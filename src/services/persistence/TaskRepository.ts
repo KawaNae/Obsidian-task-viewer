@@ -63,7 +63,12 @@ export class TaskRepository {
 
     async wrapTaskInGroup(
         task: Task,
-        opts: { groupStartDate: string; groupEndDate?: string; sessionLine: string }
+        opts: {
+            groupStartDate: string;
+            groupEndDate?: string;
+            sessionLine: string;
+            groupContent?: string;
+        }
     ): Promise<void> {
         return this.inlineWriter.wrapTaskInGroup(task, opts);
     }

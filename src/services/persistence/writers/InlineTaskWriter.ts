@@ -154,6 +154,28 @@ export class InlineTaskWriter {
     }
 
     /**
+     * The session group's line, built by the parser rather than by hand: a task
+     * carrying dates but no times formats to `@YYYY-MM-DD`, and to
+     * `@YYYY-MM-DD>YYYY-MM-DD` once the work spans days.
+     */
+    static buildGroupLine(
+        id: string,
+        file: string,
+        content: string,
+        startDate: string,
+        endDate?: string
+    ): string {
+        return TaskParser.format(createTempTask({
+            id,
+            file,
+            content,
+            statusChar: ' ',
+            startDate,
+            endDate,
+        })).trim();
+    }
+
+    /**
      * Promote a standalone session record into a group: insert a group checkbox
      * above it, push the record (and its subtree) down one level, and add the
      * new session line as the record's sibling — all inside one vault.process so
@@ -172,10 +194,23 @@ export class InlineTaskWriter {
      * that path rebuilds the whole line from the Task model — safe here only
      * because we author the group line ourselves, so it carries nothing the
      * model does not model.
+     *
+     * `opts.groupContent` names the group. It matters because by the time this
+     * runs, `task` is already the first session *record*: self-mode recording
+     * prefixes the task's content with the timer's icon (⏱️ / ⏳ / 🍅 / 🔁,
+     * TimerRecorder.updateTaskDirectly). The icon marks a record, so carrying it
+     * onto the group would label the container as a record too. The caller knows
+     * the undecorated name and passes it; stripping icons here would mean
+     * duplicating that varying set. Omitted, it falls back to `task.content`.
      */
     async wrapTaskInGroup(
         task: Task,
-        opts: { groupStartDate: string; groupEndDate?: string; sessionLine: string }
+        opts: {
+            groupStartDate: string;
+            groupEndDate?: string;
+            sessionLine: string;
+            groupContent?: string;
+        }
     ): Promise<void> {
         const file = this.app.vault.getAbstractFileByPath(task.file);
         if (!(file instanceof TFile)) {
@@ -183,14 +218,13 @@ export class InlineTaskWriter {
             return;
         }
 
-        const groupLine = TaskParser.format(createTempTask({
-            id: `session-group:${task.id}`,
-            file: task.file,
-            content: task.content,
-            statusChar: ' ',
-            startDate: opts.groupStartDate,
-            endDate: opts.groupEndDate,
-        })).trim();
+        const groupLine = InlineTaskWriter.buildGroupLine(
+            `session-group:${task.id}`,
+            task.file,
+            opts.groupContent ?? task.content,
+            opts.groupStartDate,
+            opts.groupEndDate
+        );
 
         await this.app.vault.process(file, (content) => {
             const lines = content.split('\n');
