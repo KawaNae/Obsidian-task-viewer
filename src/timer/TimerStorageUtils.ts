@@ -4,7 +4,7 @@
 
 import { type App, FileSystemAdapter } from 'obsidian';
 import {
-    TIMER_TARGET_ID_PREFIX,
+    generateTimerTargetId,
     isTimerTargetId
 } from '../utils/TimerTargetIdUtils';
 /**
@@ -47,8 +47,7 @@ export class TimerStorageUtils {
     }
 
     generateTimerTargetId(): string {
-        const raw = this.generateStableId('target').replace(/^target-/, '');
-        return `${TIMER_TARGET_ID_PREFIX}${raw}`.replace(/[^A-Za-z0-9-]/g, '');
+        return generateTimerTargetId();
     }
 
     isAutoManagedTimerTargetId(timerTargetId?: string): boolean {
