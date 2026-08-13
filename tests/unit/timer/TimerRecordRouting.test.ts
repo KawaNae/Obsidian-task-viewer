@@ -25,13 +25,13 @@ interface Harness {
 const CHILD_ID = 'tv-inline:notes/a.md:ln:5';
 const PARENT_ID = 'tv-inline:notes/a.md:ln:3';
 
-function makeHarness(options: { childExists?: boolean } = {}): Harness {
+function makeHarness(options: { childExists?: boolean; childContent?: string } = {}): Harness {
     const inserted: string[] = [];
     const updates: { id: string; updates: Record<string, unknown> }[] = [];
     const childExists = options.childExists !== false;
 
     const parent = makeTask({ id: PARENT_ID, file: 'notes/a.md', line: 2, content: 'parent', blockId: 'tv-timer-anchor' });
-    const child = makeTask({ id: CHILD_ID, file: 'notes/a.md', line: 3, content: '', blockId: 'tv-timer-1' });
+    const child = makeTask({ id: CHILD_ID, file: 'notes/a.md', line: 3, content: options.childContent ?? '', blockId: 'tv-timer-1' });
 
     const taskIndex = {
         getTask: (id: string) => {
@@ -75,6 +75,10 @@ function makeTimer(overrides: Partial<TimerInstance> = {}): TimerInstance {
         pausedElapsedTime: 600,
         phase: 'work',
         isRunning: false,
+        runState: 'running',
+        // 1 本目の走行中。self が対象タスク行に書き戻してよいのはこの間だけ。
+        sessionCount: 0,
+        recordedElapsedTime: 0,
         isExpanded: true,
         intervalId: null,
         customLabel: '',
@@ -143,6 +147,36 @@ describe('recordSessionEnd: one session writes one line', () => {
         expect(h.updates).toHaveLength(1);
         expect(h.updates[0].id).toBe(PARENT_ID);
         expect(h.updates[0].updates.statusChar).toBe('x');
+    });
+
+    it('does not stack a second icon on a record that already carries one', async () => {
+        // レコードの名前は対象タスクから継ぐので、完了済みレコードの「続き」を
+        // 始めると起点の名前が「⏱️ …」で始まる。そこへもう一度付けない。
+        const iconed = makeHarness({ childContent: '⏱️ 完了済み記録' });
+        await iconed.recorder.recordSessionEnd(makeTimer());
+
+        expect(iconed.updates[0].updates.content).toBe('⏱️ 完了済み記録');
+    });
+
+    it('self mode closes the line it is running on, not the task row it started from', async () => {
+        // 2 本目以降の self は自分で書いた兄弟レコードに走っている。recordMode を
+        // 先に見て対象タスク行へ書き戻すと、1 本目のレコードが上書きされて消える
+        // （実機で「再開して終了すると最初のセッションが消える」として現れた）。
+        await h.recorder.recordSessionEnd(makeTimer({ recordMode: 'self', sessionCount: 1 }));
+
+        expect(h.updates).toHaveLength(1);
+        expect(h.updates[0].id).toBe(CHILD_ID);
+        expect(h.inserted).toHaveLength(0);
+    });
+
+    it('self mode adds a record line when a later session lost its own line', async () => {
+        await h.recorder.recordSessionEnd(makeTimer({
+            recordMode: 'self', sessionCount: 1, recordedChildTaskId: undefined,
+        }));
+
+        // 走行中の行を見失ってもタスク行には戻らない。記録を 1 行足して救う。
+        expect(h.inserted).toHaveLength(1);
+        expect(h.updates).toHaveLength(0);
     });
 
     it('self mode keeps the anchor on the record line so the next session can find it', async () => {

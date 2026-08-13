@@ -101,15 +101,22 @@ export class TimerRecorder {
     }
 
     /**
-     * ストップ時の記録の **唯一の入口**。recordMode に応じてタスク自身の更新か
-     * セッションレコードかを選ぶ。
+     * ストップ時の記録の **唯一の入口**。「今どの行に走っているか」で書き先を選ぶ。
+     *
+     *   走行中の行がある     → その行を閉じる（開始時に書いた placeholder）
+     *   self の 1 本目       → 対象タスク行そのものをレコードに変形する
+     *   それ以外             → レコードを 1 行足す（フォールバック）
+     *
+     * `recordMode` を先に見てはいけない。self モードでも 2 本目以降は自分で書いた
+     * 兄弟レコードに走っており、対象タスク行はもう 1 本目のレコードとして確定して
+     * いる — そこへ書き戻すと最初のセッションが上書きされて消える。
      *
      * ここを通さずに `addCountdownRecord` / `addIntervalRecord` を直接呼ぶと、
-     * child モードで開始時に作った placeholder（{@link createChildAtStart}）が
-     * 更新されず、1 セッションが 2 行になる。停止経路は必ずこれを呼ぶこと。
+     * 開始時に作った placeholder が更新されず 1 セッションが 2 行になる。停止経路は
+     * 必ずこれを呼ぶこと。
      */
     async recordSessionEnd(timer: TimerInstance): Promise<void> {
-        if (timer.recordMode === 'self') {
+        if (!timer.recordedChildTaskId && timer.recordMode === 'self' && timer.sessionCount === 0) {
             await this.updateTaskDirectly(timer);
             return;
         }
@@ -308,7 +315,13 @@ export class TimerRecorder {
 
         const icon = this.getTimerIcon(timer);
         const existingContent = child.content.trim();
-        const content = existingContent ? `${icon} ${existingContent}` : icon;
+        // 名前は対象タスクから継ぐので、既にアイコン付きの行（完了済みレコードの
+        // 「続き」など）を起点にすると二重に付く。
+        const content = existingContent.startsWith(icon)
+            ? existingContent
+            : existingContent
+                ? `${icon} ${existingContent}`
+                : icon;
 
         await taskIndex.updateTask(child.id, {
             content,
@@ -403,6 +416,10 @@ export class TimerRecorder {
         if (timer.taskId.startsWith('daily-')) return undefined;
 
         const tail = this.resolveTailRecord(timer);
+        // 新しい行を取れるまでは「走行中の行は無い」。書き込みが不発に終わったとき、
+        // 前のセッションの行を走行中と誤認して上書きさせないため。
+        timer.recordedChildTaskId = undefined;
+
         if (!tail || isTvFile(tail)) return this.createChildAtStart(timer);
 
         const previousBlockId = tail.blockId;
