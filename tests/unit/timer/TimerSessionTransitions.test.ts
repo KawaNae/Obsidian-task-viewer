@@ -6,9 +6,11 @@ import type { CountdownTimer, CountupTimer, TimerInstance } from '../../../src/t
 import type { TimerStorageUtils } from '../../../src/timer/TimerStorageUtils';
 
 /**
- * 4 出口のうち、状態機械に乗る 3 つ（⏸ 中断 / ▶ 再開 / ✓ 完了）の遷移。
- * 書き込みの種類は変えないので、記録は既存の recordSessionEnd に委ねている
- * — ここで見るのは「いつ呼ばれるか」と「呼んだ後の状態」。
+ * 4 出口（⏸ 中断 / ▶ 再開 / ■ 終了 / ✕ 破棄）の遷移。
+ *
+ * 記録の中身は recorder が持つので、ここで見るのは「いつ呼ばれるか」と「呼んだ
+ * 後の状態」。v2 で変わったのは 2 点 — 終了が**タスクの状態を触らない**ことと、
+ * 中断が尻尾（次の再開の足場）を手放さないこと。
  */
 
 const intervals: number[] = [];
@@ -19,20 +21,19 @@ const intervals: number[] = [];
 
 interface RecorderCalls {
     recordSessionEnd: number;
-    completeTargetTask: number;
     createChildAtStart: number;
     startNextSession: number;
+    discardRunningPlaceholder: number;
     order: string[];
 }
 
 function build() {
-    const calls: RecorderCalls = { recordSessionEnd: 0, completeTargetTask: 0, createChildAtStart: 0, startNextSession: 0, order: [] };
+    const calls: RecorderCalls = { recordSessionEnd: 0, createChildAtStart: 0, startNextSession: 0, discardRunningPlaceholder: 0, order: [] };
     const recorder = {
         recordSessionEnd: async () => { calls.recordSessionEnd++; calls.order.push('record'); },
-        completeTargetTask: async () => { calls.completeTargetTask++; calls.order.push('complete'); },
         createChildAtStart: async () => { calls.createChildAtStart++; calls.order.push('placeholder'); return 'tv-inline:notes/a.md:ln:4'; },
-        startNextSession: async () => { calls.startNextSession++; calls.order.push('nextSession'); return 'tv-inline:notes/a.md:ln:4'; },
-        syncGroupDateSpan: async () => { calls.order.push('groupDate'); },
+        startNextSession: async () => { calls.startNextSession++; calls.order.push('nextSession'); return 'tv-inline:notes/a.md:ln:5'; },
+        discardRunningPlaceholder: async () => { calls.discardRunningPlaceholder++; calls.order.push('discard'); },
     };
 
     let persisted = 0;
@@ -82,6 +83,7 @@ function startCountup(ctx: TimerContext, overrides: Partial<CountupTimer> = {}):
         timerType: 'countup',
         elapsedTime: 600,
         recordedChildTaskId: 'tv-inline:notes/a.md:ln:4',
+        tailRecordBlockId: 'tv-t-abc1234',
         ...overrides,
     };
     ctx.timers.set(timer.id, timer);
@@ -105,12 +107,15 @@ describe('suspend', () => {
         expect(timer.isExpanded).toBe(false);         // 自動折りたたみ
     });
 
-    it('releases the placeholder and drops to child mode for later sessions', async () => {
+    it('keeps the tail so the next resume knows what to sit beside', async () => {
         const timer = startCountup(h.ctx);
         await h.lifecycle.suspendTimer(timer);
 
-        expect(timer.recordedChildTaskId).toBeUndefined();
-        expect(timer.recordMode).toBe('child');
+        // 記録し終えた行がそのまま尻尾。ここを手放すと再開が置き場を失う。
+        expect(timer.tailRecordBlockId).toBe('tv-t-abc1234');
+        expect(timer.recordedChildTaskId).toBe('tv-inline:notes/a.md:ln:4');
+        // recordMode は 1 本目の書き方であって、中断で書き換わるものではない。
+        expect(timer.recordMode).toBe('self');
     });
 
     it('is a no-op for a timer that is already suspended', async () => {
@@ -155,10 +160,9 @@ describe('resume', () => {
         await Promise.resolve();
         await Promise.resolve();
 
-        // 書き先（変形 or 追記）の判断は recorder 側。ここでは「開始時に 1 本
-        // セッション行を書く」ことだけを見る。
+        // 書き先（尻尾の兄弟 / フォールバックの子）の判断は recorder 側。ここでは
+        // 「開始時に 1 本セッション行を書く」ことだけを見る。
         expect(h.calls.startNextSession).toBe(1);
-        expect(timer.recordedChildTaskId).toBe('tv-inline:notes/a.md:ln:4');
     });
 
     it('restarts a countdown from a full clock', async () => {
@@ -182,16 +186,17 @@ describe('resume', () => {
     });
 });
 
-describe('complete', () => {
+describe('finish', () => {
     let h: ReturnType<typeof build>;
     beforeEach(() => { h = build(); intervals.length = 0; });
 
-    it('records the running session, completes the task, then closes', async () => {
+    it('records the running session and closes, without touching the task state', async () => {
         const timer = startCountup(h.ctx);
-        await h.lifecycle.completeTimer(timer);
+        await h.lifecycle.finishTimer(timer);
 
-        // 記録 → グループ帯の更新 → 完了 の順（グループ未形成なら更新は no-op）
-        expect(h.calls.order).toEqual(['record', 'groupDate', 'complete']);
+        // 記録して閉じるだけ。完了は checkbox でユーザーが宣言するものなので、
+        // v1 の completeTargetTask に当たる書き込みはもう存在しない。
+        expect(h.calls.order).toEqual(['record']);
         expect(timer.sessionCount).toBe(1);
         expect(h.ctx.timers.has(timer.id)).toBe(false);
     });
@@ -201,16 +206,52 @@ describe('complete', () => {
         await h.lifecycle.suspendTimer(timer);
         h.calls.order.length = 0;
 
-        await h.lifecycle.completeTimer(timer);
+        await h.lifecycle.finishTimer(timer);
 
-        expect(h.calls.order).toEqual(['complete']);
+        expect(h.calls.order).toEqual([]);
         expect(timer.sessionCount).toBe(1);
         expect(h.ctx.timers.has(timer.id)).toBe(false);
     });
 
     it('wakes the idle timer once the last widget is gone', async () => {
         const timer = startCountup(h.ctx);
-        await h.lifecycle.completeTimer(timer);
+        await h.lifecycle.finishTimer(timer);
         expect(h.ctx.timers.has(IDLE_TIMER_ID)).toBe(true);
+    });
+});
+
+describe('discard', () => {
+    let h: ReturnType<typeof build>;
+    beforeEach(() => { h = build(); intervals.length = 0; });
+
+    it('drops the running session without recording it, and cleans up its line', async () => {
+        const timer = startCountup(h.ctx);
+        await h.lifecycle.discardTimer(timer);
+
+        expect(h.calls.order).toEqual(['discard']);
+        expect(h.calls.recordSessionEnd).toBe(0);
+        expect(timer.sessionCount).toBe(0);
+        expect(h.ctx.timers.has(timer.id)).toBe(false);
+    });
+});
+
+describe('the session cycle', () => {
+    let h: ReturnType<typeof build>;
+    beforeEach(() => { h = build(); intervals.length = 0; });
+
+    it('records once per session across suspend → resume → finish', async () => {
+        const timer = startCountup(h.ctx);
+
+        await h.lifecycle.suspendTimer(timer);
+        h.lifecycle.resumeSession(timer);
+        await Promise.resolve();
+        await Promise.resolve();
+        await h.lifecycle.finishTimer(timer);
+
+        // 1 セッション = 1 レコード。開始で行を書き、終いに記録する、が 2 周。
+        expect(h.calls.order).toEqual(['record', 'nextSession', 'record']);
+        expect(h.calls.startNextSession).toBe(1);
+        expect(timer.sessionCount).toBe(2);
+        expect(h.ctx.timers.has(timer.id)).toBe(false);
     });
 });

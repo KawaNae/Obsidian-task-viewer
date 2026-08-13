@@ -187,10 +187,11 @@ export class TimerRenderer {
                     return;
                 }
 
-                // Already in confirming state → execute close
+                // Already in confirming state → execute close.
+                // 走行中の破棄なので、開始時に書いた走行中の行も引き取らせる。
                 if (closeBtn.classList.contains('timer-widget__close-btn--confirming')) {
                     this.clearCloseConfirmTimer(timerId);
-                    this.lifecycle.closeTimer(timerId);
+                    void this.lifecycle.discardTimer(timer);
                     return;
                 }
 
@@ -394,8 +395,8 @@ export class TimerRenderer {
      * 出す（✕ はヘッダ）。
      *
      *   未開始   … [▶ 開始]（まだセッションが 1 つも無い状態。出口ではない）
-     *   走行中   … [⏸ 中断][✓ 完了]
-     *   中断中   … [▶ 再開][✓ 完了]
+     *   走行中   … [⏸ 中断][■ 終了]
+     *   中断中   … [▶ 再開][■ 終了]
      *
      * interval は現行の Pause(prepare)/Stop を維持するので、ここには来ない。
      */
@@ -434,9 +435,11 @@ export class TimerRenderer {
             });
         }
 
-        this.addControlButton(container, 'primary', 'check', t('timer.finish'), () => {
+        // ■ 終了は「記録して閉じる」。タスクの完了はユーザーが checkbox で宣言する
+        // ものなので、ここでは状態を触らない（だから ✓ ではなく ■）。
+        this.addControlButton(container, 'primary', 'square', t('timer.finish'), () => {
             AudioUtils.playFinishSound();
-            void this.lifecycle.completeTimer(timer);
+            void this.lifecycle.finishTimer(timer);
         });
     }
 
