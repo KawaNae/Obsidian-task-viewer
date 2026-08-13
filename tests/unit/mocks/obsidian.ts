@@ -39,6 +39,16 @@ class Vault {
 
 // --- UI classes (no-op stubs) ---
 
+export class Notice {
+    /** Messages raised during a test run — handy when asserting user feedback. */
+    static messages: string[] = [];
+    constructor(message: string | DocumentFragment, _duration?: number) {
+        if (typeof message === 'string') Notice.messages.push(message);
+    }
+    setMessage(_message: string | DocumentFragment) { return this; }
+    hide() {}
+}
+
 export class Plugin {
     app: App = new App();
     manifest = {} as any;

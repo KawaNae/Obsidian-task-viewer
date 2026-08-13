@@ -125,12 +125,20 @@ export class TaskStore {
     }
 
     /**
-     * 全リスナーに変更を通知（各リスナーを個別の rAF に分散）。
+     * 全リスナーに変更を通知（各リスナーを個別のマクロタスクに分散）。
      * 初回スキャン等の重い通知で Chrome の Long Task 警告を回避するために使用。
+     *
+     * 分散に rAF ではなく setTimeout(0) を使う。store は DOM を持たないので
+     * host window を解決できず、素の rAF は main window のフレームクロックに
+     * 固定される — popout の view しか開いていない、あるいは main が最小化
+     * されている状況では通知そのものが届かない（listener 側は自分の window の
+     * rAF で coalesce するので、ここでフレーム境界に合わせる必要はない）。
+     * timer は背景 window で throttle されるが「いずれ必ず発火する」は保たれ、
+     * Long Task を割る目的は macrotask 境界で足りる。
      */
     notifyListenersStaggered(taskId?: string, changes?: string[]): void {
         for (const listener of this.listeners) {
-            requestAnimationFrame(() => listener(taskId, changes));
+            setTimeout(() => listener(taskId, changes), 0);
         }
     }
 

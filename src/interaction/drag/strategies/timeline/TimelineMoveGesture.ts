@@ -7,7 +7,7 @@ import type { GhostPlan } from '../../ghost/GhostPlan';
 import { toDisplayHeightPx, toDisplayTopPx } from '../../../../services/display/TimelineCardPosition';
 import { type DisplayDateEdits, getOriginalTaskId } from '../../../../services/display/DisplayTaskConverter';
 import type { DragPlan } from '../../DragPlan';
-import { TRANSIENT_DRAG_CLASSES } from '../../constants';
+import { hostWindow } from '../../../../utils/HostWindow';
 
 /**
  * Timeline (timed タスク, 縦軸) の Move Gesture。
@@ -26,6 +26,9 @@ export class TimelineMoveGesture extends BaseDragStrategy {
     private anchorType: 'start' | 'end' = 'start';
     private currentDayDate: string | null = null;
     private lastDragResult: { startDate: string; startTime: string; endDate: string; endTime: string } | null = null;
+    /** 直近の processMove が計算した確定セグメント（日 × top/height, logical px）。
+     *  ドロップ時にソースカードへ反映するジオメトリの出どころ。 */
+    private lastCandidates: { date: string; top: number; height: number }[] = [];
     private hiddenElements: HTMLElement[] = [];
     private initialTop: number = 0;
     private initialHeight: number = 0;
@@ -34,6 +37,8 @@ export class TimelineMoveGesture extends BaseDragStrategy {
     private baseTask: Task | null = null;
 
     private autoScrollTimer: number | null = null;
+    /** autoScrollTimer を発行した window。clearInterval は同じ window に対して行う。 */
+    private autoScrollWin: Window | null = null;
     private scrollContainer: HTMLElement | null = null;
     private lastClientX: number = 0;
     private lastClientY: number = 0;
@@ -229,6 +234,7 @@ export class TimelineMoveGesture extends BaseDragStrategy {
             this.dragEl,
         );
         this.ghostRenderer.render(plans);
+        this.lastCandidates = candidates;
     }
 
     /**
@@ -333,9 +339,63 @@ export class TimelineMoveGesture extends BaseDragStrategy {
             effectiveEndTime: endTime,
         };
         const plan: DragPlan = { edits, baseTask: this.baseTask };
-        await this.commitPlan(context, plan, this.dragTask.id);
-        this.ghostRenderer?.clear();
+        await this.commitAndReveal({
+            context,
+            plan,
+            taskId: this.dragTask.id,
+            sourceElements: this.hiddenElements,
+            applyGeometry: () => this.applyCommittedGeometry(context),
+            clearGhosts: () => this.ghostRenderer?.clear(),
+        });
         this.cleanup();
+    }
+
+    /**
+     * ドロップ確定位置をソースカードへ反映する。ghost が描いていた形
+     * （{@link lastCandidates}）をそのままカード座標系に移すので、ドラッグ中の
+     * プレビューと寸分違わぬ絵のままドロップが完結する — つまり再可視化に
+     * render の到達を必要としない。
+     *
+     * 書くのは `--start-minutes` / `--duration-minutes` と day-column への
+     * 再 parent だけ。どちらも decorateLane が毎 render 無条件に上書きする
+     * キーなので、次の render が authoritative 値で自己修復する
+     * （TimelineResizeGesture と同じ ownership 契約）。left/width は ghost 同様
+     * ソースの cascade 値を踏襲し、cascade の再計算は render に任せる。
+     *
+     * セグメント数が合わない場合:
+     *  - source が多い（日跨ぎが減った）… 余りは隠したままにして render が消す
+     *  - source が少ない（日跨ぎが増えた）… 増えた分は次 render で現れる。
+     *    ghost を残す手もあるが「gesture が terminal で ghost を全部片付ける」
+     *    現行契約を崩す方が高くつく。旧位置フラッシュではなく「末尾セグメントが
+     *    1 フレーム遅れて出る」という良性の欠落なので許容する（tv-lead 承認）。
+     */
+    private applyCommittedGeometry(context: DragContext): void {
+        if (!this.scrollContainer) return;
+        const zoomLevel = context.getZoomLevel();
+        const count = Math.min(this.hiddenElements.length, this.lastCandidates.length);
+
+        for (let i = 0; i < count; i++) {
+            const el = this.hiddenElements[i];
+            const seg = this.lastCandidates[i];
+            const dayCol = this.scrollContainer.querySelector(
+                `.timeline-scroll-area__day-column[data-date="${seg.date}"]`,
+            ) as HTMLElement | null;
+            // 対象日が表示範囲外（view の端を跨いだ移動）ならジオメトリを確定
+            // できない。隠したまま render に委ねる。
+            if (!dayCol) continue;
+
+            if (el.parentElement !== dayCol) dayCol.appendChild(el);
+            el.style.setProperty('--start-minutes', String(seg.top / zoomLevel));
+            el.style.setProperty('--duration-minutes', String(seg.height / zoomLevel));
+
+            el.classList.remove('task-card--split-continues-before', 'task-card--split-continues-after');
+            if (this.lastCandidates.length > 1) {
+                if (i > 0) el.classList.add('task-card--split-continues-before');
+                if (i < this.lastCandidates.length - 1) el.classList.add('task-card--split-continues-after');
+            }
+
+            this.dropReveal.markApplied(el);
+        }
     }
 
     private checkAutoScroll(mouseY: number): void {
@@ -363,7 +423,11 @@ export class TimelineMoveGesture extends BaseDragStrategy {
 
     private startAutoScroll(direction: number): void {
         if (this.autoScrollTimer !== null) return;
-        this.autoScrollTimer = window.setInterval(() => {
+        // timer は scroll 対象と同じ window から取る。main window の timer は
+        // 最小化中に throttle されるため、popout のドラッグが引っかかる。
+        // 解除も同じ window に対して行う必要があるので参照を保持する。
+        this.autoScrollWin = hostWindow(this.scrollContainer);
+        this.autoScrollTimer = this.autoScrollWin.setInterval(() => {
             if (!this.scrollContainer) return;
             this.scrollContainer.scrollTop += direction;
             this.processMove(this.lastClientX, this.lastClientY);
@@ -378,8 +442,9 @@ export class TimelineMoveGesture extends BaseDragStrategy {
 
     private stopAutoScroll(): void {
         if (this.autoScrollTimer !== null) {
-            clearInterval(this.autoScrollTimer);
+            (this.autoScrollWin ?? window).clearInterval(this.autoScrollTimer);
             this.autoScrollTimer = null;
+            this.autoScrollWin = null;
         }
     }
 
@@ -391,15 +456,16 @@ export class TimelineMoveGesture extends BaseDragStrategy {
 
     protected cleanup(): void {
         this.stopAutoScroll();
-        for (const el of this.hiddenElements) {
-            el.classList.remove(...TRANSIENT_DRAG_CLASSES);
-        }
+        // 再可視化はゲート越し。commit 済みでジオメトリを確定できなかった要素は
+        // 隠したまま次 render に渡る（DropReveal 参照）。
+        this.dropReveal.finish(this.hiddenElements);
         this.ghostRenderer?.clear();
         this.ghostRenderer = null;
         this.ghostContainer = null;
         super.cleanup();
         this.hiddenElements = [];
         this.lastDragResult = null;
+        this.lastCandidates = [];
         this.currentDayDate = null;
         this.baseTask = null;
     }

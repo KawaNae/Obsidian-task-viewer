@@ -612,6 +612,10 @@ export class TaskIndex {
     async insertChildTask(parentTaskId: string, childLine: string): Promise<void> {
         const task = this.store.getTask(parentTaskId);
         if (!task) return;
+        // Read-only parsers (Tasks / dayPlanner) must never be written to.
+        // TaskApi guards this as well, but the menu path reaches the write
+        // service directly and would otherwise bypass it.
+        if (task.isReadOnly) return;
         return this.withNotify(task.file, async () => {
             logInfo(`[insertChildTask] parentId=${parentTaskId}`);
 
@@ -629,6 +633,62 @@ export class TaskIndex {
             }
 
             await this.scanner.waitForScan(task.file);
+        });
+    }
+
+    /**
+     * Append a child at the end of the parent's subtree, in contrast to
+     * insertChildTask's head insertion. Session records accumulate over time,
+     * so head insertion would print the log backwards.
+     */
+    async appendChildTask(parentTaskId: string, childLine: string): Promise<void> {
+        const task = this.store.getTask(parentTaskId);
+        if (!task) return;
+        if (task.isReadOnly) return;
+        return this.withNotify(task.file, async () => {
+            logInfo(`[appendChildTask] parentId=${parentTaskId}`);
+
+            this.syncDetector.markLocalEdit(task.file);
+
+            if (isTvFile(task)) {
+                await this.repository.insertLineAfterTvFile(
+                    task.file, childLine,
+                    this.settings.tvFileChildHeader,
+                    this.settings.tvFileChildHeaderLevel
+                );
+            } else {
+                const childIndent = FileOperations.getChildIndent(task.originalText);
+                await this.repository.insertLineAfterTask(task, childIndent + childLine);
+            }
+
+            await this.scanner.waitForScan(task.file);
+        });
+    }
+
+    /**
+     * Insert a line as the task's next sibling — same indentation, just past
+     * its subtree. Session records after the first one live beside the record
+     * before them, not under it, so the log stays flat.
+     *
+     * Inline only. A tv-file task is a whole note and has no siblings to speak
+     * of; that case belongs to appendChildTask.
+     */
+    async insertSiblingAfterTask(
+        taskId: string,
+        siblingLine: string,
+        opts: { afterCompletedRun?: boolean } = {}
+    ): Promise<number> {
+        const task = this.store.getTask(taskId);
+        if (!task) return -1;
+        if (task.isReadOnly || isTvFile(task)) return -1;
+        return this.withNotify(task.file, async () => {
+            logInfo(`[insertSiblingAfterTask] taskId=${taskId}`);
+
+            this.syncDetector.markLocalEdit(task.file);
+            const insertedLine = await this.repository.insertSiblingAfterTask(task, siblingLine, opts);
+            await this.scanner.waitForScan(task.file);
+
+            return insertedLine;
         });
     }
 

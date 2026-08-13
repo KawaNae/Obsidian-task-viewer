@@ -72,6 +72,37 @@ export class TaskWriteService {
         return this.taskIndex.insertChildTask(this.resolveTaskId(parentTaskId), childLine);
     }
 
+    /**
+     * Append a child at the *end* of the parent's subtree. Session records are
+     * a log, so they must accumulate in chronological order — insertChildTask
+     * inserts at the head and would read backwards.
+     */
+    async appendChildTask(parentTaskId: string, childLine: string): Promise<void> {
+        return this.taskIndex.appendChildTask(this.resolveTaskId(parentTaskId), childLine);
+    }
+
+    /**
+     * Insert a line as the task's next sibling, at the task's own indentation.
+     * `siblingLine` is a formatted line body without indentation — the write
+     * layer reads the indent off the file, so a shifted line cannot make the
+     * record land at the wrong depth.
+     *
+     * Pass `afterCompletedRun` to skip past the completed siblings that follow
+     * the task, which is what keeps a run of session records in chronological
+     * order when the timer resumes from an earlier one. Completion means `[x]`
+     * and nothing else.
+     *
+     * Returns the inserted line index, or -1 when nothing was written
+     * (unknown / read-only / tv-file task, or an unresolvable line).
+     */
+    async insertSiblingAfterTask(
+        taskId: string,
+        siblingLine: string,
+        opts: { afterCompletedRun?: boolean } = {}
+    ): Promise<number> {
+        return this.taskIndex.insertSiblingAfterTask(this.resolveTaskId(taskId), siblingLine, opts);
+    }
+
     async createTvFileFromData(taskData: Partial<Task>): Promise<string> {
         return this.taskIndex.createTvFileFromData(taskData);
     }

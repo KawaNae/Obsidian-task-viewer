@@ -11,8 +11,10 @@ import type {
     IntervalTimer,
     TimerInstance,
     TimerPhase,
+    TimerRunState,
     TimerStartConfig,
 } from './TimerInstance';
+import { newTimerId } from './TimerInstance';
 import { type TimerContext, IDLE_TIMER_ID } from './TimerContext';
 import type { TimerStorageUtils } from './TimerStorageUtils';
 
@@ -26,7 +28,9 @@ export class TimerCreator {
 
     createTimer(config: TimerStartConfig): TimerInstance {
         const autoStart = config.autoStart === true;
-        const id = config.timerType === 'idle' ? IDLE_TIMER_ID : config.taskId;
+        // idle は単一インスタンスの番人なので sentinel id を保つ。それ以外は
+        // タスクから独立した不変 id（rename でキーが取り残されないため）。
+        const id = config.timerType === 'idle' ? IDLE_TIMER_ID : newTimerId();
         const now = Date.now();
         const base = {
             id,
@@ -42,6 +46,10 @@ export class TimerCreator {
             pausedElapsedTime: 0,
             phase: config.timerType === 'idle' ? 'idle' : (autoStart ? 'work' : 'idle') as TimerPhase,
             isRunning: config.timerType === 'idle' ? true : autoStart,
+            // 新規タイマーは常に走行側から始まる（中断は既存タイマーの遷移）。
+            runState: 'running' as TimerRunState,
+            sessionCount: 0,
+            recordedElapsedTime: 0,
             isExpanded: true,
             intervalId: null,
             customLabel: '',

@@ -4,10 +4,17 @@
 
 import { type App, FileSystemAdapter } from 'obsidian';
 import {
-    TIMER_TARGET_ID_PREFIX,
+    generateTimerTargetId,
     isTimerTargetId
 } from '../utils/TimerTargetIdUtils';
-export const STORAGE_VERSION = 5;
+/**
+ * v6: runState / sessionCount / recordedElapsedTime を追加（セッション状態機械）。
+ * ストレージキーにバージョンが入るので、v5 の状態は読まれない。restore 時に
+ * 旧キーを掃除する（放置すると localStorage に残り続ける）。
+ */
+export const STORAGE_VERSION = 6;
+/** 掃除対象の旧バージョン。 */
+export const OBSOLETE_STORAGE_VERSIONS = [5];
 export const STORAGE_KEY_PREFIX = 'task-viewer.active-timers';
 export const DEVICE_ID_KEY = 'task-viewer.device-id.v1';
 
@@ -40,8 +47,7 @@ export class TimerStorageUtils {
     }
 
     generateTimerTargetId(): string {
-        const raw = this.generateStableId('target').replace(/^target-/, '');
-        return `${TIMER_TARGET_ID_PREFIX}${raw}`.replace(/[^A-Za-z0-9-]/g, '');
+        return generateTimerTargetId();
     }
 
     isAutoManagedTimerTargetId(timerTargetId?: string): boolean {

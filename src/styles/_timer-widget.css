@@ -100,6 +100,24 @@
     color: var(--tv-text-muted);
 }
 
+/* 中断中: 記録済みで再開待ち。走行中と一目で区別できるだけの控えめな差。 */
+.timer-widget__item--suspended .timer-widget__time-display,
+.timer-widget__item--suspended .timer-widget__header-time {
+    color: var(--tv-text-muted);
+}
+
+.timer-widget__state-badge {
+    flex-shrink: 0;
+    padding: 1px 6px;
+    border: 1px solid var(--tv-border);
+    border-radius: var(--tv-radius-s);
+    background: var(--tv-bg-secondary);
+    color: var(--tv-text-muted);
+    font-size: 0.65rem;
+    font-weight: 500;
+    white-space: nowrap;
+}
+
 /* Use :*-of-type rather than :*-child so the pin badge (a <button> sibling)
    doesn't displace the first-/last-/only-child match for items (<div>). */
 .timer-widget__item:last-of-type {

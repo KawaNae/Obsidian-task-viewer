@@ -1,6 +1,7 @@
 import { type App, TFolder } from 'obsidian';
 import type { Task } from '../../../types';
 import { hasBodyLine } from '../../../types';
+import { TaskLineClassifier } from '../../parsing/utils/TaskLineClassifier';
 
 
 /**
@@ -91,18 +92,23 @@ export class FileOperations {
     }
 
     /**
+     * One indent level, inferred from the given line's own indentation.
+     * Obsidian supports only a tab or 4 spaces, so a line already using tabs
+     * implies a tab unit; anything else — including an unindented line, where
+     * there is nothing to read — implies 4 spaces.
+     */
+    static getIndentUnit(line: string): string {
+        const indent = line.match(/^(\s*)/)?.[1] ?? '';
+        return indent.includes('\t') ? '\t' : '    ';
+    }
+
+    /**
      * Compute the indent string for a direct child of the given parent line.
      * Detects tabs vs spaces from the parent and adds one level.
      */
     static getChildIndent(parentLine: string): string {
-        const match = parentLine.match(/^(\s*)/);
-        const parentIndent = match ? match[1] : '';
-
-        if (parentIndent.includes('\t')) {
-            return parentIndent + '\t';
-        }
-
-        return parentIndent + '    ';
+        const parentIndent = parentLine.match(/^(\s*)/)?.[1] ?? '';
+        return parentIndent + FileOperations.getIndentUnit(parentLine);
     }
 
     /**
@@ -122,8 +128,48 @@ export class FileOperations {
     }
 
     /**
+     * True when `line` is a task line whose content is `content`, allowing the
+     * trailing notation (`@date`, `#tag`, `^blockId`) to follow it.
+     *
+     * The trailing boundary is the point: a bare prefix test lets a write aimed
+     * at `買い物` land on `買い物リスト` — the line resolution then overwrites an
+     * unrelated task. Classification goes through TaskLineClassifier so that
+     * "what counts as a task line" has one owner.
+     */
+    private static lineHasTaskContent(line: string, content: string): boolean {
+        if (!content) return false;
+        const parsed = TaskLineClassifier.classify(line);
+        if (!parsed) return false;
+
+        // Extra spaces after the checkbox are tolerated (`- [ ]   task`).
+        const rawContent = parsed.rawContent.trimStart();
+        if (!rawContent.startsWith(content)) return false;
+
+        const next = rawContent.charAt(content.length);
+        return next === '' || /\s/.test(next);
+    }
+
+    /**
+     * True when `token` (`@start` / `>due` / `>end`) appears as a whole date
+     * token. Only the *trailing* side needs guarding, and only loosely: a start
+     * date legitimately continues into `>` (allday range) or `T` (time of day),
+     * so those must stay matchable.
+     */
+    private static lineHasDateToken(line: string, token: string): boolean {
+        for (let from = 0; ;) {
+            const idx = line.indexOf(token, from);
+            if (idx < 0) return false;
+            const next = line.charAt(idx + token.length);
+            if (next === '' || next === '>' || next === 'T' || /\s/.test(next)) return true;
+            from = idx + 1;
+        }
+    }
+
+    /**
      * Find the current line number of a task in the file.
-     * Uses multiple strategies: exact match, content + date match, fallback to stored line.
+     * Uses multiple strategies: exact match, content + date match, verified
+     * fallback to the stored line. Returns -1 when no line can be trusted —
+     * every caller treats that as "do not write".
      */
     findTaskLineNumber(lines: string[], task: Task): number {
         // Strategy -1: Resolve by block ID (most stable against content edits).
@@ -151,9 +197,7 @@ export class FileOperations {
         }
 
         // Strategy 2: Match by content and date notation (more resilient)
-        // Build a pattern: contains task content AND @ date notation
         const content = task.content || '';
-        const escapedContent = content.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
         // due-only / end-only タスクで bare '@' に退化すると同名タスクを誤マッチ
         // するため、実トークン(>due / >end)で照合する。
         const datePattern = task.startDate
@@ -166,20 +210,25 @@ export class FileOperations {
 
         for (let i = 0; i < lines.length; i++) {
             const line = lines[i];
+            if (!FileOperations.lineHasTaskContent(line, content)) continue;
 
-            // Must be a task line (checkbox), contain the content, and match approx indent
-            if (content && (line.includes(`] ${content}`) || line.match(new RegExp(`\\]\\s+${escapedContent}`)))) {
-                // Verify it has similar characteristics
-                if (datePattern && line.includes(datePattern)) {
-                    return i;
-                } else if (!datePattern && line.includes(content)) {
-                    return i;
-                }
+            if (datePattern) {
+                if (FileOperations.lineHasDateToken(line, datePattern)) return i;
+            } else {
+                return i;
             }
         }
 
-        // Strategy 3: Fallback to stored line number
-        return task.line;
+        // Strategy 3: Stored line, but only when it still holds the same task.
+        // The unverified fallback this replaces wrote to whatever happened to
+        // sit at task.line, which silently clobbered unrelated lines whenever
+        // the earlier strategies all missed on a shifted file.
+        if (hasBodyLine(task) && task.line < lines.length
+            && FileOperations.lineHasTaskContent(lines[task.line], content)) {
+            return task.line;
+        }
+
+        return -1;
     }
 
     /**

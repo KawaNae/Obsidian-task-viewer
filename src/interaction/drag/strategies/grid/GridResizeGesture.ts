@@ -1,5 +1,4 @@
 import { BaseDragStrategy } from '../BaseDragStrategy';
-import { TRANSIENT_DRAG_CLASSES } from '../../constants';
 import type { DragContext } from '../../DragStrategy';
 import type { Task } from '../../../../types';
 import { type DisplayDateEdits, getOriginalTaskId } from '../../../../services/display/DisplayTaskConverter';
@@ -8,6 +7,7 @@ import type { GridSurface } from '../../grid/GridSurface';
 import { CalendarGridSurface } from '../../grid/CalendarGridSurface';
 import { AllDayGridSurface } from '../../grid/AllDayGridSurface';
 import { GhostRenderer } from '../../ghost/GhostRenderer';
+import type { GhostPlan } from '../../ghost/GhostPlan';
 
 /**
  * Calendar / AllDay の両 Grid Surface を扱う Resize Gesture。
@@ -43,6 +43,9 @@ export class GridResizeGesture extends BaseDragStrategy {
     private previewTargetDate: string | null = null;
     private isAllDay: boolean = false;
     private ghostRenderer: GhostRenderer | null = null;
+    /** 直近の cross-week preview で描いた ghost の配置。ドロップ時にソースカードへ
+     *  移して「旧位置で再表示されるフレーム」を作らないために保持する。 */
+    private lastGhostPlans: GhostPlan[] = [];
 
     onDown(e: PointerEvent, task: Task, el: HTMLElement, context: DragContext): void {
         this.dragTask = task;
@@ -167,9 +170,10 @@ export class GridResizeGesture extends BaseDragStrategy {
             if (crossWeek) {
                 this.hiddenElements.forEach(el => el.classList.add('is-drag-hidden'));
                 this.dragEl.classList.add('is-drag-source-faint');
-                this.ghostRenderer?.render(this.gridSurface.planSegments({
+                this.lastGhostPlans = this.gridSurface.planSegments({
                     rangeStart: this.initialVisualStart, rangeEnd: boundedEnd, trackIndex,
-                }));
+                });
+                this.ghostRenderer?.render(this.lastGhostPlans);
                 return;
             }
 
@@ -185,9 +189,10 @@ export class GridResizeGesture extends BaseDragStrategy {
             if (crossWeek) {
                 this.hiddenElements.forEach(el => el.classList.add('is-drag-hidden'));
                 this.dragEl.classList.add('is-drag-source-faint');
-                this.ghostRenderer?.render(this.gridSurface.planSegments({
+                this.lastGhostPlans = this.gridSurface.planSegments({
                     rangeStart: boundedStart, rangeEnd: this.initialVisualEnd, trackIndex,
-                }));
+                });
+                this.ghostRenderer?.render(this.lastGhostPlans);
                 return;
             }
 
@@ -210,8 +215,40 @@ export class GridResizeGesture extends BaseDragStrategy {
             this.cleanup();
             return;
         }
-        await this.commitPlan(context, this.buildResizePlan(targetDate), this.dragTask.id);
+        await this.commitAndReveal({
+            context,
+            plan: this.buildResizePlan(targetDate),
+            taskId: this.dragTask.id,
+            sourceElements: [...this.hiddenElements, this.dragEl],
+            applyGeometry: () => this.applyCommittedGeometry(),
+            clearGhosts: () => this.ghostRenderer?.clear(),
+        });
         this.cleanup();
+    }
+
+    /**
+     * ドロップ確定形をソースカードへ反映する（{@link DropReveal} の許可証）。
+     *
+     * 同一週の resize は preview 中に dragEl の `gridColumn` を直接動かして
+     * いるので、確定形は既にソースカード自身が持っている（ghost も hide も
+     * 使わない = TimelineResizeGesture と同じモデル）。反映が要るのは
+     * cross-week preview のときだけで、ghost の grid 座標をソースへ移す。
+     */
+    private applyCommittedGeometry(): void {
+        const count = Math.min(this.hiddenElements.length, this.lastGhostPlans.length);
+        for (let i = 0; i < count; i++) {
+            const el = this.hiddenElements[i];
+            const ghost = this.lastGhostPlans[i];
+            if (ghost.layout !== 'grid') continue;
+
+            el.style.gridColumn = ghost.gridColumn;
+            el.style.gridRow = ghost.gridRow;
+
+            el.classList.remove('task-card--split-continues-before', 'task-card--split-continues-after');
+            for (const cls of ghost.splitClasses) el.classList.add(cls);
+
+            this.dropReveal.markApplied(el);
+        }
     }
 
     /**
@@ -257,14 +294,14 @@ export class GridResizeGesture extends BaseDragStrategy {
     }
 
     protected cleanup(): void {
-        for (const el of this.hiddenElements) {
-            el.classList.remove(...TRANSIENT_DRAG_CLASSES);
-        }
+        // 再可視化はゲート越し（DropReveal 参照）。
+        this.dropReveal.finish(this.hiddenElements);
         this.ghostRenderer?.clear();
         this.ghostRenderer = null;
         super.cleanup();
         this.container = null;
         this.hiddenElements = [];
+        this.lastGhostPlans = [];
         this.previewTargetDate = null;
         this.baseTask = null;
         this.gridSurface = null;

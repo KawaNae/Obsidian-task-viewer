@@ -182,6 +182,77 @@ describe('DocumentTreeBuilder', () => {
             expect(tb.childRawLines[1]).toBe('    - note:: something');
         });
 
+        // コードフェンス内の `- [ ]` はサンプルテキストであってタスクではない。
+        // ただし subtree の一部ではあるので childRawLines には残る（move /
+        // duplicate で verbatim に運ばれる必要があるため）。
+        it('フェンス内のチェックボックス風行をタスクとして拾わない（トップレベル）', () => {
+            const doc = buildFromBody([
+                '```md',
+                '- [ ] fenced sample @2026-03-24',
+                '```',
+                '- [ ] real task @2026-03-25',
+            ]);
+            const blocks = doc.sections[0].blocks;
+            expect(blocks).toHaveLength(1);
+            expect((blocks[0] as any).rawLine).toBe('- [ ] real task @2026-03-25');
+        });
+
+        it('フェンス内のチェックボックス風行を子タスクにしない（childRawLines には残る）', () => {
+            const doc = buildFromBody([
+                '- [ ] parent @2026-03-24',
+                '    ```md',
+                '    - [ ] fenced sample @2026-03-25',
+                '    ```',
+                '    - [ ] real child @2026-03-26',
+            ]);
+            const tb = doc.sections[0].blocks[0] as any;
+            expect(tb.childRawLines).toHaveLength(4);
+            expect(tb.childRawLines[1]).toBe('    - [ ] fenced sample @2026-03-25');
+            expect(tb.childTaskBlocks).toHaveLength(1);
+            expect(tb.childTaskBlocks[0].rawLine).toBe('    - [ ] real child @2026-03-26');
+        });
+
+        it('フェンス内のタスク行で lead area を打ち切らない', () => {
+            const doc = buildFromBody([
+                '## Section',
+                '- tv-color:: ffffff',
+                '```md',
+                '- [ ] fenced sample',
+                '```',
+                '- tags:: work',
+                '- [ ] real task @2026-03-24',
+            ]);
+            const section = doc.sections[0];
+            expect(section.propertyBlock!.entries.map(e => e.key)).toEqual(['tv-color', 'tags']);
+            expect(section.blocks).toHaveLength(1);
+        });
+
+        // タブ字下げのフェンス。Obsidian の既定インデントはタブなので、
+        // サブツリー内フェンスの実運用上いちばん多い形。
+        it('タブ字下げされたサブツリー内フェンスも認識する', () => {
+            const doc = buildFromBody([
+                '- [ ] parent @2026-03-24',
+                '\t```md',
+                '\t- [ ] fenced sample @2026-03-25',
+                '\t```',
+                '\t- [ ] real child @2026-03-26',
+            ]);
+            const tb = doc.sections[0].blocks[0] as any;
+            expect(tb.childRawLines).toHaveLength(4);
+            expect(tb.childTaskBlocks).toHaveLength(1);
+            expect(tb.childTaskBlocks[0].rawLine).toBe('\t- [ ] real child @2026-03-26');
+        });
+
+        it('チルダフェンスにも対応する', () => {
+            const doc = buildFromBody([
+                '~~~',
+                '- [ ] fenced sample',
+                '~~~',
+                '- [ ] real task @2026-03-24',
+            ]);
+            expect(doc.sections[0].blocks).toHaveLength(1);
+        });
+
         it('子タスクブロックを再帰的に検出', () => {
             const doc = buildFromBody([
                 '- [ ] parent @2026-03-24',

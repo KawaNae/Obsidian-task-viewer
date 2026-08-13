@@ -13,6 +13,7 @@ import { getEffectiveColor, getEffectiveLinestyle } from '../../services/data/Ef
 import { PopoverStack } from '../../views/sharedUI/PopoverStack';
 import { OverlayShell } from '../../views/sharedUI/OverlayShell';
 import { TaskHubForm, type TaskHubFocusField } from './TaskHubForm';
+import { hostWindow } from '../../utils/HostWindow';
 
 export interface TaskHubDeps {
     taskRenderer: TaskCardRenderer;
@@ -73,7 +74,8 @@ export class TaskHubPanel {
 
         if (this.options.focusField && this.form) {
             const field = this.options.focusField;
-            requestAnimationFrame(() => this.form?.focusField(field));
+            // overlay が実際に載っている window のフレームで focus する（popout 対応）。
+            hostWindow(this.overlay.getPanel()).requestAnimationFrame(() => this.form?.focusField(field));
         }
 
         this.setupLiveUpdates();
