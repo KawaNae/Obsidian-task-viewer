@@ -82,6 +82,28 @@ export class TaskWriteService {
     }
 
     /**
+     * Insert a line as the task's next sibling, at the task's own indentation.
+     * `siblingLine` is a formatted line body without indentation — the write
+     * layer reads the indent off the file, so a shifted line cannot make the
+     * record land at the wrong depth.
+     *
+     * Pass `afterCompletedRun` to skip past the completed siblings that follow
+     * the task, which is what keeps a run of session records in chronological
+     * order when the timer resumes from an earlier one. Completion means `[x]`
+     * and nothing else.
+     *
+     * Returns the inserted line index, or -1 when nothing was written
+     * (unknown / read-only / tv-file task, or an unresolvable line).
+     */
+    async insertSiblingAfterTask(
+        taskId: string,
+        siblingLine: string,
+        opts: { afterCompletedRun?: boolean } = {}
+    ): Promise<number> {
+        return this.taskIndex.insertSiblingAfterTask(this.resolveTaskId(taskId), siblingLine, opts);
+    }
+
+    /**
      * The one entry point for the first session-group transformation: the
      * existing record drops one level under a new group checkbox and the next
      * session joins it as a sibling, in a single atomic write.

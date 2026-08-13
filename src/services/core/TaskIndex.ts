@@ -694,6 +694,33 @@ export class TaskIndex {
         });
     }
 
+    /**
+     * Insert a line as the task's next sibling — same indentation, just past
+     * its subtree. Session records after the first one live beside the record
+     * before them, not under it, so the log stays flat.
+     *
+     * Inline only. A tv-file task is a whole note and has no siblings to speak
+     * of; that case belongs to appendChildTask.
+     */
+    async insertSiblingAfterTask(
+        taskId: string,
+        siblingLine: string,
+        opts: { afterCompletedRun?: boolean } = {}
+    ): Promise<number> {
+        const task = this.store.getTask(taskId);
+        if (!task) return -1;
+        if (task.isReadOnly || isTvFile(task)) return -1;
+        return this.withNotify(task.file, async () => {
+            logInfo(`[insertSiblingAfterTask] taskId=${taskId}`);
+
+            this.syncDetector.markLocalEdit(task.file);
+            const insertedLine = await this.repository.insertSiblingAfterTask(task, siblingLine, opts);
+            await this.scanner.waitForScan(task.file);
+
+            return insertedLine;
+        });
+    }
+
     async createTvFileFromData(taskData: Partial<Task>): Promise<string> {
         return this.withNotify('', async () => {
             const tempTask = createTempTask({
