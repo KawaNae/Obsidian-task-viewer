@@ -103,28 +103,6 @@ export class TaskWriteService {
         return this.taskIndex.insertSiblingAfterTask(this.resolveTaskId(taskId), siblingLine, opts);
     }
 
-    /**
-     * The one entry point for the first session-group transformation: the
-     * existing record drops one level under a new group checkbox and the next
-     * session joins it as a sibling, in a single atomic write.
-     *
-     * Pass `groupContent` with the undecorated task name. The task reached here
-     * is already the first session record, whose content carries the timer's
-     * icon; without this the group would inherit that record marking. Omitted,
-     * it falls back to the task's own content.
-     */
-    async wrapTaskInGroup(
-        taskId: string,
-        opts: {
-            groupStartDate: string;
-            groupEndDate?: string;
-            sessionLine: string;
-            groupContent?: string;
-        }
-    ): Promise<void> {
-        return this.taskIndex.wrapTaskInGroup(this.resolveTaskId(taskId), opts);
-    }
-
     async createTvFileFromData(taskData: Partial<Task>): Promise<string> {
         return this.taskIndex.createTvFileFromData(taskData);
     }
