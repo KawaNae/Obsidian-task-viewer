@@ -195,14 +195,13 @@ export class TimerLifecycle {
     /**
      * ⏸ 中断: 走行分を**記録してから**ウィジェットを生かしたまま停める。
      *
-     * 現行 Stop との違いは `closeTimer` を呼ばないことだけ — 書き込みの種類は
-     * 変えない（グループ変形はフェーズ 3）。記録を書き終えた以上、次のセッション
-     * は新しいレコードになるので placeholder の紐付けは切る。
+     * 現行 Stop との違いは `closeTimer` を呼ばないことだけ。記録を書き終えた行は
+     * そのまま**尻尾**として残す（`tailRecordBlockId` / `recordedChildTaskId` を
+     * 切らない）— 次の再開はその隣に新しいレコードを並べるので、どこが最後だった
+     * かを手放してはいけない。
      *
-     * self モードは 1 回目の記録でタスク行そのものがレコードに変形する（＝
-     * `[x]` になる）。仕様上その未完了状態はフェーズ 3 で挿入するグループ
-     * checkbox が持つ。ここでは 2 回目以降が親直下への追記になるよう
-     * `recordMode` を child に落としておく。
+     * `recordMode` も触らない。v2 では 1 本目の書き方（self / child / sibling）
+     * だけを表し、2 本目以降は常に尻尾の兄弟なので、中断時に書き換える理由が無い。
      *
      * interval / idle は 4 出口の対象外（呼ばれない想定だが安全側で弾く）。
      */
@@ -216,11 +215,7 @@ export class TimerLifecycle {
 
         timer.recordedElapsedTime += Math.max(0, sessionSeconds);
         timer.sessionCount += 1;
-        timer.recordedChildTaskId = undefined;
-        timer.recordMode = 'child';
         timer.runState = 'suspended';
-        // グループが育っていれば、その帯を今日まで伸ばす（日跨ぎ作業）。
-        await this.ctx.recorder.syncGroupDateSpan(timer);
         timer.isExpanded = false;
 
         // 中断は「手を止めた」合図。走行中が居なくなったなら次タスクの提案を出す。
@@ -238,8 +233,7 @@ export class TimerLifecycle {
      * {@link resumeTimer} の累積保持と違う点）。合計は
      * `recordedElapsedTime` が持っている。
      *
-     * 走行中がタイムラインに見えるよう、child モードの慣習どおりセッション行は
-     * 開始時に書く。
+     * 走行中がタイムラインに見えるよう、セッション行は開始時に書く。
      */
     resumeSession(timer: TimerInstance): void {
         if (timer.runState !== 'suspended') return;
@@ -262,10 +256,9 @@ export class TimerLifecycle {
         this.startTimerTicker(timer.id);
         AudioUtils.playStartSound();
 
-        // 遅延グループ化の分岐は recorder が持つ（初回再開なら変形、以後は追記）。
-        void this.ctx.recorder.startNextSession(timer).then((childTaskId) => {
-            if (!childTaskId) return;
-            timer.recordedChildTaskId = childTaskId;
+        // 書き先（尻尾の兄弟 / フォールバックの子）の判断は recorder が持つ。
+        void this.ctx.recorder.startNextSession(timer).then((sessionTaskId) => {
+            if (!sessionTaskId) return;
             this.ctx.persistTimersToStorage();
         });
 
@@ -274,20 +267,35 @@ export class TimerLifecycle {
     }
 
     /**
-     * ✓ 完了: 走行中なら記録してから、対象タスクを完了にしてウィジェットを畳む。
+     * ■ 終了: 走行中なら記録してからウィジェットを畳む。
+     *
+     * **タスクの状態は触らない**。タイマーは計測と記録の装置で、完了はユーザーが
+     * checkbox で宣言するもの — v1 はここで対象タスクを `[x]` にしていたが、
+     * 「状態を所有しようとしたこと」が複雑さの根だったので v2 で手放した。
+     *
+     * 尻尾に残っている `^id` は `closeTimer` → `onTimerClosed` が片付ける。
      */
-    async completeTimer(timer: TimerInstance): Promise<void> {
+    async finishTimer(timer: TimerInstance): Promise<void> {
         if (timer.runState === 'running' && timer.timerType !== 'idle') {
             this.pauseTimer(timer);
             const sessionSeconds = getTimerElapsedSeconds(timer);
             await this.ctx.recorder.recordSessionEnd(timer);
             timer.recordedElapsedTime += Math.max(0, sessionSeconds);
             timer.sessionCount += 1;
-            timer.recordedChildTaskId = undefined;
-            await this.ctx.recorder.syncGroupDateSpan(timer);
         }
 
-        await this.ctx.recorder.completeTargetTask(timer);
+        this.closeTimer(timer.id);
+    }
+
+    /**
+     * ✕ 破棄（走行中）: 今回の走行を記録せずに閉じる。
+     *
+     * 開始時に自分が書いた placeholder 行は道連れにする — 記録しないと決めた以上、
+     * 開きかけの行だけがノートに残るのは事実ではなくゴミ。判断（本当に自分の行か）
+     * は recorder 側。
+     */
+    async discardTimer(timer: TimerInstance): Promise<void> {
+        await this.ctx.recorder.discardRunningPlaceholder(timer);
         this.closeTimer(timer.id);
     }
 

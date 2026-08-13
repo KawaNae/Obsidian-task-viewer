@@ -22,10 +22,9 @@ function build() {
         intervalPrepareBaseElapsed: new Map<string, number>(),
         recorder: {
             recordSessionEnd: async () => { /* unused */ },
-            completeTargetTask: async () => { /* unused */ },
             createChildAtStart: async () => undefined,
             startNextSession: async () => undefined,
-            syncGroupDateSpan: async () => { /* グループ未形成なら no-op */ },
+            discardRunningPlaceholder: async () => { /* unused */ },
         } as unknown as TimerContext['recorder'],
         plugin: { settings: { pomodoroWorkMinutes: 25, pomodoroBreakMinutes: 5 } } as unknown as TimerContext['plugin'],
         app: {} as TimerContext['app'],

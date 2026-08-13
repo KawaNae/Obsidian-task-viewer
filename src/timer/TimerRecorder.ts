@@ -14,7 +14,7 @@ import { type Task, isTvFile } from '../types';
 import { createTempTask } from '../services/data/createTempTask';
 import { TimeFormatter } from '../utils/TimeFormatter';
 import { TimerTaskResolver } from './TimerTaskResolver';
-import { isSessionRecord, looksLikeSessionGroup, resolveSessionGroup, stripSessionIcon } from './TimerSessionGroup';
+import { isTimerTargetId } from '../utils/TimerTargetIdUtils';
 import type { TimerStorageUtils } from './TimerStorageUtils';
 
 export class TimerRecorder {
@@ -192,16 +192,19 @@ export class TimerRecorder {
      * 走行中セッションの行（placeholder）を組み立てる。
      *
      * 開始時刻だけを持つ未完了行で、`blockId` は書き込んだ後に「どの行が今の
-     * セッションか」を引き直すための目印。セッション行の形はここが唯一の持ち主で、
-     * 子として挿す経路（{@link createChildAtStart}）とグループ変形に同梱する
-     * 経路（フェーズ 3 の wrapTaskInGroup）が同じ行を使う。
+     * セッションか」を引き直すための目印（＝ 尻尾アンカー）。セッション行の形は
+     * ここが唯一の持ち主で、子として挿す経路（{@link createChildAtStart}）と
+     * 兄弟に挿す経路（{@link startNextSession}）が同じ行を使う。
+     *
+     * 名前は**対象タスクの名前を継ぐ**。セッションは同じ作業の分割であって別物
+     * ではないので、レコードが無名（アイコンだけ）になると後から読めない。
      */
     buildSessionPlaceholder(timer: TimerInstance): { line: string; blockId: string } {
         const now = new Date();
         const blockId = this.storageUtils.generateTimerTargetId();
 
         const taskObj = this.createTaskObject(
-            timer.customLabel.trim(),
+            timer.customLabel.trim() || timer.taskName.trim(),
             this.formatDate(now),
             this.formatTime(now),
             '', ''
@@ -238,7 +241,46 @@ export class TimerRecorder {
             : this.resolver.resolveTvInline(timer);
         if (!parentTask) return undefined;
 
-        return this.findSessionTaskId(parentTask.file, blockId);
+        return this.adoptWrittenSession(timer, parentTask.file, blockId);
+    }
+
+    /**
+     * `[x]` のタスクから「続きを開始」したときの 1 本目。
+     *
+     * 起点の行そのものは触らず（既に完了した事実）、**その行から連続する完了済み
+     * 兄弟の末尾**に新しいセッション行を置く。位置決めは書き込み層の
+     * `afterCompletedRun` が担う — どこまでが「連続する完了済み」かは index の
+     * スナップショットではなくファイルの生の行を見ないと決まらないため。
+     */
+    async startContinuationSession(timer: TimerInstance): Promise<string | undefined> {
+        const anchor = this.resolveAnchorTask(timer);
+        if (!anchor) return this.createChildAtStart(timer);
+
+        const { line, blockId } = this.buildSessionPlaceholder(timer);
+        const inserted = await this.plugin.getTaskWriteService()
+            .insertSiblingAfterTask(anchor.id, line, { afterCompletedRun: true });
+        if (inserted < 0) return undefined;
+
+        return this.adoptWrittenSession(timer, anchor.file, blockId);
+    }
+
+    /**
+     * 書き込んだセッション行を尻尾として引き受ける。
+     *
+     * 引き直せたときだけ尻尾アンカーを進めるのが要点。書き込みが不発だった場合に
+     * 更新してしまうと、実在しない id を指したまま次の再開が迷子になる。
+     */
+    private async adoptWrittenSession(
+        timer: TimerInstance,
+        filePath: string,
+        blockId: string,
+    ): Promise<string | undefined> {
+        const sessionTaskId = await this.findSessionTaskId(filePath, blockId);
+        if (!sessionTaskId) return undefined;
+
+        timer.tailRecordBlockId = blockId;
+        timer.recordedChildTaskId = sessionTaskId;
+        return sessionTaskId;
     }
 
     /**
@@ -273,7 +315,10 @@ export class TimerRecorder {
             endDate: this.formatDate(endTime),
             endTime: this.formatTime(endTime),
             statusChar: 'x',
-            blockId: undefined,
+            // `^id` は**残す**。記録を書き終えてもこの行は尻尾のままで、次の再開は
+            // ここを起点に兄弟を挿す。外すのは尻尾でなくなるとき（再開）と
+            // widget を閉じるときだけ。
+            blockId: child.blockId,
         });
 
         const kind = this.getTimerKind(timer);
@@ -310,127 +355,136 @@ export class TimerRecorder {
     }
 
     /**
-     * 形成済みのセッショングループ。未形成 / tvFile / daily なら null。
-     * tvFile は最初から恒久的な器を持つので変形の対象外。
+     * タイマーが最後に書いたレコード行（＝ 尻尾）。
      *
-     * アンカー自身が既にグループの場合（＝ セッションレコードの子を持つタスクに
-     * 新しくタイマーを掛けた append モード）と、アンカーが 1 回目のレコードで
-     * その親がグループの場合の両方を引く。
+     * 正は尻尾アンカー `tailRecordBlockId` — 行番号ベースの task id はユーザーの
+     * 編集やリロードで腐るのに対し、`^id` はファイルに書いてあるものが正になる。
+     * 引けなければ task id のキャッシュへ落ちる。
+     *
+     * 最後の砦は self モードに限る。self は 1 本目のレコードが対象タスク行その
+     * ものなので対象アンカーが尻尾を兼ねるが、child / sibling の対象は**器**で
+     * あってレコードではない。器を尻尾と見なすと、その隣（＝ ユーザーのタスクと
+     * 同じ深さ）にレコードを置いてしまう。
      */
-    resolveGroup(timer: TimerInstance): Task | null {
-        if (!timer.taskId || timer.taskId.startsWith('daily-')) return null;
-        if (isTvFile(timer)) return null;
-
+    resolveTailRecord(timer: TimerInstance): Task | undefined {
         const taskIndex = this.plugin.getTaskIndex();
-        const getTask = (id: string) => taskIndex.getTask(id);
-        const anchor = this.resolveAnchorTask(timer);
 
-        if (looksLikeSessionGroup(anchor, getTask)) return anchor ?? null;
-        return resolveSessionGroup(anchor, getTask);
+        if (timer.tailRecordBlockId) {
+            const byBlockId = taskIndex.getTasks().find(task =>
+                task.blockId === timer.tailRecordBlockId
+                && (!timer.taskFile || task.file === timer.taskFile)
+            );
+            if (byBlockId) return byBlockId;
+        }
+
+        if (timer.recordedChildTaskId) {
+            const byId = taskIndex.getTask(timer.recordedChildTaskId);
+            if (byId) return byId;
+        }
+
+        return timer.recordMode === 'self' ? this.resolveAnchorTask(timer) : undefined;
     }
 
     /**
-     * 再開時にセッション行を書いて次の走行を始める。**遅延グループ化**の分岐点。
+     * 再開時にセッション行を書いて次の走行を始める。
      *
-     *   グループ形成済み          → 末尾に追記
-     *   未形成 + 1 回目のレコードがタスク行そのもの（tvInline）
-     *                             → グループ変形（1 回きり・1 vault.process）
-     *   それ以外（tvFile / daily / アンカー解決不能）
-     *                             → 従来の child 追記（変形しない）
+     *   daily            → 何も書かない（デイリーノートには終わってから 1 行足す）
+     *   尻尾を引ける     → **尻尾の兄弟**として追記し、尻尾アンカーを進める
+     *   引けない         → 対象タスクの子として追記（フォールバック）
      *
-     * 最後の枝はフォールバックでもある: レコード行をユーザーが消してアンカーを
-     * 失っても、記録そのものは落とさない。
+     * self 起点か child 起点かで分けない。self は 1 本目がタスク行そのもの、
+     * child は 1 本目が子で、どちらも 2 本目以降は「直前のレコードの隣」に並ぶ。
+     * 最後の枝はフォールバックでもある: レコード行をユーザーが消して尻尾を失って
+     * も、記録そのものは落とさない。
      */
     async startNextSession(timer: TimerInstance): Promise<string | undefined> {
-        const group = this.resolveGroup(timer);
-        if (group) return this.appendSessionAtStart(timer, group);
+        // デイリーノートは走行中の行を持たない（開始時に書く相手がいない）。
+        // セッションの記録は停止時に 1 行足す従来どおりの経路。
+        if (timer.taskId.startsWith('daily-')) return undefined;
 
-        const record = this.resolveAnchorTask(timer);
-        const canWrap = !!record
-            && !isTvFile(timer)
-            && !timer.taskId.startsWith('daily-')
-            && isSessionRecord(record);
+        const tail = this.resolveTailRecord(timer);
+        if (!tail || isTvFile(tail)) return this.createChildAtStart(timer);
 
-        return canWrap ? this.wrapIntoSessionGroup(timer, record) : this.createChildAtStart(timer);
-    }
-
-    /**
-     * 1 回目のレコードをグループの下へ落とし、新しいセッション行をその隣に置く。
-     * 変形は書き込み層の `wrapTaskInGroup` が 1 回の vault.process で行うので、
-     * 半端に包まれた状態がファイルに現れる瞬間は無い。
-     */
-    private async wrapIntoSessionGroup(timer: TimerInstance, record: Task): Promise<string | undefined> {
+        const previousBlockId = tail.blockId;
         const { line, blockId } = this.buildSessionPlaceholder(timer);
-        const today = this.formatDate(new Date());
-        const groupStartDate = record.startDate ?? today;
+        const inserted = await this.plugin.getTaskWriteService()
+            .insertSiblingAfterTask(tail.id, line);
+        if (inserted < 0) return this.createChildAtStart(timer);
 
-        await this.plugin.getTaskWriteService().wrapTaskInGroup(record.id, {
-            groupStartDate,
-            // 日を跨いで再開したなら、グループは生まれた時点で複数日の帯になる。
-            groupEndDate: today > groupStartDate ? today : undefined,
-            sessionLine: line,
-            // グループはレコードではないのでアイコンを持たない。
-            groupContent: stripSessionIcon(record.content) || timer.taskName,
-        });
-
-        return this.findSessionTaskId(record.file, blockId);
+        const sessionTaskId = await this.adoptWrittenSession(timer, tail.file, blockId);
+        if (sessionTaskId) {
+            // 尻尾は 1 個。新しい行が尻尾になった時点で前の行から id を外す。
+            await this.releaseTailId(timer, tail.file, previousBlockId);
+        }
+        return sessionTaskId;
     }
 
     /**
-     * セッション行を親の **末尾** に追記して走行を開始する。
+     * 尻尾でなくなった行から自動生成 `^id` を外す。
      *
-     * グループ配下のセッションは時系列のログなので、先頭挿入
-     * （{@link createChildAtStart} が使う insertChildTask）だと新しい順に並んで
-     * 読みにくい。
+     * 外すのは自分で付けたものだけ。ユーザーが手で書いた blockId は別用途の参照で、
+     * タイマーが片付けてよいものではない。対象アンカーが同じ id を指していたなら
+     * それも手放す — 行から消えた id を後で引きに行っても迷子になるだけ。
      */
-    async appendSessionAtStart(timer: TimerInstance, parent: Task): Promise<string | undefined> {
-        const { line, blockId } = this.buildSessionPlaceholder(timer);
-        await this.plugin.getTaskWriteService().appendChildTask(parent.id, line);
-        return this.findSessionTaskId(parent.file, blockId);
+    private async releaseTailId(
+        timer: TimerInstance,
+        filePath: string,
+        blockId: string | undefined,
+    ): Promise<void> {
+        if (!blockId || !isTimerTargetId(blockId)) return;
+
+        const taskId = await this.findSessionTaskId(filePath, blockId);
+        if (!taskId) return;
+
+        await this.plugin.getTaskIndex().updateTask(taskId, { blockId: undefined });
+
+        if (timer.timerTargetId === blockId) {
+            timer.timerTargetId = undefined;
+            timer.autoGeneratedTargetId = false;
+        }
     }
 
     /**
-     * グループ行の日付を作業実績に合わせて伸ばす。
-     *
-     * グループは**日付のみ**（時刻なし）の allday で、初回作業日から最終作業日
-     * までの帯。日を跨いで作業したらそのぶん `@初回>最終` に伸ばす。後退はさせ
-     * ない（過去日のセッションを足しても縮めない）。
+     * widget を閉じるときに尻尾の `^id` を外す（＝ ノートに残る自動 id を 0 個に
+     * する）。記録そのものは残す — 消すのは目印だけ。
      */
-    async syncGroupDateSpan(timer: TimerInstance): Promise<void> {
-        const group = this.resolveGroup(timer);
-        if (!group?.startDate) return;
+    async clearTailRecordId(timer: TimerInstance): Promise<void> {
+        const blockId = timer.tailRecordBlockId;
+        if (!blockId) return;
 
-        const today = this.formatDate(new Date());
-        if (today <= group.startDate) return;
-        if (group.endDate && today <= group.endDate) return;
-
-        await this.plugin.getTaskIndex().updateTask(group.id, { endDate: today });
+        timer.tailRecordBlockId = undefined;
+        await this.releaseTailId(timer, timer.taskFile, blockId);
     }
 
     /**
-     * ✓ 完了: 状態を持つ行を完了にする。
+     * ✕ 破棄: 走行中の記録を捨てるとき、開始時に**自分が書いた**行も片付ける。
      *
-     * グループが形成済みならグループ行が状態の持ち主（レコードは事実であって
-     * 状態ではないので常に `[x]` のまま触らない）。未形成なら対象タスク自身。
-     * child モードでセッションを子に積んでいる場合も、完了するのはレコードでは
-     * なく親。self モードは記録の時点で既に `[x]` なので何もしない。
+     * 消すのは placeholder と断定できるときだけ（未完了・尻尾の id を持つ・終了
+     * 時刻なし）。ユーザーが手を入れていたらそれはもう自分の行ではないので、
+     * 目印の id だけ外して行は残す。
      *
-     * flow 付きタスクは self が安全でないため child モードに退避されているが、
-     * ここで `[x]` にすると flow が発火する。完了は本物の完了意図なので、これは
-     * 意図した挙動（tv-lead 承認済み）。
+     * self モードの 1 本目は対象タスク行そのものなので対象外。開始時に書いた
+     * start 時刻も**巻き戻さない** — 破棄は「今回の走行を記録しない」の意であって
+     * 対象タスクの日付操作までは含まないし、巻き戻しはユーザー編集との競合を
+     * 持ち込む（tv-lead 裁定 2026-08-13）。
      */
-    async completeTargetTask(timer: TimerInstance): Promise<void> {
-        if (!timer.taskId || timer.taskId.startsWith('daily-')) return;
+    async discardRunningPlaceholder(timer: TimerInstance): Promise<void> {
+        const blockId = timer.tailRecordBlockId;
+        if (!blockId) return;
 
-        const target = this.resolveGroup(timer) ?? this.resolveAnchorTask(timer);
+        const tail = this.resolveTailRecord(timer);
+        timer.tailRecordBlockId = undefined;
+        timer.recordedChildTaskId = undefined;
 
-        if (!target) {
-            new Notice(t('notice.timerTargetNotFound'));
+        if (!tail || tail.blockId !== blockId) return;
+
+        const untouchedPlaceholder = tail.statusChar === ' ' && !tail.endTime;
+        if (!untouchedPlaceholder) {
+            await this.releaseTailId(timer, tail.file, blockId);
             return;
         }
-        if (target.statusChar === 'x') return;
 
-        await this.plugin.getTaskIndex().updateTask(target.id, { statusChar: 'x' });
+        await this.plugin.getTaskIndex().deleteTask(tail.id);
     }
 
     /**
@@ -468,11 +522,10 @@ export class TimerRecorder {
                 endTime: endTimeStr,
                 statusChar: 'x',
                 // blockId は**残す**。この行は self モードのレコードであると同時に
-                // タイマーのアンカーで、中断→再開の次セッションはこの id でしか
-                // 対象を引き直せない（記録で content も日時も変わるため、
-                // originalText / 内容一致では解決できなくなる）。
-                // 自動生成 id はタイマーが閉じるときに cleanupGeneratedTargetId
-                // が片付ける。ユーザーの手動 blockId はもとより保持。
+                // 尻尾でもあり、中断→再開の次セッションはこの id でしか隣を
+                // 決められない（記録で content も日時も変わるため、originalText /
+                // 内容一致では解決できなくなる）。自動生成 id は再開時か widget を
+                // 閉じるときに外れる。ユーザーの手動 blockId はもとより保持。
                 blockId: task.blockId,
                 content: existingContent.startsWith(icon)
                     ? existingContent
@@ -482,6 +535,10 @@ export class TimerRecorder {
             };
 
             await taskIndex.updateTask(task.id, updates);
+
+            // この行が最初のレコード＝尻尾。次の再開はここの隣に並ぶ。
+            timer.tailRecordBlockId = task.blockId;
+            timer.recordedChildTaskId = task.id;
         }
 
         const icon = this.getTimerIcon(timer);
