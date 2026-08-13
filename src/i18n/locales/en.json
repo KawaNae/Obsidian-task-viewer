@@ -607,7 +607,7 @@
     "finish": "End",
     "suspended": "Suspended",
     "startOnCompletedTitle": "This task is already completed",
-    "startOnCompletedMessage": "Start a new session next to the record of \"{{task}}\", or record over that line again?",
+    "startOnCompletedMessage": "Add a new task next to the record of \"{{task}}\", or record over this task again?",
     "continueSession": "Continue",
     "overwriteStart": "Record over it",
     "reset": "Reset",

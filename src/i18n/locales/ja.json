@@ -607,7 +607,7 @@
     "finish": "終了",
     "suspended": "中断中",
     "startOnCompletedTitle": "このタスクは完了済みです",
-    "startOnCompletedMessage": "「{{task}}」の記録の隣に新しいセッションを足しますか、それともその行に記録し直しますか。",
+    "startOnCompletedMessage": "「{{task}}」の記録の隣に新しいタスクを足しますか？それともこのタスクに記録し直しますか？",
     "continueSession": "続きを開始",
     "overwriteStart": "上書きして開始",
     "reset": "リセット",
