@@ -1,6 +1,7 @@
 import { type App, TFile } from 'obsidian';
 import type { Task } from '../../../types';
 import { TaskParser } from '../../parsing/TaskParser';
+import { TaskLineClassifier } from '../../parsing/utils/TaskLineClassifier';
 import { createTempTask } from '../../data/createTempTask';
 import { collectFlowLineIndices } from '../../flow/FlowLineScanner';
 import { FileOperations } from '../utils/FileOperations';
@@ -244,6 +245,57 @@ export class InlineTaskWriter {
         });
     }
 
+    /**
+     * The line index just past the task's subtree — where a following line
+     * would go. Trailing blank lines inside the subtree are not counted, so an
+     * insert lands against the last written line instead of after a gap.
+     */
+    private subtreeEnd(lines: string[], taskLineIndex: number): number {
+        const { childrenLines } = this.fileOps.collectChildrenFromLines(lines, taskLineIndex);
+
+        let effectiveChildrenCount = childrenLines.length;
+        for (let i = childrenLines.length - 1; i >= 0; i--) {
+            if (childrenLines[i].trim() === '') {
+                effectiveChildrenCount--;
+            } else {
+                break;
+            }
+        }
+
+        return taskLineIndex + 1 + effectiveChildrenCount;
+    }
+
+    /**
+     * Walk forward over the siblings that immediately follow `taskLineIndex`
+     * for as long as they are completed, and return the last one's index (the
+     * starting index when the very next sibling is not completed).
+     *
+     * "Completed" is `[x]` and nothing else — the status character is a fact the
+     * parser knows, unlike the shape of a line, which cannot be told apart from
+     * something the user typed by hand. The run stops at the first line that is
+     * not a completed sibling: a blank line, a shallower line, or an unfinished
+     * one. Deeper lines are never seen here because they belong to a subtree
+     * that {@link subtreeEnd} has already skipped over.
+     */
+    private completedRunEnd(lines: string[], taskLineIndex: number): number {
+        const baseIndent = lines[taskLineIndex].search(/\S|$/);
+
+        let last = taskLineIndex;
+        for (; ;) {
+            const next = this.subtreeEnd(lines, last);
+            if (next >= lines.length) return last;
+
+            const line = lines[next];
+            if (line.trim() === '') return last;
+            if (line.search(/\S|$/) !== baseIndent) return last;
+
+            const parsed = TaskLineClassifier.classify(line);
+            if (parsed?.statusChar !== 'x') return last;
+
+            last = next;
+        }
+    }
+
     async insertLineAfterTask(task: Task, lineContent: string): Promise<number> {
         const file = this.app.vault.getAbstractFileByPath(task.file);
         if (!(file instanceof TFile)) return -1;
@@ -257,21 +309,60 @@ export class InlineTaskWriter {
             const currentLine = this.fileOps.findTaskLineNumber(lines, task);
             if (currentLine < 0 || currentLine >= lines.length) return content;
 
-            // Use file-based calculation to get actual children count
-            const { childrenLines } = this.fileOps.collectChildrenFromLines(lines, currentLine);
+            const insertIndex = this.subtreeEnd(lines, currentLine);
+            lines.splice(insertIndex, 0, lineContent);
+            insertedLineIndex = insertIndex;
 
-            // Ignore trailing blank lines to avoid gaps
-            let effectiveChildrenCount = childrenLines.length;
-            for (let i = childrenLines.length - 1; i >= 0; i--) {
-                if (childrenLines[i].trim() === '') {
-                    effectiveChildrenCount--;
-                } else {
-                    break;
-                }
+            return lines.join('\n');
+        });
+
+        return insertedLineIndex;
+    }
+
+    /**
+     * Insert `lineBody` just past the task's subtree, at the task's own
+     * indentation — the task gains a next sibling.
+     *
+     * The indentation is read from the *resolved* line rather than from
+     * `task.originalText`, which can be stale after a shift; a sibling that
+     * lands one level off would silently become a child of the wrong line.
+     *
+     * With `opts.afterCompletedRun`, the insert moves past the completed
+     * siblings that directly follow the task (see {@link completedRunEnd}) so a
+     * new session record joins the end of a chronological run instead of
+     * splitting it. Deciding *where* belongs here rather than in the caller
+     * because the answer needs the file's own lines, and reading them outside
+     * this `vault.process` would reintroduce the gap between "what the index
+     * last saw" and "what the file holds now".
+     *
+     * Returns the inserted line index, or -1 when the line cannot be resolved.
+     */
+    async insertSiblingAfterTask(
+        task: Task,
+        lineBody: string,
+        opts: { afterCompletedRun?: boolean } = {}
+    ): Promise<number> {
+        const file = this.app.vault.getAbstractFileByPath(task.file);
+        if (!(file instanceof TFile)) return -1;
+
+        let insertedLineIndex = -1;
+
+        await this.app.vault.process(file, (content) => {
+            const lines = content.split('\n');
+
+            const currentLine = this.fileOps.findTaskLineNumber(lines, task);
+            if (currentLine < 0 || currentLine >= lines.length) {
+                logWarn(`[InlineTaskWriter] Task not found in file (insertSiblingAfterTask)`);
+                return content;
             }
 
-            const insertIndex = currentLine + 1 + effectiveChildrenCount;
-            lines.splice(insertIndex, 0, lineContent);
+            const indent = lines[currentLine].match(/^(\s*)/)?.[1] ?? '';
+            const anchor = opts.afterCompletedRun
+                ? this.completedRunEnd(lines, currentLine)
+                : currentLine;
+
+            const insertIndex = this.subtreeEnd(lines, anchor);
+            lines.splice(insertIndex, 0, indent + lineBody.trim());
             insertedLineIndex = insertIndex;
 
             return lines.join('\n');

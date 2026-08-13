@@ -61,6 +61,14 @@ export class TaskRepository {
         return this.inlineWriter.insertLineAfterTask(task, lineContent);
     }
 
+    async insertSiblingAfterTask(
+        task: Task,
+        lineBody: string,
+        opts: { afterCompletedRun?: boolean } = {}
+    ): Promise<number> {
+        return this.inlineWriter.insertSiblingAfterTask(task, lineBody, opts);
+    }
+
     async wrapTaskInGroup(
         task: Task,
         opts: {
