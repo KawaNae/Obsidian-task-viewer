@@ -69,18 +69,6 @@ export class TaskRepository {
         return this.inlineWriter.insertSiblingAfterTask(task, lineBody, opts);
     }
 
-    async wrapTaskInGroup(
-        task: Task,
-        opts: {
-            groupStartDate: string;
-            groupEndDate?: string;
-            sessionLine: string;
-            groupContent?: string;
-        }
-    ): Promise<void> {
-        return this.inlineWriter.wrapTaskInGroup(task, opts);
-    }
-
     async insertLineAsFirstChild(task: Task, lineContent: string): Promise<number> {
         return this.inlineWriter.insertLineAsFirstChild(task, lineContent);
     }

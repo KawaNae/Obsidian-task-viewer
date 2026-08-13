@@ -2,7 +2,6 @@ import { type App, TFile } from 'obsidian';
 import type { Task } from '../../../types';
 import { TaskParser } from '../../parsing/TaskParser';
 import { TaskLineClassifier } from '../../parsing/utils/TaskLineClassifier';
-import { createTempTask } from '../../data/createTempTask';
 import { collectFlowLineIndices } from '../../flow/FlowLineScanner';
 import { FileOperations } from '../utils/FileOperations';
 import { ChildPropertyLineEditor } from '../utils/ChildPropertyLineEditor';
@@ -151,97 +150,6 @@ export class InlineTaskWriter {
             lines.splice(currentLine, 1 + childrenLines.length);
 
             return lines.join('\n');
-        });
-    }
-
-    /**
-     * The session group's line, built by the parser rather than by hand: a task
-     * carrying dates but no times formats to `@YYYY-MM-DD`, and to
-     * `@YYYY-MM-DD>YYYY-MM-DD` once the work spans days.
-     */
-    static buildGroupLine(
-        id: string,
-        file: string,
-        content: string,
-        startDate: string,
-        endDate?: string
-    ): string {
-        return TaskParser.format(createTempTask({
-            id,
-            file,
-            content,
-            statusChar: ' ',
-            startDate,
-            endDate,
-        })).trim();
-    }
-
-    /**
-     * Promote a standalone session record into a group: insert a group checkbox
-     * above it, push the record (and its subtree) down one level, and add the
-     * new session line as the record's sibling — all inside one vault.process so
-     * the file never exists in a half-wrapped state.
-     *
-     * This is the *only* entry point for that first transformation. Later
-     * sessions are plain appends via insertLineAfterTask.
-     *
-     * The group line is produced by TaskParser.format from a task carrying only
-     * dates (no times), which is what yields `@YYYY-MM-DD` for a single day and
-     * `@YYYY-MM-DD>YYYY-MM-DD` once the work spans days. Keeping the notation in
-     * the parser's hands is why this does not concatenate the line by hand.
-     *
-     * Updating the group's dates later needs no primitive of its own: the group
-     * line is an ordinary dated checkbox, so updateTaskInFile handles it. Note
-     * that path rebuilds the whole line from the Task model — safe here only
-     * because we author the group line ourselves, so it carries nothing the
-     * model does not model.
-     *
-     * `opts.groupContent` names the group. It matters because by the time this
-     * runs, `task` is already the first session *record*: self-mode recording
-     * prefixes the task's content with the timer's icon (⏱️ / ⏳ / 🍅 / 🔁,
-     * TimerRecorder.updateTaskDirectly). The icon marks a record, so carrying it
-     * onto the group would label the container as a record too. The caller knows
-     * the undecorated name and passes it; stripping icons here would mean
-     * duplicating that varying set. Omitted, it falls back to `task.content`.
-     */
-    async wrapTaskInGroup(
-        task: Task,
-        opts: {
-            groupStartDate: string;
-            groupEndDate?: string;
-            sessionLine: string;
-            groupContent?: string;
-        }
-    ): Promise<void> {
-        const file = this.app.vault.getAbstractFileByPath(task.file);
-        if (!(file instanceof TFile)) {
-            logWarn(`[InlineTaskWriter] File not found: ${task.file}`);
-            return;
-        }
-
-        const groupLine = InlineTaskWriter.buildGroupLine(
-            `session-group:${task.id}`,
-            task.file,
-            opts.groupContent ?? task.content,
-            opts.groupStartDate,
-            opts.groupEndDate
-        );
-
-        await this.app.vault.process(file, (content) => {
-            const lines = content.split('\n');
-
-            const currentLine = this.fileOps.findTaskLineNumber(lines, task);
-            if (currentLine < 0 || currentLine >= lines.length) {
-                logWarn(`[InlineTaskWriter] Task not found in file (wrapTaskInGroup)`);
-                return content;
-            }
-
-            const wrapped = this.fileOps.buildGroupWrap(
-                lines, currentLine, groupLine, opts.sessionLine.trim()
-            );
-            if (!wrapped) return content;
-
-            return wrapped.join('\n');
         });
     }
 

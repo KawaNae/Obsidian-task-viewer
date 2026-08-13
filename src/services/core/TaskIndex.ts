@@ -637,35 +637,6 @@ export class TaskIndex {
     }
 
     /**
-     * Turn a standalone session record into a group and add the next session
-     * under it. One structural edit, applied once per task — every later
-     * session is an appendChildTask.
-     *
-     * Inline only: tv-file tasks already own a permanent group structure, so
-     * they accumulate children instead of being wrapped.
-     */
-    async wrapTaskInGroup(
-        taskId: string,
-        opts: {
-            groupStartDate: string;
-            groupEndDate?: string;
-            sessionLine: string;
-            groupContent?: string;
-        }
-    ): Promise<void> {
-        const task = this.store.getTask(taskId);
-        if (!task) return;
-        if (task.isReadOnly || isTvFile(task)) return;
-        return this.withNotify(task.file, async () => {
-            logInfo(`[wrapTaskInGroup] taskId=${taskId}`);
-
-            this.syncDetector.markLocalEdit(task.file);
-            await this.repository.wrapTaskInGroup(task, opts);
-            await this.scanner.waitForScan(task.file);
-        });
-    }
-
-    /**
      * Append a child at the end of the parent's subtree, in contrast to
      * insertChildTask's head insertion. Session records accumulate over time,
      * so head insertion would print the log backwards.
