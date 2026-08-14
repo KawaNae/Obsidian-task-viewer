@@ -652,7 +652,8 @@
     "timerTargetNotFound": "タイマーターゲットタスクが見つかりません。削除、移動、またはリネームされた可能性があります。",
     "timerTargetReadOnly": "このタスクは読み取り専用の形式です。タイマーの記録を書き込めません。",
     "taskConverted": "タスクをfrontmatterファイルに変換しました",
-    "taskConvertFailed": "タスクの変換に失敗しました"
+    "taskConvertFailed": "タスクの変換に失敗しました",
+    "taskWriteFailed": "タスクの行が特定できず、保存されませんでした。変更は元に戻しました。"
   },
   "pinnedList": {
     "noPinnedLists": "ピン留めリストがありません。",

@@ -33,7 +33,8 @@ export class TaskRepository {
 
     // --- Inline Task Operations ---
 
-    async updateTaskInFile(task: Task, updatedTask: Task, childOps: PropertyOp[] = []): Promise<void> {
+    /** @returns whether the write actually landed (see InlineTaskWriter). */
+    async updateTaskInFile(task: Task, updatedTask: Task, childOps: PropertyOp[] = []): Promise<boolean> {
         return this.inlineWriter.updateTaskInFile(task, updatedTask, childOps);
     }
 
@@ -83,12 +84,13 @@ export class TaskRepository {
 
     // --- tv-file Task Operations ---
 
+    /** @returns whether the write actually landed (see FrontmatterWriter). */
     async updateTvFile(
         task: Task,
         updates: Partial<Task>,
         frontmatterKeys: TvFileKeys,
         propertyOps: PropertyOp[] = []
-    ): Promise<void> {
+    ): Promise<boolean> {
         return this.frontmatterWriter.updateTvFile(task, updates, frontmatterKeys, propertyOps);
     }
 

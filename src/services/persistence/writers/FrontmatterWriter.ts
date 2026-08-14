@@ -27,7 +27,7 @@ export class FrontmatterWriter {
         updates: Partial<Task>,
         frontmatterKeys: TvFileKeys,
         propertyOps: PropertyOp[] = []
-    ): Promise<void> {
+    ): Promise<boolean> {
         const fmUpdates: Record<string, string | null> = {};
 
         if ('statusChar' in updates) {
@@ -55,7 +55,7 @@ export class FrontmatterWriter {
         if (Object.keys(fmUpdates).length > 0 || propertyOps.length > 0) {
             // tags（配列値）の表現決定は既存キーの形（ブロックリスト / 単一行）
             // に依存するため、ファイル行を見られる builder 内で解決する。
-            await this.updateFrontmatterFields(task.file, (lines, fmEnd) => {
+            return this.updateFrontmatterFields(task.file, (lines, fmEnd) => {
                 const merged: Record<string, string | string[] | null> = { ...fmUpdates };
                 for (const op of propertyOps) {
                     if (op.op === 'delete') {
@@ -69,6 +69,10 @@ export class FrontmatterWriter {
                 return merged;
             });
         }
+
+        // 書くものが無い更新（時刻も非時刻プロパティも変わっていない）は
+        // 書き込みが起きなくても失敗ではない。
+        return true;
     }
 
     /**
@@ -189,17 +193,22 @@ export class FrontmatterWriter {
     private async updateFrontmatterFields(
         filePath: string,
         build: (lines: string[], fmEnd: number) => Record<string, string | string[] | null>
-    ): Promise<void> {
+    ): Promise<boolean> {
         const file = this.app.vault.getAbstractFileByPath(filePath);
-        if (!(file instanceof TFile)) return;
+        if (!(file instanceof TFile)) return false;
+
+        let written = false;
 
         await this.app.vault.process(file, (content) => {
             const lines = content.split('\n');
             const fmEnd = FrontmatterLineEditor.findEnd(lines);
             if (fmEnd < 0) return content;
 
+            written = true;
             return FrontmatterLineEditor.applyUpdates(lines, fmEnd, build(lines, fmEnd));
         });
+
+        return written;
     }
 
 }

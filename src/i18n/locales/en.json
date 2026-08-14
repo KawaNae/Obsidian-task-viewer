@@ -652,7 +652,8 @@
     "timerTargetNotFound": "Timer target task was not found. It may have been deleted, moved, or renamed.",
     "timerTargetReadOnly": "This task's format is read-only. The timer cannot write records to it.",
     "taskConverted": "Task converted to frontmatter file",
-    "taskConvertFailed": "Failed to convert task"
+    "taskConvertFailed": "Failed to convert task",
+    "taskWriteFailed": "The task line could not be located, so nothing was saved. The change has been undone."
   },
   "pinnedList": {
     "noPinnedLists": "No pinned lists.",

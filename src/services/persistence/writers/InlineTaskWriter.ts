@@ -19,12 +19,21 @@ export class InlineTaskWriter {
         private fileOps: FileOperations
     ) { }
 
-    async updateTaskInFile(task: Task, updatedTask: Task, childOps: PropertyOp[] = []): Promise<void> {
+    /**
+     * @returns whether the task's line was found and rewritten. A `false` here
+     * means nothing was written at all, which the caller must not treat as a
+     * successful no-op: the index has already been updated optimistically, and
+     * an unwritten file leaves the two disagreeing until something else forces
+     * a rescan.
+     */
+    async updateTaskInFile(task: Task, updatedTask: Task, childOps: PropertyOp[] = []): Promise<boolean> {
         const file = this.app.vault.getAbstractFileByPath(task.file);
         if (!(file instanceof TFile)) {
             logWarn(`[InlineTaskWriter] File not found: ${task.file}`);
-            return;
+            return false;
         }
+
+        let written = false;
 
         await this.app.vault.process(file, (content) => {
             const lines = content.split('\n');
@@ -35,6 +44,7 @@ export class InlineTaskWriter {
                 logWarn(`[InlineTaskWriter] Task not found in file`);
                 return content;
             }
+            written = true;
 
             // Re-format line
             const newLine = TaskParser.format(updatedTask);
@@ -52,6 +62,8 @@ export class InlineTaskWriter {
 
             return lines.join('\n');
         });
+
+        return written;
     }
 
     async updateLine(filePath: string, lineNumber: number, newContent: string): Promise<void> {

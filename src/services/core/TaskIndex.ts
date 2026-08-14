@@ -1,4 +1,5 @@
-import { type App, TFile } from 'obsidian';
+import { type App, Notice, TFile } from 'obsidian';
+import { t } from '../../i18n';
 import type { DuplicateOptions, Task, TaskViewerSettings } from '../../types';
 import { isTvFile, isTvInline, hasBodyLine } from '../../types';
 import { TaskRepository } from '../persistence/TaskRepository';
@@ -498,6 +499,13 @@ export class TaskIndex {
         // ここで評価する。
         const propertyOps = PropertyUpdatePlanner.plan(task, updates, this.settings.tvFileKeys);
 
+        // 巻き戻し用に、これから触るキーの元の値だけを控える。値が無かったキーは
+        // undefined として記録されるので、戻すときに追加された分も消える。
+        const before: Record<string, unknown> = {};
+        for (const key of Object.keys(updates)) {
+            before[key] = (task as unknown as Record<string, unknown>)[key];
+        }
+
         this.syncDetector.markLocalEdit(task.file);
         Object.assign(task, updates);
         this.store.bumpRevision();
@@ -507,15 +515,47 @@ export class TaskIndex {
             this.store.notifyListeners(taskId, Object.keys(updates));
         }
 
-        if (isTvFile(task)) {
-            await this.repository.updateTvFile(task, updates, this.settings.tvFileKeys, propertyOps);
-        } else {
+        const written = isTvFile(task)
+            ? await this.repository.updateTvFile(task, updates, this.settings.tvFileKeys, propertyOps)
             // All inline tasks route through InlineTaskWriter; TaskParser.format
             // dispatches by parserId. TVInlineParser.format() handles both
             // bare-checkbox and @notation-bearing output, so a task gaining or
             // losing date fields just produces the right line — no parserId
             // promotion/demotion needed.
-            await this.repository.updateTaskInFile(task, { ...task, ...updates }, propertyOps);
+            : await this.repository.updateTaskInFile(task, { ...task, ...updates }, propertyOps);
+
+        if (!written) {
+            this.revertUnwrittenUpdate(task, taskId, before, updates);
+        }
+    }
+
+    /**
+     * 書き込みが 1 バイトも書かなかった更新を取り消す。
+     *
+     * index を先に書き換える設計なので、書けなかった更新を残すと画面とファイルが
+     * 食い違ったまま居座る。しかも何も書かなければ `vault.modify` が発火せず
+     * 再スキャンも走らないため、index を正す唯一の経路が、まさに落ちたその書き込み
+     * 自身に依存してしまう。値を戻し、再スキャンを促し、これまで警告ログだけで
+     * 黙って捨てていた失敗をユーザーにも伝える。
+     */
+    private revertUnwrittenUpdate(
+        task: Task,
+        taskId: string,
+        before: Record<string, unknown>,
+        updates: Partial<Task>,
+    ): void {
+        Object.assign(task, before);
+        this.store.bumpRevision();
+        if (this.draggingFilePath !== task.file) {
+            this.store.notifyListeners(taskId, Object.keys(updates));
+        }
+
+        logWarn(`[TaskIndex] update was not written, reverted: id=${taskId} fields=[${Object.keys(updates)}]`);
+        new Notice(t('notice.taskWriteFailed'));
+
+        const file = this.app.vault.getAbstractFileByPath(task.file);
+        if (file instanceof TFile) {
+            void this.scanner.requestScan(file);
         }
     }
 
