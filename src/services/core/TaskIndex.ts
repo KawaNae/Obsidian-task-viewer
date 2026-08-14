@@ -499,12 +499,8 @@ export class TaskIndex {
         // ここで評価する。
         const propertyOps = PropertyUpdatePlanner.plan(task, updates, this.settings.tvFileKeys);
 
-        // 巻き戻し用に、これから触るキーの元の値だけを控える。値が無かったキーは
-        // undefined として記録されるので、戻すときに追加された分も消える。
-        const before: Record<string, unknown> = {};
-        for (const key of Object.keys(updates)) {
-            before[key] = (task as unknown as Record<string, unknown>)[key];
-        }
+        // 更新前の姿。行の探索と、書けなかったときの巻き戻しの両方で要る。
+        const before: Task = { ...task };
 
         this.syncDetector.markLocalEdit(task.file);
         Object.assign(task, updates);
@@ -516,13 +512,18 @@ export class TaskIndex {
         }
 
         const written = isTvFile(task)
+            // tv-file は書き先がキー名で決まるので、渡すのは更新後の値でよい。
             ? await this.repository.updateTvFile(task, updates, this.settings.tvFileKeys, propertyOps)
             // All inline tasks route through InlineTaskWriter; TaskParser.format
             // dispatches by parserId. TVInlineParser.format() handles both
             // bare-checkbox and @notation-bearing output, so a task gaining or
             // losing date fields just produces the right line — no parserId
             // promotion/demotion needed.
-            : await this.repository.updateTaskInFile(task, { ...task, ...updates }, propertyOps);
+            //
+            // 探索は更新前の姿で行う。ファイルに書かれているのは更新前の行なので、
+            // 更新後の日付や時刻で探しに行くと、まさにその値を変える更新のときに
+            // 空振りする。第 2 引数が書く内容、第 1 引数がどの行かを決める。
+            : await this.repository.updateTaskInFile(before, task, propertyOps);
 
         if (!written) {
             this.revertUnwrittenUpdate(task, taskId, before, updates);
@@ -541,10 +542,16 @@ export class TaskIndex {
     private revertUnwrittenUpdate(
         task: Task,
         taskId: string,
-        before: Record<string, unknown>,
+        before: Task,
         updates: Partial<Task>,
     ): void {
-        Object.assign(task, before);
+        // 触ったキーだけを戻す。更新で新たに生えたキーは、スナップショットに
+        // undefined として写っているので同じ手順で消える。
+        const source = before as unknown as Record<string, unknown>;
+        const target = task as unknown as Record<string, unknown>;
+        for (const key of Object.keys(updates)) {
+            target[key] = source[key];
+        }
         this.store.bumpRevision();
         if (this.draggingFilePath !== task.file) {
             this.store.notifyListeners(taskId, Object.keys(updates));

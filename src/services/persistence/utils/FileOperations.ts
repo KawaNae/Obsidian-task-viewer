@@ -244,6 +244,22 @@ export class FileOperations {
     }
 
     /**
+     * Decide which of several equally matching lines the task means.
+     *
+     * One candidate answers itself. With more than one, the stored line number
+     * breaks the tie when it points at one of them — it is independent evidence,
+     * and the candidates are indistinguishable without it. Otherwise nothing is
+     * returned: writing to the first of several identical records would edit a
+     * neighbour with no sign that it happened, and the caller now reverts and
+     * reports rather than dropping the write in silence.
+     */
+    private static pickUnique(hits: number[], task: Task): number {
+        if (hits.length === 1) return hits[0];
+        if (hasBodyLine(task) && hits.includes(task.line)) return task.line;
+        return -1;
+    }
+
+    /**
      * Find the current line number of a task in the file.
      * Uses multiple strategies: exact match, content + date match, verified
      * fallback to the stored line. Returns -1 when no line can be trusted —
@@ -278,42 +294,36 @@ export class FileOperations {
         const content = task.content || '';
         // due-only / end-only タスクで bare '@' に退化すると同名タスクを誤マッチ
         // するため、実トークン(>due / >end)で照合する。
+        //
+        // 開始時刻まで含めるのは、同名・同日のレコードが日常的に並ぶため。
+        // ポモドーロは 30 分ごとに同じ名前の行を積むし、中断と再開も 1 日に何度も
+        // 起きる。日付だけで照合すると、その列のどれを指しているのか決まらない。
+        // 実データでは時刻がほぼ常に異なるので、これでほぼ一意になる。
         const datePattern = task.startDate
-            ? `@${task.startDate}`
+            ? `@${task.startDate}${task.startTime ? `T${task.startTime}` : ''}`
             : task.due
                 ? `>${task.due}`
                 : task.endDate
                     ? `>${task.endDate}`
                     : null;
 
-        if (content) {
-            for (let i = 0; i < lines.length; i++) {
-                const line = lines[i];
-                if (!FileOperations.lineHasTaskContent(line, content)) continue;
+        const matches = (line: string): boolean => {
+            if (content) {
+                if (!FileOperations.lineHasTaskContent(line, content)) return false;
+            } else {
+                // 名前が無い行は、日付トークンだけが手がかり。日付も無ければ
+                // 見分ける材料がゼロなので、この経路自体を使わない。
+                if (!datePattern) return false;
+                if (!FileOperations.lineHasEmptyTaskContent(line)) return false;
+            }
+            return !datePattern || FileOperations.lineHasDateToken(line, datePattern);
+        };
 
-                if (datePattern) {
-                    if (FileOperations.lineHasDateToken(line, datePattern)) return i;
-                } else {
-                    return i;
-                }
-            }
-        } else if (datePattern) {
-            // Strategy 2b: the task has no name, so the date token is all there
-            // is to match on. That is weak evidence — two name-less tasks on the
-            // same date are indistinguishable — so it only counts when exactly
-            // one line answers. Returning the first hit here would let a write
-            // aimed at one land on the other; refusing is the safe half of the
-            // trade, and the caller now reports the refusal instead of dropping
-            // the write in silence.
-            let found = -1;
-            for (let i = 0; i < lines.length; i++) {
-                if (!FileOperations.lineHasEmptyTaskContent(lines[i])) continue;
-                if (!FileOperations.lineHasDateToken(lines[i], datePattern)) continue;
-                if (found >= 0) return -1;
-                found = i;
-            }
-            if (found >= 0) return found;
+        const hits: number[] = [];
+        for (let i = 0; i < lines.length; i++) {
+            if (matches(lines[i])) hits.push(i);
         }
+        if (hits.length > 0) return FileOperations.pickUnique(hits, task);
 
         // Strategy 3: Stored line, but only when it still holds the same task.
         // The unverified fallback this replaces wrote to whatever happened to

@@ -519,12 +519,23 @@ describe('FileOperations', () => {
             expect(ops.findTaskLineNumber(lines, emptyTask({ statusChar: 'x' }))).toBe(1);
         });
 
-        it('refuses when two content-less tasks share the date', () => {
+        it('breaks a tie between same-date tasks with the stored line', () => {
             const lines = [
                 '- [x]  @2026-08-15',
                 '- [x]  @2026-08-15 ==> +1d',
             ];
-            expect(ops.findTaskLineNumber(lines, emptyTask({ statusChar: 'x' }))).toBe(-1);
+            // Both answer the date; the line number says which one.
+            expect(ops.findTaskLineNumber(lines, emptyTask({ statusChar: 'x', line: 1 }))).toBe(1);
+        });
+
+        it('refuses when the tie cannot be broken', () => {
+            const lines = [
+                '- [ ] 別のタスク @2026-08-15',
+                '- [x]  @2026-08-15',
+                '- [x]  @2026-08-15 ==> +1d',
+            ];
+            // The stored line points outside the candidates, so nothing decides.
+            expect(ops.findTaskLineNumber(lines, emptyTask({ statusChar: 'x', line: 0 }))).toBe(-1);
         });
 
         it('refuses when there is no date to match on', () => {
@@ -645,6 +656,129 @@ describe('FileOperations', () => {
             const lines = ['- [ ] parent', '', '    - [ ] not a child'];
             // Nothing indented before the blank, so the file's own unit decides.
             expect(FileOperations.resolveChildIndent(lines, 0)).toBe('    ');
+        });
+    });
+
+    // ── same-name records, in the shapes real vaults hold ──
+    //
+    // Timer records repeat the target's name, so a day of pomodoros is a column
+    // of identical names. Matching on the date alone cannot say which one a
+    // write means; the start time can.
+    describe('findTaskLineNumber across a run of same-name records', () => {
+        const pomodoro = [
+            '- [x] 🍅 スタディ3 @2026-08-14T09:00>09:25',
+            '- [x] 🍅 スタディ3 @2026-08-14T09:30>09:55',
+            '- [x] 🍅 スタディ3 @2026-08-14T10:00>10:25',
+            '- [x] 🍅 スタディ3 @2026-08-14T10:30>10:55',
+            '- [x] 🍅 スタディ3 @2026-08-14T11:00>11:25',
+            '- [x] 🍅 スタディ3 @2026-08-14T11:30>11:55',
+        ];
+        const record = (startTime: string, line: number) => makeTask({
+            content: '🍅 スタディ3', statusChar: 'x',
+            startDate: '2026-08-14', startTime,
+            // Stale on purpose: the exact-text strategies must not be what answers.
+            originalText: '- [ ] 🍅 スタディ3 @stale', line,
+        });
+
+        it('picks the record whose start time matches, not the first of the run', () => {
+            expect(ops.findTaskLineNumber(pomodoro, record('10:30', 3))).toBe(3);
+        });
+
+        it('picks the last of the run', () => {
+            expect(ops.findTaskLineNumber(pomodoro, record('11:30', 5))).toBe(5);
+        });
+
+        it('answers even when the stored line points elsewhere', () => {
+            // Only one line carries 09:30, so the time alone decides.
+            expect(ops.findTaskLineNumber(pomodoro, record('09:30', 0))).toBe(1);
+        });
+
+        it('refuses two records that share the same minute', () => {
+            const sameMinute = [
+                '- [ ] 別 @2026-08-14T08:00',
+                '- [x] ⏱️ 設計 @2026-08-14T10:00>10:00',
+                '- [x] ⏱️ 設計 @2026-08-14T10:00>10:30',
+            ];
+            const task = makeTask({
+                content: '⏱️ 設計', statusChar: 'x',
+                startDate: '2026-08-14', startTime: '10:00',
+                originalText: '- [ ] ⏱️ 設計 @stale', line: 0,
+            });
+            expect(ops.findTaskLineNumber(sameMinute, task)).toBe(-1);
+        });
+
+        it('breaks a same-minute tie with the stored line', () => {
+            const sameMinute = [
+                '- [x] ⏱️ 設計 @2026-08-14T10:00>10:00',
+                '- [x] ⏱️ 設計 @2026-08-14T10:00>10:30',
+            ];
+            const task = makeTask({
+                content: '⏱️ 設計', statusChar: 'x',
+                startDate: '2026-08-14', startTime: '10:00',
+                originalText: '- [ ] ⏱️ 設計 @stale', line: 1,
+            });
+            expect(ops.findTaskLineNumber(sameMinute, task)).toBe(1);
+        });
+    });
+
+    describe('findTaskLineNumber across a run of nameless records', () => {
+        // Old habit files hold columns of icon-only records; the timestamps are
+        // unique to the minute.
+        const nameless = [
+            '- [x] ⏱️ @2026-08-14T07:00>07:30',
+            '- [x] ⏱️ @2026-08-14T08:00>08:30',
+            '- [x] ⏱️ @2026-08-14T09:00>09:30',
+        ];
+        const containers = [
+            '- [x]  @2026-08-14T07:00>07:30',
+            '- [x]  @2026-08-14T08:00>08:30',
+            '- [x]  @2026-08-14T09:00>09:30',
+        ];
+
+        it('separates icon-only records by time', () => {
+            const task = makeTask({
+                content: '⏱️', statusChar: 'x',
+                startDate: '2026-08-14', startTime: '08:00',
+                originalText: '- [ ] ⏱️ @stale', line: 0,
+            });
+            expect(ops.findTaskLineNumber(nameless, task)).toBe(1);
+        });
+
+        it('separates content-less containers by time', () => {
+            // Matching on the date alone made this whole column ambiguous, so
+            // every write to it was refused.
+            const task = makeTask({
+                content: '', statusChar: 'x',
+                startDate: '2026-08-14', startTime: '09:00',
+                originalText: '- [ ]  @stale', line: 0,
+            });
+            expect(ops.findTaskLineNumber(containers, task)).toBe(2);
+        });
+    });
+
+    describe('findTaskLineNumber for all-day tasks', () => {
+        it('resolves a lone all-day task by date', () => {
+            const lines = ['- [x] 読書 @2026-08-14'];
+            const task = makeTask({
+                content: '読書', statusChar: 'x', startDate: '2026-08-14',
+                originalText: '- [ ] 読書 @stale', line: 0,
+            });
+            expect(ops.findTaskLineNumber(lines, task)).toBe(0);
+        });
+
+        it('refuses same-name all-day tasks that the stored line cannot separate', () => {
+            // No time to tell them apart. This is the case the change gives up
+            // on; before, it wrote to the first one without saying so.
+            const lines = [
+                '- [ ] 別 @2026-08-14',
+                '- [x] 読書 @2026-08-14',
+                '- [x] 読書 @2026-08-14',
+            ];
+            const task = makeTask({
+                content: '読書', statusChar: 'x', startDate: '2026-08-14',
+                originalText: '- [ ] 読書 @stale', line: 0,
+            });
+            expect(ops.findTaskLineNumber(lines, task)).toBe(-1);
         });
     });
 });
