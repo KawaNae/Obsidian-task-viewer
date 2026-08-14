@@ -7,6 +7,7 @@ import {
     toDisplayTaskWithSplit,
 } from '../../../src/services/display/DisplayTaskConverter';
 import { getTaskDateRange } from '../../../src/services/display/VisualDateRange';
+import { classifyForSection } from '../../../src/services/display/SectionClassifier';
 import type { Task } from '../../../src/types';
 
 /** Build a minimal Task for testing. */
@@ -317,5 +318,96 @@ describe('materializeRawDates', () => {
         expect(updates.startDate).toBe('2026-05-15');
         expect(updates.startTime).toBeUndefined();
         expect(updates.endDate).toBeUndefined();
+    });
+});
+
+/**
+ * 継承（cascadeContext）由来の日時は、タスク行に書かれた日時と同じ解決を
+ * 受ける。以前は暗黙 end の解決が raw フィールドだけを見ていたため、
+ * セクションから継承した時刻が「時刻として」効かず、timed であるべき
+ * タスクが 23h59m の allDay になっていた。
+ */
+describe('toDisplayTask — cascade 継承日時の解決', () => {
+    it('継承 startTime + raw startDate は timed（既定 1h）になる', () => {
+        const task = makeTask({
+            startDate: '2026-01-15',
+            cascadeContext: { startTime: '09:00' },
+        });
+        const dt = toDisplayTask(task, startHour, NO_TASK_LOOKUP);
+        expect(dt.effectiveStartTime).toBe('09:00');
+        expect(dt.effectiveEndDate).toBe('2026-01-15');
+        expect(dt.effectiveEndTime).toBe('10:00');
+        expect(classifyForSection(dt, startHour)).toBe('timed');
+        expect(getTaskDateRange(dt, startHour)).toEqual({
+            effectiveStart: '2026-01-15', effectiveEnd: '2026-01-15',
+        });
+    });
+
+    it('日付も時刻も継承（セクション tv-start:: 06:00 + ファイル tv-start）でも timed', () => {
+        const task = makeTask({
+            cascadeContext: { startDate: '2026-06-30', startTime: '06:00' },
+        });
+        const dt = toDisplayTask(task, startHour, NO_TASK_LOOKUP);
+        expect(dt.effectiveStartDate).toBe('2026-06-30');
+        expect(dt.effectiveStartTime).toBe('06:00');
+        expect(dt.effectiveEndDate).toBe('2026-06-30');
+        expect(dt.effectiveEndTime).toBe('07:00');
+        expect(classifyForSection(dt, startHour)).toBe('timed');
+    });
+
+    it('継承 endTime + raw endDate は捨てられない', () => {
+        const task = makeTask({
+            endDate: '2026-01-15',
+            cascadeContext: { endTime: '10:00' },
+        });
+        const dt = toDisplayTask(task, startHour, NO_TASK_LOOKUP);
+        expect(dt.effectiveEndTime).toBe('10:00');
+        // E-Timed: 終端の 1 時間前が暗黙の開始
+        expect(dt.effectiveStartDate).toBe('2026-01-15');
+        expect(dt.effectiveStartTime).toBe('09:00');
+        expect(classifyForSection(dt, startHour)).toBe('timed');
+    });
+
+    it('継承 endDate のみのタスクはどのセクションからも消えない', () => {
+        const task = makeTask({
+            cascadeContext: { endDate: '2026-01-15', endTime: '10:00' },
+        });
+        const dt = toDisplayTask(task, startHour, NO_TASK_LOOKUP);
+        expect(dt.effectiveStartDate).toBe('2026-01-15');
+        expect(dt.effectiveStartTime).toBe('09:00');
+        expect(classifyForSection(dt, startHour)).not.toBeNull();
+        expect(getTaskDateRange(dt, startHour).effectiveStart).toBe('2026-01-15');
+    });
+
+    it('時刻なしの継承 endDate は従来どおり allDay', () => {
+        const task = makeTask({ cascadeContext: { endDate: '2026-01-15' } });
+        const dt = toDisplayTask(task, startHour, NO_TASK_LOOKUP);
+        expect(dt.effectiveEndTime).toBe('04:59');
+        expect(classifyForSection(dt, startHour)).toBe('allDay');
+    });
+
+    it('raw と継承で結果が一致する（同じ値ならどちらに書いても同じ）', () => {
+        const raw = toDisplayTask(
+            makeTask({ startDate: '2026-01-15', startTime: '09:00' }), startHour, NO_TASK_LOOKUP);
+        const cascaded = toDisplayTask(
+            makeTask({ cascadeContext: { startDate: '2026-01-15', startTime: '09:00' } }),
+            startHour, NO_TASK_LOOKUP);
+        expect({
+            s: cascaded.effectiveStartDate, st: cascaded.effectiveStartTime,
+            e: cascaded.effectiveEndDate, et: cascaded.effectiveEndTime,
+        }).toEqual({
+            s: raw.effectiveStartDate, st: raw.effectiveStartTime,
+            e: raw.effectiveEndDate, et: raw.effectiveEndTime,
+        });
+    });
+
+    it('*Implicit フラグは raw 基準のまま（継承値は placeholder 表示）', () => {
+        const task = makeTask({
+            startDate: '2026-01-15',
+            cascadeContext: { startTime: '09:00' },
+        });
+        const dt = toDisplayTask(task, startHour, NO_TASK_LOOKUP);
+        expect(dt.startDateImplicit).toBe(false);
+        expect(dt.startTimeImplicit).toBe(true);
     });
 });

@@ -37,24 +37,43 @@ export function toDisplayTask(task: Task, startHour: number, getTask: TaskLookup
     let effectiveEndTime = task.endTime || task.cascadeContext?.endTime;
     const effectiveDue = task.due || task.cascadeContext?.due;
 
-    const startDateExplicit = !!task.startDate;
+    // Which fields the 3 layers actually produced. Every implicit-resolution
+    // branch below asks THESE, not the raw fields: a time inherited from the
+    // section (`- tv-start:: 06:00`) is a time, and resolving the missing end
+    // from the raw fields alone turned such a task into a 23h59m all-day
+    // block — and dropped an inherited end time on the floor.
+    const hasStartDate = !!effectiveStartDate;
+    const hasEndDate = !!effectiveEndDate;
+    const hasEndTime = !!effectiveEndTime;
+    const hasStartTime = !!effectiveStartTime;
 
-    let startDateImplicit = !startDateExplicit;
+    // The `*Implicit` flags stay RAW-based: they mean "not written on this
+    // task line", which is what the menu and the form's placeholders read
+    // them for. An inherited value is written in the note but not here, so
+    // it must keep showing as a placeholder — filling the field would
+    // materialize the inherited value onto the line on save.
+    let startDateImplicit = !task.startDate;
     let startTimeImplicit = !task.startTime;
     let endDateImplicit = !task.endDate;
     let endTimeImplicit = !task.endTime;
 
+    // Whether the converter synthesized the value (no layer supplied one).
+    // Only the same-day inversion fallback needs this distinction, and it
+    // must not rewrite an inherited real value to 00:00 / 23:59.
+    let startTimeDefaulted = false;
+    let endTimeDefaulted = false;
+
     // Resolve implicit start for E/ED types (have endDate, no startDate at all)
-    if (!task.startDate && task.endDate) {
-        if (task.endTime) {
+    if (!hasStartDate && hasEndDate) {
+        if (hasEndTime) {
             // E-Timed: 1 hour before endTime
-            const endMinutes = DateUtils.timeToMinutes(task.endTime);
+            const endMinutes = DateUtils.timeToMinutes(effectiveEndTime!);
             const startMinutes = endMinutes - DateUtils.DEFAULT_TIMED_DURATION_MINUTES;
             if (startMinutes >= 0) {
-                effectiveStartDate = task.endDate;
+                effectiveStartDate = effectiveEndDate!;
                 effectiveStartTime = DateUtils.minutesToTime(startMinutes);
             } else {
-                effectiveStartDate = DateUtils.addDays(task.endDate, -1);
+                effectiveStartDate = DateUtils.addDays(effectiveEndDate!, -1);
                 effectiveStartTime = DateUtils.minutesToTime(startMinutes + 24 * 60);
             }
         } else {
@@ -62,28 +81,31 @@ export function toDisplayTask(task: Task, startHour: number, getTask: TaskLookup
             const endHour = startHour === 0 ? 23 : startHour - 1;
             const implicitEndTime = `${endHour.toString().padStart(2, '0')}:59`;
             effectiveEndTime = implicitEndTime;
-            effectiveStartDate = DateUtils.toVisualDate(task.endDate, implicitEndTime, startHour);
+            endTimeDefaulted = true;
+            effectiveStartDate = DateUtils.toVisualDate(effectiveEndDate!, implicitEndTime, startHour);
             effectiveStartTime = startHour.toString().padStart(2, '0') + ':00';
         }
+        startTimeDefaulted = true;
         // startDateImplicit / startTimeImplicit remain true
     }
 
     // Resolve implicit start time for all-day tasks (date only, no time)
     if (effectiveStartDate && !effectiveStartTime) {
         effectiveStartTime = startHour.toString().padStart(2, '0') + ':00';
+        startTimeDefaulted = true;
     }
 
     // Resolve implicit end for S/SD types (have startDate, no endDate)
-    if (effectiveStartDate && !task.endDate) {
-        if (task.endTime) {
-            // endTime is explicit, only endDate needs resolution
+    if (effectiveStartDate && !hasEndDate) {
+        if (hasEndTime) {
+            // endTime is known (raw or inherited), only endDate needs resolution
             // Cross-midnight fallback: if endTime < startTime, resolve to next calendar day
-            if (effectiveStartTime && task.endTime < effectiveStartTime) {
+            if (effectiveStartTime && effectiveEndTime! < effectiveStartTime) {
                 effectiveEndDate = DateUtils.addDays(effectiveStartDate, 1);
             } else {
                 effectiveEndDate = effectiveStartDate;
             }
-        } else if (task.startTime) {
+        } else if (hasStartTime) {
             // S-Timed: startTime + DEFAULT_TIMED_DURATION_MINUTES
             const startMinutes = DateUtils.timeToMinutes(effectiveStartTime!);
             const endMinutes = startMinutes + DateUtils.DEFAULT_TIMED_DURATION_MINUTES;
@@ -94,12 +116,14 @@ export function toDisplayTask(task: Task, startHour: number, getTask: TaskLookup
                 effectiveEndDate = DateUtils.addDays(effectiveStartDate, 1);
                 effectiveEndTime = DateUtils.minutesToTime(endMinutes - 24 * 60);
             }
+            endTimeDefaulted = true;
         } else {
             // S-AllDay: startTime (resolved above) + 23h59m
             const startMinutes = DateUtils.timeToMinutes(effectiveStartTime!);
             const endMinutes = startMinutes + 23 * 60 + 59;
             effectiveEndDate = DateUtils.addDays(effectiveStartDate, Math.floor(endMinutes / (24 * 60)));
             effectiveEndTime = DateUtils.minutesToTime(endMinutes % (24 * 60));
+            endTimeDefaulted = true;
         }
         // endDateImplicit remains true (endDate was not explicit)
     }
@@ -108,27 +132,22 @@ export function toDisplayTask(task: Task, startHour: number, getTask: TaskLookup
     if (effectiveEndDate && !effectiveEndTime) {
         const endHour = startHour === 0 ? 23 : startHour - 1;
         effectiveEndTime = `${endHour.toString().padStart(2, '0')}:59`;
+        endTimeDefaulted = true;
     }
 
-    // Fallback: if same calendarDate and implicit end < implicit start, use 00:00/23:59
+    // Fallback: if same calendarDate and defaulted end < defaulted start, use 00:00/23:59
     if (effectiveStartDate && effectiveEndDate
         && effectiveStartDate === effectiveEndDate
         && effectiveStartTime && effectiveEndTime
-        && startTimeImplicit !== endTimeImplicit
+        && startTimeDefaulted !== endTimeDefaulted
         && effectiveEndTime < effectiveStartTime) {
-        if (startTimeImplicit) {
+        if (startTimeDefaulted) {
             effectiveStartTime = '00:00';
         }
-        if (endTimeImplicit) {
+        if (endTimeDefaulted) {
             effectiveEndTime = '23:59';
         }
     }
-
-    // For explicit fields, mark as non-implicit
-    if (startDateExplicit) startDateImplicit = false;
-    if (task.startTime) startTimeImplicit = false;
-    if (task.endDate) endDateImplicit = false;
-    if (task.endTime) endTimeImplicit = false;
 
     return {
         ...task,
