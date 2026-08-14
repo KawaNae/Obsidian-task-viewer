@@ -207,4 +207,114 @@ describe('FrontmatterLineEditor', () => {
             expect(esc('back\\slash')).toBe('"back\\\\slash"');
         });
     });
+
+    // ── ensureBlock ──
+    describe('ensureBlock', () => {
+        it('returns the existing block untouched', () => {
+            const lines = ['---', 'title: foo', '---', 'body'];
+            const r = FrontmatterLineEditor.ensureBlock(lines);
+            expect(r.fmEnd).toBe(2);
+            expect(r.lines).toBe(lines);
+        });
+
+        it('prepends an empty block when the file has none', () => {
+            const r = FrontmatterLineEditor.ensureBlock(['# heading', 'body']);
+            expect(r.fmEnd).toBe(1);
+            expect(r.lines).toEqual(['---', '---', '# heading', 'body']);
+        });
+
+        it('prepends an empty block for an empty file', () => {
+            const r = FrontmatterLineEditor.ensureBlock(['']);
+            expect(r.fmEnd).toBe(1);
+            expect(r.lines).toEqual(['---', '---', '']);
+        });
+
+        it('treats an unterminated block as absent', () => {
+            const r = FrontmatterLineEditor.ensureBlock(['---', 'title: foo']);
+            expect(r.fmEnd).toBe(1);
+            expect(r.lines).toEqual(['---', '---', '---', 'title: foo']);
+        });
+
+        it('a key written into a created block lands inside it', () => {
+            const { lines, fmEnd } = FrontmatterLineEditor.ensureBlock(['body']);
+            const out = FrontmatterLineEditor.applyUpdates(lines, fmEnd, { 'tv-color': 'ff0000' });
+            expect(out).toBe('---\ntv-color: ff0000\n---\nbody');
+        });
+    });
+
+    // ── readRawScalar ──
+    describe('readRawScalar', () => {
+        const lines = ['---', 'plain: abc', 'quoted: "a: b"', 'empty:', 'list:', '  - x', '---'];
+        const fmEnd = 6;
+        const read = (key: string) => FrontmatterLineEditor.readRawScalar(lines, fmEnd, key);
+
+        it('returns the value as written', () => {
+            expect(read('plain')).toBe('abc');
+        });
+
+        it('keeps quotes rather than interpreting them', () => {
+            expect(read('quoted')).toBe('"a: b"');
+        });
+
+        it('returns an empty string for a key with no value', () => {
+            expect(read('empty')).toBe('');
+        });
+
+        it('returns null for a missing key', () => {
+            expect(read('nope')).toBeNull();
+        });
+
+        it('reads only the key line of a multi-line value', () => {
+            expect(read('list')).toBe('');
+        });
+    });
+
+    // ── surgical edit が保つもの（processFrontMatter との差） ──
+    describe('representation is preserved across a key write', () => {
+        // processFrontMatter はここでコメントを落とし、引用符を外し、
+        // フロー配列をブロックリストへ変える（2026-08-14 実測）。
+        const source = [
+            '---',
+            '# why this file exists',
+            'tv-start: 2026-08-14T10:00',
+            'tags:',
+            '  - work',
+            '  - "quoted tag"',
+            'memo: \'single quoted\'',
+            'tv-content: |',
+            '  line one',
+            '  line two',
+            'aliases: [a, b]',
+            '---',
+            '',
+            'body',
+        ];
+
+        it('keeps comments, quotes, flow arrays and block scalars', () => {
+            const fmEnd = FrontmatterLineEditor.findEnd(source);
+            const out = FrontmatterLineEditor.applyUpdates(source, fmEnd, {
+                'tv-timer-target-id': 'tv-t-abc1234',
+            });
+            const lines = out.split('\n');
+
+            expect(lines).toContain('# why this file exists');
+            expect(lines).toContain('  - "quoted tag"');
+            expect(lines).toContain("memo: 'single quoted'");
+            expect(lines).toContain('aliases: [a, b]');
+            expect(lines).toContain('tv-content: |');
+            expect(lines).toContain('  line one');
+            expect(lines).toContain('tv-timer-target-id: tv-t-abc1234');
+        });
+
+        it('removing the key restores the original text', () => {
+            const fmEnd = FrontmatterLineEditor.findEnd(source);
+            const added = FrontmatterLineEditor.applyUpdates(source, fmEnd, {
+                'tv-timer-target-id': 'tv-t-abc1234',
+            }).split('\n');
+            const back = FrontmatterLineEditor.applyUpdates(
+                added, FrontmatterLineEditor.findEnd(added), { 'tv-timer-target-id': null }
+            );
+            expect(back).toBe(source.join('\n'));
+        });
+    });
 });

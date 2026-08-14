@@ -164,12 +164,8 @@ export class WindowAttachment {
 
             const hex = normalizeColor(colorInput.value);
             const colorKey = this.ctx.getSettings().tvFileKeys.color;
-            await this.ctx.app.fileManager.processFrontMatter(
-                activeFile,
-                (frontmatter: Record<string, unknown>) => {
-                    frontmatter[colorKey] = hex;
-                }
-            );
+            await this.ctx.suggestHost.getTaskIndex().getRepository()
+                .setFrontmatterKeys(activeFile.path, { [colorKey]: hex });
 
             // valueDiv は再描画で別要素に置き換わりうるので closure ではなく都度解決する。
             const currentValueDiv = container.querySelector(

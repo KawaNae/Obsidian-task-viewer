@@ -100,6 +100,19 @@ export class TaskRepository {
         return this.frontmatterWriter.insertLineAfterTvFile(filePath, lineContent, header, headerLevel);
     }
 
+    /**
+     * Task を介さない frontmatter 書き込みの入口。タイマーの対象 ID や、
+     * プロパティ欄のサジェストが使う（いずれも Task ではなくファイルとキーで
+     * 書き先が決まる）。
+     */
+    async setFrontmatterKeys(filePath: string, updates: Record<string, string | null>): Promise<void> {
+        return this.frontmatterWriter.setKeys(filePath, updates);
+    }
+
+    async deleteFrontmatterKeyIfValue(filePath: string, key: string, expected: string): Promise<void> {
+        return this.frontmatterWriter.deleteKeyIfValue(filePath, key, expected);
+    }
+
     // --- Task Cloning Operations ---
 
     async duplicateInlineTask(task: Task, options?: DuplicateOptions): Promise<void> {
