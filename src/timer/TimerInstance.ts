@@ -83,6 +83,14 @@ export interface TimerBase {
      * widget を閉じたら 0 個）が素直に成立する。
      */
     tailRecordBlockId?: string;
+    /**
+     * 走行中の行の実効 end（ミリ秒）。これを過ぎるまで end の書き足しを見送る門で、
+     * 毎秒の tick がインデックスを引かずに済ませるためだけに持つ。
+     *
+     * **永続化しない**。復元後は未定義から始まり、最初の tick で走行中の行から
+     * 取り直す。行はユーザーにも編集されうるので、記憶した値より現物が正しい。
+     */
+    lazyEndFloorMs?: number;
 
     startTimeMs: number;
     pausedElapsedTime: number;

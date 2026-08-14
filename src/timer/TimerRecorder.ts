@@ -16,6 +16,7 @@ import { TimeFormatter } from '../utils/TimeFormatter';
 import { TimerTaskResolver } from './TimerTaskResolver';
 import { isTimerTargetId } from '../utils/TimerTargetIdUtils';
 import { type TimerIcon, getTimerIcon, withTimerIcon } from '../utils/TimerIcons';
+import { decideLazyEnd } from './TimerLazyEnd';
 import type { TimerStorageUtils } from './TimerStorageUtils';
 import { logWarn } from '../log/log';
 
@@ -210,6 +211,43 @@ export class TimerRecorder {
     }
 
     /**
+     * 走行中の行の end を、実効 end を過ぎていたら先へ書き足す。
+     *
+     * 書き先は「今どの行に走っているか」＝ {@link resolveTailRecord} が返す行で、
+     * 停止時の記録と同じ判断に乗る（self の 1 本目は対象タスク行、それ以外は
+     * 自分が書いたセッション行）。行を引けなければ何も書かない — 次の見直しで
+     * また試す。
+     *
+     * 実効 end は `DisplayTask` から取る。end の無い時刻付きタスクが既定の 1 時間
+     * で終わる規則はそちらが持っており、ここで再現すると二重管理になる。明示 end
+     * を持つ行も同じ経路で扱えるのはその副産物である。
+     *
+     * @returns 次に見直す時刻（ミリ秒）。行を引けなかったときは undefined。
+     */
+    async extendRunningSession(timer: TimerInstance): Promise<number | undefined> {
+        const target = this.resolveTailRecord(timer);
+        if (!target) return undefined;
+
+        const display = this.plugin.getTaskReadService().getDisplayTask(target.id);
+        if (!display?.effectiveEndDate || !display.effectiveEndTime) return undefined;
+
+        const effectiveEndMs = new Date(
+            `${display.effectiveEndDate}T${display.effectiveEndTime}`
+        ).getTime();
+        if (Number.isNaN(effectiveEndMs)) return undefined;
+
+        const decision = decideLazyEnd(Date.now(), effectiveEndMs);
+        if (decision.kind === 'hold') return decision.floorMs;
+
+        const end = new Date(decision.endMs);
+        await this.plugin.getTaskIndex().updateTask(target.id, {
+            endDate: this.formatDate(end),
+            endTime: this.formatTime(end),
+        });
+        return decision.endMs;
+    }
+
+    /**
      * 走行中セッションの行（placeholder）を組み立てる。
      *
      * 開始時刻だけを持つ未完了行で、`blockId` は書き込んだ後に「どの行が今の
@@ -301,6 +339,8 @@ export class TimerRecorder {
 
         timer.tailRecordBlockId = blockId;
         timer.recordedChildTaskId = sessionTaskId;
+        // 新しい行に走り始めたので、end 書き足しの門は引き直す。
+        timer.lazyEndFloorMs = undefined;
         return sessionTaskId;
     }
 

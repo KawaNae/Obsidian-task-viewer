@@ -15,6 +15,9 @@ import { type TimerContext, IDLE_TIMER_ID } from './TimerContext';
 import type { TimerCreator } from './TimerCreator';
 
 export class TimerLifecycle {
+    /** end の書き足しが飛んでいるタイマー。1 秒 tick の二重発行を防ぐ。 */
+    private extending = new Set<string>();
+
     constructor(
         private ctx: TimerContext,
         private creator: TimerCreator,
@@ -43,9 +46,37 @@ export class TimerLifecycle {
         timer.intervalId = null;
     }
 
+    /**
+     * 走行中の行の end を書き足す門。
+     *
+     * 実効 end を過ぎるまでは何もしない — 毎秒の tick でインデックスを引かない
+     * ための門で、判断そのものは recorder が持つ。書き込みは非同期なので、
+     * 返る前の tick が二重に走らないよう実行中の id を握っておく。
+     */
+    private maybeExtendSessionEnd(timer: TimerInstance): void {
+        if (timer.timerType === 'idle') return;
+        if (timer.runState !== 'running') return;
+        // デイリーノートへの記録は停止時に 1 行足す形で、走行中の行を持たない。
+        if (timer.taskId.startsWith('daily-')) return;
+
+        const floor = timer.lazyEndFloorMs;
+        if (floor !== undefined && Date.now() < floor) return;
+        if (this.extending.has(timer.id)) return;
+
+        this.extending.add(timer.id);
+        void this.ctx.recorder.extendRunningSession(timer)
+            .then((nextFloorMs) => {
+                // 引けなかったときは門を開けたままにして次の tick で再試行する。
+                if (nextFloorMs !== undefined) timer.lazyEndFloorMs = nextFloorMs;
+            })
+            .finally(() => this.extending.delete(timer.id));
+    }
+
     private tick(timerId: string): void {
         const timer = this.ctx.timers.get(timerId);
         if (!timer || !timer.isRunning) return;
+
+        this.maybeExtendSessionEnd(timer);
 
         const now = Date.now();
         const currentSessionElapsed = Math.floor((now - timer.startTimeMs) / 1000);
@@ -295,6 +326,9 @@ export class TimerLifecycle {
      * は recorder 側。
      */
     async discardTimer(timer: TimerInstance): Promise<void> {
+        // 先に tick を止める。走行中の行は end の書き足し対象でもあるので、
+        // 消している最中の行に書き足しが飛ぶ経路を作らない。
+        this.stopTimerTick(timer.id);
         await this.ctx.recorder.discardRunningPlaceholder(timer);
         this.closeTimer(timer.id);
     }
