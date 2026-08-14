@@ -19,9 +19,18 @@ export interface AttachmentContext {
  * MutationObserver / ネイティブ抑制 style を window スコープで保持する。
  * attach 済み要素の追跡 (attachedInputs) は ctx 経由で共有。
  */
+/**
+ * 色ピッカーの `input` は掴んで動かしている間ずっと流れてくる。書き込みを 1 手
+ * ごとに出すとファイルへの往復がその回数だけ起きるので、末尾だけを書く。
+ * ピッカーを閉じた時点（`change`）と attach の破棄時に取りこぼしを流し切る。
+ */
+const COLOR_WRITE_DEBOUNCE_MS = 300;
+
 export class WindowAttachment {
     private observer: MutationObserver | null = null;
     private nativeSuggestStyles: Map<string, HTMLStyleElement> = new Map();
+    private colorWriteTimer: number | null = null;
+    private pendingColorWrite: (() => Promise<void>) | null = null;
 
     constructor(
         private win: Window,
@@ -42,12 +51,34 @@ export class WindowAttachment {
     }
 
     dispose(): void {
+        void this.flushColorWrite();
         this.observer?.disconnect();
         this.observer = null;
         for (const style of this.nativeSuggestStyles.values()) {
             style.remove();
         }
         this.nativeSuggestStyles.clear();
+    }
+
+    /** 最後の色だけを書くよう予約し直す（前の予約は破棄する）。 */
+    private queueColorWrite(write: () => Promise<void>): void {
+        this.pendingColorWrite = write;
+        if (this.colorWriteTimer !== null) this.win.clearTimeout(this.colorWriteTimer);
+        this.colorWriteTimer = this.win.setTimeout(() => {
+            this.colorWriteTimer = null;
+            void this.flushColorWrite();
+        }, COLOR_WRITE_DEBOUNCE_MS);
+    }
+
+    /** 予約が残っていれば今すぐ書く。予約が無ければ何もしない。 */
+    private async flushColorWrite(): Promise<void> {
+        if (this.colorWriteTimer !== null) {
+            this.win.clearTimeout(this.colorWriteTimer);
+            this.colorWriteTimer = null;
+        }
+        const write = this.pendingColorWrite;
+        this.pendingColorWrite = null;
+        if (write) await write();
     }
 
     private syncAttach(): void {
@@ -158,20 +189,25 @@ export class WindowAttachment {
             valueContainer.after(iconBtn);
         }
 
-        colorInput.addEventListener('input', async () => {
+        colorInput.addEventListener('input', () => {
             const activeFile = this.ctx.app.workspace.getActiveFile();
             if (!activeFile) return;
 
             const hex = normalizeColor(colorInput.value);
             const colorKey = this.ctx.getSettings().tvFileKeys.color;
-            await this.ctx.suggestHost.getTaskIndex().getRepository()
-                .setFrontmatterKeys(activeFile.path, { [colorKey]: hex });
 
+            // 見た目は 1 手ごとに追随させ、ファイルへの書き込みだけ末尾に寄せる。
             // valueDiv は再描画で別要素に置き換わりうるので closure ではなく都度解決する。
             const currentValueDiv = container.querySelector(
                 '.metadata-input-longtext'
             ) as HTMLDivElement | null;
             if (currentValueDiv) currentValueDiv.textContent = hex;
+
+            this.queueColorWrite(() => this.ctx.suggestHost.getTaskIndex().getRepository()
+                .setFrontmatterKeys(activeFile.path, { [colorKey]: hex }));
         });
+
+        // ピッカーを閉じた時点で確定させる（debounce の満了を待たない）。
+        colorInput.addEventListener('change', () => { void this.flushColorWrite(); });
     }
 }
