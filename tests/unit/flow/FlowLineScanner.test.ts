@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
     collectFlowLineIndices,
+    collectFlowLineIndicesInFile,
     flowLineTail,
     formatFlowLine,
     isFlowLine,
@@ -51,7 +52,7 @@ describe('FlowLineScanner', () => {
                 '\t- ==> x3',
                 '\t- plain note',
             ];
-            expect(collectFlowLineIndices(lines, 0)).toEqual([1, 2]);
+            expect(collectFlowLineIndicesInFile(lines, 0)).toEqual([1, 2]);
         });
 
         it('collects direct flow children (4-space indent)', () => {
@@ -59,7 +60,7 @@ describe('FlowLineScanner', () => {
                 '- [ ] task',
                 '    - ==> every mon',
             ];
-            expect(collectFlowLineIndices(lines, 0)).toEqual([1]);
+            expect(collectFlowLineIndicesInFile(lines, 0)).toEqual([1]);
         });
 
         it('does not steal flow lines owned by a child checkbox', () => {
@@ -70,8 +71,8 @@ describe('FlowLineScanner', () => {
                 '\t- ==> nochildren',
             ];
             // Line 2 belongs to the child checkbox; line 3 is back at direct level.
-            expect(collectFlowLineIndices(lines, 0)).toEqual([3]);
-            expect(collectFlowLineIndices(lines, 1)).toEqual([2]);
+            expect(collectFlowLineIndicesInFile(lines, 0)).toEqual([3]);
+            expect(collectFlowLineIndicesInFile(lines, 1)).toEqual([2]);
         });
 
         it('does not steal flow lines nested under a plain note bullet', () => {
@@ -80,7 +81,7 @@ describe('FlowLineScanner', () => {
                 '\t- memo',
                 '\t\t- ==> x3',
             ];
-            expect(collectFlowLineIndices(lines, 0)).toEqual([]);
+            expect(collectFlowLineIndicesInFile(lines, 0)).toEqual([]);
         });
 
         it('stops at a blank line (end of child block)', () => {
@@ -90,7 +91,7 @@ describe('FlowLineScanner', () => {
                 '',
                 '\t- ==> x3',
             ];
-            expect(collectFlowLineIndices(lines, 0)).toEqual([1]);
+            expect(collectFlowLineIndicesInFile(lines, 0)).toEqual([1]);
         });
 
         it('stops at a sibling (indent <= task line)', () => {
@@ -99,8 +100,8 @@ describe('FlowLineScanner', () => {
                 '- [ ] sibling',
                 '\t- ==> x3',
             ];
-            expect(collectFlowLineIndices(lines, 0)).toEqual([]);
-            expect(collectFlowLineIndices(lines, 1)).toEqual([2]);
+            expect(collectFlowLineIndicesInFile(lines, 0)).toEqual([]);
+            expect(collectFlowLineIndicesInFile(lines, 1)).toEqual([2]);
         });
 
         it('works for an indented task line', () => {
@@ -109,7 +110,59 @@ describe('FlowLineScanner', () => {
                 '\t- [ ] inner',
                 '\t\t- ==> every mon',
             ];
-            expect(collectFlowLineIndices(lines, 1)).toEqual([2]);
+            expect(collectFlowLineIndicesInFile(lines, 1)).toEqual([2]);
+        });
+
+        it('honours the caller-supplied fence mask', () => {
+            const lines = [
+                '- [ ] task',
+                '\t- ==> every mon',
+                '\t- ==> x3',
+            ];
+            expect(collectFlowLineIndices(lines, 0, [false, true, false])).toEqual([2]);
+        });
+    });
+
+    describe('collectFlowLineIndicesInFile — code fences', () => {
+        it('ignores a flow line inside a fence nested under the task', () => {
+            const lines = [
+                '- [ ] 手順メモ @2026-08-20',
+                '\t```markdown',
+                '\t- ==> every 1d',
+                '\t```',
+            ];
+            expect(collectFlowLineIndicesInFile(lines, 0)).toEqual([]);
+        });
+
+        it('ignores a flow line inside a tilde fence', () => {
+            const lines = [
+                '- [ ] 手順メモ @2026-08-20',
+                '    ~~~',
+                '    - ==> every 1d',
+                '    ~~~',
+            ];
+            expect(collectFlowLineIndicesInFile(lines, 0)).toEqual([]);
+        });
+
+        it('still collects a real flow line after the fence closes', () => {
+            const lines = [
+                '- [ ] 手順メモ @2026-08-20',
+                '\t```markdown',
+                '\t- ==> every 1d',
+                '\t```',
+                '\t- ==> every mon',
+            ];
+            expect(collectFlowLineIndicesInFile(lines, 0)).toEqual([4]);
+        });
+
+        it('ignores a flow line inside a document-level fence', () => {
+            const lines = [
+                '```markdown',
+                '- [ ] 例 @2026-08-20',
+                '\t- ==> every 1d',
+                '```',
+            ];
+            expect(collectFlowLineIndicesInFile(lines, 1)).toEqual([]);
         });
     });
 

@@ -2,7 +2,7 @@ import { type App, TFile } from 'obsidian';
 import type { Task } from '../../../types';
 import { TaskParser } from '../../parsing/TaskParser';
 import { TaskLineClassifier } from '../../parsing/utils/TaskLineClassifier';
-import { collectFlowLineIndices } from '../../flow/FlowLineScanner';
+import { collectFlowLineIndicesInFile } from '../../flow/FlowLineScanner';
 import { FileOperations } from '../utils/FileOperations';
 import { ChildPropertyLineEditor } from '../utils/ChildPropertyLineEditor';
 import type { PropertyOp } from '../PropertyUpdatePlanner';
@@ -132,7 +132,7 @@ export class InlineTaskWriter {
                 return content;
             }
 
-            const flowIndices = collectFlowLineIndices(lines, currentLine);
+            const flowIndices = collectFlowLineIndicesInFile(lines, currentLine);
             for (let i = flowIndices.length - 1; i >= 0; i--) {
                 lines.splice(flowIndices[i], 1);
             }
@@ -376,7 +376,7 @@ export class InlineTaskWriter {
         // The task's own direct `- ==>` flow lines are consumed by the fire —
         // they must not travel to the archive. Descendant tasks' flow lines
         // are NOT direct (structural-parent rule) and stay as templates.
-        const flowAbs = new Set(collectFlowLineIndices(lines, currentLine));
+        const flowAbs = new Set(collectFlowLineIndicesInFile(lines, currentLine));
         const { childrenLines } = this.fileOps.collectChildrenFromLines(lines, currentLine);
         const kept = childrenLines.filter((_, i) => !flowAbs.has(currentLine + 1 + i));
         const cleaned = this.fileOps.stripBlockIds(kept);

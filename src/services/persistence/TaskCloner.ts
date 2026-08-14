@@ -1,6 +1,6 @@
 import { type App, TFile } from 'obsidian';
 import type { DuplicateOptions, TvFileKeys, Task } from '../../types';
-import { collectFlowLineIndices, formatFlowLine } from '../flow/FlowLineScanner';
+import { collectFlowLineIndicesInFile, formatFlowLine } from '../flow/FlowLineScanner';
 import { DateUtils } from '../../utils/DateUtils';
 import type { FileOperations } from './utils/FileOperations';
 import { FrontmatterLineEditor } from './utils/FrontmatterLineEditor';
@@ -132,7 +132,7 @@ export class TaskCloner {
             // xN の stale 複製 + 新タスク行の canonical と二重化するため除外。
             // 子孫タスクの flow 行は直下でない（構造親規則）のでテンプレート
             // として自然に残る。
-            const flowAbs = new Set(collectFlowLineIndices(lines, currentLine));
+            const flowAbs = new Set(collectFlowLineIndicesInFile(lines, currentLine));
             const { childrenLines } = this.fileOps.collectChildrenFromLines(lines, currentLine);
             const keptChildren = childrenLines.filter((_, i) => !flowAbs.has(currentLine + 1 + i));
 

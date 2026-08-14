@@ -285,18 +285,6 @@ export class DocumentTreeBuilder {
     }
 
     /**
-     * Fence membership *within a subtree*, where the fence markers carry the
-     * list item's indentation. CodeFenceTracker measures its ≤3-space allowance
-     * from column 0 (CommonMark), so a fence nested under a task — the normal
-     * way to write one in Obsidian — is invisible to the document-level mask.
-     * Feeding dedented lines restores the relative reading.
-     */
-    private static subtreeFenceMask(childRawLines: string[]): boolean[] {
-        const tracker = new CodeFenceTracker();
-        return childRawLines.map(line => tracker.feed(line.trimStart()));
-    }
-
-    /**
      * タスクブロックを収集（タスク行 + インデントされた子行 + ネスト再帰）。
      * `lines[i]` の絶対行番号を `lineNumbers[i]` が与える一般形 — トップ
      * レベル（絶対行配列 + 連番）とネスト（相対子行配列 + 行番号マップ）を
@@ -328,15 +316,20 @@ export class DocumentTreeBuilder {
             }
         }
 
+        // フェンス判定はここで 1 度だけ行い、TaskBlock に載せて下流と共有する。
+        // Fenced lines stay in childRawLines (they are part of the subtree
+        // body and must survive moves verbatim) but are never interpreted as
+        // notation — neither as tasks nor as `- ==>` flow lines.
+        const localFence = CodeFenceTracker.subtreeMask(childRawLines);
+        const childFenced = childRawLines.map(
+            (_, i) => fenceMask[childLineNumbers[i]] || localFence[i]
+        );
+
         // 再帰的に子タスクブロックを検出
-        const localFence = this.subtreeFenceMask(childRawLines);
         const childTaskBlocks: TaskBlock[] = [];
         let ci = 0;
         while (ci < childRawLines.length) {
-            // Fenced lines stay in childRawLines (they are part of the subtree
-            // body and must survive moves verbatim) but never become tasks.
-            const fenced = fenceMask[childLineNumbers[ci]] || localFence[ci];
-            if (!fenced && TaskLineClassifier.isTaskLine(childRawLines[ci])) {
+            if (!childFenced[ci] && TaskLineClassifier.isTaskLine(childRawLines[ci])) {
                 const childBlock = this.collectBlock(
                     childRawLines, childLineNumbers, ci, childRawLines.length, fenceMask
                 );
@@ -354,6 +347,7 @@ export class DocumentTreeBuilder {
             indent,
             childRawLines,
             childLineNumbers,
+            childFenced,
             childTaskBlocks,
         };
     }

@@ -32,4 +32,19 @@ export class CodeFenceTracker {
         const tracker = new CodeFenceTracker();
         return lines.map((line) => tracker.feed(line));
     }
+
+    /**
+     * Fence membership *within a subtree*, where the fence markers carry the
+     * list item's indentation. `feed` measures its ≤3-space allowance from
+     * column 0 (CommonMark), so a fence nested under a task — the normal way
+     * to write one in Obsidian — is invisible to {@link mask}. Feeding
+     * dedented lines restores the relative reading.
+     *
+     * A subtree mask is only ever half the answer: the subtree may itself sit
+     * inside a document-level fence. Callers OR the two together.
+     */
+    static subtreeMask(lines: string[]): boolean[] {
+        const tracker = new CodeFenceTracker();
+        return lines.map((line) => tracker.feed(line.trimStart()));
+    }
 }

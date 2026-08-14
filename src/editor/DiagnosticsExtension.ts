@@ -1,5 +1,6 @@
 import { Decoration, type DecorationSet, type EditorView, ViewPlugin, type ViewUpdate } from '@codemirror/view';
-import { RangeSet, type Extension } from '@codemirror/state';
+import { RangeSet, type Extension, type Text } from '@codemirror/state';
+import { CodeFenceTracker } from '../utils/CodeFenceTracker';
 import type { Diagnostic } from '../services/lang/Diagnostic';
 import { joinSegments, parseFlowSegments, segmentIndexAt } from '../services/flow/FlowSegments';
 import { collectFlowLineIndices, isFlowLine, matchFlowLine } from '../services/flow/FlowLineScanner';
@@ -70,6 +71,37 @@ export function createDiagnosticsExtension(): Extension {
     };
 
     /**
+     * Per-line code-fence membership, 0-indexed by (line number - 1).
+     *
+     * The scanner never turns a fenced line into a task or a flow segment
+     * (DocumentTreeBuilder feeds the same judgment into TaskBlock), so
+     * decorating one here would make the editor claim a command the file
+     * does not have.
+     *
+     * Two readings are OR'd, mirroring DocumentTreeBuilder: the plain one
+     * (CommonMark measures the ≤3-space allowance from column 0) and the
+     * dedented one (a fence nested under a task carries the list item's
+     * indentation). The extractor scopes its dedented reading to one
+     * subtree while this runs over the whole document; the two diverge only
+     * for a fence that is never closed, and there Obsidian's own renderer
+     * also treats the remainder as code.
+     *
+     * Computed lazily — a viewport with no task or flow line never pays for
+     * it — and cached on the doc, which CodeMirror replaces on every change.
+     */
+    let fenceCache: { doc: Text; mask: boolean[] } | null = null;
+    const fenceMaskFor = (doc: Text): boolean[] => {
+        if (fenceCache?.doc === doc) return fenceCache.mask;
+        const lines: string[] = [];
+        for (let n = 1; n <= doc.lines; n++) lines.push(doc.line(n).text);
+        const plain = CodeFenceTracker.mask(lines);
+        const dedented = CodeFenceTracker.subtreeMask(lines);
+        const mask = lines.map((_, i) => plain[i] || dedented[i]);
+        fenceCache = { doc, mask };
+        return mask;
+    };
+
+    /**
      * Owner task line of a flow child line: its structural parent (nearest
      * preceding non-blank line with smaller indent) when that is a task
      * line. Flow lines nested under notes/checkbox-less structures have no
@@ -112,7 +144,10 @@ export function createDiagnosticsExtension(): Extension {
             windowLineNumbers.push(n);
         }
 
-        const flowIndices = collectFlowLineIndices(window, 0);
+        const mask = fenceMaskFor(doc);
+        const fenced = windowLineNumbers.map(n => mask[n - 1]);
+
+        const flowIndices = collectFlowLineIndices(window, 0, fenced);
         if (markerIdx === -1 && flowIndices.length === 0) return null;
 
         const seg0: SegmentLoc = markerIdx >= 0
@@ -150,6 +185,16 @@ export function createDiagnosticsExtension(): Extension {
                 pos = line.to + 1;
 
                 const isTaskLine = TaskLineClassifier.isTaskLine(line.text);
+
+                // A fenced line is an example, not notation: the scanner
+                // parses neither its date block nor its `==>`. Checked here,
+                // once, for both halves of the extension — and only for
+                // lines that would otherwise be decorated, so the mask stays
+                // uncomputed on ordinary prose.
+                if ((isTaskLine || isFlowLine(line.text))
+                    && fenceMaskFor(view.state.doc)[line.number - 1]) {
+                    continue;
+                }
 
                 // Date-block diagnostics: strictly per-line, so they run for
                 // every visible task line — BEFORE the flow-root shortcuts
