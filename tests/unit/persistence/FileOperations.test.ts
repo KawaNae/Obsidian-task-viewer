@@ -483,4 +483,109 @@ describe('FileOperations', () => {
             expect(ops.findSiblingGroupStart(lines, 0)).toBe(0);
         });
     });
+
+    // ── findTaskLineNumber: tasks with no name ──
+    //
+    // A line like `- [ ]  @2026-08-15` carries no name, so every strategy that
+    // compares content used to miss and the write was dropped in silence. These
+    // pin both halves of the trade: resolve when the date makes it unambiguous,
+    // refuse when it does not.
+    describe('findTaskLineNumber for a content-less task', () => {
+        const emptyTask = (overrides: Partial<Task> = {}) => makeTask({
+            content: '',
+            startDate: '2026-08-15',
+            originalText: '- [ ]  @2026-08-15',
+            line: 0,
+            ...overrides,
+        });
+
+        it('resolves after the stored text goes stale', () => {
+            // The line was rewritten by an earlier write; the index still holds
+            // the pre-write text.
+            const lines = ['- [x]  @2026-08-15'];
+            expect(ops.findTaskLineNumber(lines, emptyTask({ statusChar: 'x' }))).toBe(0);
+        });
+
+        it('resolves when the line still matches exactly', () => {
+            const lines = ['- [ ]  @2026-08-15'];
+            expect(ops.findTaskLineNumber(lines, emptyTask())).toBe(0);
+        });
+
+        it('resolves past a shift, ignoring named tasks on the same date', () => {
+            const lines = [
+                '- [ ] 名前あり @2026-08-15',
+                '- [x]  @2026-08-15',
+            ];
+            expect(ops.findTaskLineNumber(lines, emptyTask({ statusChar: 'x' }))).toBe(1);
+        });
+
+        it('refuses when two content-less tasks share the date', () => {
+            const lines = [
+                '- [x]  @2026-08-15',
+                '- [x]  @2026-08-15 ==> +1d',
+            ];
+            expect(ops.findTaskLineNumber(lines, emptyTask({ statusChar: 'x' }))).toBe(-1);
+        });
+
+        it('refuses when there is no date to match on', () => {
+            const lines = ['- [x] '];
+            const task = makeTask({
+                content: '', startDate: undefined, originalText: '- [ ] ', line: 0,
+            });
+            expect(ops.findTaskLineNumber(lines, task)).toBe(-1);
+        });
+
+        it('keeps trailing notation matchable (flow command after the date)', () => {
+            const lines = ['- [x]  @2026-08-15 ==> +1d setStartTime(none) setEnd(none)'];
+            expect(ops.findTaskLineNumber(lines, emptyTask({ statusChar: 'x' }))).toBe(0);
+        });
+
+        it('falls back to the stored line when it still holds a matching task', () => {
+            const lines = [
+                '- [ ] 別のタスク @2026-08-15',
+                '- [x]  @2026-08-15 ^tv-t-abc',
+                '- [ ] さらに別 @2026-08-15',
+            ];
+            // Strategy 2b sees exactly one content-less line, so it resolves there.
+            expect(ops.findTaskLineNumber(lines, emptyTask({ statusChar: 'x', line: 1 }))).toBe(1);
+        });
+
+        it('does not match a named task when the task has no name', () => {
+            const lines = ['- [x] 名前あり @2026-08-15'];
+            expect(ops.findTaskLineNumber(lines, emptyTask({ statusChar: 'x' }))).toBe(-1);
+        });
+
+        it('resolves by end date when the task has no start date', () => {
+            const lines = ['- [x]  @>2026-08-20'];
+            const task = makeTask({
+                content: '', startDate: undefined, endDate: '2026-08-20',
+                originalText: '- [ ]  @>2026-08-20', line: 0,
+            });
+            expect(ops.findTaskLineNumber(lines, task)).toBe(0);
+        });
+
+        it('still prefers the block id when the task carries one', () => {
+            const lines = [
+                '- [x]  @2026-08-15',
+                '- [x]  @2026-08-16 ^tv-t-abc',
+            ];
+            const task = emptyTask({ statusChar: 'x', blockId: 'tv-t-abc', startDate: '2026-08-16' });
+            expect(ops.findTaskLineNumber(lines, task)).toBe(1);
+        });
+    });
+
+    // ── findTaskLineNumber: named tasks are unaffected ──
+    describe('findTaskLineNumber for a named task (regression)', () => {
+        it('still returns the first hit when several share content and date', () => {
+            const lines = [
+                '- [x] 設計 @2026-08-15',
+                '- [x] 設計 @2026-08-15',
+            ];
+            const task = makeTask({
+                content: '設計', startDate: '2026-08-15', statusChar: 'x',
+                originalText: '- [ ] 設計 @2026-08-15', line: 0,
+            });
+            expect(ops.findTaskLineNumber(lines, task)).toBe(0);
+        });
+    });
 });

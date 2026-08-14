@@ -150,6 +150,23 @@ export class FileOperations {
     }
 
     /**
+     * True when `line` is a task line that carries no name — everything it says
+     * is notation (`- [ ]  @2026-08-15`).
+     *
+     * Such a task is invisible to {@link lineHasTaskContent}, which needs a name
+     * to compare, so every strategy after the exact-text ones used to miss and
+     * the write was dropped. The test is deliberately narrow: anything before
+     * the date block means the line has a name, so only a genuinely empty one
+     * qualifies. It is never used alone — the caller pairs it with a date token,
+     * because a name-less line with no date has nothing left to identify it by.
+     */
+    private static lineHasEmptyTaskContent(line: string): boolean {
+        const parsed = TaskLineClassifier.classify(line);
+        if (!parsed) return false;
+        return parsed.rawContent.split('@')[0].trim() === '';
+    }
+
+    /**
      * True when `token` (`@start` / `>due` / `>end`) appears as a whole date
      * token. Only the *trailing* side needs guarding, and only loosely: a start
      * date legitimately continues into `>` (allday range) or `T` (time of day),
@@ -208,24 +225,47 @@ export class FileOperations {
                     ? `>${task.endDate}`
                     : null;
 
-        for (let i = 0; i < lines.length; i++) {
-            const line = lines[i];
-            if (!FileOperations.lineHasTaskContent(line, content)) continue;
+        if (content) {
+            for (let i = 0; i < lines.length; i++) {
+                const line = lines[i];
+                if (!FileOperations.lineHasTaskContent(line, content)) continue;
 
-            if (datePattern) {
-                if (FileOperations.lineHasDateToken(line, datePattern)) return i;
-            } else {
-                return i;
+                if (datePattern) {
+                    if (FileOperations.lineHasDateToken(line, datePattern)) return i;
+                } else {
+                    return i;
+                }
             }
+        } else if (datePattern) {
+            // Strategy 2b: the task has no name, so the date token is all there
+            // is to match on. That is weak evidence — two name-less tasks on the
+            // same date are indistinguishable — so it only counts when exactly
+            // one line answers. Returning the first hit here would let a write
+            // aimed at one land on the other; refusing is the safe half of the
+            // trade, and the caller now reports the refusal instead of dropping
+            // the write in silence.
+            let found = -1;
+            for (let i = 0; i < lines.length; i++) {
+                if (!FileOperations.lineHasEmptyTaskContent(lines[i])) continue;
+                if (!FileOperations.lineHasDateToken(lines[i], datePattern)) continue;
+                if (found >= 0) return -1;
+                found = i;
+            }
+            if (found >= 0) return found;
         }
 
         // Strategy 3: Stored line, but only when it still holds the same task.
         // The unverified fallback this replaces wrote to whatever happened to
         // sit at task.line, which silently clobbered unrelated lines whenever
         // the earlier strategies all missed on a shifted file.
-        if (hasBodyLine(task) && task.line < lines.length
-            && FileOperations.lineHasTaskContent(lines[task.line], content)) {
-            return task.line;
+        if (hasBodyLine(task) && task.line < lines.length) {
+            const stored = lines[task.line];
+            const stillHolds = content
+                ? FileOperations.lineHasTaskContent(stored, content)
+                : !!datePattern
+                    && FileOperations.lineHasEmptyTaskContent(stored)
+                    && FileOperations.lineHasDateToken(stored, datePattern);
+            if (stillHolds) return task.line;
         }
 
         return -1;
