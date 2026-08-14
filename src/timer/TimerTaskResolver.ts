@@ -2,11 +2,30 @@ import type TaskViewerPlugin from '../main';
 import { type Task, isTvFile, isTvInline } from '../types';
 import type { TimerInstance } from './TimerInstance';
 
+/** 解決に失敗した理由。文言を選ぶためだけに使う。 */
+export type TimerResolveFailure = 'read-only' | 'not-found';
+
 /**
  * Shared timer target resolution helpers.
  */
 export class TimerTaskResolver {
     constructor(private plugin: TaskViewerPlugin) { }
+
+    /**
+     * 解決に失敗した理由を分ける。
+     *
+     * 解決手段はどれも候補に tvInline / tvFile を要求するので、day-planner や
+     * tasks-plugin のタスクは「見つからない」のと同じ経路で落ちる。しかし原因は
+     * 別物で、こちらは最初から書き込めない形式であり、あちらは行を見失った状態
+     * である。同じ文言（削除・移動・リネームの可能性）を出すと原因を取り違える。
+     *
+     * 解決が失敗したときだけ呼ぶ。除外された候補が実在するかどうかは id で
+     * 引き直さないと分からない。
+     */
+    explainFailure(timer: Pick<TimerInstance, 'taskId'>): TimerResolveFailure {
+        const task = this.plugin.getTaskIndex().getTask(timer.taskId);
+        return task?.isReadOnly ? 'read-only' : 'not-found';
+    }
 
     resolveTvInline(timer: Pick<TimerInstance, 'taskId' | 'taskFile' | 'taskOriginalText' | 'timerTargetId'>): Task | undefined {
         const taskIndex = this.plugin.getTaskIndex();

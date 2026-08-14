@@ -17,6 +17,7 @@ import { TimerTaskResolver } from './TimerTaskResolver';
 import { isTimerTargetId } from '../utils/TimerTargetIdUtils';
 import { type TimerIcon, getTimerIcon, withTimerIcon } from '../utils/TimerIcons';
 import type { TimerStorageUtils } from './TimerStorageUtils';
+import { logWarn } from '../log/log';
 
 export class TimerRecorder {
     private resolver: TimerTaskResolver;
@@ -163,7 +164,19 @@ export class TimerRecorder {
             ? this.resolver.resolveTvFile(timer)
             : this.resolver.resolveTvInline(timer);
 
-        if (!task) return;
+        if (!task) {
+            // 開始時の書き込みが落ちるとセッションを丸ごと失う。黙って戻ると
+            // ユーザーは計測を終えるまで気づけないので、書き込めない形式だと
+            // 分かっている場合はその場で伝える。行を見失っただけの場合は
+            // 再スキャンで直ることがあるのでログに留める。
+            const reason = this.resolver.explainFailure(timer);
+            if (reason === 'read-only') {
+                new Notice(t('notice.timerTargetReadOnly'));
+            } else {
+                logWarn('[TimerRecorder] start-time write skipped: timer target not resolved');
+            }
+            return;
+        }
 
         const updates: Record<string, string | undefined> = {
             startDate: this.formatDate(now),
@@ -333,6 +346,20 @@ export class TimerRecorder {
 
         const kind = this.getTimerKind(timer);
         new Notice(t('notice.kindRecorded', { icon, kind, duration: TimeFormatter.formatSeconds(elapsedSeconds) }));
+    }
+
+    /**
+     * 対象を引けなかったことを、原因に応じた文言で伝える。
+     *
+     * 読み取り専用の形式（day-planner / tasks-plugin）は最初から書き込めない。
+     * 「削除、移動、またはリネームされた可能性」と言うと、実際には在る行を
+     * 探しに行かせることになる。
+     */
+    private noticeResolveFailure(timer: TimerInstance): void {
+        const reason = this.resolver.explainFailure(timer);
+        new Notice(t(reason === 'read-only'
+            ? 'notice.timerTargetReadOnly'
+            : 'notice.timerTargetNotFound'));
     }
 
     /**
@@ -540,7 +567,7 @@ export class TimerRecorder {
                 : this.resolver.resolveTvInline(timer);
 
             if (!task) {
-                new Notice(t('notice.timerTargetNotFound'));
+                this.noticeResolveFailure(timer);
                 return;
             }
 
@@ -588,7 +615,7 @@ export class TimerRecorder {
             : this.resolver.resolveTvInline(timer);
 
         if (!resolvedTask) {
-            new Notice(t('notice.timerTargetNotFound'));
+            this.noticeResolveFailure(timer);
             return;
         }
 

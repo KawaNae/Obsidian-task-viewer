@@ -121,6 +121,11 @@ export class TimerWidget implements TimerContext {
             return;
         }
 
+        if (this.isReadOnlyTarget(config)) {
+            new Notice(t('notice.timerTargetReadOnly'));
+            return;
+        }
+
         if (config.timerType !== 'idle') {
             this.lifecycle.stopIdleTimer();
         } else if (this.timers.has(IDLE_TIMER_ID)) {
@@ -133,6 +138,20 @@ export class TimerWidget implements TimerContext {
         }
 
         this.startTimerNow(config);
+    }
+
+    /**
+     * 記録を書き込めない形式のタスクか。
+     *
+     * 読み取り専用の記法（day-planner / tasks-plugin）にタイマーを掛けても、
+     * 開始時の書き込みも停止時の記録も落ちる。計測そのものは動いてしまうので、
+     * ユーザーは終わるまで何も残らないことに気づけない。開始経路は提案・カード
+     * メニュー・各ビューに散っているので、全経路が通るここで 1 度だけ止める。
+     */
+    private isReadOnlyTarget(config: TimerStartConfig): boolean {
+        if (config.timerType === 'idle') return false;
+        if (!config.taskId || config.taskId.startsWith('daily-')) return false;
+        return !!this.plugin.getTaskReadService().getTask(config.taskId)?.isReadOnly;
     }
 
     /**

@@ -8,7 +8,9 @@
  *   2. 'upcoming' — the incomplete timed task starting soonest later in
  *                   the current visual day
  * All-day tasks (>= 23.5h, the codebase-wide boundary) are excluded — they
- * are day-long containers, not "the thing to do right now".
+ * are day-long containers, not "the thing to do right now". Read-only tasks
+ * are excluded too: the timer cannot write a record to them, so suggesting
+ * one hands the user a session that will be lost.
  *
  * Results are cached per (TaskIndex revision, wall-clock minute) so the
  * 1-second idle tick never rescans the index.
@@ -67,6 +69,10 @@ export class NextTaskSuggester {
         let upcomingStart = '';
 
         for (const dt of readService.getVisibleDisplayTasks()) {
+            // 読み取り専用の記法（day-planner / tasks-plugin）にはタイマーの記録を
+            // 書き込めない。提案から開始すると計測した分がそのまま消えるので、
+            // カードメニューと同じ規則で候補から外す。
+            if (dt.isReadOnly) continue;
             if (!dt.effectiveStartDate || !dt.effectiveStartTime) continue;
             if (DateUtils.isAllDayTask(
                 dt.effectiveStartDate, dt.effectiveStartTime,
