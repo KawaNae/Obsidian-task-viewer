@@ -588,4 +588,63 @@ describe('FileOperations', () => {
             expect(ops.findTaskLineNumber(lines, task)).toBe(0);
         });
     });
+
+    // ── indent resolution (static) ──
+    describe('indentWidth', () => {
+        it('counts a tab as four columns', () => {
+            expect(FileOperations.indentWidth('\t- [ ] x')).toBe(4);
+            expect(FileOperations.indentWidth('    - [ ] x')).toBe(4);
+        });
+
+        it('gives the same depth the same width regardless of spelling', () => {
+            expect(FileOperations.indentWidth('\t\t- x')).toBe(FileOperations.indentWidth('        - x'));
+        });
+
+        it('is zero for a top-level line', () => {
+            expect(FileOperations.indentWidth('- [ ] x')).toBe(0);
+        });
+    });
+
+    describe('detectIndentUnit', () => {
+        it('takes the spelling of the first indented line', () => {
+            expect(FileOperations.detectIndentUnit(['- a', '\t- b'])).toBe('\t');
+            expect(FileOperations.detectIndentUnit(['- a', '    - b'])).toBe('    ');
+        });
+
+        it('ignores blank lines while looking', () => {
+            expect(FileOperations.detectIndentUnit(['- a', '   ', '\t- b'])).toBe('\t');
+        });
+
+        it('defaults to a tab when nothing is indented', () => {
+            expect(FileOperations.detectIndentUnit(['- a', '- b'])).toBe('\t');
+        });
+    });
+
+    describe('resolveChildIndent', () => {
+        it('copies the first existing child', () => {
+            const lines = ['- [ ] parent', '\t- [ ] child'];
+            expect(FileOperations.resolveChildIndent(lines, 0)).toBe('\t');
+        });
+
+        it('prefers the task\'s own children over the rest of the file', () => {
+            const lines = ['- [ ] other', '    - [ ] other child', '- [ ] parent', '\t- [ ] child'];
+            expect(FileOperations.resolveChildIndent(lines, 2)).toBe('\t');
+        });
+
+        it('falls back to the file when the task has no children', () => {
+            const lines = ['- [ ] parent', '- [ ] other', '    - [ ] other child'];
+            expect(FileOperations.resolveChildIndent(lines, 0)).toBe('    ');
+        });
+
+        it('nests below an already indented parent', () => {
+            const lines = ['- [ ] top', '\t- [ ] parent', '\t\t- [ ] child'];
+            expect(FileOperations.resolveChildIndent(lines, 1)).toBe('\t\t');
+        });
+
+        it('does not treat a line past a blank as a child', () => {
+            const lines = ['- [ ] parent', '', '    - [ ] not a child'];
+            // Nothing indented before the blank, so the file's own unit decides.
+            expect(FileOperations.resolveChildIndent(lines, 0)).toBe('    ');
+        });
+    });
 });

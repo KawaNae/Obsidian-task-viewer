@@ -228,8 +228,9 @@ describe('TaskIndex child insertion', () => {
 
         expect(host.repository.insertLineAfterTask).toHaveBeenCalledTimes(1);
         expect(host.repository.insertLineAsFirstChild).not.toHaveBeenCalled();
-        // Indented one level below the parent, in the parent's own style.
-        expect(host.repository.insertLineAfterTask.mock.calls[0][1]).toBe('\t\t- [x] session');
+        // The body is passed through unindented: the depth is resolved by the
+        // write layer, which can see the children the task already has.
+        expect(host.repository.insertLineAfterTask.mock.calls[0][1]).toBe('- [x] session');
     });
 
     it('insertChildTask still inserts at the head', async () => {
@@ -338,5 +339,100 @@ describe('TaskWriteService delegation', () => {
 
         await svc.insertSiblingAfterTask('p', NEW_SESSION);
         expect(idx.insertSiblingAfterTask).toHaveBeenCalledWith('p', NEW_SESSION, {});
+    });
+});
+
+// ── child inserts resolve their own indent ──
+function runChildInsert(
+    fileText: string,
+    task: Task,
+    lineBody: string,
+    mode: 'first' | 'after'
+): Promise<{ text: string; index: number }> {
+    let content = fileText;
+    const file = new TFile();
+    const app = {
+        vault: {
+            getAbstractFileByPath: () => file,
+            process: async (_f: TFile, fn: (data: string) => string) => { content = fn(content); },
+        },
+    } as any;
+    const writer = new InlineTaskWriter(app, new FileOperations(app));
+    const call = mode === 'first'
+        ? writer.insertLineAsFirstChild(task, lineBody)
+        : writer.insertLineAfterTask(task, lineBody);
+    return call.then(index => ({ text: content, index }));
+}
+
+describe('child inserts take their indent from the file', () => {
+    const parent = '- [ ] parent @2026-08-13T09:00';
+    const parentTask = () => makeTask({ content: 'parent', line: 0, originalText: parent });
+    const RECORD = '- [x] ⏱️ parent @2026-08-13T10:00>11:00';
+
+    it('follows an existing tab-indented child', async () => {
+        const { text } = await runChildInsert(
+            [parent, '\t- [ ] existing'].join('\n'), parentTask(), RECORD, 'after'
+        );
+        expect(text.split('\n')).toEqual([parent, '\t- [ ] existing', '\t' + RECORD]);
+    });
+
+    it('follows an existing space-indented child', async () => {
+        const { text } = await runChildInsert(
+            [parent, '    - [ ] existing'].join('\n'), parentTask(), RECORD, 'after'
+        );
+        expect(text.split('\n')).toEqual([parent, '    - [ ] existing', '    ' + RECORD]);
+    });
+
+    it('falls back to how the rest of the file is written', async () => {
+        // The parent has no children yet, but the file is tab-indented. Deriving
+        // the unit from the top-level parent line alone would answer 4 spaces.
+        const { text } = await runChildInsert(
+            [parent, '- [ ] other', '\t- [ ] other child'].join('\n'),
+            parentTask(), RECORD, 'first'
+        );
+        expect(text.split('\n')[1]).toBe('\t' + RECORD);
+    });
+
+    it('uses a tab when the file has no indentation to read', async () => {
+        const { text } = await runChildInsert(parent, parentTask(), RECORD, 'first');
+        expect(text.split('\n')[1]).toBe('\t' + RECORD);
+    });
+
+    it('ignores indentation supplied by the caller', async () => {
+        const { text } = await runChildInsert(
+            [parent, '\t- [ ] existing'].join('\n'), parentTask(), '        ' + RECORD, 'after'
+        );
+        expect(text.split('\n')[2]).toBe('\t' + RECORD);
+    });
+});
+
+describe('completed-run walk across mixed indentation', () => {
+    // Files written before the indent unification can hold both spellings of the
+    // same depth. Comparing raw character counts stops the walk at the first
+    // sibling spelled the other way, which drops a new record into the middle of
+    // the run instead of at its end.
+    it('steps over a tab-indented sibling from a space-indented anchor', async () => {
+        const first = '    - [x] ⏱️ rec @2026-08-13T10:00>10:30';
+        const second = '\t- [x] ⏱️ rec @2026-08-13T11:00>11:30';
+        const { text } = await runSiblingInsert(
+            ['- [ ] parent', first, second].join('\n'),
+            makeTask({ content: '⏱️ rec', line: 1, originalText: first, statusChar: 'x', startDate: '2026-08-13', startTime: '10:00' }),
+            NEW_SESSION,
+            { afterCompletedRun: true }
+        );
+
+        expect(text.split('\n')).toEqual(['- [ ] parent', first, second, '    ' + NEW_SESSION]);
+    });
+
+    it('still stops at a genuinely shallower line', async () => {
+        const anchor = '\t- [x] ⏱️ rec @2026-08-13T10:00>10:30';
+        const { text } = await runSiblingInsert(
+            ['- [ ] parent', anchor, '- [x] top level'].join('\n'),
+            makeTask({ content: '⏱️ rec', line: 1, originalText: anchor, statusChar: 'x', startDate: '2026-08-13', startTime: '10:00' }),
+            NEW_SESSION,
+            { afterCompletedRun: true }
+        );
+
+        expect(text.split('\n')).toEqual(['- [ ] parent', anchor, '\t' + NEW_SESSION, '- [x] top level']);
     });
 });

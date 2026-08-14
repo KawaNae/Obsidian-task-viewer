@@ -1,4 +1,5 @@
 import { ChildLineClassifier } from '../../parsing/utils/ChildLineClassifier';
+import { FileOperations } from './FileOperations';
 import type { PropertyOp } from '../PropertyUpdatePlanner';
 
 interface OwnPropertyLine {
@@ -108,26 +109,10 @@ export class ChildPropertyLineEditor {
                 indent = lines[last.lineIdx].match(/^(\s*)/)?.[1] ?? '';
             } else {
                 insertIdx = taskLineIdx + 1;
-                indent = this.firstChildIndent(lines, taskLineIdx)
-                    ?? (lines[taskLineIdx].match(/^(\s*)/)?.[1] ?? '') + '\t';
+                indent = FileOperations.resolveChildIndent(lines, taskLineIdx);
             }
             lines.splice(insertIdx, 0, `${indent}- ${op.key}:: ${this.formatValue(op.value, null)}`);
         }
-    }
-
-    /**
-     * タスク直下の最初の子行（空行・dedent で終端）のインデント文字列を返す。
-     * 子行が無ければ null。
-     */
-    private static firstChildIndent(lines: string[], taskLineIdx: number): string | null {
-        const taskIndent = lines[taskLineIdx].search(/\S|$/);
-        for (let j = taskLineIdx + 1; j < lines.length; j++) {
-            const line = lines[j];
-            if (line.trim() === '') break;
-            if (line.search(/\S|$/) <= taskIndent) break;
-            return line.match(/^(\s*)/)?.[1] ?? null;
-        }
-        return null;
     }
 
     /**

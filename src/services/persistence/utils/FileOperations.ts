@@ -112,6 +112,67 @@ export class FileOperations {
     }
 
     /**
+     * The indent string of the task's first child, or null when it has none.
+     * Blank lines and anything at or above the task's own depth end the search,
+     * matching {@link collectChildrenFromLines}.
+     */
+    static firstChildIndent(lines: string[], taskLineIndex: number): string | null {
+        const taskIndent = lines[taskLineIndex].search(/\S|$/);
+        for (let j = taskLineIndex + 1; j < lines.length; j++) {
+            const line = lines[j];
+            if (line.trim() === '') break;
+            if (line.search(/\S|$/) <= taskIndent) break;
+            return line.match(/^(\s*)/)?.[1] ?? null;
+        }
+        return null;
+    }
+
+    /**
+     * One indent level as this file spells it, taken from the first indented
+     * line. A file with no indentation anywhere gets a tab, Obsidian's default.
+     */
+    static detectIndentUnit(lines: string[]): string {
+        for (const line of lines) {
+            const m = line.match(/^([ \t]+)\S/);
+            if (m) return m[1].includes('\t') ? '\t' : '    ';
+        }
+        return '\t';
+    }
+
+    /**
+     * The indent to give a new child of the task at `taskLineIndex`.
+     *
+     * The task's existing children decide it, so a subtree keeps one spelling.
+     * With no children to copy, the rest of the file decides — reading the
+     * parent line alone cannot, because a top-level task has no indentation and
+     * {@link getIndentUnit} then answers four spaces for every file, tab-written
+     * ones included. That is how the two spellings ended up in one subtree.
+     */
+    static resolveChildIndent(lines: string[], taskLineIndex: number): string {
+        const own = FileOperations.firstChildIndent(lines, taskLineIndex);
+        if (own !== null) return own;
+
+        const parentIndent = lines[taskLineIndex].match(/^(\s*)/)?.[1] ?? '';
+        return parentIndent + FileOperations.detectIndentUnit(lines);
+    }
+
+    /**
+     * Visual width of a line's indentation, counting a tab as four columns.
+     *
+     * Obsidian accepts only a tab or four spaces per level, so this maps both
+     * spellings of the same depth onto the same number. Comparing raw character
+     * counts instead treats a tab as one column, which makes a tab-indented
+     * sibling look shallower than a space-indented one and cuts sibling walks
+     * short in files where the two are mixed.
+     */
+    static indentWidth(line: string): number {
+        const indent = line.match(/^(\s*)/)?.[1] ?? '';
+        let width = 0;
+        for (const ch of indent) width += ch === '\t' ? 4 : 1;
+        return width;
+    }
+
+    /**
      * Strip the parent's indent prefix from each child line, preserving deeper
      * indentation (tabs / spaces / mixed) exactly as written in the source.
      */

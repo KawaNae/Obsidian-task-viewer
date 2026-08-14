@@ -668,8 +668,10 @@ export class TaskIndex {
                     this.settings.tvFileChildHeaderLevel
                 );
             } else {
-                const childIndent = FileOperations.getChildIndent(task.originalText);
-                await this.repository.insertLineAsFirstChild(task, childIndent + childLine);
+                // インデントは書き込み層が既存子行から決める（親行だけからは
+                // トップレベルのとき 4 スペース固定になり、タブ書きのファイルに
+                // スペースが混ざる）。
+                await this.repository.insertLineAsFirstChild(task, childLine);
             }
 
             await this.scanner.waitForScan(task.file);
@@ -697,8 +699,7 @@ export class TaskIndex {
                     this.settings.tvFileChildHeaderLevel
                 );
             } else {
-                const childIndent = FileOperations.getChildIndent(task.originalText);
-                await this.repository.insertLineAfterTask(task, childIndent + childLine);
+                await this.repository.insertLineAfterTask(task, childLine);
             }
 
             await this.scanner.waitForScan(task.file);

@@ -198,7 +198,12 @@ export class InlineTaskWriter {
      * that {@link subtreeEnd} has already skipped over.
      */
     private completedRunEnd(lines: string[], taskLineIndex: number): number {
-        const baseIndent = lines[taskLineIndex].search(/\S|$/);
+        // Depth is compared by visual width, not by character count: a file that
+        // mixes tabs and four-space indents writes the same depth two ways, and
+        // counting characters makes the tab line look shallower — the walk then
+        // stops at the first sibling spelled differently and a new record lands
+        // in the middle of the run instead of at its end.
+        const baseWidth = FileOperations.indentWidth(lines[taskLineIndex]);
 
         let last = taskLineIndex;
         for (; ;) {
@@ -207,7 +212,7 @@ export class InlineTaskWriter {
 
             const line = lines[next];
             if (line.trim() === '') return last;
-            if (line.search(/\S|$/) !== baseIndent) return last;
+            if (FileOperations.indentWidth(line) !== baseWidth) return last;
 
             const parsed = TaskLineClassifier.classify(line);
             if (parsed?.statusChar !== 'x') return last;
@@ -216,7 +221,15 @@ export class InlineTaskWriter {
         }
     }
 
-    async insertLineAfterTask(task: Task, lineContent: string): Promise<number> {
+    /**
+     * Append `lineBody` as the task's last child.
+     *
+     * `lineBody` carries no indentation: the depth is read off the file here,
+     * from the children the task already has. Letting the caller prefix it meant
+     * deriving the unit from the parent line alone, which returns four spaces
+     * for any top-level task and so mixed spaces into tab-written files.
+     */
+    async insertLineAfterTask(task: Task, lineBody: string): Promise<number> {
         const file = this.app.vault.getAbstractFileByPath(task.file);
         if (!(file instanceof TFile)) return -1;
 
@@ -229,8 +242,9 @@ export class InlineTaskWriter {
             const currentLine = this.fileOps.findTaskLineNumber(lines, task);
             if (currentLine < 0 || currentLine >= lines.length) return content;
 
+            const indent = FileOperations.resolveChildIndent(lines, currentLine);
             const insertIndex = this.subtreeEnd(lines, currentLine);
-            lines.splice(insertIndex, 0, lineContent);
+            lines.splice(insertIndex, 0, indent + lineBody.trim());
             insertedLineIndex = insertIndex;
 
             return lines.join('\n');
@@ -292,10 +306,13 @@ export class InlineTaskWriter {
     }
 
     /**
-     * Insert a line as the first child of a task (right after the task line).
+     * Insert `lineBody` as the first child of a task (right after the task line).
      * Used for timer/pomodoro records that should appear at the top of children.
+     *
+     * As with {@link insertLineAfterTask}, the indent is resolved here from the
+     * task's existing children rather than supplied by the caller.
      */
-    async insertLineAsFirstChild(task: Task, lineContent: string): Promise<number> {
+    async insertLineAsFirstChild(task: Task, lineBody: string): Promise<number> {
         const file = this.app.vault.getAbstractFileByPath(task.file);
         if (!(file instanceof TFile)) return -1;
 
@@ -305,13 +322,15 @@ export class InlineTaskWriter {
             const lines = content.split('\n');
 
             // Find the current line number using multiple strategies
-            let currentLine = this.fileOps.findTaskLineNumber(lines, task);
+            const currentLine = this.fileOps.findTaskLineNumber(lines, task);
 
             if (currentLine < 0 || currentLine >= lines.length) return content;
 
+            const indent = FileOperations.resolveChildIndent(lines, currentLine);
+
             // Insert directly after the task line (as first child)
             const insertIndex = currentLine + 1;
-            lines.splice(insertIndex, 0, lineContent);
+            lines.splice(insertIndex, 0, indent + lineBody.trim());
             insertedLineIndex = insertIndex;
 
             return lines.join('\n');
