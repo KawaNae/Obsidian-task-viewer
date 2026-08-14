@@ -8,6 +8,11 @@ import { diagnosticText } from '../services/flow/diagnosticText';
 import { TaskLineClassifier } from '../services/parsing/utils/TaskLineClassifier';
 import { TaskParser } from '../services/parsing/TaskParser';
 import { dateBlockDiagnostics } from '../services/parsing/tv-inline/DateBlockDiagnostics';
+import {
+    inertFlowDiagnostic,
+    inertNotationOf,
+    type InertNotation,
+} from '../services/parsing/tv-inline/InertFlowDiagnostics';
 
 const FLOW_MARKER = '==>';
 /** Bound for the up/down document scans around the viewport. */
@@ -49,6 +54,7 @@ interface SegmentLoc {
 export function createDiagnosticsExtension(): Extension {
     const cache = new Map<string, Diagnostic[]>();
     const dateCache = new Map<string, Diagnostic[]>();
+    const inertCache = new Map<string, InertNotation | null>();
     const CACHE_CAP = 500;
 
     const diagnosticsFor = (raws: string[]): Diagnostic[] => {
@@ -68,6 +74,16 @@ export function createDiagnosticsExtension(): Extension {
         const diagnostics = dateBlockDiagnostics(lineText);
         dateCache.set(lineText, diagnostics);
         return diagnostics;
+    };
+
+    /** Memoized `inertNotationOf` — same chain-generation lifetime as the rest. */
+    const inertNotationFor = (lineText: string): InertNotation | null => {
+        const hit = inertCache.get(lineText);
+        if (hit !== undefined) return hit;
+        if (inertCache.size >= CACHE_CAP) inertCache.clear();
+        const notation = inertNotationOf(lineText);
+        inertCache.set(lineText, notation);
+        return notation;
     };
 
     /**
@@ -230,6 +246,28 @@ export function createDiagnosticsExtension(): Extension {
                 // — the parser treats a lone marker as content, not a command.
                 if (segments.length === 1 && !segments[0].raw.trim()) continue;
 
+                // A read-only notation owns this task line: the command never
+                // fires, so say that instead of grading its syntax. Every
+                // segment of the group is marked, the task line's own tail
+                // and its `- ==>` children alike.
+                const notation = inertNotationFor(view.state.doc.line(rootNumber).text);
+                if (notation) {
+                    const d = inertFlowDiagnostic(notation, { start: 0, end: 0 });
+                    for (const seg of segments) {
+                        if (seg.markerCol === null) continue;
+                        const segLine = view.state.doc.line(seg.lineNumber);
+                        marks.push({
+                            from: segLine.from + seg.markerCol,
+                            to: segLine.to,
+                            deco: Decoration.mark({
+                                class: `tv-diag tv-diag--${d.severity}`,
+                                attributes: { title: diagnosticText(d) },
+                            }),
+                        });
+                    }
+                    continue;
+                }
+
                 const raws = segments.map(s => s.raw);
                 const { table } = joinSegments(raws);
                 for (const d of diagnosticsFor(raws)) {
@@ -295,6 +333,7 @@ export function createDiagnosticsExtension(): Extension {
                     this.chainGeneration = generation;
                     cache.clear();
                     dateCache.clear();
+                    inertCache.clear();
                     this.decorations = buildDecorations(update.view);
                 } else if (update.docChanged || update.viewportChanged) {
                     this.decorations = buildDecorations(update.view);

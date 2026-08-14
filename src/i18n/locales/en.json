@@ -754,7 +754,8 @@
       "bad-monthday": "Expected a day number or 'last' after '@'",
       "orphan-modifier": "'{{clause}}' requires a schedule clause (every / + / at)",
       "empty": "Flow command is empty",
-      "node-spans-lines": "A clause must be written within a single line"
+      "node-spans-lines": "A clause must be written within a single line",
+      "inert-notation": "This line is read as {{notation}} notation, so the ==> command never runs — it stays part of the task name"
     }
   }
 }

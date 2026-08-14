@@ -754,7 +754,8 @@
       "bad-monthday": "'@' の後には日番号か 'last' が必要です",
       "orphan-modifier": "'{{clause}}' にはスケジュール節（every / + / at）が必要です",
       "empty": "フロー・コマンドが空です",
-      "node-spans-lines": "節は行をまたいで書けません"
+      "node-spans-lines": "節は行をまたいで書けません",
+      "inert-notation": "この行は {{notation}} 記法として解釈されるため、==> コマンドは実行されません（タスク名の一部として表示されます）"
     }
   }
 }
