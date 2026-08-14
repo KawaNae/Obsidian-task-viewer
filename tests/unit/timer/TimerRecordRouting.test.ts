@@ -135,6 +135,33 @@ describe('recordSessionEnd: one session writes one line', () => {
         expect(gone.updates).toHaveLength(0);
     });
 
+    it('the fallback record still carries the task name', async () => {
+        // 走行中の行を書く経路は customLabel が無ければ対象名を継ぐのに、
+        // フォールバックだけが customLabel しか見ておらず、名前を失った
+        // 「⏱️」だけのレコードを書いていた（move 発火中の停止で実機観測）。
+        const gone = makeHarness({ childExists: false });
+        await gone.recorder.recordSessionEnd(makeTimer());
+        expect(gone.inserted[0]).toContain('⏱️ parent');
+    });
+
+    it('the fallback record prefers an explicit label over the task name', async () => {
+        const gone = makeHarness({ childExists: false });
+        await gone.recorder.recordSessionEnd(makeTimer({ customLabel: '資料集め' }));
+        expect(gone.inserted[0]).toContain('⏱️ 資料集め');
+        expect(gone.inserted[0]).not.toContain('parent');
+    });
+
+    it('the placeholder and the fallback agree on the name', async () => {
+        const gone = makeHarness({ childExists: false });
+        const timer = makeTimer();
+        const placeholder = gone.recorder.buildSessionPlaceholder(timer).line;
+        await gone.recorder.recordSessionEnd(timer);
+
+        // 走行中の行とフォールバックのレコードは同じ名前を名乗る。
+        expect(placeholder).toContain('parent');
+        expect(gone.inserted[0]).toContain('parent');
+    });
+
     it('inserts a single record when no placeholder was created', async () => {
         await h.recorder.recordSessionEnd(makeTimer({ recordedChildTaskId: undefined }));
         expect(h.inserted).toHaveLength(1);

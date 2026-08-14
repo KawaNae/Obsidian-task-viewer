@@ -15,7 +15,7 @@ import { createTempTask } from '../services/data/createTempTask';
 import { TimeFormatter } from '../utils/TimeFormatter';
 import { TimerTaskResolver } from './TimerTaskResolver';
 import { isTimerTargetId } from '../utils/TimerTargetIdUtils';
-import { type TimerIcon, getTimerIcon } from '../utils/TimerIcons';
+import { type TimerIcon, getTimerIcon, withTimerIcon } from '../utils/TimerIcons';
 import type { TimerStorageUtils } from './TimerStorageUtils';
 
 export class TimerRecorder {
@@ -39,8 +39,9 @@ export class TimerRecorder {
         const endTime = new Date();
         const startTime = new Date(endTime.getTime() - elapsedSeconds * 1000);
 
+        const icon = this.getTimerIcon(timer);
         const taskObj = this.createTaskObject(
-            timer.customLabel.trim() ? `⏱️ ${timer.customLabel.trim()}` : '⏱️',
+            this.recordLabel(timer),
             this.formatDate(startTime),
             this.formatTime(startTime),
             this.formatDate(endTime),
@@ -49,7 +50,7 @@ export class TimerRecorder {
         const formattedLine = TaskParser.format(taskObj);
 
         await this.insertChildRecord(timer, formattedLine);
-        new Notice(t('notice.timerRecorded', { icon: '⏱️', duration: TimeFormatter.formatSeconds(elapsedSeconds) }));
+        new Notice(t('notice.timerRecorded', { icon, duration: TimeFormatter.formatSeconds(elapsedSeconds) }));
     }
 
     /**
@@ -60,8 +61,9 @@ export class TimerRecorder {
         const endTime = new Date();
         const startTime = new Date(endTime.getTime() - elapsedSeconds * 1000);
 
+        const icon = this.getTimerIcon(timer);
         const taskObj = this.createTaskObject(
-            timer.customLabel.trim() ? `⏲️ ${timer.customLabel.trim()}` : '⏲️',
+            this.recordLabel(timer),
             this.formatDate(startTime),
             this.formatTime(startTime),
             this.formatDate(endTime),
@@ -70,7 +72,7 @@ export class TimerRecorder {
         const formattedLine = TaskParser.format(taskObj);
 
         await this.insertChildRecord(timer, formattedLine);
-        new Notice(t('notice.countdownRecorded', { icon: '⏲️', duration: TimeFormatter.formatSeconds(elapsedSeconds) }));
+        new Notice(t('notice.countdownRecorded', { icon, duration: TimeFormatter.formatSeconds(elapsedSeconds) }));
     }
 
     /**
@@ -84,11 +86,9 @@ export class TimerRecorder {
 
         const isPomodoroSource = timer.timerType === 'interval' && timer.intervalSource === 'pomodoro';
         const icon = this.getTimerIcon(timer);
-        const custom = timer.customLabel.trim();
-        const label = custom ? `${icon} ${custom}` : icon;
 
         const taskObj = this.createTaskObject(
-            label,
+            this.recordLabel(timer),
             this.formatDate(startTime),
             this.formatTime(startTime),
             this.formatDate(endTime),
@@ -212,7 +212,7 @@ export class TimerRecorder {
         const blockId = this.storageUtils.generateTimerTargetId();
 
         const taskObj = this.createTaskObject(
-            timer.customLabel.trim() || timer.taskName.trim(),
+            this.sessionName(timer),
             this.formatDate(now),
             this.formatTime(now),
             '', ''
@@ -315,14 +315,10 @@ export class TimerRecorder {
         const endTime = new Date();
 
         const icon = this.getTimerIcon(timer);
-        const existingContent = child.content.trim();
         // 名前は対象タスクから継ぐので、既にアイコン付きの行（完了済みレコードの
-        // 「続き」など）を起点にすると二重に付く。
-        const content = existingContent.startsWith(icon)
-            ? existingContent
-            : existingContent
-                ? `${icon} ${existingContent}`
-                : icon;
+        // 「続き」など）を起点にすると二重に付く。付け直しの規則は
+        // {@link withTimerIcon} が持つ。
+        const content = withTimerIcon(icon, child.content.trim());
 
         await taskIndex.updateTask(child.id, {
             content,
@@ -337,6 +333,24 @@ export class TimerRecorder {
 
         const kind = this.getTimerKind(timer);
         new Notice(t('notice.kindRecorded', { icon, kind, duration: TimeFormatter.formatSeconds(elapsedSeconds) }));
+    }
+
+    /**
+     * レコードが名乗る名前の素。
+     *
+     * ユーザーが付けたラベルが無ければ**対象タスクの名前を継ぐ**。セッションは
+     * 同じ作業の分割であって別物ではないので、名前を落とすと後から読めない。
+     * 走行中の行を書く {@link buildSessionPlaceholder} と、行を引けずに 1 行
+     * 足すフォールバック（{@link addCountupRecord} 系）で規則が割れていて、
+     * 後者だけが名前を失っていた。
+     */
+    private sessionName(timer: TimerInstance): string {
+        return timer.customLabel.trim() || timer.taskName.trim();
+    }
+
+    /** レコード行の content（アイコン + 名前）。 */
+    private recordLabel(timer: TimerInstance): string {
+        return withTimerIcon(this.getTimerIcon(timer), this.sessionName(timer));
     }
 
     /**
@@ -531,7 +545,6 @@ export class TimerRecorder {
             }
 
             const icon = this.getTimerIcon(timer);
-            const existingContent = task.content.trim();
 
             const updates: Partial<Task> = {
                 startDate: startDateStr,
@@ -545,11 +558,7 @@ export class TimerRecorder {
                 // 内容一致では解決できなくなる）。自動生成 id は再開時か widget を
                 // 閉じるときに外れる。ユーザーの手動 blockId はもとより保持。
                 blockId: task.blockId,
-                content: existingContent.startsWith(icon)
-                    ? existingContent
-                    : existingContent
-                        ? `${icon} ${existingContent}`
-                        : icon,
+                content: withTimerIcon(icon, task.content.trim()),
             };
 
             await taskIndex.updateTask(task.id, updates);
