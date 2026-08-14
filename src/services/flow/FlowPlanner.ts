@@ -1,6 +1,7 @@
 import { differenceInCalendarDays } from 'date-fns';
 import type { Task, TaskFlow } from '../../types';
 import { DateUtils } from '../../utils/DateUtils';
+import { TIMER_ICON_PREFIX_RE } from '../../utils/TimerIcons';
 import type { PropName } from '../lang/ExprAst';
 import { type EvalContext, EvalError, evalExpr } from '../lang/ExprEvaluator';
 import type { EvalHost } from '../lang/functions';
@@ -107,7 +108,10 @@ function buildNextTask(task: Task, anchor: DateAnchor | null, next: NextOccurren
         childLines: [],
         blockId: undefined,
         timerTargetId: undefined,
-        content: task.content.replace(/^(?:⏱️|🍅|⏳)\s*/, ''),
+        // タイマーのアイコンは記法に準ずる目印なので次インスタンスへ持ち越さない。
+        // 一覧の単一情報源は TimerIcons — ここに直接書くと、付ける側に足した
+        // アイコンが剥がす側から漏れる（`🔁` が実際に漏れていた）。
+        content: task.content.replace(TIMER_ICON_PREFIX_RE, ''),
     };
 
     if (!anchor) {

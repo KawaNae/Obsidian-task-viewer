@@ -15,6 +15,7 @@ import { createTempTask } from '../services/data/createTempTask';
 import { TimeFormatter } from '../utils/TimeFormatter';
 import { TimerTaskResolver } from './TimerTaskResolver';
 import { isTimerTargetId } from '../utils/TimerTargetIdUtils';
+import { type TimerIcon, getTimerIcon } from '../utils/TimerIcons';
 import type { TimerStorageUtils } from './TimerStorageUtils';
 
 export class TimerRecorder {
@@ -82,7 +83,7 @@ export class TimerRecorder {
         const startTime = new Date(endTime.getTime() - elapsedSeconds * 1000);
 
         const isPomodoroSource = timer.timerType === 'interval' && timer.intervalSource === 'pomodoro';
-        const icon = isPomodoroSource ? '🍅' : '🔁';
+        const icon = this.getTimerIcon(timer);
         const custom = timer.customLabel.trim();
         const label = custom ? `${icon} ${custom}` : icon;
 
@@ -340,13 +341,13 @@ export class TimerRecorder {
 
     /**
      * Get the emoji icon for a timer type.
+     * 一覧は {@link TimerIcons} が持つ — 剥がす側（フロー発火）と共有する。
      */
-    private getTimerIcon(timer: TimerInstance): string {
-        if (timer.timerType === 'interval') {
-            return timer.intervalSource === 'pomodoro' ? '🍅' : '🔁';
-        }
-        if (timer.timerType === 'countdown') return '⏳';
-        return '⏱️';
+    private getTimerIcon(timer: TimerInstance): TimerIcon {
+        return getTimerIcon(
+            timer.timerType,
+            timer.timerType === 'interval' ? timer.intervalSource : undefined
+        );
     }
 
     /**

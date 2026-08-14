@@ -4,6 +4,7 @@ import { parseFlow } from '../../../src/services/flow/FlowParser';
 import { parseFlowSegments } from '../../../src/services/flow/FlowSegments';
 import { EvalError } from '../../../src/services/lang/ExprEvaluator';
 import { Task } from '../../../src/types';
+import { TIMER_ICONS } from '../../../src/utils/TimerIcons';
 import { makeTask } from '../helpers/makeTask';
 
 // 2026-07-02 is a Thursday.
@@ -340,6 +341,17 @@ describe('FlowPlanner', () => {
         it('strips timer emoji prefixes from the copied content', () => {
             const { newTask } = createNextOf(plan('at(today + 1d)', { startDate: '2026-07-01', content: '⏱️ Test task' }));
             expect(newTask.content).toBe('Test task');
+        });
+
+        // 一覧を TimerIcons に寄せる前は付ける側にしか無いアイコンがあり、
+        // interval（非ポモドーロ）の `🔁` が次インスタンスに残っていた。
+        it('strips every icon the timer can produce', () => {
+            for (const icon of TIMER_ICONS) {
+                const { newTask } = createNextOf(
+                    plan('at(today + 1d)', { startDate: '2026-07-01', content: `${icon} Test task` })
+                );
+                expect(newTask.content).toBe('Test task');
+            }
         });
     });
 
