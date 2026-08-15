@@ -38,38 +38,8 @@ describe('ExprPrinter', () => {
         expect(roundTrip('(1 == 2) == true')).toBe('(1 == 2) == true');
     });
 
-    /**
-     * Both defects found so far were the same illness: the printer's levels
-     * and the parser's associativity disagreeing. A hand-written case only
-     * covers the shape someone thought of, while this grows on its own as
-     * operators are added.
-     */
-    it('round-trips every accepted pairing of binary operators', () => {
-        const ops = ['+', '-', '*', '/', '%', '==', '!=', '<', '<=', '>', '>=', '&&', '||', '??'];
-        let checked = 0;
-        for (const first of ops) {
-            for (const second of ops) {
-                for (const src of [
-                    `1 ${first} 2 ${second} 3`,
-                    `(1 ${first} 2) ${second} 3`,
-                    `1 ${first} (2 ${second} 3)`,
-                    `!(1 ${first} 2) ${second} 3`,
-                    `1 ${first} 2 ${second} 3 ? 4 : 5`,
-                ]) {
-                    const parsed = parse(src);
-                    // 受理しない形はこの契約の対象外（拒否は拒否で正しい）
-                    if (parsed.diagnostics.length > 0 || !parsed.expr) continue;
-                    const printed = printExpr(parsed.expr);
-                    const again = parse(printed);
-                    expect(again.diagnostics, `${src} → ${printed}`).toEqual([]);
-                    expect(printExpr(again.expr!), `${src} → ${printed}`).toBe(printed);
-                    checked++;
-                }
-            }
-        }
-        // 網が空になっていないこと（受理形がゼロだと素通りする）
-        expect(checked).toBeGreaterThan(300);
-    });
+    // 総当たりのスイープは ExprRoundTrip.test.ts にある。この一覧は
+    // 「なぜこの境界に括弧が要るのか」の記録として残す。
 
     it('keeps precedence parentheses everywhere else', () => {
         expect(roundTrip('today + 1d * 2')).toBe('today + 1d * 2');
