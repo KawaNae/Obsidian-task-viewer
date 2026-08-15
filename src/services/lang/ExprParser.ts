@@ -49,13 +49,13 @@ function parseTernary(cursor: TokenCursor, diagnostics: Diagnostic[]): Expr | nu
  * appears on this level's token run.
  */
 function parseNullish(cursor: TokenCursor, diagnostics: Diagnostic[]): Expr | null {
-    const start = cursor.mark();
-    let left = parseOr(cursor, diagnostics);
+    const logic: LogicSeen = { any: false };
+    let left = parseOr(cursor, diagnostics, logic);
     if (!left) return null;
     while (cursor.tryEat('qq')) {
-        const right = parseOr(cursor, diagnostics);
+        const right = parseOr(cursor, diagnostics, logic);
         if (!right) return null;
-        if (hasBareLogicalOp(cursor.between(start, cursor.mark()))) {
+        if (logic.any) {
             diagnostics.push(error('expr.nullish-mixed-with-logic',
                 "'??' cannot be mixed with '||' or '&&' — parenthesize the one you mean",
                 spanBetween(left.span, right.span)));
@@ -66,32 +66,33 @@ function parseNullish(cursor: TokenCursor, diagnostics: Diagnostic[]): Expr | nu
     return left;
 }
 
-/** A `||`/`&&` outside any parentheses in this token run. */
-function hasBareLogicalOp(tokens: Token[]): boolean {
-    let depth = 0;
-    for (const t of tokens) {
-        if (t.kind === 'lparen') depth++;
-        else if (t.kind === 'rparen') depth--;
-        else if (depth === 0 && (t.kind === 'pipepipe' || t.kind === 'ampamp')) return true;
-    }
-    return false;
-}
+/**
+ * Whether this `??` level actually consumed a `||`/`&&`.
+ *
+ * Recorded by the levels themselves rather than read back off the token run:
+ * a parenthesized `a || b` is parsed by a nested descent from the primary
+ * parser, so it never sets this flag — and the rule stays right no matter
+ * which bracket kinds the lexer grows later.
+ */
+interface LogicSeen { any: boolean }
 
-function parseOr(cursor: TokenCursor, diagnostics: Diagnostic[]): Expr | null {
-    let left = parseAnd(cursor, diagnostics);
+function parseOr(cursor: TokenCursor, diagnostics: Diagnostic[], logic?: LogicSeen): Expr | null {
+    let left = parseAnd(cursor, diagnostics, logic);
     if (!left) return null;
     while (cursor.tryEat('pipepipe')) {
-        const right = parseAnd(cursor, diagnostics);
+        if (logic) logic.any = true;
+        const right = parseAnd(cursor, diagnostics, logic);
         if (!right) return null;
         left = { kind: 'binary', op: '||', left, right, span: spanBetween(left.span, right.span) };
     }
     return left;
 }
 
-function parseAnd(cursor: TokenCursor, diagnostics: Diagnostic[]): Expr | null {
+function parseAnd(cursor: TokenCursor, diagnostics: Diagnostic[], logic?: LogicSeen): Expr | null {
     let left = parseComparison(cursor, diagnostics);
     if (!left) return null;
     while (cursor.tryEat('ampamp')) {
+        if (logic) logic.any = true;
         const right = parseComparison(cursor, diagnostics);
         if (!right) return null;
         left = { kind: 'binary', op: '&&', left, right, span: spanBetween(left.span, right.span) };

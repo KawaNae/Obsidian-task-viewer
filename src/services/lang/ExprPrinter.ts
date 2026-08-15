@@ -27,6 +27,21 @@ function precOf(expr: Expr): number {
     }
 }
 
+/**
+ * An operand of a binary expression.
+ *
+ * `??` cannot be written next to `||`/`&&` without parentheses — the parser
+ * refuses it — so this boundary's parentheses are no longer implied by
+ * precedence. They have to be printed unconditionally: a flow command is
+ * re-serialized on every firing, and dropping them would hand the next scan a
+ * line the parser rejects, stopping the task from firing again.
+ */
+function printOperand(parent: Expr & { kind: 'binary' }, child: Expr, prec: number): string {
+    const mixesLogic = parent.op === '??'
+        && child.kind === 'binary' && (child.op === '||' || child.op === '&&');
+    return mixesLogic ? `(${print(child, 0)})` : print(child, prec);
+}
+
 function print(expr: Expr, parentPrec: number): string {
     const myPrec = precOf(expr);
     const body = (() => {
@@ -35,7 +50,7 @@ function print(expr: Expr, parentPrec: number): string {
             case 'prop': return expr.name;
             case 'unary': return `${expr.op}${print(expr.operand, myPrec)}`;
             case 'binary':
-                return `${print(expr.left, myPrec)} ${expr.op} ${print(expr.right, myPrec + 1)}`;
+                return `${printOperand(expr, expr.left, myPrec)} ${expr.op} ${printOperand(expr, expr.right, myPrec + 1)}`;
             case 'cond':
                 return `${print(expr.cond, myPrec + 1)} ? ${print(expr.then, myPrec)} : ${print(expr.else, myPrec)}`;
             case 'call':

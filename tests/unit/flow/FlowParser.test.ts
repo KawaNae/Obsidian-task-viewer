@@ -202,6 +202,7 @@ describe('FlowParser', () => {
             'at(next("mon", start))',
             '+3d setStartTime(time(start) ?? 09:00)',
             'every mon setContent(content ?? "untitled")',
+            'every mon setContent((true || false) ?? none ? "a" : "b")',
         ])('parse → serialize → parse is stable: %s', (src) => {
             const first = parseFlow(src);
             expect(first.program).not.toBeNull();
