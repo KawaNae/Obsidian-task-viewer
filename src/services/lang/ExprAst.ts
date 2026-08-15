@@ -51,6 +51,18 @@ export type Expr =
     | { kind: 'assign'; op: '=' | '+=' | '-='; name: string; nameSpan: Span; value: Expr; span: Span }
     /** A name bound by an enclosing arrow parameter (block profile only). */
     | { kind: 'var'; name: string; span: Span }
+    /**
+     * `f(1)` — a call of an arrow bound by a local declaration, which is what
+     * makes `const f = x => ...` a real answer to "write a function" instead
+     * of a form only a list method can use.
+     *
+     * The callee is a name and only a name. Letting an arbitrary expression
+     * stand there would let a function travel as a value — out of a list, out
+     * of a record field — and a function cannot be printed, so a cell could
+     * never carry one back to the next instance. Keeping the call shape
+     * narrow is what keeps that closed.
+     */
+    | { kind: 'call-local'; name: string; nameSpan: Span; args: Expr[]; span: Span }
     /** `{ mon: "燃えるゴミ" }` — a record literal. Order is kept as written. */
     | { kind: 'record'; entries: { key: string; value: Expr }[]; span: Span }
     /** `...xs` — only meaningful inside a list literal, which spreads it. */

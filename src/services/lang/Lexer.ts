@@ -1,4 +1,4 @@
-import { type Diagnostic, error } from './Diagnostic';
+import { type Diagnostic, type Span, error } from './Diagnostic';
 import type { Token, TokenKind } from './Token';
 import { DECIMAL_PLACES, DURATION_UNITS, type DurUnit, MAX_EXACT_FRACTION } from './Value';
 
@@ -10,6 +10,14 @@ const IDENT_RE = /^[A-Za-z_][A-Za-z0-9_]*/;
 export interface LexResult {
     tokens: Token[];
     diagnostics: Diagnostic[];
+    /**
+     * Where the `//` comments were. A generation block keeps its source
+     * verbatim, so a comment written there survives and the lexer simply
+     * drops it. A flow command does not: it is regenerated in canonical form
+     * on every fire, and anything the printer has no node for disappears
+     * without a word. The flow surface reads this list and refuses instead.
+     */
+    comments: Span[];
 }
 
 /**
@@ -26,17 +34,27 @@ export interface LexResult {
 export function tokenize(src: string, base = 0): LexResult {
     const tokens: Token[] = [];
     const rawDiagnostics: Diagnostic[] = [];
+    const comments: Span[] = [];
     let i = 0;
 
-    // Open ( and [ carry a statement across a line break, so a newline
-    // inside them is plain whitespace and never becomes a token. Braces are
-    // deliberately not counted: a block statement's braces hold statement
-    // boundaries, and a record literal skips its own newlines at the parser.
-    let bracketDepth = 0;
+    // Which brackets are still open, innermost last. A line break inside an
+    // open ( or [ continues the statement, so it stays plain whitespace; a
+    // line break directly inside a { is a statement boundary, because that is
+    // where statements live. Which of the two applies is decided by the
+    // innermost bracket alone — a block body nested inside a call argument
+    // (`xs.map(x => { ... })`) is still a place where statements end at the
+    // line break, which a single depth counter cannot express. The one brace
+    // that is not a block is a record literal, and the parser skips its own
+    // newlines.
+    const open: TokenKind[] = [];
+    const CLOSES: Partial<Record<TokenKind, TokenKind>> = {
+        rparen: 'lparen', rbracket: 'lbracket', rbrace: 'lbrace',
+    };
 
     const push = (kind: TokenKind, text: string, start: number, end: number) => {
-        if (kind === 'lparen' || kind === 'lbracket') bracketDepth++;
-        if ((kind === 'rparen' || kind === 'rbracket') && bracketDepth > 0) bracketDepth--;
+        if (kind === 'lparen' || kind === 'lbracket' || kind === 'lbrace') open.push(kind);
+        const opener = CLOSES[kind];
+        if (opener !== undefined && open[open.length - 1] === opener) open.pop();
         tokens.push({ kind, text, start: start + base, end: end + base });
     };
 
@@ -44,12 +62,37 @@ export function tokenize(src: string, base = 0): LexResult {
         const ch = src[i];
 
         if (ch === '\n') {
-            if (bracketDepth === 0) push('newline', '\n', i, i + 1);
+            const innermost = open[open.length - 1];
+            if (innermost === undefined || innermost === 'lbrace') push('newline', '\n', i, i + 1);
             i++;
             continue;
         }
         if (/\s/.test(ch)) {
             i++;
+            continue;
+        }
+
+        // `// to the end of the line`. The line break itself is left for the
+        // loop above, so a comment never swallows a statement boundary.
+        if (src.startsWith('//', i)) {
+            const end = src.indexOf('\n', i);
+            const stop = end === -1 ? src.length : end;
+            comments.push({ start: i, end: stop });
+            i = stop;
+            continue;
+        }
+
+        // `/* */` is refused rather than skipped. A block comment can hold a
+        // line break, so accepting one would make "a statement ends at the
+        // line break" depend on whether the break is inside a comment —
+        // exactly the kind of invisible rule the no-ASI decision avoids.
+        if (src.startsWith('/*', i)) {
+            const close = src.indexOf('*/', i + 2);
+            const stop = close === -1 ? src.length : close + 2;
+            rawDiagnostics.push(error('lex.no-block-comment',
+                'A /* */ comment is not in this language — write // at the end of the line',
+                { start: i, end: stop }));
+            i = stop;
             continue;
         }
 
@@ -302,13 +345,18 @@ export function tokenize(src: string, base = 0): LexResult {
     }
 
     push('eof', '', src.length, src.length);
-    const diagnostics = base === 0
-        ? rawDiagnostics
-        : rawDiagnostics.map(d => ({ ...d, span: { start: d.span.start + base, end: d.span.end + base } }));
-    return { tokens, diagnostics };
+    if (base === 0) return { tokens, diagnostics: rawDiagnostics, comments };
+    return {
+        tokens,
+        diagnostics: rawDiagnostics.map(d => ({ ...d, span: shift(d.span, base) })),
+        comments: comments.map(s => shift(s, base)),
+    };
 }
 
-/** Parse the text of a 'duration' token into its parts. */
+function shift(span: Span, base: number): Span {
+    return { start: span.start + base, end: span.end + base };
+}
+
 /**
  * Index of the `}` that closes the `${` starting at `open`, or -1.
  *

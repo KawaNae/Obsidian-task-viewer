@@ -27,9 +27,20 @@ const SET_HEADS: Record<string, SetField> = Object.fromEntries(
  * misordering like `tue every` fails loudly instead of being misread.
  */
 export function parseFlow(raw: string): ParseFlowResult {
-    const { tokens, diagnostics } = tokenize(raw);
+    const { tokens, diagnostics, comments } = tokenize(raw);
     const cursor = new TokenCursor(tokens);
     const program: FlowProgram = {};
+
+    // A comment is fine inside a generation block, whose source is kept as
+    // written. Here it is not: every fire reprints the command from its AST,
+    // and the AST has nowhere to hold a comment — so it would be dropped the
+    // first time the task moves on. Refusing is the only form of this that
+    // does not lose what someone wrote.
+    for (const span of comments) {
+        diagnostics.push(error('flow.comment-not-here',
+            'A // comment cannot be written in a command — the command is rewritten on every fire, and the comment would be dropped',
+            span));
+    }
 
     while (!cursor.atEof()) {
         parseNode(cursor, program, diagnostics);

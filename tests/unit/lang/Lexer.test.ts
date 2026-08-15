@@ -80,4 +80,81 @@ describe('Lexer', () => {
         expect(tokens[0]).toMatchObject({ text: 'every', start: 0, end: 5 });
         expect(tokens[1]).toMatchObject({ text: 'mon', start: 6, end: 9 });
     });
+
+    // 文の終端は改行そのもの（ASI はしない）。どの改行がトークンになるかは
+    // 「いま開いている一番内側の括弧」だけで決まる。
+    describe('newline tokens', () => {
+        it('emits a newline at the top level', () => {
+            expect(kinds('a\nb')).toEqual(['ident', 'newline', 'ident', 'eof']);
+        });
+
+        it('holds the line inside an open ( or [', () => {
+            expect(kinds('(a\nb)')).toEqual(['lparen', 'ident', 'ident', 'rparen', 'eof']);
+            expect(kinds('[a\nb]')).toEqual(['lbracket', 'ident', 'ident', 'rbracket', 'eof']);
+        });
+
+        it('resumes emitting once the bracket closes', () => {
+            expect(kinds('(a\nb)\nc')).toEqual([
+                'lparen', 'ident', 'ident', 'rparen', 'newline', 'ident', 'eof',
+            ]);
+        });
+
+        it('emits inside a brace, which is where statements live', () => {
+            expect(kinds('{a\nb}')).toEqual(['lbrace', 'ident', 'newline', 'ident', 'rbrace', 'eof']);
+        });
+
+        // スカラーの深さでは表せない形: 呼び出しの内側のブロック本体。
+        // 判定は最上段だけなので、( の中でも { が開けば改行は戻ってくる。
+        it('emits inside a brace nested in parens', () => {
+            expect(kinds('f({a\nb})')).toEqual([
+                'ident', 'lparen', 'lbrace', 'ident', 'newline', 'ident', 'rbrace', 'rparen', 'eof',
+            ]);
+        });
+
+        it('holds the line again inside a bracket nested in a brace', () => {
+            expect(kinds('{[a\nb]}')).toEqual([
+                'lbrace', 'lbracket', 'ident', 'ident', 'rbracket', 'rbrace', 'eof',
+            ]);
+        });
+
+        it('keeps a line break inside a template literal in the token', () => {
+            const { tokens } = tokenize('`a\nb`');
+            expect(tokens.map(t => t.kind)).toEqual(['template', 'eof']);
+            expect(tokens[0].text).toBe('a\nb');
+        });
+
+        it('leaves a stray closer alone rather than unbalancing the stack', () => {
+            expect(kinds(')\na')).toEqual(['rparen', 'newline', 'ident', 'eof']);
+        });
+    });
+
+    describe('comments', () => {
+        it('drops a // comment and records where it was', () => {
+            const { tokens, comments } = tokenize('a // note');
+            expect(tokens.map(t => t.kind)).toEqual(['ident', 'eof']);
+            expect(comments).toEqual([{ start: 2, end: 9 }]);
+        });
+
+        it('leaves the line break for the boundary rule', () => {
+            expect(kinds('a // note\nb')).toEqual(['ident', 'newline', 'ident', 'eof']);
+        });
+
+        it('does not read a // inside a string or a wikilink', () => {
+            expect(tokenize('"a // b"').comments).toEqual([]);
+            expect(tokenize('[[a//b]]').comments).toEqual([]);
+        });
+
+        it('still lexes a lone slash as division', () => {
+            expect(kinds('6 / 3')).toEqual(['number', 'slash', 'number', 'eof']);
+        });
+
+        it('refuses a block comment, which could hide a line break', () => {
+            const { diagnostics } = tokenize('a /* b */ c');
+            expect(diagnostics.map(d => d.code)).toEqual(['lex.no-block-comment']);
+        });
+
+        it('shifts comment spans by the base offset, like diagnostics', () => {
+            expect(tokenize('a // note', 10).comments).toEqual([{ start: 12, end: 19 }]);
+        });
+    });
 });

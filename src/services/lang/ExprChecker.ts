@@ -42,6 +42,14 @@ export function checkExpr(expr: Expr, env: TypeEnv, diagnostics: Diagnostic[], v
             // assignment has the type of its value, which is what it yields.
             return checkExpr(expr.value, env, diagnostics, vars);
 
+        case 'call-local':
+            // Resolving the name to a declared arrow, and the call's type to
+            // that arrow's result, needs the scope tree the statement checker
+            // builds. The arguments are still walked, so a mistake inside one
+            // is reported where it was written rather than swallowed.
+            expr.args.forEach(a => checkExpr(a, env, diagnostics, vars));
+            return 'none';
+
         case 'prop': {
             const t = env[expr.name];
             if (t === undefined) {

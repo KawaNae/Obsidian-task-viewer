@@ -86,6 +86,8 @@ function print(expr: Expr, parentPrec: number): string {
             case 'method':
                 return `${print(expr.obj, myPrec)}${expr.optional ? '?.' : '.'}${expr.name}(${expr.args.map(a => print(a, 1)).join(', ')})`;
             case 'var': return expr.name;
+            case 'call-local':
+                return `${expr.name}(${expr.args.map(a => print(a, 1)).join(', ')})`;
             case 'record':
                 return `{${expr.entries.map(e => `${fieldKeyLiteral(e.key)}: ${print(e.value, 1)}`).join(', ')}}`;
             case 'spread': return `...${print(expr.arg, myPrec)}`;

@@ -14,15 +14,20 @@ const SIMPLE_PROPS = ['start', 'end', 'due', 'content', 'done', 'today'] as cons
  * Names refused in expression position, each with its way out. The design's
  * exclusion list is worth having only if stepping on it explains itself —
  * `new Date()` and `console.log` get named answers, not "unknown identifier".
+ *
+ * One code per name, so each answer is one message shape and can be
+ * translated. Sharing a code would leave every locale but English with a
+ * single generic sentence, which is the part of the refusal that carries no
+ * information.
  */
-const REFUSED_EXPR_NAMES: Record<string, string> = {
-    new: "'new' is not in this language — dates come from today / start / tv.date.*",
-    Date: "'Date' is not in this language — the clock here is today, start, done and tv.date.*",
-    console: "'console' is not in this language — the reading view previews what a block generates",
-    function: "A function keyword is not in this language — write an arrow: x => ...",
-    await: "'await' is not in this language — evaluation is synchronous",
-    typeof: "'typeof' is not in this language",
-    delete: "'delete' is not in this language — values here are immutable",
+const REFUSED_EXPR_NAMES: Record<string, { code: string; message: string }> = {
+    new: { code: 'expr.no-new', message: "'new' is not in this language — dates come from today / start / tv.date.*" },
+    Date: { code: 'expr.no-date', message: "'Date' is not in this language — the clock here is today, start, done and tv.date.*" },
+    console: { code: 'expr.no-console', message: "'console' is not in this language — the reading view previews what a block generates" },
+    function: { code: 'expr.no-function', message: 'A function keyword is not in this language — write an arrow: x => ...' },
+    await: { code: 'expr.no-await', message: "'await' is not in this language — evaluation is synchronous" },
+    typeof: { code: 'expr.no-typeof', message: "'typeof' is not in this language" },
+    delete: { code: 'expr.no-delete', message: "'delete' is not in this language — values here are immutable" },
 };
 
 /**
@@ -652,7 +657,7 @@ function parseIdentLed(cursor: TokenCursor, diagnostics: Diagnostic[]): Expr | n
     // unknown binding.
     const refused = REFUSED_EXPR_NAMES[name];
     if (refused && profile !== 'flow') {
-        diagnostics.push(error('expr.not-in-language', refused, span, { name }));
+        diagnostics.push(error(refused.code, refused.message, span, { name }));
         return null;
     }
 
@@ -660,7 +665,15 @@ function parseIdentLed(cursor: TokenCursor, diagnostics: Diagnostic[]): Expr | n
     // an arrow parameter or a local, later a cell. The built-ins resolve
     // first, which is what makes those names effectively reserved.
     if (profile !== 'flow') {
-        return { kind: 'var', name, span };
+        if (!cursor.at('lparen')) return { kind: 'var', name, span };
+        // `f(1)`. Read here rather than in the postfix loop, so the callee is
+        // a name by construction and no expression can grow into one.
+        const args = parseArgs(cursor, diagnostics, name);
+        if (!args) return null;
+        return {
+            kind: 'call-local', name, nameSpan: span, args,
+            span: spanBetween(span, tokenSpan(cursor.peek(-1))),
+        };
     }
 
     // A weekday is a string here, so `start.weekday() == "tue"` — the form

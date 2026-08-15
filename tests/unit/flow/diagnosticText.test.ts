@@ -1,11 +1,22 @@
 import { describe, it, expect } from 'vitest';
+import en from '../../../src/i18n/locales/en.json';
+import ja from '../../../src/i18n/locales/ja.json';
 import { diagnosticText } from '../../../src/services/flow/diagnosticText';
 import { parseFlow } from '../../../src/services/flow/FlowParser';
 import { Diagnostic } from '../../../src/services/lang/Diagnostic';
 import { FLOW_TYPE_ENV, checkExpr } from '../../../src/services/lang/ExprChecker';
 import { parseExpr, splitInterpolations } from '../../../src/services/lang/ExprParser';
 import { tokenize } from '../../../src/services/lang/Lexer';
+import { parseProgram } from '../../../src/services/lang/StmtParser';
 import { TokenCursor } from '../../../src/services/lang/Token';
+
+/** Whether `flowDiag.<family>.<name>` is actually spelled out in a locale. */
+function hasLocaleEntry(locale: unknown, code: string): boolean {
+    const dot = code.indexOf('.');
+    const family = (locale as { flowDiag?: Record<string, Record<string, string>> })
+        .flowDiag?.[code.slice(0, dot)];
+    return typeof family?.[code.slice(dot + 1)] === 'string';
+}
 
 describe('diagnosticText', () => {
     it('renders the locale template with params interpolated', () => {
@@ -149,6 +160,104 @@ describe('diagnosticText', () => {
         }
         expect(seen).toContain('gen.trailing-input');
         expect(seen).toContain('gen.unterminated-interpolation');
+    });
+
+    // 段 2（js セクション）の診断は文パーサから出るので、式の網にも
+    // フロー行の網にも載らない。ここで別に通す。
+    describe('the js section', () => {
+        const STATEMENT_SAMPLES = [
+            'let x = 1 let y = 2',              // stmt.expected-end
+            'let x = 1 +\n2',                   // stmt.unexpected-line-break
+            '}',                                // stmt.unexpected-rbrace
+            'const x',                          // stmt.const-needs-init
+            'let [a, b]',                       // stmt.pattern-needs-init
+            'let 1 = 2',                        // stmt.expected-binding
+            'let {1: a} = xs',                  // stmt.expected-field-binding
+            'let [a b] = xs',                   // stmt.expected-rbracket-pattern
+            'let {a 1} = xs',                   // stmt.expected-rbrace-pattern
+            'const f = x => { return x',        // stmt.expected-rbrace-fn
+            'if (a) { b = 1',                   // stmt.expected-rbrace-body
+            '{ let x = 1',                      // stmt.expected-rbrace-block
+            'if a { b = 1 }',                   // stmt.expected-lparen
+            'if (a { b = 1 }',                  // stmt.expected-rparen
+            'for (const x of xs { y = 1 }',     // stmt.expected-rparen-head
+            'for (const x in xs) { y = 1 }',    // stmt.expected-semicolon
+            'for (let i = 0; i < n i += 1) { y = 1 }', // stmt.expected-second-semicolon
+            'return 1',                         // stmt.return-not-here
+            'if (a) b = 1',                     // stmt.body-needs-braces
+            '{a: 1}',                           // stmt.record-needs-parens
+            'var x = 1',                        // stmt.no-var
+            'function f() { }',                 // stmt.no-function
+            'class A { }',                      // stmt.no-class
+            'try { x = 1 }',                    // stmt.no-try
+            'throw 1',                          // stmt.no-throw
+            'switch (x) { }',                   // stmt.no-switch
+            'do { x = 1 } while (a)',           // stmt.no-do
+            'async function f() { }',           // stmt.no-async
+            'import x from "y"',                // stmt.no-import
+            'export const x = 1',               // stmt.no-export
+            'const d = new Date()',             // expr.no-new
+            'let t = Date.now()',               // expr.no-date
+            'console.log(1)',                   // expr.no-console
+            'let f = function () { }',          // expr.no-function
+            'let v = await x',                  // expr.no-await
+            'let t = typeof x',                 // expr.no-typeof
+            'delete x.y',                       // expr.no-delete
+            'n++',                              // expr.increment-not-here
+            '1 = 2',                            // expr.assign-target
+            'let x = 1 /* c */',                // lex.no-block-comment
+        ];
+
+        // 代入とコメントはブロックでは通る形なので、拒否はフロー行の側から出る。
+        const FLOW_SAMPLES = [
+            'every mon setContent(content = "x")', // expr.assign-not-here
+            'every mon // weekly',                 // flow.comment-not-here
+        ];
+
+        const EXPECTED = [
+            'stmt.expected-end', 'stmt.unexpected-line-break', 'stmt.unexpected-rbrace',
+            'stmt.const-needs-init', 'stmt.pattern-needs-init', 'stmt.expected-binding',
+            'stmt.expected-field-binding', 'stmt.expected-rbracket-pattern',
+            'stmt.expected-rbrace-pattern', 'stmt.expected-rbrace-fn', 'stmt.expected-rbrace-body',
+            'stmt.expected-rbrace-block', 'stmt.expected-lparen', 'stmt.expected-rparen',
+            'stmt.expected-rparen-head', 'stmt.expected-semicolon', 'stmt.expected-second-semicolon',
+            'stmt.return-not-here', 'stmt.body-needs-braces', 'stmt.record-needs-parens',
+            'stmt.no-var', 'stmt.no-function', 'stmt.no-class', 'stmt.no-try', 'stmt.no-throw',
+            'stmt.no-switch', 'stmt.no-do', 'stmt.no-async', 'stmt.no-import', 'stmt.no-export',
+            'expr.no-new', 'expr.no-date', 'expr.no-console', 'expr.no-function', 'expr.no-await',
+            'expr.no-typeof', 'expr.no-delete', 'expr.increment-not-here', 'expr.assign-target',
+            'expr.assign-not-here', 'lex.no-block-comment', 'flow.comment-not-here',
+        ];
+
+        function emitted(): Diagnostic[] {
+            const all: Diagnostic[] = [];
+            for (const src of STATEMENT_SAMPLES) all.push(...parseProgram(src).diagnostics);
+            for (const src of FLOW_SAMPLES) all.push(...parseFlow(src).diagnostics);
+            return all;
+        }
+
+        it('emits every code the samples are here for', () => {
+            const seen = new Set(emitted().map(d => d.code));
+            for (const code of EXPECTED) expect(seen).toContain(code);
+        });
+
+        // 文言のフォールバックは英語なので、ロケールの欠落は表示では気づけない。
+        // キーの実在を直に見る。日本語だけ落ちる形（1 code に複数のメッセージを
+        // 持たせた結果、訳が 1 つしか置けない）もここで止まる。
+        it('has a locale entry in every language for each of them', () => {
+            for (const code of EXPECTED) {
+                expect({ code, en: hasLocaleEntry(en, code) }).toEqual({ code, en: true });
+                expect({ code, ja: hasLocaleEntry(ja, code) }).toEqual({ code, ja: true });
+            }
+        });
+
+        it('renders each one with its params filled in', () => {
+            for (const d of emitted()) {
+                const text = diagnosticText(d);
+                expect(text).not.toMatch(/^flowDiag\./);
+                expect(text).not.toContain('{{');
+            }
+        });
     });
 
     it('falls back to the English default message for unknown codes', () => {

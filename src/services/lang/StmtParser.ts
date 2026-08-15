@@ -37,7 +37,7 @@ export function parseArrowBlockBody(cursor: TokenCursor, diagnostics: Diagnostic
         const body = parseStmtList(cursor, diagnostics, 'rbrace');
         const close = cursor.tryEat('rbrace');
         if (!close) {
-            diagnostics.push(error('stmt.expected-rbrace',
+            diagnostics.push(error('stmt.expected-rbrace-fn',
                 "Expected '}' to close the function body", tokenSpan(cursor.peek())));
             return null;
         }
@@ -59,18 +59,25 @@ function spanBetween(a: Span, b: Span): Span {
     return { start: a.start, end: b.end };
 }
 
-/** Names that begin a statement this language does not have, with the way out. */
-const REFUSED_STMT: Record<string, string> = {
-    var: "'var' is not in this language — write 'let'",
-    function: "A function declaration is not in this language — write an arrow: const f = x => ...",
-    class: "'class' is not in this language",
-    try: "'try' is not in this language — a failed evaluation does not fire, and does not consume the command",
-    throw: "'throw' is not in this language — a failed evaluation is the failure",
-    switch: "'switch' is not in this language — write if / else if",
-    do: "'do' is not in this language — write 'while'",
-    async: "'async' is not in this language — evaluation is synchronous",
-    import: "'import' is not in this language — the injected API is all there is",
-    export: "'export' is not in this language",
+/**
+ * Names that begin a statement this language does not have, each with the way
+ * out. One code per construct, not one shared code with ten messages: the
+ * exclusion list is worth having only because stepping on it names the
+ * alternative, and a code carrying several message shapes cannot be
+ * translated — every locale but English would lose exactly the sentence that
+ * makes the refusal useful.
+ */
+const REFUSED_STMT: Record<string, { code: string; message: string }> = {
+    var: { code: 'stmt.no-var', message: "'var' is not in this language — write 'let'" },
+    function: { code: 'stmt.no-function', message: 'A function declaration is not in this language — write an arrow: const f = x => ...' },
+    class: { code: 'stmt.no-class', message: "'class' is not in this language" },
+    try: { code: 'stmt.no-try', message: "'try' is not in this language — a failed evaluation does not fire, and does not consume the command" },
+    throw: { code: 'stmt.no-throw', message: "'throw' is not in this language — a failed evaluation is the failure" },
+    switch: { code: 'stmt.no-switch', message: "'switch' is not in this language — write if / else if" },
+    do: { code: 'stmt.no-do', message: "'do' is not in this language — write 'while'" },
+    async: { code: 'stmt.no-async', message: "'async' is not in this language — evaluation is synchronous" },
+    import: { code: 'stmt.no-import', message: "'import' is not in this language — the injected API is all there is" },
+    export: { code: 'stmt.no-export', message: "'export' is not in this language" },
 };
 
 function parseStmtList(cursor: TokenCursor, diagnostics: Diagnostic[], end: 'eof' | 'rbrace'): Stmt[] {
@@ -120,7 +127,7 @@ function parseStmt(cursor: TokenCursor, diagnostics: Diagnostic[]): Stmt | null 
     if (t.kind === 'ident') {
         const refused = REFUSED_STMT[t.text];
         if (refused) {
-            diagnostics.push(error('stmt.not-in-language', refused, tokenSpan(t), { name: t.text }));
+            diagnostics.push(error(refused.code, refused.message, tokenSpan(t), { name: t.text }));
             return null;
         }
         switch (t.text) {
@@ -144,10 +151,20 @@ function parseStmt(cursor: TokenCursor, diagnostics: Diagnostic[]): Stmt | null 
         }
     }
 
-    // A `{` in statement position is a block, as in JS. A record literal
-    // wanted here is written in parentheses; the checker cannot guess.
+    // A `{` in statement position is a block, as in JS. A record wanted here
+    // is written in parentheses — and since `{a: 1}` is what someone reaching
+    // for a record writes, the shape is recognized and answered rather than
+    // left to fail as a block whose first statement is `a` followed by a
+    // stray colon. It is then read as the record it looks like, so one
+    // diagnostic covers it instead of a cascade.
     if (t.kind === 'lbrace') {
-        return parseBlockStmt(cursor, diagnostics);
+        if (!looksLikeRecord(cursor)) return parseBlockStmt(cursor, diagnostics);
+        diagnostics.push(error('stmt.record-needs-parens',
+            "A '{' at the start of a statement opens a block — write a record in parentheses: ({a: 1})",
+            tokenSpan(t)));
+        const record = parseExpr(cursor, diagnostics, 'stmt');
+        if (!record) return null;
+        return { kind: 'expr', expr: record, span: record.span };
     }
 
     const expr = parseExpr(cursor, diagnostics, 'stmt');
@@ -226,7 +243,7 @@ function parseBindTarget(cursor: TokenCursor, diagnostics: Diagnostic[]): BindTa
         while (!cursor.at('rbrace')) {
             const key = cursor.peek();
             if (key.kind !== 'ident') {
-                diagnostics.push(error('stmt.expected-binding',
+                diagnostics.push(error('stmt.expected-field-binding',
                     'Expected a field name to bind', tokenSpan(key)));
                 return null;
             }
@@ -251,7 +268,7 @@ function parseBindTarget(cursor: TokenCursor, diagnostics: Diagnostic[]): BindTa
         }
         const close = cursor.tryEat('rbrace');
         if (!close) {
-            diagnostics.push(error('stmt.expected-rbrace',
+            diagnostics.push(error('stmt.expected-rbrace-pattern',
                 "Expected '}' to close the pattern", tokenSpan(cursor.peek())));
             return null;
         }
@@ -276,9 +293,7 @@ function parseIf(cursor: TokenCursor, diagnostics: Diagnostic[]): Stmt | null {
 
     let alt: Stmt[] | null = null;
     let last: Span = then.span;
-    cursor.skipNewlines();
-    if (cursor.atIdent('else')) {
-        cursor.next();
+    if (tryEatElse(cursor)) {
         if (cursor.atIdent('if')) {
             const chained = parseIf(cursor, diagnostics);
             if (!chained) return null;
@@ -292,6 +307,22 @@ function parseIf(cursor: TokenCursor, diagnostics: Diagnostic[]): Stmt | null {
         }
     }
     return { kind: 'if', cond, then: then.body, alt, span: spanBetween(tokenSpan(keyword), last) };
+}
+
+/**
+ * Consume `else`, and the line breaks in front of it, if that is what comes
+ * next. Looking first and consuming after is the whole point: an `if` that
+ * ends here is followed by a line break that still has to mean the end of the
+ * statement, and skipping the break to look would eat that boundary and read
+ * the next statement as leftovers of this one.
+ */
+function tryEatElse(cursor: TokenCursor): boolean {
+    let ahead = 0;
+    while (cursor.peek(ahead).kind === 'newline') ahead++;
+    const t = cursor.peek(ahead);
+    if (!(t.kind === 'ident' && t.text === 'else')) return false;
+    for (let i = 0; i <= ahead; i++) cursor.next();
+    return true;
 }
 
 function parseWhile(cursor: TokenCursor, diagnostics: Diagnostic[]): Stmt | null {
@@ -311,7 +342,7 @@ function parseFor(cursor: TokenCursor, diagnostics: Diagnostic[]): Stmt | null {
     const keyword = cursor.next();
     if (!cursor.tryEat('lparen')) {
         diagnostics.push(error('stmt.expected-lparen',
-            "Expected '(' after 'for'", tokenSpan(cursor.peek())));
+            "Expected '(' after 'for'", tokenSpan(cursor.peek()), { what: 'for' }));
         return null;
     }
 
@@ -327,7 +358,7 @@ function parseFor(cursor: TokenCursor, diagnostics: Diagnostic[]): Stmt | null {
             const iterable = parseExpr(cursor, diagnostics, 'stmt');
             if (!iterable) return null;
             if (!cursor.tryEat('rparen')) {
-                diagnostics.push(error('stmt.expected-rparen',
+                diagnostics.push(error('stmt.expected-rparen-head',
                     "Expected ')' to close the for head", tokenSpan(cursor.peek())));
                 return null;
             }
@@ -381,7 +412,7 @@ function parseClassicForTail(
         if (!cond) return null;
     }
     if (!cursor.tryEat('semicolon')) {
-        diagnostics.push(error('stmt.expected-semicolon',
+        diagnostics.push(error('stmt.expected-second-semicolon',
             "Expected the second ';' in the for head", tokenSpan(cursor.peek())));
         return null;
     }
@@ -391,7 +422,7 @@ function parseClassicForTail(
         if (!update) return null;
     }
     if (!cursor.tryEat('rparen')) {
-        diagnostics.push(error('stmt.expected-rparen',
+        diagnostics.push(error('stmt.expected-rparen-head',
             "Expected ')' to close the for head", tokenSpan(cursor.peek())));
         return null;
     }
@@ -454,11 +485,25 @@ function parseBracedBody(
     const body = parseStmtList(cursor, diagnostics, 'rbrace');
     const close = cursor.tryEat('rbrace');
     if (!close) {
-        diagnostics.push(error('stmt.expected-rbrace',
+        diagnostics.push(error('stmt.expected-rbrace-body',
             `Expected '}' to close the ${what} body`, tokenSpan(cursor.peek()), { what }));
         return null;
     }
     return { body, span: spanBetween(tokenSpan(open), tokenSpan(close)) };
+}
+
+/**
+ * Whether the `{` the cursor sits on opens what someone meant as a record.
+ * `{a: 1}` is the tell — a field name and a colon — and a block cannot start
+ * that way, since the language has no labels. Line breaks are stepped over so
+ * a record written open across lines is recognized too.
+ */
+function looksLikeRecord(cursor: TokenCursor): boolean {
+    let ahead = 1;
+    while (cursor.peek(ahead).kind === 'newline') ahead++;
+    const key = cursor.peek(ahead);
+    if (key.kind !== 'ident' && key.kind !== 'string') return false;
+    return cursor.peek(ahead + 1).kind === 'colon';
 }
 
 /** A bare `{ ... }` in statement position: a scope. */
@@ -467,7 +512,7 @@ function parseBlockStmt(cursor: TokenCursor, diagnostics: Diagnostic[]): Stmt | 
     const body = parseStmtList(cursor, diagnostics, 'rbrace');
     const close = cursor.tryEat('rbrace');
     if (!close) {
-        diagnostics.push(error('stmt.expected-rbrace',
+        diagnostics.push(error('stmt.expected-rbrace-block',
             "Expected '}' to close the block", tokenSpan(cursor.peek())));
         return null;
     }

@@ -49,4 +49,26 @@ describe('ExprPrinter', () => {
         expect(roundTrip('time(start) ?? 09:00')).toBe('time(start) ?? 09:00');
         expect(roundTrip('start.format("MM") + "/" + content')).toBe('start.format("MM") + "/" + content');
     });
+
+    // 印字の契約はフロー行だけのもの。文を持てる形は verbatim なソースにしか
+    // 現れないので、canonical 形が無いことを黙って埋めずに言う。
+    it('has no canonical form for a block-bodied arrow', () => {
+        const { tokens, diagnostics } = tokenize('xs.map(x => { return x })');
+        const expr = parseExpr(new TokenCursor(tokens), diagnostics, 'stmt');
+        expect(diagnostics).toEqual([]);
+        expect(() => printExpr(expr!)).toThrow(/verbatim/);
+    });
+
+    it('parenthesizes an assignment wherever an operand is expected', () => {
+        const printAs = (src: string): string => {
+            const { tokens, diagnostics } = tokenize(src);
+            const expr = parseExpr(new TokenCursor(tokens), diagnostics, 'stmt');
+            expect(diagnostics).toEqual([]);
+            return printExpr(expr!);
+        };
+        expect(printAs('n = 1')).toBe('n = 1');
+        expect(printAs('n += 1')).toBe('n += 1');
+        expect(printAs('(n = 1) + 2')).toBe('(n = 1) + 2');
+        expect(printAs('[(n = 1)]')).toBe('[(n = 1)]');
+    });
 });

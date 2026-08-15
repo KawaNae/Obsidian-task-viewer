@@ -38,6 +38,12 @@ export function evalExpr(expr: Expr, ctx: EvalContext): Value {
             // evaluation — two-phase, so nothing is half-written.
             throw new EvalError('An assignment is not available here yet', expr.span);
 
+        case 'call-local':
+            // Needs the js section's scope chain to find what the name is
+            // bound to. Same two-phase shape as an assignment: fail rather
+            // than guess.
+            throw new EvalError(`Calling '${expr.name}' is not available here yet`, expr.span);
+
         case 'prop': {
             const v = ctx.props[expr.name];
             if (v === undefined) {
