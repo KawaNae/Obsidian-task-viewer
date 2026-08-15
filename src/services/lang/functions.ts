@@ -113,6 +113,8 @@ export interface FnSig {
     minArgs: number;
     /** Expected type per position (covers minArgs..params.length). */
     params: StaticType[];
+    /** When set, arguments past `params` are allowed and must have this type. */
+    rest?: StaticType;
     result: StaticType;
     /**
      * Extra constraint applied at check time (e.g. unit keyword must be a
@@ -158,6 +160,12 @@ export const FN_SIGS: Record<FnName, FnSig> = {
     nextCycle: { name: 'nextCycle', minArgs: 2, params: ['datish', 'duration'], result: 'datish' },
     date: { name: 'date', minArgs: 1, params: ['datish'], result: 'date' },
     time: { name: 'time', minArgs: 1, params: ['datish'], result: 'time' },
+    'Math.floor': { name: 'Math.floor', minArgs: 1, params: ['number'], result: 'number' },
+    'Math.ceil': { name: 'Math.ceil', minArgs: 1, params: ['number'], result: 'number' },
+    'Math.round': { name: 'Math.round', minArgs: 1, params: ['number'], result: 'number' },
+    'Math.abs': { name: 'Math.abs', minArgs: 1, params: ['number'], result: 'number' },
+    'Math.min': { name: 'Math.min', minArgs: 1, params: ['number'], rest: 'number', result: 'number' },
+    'Math.max': { name: 'Math.max', minArgs: 1, params: ['number'], rest: 'number', result: 'number' },
 };
 
 // ---------------------------------------------------------------------------
@@ -224,6 +232,35 @@ export function callFn(fn: FnName, args: Value[], rt: EvalRuntime): Value {
             if (v.type === 'date') return { type: 'none' };
             return { type: 'time', value: v.time };
         }
+        case 'Math.floor':
+        case 'Math.ceil':
+        case 'Math.round':
+        case 'Math.abs':
+        case 'Math.min':
+        case 'Math.max':
+            return callMath(fn, args);
+    }
+}
+
+/**
+ * The arithmetic helpers, under the name JS gives them.
+ *
+ * Rounding is what makes division usable: the quotient is carried to ten
+ * decimal places, and a count of days or items has to come back to a whole
+ * number before it can be written into a task.
+ */
+function callMath(fn: FnName, args: Value[]): Value {
+    const numbers = args.map(a => {
+        if (a.type !== 'number') throw new FnCallError(`${fn}() expects numbers`);
+        return a.value;
+    });
+    switch (fn) {
+        case 'Math.floor': return { type: 'number', value: Math.floor(numbers[0]) };
+        case 'Math.ceil': return { type: 'number', value: Math.ceil(numbers[0]) };
+        case 'Math.round': return { type: 'number', value: Math.round(numbers[0]) };
+        case 'Math.abs': return { type: 'number', value: Math.abs(numbers[0]) };
+        case 'Math.min': return { type: 'number', value: Math.min(...numbers) };
+        default: return { type: 'number', value: Math.max(...numbers) };
     }
 }
 

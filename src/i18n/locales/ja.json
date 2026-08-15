@@ -733,7 +733,7 @@
       "file-needs-member": "'file' にはメンバー指定が必要です（file.name）",
       "unknown-ident": "不明な識別子 '{{name}}'",
       "expected-member": "ドットの後にはプロパティ名かメソッド名が必要です",
-      "tv-needs-member": "'tv' にはメンバー指定が必要です（tv.date.format(...) / tv.file.name）",
+      "namespace-needs-member": "'{{name}}' にはメンバー指定が必要です（tv.date.format(...) / tv.file.name / Math.floor(...)）",
       "expected-call": "'{{name}}' は関数です。呼び出してください",
       "comparison-chain": "比較は連鎖しません。括弧で意図を書いてください: (a {{first}} b) {{second}} c",
       "nullish-mixed-with-logic": "'??' と '||' / '&&' は混ぜられません。括弧で意図を書いてください",

@@ -4,7 +4,13 @@ import type { Value } from './Value';
 export const PROP_NAMES = ['start', 'end', 'due', 'content', 'done', 'today', 'file.name'] as const;
 export type PropName = typeof PROP_NAMES[number];
 
-export const FN_NAMES = ['format', 'next', 'startOf', 'endOf', 'nextCycle', 'date', 'time'] as const;
+export const FN_NAMES = [
+    'format', 'next', 'startOf', 'endOf', 'nextCycle', 'date', 'time',
+    // Written and printed with the namespace. A dot cannot appear in an
+    // identifier, so there is no bare spelling to reserve six more names for,
+    // and what the printer writes reads back as the same call.
+    'Math.floor', 'Math.ceil', 'Math.round', 'Math.abs', 'Math.min', 'Math.max',
+] as const;
 export type FnName = typeof FN_NAMES[number];
 
 export type BinaryOp =
