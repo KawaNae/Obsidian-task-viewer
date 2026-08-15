@@ -99,4 +99,72 @@ describe('ChildPropertyLineEditor', () => {
             ]);
         });
     });
+
+    // ── フェンス内は宣言ではない ──
+    //
+    // パーサはフェンス内の `- key:: value` をプロパティとして読まない。
+    // 書き込み側が own 宣言として扱うと、タスクの編集がユーザーのコード例を
+    // 書き換えることになる。
+    describe('fenced lines are not declarations', () => {
+        it('フェンス内の property 行を own として拾わない', () => {
+            const lines = [
+                '- [ ] task',
+                '    ```md',
+                '    - key:: 例',
+                '    ```',
+            ];
+            expect(ChildPropertyLineEditor.findOwnPropertyLines(lines, 0)).toEqual([]);
+        });
+
+        it('フェンス内の同名宣言を更新の対象にしない', () => {
+            const lines = [
+                '- [ ] task',
+                '    ```md',
+                '    - key:: 例',
+                '    ```',
+                '    - key:: 本物',
+            ];
+            ChildPropertyLineEditor.applyOps(lines, 0, [{ key: 'key', op: 'set', value: '新' }]);
+            expect(lines).toEqual([
+                '- [ ] task',
+                '    ```md',
+                '    - key:: 例',
+                '    ```',
+                '    - key:: 新',
+            ]);
+        });
+
+        it('フェンス内の同名宣言を delete で消さない', () => {
+            const lines = [
+                '- [ ] task',
+                '    ```md',
+                '    - key:: 例',
+                '    ```',
+                '    - key:: 本物',
+            ];
+            ChildPropertyLineEditor.applyOps(lines, 0, [{ key: 'key', op: 'delete' }]);
+            expect(lines).toEqual([
+                '- [ ] task',
+                '    ```md',
+                '    - key:: 例',
+                '    ```',
+            ]);
+        });
+
+        it('フェンスしか無ければ新規挿入はタスク行直下に入る', () => {
+            const lines = [
+                '- [ ] task',
+                '    ```md',
+                '    - key:: 例',
+                '    ```',
+            ];
+            ChildPropertyLineEditor.applyOps(lines, 0, [{ key: 'key', op: 'set', value: '新' }]);
+            expect(lines[1]).toBe('    - key:: 新');
+            expect(lines.slice(2)).toEqual([
+                '    ```md',
+                '    - key:: 例',
+                '    ```',
+            ]);
+        });
+    });
 });

@@ -1,6 +1,7 @@
 import { type App, TFolder } from 'obsidian';
 import type { Task } from '../../../types';
 import { hasBodyLine } from '../../../types';
+import { CodeFenceTracker } from '../../../utils/CodeFenceTracker';
 import { TaskLineClassifier } from '../../parsing/utils/TaskLineClassifier';
 
 
@@ -266,11 +267,26 @@ export class FileOperations {
      * every caller treats that as "do not write".
      */
     findTaskLineNumber(lines: string[], task: Task): number {
+        // A line inside a code fence is an example, not a task. The parser
+        // already refuses to index it, so no task ever *lives* there — but the
+        // search below looks for lines that resemble the task, and a sample in
+        // a fence resembles one exactly. Excluding them keeps a write aimed at
+        // the real line from landing on a quoted copy of it.
+        //
+        // Only the document-level reading is used, matching what the parser
+        // does when it decides which lines become tasks. A fence indented under
+        // a task is invisible to both (CommonMark measures the ≤3-space
+        // allowance from column 0), so a sample written there is still a
+        // candidate. That gap is left as it is rather than widened here: the
+        // dedented reading would have to be applied to the whole document, and
+        // an unclosed indented fence would then swallow every line after it.
+        const fenced = CodeFenceTracker.mask(lines);
+
         // Strategy -1: Resolve by block ID (most stable against content edits).
         if (task.blockId) {
             const blockIdRegex = new RegExp(`\\s\\^${task.blockId.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s*$`);
             for (let i = 0; i < lines.length; i++) {
-                if (blockIdRegex.test(lines[i])) {
+                if (!fenced[i] && blockIdRegex.test(lines[i])) {
                     return i;
                 }
             }
@@ -279,13 +295,14 @@ export class FileOperations {
         // Strategy 0: Stored line number (O(1), correct when no line shift has occurred)
         // Must run before Strategy 1 to avoid returning the first duplicate when
         // multiple lines share the same originalText (e.g. duplicate bare-checkbox child lines).
-        if (hasBodyLine(task) && task.line < lines.length && lines[task.line] === task.originalText) {
+        if (hasBodyLine(task) && task.line < lines.length
+            && !fenced[task.line] && lines[task.line] === task.originalText) {
             return task.line;
         }
 
         // Strategy 1: Exact originalText match (fallback for shifted lines)
         for (let i = 0; i < lines.length; i++) {
-            if (lines[i] === task.originalText) {
+            if (!fenced[i] && lines[i] === task.originalText) {
                 return i;
             }
         }
@@ -321,7 +338,7 @@ export class FileOperations {
 
         const hits: number[] = [];
         for (let i = 0; i < lines.length; i++) {
-            if (matches(lines[i])) hits.push(i);
+            if (!fenced[i] && matches(lines[i])) hits.push(i);
         }
         if (hits.length > 0) return FileOperations.pickUnique(hits, task);
 
@@ -329,7 +346,7 @@ export class FileOperations {
         // The unverified fallback this replaces wrote to whatever happened to
         // sit at task.line, which silently clobbered unrelated lines whenever
         // the earlier strategies all missed on a shifted file.
-        if (hasBodyLine(task) && task.line < lines.length) {
+        if (hasBodyLine(task) && task.line < lines.length && !fenced[task.line]) {
             const stored = lines[task.line];
             const stillHolds = content
                 ? FileOperations.lineHasTaskContent(stored, content)

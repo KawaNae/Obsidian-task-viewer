@@ -1,4 +1,5 @@
 import { ChildLineClassifier } from '../../parsing/utils/ChildLineClassifier';
+import { CodeFenceTracker } from '../../../utils/CodeFenceTracker';
 import { FileOperations } from './FileOperations';
 import type { PropertyOp } from '../PropertyUpdatePlanner';
 
@@ -37,11 +38,21 @@ export class ChildPropertyLineEditor {
         const result: OwnPropertyLine[] = [];
         let skipDeeperThan: number | null = null;
 
+        // `- key:: value` written inside a fence is a sample, not a declaration.
+        // The parser never turned it into a property, so treating it as one here
+        // would let an edit to the task rewrite a line in someone's code block.
+        // The subtree reading is the one that applies: a fence under a task
+        // carries the list item's indentation, which the document-level reading
+        // cannot see.
+        const fenced = CodeFenceTracker.subtreeMask(lines.slice(taskLineIdx + 1));
+
         for (let j = taskLineIdx + 1; j < lines.length; j++) {
             const line = lines[j];
             if (line.trim() === '') break;
             const indent = line.search(/\S|$/);
             if (indent <= taskIndent) break;
+
+            if (fenced[j - taskLineIdx - 1]) continue;
 
             if (skipDeeperThan !== null) {
                 if (indent > skipDeeperThan) continue;

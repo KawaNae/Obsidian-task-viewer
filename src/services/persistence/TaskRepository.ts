@@ -8,6 +8,7 @@ import { TaskConverter } from './TaskConverter';
 import { getFileBaseName } from '../parsing/utils/TaskContent';
 import { TaskLineClassifier } from '../parsing/utils/TaskLineClassifier';
 import { ChildLineClassifier } from '../parsing/utils/ChildLineClassifier';
+import { CodeFenceTracker } from '../../utils/CodeFenceTracker';
 import type { PropertyOp } from './PropertyUpdatePlanner';
 
 /**
@@ -171,8 +172,11 @@ export class TaskRepository {
         const firstChild = childrenLines.find(l => l.trim() !== '');
         const childIndent = firstChild ? (firstChild.match(/^\s*/)?.[0] ?? '') : '';
         const normalized = FileOperations.adjustChildIndentation(childrenLines, childIndent);
-        // property 行 (- key:: value) は frontmatter へ昇格済みのため body から除外
-        return normalized.filter(line => !ChildLineClassifier.isPropertyLine(line));
+        // property 行 (- key:: value) は frontmatter へ昇格済みのため body から除外。
+        // ただしフェンス内の同じ形の行は宣言ではなく見本で、frontmatter へ昇格
+        // してもいないので、落とすと本文から消えるだけになる。
+        const fenced = CodeFenceTracker.subtreeMask(normalized);
+        return normalized.filter((line, i) => fenced[i] || !ChildLineClassifier.isPropertyLine(line));
     }
 
     /**

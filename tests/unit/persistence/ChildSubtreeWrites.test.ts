@@ -355,12 +355,10 @@ describe('insertRecurrenceForTask copies the subtree into the new instance', () 
         expect(h.lines()[1]).toBe('- [ ] parent @2026-08-15');
     });
 
-    // Characterization of a defect, not of intended behaviour. The checkbox
-    // reset reads every copied line as a checkbox, so a `- [x]` written inside
-    // a fence — a code sample, not a task — is rewritten as `- [ ]`. The line
-    // is being *interpreted*, which is exactly what the fence is supposed to
-    // prevent. Pinned here so the fix shows up as a diff.
-    it('rewrites checkboxes inside a fence (defect, pinned)', async () => {
+    // The reset unchecks tasks, not text that looks like one. A `- [x]` inside
+    // a fence is a code sample, and rewriting it would edit the example rather
+    // than the state of anything.
+    it('leaves checkboxes inside a fence alone', async () => {
         const h = harness([
             '- [ ] parent @2026-08-15',
             '\t```md',
@@ -373,8 +371,28 @@ describe('insertRecurrenceForTask copies the subtree into the new instance', () 
         expect(h.lines().slice(0, 4)).toEqual([
             NEXT,
             '\t```md',
-            '\t- [ ] sample',   // should stay `- [x]`
+            '\t- [x] sample',
             '\t```',
+        ]);
+    });
+
+    it('still unchecks real children next to a fence', async () => {
+        const h = harness([
+            '- [ ] parent @2026-08-15',
+            '\t```md',
+            '\t- [x] sample',
+            '\t```',
+            '\t- [x] real child',
+        ].join('\n'));
+
+        await h.cloner.insertRecurrenceForTask(parent(), NEXT);
+
+        expect(h.lines().slice(0, 5)).toEqual([
+            NEXT,
+            '\t```md',
+            '\t- [x] sample',
+            '\t```',
+            '\t- [ ] real child',
         ]);
     });
 
@@ -411,13 +429,10 @@ describe('the extent is also what conversion and replacement act on', () => {
         expect(body).toEqual(['- [ ] child', '\t- [ ] grandchild']);
     });
 
-    // Characterization of a defect. The property filter reads every line as a
-    // possible `- key:: value`, so a line written inside a fence — a sample,
-    // not a declaration — is dropped from the converted body. The content is
-    // lost: it is not promoted to frontmatter either, because the fence means
-    // the parser never saw it as a property. Same root as the checkbox reset
-    // above: a line is interpreted where the fence says it should not be.
-    it('drops property-looking lines inside a fence (defect, pinned)', async () => {
+    // The filter drops declarations, which are promoted to frontmatter. A line
+    // of the same shape inside a fence was never promoted — the parser did not
+    // read it as a property — so dropping it would delete content outright.
+    it('keeps property-looking lines inside a fence', async () => {
         const h = harness([
             '- [ ] parent @2026-08-15',
             '\t```md',
@@ -427,7 +442,21 @@ describe('the extent is also what conversion and replacement act on', () => {
 
         const body = await h.repo.collectChildBodyLines(parent());
 
-        expect(body).toEqual(['```md', '```']);   // the middle line should survive
+        expect(body).toEqual(['```md', '- key:: not a property here', '```']);
+    });
+
+    it('still drops real property lines next to a fence', async () => {
+        const h = harness([
+            '- [ ] parent @2026-08-15',
+            '\t```md',
+            '\t- key:: sample',
+            '\t```',
+            '\t- tv-color:: ff0000',
+        ].join('\n'));
+
+        const body = await h.repo.collectChildBodyLines(parent());
+
+        expect(body).toEqual(['```md', '- key:: sample', '```']);
     });
 
     it('replaceInlineTaskWithWikilink swallows the whole subtree', async () => {

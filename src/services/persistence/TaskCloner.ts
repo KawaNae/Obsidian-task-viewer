@@ -1,6 +1,7 @@
 import { type App, TFile } from 'obsidian';
 import type { DuplicateOptions, TvFileKeys, Task } from '../../types';
 import { collectFlowLineIndicesInFile, formatFlowLine } from '../flow/FlowLineScanner';
+import { CodeFenceTracker } from '../../utils/CodeFenceTracker';
 import { DateUtils } from '../../utils/DateUtils';
 import type { FileOperations } from './utils/FileOperations';
 import { FrontmatterLineEditor } from './utils/FrontmatterLineEditor';
@@ -157,8 +158,19 @@ export class TaskCloner {
 
     // --- Private helpers ---
 
+    /**
+     * Uncheck the copied children, leaving fenced content alone.
+     *
+     * A `- [x]` inside a fence is a code sample. Rewriting it edits the text of
+     * an example rather than the state of a task, and the copy then differs
+     * from what the user wrote. The dedented reading is the one that applies:
+     * these lines still carry the parent's indentation.
+     */
     private resetChildCheckboxes(lines: string[]): string[] {
-        return lines.map(line => line.replace(/^(\s*(?:[-*+]|\d+[.)]) *\[)[^\]]/, '$1 '));
+        const fenced = CodeFenceTracker.subtreeMask(lines);
+        return lines.map((line, i) => fenced[i]
+            ? line
+            : line.replace(/^(\s*(?:[-*+]|\d+[.)]) *\[)[^\]]/, '$1 '));
     }
 
     /**

@@ -781,4 +781,67 @@ describe('FileOperations', () => {
             expect(ops.findTaskLineNumber(lines, task)).toBe(-1);
         });
     });
+
+    // ── fenced lines are not candidates ──
+    //
+    // The parser refuses to index a line inside a fence, so no task lives
+    // there. The search still has to skip them: a sample in a fence can be a
+    // character-for-character copy of the task being looked for.
+    describe('findTaskLineNumber ignores fenced lines', () => {
+        it('does not match an identical line inside a fence', () => {
+            const line = '- [ ] 設計 @2026-08-14T10:00';
+            const lines = ['```md', line, '```', line];
+            const task = makeTask({
+                content: '設計', startDate: '2026-08-14', startTime: '10:00',
+                originalText: line, line: 3,
+            });
+            expect(ops.findTaskLineNumber(lines, task)).toBe(3);
+        });
+
+        it('does not match by block id inside a fence', () => {
+            const lines = [
+                '```md',
+                '- [ ] 例 ^abc123',
+                '```',
+                '- [ ] 本物 ^abc123',
+            ];
+            const task = makeTask({ content: '本物', blockId: 'abc123', line: 3 });
+            expect(ops.findTaskLineNumber(lines, task)).toBe(3);
+        });
+
+        it('does not match by content and date inside a fence', () => {
+            const lines = [
+                '```md',
+                '- [x] 設計 @2026-08-14T10:00',
+                '```',
+                '- [x] 設計 @2026-08-14T10:00',
+            ];
+            const task = makeTask({
+                content: '設計', statusChar: 'x',
+                startDate: '2026-08-14', startTime: '10:00',
+                originalText: '- [ ] 設計 @stale', line: 0,
+            });
+            // Only the line outside the fence answers, so it resolves uniquely.
+            expect(ops.findTaskLineNumber(lines, task)).toBe(3);
+        });
+
+        it('refuses when the only candidate sits inside a fence', () => {
+            const lines = ['```md', '- [x] 設計 @2026-08-14T10:00', '```'];
+            const task = makeTask({
+                content: '設計', statusChar: 'x',
+                startDate: '2026-08-14', startTime: '10:00',
+                originalText: '- [ ] 設計 @stale', line: 1,
+            });
+            expect(ops.findTaskLineNumber(lines, task)).toBe(-1);
+        });
+
+        it('does not fall back to a stored line that is now fenced', () => {
+            const lines = ['```md', '- [x] 設計 @2026-08-14T10:00', '```'];
+            const task = makeTask({
+                content: '設計', statusChar: 'x', startDate: '2026-08-14',
+                originalText: '- [x] 設計 @2026-08-14T10:00', line: 1,
+            });
+            expect(ops.findTaskLineNumber(lines, task)).toBe(-1);
+        });
+    });
 });
