@@ -182,6 +182,24 @@ describe('a use() flow writes what its block describes', () => {
         expect(children).toEqual([{ depth: 1, body: '- [ ] ストレッチ' }]);
     });
 
+    it('fires a block the static reading calls out of order', async () => {
+        // A line that is only an interpolation is placed by its value, so a
+        // parent written below one reads as out of order and renders fine.
+        // The editor says so with a squiggle; refusing to fire would be the
+        // harsher answer to the same observation.
+        const repository = makeRepository();
+        const { executor } = makeExecutor(repository, {
+            週報: block('週報', ['\t${["- [ ] 資料集め"]}', '- [ ] 週報 @${start}']),
+        });
+
+        await executor.handleTaskCompletion(firedTask('every mon use("週報")'));
+        await flush();
+
+        const [, parentLine, , children] = repository.insertGeneratedInstance.mock.calls[0];
+        expect(parentLine).toContain('- [ ] 週報 @2026-08-24');
+        expect(children).toEqual([{ depth: 1, body: '- [ ] 資料集め' }]);
+    });
+
     it('unchecks a parent line the block wrote as done', async () => {
         // Otherwise the instance is complete the moment it lands and fires
         // again on the next scan, for as long as the vault is open.
@@ -231,7 +249,16 @@ describe('a fire that cannot generate writes nothing and keeps its command', () 
     });
 
     it('when the block cannot describe one task', async () => {
+        // The parse keeps the first line at depth 0 and drops the rest, so
+        // the render never learns they existed. Firing would write an
+        // instance missing lines nobody deleted.
         await refuses({ 週報: block('週報', ['- [ ] 一つ目', '- [ ] 二つ目']) });
+    });
+
+    it('when the block holds a js section this release cannot read', async () => {
+        await refuses({
+            週報: block('週報', ['<js', 'const n = 1', '/js>', '- [ ] 週報 @${start}']),
+        });
     });
 
     it('when an expression in the block fails', async () => {

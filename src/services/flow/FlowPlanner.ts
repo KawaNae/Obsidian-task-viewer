@@ -121,6 +121,24 @@ export function planFlow(task: Task, program: FlowProgram, deps: FlowPlanDeps): 
 // ---------------------------------------------------------------------------
 
 /**
+ * The one static error a fire may ignore.
+ *
+ * Order is the only structural verdict the render can overturn. A line that
+ * is nothing but an interpolation is placed by its value, so a block whose
+ * parent is written below such a line reads as out of order and renders
+ * perfectly well: the parent comes back at depth 0 and the value's lines
+ * below it. Refusing to fire on a squiggle the editor has already drawn
+ * would be the harsher of two answers, and the wrong one.
+ *
+ * The rest stay blocking, and two of them for a reason worth stating: when
+ * a block has more than one line at depth 0, the parse keeps the first and
+ * drops the others — they are neither the parent nor children. The render
+ * never sees them, so it cannot decide anything about them, and firing
+ * would write an instance with lines silently missing.
+ */
+const RENDER_DECIDES = new Set(['gen.root-not-first']);
+
+/**
  * Turn a block into the lines of the next instance.
  *
  * The order is load-bearing. The block's parent line is checked while it is
@@ -151,11 +169,9 @@ function planGenerated(
     }
 
     const body = parseGenBody(block.body, block.openLine + 1);
-    const broken = body.diagnostics.find(d => d.severity === 'error');
+    const broken = body.diagnostics.find(
+        d => d.severity === 'error' && !RENDER_DECIDES.has(d.code));
     if (broken) {
-        // The block cannot describe one instance, so there is nothing to
-        // generate from it. Firing anyway would write whatever survived the
-        // damage and consume the command that produced it.
         throw new GenerationError(`The block '${name.value}' cannot generate: ${broken.message}`);
     }
 
