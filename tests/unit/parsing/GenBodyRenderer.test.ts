@@ -117,3 +117,51 @@ describe('renderGenBody', () => {
         });
     });
 });
+
+describe('a line that is only an interpolation', () => {
+    it('takes the depth its value carries, as the canonical sample writes it', () => {
+        // 設計のサンプル 4 の形。差し込み行はカラム 0 に置かれ、階層は
+        // 文字列の中に書かれる（LLM が実際に書いた形で、R1 が verbatim に
+        // なった理由そのもの）
+        const result = render([
+            '- [ ] 週次レビュー',
+            '${["    - [ ] 仕事", "    - [ ] 健康"].join("\n")}',
+        ]);
+        expect(result).toEqual({
+            ok: true,
+            parentText: '- [ ] 週次レビュー',
+            children: [
+                { depth: 1, body: '- [ ] 仕事' },
+                { depth: 1, body: '- [ ] 健康' },
+            ],
+        });
+    });
+
+    it('is not a second root, so the static rules leave it alone', () => {
+        const body = parseGenBody([
+            '- [ ] 親',
+            '${"    - [ ] 子"}',
+        ], 1);
+        // 深さ 0 でも親候補にならないので multiple-roots も root-not-a-task も出ない
+        expect(body.diagnostics).toEqual([]);
+        expect(body.parent?.text).toBe('- [ ] 親');
+        expect(body.children).toHaveLength(1);
+    });
+
+    it('can be the generated task itself when its value says so', () => {
+        const result = render(['${"- [ ] 生成された親"}']);
+        expect(result).toMatchObject({ ok: true, parentText: '- [ ] 生成された親' });
+    });
+
+    it('refuses two lines at the top level, whoever produced them', () => {
+        const result = render(['${["- [ ] a", "- [ ] b"].join("\n")}']);
+        expect(result.ok).toBe(false);
+        expect(!result.ok && result.error.message).toContain('one task');
+    });
+
+    it('refuses a top-level line that is not a checkbox', () => {
+        const result = render(['${"ただのテキスト"}']);
+        expect(result.ok).toBe(false);
+        expect(!result.ok && result.error.message).toContain('checkbox');
+    });
+});

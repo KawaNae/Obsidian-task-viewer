@@ -130,8 +130,21 @@ export function parseGenBody(body: string[], firstLine: number): GenBody {
     return classify(lines, diagnostics);
 }
 
+/**
+ * A line that is nothing but one interpolation.
+ *
+ * Its depth cannot be read from the page: whatever the value brings decides
+ * it. So it is left out of the static classification below and placed when
+ * the value is known — the shape people actually write, with the hierarchy
+ * inside the string and the interpolation at column 0, which is the shape
+ * the verbatim rule exists to accept.
+ */
+export function isSpliceLine(line: GenLine): boolean {
+    return line.parts.length === 1 && line.parts[0].kind === 'expr';
+}
+
 function classify(lines: GenLine[], diagnostics: LocatedDiagnostic[]): GenBody {
-    const roots = lines.filter(l => l.depth === 0);
+    const roots = lines.filter(l => l.depth === 0 && !isSpliceLine(l));
     const parent = roots[0] ?? null;
 
     for (const extra of roots.slice(1)) {
@@ -164,7 +177,7 @@ function classify(lines: GenLine[], diagnostics: LocatedDiagnostic[]): GenBody {
     diagnostics.sort((a, b) => a.line - b.line);
     return {
         parent,
-        children: lines.filter(l => l !== parent && l.depth > 0),
+        children: lines.filter(l => l !== parent && (l.depth > 0 || isSpliceLine(l))),
         diagnostics,
     };
 }
