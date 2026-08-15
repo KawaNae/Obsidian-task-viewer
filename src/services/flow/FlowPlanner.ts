@@ -93,18 +93,22 @@ export function planFlow(task: Task, program: FlowProgram, deps: FlowPlanDeps): 
         if (withinUntil && hasLife) {
             const newTask = buildNextTask(task, anchor, next);
             applySet(newTask, program, deps);
-            attachNextFlow(newTask, program, task.flow!);
+
             // The block is only consulted when something is generated. A
             // fire that has run out of until or telomere writes no next
             // instance, and holding its command hostage to a name it no
             // longer needs would leave expired commands on the page forever.
-            // Without a block there are no children to write. The live ones
-            // are what the instance that fired did, not a description of
-            // what the next one should hold, and telling those apart was
-            // never possible while one copy rule covered both.
-            effects.push(program.use
-                ? planGenerated(task, newTask, program, preCtx, deps)
-                : { kind: 'create-next', newTask });
+            if (program.use) {
+                effects.push(planGenerated(task, newTask, program, preCtx, deps));
+            } else {
+                // Without a block there are no children to write. The live
+                // ones are what the instance that fired did, not a
+                // description of what the next one should hold, and telling
+                // those apart was never possible while one copy rule
+                // covered both.
+                newTask.flow = nextFlow(program, task.flow!);
+                effects.push({ kind: 'create-next', newTask });
+            }
         }
     }
 
@@ -189,6 +193,11 @@ function planGenerated(
     // the setter clauses evaluate against.
     const rendered = renderGenBody(body, buildEvalContext(newTask, deps));
     if (!rendered.ok) throw new GenerationError(rendered.error.message);
+
+    // After the block, not before. Today the clause reads nothing the block
+    // could have touched, so the two orders agree; once a `let` cell can be
+    // assigned in the body, only this one prints the value that was written.
+    newTask.flow = nextFlow(program, task.flow!);
 
     const warnings: Diagnostic[] = [];
     return {
@@ -385,15 +394,23 @@ function applySet(newTask: Task, program: FlowProgram, deps: FlowPlanDeps): void
 // Telomere & flow inheritance
 // ---------------------------------------------------------------------------
 
-function attachNextFlow(newTask: Task, program: FlowProgram, originalFlow: TaskFlow): void {
+/**
+ * The command the next instance carries, or undefined when the chain ends
+ * here.
+ *
+ * Returned rather than assigned, so that where it is called is decided by
+ * what it needs rather than by where the line happens to sit. A generated
+ * instance calls it after its block has run, which will matter as soon as
+ * the clause has to print values the block decides.
+ */
+function nextFlow(program: FlowProgram, originalFlow: TaskFlow): TaskFlow | undefined {
     let nextProgram = program;
     if (program.lifetime) {
         const remaining = program.lifetime.count - 1;
         if (remaining <= 0) {
             // x1 fired: the final instance carries no command at all
             // (the extreme case of "an emptied segment loses its line").
-            newTask.flow = undefined;
-            return;
+            return undefined;
         }
         nextProgram = { ...program, lifetime: { ...program.lifetime, count: remaining } };
     }
@@ -404,7 +421,7 @@ function attachNextFlow(newTask: Task, program: FlowProgram, originalFlow: TaskF
     // regenerated in canonical order.
     const { table } = joinSegments(flowRaws(originalFlow));
     const lines = serializeFlowLines(nextProgram, table);
-    newTask.flow = {
+    return {
         raw: lines.taskLine,
         childSegments: lines.childLines.map(raw => ({ raw, bodyLine: -1 })),
         program: nextProgram,

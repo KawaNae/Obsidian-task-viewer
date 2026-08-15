@@ -182,6 +182,26 @@ describe('a use() flow writes what its block describes', () => {
         expect(children).toEqual([{ depth: 1, body: '- [ ] ストレッチ' }]);
     });
 
+    it('gives the last instance its body and no command', async () => {
+        // x1 ends the chain, and the clause is composed after the block has
+        // run — the block still describes this instance, it simply has
+        // nothing left to carry. What the command holds between generations
+        // ends with it.
+        const repository = makeRepository();
+        const { executor } = makeExecutor(repository, { 週報: WEEKLY });
+
+        await executor.handleTaskCompletion(firedTask('every mon x1 use("週報")'));
+        await flush();
+
+        const [, parentLine, flowLines, children] = repository.insertGeneratedInstance.mock.calls[0];
+        expect(parentLine).not.toContain('==>');
+        expect(flowLines).toEqual([]);
+        expect(children).toEqual([
+            { depth: 1, body: '- [ ] 資料集め' },
+            { depth: 2, body: '- [ ] 先週分' },
+        ]);
+    });
+
     it('fires a block the static reading calls out of order', async () => {
         // A line that is only an interpolation is placed by its value, so a
         // parent written below one reads as out of order and renders fine.
