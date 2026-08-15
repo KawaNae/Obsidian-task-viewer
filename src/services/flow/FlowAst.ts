@@ -41,7 +41,6 @@ export interface FlowProgram {
     lifetime?: { count: number; span: Span };
     /** Generate only while next anchor date <= the evaluated date (inclusive). */
     until?: { expr: Expr; span: Span };
-    nochildren?: { span: Span };
     /**
      * `use("名前")` — the generation block that writes the next instance.
      *

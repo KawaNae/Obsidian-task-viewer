@@ -11,7 +11,7 @@ import { type FlowProgram, SET_FIELD_ORDER, setHeadName } from './FlowAst';
 export function checkFlow(program: FlowProgram, diagnostics: Diagnostic[]): void {
     // Modifiers of the generation step require a schedule to modify.
     if (!program.schedule) {
-        for (const key of ['lifetime', 'until', 'nochildren', 'use'] as const) {
+        for (const key of ['lifetime', 'until', 'use'] as const) {
             const node = program[key];
             if (node) {
                 const clause = key === 'lifetime' ? 'xN' : key;
@@ -27,9 +27,11 @@ export function checkFlow(program: FlowProgram, diagnostics: Diagnostic[]): void
                     `'${clause}' requires a schedule clause (every / + / at)`, node.span, { clause }));
             }
         }
-        if (!program.move && !program.lifetime && !program.until && !program.nochildren && !program.use && !program.sets) {
+        if (!program.move && !program.lifetime && !program.until && !program.use && !program.sets) {
             // Empty program (e.g. `==>` followed by prose that failed earlier,
-            // or nothing at all). Only flag when no diagnostics explain it yet.
+            // a command that says only `nochildren`, or nothing at all). Only
+            // flag when no diagnostics explain it yet — the retired clause
+            // has already explained itself.
             if (diagnostics.length === 0) {
                 diagnostics.push(error('flow.empty', 'Flow command is empty', { start: 0, end: 0 }));
             }

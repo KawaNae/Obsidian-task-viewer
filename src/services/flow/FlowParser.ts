@@ -12,7 +12,9 @@ export interface ParseFlowResult {
     diagnostics: Diagnostic[];
 }
 
-const HEAD_HINT = 'clauses start with every / + / at(...) / xN / until(...) / nochildren / use(...) / setContent|setStart|setStartTime|setEnd|setEndTime|setDue|setDueTime(...) / move(...)';
+// `nochildren` is missing on purpose: it is still read, but a hint is a
+// list of what to write, and a retired clause does not belong on one.
+const HEAD_HINT = 'clauses start with every / + / at(...) / xN / until(...) / use(...) / setContent|setStart|setStartTime|setEnd|setEndTime|setDue|setDueTime(...) / move(...)';
 const SET_HEADS: Record<string, SetField> = Object.fromEntries(
     SET_FIELD_ORDER.map(field => [setHeadName(field), field])
 );
@@ -96,15 +98,15 @@ function parseNode(cursor: TokenCursor, program: FlowProgram, diagnostics: Diagn
             return;
         }
         case 'nochildren':
-            // Retired, and said here rather than in the checker: the clause
-            // is on its way off the AST, and a check that reads a field it
-            // is losing would have to move with it. The token is read either
-            // way, so this is where the notice keeps working.
+            // Read and dropped. Refusing the token would null the program and
+            // take the rest of the command down with it, so it stays in the
+            // grammar; keeping it on the AST would put it back on the line
+            // every time a fire regenerates the clause. Between those, the
+            // value goes and the notice stays.
             cursor.next();
             diagnostics.push(warning('flow.nochildren-retired',
                 "'nochildren' is retired: child lines no longer travel to the next instance, so the clause can be deleted",
                 tokenSpan(head)));
-            assignNode(program, 'nochildren', { span: tokenSpan(head) }, diagnostics, tokenSpan(head));
             return;
         case 'use': {
             cursor.next();
@@ -262,7 +264,7 @@ function assignSchedule(program: FlowProgram, node: ScheduleNode, diagnostics: D
     program.schedule = node;
 }
 
-function assignNode<K extends 'lifetime' | 'until' | 'nochildren' | 'use' | 'move'>(
+function assignNode<K extends 'lifetime' | 'until' | 'use' | 'move'>(
     program: FlowProgram,
     key: K,
     node: NonNullable<FlowProgram[K]>,
@@ -279,6 +281,10 @@ function assignNode<K extends 'lifetime' | 'until' | 'nochildren' | 'use' | 'mov
 /**
  * Error recovery: skip tokens until something that can start a node, so one
  * mistake yields one diagnostic instead of a cascade.
+ *
+ * `nochildren` belongs on this list even though it is retired. Recovery has
+ * to recognize every head the parser accepts, and it is still accepted; drop
+ * it and a command written after one would be skipped along with the mistake.
  */
 function skipToNextNode(cursor: TokenCursor): void {
     while (!cursor.atEof()) {

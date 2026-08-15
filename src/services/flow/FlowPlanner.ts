@@ -98,9 +98,13 @@ export function planFlow(task: Task, program: FlowProgram, deps: FlowPlanDeps): 
             // fire that has run out of until or telomere writes no next
             // instance, and holding its command hostage to a name it no
             // longer needs would leave expired commands on the page forever.
+            // Without a block there are no children to write. The live ones
+            // are what the instance that fired did, not a description of
+            // what the next one should hold, and telling those apart was
+            // never possible while one copy rule covered both.
             effects.push(program.use
                 ? planGenerated(task, newTask, program, preCtx, deps)
-                : { kind: 'create-next', newTask, copyChildren: !program.nochildren });
+                : { kind: 'create-next', newTask, copyChildren: false });
         }
     }
 

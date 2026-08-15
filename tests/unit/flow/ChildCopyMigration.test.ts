@@ -12,9 +12,9 @@ import { parseFlow } from '../../../src/services/flow/FlowParser';
  */
 
 const warn = (src: string, childLines: string[]) => {
-    const { program } = parseFlow(src);
+    const { program, diagnostics } = parseFlow(src);
     if (!program) throw new Error(`failed to parse: ${src}`);
-    return childCopyMigrationWarning(program, childLines);
+    return childCopyMigrationWarning(program, childLines, diagnostics);
 };
 
 const CHILD = '\t- [ ] 資料集め';
@@ -63,8 +63,9 @@ describe('the tasks that hear nothing', () => {
         expect(warn('move([[Archive]])', [CHILD])).toBeNull();
     });
 
-    it('says nothing to a command that already opted out', () => {
-        // The retirement notice on the clause covers this line.
+    it('says nothing to a command still carrying the retired clause', () => {
+        // That line already carries a warning saying the same thing, and two
+        // warnings about one change is one too many.
         expect(warn('every mon nochildren', [CHILD])).toBeNull();
     });
 

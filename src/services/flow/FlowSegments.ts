@@ -81,7 +81,6 @@ function nodeSpans(program: FlowProgram): Span[] {
     if (program.schedule) spans.push(program.schedule.span);
     if (program.lifetime) spans.push(program.lifetime.span);
     if (program.until) spans.push(program.until.span);
-    if (program.nochildren) spans.push(program.nochildren.span);
     if (program.sets) {
         for (const node of Object.values(program.sets)) {
             if (node) spans.push(node.span);

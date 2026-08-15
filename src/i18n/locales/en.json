@@ -772,7 +772,7 @@
       "bad-weekday-name": "Expected a weekday name (sun, mon, tue, wed, thu, fri, sat), got '{{actual}}'"
     },
     "flow": {
-      "unknown-head": "Unknown clause '{{head}}' — clauses start with every / + / at(...) / xN / until(...) / nochildren / use(...) / setContent|setStart|setStartTime|setEnd|setEndTime|setDue|setDueTime(...) / move(...)",
+      "unknown-head": "Unknown clause '{{head}}' — clauses start with every / + / at(...) / xN / until(...) / use(...) / setContent|setStart|setStartTime|setEnd|setEndTime|setDue|setDueTime(...) / move(...)",
       "zero-lifetime": "xN requires N >= 1",
       "duplicate-schedule": "Only one schedule clause (every / + / at) is allowed",
       "duplicate-node": "Duplicate '{{clause}}' clause",

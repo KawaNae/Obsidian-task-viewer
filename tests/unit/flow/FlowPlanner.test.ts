@@ -352,9 +352,12 @@ describe('FlowPlanner', () => {
     });
 
     describe('options', () => {
-        it('nochildren turns off child copying', () => {
+        it('never copies the live child lines', () => {
+            // What a task's children hold is what that instance did, and a
+            // block is where the next one's are described. The clause that
+            // used to ask for this is retired, so asking makes no difference.
+            expect(createNextOf(plan('at(today + 1d)', { startDate: '2026-07-01' })).copyChildren).toBe(false);
             expect(createNextOf(plan('at(today + 1d) nochildren', { startDate: '2026-07-01' })).copyChildren).toBe(false);
-            expect(createNextOf(plan('at(today + 1d)', { startDate: '2026-07-01' })).copyChildren).toBe(true);
         });
 
         it('strips timer emoji prefixes from the copied content', () => {

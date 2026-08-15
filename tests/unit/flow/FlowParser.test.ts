@@ -117,29 +117,32 @@ describe('FlowParser', () => {
 
         it('rejects orphan modifiers without a schedule', () => {
             expect(errors('x5')).toContain('flow.orphan-modifier');
-            expect(errors('nochildren')).toContain('flow.orphan-modifier');
             expect(errors('until(2026-09-28)')).toContain('flow.orphan-modifier');
             expect(errors('use("週報")')).toContain('flow.orphan-modifier');
         });
 
-        it('warns that nochildren is retired, without refusing it', () => {
-            // Refusing it would take the whole command down with it: an error
-            // nulls the program, so a line that used to run would stop
-            // running on the release that retires one of its clauses.
+        it('reads nochildren, warns, and keeps nothing of it', () => {
+            // Refusing the token would take the whole command down with it —
+            // an error nulls the program, so a line that used to run would
+            // stop running on the release that retires one of its clauses.
+            // Keeping it on the AST would put it back on the line every time
+            // a fire regenerates the clause.
             const { program, diagnostics } = parseFlow('every mon nochildren');
 
-            expect(program?.nochildren).toBeDefined();
+            expect(program).not.toBeNull();
             expect(diagnostics.map(d => [d.code, d.severity]))
                 .toEqual([['flow.nochildren-retired', 'warning']]);
+            expect(serializeFlow(program!)).toBe('every mon');
         });
 
-        it('still reports a lone nochildren as an orphan', () => {
-            // Stage 1 keeps the clause on the AST, so the orphan check still
-            // sees it. Both diagnostics are correct: one says the clause
-            // needs a schedule, the other that it does nothing any more.
-            const codes = parseFlow('nochildren').diagnostics.map(d => d.code);
-            expect(codes).toContain('flow.orphan-modifier');
-            expect(codes).toContain('flow.nochildren-retired');
+        it('says only that the clause is retired when it is all there is', () => {
+            // Dropping the clause leaves an empty command, but flow.empty
+            // only speaks when nothing else has explained the line — and the
+            // retirement notice has, in a message that names the fix.
+            const { program, diagnostics } = parseFlow('nochildren');
+
+            expect(program).not.toBeNull();
+            expect(diagnostics.map(d => d.code)).toEqual(['flow.nochildren-retired']);
         });
 
         it('parses use() and keeps the name as an expression', () => {

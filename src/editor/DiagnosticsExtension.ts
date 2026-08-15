@@ -342,7 +342,8 @@ export function createDiagnosticsExtension(): Extension {
                 // The children stopped travelling with the command. Nothing
                 // in the text says so, which is why it is said here; the mark
                 // covers the command because that is what has to change.
-                const migration = parsed.program && childCopyMigrationWarning(parsed.program, childLines);
+                const migration = parsed.program
+                    && childCopyMigrationWarning(parsed.program, childLines, parsed.diagnostics);
                 if (migration) {
                     const anchor = segments.find(s => s.markerCol !== null);
                     if (anchor) {

@@ -66,7 +66,9 @@ describe('FlowExecutor', () => {
         const [origArg, lineArg, copyChildrenArg, flowLinesArg] = repository.insertRecurrenceForTask.mock.calls[0];
         expect(origArg).toBe(task);
         expect(lineArg).toContain('==> every mon');
-        expect(copyChildrenArg).toBe(true);
+        // The live children stay with the instance that made them; a block
+        // is where the next instance's children are described now.
+        expect(copyChildrenArg).toBe(false);
         expect(flowLinesArg).toEqual([]);
 
         expect(repository.stripFlow).toHaveBeenCalledTimes(1);

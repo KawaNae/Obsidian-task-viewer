@@ -772,7 +772,7 @@
       "bad-weekday-name": "曜日名（sun, mon, tue, wed, thu, fri, sat）が必要です（'{{actual}}' が渡されました）"
     },
     "flow": {
-      "unknown-head": "不明な節 '{{head}}' — 節は every / + / at(...) / xN / until(...) / nochildren / use(...) / setContent|setStart|setStartTime|setEnd|setEndTime|setDue|setDueTime(...) / move(...) で始まります",
+      "unknown-head": "不明な節 '{{head}}' — 節は every / + / at(...) / xN / until(...) / use(...) / setContent|setStart|setStartTime|setEnd|setEndTime|setDue|setDueTime(...) / move(...) で始まります",
       "zero-lifetime": "xN の N は 1 以上が必要です",
       "duplicate-schedule": "スケジュール節（every / + / at）は1つだけ書けます",
       "duplicate-node": "'{{clause}}' 節が重複しています",
