@@ -97,6 +97,19 @@ describe('renderGenBody', () => {
         expect(!result.ok && result.error.message).toContain('several lines');
     });
 
+    it('evaluates the lines in document order, parent line included', () => {
+        // 今は式に効果が無いので順序は結果に現れない — 段 3 の代入
+        // ${n = n + 1} が入った日に、書き手の読む順で走ることが要る。
+        // 観測手段はエラーの発生順: 両方の行が失敗する形で、文書で先に
+        // 読む行のエラーが返ることを pin する
+        const result = render([
+            '${start}',
+            '- [ ] 親 ${end}',
+        ]);
+        expect(result.ok).toBe(false);
+        expect(!result.ok && result.error.message).toContain("'start' is not set");
+    });
+
     it('reports a failed expression instead of writing a partial instance', () => {
         // 2 相: 1 つでも評価に失敗したら、効果を 1 つも出さない
         const result = render([
