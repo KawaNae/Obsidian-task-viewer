@@ -1,7 +1,8 @@
 import type { Span } from '../../lang/Diagnostic';
 import { type EvalContext, EvalError } from '../../lang/ExprEvaluator';
 import { type RenderedPart, renderInterpolation } from '../../lang/Interpolation';
-import { type GenBody, type GenLine, indentDepth, leadingIndent } from './GenBodyParser';
+import { TaskLineClassifier } from '../utils/TaskLineClassifier';
+import { type GenBody, type GenLine, indentDepth, isSpliceLine, leadingIndent } from './GenBodyParser';
 
 /** One generated child line: its text, and how deep it sits under the parent. */
 export interface RenderedChild {
@@ -42,13 +43,40 @@ export type GenRenderResult =
  */
 export function renderGenBody(body: GenBody, ctx: EvalContext): GenRenderResult {
     try {
-        const parentText = body.parent === null ? null : renderParent(body.parent, ctx);
-        const children = body.children.flatMap(line => renderChild(line, ctx));
-        return { ok: true, parentText, children };
+        const entries: RenderedEntry[] = [];
+        if (body.parent !== null) {
+            entries.push({ depth: 0, body: renderParent(body.parent, ctx), from: body.parent });
+        }
+        for (const line of body.children) entries.push(...renderChild(line, ctx));
+
+        // What sits at depth 0 is only known now: a line that is nothing but
+        // an interpolation is placed by its value, not by where it was typed.
+        const roots = entries.filter(e => e.depth === 0);
+        if (roots.length > 1) {
+            throw new EvalError(
+                'A block generates one task, and this produced more than one line at the top level',
+                lineSpan(roots[1].from));
+        }
+        const parent = roots[0] ?? null;
+        if (parent && !TaskLineClassifier.isTaskLine(parent.body)) {
+            throw new EvalError(
+                'The generated task must be a checkbox line',
+                lineSpan(parent.from));
+        }
+        return {
+            ok: true,
+            parentText: parent?.body ?? null,
+            children: entries.filter(e => e !== parent).map(({ depth, body: text }) => ({ depth, body: text })),
+        };
     } catch (e) {
         if (e instanceof EvalError) return { ok: false, error: e };
         throw e;
     }
+}
+
+/** A rendered line, with the block line it came from for diagnostics. */
+interface RenderedEntry extends RenderedChild {
+    from: GenLine;
 }
 
 /**
@@ -75,16 +103,23 @@ function renderParent(line: GenLine, ctx: EvalContext): string {
  * children when the result is read back, so keeping one would truncate the
  * generated task.
  */
-function renderChild(line: GenLine, ctx: EvalContext): RenderedChild[] {
+function renderChild(line: GenLine, ctx: EvalContext): RenderedEntry[] {
     const text = renderLine(line, ctx);
-    if (!text.includes('\n')) return [{ depth: line.depth, body: text }];
-
-    const [first, ...rest] = text.split('\n');
-    const out: RenderedChild[] = [{ depth: line.depth, body: first }];
-    for (const raw of rest) {
-        if (raw.trim() === '') continue;
-        out.push({ depth: line.depth + indentDepth(leadingIndent(raw)), body: raw.trimStart() });
+    // A line that is nothing but an interpolation has no text of its own, so
+    // every line of the value is placed by its own indentation. A line that
+    // mixes text and value keeps its first line where it was written, because
+    // the text before the value is sitting there.
+    const placeFirstByValue = isSpliceLine(line);
+    if (!text.includes('\n') && !placeFirstByValue) {
+        return [{ depth: line.depth, body: text, from: line }];
     }
+
+    const out: RenderedEntry[] = [];
+    text.split('\n').forEach((raw, i) => {
+        if (raw.trim() === '') return;
+        const own = i > 0 || placeFirstByValue ? indentDepth(leadingIndent(raw)) : 0;
+        out.push({ depth: line.depth + own, body: raw.trimStart(), from: line });
+    });
     return out;
 }
 
@@ -106,5 +141,9 @@ function hasTextAfter(parts: RenderedPart[], index: number): boolean {
 /** Where to point when a part is at fault: its own span, or the whole line. */
 function spanOf(line: GenLine, index: number): Span {
     const part = line.parts[index];
-    return part?.kind === 'expr' ? part.span : { start: 0, end: line.text.length };
+    return part?.kind === 'expr' ? part.span : lineSpan(line);
+}
+
+function lineSpan(line: GenLine): Span {
+    return { start: 0, end: line.text.length };
 }
