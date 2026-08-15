@@ -8,7 +8,7 @@ import { tokenize } from '../../../src/services/lang/Lexer';
 import { TokenCursor } from '../../../src/services/lang/Token';
 import type { EvalHost, StaticType } from '../../../src/services/lang/functions';
 import { arrayOf, recordOf } from '../../../src/services/lang/functions';
-import type { Value } from '../../../src/services/lang/Value';
+import { DECIMAL_SCALE, type Value } from '../../../src/services/lang/Value';
 import {
     BLOCK_FAMILIES, DIFFERENTIAL_FAMILIES, type Family, LITERAL_FAMILIES, NESTING_FAMILIES,
     POSTFIX_FAMILIES,
@@ -20,10 +20,11 @@ import {
  * purpose.
  *
  * The deviations are not scattered through the corpus as hand-written tags;
- * they are the six predicates in `EXCLUSIONS` below, detected on the parsed
- * tree. Only a divergence no predicate claims turns red. Retiring a deviation
- * (the decimal one, when decimals land) is deleting its predicate — the net
- * widens by itself, over the whole corpus at once.
+ * they are the six predicates on `Features` below, detected on the parsed
+ * tree. Only a divergence no predicate claims turns red. When a deviation
+ * shrinks, its predicate shrinks with it and the net widens over the whole
+ * corpus at once — decimals did exactly this when they landed: the skip
+ * became a grid comparison, and only the discontinuous consumers stayed out.
  *
  * The corpus is `exprFamilies.ts`, shared with the round-trip sweep: a family
  * added there is measured for printing and for meaning on the same day.
@@ -138,9 +139,9 @@ function bridge(v: Value): unknown {
     }
 }
 
-/** Division carries the quotient to ten places; the comparison meets it there. */
+/** Arithmetic lands on the decimal grid; the comparison meets both sides there. */
 function quantize(v: number): number {
-    return Number.isInteger(v) ? v : Math.round(v * 1e10) / 1e10;
+    return Number.isInteger(v) ? v : Math.round(v * DECIMAL_SCALE) / DECIMAL_SCALE;
 }
 
 function deepEqual(a: unknown, b: unknown, onGrid: boolean): boolean {
@@ -178,8 +179,24 @@ function isDomainFn(fn: string): boolean {
 const DOMAIN_PROPS = new Set(['start', 'end', 'due', 'today', 'file.name']);
 
 interface Features {
-    /** #1 10進 — a decimal literal (today the lexer refuses them; deleting this row widens the net when they land). */
-    decimal: boolean;
+    /**
+     * #1 10進, the comparable half — decimal arithmetic through continuous
+     * operations (`+` `-` `*`, and `/` under the root rule below). This
+     * language lands every result on the ten-place grid and JS carries the
+     * raw float, but the two stay within half a grid step of each other, so
+     * quantizing both sides makes them meet: `0.1 + 0.2` is 0.3 here and
+     * 0.30000000000000004 in JS, and the grid comparison sees one number.
+     */
+    decimalGrid: boolean;
+    /**
+     * #1 10進, the incomparable half — a decimal feeding a discontinuous
+     * consumer: `%`, an equality or an ordering, `Math.floor`-family, or a
+     * digit/bound position. Half a grid step is exactly what flips those:
+     * `0.1 + 0.2 == 0.3` is true here and false in JS by design, and
+     * `Math.floor(0.7 * 10)` is 7 here and 6 in JS. These are the deviation
+     * itself, pinned in ExprDecimal.test.ts and skipped here.
+     */
+    decimalStep: boolean;
     /**
      * #2 除算丸め, the comparable half — the expression is one `/` or `%` at
      * the root, fed by exact integer arithmetic. Its result lives on the
@@ -206,21 +223,29 @@ interface Features {
     //    the comparison, because only accepted sources are compared.
 }
 
-function detectFeatures(expr: Expr, src: string): Features {
+function detectFeatures(expr: Expr): Features {
     const f: Features = {
-        decimal: /\d\.\d/.test(src),
+        decimalGrid: false,
+        decimalStep: false,
         divisionRoot: false,
         divisionComposed: false,
         domain: false,
         strictEq: false,
     };
-    walk(expr, f);
+    const marks = { decimal: false, step: false };
+    walk(expr, f, marks);
+    if (marks.decimal) {
+        if (marks.step) f.decimalStep = true;
+        else f.decimalGrid = true;
+    }
     // One division, and it is the whole expression: the per-operation
     // rounding and the end-of-expression rounding are then the same rounding.
     const divisions = countDivisions(expr);
     if (divisions > 0) {
         const rootIsDivision = expr.kind === 'binary' && (expr.op === '/' || expr.op === '%');
-        if (divisions === 1 && rootIsDivision) f.divisionRoot = true;
+        // `%` over decimals follows the quantized quotient here and the raw
+        // carrier in JS — the step case, whichever position it sits in.
+        if (divisions === 1 && rootIsDivision && !(marks.decimal && expr.op === '%')) f.divisionRoot = true;
         else f.divisionComposed = true;
     }
     return f;
@@ -253,16 +278,23 @@ function countDivisions(expr: Expr): number {
     return count;
 }
 
-function walk(expr: Expr, f: Features): void {
+/** What a decimal must not meet to stay comparable: anything half a grid step can flip. */
+const STEP_OPS = new Set(['%', '==', '!=', '<', '<=', '>', '>=']);
+const STEP_FNS = new Set(['Math.floor', 'Math.ceil', 'Math.round']);
+const STEP_METHODS = new Set(['toFixed', 'slice', 'padStart']);
+
+function walk(expr: Expr, f: Features, marks: { decimal: boolean; step: boolean }): void {
     switch (expr.kind) {
         case 'lit':
             if (['date', 'datetime', 'time', 'duration', 'link'].includes(expr.value.type)) f.domain = true;
+            if (expr.value.type === 'number' && !Number.isInteger(expr.value.value)) marks.decimal = true;
             return;
         case 'prop':
             if (DOMAIN_PROPS.has(expr.name)) f.domain = true;
             return;
-        case 'unary': return walk(expr.operand, f);
+        case 'unary': return walk(expr.operand, f, marks);
         case 'binary': {
+            if (STEP_OPS.has(expr.op)) marks.step = true;
             if (expr.op === '==' || expr.op === '!=') {
                 const lt = staticTypeOf(expr.left);
                 const rt = staticTypeOf(expr.right);
@@ -271,31 +303,33 @@ function walk(expr: Expr, f: Features): void {
                     f.strictEq = true;
                 }
             }
-            walk(expr.left, f);
-            walk(expr.right, f);
+            walk(expr.left, f, marks);
+            walk(expr.right, f, marks);
             return;
         }
         case 'cond':
-            walk(expr.cond, f); walk(expr.then, f); walk(expr.else, f);
+            walk(expr.cond, f, marks); walk(expr.then, f, marks); walk(expr.else, f, marks);
             return;
         case 'call':
             if (isDomainFn(expr.fn)) f.domain = true;
-            expr.args.forEach(arg => walk(arg, f));
+            if (STEP_FNS.has(expr.fn)) marks.step = true;
+            expr.args.forEach(arg => walk(arg, f, marks));
             return;
         case 'member':
-            return walk(expr.obj, f);
+            return walk(expr.obj, f, marks);
         case 'method':
-            walk(expr.obj, f);
-            expr.args.forEach(arg => walk(arg, f));
+            if (STEP_METHODS.has(expr.name)) marks.step = true;
+            walk(expr.obj, f, marks);
+            expr.args.forEach(arg => walk(arg, f, marks));
             return;
         case 'index':
-            walk(expr.obj, f); walk(expr.index, f);
+            walk(expr.obj, f, marks); walk(expr.index, f, marks);
             return;
         case 'var': return;
-        case 'arrow': return walk(expr.body, f);
-        case 'array': return expr.items.forEach(item => walk(item, f));
-        case 'record': return expr.entries.forEach(e => walk(e.value, f));
-        case 'spread': return walk(expr.arg, f);
+        case 'arrow': return walk(expr.body, f, marks);
+        case 'array': return expr.items.forEach(item => walk(item, f, marks));
+        case 'record': return expr.entries.forEach(e => walk(e.value, f, marks));
+        case 'spread': return walk(expr.arg, f, marks);
         case 'template':
             for (const part of expr.parts) {
                 if (part.kind === 'text') {
@@ -305,7 +339,7 @@ function walk(expr: Expr, f: Features): void {
                     // source mean two different strings.
                     if (part.text.includes('\\') || part.text.includes('${')) f.domain = true;
                 } else {
-                    walk(part.expr, f);
+                    walk(part.expr, f, marks);
                 }
             }
             return;
@@ -341,8 +375,8 @@ function runFamily(family: Family): FamilyOutcome {
             continue;
         }
 
-        const features = detectFeatures(expr, src);
-        if (features.decimal || features.domain || features.strictEq || features.divisionComposed) {
+        const features = detectFeatures(expr);
+        if (features.decimalStep || features.domain || features.strictEq || features.divisionComposed) {
             outcome.skipped++;
             continue;
         }
@@ -364,7 +398,7 @@ function runFamily(family: Family): FamilyOutcome {
             outcome.red.push(`${src} — ours: ${ourSide} / js: ${jsSide}`);
             continue;
         }
-        if (ours.ok && js.ok && !deepEqual(bridge(ours.value), js.value, features.divisionRoot)) {
+        if (ours.ok && js.ok && !deepEqual(bridge(ours.value), js.value, features.divisionRoot || features.decimalGrid)) {
             outcome.red.push(`${src} — ours: ${show(bridge(ours.value))} / js: ${show(js.value)}`);
             continue;
         }
@@ -399,11 +433,6 @@ const ALL_FAMILIES: Family[] = [
  * this list on purpose.
  */
 const EXPECTED_ZERO_COMPARED = new Set([
-    // deviation #1: every source carries a decimal, so the predicate skips
-    // the whole family — deleting that predicate row takes these two off
-    // this list on purpose and the grid starts being compared
-    'decimal number',
-    'decimal grid',
     // all-domain shapes
     'method call',
     'optional member',
