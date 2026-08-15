@@ -64,6 +64,8 @@ export const POSTFIX_FAMILIES: Family[] = [
 /** Literals of every domain type — `valueToLiteral` has to write them back readable. */
 export const LITERAL_FAMILIES: Family[] = [
     { shape: 'number', sources: ['42', '0'] },
+    // 固定小数点の往復が要点: String(1e-7) は指数表記になり字句が読み戻せない
+    { shape: 'decimal number', sources: ['0.5', '0.1', '0.0000001', '900000.5', '0.3333333333'] },
     { shape: 'string', sources: ['"text"', '""', '"quote \\" inside"', '"brace } inside"'] },
     { shape: 'date and time', sources: ['2026-08-17', '2026-08-17T14:00', '14:00', '09:05'] },
     { shape: 'duration', sources: ['3d', '30min', '2mo', '1w', '4y', '6h'] },
@@ -155,6 +157,18 @@ export const DIFFERENTIAL_FAMILIES: Family[] = [
     {
         shape: 'division grid',
         sources: ['1 / 3', 'n / y', '10 % 3', '7 / 2 + 1', '1 / 3 * 3'],
+    },
+    {
+        // Deviation #1 made concrete: these sit behind the decimal predicate
+        // today, and deleting that predicate row puts them in front of the
+        // differential net — where each one disagrees with native JS by
+        // design (0.1 + 0.2 is 0.3 here, and % follows the quantized
+        // quotient). The round-trip net reads them from day one.
+        shape: 'decimal grid',
+        sources: [
+            '0.1 + 0.2', '0.1 * 3', '0.1 + 0.2 == 0.3', '1.1 - 1',
+            '0.3 % 0.1', '1.5 % 0.4', 'n + 0.5', '(0.1 + 0.2) * 10',
+        ],
     },
     {
         shape: 'Math helpers',

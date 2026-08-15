@@ -399,6 +399,11 @@ const ALL_FAMILIES: Family[] = [
  * this list on purpose.
  */
 const EXPECTED_ZERO_COMPARED = new Set([
+    // deviation #1: every source carries a decimal, so the predicate skips
+    // the whole family — deleting that predicate row takes these two off
+    // this list on purpose and the grid starts being compared
+    'decimal number',
+    'decimal grid',
     // all-domain shapes
     'method call',
     'optional member',
