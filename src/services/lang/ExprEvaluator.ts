@@ -1,7 +1,7 @@
 import type { Span } from './Diagnostic';
 import type { Expr, PropName } from './ExprAst';
 import { type EvalRuntime, FnCallError, callFn } from './functions';
-import { type DurUnit, type Value, WEEKDAY_NAMES, addDuration, compareValues, isDatishValue } from './Value';
+import { type DurUnit, type Value, WEEKDAY_NAMES, addDuration, compareValues, isDatishValue, parseDateStr } from './Value';
 
 /**
  * Runtime evaluation failure (e.g. a referenced property is unset on the
@@ -94,14 +94,21 @@ function callMember(obj: Value, name: string, args: Value[], ctx: EvalContext, s
             return a !== undefined && a.type === 'number' ? a.value : fallback;
         };
         switch (name) {
-            case 'length': return { type: 'number', value: [...s].length };
+            // UTF-16 units, as in JS. Code points would read better for emoji,
+            // but then `length` and `indexOf`/`slice` would count in different
+            // units and stop agreeing with each other.
+            case 'length': return { type: 'number', value: s.length };
             case 'includes': return { type: 'bool', value: s.includes(str(0)) };
             case 'startsWith': return { type: 'bool', value: s.startsWith(str(0)) };
             case 'endsWith': return { type: 'bool', value: s.endsWith(str(0)) };
             case 'indexOf': return { type: 'number', value: s.indexOf(str(0)) };
             case 'slice': return { type: 'string', value: s.slice(num(0, 0), args.length > 1 ? num(1, s.length) : undefined) };
             case 'padStart': return { type: 'string', value: s.padStart(num(0, 0), args.length > 1 ? str(1) : ' ') };
-            case 'replace': return { type: 'string', value: s.split(str(0)).join(str(1)) };
+            // JS semantics: replace hits the first occurrence only. Delegating
+            // to the real methods also keeps `$&` and friends behaving as a
+            // reader of JS expects.
+            case 'replace': return { type: 'string', value: s.replace(str(0), str(1)) };
+            case 'replaceAll': return { type: 'string', value: s.replaceAll(str(0), str(1)) };
             case 'trim': return { type: 'string', value: s.trim() };
             case 'toUpperCase': return { type: 'string', value: s.toUpperCase() };
             case 'toLowerCase': return { type: 'string', value: s.toLowerCase() };
@@ -115,8 +122,11 @@ function callMember(obj: Value, name: string, args: Value[], ctx: EvalContext, s
             return { type: 'string', value: ctx.host.formatDate(obj, tokens.value, ctx.weekStartDay) };
         }
         if (name === 'weekday') {
+            // Deliberately not routed through host.formatDate: these names are
+            // compared against string literals in user expressions, so they
+            // must stay the same seven identifiers in every locale.
             const date = obj.type === 'date' ? obj.value : obj.date;
-            return { type: 'string', value: WEEKDAY_NAMES[new Date(`${date}T00:00`).getDay()] };
+            return { type: 'string', value: WEEKDAY_NAMES[parseDateStr(date).getDay()] };
         }
     }
 
@@ -131,6 +141,12 @@ function callMember(obj: Value, name: string, args: Value[], ctx: EvalContext, s
 
 function evalBinary(expr: Expr & { kind: 'binary' }, ctx: EvalContext): Value {
     const { op, span } = expr;
+
+    // `a ?? b` — the right side is only reached when the left is missing.
+    if (op === '??') {
+        const l = evalExpr(expr.left, ctx);
+        return l.type === 'none' ? evalExpr(expr.right, ctx) : l;
+    }
 
     // Short-circuit logicals
     if (op === '&&' || op === '||') {

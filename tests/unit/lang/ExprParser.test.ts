@@ -20,7 +20,6 @@ describe('ExprParser', () => {
         expect(parse('"abc"').expr).toMatchObject({ kind: 'lit', value: { type: 'string', value: 'abc' } });
         expect(parse('42').expr).toMatchObject({ kind: 'lit', value: { type: 'number', value: 42 } });
         expect(parse('true').expr).toMatchObject({ kind: 'lit', value: { type: 'bool', value: true } });
-        expect(parse('tue').expr).toMatchObject({ kind: 'lit', value: { type: 'weekday', value: 2 } });
         expect(parse('[[Archive]]').expr).toMatchObject({ kind: 'lit', value: { type: 'link', target: 'Archive' } });
         expect(parse('none').expr).toMatchObject({ kind: 'lit', value: { type: 'none' } });
     });
@@ -91,13 +90,13 @@ describe('ExprParser', () => {
     });
 
     it('parses startOf with unit keyword and nested next()', () => {
-        const { expr, diagnostics } = parse('startOf(week, next(tue))');
+        const { expr, diagnostics } = parse('startOf(week, next("tue"))');
         expect(diagnostics).toEqual([]);
         expect(expr).toMatchObject({
             kind: 'call', fn: 'startOf',
             args: [
                 { kind: 'lit', value: { type: 'string', value: 'week' } },
-                { kind: 'call', fn: 'next', args: [{ kind: 'lit', value: { type: 'weekday', value: 2 } }] },
+                { kind: 'call', fn: 'next', args: [{ kind: 'lit', value: { type: 'string', value: 'tue' } }] },
             ],
         });
     });
@@ -158,5 +157,28 @@ describe('ExprParser', () => {
         expect(diagnostics).toEqual([]);
         expect(expr?.kind === 'call' && expr.fn).toBe('startOf');
         expect(parse('tv.file.name').expr?.kind === 'prop').toBe(true);
+    });
+    it('binds ?? looser than || and than comparison', () => {
+        const { expr, diagnostics } = parse('true || false ?? none');
+        expect(diagnostics).toEqual([]);
+        expect(expr).toMatchObject({ kind: 'binary', op: '??', left: { kind: 'binary', op: '||' } });
+
+        const { expr: shape } = parse('time(start) ?? content == "x"');
+        expect(shape).toMatchObject({ kind: 'binary', op: '??', right: { kind: 'binary', op: '==' } });
+    });
+
+    it('names a bare weekday instead of calling it unknown', () => {
+        const { expr, diagnostics } = parse('next(tue)');
+        expect(expr).toBeNull();
+        expect(diagnostics.map(d => d.code)).toContain('expr.weekday-not-literal');
+    });
+
+    it('reads a quoted weekday as a plain string', () => {
+        const { expr, diagnostics } = parse('next("tue")');
+        expect(diagnostics).toEqual([]);
+        expect(expr).toMatchObject({
+            kind: 'call', fn: 'next',
+            args: [{ kind: 'lit', value: { type: 'string', value: 'tue' } }],
+        });
     });
 });

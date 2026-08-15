@@ -15,14 +15,15 @@ function precOf(expr: Expr): number {
         case 'cond': return 1;
         case 'binary':
             switch (expr.op) {
-                case '||': return 2;
-                case '&&': return 3;
-                case '+': case '-': return 5;
-                case '*': case '/': case '%': return 6;
-                default: return 4; // comparisons
+                case '??': return 2;
+                case '||': return 3;
+                case '&&': return 4;
+                case '+': case '-': return 6;
+                case '*': case '/': case '%': return 7;
+                default: return 5; // comparisons
             }
-        case 'unary': return 7;
-        default: return 8;
+        case 'unary': return 8;
+        default: return 9;
     }
 }
 

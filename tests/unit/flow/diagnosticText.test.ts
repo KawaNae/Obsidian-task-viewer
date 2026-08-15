@@ -31,14 +31,29 @@ describe('diagnosticText', () => {
             '+3x',                              // lex.unknown-unit
             'every mon setStartTime("x")',     // type.set-time-mismatch
             'every mon until("text")',          // type.until-not-datish
+            'at(next(tue))',                    // expr.weekday-not-literal
+            'at(next("monday"))',               // type.bad-weekday-name
+            'every mon setStartTime(time(start) ?? 3)', // type.nullish-mismatch
+            'every mon setContent(start.format())', // type.member-arity
+            'every mon setContent(start.nope)',  // type.unknown-member
+            'every mon setContent(content.slice("a"))', // type.member-arg
+            'at(today + 0.5d)',                 // lex.decimal-unsupported
         ];
+        const seen = new Set<string>();
         for (const src of samples) {
             for (const d of parseFlow(src).diagnostics) {
+                seen.add(d.code);
                 const text = diagnosticText(d);
                 // Never leak the raw key or unfilled placeholders
                 expect(text).not.toMatch(/^flowDiag\./);
                 expect(text).not.toContain('{{');
             }
+        }
+        // 追加した診断が実際に出ていること（サンプルが陳腐化すると気づけない）
+        for (const code of ['expr.weekday-not-literal', 'type.bad-weekday-name',
+            'type.nullish-mismatch', 'type.member-arity', 'type.unknown-member',
+            'type.member-arg', 'lex.decimal-unsupported']) {
+            expect(seen).toContain(code);
         }
     });
 

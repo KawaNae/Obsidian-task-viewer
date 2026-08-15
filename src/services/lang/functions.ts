@@ -2,7 +2,8 @@ import { addDays, addMonths, addYears, differenceInCalendarDays } from 'date-fns
 import type { Span } from './Diagnostic';
 import type { Expr, FnName } from './ExprAst';
 import {
-    type DurUnit, type Value, type Weekday, formatDateStr, isDatishValue, parseDateStr,
+    type DurUnit, type Value, WEEKDAY_NAMES, type Weekday, formatDateStr, isDatishValue, parseDateStr,
+    weekdayFromName,
 } from './Value';
 
 /**
@@ -62,9 +63,23 @@ function requireUnitKeyword(args: Expr[]): FnSigViolation | null {
     return null;
 }
 
+/** A constant weekday name is checkable now rather than at fire time. */
+function requireWeekdayName(args: Expr[]): FnSigViolation | null {
+    const first = args[0];
+    if (first && first.kind === 'lit' && first.value.type === 'string' && weekdayFromName(first.value.value) === null) {
+        return {
+            code: 'type.bad-weekday-name',
+            message: `Expected a weekday name (${WEEKDAY_NAMES.join(', ')}), got '${first.value.value}'`,
+            span: first.span,
+            params: { actual: first.value.value },
+        };
+    }
+    return null;
+}
+
 export const FN_SIGS: Record<FnName, FnSig> = {
     format: { name: 'format', minArgs: 2, params: ['datish', 'string'], result: 'string' },
-    next: { name: 'next', minArgs: 1, params: ['weekday', 'datish'], result: 'date' },
+    next: { name: 'next', minArgs: 1, params: ['string', 'datish'], result: 'date', checkArgs: requireWeekdayName },
     startOf: { name: 'startOf', minArgs: 1, params: ['string', 'datish'], result: 'date', checkArgs: requireUnitKeyword },
     endOf: { name: 'endOf', minArgs: 1, params: ['string', 'datish'], result: 'date', checkArgs: requireUnitKeyword },
     nextCycle: { name: 'nextCycle', minArgs: 2, params: ['datish', 'duration'], result: 'datish' },
@@ -106,8 +121,9 @@ export function callFn(fn: FnName, args: Value[], rt: EvalRuntime): Value {
         }
         case 'next': {
             const [weekday, from] = args;
-            if (weekday.type !== 'weekday') throw new FnCallError('next() expects a weekday');
-            return { type: 'date', value: nextWeekdayAfter(weekday.value, datishDateOr(from, rt.today)) };
+            const day = weekday.type === 'string' ? weekdayFromName(weekday.value) : null;
+            if (day === null) throw new FnCallError(`next() expects a weekday name (${WEEKDAY_NAMES.join(', ')})`);
+            return { type: 'date', value: nextWeekdayAfter(day, datishDateOr(from, rt.today)) };
         }
         case 'startOf':
         case 'endOf': {

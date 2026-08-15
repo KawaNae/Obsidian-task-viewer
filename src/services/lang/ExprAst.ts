@@ -11,7 +11,7 @@ export type BinaryOp =
     | '+' | '-'
     | '*' | '/' | '%'
     | '==' | '!=' | '<' | '<=' | '>' | '>='
-    | '&&' | '||';
+    | '&&' | '||' | '??';
 
 export type Expr =
     | { kind: 'lit'; value: Value; span: Span }

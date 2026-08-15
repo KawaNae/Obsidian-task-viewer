@@ -25,6 +25,7 @@ export type TokenKind =
     | 'question'
     | 'ampamp'
     | 'pipepipe'
+    | 'qq'         // ?? (nullish coalescing)
     | 'eq'         // ==
     | 'neq'        // !=
     | 'lt'

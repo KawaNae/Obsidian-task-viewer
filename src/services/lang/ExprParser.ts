@@ -13,7 +13,8 @@ const SIMPLE_PROPS = ['start', 'end', 'due', 'content', 'done', 'today'] as cons
  * Recursive-descent expression parser. Consumes tokens from the cursor and
  * returns null after emitting a diagnostic when the input is malformed.
  *
- * Precedence (loose to tight): ?: < || < && < comparison < + - < unary < primary
+ * Precedence (loose to tight):
+ * ?: < ?? < || < && < comparison < + - < * / % < unary < postfix < primary
  */
 export function parseExpr(cursor: TokenCursor, diagnostics: Diagnostic[]): Expr | null {
     return parseTernary(cursor, diagnostics);
@@ -24,7 +25,7 @@ function spanBetween(a: Span, b: Span): Span {
 }
 
 function parseTernary(cursor: TokenCursor, diagnostics: Diagnostic[]): Expr | null {
-    const cond = parseOr(cursor, diagnostics);
+    const cond = parseNullish(cursor, diagnostics);
     if (!cond) return null;
     if (!cursor.tryEat('question')) return cond;
     const thenExpr = parseTernary(cursor, diagnostics);
@@ -36,6 +37,24 @@ function parseTernary(cursor: TokenCursor, diagnostics: Diagnostic[]): Expr | nu
     const elseExpr = parseTernary(cursor, diagnostics);
     if (!elseExpr) return null;
     return { kind: 'cond', cond, then: thenExpr, else: elseExpr, span: spanBetween(cond.span, elseExpr.span) };
+}
+
+/**
+ * `a ?? b` — b only when a is none. Looser than `||`, as in JS.
+ *
+ * JS additionally refuses `a || b ?? c` without parentheses; we accept it and
+ * read it as `(a || b) ?? c`. Accepting more than JS never changes what a
+ * program valid in JS means, so no existing reading shifts under us.
+ */
+function parseNullish(cursor: TokenCursor, diagnostics: Diagnostic[]): Expr | null {
+    let left = parseOr(cursor, diagnostics);
+    if (!left) return null;
+    while (cursor.tryEat('qq')) {
+        const right = parseOr(cursor, diagnostics);
+        if (!right) return null;
+        left = { kind: 'binary', op: '??', left, right, span: spanBetween(left.span, right.span) };
+    }
+    return left;
 }
 
 function parseOr(cursor: TokenCursor, diagnostics: Diagnostic[]): Expr | null {
@@ -236,12 +255,6 @@ function parseIdentLed(cursor: TokenCursor, diagnostics: Diagnostic[]): Expr | n
         return { kind: 'lit', value: { type: 'none' }, span };
     }
 
-    // Weekday literals
-    const weekday = weekdayFromName(name);
-    if (weekday !== null) {
-        return { kind: 'lit', value: { type: 'weekday', value: weekday }, span };
-    }
-
     // Unit keywords (arguments to startOf/endOf) are carried as strings
     if ((UNIT_KEYWORDS as readonly string[]).includes(name)) {
         return { kind: 'lit', value: { type: 'string', value: name }, span };
@@ -269,6 +282,16 @@ function parseIdentLed(cursor: TokenCursor, diagnostics: Diagnostic[]): Expr | n
             return null;
         }
         diagnostics.push(error('expr.file-needs-member', "Property 'file' requires a member (file.name)", span));
+        return null;
+    }
+
+    // A weekday is a string here, so `start.weekday() == "tue"` — the form
+    // everyone writes — compares equal. Bare `mon` survives only in the
+    // schedule syntax (`every mon,fri`), which never reaches this parser.
+    if (weekdayFromName(name) !== null) {
+        diagnostics.push(error('expr.weekday-not-literal',
+            `Weekdays are strings in expressions — write "${name}" (bare ${name} is only for 'every ${name}')`,
+            span, { name }));
         return null;
     }
 

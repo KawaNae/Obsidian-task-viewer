@@ -3,7 +3,14 @@ import { addDays, addMonths, addYears } from 'date-fns';
 export const DURATION_UNITS = ['min', 'h', 'd', 'w', 'mo', 'y'] as const;
 export type DurUnit = typeof DURATION_UNITS[number];
 
-/** 0=sun .. 6=sat (Date.getDay convention) */
+/**
+ * 0=sun .. 6=sat (Date.getDay convention).
+ *
+ * Weekdays are not a value type of the expression language — there they are
+ * plain strings, so `start.weekday() == "tue"` compares equal. This type
+ * belongs to the schedule syntax (`every mon,fri`), which reads the bare
+ * names straight from tokens.
+ */
 export type Weekday = 0 | 1 | 2 | 3 | 4 | 5 | 6;
 export const WEEKDAY_NAMES = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'] as const;
 
@@ -25,7 +32,6 @@ export type Value =
     | { type: 'string'; value: string }
     | { type: 'number'; value: number }
     | { type: 'bool'; value: boolean }
-    | { type: 'weekday'; value: Weekday }
     | { type: 'link'; target: string }
     | { type: 'none' };
 
@@ -132,7 +138,6 @@ export function compareValues(a: Value, b: Value): number | null {
         case 'number': return a.value - (b as typeof a).value;
         case 'bool': return Number(a.value) - Number((b as typeof a).value);
         case 'time': return a.value.localeCompare((b as typeof a).value);
-        case 'weekday': return a.value - (b as typeof a).value;
         case 'link': return a.target === (b as typeof a).target ? 0 : null;
         case 'duration': {
             const bd = b as typeof a;
@@ -155,7 +160,6 @@ export function valueToLiteral(v: Value): string {
         case 'string': return `"${v.value.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`;
         case 'number': return String(v.value);
         case 'bool': return v.value ? 'true' : 'false';
-        case 'weekday': return WEEKDAY_NAMES[v.value];
         case 'link': return `[[${v.target}]]`;
         case 'none': return 'none';
     }

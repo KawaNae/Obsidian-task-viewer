@@ -707,7 +707,8 @@
       "unterminated-wikilink": "wikilink が閉じられていません",
       "unterminated-string": "文字列が閉じられていません",
       "unknown-unit": "不明な期間単位 '{{unit}}'（使用可能: {{units}}）",
-      "unexpected-char": "予期しない文字 '{{char}}'"
+      "unexpected-char": "予期しない文字 '{{char}}'",
+      "decimal-unsupported": "小数はまだ使えません（'{{text}}'）。小さい単位で書いてください"
     },
     "expr": {
       "expected-colon": "条件式には ':' が必要です",
@@ -717,7 +718,11 @@
       "unexpected-eof": "式が途中で終わっています",
       "unknown-property": "不明なプロパティ '{{name}}'",
       "file-needs-member": "'file' にはメンバー指定が必要です（file.name）",
-      "unknown-ident": "不明な識別子 '{{name}}'"
+      "unknown-ident": "不明な識別子 '{{name}}'",
+      "expected-member": "ドットの後にはプロパティ名かメソッド名が必要です",
+      "tv-needs-member": "'tv' にはメンバー指定が必要です（tv.date.format(...) / tv.file.name）",
+      "expected-call": "'{{name}}' は関数です。呼び出してください",
+      "weekday-not-literal": "式の中では曜日は文字列です。\"{{name}}\" と書いてください（裸の {{name}} は every {{name}} 専用）"
     },
     "type": {
       "unknown-property": "プロパティ '{{name}}' はここでは使えません",
@@ -739,7 +744,12 @@
       "until-not-datish": "until() には日付/日時になる式が必要です（{{actual}} が渡されました）",
       "datetime-plus-time": "{{left}} への時刻の加算は曖昧です — date(x) + 14:00 のように日付に切り捨ててから足してください",
       "move-target": "move() の宛先には wikilink か string が必要です（{{actual}} が渡されました）",
-      "use-name": "use() のブロック名には string が必要です（{{actual}} が渡されました）"
+      "use-name": "use() のブロック名には string が必要です（{{actual}} が渡されました）",
+      "unknown-member": "{{receiver}} に '{{name}}' はありません",
+      "member-arity": "'{{name}}' の引数は {{expected}} 個です（{{actual}} 個が渡されました）",
+      "member-arg": "'{{name}}' の第{{index}}引数には {{expected}} が必要です（{{actual}} が渡されました）",
+      "nullish-mismatch": "'??' の左右の型が一致しません（{{left}} と {{right}}）",
+      "bad-weekday-name": "曜日名（sun, mon, tue, wed, thu, fri, sat）が必要です（'{{actual}}' が渡されました）"
     },
     "flow": {
       "unknown-head": "不明な節 '{{head}}' — 節は every / + / at(...) / xN / until(...) / nochildren / use(...) / setContent|setStart|setStartTime|setEnd|setEndTime|setDue|setDueTime(...) / move(...) で始まります",

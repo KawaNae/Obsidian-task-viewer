@@ -160,7 +160,8 @@ export function tokenize(src: string): LexResult {
             two === '!=' ? 'neq' :
             two === '<=' ? 'lte' :
             two === '>=' ? 'gte' :
-            two === '?.' ? 'qdot' : undefined;
+            two === '?.' ? 'qdot' :
+            two === '??' ? 'qq' : undefined;
         if (twoKind) {
             push(twoKind, two, i, i + 2);
             i += 2;

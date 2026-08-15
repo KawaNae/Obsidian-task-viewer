@@ -32,7 +32,7 @@ describe('ExprChecker', () => {
 
     it('types function results', () => {
         expect(check('format(start, "MM/DD")')).toMatchObject({ type: 'string', diagnostics: [] });
-        expect(check('next(tue)')).toMatchObject({ type: 'date', diagnostics: [] });
+        expect(check('next("tue")')).toMatchObject({ type: 'date', diagnostics: [] });
         expect(check('endOf(month, start)')).toMatchObject({ type: 'date', diagnostics: [] });
         expect(check('date(start)')).toMatchObject({ type: 'date', diagnostics: [] });
     });
@@ -119,5 +119,21 @@ describe('ExprChecker', () => {
 
     it('rejects unknown members', () => {
         expect(check('"abc".nope()').diagnostics.map(d => d.code)).toContain('type.unknown-member');
+    });
+    it('types ?? by the surviving side', () => {
+        expect(check('time(start) ?? 09:00')).toMatchObject({ type: 'time', diagnostics: [] });
+        expect(check('content ?? "fallback"')).toMatchObject({ type: 'string', diagnostics: [] });
+        expect(check('content ?? 3').diagnostics.map(d => d.code)).toContain('type.nullish-mismatch');
+    });
+
+    it('rejects a weekday name that is not one', () => {
+        expect(check('next("mon")')).toMatchObject({ type: 'date', diagnostics: [] });
+        expect(check('next("monday")').diagnostics.map(d => d.code)).toContain('type.bad-weekday-name');
+    });
+
+    it('rejects a missing required argument', () => {
+        expect(check('start.format()').diagnostics.map(d => d.code)).toContain('type.member-arity');
+        expect(check('content.replace("a")').diagnostics.map(d => d.code)).toContain('type.member-arity');
+        expect(check('content.slice(1)')).toMatchObject({ type: 'string', diagnostics: [] });
     });
 });

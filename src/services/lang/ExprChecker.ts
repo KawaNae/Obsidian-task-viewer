@@ -68,10 +68,14 @@ export function checkExpr(expr: Expr, env: TypeEnv, diagnostics: Diagnostic[]): 
                     expr.span, { receiver: ot, name: expr.name }));
                 return 'error';
             }
-            if (expr.kind === 'method' && argTypes.length > sig.params.length) {
+            // Both ends of the range. A missing required argument used to reach
+            // the evaluator, so `start.format()` failed at firing time — the
+            // moment the user completed the task, not while writing it.
+            if (expr.kind === 'method' && (argTypes.length < sig.minArgs || argTypes.length > sig.params.length)) {
+                const range = sig.minArgs === sig.params.length ? `${sig.minArgs}` : `${sig.minArgs}-${sig.params.length}`;
                 diagnostics.push(error('type.member-arity',
-                    `'${expr.name}' takes at most ${sig.params.length} argument(s), got ${argTypes.length}`,
-                    expr.span, { name: expr.name, expected: sig.params.length, actual: argTypes.length }));
+                    `'${expr.name}' takes ${range} argument(s), got ${argTypes.length}`,
+                    expr.span, { name: expr.name, expected: range, actual: argTypes.length }));
                 return 'error';
             }
             for (let i = 0; i < argTypes.length; i++) {
@@ -79,7 +83,7 @@ export function checkExpr(expr: Expr, env: TypeEnv, diagnostics: Diagnostic[]): 
                     diagnostics.push(error('type.member-arg',
                         `'${expr.name}' expects ${sig.params[i]} for argument ${i + 1}, got ${argTypes[i]}`,
                         expr.kind === 'method' ? expr.args[i].span : expr.span,
-                        { name: expr.name, expected: sig.params[i], actual: argTypes[i] }));
+                        { name: expr.name, index: i + 1, expected: sig.params[i], actual: argTypes[i] }));
                     return 'error';
                 }
             }
@@ -101,10 +105,8 @@ export function checkExpr(expr: Expr, env: TypeEnv, diagnostics: Diagnostic[]): 
             const tt = checkExpr(expr.then, env, diagnostics);
             const et = checkExpr(expr.else, env, diagnostics);
             if (tt === 'error' || et === 'error') return 'error';
-            if (tt === et) return tt;
-            if (tt === 'none') return et;
-            if (et === 'none') return tt;
-            if (isDatishType(tt) && isDatishType(et)) return 'datish';
+            const unified = unifyTypes(tt, et);
+            if (unified) return unified;
             diagnostics.push(error('type.branch-mismatch', `Conditional branches have different types (${tt} vs ${et})`, expr.span, { thenType: tt, elseType: et }));
             return 'error';
         }
@@ -136,6 +138,18 @@ export function checkExpr(expr: Expr, env: TypeEnv, diagnostics: Diagnostic[]): 
     }
 }
 
+/**
+ * The single type two alternatives settle on, or null when they do not meet.
+ * `none` is the missing-value type, so it takes the shape of the other side.
+ */
+function unifyTypes(a: StaticType, b: StaticType): StaticType | null {
+    if (a === b) return a;
+    if (a === 'none') return b;
+    if (b === 'none') return a;
+    if (isDatishType(a) && isDatishType(b)) return 'datish';
+    return null;
+}
+
 function checkBinary(
     expr: Expr & { kind: 'binary' },
     lt: StaticType,
@@ -152,6 +166,13 @@ function checkBinary(
         return lt === 'bool' && rt === 'bool'
             ? 'bool'
             : fail('type.logic-expects-bool', `'${op}' expects bool operands, got ${lt} and ${rt}`, { op, left: lt, right: rt });
+    }
+
+    // `a ?? b` yields whichever side survives, so both sides must land on one
+    // type — the same unification a conditional needs.
+    if (op === '??') {
+        return unifyTypes(lt, rt)
+            ?? fail('type.nullish-mismatch', `'??' sides have different types (${lt} vs ${rt})`, { left: lt, right: rt });
     }
 
     if (op === '*' || op === '/' || op === '%') {
@@ -205,32 +226,38 @@ function checkBinary(
  * read against each other: every entry here has a case there, and a member
  * that is missing from one is visible as a hole in the other.
  */
-interface MemberSig { params: StaticType[]; result: StaticType }
+interface MemberSig {
+    params: StaticType[];
+    /** Arguments that must be present. Positions beyond this are optional. */
+    minArgs: number;
+    result: StaticType;
+}
 
 const DATE_METHODS: Record<string, MemberSig> = {
-    format: { params: ['string'], result: 'string' },
-    weekday: { params: [], result: 'string' },
+    format: { params: ['string'], minArgs: 1, result: 'string' },
+    weekday: { params: [], minArgs: 0, result: 'string' },
 };
 
 const STRING_MEMBERS: Record<string, MemberSig> = {
-    length: { params: [], result: 'number' },
+    length: { params: [], minArgs: 0, result: 'number' },
 };
 
 const STRING_METHODS: Record<string, MemberSig> = {
-    includes: { params: ['string'], result: 'bool' },
-    startsWith: { params: ['string'], result: 'bool' },
-    endsWith: { params: ['string'], result: 'bool' },
-    indexOf: { params: ['string'], result: 'number' },
-    slice: { params: ['number', 'number'], result: 'string' },
-    padStart: { params: ['number', 'string'], result: 'string' },
-    replace: { params: ['string', 'string'], result: 'string' },
-    trim: { params: [], result: 'string' },
-    toUpperCase: { params: [], result: 'string' },
-    toLowerCase: { params: [], result: 'string' },
+    includes: { params: ['string'], minArgs: 1, result: 'bool' },
+    startsWith: { params: ['string'], minArgs: 1, result: 'bool' },
+    endsWith: { params: ['string'], minArgs: 1, result: 'bool' },
+    indexOf: { params: ['string'], minArgs: 1, result: 'number' },
+    slice: { params: ['number', 'number'], minArgs: 1, result: 'string' },
+    padStart: { params: ['number', 'string'], minArgs: 1, result: 'string' },
+    replace: { params: ['string', 'string'], minArgs: 2, result: 'string' },
+    replaceAll: { params: ['string', 'string'], minArgs: 2, result: 'string' },
+    trim: { params: [], minArgs: 0, result: 'string' },
+    toUpperCase: { params: [], minArgs: 0, result: 'string' },
+    toLowerCase: { params: [], minArgs: 0, result: 'string' },
 };
 
 const NUMBER_METHODS: Record<string, MemberSig> = {
-    toFixed: { params: ['number'], result: 'string' },
+    toFixed: { params: ['number'], minArgs: 1, result: 'string' },
 };
 
 export function memberSignature(receiver: StaticType, name: string, isMethod: boolean): MemberSig | null {

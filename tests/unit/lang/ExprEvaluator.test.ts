@@ -98,9 +98,9 @@ describe('ExprEvaluator', () => {
 
     it('computes next weekday strictly after the base', () => {
         // 2026-07-02 is a Thursday
-        expect(evaluate('next(thu)')).toEqual({ type: 'date', value: '2026-07-09' });
-        expect(evaluate('next(fri)')).toEqual({ type: 'date', value: '2026-07-03' });
-        expect(evaluate('next(mon, 2026-07-02)')).toEqual({ type: 'date', value: '2026-07-06' });
+        expect(evaluate('next("thu")')).toEqual({ type: 'date', value: '2026-07-09' });
+        expect(evaluate('next("fri")')).toEqual({ type: 'date', value: '2026-07-03' });
+        expect(evaluate('next("mon", 2026-07-02)')).toEqual({ type: 'date', value: '2026-07-06' });
     });
 
     it('computes grid occurrences (the engine behind every <interval>)', () => {
@@ -229,5 +229,27 @@ describe('ExprEvaluator', () => {
             expect(evaluate('tv.date.format(start, "MM/DD")', { start: { type: 'date', value: '2026-08-17' } }))
                 .toEqual({ type: 'string', value: '[MM/DD:2026-08-17]' });
         });
+    });
+    it('falls back with ?? only when the left side is none', () => {
+        expect(evaluate('time(2026-07-15) ?? 09:00')).toEqual({ type: 'time', value: '09:00' });
+        expect(evaluate('time(2026-07-15T14:30) ?? 09:00')).toEqual({ type: 'time', value: '14:30' });
+    });
+
+    it('names the weekday in the same seven identifiers everywhere', () => {
+        const props = { start: { type: 'date', value: '2026-07-02' } } as EvalContext['props'];
+        expect(evaluate('start.weekday()', props)).toEqual({ type: 'string', value: 'thu' });
+        expect(evaluate('start.weekday() == "thu"', props)).toEqual({ type: 'bool', value: true });
+    });
+
+    it('replaces the first occurrence, replaceAll every one', () => {
+        const props = { content: { type: 'string', value: 'a-a-a' } } as EvalContext['props'];
+        expect(evaluate('content.replace("a", "b")', props)).toEqual({ type: 'string', value: 'b-a-a' });
+        expect(evaluate('content.replaceAll("a", "b")', props)).toEqual({ type: 'string', value: 'b-b-b' });
+    });
+
+    it('counts length in the same units indexOf and slice use', () => {
+        const props = { content: { type: 'string', value: '\u{1F389}ab' } } as EvalContext['props'];
+        expect(evaluate('content.length', props)).toEqual({ type: 'number', value: 4 });
+        expect(evaluate('content.indexOf("a")', props)).toEqual({ type: 'number', value: 2 });
     });
 });

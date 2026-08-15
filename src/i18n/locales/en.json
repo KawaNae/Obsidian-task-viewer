@@ -707,7 +707,8 @@
       "unterminated-wikilink": "Unterminated wikilink",
       "unterminated-string": "Unterminated string",
       "unknown-unit": "Unknown duration unit '{{unit}}' (expected {{units}})",
-      "unexpected-char": "Unexpected character '{{char}}'"
+      "unexpected-char": "Unexpected character '{{char}}'",
+      "decimal-unsupported": "Decimal numbers are not supported yet ('{{text}}') — say it in a smaller unit"
     },
     "expr": {
       "expected-colon": "Expected ':' in conditional expression",
@@ -717,7 +718,11 @@
       "unexpected-eof": "Unexpected end of expression",
       "unknown-property": "Unknown property '{{name}}'",
       "file-needs-member": "Property 'file' requires a member (file.name)",
-      "unknown-ident": "Unknown identifier '{{name}}'"
+      "unknown-ident": "Unknown identifier '{{name}}'",
+      "expected-member": "Expected a property or method name after the dot",
+      "tv-needs-member": "'tv' requires a member (tv.date.format(...) / tv.file.name)",
+      "expected-call": "'{{name}}' is a function — call it",
+      "weekday-not-literal": "Weekdays are strings in expressions — write \"{{name}}\" (bare {{name}} is only for 'every {{name}}')"
     },
     "type": {
       "unknown-property": "Property '{{name}}' is not available here",
@@ -739,7 +744,12 @@
       "until-not-datish": "until() expects a date or datetime expression, got {{actual}}",
       "datetime-plus-time": "Adding a time to a {{left}} is ambiguous — truncate first: date(x) + 14:00",
       "move-target": "move() expects a wikilink or string target, got {{actual}}",
-      "use-name": "use() expects a block name as a string, got {{actual}}"
+      "use-name": "use() expects a block name as a string, got {{actual}}",
+      "unknown-member": "{{receiver}} has no member '{{name}}'",
+      "member-arity": "'{{name}}' takes {{expected}} argument(s), got {{actual}}",
+      "member-arg": "'{{name}}' expects {{expected}} for argument {{index}}, got {{actual}}",
+      "nullish-mismatch": "'??' sides have different types ({{left}} vs {{right}})",
+      "bad-weekday-name": "Expected a weekday name (sun, mon, tue, wed, thu, fri, sat), got '{{actual}}'"
     },
     "flow": {
       "unknown-head": "Unknown clause '{{head}}' — clauses start with every / + / at(...) / xN / until(...) / nochildren / use(...) / setContent|setStart|setStartTime|setEnd|setEndTime|setDue|setDueTime(...) / move(...)",

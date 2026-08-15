@@ -199,6 +199,9 @@ describe('FlowParser', () => {
             '+3d setStart(none)',
             'at(today + 3d * 2)',
             'at(today + (1d + 2d) * 3)',
+            'at(next("mon", start))',
+            '+3d setStartTime(time(start) ?? 09:00)',
+            'every mon setContent(content ?? "untitled")',
         ])('parse → serialize → parse is stable: %s', (src) => {
             const first = parseFlow(src);
             expect(first.program).not.toBeNull();
@@ -215,6 +218,14 @@ describe('FlowParser', () => {
                 .toBe('at(today + 1d * 2 + 3d)');
             expect(serializeFlow(parseFlow('at(today + (1d + 2d) * 3)').program!))
                 .toBe('at(today + (1d + 2d) * 3)');
+        });
+
+        it('prints ?? with the parentheses its precedence needs', () => {
+            // ?? は || より緩い。括弧が落ちると発火のたびに意味が変わる。
+            expect(serializeFlow(parseFlow('+3d setStartTime((time(start) ?? 09:00))').program!))
+                .toBe('+3d setStartTime(time(start) ?? 09:00)');
+            expect(serializeFlow(parseFlow('every mon setContent((content ?? "a") + "b")').program!))
+                .toBe('every mon setContent((content ?? "a") + "b")');
         });
 
         it('prints accepted variants in one canonical form', () => {
