@@ -1,5 +1,8 @@
 import { describe, it, expect } from 'vitest';
-import { checkGeneratedParentLine } from '../../../src/services/flow/GeneratedLineCheck';
+import {
+    checkGeneratedChildLine,
+    checkGeneratedParentLine,
+} from '../../../src/services/flow/GeneratedLineCheck';
 
 /**
  * What a generation block may not write on the line that becomes the next
@@ -102,5 +105,46 @@ describe('a generated parent line the engine corrects', () => {
 
     it('corrects an ordered-list task line too', () => {
         expect(ok('1. [x] 週報 第4回').line).toBe('1. [ ] 週報 第4回');
+    });
+});
+
+describe('a generated child line', () => {
+    const childOk = (line: string) => {
+        const result = checkGeneratedChildLine(line);
+        if (!result.ok) throw new Error(`expected a pass, got ${result.error.code}`);
+        return result;
+    };
+
+    it('passes an ordinary child', () => {
+        expect(childOk('- [ ] 資料集め').line).toBe('- [ ] 資料集め');
+    });
+
+    it('passes a child carrying its own command', () => {
+        // A template item that fires on its own is written this way, and the
+        // command belongs to the child rather than to the instance around it.
+        expect(childOk('- [ ] 経費 @2026-08-24 ==> every 1mo').warnings).toEqual([]);
+    });
+
+    it('passes a line that is not a checkbox', () => {
+        expect(childOk('- 参考: 先週の議事録').line).toBe('- 参考: 先週の議事録');
+    });
+
+    it('leaves a checked child as the block wrote it', () => {
+        // Nothing fires from a child, so a checked one starts no runaway.
+        // Correcting it would edit a body the engine does not normalize.
+        expect(childOk('- [x] 定型の確認').line).toBe('- [x] 定型の確認');
+    });
+
+    it('refuses a block id, the one fault it shares with the parent', () => {
+        const result = checkGeneratedChildLine('- [ ] 資料集め ^weekly-note');
+
+        expect(result.ok).toBe(false);
+        if (result.ok) return;
+        expect(result.error.code).toBe('gen.generated-block-id');
+        expect(result.error.params).toEqual({ blockId: 'weekly-note' });
+    });
+
+    it('drops indentation the caller left on the value', () => {
+        expect(childOk('\t- [ ] 資料集め ').line).toBe('- [ ] 資料集め');
     });
 });

@@ -89,3 +89,34 @@ export function checkGeneratedParentLine(raw: string): GeneratedLineCheck {
         ],
     };
 }
+
+/**
+ * Check one generated child line.
+ *
+ * Only the block id carries over from the parent's rules. A child may hold
+ * its own flow command, which is how a template item that fires on its own
+ * is written, and a child need not be a checkbox at all — a note bullet
+ * under a task is an ordinary thing to generate. The status is left as
+ * written for the same reason: a child that starts checked generates
+ * nothing, so there is no runaway to prevent, and correcting it would edit
+ * a block body the engine promises not to normalize.
+ *
+ * The id is the one shape that fails the same way it does on the parent.
+ * Every fire writes the same anchor again, and the index keeps one of the
+ * lines that claim it. The recurrence path drops the ids it copies; a block
+ * writes its lines afresh each time, so there is nothing to drop and the
+ * text has to be refused instead.
+ */
+export function checkGeneratedChildLine(raw: string): GeneratedLineCheck {
+    const line = raw.trim();
+    const { blockId } = TaskLineClassifier.extractBlockId(line);
+    if (blockId) {
+        return {
+            ok: false,
+            error: error('gen.generated-block-id',
+                `A generated line cannot carry a block id — every fire would write '^${blockId}' again`,
+                { start: 0, end: line.length }, { blockId }),
+        };
+    }
+    return { ok: true, line, warnings: [] };
+}
