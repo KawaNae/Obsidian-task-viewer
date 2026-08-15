@@ -722,6 +722,7 @@
       "expected-member": "Expected a property or method name after the dot",
       "tv-needs-member": "'tv' requires a member (tv.date.format(...) / tv.file.name)",
       "expected-call": "'{{name}}' is a function — call it",
+      "comparison-chain": "Comparisons do not chain — parenthesize what you mean: (a {{first}} b) {{second}} c",
       "nullish-mixed-with-logic": "'??' cannot be mixed with '||' or '&&' — parenthesize the one you mean",
       "weekday-not-literal": "Weekdays are strings in expressions — write \"{{name}}\" (bare {{name}} is only for 'every {{name}}')"
     },

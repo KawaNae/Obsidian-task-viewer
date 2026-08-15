@@ -1,4 +1,4 @@
-import type { Expr } from './ExprAst';
+import type { BinaryOp, Expr } from './ExprAst';
 import { valueToLiteral } from './Value';
 
 /**
@@ -37,9 +37,25 @@ function precOf(expr: Expr): number {
  * line the parser rejects, stopping the task from firing again.
  */
 function printOperand(parent: Expr & { kind: 'binary' }, child: Expr, prec: number): string {
-    const mixesLogic = parent.op === '??'
-        && child.kind === 'binary' && (child.op === '||' || child.op === '&&');
-    return mixesLogic ? `(${print(child, 0)})` : print(child, prec);
+    if (child.kind === 'binary' && mustParenthesize(parent.op, child.op)) {
+        return `(${print(child, 0)})`;
+    }
+    return print(child, prec);
+}
+
+/** Comparisons do not chain, so two of them can only have come from parentheses. */
+const NON_ASSOCIATIVE: ReadonlySet<string> = new Set(['==', '!=', '<', '<=', '>', '>=']);
+
+/**
+ * Boundaries where precedence does not decide the parentheses.
+ *
+ * Both cases are the same shape: the parser refuses to read the two operators
+ * next to each other, so a tree that has them nested can only have come from
+ * parentheses — and must be printed back with them, whatever the levels say.
+ */
+function mustParenthesize(parentOp: BinaryOp, childOp: BinaryOp): boolean {
+    if (parentOp === '??') return childOp === '||' || childOp === '&&';
+    return NON_ASSOCIATIVE.has(parentOp) && NON_ASSOCIATIVE.has(childOp);
 }
 
 function print(expr: Expr, parentPrec: number): string {

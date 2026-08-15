@@ -104,6 +104,12 @@ const COMPARISON_OPS: Partial<Record<Token['kind'], BinaryOp>> = {
     eq: '==', neq: '!=', lt: '<', lte: '<=', gt: '>', gte: '>=',
 };
 
+/**
+ * Comparisons do not chain: `a < b < c` reads as `(a < b) < c` in JS, which
+ * compares a bool with c and is never what anyone means. This level takes one
+ * operator and stops — and says so when a second one follows, rather than
+ * dropping the rest of the expression on the floor.
+ */
 function parseComparison(cursor: TokenCursor, diagnostics: Diagnostic[]): Expr | null {
     const left = parseAdditive(cursor, diagnostics);
     if (!left) return null;
@@ -112,7 +118,15 @@ function parseComparison(cursor: TokenCursor, diagnostics: Diagnostic[]): Expr |
     cursor.next();
     const right = parseAdditive(cursor, diagnostics);
     if (!right) return null;
-    return { kind: 'binary', op, left, right, span: spanBetween(left.span, right.span) };
+    const expr: Expr = { kind: 'binary', op, left, right, span: spanBetween(left.span, right.span) };
+    const chained = COMPARISON_OPS[cursor.peek().kind];
+    if (chained) {
+        diagnostics.push(error('expr.comparison-chain',
+            `Comparisons do not chain — parenthesize what you mean: (a ${op} b) ${chained} c`,
+            spanBetween(expr.span, tokenSpan(cursor.peek())), { first: op, second: chained }));
+        return null;
+    }
+    return expr;
 }
 
 function parseAdditive(cursor: TokenCursor, diagnostics: Diagnostic[]): Expr | null {
