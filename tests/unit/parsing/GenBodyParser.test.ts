@@ -13,11 +13,19 @@ describe('parseGenBody — depth', () => {
             '\t- [ ] 下書き',
         ]);
         expect(diagnostics).toEqual([]);
-        expect(parent).toEqual({ depth: 0, text: '- [ ] 週報 ${start}', line: 1 });
-        expect(children).toEqual([
+        expect(parent).toMatchObject({ depth: 0, text: '- [ ] 週報 ${start}', line: 1 });
+        expect(children).toMatchObject([
             { depth: 1, text: '- [ ] 資料集め', line: 2 },
             { depth: 1, text: '- [ ] 下書き', line: 3 },
         ]);
+        // 差し込みは読んだ時点で分けてある。位置は行頭からの絶対位置なので、
+        // エディタがそのまま下線を引ける
+        expect(parent!.parts.map(p => p.kind)).toEqual(['text', 'expr']);
+        const interpolation = parent!.parts[1];
+        expect(interpolation.kind === 'expr' && interpolation.expr).toMatchObject({ kind: 'prop', name: 'start' });
+        expect(interpolation.kind === 'expr' && interpolation.expr.span)
+            .toEqual({ start: '- [ ] 週報 ${'.length, end: '- [ ] 週報 ${start'.length });
+        expect(children[0].parts).toEqual([{ kind: 'text', text: '- [ ] 資料集め' }]);
     });
 
     it('counts a tab and four spaces as one level each', () => {

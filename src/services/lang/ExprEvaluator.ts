@@ -92,6 +92,13 @@ export function evalExpr(expr: Expr, ctx: EvalContext): Value {
             return obj.items[i.value] ?? { type: 'none' };
         }
 
+        case 'template': {
+            const text = expr.parts
+                .map(part => part.kind === 'text' ? part.text : valueToDisplay(evalExpr(part.expr, ctx)))
+                .join('');
+            return { type: 'string', value: text };
+        }
+
         case 'arrow':
             throw new EvalError('A function only means something as an argument to a list method', expr.span);
 

@@ -34,4 +34,11 @@ export type Expr =
      */
     | { kind: 'arrow'; params: string[]; body: Expr; span: Span }
     /** A name bound by an enclosing arrow parameter (block profile only). */
-    | { kind: 'var'; name: string; span: Span };
+    | { kind: 'var'; name: string; span: Span }
+    /** `` `第${n}回` `` — literal text with expressions spliced in. */
+    | { kind: 'template'; parts: InterpolationPart[]; span: Span };
+
+/** One piece of a template literal, or of a generation block's body line. */
+export type InterpolationPart =
+    | { kind: 'text'; text: string }
+    | { kind: 'expr'; expr: Expr; span: Span };

@@ -79,12 +79,18 @@ function print(expr: Expr, parentPrec: number): string {
             case 'method':
                 return `${print(expr.obj, myPrec)}${expr.optional ? '?.' : '.'}${expr.name}(${expr.args.map(a => print(a, 0)).join(', ')})`;
             case 'var': return expr.name;
+            case 'template':
+                // Block-only, like lists: a flow command joins with + and is
+                // the only surface whose printing has to read back.
+                return '`' + expr.parts
+                    .map(part => part.kind === 'text' ? part.text : '${' + print(part.expr, 0) + '}')
+                    .join('') + '`';
             case 'array': {
                 const items = expr.items.map(i => print(i, 0));
                 // `[[` opens a wikilink, which wins the longest match. A list
                 // whose first element is a list has to be written with the
                 // brackets apart, or it reads back as a link to nowhere.
-                const pad = items[0]?.startsWith('[') ? ' ' : '';
+                const pad = items.length > 0 && items[0].startsWith('[') ? ' ' : '';
                 return `[${pad}${items.join(', ')}${pad}]`;
             }
             case 'index': return `${print(expr.obj, myPrec)}${expr.optional ? '?.' : ''}[${print(expr.index, 0)}]`;
