@@ -1,4 +1,4 @@
-import type { BinaryOp, Expr } from './ExprAst';
+import { type BinaryOp, type Expr, isExprBody } from './ExprAst';
 import { fieldKeyLiteral, valueToLiteral } from './Value';
 
 /**
@@ -12,6 +12,10 @@ export function printExpr(expr: Expr): string {
 /** Precedence levels (higher binds tighter). */
 function precOf(expr: Expr): number {
     switch (expr.kind) {
+        // Looser than everything: an assignment is read only at the top of
+        // an interpolation or inside parentheses, so anywhere an operand or
+        // an argument expects one, the parentheses have to be printed.
+        case 'assign': return 0;
         case 'cond': return 1;
         // A function body runs to the end of the expression, so it must be
         // parenthesized anywhere an operand is expected.
@@ -73,14 +77,17 @@ function print(expr: Expr, parentPrec: number): string {
             case 'cond':
                 return `${print(expr.cond, myPrec + 1)} ? ${print(expr.then, myPrec)} : ${print(expr.else, myPrec)}`;
             case 'call':
-                return `${expr.fn}(${expr.args.map(a => print(a, 0)).join(', ')})`;
+                // Arguments print at level 1: everything except an assignment
+                // is untouched, and an assignment gets the parentheses the
+                // argument position needs to read it back.
+                return `${expr.fn}(${expr.args.map(a => print(a, 1)).join(', ')})`;
             case 'member':
                 return `${print(expr.obj, myPrec)}${expr.optional ? '?.' : '.'}${expr.name}`;
             case 'method':
-                return `${print(expr.obj, myPrec)}${expr.optional ? '?.' : '.'}${expr.name}(${expr.args.map(a => print(a, 0)).join(', ')})`;
+                return `${print(expr.obj, myPrec)}${expr.optional ? '?.' : '.'}${expr.name}(${expr.args.map(a => print(a, 1)).join(', ')})`;
             case 'var': return expr.name;
             case 'record':
-                return `{${expr.entries.map(e => `${fieldKeyLiteral(e.key)}: ${print(e.value, 0)}`).join(', ')}}`;
+                return `{${expr.entries.map(e => `${fieldKeyLiteral(e.key)}: ${print(e.value, 1)}`).join(', ')}}`;
             case 'spread': return `...${print(expr.arg, myPrec)}`;
             case 'template':
                 // Block-only, like lists: a flow command joins with + and is
@@ -94,18 +101,26 @@ function print(expr: Expr, parentPrec: number): string {
                         : '${' + print(part.expr, 0) + '}')
                     .join('') + '`';
             case 'array': {
-                const items = expr.items.map(i => print(i, 0));
+                const items = expr.items.map(i => print(i, 1));
                 // `[[` opens a wikilink, which wins the longest match. A list
                 // whose first element is a list has to be written with the
                 // brackets apart, or it reads back as a link to nowhere.
                 const pad = items.length > 0 && items[0].startsWith('[') ? ' ' : '';
                 return `[${pad}${items.join(', ')}${pad}]`;
             }
-            case 'index': return `${print(expr.obj, myPrec)}${expr.optional ? '?.' : ''}[${print(expr.index, 0)}]`;
+            case 'index': return `${print(expr.obj, myPrec)}${expr.optional ? '?.' : ''}[${print(expr.index, 1)}]`;
             case 'arrow':
                 // Always parenthesized: a single bare parameter would re-parse
-                // the same, but one form is easier to read back than two.
-                return `(${expr.params.join(', ')}) => ${print(expr.body, 0)}`;
+                // the same, but one form is easier to read back than two. A
+                // block body is verbatim-only source and never prints.
+                if (!isExprBody(expr.body)) {
+                    throw new Error('A block-bodied arrow has no canonical print — it lives in verbatim source only');
+                }
+                return `(${expr.params.join(', ')}) => ${print(expr.body, 1)}`;
+            case 'assign':
+                // Read back at the top of an interpolation, or inside the
+                // parentheses the precedence above forces everywhere else.
+                return `${expr.name} ${expr.op} ${print(expr.value, 0)}`;
         }
     })();
     return myPrec < parentPrec ? `(${body})` : body;

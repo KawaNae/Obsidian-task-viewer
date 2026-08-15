@@ -1,6 +1,7 @@
 import { type Diagnostic, type Span, error } from './Diagnostic';
 import { type BinaryOp, type Expr, FN_NAMES, type FnName, type InterpolationPart, type PropName } from './ExprAst';
 import { findInterpolationEnd, splitDurationText, tokenize } from './Lexer';
+import { parseArrowBlockBody } from './StmtParser';
 import { type Token, TokenCursor, tokenSpan } from './Token';
 import { weekdayFromName } from './Value';
 
@@ -10,15 +11,34 @@ const UNIT_KEYWORDS = ['week', 'month', 'year'] as const;
 const SIMPLE_PROPS = ['start', 'end', 'due', 'content', 'done', 'today'] as const;
 
 /**
- * Which surface an expression is being read for. One grammar, two profiles:
+ * Names refused in expression position, each with its way out. The design's
+ * exclusion list is worth having only if stepping on it explains itself —
+ * `new Date()` and `console.log` get named answers, not "unknown identifier".
+ */
+const REFUSED_EXPR_NAMES: Record<string, string> = {
+    new: "'new' is not in this language — dates come from today / start / tv.date.*",
+    Date: "'Date' is not in this language — the clock here is today, start, done and tv.date.*",
+    console: "'console' is not in this language — the reading view previews what a block generates",
+    function: "A function keyword is not in this language — write an arrow: x => ...",
+    await: "'await' is not in this language — evaluation is synchronous",
+    typeof: "'typeof' is not in this language",
+    delete: "'delete' is not in this language — values here are immutable",
+};
+
+/**
+ * Which surface an expression is being read for. One grammar, profiles apart:
  * a flow command is a single expression that has to print back to canonical
  * source, while a generation block is verbatim and may use the wider forms.
  *
  * Lists and functions are refused in the flow profile at the point they are
  * written, which both keeps the printer's vocabulary closed and puts the
  * diagnostic on the literal rather than on the whole clause.
+ *
+ * 'stmt' is the js section: everything 'block' reads, plus arrow functions
+ * with a block body. Assignments are read in both non-flow profiles — a
+ * `${n += 1}` in the body is the shape the cells design exists for.
  */
-export type ParseProfile = 'flow' | 'block';
+export type ParseProfile = 'flow' | 'block' | 'stmt';
 
 /**
  * Profile for the parse in progress. Set by {@link parseExpr} only —
@@ -42,10 +62,43 @@ export function parseExpr(cursor: TokenCursor, diagnostics: Diagnostic[], forPro
     const outer = profile;
     profile = forProfile;
     try {
-        return parseTernary(cursor, diagnostics);
+        return parseAssignment(cursor, diagnostics);
     } finally {
         profile = outer;
     }
+}
+
+/**
+ * `n = 1` / `n += 1` — looser than everything, right-associative, and an
+ * expression: it yields the new value. The flow profile refuses it where the
+ * `=` is written: a clause runs at schedule time, outside the block's
+ * document order, so it must not be a second way to write a cell.
+ *
+ * Only this level and the parenthesized-expression branch read assignments.
+ * An argument or a list item wanting one says it with parentheses, which is
+ * also what makes an intentional `if ((n = next))` visible.
+ */
+function parseAssignment(cursor: TokenCursor, diagnostics: Diagnostic[]): Expr | null {
+    const left = parseTernary(cursor, diagnostics);
+    if (!left) return null;
+    const t = cursor.peek();
+    const op = t.kind === 'assign' ? '=' : t.kind === 'pluseq' ? '+=' : t.kind === 'minuseq' ? '-=' : null;
+    if (!op) return left;
+    if (profile === 'flow') {
+        diagnostics.push(error('expr.assign-not-here',
+            'An assignment only means something inside a generation block — a flow clause cannot write a cell',
+            tokenSpan(t)));
+        return null;
+    }
+    cursor.next();
+    if (left.kind !== 'var') {
+        diagnostics.push(error('expr.assign-target',
+            'Only a variable can be assigned to', left.span));
+        return null;
+    }
+    const value = parseAssignment(cursor, diagnostics);
+    if (!value) return null;
+    return { kind: 'assign', op, name: left.name, nameSpan: left.span, value, span: spanBetween(left.span, value.span) };
 }
 
 function spanBetween(a: Span, b: Span): Span {
@@ -193,6 +246,7 @@ function parseMultiplicative(cursor: TokenCursor, diagnostics: Diagnostic[]): Ex
 }
 
 function parseUnary(cursor: TokenCursor, diagnostics: Diagnostic[]): Expr | null {
+    if (refuseIncrement(cursor, diagnostics)) return null;
     if (cursor.at('bang') || cursor.at('minus')) {
         const opToken = cursor.next();
         const operand = parseUnary(cursor, diagnostics);
@@ -218,6 +272,7 @@ function parsePostfix(cursor: TokenCursor, diagnostics: Diagnostic[]): Expr | nu
     let obj = parsePrimary(cursor, diagnostics);
     if (!obj) return null;
     for (;;) {
+        if (refuseIncrement(cursor, diagnostics)) return null;
         if (cursor.at('lbracket')) {
             const next = parseIndex(cursor, diagnostics, obj, false);
             if (!next) return null;
@@ -258,6 +313,22 @@ function parsePostfix(cursor: TokenCursor, diagnostics: Diagnostic[]): Expr | nu
             span: spanBetween(obj.span, tokenSpan(nameToken)),
         };
     }
+}
+
+/**
+ * `++` and `--` are lexed but never parsed. Postfix `n++` returns the old
+ * value and then updates, so `第${n++}回` would splice one number and write
+ * back another — the off-by-one the cells design exists to prevent. One
+ * diagnostic covers the prefix and postfix positions.
+ */
+function refuseIncrement(cursor: TokenCursor, diagnostics: Diagnostic[]): boolean {
+    if (!cursor.at('plusplus') && !cursor.at('minusminus')) return false;
+    const t = cursor.next();
+    const fix = t.text === '++' ? '+= 1' : '-= 1';
+    diagnostics.push(error('expr.increment-not-here',
+        `'${t.text}' is not in this language — write '${fix}', which returns the new value`,
+        tokenSpan(t), { op: t.text, fix }));
+    return true;
 }
 
 /** `xs[i]`. Cursor sits on '['. */
@@ -339,7 +410,10 @@ function parsePrimary(cursor: TokenCursor, diagnostics: Diagnostic[]): Expr | nu
         }
         case 'lparen': {
             cursor.next();
-            const inner = parseTernary(cursor, diagnostics);
+            // Assignments parse inside parentheses — `(n = next)` is the
+            // written-out way to mean one where a bare `=` would be refused
+            // or warned, the same convention JS linters teach.
+            const inner = parseAssignment(cursor, diagnostics);
             if (!inner) return null;
             if (!cursor.tryEat('rparen')) {
                 diagnostics.push(error('expr.expected-rparen', "Expected ')'", tokenSpan(cursor.peek())));
@@ -352,6 +426,12 @@ function parsePrimary(cursor: TokenCursor, diagnostics: Diagnostic[]): Expr | nu
         default:
             if (token.kind === 'eof') {
                 diagnostics.push(error('expr.unexpected-eof', 'Unexpected end of expression', span));
+            } else if (token.kind === 'newline') {
+                // Only the statement profile keeps newlines, so this is a
+                // statement broken across lines with every bracket closed.
+                diagnostics.push(error('stmt.unexpected-line-break',
+                    'The statement ended at the line break above — an open ( or [ is what carries one across lines',
+                    span));
             } else {
                 diagnostics.push(error('expr.unexpected-token', `Unexpected token '${token.text}'`, span, { token: token.text }));
             }
@@ -410,6 +490,9 @@ function parseRecordLiteral(cursor: TokenCursor, diagnostics: Diagnostic[]): Exp
         return null;
     }
     const entries: { key: string; value: Expr }[] = [];
+    // The lexer cannot tell a record's braces from a block's, so the record
+    // skips its own newlines: `{a: 1,\n b: 2}` is one literal, not two lines.
+    cursor.skipNewlines();
     if (!cursor.at('rbrace')) {
         for (;;) {
             const keyToken = cursor.peek();
@@ -428,7 +511,8 @@ function parseRecordLiteral(cursor: TokenCursor, diagnostics: Diagnostic[]): Exp
             const value = parseTernary(cursor, diagnostics);
             if (!value) return null;
             entries.push({ key: keyToken.text, value });
-            if (cursor.tryEat('comma')) continue;
+            cursor.skipNewlines();
+            if (cursor.tryEat('comma')) { cursor.skipNewlines(); continue; }
             break;
         }
     }
@@ -493,6 +577,14 @@ function parseArrow(cursor: TokenCursor, diagnostics: Diagnostic[]): Expr | null
         }
     }
     cursor.next(); // '=>'
+    // `x => { ... }` — a block body, read as statements. Statement profile
+    // only: the expression surfaces have no statements to hold, and there a
+    // `{` after the arrow keeps meaning a record, as it always has.
+    if (profile === 'stmt' && cursor.at('lbrace')) {
+        const blockBody = parseArrowBlockBody(cursor, diagnostics);
+        if (!blockBody) return null;
+        return { kind: 'arrow', params, body: blockBody, span: spanBetween(tokenSpan(start), blockBody.span) };
+    }
     const body = parseTernary(cursor, diagnostics);
     if (!body) return null;
     return { kind: 'arrow', params, body, span: spanBetween(tokenSpan(start), body.span) };
@@ -513,8 +605,10 @@ function parseIdentLed(cursor: TokenCursor, diagnostics: Diagnostic[]): Expr | n
         return { kind: 'lit', value: { type: 'bool', value: name === 'true' }, span };
     }
 
-    // None literal
-    if (name === 'none') {
+    // None literal. `undefined` and `null` are the JS spellings of the same
+    // missing value, accepted so what an LLM writes as plain JS works; the
+    // canonical print is `none` either way.
+    if (name === 'none' || name === 'undefined' || name === 'null') {
         return { kind: 'lit', value: { type: 'none' }, span };
     }
 
@@ -553,10 +647,19 @@ function parseIdentLed(cursor: TokenCursor, diagnostics: Diagnostic[]): Expr | n
         return null;
     }
 
+    // Names a JS habit reaches for and this language refuses on purpose —
+    // said here with the way out, not left to trip the evaluator as an
+    // unknown binding.
+    const refused = REFUSED_EXPR_NAMES[name];
+    if (refused && profile !== 'flow') {
+        diagnostics.push(error('expr.not-in-language', refused, span, { name }));
+        return null;
+    }
+
     // Inside a block, a name the built-ins do not claim is a binding — today
-    // an arrow parameter, later a cell. The built-ins resolve first, which is
-    // what makes those names effectively reserved.
-    if (profile === 'block') {
+    // an arrow parameter or a local, later a cell. The built-ins resolve
+    // first, which is what makes those names effectively reserved.
+    if (profile !== 'flow') {
         return { kind: 'var', name, span };
     }
 

@@ -1,5 +1,5 @@
 import type { Span } from './Diagnostic';
-import type { Expr, PropName } from './ExprAst';
+import { type Expr, type PropName, isExprBody } from './ExprAst';
 import { type EvalRuntime, FnCallError, callFn } from './functions';
 import {
     type DurUnit, type Value, WEEKDAY_NAMES, addDuration, compareValues, isDatishValue, parseDateStr,
@@ -31,6 +31,12 @@ export function evalExpr(expr: Expr, ctx: EvalContext): Value {
     switch (expr.kind) {
         case 'lit':
             return expr.value;
+
+        case 'assign':
+            // Lands with the js section's evaluator, which owns the mutable
+            // environment an assignment writes. Until then it fails the
+            // evaluation — two-phase, so nothing is half-written.
+            throw new EvalError('An assignment is not available here yet', expr.span);
 
         case 'prop': {
             const v = ctx.props[expr.name];
@@ -172,6 +178,10 @@ function callListMember(
     /** Apply the function argument to one element. */
     const apply = (fnExpr: Expr, values: Value[]): Value => {
         if (fnExpr.kind !== 'arrow') throw new EvalError(`'${name}' expects a function`, fnExpr.span);
+        if (!isExprBody(fnExpr.body)) {
+            // Runs on the statement evaluator, wired with the js section.
+            throw new EvalError('A function with a { } body is not available here yet', fnExpr.span);
+        }
         const bound = new Map(ctx.vars ?? []);
         fnExpr.params.forEach((p, i) => bound.set(p, values[i] ?? { type: 'none' }));
         return evalExpr(fnExpr.body, { ...ctx, vars: bound });

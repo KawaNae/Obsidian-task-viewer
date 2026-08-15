@@ -28,13 +28,26 @@ export function tokenize(src: string, base = 0): LexResult {
     const rawDiagnostics: Diagnostic[] = [];
     let i = 0;
 
+    // Open ( and [ carry a statement across a line break, so a newline
+    // inside them is plain whitespace and never becomes a token. Braces are
+    // deliberately not counted: a block statement's braces hold statement
+    // boundaries, and a record literal skips its own newlines at the parser.
+    let bracketDepth = 0;
+
     const push = (kind: TokenKind, text: string, start: number, end: number) => {
+        if (kind === 'lparen' || kind === 'lbracket') bracketDepth++;
+        if ((kind === 'rparen' || kind === 'rbracket') && bracketDepth > 0) bracketDepth--;
         tokens.push({ kind, text, start: start + base, end: end + base });
     };
 
     while (i < src.length) {
         const ch = src[i];
 
+        if (ch === '\n') {
+            if (bracketDepth === 0) push('newline', '\n', i, i + 1);
+            i++;
+            continue;
+        }
         if (/\s/.test(ch)) {
             i++;
             continue;
@@ -245,7 +258,11 @@ export function tokenize(src: string, base = 0): LexResult {
             two === '>=' ? 'gte' :
             two === '?.' ? 'qdot' :
             two === '??' ? 'qq' :
-            two === '=>' ? 'arrow' : undefined;
+            two === '=>' ? 'arrow' :
+            two === '+=' ? 'pluseq' :
+            two === '-=' ? 'minuseq' :
+            two === '++' ? 'plusplus' :
+            two === '--' ? 'minusminus' : undefined;
         if (twoKind) {
             push(twoKind, two, i, i + 2);
             i += 2;
@@ -271,7 +288,9 @@ export function tokenize(src: string, base = 0): LexResult {
             ch === '!' ? 'bang' :
             ch === '?' ? 'question' :
             ch === '<' ? 'lt' :
-            ch === '>' ? 'gt' : undefined;
+            ch === '>' ? 'gt' :
+            ch === '=' ? 'assign' :
+            ch === ';' ? 'semicolon' : undefined;
         if (oneKind) {
             push(oneKind, ch, i, i + 1);
             i++;

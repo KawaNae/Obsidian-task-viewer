@@ -1,4 +1,5 @@
 import type { Span } from './Diagnostic';
+import type { Stmt } from './StmtAst';
 import type { Value } from './Value';
 
 export const PROP_NAMES = ['start', 'end', 'due', 'content', 'done', 'today', 'file.name'] as const;
@@ -36,9 +37,18 @@ export type Expr =
     | { kind: 'index'; obj: Expr; index: Expr; optional: boolean; span: Span }
     /**
      * `x => x.length` — only meaningful as an argument to a list method, which
-     * is what binds its parameters. Never a value of its own.
+     * is what binds its parameters. Never a value of its own. A block body
+     * (`x => { ... return y }`) is read in the statement profile only.
      */
-    | { kind: 'arrow'; params: string[]; body: Expr; span: Span }
+    | { kind: 'arrow'; params: string[]; body: Expr | ArrowBlockBody; span: Span }
+    /**
+     * `n = n + 1` / `n += 1` — an assignment, and it is an expression: it
+     * yields the new value, which is what lets `${n += 1}` splice and update
+     * in one place. Only the statement profile reads it; the flow profile
+     * refuses it where it is written (a clause runs at schedule time, outside
+     * the block's document order).
+     */
+    | { kind: 'assign'; op: '=' | '+=' | '-='; name: string; nameSpan: Span; value: Expr; span: Span }
     /** A name bound by an enclosing arrow parameter (block profile only). */
     | { kind: 'var'; name: string; span: Span }
     /** `{ mon: "燃えるゴミ" }` — a record literal. Order is kept as written. */
@@ -52,3 +62,15 @@ export type Expr =
 export type InterpolationPart =
     | { kind: 'text'; text: string }
     | { kind: 'expr'; expr: Expr; span: Span };
+
+/** An arrow function's `{ ... }` body: statements, ended by `return`. */
+export interface ArrowBlockBody {
+    kind: 'block-body';
+    body: Stmt[];
+    span: Span;
+}
+
+/** The body shape everything before the js section knew: a single expression. */
+export function isExprBody(body: Expr | ArrowBlockBody): body is Expr {
+    return body.kind !== 'block-body';
+}

@@ -1,5 +1,5 @@
 import { type Diagnostic, type Span, error } from './Diagnostic';
-import type { Expr, PropName } from './ExprAst';
+import { type Expr, type PropName, isExprBody } from './ExprAst';
 import {
     type ArrayType, FN_SIGS, type StaticType, arrayOf, isArrayType, isAssignable, isDatishType,
     type RecordType, isRecordType, recordFieldType, recordOf, sameType, typeName,
@@ -35,6 +35,12 @@ export function checkExpr(expr: Expr, env: TypeEnv, diagnostics: Diagnostic[], v
     switch (expr.kind) {
         case 'lit':
             return literalType(expr.value);
+
+        case 'assign':
+            // The scope-aware pass (undeclared names, const, cells) is the
+            // statement checker's, wired with the js section. Here the
+            // assignment has the type of its value, which is what it yields.
+            return checkExpr(expr.value, env, diagnostics, vars);
 
         case 'prop': {
             const t = env[expr.name];
@@ -439,6 +445,9 @@ function checkCallback(
         }
         bound.set(p, paramTypes[i]);
     });
+    // A block body carries statements, whose checking arrives with the js
+    // section's own pass. Until it is wired, its result is simply unknown.
+    if (!isExprBody(arg.body)) return 'none';
     return checkExpr(arg.body, env, diagnostics, bound);
 }
 
