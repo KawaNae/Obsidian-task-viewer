@@ -18,6 +18,7 @@ import { DateUtils as CoreDateUtils } from '../../utils/DateUtils';
 import { toDisplayTask } from '../display/DisplayTaskConverter';
 import { getTaskDateRange } from '../display/VisualDateRange';
 import { TaskParser } from '../parsing/TaskParser';
+import type { GenBlock } from '../parsing/gen/GenBlockCollector';
 import { HeadingInserter } from '../../utils/HeadingInserter';
 import { FileOperations } from '../persistence/utils/FileOperations';
 import { logError, logInfo, logWarn } from '../../log/log';
@@ -332,6 +333,14 @@ export class TaskIndex {
 
     getTask(taskId: string): Task | undefined {
         return this.store.getTask(taskId);
+    }
+
+    /**
+     * A generation block by name. Resolution is file-local: a command
+     * reaches only the blocks of the file it is written in.
+     */
+    getGenBlock(filePath: string, name: string): GenBlock | undefined {
+        return this.store.getGenBlock(filePath, name);
     }
 
     getTaskByFileLine(filePath: string, line: number): Task | undefined {

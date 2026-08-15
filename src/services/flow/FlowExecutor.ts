@@ -8,7 +8,7 @@ import type { TaskRepository } from '../persistence/TaskRepository';
 import { EvalError } from '../lang/ExprEvaluator';
 import type { FlowEffect } from './FlowEffects';
 import { flowSource } from './FlowSegments';
-import { type FlowPlanDeps, planFlow } from './FlowPlanner';
+import { type FlowPlanDeps, GenerationError, planFlow } from './FlowPlanner';
 import { canTriggerFlow } from './FlowTrigger';
 import { createMomentEvalHost } from './MomentEvalHost';
 
@@ -99,10 +99,11 @@ export class FlowExecutor {
         try {
             effects = planFlow(task, program, this.buildDeps());
         } catch (err) {
-            if (err instanceof EvalError) {
-                // Runtime expression failure (e.g. unset property): do not
-                // fire and do not consume — the command stays for the user
-                // to fix, and the diagnostic explains why.
+            if (err instanceof EvalError || err instanceof GenerationError) {
+                // Runtime expression failure (e.g. unset property), or a
+                // block that cannot produce the next instance: do not fire
+                // and do not consume — the command stays for the user to
+                // fix, and the message explains why.
                 logWarn(`[FlowExecutor] Flow did not fire for ${task.id}: ${err.message}`);
                 return false;
             }
@@ -130,6 +131,13 @@ export class FlowExecutor {
                 await this.repository.insertRecurrenceForTask(task, line, effect.copyChildren, flowLines);
                 return;
             }
+            case 'create-generated':
+                // Finished lines: the planner composed the parent, checked
+                // it and normalized its status, so there is nothing to
+                // format here.
+                await this.repository.insertGeneratedInstance(
+                    task, effect.parentLine, effect.flowLines, effect.children);
+                return;
             case 'archive-to': {
                 const line = TaskParser.format(effect.archivedTask);
                 await this.repository.appendTaskWithChildren(effect.destPath, line, task);
@@ -157,6 +165,7 @@ export class FlowExecutor {
             },
             weekStartDay: this.getSettings().weekStartDay,
             host: this.host,
+            getBlock: (filePath, name) => this.taskIndex.getGenBlock(filePath, name),
         };
     }
 }

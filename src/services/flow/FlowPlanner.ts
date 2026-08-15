@@ -6,8 +6,14 @@ import type { PropName } from '../lang/ExprAst';
 import { type EvalContext, EvalError, evalExpr } from '../lang/ExprEvaluator';
 import type { EvalHost } from '../lang/functions';
 import { type Value, isDatishValue, parseDateStr, valueToDisplay } from '../lang/Value';
+import type { GenBlock } from '../parsing/gen/GenBlockCollector';
+import { parseGenBody } from '../parsing/gen/GenBodyParser';
+import { renderGenBody } from '../parsing/gen/GenBodyRenderer';
+import { TaskParser } from '../parsing/TaskParser';
+import type { GeneratedChild } from '../persistence/TaskCloner';
 import { type FlowProgram, SET_FIELD_ORDER } from './FlowAst';
 import type { FlowEffect } from './FlowEffects';
+import { checkGeneratedChildLine, checkGeneratedParentLine } from './GeneratedLineCheck';
 import { flowRaws, joinSegments } from './FlowSegments';
 import { serializeFlowLines } from './FlowSerializer';
 import { type DateAnchor, type NextOccurrence, nextOccurrence } from './ScheduleEngine';
@@ -19,6 +25,31 @@ export interface FlowPlanDeps {
     now: { date: string; time: string };
     weekStartDay: 0 | 1;
     host: EvalHost;
+    /**
+     * A generation block by name, resolved within the firing task's own file.
+     *
+     * Injected rather than read here, so the planner stays pure. It has to
+     * happen during planning all the same: the name is an expression, so it
+     * is not known until the plan runs, and a name that answers to nothing
+     * must stop the fire — which is only sayable by emitting no effects.
+     */
+    getBlock: (filePath: string, name: string) => GenBlock | undefined;
+}
+
+/**
+ * A fire that cannot produce its next instance.
+ *
+ * Thrown, and caught where EvalError is caught, because both mean the same
+ * thing downstream: write nothing, leave the command in place. It is a type
+ * of its own for the message — a name that answers to no block is not an
+ * expression that failed, and the difference is what the reader has to act
+ * on.
+ */
+export class GenerationError extends Error {
+    constructor(message: string) {
+        super(message);
+        this.name = 'GenerationError';
+    }
 }
 
 /**
@@ -62,7 +93,13 @@ export function planFlow(task: Task, program: FlowProgram, deps: FlowPlanDeps): 
             const newTask = buildNextTask(task, anchor, next);
             applySet(newTask, program, deps);
             attachNextFlow(newTask, program, task.flow!);
-            effects.push({ kind: 'create-next', newTask, copyChildren: !program.nochildren });
+            // The block is only consulted when something is generated. A
+            // fire that has run out of until or telomere writes no next
+            // instance, and holding its command hostage to a name it no
+            // longer needs would leave expired commands on the page forever.
+            effects.push(program.use
+                ? planGenerated(task, newTask, program, preCtx, deps)
+                : { kind: 'create-next', newTask, copyChildren: !program.nochildren });
         }
     }
 
@@ -77,6 +114,93 @@ export function planFlow(task: Task, program: FlowProgram, deps: FlowPlanDeps): 
     }
 
     return effects;
+}
+
+// ---------------------------------------------------------------------------
+// Generation
+// ---------------------------------------------------------------------------
+
+/**
+ * Turn a block into the lines of the next instance.
+ *
+ * The order is load-bearing. The block's parent line is checked while it is
+ * still the text the block wrote; the flow clause goes on afterwards.
+ * Reversed, the check would meet the `==>` the engine had just added and
+ * refuse the instance for carrying a command nobody wrote.
+ *
+ * Everything that can go wrong here throws, and a throw means the task does
+ * not fire and does not consume its command. That is only honest while
+ * nothing has been written, which is why all of it happens before the effect
+ * exists.
+ */
+function planGenerated(
+    task: Task,
+    newTask: Task,
+    program: FlowProgram,
+    preCtx: EvalContext,
+    deps: FlowPlanDeps,
+): FlowEffect {
+    const name = evalExpr(program.use!.name, preCtx);
+    if (name.type !== 'string') {
+        throw new GenerationError(`use() names a block with a string, got ${name.type}`);
+    }
+
+    const block = deps.getBlock(task.file, name.value);
+    if (!block) {
+        throw new GenerationError(`No generation block named '${name.value}' in this file`);
+    }
+
+    const body = parseGenBody(block.body, block.openLine + 1);
+    const broken = body.diagnostics.find(d => d.severity === 'error');
+    if (broken) {
+        // The block cannot describe one instance, so there is nothing to
+        // generate from it. Firing anyway would write whatever survived the
+        // damage and consume the command that produced it.
+        throw new GenerationError(`The block '${name.value}' cannot generate: ${broken.message}`);
+    }
+
+    // Dates come from the new instance and content from the one that fired,
+    // which is what the post-shift context already holds — the same snapshot
+    // the setter clauses evaluate against.
+    const rendered = renderGenBody(body, buildEvalContext(newTask, deps));
+    if (!rendered.ok) throw new GenerationError(rendered.error.message);
+
+    return {
+        kind: 'create-generated',
+        parentLine: composeParentLine(rendered.parentText, newTask),
+        flowLines: (newTask.flow?.childSegments ?? []).map(s => s.raw),
+        children: rendered.children.map(child => checkedChild(child)),
+    };
+}
+
+/**
+ * The task line of the new instance: what the block wrote, or the shifted
+ * task when the block wrote no parent line.
+ *
+ * Both roads end in one string so the write layer never learns that a block
+ * can leave the parent out. The clause is spelled the way format() spells
+ * it, since these are two ways of writing the same line.
+ */
+function composeParentLine(parentText: string | null, newTask: Task): string {
+    if (parentText === null) return TaskParser.format(newTask).trim();
+
+    const checked = checkGeneratedParentLine(parentText);
+    if (!checked.ok) throw new GenerationError(checked.error.message);
+    return checked.line + (newTask.flow?.raw ? ` ==> ${newTask.flow.raw}` : '');
+}
+
+function checkedChild(child: { depth: number; body: string }): GeneratedChild {
+    const checked = checkGeneratedChildLine(child.body);
+    if (!checked.ok) throw new GenerationError(checked.error.message);
+    // A net, not a rule: the renderer splits multi-line values into lines of
+    // their own, so one arriving here would mean that promise broke. The
+    // write layer treats an element as a line and would emit the rest of it
+    // without indentation, which reads as a different tree than the one the
+    // block described.
+    if (checked.line.includes('\n')) {
+        throw new GenerationError('A generated line cannot contain a line break');
+    }
+    return { depth: child.depth, body: checked.line };
 }
 
 // ---------------------------------------------------------------------------

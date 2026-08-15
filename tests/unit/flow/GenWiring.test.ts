@@ -2,7 +2,7 @@ import { describe, it, expect, vi } from 'vitest';
 import { TFile } from 'obsidian';
 import { FlowExecutor } from '../../../src/services/flow/FlowExecutor';
 import { parseFlowSegments, singleLineFlow } from '../../../src/services/flow/FlowSegments';
-import { collectGenBlocks } from '../../../src/services/parsing/gen/GenBlockCollector';
+import { collectGenBlocks, type GenBlock } from '../../../src/services/parsing/gen/GenBlockCollector';
 import { parseGenBody } from '../../../src/services/parsing/gen/GenBodyParser';
 import { TaskCloner, type GeneratedChild } from '../../../src/services/persistence/TaskCloner';
 import { FileOperations } from '../../../src/services/persistence/utils/FileOperations';
@@ -44,12 +44,21 @@ function makeRepository() {
 
 const app = { vault: { getAbstractFileByPath: () => null } };
 
-function makeExecutor(repository: ReturnType<typeof makeRepository>) {
+/** A block as the scan would have collected it, from its body lines. */
+function block(name: string, body: string[]): GenBlock {
+    return { name, body, openLine: 10, closeLine: 10 + body.length + 1 };
+}
+
+function makeExecutor(
+    repository: ReturnType<typeof makeRepository>,
+    blocks: Record<string, GenBlock> = {},
+) {
     const taskIndex = {
         waitForScan: vi.fn().mockResolvedValue(undefined),
         resolveTask: vi.fn((t: Task) => t),
         requestScan: vi.fn().mockResolvedValue(undefined),
         notifyImmediate: vi.fn(),
+        getGenBlock: vi.fn((_file: string, name: string) => blocks[name]),
     };
     const executor = new FlowExecutor(
         repository as unknown as TaskRepository,
@@ -75,49 +84,70 @@ async function flush() {
     await new Promise(resolve => setTimeout(resolve, 0));
 }
 
-describe('a use() flow today: the block is named but never read', () => {
-    it('fires down the recurrence path, not the generated one', async () => {
-        // FLIPS: the wiring routes a resolvable use() to insertGeneratedInstance.
+const WEEKLY = block('週報', [
+    '- [ ] 週報 第4回 @${start}',
+    '\t- [ ] 資料集め',
+    '\t\t- [ ] 先週分',
+]);
+
+describe('a use() flow writes what its block describes', () => {
+    it('takes the generated path instead of the recurrence one', async () => {
         const repository = makeRepository();
-        const { executor } = makeExecutor(repository);
+        const { executor } = makeExecutor(repository, { 週報: WEEKLY });
 
         await executor.handleTaskCompletion(firedTask('every mon use("週報")'));
         await flush();
 
-        expect(repository.insertRecurrenceForTask).toHaveBeenCalledTimes(1);
-        expect(repository.insertGeneratedInstance).not.toHaveBeenCalled();
+        expect(repository.insertGeneratedInstance).toHaveBeenCalledTimes(1);
+        expect(repository.insertRecurrenceForTask).not.toHaveBeenCalled();
     });
 
-    it('copies the live child lines it is meant to stop copying', async () => {
-        // FLIPS: the block writes the children, so the live ones stay put.
+    it('leaves the live child lines where they are', async () => {
+        // Nothing in this path carries them: the block says what the next
+        // instance holds, and the records stay with the instance that made
+        // them. The recurrence path is what used to copy them.
         const repository = makeRepository();
-        const { executor } = makeExecutor(repository);
+        const { executor } = makeExecutor(repository, { 週報: WEEKLY });
 
         await executor.handleTaskCompletion(firedTask('every mon use("週報")'));
         await flush();
 
-        const [, , copyChildren] = repository.insertRecurrenceForTask.mock.calls[0];
-        expect(copyChildren).toBe(true);
+        const [, , , children] = repository.insertGeneratedInstance.mock.calls[0];
+        expect(children).toEqual([
+            { depth: 1, body: '- [ ] 資料集め' },
+            { depth: 2, body: '- [ ] 先週分' },
+        ]);
     });
 
     it('carries the clause on to the next instance', async () => {
-        // HOLDS: the generated line must keep naming its block, or the chain
+        // The generated line must keep naming its block, or the chain
         // generates once and then falls back to a plain recurrence.
         const repository = makeRepository();
-        const { executor } = makeExecutor(repository);
+        const { executor } = makeExecutor(repository, { 週報: WEEKLY });
 
         await executor.handleTaskCompletion(firedTask('every mon use("週報")'));
         await flush();
 
-        const [, line] = repository.insertRecurrenceForTask.mock.calls[0];
-        expect(line).toContain('==> every mon use("週報")');
+        const [, parentLine] = repository.insertGeneratedInstance.mock.calls[0];
+        expect(parentLine).toContain('==> every mon use("週報")');
+    });
+
+    it('fills the interpolation with the new instance\'s own date', async () => {
+        const repository = makeRepository();
+        const { executor } = makeExecutor(repository, { 週報: WEEKLY });
+
+        await executor.handleTaskCompletion(firedTask('every mon use("週報")'));
+        await flush();
+
+        const [, parentLine] = repository.insertGeneratedInstance.mock.calls[0];
+        expect(parentLine).toContain('@2026-08-24');
     });
 
     it('keeps the clause on the line the user wrote it on', async () => {
-        // HOLDS: line-level canonical inheritance decides where a clause
-        // lands, and use() is not exempt from it.
+        // Line-level canonical inheritance decides where a clause lands, and
+        // use() is not exempt from it.
         const repository = makeRepository();
-        const { executor } = makeExecutor(repository);
+        const { executor } = makeExecutor(repository, { 週報: WEEKLY });
         const raws = ['every mon', 'use("週報")'];
         const { program, diagnostics } = parseFlowSegments(raws);
 
@@ -131,21 +161,98 @@ describe('a use() flow today: the block is named but never read', () => {
         }));
         await flush();
 
-        const [, line, , flowLines] = repository.insertRecurrenceForTask.mock.calls[0];
-        expect(line).not.toContain('use(');
+        const [, parentLine, flowLines] = repository.insertGeneratedInstance.mock.calls[0];
+        expect(parentLine).not.toContain('use(');
         expect(flowLines).toEqual(['use("週報")']);
     });
 
-    it('fires and consumes even when no block answers to the name', async () => {
-        // FLIPS: a name that resolves to nothing must not fire and must not
-        // consume — the command has to survive for the user to fix the name.
+    it('builds the parent itself when the block writes only children', async () => {
+        // One payload shape, so the write layer never learns that a block
+        // can leave the parent out.
         const repository = makeRepository();
-        const { executor } = makeExecutor(repository);
+        const { executor } = makeExecutor(repository, {
+            朝: block('朝', ['\t- [ ] ストレッチ']),
+        });
 
-        await executor.handleTaskCompletion(firedTask('every mon use("存在しない")'));
+        await executor.handleTaskCompletion(firedTask('every mon use("朝")'));
         await flush();
 
-        expect(repository.insertRecurrenceForTask).toHaveBeenCalledTimes(1);
+        const [, parentLine, , children] = repository.insertGeneratedInstance.mock.calls[0];
+        expect(parentLine).toBe('- [ ] 週報 第3回 @2026-08-24 ==> every mon use("朝")');
+        expect(children).toEqual([{ depth: 1, body: '- [ ] ストレッチ' }]);
+    });
+
+    it('unchecks a parent line the block wrote as done', async () => {
+        // Otherwise the instance is complete the moment it lands and fires
+        // again on the next scan, for as long as the vault is open.
+        const repository = makeRepository();
+        const { executor } = makeExecutor(repository, {
+            週報: block('週報', ['- [x] 週報 @${start}']),
+        });
+
+        await executor.handleTaskCompletion(firedTask('every mon use("週報")'));
+        await flush();
+
+        const [, parentLine] = repository.insertGeneratedInstance.mock.calls[0];
+        expect(parentLine.startsWith('- [ ] ')).toBe(true);
+    });
+});
+
+describe('a fire that cannot generate writes nothing and keeps its command', () => {
+    const refuses = async (blocks: Record<string, GenBlock>, src = 'every mon use("週報")') => {
+        const repository = makeRepository();
+        const { executor } = makeExecutor(repository, blocks);
+
+        await executor.handleTaskCompletion(firedTask(src));
+        await flush();
+
+        expect(repository.insertGeneratedInstance).not.toHaveBeenCalled();
+        expect(repository.insertRecurrenceForTask).not.toHaveBeenCalled();
+        expect(repository.stripFlow).not.toHaveBeenCalled();
+        expect(repository.deleteTaskFromFile).not.toHaveBeenCalled();
+    };
+
+    it('when no block answers to the name', async () => {
+        await refuses({});
+    });
+
+    it('when the block writes a flow command of its own', async () => {
+        await refuses({ 週報: block('週報', ['- [ ] 週報 @${start} ==> every mon']) });
+    });
+
+    it('when the block writes a block id', async () => {
+        await refuses({ 週報: block('週報', ['- [ ] 週報 @${start} ^weekly']) });
+    });
+
+    it('when a generated child writes a block id', async () => {
+        await refuses({
+            週報: block('週報', ['- [ ] 週報 @${start}', '\t- [ ] 資料 ^weekly-note']),
+        });
+    });
+
+    it('when the block cannot describe one task', async () => {
+        await refuses({ 週報: block('週報', ['- [ ] 一つ目', '- [ ] 二つ目']) });
+    });
+
+    it('when an expression in the block fails', async () => {
+        // `end` is unset on the task that fired.
+        await refuses({ 週報: block('週報', ['- [ ] 週報 @${end}']) });
+    });
+});
+
+describe('a fire that generates nothing still consumes its command', () => {
+    it('does not hold the command hostage to a name it no longer needs', async () => {
+        // until has passed, so there is no next instance to write and the
+        // block is never consulted. Refusing here would leave expired
+        // commands on the page for good.
+        const repository = makeRepository();
+        const { executor } = makeExecutor(repository, {});
+
+        await executor.handleTaskCompletion(
+            firedTask('every mon until(2026-08-18) use("存在しない")'));
+        await flush();
+
+        expect(repository.insertGeneratedInstance).not.toHaveBeenCalled();
         expect(repository.stripFlow).toHaveBeenCalledTimes(1);
     });
 });
