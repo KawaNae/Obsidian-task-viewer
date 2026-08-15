@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { Expr } from '../../../src/services/lang/ExprAst';
+import { FLOW_TYPE_ENV, checkExpr } from '../../../src/services/lang/ExprChecker';
 import { type ParseProfile, parseExpr } from '../../../src/services/lang/ExprParser';
 import { printExpr } from '../../../src/services/lang/ExprPrinter';
 import { tokenize } from '../../../src/services/lang/Lexer';
@@ -207,5 +208,53 @@ describe('expression round-trip sweep', () => {
             }
         }
         expect(dropped).toEqual([]);
+    });
+});
+
+/**
+ * Block-only shapes, written with operands a flow command accepts, so that the
+ * only thing able to refuse them is the gate itself. An unknown name would
+ * refuse them for the wrong reason and the check would pass on its own.
+ *
+ * The gate is what keeps the printer's vocabulary closed: a shape that becomes
+ * expressible in a flow command also becomes something the printer has to
+ * write back readably on every firing.
+ */
+const FLOW_GATE_SOURCES = [
+    '[1, 2]',
+    '[1, 2][0]',
+    '[content, content]',
+    '[1, 2] + 3',
+    '[ [1], [2] ]',
+    '["a"].map(x => x)',
+    '["a"].filter(x => x.length > 0).join(", ")',
+    'x => x',
+    '(a, b) => a',
+    'content[0]',
+];
+
+describe('the flow profile cannot express a block shape', () => {
+    it('refuses every block-only shape, by the parser or the checker', () => {
+        const accepted: string[] = [];
+        for (const src of FLOW_GATE_SOURCES) {
+            const parsed = parse(src, 'flow');
+            const diagnostics = [...parsed.diagnostics];
+            // パーサと型検査を通して初めて「フロー行が書けない」と言える。
+            // 添字はパーサでは通り、受け手が配列でないことで落ちる
+            if (parsed.expr) checkExpr(parsed.expr, FLOW_TYPE_ENV, diagnostics);
+            if (diagnostics.length === 0) accepted.push(src);
+        }
+        expect(accepted).toEqual([]);
+    });
+
+    it('still parses each of them as a block shape, so the list cannot rot', () => {
+        // 上の検査は「拒否されること」しか見ないので、綴りを間違えた行でも通る。
+        // ブロックでは読めることを併せて見て、意味のある形であり続けさせる
+        const unreadable = FLOW_GATE_SOURCES
+            .filter(src => {
+                const parsed = parse(src, 'block');
+                return parsed.diagnostics.length > 0 || !parsed.expr;
+            });
+        expect(unreadable).toEqual([]);
     });
 });
