@@ -43,11 +43,20 @@ export type GenRenderResult =
  */
 export function renderGenBody(body: GenBody, ctx: EvalContext): GenRenderResult {
     try {
+        // Document order, parent line included. Today no expression has an
+        // effect, so the order cannot be observed in the result — but cells
+        // give lines assignment, and `${n = n + 1}` has to run in the order
+        // the writer reads. Rendering the parent line first would move it.
+        const ordered = body.parent === null ? body.children :
+            [body.parent, ...body.children].sort((a, b) => a.line - b.line);
         const entries: RenderedEntry[] = [];
-        if (body.parent !== null) {
-            entries.push({ depth: 0, body: renderParent(body.parent, ctx), from: body.parent });
+        for (const line of ordered) {
+            if (line === body.parent) {
+                entries.push({ depth: 0, body: renderParent(line, ctx), from: line });
+            } else {
+                entries.push(...renderChild(line, ctx));
+            }
         }
-        for (const line of body.children) entries.push(...renderChild(line, ctx));
 
         // What sits at depth 0 is only known now: a line that is nothing but
         // an interpolation is placed by its value, not by where it was typed.
