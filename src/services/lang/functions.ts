@@ -33,7 +33,19 @@ export function arrayOf(element: StaticType): ArrayType {
 }
 
 export function recordOf(fields: Record<string, StaticType>): RecordType {
-    return { fields };
+    // No prototype, so `toString` and `constructor` are absent until someone
+    // writes them, and `__proto__` is an ordinary field name rather than a
+    // way to reach the prototype. A record's field names come from the
+    // document, so every name JS gives an object for free would otherwise be
+    // a field this language never declared.
+    const own: Record<string, StaticType> = Object.create(null);
+    for (const key of Object.keys(fields)) own[key] = fields[key];
+    return { fields: own };
+}
+
+/** A field this record actually has. */
+export function recordFieldType(t: RecordType, name: string): StaticType | undefined {
+    return Object.hasOwn(t.fields, name) ? t.fields[name] : undefined;
 }
 
 export function isArrayType(t: StaticType): t is ArrayType {
@@ -67,7 +79,8 @@ export function sameType(a: StaticType, b: StaticType): boolean {
         if (!isRecordType(a) || !isRecordType(b)) return false;
         const ak = Object.keys(a.fields);
         const bk = Object.keys(b.fields);
-        return ak.length === bk.length && ak.every(k => k in b.fields && sameType(a.fields[k], b.fields[k]));
+        return ak.length === bk.length
+            && ak.every(k => Object.hasOwn(b.fields, k) && sameType(a.fields[k], b.fields[k]));
     }
     return a === b;
 }

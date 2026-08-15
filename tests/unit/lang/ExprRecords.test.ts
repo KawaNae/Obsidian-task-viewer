@@ -92,6 +92,24 @@ describe('records', () => {
         expect(printExpr(expr!)).toBe(src);
     });
 
+    it('has only the fields that were written', () => {
+        // 素のオブジェクトで持つと、書いていない toString や constructor が
+        // 「在る」と判定され、型検査が junk 型を下流へ流す。フィールド名は
+        // 文書から来るので、JS がただで付ける名前は 1 つも継がない。
+        expect(codes(check('{a: 1}.toString').diagnostics)).toContain('type.unknown-field');
+        expect(codes(check('{a: 1}["toString"]').diagnostics)).toContain('type.unknown-field');
+        expect(codes(check('{a: 1}.constructor').diagnostics)).toContain('type.unknown-field');
+        // __proto__ はフィールド名であって、継承先を差し替える手段ではない。
+        // 期待値の側も同じ罠を踏むので、キーを直接見る（オブジェクトリテラル
+        // に書くと、こちらの __proto__ がプロトタイプ指定として消える）
+        const protoField = check('{"__proto__": 1}').type as { fields: Record<string, unknown> };
+        expect(Object.keys(protoField.fields)).toEqual(['__proto__']);
+        expect(check('{"__proto__": 1}["__proto__"]').type).toBe('number');
+        // 評価側も同じ答えを返す（検査と評価が食い違わない）
+        expect(evaluate('{"__proto__": 1}["__proto__"]')).toEqual({ type: 'number', value: 1 });
+        expect(evaluate('{a: 1}["toString"] ?? "無い"')).toEqual({ type: 'string', value: '無い' });
+    });
+
     it('says where a field name is missing', () => {
         expect(codes(parseIn('{1: "a"}').diagnostics)).toContain('expr.expected-field-name');
         expect(codes(parseIn('{a 1}').diagnostics)).toContain('expr.expected-field-value');

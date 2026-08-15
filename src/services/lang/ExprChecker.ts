@@ -2,7 +2,7 @@ import { type Diagnostic, type Span, error } from './Diagnostic';
 import type { Expr, PropName } from './ExprAst';
 import {
     type ArrayType, FN_SIGS, type StaticType, arrayOf, isArrayType, isAssignable, isDatishType,
-    type RecordType, isRecordType, recordOf, sameType, typeName,
+    type RecordType, isRecordType, recordFieldType, recordOf, sameType, typeName,
 } from './functions';
 import { type Value, weekdayFromName } from './Value';
 
@@ -110,7 +110,10 @@ export function checkExpr(expr: Expr, env: TypeEnv, diagnostics: Diagnostic[], v
         }
 
         case 'record': {
-            const fields: Record<string, StaticType> = {};
+            // Built without a prototype for the same reason it is read through
+            // `recordFieldType`: a field called `__proto__` is a field, not a
+            // way to change what the object inherits.
+            const fields: Record<string, StaticType> = Object.create(null);
             for (const entry of expr.entries) {
                 const t = checkExpr(entry.value, env, diagnostics, vars);
                 if (t === 'error') return 'error';
@@ -168,7 +171,7 @@ export function checkExpr(expr: Expr, env: TypeEnv, diagnostics: Diagnostic[], v
                         expr.span, { receiver: typeName(ot), name: expr.name }));
                     return 'error';
                 }
-                const field = ot.fields[expr.name];
+                const field = recordFieldType(ot, expr.name);
                 if (field === undefined) {
                     diagnostics.push(error('type.unknown-field',
                         `${typeName(ot)} has no field '${expr.name}'`,
@@ -469,7 +472,7 @@ function recordIndexType(
         ? expr.index.value.value
         : null;
     if (constant !== null) {
-        const field = receiver.fields[constant];
+        const field = recordFieldType(receiver, constant);
         if (field === undefined) {
             diagnostics.push(error('type.unknown-field',
                 `${typeName(receiver)} has no field '${constant}'`,
