@@ -311,10 +311,13 @@ describe('appendTaskWithChildren carries the subtree', () => {
 
 // ── recurrence: the extent decides what the next instance inherits ──
 
-describe('insertRecurrenceForTask copies the subtree into the new instance', () => {
+describe('insertRecurrenceForTask leaves the subtree with the instance that fired', () => {
     const NEXT = '- [ ] parent @2026-08-16';
 
-    it('copies descendants, resets their checkboxes and drops block ids', async () => {
+    it('writes the new instance and nothing under it', async () => {
+        // What sits under a task is what that instance did. A block is where
+        // the next instance's children are described, and a command without
+        // one describes no children at all.
         const h = harness([
             '- [ ] parent @2026-08-15',
             '\t- [x] done child ^abc123',
@@ -323,77 +326,38 @@ describe('insertRecurrenceForTask copies the subtree into the new instance', () 
 
         await h.cloner.insertRecurrenceForTask(parent(), NEXT);
 
-        expect(h.lines().slice(0, 3)).toEqual([
+        expect(h.lines()).toEqual([
             NEXT,
-            '\t- [ ] done child',
-            '\t\t- [ ] done grandchild',
+            '- [ ] parent @2026-08-15',
+            '\t- [x] done child ^abc123',
+            '\t\t- [x] done grandchild',
         ]);
     });
 
-    it('leaves the flow child lines of the fired task behind', async () => {
+    it('takes the flow line indent from the existing children', async () => {
+        // The subtree is still read, for this and nothing else: a new
+        // instance has no children of its own to copy a spelling from.
         const h = harness([
             '- [ ] parent @2026-08-15',
-            '\t- ==> every 1d',
-            '\t- [ ] real child',
+            '    - [ ] real child',
         ].join('\n'));
 
-        await h.cloner.insertRecurrenceForTask(parent(), NEXT);
+        await h.cloner.insertRecurrenceForTask(parent(), NEXT, ['every 1d']);
 
-        // The consumed command must not travel to the new instance.
-        expect(h.lines().slice(0, 2)).toEqual([NEXT, '\t- [ ] real child']);
+        expect(h.lines().slice(0, 2)).toEqual([NEXT, '    - ==> every 1d']);
     });
 
-    it('copies nothing when told not to', async () => {
+    it('falls back to the consumed command line for that spelling', async () => {
+        // Only flow lines below: their indent is the one thing the file has
+        // to say about how this task writes a level.
         const h = harness([
             '- [ ] parent @2026-08-15',
-            '\t- [ ] child',
+            '    - ==> every 1d',
         ].join('\n'));
 
-        await h.cloner.insertRecurrenceForTask(parent(), NEXT, false);
+        await h.cloner.insertRecurrenceForTask(parent(), NEXT, ['every 1d']);
 
-        expect(h.lines()[0]).toBe(NEXT);
-        expect(h.lines()[1]).toBe('- [ ] parent @2026-08-15');
-    });
-
-    // The reset unchecks tasks, not text that looks like one. A `- [x]` inside
-    // a fence is a code sample, and rewriting it would edit the example rather
-    // than the state of anything.
-    it('leaves checkboxes inside a fence alone', async () => {
-        const h = harness([
-            '- [ ] parent @2026-08-15',
-            '\t```md',
-            '\t- [x] sample',
-            '\t```',
-        ].join('\n'));
-
-        await h.cloner.insertRecurrenceForTask(parent(), NEXT);
-
-        expect(h.lines().slice(0, 4)).toEqual([
-            NEXT,
-            '\t```md',
-            '\t- [x] sample',
-            '\t```',
-        ]);
-    });
-
-    it('still unchecks real children next to a fence', async () => {
-        const h = harness([
-            '- [ ] parent @2026-08-15',
-            '\t```md',
-            '\t- [x] sample',
-            '\t```',
-            '\t- [x] real child',
-        ].join('\n'));
-
-        await h.cloner.insertRecurrenceForTask(parent(), NEXT);
-
-        expect(h.lines().slice(0, 5)).toEqual([
-            NEXT,
-            '\t```md',
-            '\t- [x] sample',
-            '\t```',
-            '\t- [ ] real child',
-        ]);
+        expect(h.lines().slice(0, 2)).toEqual([NEXT, '    - ==> every 1d']);
     });
 
     it('lands at the head of the sibling group', async () => {

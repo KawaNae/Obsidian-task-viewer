@@ -13,7 +13,7 @@ import type { GeneratedChild } from '../persistence/TaskCloner';
  * line resolution (findTaskLineNumber) matches on originalText.
  */
 export type FlowEffect =
-    | { kind: 'create-next'; newTask: Task; copyChildren: boolean }
+    | { kind: 'create-next'; newTask: Task }
     /**
      * The next instance as a generation block wrote it.
      *

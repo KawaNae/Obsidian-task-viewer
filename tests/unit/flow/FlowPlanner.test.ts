@@ -352,12 +352,15 @@ describe('FlowPlanner', () => {
     });
 
     describe('options', () => {
-        it('never copies the live child lines', () => {
-            // What a task's children hold is what that instance did, and a
-            // block is where the next one's are described. The clause that
-            // used to ask for this is retired, so asking makes no difference.
-            expect(createNextOf(plan('at(today + 1d)', { startDate: '2026-07-01' })).copyChildren).toBe(false);
-            expect(createNextOf(plan('at(today + 1d) nochildren', { startDate: '2026-07-01' })).copyChildren).toBe(false);
+        it('plans the same effect with or without the retired clause', () => {
+            // Nothing in the effect answers for children any more. What a
+            // task's children hold is what that instance did, and the writer
+            // has no knob left to be asked otherwise.
+            const plain = createNextOf(plan('at(today + 1d)', { startDate: '2026-07-01' }));
+            const retired = createNextOf(plan('at(today + 1d) nochildren', { startDate: '2026-07-01' }));
+
+            expect(Object.keys(plain).sort()).toEqual(['kind', 'newTask']);
+            expect(retired.newTask.startDate).toBe(plain.newTask.startDate);
         });
 
         it('strips timer emoji prefixes from the copied content', () => {

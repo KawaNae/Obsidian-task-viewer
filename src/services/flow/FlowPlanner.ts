@@ -104,7 +104,7 @@ export function planFlow(task: Task, program: FlowProgram, deps: FlowPlanDeps): 
             // never possible while one copy rule covered both.
             effects.push(program.use
                 ? planGenerated(task, newTask, program, preCtx, deps)
-                : { kind: 'create-next', newTask, copyChildren: false });
+                : { kind: 'create-next', newTask });
         }
     }
 

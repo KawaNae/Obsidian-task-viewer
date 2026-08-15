@@ -1,7 +1,6 @@
 import { type App, TFile } from 'obsidian';
 import type { DuplicateOptions, TvFileKeys, Task } from '../../types';
 import { collectFlowLineIndicesInFile, formatFlowLine } from '../flow/FlowLineScanner';
-import { CodeFenceTracker } from '../../utils/CodeFenceTracker';
 import { DateUtils } from '../../utils/DateUtils';
 import { logWarn } from '../../log/log';
 import { FileOperations } from './utils/FileOperations';
@@ -116,13 +115,17 @@ export class TaskCloner {
     }
 
     /**
-     * タスクの再発処理：元タスク+子行の直後に新しいタスク（+子行コピー）を挿入する。
-     * 既存タスクがある場合はその直後に、なければ新しいタスクとして追加する。
+     * タスクの再発処理：元タスクの兄弟位置に新しいタスク行を挿入する。
      * `content` は呼び出し側（FlowExecutor interpreter）が format 済みの行文字列。
      * `flowLines` は新インスタンスの `- ==>` フロー子行の raw 列（行単位
      * canonical、FlowPlanner 産）。タスク行直後に正規化位置で挿入する。
+     *
+     * 子行は運ばない。発火したインスタンスの下にある行はそのインスタンスが
+     * 何をしたかの記録で、次インスタンスに何を持たせるかは生成ブロックが
+     * 記述する（gen v3）。既存子行はここでも読むが、用途はフロー子行の
+     * インデントをファイルの綴りに揃えることだけである。
      */
-    async insertRecurrenceForTask(task: Task, content: string, copyChildren = true, flowLines: string[] = []): Promise<void> {
+    async insertRecurrenceForTask(task: Task, content: string, flowLines: string[] = []): Promise<void> {
         const file = this.app.vault.getAbstractFileByPath(task.file);
         if (!(file instanceof TFile)) return;
 
@@ -142,28 +145,20 @@ export class TaskCloner {
             const originalIndent = originalLine.match(/^(\s*)/)?.[1] || '';
             const newParentLine = originalIndent + content.trim();
 
-            // 元タスクの直下 flow 行は発火で消費される側 — コピーすると未減算
-            // xN の stale 複製 + 新タスク行の canonical と二重化するため除外。
-            // 子孫タスクの flow 行は直下でない（構造親規則）のでテンプレート
-            // として自然に残る。
+            // 新インスタンスの flow 行インデント: 既存子行の綴りに揃え、
+            // なければタブ。直下の flow 行は発火で消費される側なので、綴りの
+            // 見本としては後回しにする（それしか無ければ使う）。
             const flowAbs = new Set(collectFlowLineIndicesInFile(lines, currentLine));
             const { childrenLines } = this.fileOps.collectChildrenFromLines(lines, currentLine);
-            const keptChildren = childrenLines.filter((_, i) => !flowAbs.has(currentLine + 1 + i));
+            const ordinaryChildren = childrenLines.filter((_, i) => !flowAbs.has(currentLine + 1 + i));
 
-            // 新インスタンスの flow 行インデント: 既存子行に揃え、なければタブ
-            const childIndent = keptChildren.find(l => l.trim() !== '')?.match(/^\s*/)?.[0]
+            const childIndent = ordinaryChildren.find(l => l.trim() !== '')?.match(/^\s*/)?.[0]
                 ?? childrenLines.find(l => l.trim() !== '')?.match(/^\s*/)?.[0]
                 ?? originalIndent + '\t';
             const newFlowLines = flowLines.map(raw => formatFlowLine(childIndent, raw));
 
             const insertAt = this.fileOps.findSiblingGroupStart(lines, currentLine);
-            if (copyChildren) {
-                const cleaned = this.fileOps.stripBlockIds(keptChildren);
-                const reset = this.resetChildCheckboxes(cleaned);
-                lines.splice(insertAt, 0, newParentLine, ...newFlowLines, ...reset);
-            } else {
-                lines.splice(insertAt, 0, newParentLine, ...newFlowLines);
-            }
+            lines.splice(insertAt, 0, newParentLine, ...newFlowLines);
 
             return lines.join('\n');
         });
@@ -223,21 +218,6 @@ export class TaskCloner {
     }
 
     // --- Private helpers ---
-
-    /**
-     * Uncheck the copied children, leaving fenced content alone.
-     *
-     * A `- [x]` inside a fence is a code sample. Rewriting it edits the text of
-     * an example rather than the state of a task, and the copy then differs
-     * from what the user wrote. The dedented reading is the one that applies:
-     * these lines still carry the parent's indentation.
-     */
-    private resetChildCheckboxes(lines: string[]): string[] {
-        const fenced = CodeFenceTracker.subtreeMask(lines);
-        return lines.map((line, i) => fenced[i]
-            ? line
-            : line.replace(/^(\s*(?:[-*+]|\d+[.)]) *\[)[^\]]/, '$1 '));
-    }
 
     /**
      * Inline task duplication core: collect parent+children, replace parent line,

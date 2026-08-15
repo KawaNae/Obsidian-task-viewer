@@ -128,7 +128,7 @@ export class FlowExecutor {
                 // (line-level canonical, from FlowPlanner) are emitted right
                 // after the task line.
                 const flowLines = (effect.newTask.flow?.childSegments ?? []).map(s => s.raw);
-                await this.repository.insertRecurrenceForTask(task, line, effect.copyChildren, flowLines);
+                await this.repository.insertRecurrenceForTask(task, line, flowLines);
                 return;
             }
             case 'create-generated':
