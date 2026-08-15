@@ -786,7 +786,9 @@
       "orphan-modifier": "'{{clause}}' にはスケジュール節（every / + / at）が必要です",
       "empty": "フロー・コマンドが空です",
       "node-spans-lines": "節は行をまたいで書けません",
-      "inert-notation": "この行は {{notation}} 記法として解釈されるため、==> コマンドは実行されません（タスク名の一部として表示されます）"
+      "inert-notation": "この行は {{notation}} 記法として解釈されるため、==> コマンドは実行されません（タスク名の一部として表示されます）",
+      "nochildren-retired": "'nochildren' は退役しました。子行は次インスタンスへ引き継がれないので、この節は削除できます",
+      "child-copy-retired": "子行は次インスタンスへ引き継がれません。引き継ぎたい項目は tv-gen ブロックに書き、use(\"名前\") で参照してください"
     },
     "gen": {
       "trailing-input": "式の後ろに読み残しがあります（'{{source}}'）",

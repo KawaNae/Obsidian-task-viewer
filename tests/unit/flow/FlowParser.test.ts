@@ -2,8 +2,12 @@ import { describe, it, expect } from 'vitest';
 import { parseFlow } from '../../../src/services/flow/FlowParser';
 import { serializeFlow } from '../../../src/services/flow/FlowSerializer';
 
+function errorsIn(diagnostics: { severity: string; code: string }[]): string[] {
+    return diagnostics.filter(d => d.severity === 'error').map(d => d.code);
+}
+
 function errors(raw: string): string[] {
-    return parseFlow(raw).diagnostics.filter(d => d.severity === 'error').map(d => d.code);
+    return errorsIn(parseFlow(raw).diagnostics);
 }
 
 describe('FlowParser', () => {
@@ -65,8 +69,10 @@ describe('FlowParser', () => {
         it('parses the full clause set order-free', () => {
             const canonical = parseFlow('every mon x14 until(2026-09-28) nochildren move([[Log/Done]])');
             const shuffled = parseFlow('nochildren until(2026-09-28) move([[Log/Done]]) x14 every mon');
-            expect(canonical.diagnostics).toEqual([]);
-            expect(shuffled.diagnostics).toEqual([]);
+            // Errors, not diagnostics: `nochildren` is retired and says so,
+            // and a warning is what order-freedom is being read through here.
+            expect(errorsIn(canonical.diagnostics)).toEqual([]);
+            expect(errorsIn(shuffled.diagnostics)).toEqual([]);
             expect(serializeFlow(shuffled.program!)).toBe(serializeFlow(canonical.program!));
         });
 
@@ -114,6 +120,26 @@ describe('FlowParser', () => {
             expect(errors('nochildren')).toContain('flow.orphan-modifier');
             expect(errors('until(2026-09-28)')).toContain('flow.orphan-modifier');
             expect(errors('use("週報")')).toContain('flow.orphan-modifier');
+        });
+
+        it('warns that nochildren is retired, without refusing it', () => {
+            // Refusing it would take the whole command down with it: an error
+            // nulls the program, so a line that used to run would stop
+            // running on the release that retires one of its clauses.
+            const { program, diagnostics } = parseFlow('every mon nochildren');
+
+            expect(program?.nochildren).toBeDefined();
+            expect(diagnostics.map(d => [d.code, d.severity]))
+                .toEqual([['flow.nochildren-retired', 'warning']]);
+        });
+
+        it('still reports a lone nochildren as an orphan', () => {
+            // Stage 1 keeps the clause on the AST, so the orphan check still
+            // sees it. Both diagnostics are correct: one says the clause
+            // needs a schedule, the other that it does nothing any more.
+            const codes = parseFlow('nochildren').diagnostics.map(d => d.code);
+            expect(codes).toContain('flow.orphan-modifier');
+            expect(codes).toContain('flow.nochildren-retired');
         });
 
         it('parses use() and keeps the name as an expression', () => {
@@ -208,7 +234,10 @@ describe('FlowParser', () => {
             expect(first.program).not.toBeNull();
             const printed = serializeFlow(first.program!);
             const second = parseFlow(printed);
-            expect(second.diagnostics).toEqual([]);
+            // Errors only: a retired clause survives printing in this stage
+            // and warns again on the way back in, which is round-trip
+            // working rather than failing.
+            expect(errorsIn(second.diagnostics)).toEqual([]);
             expect(serializeFlow(second.program!)).toBe(printed);
         });
 

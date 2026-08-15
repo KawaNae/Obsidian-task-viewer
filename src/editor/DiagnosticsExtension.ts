@@ -7,7 +7,13 @@ import {
 } from '../services/parsing/gen/GenBlockCollector';
 import { parseGenBody } from '../services/parsing/gen/GenBodyParser';
 import type { Diagnostic } from '../services/lang/Diagnostic';
-import { joinSegments, parseFlowSegments, segmentIndexAt } from '../services/flow/FlowSegments';
+import {
+    joinSegments,
+    type ParseFlowSegmentsResult,
+    parseFlowSegments,
+    segmentIndexAt,
+} from '../services/flow/FlowSegments';
+import { childCopyMigrationWarning } from '../services/flow/ChildCopyMigration';
 import { collectFlowLineIndices, isFlowLine, matchFlowLine } from '../services/flow/FlowLineScanner';
 import { diagnosticText } from '../services/flow/diagnosticText';
 import { TaskLineClassifier } from '../services/parsing/utils/TaskLineClassifier';
@@ -57,19 +63,24 @@ interface SegmentLoc {
  * both caches are dropped when the parser chain is rebuilt (settings).
  */
 export function createDiagnosticsExtension(): Extension {
-    const cache = new Map<string, Diagnostic[]>();
+    const cache = new Map<string, ParseFlowSegmentsResult>();
     const dateCache = new Map<string, Diagnostic[]>();
     const inertCache = new Map<string, InertNotation | null>();
     const CACHE_CAP = 500;
 
-    const diagnosticsFor = (raws: string[]): Diagnostic[] => {
+    /**
+     * The parse of one flow group, memoized. The program is kept alongside
+     * the diagnostics because the migration notice asks what the command
+     * says (does it name a block?) rather than how it is written.
+     */
+    const parseFor = (raws: string[]): ParseFlowSegmentsResult => {
         const key = raws.join('\n');
         const hit = cache.get(key);
         if (hit) return hit;
         if (cache.size >= CACHE_CAP) cache.clear();
-        const diagnostics = parseFlowSegments(raws).diagnostics;
-        cache.set(key, diagnostics);
-        return diagnostics;
+        const result = parseFlowSegments(raws);
+        cache.set(key, result);
+        return result;
     };
 
     const dateDiagnosticsFor = (lineText: string): Diagnostic[] => {
@@ -173,7 +184,10 @@ export function createDiagnosticsExtension(): Extension {
      * flow child lines (ownership shared with the extractor via
      * collectFlowLineIndices). Returns null when the task has no flow at all.
      */
-    const collectGroup = (view: EditorView, rootLineNumber: number): SegmentLoc[] | null => {
+    const collectGroup = (
+        view: EditorView,
+        rootLineNumber: number,
+    ): { segments: SegmentLoc[]; childLines: string[] } | null => {
         const doc = view.state.doc;
         const rootText = doc.line(rootLineNumber).text;
         const rootIndent = rootText.search(/\S|$/);
@@ -216,7 +230,11 @@ export function createDiagnosticsExtension(): Extension {
                 raw: m.tail,
             });
         }
-        return segments;
+        // The window minus the root is the task's child block, which the
+        // migration notice weighs. It comes from here rather than from a
+        // second walk: where a child block ends is one rule, and reading it
+        // twice is how the two readings start to differ.
+        return { segments, childLines: window.slice(1) };
     };
 
     const buildDecorations = (view: EditorView): DecorationSet => {
@@ -288,8 +306,9 @@ export function createDiagnosticsExtension(): Extension {
                 if (rootNumber === null || seenRoots.has(rootNumber)) continue;
                 seenRoots.add(rootNumber);
 
-                const segments = collectGroup(view, rootNumber);
-                if (!segments) continue;
+                const group = collectGroup(view, rootNumber);
+                if (!group) continue;
+                const { segments, childLines } = group;
                 // Skip the degenerate "bare trailing ==> with nothing anywhere"
                 // — the parser treats a lone marker as content, not a command.
                 if (segments.length === 1 && !segments[0].raw.trim()) continue;
@@ -318,7 +337,28 @@ export function createDiagnosticsExtension(): Extension {
 
                 const raws = segments.map(s => s.raw);
                 const { table } = joinSegments(raws);
-                for (const d of diagnosticsFor(raws)) {
+                const parsed = parseFor(raws);
+
+                // The children stopped travelling with the command. Nothing
+                // in the text says so, which is why it is said here; the mark
+                // covers the command because that is what has to change.
+                const migration = parsed.program && childCopyMigrationWarning(parsed.program, childLines);
+                if (migration) {
+                    const anchor = segments.find(s => s.markerCol !== null);
+                    if (anchor) {
+                        const anchorLine = view.state.doc.line(anchor.lineNumber);
+                        marks.push({
+                            from: anchorLine.from + anchor.markerCol!,
+                            to: anchorLine.to,
+                            deco: Decoration.mark({
+                                class: `tv-diag tv-diag--${migration.severity}`,
+                                attributes: { title: diagnosticText(migration) },
+                            }),
+                        });
+                    }
+                }
+
+                for (const d of parsed.diagnostics) {
                     const segIdx = Math.min(segmentIndexAt(table, d.span.start), segments.length - 1);
                     const seg = segments[segIdx];
                     const segLine = view.state.doc.line(seg.lineNumber);

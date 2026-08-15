@@ -1,4 +1,4 @@
-import { type Diagnostic, type Span, error } from '../lang/Diagnostic';
+import { type Diagnostic, type Span, error, warning } from '../lang/Diagnostic';
 import { parseExpr } from '../lang/ExprParser';
 import { splitDurationText, tokenize } from '../lang/Lexer';
 import { TokenCursor, tokenSpan } from '../lang/Token';
@@ -96,7 +96,14 @@ function parseNode(cursor: TokenCursor, program: FlowProgram, diagnostics: Diagn
             return;
         }
         case 'nochildren':
+            // Retired, and said here rather than in the checker: the clause
+            // is on its way off the AST, and a check that reads a field it
+            // is losing would have to move with it. The token is read either
+            // way, so this is where the notice keeps working.
             cursor.next();
+            diagnostics.push(warning('flow.nochildren-retired',
+                "'nochildren' is retired: child lines no longer travel to the next instance, so the clause can be deleted",
+                tokenSpan(head)));
             assignNode(program, 'nochildren', { span: tokenSpan(head) }, diagnostics, tokenSpan(head));
             return;
         case 'use': {

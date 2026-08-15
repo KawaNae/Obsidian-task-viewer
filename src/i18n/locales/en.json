@@ -786,7 +786,9 @@
       "orphan-modifier": "'{{clause}}' requires a schedule clause (every / + / at)",
       "empty": "Flow command is empty",
       "node-spans-lines": "A clause must be written within a single line",
-      "inert-notation": "This line is read as {{notation}} notation, so the ==> command never runs — it stays part of the task name"
+      "inert-notation": "This line is read as {{notation}} notation, so the ==> command never runs — it stays part of the task name",
+      "nochildren-retired": "'nochildren' is retired: child lines no longer travel to the next instance, so the clause can be deleted",
+      "child-copy-retired": "Child lines no longer travel to the next instance — put what should carry over in a tv-gen block and name it with use(\"...\")"
     },
     "gen": {
       "trailing-input": "Not all of this was read — there is more after the expression in '{{source}}'",
