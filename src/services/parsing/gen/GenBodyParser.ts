@@ -30,6 +30,28 @@ export interface GenBody {
 /** Spaces that make up one level of depth (Obsidian accepts 1 tab or 4 spaces). */
 const SPACES_PER_LEVEL = 4;
 
+/**
+ * Levels of indentation in a run of leading whitespace.
+ *
+ * A tab is one level and four spaces are one level, and a remainder rounds
+ * UP: rounding down would let a line indented by two spaces come out as a
+ * sibling, which is the opposite of what its author meant.
+ *
+ * Exported because the same conversion applies to the lines a multi-line
+ * value brings with it — the rule has one owner, and generation reads it
+ * from here rather than counting again.
+ */
+export function indentDepth(indent: string): number {
+    const tabs = (indent.match(/\t/g) ?? []).length;
+    const spaces = indent.length - tabs;
+    return tabs + Math.ceil(spaces / SPACES_PER_LEVEL);
+}
+
+/** Leading whitespace of a line. */
+export function leadingIndent(raw: string): string {
+    return raw.slice(0, raw.length - raw.trimStart().length);
+}
+
 /** Opening and closing tags of the leading js section. */
 const JS_OPEN_RE = /^\s*<js\b/;
 const JS_CLOSE_RE = /^\s*\/js>\s*$/;
@@ -76,7 +98,7 @@ export function parseGenBody(body: string[], firstLine: number): GenBody {
             continue;
         }
 
-        const indent = raw.slice(0, raw.length - raw.trimStart().length);
+        const indent = leadingIndent(raw);
         const tabs = (indent.match(/\t/g) ?? []).length;
         const spaces = indent.length - tabs;
         if (spaces % SPACES_PER_LEVEL !== 0 || (tabs > 0 && spaces > 0)) {
@@ -98,7 +120,7 @@ export function parseGenBody(body: string[], firstLine: number): GenBody {
         for (const d of lineDiagnostics) diagnostics.push({ ...d, line });
 
         lines.push({
-            depth: tabs + Math.ceil(spaces / SPACES_PER_LEVEL),
+            depth: indentDepth(indent),
             text,
             parts,
             line,
