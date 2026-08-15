@@ -1,4 +1,4 @@
-import { CodeFenceTracker } from '../../../utils/CodeFenceTracker';
+import { CodeFenceTracker, type FenceScan } from '../../../utils/CodeFenceTracker';
 import { type Diagnostic, error, warning } from '../../lang/Diagnostic';
 
 /** Language tag that marks a generation block. */
@@ -44,9 +44,12 @@ export interface GenBlockScan {
  * own: only that walk knows a delimiter written inside a wider fence is
  * quoted content. A note explaining the notation wraps its samples in an
  * outer fence, and its examples must not become real blocks.
+ *
+ * `scan` may be passed in by a caller that already walked the same lines
+ * (the editor extension needs the membership mask anyway).
  */
-export function collectGenBlocks(lines: string[]): GenBlockScan {
-    const { fenced, opens } = CodeFenceTracker.scan(lines);
+export function collectGenBlocks(lines: string[], scan?: FenceScan): GenBlockScan {
+    const { fenced, opens } = scan ?? CodeFenceTracker.scan(lines);
     const blocks = new Map<string, GenBlock>();
     const diagnostics: LocatedDiagnostic[] = [];
 

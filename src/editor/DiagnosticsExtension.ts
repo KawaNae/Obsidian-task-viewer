@@ -5,6 +5,7 @@ import {
     collectGenBlocks,
     type LocatedDiagnostic,
 } from '../services/parsing/gen/GenBlockCollector';
+import { parseGenBody } from '../services/parsing/gen/GenBodyParser';
 import type { Diagnostic } from '../services/lang/Diagnostic';
 import { joinSegments, parseFlowSegments, segmentIndexAt } from '../services/flow/FlowSegments';
 import { collectFlowLineIndices, isFlowLine, matchFlowLine } from '../services/flow/FlowLineScanner';
@@ -121,25 +122,29 @@ export function createDiagnosticsExtension(): Extension {
         if (docCache?.doc === doc) return docCache.analysis;
         const lines: string[] = [];
         for (let n = 1; n <= doc.lines; n++) lines.push(doc.line(n).text);
-        const plain = CodeFenceTracker.mask(lines);
+        const scan = CodeFenceTracker.scan(lines);
         const dedented = CodeFenceTracker.subtreeMask(lines);
+
+        const { blocks, diagnostics } = collectGenBlocks(lines, scan);
         const gen = new Map<number, LocatedDiagnostic[]>();
-        for (const d of collectGenBlocks(lines).diagnostics) {
-            const bucket = gen.get(d.line);
-            if (bucket) bucket.push(d);
+        const bucket = (d: LocatedDiagnostic) => {
+            const at = gen.get(d.line);
+            if (at) at.push(d);
             else gen.set(d.line, [d]);
+        };
+        diagnostics.forEach(bucket);
+        for (const block of blocks.values()) {
+            parseGenBody(block.body, block.openLine + 1).diagnostics.forEach(bucket);
         }
+
         const analysis: DocAnalysis = {
-            fenced: lines.map((_, i) => plain[i] || dedented[i]),
+            fenced: lines.map((_, i) => scan.fenced[i] || dedented[i]),
             gen,
         };
         docCache = { doc, analysis };
         return analysis;
     };
     const fenceMaskFor = (doc: Text): boolean[] => analyze(doc).fenced;
-
-    /** A line that could carry a block diagnostic — cheap enough per line. */
-    const looksLikeFence = (text: string): boolean => /^\s*(?:`{3,}|~{3,})/.test(text);
 
     /**
      * Owner task line of a flow child line: its structural parent (nearest
@@ -224,10 +229,10 @@ export function createDiagnosticsExtension(): Extension {
                 const line = view.state.doc.lineAt(pos);
                 pos = line.to + 1;
 
-                // Block diagnostics anchor on delimiter lines, which are
-                // neither task nor flow lines — so they run before the
-                // fence guard below rather than through it.
-                if (looksLikeFence(line.text)) {
+                // Block diagnostics anchor on the delimiter and on body
+                // lines, neither of which is a task or flow line — so they
+                // run before the fence guard below rather than through it.
+                {
                     for (const d of analyze(view.state.doc).gen.get(line.number - 1) ?? []) {
                         const from = line.from + d.span.start;
                         const to = Math.min(line.from + d.span.end, line.to);
