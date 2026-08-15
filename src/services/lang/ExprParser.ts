@@ -10,13 +10,32 @@ const UNIT_KEYWORDS = ['week', 'month', 'year'] as const;
 const SIMPLE_PROPS = ['start', 'end', 'due', 'content', 'done', 'today'] as const;
 
 /**
+ * Which surface an expression is being read for. One grammar, two profiles:
+ * a flow command is a single expression that has to print back to canonical
+ * source, while a generation block is verbatim and may use the wider forms.
+ *
+ * Lists and functions are refused in the flow profile at the point they are
+ * written, which both keeps the printer's vocabulary closed and puts the
+ * diagnostic on the literal rather than on the whole clause.
+ */
+export type ParseProfile = 'flow' | 'block';
+
+/**
+ * Profile for the parse in progress. Set by {@link parseExpr} only —
+ * recursive descent calls {@link parseTernary} directly so a nested
+ * expression cannot silently reset it.
+ */
+let profile: ParseProfile = 'flow';
+
+/**
  * Recursive-descent expression parser. Consumes tokens from the cursor and
  * returns null after emitting a diagnostic when the input is malformed.
  *
  * Precedence (loose to tight):
  * ?: < ?? < || < && < comparison < + - < * / % < unary < postfix < primary
  */
-export function parseExpr(cursor: TokenCursor, diagnostics: Diagnostic[]): Expr | null {
+export function parseExpr(cursor: TokenCursor, diagnostics: Diagnostic[], forProfile: ParseProfile = 'flow'): Expr | null {
+    profile = forProfile;
     return parseTernary(cursor, diagnostics);
 }
 
@@ -190,9 +209,23 @@ function parsePostfix(cursor: TokenCursor, diagnostics: Diagnostic[]): Expr | nu
     let obj = parsePrimary(cursor, diagnostics);
     if (!obj) return null;
     for (;;) {
+        if (cursor.at('lbracket')) {
+            const next = parseIndex(cursor, diagnostics, obj, false);
+            if (!next) return null;
+            obj = next;
+            continue;
+        }
         const optional = cursor.at('qdot');
         if (!optional && !cursor.at('dot')) return obj;
         cursor.next();
+
+        // `xs?.[0]` — the optional form of an element read.
+        if (optional && cursor.at('lbracket')) {
+            const next = parseIndex(cursor, diagnostics, obj, true);
+            if (!next) return null;
+            obj = next;
+            continue;
+        }
 
         const nameToken = cursor.peek();
         if (nameToken.kind !== 'ident') {
@@ -218,11 +251,32 @@ function parsePostfix(cursor: TokenCursor, diagnostics: Diagnostic[]): Expr | nu
     }
 }
 
+/** `xs[i]`. Cursor sits on '['. */
+function parseIndex(cursor: TokenCursor, diagnostics: Diagnostic[], obj: Expr, optional: boolean): Expr | null {
+    cursor.next(); // consume '['
+    const index = parseTernary(cursor, diagnostics);
+    if (!index) return null;
+    const close = cursor.tryEat('rbracket');
+    if (!close) {
+        diagnostics.push(error('expr.expected-rbracket', "Expected ']'", tokenSpan(cursor.peek())));
+        return null;
+    }
+    return { kind: 'index', obj, index, optional, span: spanBetween(obj.span, tokenSpan(close)) };
+}
+
 function parsePrimary(cursor: TokenCursor, diagnostics: Diagnostic[]): Expr | null {
     const token = cursor.peek();
     const span = tokenSpan(token);
 
+    // `x => ...` / `(a, b) => ...`. Checked before the parenthesized-expression
+    // branch, which would otherwise eat the parameter list.
+    if (isArrowAhead(cursor)) {
+        return parseArrow(cursor, diagnostics);
+    }
+
     switch (token.kind) {
+        case 'lbracket':
+            return parseArrayLiteral(cursor, diagnostics);
         case 'date':
             cursor.next();
             return { kind: 'lit', value: { type: 'date', value: token.text }, span };
@@ -250,7 +304,7 @@ function parsePrimary(cursor: TokenCursor, diagnostics: Diagnostic[]): Expr | nu
             return { kind: 'lit', value: { type: 'link', target: token.text }, span };
         case 'lparen': {
             cursor.next();
-            const inner = parseExpr(cursor, diagnostics);
+            const inner = parseTernary(cursor, diagnostics);
             if (!inner) return null;
             if (!cursor.tryEat('rparen')) {
                 diagnostics.push(error('expr.expected-rparen', "Expected ')'", tokenSpan(cursor.peek())));
@@ -268,6 +322,89 @@ function parsePrimary(cursor: TokenCursor, diagnostics: Diagnostic[]): Expr | nu
             }
             return null;
     }
+}
+
+/** `["a", "b"]`. Cursor sits on '['. */
+function parseArrayLiteral(cursor: TokenCursor, diagnostics: Diagnostic[]): Expr | null {
+    const open = cursor.next();
+    if (profile === 'flow') {
+        diagnostics.push(error('expr.list-not-here',
+            'A list is only available inside a generation block', tokenSpan(open)));
+        return null;
+    }
+    const items: Expr[] = [];
+    if (!cursor.at('rbracket')) {
+        for (;;) {
+            const item = parseTernary(cursor, diagnostics);
+            if (!item) return null;
+            items.push(item);
+            if (cursor.tryEat('comma')) continue;
+            break;
+        }
+    }
+    const close = cursor.tryEat('rbracket');
+    if (!close) {
+        diagnostics.push(error('expr.expected-rbracket', "Expected ']' to close the list", tokenSpan(cursor.peek())));
+        return null;
+    }
+    return { kind: 'array', items, span: spanBetween(tokenSpan(open), tokenSpan(close)) };
+}
+
+/**
+ * Does an arrow function start here? `x =>` is one token of lookahead;
+ * `(a, b) =>` needs the matching ')' first, since a parameter list and a
+ * parenthesized expression start the same way.
+ */
+function isArrowAhead(cursor: TokenCursor): boolean {
+    if (cursor.at('ident')) return cursor.peek(1).kind === 'arrow';
+    if (!cursor.at('lparen')) return false;
+    let depth = 0;
+    for (let i = 0; ; i++) {
+        const t = cursor.peek(i);
+        if (t.kind === 'eof') return false;
+        if (t.kind === 'lparen') depth++;
+        else if (t.kind === 'rparen') {
+            depth--;
+            if (depth === 0) return cursor.peek(i + 1).kind === 'arrow';
+        }
+    }
+}
+
+/** `x => body` / `(a, b) => body`. Expression bodies only; blocks are statements. */
+function parseArrow(cursor: TokenCursor, diagnostics: Diagnostic[]): Expr | null {
+    const start = cursor.peek();
+    if (profile === 'flow') {
+        diagnostics.push(error('expr.function-not-here',
+            'A function is only available inside a generation block', tokenSpan(start)));
+        return null;
+    }
+    const params: string[] = [];
+    if (cursor.at('ident')) {
+        params.push(cursor.next().text);
+    } else {
+        cursor.next(); // '('
+        if (!cursor.at('rparen')) {
+            for (;;) {
+                const p = cursor.peek();
+                if (p.kind !== 'ident') {
+                    diagnostics.push(error('expr.expected-param', 'Expected a parameter name', tokenSpan(p)));
+                    return null;
+                }
+                cursor.next();
+                params.push(p.text);
+                if (cursor.tryEat('comma')) continue;
+                break;
+            }
+        }
+        if (!cursor.tryEat('rparen')) {
+            diagnostics.push(error('expr.expected-rparen', "Expected ')'", tokenSpan(cursor.peek())));
+            return null;
+        }
+    }
+    cursor.next(); // '=>'
+    const body = parseTernary(cursor, diagnostics);
+    if (!body) return null;
+    return { kind: 'arrow', params, body, span: spanBetween(tokenSpan(start), body.span) };
 }
 
 function parseIdentLed(cursor: TokenCursor, diagnostics: Diagnostic[]): Expr | null {
@@ -318,6 +455,13 @@ function parseIdentLed(cursor: TokenCursor, diagnostics: Diagnostic[]): Expr | n
         }
         diagnostics.push(error('expr.file-needs-member', "Property 'file' requires a member (file.name)", span));
         return null;
+    }
+
+    // Inside a block, a name the built-ins do not claim is a binding — today
+    // an arrow parameter, later a cell. The built-ins resolve first, which is
+    // what makes those names effectively reserved.
+    if (profile === 'block') {
+        return { kind: 'var', name, span };
     }
 
     // A weekday is a string here, so `start.weekday() == "tue"` — the form
@@ -392,7 +536,7 @@ function parseArgs(cursor: TokenCursor, diagnostics: Diagnostic[], fn = 'the cal
     const args: Expr[] = [];
     if (!cursor.at('rparen')) {
         for (;;) {
-            const arg = parseExpr(cursor, diagnostics);
+            const arg = parseTernary(cursor, diagnostics);
             if (!arg) return null;
             args.push(arg);
             if (cursor.tryEat('comma')) continue;

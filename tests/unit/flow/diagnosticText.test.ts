@@ -2,6 +2,10 @@ import { describe, it, expect } from 'vitest';
 import { diagnosticText } from '../../../src/services/flow/diagnosticText';
 import { parseFlow } from '../../../src/services/flow/FlowParser';
 import { Diagnostic } from '../../../src/services/lang/Diagnostic';
+import { FLOW_TYPE_ENV, checkExpr } from '../../../src/services/lang/ExprChecker';
+import { parseExpr } from '../../../src/services/lang/ExprParser';
+import { tokenize } from '../../../src/services/lang/Lexer';
+import { TokenCursor } from '../../../src/services/lang/Token';
 
 describe('diagnosticText', () => {
     it('renders the locale template with params interpolated', () => {
@@ -57,6 +61,55 @@ describe('diagnosticText', () => {
             'type.member-arg', 'lex.decimal-unsupported', 'expr.nullish-mixed-with-logic', 'expr.comparison-chain']) {
             expect(seen).toContain(code);
         }
+    });
+
+    it('covers the block-only codes too', () => {
+        // 生成ブロックの診断は parseFlow からは出ない。フロー行の網に載らない
+        // ぶん、ここで別に通す。
+        const samples = [
+            '[1, "a"]',                       // type.list-mixed
+            '["a"]["x"]',                     // type.index-not-number
+            'content[0]',                     // type.not-indexable
+            '["a"].push("b")',                // type.list-immutable
+            '[2, 10].sort()',                 // type.sort-needs-comparator
+            '["a"].map("x")',                 // type.expects-function
+            '["a"].filter(s => s.length)',    // type.callback-result
+            '["a"].map((a, b, c) => a)',      // type.too-many-params
+            '["a"].map(content => content)',  // type.param-shadows-builtin
+            'x => x',                         // type.function-not-here
+            '["a"',                           // expr.expected-rbracket
+            '(1) => 1',                       // expr.expected-param
+            '[[1, 2], [3]]',                  // lex.wikilink-looks-like-list
+        ];
+        const seen = new Set<string>();
+        for (const src of samples) {
+            const { tokens, diagnostics } = tokenize(src);
+            const expr = parseExpr(new TokenCursor(tokens), diagnostics, 'block');
+            if (expr) checkExpr(expr, FLOW_TYPE_ENV, diagnostics);
+            for (const d of diagnostics) {
+                seen.add(d.code);
+                const text = diagnosticText(d);
+                expect(text).not.toMatch(/^flowDiag\./);
+                expect(text).not.toContain('{{');
+            }
+        }
+        for (const code of ['type.list-mixed', 'type.index-not-number', 'type.not-indexable',
+            'type.list-immutable', 'type.sort-needs-comparator', 'type.expects-function',
+            'type.callback-result', 'type.too-many-params', 'type.param-shadows-builtin',
+            'type.function-not-here', 'expr.expected-rbracket', 'expr.expected-param',
+            'lex.wikilink-looks-like-list']) {
+            expect(seen).toContain(code);
+        }
+        // フロー側で弾く 2 つも、文言が出ること
+        const flowOnly = ['every mon setContent(["a"])', 'every mon setContent(content.map(x => x))'];
+        for (const src of flowOnly) {
+            for (const d of parseFlow(src).diagnostics) {
+                expect(diagnosticText(d)).not.toContain('{{');
+                seen.add(d.code);
+            }
+        }
+        expect(seen).toContain('expr.list-not-here');
+        expect(seen).toContain('expr.function-not-here');
     });
 
     it('falls back to the English default message for unknown codes', () => {

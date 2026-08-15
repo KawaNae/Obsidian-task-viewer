@@ -23,4 +23,15 @@ export type Expr =
     /** `start.weekday` — a property read on a value. */
     | { kind: 'member'; obj: Expr; name: string; optional: boolean; span: Span }
     /** `start.format("MM/DD")` — a method call on a value. */
-    | { kind: 'method'; obj: Expr; name: string; args: Expr[]; optional: boolean; span: Span };
+    | { kind: 'method'; obj: Expr; name: string; args: Expr[]; optional: boolean; span: Span }
+    /** `["a", "b"]` — a list literal. */
+    | { kind: 'array'; items: Expr[]; span: Span }
+    /** `xs[0]` — an element read. */
+    | { kind: 'index'; obj: Expr; index: Expr; optional: boolean; span: Span }
+    /**
+     * `x => x.length` — only meaningful as an argument to a list method, which
+     * is what binds its parameters. Never a value of its own.
+     */
+    | { kind: 'arrow'; params: string[]; body: Expr; span: Span }
+    /** A name bound by an enclosing arrow parameter (block profile only). */
+    | { kind: 'var'; name: string; span: Span };

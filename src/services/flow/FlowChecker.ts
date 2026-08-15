@@ -1,6 +1,6 @@
 import { type Diagnostic, error } from '../lang/Diagnostic';
 import { FLOW_TYPE_ENV, checkExpr } from '../lang/ExprChecker';
-import { isDatishType } from '../lang/functions';
+import { isDatishType, typeName } from '../lang/functions';
 import { type FlowProgram, SET_FIELD_ORDER, setHeadName } from './FlowAst';
 
 /**
@@ -40,16 +40,16 @@ export function checkFlow(program: FlowProgram, diagnostics: Diagnostic[]): void
         const t = checkExpr(program.until.expr, FLOW_TYPE_ENV, diagnostics);
         if (t !== 'error' && !isDatishType(t)) {
             diagnostics.push(error('type.until-not-datish',
-                `until() expects a date or datetime expression, got ${t}`,
-                program.until.expr.span, { actual: t }));
+                `until() expects a date or datetime expression, got ${typeName(t)}`,
+                program.until.expr.span, { actual: typeName(t) }));
         }
     }
 
     if (program.schedule?.kind === 'at') {
         const t = checkExpr(program.schedule.expr, FLOW_TYPE_ENV, diagnostics);
         if (t !== 'error' && !isDatishType(t)) {
-            diagnostics.push(error('type.at-not-datish', `at() expects a date or datetime expression, got ${t}`,
-                program.schedule.expr.span, { actual: t }));
+            diagnostics.push(error('type.at-not-datish', `at() expects a date or datetime expression, got ${typeName(t)}`,
+                program.schedule.expr.span, { actual: typeName(t) }));
         }
     }
 
@@ -64,17 +64,17 @@ export function checkFlow(program: FlowProgram, diagnostics: Diagnostic[]): void
             if (field === 'content') {
                 if (t !== 'string' && t !== 'none') {
                     diagnostics.push(error('type.set-content-not-string',
-                        `${fn}(...) expects string or none, got ${t}`, node.expr.span, { fn, actual: t }));
+                        `${fn}(...) expects string or none, got ${typeName(t)}`, node.expr.span, { fn, actual: typeName(t) }));
                 }
             } else if (TIME_FIELDS.includes(field)) {
                 if (t !== 'time' && t !== 'none') {
                     diagnostics.push(error('type.set-time-mismatch',
-                        `${fn}(...) expects time or none, got ${t}`, node.expr.span, { fn, actual: t }));
+                        `${fn}(...) expects time or none, got ${typeName(t)}`, node.expr.span, { fn, actual: typeName(t) }));
                 }
             } else {
                 if (!isDatishType(t) && t !== 'none') {
                     diagnostics.push(error('type.set-date-mismatch',
-                        `${fn}(...) expects date, datetime or none, got ${t}`, node.expr.span, { fn, actual: t }));
+                        `${fn}(...) expects date, datetime or none, got ${typeName(t)}`, node.expr.span, { fn, actual: typeName(t) }));
                 }
             }
         }
@@ -83,16 +83,16 @@ export function checkFlow(program: FlowProgram, diagnostics: Diagnostic[]): void
     if (program.use) {
         const t = checkExpr(program.use.name, FLOW_TYPE_ENV, diagnostics);
         if (t !== 'error' && t !== 'string') {
-            diagnostics.push(error('type.use-name', `use() expects a block name as a string, got ${t}`,
-                program.use.name.span, { actual: t }));
+            diagnostics.push(error('type.use-name', `use() expects a block name as a string, got ${typeName(t)}`,
+                program.use.name.span, { actual: typeName(t) }));
         }
     }
 
     if (program.move) {
         const t = checkExpr(program.move.target, FLOW_TYPE_ENV, diagnostics);
         if (t !== 'error' && t !== 'link' && t !== 'string') {
-            diagnostics.push(error('type.move-target', `move() expects a wikilink or string target, got ${t}`,
-                program.move.target.span, { actual: t }));
+            diagnostics.push(error('type.move-target', `move() expects a wikilink or string target, got ${typeName(t)}`,
+                program.move.target.span, { actual: typeName(t) }));
         }
     }
 }

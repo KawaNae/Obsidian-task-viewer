@@ -704,6 +704,7 @@
   }  ,
   "flowDiag": {
     "lex": {
+      "wikilink-looks-like-list": "This reads as a wikilink, not a list of lists — separate the brackets: [ [1], [2] ]",
       "unterminated-wikilink": "Unterminated wikilink",
       "unterminated-string": "Unterminated string",
       "unknown-unit": "Unknown duration unit '{{unit}}' (expected {{units}})",
@@ -711,6 +712,10 @@
       "decimal-unsupported": "Decimal numbers are not supported yet ('{{text}}') — say it in a smaller unit"
     },
     "expr": {
+      "function-not-here": "A function is only available inside a generation block",
+      "list-not-here": "A list is only available inside a generation block",
+      "expected-param": "Expected a parameter name",
+      "expected-rbracket": "Expected ']'",
       "expected-colon": "Expected ':' in conditional expression",
       "expected-rparen": "Expected ')'",
       "expected-rparen-call": "Expected ')' to close {{fn}}(...)",
@@ -727,6 +732,16 @@
       "weekday-not-literal": "Weekdays are strings in expressions — write \"{{name}}\" (bare {{name}} is only for 'every {{name}}')"
     },
     "type": {
+      "param-shadows-builtin": "'{{name}}' already means something here — the built-in wins and this parameter cannot be read",
+      "sort-needs-comparator": "Sorting {{receiver}} needs the comparison written out: sort((a, b) => a - b)",
+      "list-immutable": "A list cannot be added to — build it in one go, or use concat",
+      "too-many-params": "'{{name}}' passes {{expected}} value(s) to its function, got {{actual}} parameter(s)",
+      "expects-function": "'{{name}}' expects a function, like (x) => x",
+      "callback-result": "'{{name}}' expects a function returning {{expected}}, got {{actual}}",
+      "function-not-here": "A function only means something as an argument to a list method (map, filter, sort, ...)",
+      "index-not-number": "A list index is a number, got {{actual}}",
+      "not-indexable": "{{receiver}} cannot be indexed",
+      "list-mixed": "A list holds one kind of value ({{left}} vs {{right}})",
       "unknown-property": "Property '{{name}}' is not available here",
       "bang-expects-bool": "'!' expects bool, got {{actual}}",
       "unary-minus-operand": "Unary '-' expects number or duration, got {{actual}}",

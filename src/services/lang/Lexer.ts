@@ -33,15 +33,28 @@ export function tokenize(src: string): LexResult {
             continue;
         }
 
-        // Wikilink [[target]]
+        // Wikilink [[target]] — matched before '[', so a list of lists needs a
+        // space between the brackets ([ [1], [2] ]). One of the four domain
+        // literals that read as something else in JS.
         if (src.startsWith('[[', i)) {
             const close = src.indexOf(']]', i + 2);
             if (close === -1) {
-                diagnostics.push(error('lex.unterminated-wikilink', 'Unterminated wikilink', { start: i, end: src.length }));
+                diagnostics.push(error('lex.unterminated-wikilink',
+                    'Unterminated wikilink — a list inside a list is written with a space: [ [1], [2] ]',
+                    { start: i, end: src.length }));
                 i = src.length;
                 continue;
             }
-            push('wikilink', src.slice(i + 2, close), i, close + 2);
+            const target = src.slice(i + 2, close);
+            // Obsidian forbids brackets in a note name, so a target carrying
+            // one is a list of lists that lost the longest match. Say so here,
+            // where it is still visible, rather than at evaluation.
+            if (/[[\]]/.test(target)) {
+                diagnostics.push(error('lex.wikilink-looks-like-list',
+                    'This reads as a wikilink, not a list of lists — separate the brackets: [ [1], [2] ]',
+                    { start: i, end: close + 2 }, { target }));
+            }
+            push('wikilink', target, i, close + 2);
             i = close + 2;
             continue;
         }
@@ -161,7 +174,8 @@ export function tokenize(src: string): LexResult {
             two === '<=' ? 'lte' :
             two === '>=' ? 'gte' :
             two === '?.' ? 'qdot' :
-            two === '??' ? 'qq' : undefined;
+            two === '??' ? 'qq' :
+            two === '=>' ? 'arrow' : undefined;
         if (twoKind) {
             push(twoKind, two, i, i + 2);
             i += 2;
@@ -171,6 +185,8 @@ export function tokenize(src: string): LexResult {
         const oneKind: TokenKind | undefined =
             ch === '(' ? 'lparen' :
             ch === ')' ? 'rparen' :
+            ch === '[' ? 'lbracket' :
+            ch === ']' ? 'rbracket' :
             ch === ',' ? 'comma' :
             ch === ':' ? 'colon' :
             ch === '@' ? 'at' :

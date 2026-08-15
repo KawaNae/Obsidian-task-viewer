@@ -11,6 +11,9 @@ export type TokenKind =
     | 'wikilink'   // [[target]] (brackets stripped)
     | 'lparen'
     | 'rparen'
+    | 'lbracket'   // [ (a wikilink's [[ is matched first)
+    | 'rbracket'
+    | 'arrow'      // =>
     | 'comma'
     | 'colon'
     | 'at'         // @ (used by mo@25)

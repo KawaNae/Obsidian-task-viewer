@@ -13,6 +13,9 @@ export function printExpr(expr: Expr): string {
 function precOf(expr: Expr): number {
     switch (expr.kind) {
         case 'cond': return 1;
+        // A function body runs to the end of the expression, so it must be
+        // parenthesized anywhere an operand is expected.
+        case 'arrow': return 1;
         case 'binary':
             switch (expr.op) {
                 case '??': return 2;
@@ -75,6 +78,20 @@ function print(expr: Expr, parentPrec: number): string {
                 return `${print(expr.obj, myPrec)}${expr.optional ? '?.' : '.'}${expr.name}`;
             case 'method':
                 return `${print(expr.obj, myPrec)}${expr.optional ? '?.' : '.'}${expr.name}(${expr.args.map(a => print(a, 0)).join(', ')})`;
+            case 'var': return expr.name;
+            case 'array': {
+                const items = expr.items.map(i => print(i, 0));
+                // `[[` opens a wikilink, which wins the longest match. A list
+                // whose first element is a list has to be written with the
+                // brackets apart, or it reads back as a link to nowhere.
+                const pad = items[0]?.startsWith('[') ? ' ' : '';
+                return `[${pad}${items.join(', ')}${pad}]`;
+            }
+            case 'index': return `${print(expr.obj, myPrec)}${expr.optional ? '?.' : ''}[${print(expr.index, 0)}]`;
+            case 'arrow':
+                // Always parenthesized: a single bare parameter would re-parse
+                // the same, but one form is easier to read back than two.
+                return `(${expr.params.join(', ')}) => ${print(expr.body, 0)}`;
         }
     })();
     return myPrec < parentPrec ? `(${body})` : body;

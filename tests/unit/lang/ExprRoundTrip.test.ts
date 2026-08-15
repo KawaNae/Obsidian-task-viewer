@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { Expr } from '../../../src/services/lang/ExprAst';
-import { parseExpr } from '../../../src/services/lang/ExprParser';
+import { type ParseProfile, parseExpr } from '../../../src/services/lang/ExprParser';
 import { printExpr } from '../../../src/services/lang/ExprPrinter';
 import { tokenize } from '../../../src/services/lang/Lexer';
 import { TokenCursor } from '../../../src/services/lang/Token';
@@ -21,10 +21,10 @@ import { TokenCursor } from '../../../src/services/lang/Token';
  * record of *why* each boundary needs its parentheses; this file is the net.
  */
 
-function parse(src: string) {
+function parse(src: string, profile: ParseProfile = 'flow') {
     const { tokens, diagnostics } = tokenize(src);
     const cursor = new TokenCursor(tokens);
-    const expr = parseExpr(cursor, diagnostics);
+    const expr = parseExpr(cursor, diagnostics, profile);
     // Whether the parser reached the end of the input. It reads one expression
     // and stops, so leftover tokens mean part of what the user wrote was
     // dropped. Round-tripping cannot see that: the half that was read prints
@@ -50,9 +50,9 @@ function withoutSpans(node: unknown): unknown {
  * reads back as something else is already broken, even in the rare case where
  * the something else happens to print identically.
  */
-function survivesRoundTrip(expr: Expr): { ok: boolean; detail: string } {
+function survivesRoundTrip(expr: Expr, profile: ParseProfile = 'flow'): { ok: boolean; detail: string } {
     const printed = printExpr(expr);
-    const again = parse(printed);
+    const again = parse(printed, profile);
     if (again.diagnostics.length > 0 || !again.expr) {
         const codes = again.diagnostics.map(d => d.code).join(', ');
         return { ok: false, detail: `printed as "${printed}", which no longer parses (${codes})` };
@@ -122,17 +122,33 @@ const LITERAL_FAMILIES: Family[] = [
     { shape: 'injected property', sources: ['start', 'end', 'due', 'content', 'done', 'today'] },
 ];
 
-function sweep(families: Family[]): { broken: string[]; empty: string[] } {
+/**
+ * Shapes only a generation block accepts: lists, indexing, and the functions
+ * written for them. A flow command cannot reach any of these, so they are not
+ * part of what gets re-serialized on firing — but the printer still has to be
+ * able to write back what it reads, and this is where that is checked.
+ */
+const BLOCK_FAMILIES: Family[] = [
+    { shape: 'index', sources: BINARY_OPS.map(op => `xs[0] ${op} 1`) },
+    { shape: 'list literal', sources: BINARY_OPS.map(op => `[1, 2] ${op} y`) },
+    { shape: 'arrow argument', sources: BINARY_OPS.map(op => `xs.map(x => x) ${op} y`) },
+    { shape: 'optional index', sources: ['xs?.[0]', 'xs?.[0] ?? "fallback"'] },
+    { shape: 'nested list', sources: ['[ [1, 2], [3] ]', '[ [1], [2] ][0]'] },
+    { shape: 'list method chain', sources: ['xs.filter(x => x.length > 1).map(x => x.trim()).join(", ")'] },
+    { shape: 'two-parameter function', sources: ['xs.map((x, i) => i)', 'xs.sort((a, b) => a - b)'] },
+];
+
+function sweep(families: Family[], profile: ParseProfile = 'flow'): { broken: string[]; empty: string[] } {
     const broken: string[] = [];
     const empty: string[] = [];
     for (const family of families) {
         let accepted = 0;
         for (const src of family.sources) {
-            const parsed = parse(src);
+            const parsed = parse(src, profile);
             // 受理しない形はこの契約の対象外（拒否は拒否で正しい）
             if (parsed.diagnostics.length > 0 || !parsed.expr) continue;
             accepted++;
-            const result = survivesRoundTrip(parsed.expr);
+            const result = survivesRoundTrip(parsed.expr, profile);
             if (!result.ok) broken.push(`${src} — ${result.detail}`);
         }
         // 網が空になっていないこと。受理形がゼロの family は素通りするので、
@@ -169,14 +185,23 @@ describe('expression round-trip sweep', () => {
         expect(broken).toEqual([]);
     });
 
+    it('prints every accepted block-only shape so that it reads back the same', () => {
+        const { broken, empty } = sweep(BLOCK_FAMILIES, 'block');
+        expect(broken).toEqual([]);
+        expect(empty).toEqual([]);
+    });
+
     it('reads every accepted shape to the end, or says why not', () => {
         // 往復では見えない契約。入力の一部を黙って落としても、読めた分は
         // きれいに往復する。`1 == 2 == 3` がまさにそれで、フロー層の
         // ') が必要' に引っかかっていただけだった。差し込みはその網の外に出る。
         const dropped: string[] = [];
-        for (const family of [...NESTING_FAMILIES, ...POSTFIX_FAMILIES, ...LITERAL_FAMILIES]) {
-            for (const src of family.sources) {
-                const parsed = parse(src);
+        for (const [profile, families] of [
+            ['flow', [...NESTING_FAMILIES, ...POSTFIX_FAMILIES, ...LITERAL_FAMILIES]],
+            ['block', BLOCK_FAMILIES],
+        ] as [ParseProfile, Family[]][]) {
+            for (const src of families.flatMap(f => f.sources)) {
+                const parsed = parse(src, profile);
                 if (parsed.diagnostics.length > 0 || !parsed.expr) continue; // 診断を出して止まるのは正しい
                 if (!parsed.readToEnd) dropped.push(`${src} — read only "${printExpr(parsed.expr)}"`);
             }

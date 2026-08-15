@@ -704,6 +704,7 @@
   }  ,
   "flowDiag": {
     "lex": {
+      "wikilink-looks-like-list": "これは wikilink として読まれます（配列の配列ではありません）。括弧を離してください: [ [1], [2] ]",
       "unterminated-wikilink": "wikilink が閉じられていません",
       "unterminated-string": "文字列が閉じられていません",
       "unknown-unit": "不明な期間単位 '{{unit}}'（使用可能: {{units}}）",
@@ -711,6 +712,10 @@
       "decimal-unsupported": "小数はまだ使えません（'{{text}}'）。小さい単位で書いてください"
     },
     "expr": {
+      "function-not-here": "関数は生成ブロックの中でのみ使えます",
+      "list-not-here": "配列は生成ブロックの中でのみ使えます",
+      "expected-param": "引数名が必要です",
+      "expected-rbracket": "']' が必要です",
       "expected-colon": "条件式には ':' が必要です",
       "expected-rparen": "')' が必要です",
       "expected-rparen-call": "{{fn}}(...) を閉じる ')' が必要です",
@@ -727,6 +732,16 @@
       "weekday-not-literal": "式の中では曜日は文字列です。\"{{name}}\" と書いてください（裸の {{name}} は every {{name}} 専用）"
     },
     "type": {
+      "param-shadows-builtin": "'{{name}}' は既に別の意味を持つ名前です。組み込みが優先され、この引数は参照できません",
+      "sort-needs-comparator": "{{receiver}} の並べ替えには比較を書く必要があります: sort((a, b) => a - b)",
+      "list-immutable": "配列には追加できません。一度に組み立てるか concat を使ってください",
+      "too-many-params": "'{{name}}' が関数に渡す値は {{expected}} 個です（引数が {{actual}} 個あります）",
+      "expects-function": "'{{name}}' には関数が必要です（(x) => x のような形）",
+      "callback-result": "'{{name}}' には {{expected}} を返す関数が必要です（{{actual}} が返されました）",
+      "function-not-here": "関数は配列のメソッド（map / filter / sort など）の引数としてのみ意味を持ちます",
+      "index-not-number": "添字は number です（{{actual}} が渡されました）",
+      "not-indexable": "{{receiver}} には添字を使えません",
+      "list-mixed": "配列の要素は同じ型でなければなりません（{{left}} と {{right}}）",
       "unknown-property": "プロパティ '{{name}}' はここでは使えません",
       "bang-expects-bool": "'!' には bool が必要です（{{actual}} が渡されました）",
       "unary-minus-operand": "単項 '-' には number か duration が必要です（{{actual}} が渡されました）",

@@ -10,16 +10,53 @@ import {
  * Static types used by the checker. 'datish' is the date|datetime family
  * (task date fields may be either depending on whether a time is present).
  * 'error' is the poison type that suppresses cascading diagnostics.
+ *
+ * A list carries its element type: `map` has to know what its parameter is
+ * before it can check the body written for it. Spelled out rather than
+ * derived from `Value['type']` so a bare 'array' — a list of nothing in
+ * particular — cannot be written.
  */
-export type StaticType = Value['type'] | 'datish' | 'error';
+export type ScalarType =
+    | 'date' | 'datetime' | 'time' | 'duration'
+    | 'string' | 'number' | 'bool' | 'link' | 'none'
+    | 'datish' | 'error';
+
+export interface ArrayType { readonly array: StaticType }
+
+export type StaticType = ScalarType | ArrayType;
+
+export function arrayOf(element: StaticType): ArrayType {
+    return { array: element };
+}
+
+export function isArrayType(t: StaticType): t is ArrayType {
+    return typeof t === 'object';
+}
+
+/** Display form for diagnostics: `string[]`, `number[][]`. */
+export function typeName(t: StaticType): string {
+    return isArrayType(t) ? `${typeName(t.array)}[]` : t;
+}
 
 export function isDatishType(t: StaticType): boolean {
     return t === 'date' || t === 'datetime' || t === 'datish';
 }
 
+/** Structural equality — two list types match when their elements do. */
+export function sameType(a: StaticType, b: StaticType): boolean {
+    if (isArrayType(a) || isArrayType(b)) {
+        return isArrayType(a) && isArrayType(b) && sameType(a.array, b.array);
+    }
+    return a === b;
+}
+
 export function isAssignable(actual: StaticType, expected: StaticType): boolean {
     if (actual === 'error') return true;
     if (actual === 'none') return true;
+    if (isArrayType(expected)) {
+        return isArrayType(actual) && isAssignable(actual.array, expected.array);
+    }
+    if (isArrayType(actual)) return false;
     if (expected === 'datish') return isDatishType(actual);
     return actual === expected;
 }

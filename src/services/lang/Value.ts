@@ -33,6 +33,8 @@ export type Value =
     | { type: 'number'; value: number }
     | { type: 'bool'; value: boolean }
     | { type: 'link'; target: string }
+    /** A list. Immutable: every operation returns a new one. */
+    | { type: 'array'; items: Value[] }
     | { type: 'none' };
 
 export type LangType = Value['type'];
@@ -161,6 +163,7 @@ export function valueToLiteral(v: Value): string {
         case 'number': return String(v.value);
         case 'bool': return v.value ? 'true' : 'false';
         case 'link': return `[[${v.target}]]`;
+        case 'array': return `[${v.items.map(valueToLiteral).join(', ')}]`;
         case 'none': return 'none';
     }
 }
@@ -170,6 +173,9 @@ export function valueToDisplay(v: Value): string {
     switch (v.type) {
         case 'string': return v.value;
         case 'link': return `[[${v.target}]]`;
+        // A list is lines — the same rule interpolation uses for a multi-line
+        // value, so a list and its newline join land on the same text.
+        case 'array': return v.items.map(valueToDisplay).join('\n');
         case 'none': return '';
         default: return valueToLiteral(v);
     }

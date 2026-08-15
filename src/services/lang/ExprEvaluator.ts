@@ -1,7 +1,10 @@
 import type { Span } from './Diagnostic';
 import type { Expr, PropName } from './ExprAst';
 import { type EvalRuntime, FnCallError, callFn } from './functions';
-import { type DurUnit, type Value, WEEKDAY_NAMES, addDuration, compareValues, isDatishValue, parseDateStr } from './Value';
+import {
+    type DurUnit, type Value, WEEKDAY_NAMES, addDuration, compareValues, isDatishValue, parseDateStr,
+    valueToDisplay,
+} from './Value';
 
 /**
  * Runtime evaluation failure (e.g. a referenced property is unset on the
@@ -17,6 +20,11 @@ export class EvalError extends Error {
 export interface EvalContext extends EvalRuntime {
     /** Property snapshot the expression evaluates against. */
     props: Partial<Record<PropName, Value>>;
+    /**
+     * Names bound by enclosing arrow parameters. Rebound per element rather
+     * than mutated, so a list method cannot leak a binding to its caller.
+     */
+    vars?: ReadonlyMap<string, Value>;
 }
 
 export function evalExpr(expr: Expr, ctx: EvalContext): Value {
@@ -62,6 +70,31 @@ export function evalExpr(expr: Expr, ctx: EvalContext): Value {
             }
         }
 
+        case 'var': {
+            const v = ctx.vars?.get(expr.name);
+            if (v === undefined) throw new EvalError(`'${expr.name}' is not bound here`, expr.span);
+            return v;
+        }
+
+        case 'array':
+            return { type: 'array', items: expr.items.map(i => evalExpr(i, ctx)) };
+
+        case 'index': {
+            const obj = evalExpr(expr.obj, ctx);
+            if (obj.type === 'none') {
+                if (expr.optional) return { type: 'none' };
+                throw new EvalError('Cannot index none', expr.span);
+            }
+            if (obj.type !== 'array') throw new EvalError(`${obj.type} cannot be indexed`, expr.span);
+            const i = evalExpr(expr.index, ctx);
+            if (i.type !== 'number') throw new EvalError(`A list index is a number, got ${i.type}`, expr.index.span);
+            // Past the end is a missing value, not a failure — `??` covers it.
+            return obj.items[i.value] ?? { type: 'none' };
+        }
+
+        case 'arrow':
+            throw new EvalError('A function only means something as an argument to a list method', expr.span);
+
         case 'member':
         case 'method': {
             const obj = evalExpr(expr.obj, ctx);
@@ -71,10 +104,109 @@ export function evalExpr(expr: Expr, ctx: EvalContext): Value {
                 if (expr.optional) return { type: 'none' };
                 throw new EvalError(`Cannot read '${expr.name}' of none`, expr.span);
             }
+            // A list method is handed the function itself, not its value: the
+            // parameters are bound per element inside.
+            if (obj.type === 'array') return callListMember(obj, expr, ctx);
             const args = expr.kind === 'method' ? expr.args.map(a => evalExpr(a, ctx)) : [];
             return callMember(obj, expr.name, args, ctx, expr.span);
         }
     }
+}
+
+/**
+ * Members and methods of a list. Mirrors the list branch of the checker —
+ * every method typed there has a case here.
+ */
+function callListMember(
+    list: Value & { type: 'array' },
+    expr: Expr & { kind: 'member' | 'method' },
+    ctx: EvalContext
+): Value {
+    const { name, span } = expr;
+    const items = list.items;
+    if (expr.kind === 'member') {
+        if (name === 'length') return { type: 'number', value: items.length };
+        throw new EvalError(`A list has no property '${name}'`, span);
+    }
+
+    const argExprs = expr.args;
+    const num = (i: number): Value => ({ type: 'number', value: i });
+
+    /** Apply the function argument to one element. */
+    const apply = (fnExpr: Expr, values: Value[]): Value => {
+        if (fnExpr.kind !== 'arrow') throw new EvalError(`'${name}' expects a function`, fnExpr.span);
+        const bound = new Map(ctx.vars ?? []);
+        fnExpr.params.forEach((p, i) => bound.set(p, values[i] ?? { type: 'none' }));
+        return evalExpr(fnExpr.body, { ...ctx, vars: bound });
+    };
+    const test = (v: Value, i: number): boolean => {
+        const r = apply(argExprs[0], [v, num(i)]);
+        if (r.type !== 'bool') {
+            throw new EvalError(`'${name}' expects a function returning bool, got ${r.type}`, argExprs[0].span);
+        }
+        return r.value;
+    };
+    const arg = (i: number): Value | undefined =>
+        argExprs[i] === undefined ? undefined : evalExpr(argExprs[i], ctx);
+
+    switch (name) {
+        case 'map':
+            return { type: 'array', items: items.map((v, i) => apply(argExprs[0], [v, num(i)])) };
+        case 'filter':
+            return { type: 'array', items: items.filter(test) };
+        case 'find':
+            return items.find(test) ?? { type: 'none' };
+        case 'some':
+            return { type: 'bool', value: items.some(test) };
+        case 'every':
+            return { type: 'bool', value: items.every(test) };
+        case 'forEach':
+            items.forEach((v, i) => apply(argExprs[0], [v, num(i)]));
+            return { type: 'none' };
+        case 'sort': {
+            // A new list either way: sorting in place would be the one
+            // mutation, and lists here do not have one.
+            const copy = [...items];
+            if (argExprs.length === 0) {
+                return { type: 'array', items: copy.sort((a, b) => valueToDisplay(a).localeCompare(valueToDisplay(b))) };
+            }
+            return {
+                type: 'array',
+                items: copy.sort((a, b) => {
+                    const r = apply(argExprs[0], [a, b]);
+                    if (r.type !== 'number') {
+                        throw new EvalError(`'sort' expects a function returning number, got ${r.type}`, argExprs[0].span);
+                    }
+                    return r.value;
+                }),
+            };
+        }
+        case 'join': {
+            const sep = arg(0);
+            return { type: 'string', value: items.map(valueToDisplay).join(sep === undefined ? ',' : valueToDisplay(sep)) };
+        }
+        case 'includes':
+            return { type: 'bool', value: items.some(v => compareValues(v, arg(0)!) === 0) };
+        case 'indexOf':
+            return { type: 'number', value: items.findIndex(v => compareValues(v, arg(0)!) === 0) };
+        case 'slice': {
+            const from = arg(0);
+            const to = arg(1);
+            return {
+                type: 'array',
+                items: items.slice(
+                    from?.type === 'number' ? from.value : 0,
+                    to?.type === 'number' ? to.value : undefined
+                ),
+            };
+        }
+        case 'concat': {
+            const other = arg(0);
+            if (other?.type !== 'array') throw new EvalError(`'concat' expects a list`, span);
+            return { type: 'array', items: [...items, ...other.items] };
+        }
+    }
+    throw new EvalError(`A list has no method '${name}'`, span);
 }
 
 /**
