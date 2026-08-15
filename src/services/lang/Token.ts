@@ -17,6 +17,9 @@ export type TokenKind =
     | 'dot'        // . (used by file.name)
     | 'plus'
     | 'minus'
+    | 'star'
+    | 'slash'
+    | 'percent'
     | 'bang'
     | 'question'
     | 'ampamp'

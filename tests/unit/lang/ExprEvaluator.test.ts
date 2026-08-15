@@ -158,4 +158,44 @@ describe('ExprEvaluator', () => {
     it('evaluates time() on arithmetic result', () => {
         expect(evaluate('time(2026-07-15 + 2h)')).toEqual({ type: 'time', value: '02:00' });
     });
+
+    describe('multiplicative', () => {
+        it('multiplies and takes the remainder of numbers', () => {
+            expect(evaluate('3 * 4')).toEqual({ type: 'number', value: 12 });
+            expect(evaluate('7 % 3')).toEqual({ type: 'number', value: 1 });
+        });
+
+        it('scales a duration, keeping its unit', () => {
+            // 間隔反復（gap を倍にする）で使う形。
+            expect(evaluate('1d * 2')).toEqual({ type: 'duration', amount: 2, unit: 'd' });
+            expect(evaluate('2 * 3h')).toEqual({ type: 'duration', amount: 6, unit: 'h' });
+            expect(evaluate('4w / 2')).toEqual({ type: 'duration', amount: 2, unit: 'w' });
+        });
+
+        it('refuses a fractional duration instead of writing one that cannot be read back', () => {
+            // duration リテラルは整数 + 単位なので、2.5d は書けても読み戻せない。
+            // 印字できない値を作らせないことで round-trip を守る。
+            expect(() => evaluate('1d / 2')).toThrow(EvalError);
+            expect(() => evaluate('3d / 2')).toThrow(EvalError);
+            // 小さい単位で言えば通る。
+            expect(evaluate('24h / 2')).toEqual({ type: 'duration', amount: 12, unit: 'h' });
+        });
+
+        it('rounds division to a fixed number of places', () => {
+            // 1 / 3 は終わらないので、桁数を規則で決める。
+            expect(evaluate('1 / 3')).toEqual({ type: 'number', value: 0.3333333333 });
+            expect(evaluate('10 / 4')).toEqual({ type: 'number', value: 2.5 });
+        });
+
+        it('fails on division by zero instead of producing infinity', () => {
+            // 評価が失敗すればコマンドは消費されない。無限大の値表現は持たない。
+            expect(() => evaluate('1 / 0')).toThrow(EvalError);
+            expect(() => evaluate('1d / 0')).toThrow(EvalError);
+        });
+
+        it('binds tighter than addition', () => {
+            expect(evaluate('1 + 2 * 3')).toEqual({ type: 'number', value: 7 });
+            expect(evaluate('(1 + 2) * 3')).toEqual({ type: 'number', value: 9 });
+        });
+    });
 });

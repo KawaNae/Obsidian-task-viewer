@@ -9,6 +9,7 @@ export type FnName = typeof FN_NAMES[number];
 
 export type BinaryOp =
     | '+' | '-'
+    | '*' | '/' | '%'
     | '==' | '!=' | '<' | '<=' | '>' | '>='
     | '&&' | '||';
 

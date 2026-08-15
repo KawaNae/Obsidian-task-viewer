@@ -197,6 +197,8 @@ describe('FlowParser', () => {
             '+3d setEndTime(time(start))',
             '+3d setDueTime(none)',
             '+3d setStart(none)',
+            'at(today + 3d * 2)',
+            'at(today + (1d + 2d) * 3)',
         ])('parse → serialize → parse is stable: %s', (src) => {
             const first = parseFlow(src);
             expect(first.program).not.toBeNull();
@@ -204,6 +206,23 @@ describe('FlowParser', () => {
             const second = parseFlow(printed);
             expect(second.diagnostics).toEqual([]);
             expect(serializeFlow(second.program!)).toBe(printed);
+        });
+
+        it('keeps multiplicative precedence when printing', () => {
+            // 印字は優先順位に従って括弧を復元する。ここが崩れると、発火の
+            // たびに式の意味が変わる。
+            expect(serializeFlow(parseFlow('at(today + 1d * 2 + 3d)').program!))
+                .toBe('at(today + 1d * 2 + 3d)');
+            expect(serializeFlow(parseFlow('at(today + (1d + 2d) * 3)').program!))
+                .toBe('at(today + (1d + 2d) * 3)');
+        });
+
+        it('prints accepted variants in one canonical form', () => {
+            // 受理は広く、印字は狭く。異形ごとに canonical 形を 1 つに決める。
+            expect(serializeFlow(parseFlow("every mon setContent('text')").program!))
+                .toBe('every mon setContent("text")');
+            expect(serializeFlow(parseFlow('every mon setContent(1 === 1 ? "a" : "b")').program!))
+                .toBe('every mon setContent(1 == 1 ? "a" : "b")');
         });
 
         it('normalizes clause order canonically', () => {

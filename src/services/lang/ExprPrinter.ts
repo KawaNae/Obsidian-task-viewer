@@ -18,10 +18,11 @@ function precOf(expr: Expr): number {
                 case '||': return 2;
                 case '&&': return 3;
                 case '+': case '-': return 5;
+                case '*': case '/': case '%': return 6;
                 default: return 4; // comparisons
             }
-        case 'unary': return 6;
-        default: return 7;
+        case 'unary': return 7;
+        default: return 8;
     }
 }
 

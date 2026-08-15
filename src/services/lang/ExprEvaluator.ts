@@ -1,7 +1,7 @@
 import type { Span } from './Diagnostic';
 import type { Expr, PropName } from './ExprAst';
 import { type EvalRuntime, FnCallError, callFn } from './functions';
-import { type Value, addDuration, compareValues, isDatishValue } from './Value';
+import { type DurUnit, type Value, addDuration, compareValues, isDatishValue } from './Value';
 
 /**
  * Runtime evaluation failure (e.g. a referenced property is unset on the
@@ -81,6 +81,20 @@ function evalBinary(expr: Expr & { kind: 'binary' }, ctx: EvalContext): Value {
     const l = evalExpr(expr.left, ctx);
     const r = evalExpr(expr.right, ctx);
 
+    if (op === '*' || op === '/' || op === '%') {
+        // duration scaling keeps the unit: `gap * 2` is the adaptive-interval shape.
+        if (l.type === 'duration' && r.type === 'number') {
+            return scaledDuration(arith(op, l.amount, r.value, span), l.unit, span);
+        }
+        if (op === '*' && l.type === 'number' && r.type === 'duration') {
+            return scaledDuration(arith(op, r.amount, l.value, span), r.unit, span);
+        }
+        if (l.type === 'number' && r.type === 'number') {
+            return { type: 'number', value: arith(op, l.value, r.value, span) };
+        }
+        throw new EvalError(`'${op}' cannot combine ${l.type} and ${r.type}`, span);
+    }
+
     if (op === '+' || op === '-') {
         const sign = op === '+' ? 1 : -1;
         if (isDatishValue(l) && r.type === 'duration') return addDuration(l, r, sign as 1 | -1);
@@ -118,6 +132,44 @@ function evalBinary(expr: Expr & { kind: 'binary' }, ctx: EvalContext): Value {
         case '>': return { type: 'bool', value: cmp > 0 };
         default: return { type: 'bool', value: cmp >= 0 };
     }
+}
+
+/**
+ * A scaled duration, refused when the result is fractional.
+ *
+ * Duration literals are whole numbers followed by a unit, so `2.5d` cannot be
+ * read back. Printing one would break the round-trip contract the flow line
+ * depends on, and the break would only surface a generation later. Refusing
+ * here keeps every value the evaluator produces writable; the smaller unit is
+ * the way to say it (`24h / 2` rather than `1d / 2`).
+ */
+function scaledDuration(amount: number, unit: DurUnit, span: Span): Value {
+    if (!Number.isInteger(amount)) {
+        throw new EvalError(
+            `A duration must stay whole — ${amount}${unit} cannot be written. Use a smaller unit.`,
+            span);
+    }
+    return { type: 'duration', amount, unit };
+}
+
+/** Decimal places kept by division (design: 10, half-up). */
+const DIVISION_SCALE = 10;
+
+/**
+ * `*` `/` `%` on plain numbers.
+ *
+ * Division rounds to a fixed number of decimal places because 1 / 3 does not
+ * terminate; without a rule the result would depend on the float that came
+ * out. Dividing by zero fails the evaluation rather than producing infinity —
+ * there is no value for it, and a failed evaluation leaves the command
+ * unconsumed.
+ */
+function arith(op: '*' | '/' | '%', a: number, b: number, span: Span): number {
+    if (op === '*') return a * b;
+    if (b === 0) throw new EvalError(`Division by zero`, span);
+    if (op === '%') return a % b;
+    const factor = 10 ** DIVISION_SCALE;
+    return Math.round((a / b) * factor) / factor;
 }
 
 function isStringish(v: Value): v is Value & { type: 'string' | 'link' } {

@@ -121,6 +121,14 @@ function checkBinary(
             : fail('type.logic-expects-bool', `'${op}' expects bool operands, got ${lt} and ${rt}`, { op, left: lt, right: rt });
     }
 
+    if (op === '*' || op === '/' || op === '%') {
+        if (lt === 'number' && rt === 'number') return 'number';
+        // duration scaling: gap * 2 / 2 * gap / gap / 2 — the adaptive-interval shape
+        if (lt === 'duration' && rt === 'number') return 'duration';
+        if (op === '*' && lt === 'number' && rt === 'duration') return 'duration';
+        return fail('type.cannot-combine', `'${op}' cannot combine ${lt} and ${rt}`, { op, left: lt, right: rt });
+    }
+
     if (op === '+' || op === '-') {
         if (isDatishType(lt) && rt === 'duration') return lt;
         if (op === '+' && lt === 'duration' && isDatishType(rt)) return rt;

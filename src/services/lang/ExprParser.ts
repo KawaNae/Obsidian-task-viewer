@@ -76,10 +76,32 @@ function parseComparison(cursor: TokenCursor, diagnostics: Diagnostic[]): Expr |
 }
 
 function parseAdditive(cursor: TokenCursor, diagnostics: Diagnostic[]): Expr | null {
-    let left = parseUnary(cursor, diagnostics);
+    let left = parseMultiplicative(cursor, diagnostics);
     if (!left) return null;
     for (;;) {
         const op: BinaryOp | null = cursor.at('plus') ? '+' : cursor.at('minus') ? '-' : null;
+        if (!op) return left;
+        cursor.next();
+        const right = parseMultiplicative(cursor, diagnostics);
+        if (!right) return null;
+        left = { kind: 'binary', op, left, right, span: spanBetween(left.span, right.span) };
+    }
+}
+
+/**
+ * Multiplicative binds tighter than additive, as in JS. `%` is the remainder
+ * operator here; the line-leading marker of a generation block is a different
+ * layer and never reaches this parser.
+ */
+function parseMultiplicative(cursor: TokenCursor, diagnostics: Diagnostic[]): Expr | null {
+    let left = parseUnary(cursor, diagnostics);
+    if (!left) return null;
+    for (;;) {
+        const t = cursor.peek();
+        const op: BinaryOp | null =
+            t.kind === 'star' ? '*' :
+            t.kind === 'slash' ? '/' :
+            t.kind === 'percent' ? '%' : null;
         if (!op) return left;
         cursor.next();
         const right = parseUnary(cursor, diagnostics);

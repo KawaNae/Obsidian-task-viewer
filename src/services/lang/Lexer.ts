@@ -47,7 +47,8 @@ export function tokenize(src: string): LexResult {
         }
 
         // String "..." with backslash escapes
-        if (ch === '"') {
+        if (ch === '"' || ch === "'") {
+            const quote = ch;
             const start = i;
             i++;
             let value = '';
@@ -60,7 +61,7 @@ export function tokenize(src: string): LexResult {
                     i += 2;
                     continue;
                 }
-                if (c === '"') {
+                if (c === quote) {
                     closed = true;
                     i++;
                     break;
@@ -128,7 +129,17 @@ export function tokenize(src: string): LexResult {
             continue;
         }
 
-        // Multi-char operators
+        // Multi-char operators. Longest first: `===` must not split into `==` + `=`.
+        const three = src.slice(i, i + 3);
+        const threeKind: TokenKind | undefined =
+            three === '===' ? 'eq' :
+            three === '!==' ? 'neq' : undefined;
+        if (threeKind) {
+            push(threeKind, three, i, i + 3);
+            i += 3;
+            continue;
+        }
+
         const two = src.slice(i, i + 2);
         const twoKind: TokenKind | undefined =
             two === '&&' ? 'ampamp' :
@@ -152,6 +163,9 @@ export function tokenize(src: string): LexResult {
             ch === '.' ? 'dot' :
             ch === '+' ? 'plus' :
             ch === '-' ? 'minus' :
+            ch === '*' ? 'star' :
+            ch === '/' ? 'slash' :
+            ch === '%' ? 'percent' :
             ch === '!' ? 'bang' :
             ch === '?' ? 'question' :
             ch === '<' ? 'lt' :

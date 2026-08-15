@@ -130,4 +130,19 @@ describe('ExprParser', () => {
         expect(expr).toBeNull();
         expect(diagnostics.some(d => d.code === 'expr.expected-colon')).toBe(true);
     });
+
+    it('reads strict equality as equality', () => {
+        // LLM は === と !== を書く。受理して canonical では == / != に寄せる。
+        const { expr } = parse('1 === 1');
+        expect(expr?.kind).toBe('binary');
+        expect(expr?.kind === 'binary' && expr.op).toBe('==');
+        const neq = parse('1 !== 2');
+        expect(neq.expr?.kind === 'binary' && neq.expr.op).toBe('!=');
+    });
+
+    it('accepts single-quoted strings', () => {
+        const { expr, diagnostics } = parse("'text'");
+        expect(diagnostics).toEqual([]);
+        expect(expr?.kind === 'lit' && expr.value).toEqual({ type: 'string', value: 'text' });
+    });
 });
