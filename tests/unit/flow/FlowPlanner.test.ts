@@ -13,6 +13,7 @@ const DEPS: FlowPlanDeps = {
     now: { date: '2026-07-02', time: '10:00' },
     weekStartDay: 1,
     host: { formatDate: (v, tokens) => `[${tokens}]` },
+    getBlock: () => undefined,
 };
 
 function plan(src: string, overrides: Partial<Task> = {}) {
@@ -25,6 +26,24 @@ function plan(src: string, overrides: Partial<Task> = {}) {
 function createNextOf(effects: ReturnType<typeof plan>) {
     const e = effects.find(e => e.kind === 'create-next');
     if (!e || e.kind !== 'create-next') throw new Error('no create-next effect');
+    return e;
+}
+
+/** Plan a fire whose command names a block, with that block in hand. */
+function planGenerated(src: string, body: string[], overrides: Partial<Task> = {}) {
+    const { program, diagnostics } = parseFlow(src);
+    if (!program) throw new Error(`parse failed: ${diagnostics.map(d => d.message).join('; ')}`);
+    const task = makeTask({
+        statusChar: 'x',
+        flow: { raw: src, childSegments: [], program, diagnostics: [] },
+        ...overrides,
+    });
+    const effects = planFlow(task, program, {
+        ...DEPS,
+        getBlock: (_file, name) => ({ name, body, openLine: 0, closeLine: body.length + 1 }),
+    });
+    const e = effects.find(e => e.kind === 'create-generated');
+    if (!e || e.kind !== 'create-generated') throw new Error('no create-generated effect');
     return e;
 }
 
@@ -358,6 +377,31 @@ describe('FlowPlanner', () => {
     describe('runtime failures', () => {
         it('throws EvalError when a referenced property is unset (executor leaves command intact)', () => {
             expect(() => plan('every mon setDue(end + 1d)', { startDate: '2026-06-29' })).toThrow(EvalError);
+        });
+    });
+
+    describe('generation: what the engine corrected travels with the effect', () => {
+        it('reports the status it dropped from the parent line', () => {
+            // The written line differs from the one the block describes, and
+            // this is the only record of it — the block is not rewritten.
+            const effect = planGenerated(
+                'every mon use("週報")',
+                ['- [x] 週報 @${start}'],
+                { startDate: '2026-06-29' },
+            );
+
+            expect(effect.parentLine.startsWith('- [ ] ')).toBe(true);
+            expect(effect.warnings.map(w => w.code)).toEqual(['gen.generated-status']);
+        });
+
+        it('says nothing when there was nothing to correct', () => {
+            const effect = planGenerated(
+                'every mon use("週報")',
+                ['- [ ] 週報 @${start}'],
+                { startDate: '2026-06-29' },
+            );
+
+            expect(effect.warnings).toEqual([]);
         });
     });
 });

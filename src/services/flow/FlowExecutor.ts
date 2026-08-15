@@ -134,7 +134,12 @@ export class FlowExecutor {
             case 'create-generated':
                 // Finished lines: the planner composed the parent, checked
                 // it and normalized its status, so there is nothing to
-                // format here.
+                // format here. What it corrected on the way is reported
+                // rather than dropped — the written line differs from the
+                // one the block describes, and nothing else will say so.
+                for (const w of effect.warnings) {
+                    logWarn(`[Flow:generated] ${task.id}: ${w.message}`);
+                }
                 await this.repository.insertGeneratedInstance(
                     task, effect.parentLine, effect.flowLines, effect.children);
                 return;

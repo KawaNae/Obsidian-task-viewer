@@ -1,4 +1,5 @@
 import type { Task } from '../../types';
+import type { Diagnostic } from '../lang/Diagnostic';
 import type { GeneratedChild } from '../persistence/TaskCloner';
 
 /**
@@ -29,6 +30,14 @@ export type FlowEffect =
         /** Canonical `- ==>` child lines of the new instance. */
         flowLines: string[];
         children: GeneratedChild[];
+        /**
+         * What the engine corrected on the way, such as a status the block
+         * wrote as done. The fire went ahead, so these are not reasons to
+         * stop — they are the only record that the written lines differ
+         * from the ones the block described, and the interpreter reports
+         * them.
+         */
+        warnings: Diagnostic[];
     }
     | { kind: 'archive-to'; destPath: string; archivedTask: Task }
     | { kind: 'strip-flow' }

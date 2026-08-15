@@ -2,6 +2,7 @@ import { differenceInCalendarDays } from 'date-fns';
 import type { Task, TaskFlow } from '../../types';
 import { DateUtils } from '../../utils/DateUtils';
 import { TIMER_ICON_PREFIX_RE } from '../../utils/TimerIcons';
+import type { Diagnostic } from '../lang/Diagnostic';
 import type { PropName } from '../lang/ExprAst';
 import { type EvalContext, EvalError, evalExpr } from '../lang/ExprEvaluator';
 import type { EvalHost } from '../lang/functions';
@@ -135,6 +136,10 @@ export function planFlow(task: Task, program: FlowProgram, deps: FlowPlanDeps): 
  * drops the others — they are neither the parent nor children. The render
  * never sees them, so it cannot decide anything about them, and firing
  * would write an instance with lines silently missing.
+ *
+ * The rule underneath, for whoever adds the next diagnostic: a fire may
+ * proceed when the parse drops no line. Anything the render still holds it
+ * can judge for itself; anything the parse threw away it cannot.
  */
 const RENDER_DECIDES = new Set(['gen.root-not-first']);
 
@@ -181,11 +186,13 @@ function planGenerated(
     const rendered = renderGenBody(body, buildEvalContext(newTask, deps));
     if (!rendered.ok) throw new GenerationError(rendered.error.message);
 
+    const warnings: Diagnostic[] = [];
     return {
         kind: 'create-generated',
-        parentLine: composeParentLine(rendered.parentText, newTask),
+        parentLine: composeParentLine(rendered.parentText, newTask, warnings),
         flowLines: (newTask.flow?.childSegments ?? []).map(s => s.raw),
         children: rendered.children.map(child => checkedChild(child)),
+        warnings,
     };
 }
 
@@ -196,12 +203,21 @@ function planGenerated(
  * Both roads end in one string so the write layer never learns that a block
  * can leave the parent out. The clause is spelled the way format() spells
  * it, since these are two ways of writing the same line.
+ *
+ * Corrections collect into `warnings`. A status the block wrote as done is
+ * dropped here and nowhere else, so this is the only place that can say the
+ * written line differs from the described one.
  */
-function composeParentLine(parentText: string | null, newTask: Task): string {
+function composeParentLine(
+    parentText: string | null,
+    newTask: Task,
+    warnings: Diagnostic[],
+): string {
     if (parentText === null) return TaskParser.format(newTask).trim();
 
     const checked = checkGeneratedParentLine(parentText);
     if (!checked.ok) throw new GenerationError(checked.error.message);
+    warnings.push(...checked.warnings);
     return checked.line + (newTask.flow?.raw ? ` ==> ${newTask.flow.raw}` : '');
 }
 
