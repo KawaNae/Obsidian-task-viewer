@@ -116,6 +116,15 @@ export function checkExpr(expr: Expr, env: TypeEnv, diagnostics: Diagnostic[], v
             return ot.array;
         }
 
+        case 'template': {
+            // Every piece has to be renderable as text. Only a function is
+            // not, and it reports itself when checked.
+            for (const part of expr.parts) {
+                if (part.kind === 'expr') checkExpr(part.expr, env, diagnostics, vars);
+            }
+            return 'string';
+        }
+
         case 'arrow':
             diagnostics.push(error('type.function-not-here',
                 'A function only means something as an argument to a list method (map, filter, sort, ...)',

@@ -1,4 +1,6 @@
-import { error, warning } from '../../lang/Diagnostic';
+import { type Diagnostic, error, warning } from '../../lang/Diagnostic';
+import type { InterpolationPart } from '../../lang/ExprAst';
+import { splitInterpolations } from '../../lang/ExprParser';
 import { TaskLineClassifier } from '../utils/TaskLineClassifier';
 import type { LocatedDiagnostic } from './GenBlockCollector';
 
@@ -8,6 +10,12 @@ export interface GenLine {
     depth: number;
     /** The line without its indentation. Interpolations are left as written. */
     text: string;
+    /**
+     * The same line split into literal text and `${...}` expressions, ready to
+     * render. Read here rather than at generation time so a broken expression
+     * is reported while it is being written, not when a task is completed.
+     */
+    parts: InterpolationPart[];
     /** Absolute line index in the file. */
     line: number;
 }
@@ -82,9 +90,17 @@ export function parseGenBody(body: string[], firstLine: number): GenBody {
             });
         }
 
+        // Spans are measured from the start of the raw line, which is where
+        // the editor puts them, so the interpolations carry the indent.
+        const text = raw.trimStart();
+        const lineDiagnostics: Diagnostic[] = [];
+        const parts = splitInterpolations(text, lineDiagnostics, indent.length);
+        for (const d of lineDiagnostics) diagnostics.push({ ...d, line });
+
         lines.push({
             depth: tabs + Math.ceil(spaces / SPACES_PER_LEVEL),
-            text: raw.trimStart(),
+            text,
+            parts,
             line,
         });
     }

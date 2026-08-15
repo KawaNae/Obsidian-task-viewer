@@ -9,6 +9,7 @@ export type TokenKind =
     | 'duration'   // 3d, 30min, 2mo
     | 'string'     // "text" (escapes resolved)
     | 'wikilink'   // [[target]] (brackets stripped)
+    | 'template'   // `text ${expr}` (backticks stripped, interpolations raw)
     | 'lparen'
     | 'rparen'
     | 'lbracket'   // [ (a wikilink's [[ is matched first)

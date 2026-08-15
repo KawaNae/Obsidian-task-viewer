@@ -1,7 +1,7 @@
 import { type Diagnostic, type Span, error } from './Diagnostic';
-import { type BinaryOp, type Expr, FN_NAMES, type FnName, type PropName } from './ExprAst';
-import { splitDurationText } from './Lexer';
-import { type Token, type TokenCursor, tokenSpan } from './Token';
+import { type BinaryOp, type Expr, FN_NAMES, type FnName, type InterpolationPart, type PropName } from './ExprAst';
+import { findInterpolationEnd, splitDurationText, tokenize } from './Lexer';
+import { type Token, TokenCursor, tokenSpan } from './Token';
 import { weekdayFromName } from './Value';
 
 /** Bare idents inside expressions that read as unit keywords (startOf(week)). */
@@ -311,6 +311,22 @@ function parsePrimary(cursor: TokenCursor, diagnostics: Diagnostic[]): Expr | nu
         case 'wikilink':
             cursor.next();
             return { kind: 'lit', value: { type: 'link', target: token.text }, span };
+        case 'template': {
+            cursor.next();
+            // Block-only, like lists. A flow command is re-serialized on every
+            // firing, and carrying interpolation back out canonically is a
+            // heavy contract for the printer to hold for a rare shape — so
+            // the surface that has to print says to join with + instead.
+            if (profile === 'flow') {
+                diagnostics.push(error('expr.template-not-here',
+                    'A template literal is only available inside a generation block — join with + here', span));
+                return null;
+            }
+            // The token holds the text between the backticks, so an offset of
+            // one puts the interpolations back where the reader sees them.
+            const parts = splitInterpolations(token.text, diagnostics, span.start + 1, 'block');
+            return { kind: 'template', parts, span };
+        }
         case 'lparen': {
             cursor.next();
             const inner = parseTernary(cursor, diagnostics);
@@ -563,4 +579,92 @@ function parseArgs(cursor: TokenCursor, diagnostics: Diagnostic[], fn = 'the cal
 function normalizeTime(text: string): string {
     const [h, m] = text.split(':');
     return `${h.padStart(2, '0')}:${m}`;
+}
+
+
+/**
+ * Split text into its literal parts and its `${...}` expressions.
+ *
+ * Used for a template literal and for a line of a generation block's body,
+ * which are the same problem written two ways. Diagnostic spans are absolute:
+ * `offset` is where `text` sits in whatever the reader is looking at.
+ *
+ * Everything that goes wrong is reported — a line with two broken
+ * interpolations says so twice rather than stopping at the first.
+ */
+export function splitInterpolations(
+    text: string,
+    diagnostics: Diagnostic[],
+    offset = 0,
+    forProfile: ParseProfile = 'block'
+): InterpolationPart[] {
+    const parts: InterpolationPart[] = [];
+    let literal = '';
+    const flushLiteral = () => {
+        if (literal !== '') parts.push({ kind: 'text', text: literal });
+        literal = '';
+    };
+    let i = 0;
+
+    while (i < text.length) {
+        if (text[i] !== '$' || text[i + 1] !== '{') { literal += text[i]; i++; continue; }
+        // A backslash immediately before makes the `${` literal, and is the
+        // only thing a backslash ever does here: everywhere else it is an
+        // ordinary character, so a Windows path can be written as it is.
+        if (literal.endsWith('\\')) {
+            literal = literal.slice(0, -1) + '${';
+            i += 2;
+            continue;
+        }
+        const end = findInterpolationEnd(text, i);
+        if (end === -1) {
+            diagnostics.push(error('gen.unterminated-interpolation',
+                "Unterminated '${' — the closing brace is missing",
+                { start: offset + i, end: offset + text.length }));
+            break;
+        }
+        flushLiteral();
+
+        const source = text.slice(i + 2, end);
+        const span = { start: offset + i, end: offset + end + 1 };
+        const expr = parseWholeExpr(source, offset + i + 2, span, diagnostics, forProfile);
+        if (expr) parts.push({ kind: 'expr', expr, span });
+
+        i = end + 1;
+    }
+    flushLiteral();
+    return parts;
+}
+
+/**
+ * One `${...}`, read to the end.
+ *
+ * The expression parser reads one expression and stops, which is fine inside
+ * a call where the `)` catches whatever is left over. Nothing catches it here.
+ * Without this check `${a == b == c}` would quietly generate from `a == b`,
+ * and no round-trip test can see it: the half that was read prints and reads
+ * back perfectly well.
+ */
+function parseWholeExpr(
+    source: string,
+    offset: number,
+    span: Span,
+    diagnostics: Diagnostic[],
+    forProfile: ParseProfile
+): Expr | null {
+    // Lexed with the offset, so every span the parse produces — the tokens,
+    // the AST nodes, and anything the checker or the evaluator reports later
+    // against them — already points into the line the reader is looking at.
+    const { tokens, diagnostics: lexDiagnostics } = tokenize(source, offset);
+    diagnostics.push(...lexDiagnostics);
+    const cursor = new TokenCursor(tokens);
+    const expr = parseExpr(cursor, diagnostics, forProfile);
+    if (!expr) return null;
+    if (!cursor.atEof()) {
+        diagnostics.push(error('gen.trailing-input',
+            `Not all of this was read — there is more after the expression in '${source.trim()}'`,
+            span, { source: source.trim() }));
+        return null;
+    }
+    return expr;
 }

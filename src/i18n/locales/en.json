@@ -704,6 +704,7 @@
   }  ,
   "flowDiag": {
     "lex": {
+      "unterminated-template": "Unterminated template literal",
       "wikilink-looks-like-list": "This reads as a wikilink, not a list of lists — separate the brackets: [ [1], [2] ]",
       "unterminated-wikilink": "Unterminated wikilink",
       "unterminated-string": "Unterminated string",
@@ -712,6 +713,7 @@
       "decimal-unsupported": "Decimal numbers are not supported yet ('{{text}}') — say it in a smaller unit"
     },
     "expr": {
+      "template-not-here": "A template literal is only available inside a generation block — join with + here",
       "function-not-here": "A function is only available inside a generation block",
       "list-not-here": "A list is only available inside a generation block",
       "expected-param": "Expected a parameter name",
@@ -787,6 +789,8 @@
       "inert-notation": "This line is read as {{notation}} notation, so the ==> command never runs — it stays part of the task name"
     },
     "gen": {
+      "trailing-input": "Not all of this was read — there is more after the expression in '{{source}}'",
+      "unterminated-interpolation": "Unterminated '${' — the closing brace is missing",
       "unknown-tag": "Unknown language tag '{{tag}}' — a generation block is tagged tv-gen",
       "unterminated-block": "This block is never closed: every line below it is read as its body, and the tasks written there stop appearing",
       "missing-name": "A generation block needs a name — reference it with use(\"name\")",

@@ -15,14 +15,21 @@ export interface LexResult {
 /**
  * Shared lexer for the flow-command surface and the expression language.
  * Whitespace separates tokens and is otherwise insignificant.
+ *
+ * `base` is where `src` sits inside whatever the reader is looking at. An
+ * expression lifted out of a `${...}` is lexed on its own, and without this
+ * every span it produces — the tokens, and every AST node built from them —
+ * would measure from the start of the fragment and point at the wrong place
+ * in the line. Carrying it here fixes all of them at once, rather than
+ * remapping diagnostics afterwards and leaving the AST wrong.
  */
-export function tokenize(src: string): LexResult {
+export function tokenize(src: string, base = 0): LexResult {
     const tokens: Token[] = [];
-    const diagnostics: Diagnostic[] = [];
+    const rawDiagnostics: Diagnostic[] = [];
     let i = 0;
 
     const push = (kind: TokenKind, text: string, start: number, end: number) => {
-        tokens.push({ kind, text, start, end });
+        tokens.push({ kind, text, start: start + base, end: end + base });
     };
 
     while (i < src.length) {
@@ -39,7 +46,7 @@ export function tokenize(src: string): LexResult {
         if (src.startsWith('[[', i)) {
             const close = src.indexOf(']]', i + 2);
             if (close === -1) {
-                diagnostics.push(error('lex.unterminated-wikilink',
+                rawDiagnostics.push(error('lex.unterminated-wikilink',
                     'Unterminated wikilink — a list inside a list is written with a space: [ [1], [2] ]',
                     { start: i, end: src.length }));
                 i = src.length;
@@ -50,12 +57,41 @@ export function tokenize(src: string): LexResult {
             // one is a list of lists that lost the longest match. Say so here,
             // where it is still visible, rather than at evaluation.
             if (/[[\]]/.test(target)) {
-                diagnostics.push(error('lex.wikilink-looks-like-list',
+                rawDiagnostics.push(error('lex.wikilink-looks-like-list',
                     'This reads as a wikilink, not a list of lists — separate the brackets: [ [1], [2] ]',
                     { start: i, end: close + 2 }, { target }));
             }
             push('wikilink', target, i, close + 2);
             i = close + 2;
+            continue;
+        }
+
+        // Template literal `text ${expr}`. Taken whole: the interpolations
+        // inside are read by the parser, which is what can read an expression.
+        // Scanning past them here is what keeps a backtick inside one from
+        // ending the template early.
+        if (ch === '`') {
+            let j = i + 1;
+            let closed = false;
+            while (j < src.length) {
+                if (src[j] === '\\') { j += 2; continue; }
+                if (src[j] === '$' && src[j + 1] === '{') {
+                    const end = findInterpolationEnd(src, j);
+                    if (end === -1) break;
+                    j = end + 1;
+                    continue;
+                }
+                if (src[j] === '`') { closed = true; break; }
+                j++;
+            }
+            if (!closed) {
+                rawDiagnostics.push(error('lex.unterminated-template', 'Unterminated template literal',
+                    { start: i, end: src.length }));
+                i = src.length;
+                continue;
+            }
+            push('template', src.slice(i + 1, j), i, j + 1);
+            i = j + 1;
             continue;
         }
 
@@ -83,7 +119,7 @@ export function tokenize(src: string): LexResult {
                 i++;
             }
             if (!closed) {
-                diagnostics.push(error('lex.unterminated-string', 'Unterminated string', { start, end: src.length }));
+                rawDiagnostics.push(error('lex.unterminated-string', 'Unterminated string', { start, end: src.length }));
             }
             push('string', value, start, i);
             continue;
@@ -117,7 +153,7 @@ export function tokenize(src: string): LexResult {
             // wrong instead, and point at the way to write it today.
             if (/^\.\d/.test(afterNum)) {
                 const full = num + afterNum.match(/^\.\d+/)![0];
-                diagnostics.push(error('lex.decimal-unsupported',
+                rawDiagnostics.push(error('lex.decimal-unsupported',
                     `Decimal numbers are not supported yet ('${full}') — say it in a smaller unit`,
                     { start: i, end: i + full.length }, { text: full }));
                 push('number', num, i, i + num.length);
@@ -131,7 +167,7 @@ export function tokenize(src: string): LexResult {
                 if ((DURATION_UNITS as readonly string[]).includes(unit)) {
                     push('duration', full, i, i + full.length);
                 } else {
-                    diagnostics.push(error('lex.unknown-unit',
+                    rawDiagnostics.push(error('lex.unknown-unit',
                         `Unknown duration unit '${unit}' (expected ${DURATION_UNITS.join('/')})`,
                         { start: i, end: i + full.length },
                         { unit, units: DURATION_UNITS.join('/') }));
@@ -206,15 +242,63 @@ export function tokenize(src: string): LexResult {
             continue;
         }
 
-        diagnostics.push(error('lex.unexpected-char', `Unexpected character '${ch}'`, { start: i, end: i + 1 }, { char: ch }));
+        rawDiagnostics.push(error('lex.unexpected-char', `Unexpected character '${ch}'`, { start: i, end: i + 1 }, { char: ch }));
         i++;
     }
 
     push('eof', '', src.length, src.length);
+    const diagnostics = base === 0
+        ? rawDiagnostics
+        : rawDiagnostics.map(d => ({ ...d, span: { start: d.span.start + base, end: d.span.end + base } }));
     return { tokens, diagnostics };
 }
 
 /** Parse the text of a 'duration' token into its parts. */
+/**
+ * Index of the `}` that closes the `${` starting at `open`, or -1.
+ *
+ * Not the first brace: an object literal, a function body and a string can
+ * each carry one, and `${xs.map(x => { return x })}` has three before the
+ * real end. Strings are skipped whole, including the template literals that
+ * can nest another interpolation inside them.
+ *
+ * Shared by the template-literal lexer and the interpolation of a generation
+ * block's body — the two places where a `${` has to be closed correctly.
+ */
+export function findInterpolationEnd(src: string, open: number): number {
+    /** Closers still owed, innermost last. Every bracket kind, not just the
+     *  braces: keeping one list means a kind added later cannot be forgotten
+     *  the way a hand-written brace count would forget it. */
+    const owed: string[] = [];
+    const CLOSER: Record<string, string> = { '{': '}', '(': ')', '[': ']' };
+    let i = open + 2; // past the `${`
+    let quote: string | null = null;
+
+    while (i < src.length) {
+        const ch = src[i];
+        if (quote !== null) {
+            if (ch === '\\') { i += 2; continue; }
+            if (ch === quote) { quote = null; i++; continue; }
+            if (quote === '`' && ch === '$' && src[i + 1] === '{') {
+                // A template literal inside the interpolation closes its own
+                // interpolations before this one closes.
+                const inner = findInterpolationEnd(src, i);
+                if (inner === -1) return -1;
+                i = inner + 1;
+                continue;
+            }
+            i++;
+            continue;
+        }
+        if (ch === '"' || ch === "'" || ch === '`') { quote = ch; i++; continue; }
+        if (CLOSER[ch] !== undefined) { owed.push(CLOSER[ch]); i++; continue; }
+        if (ch === '}' && owed.length === 0) return i;
+        if (ch === owed[owed.length - 1]) { owed.pop(); i++; continue; }
+        i++;
+    }
+    return -1;
+}
+
 export function splitDurationText(text: string): { amount: number; unit: DurUnit } {
     const m = text.match(/^(\d+)([A-Za-z]+)$/)!;
     return { amount: parseInt(m[1], 10), unit: m[2] as DurUnit };

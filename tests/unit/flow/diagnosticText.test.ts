@@ -3,7 +3,7 @@ import { diagnosticText } from '../../../src/services/flow/diagnosticText';
 import { parseFlow } from '../../../src/services/flow/FlowParser';
 import { Diagnostic } from '../../../src/services/lang/Diagnostic';
 import { FLOW_TYPE_ENV, checkExpr } from '../../../src/services/lang/ExprChecker';
-import { parseExpr } from '../../../src/services/lang/ExprParser';
+import { parseExpr, splitInterpolations } from '../../../src/services/lang/ExprParser';
 import { tokenize } from '../../../src/services/lang/Lexer';
 import { TokenCursor } from '../../../src/services/lang/Token';
 
@@ -81,6 +81,7 @@ describe('diagnosticText', () => {
             '["a"',                           // expr.expected-rbracket-list
             '(1) => 1',                       // expr.expected-param
             '[[1, 2], [3]]',                  // lex.wikilink-looks-like-list
+            '`unterminated',                  // lex.unterminated-template
         ];
         const seen = new Set<string>();
         for (const src of samples) {
@@ -99,11 +100,15 @@ describe('diagnosticText', () => {
             'type.callback-result', 'type.too-many-params', 'type.param-shadows-builtin',
             'type.function-not-here', 'expr.expected-rbracket', 'expr.expected-rbracket-list',
             'expr.expected-param',
-            'lex.wikilink-looks-like-list']) {
+            'lex.wikilink-looks-like-list', 'lex.unterminated-template']) {
             expect(seen).toContain(code);
         }
         // フロー側で弾く 2 つも、文言が出ること
-        const flowOnly = ['every mon setContent(["a"])', 'every mon setContent(content.map(x => x))'];
+        const flowOnly = [
+            'every mon setContent(["a"])',
+            'every mon setContent(content.map(x => x))',
+            'every mon setContent(`第${1}回`)',
+        ];
         for (const src of flowOnly) {
             for (const d of parseFlow(src).diagnostics) {
                 expect(diagnosticText(d)).not.toContain('{{');
@@ -112,6 +117,17 @@ describe('diagnosticText', () => {
         }
         expect(seen).toContain('expr.list-not-here');
         expect(seen).toContain('expr.function-not-here');
+        expect(seen).toContain('expr.template-not-here');
+
+        // 差し込みの診断は行から出る（フロー行にも式にも属さない第三の入口）
+        const lineDiagnostics: Diagnostic[] = [];
+        splitInterpolations('- [ ] ${1 2} and ${unclosed', lineDiagnostics);
+        for (const d of lineDiagnostics) {
+            seen.add(d.code);
+            expect(diagnosticText(d)).not.toContain('{{');
+        }
+        expect(seen).toContain('gen.trailing-input');
+        expect(seen).toContain('gen.unterminated-interpolation');
     });
 
     it('falls back to the English default message for unknown codes', () => {

@@ -704,6 +704,7 @@
   }  ,
   "flowDiag": {
     "lex": {
+      "unterminated-template": "テンプレートリテラルが閉じられていません",
       "wikilink-looks-like-list": "これは wikilink として読まれます（配列の配列ではありません）。括弧を離してください: [ [1], [2] ]",
       "unterminated-wikilink": "wikilink が閉じられていません",
       "unterminated-string": "文字列が閉じられていません",
@@ -712,6 +713,7 @@
       "decimal-unsupported": "小数はまだ使えません（'{{text}}'）。小さい単位で書いてください"
     },
     "expr": {
+      "template-not-here": "テンプレートリテラルは生成ブロックの中でのみ使えます。ここでは + で連結してください",
       "function-not-here": "関数は生成ブロックの中でのみ使えます",
       "list-not-here": "配列は生成ブロックの中でのみ使えます",
       "expected-param": "引数名が必要です",
@@ -787,6 +789,8 @@
       "inert-notation": "この行は {{notation}} 記法として解釈されるため、==> コマンドは実行されません（タスク名の一部として表示されます）"
     },
     "gen": {
+      "trailing-input": "式の後ろに読み残しがあります（'{{source}}'）",
+      "unterminated-interpolation": "'${' が閉じられていません",
       "unknown-tag": "不明な言語タグ '{{tag}}' です。生成ブロックの言語タグは tv-gen です",
       "unterminated-block": "このブロックが閉じられていません。以降の行がすべてブロックの本文として読まれ、そこに書いたタスクは表示されなくなります",
       "missing-name": "生成ブロックには名前が必要です（use(\"名前\") で参照します）",
