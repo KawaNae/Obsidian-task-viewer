@@ -716,6 +716,7 @@
       "list-not-here": "配列は生成ブロックの中でのみ使えます",
       "expected-param": "引数名が必要です",
       "expected-rbracket": "']' が必要です",
+      "expected-rbracket-list": "配列を閉じる ']' が必要です",
       "expected-colon": "条件式には ':' が必要です",
       "expected-rparen": "')' が必要です",
       "expected-rparen-call": "{{fn}}(...) を閉じる ')' が必要です",

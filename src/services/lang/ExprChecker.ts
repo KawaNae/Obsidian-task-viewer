@@ -1,4 +1,4 @@
-import { type Diagnostic, type Span, error, warning } from './Diagnostic';
+import { type Diagnostic, type Span, error } from './Diagnostic';
 import type { Expr, PropName } from './ExprAst';
 import {
     type ArrayType, FN_SIGS, type StaticType, arrayOf, isArrayType, isAssignable, isDatishType,
@@ -368,8 +368,13 @@ function checkCallback(
     }
     const bound = new Map(vars);
     arg.params.forEach((p, i) => {
+        // An error, where shadowing a built-in with `let` is only a warning.
+        // A parameter is the only handle on the element, so a body that cannot
+        // see it has no correct reading — and it does not fail loudly either:
+        // `filter(content => content.length > 1)` becomes a constant predicate
+        // and lets everything through, writing plausible nonsense.
         if (isReservedName(p)) {
-            diagnostics.push(warning('type.param-shadows-builtin',
+            diagnostics.push(error('type.param-shadows-builtin',
                 `'${p}' already means something here — the built-in wins and this parameter cannot be read`,
                 arg.span, { name: p }));
         }
@@ -516,6 +521,24 @@ const NUMBER_METHODS: Record<string, MemberSig> = {
 };
 
 /**
+ * Every scalar receiver and what it carries.
+ *
+ * One table behind both the lookup and the invariant below, so a fifth
+ * receiver added later cannot appear in one and not the other.
+ */
+const SCALAR_MEMBERS: readonly {
+    applies: (t: StaticType) => boolean;
+    members: Record<string, MemberSig>;
+    methods: Record<string, MemberSig>;
+}[] = [
+    { applies: t => t === 'string', members: STRING_MEMBERS, methods: STRING_METHODS },
+    // 'datish' covers a property whose concrete date type is not known until
+    // evaluation; date methods apply to it just the same.
+    { applies: isDatishType, members: {}, methods: DATE_METHODS },
+    { applies: t => t === 'number', members: {}, methods: NUMBER_METHODS },
+];
+
+/**
  * Every member a scalar carries, flattened.
  *
  * Exposed so the invariant that holds the two profiles apart stays checkable:
@@ -524,20 +547,11 @@ const NUMBER_METHODS: Record<string, MemberSig> = {
  * (a `split`, say) would open the same door, and with it the printer's
  * obligation to write functions back out.
  */
-export const SCALAR_MEMBER_SIGS: readonly MemberSig[] = [
-    ...Object.values(DATE_METHODS),
-    ...Object.values(STRING_MEMBERS),
-    ...Object.values(STRING_METHODS),
-    ...Object.values(NUMBER_METHODS),
-];
+export const SCALAR_MEMBER_SIGS: readonly MemberSig[] = SCALAR_MEMBERS.flatMap(
+    e => [...Object.values(e.members), ...Object.values(e.methods)]);
 
 export function memberSignature(receiver: StaticType, name: string, isMethod: boolean): MemberSig | null {
-    if (receiver === 'string') {
-        return (isMethod ? STRING_METHODS[name] : STRING_MEMBERS[name]) ?? null;
-    }
-    // 'datish' covers a property whose concrete date type is not known until
-    // evaluation; date methods apply to it just the same.
-    if (isMethod && isDatishType(receiver)) return DATE_METHODS[name] ?? null;
-    if (isMethod && receiver === 'number') return NUMBER_METHODS[name] ?? null;
-    return null;
+    const entry = SCALAR_MEMBERS.find(e => e.applies(receiver));
+    if (!entry) return null;
+    return (isMethod ? entry.methods : entry.members)[name] ?? null;
 }

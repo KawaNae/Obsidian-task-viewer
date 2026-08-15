@@ -238,7 +238,7 @@ function parseParenExpr(cursor: TokenCursor, fnName: string, diagnostics: Diagno
         diagnostics.push(error('flow.expected-lparen', `Expected '(' after '${fnName}'`, tokenSpan(cursor.peek()), { fn: fnName }));
         return null;
     }
-    const expr = parseExpr(cursor, diagnostics);
+    const expr = parseExpr(cursor, diagnostics, 'flow');
     if (!expr) return null;
     if (!cursor.tryEat('rparen')) {
         diagnostics.push(error('flow.expected-rparen', `Expected ')' to close ${fnName}(...)`, tokenSpan(cursor.peek()), { fn: fnName }));

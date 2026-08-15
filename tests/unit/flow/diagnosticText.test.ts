@@ -77,7 +77,8 @@ describe('diagnosticText', () => {
             '["a"].map((a, b, c) => a)',      // type.too-many-params
             '["a"].map(content => content)',  // type.param-shadows-builtin
             'x => x',                         // type.function-not-here
-            '["a"',                           // expr.expected-rbracket
+            'xs[0',                           // expr.expected-rbracket
+            '["a"',                           // expr.expected-rbracket-list
             '(1) => 1',                       // expr.expected-param
             '[[1, 2], [3]]',                  // lex.wikilink-looks-like-list
         ];
@@ -96,7 +97,8 @@ describe('diagnosticText', () => {
         for (const code of ['type.list-mixed', 'type.index-not-number', 'type.not-indexable',
             'type.list-immutable', 'type.sort-needs-comparator', 'type.expects-function',
             'type.callback-result', 'type.too-many-params', 'type.param-shadows-builtin',
-            'type.function-not-here', 'expr.expected-rbracket', 'expr.expected-param',
+            'type.function-not-here', 'expr.expected-rbracket', 'expr.expected-rbracket-list',
+            'expr.expected-param',
             'lex.wikilink-looks-like-list']) {
             expect(seen).toContain(code);
         }

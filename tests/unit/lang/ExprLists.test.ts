@@ -96,10 +96,27 @@ describe('lists in the block profile', () => {
         expect(check('[2, 10].sort((a, b) => a - b)').type).toEqual({ array: 'number' });
     });
 
-    it('warns when a parameter shadows a name the parser already claims', () => {
+    it('refuses a parameter that shadows a name the parser already claims', () => {
+        // `let` の隠蔽が warning なのに対しこちらは error。引数は要素に触れる
+        // 唯一の手段なので、本体から見えない map / filter に正しい読みが無い。
+        // しかも黙って通る: filter の述語が定数になって全件素通りする。
         const { diagnostics } = check('["a"].map(content => content)');
         expect(codes(diagnostics)).toContain('type.param-shadows-builtin');
-        expect(diagnostics[0].severity).toBe('warning');
+        expect(diagnostics[0].severity).toBe('error');
+        expect(codes(check('["a", "bb"].filter(content => content.length > 1)').diagnostics))
+            .toContain('type.param-shadows-builtin');
+        // 隠していない名前は通る
+        expect(check('["a"].map(s => s)').diagnostics).toEqual([]);
+    });
+
+    it('keeps the profile of the caller when the parser is re-entered', () => {
+        // 入れ子で parseExpr を呼んでも、外側のプロファイルへ戻ること。
+        // 戻さないと、ブロックの途中から配列が静かに拒否され始める。
+        const { tokens, diagnostics } = tokenize('["a"]');
+        parseExpr(new TokenCursor(tokenize('1').tokens), [], 'flow');
+        const expr = parseExpr(new TokenCursor(tokens), diagnostics, 'block');
+        expect(diagnostics).toEqual([]);
+        expect(expr).toMatchObject({ kind: 'array' });
     });
 
     it('evaluates the list methods', () => {

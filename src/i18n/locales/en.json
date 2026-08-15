@@ -716,6 +716,7 @@
       "list-not-here": "A list is only available inside a generation block",
       "expected-param": "Expected a parameter name",
       "expected-rbracket": "Expected ']'",
+      "expected-rbracket-list": "Expected ']' to close the list",
       "expected-colon": "Expected ':' in conditional expression",
       "expected-rparen": "Expected ')'",
       "expected-rparen-call": "Expected ')' to close {{fn}}(...)",

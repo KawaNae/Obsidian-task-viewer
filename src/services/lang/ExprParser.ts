@@ -35,8 +35,17 @@ let profile: ParseProfile = 'flow';
  * ?: < ?? < || < && < comparison < + - < * / % < unary < postfix < primary
  */
 export function parseExpr(cursor: TokenCursor, diagnostics: Diagnostic[], forProfile: ParseProfile = 'flow'): Expr | null {
+    // Saved and restored rather than merely set: a nested call — someone
+    // reaching for the exported entry point from inside a bracket or an
+    // argument list — would otherwise drop a block back to flow rules
+    // mid-expression, and lists would start being refused with no sign why.
+    const outer = profile;
     profile = forProfile;
-    return parseTernary(cursor, diagnostics);
+    try {
+        return parseTernary(cursor, diagnostics);
+    } finally {
+        profile = outer;
+    }
 }
 
 function spanBetween(a: Span, b: Span): Span {
@@ -344,7 +353,7 @@ function parseArrayLiteral(cursor: TokenCursor, diagnostics: Diagnostic[]): Expr
     }
     const close = cursor.tryEat('rbracket');
     if (!close) {
-        diagnostics.push(error('expr.expected-rbracket', "Expected ']' to close the list", tokenSpan(cursor.peek())));
+        diagnostics.push(error('expr.expected-rbracket-list', "Expected ']' to close the list", tokenSpan(cursor.peek())));
         return null;
     }
     return { kind: 'array', items, span: spanBetween(tokenSpan(open), tokenSpan(close)) };
