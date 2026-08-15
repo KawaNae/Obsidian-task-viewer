@@ -15,6 +15,7 @@ export type TokenKind =
     | 'colon'
     | 'at'         // @ (used by mo@25)
     | 'dot'        // . (used by file.name)
+    | 'qdot'       // ?. optional chaining
     | 'plus'
     | 'minus'
     | 'star'

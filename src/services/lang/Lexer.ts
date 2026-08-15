@@ -99,6 +99,18 @@ export function tokenize(src: string): LexResult {
             }
             const num = rest.match(/^\d+/)![0];
             const afterNum = rest.slice(num.length);
+            // A decimal splits into number, dot, number under this lexer, which
+            // then fails as a member access on a number. Say what is actually
+            // wrong instead, and point at the way to write it today.
+            if (/^\.\d/.test(afterNum)) {
+                const full = num + afterNum.match(/^\.\d+/)![0];
+                diagnostics.push(error('lex.decimal-unsupported',
+                    `Decimal numbers are not supported yet ('${full}') — say it in a smaller unit`,
+                    { start: i, end: i + full.length }, { text: full }));
+                push('number', num, i, i + num.length);
+                i += full.length;
+                continue;
+            }
             const unitMatch = afterNum.match(/^[A-Za-z]+/);
             if (unitMatch) {
                 const unit = unitMatch[0];
@@ -147,7 +159,8 @@ export function tokenize(src: string): LexResult {
             two === '==' ? 'eq' :
             two === '!=' ? 'neq' :
             two === '<=' ? 'lte' :
-            two === '>=' ? 'gte' : undefined;
+            two === '>=' ? 'gte' :
+            two === '?.' ? 'qdot' : undefined;
         if (twoKind) {
             push(twoKind, two, i, i + 2);
             i += 2;

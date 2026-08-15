@@ -1,7 +1,7 @@
 import type { Span } from './Diagnostic';
 import type { Expr, PropName } from './ExprAst';
 import { type EvalRuntime, FnCallError, callFn } from './functions';
-import { type DurUnit, type Value, addDuration, compareValues, isDatishValue } from './Value';
+import { type DurUnit, type Value, WEEKDAY_NAMES, addDuration, compareValues, isDatishValue } from './Value';
 
 /**
  * Runtime evaluation failure (e.g. a referenced property is unset on the
@@ -61,7 +61,72 @@ export function evalExpr(expr: Expr, ctx: EvalContext): Value {
                 throw e;
             }
         }
+
+        case 'member':
+        case 'method': {
+            const obj = evalExpr(expr.obj, ctx);
+            // `?.` short-circuits on a missing value; a plain dot on one is an
+            // error, as in JS.
+            if (obj.type === 'none') {
+                if (expr.optional) return { type: 'none' };
+                throw new EvalError(`Cannot read '${expr.name}' of none`, expr.span);
+            }
+            const args = expr.kind === 'method' ? expr.args.map(a => evalExpr(a, ctx)) : [];
+            return callMember(obj, expr.name, args, ctx, expr.span);
+        }
     }
+}
+
+/**
+ * Members and methods on a value. The set mirrors the signature table in the
+ * checker — an entry that exists in one and not the other is a hole, so the
+ * two are meant to be read side by side.
+ */
+function callMember(obj: Value, name: string, args: Value[], ctx: EvalContext, span: Span): Value {
+    if (obj.type === 'string') {
+        const s = obj.value;
+        const str = (i: number) => {
+            const a = args[i];
+            return a !== undefined && a.type === 'string' ? a.value : '';
+        };
+        const num = (i: number, fallback: number) => {
+            const a = args[i];
+            return a !== undefined && a.type === 'number' ? a.value : fallback;
+        };
+        switch (name) {
+            case 'length': return { type: 'number', value: [...s].length };
+            case 'includes': return { type: 'bool', value: s.includes(str(0)) };
+            case 'startsWith': return { type: 'bool', value: s.startsWith(str(0)) };
+            case 'endsWith': return { type: 'bool', value: s.endsWith(str(0)) };
+            case 'indexOf': return { type: 'number', value: s.indexOf(str(0)) };
+            case 'slice': return { type: 'string', value: s.slice(num(0, 0), args.length > 1 ? num(1, s.length) : undefined) };
+            case 'padStart': return { type: 'string', value: s.padStart(num(0, 0), args.length > 1 ? str(1) : ' ') };
+            case 'replace': return { type: 'string', value: s.split(str(0)).join(str(1)) };
+            case 'trim': return { type: 'string', value: s.trim() };
+            case 'toUpperCase': return { type: 'string', value: s.toUpperCase() };
+            case 'toLowerCase': return { type: 'string', value: s.toLowerCase() };
+        }
+    }
+
+    if (isDatishValue(obj)) {
+        if (name === 'format') {
+            const tokens = args[0];
+            if (tokens?.type !== 'string') throw new EvalError(`'format' expects a token string`, span);
+            return { type: 'string', value: ctx.host.formatDate(obj, tokens.value, ctx.weekStartDay) };
+        }
+        if (name === 'weekday') {
+            const date = obj.type === 'date' ? obj.value : obj.date;
+            return { type: 'string', value: WEEKDAY_NAMES[new Date(`${date}T00:00`).getDay()] };
+        }
+    }
+
+    if (obj.type === 'number' && name === 'toFixed') {
+        const digits = args[0];
+        if (digits?.type !== 'number') throw new EvalError(`'toFixed' expects a number`, span);
+        return { type: 'string', value: obj.value.toFixed(digits.value) };
+    }
+
+    throw new EvalError(`${obj.type} has no member '${name}'`, span);
 }
 
 function evalBinary(expr: Expr & { kind: 'binary' }, ctx: EvalContext): Value {
@@ -83,7 +148,7 @@ function evalBinary(expr: Expr & { kind: 'binary' }, ctx: EvalContext): Value {
 
     if (op === '*' || op === '/' || op === '%') {
         // duration scaling keeps the unit: `gap * 2` is the adaptive-interval shape.
-        if (l.type === 'duration' && r.type === 'number') {
+        if (op !== '%' && l.type === 'duration' && r.type === 'number') {
             return scaledDuration(arith(op, l.amount, r.value, span), l.unit, span);
         }
         if (op === '*' && l.type === 'number' && r.type === 'duration') {

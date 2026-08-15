@@ -104,4 +104,20 @@ describe('ExprChecker', () => {
         expect(check('start < due ? none : 14:00')).toMatchObject({ type: 'time', diagnostics: [] });
         expect(check('start < due ? none : none')).toMatchObject({ type: 'none', diagnostics: [] });
     });
+
+    it('rejects the remainder of a duration', () => {
+        // 1d % 2 は 1d、24h % 2 は 0h。同じ長さなのに答えが変わるので通さない。
+        expect(check('1d % 2').diagnostics.map(d => d.code)).toContain('type.cannot-combine');
+        expect(check('1d * 2')).toMatchObject({ type: 'duration', diagnostics: [] });
+    });
+
+    it('types members and methods by receiver', () => {
+        expect(check('"abc".length')).toMatchObject({ type: 'number', diagnostics: [] });
+        expect(check('start.format("MM")')).toMatchObject({ type: 'string', diagnostics: [] });
+        expect(check('start.weekday()')).toMatchObject({ type: 'string', diagnostics: [] });
+    });
+
+    it('rejects unknown members', () => {
+        expect(check('"abc".nope()').diagnostics.map(d => d.code)).toContain('type.unknown-member');
+    });
 });

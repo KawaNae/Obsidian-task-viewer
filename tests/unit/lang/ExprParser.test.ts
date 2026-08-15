@@ -145,4 +145,18 @@ describe('ExprParser', () => {
         expect(diagnostics).toEqual([]);
         expect(expr?.kind === 'lit' && expr.value).toEqual({ type: 'string', value: 'text' });
     });
+
+    it('reports decimals with a diagnostic of their own', () => {
+        // 0.5 は 0 と ドット と 5 に割れる。数値へのメンバアクセスとして
+        // 報告すると理由が伝わらないので、字句の段階で名指しする。
+        const { diagnostics } = parse('1d * 0.5');
+        expect(diagnostics.some(d => d.code === 'lex.decimal-unsupported')).toBe(true);
+    });
+
+    it('reads the tv namespace as the bare form', () => {
+        const { expr, diagnostics } = parse('tv.date.startOf("month", start)');
+        expect(diagnostics).toEqual([]);
+        expect(expr?.kind === 'call' && expr.fn).toBe('startOf');
+        expect(parse('tv.file.name').expr?.kind === 'prop').toBe(true);
+    });
 });

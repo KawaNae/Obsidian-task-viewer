@@ -122,7 +122,46 @@ function parseUnary(cursor: TokenCursor, diagnostics: Diagnostic[]): Expr | null
             span: spanBetween(tokenSpan(opToken), operand.span),
         };
     }
-    return parsePrimary(cursor, diagnostics);
+    return parsePostfix(cursor, diagnostics);
+}
+
+/**
+ * Property reads and method calls on a value: `start.format("MM/DD")`,
+ * `title.length`, `xs?.first`.
+ *
+ * `file.name` never reaches here — it is consumed as a single property by
+ * {@link parseIdentLed}, so the two spellings do not compete.
+ */
+function parsePostfix(cursor: TokenCursor, diagnostics: Diagnostic[]): Expr | null {
+    let obj = parsePrimary(cursor, diagnostics);
+    if (!obj) return null;
+    for (;;) {
+        const optional = cursor.at('qdot');
+        if (!optional && !cursor.at('dot')) return obj;
+        cursor.next();
+
+        const nameToken = cursor.peek();
+        if (nameToken.kind !== 'ident') {
+            diagnostics.push(error('expr.expected-member', 'Expected a property or method name after the dot',
+                tokenSpan(nameToken)));
+            return null;
+        }
+        cursor.next();
+
+        if (cursor.at('lparen')) {
+            const args = parseArgs(cursor, diagnostics);
+            if (!args) return null;
+            obj = {
+                kind: 'method', obj, name: nameToken.text, args, optional,
+                span: spanBetween(obj.span, tokenSpan(cursor.peek(-1))),
+            };
+            continue;
+        }
+        obj = {
+            kind: 'member', obj, name: nameToken.text, optional,
+            span: spanBetween(obj.span, tokenSpan(nameToken)),
+        };
+    }
 }
 
 function parsePrimary(cursor: TokenCursor, diagnostics: Diagnostic[]): Expr | null {
@@ -212,6 +251,13 @@ function parseIdentLed(cursor: TokenCursor, diagnostics: Diagnostic[]): Expr | n
     if ((SIMPLE_PROPS as readonly string[]).includes(name)) {
         return { kind: 'prop', name: name as PropName, span };
     }
+    // `tv.date.format(...)` / `tv.file.name` — the namespaced spelling of the
+    // built-ins. Accepted as an alias and resolved here, so the canonical form
+    // stays the bare one and the printer needs no new shape.
+    if (name === 'tv') {
+        return parseTvNamespace(cursor, diagnostics, span);
+    }
+
     if (name === 'file') {
         if (cursor.tryEat('dot')) {
             const member = cursor.peek();
@@ -230,7 +276,60 @@ function parseIdentLed(cursor: TokenCursor, diagnostics: Diagnostic[]): Expr | n
     return null;
 }
 
+/** `tv.date.<fn>(...)` and `tv.file.name`, resolved to the bare forms. */
+function parseTvNamespace(cursor: TokenCursor, diagnostics: Diagnostic[], span: Span): Expr | null {
+    if (!cursor.tryEat('dot')) {
+        diagnostics.push(error('expr.tv-needs-member', "'tv' requires a member (tv.date.format(...) / tv.file.name)", span));
+        return null;
+    }
+    const group = cursor.peek();
+    if (group.kind !== 'ident' || (group.text !== 'date' && group.text !== 'file')) {
+        diagnostics.push(error('expr.unknown-property', `Unknown namespace 'tv.${group.text}'`,
+            tokenSpan(group), { name: `tv.${group.text}` }));
+        return null;
+    }
+    cursor.next();
+    if (!cursor.tryEat('dot')) {
+        diagnostics.push(error('expr.tv-needs-member', `'tv.${group.text}' requires a member`, span));
+        return null;
+    }
+    const member = cursor.peek();
+    if (member.kind !== 'ident') {
+        diagnostics.push(error('expr.expected-member', 'Expected a name after the dot', tokenSpan(member)));
+        return null;
+    }
+
+    if (group.text === 'file') {
+        if (member.text !== 'name') {
+            diagnostics.push(error('expr.unknown-property', `Unknown property 'tv.file.${member.text}'`,
+                tokenSpan(member), { name: `tv.file.${member.text}` }));
+            return null;
+        }
+        cursor.next();
+        return { kind: 'prop', name: 'file.name', span: spanBetween(span, tokenSpan(member)) };
+    }
+
+    if (!(FN_NAMES as readonly string[]).includes(member.text)) {
+        diagnostics.push(error('expr.unknown-property', `Unknown function 'tv.date.${member.text}'`,
+            tokenSpan(member), { name: `tv.date.${member.text}` }));
+        return null;
+    }
+    cursor.next();
+    if (!cursor.at('lparen')) {
+        diagnostics.push(error('expr.expected-call', `'tv.date.${member.text}' is a function — call it`, tokenSpan(member)));
+        return null;
+    }
+    return parseCall(member.text as FnName, spanBetween(span, tokenSpan(member)), cursor, diagnostics);
+}
+
 function parseCall(fn: FnName, fnSpan: Span, cursor: TokenCursor, diagnostics: Diagnostic[]): Expr | null {
+    const args = parseArgs(cursor, diagnostics, fn);
+    if (!args) return null;
+    return { kind: 'call', fn, args, span: spanBetween(fnSpan, tokenSpan(cursor.peek(-1))) };
+}
+
+/** `( a, b )` — shared by plain calls and method calls. Cursor sits on '('. */
+function parseArgs(cursor: TokenCursor, diagnostics: Diagnostic[], fn = 'the call'): Expr[] | null {
     cursor.next(); // consume '('
     const args: Expr[] = [];
     if (!cursor.at('rparen')) {
@@ -242,12 +341,11 @@ function parseCall(fn: FnName, fnSpan: Span, cursor: TokenCursor, diagnostics: D
             break;
         }
     }
-    const close = cursor.tryEat('rparen');
-    if (!close) {
+    if (!cursor.tryEat('rparen')) {
         diagnostics.push(error('expr.expected-rparen-call', `Expected ')' to close ${fn}(...)`, tokenSpan(cursor.peek()), { fn }));
         return null;
     }
-    return { kind: 'call', fn, args, span: spanBetween(fnSpan, tokenSpan(close)) };
+    return args;
 }
 
 /** Normalize H:mm to HH:mm so time values compare lexicographically. */

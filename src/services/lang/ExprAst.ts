@@ -19,4 +19,8 @@ export type Expr =
     | { kind: 'binary'; op: BinaryOp; left: Expr; right: Expr; span: Span }
     | { kind: 'unary'; op: '!' | '-'; operand: Expr; span: Span }
     | { kind: 'cond'; cond: Expr; then: Expr; else: Expr; span: Span }
-    | { kind: 'call'; fn: FnName; args: Expr[]; span: Span };
+    | { kind: 'call'; fn: FnName; args: Expr[]; span: Span }
+    /** `start.weekday` — a property read on a value. */
+    | { kind: 'member'; obj: Expr; name: string; optional: boolean; span: Span }
+    /** `start.format("MM/DD")` — a method call on a value. */
+    | { kind: 'method'; obj: Expr; name: string; args: Expr[]; optional: boolean; span: Span };

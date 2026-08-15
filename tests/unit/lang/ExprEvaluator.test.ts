@@ -198,4 +198,36 @@ describe('ExprEvaluator', () => {
             expect(evaluate('(1 + 2) * 3')).toEqual({ type: 'number', value: 9 });
         });
     });
+
+    describe('members and methods', () => {
+        it('formats a date through the method form', () => {
+            expect(evaluate('start.format("YYYY-MM-DD")', { start: { type: 'date', value: '2026-08-17' } }))
+                .toEqual({ type: 'string', value: '[YYYY-MM-DD:2026-08-17]' });
+        });
+
+        it('names the weekday as a string', () => {
+            // 曜日は文字列で返す。引用符付きの比較が静かに false にならないため。
+            expect(evaluate('start.weekday()', { start: { type: 'date', value: '2026-08-18' } }))
+                .toEqual({ type: 'string', value: 'tue' });
+            expect(evaluate('start.weekday() === "tue"', { start: { type: 'date', value: '2026-08-18' } }))
+                .toEqual({ type: 'bool', value: true });
+        });
+
+        it('reads string members and methods', () => {
+            expect(evaluate('"週報".length')).toEqual({ type: 'number', value: 2 });
+            expect(evaluate('"abc".toUpperCase()')).toEqual({ type: 'string', value: 'ABC' });
+            expect(evaluate('"a-b".replace("-", "+")')).toEqual({ type: 'string', value: 'a+b' });
+            expect(evaluate('"abc".includes("b")')).toEqual({ type: 'bool', value: true });
+        });
+
+        it('short-circuits optional chaining on a missing value', () => {
+            expect(evaluate('end?.format("MM")', { end: { type: 'none' } })).toEqual({ type: 'none' });
+            expect(() => evaluate('end.format("MM")', { end: { type: 'none' } })).toThrow(EvalError);
+        });
+
+        it('resolves the tv namespace to the bare built-ins', () => {
+            expect(evaluate('tv.date.format(start, "MM/DD")', { start: { type: 'date', value: '2026-08-17' } }))
+                .toEqual({ type: 'string', value: '[MM/DD:2026-08-17]' });
+        });
+    });
 });

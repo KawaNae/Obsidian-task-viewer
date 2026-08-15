@@ -53,6 +53,39 @@ export function checkExpr(expr: Expr, env: TypeEnv, diagnostics: Diagnostic[]): 
             return t;
         }
 
+        case 'member':
+        case 'method': {
+            const ot = checkExpr(expr.obj, env, diagnostics);
+            if (ot === 'error') return 'error';
+            const argTypes = expr.kind === 'method'
+                ? expr.args.map(a => checkExpr(a, env, diagnostics))
+                : [];
+            if (argTypes.includes('error')) return 'error';
+            const sig = memberSignature(ot, expr.name, expr.kind === 'method');
+            if (!sig) {
+                diagnostics.push(error('type.unknown-member',
+                    `${ot} has no ${expr.kind === 'method' ? 'method' : 'property'} '${expr.name}'`,
+                    expr.span, { receiver: ot, name: expr.name }));
+                return 'error';
+            }
+            if (expr.kind === 'method' && argTypes.length > sig.params.length) {
+                diagnostics.push(error('type.member-arity',
+                    `'${expr.name}' takes at most ${sig.params.length} argument(s), got ${argTypes.length}`,
+                    expr.span, { name: expr.name, expected: sig.params.length, actual: argTypes.length }));
+                return 'error';
+            }
+            for (let i = 0; i < argTypes.length; i++) {
+                if (argTypes[i] !== sig.params[i]) {
+                    diagnostics.push(error('type.member-arg',
+                        `'${expr.name}' expects ${sig.params[i]} for argument ${i + 1}, got ${argTypes[i]}`,
+                        expr.kind === 'method' ? expr.args[i].span : expr.span,
+                        { name: expr.name, expected: sig.params[i], actual: argTypes[i] }));
+                    return 'error';
+                }
+            }
+            return sig.result;
+        }
+
         case 'binary': {
             const lt = checkExpr(expr.left, env, diagnostics);
             const rt = checkExpr(expr.right, env, diagnostics);
@@ -124,7 +157,10 @@ function checkBinary(
     if (op === '*' || op === '/' || op === '%') {
         if (lt === 'number' && rt === 'number') return 'number';
         // duration scaling: gap * 2 / 2 * gap / gap / 2 — the adaptive-interval shape
-        if (lt === 'duration' && rt === 'number') return 'duration';
+        // Scaling keeps the unit, so it means the same for 1d and 24h. The
+        // remainder does not: 1d % 2 is 1d while 24h % 2 is 0h, though the two
+        // durations are the same length. Refuse rather than pick a unit.
+        if (op !== '%' && lt === 'duration' && rt === 'number') return 'duration';
         if (op === '*' && lt === 'number' && rt === 'duration') return 'duration';
         return fail('type.cannot-combine', `'${op}' cannot combine ${lt} and ${rt}`, { op, left: lt, right: rt });
     }
@@ -159,4 +195,51 @@ function checkBinary(
         lt === rt;
     if (!comparable) return fail('type.cannot-compare', `Cannot compare ${lt} with ${rt}`, { left: lt, right: rt });
     return 'bool';
+}
+
+
+/**
+ * Members and methods a value carries, by receiver type.
+ *
+ * Kept as data rather than branches so the checker and the evaluator can be
+ * read against each other: every entry here has a case there, and a member
+ * that is missing from one is visible as a hole in the other.
+ */
+interface MemberSig { params: StaticType[]; result: StaticType }
+
+const DATE_METHODS: Record<string, MemberSig> = {
+    format: { params: ['string'], result: 'string' },
+    weekday: { params: [], result: 'string' },
+};
+
+const STRING_MEMBERS: Record<string, MemberSig> = {
+    length: { params: [], result: 'number' },
+};
+
+const STRING_METHODS: Record<string, MemberSig> = {
+    includes: { params: ['string'], result: 'bool' },
+    startsWith: { params: ['string'], result: 'bool' },
+    endsWith: { params: ['string'], result: 'bool' },
+    indexOf: { params: ['string'], result: 'number' },
+    slice: { params: ['number', 'number'], result: 'string' },
+    padStart: { params: ['number', 'string'], result: 'string' },
+    replace: { params: ['string', 'string'], result: 'string' },
+    trim: { params: [], result: 'string' },
+    toUpperCase: { params: [], result: 'string' },
+    toLowerCase: { params: [], result: 'string' },
+};
+
+const NUMBER_METHODS: Record<string, MemberSig> = {
+    toFixed: { params: ['number'], result: 'string' },
+};
+
+export function memberSignature(receiver: StaticType, name: string, isMethod: boolean): MemberSig | null {
+    if (receiver === 'string') {
+        return (isMethod ? STRING_METHODS[name] : STRING_MEMBERS[name]) ?? null;
+    }
+    // 'datish' covers a property whose concrete date type is not known until
+    // evaluation; date methods apply to it just the same.
+    if (isMethod && isDatishType(receiver)) return DATE_METHODS[name] ?? null;
+    if (isMethod && receiver === 'number') return NUMBER_METHODS[name] ?? null;
+    return null;
 }

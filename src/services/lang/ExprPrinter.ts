@@ -39,6 +39,10 @@ function print(expr: Expr, parentPrec: number): string {
                 return `${print(expr.cond, myPrec + 1)} ? ${print(expr.then, myPrec)} : ${print(expr.else, myPrec)}`;
             case 'call':
                 return `${expr.fn}(${expr.args.map(a => print(a, 0)).join(', ')})`;
+            case 'member':
+                return `${print(expr.obj, myPrec)}${expr.optional ? '?.' : '.'}${expr.name}`;
+            case 'method':
+                return `${print(expr.obj, myPrec)}${expr.optional ? '?.' : '.'}${expr.name}(${expr.args.map(a => print(a, 0)).join(', ')})`;
         }
     })();
     return myPrec < parentPrec ? `(${body})` : body;
