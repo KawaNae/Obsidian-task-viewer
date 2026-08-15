@@ -713,6 +713,11 @@
       "decimal-unsupported": "Decimal numbers are not supported yet ('{{text}}') — say it in a smaller unit"
     },
     "expr": {
+      "expected-rbrace": "Expected '}' to close the record",
+      "expected-field-value": "Expected ':' after the field name '{{name}}'",
+      "expected-field-name": "Expected a field name",
+      "spread-not-here": "A spread only means something inside a list: [...xs, y]",
+      "record-not-here": "A record is only available inside a generation block",
       "template-not-here": "A template literal is only available inside a generation block — join with + here",
       "function-not-here": "A function is only available inside a generation block",
       "list-not-here": "A list is only available inside a generation block",
@@ -735,6 +740,11 @@
       "weekday-not-literal": "Weekdays are strings in expressions — write \"{{name}}\" (bare {{name}} is only for 'every {{name}}')"
     },
     "type": {
+      "spread-not-here": "A spread only means something inside a list: [...xs, y]",
+      "spread-not-a-list": "A spread needs a list, got {{actual}}",
+      "record-fields-differ": "Looking a field up by a computed key needs the fields to share a type ({{receiver}})",
+      "index-not-string": "A record is indexed by a string, got {{actual}}",
+      "unknown-field": "{{receiver}} has no field '{{name}}'",
       "param-shadows-builtin": "'{{name}}' already means something here — the built-in wins and this parameter cannot be read",
       "sort-needs-comparator": "Sorting {{receiver}} needs the comparison written out: sort((a, b) => a - b)",
       "list-immutable": "A list cannot be added to — build it in one go, or use concat",

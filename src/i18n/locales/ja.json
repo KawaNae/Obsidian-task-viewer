@@ -713,6 +713,11 @@
       "decimal-unsupported": "小数はまだ使えません（'{{text}}'）。小さい単位で書いてください"
     },
     "expr": {
+      "expected-rbrace": "レコードを閉じる '}' が必要です",
+      "expected-field-value": "フィールド名 '{{name}}' の後に ':' が必要です",
+      "expected-field-name": "フィールド名が必要です",
+      "spread-not-here": "スプレッドは配列の中でのみ意味を持ちます: [...xs, y]",
+      "record-not-here": "レコードは生成ブロックの中でのみ使えます",
       "template-not-here": "テンプレートリテラルは生成ブロックの中でのみ使えます。ここでは + で連結してください",
       "function-not-here": "関数は生成ブロックの中でのみ使えます",
       "list-not-here": "配列は生成ブロックの中でのみ使えます",
@@ -735,6 +740,11 @@
       "weekday-not-literal": "式の中では曜日は文字列です。\"{{name}}\" と書いてください（裸の {{name}} は every {{name}} 専用）"
     },
     "type": {
+      "spread-not-here": "スプレッドは配列の中でのみ意味を持ちます: [...xs, y]",
+      "spread-not-a-list": "スプレッドには配列が必要です（{{actual}} が渡されました）",
+      "record-fields-differ": "計算したキーで引くには、フィールドの型が揃っている必要があります（{{receiver}}）",
+      "index-not-string": "レコードの添字は string です（{{actual}} が渡されました）",
+      "unknown-field": "{{receiver}} に '{{name}}' というフィールドはありません",
       "param-shadows-builtin": "'{{name}}' は既に別の意味を持つ名前です。組み込みが優先され、この引数は参照できません",
       "sort-needs-comparator": "{{receiver}} の並べ替えには比較を書く必要があります: sort((a, b) => a - b)",
       "list-immutable": "配列には追加できません。一度に組み立てるか concat を使ってください",

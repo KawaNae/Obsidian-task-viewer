@@ -3,7 +3,7 @@ import type { Expr, PropName } from './ExprAst';
 import { type EvalRuntime, FnCallError, callFn } from './functions';
 import {
     type DurUnit, type Value, WEEKDAY_NAMES, addDuration, compareValues, isDatishValue, parseDateStr,
-    valueToDisplay,
+    recordField, valueToDisplay,
 } from './Value';
 
 /**
@@ -76,8 +76,28 @@ export function evalExpr(expr: Expr, ctx: EvalContext): Value {
             return v;
         }
 
-        case 'array':
-            return { type: 'array', items: expr.items.map(i => evalExpr(i, ctx)) };
+        case 'array': {
+            const items: Value[] = [];
+            for (const item of expr.items) {
+                if (item.kind !== 'spread') {
+                    items.push(evalExpr(item, ctx));
+                    continue;
+                }
+                const inner = evalExpr(item.arg, ctx);
+                if (inner.type !== 'array') throw new EvalError(`A spread needs a list, got ${inner.type}`, item.span);
+                items.push(...inner.items);
+            }
+            return { type: 'array', items };
+        }
+
+        case 'record':
+            return {
+                type: 'record',
+                entries: expr.entries.map(e => ({ key: e.key, value: evalExpr(e.value, ctx) })),
+            };
+
+        case 'spread':
+            throw new EvalError('A spread only means something inside a list', expr.span);
 
         case 'index': {
             const obj = evalExpr(expr.obj, ctx);
@@ -85,8 +105,14 @@ export function evalExpr(expr: Expr, ctx: EvalContext): Value {
                 if (expr.optional) return { type: 'none' };
                 throw new EvalError('Cannot index none', expr.span);
             }
-            if (obj.type !== 'array') throw new EvalError(`${obj.type} cannot be indexed`, expr.span);
             const i = evalExpr(expr.index, ctx);
+            if (obj.type === 'record') {
+                if (i.type !== 'string') throw new EvalError(`A record is indexed by a string, got ${i.type}`, expr.index.span);
+                // A field that is not there is a missing value, like reading
+                // past the end of a list — `??` covers both.
+                return recordField(obj, i.value) ?? { type: 'none' };
+            }
+            if (obj.type !== 'array') throw new EvalError(`${obj.type} cannot be indexed`, expr.span);
             if (i.type !== 'number') throw new EvalError(`A list index is a number, got ${i.type}`, expr.index.span);
             // Past the end is a missing value, not a failure — `??` covers it.
             return obj.items[i.value] ?? { type: 'none' };
@@ -114,6 +140,10 @@ export function evalExpr(expr: Expr, ctx: EvalContext): Value {
             // A list method is handed the function itself, not its value: the
             // parameters are bound per element inside.
             if (obj.type === 'array') return callListMember(obj, expr, ctx);
+            if (obj.type === 'record') {
+                if (expr.kind === 'method') throw new EvalError(`A record has no method '${expr.name}'`, expr.span);
+                return recordField(obj, expr.name) ?? { type: 'none' };
+            }
             const args = expr.kind === 'method' ? expr.args.map(a => evalExpr(a, ctx)) : [];
             return callMember(obj, expr.name, args, ctx, expr.span);
         }

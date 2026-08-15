@@ -286,6 +286,16 @@ function parsePrimary(cursor: TokenCursor, diagnostics: Diagnostic[]): Expr | nu
     switch (token.kind) {
         case 'lbracket':
             return parseArrayLiteral(cursor, diagnostics);
+        case 'lbrace':
+            return parseRecordLiteral(cursor, diagnostics);
+        case 'ellipsis': {
+            // Accepted here so the diagnostic can say where a spread belongs;
+            // the list literal consumes its own before reaching this.
+            cursor.next();
+            diagnostics.push(error('expr.spread-not-here',
+                'A spread only means something inside a list: [...xs, y]', span));
+            return null;
+        }
         case 'date':
             cursor.next();
             return { kind: 'lit', value: { type: 'date', value: token.text }, span };
@@ -360,7 +370,9 @@ function parseArrayLiteral(cursor: TokenCursor, diagnostics: Diagnostic[]): Expr
     const items: Expr[] = [];
     if (!cursor.at('rbracket')) {
         for (;;) {
-            const item = parseTernary(cursor, diagnostics);
+            const item = cursor.at('ellipsis')
+                ? parseSpread(cursor, diagnostics)
+                : parseTernary(cursor, diagnostics);
             if (!item) return null;
             items.push(item);
             if (cursor.tryEat('comma')) continue;
@@ -373,6 +385,60 @@ function parseArrayLiteral(cursor: TokenCursor, diagnostics: Diagnostic[]): Expr
         return null;
     }
     return { kind: 'array', items, span: spanBetween(tokenSpan(open), tokenSpan(close)) };
+}
+
+/** `...xs`, inside a list literal. Cursor sits on the ellipsis. */
+function parseSpread(cursor: TokenCursor, diagnostics: Diagnostic[]): Expr | null {
+    const open = cursor.next();
+    const arg = parseTernary(cursor, diagnostics);
+    if (!arg) return null;
+    return { kind: 'spread', arg, span: spanBetween(tokenSpan(open), arg.span) };
+}
+
+/**
+ * `{ mon: "a", tue: "b" }`. Cursor sits on the brace.
+ *
+ * Keys are written as names or as strings; a computed key is not read here,
+ * because a record's fields are what the checker knows about it and a key
+ * decided at evaluation would leave it knowing nothing.
+ */
+function parseRecordLiteral(cursor: TokenCursor, diagnostics: Diagnostic[]): Expr | null {
+    const open = cursor.next();
+    if (profile === 'flow') {
+        diagnostics.push(error('expr.record-not-here',
+            'A record is only available inside a generation block', tokenSpan(open)));
+        return null;
+    }
+    const entries: { key: string; value: Expr }[] = [];
+    if (!cursor.at('rbrace')) {
+        for (;;) {
+            const keyToken = cursor.peek();
+            if (keyToken.kind !== 'ident' && keyToken.kind !== 'string') {
+                diagnostics.push(error('expr.expected-field-name',
+                    'Expected a field name', tokenSpan(keyToken)));
+                return null;
+            }
+            cursor.next();
+            if (!cursor.tryEat('colon')) {
+                diagnostics.push(error('expr.expected-field-value',
+                    `Expected ':' after the field name '${keyToken.text}'`, tokenSpan(cursor.peek()),
+                    { name: keyToken.text }));
+                return null;
+            }
+            const value = parseTernary(cursor, diagnostics);
+            if (!value) return null;
+            entries.push({ key: keyToken.text, value });
+            if (cursor.tryEat('comma')) continue;
+            break;
+        }
+    }
+    const close = cursor.tryEat('rbrace');
+    if (!close) {
+        diagnostics.push(error('expr.expected-rbrace', "Expected '}' to close the record",
+            tokenSpan(cursor.peek())));
+        return null;
+    }
+    return { kind: 'record', entries, span: spanBetween(tokenSpan(open), tokenSpan(close)) };
 }
 
 /**
