@@ -35,6 +35,10 @@ export type Expr =
     | { kind: 'arrow'; params: string[]; body: Expr; span: Span }
     /** A name bound by an enclosing arrow parameter (block profile only). */
     | { kind: 'var'; name: string; span: Span }
+    /** `{ mon: "燃えるゴミ" }` — a record literal. Order is kept as written. */
+    | { kind: 'record'; entries: { key: string; value: Expr }[]; span: Span }
+    /** `...xs` — only meaningful inside a list literal, which spreads it. */
+    | { kind: 'spread'; arg: Expr; span: Span }
     /** `` `第${n}回` `` — literal text with expressions spliced in. */
     | { kind: 'template'; parts: InterpolationPart[]; span: Span };
 

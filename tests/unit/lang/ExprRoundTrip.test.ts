@@ -140,6 +140,15 @@ const BLOCK_FAMILIES: Family[] = [
     { shape: 'nested list', sources: ['[ [1, 2], [3] ]', '[ [1], [2] ][0]'] },
     { shape: 'list method chain', sources: ['xs.filter(x => x.length > 1).map(x => x.trim()).join(", ")'] },
     { shape: 'two-parameter function', sources: ['xs.map((x, i) => i)', 'xs.sort((a, b) => a - b)'] },
+    { shape: 'record literal', sources: BINARY_OPS.map(op => `{a: 1, b: "x"} ${op} y`) },
+    {
+        shape: 'record read',
+        sources: ['{a: 1}.a', '{a: 1}["a"]', '{a: 1, b: 2}[key]', '{}', '{"a b": 1}["a b"]'],
+    },
+    {
+        shape: 'spread',
+        sources: ['[...xs]', '[...xs, y]', '[a, ...xs, b]', '[...xs, ...ys]'],
+    },
     {
         shape: 'template literal',
         sources: [

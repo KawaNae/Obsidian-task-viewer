@@ -14,6 +14,9 @@ export type TokenKind =
     | 'rparen'
     | 'lbracket'   // [ (a wikilink's [[ is matched first)
     | 'rbracket'
+    | 'lbrace'     // {
+    | 'rbrace'
+    | 'ellipsis'   // ... (spread)
     | 'arrow'      // =>
     | 'comma'
     | 'colon'

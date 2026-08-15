@@ -2,9 +2,9 @@ import { type Diagnostic, type Span, error } from './Diagnostic';
 import type { Expr, PropName } from './ExprAst';
 import {
     type ArrayType, FN_SIGS, type StaticType, arrayOf, isArrayType, isAssignable, isDatishType,
-    sameType, typeName,
+    type RecordType, isRecordType, recordOf, sameType, typeName,
 } from './functions';
-import { weekdayFromName } from './Value';
+import { type Value, weekdayFromName } from './Value';
 
 /** Static types of the property references available in an evaluation context. */
 export type TypeEnv = Partial<Record<PropName, StaticType>>;
@@ -34,9 +34,7 @@ const NO_VARS: VarTypes = new Map();
 export function checkExpr(expr: Expr, env: TypeEnv, diagnostics: Diagnostic[], vars: VarTypes = NO_VARS): StaticType {
     switch (expr.kind) {
         case 'lit':
-            // A list only reaches the checker as an 'array' node, never as a
-            // literal value — but the value model has the case, so answer it.
-            return expr.value.type === 'array' ? arrayOf('none') : expr.value.type;
+            return literalType(expr.value);
 
         case 'prop': {
             const t = env[expr.name];
@@ -81,7 +79,19 @@ export function checkExpr(expr: Expr, env: TypeEnv, diagnostics: Diagnostic[], v
         }
 
         case 'array': {
-            const itemTypes = expr.items.map(i => checkExpr(i, env, diagnostics, vars));
+            // A spread contributes the elements of the list it holds, so it is
+            // typed by that list's element rather than by the spread itself.
+            const itemTypes = expr.items.map(item => {
+                if (item.kind !== 'spread') return checkExpr(item, env, diagnostics, vars);
+                const t = checkExpr(item.arg, env, diagnostics, vars);
+                if (t === 'error') return 'error';
+                if (!isArrayType(t)) {
+                    diagnostics.push(error('type.spread-not-a-list',
+                        `A spread needs a list, got ${typeName(t)}`, item.span, { actual: typeName(t) }));
+                    return 'error';
+                }
+                return t.array;
+            });
             if (itemTypes.includes('error')) return 'error';
             // An empty list is a list of nothing yet: `none` is the bottom of
             // the unification, so it takes the shape of whatever it meets.
@@ -99,10 +109,26 @@ export function checkExpr(expr: Expr, env: TypeEnv, diagnostics: Diagnostic[], v
             return arrayOf(elem);
         }
 
+        case 'record': {
+            const fields: Record<string, StaticType> = {};
+            for (const entry of expr.entries) {
+                const t = checkExpr(entry.value, env, diagnostics, vars);
+                if (t === 'error') return 'error';
+                fields[entry.key] = t;
+            }
+            return recordOf(fields);
+        }
+
+        case 'spread':
+            diagnostics.push(error('type.spread-not-here',
+                'A spread only means something inside a list: [...xs, y]', expr.span));
+            return 'error';
+
         case 'index': {
             const ot = checkExpr(expr.obj, env, diagnostics, vars);
             const it = checkExpr(expr.index, env, diagnostics, vars);
             if (ot === 'error' || it === 'error') return 'error';
+            if (isRecordType(ot)) return recordIndexType(ot, expr, it, diagnostics);
             if (!isArrayType(ot)) {
                 diagnostics.push(error('type.not-indexable', `${typeName(ot)} cannot be indexed`,
                     expr.span, { receiver: typeName(ot) }));
@@ -135,6 +161,22 @@ export function checkExpr(expr: Expr, env: TypeEnv, diagnostics: Diagnostic[], v
         case 'method': {
             const ot = checkExpr(expr.obj, env, diagnostics, vars);
             if (ot === 'error') return 'error';
+            if (isRecordType(ot)) {
+                if (expr.kind === 'method') {
+                    diagnostics.push(error('type.unknown-member',
+                        `${typeName(ot)} has no method '${expr.name}'`,
+                        expr.span, { receiver: typeName(ot), name: expr.name }));
+                    return 'error';
+                }
+                const field = ot.fields[expr.name];
+                if (field === undefined) {
+                    diagnostics.push(error('type.unknown-field',
+                        `${typeName(ot)} has no field '${expr.name}'`,
+                        expr.span, { receiver: typeName(ot), name: expr.name }));
+                    return 'error';
+                }
+                return field;
+            }
             // A list needs the element type in hand to check the function
             // written for it, which a flat signature table cannot express.
             if (isArrayType(ot)) return checkListMember(expr, ot, env, diagnostics, vars);
@@ -323,7 +365,8 @@ function checkListPlainMethod(
     if (name === 'push') {
         // The one mutation people reach for out of habit.
         return fail('type.list-immutable',
-            'A list cannot be added to — build it in one go, or use concat', { name });
+            'A list cannot be added to — build it in one go, or use concat or a spread: [...xs, y]',
+            { name });
     }
 
     const sigs: Record<string, { params: StaticType[]; minArgs: number; result: StaticType }> = {
@@ -400,6 +443,67 @@ function isReservedName(name: string): boolean {
     return ['true', 'false', 'none', 'week', 'month', 'year', 'start', 'end', 'due',
         'content', 'done', 'today', 'file', 'tv', 'format', 'next', 'startOf', 'endOf',
         'nextCycle', 'date', 'time'].includes(name);
+}
+
+/**
+ * `table[key]` on a record.
+ *
+ * A constant key is the field it names. A key computed at evaluation could be
+ * any of them, so the answer is the one type they all share — and when they do
+ * not share one, saying so here beats handing back a type that is wrong for
+ * every branch but one.
+ */
+function recordIndexType(
+    receiver: RecordType,
+    expr: Expr & { kind: 'index' },
+    keyType: StaticType,
+    diagnostics: Diagnostic[]
+): StaticType {
+    if (keyType !== 'string') {
+        diagnostics.push(error('type.index-not-string',
+            `A record is indexed by a string, got ${typeName(keyType)}`,
+            expr.index.span, { actual: typeName(keyType) }));
+        return 'error';
+    }
+    const constant = expr.index.kind === 'lit' && expr.index.value.type === 'string'
+        ? expr.index.value.value
+        : null;
+    if (constant !== null) {
+        const field = receiver.fields[constant];
+        if (field === undefined) {
+            diagnostics.push(error('type.unknown-field',
+                `${typeName(receiver)} has no field '${constant}'`,
+                expr.index.span, { receiver: typeName(receiver), name: constant }));
+            return 'error';
+        }
+        return field;
+    }
+    const types = Object.values(receiver.fields);
+    if (types.length === 0) return 'none';
+    let unified: StaticType | null = types[0];
+    for (const t of types.slice(1)) {
+        unified = unified === null ? null : unifyTypes(unified, t);
+    }
+    if (unified === null) {
+        diagnostics.push(error('type.record-fields-differ',
+            `Looking a field up by a computed key needs the fields to share a type (${typeName(receiver)})`,
+            expr.span, { receiver: typeName(receiver) }));
+        return 'error';
+    }
+    return unified;
+}
+
+/**
+ * The static type of a literal value.
+ *
+ * A container only reaches the checker as its own node kind, never as a
+ * literal — but the value model has the cases, so they are answered rather
+ * than left to fall through as a type nobody declared.
+ */
+function literalType(value: Value): StaticType {
+    if (value.type === 'array') return arrayOf('none');
+    if (value.type === 'record') return recordOf({});
+    return value.type;
 }
 
 /**

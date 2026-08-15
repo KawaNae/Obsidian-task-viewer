@@ -35,6 +35,12 @@ export type Value =
     | { type: 'link'; target: string }
     /** A list. Immutable: every operation returns a new one. */
     | { type: 'array'; items: Value[] }
+    /**
+     * A record. Entries rather than an object so the order it was written in
+     * survives — printing it back in a different order would read as a
+     * different expression.
+     */
+    | { type: 'record'; entries: { key: string; value: Value }[] }
     | { type: 'none' };
 
 export type LangType = Value['type'];
@@ -120,6 +126,14 @@ export function datishKey(v: Value & { type: 'date' | 'datetime' }): string {
     return v.type === 'date' ? `${v.value}T00:00` : `${v.date}T${v.time}`;
 }
 
+/** The value of a field, last write winning, or undefined. */
+export function recordField(v: Value & { type: 'record' }, key: string): Value | undefined {
+    for (let i = v.entries.length - 1; i >= 0; i--) {
+        if (v.entries[i].key === key) return v.entries[i].value;
+    }
+    return undefined;
+}
+
 export function isDatishValue(v: Value): v is Value & { type: 'date' | 'datetime' } {
     return v.type === 'date' || v.type === 'datetime';
 }
@@ -164,6 +178,9 @@ export function valueToLiteral(v: Value): string {
         case 'bool': return v.value ? 'true' : 'false';
         case 'link': return `[[${v.target}]]`;
         case 'array': return `[${v.items.map(valueToLiteral).join(', ')}]`;
+        case 'record': return `{${v.entries.map(e =>
+            `${/^[A-Za-z_][A-Za-z0-9_]*$/.test(e.key) ? e.key : JSON.stringify(e.key)}: ${valueToLiteral(e.value)}`
+        ).join(', ')}}`;
         case 'none': return 'none';
     }
 }
@@ -176,6 +193,9 @@ export function valueToDisplay(v: Value): string {
         // A list is lines — the same rule interpolation uses for a multi-line
         // value, so a list and its newline join land on the same text.
         case 'array': return v.items.map(valueToDisplay).join('\n');
+        // A record has no reading as text; showing its literal form at least
+        // says what it is rather than putting "[object Object]" in a note.
+        case 'record': return valueToLiteral(v);
         case 'none': return '';
         default: return valueToLiteral(v);
     }

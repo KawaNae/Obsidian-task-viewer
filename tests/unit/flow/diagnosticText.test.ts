@@ -82,6 +82,14 @@ describe('diagnosticText', () => {
             '(1) => 1',                       // expr.expected-param
             '[[1, 2], [3]]',                  // lex.wikilink-looks-like-list
             '`unterminated',                  // lex.unterminated-template
+            '{1: "a"}',                       // expr.expected-field-name
+            '{a 1}',                          // expr.expected-field-value
+            '{a: 1',                          // expr.expected-rbrace
+            '...["a"]',                       // expr.spread-not-here
+            '{a: 1}.b',                       // type.unknown-field
+            '{a: 1}[0]',                      // type.index-not-string
+            '{a: 1, b: "x"}[content]',        // type.record-fields-differ
+            '[...content]',                   // type.spread-not-a-list
         ];
         const seen = new Set<string>();
         for (const src of samples) {
@@ -100,7 +108,10 @@ describe('diagnosticText', () => {
             'type.callback-result', 'type.too-many-params', 'type.param-shadows-builtin',
             'type.function-not-here', 'expr.expected-rbracket', 'expr.expected-rbracket-list',
             'expr.expected-param',
-            'lex.wikilink-looks-like-list', 'lex.unterminated-template']) {
+            'lex.wikilink-looks-like-list', 'lex.unterminated-template',
+            'expr.expected-field-name', 'expr.expected-field-value', 'expr.expected-rbrace',
+            'expr.spread-not-here', 'type.unknown-field', 'type.index-not-string',
+            'type.record-fields-differ', 'type.spread-not-a-list']) {
             expect(seen).toContain(code);
         }
         // フロー側で弾く 2 つも、文言が出ること
@@ -108,6 +119,7 @@ describe('diagnosticText', () => {
             'every mon setContent(["a"])',
             'every mon setContent(content.map(x => x))',
             'every mon setContent(`第${1}回`)',
+            'every mon setContent({a: 1})',
         ];
         for (const src of flowOnly) {
             for (const d of parseFlow(src).diagnostics) {
@@ -118,6 +130,7 @@ describe('diagnosticText', () => {
         expect(seen).toContain('expr.list-not-here');
         expect(seen).toContain('expr.function-not-here');
         expect(seen).toContain('expr.template-not-here');
+        expect(seen).toContain('expr.record-not-here');
 
         // 差し込みの診断は行から出る（フロー行にも式にも属さない第三の入口）
         const lineDiagnostics: Diagnostic[] = [];

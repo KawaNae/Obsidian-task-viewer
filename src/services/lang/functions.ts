@@ -23,29 +23,51 @@ export type ScalarType =
 
 export interface ArrayType { readonly array: StaticType }
 
-export type StaticType = ScalarType | ArrayType;
+/** A record: the fields it holds, by name. Order is not part of the type. */
+export interface RecordType { readonly fields: Readonly<Record<string, StaticType>> }
+
+export type StaticType = ScalarType | ArrayType | RecordType;
 
 export function arrayOf(element: StaticType): ArrayType {
     return { array: element };
 }
 
-export function isArrayType(t: StaticType): t is ArrayType {
-    return typeof t === 'object';
+export function recordOf(fields: Record<string, StaticType>): RecordType {
+    return { fields };
 }
 
-/** Display form for diagnostics: `string[]`, `number[][]`. */
+export function isArrayType(t: StaticType): t is ArrayType {
+    return typeof t === 'object' && 'array' in t;
+}
+
+export function isRecordType(t: StaticType): t is RecordType {
+    return typeof t === 'object' && 'fields' in t;
+}
+
+/** Display form for diagnostics: `string[]`, `number[][]`, `{a: string}`. */
 export function typeName(t: StaticType): string {
-    return isArrayType(t) ? `${typeName(t.array)}[]` : t;
+    if (isArrayType(t)) return `${typeName(t.array)}[]`;
+    if (isRecordType(t)) {
+        const fields = Object.entries(t.fields).map(([k, v]) => `${k}: ${typeName(v)}`);
+        return `{${fields.join(', ')}}`;
+    }
+    return t;
 }
 
 export function isDatishType(t: StaticType): boolean {
     return t === 'date' || t === 'datetime' || t === 'datish';
 }
 
-/** Structural equality — two list types match when their elements do. */
+/** Structural equality — two containers match when their contents do. */
 export function sameType(a: StaticType, b: StaticType): boolean {
     if (isArrayType(a) || isArrayType(b)) {
         return isArrayType(a) && isArrayType(b) && sameType(a.array, b.array);
+    }
+    if (isRecordType(a) || isRecordType(b)) {
+        if (!isRecordType(a) || !isRecordType(b)) return false;
+        const ak = Object.keys(a.fields);
+        const bk = Object.keys(b.fields);
+        return ak.length === bk.length && ak.every(k => k in b.fields && sameType(a.fields[k], b.fields[k]));
     }
     return a === b;
 }
@@ -56,7 +78,8 @@ export function isAssignable(actual: StaticType, expected: StaticType): boolean 
     if (isArrayType(expected)) {
         return isArrayType(actual) && isAssignable(actual.array, expected.array);
     }
-    if (isArrayType(actual)) return false;
+    if (isRecordType(expected)) return isRecordType(actual) && sameType(actual, expected);
+    if (isArrayType(actual) || isRecordType(actual)) return false;
     if (expected === 'datish') return isDatishType(actual);
     return actual === expected;
 }

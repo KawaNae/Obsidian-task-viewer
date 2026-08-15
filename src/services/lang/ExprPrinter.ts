@@ -9,6 +9,17 @@ export function printExpr(expr: Expr): string {
     return print(expr, 0);
 }
 
+/**
+ * A field name, quoted when it has to be.
+ *
+ * A key that is not a plain identifier was written as a string and has to go
+ * back out as one — printed bare it reads as a name followed by a stray word,
+ * which is a different expression and usually not one at all.
+ */
+function fieldKey(key: string): string {
+    return /^[A-Za-z_][A-Za-z0-9_]*$/.test(key) ? key : JSON.stringify(key);
+}
+
 /** Precedence levels (higher binds tighter). */
 function precOf(expr: Expr): number {
     switch (expr.kind) {
@@ -79,6 +90,9 @@ function print(expr: Expr, parentPrec: number): string {
             case 'method':
                 return `${print(expr.obj, myPrec)}${expr.optional ? '?.' : '.'}${expr.name}(${expr.args.map(a => print(a, 0)).join(', ')})`;
             case 'var': return expr.name;
+            case 'record':
+                return `{${expr.entries.map(e => `${fieldKey(e.key)}: ${print(e.value, 0)}`).join(', ')}}`;
+            case 'spread': return `...${print(expr.arg, myPrec)}`;
             case 'template':
                 // Block-only, like lists: a flow command joins with + and is
                 // the only surface whose printing has to read back.

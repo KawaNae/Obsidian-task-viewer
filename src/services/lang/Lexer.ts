@@ -199,7 +199,8 @@ export function tokenize(src: string, base = 0): LexResult {
         const three = src.slice(i, i + 3);
         const threeKind: TokenKind | undefined =
             three === '===' ? 'eq' :
-            three === '!==' ? 'neq' : undefined;
+            three === '!==' ? 'neq' :
+            three === '...' ? 'ellipsis' : undefined;
         if (threeKind) {
             push(threeKind, three, i, i + 3);
             i += 3;
@@ -228,6 +229,8 @@ export function tokenize(src: string, base = 0): LexResult {
             ch === ')' ? 'rparen' :
             ch === '[' ? 'lbracket' :
             ch === ']' ? 'rbracket' :
+            ch === '{' ? 'lbrace' :
+            ch === '}' ? 'rbrace' :
             ch === ',' ? 'comma' :
             ch === ':' ? 'colon' :
             ch === '@' ? 'at' :
