@@ -83,7 +83,12 @@ function print(expr: Expr, parentPrec: number): string {
                 // Block-only, like lists: a flow command joins with + and is
                 // the only surface whose printing has to read back.
                 return '`' + expr.parts
-                    .map(part => part.kind === 'text' ? part.text : '${' + print(part.expr, 0) + '}')
+                    // The escape was folded away when the text was read, so it
+                    // goes back on: printing the bare form would turn what was
+                    // written as literal text into a live interpolation.
+                    .map(part => part.kind === 'text'
+                        ? part.text.split('${').join('\\${')
+                        : '${' + print(part.expr, 0) + '}')
                     .join('') + '`';
             case 'array': {
                 const items = expr.items.map(i => print(i, 0));

@@ -64,6 +64,9 @@ function survivesRoundTrip(expr: Expr, profile: ParseProfile = 'flow'): { ok: bo
     return { ok: true, detail: printed };
 }
 
+/** Written out so the escape in the template family reads as what it is. */
+const BACKSLASH = '\\';
+
 const BINARY_OPS = ['+', '-', '*', '/', '%', '==', '!=', '<', '<=', '>', '>=', '&&', '||', '??'] as const;
 
 /**
@@ -137,6 +140,17 @@ const BLOCK_FAMILIES: Family[] = [
     { shape: 'nested list', sources: ['[ [1, 2], [3] ]', '[ [1], [2] ][0]'] },
     { shape: 'list method chain', sources: ['xs.filter(x => x.length > 1).map(x => x.trim()).join(", ")'] },
     { shape: 'two-parameter function', sources: ['xs.map((x, i) => i)', 'xs.sort((a, b) => a - b)'] },
+    {
+        shape: 'template literal',
+        sources: [
+            '`plain text`',
+            '`第${n}回`',
+            '`${a} between ${b}`',
+            // エスケープした差し込みは、印字して読み直してもリテラルのまま
+            '`path C:' + BACKSLASH + BACKSLASH + '${name}`',
+            '`${xs.map(x => `in ${x}`).join("")}`',
+        ],
+    },
 ];
 
 function sweep(families: Family[], profile: ParseProfile = 'flow'): { broken: string[]; empty: string[] } {

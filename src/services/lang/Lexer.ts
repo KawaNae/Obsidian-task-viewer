@@ -74,7 +74,12 @@ export function tokenize(src: string, base = 0): LexResult {
             let j = i + 1;
             let closed = false;
             while (j < src.length) {
-                if (src[j] === '\\') { j += 2; continue; }
+                // A backslash escapes one thing and only one: the start of an
+                // interpolation. Letting it escape anything would give the
+                // same character two meanings between here and the splitter
+                // that reads this body — and would eat the closing backtick
+                // of a path ending in a separator.
+                if (src[j] === '\\' && src[j + 1] === '$' && src[j + 2] === '{') { j += 3; continue; }
                 if (src[j] === '$' && src[j + 1] === '{') {
                     const end = findInterpolationEnd(src, j);
                     if (end === -1) break;
@@ -276,17 +281,27 @@ export function findInterpolationEnd(src: string, open: number): number {
 
     while (i < src.length) {
         const ch = src[i];
-        if (quote !== null) {
-            if (ch === '\\') { i += 2; continue; }
-            if (ch === quote) { quote = null; i++; continue; }
-            if (quote === '`' && ch === '$' && src[i + 1] === '{') {
-                // A template literal inside the interpolation closes its own
+        if (quote === '`') {
+            // Same one rule as the lexer: inside a template body a backslash
+            // means something only in front of an interpolation.
+            if (ch === '\\' && src[i + 1] === '$' && src[i + 2] === '{') { i += 3; continue; }
+            if (ch === '$' && src[i + 1] === '{') {
+                // A template inside this interpolation closes its own
                 // interpolations before this one closes.
                 const inner = findInterpolationEnd(src, i);
                 if (inner === -1) return -1;
                 i = inner + 1;
                 continue;
             }
+            if (ch === '`') { quote = null; }
+            i++;
+            continue;
+        }
+        if (quote !== null) {
+            // A quoted string is a string literal, where a backslash escapes
+            // whatever follows it.
+            if (ch === '\\') { i += 2; continue; }
+            if (ch === quote) { quote = null; }
             i++;
             continue;
         }

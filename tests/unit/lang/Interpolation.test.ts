@@ -25,6 +25,9 @@ function ctx(props: EvalContext['props'] = {}): EvalContext {
 
 const codes = (ds: Diagnostic[]) => ds.map(d => d.code);
 
+/** Written out so the escapes below read as what they are. */
+const BACKSLASH = '\\';
+
 function render(line: string, props: EvalContext['props'] = {}): string {
     const diagnostics: Diagnostic[] = [];
     const parts = splitInterpolations(line, diagnostics);
@@ -147,6 +150,41 @@ describe('template literals', () => {
         const { expr, diagnostics } = parseBlock('`outer ${["x"].map(s => `in ${s}`).join("")} end`');
         expect(diagnostics).toEqual([]);
         expect(expr).toMatchObject({ kind: 'template' });
+    });
+
+    it('escapes an interpolation and nothing else', () => {
+        // 規則は 1 つ: バックスラッシュは差し込みの直前でだけ意味を持つ。
+        // 任意の文字をエスケープする形にすると、末尾がバックスラッシュの
+        // パスで閉じのバッククォートが食われる（設計がこの規則の動機に
+        // 挙げた当のパスが書けなくなる）。
+        const path = parseBlock('`C:BdirB`'.split('B').join(BACKSLASH));
+        expect(path.diagnostics).toEqual([]);
+        expect(path.expr).toMatchObject({
+            kind: 'template',
+            parts: [{ kind: 'text', text: 'C:BdirB'.split('B').join(BACKSLASH) }],
+        });
+
+        const literal = parseBlock('`C:BdirB${name}`'.split('B').join(BACKSLASH));
+        expect(literal.diagnostics).toEqual([]);
+        // 差し込みではなくリテラルのテキストになる（隣接する形は書けない）
+        expect(literal.expr).toMatchObject({
+            kind: 'template',
+            parts: [{ kind: 'text', text: 'C:Bdir${name}'.split('B').join(BACKSLASH) }],
+        });
+    });
+
+    it('cannot hold a backtick, which is what one rule costs', () => {
+        // バックスラッシュがエスケープしないので、内側のバッククォートが
+        // テンプレートを終わらせる。書きたいときは文字列と + で組む。
+        const { diagnostics } = parseBlock('`aBb`'.split('B').join(BACKSLASH + '`'));
+        expect(codes(diagnostics)).toContain('lex.unterminated-template');
+    });
+
+    it('prints the escape back so a literal stays literal', () => {
+        const src = '`aB${b}`'.split('B').join(BACKSLASH);
+        const { expr, diagnostics } = parseBlock(src);
+        expect(diagnostics).toEqual([]);
+        expect(printExpr(expr!)).toBe(src);
     });
 
     it('reports an unterminated template', () => {
