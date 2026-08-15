@@ -43,6 +43,15 @@ export interface FlowProgram {
     until?: { expr: Expr; span: Span };
     nochildren?: { span: Span };
     /**
+     * `use("名前")` — the generation block that writes the next instance.
+     *
+     * The argument stays an expression rather than a bare literal. The flow
+     * profile allows expressions (it only forbids assignment), so a computed
+     * name works later without widening the grammar; the checker requires the
+     * expression to be a string.
+     */
+    use?: { name: Expr; span: Span };
+    /**
      * setContent(...) / setStart(...) / setEnd(...) / setDue(...) — field
      * overrides applied to the generated instance AFTER the schedule shift.
      * All RHS evaluate against the same post-shift snapshot (no chaining).

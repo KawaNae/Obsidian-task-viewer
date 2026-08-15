@@ -738,10 +738,11 @@
       "time-arithmetic": "Time arithmetic is not supported — apply duration to a date first: time(start + 2h)",
       "until-not-datish": "until() expects a date or datetime expression, got {{actual}}",
       "datetime-plus-time": "Adding a time to a {{left}} is ambiguous — truncate first: date(x) + 14:00",
-      "move-target": "move() expects a wikilink or string target, got {{actual}}"
+      "move-target": "move() expects a wikilink or string target, got {{actual}}",
+      "use-name": "use() expects a block name as a string, got {{actual}}"
     },
     "flow": {
-      "unknown-head": "Unknown clause '{{head}}' — clauses start with every / + / at(...) / xN / until(...) / nochildren / setContent|setStart|setStartTime|setEnd|setEndTime|setDue|setDueTime(...) / move(...)",
+      "unknown-head": "Unknown clause '{{head}}' — clauses start with every / + / at(...) / xN / until(...) / nochildren / use(...) / setContent|setStart|setStartTime|setEnd|setEndTime|setDue|setDueTime(...) / move(...)",
       "zero-lifetime": "xN requires N >= 1",
       "duplicate-schedule": "Only one schedule clause (every / + / at) is allowed",
       "duplicate-node": "Duplicate '{{clause}}' clause",

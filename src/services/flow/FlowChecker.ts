@@ -11,7 +11,7 @@ import { type FlowProgram, SET_FIELD_ORDER, setHeadName } from './FlowAst';
 export function checkFlow(program: FlowProgram, diagnostics: Diagnostic[]): void {
     // Modifiers of the generation step require a schedule to modify.
     if (!program.schedule) {
-        for (const key of ['lifetime', 'until', 'nochildren'] as const) {
+        for (const key of ['lifetime', 'until', 'nochildren', 'use'] as const) {
             const node = program[key];
             if (node) {
                 const clause = key === 'lifetime' ? 'xN' : key;
@@ -27,7 +27,7 @@ export function checkFlow(program: FlowProgram, diagnostics: Diagnostic[]): void
                     `'${clause}' requires a schedule clause (every / + / at)`, node.span, { clause }));
             }
         }
-        if (!program.move && !program.lifetime && !program.until && !program.nochildren && !program.sets) {
+        if (!program.move && !program.lifetime && !program.until && !program.nochildren && !program.use && !program.sets) {
             // Empty program (e.g. `==>` followed by prose that failed earlier,
             // or nothing at all). Only flag when no diagnostics explain it yet.
             if (diagnostics.length === 0) {
@@ -77,6 +77,14 @@ export function checkFlow(program: FlowProgram, diagnostics: Diagnostic[]): void
                         `${fn}(...) expects date, datetime or none, got ${t}`, node.expr.span, { fn, actual: t }));
                 }
             }
+        }
+    }
+
+    if (program.use) {
+        const t = checkExpr(program.use.name, FLOW_TYPE_ENV, diagnostics);
+        if (t !== 'error' && t !== 'string') {
+            diagnostics.push(error('type.use-name', `use() expects a block name as a string, got ${t}`,
+                program.use.name.span, { actual: t }));
         }
     }
 

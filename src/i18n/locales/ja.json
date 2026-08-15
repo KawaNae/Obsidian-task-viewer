@@ -738,10 +738,11 @@
       "time-arithmetic": "時刻単体の算術はできません — 日付に対して演算してから抽出してください: time(start + 2h)",
       "until-not-datish": "until() には日付/日時になる式が必要です（{{actual}} が渡されました）",
       "datetime-plus-time": "{{left}} への時刻の加算は曖昧です — date(x) + 14:00 のように日付に切り捨ててから足してください",
-      "move-target": "move() の宛先には wikilink か string が必要です（{{actual}} が渡されました）"
+      "move-target": "move() の宛先には wikilink か string が必要です（{{actual}} が渡されました）",
+      "use-name": "use() のブロック名には string が必要です（{{actual}} が渡されました）"
     },
     "flow": {
-      "unknown-head": "不明な節 '{{head}}' — 節は every / + / at(...) / xN / until(...) / nochildren / setContent|setStart|setStartTime|setEnd|setEndTime|setDue|setDueTime(...) / move(...) で始まります",
+      "unknown-head": "不明な節 '{{head}}' — 節は every / + / at(...) / xN / until(...) / nochildren / use(...) / setContent|setStart|setStartTime|setEnd|setEndTime|setDue|setDueTime(...) / move(...) で始まります",
       "zero-lifetime": "xN の N は 1 以上が必要です",
       "duplicate-schedule": "スケジュール節（every / + / at）は1つだけ書けます",
       "duplicate-node": "'{{clause}}' 節が重複しています",

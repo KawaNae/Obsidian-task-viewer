@@ -12,7 +12,7 @@ export interface ParseFlowResult {
     diagnostics: Diagnostic[];
 }
 
-const HEAD_HINT = 'clauses start with every / + / at(...) / xN / until(...) / nochildren / setContent|setStart|setStartTime|setEnd|setEndTime|setDue|setDueTime(...) / move(...)';
+const HEAD_HINT = 'clauses start with every / + / at(...) / xN / until(...) / nochildren / use(...) / setContent|setStart|setStartTime|setEnd|setEndTime|setDue|setDueTime(...) / move(...)';
 const SET_HEADS: Record<string, SetField> = Object.fromEntries(
     SET_FIELD_ORDER.map(field => [setHeadName(field), field])
 );
@@ -99,6 +99,16 @@ function parseNode(cursor: TokenCursor, program: FlowProgram, diagnostics: Diagn
             cursor.next();
             assignNode(program, 'nochildren', { span: tokenSpan(head) }, diagnostics, tokenSpan(head));
             return;
+        case 'use': {
+            cursor.next();
+            const name = parseParenExpr(cursor, 'use', diagnostics);
+            if (name) {
+                assignNode(program, 'use', { name, span: { start: head.start, end: name.span.end + 1 } }, diagnostics, tokenSpan(head));
+            } else {
+                skipToNextNode(cursor);
+            }
+            return;
+        }
         case 'move': {
             cursor.next();
             const target = parseParenExpr(cursor, 'move', diagnostics);
@@ -245,7 +255,7 @@ function assignSchedule(program: FlowProgram, node: ScheduleNode, diagnostics: D
     program.schedule = node;
 }
 
-function assignNode<K extends 'lifetime' | 'until' | 'nochildren' | 'move'>(
+function assignNode<K extends 'lifetime' | 'until' | 'nochildren' | 'use' | 'move'>(
     program: FlowProgram,
     key: K,
     node: NonNullable<FlowProgram[K]>,
@@ -267,7 +277,7 @@ function skipToNextNode(cursor: TokenCursor): void {
     while (!cursor.atEof()) {
         const t = cursor.peek();
         if (t.kind === 'ident' && (
-            ['every', 'at', 'until', 'nochildren', 'move'].includes(t.text)
+            ['every', 'at', 'until', 'nochildren', 'use', 'move'].includes(t.text)
             || t.text in SET_HEADS
             || /^x\d+$/.test(t.text)
         )) return;

@@ -10,7 +10,7 @@ import { type SegmentTable, segmentIndexAt } from './FlowSegments';
  * Input is accepted order-free, but every regeneration (each fire rewrites
  * the command into the next instance, decrementing the telomere) emits this
  * canonical order — files converge to it naturally over generations:
- *   schedule → xN → until → nochildren → set → move
+ *   schedule → xN → until → nochildren → use → set → move
  */
 export function serializeFlow(program: FlowProgram): string {
     return serializeParts(program).map(p => p.text).join(' ');
@@ -47,6 +47,7 @@ function serializeParts(program: FlowProgram): { text: string; span: Span }[] {
     if (program.lifetime) parts.push({ text: `x${program.lifetime.count}`, span: program.lifetime.span });
     if (program.until) parts.push({ text: `until(${printExpr(program.until.expr)})`, span: program.until.span });
     if (program.nochildren) parts.push({ text: 'nochildren', span: program.nochildren.span });
+    if (program.use) parts.push({ text: `use(${printExpr(program.use.name)})`, span: program.use.span });
     if (program.sets) {
         for (const field of SET_FIELD_ORDER) {
             const node = program.sets[field];

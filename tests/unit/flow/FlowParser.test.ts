@@ -113,6 +113,27 @@ describe('FlowParser', () => {
             expect(errors('x5')).toContain('flow.orphan-modifier');
             expect(errors('nochildren')).toContain('flow.orphan-modifier');
             expect(errors('until(2026-09-28)')).toContain('flow.orphan-modifier');
+            expect(errors('use("週報")')).toContain('flow.orphan-modifier');
+        });
+
+        it('parses use() and keeps the name as an expression', () => {
+            const { program, diagnostics } = parseFlow('every mon use("週報")');
+            expect(diagnostics).toEqual([]);
+            expect(program?.use?.name.kind).toBe('lit');
+        });
+
+        it('accepts a computed block name', () => {
+            // 引数を式のまま持つ判断の pin。リテラル限定にすると後で文法が広がる。
+            const { diagnostics } = parseFlow('every mon use("週報" + "2")');
+            expect(diagnostics).toEqual([]);
+        });
+
+        it('rejects a non-string block name', () => {
+            expect(errors('every mon use(3d)')).toContain('type.use-name');
+        });
+
+        it('rejects duplicate use clauses', () => {
+            expect(errors('every mon use("a") use("b")')).toContain('flow.duplicate-node');
         });
 
         it('reports legacy syntax as an unknown clause', () => {
@@ -164,6 +185,8 @@ describe('FlowParser', () => {
             'every mon x14',
             'every mon until(2026-09-28)',
             'every mon x14 until(2026-09-28) nochildren',
+            'every mon use("週報")',
+            'every mon x14 use("週報") move([[Log]])',
             'move([[Archive/Done]])',
             'every mon move([[Log]])',
             'at(startOf(month, done + 1mo) + 4d)',
