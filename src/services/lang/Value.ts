@@ -166,6 +166,18 @@ export function compareValues(a: Value, b: Value): number | null {
     }
 }
 
+/**
+ * A field name as it is written.
+ *
+ * Quoted unless it is a plain identifier: printed bare, a name with a space
+ * in it reads as a name followed by a stray word. One implementation, used by
+ * both the value form and the expression printer — the rule cannot be right
+ * in one place and wrong in the other.
+ */
+export function fieldKeyLiteral(key: string): string {
+    return /^[A-Za-z_][A-Za-z0-9_]*$/.test(key) ? key : JSON.stringify(key);
+}
+
 /** Canonical literal form, used by the serializer for round-tripping. */
 export function valueToLiteral(v: Value): string {
     switch (v.type) {
@@ -178,9 +190,7 @@ export function valueToLiteral(v: Value): string {
         case 'bool': return v.value ? 'true' : 'false';
         case 'link': return `[[${v.target}]]`;
         case 'array': return `[${v.items.map(valueToLiteral).join(', ')}]`;
-        case 'record': return `{${v.entries.map(e =>
-            `${/^[A-Za-z_][A-Za-z0-9_]*$/.test(e.key) ? e.key : JSON.stringify(e.key)}: ${valueToLiteral(e.value)}`
-        ).join(', ')}}`;
+        case 'record': return `{${v.entries.map(e => `${fieldKeyLiteral(e.key)}: ${valueToLiteral(e.value)}`).join(', ')}}`;
         case 'none': return 'none';
     }
 }
