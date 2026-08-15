@@ -50,6 +50,15 @@ describe('ExprPrinter', () => {
         expect(roundTrip('start.format("MM") + "/" + content')).toBe('start.format("MM") + "/" + content');
     });
 
+    // ブロックには文が無いので、そこに { } 本体の関数は書けない。落ちる先が
+    // レコードのパーサだと `return` を「フィールド名」と呼んで誤誘導するため、
+    // 手前で名指しする。
+    it('names a { } function body written outside a js section', () => {
+        const { tokens, diagnostics } = tokenize('xs.map(x => { return x })');
+        parseExpr(new TokenCursor(tokens), diagnostics, 'block');
+        expect(diagnostics.map(d => d.code)).toEqual(['expr.fn-body-not-here']);
+    });
+
     // 印字の契約はフロー行だけのもの。文を持てる形は verbatim なソースにしか
     // 現れないので、canonical 形が無いことを黙って埋めずに言う。
     it('has no canonical form for a block-bodied arrow', () => {

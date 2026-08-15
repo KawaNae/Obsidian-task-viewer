@@ -91,6 +91,27 @@ describe('StmtParser', () => {
             ]);
         });
 
+        // 代入をここで読まないのは意図的な除外。除外は、踏んだときに逃げ道を
+        // 示せて初めて意味を持つ（括弧の閉じ忘れエラーで返さない）。
+        it('names the parentheses an assignment needs at this depth', () => {
+            for (const src of [
+                'xs.forEach(x => total += x)',
+                'const ys = xs.map(x => n = n + 1)',
+                'let y = f(n = 1)',
+                'let y = [n = 1]',
+                'let y = {a: n = 1}',
+                'let y = xs[n = 1]',
+                'let y = true ? n = 1 : 2',
+            ]) {
+                expect({ src, codes: codes(src) }).toEqual({ src, codes: ['expr.assign-needs-parens'] });
+            }
+        });
+
+        it('reads both forms that do carry an assignment there', () => {
+            expect(ok('xs.forEach(x => (total += x))')).toHaveLength(1);
+            expect(ok('xs.forEach(x => { total += x })')).toHaveLength(1);
+        });
+
         it('names the callee when its arguments are not closed', () => {
             const d = first('let y = f(2');
             expect(d.code).toBe('expr.expected-rparen-call');
@@ -245,6 +266,15 @@ describe('StmtParser', () => {
 
         it('names the function body when its brace is missing', () => {
             expect(first('const f = x => { return x').code).toBe('stmt.expected-rbrace-fn');
+        });
+
+        // `=>` の後の波括弧は、レコードに見えればレコード。文パーサと同じ判定を
+        // 共有しているので、両者が食い違うことはない。
+        it('still reads a record body when the braces look like one', () => {
+            expect(ok('let ys = xs.map(x => ({a: x}))')).toHaveLength(1);
+            expect(ok('let ys = xs.map(x => {a: x})')).toMatchObject([
+                { init: { args: [{ kind: 'arrow', body: { kind: 'record' } }] } },
+            ]);
         });
     });
 

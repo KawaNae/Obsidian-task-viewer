@@ -70,14 +70,14 @@ function spanBetween(a: Span, b: Span): Span {
 const REFUSED_STMT: Record<string, { code: string; message: string }> = {
     var: { code: 'stmt.no-var', message: "'var' is not in this language — write 'let'" },
     function: { code: 'stmt.no-function', message: 'A function declaration is not in this language — write an arrow: const f = x => ...' },
-    class: { code: 'stmt.no-class', message: "'class' is not in this language" },
+    class: { code: 'stmt.no-class', message: "'class' is not in this language — a record holds the fields, and an arrow bound next to it holds the behaviour" },
     try: { code: 'stmt.no-try', message: "'try' is not in this language — a failed evaluation does not fire, and does not consume the command" },
     throw: { code: 'stmt.no-throw', message: "'throw' is not in this language — a failed evaluation is the failure" },
     switch: { code: 'stmt.no-switch', message: "'switch' is not in this language — write if / else if" },
     do: { code: 'stmt.no-do', message: "'do' is not in this language — write 'while'" },
     async: { code: 'stmt.no-async', message: "'async' is not in this language — evaluation is synchronous" },
     import: { code: 'stmt.no-import', message: "'import' is not in this language — the injected API is all there is" },
-    export: { code: 'stmt.no-export', message: "'export' is not in this language" },
+    export: { code: 'stmt.no-export', message: 'A section is not a module — a block is named on its tv-gen tag and reached with use("name")' },
 };
 
 function parseStmtList(cursor: TokenCursor, diagnostics: Diagnostic[], end: 'eof' | 'rbrace'): Stmt[] {
@@ -497,8 +497,12 @@ function parseBracedBody(
  * `{a: 1}` is the tell — a field name and a colon — and a block cannot start
  * that way, since the language has no labels. Line breaks are stepped over so
  * a record written open across lines is recognized too.
+ *
+ * Shared with the expression parser, which faces the same fork after an
+ * arrow's `=>`. One test, so the two places cannot drift into disagreeing
+ * about what `x => {a: 1}` is.
  */
-function looksLikeRecord(cursor: TokenCursor): boolean {
+export function looksLikeRecord(cursor: TokenCursor): boolean {
     let ahead = 1;
     while (cursor.peek(ahead).kind === 'newline') ahead++;
     const key = cursor.peek(ahead);

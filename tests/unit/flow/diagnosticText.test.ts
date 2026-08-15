@@ -205,6 +205,7 @@ describe('diagnosticText', () => {
             'delete x.y',                       // expr.no-delete
             'n++',                              // expr.increment-not-here
             '1 = 2',                            // expr.assign-target
+            'xs.forEach(x => total += x)',      // expr.assign-needs-parens
             'let x = 1 /* c */',                // lex.no-block-comment
         ];
 
@@ -226,13 +227,18 @@ describe('diagnosticText', () => {
             'stmt.no-switch', 'stmt.no-do', 'stmt.no-async', 'stmt.no-import', 'stmt.no-export',
             'expr.no-new', 'expr.no-date', 'expr.no-console', 'expr.no-function', 'expr.no-await',
             'expr.no-typeof', 'expr.no-delete', 'expr.increment-not-here', 'expr.assign-target',
-            'expr.assign-not-here', 'lex.no-block-comment', 'flow.comment-not-here',
+            'expr.assign-needs-parens', 'expr.fn-body-not-here', 'expr.assign-not-here',
+            'lex.no-block-comment', 'flow.comment-not-here',
         ];
 
         function emitted(): Diagnostic[] {
             const all: Diagnostic[] = [];
             for (const src of STATEMENT_SAMPLES) all.push(...parseProgram(src).diagnostics);
             for (const src of FLOW_SAMPLES) all.push(...parseFlow(src).diagnostics);
+            // ブロックには文が無いので、{ } 本体の関数はブロック側からしか出ない。
+            const { tokens, diagnostics } = tokenize('xs.map(x => { return x })');
+            parseExpr(new TokenCursor(tokens), diagnostics, 'block');
+            all.push(...diagnostics);
             return all;
         }
 

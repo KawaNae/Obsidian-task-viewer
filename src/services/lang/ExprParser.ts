@@ -1,7 +1,7 @@
 import { type Diagnostic, type Span, error } from './Diagnostic';
 import { type BinaryOp, type Expr, FN_NAMES, type FnName, type InterpolationPart, type PropName } from './ExprAst';
 import { findInterpolationEnd, splitDurationText, tokenize } from './Lexer';
-import { parseArrowBlockBody } from './StmtParser';
+import { looksLikeRecord, parseArrowBlockBody } from './StmtParser';
 import { type Token, TokenCursor, tokenSpan } from './Token';
 import { weekdayFromName } from './Value';
 
@@ -26,7 +26,7 @@ const REFUSED_EXPR_NAMES: Record<string, { code: string; message: string }> = {
     console: { code: 'expr.no-console', message: "'console' is not in this language — the reading view previews what a block generates" },
     function: { code: 'expr.no-function', message: 'A function keyword is not in this language — write an arrow: x => ...' },
     await: { code: 'expr.no-await', message: "'await' is not in this language — evaluation is synchronous" },
-    typeof: { code: 'expr.no-typeof', message: "'typeof' is not in this language" },
+    typeof: { code: 'expr.no-typeof', message: "'typeof' is not in this language — a value's type is fixed where it is written, and the checker reports a mismatch before anything runs" },
     delete: { code: 'expr.no-delete', message: "'delete' is not in this language — values here are immutable" },
 };
 
@@ -86,15 +86,46 @@ export function parseExpr(cursor: TokenCursor, diagnostics: Diagnostic[], forPro
 function parseAssignment(cursor: TokenCursor, diagnostics: Diagnostic[]): Expr | null {
     const left = parseTernary(cursor, diagnostics);
     if (!left) return null;
-    const t = cursor.peek();
-    const op = t.kind === 'assign' ? '=' : t.kind === 'pluseq' ? '+=' : t.kind === 'minuseq' ? '-=' : null;
-    if (!op) return left;
-    if (profile === 'flow') {
-        diagnostics.push(error('expr.assign-not-here',
-            'An assignment only means something inside a generation block — a flow clause cannot write a cell',
-            tokenSpan(t)));
-        return null;
+    if (assignOp(cursor) === null) return left;
+    if (refuseFlowAssignment(cursor, diagnostics)) return null;
+    return finishAssignment(cursor, diagnostics, left);
+}
+
+/**
+ * A whole value in a place that reads one and stops: an argument, a list
+ * element, a record's value, a branch of a ternary, an arrow's expression
+ * body. An assignment is not read at this depth — it says itself with
+ * parentheses, which is what keeps an intended write visible.
+ *
+ * That refusal only works if it is said. Left as a bare "expected ')'", the
+ * accumulate idiom everyone writes first — `xs.forEach(x => total += x)` —
+ * comes back as a missing bracket, and the two forms that do work,
+ * `x => (total += x)` and `x => { total += x }`, are never named. So the
+ * assignment is named and then read through, and one diagnostic stands in
+ * for the cascade the unread `=` would otherwise cause.
+ */
+function parseSubExpr(cursor: TokenCursor, diagnostics: Diagnostic[]): Expr | null {
+    const value = parseTernary(cursor, diagnostics);
+    if (!value) return null;
+    if (assignOp(cursor) === null) return value;
+    if (refuseFlowAssignment(cursor, diagnostics)) return null;
+    diagnostics.push(error('expr.assign-needs-parens',
+        'An assignment here is written in parentheses: (n = 1)', tokenSpan(cursor.peek())));
+    return finishAssignment(cursor, diagnostics, value);
+}
+
+function assignOp(cursor: TokenCursor): '=' | '+=' | '-=' | null {
+    switch (cursor.peek().kind) {
+        case 'assign': return '=';
+        case 'pluseq': return '+=';
+        case 'minuseq': return '-=';
+        default: return null;
     }
+}
+
+/** Cursor sits on an assignment operator, in a profile that reads one. */
+function finishAssignment(cursor: TokenCursor, diagnostics: Diagnostic[], left: Expr): Expr | null {
+    const op = assignOp(cursor)!;
     cursor.next();
     if (left.kind !== 'var') {
         diagnostics.push(error('expr.assign-target',
@@ -106,6 +137,15 @@ function parseAssignment(cursor: TokenCursor, diagnostics: Diagnostic[]): Expr |
     return { kind: 'assign', op, name: left.name, nameSpan: left.span, value, span: spanBetween(left.span, value.span) };
 }
 
+/** Cursor sits on an assignment operator. In a flow clause that is the end of it. */
+function refuseFlowAssignment(cursor: TokenCursor, diagnostics: Diagnostic[]): boolean {
+    if (profile !== 'flow') return false;
+    diagnostics.push(error('expr.assign-not-here',
+        'An assignment only means something inside a generation block — a flow clause cannot write a cell',
+        tokenSpan(cursor.peek())));
+    return true;
+}
+
 function spanBetween(a: Span, b: Span): Span {
     return { start: a.start, end: b.end };
 }
@@ -114,13 +154,13 @@ function parseTernary(cursor: TokenCursor, diagnostics: Diagnostic[]): Expr | nu
     const cond = parseNullish(cursor, diagnostics);
     if (!cond) return null;
     if (!cursor.tryEat('question')) return cond;
-    const thenExpr = parseTernary(cursor, diagnostics);
+    const thenExpr = parseSubExpr(cursor, diagnostics);
     if (!thenExpr) return null;
     if (!cursor.tryEat('colon')) {
         diagnostics.push(error('expr.expected-colon', "Expected ':' in conditional expression", tokenSpan(cursor.peek())));
         return null;
     }
-    const elseExpr = parseTernary(cursor, diagnostics);
+    const elseExpr = parseSubExpr(cursor, diagnostics);
     if (!elseExpr) return null;
     return { kind: 'cond', cond, then: thenExpr, else: elseExpr, span: spanBetween(cond.span, elseExpr.span) };
 }
@@ -305,7 +345,7 @@ function parsePostfix(cursor: TokenCursor, diagnostics: Diagnostic[]): Expr | nu
         cursor.next();
 
         if (cursor.at('lparen')) {
-            const args = parseArgs(cursor, diagnostics);
+            const args = parseArgs(cursor, diagnostics, nameToken.text);
             if (!args) return null;
             obj = {
                 kind: 'method', obj, name: nameToken.text, args, optional,
@@ -339,7 +379,7 @@ function refuseIncrement(cursor: TokenCursor, diagnostics: Diagnostic[]): boolea
 /** `xs[i]`. Cursor sits on '['. */
 function parseIndex(cursor: TokenCursor, diagnostics: Diagnostic[], obj: Expr, optional: boolean): Expr | null {
     cursor.next(); // consume '['
-    const index = parseTernary(cursor, diagnostics);
+    const index = parseSubExpr(cursor, diagnostics);
     if (!index) return null;
     const close = cursor.tryEat('rbracket');
     if (!close) {
@@ -457,7 +497,7 @@ function parseArrayLiteral(cursor: TokenCursor, diagnostics: Diagnostic[]): Expr
         for (;;) {
             const item = cursor.at('ellipsis')
                 ? parseSpread(cursor, diagnostics)
-                : parseTernary(cursor, diagnostics);
+                : parseSubExpr(cursor, diagnostics);
             if (!item) return null;
             items.push(item);
             if (cursor.tryEat('comma')) continue;
@@ -475,7 +515,7 @@ function parseArrayLiteral(cursor: TokenCursor, diagnostics: Diagnostic[]): Expr
 /** `...xs`, inside a list literal. Cursor sits on the ellipsis. */
 function parseSpread(cursor: TokenCursor, diagnostics: Diagnostic[]): Expr | null {
     const open = cursor.next();
-    const arg = parseTernary(cursor, diagnostics);
+    const arg = parseSubExpr(cursor, diagnostics);
     if (!arg) return null;
     return { kind: 'spread', arg, span: spanBetween(tokenSpan(open), arg.span) };
 }
@@ -513,7 +553,7 @@ function parseRecordLiteral(cursor: TokenCursor, diagnostics: Diagnostic[]): Exp
                     { name: keyToken.text }));
                 return null;
             }
-            const value = parseTernary(cursor, diagnostics);
+            const value = parseSubExpr(cursor, diagnostics);
             if (!value) return null;
             entries.push({ key: keyToken.text, value });
             cursor.skipNewlines();
@@ -582,15 +622,24 @@ function parseArrow(cursor: TokenCursor, diagnostics: Diagnostic[]): Expr | null
         }
     }
     cursor.next(); // '=>'
-    // `x => { ... }` — a block body, read as statements. Statement profile
-    // only: the expression surfaces have no statements to hold, and there a
-    // `{` after the arrow keeps meaning a record, as it always has.
-    if (profile === 'stmt' && cursor.at('lbrace')) {
+    // `x => { ... }`. A `{` here is a record when it looks like one, which is
+    // how `xs.map(x => {a: 1})` has always read — the same test the statement
+    // parser uses, shared rather than written twice. Otherwise it is a block
+    // body, and that is a js section form: outside one there are no
+    // statements to hold, so it is named instead of falling through to the
+    // record parser, which would call `return` a field name.
+    if (cursor.at('lbrace') && !looksLikeRecord(cursor)) {
+        if (profile !== 'stmt') {
+            diagnostics.push(error('expr.fn-body-not-here',
+                'A function with a { } body can only be written in a js section — here the body is an expression: x => x.length',
+                tokenSpan(cursor.peek())));
+            return null;
+        }
         const blockBody = parseArrowBlockBody(cursor, diagnostics);
         if (!blockBody) return null;
         return { kind: 'arrow', params, body: blockBody, span: spanBetween(tokenSpan(start), blockBody.span) };
     }
-    const body = parseTernary(cursor, diagnostics);
+    const body = parseSubExpr(cursor, diagnostics);
     if (!body) return null;
     return { kind: 'arrow', params, body, span: spanBetween(tokenSpan(start), body.span) };
 }
@@ -768,7 +817,7 @@ function parseArgs(cursor: TokenCursor, diagnostics: Diagnostic[], fn = 'the cal
     const args: Expr[] = [];
     if (!cursor.at('rparen')) {
         for (;;) {
-            const arg = parseTernary(cursor, diagnostics);
+            const arg = parseSubExpr(cursor, diagnostics);
             if (!arg) return null;
             args.push(arg);
             if (cursor.tryEat('comma')) continue;
