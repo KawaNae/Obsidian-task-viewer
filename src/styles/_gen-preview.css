@@ -1,0 +1,63 @@
+/* Reading-view rendering of a `tv-gen` block */
+
+.tv-gen-preview {
+    border: 1px solid var(--background-modifier-border);
+    border-radius: var(--radius-s);
+    padding: var(--size-4-2) var(--size-4-3);
+    background: var(--background-secondary);
+    font-size: var(--font-ui-small);
+}
+
+.tv-gen-preview__name {
+    font-weight: var(--font-semibold);
+    color: var(--text-muted);
+    margin-bottom: var(--size-4-2);
+}
+
+.tv-gen-preview__name::before {
+    content: 'tv-gen ';
+    color: var(--text-faint);
+    font-weight: var(--font-normal);
+}
+
+.tv-gen-preview__line {
+    display: flex;
+    align-items: baseline;
+    gap: var(--size-4-1);
+    padding-left: calc(var(--tv-gen-depth, 0) * var(--size-4-4));
+    line-height: 1.6;
+}
+
+/* Inert stand-in for a checkbox: this is a template, not a record. */
+.tv-gen-preview__marker {
+    flex: 0 0 auto;
+    width: 0.85em;
+    height: 0.85em;
+    border: 1px solid var(--text-faint);
+    border-radius: 2px;
+    align-self: center;
+}
+
+.tv-gen-preview__text {
+    white-space: pre-wrap;
+    word-break: break-word;
+}
+
+.tv-gen-preview__empty {
+    color: var(--text-faint);
+}
+
+.tv-gen-preview__diag {
+    margin-top: var(--size-4-1);
+    padding-left: var(--size-4-2);
+    border-left: 2px solid transparent;
+    color: var(--text-muted);
+}
+
+.tv-gen-preview__diag--error {
+    border-left-color: var(--color-red);
+}
+
+.tv-gen-preview__diag--warning {
+    border-left-color: var(--color-yellow);
+}

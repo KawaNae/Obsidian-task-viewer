@@ -104,6 +104,7 @@ const copyStaticFiles = {
           '_checkboxes.css',
           '_editor-task-menu.css',
           '_diagnostics.css',
+          '_gen-preview.css',
           '_menu.css',
           '_toolbar.css',
           '_section-toggle.css',
