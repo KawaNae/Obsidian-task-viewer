@@ -85,18 +85,30 @@ describe('parseGenBody — diagnostics', () => {
         ])).toEqual([['gen.root-not-first', 2]]);
     });
 
-    it('reports a statement line as unsupported and ignores it', () => {
-        const { children, diagnostics } = parse([
-            '- [ ] 親',
-            '% if (n > 3) {',
-            '    - [ ] 子',
-            '% }',
+    it('reports a js section as unsupported and skips it', () => {
+        const { parent, children, diagnostics } = parse([
+            '<js',
+            'n = n + 1',
+            '/js>',
+            '- [ ] 週報 第${n}回',
+            '    - [ ] 資料集め',
         ]);
         expect(diagnostics.map(d => [d.code, d.line])).toEqual([
-            ['gen.statement-unsupported', 2],
-            ['gen.statement-unsupported', 4],
+            ['gen.js-section-unsupported', 1],
         ]);
-        expect(children.map(c => c.text)).toEqual(['- [ ] 子']);
+        expect(parent!.text).toBe('- [ ] 週報 第${n}回');
+        expect(children.map(c => c.text)).toEqual(['- [ ] 資料集め']);
+    });
+
+    it('does not swallow the body when the section closes on its own line', () => {
+        const { parent } = parse(['<js n = n + 1 /js>', '- [ ] 週報']);
+        expect(parent!.text).toBe('- [ ] 週報');
+    });
+
+    it('keeps a line starting with % as ordinary content', () => {
+        const { parent, diagnostics } = parse(['- [ ] 進捗 50% 完了', '    % のメモ']);
+        expect(diagnostics).toEqual([]);
+        expect(parent!.text).toBe('- [ ] 進捗 50% 完了');
     });
 
     it('reports diagnostics in line order', () => {

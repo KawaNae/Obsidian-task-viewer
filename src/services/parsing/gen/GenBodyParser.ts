@@ -22,8 +22,9 @@ export interface GenBody {
 /** Spaces that make up one level of depth (Obsidian accepts 1 tab or 4 spaces). */
 const SPACES_PER_LEVEL = 4;
 
-/** A statement line: the first non-blank character is `%`, unescaped. */
-const STATEMENT_RE = /^\s*%/;
+/** Opening and closing tags of the leading js section. */
+const JS_OPEN_RE = /^\s*<js\b/;
+const JS_CLOSE_RE = /^\s*\/js>\s*$/;
 
 /**
  * Read the literal lines of a block body.
@@ -51,13 +52,19 @@ export function parseGenBody(body: string[], firstLine: number): GenBody {
         const line = firstLine + i;
         if (raw.trim() === '') continue;
 
-        if (STATEMENT_RE.test(raw)) {
+        // The js section is read by a later stage. Until then, say so and
+        // skip it: emitting its lines as markdown would print the tag and
+        // then generate whatever the logic was meant to decide.
+        if (JS_OPEN_RE.test(raw)) {
             diagnostics.push({
-                ...error('gen.statement-unsupported',
-                    'Statement lines are not supported yet — this line is ignored',
+                ...error('gen.js-section-unsupported',
+                    'A js section is not supported yet — this block generates its body only',
                     { start: 0, end: raw.length }),
                 line,
             });
+            if (!raw.includes('/js>')) {
+                while (i < body.length && !JS_CLOSE_RE.test(body[i])) i++;
+            }
             continue;
         }
 
