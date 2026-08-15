@@ -3,8 +3,21 @@ import type { DuplicateOptions, TvFileKeys, Task } from '../../types';
 import { collectFlowLineIndicesInFile, formatFlowLine } from '../flow/FlowLineScanner';
 import { CodeFenceTracker } from '../../utils/CodeFenceTracker';
 import { DateUtils } from '../../utils/DateUtils';
-import type { FileOperations } from './utils/FileOperations';
+import { logWarn } from '../../log/log';
+import { FileOperations } from './utils/FileOperations';
 import { FrontmatterLineEditor } from './utils/FrontmatterLineEditor';
+
+/**
+ * One generated child line, as the block described it.
+ *
+ * `depth` counts levels below the generated parent, so 1 is its direct child.
+ * `body` carries no indentation — this layer decides what one level looks like
+ * in the file being written.
+ */
+export interface GeneratedChild {
+    depth: number;
+    body: string;
+}
 
 
 /**
@@ -151,6 +164,59 @@ export class TaskCloner {
             } else {
                 lines.splice(insertAt, 0, newParentLine, ...newFlowLines);
             }
+
+            return lines.join('\n');
+        });
+    }
+
+    /**
+     * Write the next instance from what a gen block described.
+     *
+     * The caller hands over finished values: the parent line with its flow
+     * clause already composed, the flow child lines in canonical form, and the
+     * children as depth and body. Nothing here reads the block or evaluates
+     * anything — this layer only decides where the lines go and how deep they
+     * sit, which is the same division of labour the recurrence path has always
+     * had.
+     *
+     * Indentation is resolved from the file, not from the caller. The parent is
+     * a sibling of the task that fired, so it takes that task's own indent; the
+     * children take one unit per level of `depth`, where a depth of 1 means the
+     * first level below the parent. The unit follows the task's existing
+     * children, falling back to however the rest of the file is written — the
+     * same rule the child-insert primitives use, so a subtree keeps one
+     * spelling.
+     */
+    async insertGeneratedInstance(
+        task: Task,
+        parentLine: string,
+        flowLines: string[],
+        children: GeneratedChild[],
+    ): Promise<void> {
+        const file = this.app.vault.getAbstractFileByPath(task.file);
+        if (!(file instanceof TFile)) return;
+
+        await this.app.vault.process(file, (fileContent) => {
+            const lines = fileContent.split('\n');
+
+            const currentLine = this.fileOps.findTaskLineNumber(lines, task);
+            if (currentLine < 0 || currentLine >= lines.length) {
+                logWarn('[TaskCloner] Task not found in file (insertGeneratedInstance)');
+                return fileContent;
+            }
+
+            const parentIndent = lines[currentLine].match(/^(\s*)/)?.[1] ?? '';
+            const unit = FileOperations.resolveChildIndent(lines, currentLine)
+                .slice(parentIndent.length) || FileOperations.detectIndentUnit(lines);
+
+            const rendered = [
+                parentIndent + parentLine.trim(),
+                ...flowLines.map(raw => formatFlowLine(parentIndent + unit, raw)),
+                ...children.map(c => parentIndent + unit.repeat(Math.max(1, c.depth)) + c.body.trim()),
+            ];
+
+            const insertAt = this.fileOps.findSiblingGroupStart(lines, currentLine);
+            lines.splice(insertAt, 0, ...rendered);
 
             return lines.join('\n');
         });

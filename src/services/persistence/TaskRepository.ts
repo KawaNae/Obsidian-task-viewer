@@ -3,7 +3,7 @@ import type { DuplicateOptions, TvFileKeys, Task } from '../../types';
 import { FileOperations } from './utils/FileOperations';
 import { InlineTaskWriter } from './writers/InlineTaskWriter';
 import { FrontmatterWriter } from './writers/FrontmatterWriter';
-import { TaskCloner } from './TaskCloner';
+import { TaskCloner, type GeneratedChild } from './TaskCloner';
 import { TaskConverter } from './TaskConverter';
 import { getFileBaseName } from '../parsing/utils/TaskContent';
 import { TaskLineClassifier } from '../parsing/utils/TaskLineClassifier';
@@ -128,6 +128,20 @@ export class TaskRepository {
 
     async insertRecurrenceForTask(task: Task, content: string, copyChildren = true, flowLines: string[] = []): Promise<void> {
         return this.cloner.insertRecurrenceForTask(task, content, copyChildren, flowLines);
+    }
+
+    /**
+     * Write the next instance from a gen block's output. See
+     * {@link TaskCloner.insertGeneratedInstance} for what the caller owes and
+     * what this layer decides.
+     */
+    async insertGeneratedInstance(
+        task: Task,
+        parentLine: string,
+        flowLines: string[],
+        children: GeneratedChild[],
+    ): Promise<void> {
+        return this.cloner.insertGeneratedInstance(task, parentLine, flowLines, children);
     }
 
     // --- Task Conversion Operations ---
