@@ -65,7 +65,7 @@ export const POSTFIX_FAMILIES: Family[] = [
 export const LITERAL_FAMILIES: Family[] = [
     { shape: 'number', sources: ['42', '0'] },
     // 固定小数点の往復が要点: String(1e-7) は指数表記になり字句が読み戻せない
-    { shape: 'decimal number', sources: ['0.5', '0.1', '0.0000001', '900000.5', '0.3333333333'] },
+    { shape: 'decimal number', sources: ['0.5', '0.1', '0.0000001', '500000.5', '0.3333333333'] },
     { shape: 'string', sources: ['"text"', '""', '"quote \\" inside"', '"brace } inside"'] },
     { shape: 'date and time', sources: ['2026-08-17', '2026-08-17T14:00', '14:00', '09:05'] },
     { shape: 'duration', sources: ['3d', '30min', '2mo', '1w', '4y', '6h'] },

@@ -711,7 +711,8 @@
       "unknown-unit": "Unknown duration unit '{{unit}}' (expected {{units}})",
       "unexpected-char": "Unexpected character '{{char}}'",
       "decimal-duration": "A duration is a whole number ('{{text}}') — say it in a smaller unit",
-      "decimal-too-precise": "A number keeps at most {{places}} decimal places ('{{text}}')"
+      "decimal-too-precise": "A number keeps at most {{places}} decimal places ('{{text}}')",
+      "decimal-too-large": "A number with a fraction holds its precision up to {{max}} ('{{text}}')"
     },
     "expr": {
       "expected-rbrace": "Expected '}' to close the record",

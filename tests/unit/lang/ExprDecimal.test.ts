@@ -67,9 +67,21 @@ describe('decimal numbers', () => {
     });
 
     it('refuses a number it could not hold exactly', () => {
-        // 端は設計に明記した値。黙って精度を落とさず、評価失敗で教える
+        // 端 = 2^19。その上の binade では ulp が格子間隔 1e-10 を超え、
+        // 隣接する格子点が同じ double に潰れる。黙って精度を落とさず、
+        // 評価失敗で教える
         expect(() => evaluate(`${MAX_EXACT_FRACTION} + 0.5`)).toThrow(EvalError);
-        expect(num('900000 + 0.5')).toBe(900000.5);
+        expect(num('500000 + 0.5')).toBe(500000.5);
+    });
+
+    it('refuses a literal past the exact range at the lexer', () => {
+        // quantize は演算結果しか守らない。リテラルは格子へのもう 1 つの
+        // 入口なので、書かれた場所で大きさを見る（レビュー実測: この値は
+        // 受理すると印字で 600000.0000000003 に化ける）
+        expect(codes(parse('600000.0000000004').diagnostics)).toContain('lex.decimal-too-large');
+        expect(parse('500000.0000000004').diagnostics).toEqual([]);
+        // 小数点以下が全部ゼロなら値は整数で、2^53 まで正確 — 拒否しない
+        expect(parse('600000.0').diagnostics).toEqual([]);
     });
 
     it('reads a decimal literal, and refuses one finer than the grid', () => {
@@ -102,6 +114,8 @@ describe('decimal numbers', () => {
         // まさに格子が支えるべき小さい値なので、固定小数点で書く。
         expect(valueToLiteral({ type: 'number', value: 0.0000001 })).toBe('0.0000001');
         expect(valueToLiteral({ type: 'number', value: 0.3 })).toBe('0.3');
+        // 正確な範囲の中では、格子点は印字と読み戻しでちょうど 1 往復する
+        expect(valueToLiteral({ type: 'number', value: 500000.0000000004 })).toBe('500000.0000000004');
         expect(valueToLiteral({ type: 'number', value: 3 })).toBe('3');
         const { expr } = parse('0.0000001');
         expect(printExpr(expr!)).toBe('0.0000001');

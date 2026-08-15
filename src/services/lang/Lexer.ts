@@ -1,6 +1,6 @@
 import { type Diagnostic, error } from './Diagnostic';
 import type { Token, TokenKind } from './Token';
-import { DECIMAL_PLACES, DURATION_UNITS, type DurUnit } from './Value';
+import { DECIMAL_PLACES, DURATION_UNITS, type DurUnit, MAX_EXACT_FRACTION } from './Value';
 
 const DATETIME_RE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/;
 const DATE_RE = /^\d{4}-\d{2}-\d{2}/;
@@ -176,6 +176,18 @@ export function tokenize(src: string, base = 0): LexResult {
                     rawDiagnostics.push(error('lex.decimal-too-precise',
                         `A number keeps at most ${DECIMAL_PLACES} decimal places ('${full}')`,
                         { start: i, end: i + full.length }, { text: full, places: DECIMAL_PLACES }));
+                }
+                // The evaluator's range gate guards operation results only; a
+                // literal is the other way onto the grid, so its magnitude is
+                // checked where it is written. Past this bound the grid stops
+                // being one-to-one on doubles and the value would drift on the
+                // print/read round trip. A fraction of zeros still means a
+                // whole number, which is exact far beyond this.
+                const value = parseFloat(full);
+                if (!Number.isInteger(value) && value > MAX_EXACT_FRACTION) {
+                    rawDiagnostics.push(error('lex.decimal-too-large',
+                        `A number with a fraction holds its precision up to ${MAX_EXACT_FRACTION} ('${full}')`,
+                        { start: i, end: i + full.length }, { text: full, max: MAX_EXACT_FRACTION }));
                 }
                 push('number', full, i, i + full.length);
                 i += full.length;

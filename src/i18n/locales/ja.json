@@ -711,7 +711,8 @@
       "unknown-unit": "不明な期間単位 '{{unit}}'（使用可能: {{units}}）",
       "unexpected-char": "予期しない文字 '{{char}}'",
       "decimal-duration": "duration は整数と単位で書きます（'{{text}}'）。小さい単位で書いてください",
-      "decimal-too-precise": "数値は小数点以下 {{places}} 桁までです（'{{text}}'）"
+      "decimal-too-precise": "数値は小数点以下 {{places}} 桁までです（'{{text}}'）",
+      "decimal-too-large": "小数を持つ数値は {{max}} まで正確に保てます（'{{text}}'）"
     },
     "expr": {
       "expected-rbrace": "レコードを閉じる '}' が必要です",

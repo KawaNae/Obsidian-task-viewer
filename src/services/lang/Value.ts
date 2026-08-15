@@ -14,14 +14,18 @@ export const DECIMAL_PLACES = 10;
 export const DECIMAL_SCALE = 10 ** DECIMAL_PLACES;
 
 /**
- * Largest fraction the carrier holds exactly.
+ * Largest fractional value the carrier holds exactly.
  *
- * A double keeps 2^53 whole units, and a value on the grid is that many
- * ten-billionths — so about 9.0e5. Whole numbers are exact up to 2^53 itself
- * and do not pay this cost. Past either end the evaluation fails rather than
- * writing a number that is not the one that was computed.
+ * The grid maps one-to-one onto doubles only while a double's ulp stays
+ * under the grid spacing: ulp(v) < 1e-10 holds for |v| < 2^19. One binade
+ * higher the ulp is 1.16e-10 and neighbouring grid points start collapsing
+ * into the same double — a value would then drift on the print/read round
+ * trip, which is the exact failure the grid exists to prevent. Whole numbers
+ * are exact up to 2^53 and do not pay this cost. Past either end the
+ * evaluation fails rather than writing a number that is not the one that
+ * was computed.
  */
-export const MAX_EXACT_FRACTION = Number.MAX_SAFE_INTEGER / DECIMAL_SCALE;
+export const MAX_EXACT_FRACTION = 2 ** 19;
 
 export const DURATION_UNITS = ['min', 'h', 'd', 'w', 'mo', 'y'] as const;
 export type DurUnit = typeof DURATION_UNITS[number];
