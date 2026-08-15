@@ -1,13 +1,18 @@
 import type { Span } from '../../lang/Diagnostic';
 import { type EvalContext, EvalError } from '../../lang/ExprEvaluator';
 import { type RenderedPart, renderInterpolation } from '../../lang/Interpolation';
-import type { GenBody, GenLine } from './GenBodyParser';
+import { type GenBody, type GenLine, indentDepth, leadingIndent } from './GenBodyParser';
 
 /** One generated child line: its text, and how deep it sits under the parent. */
 export interface RenderedChild {
     /** 1 is directly under the parent. */
     depth: number;
-    /** The line as it will be written, without indentation. */
+    /**
+     * The line as it will be written, without indentation and **never
+     * containing a newline**. A value that renders as several lines is split
+     * here, where the indent rule already lives, so the writer keeps its one
+     * element to one line.
+     */
     body: string;
 }
 
@@ -37,16 +42,50 @@ export type GenRenderResult =
  */
 export function renderGenBody(body: GenBody, ctx: EvalContext): GenRenderResult {
     try {
-        const parentText = body.parent === null ? null : renderLine(body.parent, ctx);
-        const children = body.children.map(line => ({
-            depth: line.depth,
-            body: renderLine(line, ctx),
-        }));
+        const parentText = body.parent === null ? null : renderParent(body.parent, ctx);
+        const children = body.children.flatMap(line => renderChild(line, ctx));
         return { ok: true, parentText, children };
     } catch (e) {
         if (e instanceof EvalError) return { ok: false, error: e };
         throw e;
     }
+}
+
+/**
+ * The parent line. One firing generates one task, so a value of several lines
+ * has nowhere to put the rest of itself here — said plainly, rather than
+ * leaving the extra lines to fail later as "not a checkbox line".
+ */
+function renderParent(line: GenLine, ctx: EvalContext): string {
+    const text = renderLine(line, ctx);
+    if (text.includes('\n')) {
+        throw new EvalError(
+            'The generated task is one line — a value of several lines cannot go on it',
+            { start: 0, end: line.text.length });
+    }
+    return text;
+}
+
+/**
+ * A child line, and the lines a value brought with it.
+ *
+ * Each of those lines is placed relative to the line it landed on: its own
+ * indentation becomes levels by the same rule the parser uses, added to the
+ * depth of the host. Blank lines are dropped — a blank line ends the run of
+ * children when the result is read back, so keeping one would truncate the
+ * generated task.
+ */
+function renderChild(line: GenLine, ctx: EvalContext): RenderedChild[] {
+    const text = renderLine(line, ctx);
+    if (!text.includes('\n')) return [{ depth: line.depth, body: text }];
+
+    const [first, ...rest] = text.split('\n');
+    const out: RenderedChild[] = [{ depth: line.depth, body: first }];
+    for (const raw of rest) {
+        if (raw.trim() === '') continue;
+        out.push({ depth: line.depth + indentDepth(leadingIndent(raw)), body: raw.trimStart() });
+    }
+    return out;
 }
 
 function renderLine(line: GenLine, ctx: EvalContext): string {

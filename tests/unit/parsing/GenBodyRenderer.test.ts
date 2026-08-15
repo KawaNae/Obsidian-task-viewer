@@ -56,10 +56,37 @@ describe('renderGenBody', () => {
         expect(result.ok && result.children).toEqual([{ depth: 1, body: '- [ ] 子だけ' }]);
     });
 
-    it('turns a value of several lines into several lines', () => {
-        // 配列は「要素が行」。前置きのテキストは 1 行目に付く
+    it('turns a value of several lines into several children', () => {
+        // 配列は「要素が行」。前置きのテキストは 1 行目に付き、値が持ってきた
+        // 行はホスト行の段数を基底に、自分のインデントを段数へ換算して並ぶ
+        const result = render([
+            '- [ ] 親',
+            '    - ${["a", "\tb", "        c"].join("\n")}',
+        ]);
+        expect(result.ok && result.children).toEqual([
+            { depth: 1, body: '- a' },
+            { depth: 2, body: 'b' },
+            { depth: 3, body: 'c' },
+        ]);
+    });
+
+    it('drops the blank lines a value brings', () => {
+        // 空行は子の並びを終わらせるので、残すと生成物がそこで切れる
+        const result = render([
+            '- [ ] 親',
+            '    - ${["a", "", "b"].join("\n")}',
+        ]);
+        expect(result.ok && result.children).toEqual([
+            { depth: 1, body: '- a' },
+            { depth: 1, body: 'b' },
+        ]);
+    });
+
+    it('refuses a value of several lines on the parent line', () => {
+        // 1 回の発火が生む親は 1 つ。理由の分かる文言で落とす
         const result = render(['- [ ] ${["a", "b"]}']);
-        expect(result).toMatchObject({ ok: true, parentText: '- [ ] a\nb' });
+        expect(result.ok).toBe(false);
+        expect(!result.ok && result.error.message).toContain('one line');
     });
 
     it('refuses a value of several lines with text after it', () => {
