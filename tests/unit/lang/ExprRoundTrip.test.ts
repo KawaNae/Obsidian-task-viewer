@@ -113,6 +113,8 @@ const POSTFIX_FAMILIES: Family[] = [
     { shape: 'string-arg call', build: (op: string) => `next("mon", today) ${op} 1d` },
     { shape: 'domain literal call', build: (op: string) => `date("2026-08-17") ${op} 3d` },
     { shape: 'dotted property', build: (op: string) => `tv.file.name ${op} content` },
+    { shape: 'namespaced call', build: (op: string) => `Math.floor(3 / 2) ${op} 1` },
+    { shape: 'variadic call', build: (op: string) => `Math.max(1, 2, 3) ${op} 1` },
 ].map(({ shape, build }) => ({ shape, sources: BINARY_OPS.map(build) }));
 
 /** Literals of every domain type — `valueToLiteral` has to write them back readable. */

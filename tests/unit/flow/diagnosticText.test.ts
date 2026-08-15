@@ -31,6 +31,10 @@ describe('diagnosticText', () => {
             'every mon setContent(start + due)', // type.cannot-combine
             'at(startOf("day"))',               // type.bad-unit-keyword
             'at(starrt)',                       // expr.unknown-ident
+            'at(Math)',                         // expr.namespace-needs-member
+            'at(Math.sqrt(4))',                 // expr.unknown-property
+            'at(Math.floor)',                   // expr.expected-call
+            'at(Math.floor(1, 2))',             // type.arg-count
             'at(format(start))',                // type.arg-count
             '+3x',                              // lex.unknown-unit
             'every mon setStartTime("x")',     // type.set-time-mismatch
@@ -56,7 +60,8 @@ describe('diagnosticText', () => {
             }
         }
         // 追加した診断が実際に出ていること（サンプルが陳腐化すると気づけない）
-        for (const code of ['expr.weekday-not-literal', 'type.bad-weekday-name',
+        for (const code of ['expr.namespace-needs-member', 'expr.expected-call',
+            'expr.weekday-not-literal', 'type.bad-weekday-name',
             'type.nullish-mismatch', 'type.member-arity', 'type.unknown-member',
             'type.member-arg', 'lex.decimal-unsupported', 'expr.nullish-mixed-with-logic', 'expr.comparison-chain']) {
             expect(seen).toContain(code);

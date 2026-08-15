@@ -531,7 +531,12 @@ function parseIdentLed(cursor: TokenCursor, diagnostics: Diagnostic[]): Expr | n
     // built-ins. Accepted as an alias and resolved here, so the canonical form
     // stays the bare one and the printer needs no new shape.
     if (name === 'tv') {
-        return parseTvNamespace(cursor, diagnostics, span);
+        return parseNamespaced(name, cursor, diagnostics, span);
+    }
+
+    // `Math.floor(...)` — the same resolution as `tv.`, not a second one.
+    if (name === 'Math') {
+        return parseNamespaced(name, cursor, diagnostics, span);
     }
 
     if (name === 'file') {
@@ -569,50 +574,70 @@ function parseIdentLed(cursor: TokenCursor, diagnostics: Diagnostic[]): Expr | n
     return null;
 }
 
-/** `tv.date.<fn>(...)` and `tv.file.name`, resolved to the bare forms. */
-function parseTvNamespace(cursor: TokenCursor, diagnostics: Diagnostic[], span: Span): Expr | null {
+/**
+ * A built-in reached through a namespace: `tv.date.format(...)`,
+ * `tv.file.name`, `Math.floor(...)`.
+ *
+ * One resolver for all of them. `tv.date.*` is an alias that resolves to the
+ * bare function so the canonical form stays single, while `Math.*` keeps its
+ * namespace in the name itself — a dot cannot appear in an identifier, so
+ * there is no bare spelling to collide with and the printed form reads back
+ * as the same call.
+ */
+function parseNamespaced(root: string, cursor: TokenCursor, diagnostics: Diagnostic[], span: Span): Expr | null {
+    const hint = root === 'tv' ? "'tv' requires a member (tv.date.format(...) / tv.file.name)" : "'Math' requires a member (Math.floor(...))";
     if (!cursor.tryEat('dot')) {
-        diagnostics.push(error('expr.tv-needs-member', "'tv' requires a member (tv.date.format(...) / tv.file.name)", span));
+        diagnostics.push(error('expr.namespace-needs-member', hint, span, { name: root }));
         return null;
     }
-    const group = cursor.peek();
-    if (group.kind !== 'ident' || (group.text !== 'date' && group.text !== 'file')) {
-        diagnostics.push(error('expr.unknown-property', `Unknown namespace 'tv.${group.text}'`,
-            tokenSpan(group), { name: `tv.${group.text}` }));
-        return null;
+
+    // `tv` has one more level; `Math` holds its functions directly.
+    let group = root;
+    if (root === 'tv') {
+        const groupToken = cursor.peek();
+        if (groupToken.kind !== 'ident' || (groupToken.text !== 'date' && groupToken.text !== 'file')) {
+            diagnostics.push(error('expr.unknown-property', `Unknown namespace 'tv.${groupToken.text}'`,
+                tokenSpan(groupToken), { name: `tv.${groupToken.text}` }));
+            return null;
+        }
+        cursor.next();
+        group = `tv.${groupToken.text}`;
+        if (!cursor.tryEat('dot')) {
+            diagnostics.push(error('expr.namespace-needs-member', `'${group}' requires a member`, span, { name: group }));
+            return null;
+        }
     }
-    cursor.next();
-    if (!cursor.tryEat('dot')) {
-        diagnostics.push(error('expr.tv-needs-member', `'tv.${group.text}' requires a member`, span));
-        return null;
-    }
+
     const member = cursor.peek();
     if (member.kind !== 'ident') {
         diagnostics.push(error('expr.expected-member', 'Expected a name after the dot', tokenSpan(member)));
         return null;
     }
+    const written = `${group}.${member.text}`;
 
-    if (group.text === 'file') {
+    if (group === 'tv.file') {
         if (member.text !== 'name') {
-            diagnostics.push(error('expr.unknown-property', `Unknown property 'tv.file.${member.text}'`,
-                tokenSpan(member), { name: `tv.file.${member.text}` }));
+            diagnostics.push(error('expr.unknown-property', `Unknown property '${written}'`,
+                tokenSpan(member), { name: written }));
             return null;
         }
         cursor.next();
         return { kind: 'prop', name: 'file.name', span: spanBetween(span, tokenSpan(member)) };
     }
 
-    if (!(FN_NAMES as readonly string[]).includes(member.text)) {
-        diagnostics.push(error('expr.unknown-property', `Unknown function 'tv.date.${member.text}'`,
-            tokenSpan(member), { name: `tv.date.${member.text}` }));
+    // `tv.date.format` resolves to `format`; `Math.floor` keeps its name.
+    const resolved = group === 'tv.date' ? member.text : written;
+    if (!(FN_NAMES as readonly string[]).includes(resolved)) {
+        diagnostics.push(error('expr.unknown-property', `Unknown function '${written}'`,
+            tokenSpan(member), { name: written }));
         return null;
     }
     cursor.next();
     if (!cursor.at('lparen')) {
-        diagnostics.push(error('expr.expected-call', `'tv.date.${member.text}' is a function — call it`, tokenSpan(member)));
+        diagnostics.push(error('expr.expected-call', `'${written}' is a function — call it`, tokenSpan(member), { name: written }));
         return null;
     }
-    return parseCall(member.text as FnName, spanBetween(span, tokenSpan(member)), cursor, diagnostics);
+    return parseCall(resolved as FnName, spanBetween(span, tokenSpan(member)), cursor, diagnostics);
 }
 
 function parseCall(fn: FnName, fnSpan: Span, cursor: TokenCursor, diagnostics: Diagnostic[]): Expr | null {

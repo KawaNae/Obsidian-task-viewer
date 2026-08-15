@@ -236,18 +236,22 @@ export function checkExpr(expr: Expr, env: TypeEnv, diagnostics: Diagnostic[], v
 
         case 'call': {
             const sig = FN_SIGS[expr.fn];
-            if (expr.args.length < sig.minArgs || expr.args.length > sig.params.length) {
-                const range = sig.minArgs === sig.params.length ? `${sig.minArgs}` : `${sig.minArgs}-${sig.params.length}`;
+            const tooMany = sig.rest === undefined && expr.args.length > sig.params.length;
+            if (expr.args.length < sig.minArgs || tooMany) {
+                const range = sig.rest !== undefined
+                    ? `${sig.minArgs} or more`
+                    : sig.minArgs === sig.params.length ? `${sig.minArgs}` : `${sig.minArgs}-${sig.params.length}`;
                 diagnostics.push(error('type.arg-count', `${expr.fn}() expects ${range} argument(s), got ${expr.args.length}`, expr.span,
                     { fn: expr.fn, expected: range, actual: expr.args.length }));
                 return 'error';
             }
             let ok = true;
             expr.args.forEach((arg, i) => {
+                const expected = sig.params[i] ?? sig.rest!;
                 const at = checkExpr(arg, env, diagnostics, vars);
-                if (at !== 'error' && !isAssignable(at, sig.params[i])) {
-                    diagnostics.push(error('type.arg-mismatch', `${expr.fn}() argument ${i + 1} expects ${typeName(sig.params[i])}, got ${typeName(at)}`, arg.span,
-                        { fn: expr.fn, index: i + 1, expected: typeName(sig.params[i]), actual: typeName(at) }));
+                if (at !== 'error' && !isAssignable(at, expected)) {
+                    diagnostics.push(error('type.arg-mismatch', `${expr.fn}() argument ${i + 1} expects ${typeName(expected)}, got ${typeName(at)}`, arg.span,
+                        { fn: expr.fn, index: i + 1, expected: typeName(expected), actual: typeName(at) }));
                     ok = false;
                 }
             });
@@ -441,7 +445,7 @@ function checkCallback(
  */
 function isReservedName(name: string): boolean {
     return ['true', 'false', 'none', 'week', 'month', 'year', 'start', 'end', 'due',
-        'content', 'done', 'today', 'file', 'tv', 'format', 'next', 'startOf', 'endOf',
+        'content', 'done', 'today', 'file', 'tv', 'Math', 'format', 'next', 'startOf', 'endOf',
         'nextCycle', 'date', 'time'].includes(name);
 }
 
