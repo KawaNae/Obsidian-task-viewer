@@ -85,11 +85,15 @@ export class FileOperations {
     }
 
     /**
-     * Helper: Strip block IDs from lines
+     * Strip a trailing `^block-id` from each line.
+     *
+     * The reading comes from TaskLineClassifier, which is where every parser
+     * asks the same question. A stricter copy here would leave an id on a
+     * line the parser still reads as anchored, and the copy would then claim
+     * the anchor of the line it was copied from.
      */
     stripBlockIds(lines: string[]): string[] {
-        const blockIdRegex = /\s\^[a-zA-Z0-9-]+$/;
-        return lines.map(line => line.replace(blockIdRegex, ''));
+        return lines.map(line => TaskLineClassifier.extractBlockId(line).text);
     }
 
     /**

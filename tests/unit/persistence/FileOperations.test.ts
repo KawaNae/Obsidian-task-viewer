@@ -206,6 +206,13 @@ describe('FileOperations', () => {
             const result = ops.stripBlockIds(['text ^my-block-id']);
             expect(result[0]).toBe('text');
         });
+
+        it('removes an ID the parser reads, trailing space and all', () => {
+            // The reading has to match the one every parser uses: a stricter
+            // one leaves the copy claiming the original's anchor.
+            const result = ops.stripBlockIds(['- [ ] task ^abc ']);
+            expect(result[0]).toBe('- [ ] task');
+        });
     });
 
     // ── findTaskLineNumber ──
