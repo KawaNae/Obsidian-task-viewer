@@ -135,5 +135,8 @@ describe('ExprChecker', () => {
         expect(check('start.format()').diagnostics.map(d => d.code)).toContain('type.member-arity');
         expect(check('content.replace("a")').diagnostics.map(d => d.code)).toContain('type.member-arity');
         expect(check('content.slice(1)')).toMatchObject({ type: 'string', diagnostics: [] });
+        // JS で省略できる引数は省略できる（slice() は複製、toFixed() は0桁）
+        expect(check('content.slice()')).toMatchObject({ type: 'string', diagnostics: [] });
+        expect(check('content.length.toFixed()')).toMatchObject({ type: 'string', diagnostics: [] });
     });
 });

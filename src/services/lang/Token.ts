@@ -55,6 +55,16 @@ export class TokenCursor {
 
     constructor(private readonly tokens: Token[]) { }
 
+    /** Current position, for rules that need to look back over what was read. */
+    mark(): number {
+        return this.pos;
+    }
+
+    /** Tokens read between two marks, in source order. */
+    between(from: number, to: number): Token[] {
+        return this.tokens.slice(from, to);
+    }
+
     peek(offset = 0): Token {
         const i = Math.max(0, Math.min(this.pos + offset, this.tokens.length - 1));
         return this.tokens[i];

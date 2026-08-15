@@ -42,19 +42,39 @@ function parseTernary(cursor: TokenCursor, diagnostics: Diagnostic[]): Expr | nu
 /**
  * `a ?? b` — b only when a is none. Looser than `||`, as in JS.
  *
- * JS additionally refuses `a || b ?? c` without parentheses; we accept it and
- * read it as `(a || b) ?? c`. Accepting more than JS never changes what a
- * program valid in JS means, so no existing reading shifts under us.
+ * Mixing the two without parentheses is a syntax error in JS, and reading
+ * `a || b ?? c` silently as `(a || b) ?? c` is exactly the kind of quiet
+ * disagreement this language avoids. The parenthesized form is not affected:
+ * parentheses are consumed by the primary parser, so `||` inside them never
+ * appears on this level's token run.
  */
 function parseNullish(cursor: TokenCursor, diagnostics: Diagnostic[]): Expr | null {
+    const start = cursor.mark();
     let left = parseOr(cursor, diagnostics);
     if (!left) return null;
     while (cursor.tryEat('qq')) {
         const right = parseOr(cursor, diagnostics);
         if (!right) return null;
+        if (hasBareLogicalOp(cursor.between(start, cursor.mark()))) {
+            diagnostics.push(error('expr.nullish-mixed-with-logic',
+                "'??' cannot be mixed with '||' or '&&' — parenthesize the one you mean",
+                spanBetween(left.span, right.span)));
+            return null;
+        }
         left = { kind: 'binary', op: '??', left, right, span: spanBetween(left.span, right.span) };
     }
     return left;
+}
+
+/** A `||`/`&&` outside any parentheses in this token run. */
+function hasBareLogicalOp(tokens: Token[]): boolean {
+    let depth = 0;
+    for (const t of tokens) {
+        if (t.kind === 'lparen') depth++;
+        else if (t.kind === 'rparen') depth--;
+        else if (depth === 0 && (t.kind === 'pipepipe' || t.kind === 'ampamp')) return true;
+    }
+    return false;
 }
 
 function parseOr(cursor: TokenCursor, diagnostics: Diagnostic[]): Expr | null {

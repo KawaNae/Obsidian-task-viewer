@@ -247,7 +247,7 @@ const STRING_METHODS: Record<string, MemberSig> = {
     startsWith: { params: ['string'], minArgs: 1, result: 'bool' },
     endsWith: { params: ['string'], minArgs: 1, result: 'bool' },
     indexOf: { params: ['string'], minArgs: 1, result: 'number' },
-    slice: { params: ['number', 'number'], minArgs: 1, result: 'string' },
+    slice: { params: ['number', 'number'], minArgs: 0, result: 'string' },
     padStart: { params: ['number', 'string'], minArgs: 1, result: 'string' },
     replace: { params: ['string', 'string'], minArgs: 2, result: 'string' },
     replaceAll: { params: ['string', 'string'], minArgs: 2, result: 'string' },
@@ -257,7 +257,7 @@ const STRING_METHODS: Record<string, MemberSig> = {
 };
 
 const NUMBER_METHODS: Record<string, MemberSig> = {
-    toFixed: { params: ['number'], minArgs: 1, result: 'string' },
+    toFixed: { params: ['number'], minArgs: 0, result: 'string' },
 };
 
 export function memberSignature(receiver: StaticType, name: string, isMethod: boolean): MemberSig | null {

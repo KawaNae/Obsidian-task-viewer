@@ -131,9 +131,10 @@ function callMember(obj: Value, name: string, args: Value[], ctx: EvalContext, s
     }
 
     if (obj.type === 'number' && name === 'toFixed') {
+        // No argument means zero digits, as in JS.
         const digits = args[0];
-        if (digits?.type !== 'number') throw new EvalError(`'toFixed' expects a number`, span);
-        return { type: 'string', value: obj.value.toFixed(digits.value) };
+        if (digits !== undefined && digits.type !== 'number') throw new EvalError(`'toFixed' expects a number`, span);
+        return { type: 'string', value: obj.value.toFixed(digits?.type === 'number' ? digits.value : 0) };
     }
 
     throw new EvalError(`${obj.type} has no member '${name}'`, span);

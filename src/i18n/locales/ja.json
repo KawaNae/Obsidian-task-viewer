@@ -722,6 +722,7 @@
       "expected-member": "ドットの後にはプロパティ名かメソッド名が必要です",
       "tv-needs-member": "'tv' にはメンバー指定が必要です（tv.date.format(...) / tv.file.name）",
       "expected-call": "'{{name}}' は関数です。呼び出してください",
+      "nullish-mixed-with-logic": "'??' と '||' / '&&' は混ぜられません。括弧で意図を書いてください",
       "weekday-not-literal": "式の中では曜日は文字列です。\"{{name}}\" と書いてください（裸の {{name}} は every {{name}} 専用）"
     },
     "type": {

@@ -38,6 +38,7 @@ describe('diagnosticText', () => {
             'every mon setContent(start.nope)',  // type.unknown-member
             'every mon setContent(content.slice("a"))', // type.member-arg
             'at(today + 0.5d)',                 // lex.decimal-unsupported
+            'every mon setContent(true || false ?? none)', // expr.nullish-mixed-with-logic
         ];
         const seen = new Set<string>();
         for (const src of samples) {
@@ -52,7 +53,7 @@ describe('diagnosticText', () => {
         // 追加した診断が実際に出ていること（サンプルが陳腐化すると気づけない）
         for (const code of ['expr.weekday-not-literal', 'type.bad-weekday-name',
             'type.nullish-mismatch', 'type.member-arity', 'type.unknown-member',
-            'type.member-arg', 'lex.decimal-unsupported']) {
+            'type.member-arg', 'lex.decimal-unsupported', 'expr.nullish-mixed-with-logic']) {
             expect(seen).toContain(code);
         }
     });

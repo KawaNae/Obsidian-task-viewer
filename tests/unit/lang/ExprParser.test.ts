@@ -158,13 +158,23 @@ describe('ExprParser', () => {
         expect(expr?.kind === 'call' && expr.fn).toBe('startOf');
         expect(parse('tv.file.name').expr?.kind === 'prop').toBe(true);
     });
-    it('binds ?? looser than || and than comparison', () => {
-        const { expr, diagnostics } = parse('true || false ?? none');
+    it('binds ?? looser than comparison', () => {
+        const { expr, diagnostics } = parse('time(start) ?? content == "x"');
         expect(diagnostics).toEqual([]);
-        expect(expr).toMatchObject({ kind: 'binary', op: '??', left: { kind: 'binary', op: '||' } });
+        expect(expr).toMatchObject({ kind: 'binary', op: '??', right: { kind: 'binary', op: '==' } });
+    });
 
-        const { expr: shape } = parse('time(start) ?? content == "x"');
-        expect(shape).toMatchObject({ kind: 'binary', op: '??', right: { kind: 'binary', op: '==' } });
+    it('refuses ?? mixed with || or && the way JS does', () => {
+        // 括弧なしの混在は JS では構文エラー。黙って片方の解釈を選ばない。
+        expect(parse('true || false ?? none').diagnostics.map(d => d.code))
+            .toContain('expr.nullish-mixed-with-logic');
+        expect(parse('true && false ?? none').diagnostics.map(d => d.code))
+            .toContain('expr.nullish-mixed-with-logic');
+
+        // 括弧で意図が書いてあれば通る。括弧の中の || はこの段には現れない
+        expect(parse('(true || false) ?? none').diagnostics).toEqual([]);
+        // 呼び出しの括弧の中も同じ
+        expect(parse('time(start) ?? (true || false)').diagnostics).toEqual([]);
     });
 
     it('names a bare weekday instead of calling it unknown', () => {
