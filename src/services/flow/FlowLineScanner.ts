@@ -10,6 +10,12 @@
 
 import { CodeFenceTracker } from '../../utils/CodeFenceTracker';
 
+/**
+ * The marker that turns the tail of a line into a flow command, on a task
+ * line as much as on a flow child line.
+ */
+export const FLOW_MARKER = '==>';
+
 /** `- ==> <tail>` with any list bullet. Group 1 = indent, group 2 = tail. */
 export const FLOW_LINE_RE = /^(\s*)(?:[-*+]|\d+[.)])\s*==>\s?(.*)$/;
 

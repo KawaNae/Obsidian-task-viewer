@@ -796,7 +796,11 @@
       "ragged-indent": "Indent with one tab or four spaces per level; this line rounds up",
       "multiple-roots": "A block generates one task: only the first line may sit at depth 0",
       "root-not-a-task": "The depth-0 line becomes the generated task, so it must be a checkbox line",
-      "root-not-first": "The generated task must come before the lines nested under it"
+      "root-not-first": "The generated task must come before the lines nested under it",
+      "generated-command": "A generated line cannot carry a ==> command — the engine writes the command for the next instance",
+      "generated-block-id": "A generated line cannot carry a block id: every fire would write '^{{blockId}}' again",
+      "generated-not-a-task": "The generated task must be a checkbox line, or there is nothing to fire next time",
+      "generated-status": "A generated task starts unchecked; the '{{status}}' written here is dropped"
     }
   }
 }
