@@ -1,6 +1,6 @@
 import { type Diagnostic, error } from './Diagnostic';
 import type { Token, TokenKind } from './Token';
-import { DURATION_UNITS, type DurUnit } from './Value';
+import { DECIMAL_PLACES, DURATION_UNITS, type DurUnit } from './Value';
 
 const DATETIME_RE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/;
 const DATE_RE = /^\d{4}-\d{2}-\d{2}/;
@@ -152,16 +152,32 @@ export function tokenize(src: string, base = 0): LexResult {
                 continue;
             }
             const num = rest.match(/^\d+/)![0];
-            const afterNum = rest.slice(num.length);
-            // A decimal splits into number, dot, number under this lexer, which
-            // then fails as a member access on a number. Say what is actually
-            // wrong instead, and point at the way to write it today.
-            if (/^\.\d/.test(afterNum)) {
-                const full = num + afterNum.match(/^\.\d+/)![0];
-                rawDiagnostics.push(error('lex.decimal-unsupported',
-                    `Decimal numbers are not supported yet ('${full}') — say it in a smaller unit`,
-                    { start: i, end: i + full.length }, { text: full }));
-                push('number', num, i, i + num.length);
+            let afterNum = rest.slice(num.length);
+            const fraction = afterNum.match(/^\.\d+/)?.[0];
+            if (fraction !== undefined) {
+                const places = fraction.length - 1;
+                const full = num + fraction;
+                const unit = afterNum.slice(fraction.length).match(/^[A-Za-z]+/)?.[0];
+                // A duration is a whole number and a unit — there is no way to
+                // write 0.5d back, so it is refused where it is written rather
+                // than a generation later.
+                if (unit !== undefined && (DURATION_UNITS as readonly string[]).includes(unit)) {
+                    rawDiagnostics.push(error('lex.decimal-duration',
+                        `A duration is a whole number ('${full}${unit}') — say it in a smaller unit`,
+                        { start: i, end: i + full.length + unit.length }, { text: full + unit }));
+                    push('duration', num + unit, i, i + full.length + unit.length);
+                    i += full.length + unit.length;
+                    continue;
+                }
+                // Values live on a grid of ten decimal places, the same one
+                // division rounds to. Anything finer cannot be held, so it is
+                // said here rather than quietly rounded away.
+                if (places > DECIMAL_PLACES) {
+                    rawDiagnostics.push(error('lex.decimal-too-precise',
+                        `A number keeps at most ${DECIMAL_PLACES} decimal places ('${full}')`,
+                        { start: i, end: i + full.length }, { text: full, places: DECIMAL_PLACES }));
+                }
+                push('number', full, i, i + full.length);
                 i += full.length;
                 continue;
             }

@@ -3,7 +3,7 @@ import type { Expr, PropName } from './ExprAst';
 import { type EvalRuntime, FnCallError, callFn } from './functions';
 import {
     type DurUnit, type Value, WEEKDAY_NAMES, addDuration, compareValues, isDatishValue, parseDateStr,
-    recordField, valueToDisplay,
+    DECIMAL_SCALE, MAX_EXACT_FRACTION, recordField, valueToDisplay,
 } from './Value';
 
 /**
@@ -232,8 +232,8 @@ function callListMember(
             return {
                 type: 'array',
                 items: items.slice(
-                    from?.type === 'number' ? from.value : 0,
-                    to?.type === 'number' ? to.value : undefined
+                    from?.type === 'number' ? wholeOrThrow(from.value, 'slice', span) : 0,
+                    to?.type === 'number' ? wholeOrThrow(to.value, 'slice', span) : undefined
                 ),
             };
         }
@@ -271,8 +271,8 @@ function callMember(obj: Value, name: string, args: Value[], ctx: EvalContext, s
             case 'startsWith': return { type: 'bool', value: s.startsWith(str(0)) };
             case 'endsWith': return { type: 'bool', value: s.endsWith(str(0)) };
             case 'indexOf': return { type: 'number', value: s.indexOf(str(0)) };
-            case 'slice': return { type: 'string', value: s.slice(num(0, 0), args.length > 1 ? num(1, s.length) : undefined) };
-            case 'padStart': return { type: 'string', value: s.padStart(num(0, 0), args.length > 1 ? str(1) : ' ') };
+            case 'slice': return { type: 'string', value: s.slice(wholeOrThrow(num(0, 0), 'slice', span), args.length > 1 ? wholeOrThrow(num(1, s.length), 'slice', span) : undefined) };
+            case 'padStart': return { type: 'string', value: s.padStart(wholeOrThrow(num(0, 0), 'padStart', span), args.length > 1 ? str(1) : ' ') };
             // JS semantics: replace hits the first occurrence only. Delegating
             // to the real methods also keeps `$&` and friends behaving as a
             // reader of JS expects.
@@ -303,7 +303,7 @@ function callMember(obj: Value, name: string, args: Value[], ctx: EvalContext, s
         // No argument means zero digits, as in JS.
         const digits = args[0];
         if (digits !== undefined && digits.type !== 'number') throw new EvalError(`'toFixed' expects a number`, span);
-        return { type: 'string', value: obj.value.toFixed(digits?.type === 'number' ? digits.value : 0) };
+        return { type: 'string', value: obj.value.toFixed(digits?.type === 'number' ? wholeOrThrow(digits.value, 'toFixed', span) : 0) };
     }
 
     throw new EvalError(`${obj.type} has no member '${name}'`, span);
@@ -362,7 +362,9 @@ function evalBinary(expr: Expr & { kind: 'binary' }, ctx: EvalContext): Value {
             const rm = minutesOrThrow(r, span);
             return { type: 'duration', amount: lm + sign * rm, unit: 'min' };
         }
-        if (l.type === 'number' && r.type === 'number') return { type: 'number', value: l.value + sign * r.value };
+        if (l.type === 'number' && r.type === 'number') {
+            return { type: 'number', value: quantize(l.value + sign * r.value, span) };
+        }
         if (op === '+' && isStringish(l) && isStringish(r)) {
             return { type: 'string', value: stringishText(l) + stringishText(r) };
         }
@@ -403,24 +405,75 @@ function scaledDuration(amount: number, unit: DurUnit, span: Span): Value {
     return { type: 'duration', amount, unit };
 }
 
-/** Decimal places kept by division (design: 10, half-up). */
-const DIVISION_SCALE = 10;
+/**
+ * Put a result back on the decimal grid.
+ *
+ * Numbers here are decimal, so `0.1 + 0.2` has to be `0.3` and not the float
+ * that addition actually produced. The double is only the carrier: every
+ * operation lands back on a grid of ten decimal places, which is also what a
+ * literal may write and what division rounds to.
+ *
+ * Whole numbers pass straight through. Scaling one by ten billion to round it
+ * would push it out of the range a double holds exactly, which is the way to
+ * lose the precision this function exists to keep.
+ *
+ * Past the grid's reach the evaluation fails, rather than writing a number
+ * that is not the one that was computed. Failing is the same answer the rest
+ * of the language gives to a value it cannot write back — a duration that
+ * came out fractional says it the same way.
+ */
+function quantize(value: number, span: Span): number {
+    if (Number.isInteger(value)) {
+        if (!Number.isSafeInteger(value)) {
+            throw new EvalError(
+                `${value} is too large to hold exactly`, span);
+        }
+        // A negative zero is the same number as zero and reads oddly wherever
+        // it lands, so it does not survive the trip.
+        return value === 0 ? 0 : value;
+    }
+    if (!Number.isFinite(value) || Math.abs(value) > MAX_EXACT_FRACTION) {
+        throw new EvalError(
+            `A fraction this large cannot be held exactly (up to ${MAX_EXACT_FRACTION})`, span);
+    }
+    const onGrid = Math.round(value * DECIMAL_SCALE) / DECIMAL_SCALE;
+    return onGrid === 0 ? 0 : onGrid;
+}
+
+/**
+ * Positions that ask for a count — a slice bound, a pad length, a digit
+ * count. JS truncates a fraction here silently; that would make `xs.slice(x)`
+ * quietly mean something else the day `x` picks up a decimal, so a fraction
+ * fails instead.
+ */
+function wholeOrThrow(value: number, what: string, span: Span): number {
+    if (!Number.isInteger(value)) {
+        throw new EvalError(`'${what}' expects a whole number, got ${value}`, span);
+    }
+    return value;
+}
 
 /**
  * `*` `/` `%` on plain numbers.
  *
- * Division rounds to a fixed number of decimal places because 1 / 3 does not
- * terminate; without a rule the result would depend on the float that came
- * out. Dividing by zero fails the evaluation rather than producing infinity —
- * there is no value for it, and a failed evaluation leaves the command
- * unconsumed.
+ * Division needs the grid most — 1 / 3 does not terminate, so without a rule
+ * the result would be whatever float came out. Dividing by zero fails the
+ * evaluation rather than producing infinity: there is no value for it, and a
+ * failed evaluation leaves the command unconsumed.
  */
 function arith(op: '*' | '/' | '%', a: number, b: number, span: Span): number {
-    if (op === '*') return a * b;
+    if (op === '*') return quantize(a * b, span);
     if (b === 0) throw new EvalError(`Division by zero`, span);
-    if (op === '%') return a % b;
-    const factor = 10 ** DIVISION_SCALE;
-    return Math.round((a / b) * factor) / factor;
+    if (op === '/') return quantize(a / b, span);
+
+    // The remainder is derived from the quotient rather than taken from the
+    // carrier. Quantizing works when the error is smaller than the grid, and
+    // `%` is where that stops being true: it jumps by a whole divisor when the
+    // quotient's error crosses an integer, so 0.3 % 0.1 comes out as 0.0999…
+    // and rounds to 0.1 when the decimal answer is 0. Rounding the quotient
+    // first puts it back on the grid, and the rest follows from it.
+    const quotient = quantize(a / b, span);
+    return quantize(a - b * Math.trunc(quotient), span);
 }
 
 function isStringish(v: Value): v is Value & { type: 'string' | 'link' } {

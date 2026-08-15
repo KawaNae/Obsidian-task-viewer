@@ -1,5 +1,28 @@
 import { addDays, addMonths, addYears } from 'date-fns';
 
+/**
+ * Decimal places a number keeps.
+ *
+ * One grid for the whole language: what division rounds to, what a literal
+ * may write, and what every other operation lands on. Numbers here are
+ * decimal — `0.1 + 0.2` is `0.3` — because a cell's value is printed and read
+ * back each generation, and a float's error would grow with every one.
+ */
+export const DECIMAL_PLACES = 10;
+
+/** The grid itself. */
+export const DECIMAL_SCALE = 10 ** DECIMAL_PLACES;
+
+/**
+ * Largest fraction the carrier holds exactly.
+ *
+ * A double keeps 2^53 whole units, and a value on the grid is that many
+ * ten-billionths — so about 9.0e5. Whole numbers are exact up to 2^53 itself
+ * and do not pay this cost. Past either end the evaluation fails rather than
+ * writing a number that is not the one that was computed.
+ */
+export const MAX_EXACT_FRACTION = Number.MAX_SAFE_INTEGER / DECIMAL_SCALE;
+
 export const DURATION_UNITS = ['min', 'h', 'd', 'w', 'mo', 'y'] as const;
 export type DurUnit = typeof DURATION_UNITS[number];
 
@@ -178,6 +201,19 @@ export function fieldKeyLiteral(key: string): string {
     return /^[A-Za-z_][A-Za-z0-9_]*$/.test(key) ? key : JSON.stringify(key);
 }
 
+/**
+ * A number, written so it can be read back.
+ *
+ * Fixed point, never exponential: JS writes 1e-7 for a small value and the
+ * lexer has no way to read that, so the round trip would break on exactly the
+ * values the grid exists to support. Trailing zeros go, since they say
+ * nothing.
+ */
+export function numberToLiteral(value: number): string {
+    if (Number.isInteger(value)) return String(value);
+    return value.toFixed(DECIMAL_PLACES).replace(/0+$/, '').replace(/\.$/, '');
+}
+
 /** Canonical literal form, used by the serializer for round-tripping. */
 export function valueToLiteral(v: Value): string {
     switch (v.type) {
@@ -186,7 +222,7 @@ export function valueToLiteral(v: Value): string {
         case 'time': return v.value;
         case 'duration': return `${v.amount}${v.unit}`;
         case 'string': return `"${v.value.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`;
-        case 'number': return String(v.value);
+        case 'number': return numberToLiteral(v.value);
         case 'bool': return v.value ? 'true' : 'false';
         case 'link': return `[[${v.target}]]`;
         case 'array': return `[${v.items.map(valueToLiteral).join(', ')}]`;

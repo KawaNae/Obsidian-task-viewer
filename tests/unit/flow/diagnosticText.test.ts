@@ -45,7 +45,8 @@ describe('diagnosticText', () => {
             'every mon setContent(start.format())', // type.member-arity
             'every mon setContent(start.nope)',  // type.unknown-member
             'every mon setContent(content.slice("a"))', // type.member-arg
-            'at(today + 0.5d)',                 // lex.decimal-unsupported
+            'at(today + 0.5d)',                 // lex.decimal-duration
+            'at(0.00000000001)',                // lex.decimal-too-precise
             'every mon setContent(true || false ?? none)', // expr.nullish-mixed-with-logic
             'every mon setContent(content == "a" == true)', // expr.comparison-chain
         ];
@@ -63,7 +64,7 @@ describe('diagnosticText', () => {
         for (const code of ['expr.namespace-needs-member', 'expr.expected-call',
             'expr.weekday-not-literal', 'type.bad-weekday-name',
             'type.nullish-mismatch', 'type.member-arity', 'type.unknown-member',
-            'type.member-arg', 'lex.decimal-unsupported', 'expr.nullish-mixed-with-logic', 'expr.comparison-chain']) {
+            'type.member-arg', 'lex.decimal-duration', 'lex.decimal-too-precise', 'expr.nullish-mixed-with-logic', 'expr.comparison-chain']) {
             expect(seen).toContain(code);
         }
     });

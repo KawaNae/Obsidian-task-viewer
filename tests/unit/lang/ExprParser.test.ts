@@ -145,11 +145,14 @@ describe('ExprParser', () => {
         expect(expr?.kind === 'lit' && expr.value).toEqual({ type: 'string', value: 'text' });
     });
 
-    it('reports decimals with a diagnostic of their own', () => {
-        // 0.5 は 0 と ドット と 5 に割れる。数値へのメンバアクセスとして
-        // 報告すると理由が伝わらないので、字句の段階で名指しする。
-        const { diagnostics } = parse('1d * 0.5');
-        expect(diagnostics.some(d => d.code === 'lex.decimal-unsupported')).toBe(true);
+    it('reads a decimal, and refuses one finer than the grid', () => {
+        const { expr, diagnostics } = parse('0.5');
+        expect(diagnostics).toEqual([]);
+        expect(expr).toMatchObject({ kind: 'lit', value: { type: 'number', value: 0.5 } });
+        // 11 桁目からは格子に載らない。黙って丸めず、字句の段階で名指しする
+        expect(parse('0.00000000001').diagnostics.map(d => d.code)).toContain('lex.decimal-too-precise');
+        // duration は整数 + 単位なので、書けない形をその場で言う
+        expect(parse('1.5d').diagnostics.map(d => d.code)).toContain('lex.decimal-duration');
     });
 
     it('reads the tv namespace as the bare form', () => {

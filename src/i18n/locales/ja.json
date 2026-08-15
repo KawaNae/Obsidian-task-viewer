@@ -710,7 +710,8 @@
       "unterminated-string": "文字列が閉じられていません",
       "unknown-unit": "不明な期間単位 '{{unit}}'（使用可能: {{units}}）",
       "unexpected-char": "予期しない文字 '{{char}}'",
-      "decimal-unsupported": "小数はまだ使えません（'{{text}}'）。小さい単位で書いてください"
+      "decimal-duration": "duration は整数と単位で書きます（'{{text}}'）。小さい単位で書いてください",
+      "decimal-too-precise": "数値は小数点以下 {{places}} 桁までです（'{{text}}'）"
     },
     "expr": {
       "expected-rbrace": "レコードを閉じる '}' が必要です",

@@ -314,7 +314,7 @@ function parsePrimary(cursor: TokenCursor, diagnostics: Diagnostic[]): Expr | nu
         }
         case 'number':
             cursor.next();
-            return { kind: 'lit', value: { type: 'number', value: parseInt(token.text, 10) }, span };
+            return { kind: 'lit', value: { type: 'number', value: parseFloat(token.text) }, span };
         case 'string':
             cursor.next();
             return { kind: 'lit', value: { type: 'string', value: token.text }, span };

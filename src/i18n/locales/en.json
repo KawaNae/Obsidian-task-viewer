@@ -710,7 +710,8 @@
       "unterminated-string": "Unterminated string",
       "unknown-unit": "Unknown duration unit '{{unit}}' (expected {{units}})",
       "unexpected-char": "Unexpected character '{{char}}'",
-      "decimal-unsupported": "Decimal numbers are not supported yet ('{{text}}') — say it in a smaller unit"
+      "decimal-duration": "A duration is a whole number ('{{text}}') — say it in a smaller unit",
+      "decimal-too-precise": "A number keeps at most {{places}} decimal places ('{{text}}')"
     },
     "expr": {
       "expected-rbrace": "Expected '}' to close the record",
