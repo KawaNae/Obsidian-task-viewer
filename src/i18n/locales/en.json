@@ -756,6 +756,13 @@
       "empty": "Flow command is empty",
       "node-spans-lines": "A clause must be written within a single line",
       "inert-notation": "This line is read as {{notation}} notation, so the ==> command never runs — it stays part of the task name"
+    },
+    "gen": {
+      "unknown-tag": "Unknown language tag '{{tag}}' — a generation block is tagged tv-gen",
+      "unterminated-block": "This block is never closed: every line below it is read as its body, and the tasks written there stop appearing",
+      "missing-name": "A generation block needs a name — reference it with use(\"name\")",
+      "duplicate-name": "A block named '{{name}}' is already defined; the first one is used",
+      "indented-block": "An indented block is not collected — move it to the top level of the file"
     }
   }
 }

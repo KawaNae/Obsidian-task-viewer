@@ -166,6 +166,10 @@ export class TaskScanner {
             if (parsed.fmTask) {
                 this.store.setWikilinkRefs(parsed.fmTask.id, parsed.wikilinkRefs);
             }
+
+            // removeTasksByFile above dropped the previous ones, so this is a
+            // replacement, not a merge — the scan owns the file's blocks.
+            this.store.setGenBlocks(file.path, parsed.genBlocks);
         } finally {
             this.store.endBatch();
         }

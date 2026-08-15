@@ -1,6 +1,7 @@
 import { parseYaml } from 'obsidian';
 import type { Task, TaskViewerSettings, WikilinkRef } from '../../types';
 import { isTvFileUnscheduled } from '../../types';
+import { collectGenBlocks, type GenBlock } from './gen/GenBlockCollector';
 import { DocumentTreeBuilder } from './tree/DocumentTreeBuilder';
 import { SectionPropertyResolver } from './tree/SectionPropertyResolver';
 import { TreeTaskExtractor } from './tree/TreeTaskExtractor';
@@ -15,6 +16,8 @@ export interface FileParseResult {
     fmTask: Task | null;
     /** Body wikilink refs of the fm task (parent-child wiring substrate). */
     wikilinkRefs: WikilinkRef[];
+    /** `tv-gen` blocks of the file, by name. Referenced by `use("name")`. */
+    genBlocks: Map<string, GenBlock>;
 }
 
 /**
@@ -60,7 +63,7 @@ export class FileParsePipeline {
         }
 
         if (this.isIgnoredByFrontmatter(frontmatterObj, lines, bodyStartIndex, settings)) {
-            return { ignored: true, tasks: [], fmTask: null, wikilinkRefs: [] };
+            return { ignored: true, tasks: [], fmTask: null, wikilinkRefs: [], genBlocks: new Map() };
         }
 
         const bodyLines = lines.slice(bodyStartIndex);
@@ -113,7 +116,11 @@ export class FileParsePipeline {
         }
         tasks.push(...inlineTasks);
 
-        return { ignored: false, tasks, fmTask, wikilinkRefs };
+        // Blocks are collected from the whole file (frontmatter cannot hold a
+        // fence, and a block is not a task, so the body offset is irrelevant).
+        const { blocks: genBlocks } = collectGenBlocks(lines);
+
+        return { ignored: false, tasks, fmTask, wikilinkRefs, genBlocks };
     }
 
     private static basename(filePath: string): string {

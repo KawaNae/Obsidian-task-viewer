@@ -1,6 +1,10 @@
 import { Decoration, type DecorationSet, type EditorView, ViewPlugin, type ViewUpdate } from '@codemirror/view';
 import { RangeSet, type Extension, type Text } from '@codemirror/state';
 import { CodeFenceTracker } from '../utils/CodeFenceTracker';
+import {
+    collectGenBlocks,
+    type LocatedDiagnostic,
+} from '../services/parsing/gen/GenBlockCollector';
 import type { Diagnostic } from '../services/lang/Diagnostic';
 import { joinSegments, parseFlowSegments, segmentIndexAt } from '../services/flow/FlowSegments';
 import { collectFlowLineIndices, isFlowLine, matchFlowLine } from '../services/flow/FlowLineScanner';
@@ -102,20 +106,40 @@ export function createDiagnosticsExtension(): Extension {
      * for a fence that is never closed, and there Obsidian's own renderer
      * also treats the remainder as code.
      *
-     * Computed lazily — a viewport with no task or flow line never pays for
-     * it — and cached on the doc, which CodeMirror replaces on every change.
+     * Computed lazily — a viewport with no task, flow or fence line never
+     * pays for it — and cached on the doc, which CodeMirror replaces on
+     * every change. The `tv-gen` diagnostics ride along: they need the same
+     * walk of the same lines, so one pass answers both.
      */
-    let fenceCache: { doc: Text; mask: boolean[] } | null = null;
-    const fenceMaskFor = (doc: Text): boolean[] => {
-        if (fenceCache?.doc === doc) return fenceCache.mask;
+    interface DocAnalysis {
+        fenced: boolean[];
+        /** `tv-gen` diagnostics bucketed by 0-indexed line. */
+        gen: Map<number, LocatedDiagnostic[]>;
+    }
+    let docCache: { doc: Text; analysis: DocAnalysis } | null = null;
+    const analyze = (doc: Text): DocAnalysis => {
+        if (docCache?.doc === doc) return docCache.analysis;
         const lines: string[] = [];
         for (let n = 1; n <= doc.lines; n++) lines.push(doc.line(n).text);
         const plain = CodeFenceTracker.mask(lines);
         const dedented = CodeFenceTracker.subtreeMask(lines);
-        const mask = lines.map((_, i) => plain[i] || dedented[i]);
-        fenceCache = { doc, mask };
-        return mask;
+        const gen = new Map<number, LocatedDiagnostic[]>();
+        for (const d of collectGenBlocks(lines).diagnostics) {
+            const bucket = gen.get(d.line);
+            if (bucket) bucket.push(d);
+            else gen.set(d.line, [d]);
+        }
+        const analysis: DocAnalysis = {
+            fenced: lines.map((_, i) => plain[i] || dedented[i]),
+            gen,
+        };
+        docCache = { doc, analysis };
+        return analysis;
     };
+    const fenceMaskFor = (doc: Text): boolean[] => analyze(doc).fenced;
+
+    /** A line that could carry a block diagnostic — cheap enough per line. */
+    const looksLikeFence = (text: string): boolean => /^\s*(?:`{3,}|~{3,})/.test(text);
 
     /**
      * Owner task line of a flow child line: its structural parent (nearest
@@ -199,6 +223,25 @@ export function createDiagnosticsExtension(): Extension {
             while (pos <= to) {
                 const line = view.state.doc.lineAt(pos);
                 pos = line.to + 1;
+
+                // Block diagnostics anchor on delimiter lines, which are
+                // neither task nor flow lines — so they run before the
+                // fence guard below rather than through it.
+                if (looksLikeFence(line.text)) {
+                    for (const d of analyze(view.state.doc).gen.get(line.number - 1) ?? []) {
+                        const from = line.from + d.span.start;
+                        const to = Math.min(line.from + d.span.end, line.to);
+                        if (to <= from) continue;
+                        marks.push({
+                            from,
+                            to,
+                            deco: Decoration.mark({
+                                class: `tv-diag tv-diag--${d.severity}`,
+                                attributes: { title: diagnosticText(d) },
+                            }),
+                        });
+                    }
+                }
 
                 const isTaskLine = TaskLineClassifier.isTaskLine(line.text);
 

@@ -1,4 +1,5 @@
 import type { Task, TaskViewerSettings, WikilinkRef } from '../../types';
+import type { GenBlock } from '../parsing/gen/GenBlockCollector';
 
 /**
  * タスクストア - タスクのインメモリ管理とアクセス
@@ -7,6 +8,8 @@ import type { Task, TaskViewerSettings, WikilinkRef } from '../../types';
 export class TaskStore {
     private tasks: Map<string, Task> = new Map();
     private wikilinkRefs: Map<string, WikilinkRef[]> = new Map(); // taskId → refs
+    /** filePath → (block name → block). Rebuilt by each scan of that file. */
+    private genBlocks: Map<string, Map<string, GenBlock>> = new Map();
     private listeners: ((taskId?: string, changes?: string[]) => void)[] = [];
     private revision: number = 0;
     private batchDepth: number = 0;
@@ -77,6 +80,7 @@ export class TaskStore {
     clear(): void {
         this.tasks.clear();
         this.wikilinkRefs.clear();
+        this.genBlocks.clear();
         this.bumpRevision();
     }
 
@@ -90,7 +94,10 @@ export class TaskStore {
                 toRemove.push(id);
             }
         }
-        if (toRemove.length > 0) {
+        // Generation blocks are keyed by file, not by task, so a file that
+        // holds only blocks is forgotten here too.
+        const hadBlocks = this.genBlocks.delete(filePath);
+        if (toRemove.length > 0 || hadBlocks) {
             for (const id of toRemove) {
                 this.tasks.delete(id);
                 this.wikilinkRefs.delete(id);
@@ -161,6 +168,30 @@ export class TaskStore {
 
     getWikilinkRefsMap(): Map<string, WikilinkRef[]> {
         return this.wikilinkRefs;
+    }
+
+    // ===== Generation blocks =====
+
+    /** Replace a file's blocks. The scan of that file is the only writer. */
+    setGenBlocks(filePath: string, blocks: Map<string, GenBlock>): void {
+        if (blocks.size > 0) {
+            this.genBlocks.set(filePath, blocks);
+        } else {
+            this.genBlocks.delete(filePath);
+        }
+    }
+
+    /**
+     * A block by name. Resolution is file-local: a flow command reaches
+     * only the blocks of its own file.
+     */
+    getGenBlock(filePath: string, name: string): GenBlock | undefined {
+        return this.genBlocks.get(filePath)?.get(name);
+    }
+
+    /** All blocks of a file, empty when it has none. */
+    getGenBlocks(filePath: string): Map<string, GenBlock> {
+        return this.genBlocks.get(filePath) ?? new Map();
     }
 
     /**
