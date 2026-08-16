@@ -17,7 +17,7 @@ export interface ParseFlowResult {
 
 // `nochildren` is missing on purpose: it is still read, but a hint is a
 // list of what to write, and a retired clause does not belong on one.
-const HEAD_HINT = 'clauses start with every / + / at(...) / xN / until(...) / let(...) / use(...) / setContent|setStart|setStartTime|setEnd|setEndTime|setDue|setDueTime(...) / move(...)';
+const HEAD_HINT = 'clauses start with every / + / at(...) / xN / until(...) / state(...) / use(...) / setContent|setStart|setStartTime|setEnd|setEndTime|setDue|setDueTime(...) / move(...)';
 const SET_HEADS: Record<string, SetField> = Object.fromEntries(
     SET_FIELD_ORDER.map(field => [setHeadName(field), field])
 );
@@ -147,7 +147,7 @@ function parseNode(cursor: TokenCursor, program: FlowProgram, diagnostics: Diagn
                 "'nochildren' is retired: child lines no longer travel to the next instance, so the clause can be deleted",
                 tokenSpan(head)));
             return;
-        case 'let':
+        case 'state':
             cursor.next();
             parseCells(cursor, head, program, diagnostics);
             return;
@@ -282,17 +282,21 @@ function parseMonthDay(cursor: TokenCursor, intervalMonths: number, diagnostics:
 }
 
 // ---------------------------------------------------------------------------
-// let
+// state
 // ---------------------------------------------------------------------------
 
-/** The one sentence every malformed `let(...)` gets, since it is the whole grammar. */
-const CELL_SHAPE = 'let(...) declares cells as name: value — e.g. let(n: 3)';
+/** The one sentence every malformed `state(...)` gets, since it is the whole grammar. */
+const CELL_SHAPE = 'state(...) declares cells as name: value — e.g. state(n: 3)';
 
 /**
- * `let(n: 3, done: false)` — the cells carried between generations.
+ * `state(n: 3, done: false)` — the cells carried between generations.
  *
- * One clause holds every cell rather than one clause each. A second `let` is a
- * duplicate like any other node, which keeps "at most one node of a kind" true
+ * Named for what it holds rather than for how it is written. `let` said the
+ * opposite of the truth: what it declares outlives the block it is read in,
+ * and is written back to the line on every fire.
+ *
+ * One clause holds every cell rather than one clause each. A second `state` is
+ * a duplicate like any other node, which keeps "at most one node of a kind" true
  * for the whole grammar and leaves the canonical print with one place to put
  * them.
  *
@@ -304,7 +308,7 @@ const CELL_SHAPE = 'let(...) declares cells as name: value — e.g. let(n: 3)';
  */
 function parseCells(cursor: TokenCursor, head: Token, program: FlowProgram, diagnostics: Diagnostic[]): void {
     if (!cursor.tryEat('lparen')) {
-        diagnostics.push(error('flow.expected-lparen', "Expected '(' after 'let'", tokenSpan(cursor.peek()), { fn: 'let' }));
+        diagnostics.push(error('flow.expected-lparen', "Expected '(' after 'state'", tokenSpan(cursor.peek()), { fn: 'state' }));
         return;
     }
 
@@ -336,11 +340,11 @@ function parseCells(cursor: TokenCursor, head: Token, program: FlowProgram, diag
     }
 
     if (!cursor.tryEat('rparen')) {
-        diagnostics.push(error('flow.expected-rparen', "Expected ')' to close let(...)", tokenSpan(cursor.peek()), { fn: 'let' }));
+        diagnostics.push(error('flow.expected-rparen', "Expected ')' to close state(...)", tokenSpan(cursor.peek()), { fn: 'state' }));
         return;
     }
     if (program.cells) {
-        diagnostics.push(error('flow.duplicate-node', "Duplicate 'let' clause", tokenSpan(head), { clause: 'let' }));
+        diagnostics.push(error('flow.duplicate-node', "Duplicate 'state' clause", tokenSpan(head), { clause: 'state' }));
         return;
     }
     program.cells = { entries, span: { start: head.start, end: cursor.peek(-1).end } };
@@ -437,7 +441,7 @@ function skipToNextNode(cursor: TokenCursor): void {
     while (!cursor.atEof()) {
         const t = cursor.peek();
         if (t.kind === 'ident' && (
-            ['every', 'at', 'until', 'nochildren', 'let', 'use', 'move'].includes(t.text)
+            ['every', 'at', 'until', 'nochildren', 'state', 'use', 'move'].includes(t.text)
             || lookupWord(SET_HEADS, t.text) !== undefined
             || /^x\d+$/.test(t.text)
         )) return;

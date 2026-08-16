@@ -6,7 +6,7 @@
  * object inherits — and each of those answers is a function where an entry was
  * expected. What the readers here look up is always a word out of a file, so
  * the difference is reachable: `x.toString()` found a signature with no
- * `params` and threw, `let(...)`'s neighbour `toString(1)` was accepted as a
+ * `params` and threw, `state(...)`'s neighbour `toString(1)` was accepted as a
  * clause and then dropped by the printer, and a refusal table answered with a
  * diagnostic carrying no code.
  *

@@ -25,7 +25,7 @@ export type TokenRole =
     | 'fn'
     /** A property of the task, or a member read through a dot. */
     | 'prop'
-    /** A name the flow command's `let(...)` declared. */
+    /** A name the flow command's `state(...)` declared. */
     | 'cell'
     | 'comment'
     /**

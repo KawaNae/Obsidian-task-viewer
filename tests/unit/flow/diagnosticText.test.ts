@@ -76,11 +76,11 @@ describe('diagnosticText', () => {
             'at(600000.0000000004)',            // lex.decimal-too-large
             'every mon setContent(true || false ?? none)', // expr.nullish-mixed-with-logic
             'every mon setContent(content == "a" == true)', // expr.comparison-chain
-            'every mon let(3)',                 // flow.expected-cell
-            'every mon let(n: 3, n: 4)',        // flow.duplicate-cell
-            'every mon let(start: 3)',          // flow.cell-reserved-name
-            'every mon let(n: 1 + 2)',          // flow.cell-not-literal
-            'every mon let(n: none)',           // type.cell-not-storable
+            'every mon state(3)',                 // flow.expected-cell
+            'every mon state(n: 3, n: 4)',        // flow.duplicate-cell
+            'every mon state(start: 3)',          // flow.cell-reserved-name
+            'every mon state(n: 1 + 2)',          // flow.cell-not-literal
+            'every mon state(n: none)',           // type.cell-not-storable
         ];
         const seen = new Set<string>();
         for (const src of samples) {

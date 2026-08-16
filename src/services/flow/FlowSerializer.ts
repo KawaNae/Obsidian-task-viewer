@@ -52,7 +52,7 @@ function serializeParts(program: FlowProgram): { text: string; span: Span }[] {
         // produces. `valueToLiteral` is the same spelling `printExpr` gives a
         // literal, so the two roads to a line agree.
         const cells = program.cells.entries.map(c => `${c.name}: ${valueToLiteral(c.value)}`);
-        parts.push({ text: `let(${cells.join(', ')})`, span: program.cells.span });
+        parts.push({ text: `state(${cells.join(', ')})`, span: program.cells.span });
     }
     if (program.use) parts.push({ text: `use(${printExpr(program.use.name)})`, span: program.use.span });
     if (program.sets) {

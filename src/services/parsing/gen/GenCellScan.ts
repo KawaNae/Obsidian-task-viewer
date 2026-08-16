@@ -17,7 +17,7 @@ import type { GenCellTypes } from './GenBodyParser';
  * work wrong.
  *
  * Read per line rather than per command: a multi-line command puts its clauses
- * on lines of their own, and a line carrying only `let(...)` is not a program —
+ * on lines of their own, and a line carrying only `state(...)` is not a program —
  * the declaration on it is true all the same.
  *
  * Shared rather than owned by one caller. A block is read in three places (the

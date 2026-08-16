@@ -325,27 +325,27 @@ describe('FlowParser', () => {
         });
     });
 
-    describe('let(...) cells', () => {
+    describe('state(...) cells', () => {
         it('parses one cell', () => {
-            const { program, diagnostics } = parseFlow('every mon let(n: 3) use("週報")');
+            const { program, diagnostics } = parseFlow('every mon state(n: 3) use("週報")');
             expect(diagnostics).toEqual([]);
             expect(program!.cells!.entries).toMatchObject([{ name: 'n', value: { type: 'number', value: 3 } }]);
         });
 
         it('parses several cells in one clause', () => {
-            const { program, diagnostics } = parseFlow('every mon let(n: 3, label: "第", sent: false)');
+            const { program, diagnostics } = parseFlow('every mon state(n: 3, label: "第", sent: false)');
             expect(diagnostics).toEqual([]);
             expect(program!.cells!.entries.map(c => c.name)).toEqual(['n', 'label', 'sent']);
         });
 
         it('takes every printable type', () => {
             const { diagnostics } = parseFlow(
-                'every mon let(n: 3, s: "text", b: true, d: 2026-08-17, t: 10:30, dur: 3d, l: [[Note]])');
+                'every mon state(n: 3, s: "text", b: true, d: 2026-08-17, t: 10:30, dur: 3d, l: [[Note]])');
             expect(diagnostics).toEqual([]);
         });
 
         it('takes a negative number, which is what a countdown writes back', () => {
-            const { program } = parseFlow('every mon let(n: -2)');
+            const { program } = parseFlow('every mon state(n: -2)');
             expect(program!.cells!.entries[0].value).toEqual({ type: 'number', value: -2 });
         });
 
@@ -353,10 +353,10 @@ describe('FlowParser', () => {
             // 印字→解析→印字 が不動点であることがフロー行の生命線（毎発火で
             // 書き直されるため、一度でも読めない形を書いたら鎖が止まる）。
             const sources = [
-                'every mon let(n: 3) use("週報")',
-                'every mon x5 until(2026-12-31) let(n: 3, s: "text") use("週報")',
-                'every mon let(d: 2026-08-17, t: 10:30, dur: 3d, b: false, l: [[Note]])',
-                'every mon let(n: -2)',
+                'every mon state(n: 3) use("週報")',
+                'every mon x5 until(2026-12-31) state(n: 3, s: "text") use("週報")',
+                'every mon state(d: 2026-08-17, t: 10:30, dur: 3d, b: false, l: [[Note]])',
+                'every mon state(n: -2)',
             ];
             for (const src of sources) {
                 const once = serializeFlow(parseFlow(src).program!);
@@ -370,7 +370,7 @@ describe('FlowParser', () => {
             // join("\n") はこの機能の看板イディオム。生の改行を書くと
             // コマンドが 2 行になり、次のスキャンが読めなくなる。
             const printed = serializeFlow({
-                ...parseFlow('every mon let(c: "x")').program!,
+                ...parseFlow('every mon state(c: "x")').program!,
                 cells: {
                     entries: [{
                         name: 'c',
@@ -388,13 +388,13 @@ describe('FlowParser', () => {
                 .toEqual({ type: 'string', value: '- [ ] a\n- [ ] b\tあと' });
         });
 
-        it('puts let between until and use whatever order it was written in', () => {
-            const { program } = parseFlow('use("週報") let(n: 3) every mon x2');
-            expect(serializeFlow(program!)).toBe('every mon x2 let(n: 3) use("週報")');
+        it('puts state between until and use whatever order it was written in', () => {
+            const { program } = parseFlow('use("週報") state(n: 3) every mon x2');
+            expect(serializeFlow(program!)).toBe('every mon x2 state(n: 3) use("週報")');
         });
 
         it('accepts a trailing comma, as every other list does', () => {
-            const { program, diagnostics } = parseFlow('every mon let(n: 3,)');
+            const { program, diagnostics } = parseFlow('every mon state(n: 3,)');
             expect(diagnostics).toEqual([]);
             expect(program!.cells!.entries).toHaveLength(1);
         });
@@ -402,21 +402,21 @@ describe('FlowParser', () => {
         it('refuses a computed initial value', () => {
             // 初期値は毎発火で書き戻される場所なので、式を書くと 1 回目の発火で
             // その結果に置き換わり、書いた式が行から消える。
-            expect(errors('every mon let(n: 1 + 2)')).toContain('flow.cell-not-literal');
-            expect(errors('every mon let(d: today)')).toContain('flow.cell-not-literal');
+            expect(errors('every mon state(n: 1 + 2)')).toContain('flow.cell-not-literal');
+            expect(errors('every mon state(d: today)')).toContain('flow.cell-not-literal');
         });
 
         it('refuses a value it cannot print and read back', () => {
             // リストとレコードはフロー・プロファイルの文法から先に落ちる。
             // セル側で二重に言う必要は無く、none だけがここまで届く。
-            expect(errors('every mon let(xs: [1, 2])')).toContain('expr.list-not-here');
-            expect(errors('every mon let(r: {a: 1})')).toContain('expr.record-not-here');
-            expect(errors('every mon let(n: none)')).toContain('type.cell-not-storable');
+            expect(errors('every mon state(xs: [1, 2])')).toContain('expr.list-not-here');
+            expect(errors('every mon state(r: {a: 1})')).toContain('expr.record-not-here');
+            expect(errors('every mon state(n: none)')).toContain('type.cell-not-storable');
         });
 
         it('refuses a name the expression language already answers to', () => {
-            expect(errors('every mon let(start: 3)')).toContain('flow.cell-reserved-name');
-            expect(errors('every mon let(mon: 3)')).toContain('flow.cell-reserved-name');
+            expect(errors('every mon state(start: 3)')).toContain('flow.cell-reserved-name');
+            expect(errors('every mon state(mon: 3)')).toContain('flow.cell-reserved-name');
         });
 
         // 答える語だけでなく、名指しで断る語も同じ。ここを通すとセルは書けて
@@ -425,34 +425,46 @@ describe('FlowParser', () => {
         // 導くと、表が動いたとき期待値も一緒に動いて何も固定できない。
         it('refuses a name the expression language refuses outright', () => {
             for (const name of ['new', 'Date', 'console', 'function', 'await', 'typeof', 'delete']) {
-                expect({ name, errors: errors(`every mon let(${name}: 3)`) })
+                expect({ name, errors: errors(`every mon state(${name}: 3)`) })
                     .toEqual({ name, errors: ['flow.cell-reserved-name'] });
             }
         });
 
         it('refuses the same cell twice', () => {
-            expect(errors('every mon let(n: 3, n: 4)')).toContain('flow.duplicate-cell');
+            expect(errors('every mon state(n: 3, n: 4)')).toContain('flow.duplicate-cell');
         });
 
-        it('refuses a second let clause', () => {
-            expect(errors('every mon let(n: 3) let(m: 4)')).toContain('flow.duplicate-node');
+        it('refuses a second state clause', () => {
+            expect(errors('every mon state(n: 3) state(m: 4)')).toContain('flow.duplicate-node');
         });
 
         it('says the shape when the pair is malformed', () => {
-            expect(errors('every mon let(3)')).toContain('flow.expected-cell');
-            expect(errors('every mon let(n 3)')).toContain('flow.expected-cell');
-            expect(errors('every mon let()')).toContain('flow.expected-cell');
+            expect(errors('every mon state(3)')).toContain('flow.expected-cell');
+            expect(errors('every mon state(n 3)')).toContain('flow.expected-cell');
+            expect(errors('every mon state()')).toContain('flow.expected-cell');
         });
 
         it('needs a schedule to carry the state on to', () => {
-            expect(errors('let(n: 3)')).toContain('flow.orphan-modifier');
+            expect(errors('state(n: 3)')).toContain('flow.orphan-modifier');
         });
 
         it('reads the declarations of a command that does not parse on its own', () => {
             // 多行フローの子行は単独では program にならない。宣言は書かれた
             // とおりに存在するので、エディタはそれを読む。
-            expect(parseFlowCells('let(n: 3)').map(c => c.name)).toEqual(['n']);
+            expect(parseFlowCells('state(n: 3)').map(c => c.name)).toEqual(['n']);
             expect(parseFlowCells('every mon use("週報")')).toEqual([]);
+        });
+
+        it('does not know the old name any more', () => {
+            // let は残さず消した。読める節でなくなるので、宣言だけが落ちて
+            // 発火が続く形にはならない。program が null になるところまでが
+            // この約束で、そこから先は canTriggerFlow が発火を止める。
+            const { program, diagnostics } = parseFlow('every mon let(n: 3) use("週報")');
+            expect(diagnostics.map(d => d.code)).toContain('flow.unknown-head');
+            expect(program).toBeNull();
+            // 宣言としても読まれない。ブロックは n を「誰も宣言していない名前」
+            // として扱い、初期値のまま静かに回り続けることがない。
+            expect(parseFlowCells('let(n: 3)')).toEqual([]);
         });
     });
 });

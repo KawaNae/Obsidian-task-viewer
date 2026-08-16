@@ -850,8 +850,8 @@
     },
     "flow": {
       "comment-not-here": "コマンドに // のコメントは書けません。コマンドは発火のたびに書き直されるため、コメントは失われます",
-      "unknown-head": "不明な節 '{{head}}' — 節は every / + / at(...) / xN / until(...) / let(...) / use(...) / setContent|setStart|setStartTime|setEnd|setEndTime|setDue|setDueTime(...) / move(...) で始まります",
-      "expected-cell": "let(...) のセルは 名前: 値 の形で書きます（例: let(n: 3)）",
+      "unknown-head": "不明な節 '{{head}}' — 節は every / + / at(...) / xN / until(...) / state(...) / use(...) / setContent|setStart|setStartTime|setEnd|setEndTime|setDue|setDueTime(...) / move(...) で始まります",
+      "expected-cell": "state(...) のセルは 名前: 値 の形で書きます（例: state(n: 3)）",
       "duplicate-cell": "セル '{{name}}' が重複して宣言されています",
       "cell-reserved-name": "'{{name}}' は式の中で既に別の意味を持つ名前なので、セル名には使えません",
       "cell-not-literal": "セル '{{name}}' の初期値は書かれた値である必要があります。計算した値は最初の発火でその結果に置き換わります",

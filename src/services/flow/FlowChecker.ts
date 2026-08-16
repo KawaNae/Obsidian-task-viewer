@@ -4,7 +4,7 @@ import { isDatishType, typeName } from '../lang/functions';
 import { type FlowProgram, SET_FIELD_ORDER, isCellValue, setHeadName } from './FlowAst';
 
 /** Nodes whose field name is not what the user writes. */
-const ORPHAN_CLAUSE_NAME: Partial<Record<string, string>> = { lifetime: 'xN', cells: 'let' };
+const ORPHAN_CLAUSE_NAME: Partial<Record<string, string>> = { lifetime: 'xN', cells: 'state' };
 
 /**
  * Structural + type validation of a parsed FlowProgram. Runs inside

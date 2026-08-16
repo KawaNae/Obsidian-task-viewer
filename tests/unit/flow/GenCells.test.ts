@@ -87,24 +87,24 @@ const COUNTER = { 週報: block('週報', ['- [ ] 週報 第${n = n + 1}回 @${s
 
 describe('a cell travels from one generation to the next', () => {
     it('prints what the block wrote, not what the line started from', async () => {
-        const written = await fire('- [x] 週報 第3回 @2026-08-17 ==> every mon let(n: 3) use("週報")', COUNTER);
+        const written = await fire('- [x] 週報 第3回 @2026-08-17 ==> every mon state(n: 3) use("週報")', COUNTER);
         expect(written.parentLine).toBe(
-            '- [ ] 週報 第4回 @2026-08-24 ==> every mon let(n: 4) use("週報")');
+            '- [ ] 週報 第4回 @2026-08-24 ==> every mon state(n: 4) use("週報")');
     });
 
     it('keeps counting over three generations', async () => {
         // 1 世代なら値の受け渡しが偶然合うこともある。3 世代続けて初めて、
         // 印字と解析が往復していることが言える。
-        const lines: string[] = ['- [x] 週報 第3回 @2026-08-17 ==> every mon let(n: 3) use("週報")'];
+        const lines: string[] = ['- [x] 週報 第3回 @2026-08-17 ==> every mon state(n: 3) use("週報")'];
         for (let i = 0; i < 3; i++) {
             const written = await fire(lines[i].replace('- [ ] ', '- [x] '), COUNTER);
             expect(written.fired).toBe(true);
             lines.push(written.parentLine);
         }
         expect(lines.slice(1)).toEqual([
-            '- [ ] 週報 第4回 @2026-08-24 ==> every mon let(n: 4) use("週報")',
-            '- [ ] 週報 第5回 @2026-08-31 ==> every mon let(n: 5) use("週報")',
-            '- [ ] 週報 第6回 @2026-09-07 ==> every mon let(n: 6) use("週報")',
+            '- [ ] 週報 第4回 @2026-08-24 ==> every mon state(n: 4) use("週報")',
+            '- [ ] 週報 第5回 @2026-08-31 ==> every mon state(n: 5) use("週報")',
+            '- [ ] 週報 第6回 @2026-09-07 ==> every mon state(n: 6) use("週報")',
         ]);
     });
 
@@ -113,7 +113,7 @@ describe('a cell travels from one generation to the next', () => {
         // 改行を印字すると 2 行になり、鎖はそこで止まって 2 行目が素の
         // テキストとして残る（tv-xparse が PR #61 で見つけた形）。
         const written = await fire(
-            '- [x] 記録 @2026-08-17 ==> every mon let(prev: "") use("記録")',
+            '- [x] 記録 @2026-08-17 ==> every mon state(prev: "") use("記録")',
             {
                 記録: block('記録', [
                     '<js',
@@ -124,7 +124,7 @@ describe('a cell travels from one generation to the next', () => {
             });
         expect(written.fired).toBe(true);
         expect(written.parentLine.split('\n')).toHaveLength(1);
-        expect(written.parentLine).toContain('let(prev: "- [ ] a\\n- [ ] b")');
+        expect(written.parentLine).toContain('state(prev: "- [ ] a\\n- [ ] b")');
 
         // 書いた行がそのまま読み戻せること。値も往復する。
         const back = TaskParser.parse(written.parentLine, FILE, 0);
@@ -137,7 +137,7 @@ describe('a cell travels from one generation to the next', () => {
         // join とは別の入口。エスケープを 1 つも書かずに改行が値へ入る形で、
         // 通る関数は同じでもピンの言葉としては別のもの。
         const written = await fire(
-            '- [x] 記録 @2026-08-17 ==> every mon let(prev: "") use("記録")',
+            '- [x] 記録 @2026-08-17 ==> every mon state(prev: "") use("記録")',
             {
                 記録: block('記録', [
                     '<js',
@@ -157,17 +157,17 @@ describe('a cell travels from one generation to the next', () => {
         // use() の無いコマンドは評価する物を持たない。宣言された値がその
         // まま次インスタンスへ運ばれる。
         const repository = makeRepository();
-        const task = TaskParser.parse('- [x] 週報 @2026-08-17 ==> every mon let(n: 3)', FILE, 0)!;
+        const task = TaskParser.parse('- [x] 週報 @2026-08-17 ==> every mon state(n: 3)', FILE, 0)!;
         await makeExecutor(repository, {}).handleTaskCompletion({ ...task, statusChar: 'x' });
         await flush();
 
         const [newTask] = repository.insertRecurrenceForTask.mock.calls[0];
-        expect(newTask.flow.raw).toBe('every mon let(n: 3)');
+        expect(newTask.flow.raw).toBe('every mon state(n: 3)');
     });
 
     it('keeps a cell on the line it was written on', async () => {
         // 行割りは span から決まる。子行に書いた let は子行に残る。
-        const raws = ['every mon', 'let(n: 3) use("週報")'];
+        const raws = ['every mon', 'state(n: 3) use("週報")'];
         const { program, diagnostics } = parseFlowSegments(raws);
         expect(diagnostics.filter(d => d.severity === 'error')).toEqual([]);
 
@@ -187,8 +187,8 @@ describe('a cell travels from one generation to the next', () => {
 
         const [, parentLine, flowLines] = repository.insertGeneratedInstance.mock.calls[0];
         expect(parentLine).toContain('==> every mon');
-        expect(parentLine).not.toContain('let(');
-        expect(flowLines).toEqual(['let(n: 4) use("週報")']);
+        expect(parentLine).not.toContain('state(');
+        expect(flowLines).toEqual(['state(n: 4) use("週報")']);
     });
 });
 
@@ -197,7 +197,7 @@ describe('the state ends with the command', () => {
         // x1 の発火でもブロックは評価され、本文は書かれる。消えるのは状態
         // だけ — コマンドの無い行にセルの置き場所は無い。
         const written = await fire(
-            '- [x] 週報 第3回 @2026-08-17 ==> every mon x1 let(n: 3) use("週報")', COUNTER);
+            '- [x] 週報 第3回 @2026-08-17 ==> every mon x1 state(n: 3) use("週報")', COUNTER);
         expect(written.parentLine).toBe('- [ ] 週報 第4回 @2026-08-24');
         expect(written.flowLines).toEqual([]);
     });
@@ -207,7 +207,7 @@ describe('a value that cannot be written back stops the fire', () => {
     const refuses = async (body: string[]) => {
         const repository = makeRepository();
         const task = TaskParser.parse(
-            '- [x] 週報 第3回 @2026-08-17 ==> every mon let(n: 3) use("週報")', FILE, 0)!;
+            '- [x] 週報 第3回 @2026-08-17 ==> every mon state(n: 3) use("週報")', FILE, 0)!;
         await makeExecutor(repository, { 週報: block('週報', body) })
             .handleTaskCompletion({ ...task, statusChar: 'x' });
         await flush();

@@ -31,7 +31,7 @@ export function setHeadName(field: SetField): string {
 }
 
 /**
- * One state cell declared on the flow line: `let(n: 3)`.
+ * One state cell declared on the flow line: `state(n: 3)`.
  *
  * Unlike every other clause this holds a `Value` and not an `Expr`. A cell is
  * printed back on every fire carrying whatever the block last wrote into it,
@@ -86,7 +86,7 @@ export interface FlowProgram {
      */
     use?: { name: Expr; span: Span };
     /**
-     * `let(n: 3, ...)` — the state that travels between generations.
+     * `state(n: 3, ...)` — the state that travels between generations.
      *
      * Declared here and nowhere else: the contract is visible on the line, so
      * a reader learns what state a chain carries without opening the block.
