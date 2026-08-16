@@ -3,7 +3,7 @@ import { UNIT_KEYWORDS } from '../../lang/ExprParser';
 import { findInterpolationEnd, tokenize } from '../../lang/Lexer';
 import { REFUSED_STMT_KEYWORDS, STMT_KEYWORDS } from '../../lang/StmtParser';
 import type { Token } from '../../lang/Token';
-import { type GenBody, type GenCellTypes, type GenLine, lineIndex } from './GenBodyParser';
+import { type GenBody, type GenLine, lineIndex } from './GenBodyParser';
 
 /**
  * What a run of characters is, as far as this language is concerned.
@@ -64,12 +64,13 @@ const BUILTIN_FNS: ReadonlySet<string> = new Set(FN_NAMES.map(f => f.split('.')[
  * painted as though it does: an unknown name is a name with no role, which is
  * the same silence the checker's squiggle sits on.
  *
- * `cells` is what the command declares, the same map the checker is given, so
- * a cell reads as state here for the same reason it resolves there.
+ * The cells are not passed in. They arrive on the parsed body, as the checker
+ * left them, so a cell reads as state here for the same reason it resolves
+ * there — and no caller can hand the two a different map.
  */
-export function highlightGenBody(body: GenBody, cells?: GenCellTypes): HighlightMark[] {
+export function highlightGenBody(body: GenBody): HighlightMark[] {
     const marks: HighlightMark[] = [];
-    const live = liveCells(body, cells);
+    const live = liveCells(body);
 
     if (body.js) {
         const { starts, lineAt } = lineIndex(body.js.source);
@@ -117,21 +118,20 @@ function bodyLines(body: GenBody): GenLine[] {
 }
 
 /**
- * The cells a reader of this block can trust the name of.
+ * The cells that still mean what the command says, where the body is read.
  *
- * A cell whose name the block declares for itself is dropped from the set: the
- * declaration hides it, and painting the hidden name as state would say the
- * writes carry when they do not. Which names those are is read off the
- * checker's own warning rather than worked out again here — a second walk of
- * the scopes would be a second reading of the same rule.
+ * Read off the bindings the checker left, which is the rule itself: a section
+ * declaring the name overwrote the cell there and a declaration inside a block
+ * was undone on the way out, so what carries the cell flag at the end is
+ * exactly what a body line resolves to a cell. Neither a second walk of the
+ * scopes nor the shadowing warning would answer this — the warning says a name
+ * was hidden but not where, and a cell hidden only inside an `if` still
+ * reaches the body.
  */
-function liveCells(body: GenBody, cells: GenCellTypes | undefined): ReadonlySet<string> {
-    if (!cells?.size) return new Set();
-    const live = new Set(cells.keys());
-    for (const d of body.diagnostics) {
-        if (d.code !== 'stmt.shadows-cell') continue;
-        const name = d.params?.name;
-        if (typeof name === 'string') live.delete(name);
+function liveCells(body: GenBody): ReadonlySet<string> {
+    const live = new Set<string>();
+    for (const [name, binding] of body.bindings.vars) {
+        if (binding.cell) live.add(name);
     }
     return live;
 }
@@ -159,12 +159,12 @@ function collect(src: string, base: number, statements: boolean, cells: Readonly
         // A template is one token to the lexer and the parser reads its
         // interpolations afterwards, so the same is done here: the whole runs
         // as text, and what is spliced into it runs again inside.
-        if (token.kind === 'template') collectTemplate(token, statements, cells, emit);
+        if (token.kind === 'template') collectTemplate(token, cells, emit);
     }
 }
 
 /** The `${...}` of a template literal, read with the template's own rule. */
-function collectTemplate(token: Token, statements: boolean, cells: ReadonlySet<string>, emit: Emit): void {
+function collectTemplate(token: Token, cells: ReadonlySet<string>, emit: Emit): void {
     const text = token.text;
     // The token's span covers the backticks; its text is what is between them.
     const base = token.start + 1;
@@ -177,7 +177,10 @@ function collectTemplate(token: Token, statements: boolean, cells: ReadonlySet<s
         if (end === -1) return;
         emit('punct', base + i, base + i + 2);
         emit('punct', base + end, base + end + 1);
-        collect(text.slice(i + 2, end), base + i + 2, statements, cells, emit);
+        // Never as statements, whatever encloses the template: the splitter
+        // reads a template's interpolations in the block profile, so the
+        // statement reader is not there and its words are ordinary names.
+        collect(text.slice(i + 2, end), base + i + 2, false, cells, emit);
         i = end + 1;
     }
 }
@@ -202,8 +205,14 @@ function roleOf(
 
 /**
  * A bare word, which is where the lexer stops being able to answer: `let`, `n`
- * and `format` are one kind of token and three different things. What decides
- * is what the readers do with the word, asked in the order they ask it.
+ * and `format` are one kind of token and three different things.
+ *
+ * The order below is the parser's own, question for question. It matters that
+ * it is: the parser asks about a call twice, once for the built-ins and once,
+ * much later, for a name bound in the block — and between the two it resolves
+ * the words that are values and the words that are properties. Asking about
+ * the bracket once, up front, paints `true(1)` as a call, which is the one
+ * thing this design exists to prevent.
  */
 function identRole(
     token: Token,
@@ -213,18 +222,23 @@ function identRole(
     cells: ReadonlySet<string>
 ): TokenRole | null {
     const word = token.text;
+    const called = after?.kind === 'lparen';
     if (statements && REFUSED_STMT_KEYWORDS.has(word)) return 'refused';
     if (statements && STMT_KEYWORDS.has(word)) return 'keyword';
-    // Before the dot rule: a method is reached through a dot and is still the
-    // name of a call.
-    if (after?.kind === 'lparen') return 'fn';
-    if (before?.kind === 'dot' || before?.kind === 'qdot') return 'prop';
-    if (BARE_PROPS.has(word) || BUILTIN_FNS.has(word)) return 'prop';
+    // A built-in, and only where it is called: bare, the parser reads the same
+    // word as a binding, and so does this.
+    if (BUILTIN_FNS.has(word) && called) return 'fn';
+    // Through a dot the postfix reader decides by the bracket too — a method
+    // is a call, a member is a read.
+    if (before?.kind === 'dot' || before?.kind === 'qdot') return called ? 'fn' : 'prop';
     if (VALUE_WORDS.has(word)) return 'value';
+    if (BARE_PROPS.has(word)) return 'prop';
+    // Last, as in the parser: a name the block bound, called.
+    if (called) return 'fn';
     if (cells.has(word)) return 'cell';
-    // A local, an arrow parameter, or a name this language does not know. The
-    // three read alike on purpose: only the last is wrong, and the checker
-    // already draws under it. A colour here would either repeat that or, worse,
-    // dress an unknown name as something the language recognizes.
+    // A local, an arrow parameter, a namespace, or a name this language does
+    // not know. They read alike on purpose: only the last is wrong, and the
+    // checker already draws under it. A colour here would either repeat that
+    // or, worse, dress an unknown name as something the language recognizes.
     return null;
 }

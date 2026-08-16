@@ -56,6 +56,17 @@ export interface GenBody {
     children: GenLine[];
     /** The leading js section, or null when the block is body only. */
     js: GenJsSection | null;
+    /**
+     * What is in scope where the body lines are read: the section's top-level
+     * declarations over the cells the command carries.
+     *
+     * The same value the interpolations were checked against, kept rather than
+     * dropped because it is also the only correct answer to which names still
+     * mean what the command says they mean. A declaration in the section
+     * overwrites a cell here and a declaration inside a block does not, which
+     * is the rule itself rather than a second reading of it.
+     */
+    bindings: Bindings;
     diagnostics: LocatedDiagnostic[];
 }
 
@@ -116,6 +127,7 @@ export function parseGenBody(body: string[], firstLine: number, cells?: GenCellT
             parent: null,
             children: [],
             js: null,
+            bindings: NO_BINDINGS,
             diagnostics: [{
                 ...nestingOverflow(e, { start: 0, end: (body[0] ?? '').length }),
                 line: firstLine,
@@ -195,8 +207,8 @@ function readGenBody(body: string[], firstLine: number, cells?: GenCellTypes): G
         });
     }
 
-    checkBody(js, jsBroken, lines, diagnostics, cells);
-    return classify(lines, js, diagnostics);
+    const bindings = checkBody(js, jsBroken, lines, diagnostics, cells);
+    return classify(lines, js, bindings, diagnostics);
 }
 
 /**
@@ -342,10 +354,10 @@ function checkBody(
     lines: GenLine[],
     diagnostics: LocatedDiagnostic[],
     cells?: GenCellTypes
-): void {
-    if (jsBroken) return;
-    const sectionDiagnostics: Diagnostic[] = [];
+): Bindings {
     const outer = cellBindings(cells);
+    if (jsBroken) return outer;
+    const sectionDiagnostics: Diagnostic[] = [];
     const bindings = js
         ? checkProgram(js.program, FLOW_TYPE_ENV, sectionDiagnostics, outer)
         : outer;
@@ -362,6 +374,7 @@ function checkBody(
             for (const d of found) diagnostics.push({ ...d, line: line.line });
         }
     }
+    return bindings;
 }
 
 /**
@@ -377,7 +390,12 @@ export function isSpliceLine(line: GenLine): boolean {
     return line.parts.length === 1 && line.parts[0].kind === 'expr';
 }
 
-function classify(lines: GenLine[], js: GenJsSection | null, diagnostics: LocatedDiagnostic[]): GenBody {
+function classify(
+    lines: GenLine[],
+    js: GenJsSection | null,
+    bindings: Bindings,
+    diagnostics: LocatedDiagnostic[]
+): GenBody {
     const roots = lines.filter(l => l.depth === 0 && !isSpliceLine(l));
     const parent = roots[0] ?? null;
 
@@ -413,6 +431,7 @@ function classify(lines: GenLine[], js: GenJsSection | null, diagnostics: Locate
         parent,
         children: lines.filter(l => l !== parent && (l.depth > 0 || isSpliceLine(l))),
         js,
+        bindings,
         diagnostics,
     };
 }

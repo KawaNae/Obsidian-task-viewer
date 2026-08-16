@@ -11,7 +11,7 @@ import type { StaticType } from '../../../src/services/lang/functions';
  * expectation names the text under the mark, not the numbers.
  */
 function paint(lines: string[], cells?: Map<string, StaticType>): string[] {
-    const marks = highlightGenBody(parseGenBody(lines, 0, cells), cells);
+    const marks = highlightGenBody(parseGenBody(lines, 0, cells));
     return marks.map(m => `${m.role}:${lines[m.line].slice(m.from, m.to)}`);
 }
 
@@ -40,24 +40,68 @@ describe('what a block is made of, said in the engine s own terms', () => {
     });
 
     it('names a refused statement as what it is', () => {
-        // The rest of the line keeps what the lexer read of it. A literal and
-        // a bracket are facts about the characters; only the roles that took a
-        // parser to decide are withheld where the parser refused — `x` binds
-        // nothing here, and is left alone.
+        // The rest of the line keeps what was read of it, in both layers: the
+        // literal and the bracket are facts about the characters, and a role
+        // like `keyword` or `prop` is a claim about the word rather than about
+        // the statement that failed around it. `x` is claimed by nobody and
+        // stays plain.
         expect(paint(['<js', 'var x = 1', '/js>', '- [ ] c']))
             .toEqual(['refused:var', 'punct:=', 'value:1']);
+        expect(paint(['<js', 'var start = 1', '/js>', '- [ ] c']))
+            .toEqual(['refused:var', 'prop:start', 'punct:=', 'value:1']);
+    });
+
+    it('asks about the bracket where the parser asks, not before it', () => {
+        // The parser asks about a call twice: once for the built-ins, and much
+        // later for a name the block bound. Between them it resolves the words
+        // that are values and the words that are properties, so a bracket
+        // after one of those does not make it a call.
+        expect(paint(['<js', 'let x = true(1)', '/js>', '- [ ] c']))
+            .toContain('value:true');
+        expect(paint(['<js', 'let x = start(1)', '/js>', '- [ ] c']))
+            .toContain('prop:start');
+        expect(paint(['<js', 'let x = week(1)', '/js>', '- [ ] c']))
+            .toContain('value:week');
+        // A name the block bound, called: the parser's last question.
+        expect(paint(['<js', 'const f = x => x', 'const y = f(1)', '/js>', '- [ ] c']))
+            .toContain('fn:f');
+    });
+
+    it('leaves a built-in alone where it is not called', () => {
+        // Bare, the parser reads `format` as a binding like any other name,
+        // and the checker calls it unknown. A colour would say otherwise.
+        expect(paint(['- [ ] c ${format}'])).toEqual(['punct:${', 'punct:}']);
+        expect(paint(['- [ ] c ${format(start, "YYYY")}'])).toContain('fn:format');
+    });
+
+    it('reads a template s splices as names, wherever the template is', () => {
+        // The splitter reads a template's interpolations in the block profile,
+        // so the statement reader is not inside one even in a js section.
+        // Painting `of` as syntax there would light up the word the checker is
+        // drawing a squiggle under.
+        expect(paint(['<js', 'const s = `x ${of} y`', '/js>', '- [ ] c']))
+            .not.toContain('keyword:of');
     });
 
     it('paints a cell as state, and its type comes from the command', () => {
         expect(paint(['- [ ] c ${n}'], CELL_N)).toEqual(['punct:${', 'cell:n', 'punct:}']);
     });
 
-    it('stops painting a cell the block declares for itself', () => {
+    it('stops painting a cell the section declares for itself', () => {
         // The declaration hides it and the writes stop carrying, which the
         // checker says out loud. The colour has to agree with the warning.
         const lines = ['<js', 'let n = 1', 'n = n + 1', '/js>', '- [ ] c ${n}'];
         expect(parseGenBody(lines, 0, CELL_N).diagnostics.map(d => d.code)).toContain('stmt.shadows-cell');
         expect(paint(lines, CELL_N).filter(p => p.startsWith('cell:'))).toEqual([]);
+    });
+
+    it('keeps painting a cell that is hidden only inside a block', () => {
+        // The warning says a name was hidden but not where, and a name hidden
+        // inside an `if` is the cell again on the way out. What the body
+        // resolves is what the bindings say, so that is what is read.
+        const lines = ['<js', 'if (true) { let n = 0 }', '/js>', '- [ ] c ${n}'];
+        expect(parseGenBody(lines, 0, CELL_N).diagnostics.map(d => d.code)).toContain('stmt.shadows-cell');
+        expect(paint(lines, CELL_N)).toContain('cell:n');
     });
 
     it('paints the name of a call, through a dot or not', () => {
@@ -115,6 +159,24 @@ describe('what a block is made of, said in the engine s own terms', () => {
         const lines = ['<js', 'let a = 1', 'let b = 2', '/js>', '- [ ] c'];
         const marks = highlightGenBody(parseGenBody(lines, 0, undefined));
         expect(marks.filter(m => m.role === 'keyword').map(m => m.line)).toEqual([1, 2]);
+    });
+
+    it('leaves both namespaces alone, since there is no role for one', () => {
+        // `Math` and `tv` are resolved by the parser, but neither is a
+        // property, a value or a call — and inventing a role for them would be
+        // a claim these roles do not carry. Both or neither; neither.
+        expect(paint(['- [ ] c ${Math.floor(1.5)}'])).toEqual([
+            'punct:${', 'punct:.', 'fn:floor', 'punct:(', 'value:1.5', 'punct:)', 'punct:}',
+        ]);
+        expect(paint(['- [ ] c ${tv.date.format(start, "YYYY")}'])
+            .filter(p => p.endsWith(':tv') || p.endsWith(':Math'))).toEqual([]);
+    });
+
+    it('reads the bracket as the parser does when a line break is between', () => {
+        // Both readers walk the same token stream, and in a section a line
+        // break is a token there. Neither sees a call.
+        expect(paint(['<js', 'let x = format', '(1)', '/js>', '- [ ] c']))
+            .not.toContain('fn:format');
     });
 
     it('says nothing about a line that is only prose', () => {
