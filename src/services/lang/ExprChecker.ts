@@ -8,6 +8,7 @@ import {
 // the two checkers call each other the way the two parsers do.
 import { checkFunctionBody } from './StmtChecker';
 import { type Value, weekdayFromName } from './Value';
+import { lookupWord } from './WordTable';
 
 /** Static types of the property references available in an evaluation context. */
 export type TypeEnv = Partial<Record<PropName, StaticType>>;
@@ -569,7 +570,7 @@ function checkListPlainMethod(
         slice: { params: ['number', 'number'], minArgs: 0, result: listType },
         concat: { params: [listType], minArgs: 1, result: listType },
     };
-    const sig = sigs[name];
+    const sig = lookupWord(sigs, name);
     if (!sig) {
         return fail('type.unknown-member', `${typeName(listType)} has no method '${name}'`,
             { receiver: typeName(listType), name });
@@ -895,5 +896,5 @@ export const SCALAR_MEMBER_SIGS: readonly MemberSig[] = SCALAR_MEMBERS.flatMap(
 export function memberSignature(receiver: StaticType, name: string, isMethod: boolean): MemberSig | null {
     const entry = SCALAR_MEMBERS.find(e => e.applies(receiver));
     if (!entry) return null;
-    return (isMethod ? entry.methods : entry.members)[name] ?? null;
+    return lookupWord(isMethod ? entry.methods : entry.members, name) ?? null;
 }
