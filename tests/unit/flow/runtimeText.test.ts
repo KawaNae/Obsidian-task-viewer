@@ -65,6 +65,13 @@ function hasJapanese(code: string): boolean {
     return typeof family?.[code.slice(dot + 1)] === 'string';
 }
 
+/** Every `<family>.<name>` translated under one of the locale's roots. */
+function codesUnder(root: 'flowEval' | 'flowDiag'): string[] {
+    const tree = (ja as unknown as Record<string, Record<string, Record<string, string>>>)[root];
+    return Object.entries(tree).flatMap(([family, names]) =>
+        Object.keys(names).map(name => `${family}.${name}`));
+}
+
 function inJapanese(f: () => void): void {
     setMockLocale('ja');
     initI18n();
@@ -87,10 +94,16 @@ describe('the sentences a failed fire can say', () => {
 
     it('has nothing translated that is never thrown', () => {
         const thrown = new Set(thrownCodes());
-        const translated = Object.entries((ja as unknown as {
-            flowEval: Record<string, Record<string, string>>;
-        }).flowEval).flatMap(([family, names]) => Object.keys(names).map(n => `${family}.${n}`));
-        expect(translated.filter(code => !thrown.has(code)).sort()).toEqual([]);
+        expect(codesUnder('flowEval').filter(code => !thrown.has(code)).sort()).toEqual([]);
+    });
+
+    it('keeps the two key spaces apart', () => {
+        // `runtimeText` reads `flowEval` first and `flowDiag` second, which is
+        // only safe while no code is spelled in both: a runtime translation
+        // would win over the diagnostic one an error is carrying. The prefixes
+        // keep them apart today, and this is what says so.
+        const runtime = new Set(codesUnder('flowEval'));
+        expect(codesUnder('flowDiag').filter(code => runtime.has(code)).sort()).toEqual([]);
     });
 
     it('says a failure in the reader language, and in English when it has no translation', () => {
