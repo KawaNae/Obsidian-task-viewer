@@ -14,6 +14,42 @@ export const FN_NAMES = [
 ] as const;
 export type FnName = typeof FN_NAMES[number];
 
+/**
+ * Bare words the parser turns into a value before it looks for any binding.
+ *
+ * `undefined` and `null` are the JS spellings of the missing value, accepted so
+ * that what someone writes out of habit works; all three print back as `none`.
+ *
+ * A table rather than a run of comparisons, because three readers ask about
+ * these words — the parser reads them, the reserved-name rule counts them, the
+ * highlighter paints them — and a word list copied three times is three lists
+ * that drift.
+ */
+export const LITERAL_WORDS: Readonly<Record<string, Value>> = {
+    true: { type: 'bool', value: true },
+    false: { type: 'bool', value: false },
+    none: { type: 'none' },
+    undefined: { type: 'none' },
+    null: { type: 'none' },
+};
+
+/**
+ * Bare idents that read as unit keywords: `startOf(week)`.
+ *
+ * Carried as strings by the parser, so they are words of the grammar rather
+ * than values of the language.
+ */
+export const UNIT_KEYWORDS = ['week', 'month', 'year'] as const;
+
+/**
+ * Words that open a namespace instead of standing for something themselves.
+ *
+ * `tv.date.format(...)` resolves to the bare `format`, so `tv` appears nowhere
+ * else; `Math.floor` keeps its namespace in the name and is therefore also in
+ * `FN_NAMES`. Both are listed because both are what the parser branches on.
+ */
+export const NAMESPACE_WORDS = ['tv', 'Math'] as const;
+
 export type BinaryOp =
     | '+' | '-'
     | '*' | '/' | '%'

@@ -1,5 +1,8 @@
 import { type Diagnostic, type Span, error, warning } from './Diagnostic';
-import { type Expr, type PropName, isExprBody } from './ExprAst';
+import {
+    type Expr, FN_NAMES, LITERAL_WORDS, NAMESPACE_WORDS, PROP_NAMES, type PropName, UNIT_KEYWORDS,
+    isExprBody,
+} from './ExprAst';
 import {
     type ArrayType, FN_SIGS, type StaticType, arrayOf, isArrayType, isAssignable, isDatishType,
     type RecordType, isRecordType, recordFieldType, recordOf, sameType, typeName,
@@ -13,8 +16,16 @@ import { lookupWord } from './WordTable';
 /** Static types of the property references available in an evaluation context. */
 export type TypeEnv = Partial<Record<PropName, StaticType>>;
 
-/** The environment used for flow commands (at()/set() expressions). */
-export const FLOW_TYPE_ENV: TypeEnv = {
+/**
+ * The environment used for flow commands (at()/set() expressions).
+ *
+ * Typed as the total record rather than the partial one: this environment is
+ * the whole of what a task offers, so a property declared in `PROP_NAMES` and
+ * forgotten here is a mistake and not a choice. Being total, the compiler says
+ * so — where a test could not, since a built-in missing only from this list
+ * still parses and still fires, and only fails to have a type.
+ */
+export const FLOW_TYPE_ENV: Record<PropName, StaticType> = {
     start: 'datish',
     end: 'datish',
     due: 'datish',
@@ -658,14 +669,6 @@ function checkCallback(
 }
 
 /**
- * Names the parser resolves before it ever looks for a binding. Shadowing one
- * is not an error — the built-in simply wins — but it is always a mistake.
- *
- * Exported for the statement checker, which applies the same list to `let` and
- * `const`: the reason a shadowed name cannot be read is the resolution order
- * in the parser, and that does not care which form of declaration wrote it.
- */
-/**
  * What a cell may hold, said about a type.
  *
  * The same rule as `isCellValue`, which says it about a value. Two sides
@@ -677,10 +680,33 @@ function isCellType(type: StaticType): boolean {
     return !isArrayType(type) && !isRecordType(type) && type !== 'none';
 }
 
+/**
+ * Names the parser resolves before it ever looks for a binding. Shadowing one
+ * is not an error — the built-in simply wins — but it is always a mistake.
+ *
+ * Derived from what the parser resolves, rather than listed beside it. A list
+ * would be a second description of the same rule, and what that allows is quiet
+ * in both directions: a name missing from it can be declared and then never
+ * read, and a name left in it after its built-in is gone refuses an ordinary
+ * binding for a reason nobody can find.
+ *
+ * `isReservedName` is exported for the statement checker, which asks the same
+ * question of `let` and `const`: what makes a shadowed name unreadable is the
+ * resolution order in the parser, and that does not care which form of
+ * declaration wrote it.
+ */
+const RESERVED_NAMES: ReadonlySet<string> = new Set([
+    ...Object.keys(LITERAL_WORDS),
+    ...UNIT_KEYWORDS,
+    // The head of a dotted name is the word a reader writes first: `file.name`
+    // is reached by writing `file`, and `Math.floor` by writing `Math`.
+    ...PROP_NAMES.map(prop => prop.split('.')[0]),
+    ...FN_NAMES.map(fn => fn.split('.')[0]),
+    ...NAMESPACE_WORDS,
+]);
+
 export function isReservedName(name: string): boolean {
-    return ['true', 'false', 'none', 'undefined', 'null', 'week', 'month', 'year',
-        'start', 'end', 'due', 'content', 'done', 'today', 'dates', 'file', 'tv', 'Math',
-        'format', 'next', 'startOf', 'endOf', 'nextCycle', 'date', 'time'].includes(name);
+    return RESERVED_NAMES.has(name);
 }
 
 /**

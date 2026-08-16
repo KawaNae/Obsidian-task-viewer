@@ -1,20 +1,29 @@
 import { type Diagnostic, type Span, error } from './Diagnostic';
-import { type BinaryOp, type Expr, FN_NAMES, type FnName, type InterpolationPart, type PropName } from './ExprAst';
+import {
+    type BinaryOp, type Expr, FN_NAMES, type FnName, type InterpolationPart, LITERAL_WORDS,
+    NAMESPACE_WORDS, PROP_NAMES, type PropName, UNIT_KEYWORDS,
+} from './ExprAst';
 import { findInterpolationEnd, splitDurationText, tokenize } from './Lexer';
 import { looksLikeRecord, parseArrowBlockBody } from './StmtParser';
 import { type Token, type TokenKind, TokenCursor, tokenSpan } from './Token';
 import { weekdayFromName } from './Value';
 import { lookupWord } from './WordTable';
 
-/**
- * Bare idents inside expressions that read as unit keywords (startOf(week)).
- *
- * Exported for the editor, which paints a word as a value only where this
- * parser makes one of it.
- */
-export const UNIT_KEYWORDS = ['week', 'month', 'year'] as const;
+// Re-exported for the editor, which paints a word as a value only where this
+// parser makes one of it. The list itself lives with the rest of the language's
+// vocabulary.
+export { UNIT_KEYWORDS } from './ExprAst';
 
-const SIMPLE_PROPS = ['start', 'end', 'due', 'content', 'done', 'today', 'dates'] as const;
+/**
+ * Properties written as one bare word.
+ *
+ * Derived rather than listed: a property spelled with a dot arrives through the
+ * rule for its head (`file` then `.name`), and every other one is read here. A
+ * new property added to `PROP_NAMES` is therefore readable the moment it is
+ * declared, instead of being an unknown identifier until someone remembers the
+ * second list.
+ */
+const SIMPLE_PROPS: readonly string[] = PROP_NAMES.filter(name => !name.includes('.'));
 
 /**
  * Names refused in expression position, each with its way out. The design's
@@ -740,16 +749,12 @@ function parseIdentLed(cursor: TokenCursor, diagnostics: Diagnostic[]): Expr | n
         return parseCall(name as FnName, span, cursor, diagnostics);
     }
 
-    // Boolean literals
-    if (name === 'true' || name === 'false') {
-        return { kind: 'lit', value: { type: 'bool', value: name === 'true' }, span };
-    }
-
-    // None literal. `undefined` and `null` are the JS spellings of the same
-    // missing value, accepted so what an LLM writes as plain JS works; the
-    // canonical print is `none` either way.
-    if (name === 'none' || name === 'undefined' || name === 'null') {
-        return { kind: 'lit', value: { type: 'none' }, span };
+    // Literal words: the two booleans and the three spellings of the missing
+    // value. Copied out of the table rather than handed over, so nothing later
+    // can be holding the same object as an unrelated expression.
+    const literal = lookupWord(LITERAL_WORDS, name);
+    if (literal) {
+        return { kind: 'lit', value: { ...literal }, span };
     }
 
     // Unit keywords (arguments to startOf/endOf) are carried as strings
@@ -758,18 +763,14 @@ function parseIdentLed(cursor: TokenCursor, diagnostics: Diagnostic[]): Expr | n
     }
 
     // Property references
-    if ((SIMPLE_PROPS as readonly string[]).includes(name)) {
+    if (SIMPLE_PROPS.includes(name)) {
         return { kind: 'prop', name: name as PropName, span };
     }
-    // `tv.date.format(...)` / `tv.file.name` — the namespaced spelling of the
-    // built-ins. Accepted as an alias and resolved here, so the canonical form
-    // stays the bare one and the printer needs no new shape.
-    if (name === 'tv') {
-        return parseNamespaced(name, cursor, diagnostics, span);
-    }
-
-    // `Math.floor(...)` — the same resolution as `tv.`, not a second one.
-    if (name === 'Math') {
+    // `tv.date.format(...)` / `tv.file.name` is the namespaced spelling of the
+    // built-ins, accepted as an alias and resolved here so the canonical form
+    // stays the bare one; `Math.floor(...)` keeps its namespace in the name.
+    // One resolution for both, and one list of the words that open one.
+    if ((NAMESPACE_WORDS as readonly string[]).includes(name)) {
         return parseNamespaced(name, cursor, diagnostics, span);
     }
 

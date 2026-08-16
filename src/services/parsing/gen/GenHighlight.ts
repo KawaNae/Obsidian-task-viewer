@@ -1,5 +1,5 @@
-import { FN_NAMES, PROP_NAMES } from '../../lang/ExprAst';
-import { REFUSED_EXPR_KEYWORDS, UNIT_KEYWORDS } from '../../lang/ExprParser';
+import { FN_NAMES, LITERAL_WORDS, PROP_NAMES, UNIT_KEYWORDS } from '../../lang/ExprAst';
+import { REFUSED_EXPR_KEYWORDS } from '../../lang/ExprParser';
 import { findInterpolationEnd, tokenize } from '../../lang/Lexer';
 import { REFUSED_STMT_KEYWORDS, STMT_KEYWORDS } from '../../lang/StmtParser';
 import type { Token } from '../../lang/Token';
@@ -49,7 +49,7 @@ const BARE_PROPS: ReadonlySet<string> = new Set(
 
 /** Names the parser reads as a value rather than as a binding. */
 const VALUE_WORDS: ReadonlySet<string> = new Set([
-    'true', 'false', 'none', 'undefined', 'null', ...UNIT_KEYWORDS,
+    ...Object.keys(LITERAL_WORDS), ...UNIT_KEYWORDS,
 ]);
 
 /** Built-ins, by the bare word a reader sees. */
