@@ -347,6 +347,10 @@ export class TaskIndex {
             clearTimeout(timer);
         }
         this.recentSelfWriteTimers.clear();
+        for (const timer of this.apiWriteInFlight.values()) {
+            clearTimeout(timer);
+        }
+        this.apiWriteInFlight.clear();
         this.pendingNotify = null;
     }
 
