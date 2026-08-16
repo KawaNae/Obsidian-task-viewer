@@ -65,7 +65,7 @@ export function renderGenBody(body: GenBody, outerCtx: EvalContext): GenRenderRe
         // The cells are a frame of their own, and the body reads it whether or
         // not a section was written: a one-line counter block has nowhere else
         // to bind `n`, and it is the shape the design leads with.
-        const cells = outerCtx.cells?.size ? cellScope(outerCtx.cells) : null;
+        const cells = outerCtx.cells?.size ? cellScope(outerCtx.cells, outerCtx.vars) : null;
         if (body.js) ctx.scope = execProgram(body.js.program, ctx, cells);
         else if (cells) ctx.scope = cells;
 

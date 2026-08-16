@@ -365,6 +365,29 @@ describe('FlowParser', () => {
             }
         });
 
+        it('prints a computed string back as one line', () => {
+            // セルは「計算された文字列」が印字器に流れる最初の経路で、
+            // join("\n") はこの機能の看板イディオム。生の改行を書くと
+            // コマンドが 2 行になり、次のスキャンが読めなくなる。
+            const printed = serializeFlow({
+                ...parseFlow('every mon let(c: "x")').program!,
+                cells: {
+                    entries: [{
+                        name: 'c',
+                        value: { type: 'string', value: '- [ ] a\n- [ ] b\tあと' },
+                        nameSpan: { start: 0, end: 0 },
+                        valueSpan: { start: 0, end: 0 },
+                    }],
+                    span: { start: 0, end: 0 },
+                },
+            });
+            expect(printed).not.toContain('\n');
+            const back = parseFlow(printed);
+            expect(back.diagnostics).toEqual([]);
+            expect(back.program!.cells!.entries[0].value)
+                .toEqual({ type: 'string', value: '- [ ] a\n- [ ] b\tあと' });
+        });
+
         it('puts let between until and use whatever order it was written in', () => {
             const { program } = parseFlow('use("週報") let(n: 3) every mon x2');
             expect(serializeFlow(program!)).toBe('every mon x2 let(n: 3) use("週報")');

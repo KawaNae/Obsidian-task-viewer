@@ -110,8 +110,12 @@ export type CellStore = Map<string, Value>;
  * so the value read back afterwards is the cell's own. The checker says what
  * that costs; the frame is what keeps it from costing the state as well.
  */
-export function cellScope(cells: CellStore): Scope {
-    const scope = new Scope();
+export function cellScope(cells: CellStore, outer?: ReadonlyMap<string, Value>): Scope {
+    // `outer` for the same reason `execProgram` takes it: a block with cells and
+    // no section binds its body against this frame alone, and a frame that
+    // cannot see the enclosing parameters would answer differently from the one
+    // a section produces.
+    const scope = new Scope(null, outer);
     for (const [name, value] of cells) scope.declare(name, value, true);
     return scope;
 }

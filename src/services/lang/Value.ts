@@ -218,6 +218,24 @@ export function numberToLiteral(value: number): string {
     return value.toFixed(DECIMAL_PLACES).replace(/0+$/, '').replace(/\.$/, '');
 }
 
+/**
+ * A string as source, escaped for everything the lexer reads back.
+ *
+ * The printer's escapes have to cover the lexer's, and a newline is where that
+ * stops being obvious: a value written in the source cannot hold one, so for a
+ * long time nothing could reach this with one. A computed string can — a cell
+ * carries what a block wrote, and `join("\n")` is the idiom of the feature —
+ * and printing that raw would put a second line where a command was, leaving a
+ * command the next scan cannot read.
+ */
+function escapeString(value: string): string {
+    return value
+        .replace(/\\/g, '\\\\')
+        .replace(/"/g, '\\"')
+        .replace(/\n/g, '\\n')
+        .replace(/\t/g, '\\t');
+}
+
 /** Canonical literal form, used by the serializer for round-tripping. */
 export function valueToLiteral(v: Value): string {
     switch (v.type) {
@@ -225,7 +243,7 @@ export function valueToLiteral(v: Value): string {
         case 'datetime': return `${v.date}T${v.time}`;
         case 'time': return v.value;
         case 'duration': return `${v.amount}${v.unit}`;
-        case 'string': return `"${v.value.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`;
+        case 'string': return `"${escapeString(v.value)}"`;
         case 'number': return numberToLiteral(v.value);
         case 'bool': return v.value ? 'true' : 'false';
         case 'link': return `[[${v.target}]]`;

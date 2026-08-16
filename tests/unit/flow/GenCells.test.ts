@@ -108,6 +108,31 @@ describe('a cell travels from one generation to the next', () => {
         ]);
     });
 
+    it('writes a command of one line when a cell holds several', async () => {
+        // 発火が書いたコマンドは次のスキャンが読めなければならない。生の
+        // 改行を印字すると 2 行になり、鎖はそこで止まって 2 行目が素の
+        // テキストとして残る（tv-xparse が PR #61 で見つけた形）。
+        const written = await fire(
+            '- [x] 記録 @2026-08-17 ==> every mon let(prev: "") use("記録")',
+            {
+                記録: block('記録', [
+                    '<js',
+                    'prev = ["- [ ] a", "- [ ] b"].join("\\n")',
+                    '/js>',
+                    '- [ ] 記録 @${start}',
+                ]),
+            });
+        expect(written.fired).toBe(true);
+        expect(written.parentLine.split('\n')).toHaveLength(1);
+        expect(written.parentLine).toContain('let(prev: "- [ ] a\\n- [ ] b")');
+
+        // 書いた行がそのまま読み戻せること。値も往復する。
+        const back = TaskParser.parse(written.parentLine, FILE, 0);
+        expect(back!.flow!.diagnostics).toEqual([]);
+        expect(back!.flow!.program!.cells!.entries[0].value)
+            .toEqual({ type: 'string', value: '- [ ] a\n- [ ] b' });
+    });
+
     it('carries a cell no block ever reads', async () => {
         // use() の無いコマンドは評価する物を持たない。宣言された値がその
         // まま次インスタンスへ運ばれる。
