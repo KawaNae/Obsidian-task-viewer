@@ -49,7 +49,20 @@ export interface FlowPlanDeps {
  * on.
  */
 export class GenerationError extends Error {
-    constructor(message: string) {
+    constructor(
+        public readonly code: string,
+        message: string,
+        public readonly params?: Diagnostic['params'],
+        /**
+         * A diagnostic quoted inside the message.
+         *
+         * The sentence carries another sentence — the block's own complaint —
+         * and that one has a translation of its own. Kept as the diagnostic
+         * rather than as the text it came to, so the reader gets both halves
+         * in one language (see services/flow/runtimeText.ts).
+         */
+        public readonly inner?: Diagnostic,
+    ) {
         super(message);
         this.name = 'GenerationError';
     }
@@ -85,7 +98,9 @@ export function planFlow(task: Task, program: FlowProgram, deps: FlowPlanDeps): 
         if (program.until) {
             const untilVal = evalExpr(program.until.expr, preCtx);
             if (!isDatishValue(untilVal)) {
-                throw new EvalError(`until() must produce a date or datetime, got ${untilVal.type}`, program.until.expr.span);
+                throw new EvalError('eval.until-not-datish',
+                    `until() must produce a date or datetime, got ${untilVal.type}`,
+                    program.until.expr.span, { actual: untilVal.type });
             }
             const untilDate = untilVal.type === 'date' ? untilVal.value : untilVal.date;
             withinUntil = next.date <= untilDate;
@@ -175,12 +190,14 @@ function planGenerated(
 ): FlowEffect {
     const name = evalExpr(program.use!.name, preCtx);
     if (name.type !== 'string') {
-        throw new GenerationError(`use() names a block with a string, got ${name.type}`);
+        throw new GenerationError('eval.use-name-not-string',
+            `use() names a block with a string, got ${name.type}`, { actual: name.type });
     }
 
     const block = deps.getBlock(task.file, name.value);
     if (!block) {
-        throw new GenerationError(`No generation block named '${name.value}' in this file`);
+        throw new GenerationError('eval.no-such-block',
+            `No generation block named '${name.value}' in this file`, { name: name.value });
     }
 
     // A copy per fire. The block writes into this one, and a fire that fails
@@ -192,14 +209,16 @@ function planGenerated(
     const broken = body.diagnostics.find(
         d => d.severity === 'error' && !RENDER_DECIDES.has(d.code));
     if (broken) {
-        throw new GenerationError(`The block '${name.value}' cannot generate: ${broken.message}`);
+        throw new GenerationError('eval.block-cannot-generate',
+            `The block '${name.value}' cannot generate: ${broken.message}`,
+            { name: name.value, reason: broken.message }, broken);
     }
 
     // Dates come from the new instance and content from the one that fired,
     // which is what the post-shift context already holds — the same snapshot
     // the setter clauses evaluate against.
     const rendered = renderGenBody(body, { ...buildEvalContext(newTask, deps), cells });
-    if (!rendered.ok) throw new GenerationError(rendered.error.message);
+    if (!rendered.ok) throw new GenerationError(rendered.error.code, rendered.error.message, rendered.error.params);
 
     // After the block, not before: what the cells came to is only known now,
     // and this is the step that prints it.
@@ -249,8 +268,9 @@ function withWrittenCells(program: FlowProgram, written: ReadonlyMap<string, Val
     const entries = program.cells.entries.map(cell => {
         const value = written.get(cell.name) ?? cell.value;
         if (!isCellValue(value)) {
-            throw new GenerationError(
-                `The cell '${cell.name}' ended as ${value.type}, which cannot be written back to the command`);
+            throw new GenerationError('eval.cell-not-storable',
+                `The cell '${cell.name}' ended as ${value.type}, which cannot be written back to the command`,
+                { name: cell.name, actual: value.type });
         }
         return { ...cell, value };
     });
@@ -277,21 +297,25 @@ function composeParentLine(
     if (parentText === null) return TaskParser.format(newTask).trim();
 
     const checked = checkGeneratedParentLine(parentText);
-    if (!checked.ok) throw new GenerationError(checked.error.message);
+    // The line check speaks in diagnostics, and its sentence is the whole of
+    // what went wrong here, so the code travels as it is — `runtimeText` looks
+    // a diagnostic's code up where diagnostics keep their translations.
+    if (!checked.ok) throw new GenerationError(checked.error.code, checked.error.message, checked.error.params);
     warnings.push(...checked.warnings);
     return checked.line + (newTask.flow?.raw ? ` ==> ${newTask.flow.raw}` : '');
 }
 
 function checkedChild(child: { depth: number; body: string }): GeneratedChild {
     const checked = checkGeneratedChildLine(child.body);
-    if (!checked.ok) throw new GenerationError(checked.error.message);
+    if (!checked.ok) throw new GenerationError(checked.error.code, checked.error.message, checked.error.params);
     // A net, not a rule: the renderer splits multi-line values into lines of
     // their own, so one arriving here would mean that promise broke. The
     // write layer treats an element as a line and would emit the rest of it
     // without indentation, which reads as a different tree than the one the
     // block described.
     if (checked.line.includes('\n')) {
-        throw new GenerationError('A generated line cannot contain a line break');
+        throw new GenerationError('eval.gen-child-line-break',
+            'A generated line cannot contain a line break');
     }
     return { depth: child.depth, body: checked.line };
 }

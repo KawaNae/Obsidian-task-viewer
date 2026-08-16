@@ -89,13 +89,13 @@ export function renderGenBody(body: GenBody, outerCtx: EvalContext): GenRenderRe
         // an interpolation is placed by its value, not by where it was typed.
         const roots = entries.filter(e => e.depth === 0);
         if (roots.length > 1) {
-            throw new EvalError(
+            throw new EvalError('eval.gen-multiple-roots',
                 'A block generates one task, and this produced more than one line at the top level',
                 lineSpan(roots[1].from));
         }
         const parent = roots[0] ?? null;
         if (parent && !TaskLineClassifier.isTaskLine(parent.body)) {
-            throw new EvalError(
+            throw new EvalError('eval.gen-root-not-a-task',
                 'The generated task must be a checkbox line',
                 lineSpan(parent.from));
         }
@@ -116,7 +116,7 @@ export function renderGenBody(body: GenBody, outerCtx: EvalContext): GenRenderRe
         if (e instanceof RangeError) {
             return {
                 ok: false,
-                error: new EvalError(
+                error: new EvalError('eval.expression-too-deep',
                     'This expression is too deep to evaluate — break it up',
                     { start: 0, end: 0 }),
             };
@@ -171,15 +171,15 @@ const MAX_DEPTH = 10;
  */
 function checkSize(entries: RenderedEntry[], from: number): void {
     if (entries.length > MAX_LINES) {
-        throw new EvalError(
+        throw new EvalError('eval.gen-too-many-lines',
             `This block generated more than ${MAX_LINES} lines, which is past what one task can be`,
-            lineSpan(entries[entries.length - 1].from));
+            lineSpan(entries[entries.length - 1].from), { max: MAX_LINES });
     }
     for (const entry of entries.slice(from)) {
         if (entry.depth > MAX_DEPTH) {
-            throw new EvalError(
+            throw new EvalError('eval.gen-too-deep',
                 `This line sits ${entry.depth} levels deep, past the ${MAX_DEPTH} a task can hold`,
-                lineSpan(entry.from));
+                lineSpan(entry.from), { depth: entry.depth, max: MAX_DEPTH });
         }
     }
 }
@@ -192,7 +192,7 @@ function checkSize(entries: RenderedEntry[], from: number): void {
 function renderParent(line: GenLine, ctx: EvalContext): string {
     const text = renderLine(line, ctx);
     if (text.includes('\n')) {
-        throw new EvalError(
+        throw new EvalError('eval.gen-parent-multiline',
             'The generated task is one line — a value of several lines cannot go on it',
             { start: 0, end: line.text.length });
     }
@@ -232,7 +232,7 @@ function renderLine(line: GenLine, ctx: EvalContext): string {
     const parts = renderInterpolation(line.parts, ctx);
     const multiLineAt = parts.findIndex(p => p.fromExpr && p.text.includes('\n'));
     if (multiLineAt !== -1 && hasTextAfter(parts, multiLineAt)) {
-        throw new EvalError(
+        throw new EvalError('eval.gen-multiline-not-last',
             'A value of several lines has to end the line — there is text after it',
             spanOf(line, multiLineAt));
     }

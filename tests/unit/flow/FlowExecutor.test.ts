@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { Notice } from 'obsidian';
+import { Notice, setMockLocale } from 'obsidian';
+import { initI18n } from '../../../src/i18n';
 import { FlowExecutor } from '../../../src/services/flow/FlowExecutor';
 import { parseFlowSegments, singleLineFlow } from '../../../src/services/flow/FlowSegments';
 import { TaskIndex } from '../../../src/services/core/TaskIndex';
@@ -257,6 +258,26 @@ describe('a fire that does not happen says so', () => {
 
         expect(Notice.messages).toHaveLength(2);
         expect(Notice.messages[1]).toContain("Property 'due' is not set on this task");
+    });
+
+    it('says it in the reader language', async () => {
+        // 理由の英文はエンジンが投げた場所で書かれている。通知はそれをそのまま
+        // 出すのではなく code で引き直すので、日本語の vault では日本語になる。
+        const repository = makeRepository();
+        const { executor } = makeExecutor(repository);
+
+        setMockLocale('ja');
+        initI18n();
+        try {
+            await executor.handleTaskCompletion(failing());
+            await flush();
+        } finally {
+            setMockLocale('en');
+            initI18n();
+        }
+
+        expect(Notice.messages).toHaveLength(1);
+        expect(Notice.messages[0]).toContain("このタスクにプロパティ 'end' は設定されていません");
     });
 
     it('stays quiet when the fire went through', async () => {

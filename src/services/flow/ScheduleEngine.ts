@@ -64,7 +64,7 @@ export function nextOccurrence(
             // written date: `+9999y` needs no block and no interpolation, and
             // the year it lands on goes straight onto the next instance's line.
             if (!isWritableDatish(v)) {
-                throw new EvalError(
+                throw new EvalError('eval.year-out-of-range',
                     'This lands outside the four-digit years a date can be written in (0001 to 9999)',
                     schedule.span);
             }
@@ -72,10 +72,13 @@ export function nextOccurrence(
         }
 
         case 'at': {
-            if (!atCtx) throw new EvalError('at() requires an evaluation context', schedule.expr.span);
+            if (!atCtx) throw new EvalError('eval.at-needs-context',
+                'at() requires an evaluation context', schedule.expr.span);
             const v = evalExpr(schedule.expr, atCtx);
             if (!isDatishValue(v)) {
-                throw new EvalError(`at() must produce a date or datetime, got ${v.type}`, schedule.expr.span);
+                throw new EvalError('eval.at-not-datish',
+                    `at() must produce a date or datetime, got ${v.type}`, schedule.expr.span,
+                    { actual: v.type });
             }
             return v.type === 'date' ? { date: v.value } : { date: v.date, time: v.time };
         }
@@ -113,7 +116,7 @@ function nextGridOccurrence(rule: EveryRule, anchor: DateAnchor | null, rt: Sche
                 const s = formatDateStr(dateAt(month.getFullYear(), month.getMonth(), day));
                 if (s > lowerBound) return { date: s };
             }
-            throw new EvalError('Recurrence grid overflow', { start: 0, end: 0 });
+            throw new EvalError('eval.recurrence-overflow', 'Recurrence grid overflow', { start: 0, end: 0 });
         }
     }
 }

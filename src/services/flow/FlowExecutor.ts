@@ -12,6 +12,7 @@ import { flowSource } from './FlowSegments';
 import { type FlowPlanDeps, GenerationError, planFlow } from './FlowPlanner';
 import { canTriggerFlow } from './FlowTrigger';
 import { createMomentEvalHost } from './MomentEvalHost';
+import { runtimeText } from './runtimeText';
 
 /**
  * Flow-command runtime: queues completion events, re-resolves the task
@@ -116,7 +117,7 @@ export class FlowExecutor {
                 // and do not consume — the command stays for the user to
                 // fix, and the message explains why.
                 logWarn(`[FlowExecutor] Flow did not fire for ${task.id}: ${err.message}`);
-                this.reportDidNotFire(task, err.message);
+                this.reportDidNotFire(task, err);
                 return false;
             }
             throw err;
@@ -145,17 +146,20 @@ export class FlowExecutor {
      * bury the file behind its own complaint. A different failure is a
      * different message, so fixing one and hitting the next is still visible.
      */
-    private reportDidNotFire(task: Task, reason: string): void {
+    private reportDidNotFire(task: Task, err: EvalError | GenerationError): void {
         const now = Date.now();
         // Drop what has aged out on the way past, so a long session does not
         // keep a key for every failure it has ever seen.
         for (const [key, at] of this.recentFailures) {
             if (now - at >= FAILURE_NOTICE_WINDOW_MS) this.recentFailures.delete(key);
         }
-        const key = `${task.id}::${reason}`;
+        // Which failure this is, said in neither language: the code and the
+        // values it was given. Keying on the sentence would make the same
+        // failure a different one as soon as the vault changes language.
+        const key = `${task.id}::${err.code}::${JSON.stringify(err.params ?? {})}`;
         if (this.recentFailures.has(key)) return;
         this.recentFailures.set(key, now);
-        new Notice(t('notice.flowDidNotFire', { reason, file: fileName(task.file) }));
+        new Notice(t('notice.flowDidNotFire', { reason: runtimeText(err), file: fileName(task.file) }));
     }
 
     private async applyEffect(task: Task, effect: FlowEffect): Promise<void> {

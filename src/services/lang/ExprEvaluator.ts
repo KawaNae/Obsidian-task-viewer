@@ -1,4 +1,4 @@
-import type { Span } from './Diagnostic';
+import type { Diagnostic, Span } from './Diagnostic';
 import { type Expr, type PropName, isExprBody } from './ExprAst';
 import { type EvalRuntime, FnCallError, callFn } from './functions';
 // An expression can hold statements again, through an arrow's block body and
@@ -14,9 +14,20 @@ import {
  * Runtime evaluation failure (e.g. a referenced property is unset on the
  * task at fire time). The planner treats this as "do not fire": effects are
  * abandoned and the command is left intact for the user to fix.
+ *
+ * Shaped like a `Diagnostic`: a stable `code` (one message shape per code),
+ * the English `message` written here, and the `params` a translation needs.
+ * The user meets this text in a notice, so it has to be translatable, and the
+ * same rule as the diagnostics applies — English lives at the throw, locale
+ * files hold translations (services/flow/runtimeText.ts).
  */
 export class EvalError extends Error {
-    constructor(message: string, public readonly span: Span) {
+    constructor(
+        public readonly code: string,
+        message: string,
+        public readonly span: Span,
+        public readonly params?: Diagnostic['params'],
+    ) {
         super(message);
     }
 }
@@ -86,7 +97,8 @@ export function evalExpr(expr: Expr, ctx: EvalContext): Value {
 
         case 'assign': {
             if (!ctx.scope) {
-                throw new EvalError('An assignment only means something inside a generation block', expr.span);
+                throw new EvalError('eval.assign-not-here',
+                    'An assignment only means something inside a generation block', expr.span);
             }
             const current = expr.op === '=' ? null : lookupVar(expr.name, ctx, expr.nameSpan);
             const written = expr.op === '='
@@ -100,14 +112,16 @@ export function evalExpr(expr: Expr, ctx: EvalContext): Value {
 
         case 'call-local': {
             const def = ctx.scope?.lookupFn(expr.name);
-            if (!def) throw new EvalError(`'${expr.name}' is not a function here`, expr.nameSpan);
+            if (!def) throw new EvalError('eval.not-a-function',
+                `'${expr.name}' is not a function here`, expr.nameSpan, { name: expr.name });
             return callFunction(def, expr.args.map(a => evalExpr(a, ctx)), ctx, expr.span);
         }
 
         case 'prop': {
             const v = ctx.props[expr.name];
             if (v === undefined) {
-                throw new EvalError(`Property '${expr.name}' is not set on this task`, expr.span);
+                throw new EvalError('eval.prop-unset',
+                    `Property '${expr.name}' is not set on this task`, expr.span, { name: expr.name });
             }
             return v;
         }
@@ -115,12 +129,14 @@ export function evalExpr(expr: Expr, ctx: EvalContext): Value {
         case 'unary': {
             const v = evalExpr(expr.operand, ctx);
             if (expr.op === '!') {
-                if (v.type !== 'bool') throw new EvalError(`'!' expects bool, got ${v.type}`, expr.span);
+                if (v.type !== 'bool') throw new EvalError('eval.bang-expects-bool',
+                    `'!' expects bool, got ${v.type}`, expr.span, { actual: v.type });
                 return { type: 'bool', value: !v.value };
             }
             if (v.type === 'number') return { type: 'number', value: -v.value };
             if (v.type === 'duration') return { type: 'duration', amount: -v.amount, unit: v.unit };
-            throw new EvalError(`Unary '-' expects number or duration, got ${v.type}`, expr.span);
+            throw new EvalError('eval.unary-minus-operand',
+                `Unary '-' expects number or duration, got ${v.type}`, expr.span, { actual: v.type });
         }
 
         case 'binary':
@@ -128,7 +144,8 @@ export function evalExpr(expr: Expr, ctx: EvalContext): Value {
 
         case 'cond': {
             const c = evalExpr(expr.cond, ctx);
-            if (c.type !== 'bool') throw new EvalError(`Condition must be bool, got ${c.type}`, expr.cond.span);
+            if (c.type !== 'bool') throw new EvalError('eval.cond-not-bool',
+                `Condition must be bool, got ${c.type}`, expr.cond.span, { actual: c.type });
             return evalExpr(c.value ? expr.then : expr.else, ctx);
         }
 
@@ -137,7 +154,10 @@ export function evalExpr(expr: Expr, ctx: EvalContext): Value {
             try {
                 return callFn(expr.fn, args, ctx);
             } catch (e) {
-                if (e instanceof FnCallError) throw new EvalError(e.message, expr.span);
+                // The built-in's own failure, given the span of the call it
+                // came from. Its code and params travel with it, or the
+                // sentence would arrive with no way to translate it.
+                if (e instanceof FnCallError) throw new EvalError(e.code, e.message, expr.span, e.params);
                 throw e;
             }
         }
@@ -153,7 +173,8 @@ export function evalExpr(expr: Expr, ctx: EvalContext): Value {
                     continue;
                 }
                 const inner = evalExpr(item.arg, ctx);
-                if (inner.type !== 'array') throw new EvalError(`A spread needs a list, got ${inner.type}`, item.span);
+                if (inner.type !== 'array') throw new EvalError('eval.spread-not-a-list',
+                    `A spread needs a list, got ${inner.type}`, item.span, { actual: inner.type });
                 items.push(...inner.items);
             }
             return { type: 'array', items };
@@ -166,23 +187,27 @@ export function evalExpr(expr: Expr, ctx: EvalContext): Value {
             };
 
         case 'spread':
-            throw new EvalError('A spread only means something inside a list', expr.span);
+            throw new EvalError('eval.spread-not-here',
+                'A spread only means something inside a list', expr.span);
 
         case 'index': {
             const obj = evalExpr(expr.obj, ctx);
             if (obj.type === 'none') {
                 if (expr.optional) return { type: 'none' };
-                throw new EvalError('Cannot index none', expr.span);
+                throw new EvalError('eval.index-of-none', 'Cannot index none', expr.span);
             }
             const i = evalExpr(expr.index, ctx);
             if (obj.type === 'record') {
-                if (i.type !== 'string') throw new EvalError(`A record is indexed by a string, got ${i.type}`, expr.index.span);
+                if (i.type !== 'string') throw new EvalError('eval.index-not-string',
+                    `A record is indexed by a string, got ${i.type}`, expr.index.span, { actual: i.type });
                 // A field that is not there is a missing value, like reading
                 // past the end of a list — `??` covers both.
                 return recordField(obj, i.value) ?? { type: 'none' };
             }
-            if (obj.type !== 'array') throw new EvalError(`${obj.type} cannot be indexed`, expr.span);
-            if (i.type !== 'number') throw new EvalError(`A list index is a number, got ${i.type}`, expr.index.span);
+            if (obj.type !== 'array') throw new EvalError('eval.not-indexable',
+                `${obj.type} cannot be indexed`, expr.span, { actual: obj.type });
+            if (i.type !== 'number') throw new EvalError('eval.index-not-number',
+                `A list index is a number, got ${i.type}`, expr.index.span, { actual: i.type });
             // Past the end is a missing value, not a failure — `??` covers it.
             return obj.items[i.value] ?? { type: 'none' };
         }
@@ -195,7 +220,8 @@ export function evalExpr(expr: Expr, ctx: EvalContext): Value {
         }
 
         case 'arrow':
-            throw new EvalError('A function only means something as an argument to a list method', expr.span);
+            throw new EvalError('eval.function-not-here',
+                'A function only means something as an argument to a list method', expr.span);
 
         case 'member':
         case 'method': {
@@ -204,13 +230,15 @@ export function evalExpr(expr: Expr, ctx: EvalContext): Value {
             // error, as in JS.
             if (obj.type === 'none') {
                 if (expr.optional) return { type: 'none' };
-                throw new EvalError(`Cannot read '${expr.name}' of none`, expr.span);
+                throw new EvalError('eval.member-of-none',
+                    `Cannot read '${expr.name}' of none`, expr.span, { name: expr.name });
             }
             // A list method is handed the function itself, not its value: the
             // parameters are bound per element inside.
             if (obj.type === 'array') return callListMember(obj, expr, ctx);
             if (obj.type === 'record') {
-                if (expr.kind === 'method') throw new EvalError(`A record has no method '${expr.name}'`, expr.span);
+                if (expr.kind === 'method') throw new EvalError('eval.record-no-method',
+                    `A record has no method '${expr.name}'`, expr.span, { name: expr.name });
                 return recordField(obj, expr.name) ?? { type: 'none' };
             }
             const args = expr.kind === 'method' ? expr.args.map(a => evalExpr(a, ctx)) : [];
@@ -230,9 +258,10 @@ function lookupVar(name: string, ctx: EvalContext, span: Span): Value {
     const v = ctx.scope ? ctx.scope.lookup(name) : ctx.vars?.get(name);
     if (v === undefined) {
         if (ctx.scope?.lookupFn(name)) {
-            throw new EvalError(`'${name}' is a function — call it with ${name}(...)`, span);
+            throw new EvalError('eval.fn-not-a-value',
+                `'${name}' is a function — call it with ${name}(...)`, span, { name });
         }
-        throw new EvalError(`'${name}' is not bound here`, span);
+        throw new EvalError('eval.unbound-name', `'${name}' is not bound here`, span, { name });
     }
     return v;
 }
@@ -250,7 +279,7 @@ function callListMember(
     const items = list.items;
     if (expr.kind === 'member') {
         if (name === 'length') return { type: 'number', value: items.length };
-        throw new EvalError(`A list has no property '${name}'`, span);
+        throw new EvalError('eval.list-no-property', `A list has no property '${name}'`, span, { name });
     }
 
     const argExprs = expr.args;
@@ -258,7 +287,8 @@ function callListMember(
 
     /** Apply the function argument to one element. */
     const apply = (fnExpr: Expr, values: Value[]): Value => {
-        if (fnExpr.kind !== 'arrow') throw new EvalError(`'${name}' expects a function`, fnExpr.span);
+        if (fnExpr.kind !== 'arrow') throw new EvalError('eval.expects-function',
+            `'${name}' expects a function`, fnExpr.span, { name });
         // Inside a section the parameters go into a scope frame, which is the
         // one mechanism a `{ }` body can declare into and an expression body
         // reads just as well. Outside one — a flow clause, a body line with no
@@ -273,7 +303,8 @@ function callListMember(
                 : execArrowBody(fnExpr.body, inner);
         }
         if (!isExprBody(fnExpr.body)) {
-            throw new EvalError('A function with a { } body only means something inside a generation block', fnExpr.span);
+            throw new EvalError('eval.fn-body-not-here',
+                'A function with a { } body only means something inside a generation block', fnExpr.span);
         }
         const bound = new Map(ctx.vars ?? []);
         fnExpr.params.forEach((p, i) => bound.set(p, values[i] ?? { type: 'none' }));
@@ -282,7 +313,9 @@ function callListMember(
     const test = (v: Value, i: number): boolean => {
         const r = apply(argExprs[0], [v, num(i)]);
         if (r.type !== 'bool') {
-            throw new EvalError(`'${name}' expects a function returning bool, got ${r.type}`, argExprs[0].span);
+            throw new EvalError('eval.callback-not-bool',
+                `'${name}' expects a function returning bool, got ${r.type}`,
+                argExprs[0].span, { name, actual: r.type });
         }
         return r.value;
     };
@@ -315,7 +348,9 @@ function callListMember(
                 items: copy.sort((a, b) => {
                     const r = apply(argExprs[0], [a, b]);
                     if (r.type !== 'number') {
-                        throw new EvalError(`'sort' expects a function returning number, got ${r.type}`, argExprs[0].span);
+                        throw new EvalError('eval.sort-not-number',
+                            `'sort' expects a function returning number, got ${r.type}`,
+                            argExprs[0].span, { actual: r.type });
                     }
                     return r.value;
                 }),
@@ -342,11 +377,12 @@ function callListMember(
         }
         case 'concat': {
             const other = arg(0);
-            if (other?.type !== 'array') throw new EvalError(`'concat' expects a list`, span);
+            if (other?.type !== 'array') throw new EvalError('eval.concat-expects-list',
+                `'concat' expects a list`, span);
             return { type: 'array', items: [...items, ...other.items] };
         }
     }
-    throw new EvalError(`A list has no method '${name}'`, span);
+    throw new EvalError('eval.list-no-method', `A list has no method '${name}'`, span, { name });
 }
 
 /**
@@ -390,7 +426,8 @@ function callMember(obj: Value, name: string, args: Value[], ctx: EvalContext, s
     if (isDatishValue(obj)) {
         if (name === 'format') {
             const tokens = args[0];
-            if (tokens?.type !== 'string') throw new EvalError(`'format' expects a token string`, span);
+            if (tokens?.type !== 'string') throw new EvalError('eval.format-token-string',
+                `'format' expects a token string`, span);
             return { type: 'string', value: ctx.host.formatDate(obj, tokens.value, ctx.weekStartDay) };
         }
         if (name === 'weekday') {
@@ -405,20 +442,23 @@ function callMember(obj: Value, name: string, args: Value[], ctx: EvalContext, s
     if (obj.type === 'number' && name === 'toFixed') {
         // No argument means zero digits, as in JS.
         const digits = args[0];
-        if (digits !== undefined && digits.type !== 'number') throw new EvalError(`'toFixed' expects a number`, span);
+        if (digits !== undefined && digits.type !== 'number') throw new EvalError('eval.tofixed-expects-number',
+            `'toFixed' expects a number`, span);
         const places = digits?.type === 'number' ? wholeOrThrow(digits.value, 'toFixed', span) : 0;
         // The host's own range, said here. Left to the host it arrives as a
         // RangeError with nowhere to be caught: not an EvalError, so the fire
         // does not fail the way a failure is supposed to — it takes the whole
         // read down with it, in an editor as well as in a fire.
         if (places < 0 || places > MAX_FIXED_DIGITS) {
-            throw new EvalError(
-                `'toFixed' takes 0 to ${MAX_FIXED_DIGITS} digits, got ${places}`, span);
+            throw new EvalError('eval.tofixed-digit-range',
+                `'toFixed' takes 0 to ${MAX_FIXED_DIGITS} digits, got ${places}`, span,
+                { max: MAX_FIXED_DIGITS, actual: places });
         }
         return { type: 'string', value: obj.value.toFixed(places) };
     }
 
-    throw new EvalError(`${obj.type} has no member '${name}'`, span);
+    throw new EvalError('eval.unknown-member', `${obj.type} has no member '${name}'`, span,
+        { receiver: obj.type, name });
 }
 
 function evalBinary(expr: Expr & { kind: 'binary' }, ctx: EvalContext): Value {
@@ -433,11 +473,13 @@ function evalBinary(expr: Expr & { kind: 'binary' }, ctx: EvalContext): Value {
     // Short-circuit logicals
     if (op === '&&' || op === '||') {
         const l = evalExpr(expr.left, ctx);
-        if (l.type !== 'bool') throw new EvalError(`'${op}' expects bool, got ${l.type}`, expr.left.span);
+        if (l.type !== 'bool') throw new EvalError('eval.logic-expects-bool',
+            `'${op}' expects bool, got ${l.type}`, expr.left.span, { op, actual: l.type });
         if (op === '&&' && !l.value) return { type: 'bool', value: false };
         if (op === '||' && l.value) return { type: 'bool', value: true };
         const r = evalExpr(expr.right, ctx);
-        if (r.type !== 'bool') throw new EvalError(`'${op}' expects bool, got ${r.type}`, expr.right.span);
+        if (r.type !== 'bool') throw new EvalError('eval.logic-expects-bool',
+            `'${op}' expects bool, got ${r.type}`, expr.right.span, { op, actual: r.type });
         return r;
     }
 
@@ -455,7 +497,9 @@ function evalBinary(expr: Expr & { kind: 'binary' }, ctx: EvalContext): Value {
         if (l.type === 'number' && r.type === 'number') {
             return { type: 'number', value: arith(op, l.value, r.value, span) };
         }
-        throw new EvalError(`'${op}' cannot combine ${l.type} and ${r.type}`, span);
+        throw new EvalError('eval.cannot-combine',
+            `'${op}' cannot combine ${l.type} and ${r.type}`, span,
+            { op, left: l.type, right: r.type });
     }
 
     if (op === '+' || op === '-') return applyAddSub(op, l, r, span);
@@ -467,7 +511,8 @@ function evalBinary(expr: Expr & { kind: 'binary' }, ctx: EvalContext): Value {
         return { type: 'bool', value: op === '==' ? equal : !equal };
     }
     const cmp = compareValues(l, r);
-    if (cmp === null) throw new EvalError(`Cannot compare ${l.type} with ${r.type}`, span);
+    if (cmp === null) throw new EvalError('eval.cannot-compare',
+        `Cannot compare ${l.type} with ${r.type}`, span, { left: l.type, right: r.type });
     switch (op) {
         case '<': return { type: 'bool', value: cmp < 0 };
         case '<=': return { type: 'bool', value: cmp <= 0 };
@@ -500,7 +545,7 @@ function evalBinary(expr: Expr & { kind: 'binary' }, ctx: EvalContext): Value {
  */
 function shifted(value: Value, span: Span): Value {
     if (isDatishValue(value) && !isWritableDatish(value)) {
-        throw new EvalError(
+        throw new EvalError('eval.year-out-of-range',
             'This lands outside the four-digit years a date can be written in (0001 to 9999)',
             span);
     }
@@ -515,7 +560,8 @@ export function applyAddSub(op: '+' | '-', l: Value, r: Value, span: Span): Valu
         return { type: 'datetime', date: l.value, time: r.value };
     }
     if (op === '+' && l.type === 'datetime' && r.type === 'time') {
-        throw new EvalError('Adding a time to a datetime is ambiguous — truncate first: date(x) + 14:00', span);
+        throw new EvalError('eval.datetime-plus-time',
+            'Adding a time to a datetime is ambiguous — truncate first: date(x) + 14:00', span);
     }
     if (l.type === 'duration' && r.type === 'duration') {
         if (l.unit === r.unit) return { type: 'duration', amount: l.amount + sign * r.amount, unit: l.unit };
@@ -529,7 +575,9 @@ export function applyAddSub(op: '+' | '-', l: Value, r: Value, span: Span): Valu
     if (op === '+' && isStringish(l) && isStringish(r)) {
         return { type: 'string', value: stringishText(l) + stringishText(r) };
     }
-    throw new EvalError(`'${op}' cannot combine ${l.type} and ${r.type}`, span);
+    throw new EvalError('eval.cannot-combine',
+        `'${op}' cannot combine ${l.type} and ${r.type}`, span,
+        { op, left: l.type, right: r.type });
 }
 
 /**
@@ -543,9 +591,9 @@ export function applyAddSub(op: '+' | '-', l: Value, r: Value, span: Span): Valu
  */
 function scaledDuration(amount: number, unit: DurUnit, span: Span): Value {
     if (!Number.isInteger(amount)) {
-        throw new EvalError(
+        throw new EvalError('eval.duration-not-whole',
             `A duration must stay whole — ${amount}${unit} cannot be written. Use a smaller unit.`,
-            span);
+            span, { amount, unit });
     }
     return { type: 'duration', amount, unit };
 }
@@ -570,16 +618,17 @@ function scaledDuration(amount: number, unit: DurUnit, span: Span): Value {
 function quantize(value: number, span: Span): number {
     if (Number.isInteger(value)) {
         if (!Number.isSafeInteger(value)) {
-            throw new EvalError(
-                `${value} is too large to hold exactly`, span);
+            throw new EvalError('eval.number-too-large',
+                `${value} is too large to hold exactly`, span, { value });
         }
         // A negative zero is the same number as zero and reads oddly wherever
         // it lands, so it does not survive the trip.
         return value === 0 ? 0 : value;
     }
     if (!Number.isFinite(value) || Math.abs(value) > MAX_EXACT_FRACTION) {
-        throw new EvalError(
-            `A fraction this large cannot be held exactly (up to ${MAX_EXACT_FRACTION})`, span);
+        throw new EvalError('eval.fraction-too-large',
+            `A fraction this large cannot be held exactly (up to ${MAX_EXACT_FRACTION})`, span,
+            { max: MAX_EXACT_FRACTION });
     }
     const onGrid = Math.round(value * DECIMAL_SCALE) / DECIMAL_SCALE;
     return onGrid === 0 ? 0 : onGrid;
@@ -593,7 +642,8 @@ function quantize(value: number, span: Span): number {
  */
 function wholeOrThrow(value: number, what: string, span: Span): number {
     if (!Number.isInteger(value)) {
-        throw new EvalError(`'${what}' expects a whole number, got ${value}`, span);
+        throw new EvalError('eval.expects-whole-number',
+            `'${what}' expects a whole number, got ${value}`, span, { what, value });
     }
     return value;
 }
@@ -608,7 +658,7 @@ function wholeOrThrow(value: number, what: string, span: Span): number {
  */
 function arith(op: '*' | '/' | '%', a: number, b: number, span: Span): number {
     if (op === '*') return quantize(a * b, span);
-    if (b === 0) throw new EvalError(`Division by zero`, span);
+    if (b === 0) throw new EvalError('eval.divide-by-zero', `Division by zero`, span);
     if (op === '/') return quantize(a / b, span);
 
     // The remainder is derived from the quotient rather than taken from the
@@ -633,6 +683,7 @@ function stringishText(v: Value & { type: 'string' | 'link' }): string {
 function minutesOrThrow(dur: Value & { type: 'duration' }, span: Span): number {
     const factors: Partial<Record<string, number>> = { min: 1, h: 60, d: 1440, w: 10080 };
     const f = factors[dur.unit];
-    if (f === undefined) throw new EvalError(`Cannot mix '${dur.unit}' with other duration units`, span);
+    if (f === undefined) throw new EvalError('eval.duration-unit-mix',
+        `Cannot mix '${dur.unit}' with other duration units`, span, { unit: dur.unit });
     return dur.amount * f;
 }
