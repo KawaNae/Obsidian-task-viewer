@@ -6,8 +6,13 @@ import { type Token, type TokenKind, TokenCursor, tokenSpan } from './Token';
 import { weekdayFromName } from './Value';
 import { lookupWord } from './WordTable';
 
-/** Bare idents inside expressions that read as unit keywords (startOf(week)). */
-const UNIT_KEYWORDS = ['week', 'month', 'year'] as const;
+/**
+ * Bare idents inside expressions that read as unit keywords (startOf(week)).
+ *
+ * Exported for the editor, which paints a word as a value only where this
+ * parser makes one of it.
+ */
+export const UNIT_KEYWORDS = ['week', 'month', 'year'] as const;
 
 const SIMPLE_PROPS = ['start', 'end', 'due', 'content', 'done', 'today'] as const;
 

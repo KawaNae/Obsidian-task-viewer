@@ -23,6 +23,15 @@ export interface GenLine {
      * is reported while it is being written, not when a task is completed.
      */
     parts: InterpolationPart[];
+    /**
+     * Characters of indentation that were trimmed off `text`.
+     *
+     * The parts above carry columns measured from the start of the raw line,
+     * which is where the editor puts them. Anything reading a part back out of
+     * `text` has to know where `text` begins, and the depth cannot answer that
+     * — a tab and four spaces are one level and different columns.
+     */
+    indent: number;
     /** Absolute line index in the file. */
     line: number;
 }
@@ -181,6 +190,7 @@ function readGenBody(body: string[], firstLine: number, cells?: GenCellTypes): G
             depth: indentDepth(indent),
             text,
             parts,
+            indent: indent.length,
             line,
         });
     }
@@ -250,6 +260,29 @@ function readJsSection(
 }
 
 /**
+ * Where each line of a multi-line source begins, and which line an offset is on.
+ *
+ * The section is measured in characters of one joined string while the page is
+ * measured in lines and columns, so everything that reads the section has to
+ * cross the same gap. One implementation, so a diagnostic and a colour drawn
+ * on the same character land on the same line.
+ */
+export function lineIndex(text: string): { starts: number[]; lineAt: (offset: number) => number } {
+    const starts: number[] = [];
+    let at = 0;
+    for (const line of text.split('\n')) {
+        starts.push(at);
+        at += line.length + 1;
+    }
+    const lineAt = (offset: number): number => {
+        let index = 0;
+        while (index + 1 < starts.length && starts[index + 1] <= offset) index++;
+        return index;
+    };
+    return { starts, lineAt };
+}
+
+/**
  * Put a diagnostic measured in characters of `text` back onto page lines.
  *
  * The section is the first source that is more than one line, so a span can
@@ -260,18 +293,7 @@ function readJsSection(
  */
 function lineLocator(text: string, firstLine: number): (d: Diagnostic) => LocatedDiagnostic {
     const lines = text.split('\n');
-    const starts: number[] = [];
-    let at = 0;
-    for (const line of lines) {
-        starts.push(at);
-        at += line.length + 1;
-    }
-    /** Index of the line an offset falls on. */
-    const lineAt = (offset: number): number => {
-        let index = 0;
-        while (index + 1 < starts.length && starts[index + 1] <= offset) index++;
-        return index;
-    };
+    const { starts, lineAt } = lineIndex(text);
     return (d: Diagnostic): LocatedDiagnostic => {
         const from = lineAt(d.span.start);
         const to = Math.max(from, lineAt(Math.max(d.span.start, d.span.end - 1)));

@@ -81,6 +81,44 @@ const REFUSED_STMT: Record<string, { code: string; message: string }> = {
     export: { code: 'stmt.no-export', message: 'A section is not a module — a block is named on its tv-gen tag and reached with use("name")' },
 };
 
+/**
+ * The word that begins each statement form, and the reader that takes it.
+ *
+ * A table rather than a switch because the set of words is wanted twice: here,
+ * to dispatch, and by the editor, which paints a word as syntax only where
+ * this reader treats it as syntax. Two lists would drift, and the drift would
+ * show up as a word painted like a keyword that the parser reads as a name.
+ */
+const STMT_HEADS: Record<string, (cursor: TokenCursor, diagnostics: Diagnostic[]) => Stmt | null> = {
+    let: parseDecl,
+    const: parseDecl,
+    if: parseIf,
+    while: parseWhile,
+    for: parseFor,
+    break: parseBreak,
+    continue: parseContinue,
+    return: parseReturn,
+};
+
+/**
+ * Words this language reads as syntax rather than as a name.
+ *
+ * `else` and `of` never begin a statement — they are consumed inside `if` and
+ * `for` — so they are named here rather than read off the table above.
+ */
+export const STMT_KEYWORDS: ReadonlySet<string> = new Set([...Object.keys(STMT_HEADS), 'else', 'of']);
+
+/** Words that begin a statement this language refuses, each with its way out. */
+export const REFUSED_STMT_KEYWORDS: ReadonlySet<string> = new Set(Object.keys(REFUSED_STMT));
+
+function parseBreak(cursor: TokenCursor): Stmt {
+    return { kind: 'break', span: tokenSpan(cursor.next()) };
+}
+
+function parseContinue(cursor: TokenCursor): Stmt {
+    return { kind: 'continue', span: tokenSpan(cursor.next()) };
+}
+
 function parseStmtList(cursor: TokenCursor, diagnostics: Diagnostic[], end: 'eof' | 'rbrace'): Stmt[] {
     const body: Stmt[] = [];
     for (;;) {
@@ -131,25 +169,8 @@ function parseStmt(cursor: TokenCursor, diagnostics: Diagnostic[]): Stmt | null 
             diagnostics.push(error(refused.code, refused.message, tokenSpan(t), { name: t.text }));
             return null;
         }
-        switch (t.text) {
-            case 'let':
-            case 'const':
-                return parseDecl(cursor, diagnostics);
-            case 'if':
-                return parseIf(cursor, diagnostics);
-            case 'while':
-                return parseWhile(cursor, diagnostics);
-            case 'for':
-                return parseFor(cursor, diagnostics);
-            case 'break':
-                cursor.next();
-                return { kind: 'break', span: tokenSpan(t) };
-            case 'continue':
-                cursor.next();
-                return { kind: 'continue', span: tokenSpan(t) };
-            case 'return':
-                return parseReturn(cursor, diagnostics);
-        }
+        const head = lookupWord(STMT_HEADS, t.text);
+        if (head) return head(cursor, diagnostics);
     }
 
     // A `{` in statement position is a block, as in JS. A record wanted here
