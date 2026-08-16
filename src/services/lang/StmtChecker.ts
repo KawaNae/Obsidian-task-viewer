@@ -142,6 +142,14 @@ class CheckState {
 
     /** False when the declaration is refused outright. */
     private reportRedeclaration(name: string, span: Span, reserved: 'warn' | 'said' = 'warn'): boolean {
+        if (this.vars.get(name)?.cell) {
+            // Legal, and almost never meant: the block goes on reading and
+            // writing this name, and none of it reaches the cell the flow line
+            // carries — so the state stops moving with no other sign.
+            this.diagnostics.push(warning('stmt.shadows-cell',
+                `'${name}' is a cell of the flow command, and this declaration hides it — writing to it will not carry to the next instance`,
+                span, { name }));
+        }
         if (reserved === 'warn' && isReservedName(name)) {
             // A warning, not an error: the program means what it says, the
             // binding simply cannot be read — the built-in resolves first.

@@ -1,0 +1,182 @@
+import { describe, it, expect, vi } from 'vitest';
+import { FlowExecutor } from '../../../src/services/flow/FlowExecutor';
+import { parseFlowSegments } from '../../../src/services/flow/FlowSegments';
+import { TaskParser } from '../../../src/services/parsing/TaskParser';
+import type { GenBlock } from '../../../src/services/parsing/gen/GenBlockCollector';
+import { TaskIndex } from '../../../src/services/core/TaskIndex';
+import { TaskRepository } from '../../../src/services/persistence/TaskRepository';
+import { DEFAULT_SETTINGS, type Task } from '../../../src/types';
+
+/**
+ * The state a chain carries between its generations.
+ *
+ * Declared on the flow line, written by the block, printed back by the fire.
+ * What these pin is the round trip: a value that leaves as text has to come
+ * back as the same value, generation after generation, or a counter drifts and
+ * the command it lives in stops being readable.
+ */
+
+const FILE = 'note.md';
+
+function makeRepository() {
+    return {
+        insertRecurrenceForTask: vi.fn().mockResolvedValue(undefined),
+        insertGeneratedInstance: vi.fn().mockResolvedValue(undefined),
+        appendTaskWithChildren: vi.fn().mockResolvedValue(undefined),
+        updateTaskInFile: vi.fn().mockResolvedValue(undefined),
+        stripFlow: vi.fn().mockResolvedValue(undefined),
+        deleteTaskFromFile: vi.fn().mockResolvedValue(undefined),
+    };
+}
+
+const app = { vault: { getAbstractFileByPath: () => null } };
+
+function block(name: string, body: string[]): GenBlock {
+    return { name, body, openLine: 10, closeLine: 10 + body.length + 1 };
+}
+
+function makeExecutor(repository: ReturnType<typeof makeRepository>, blocks: Record<string, GenBlock>) {
+    const taskIndex = {
+        waitForScan: vi.fn().mockResolvedValue(undefined),
+        resolveTask: vi.fn((t: Task) => t),
+        requestScan: vi.fn().mockResolvedValue(undefined),
+        notifyImmediate: vi.fn(),
+        getGenBlock: vi.fn((_file: string, name: string) => blocks[name]),
+    };
+    return new FlowExecutor(
+        repository as unknown as TaskRepository,
+        taskIndex as unknown as TaskIndex,
+        app as never,
+        () => DEFAULT_SETTINGS
+    );
+}
+
+async function flush() {
+    await new Promise(resolve => setTimeout(resolve, 0));
+}
+
+interface Written {
+    parentLine: string;
+    flowLines: string[];
+    children: { depth: number; body: string }[];
+    fired: boolean;
+}
+
+/**
+ * Complete the task written on `line` and hand back what was written for the
+ * next one.
+ *
+ * The line is read with the real parser rather than assembled by hand, so a
+ * generation feeds the next one the way the file does: the command travels as
+ * text and has to survive being read back.
+ */
+async function fire(line: string, blocks: Record<string, GenBlock>): Promise<Written> {
+    const repository = makeRepository();
+    const task = TaskParser.parse(line, FILE, 0);
+    expect(task, `the line has to read back as a task: ${line}`).not.toBeNull();
+    await makeExecutor(repository, blocks).handleTaskCompletion({ ...task!, statusChar: 'x' });
+    await flush();
+
+    const call = repository.insertGeneratedInstance.mock.calls[0];
+    return call
+        ? { parentLine: call[1], flowLines: call[2], children: call[3], fired: true }
+        : { parentLine: '', flowLines: [], children: [], fired: false };
+}
+
+const COUNTER = { 週報: block('週報', ['- [ ] 週報 第${n = n + 1}回 @${start}']) };
+
+describe('a cell travels from one generation to the next', () => {
+    it('prints what the block wrote, not what the line started from', async () => {
+        const written = await fire('- [x] 週報 第3回 @2026-08-17 ==> every mon let(n: 3) use("週報")', COUNTER);
+        expect(written.parentLine).toBe(
+            '- [ ] 週報 第4回 @2026-08-24 ==> every mon let(n: 4) use("週報")');
+    });
+
+    it('keeps counting over three generations', async () => {
+        // 1 世代なら値の受け渡しが偶然合うこともある。3 世代続けて初めて、
+        // 印字と解析が往復していることが言える。
+        const lines: string[] = ['- [x] 週報 第3回 @2026-08-17 ==> every mon let(n: 3) use("週報")'];
+        for (let i = 0; i < 3; i++) {
+            const written = await fire(lines[i].replace('- [ ] ', '- [x] '), COUNTER);
+            expect(written.fired).toBe(true);
+            lines.push(written.parentLine);
+        }
+        expect(lines.slice(1)).toEqual([
+            '- [ ] 週報 第4回 @2026-08-24 ==> every mon let(n: 4) use("週報")',
+            '- [ ] 週報 第5回 @2026-08-31 ==> every mon let(n: 5) use("週報")',
+            '- [ ] 週報 第6回 @2026-09-07 ==> every mon let(n: 6) use("週報")',
+        ]);
+    });
+
+    it('carries a cell no block ever reads', async () => {
+        // use() の無いコマンドは評価する物を持たない。宣言された値がその
+        // まま次インスタンスへ運ばれる。
+        const repository = makeRepository();
+        const task = TaskParser.parse('- [x] 週報 @2026-08-17 ==> every mon let(n: 3)', FILE, 0)!;
+        await makeExecutor(repository, {}).handleTaskCompletion({ ...task, statusChar: 'x' });
+        await flush();
+
+        const [newTask] = repository.insertRecurrenceForTask.mock.calls[0];
+        expect(newTask.flow.raw).toBe('every mon let(n: 3)');
+    });
+
+    it('keeps a cell on the line it was written on', async () => {
+        // 行割りは span から決まる。子行に書いた let は子行に残る。
+        const raws = ['every mon', 'let(n: 3) use("週報")'];
+        const { program, diagnostics } = parseFlowSegments(raws);
+        expect(diagnostics.filter(d => d.severity === 'error')).toEqual([]);
+
+        const repository = makeRepository();
+        const task = TaskParser.parse('- [x] 週報 第3回 @2026-08-17', FILE, 0)!;
+        await makeExecutor(repository, COUNTER).handleTaskCompletion({
+            ...task,
+            statusChar: 'x',
+            flow: {
+                raw: raws[0],
+                childSegments: [{ raw: raws[1], bodyLine: 1 }],
+                program,
+                diagnostics,
+            },
+        });
+        await flush();
+
+        const [, parentLine, flowLines] = repository.insertGeneratedInstance.mock.calls[0];
+        expect(parentLine).toContain('==> every mon');
+        expect(parentLine).not.toContain('let(');
+        expect(flowLines).toEqual(['let(n: 4) use("週報")']);
+    });
+});
+
+describe('the state ends with the command', () => {
+    it('gives the last instance its body and no cell', async () => {
+        // x1 の発火でもブロックは評価され、本文は書かれる。消えるのは状態
+        // だけ — コマンドの無い行にセルの置き場所は無い。
+        const written = await fire(
+            '- [x] 週報 第3回 @2026-08-17 ==> every mon x1 let(n: 3) use("週報")', COUNTER);
+        expect(written.parentLine).toBe('- [ ] 週報 第4回 @2026-08-24');
+        expect(written.flowLines).toEqual([]);
+    });
+});
+
+describe('a value that cannot be written back stops the fire', () => {
+    const refuses = async (body: string[]) => {
+        const repository = makeRepository();
+        const task = TaskParser.parse(
+            '- [x] 週報 第3回 @2026-08-17 ==> every mon let(n: 3) use("週報")', FILE, 0)!;
+        await makeExecutor(repository, { 週報: block('週報', body) })
+            .handleTaskCompletion({ ...task, statusChar: 'x' });
+        await flush();
+
+        // 2 相のまま: 何も書かれず、コマンドも消費されない。
+        expect(repository.insertGeneratedInstance).not.toHaveBeenCalled();
+        expect(repository.stripFlow).not.toHaveBeenCalled();
+    };
+
+    it('when the block leaves a list in a cell', async () => {
+        await refuses(['<js', 'n = [1, 2]', '/js>', '- [ ] 週報 @${start}']);
+    });
+
+    it('when the block leaves a record in a cell', async () => {
+        await refuses(['<js', 'n = {a: 1}', '/js>', '- [ ] 週報 @${start}']);
+    });
+});

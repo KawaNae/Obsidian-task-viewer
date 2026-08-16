@@ -1,7 +1,8 @@
 import type { Span } from '../../lang/Diagnostic';
 import { type EvalContext, EvalError } from '../../lang/ExprEvaluator';
 import { type RenderedPart, renderInterpolation } from '../../lang/Interpolation';
-import { SECTION_FUEL, execProgram } from '../../lang/StmtEvaluator';
+import { type CellStore, type Scope, SECTION_FUEL, cellScope, execProgram } from '../../lang/StmtEvaluator';
+import type { Value } from '../../lang/Value';
 import { TaskLineClassifier } from '../utils/TaskLineClassifier';
 import { type GenBody, type GenLine, indentDepth, isSpliceLine, leadingIndent } from './GenBodyParser';
 
@@ -27,7 +28,20 @@ export interface RenderedChild {
  * anything.
  */
 export type GenRenderResult =
-    | { ok: true; parentText: string | null; children: RenderedChild[] }
+    | {
+        ok: true;
+        parentText: string | null;
+        children: RenderedChild[];
+        /**
+         * What the cells came to. Empty when the command declares none.
+         *
+         * Handed back rather than left on the store the caller passed in: a
+         * result the caller reads only after `ok` is what keeps a failed
+         * render from moving the state, and a map it already holds would be
+         * read without that question being asked.
+         */
+        cells: ReadonlyMap<string, Value>;
+    }
     | { ok: false; error: EvalError };
 
 /**
@@ -48,7 +62,12 @@ export function renderGenBody(body: GenBody, outerCtx: EvalContext): GenRenderRe
         // the evaluation order is that one sentence, and the body reads the
         // scope it leaves behind.
         const ctx: EvalContext = { ...outerCtx, fuel: { left: SECTION_FUEL, depth: 0 } };
-        if (body.js) ctx.scope = execProgram(body.js.program, ctx);
+        // The cells are a frame of their own, and the body reads it whether or
+        // not a section was written: a one-line counter block has nowhere else
+        // to bind `n`, and it is the shape the design leads with.
+        const cells = outerCtx.cells?.size ? cellScope(outerCtx.cells) : null;
+        if (body.js) ctx.scope = execProgram(body.js.program, ctx, cells);
+        else if (cells) ctx.scope = cells;
 
         // Document order, parent line included: `${n = n + 1}` has to run in
         // the order the writer reads. Rendering the parent line first would
@@ -84,11 +103,26 @@ export function renderGenBody(body: GenBody, outerCtx: EvalContext): GenRenderRe
             ok: true,
             parentText: parent?.body ?? null,
             children: entries.filter(e => e !== parent).map(({ depth, body: text }) => ({ depth, body: text })),
+            cells: finalCells(outerCtx.cells, cells),
         };
     } catch (e) {
         if (e instanceof EvalError) return { ok: false, error: e };
         throw e;
     }
+}
+
+/**
+ * The cells as the render leaves them.
+ *
+ * Read from the cell frame by the names the command declared, so a name the
+ * section introduced is not mistaken for state: only what the flow line
+ * carries is carried on.
+ */
+function finalCells(declared: CellStore | undefined, frame: Scope | null): ReadonlyMap<string, Value> {
+    const out = new Map<string, Value>();
+    if (!declared) return out;
+    for (const [name, initial] of declared) out.set(name, frame?.lookup(name) ?? initial);
+    return out;
 }
 
 /** A rendered line, with the block line it came from for diagnostics. */

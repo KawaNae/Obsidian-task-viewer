@@ -1,7 +1,10 @@
 import { type Diagnostic, error, warning } from '../../lang/Diagnostic';
 import type { InterpolationPart } from '../../lang/ExprAst';
-import { FLOW_TYPE_ENV, checkExpr } from '../../lang/ExprChecker';
+import {
+    type Bindings, FLOW_TYPE_ENV, NO_BINDINGS, type VarBinding, checkExpr,
+} from '../../lang/ExprChecker';
 import { nestingOverflow, splitInterpolations } from '../../lang/ExprParser';
+import type { StaticType } from '../../lang/functions';
 import type { Program } from '../../lang/StmtAst';
 import { checkProgram } from '../../lang/StmtChecker';
 import { parseProgram } from '../../lang/StmtParser';
@@ -92,10 +95,11 @@ const JS_CLOSE_RE = /^\s*\/js>\s*$/;
  *
  * @param body lines between the block delimiters
  * @param firstLine absolute index of `body[0]` in the file
+ * @param cells state cells the block may read and write, by the type they hold
  */
-export function parseGenBody(body: string[], firstLine: number): GenBody {
+export function parseGenBody(body: string[], firstLine: number, cells?: GenCellTypes): GenBody {
     try {
-        return readGenBody(body, firstLine);
+        return readGenBody(body, firstLine, cells);
     } catch (e) {
         // A block is many lines of recursive descent, so it is the likelier
         // of the two places where nesting outruns the host's stack.
@@ -111,7 +115,7 @@ export function parseGenBody(body: string[], firstLine: number): GenBody {
     }
 }
 
-function readGenBody(body: string[], firstLine: number): GenBody {
+function readGenBody(body: string[], firstLine: number, cells?: GenCellTypes): GenBody {
     const diagnostics: LocatedDiagnostic[] = [];
     const lines: GenLine[] = [];
     let js: GenJsSection | null = null;
@@ -181,7 +185,7 @@ function readGenBody(body: string[], firstLine: number): GenBody {
         });
     }
 
-    checkBody(js, jsBroken, lines, diagnostics);
+    checkBody(js, jsBroken, lines, diagnostics, cells);
     return classify(lines, js, diagnostics);
 }
 
@@ -284,6 +288,24 @@ function lineLocator(text: string, firstLine: number): (d: Diagnostic) => Locate
 }
 
 /**
+ * The state cells a block may read, by the type each one holds.
+ *
+ * The block is written apart from the command that fires it, so the names its
+ * cells go by are not knowable from the block alone — they arrive from the
+ * flow line. Without them every mention of a cell reads as a typo, which is
+ * the same diagnostic a typo gets and would bury it.
+ */
+export type GenCellTypes = ReadonlyMap<string, StaticType>;
+
+/** The cells as the checker sees them: ordinary locals that may be written. */
+function cellBindings(cells: GenCellTypes | undefined): Bindings {
+    if (!cells?.size) return NO_BINDINGS;
+    const vars = new Map<string, VarBinding>();
+    for (const [name, type] of cells) vars.set(name, { type, mutable: true, cell: true });
+    return { vars, fns: new Map() };
+}
+
+/**
  * Type-check the section and the body's interpolations.
  *
  * The body reads what the section left behind, so the two are one pass in one
@@ -296,13 +318,15 @@ function checkBody(
     js: GenJsSection | null,
     jsBroken: boolean,
     lines: GenLine[],
-    diagnostics: LocatedDiagnostic[]
+    diagnostics: LocatedDiagnostic[],
+    cells?: GenCellTypes
 ): void {
     if (jsBroken) return;
     const sectionDiagnostics: Diagnostic[] = [];
+    const outer = cellBindings(cells);
     const bindings = js
-        ? checkProgram(js.program, FLOW_TYPE_ENV, sectionDiagnostics)
-        : undefined;
+        ? checkProgram(js.program, FLOW_TYPE_ENV, sectionDiagnostics, outer)
+        : outer;
     if (js) {
         const locate = lineLocator(js.source, js.firstLine);
         for (const d of sectionDiagnostics) diagnostics.push(locate(d));

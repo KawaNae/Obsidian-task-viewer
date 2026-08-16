@@ -4,7 +4,7 @@ import { type EvalRuntime, FnCallError, callFn } from './functions';
 // An expression can hold statements again, through an arrow's block body and
 // through a call of a locally declared function, so the two evaluators call
 // each other the way the two parsers do.
-import { type Scope, burn, callFunction, execArrowBody } from './StmtEvaluator';
+import { type CellStore, type Scope, burn, callFunction, execArrowBody } from './StmtEvaluator';
 import {
     type DurUnit, type Value, WEEKDAY_NAMES, addDuration, compareValues, isDatishValue, parseDateStr,
     DECIMAL_SCALE, MAX_EXACT_FRACTION, recordField, valueToDisplay,
@@ -51,6 +51,15 @@ export interface EvalContext extends EvalRuntime {
      * clause, which has no statements and therefore nothing to bind.
      */
     scope?: Scope;
+    /**
+     * The state cells of the command being fired, as the planner made them.
+     *
+     * Read where the block is rendered, which turns them into a scope the body
+     * can write to. Carried on the context because that is the only channel
+     * into the render, and left off everything else because a flow clause
+     * cannot reach a cell.
+     */
+    cells?: CellStore;
     /**
      * What is left of the evaluation budget, and how many calls are open.
      * Absent means unmetered — a flow clause is one expression, and it can

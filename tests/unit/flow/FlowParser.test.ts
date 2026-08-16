@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { parseFlow } from '../../../src/services/flow/FlowParser';
+import { parseFlow, parseFlowCells } from '../../../src/services/flow/FlowParser';
 import { serializeFlow } from '../../../src/services/flow/FlowSerializer';
 
 function errorsIn(diagnostics: { severity: string; code: string }[]): string[] {
@@ -322,6 +322,103 @@ describe('FlowParser', () => {
         it('accepts none for content', () => {
             const { diagnostics } = parseFlow('every mon setContent(none)');
             expect(diagnostics).toEqual([]);
+        });
+    });
+
+    describe('let(...) cells', () => {
+        it('parses one cell', () => {
+            const { program, diagnostics } = parseFlow('every mon let(n: 3) use("週報")');
+            expect(diagnostics).toEqual([]);
+            expect(program!.cells!.entries).toMatchObject([{ name: 'n', value: { type: 'number', value: 3 } }]);
+        });
+
+        it('parses several cells in one clause', () => {
+            const { program, diagnostics } = parseFlow('every mon let(n: 3, label: "第", sent: false)');
+            expect(diagnostics).toEqual([]);
+            expect(program!.cells!.entries.map(c => c.name)).toEqual(['n', 'label', 'sent']);
+        });
+
+        it('takes every printable type', () => {
+            const { diagnostics } = parseFlow(
+                'every mon let(n: 3, s: "text", b: true, d: 2026-08-17, t: 10:30, dur: 3d, l: [[Note]])');
+            expect(diagnostics).toEqual([]);
+        });
+
+        it('takes a negative number, which is what a countdown writes back', () => {
+            const { program } = parseFlow('every mon let(n: -2)');
+            expect(program!.cells!.entries[0].value).toEqual({ type: 'number', value: -2 });
+        });
+
+        it('prints back what it read, in canonical order', () => {
+            // 印字→解析→印字 が不動点であることがフロー行の生命線（毎発火で
+            // 書き直されるため、一度でも読めない形を書いたら鎖が止まる）。
+            const sources = [
+                'every mon let(n: 3) use("週報")',
+                'every mon x5 until(2026-12-31) let(n: 3, s: "text") use("週報")',
+                'every mon let(d: 2026-08-17, t: 10:30, dur: 3d, b: false, l: [[Note]])',
+                'every mon let(n: -2)',
+            ];
+            for (const src of sources) {
+                const once = serializeFlow(parseFlow(src).program!);
+                expect(once).toBe(src);
+                expect(serializeFlow(parseFlow(once).program!)).toBe(once);
+            }
+        });
+
+        it('puts let between until and use whatever order it was written in', () => {
+            const { program } = parseFlow('use("週報") let(n: 3) every mon x2');
+            expect(serializeFlow(program!)).toBe('every mon x2 let(n: 3) use("週報")');
+        });
+
+        it('accepts a trailing comma, as every other list does', () => {
+            const { program, diagnostics } = parseFlow('every mon let(n: 3,)');
+            expect(diagnostics).toEqual([]);
+            expect(program!.cells!.entries).toHaveLength(1);
+        });
+
+        it('refuses a computed initial value', () => {
+            // 初期値は毎発火で書き戻される場所なので、式を書くと 1 回目の発火で
+            // その結果に置き換わり、書いた式が行から消える。
+            expect(errors('every mon let(n: 1 + 2)')).toContain('flow.cell-not-literal');
+            expect(errors('every mon let(d: today)')).toContain('flow.cell-not-literal');
+        });
+
+        it('refuses a value it cannot print and read back', () => {
+            // リストとレコードはフロー・プロファイルの文法から先に落ちる。
+            // セル側で二重に言う必要は無く、none だけがここまで届く。
+            expect(errors('every mon let(xs: [1, 2])')).toContain('expr.list-not-here');
+            expect(errors('every mon let(r: {a: 1})')).toContain('expr.record-not-here');
+            expect(errors('every mon let(n: none)')).toContain('type.cell-not-storable');
+        });
+
+        it('refuses a name the expression language already answers to', () => {
+            expect(errors('every mon let(start: 3)')).toContain('flow.cell-reserved-name');
+            expect(errors('every mon let(mon: 3)')).toContain('flow.cell-reserved-name');
+        });
+
+        it('refuses the same cell twice', () => {
+            expect(errors('every mon let(n: 3, n: 4)')).toContain('flow.duplicate-cell');
+        });
+
+        it('refuses a second let clause', () => {
+            expect(errors('every mon let(n: 3) let(m: 4)')).toContain('flow.duplicate-node');
+        });
+
+        it('says the shape when the pair is malformed', () => {
+            expect(errors('every mon let(3)')).toContain('flow.expected-cell');
+            expect(errors('every mon let(n 3)')).toContain('flow.expected-cell');
+            expect(errors('every mon let()')).toContain('flow.expected-cell');
+        });
+
+        it('needs a schedule to carry the state on to', () => {
+            expect(errors('let(n: 3)')).toContain('flow.orphan-modifier');
+        });
+
+        it('reads the declarations of a command that does not parse on its own', () => {
+            // 多行フローの子行は単独では program にならない。宣言は書かれた
+            // とおりに存在するので、エディタはそれを読む。
+            expect(parseFlowCells('let(n: 3)').map(c => c.name)).toEqual(['n']);
+            expect(parseFlowCells('every mon use("週報")')).toEqual([]);
         });
     });
 });

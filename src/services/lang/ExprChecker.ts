@@ -30,6 +30,14 @@ export interface VarBinding {
     type: StaticType;
     /** `let` and arrow parameters, not `const`. Decides what may be assigned. */
     mutable: boolean;
+    /**
+     * Declared by the flow line's `let(...)` rather than by the section.
+     *
+     * Carried on the binding so that a declaration hiding one can be named for
+     * what it is: writing to the hidden name is legal and does nothing that
+     * lasts, which is a slip no other diagnostic here describes.
+     */
+    cell?: boolean;
 }
 
 /** A function in scope, by the name a declaration bound it to. */

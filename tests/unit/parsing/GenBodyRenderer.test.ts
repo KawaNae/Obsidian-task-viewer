@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { EvalContext, EvalError } from '../../../src/services/lang/ExprEvaluator';
-import type { EvalHost } from '../../../src/services/lang/functions';
+import type { EvalHost, StaticType } from '../../../src/services/lang/functions';
+import type { Value } from '../../../src/services/lang/Value';
 import { parseGenBody } from '../../../src/services/parsing/gen/GenBodyParser';
 import { renderGenBody } from '../../../src/services/parsing/gen/GenBodyRenderer';
 
@@ -40,6 +41,9 @@ describe('renderGenBody', () => {
                 { depth: 1, body: '- [ ] 資料集め' },
                 { depth: 1, body: '- [ ] 下書き 2026-08-15' },
             ],
+            // 宣言されたセルが無い発火なので空。持ち帰るのはフロー行が
+            // 宣言した名前だけで、ブロックが作った束縛は状態ではない。
+            cells: new Map(),
         });
     });
 
@@ -147,6 +151,7 @@ describe('a line that is only an interpolation', () => {
                 { depth: 1, body: '- [ ] 仕事' },
                 { depth: 1, body: '- [ ] 健康' },
             ],
+            cells: new Map(),
         });
     });
 
@@ -195,6 +200,7 @@ describe('renderGenBody — the js section', () => {
                 { depth: 1, body: '- [ ] 仕事' },
                 { depth: 1, body: '- [ ] 健康' },
             ],
+            cells: new Map(),
         });
     });
 
@@ -271,5 +277,65 @@ describe('renderGenBody — the js section', () => {
         ]);
         expect(result.ok).toBe(false);
         expect(!result.ok && result.error.message).toContain('levels deep');
+    });
+});
+
+describe('renderGenBody — the cells the command carries', () => {
+    const withCells = (lines: string[], cells: [string, Value][]) =>
+        renderGenBody(parseGenBody(lines, 1, new Map(cells.map(([n, v]) => [n, v.type as StaticType]))),
+            { ...ctx(), cells: new Map(cells) });
+
+    it('binds a cell with no section written at all', () => {
+        // 設計が先頭に置く形（1 行のカウンタ）。セクションが無い block でも
+        // 名前が束縛されていないと、この形は書けない。
+        const result = withCells(['- [ ] 第${n = n + 1}回'], [['n', { type: 'number', value: 3 }]]);
+        expect(result).toMatchObject({ ok: true, parentText: '- [ ] 第4回' });
+        expect(result.ok && result.cells.get('n')).toEqual({ type: 'number', value: 4 });
+    });
+
+    it('carries what the section wrote, not what the line started from', () => {
+        const result = withCells(
+            ['<js', 'n = n + 10', '/js>', '- [ ] 第${n}回'],
+            [['n', { type: 'number', value: 3 }]]);
+        expect(result).toMatchObject({ ok: true, parentText: '- [ ] 第13回' });
+        expect(result.ok && result.cells.get('n')).toEqual({ type: 'number', value: 13 });
+    });
+
+    it('leaves a cell the block never touched as it was', () => {
+        const result = withCells(['- [ ] 週報'], [['n', { type: 'number', value: 3 }]]);
+        expect(result.ok && result.cells.get('n')).toEqual({ type: 'number', value: 3 });
+    });
+
+    it('hands back only what the flow line declared', () => {
+        // セクションが作った束縛は状態ではない。持ち帰る名前をフロー行の
+        // 宣言に限ることが、状態がどこにあるかを行の上に留める。
+        const result = withCells(
+            ['<js', 'const m = 99', '/js>', '- [ ] 週報'],
+            [['n', { type: 'number', value: 3 }]]);
+        expect(result.ok && [...result.cells.keys()]).toEqual(['n']);
+    });
+
+    it('keeps the cell when a declaration in the section hides it', () => {
+        // 隠すこと自体は書けてしまう（診断は checker が出す）。隠された
+        // まま書き戻しが影の値を拾うと、行に出ない状態が動くことになる。
+        const result = withCells(
+            ['<js', 'let n = 100', 'n = n + 1', '/js>', '- [ ] 第${n}回'],
+            [['n', { type: 'number', value: 3 }]]);
+        expect(result).toMatchObject({ ok: true, parentText: '- [ ] 第101回' });
+        expect(result.ok && result.cells.get('n')).toEqual({ type: 'number', value: 3 });
+    });
+
+    it('lets a value of another type land in a cell, for the planner to refuse', () => {
+        // 実行は止めない。印字できるかどうかは書き戻しの直前で 1 回だけ見る。
+        const result = withCells(
+            ['<js', 'n = [1, 2]', '/js>', '- [ ] 週報'],
+            [['n', { type: 'number', value: 3 }]]);
+        expect(result.ok && result.cells.get('n')?.type).toBe('array');
+    });
+
+    it('says an assignment means nothing when the command declares no cell', () => {
+        const result = render(['- [ ] 第${n = n + 1}回']);
+        expect(result.ok).toBe(false);
+        expect(!result.ok && result.error.message).toContain('generation block');
     });
 });

@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+import type { StaticType } from '../../../src/services/lang/functions';
 import { parseGenBody } from '../../../src/services/parsing/gen/GenBodyParser';
 
 /** Bodies start at line 1 in these tests (the delimiter is line 0). */
@@ -202,5 +203,34 @@ describe('parseGenBody — diagnostics', () => {
             '  - [ ] 端数',
             '- [ ] 親',
         ])).toEqual([['gen.ragged-indent', 1], ['gen.root-not-first', 2]]);
+    });
+});
+
+describe('parseGenBody — the cells the command declares', () => {
+    const cells = new Map<string, StaticType>([['n', 'number']]);
+    const withCells = (body: string[]) => parseGenBody(body, 1, cells);
+    const cellCodes = (body: string[]) => withCells(body).diagnostics.map(d => [d.code, d.line]);
+
+    it('reads a cell as a name the block may use', () => {
+        // ブロックはどのコマンドが自分を使うか知らないので、名前は外から来る。
+        // 渡し忘れると全部 unknown / undeclared になる（沈黙しない）。
+        expect(withCells(['- [ ] 第${n = n + 1}回']).diagnostics).toEqual([]);
+        expect(withCells(['<js', 'n = n + 1', '/js>', '- [ ] 第${n}回']).diagnostics).toEqual([]);
+    });
+
+    it('still calls a name no command declares what it is', () => {
+        expect(cellCodes(['- [ ] 第${m}回'])).toEqual([['expr.unknown-ident', 1]]);
+        expect(cellCodes(['<js', 'm = 1', '/js>', '- [ ] 週報'])).toEqual([['stmt.assign-undeclared', 2]]);
+    });
+
+    it('knows what type a cell holds', () => {
+        expect(cellCodes(['<js', 'n = "text"', '/js>', '- [ ] 週報']))
+            .toEqual([['stmt.assign-type-change', 2]]);
+    });
+
+    it('names a declaration that hides a cell', () => {
+        // 書けてしまう形なので警告。隠したまま代入しても状態は動かない。
+        expect(cellCodes(['<js', 'let n = 0', '/js>', '- [ ] 第${n}回']))
+            .toEqual([['stmt.shadows-cell', 2]]);
     });
 });

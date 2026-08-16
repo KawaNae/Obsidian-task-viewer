@@ -1,9 +1,11 @@
 import { type Diagnostic, type Span, error, warning } from '../lang/Diagnostic';
+import type { Expr } from '../lang/ExprAst';
+import { isReservedName } from '../lang/ExprChecker';
 import { nestingOverflow, parseExpr } from '../lang/ExprParser';
 import { splitDurationText, tokenize } from '../lang/Lexer';
-import { TokenCursor, tokenSpan } from '../lang/Token';
-import { type Weekday, weekdayFromName } from '../lang/Value';
-import { type EveryRule, type FlowProgram, SET_FIELD_ORDER, type SetField, type ScheduleNode, setHeadName } from './FlowAst';
+import { type Token, TokenCursor, tokenSpan } from '../lang/Token';
+import { type Value, type Weekday, weekdayFromName } from '../lang/Value';
+import { type EveryRule, type FlowCell, type FlowProgram, SET_FIELD_ORDER, type SetField, type ScheduleNode, setHeadName } from './FlowAst';
 import { checkFlow } from './FlowChecker';
 
 export interface ParseFlowResult {
@@ -14,7 +16,7 @@ export interface ParseFlowResult {
 
 // `nochildren` is missing on purpose: it is still read, but a hint is a
 // list of what to write, and a retired clause does not belong on one.
-const HEAD_HINT = 'clauses start with every / + / at(...) / xN / until(...) / use(...) / setContent|setStart|setStartTime|setEnd|setEndTime|setDue|setDueTime(...) / move(...)';
+const HEAD_HINT = 'clauses start with every / + / at(...) / xN / until(...) / let(...) / use(...) / setContent|setStart|setStartTime|setEnd|setEndTime|setDue|setDueTime(...) / move(...)';
 const SET_HEADS: Record<string, SetField> = Object.fromEntries(
     SET_FIELD_ORDER.map(field => [setHeadName(field), field])
 );
@@ -28,13 +30,31 @@ const SET_HEADS: Record<string, SetField> = Object.fromEntries(
  */
 export function parseFlow(raw: string): ParseFlowResult {
     try {
-        return readFlow(raw);
+        const { program, diagnostics, hasError } = readFlow(raw);
+        return { program: hasError ? null : program, diagnostics };
     } catch (e) {
         return { program: null, diagnostics: [nestingOverflow(e, { start: 0, end: raw.length })] };
     }
 }
 
-function readFlow(raw: string): ParseFlowResult {
+/**
+ * The cells a command declares, whatever else is wrong with it.
+ *
+ * The editor checks a generation block without knowing which command uses it,
+ * so it needs the cell names of the file to tell a cell from a typo. It reads
+ * every line on its own, and a line that carries only part of a multi-line
+ * command does not parse into a program — the declarations are still there and
+ * still true, which is all this answers.
+ */
+export function parseFlowCells(raw: string): FlowCell[] {
+    try {
+        return readFlow(raw).program.cells?.entries ?? [];
+    } catch {
+        return [];
+    }
+}
+
+function readFlow(raw: string): { program: FlowProgram; diagnostics: Diagnostic[]; hasError: boolean } {
     const { tokens, diagnostics, comments } = tokenize(raw);
     const cursor = new TokenCursor(tokens);
     const program: FlowProgram = {};
@@ -56,8 +76,7 @@ function readFlow(raw: string): ParseFlowResult {
 
     checkFlow(program, diagnostics);
 
-    const hasError = diagnostics.some(d => d.severity === 'error');
-    return { program: hasError ? null : program, diagnostics };
+    return { program, diagnostics, hasError: diagnostics.some(d => d.severity === 'error') };
 }
 
 function parseNode(cursor: TokenCursor, program: FlowProgram, diagnostics: Diagnostic[]): void {
@@ -126,6 +145,10 @@ function parseNode(cursor: TokenCursor, program: FlowProgram, diagnostics: Diagn
             diagnostics.push(warning('flow.nochildren-retired',
                 "'nochildren' is retired: child lines no longer travel to the next instance, so the clause can be deleted",
                 tokenSpan(head)));
+            return;
+        case 'let':
+            cursor.next();
+            parseCells(cursor, head, program, diagnostics);
             return;
         case 'use': {
             cursor.next();
@@ -258,6 +281,110 @@ function parseMonthDay(cursor: TokenCursor, intervalMonths: number, diagnostics:
 }
 
 // ---------------------------------------------------------------------------
+// let
+// ---------------------------------------------------------------------------
+
+/** The one sentence every malformed `let(...)` gets, since it is the whole grammar. */
+const CELL_SHAPE = 'let(...) declares cells as name: value — e.g. let(n: 3)';
+
+/**
+ * `let(n: 3, done: false)` — the cells carried between generations.
+ *
+ * One clause holds every cell rather than one clause each. A second `let` is a
+ * duplicate like any other node, which keeps "at most one node of a kind" true
+ * for the whole grammar and leaves the canonical print with one place to put
+ * them.
+ *
+ * Values are literals and not expressions. What the clause holds is printed
+ * back on every fire, so an expression would be evaluated once and then
+ * replaced by its result — the line would stop saying what its author wrote
+ * after the first firing. A literal reads back as itself, generation after
+ * generation.
+ */
+function parseCells(cursor: TokenCursor, head: Token, program: FlowProgram, diagnostics: Diagnostic[]): void {
+    if (!cursor.tryEat('lparen')) {
+        diagnostics.push(error('flow.expected-lparen', "Expected '(' after 'let'", tokenSpan(cursor.peek()), { fn: 'let' }));
+        return;
+    }
+
+    const entries: FlowCell[] = [];
+    for (;;) {
+        const nameToken = cursor.peek();
+        if (nameToken.kind !== 'ident') {
+            diagnostics.push(error('flow.expected-cell', CELL_SHAPE, tokenSpan(nameToken)));
+            skipToNextNode(cursor);
+            return;
+        }
+        cursor.next();
+        if (!cursor.tryEat('colon')) {
+            diagnostics.push(error('flow.expected-cell', CELL_SHAPE, tokenSpan(cursor.peek())));
+            skipToNextNode(cursor);
+            return;
+        }
+        const expr = parseExpr(cursor, diagnostics, 'flow');
+        if (!expr) {
+            skipToNextNode(cursor);
+            return;
+        }
+        readCell(nameToken, expr, entries, diagnostics);
+
+        if (!cursor.tryEat('comma')) break;
+        // A trailing comma is written wherever a list is, and refusing it here
+        // alone would make the flow line the one place it is not allowed.
+        if (cursor.at('rparen')) break;
+    }
+
+    if (!cursor.tryEat('rparen')) {
+        diagnostics.push(error('flow.expected-rparen', "Expected ')' to close let(...)", tokenSpan(cursor.peek()), { fn: 'let' }));
+        return;
+    }
+    if (program.cells) {
+        diagnostics.push(error('flow.duplicate-node', "Duplicate 'let' clause", tokenSpan(head), { clause: 'let' }));
+        return;
+    }
+    program.cells = { entries, span: { start: head.start, end: cursor.peek(-1).end } };
+}
+
+/** One `name: value` pair, once both halves have been read. */
+function readCell(nameToken: Token, expr: Expr, entries: FlowCell[], diagnostics: Diagnostic[]): void {
+    const name = nameToken.text;
+    // A name the expression language resolves for itself cannot be read as a
+    // cell, so the cell would be write-only — said here rather than left to
+    // surface as an unrelated complaint inside the block.
+    if (isReservedName(name) || weekdayFromName(name) !== null) {
+        diagnostics.push(error('flow.cell-reserved-name',
+            `'${name}' already means something in an expression, so a cell cannot be named it`,
+            tokenSpan(nameToken), { name }));
+        return;
+    }
+    if (entries.some(c => c.name === name)) {
+        diagnostics.push(error('flow.duplicate-cell', `Cell '${name}' is declared twice`, tokenSpan(nameToken), { name }));
+        return;
+    }
+    const value = literalValue(expr);
+    if (value === null) {
+        diagnostics.push(error('flow.cell-not-literal',
+            `Cell '${name}' starts from a written value — a computed one would be replaced by its result on the first fire`,
+            expr.span, { name }));
+        return;
+    }
+    entries.push({ name, value, nameSpan: tokenSpan(nameToken), valueSpan: expr.span });
+}
+
+/** The value an expression already is, or null when it has to be computed. */
+function literalValue(expr: Expr): Value | null {
+    if (expr.kind === 'lit') return expr.value;
+    // A counter that runs down writes a negative number back, and `-1` is a
+    // node rather than a literal — so the print would not read back.
+    if (expr.kind === 'unary' && expr.op === '-' && expr.operand.kind === 'lit') {
+        const inner = expr.operand.value;
+        if (inner.type === 'number') return { type: 'number', value: -inner.value };
+        if (inner.type === 'duration') return { type: 'duration', amount: -inner.amount, unit: inner.unit };
+    }
+    return null;
+}
+
+// ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
 
@@ -309,7 +436,7 @@ function skipToNextNode(cursor: TokenCursor): void {
     while (!cursor.atEof()) {
         const t = cursor.peek();
         if (t.kind === 'ident' && (
-            ['every', 'at', 'until', 'nochildren', 'use', 'move'].includes(t.text)
+            ['every', 'at', 'until', 'nochildren', 'let', 'use', 'move'].includes(t.text)
             || t.text in SET_HEADS
             || /^x\d+$/.test(t.text)
         )) return;

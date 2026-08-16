@@ -63,6 +63,11 @@ describe('diagnosticText', () => {
             'at(600000.0000000004)',            // lex.decimal-too-large
             'every mon setContent(true || false ?? none)', // expr.nullish-mixed-with-logic
             'every mon setContent(content == "a" == true)', // expr.comparison-chain
+            'every mon let(3)',                 // flow.expected-cell
+            'every mon let(n: 3, n: 4)',        // flow.duplicate-cell
+            'every mon let(start: 3)',          // flow.cell-reserved-name
+            'every mon let(n: 1 + 2)',          // flow.cell-not-literal
+            'every mon let(n: none)',           // type.cell-not-storable
         ];
         const seen = new Set<string>();
         for (const src of samples) {
@@ -79,7 +84,9 @@ describe('diagnosticText', () => {
             'expr.weekday-not-literal', 'type.bad-weekday-name',
             'type.nullish-mismatch', 'type.member-arity', 'type.unknown-member',
             'type.member-arg', 'lex.decimal-duration', 'lex.decimal-too-precise',
-            'lex.decimal-too-large', 'expr.nullish-mixed-with-logic', 'expr.comparison-chain']) {
+            'lex.decimal-too-large', 'expr.nullish-mixed-with-logic', 'expr.comparison-chain',
+            'flow.expected-cell', 'flow.duplicate-cell', 'flow.cell-reserved-name',
+            'flow.cell-not-literal', 'type.cell-not-storable']) {
             expect(seen).toContain(code);
         }
     });
@@ -263,6 +270,7 @@ describe('diagnosticText', () => {
             'type.not-callable', 'type.call-arity', 'expr.fn-not-a-value',
             'gen.js-section-unclosed', 'gen.js-section-duplicate',
             'gen.js-section-after-body', 'expr.nesting-too-deep',
+            'stmt.shadows-cell',
         ];
 
         function emitted(): Diagnostic[] {
@@ -274,6 +282,9 @@ describe('diagnosticText', () => {
                 checkProgram(program, FLOW_TYPE_ENV, all);
             }
             for (const lines of BLOCK_SAMPLES) all.push(...parseGenBody(lines, 1).diagnostics);
+            // セルはフロー行から渡って来るので、ブロック単体の網には載らない。
+            all.push(...parseGenBody(['<js', 'let n = 0', '/js>', '- [ ] 第${n}回'], 1,
+                new Map([['n', 'number']])).diagnostics);
             // ホストのスタックが尽きる形は、書いて確かめるほうが早い。
             all.push(...parseFlow('at(' + '('.repeat(4000) + '1').diagnostics);
             // ブロックには文が無いので、{ } 本体の関数はブロック側からしか出ない。

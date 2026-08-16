@@ -1,6 +1,6 @@
 import type { Span } from '../lang/Diagnostic';
 import { printExpr } from '../lang/ExprPrinter';
-import { WEEKDAY_NAMES } from '../lang/Value';
+import { WEEKDAY_NAMES, valueToLiteral } from '../lang/Value';
 import { type EveryRule, type FlowProgram, SET_FIELD_ORDER, type ScheduleNode, setHeadName } from './FlowAst';
 import { type SegmentTable, segmentIndexAt } from './FlowSegments';
 
@@ -10,7 +10,7 @@ import { type SegmentTable, segmentIndexAt } from './FlowSegments';
  * Input is accepted order-free, but every regeneration (each fire rewrites
  * the command into the next instance, decrementing the telomere) emits this
  * canonical order — files converge to it naturally over generations:
- *   schedule → xN → until → use → set → move
+ *   schedule → xN → until → let → use → set → move
  */
 export function serializeFlow(program: FlowProgram): string {
     return serializeParts(program).map(p => p.text).join(' ');
@@ -46,6 +46,14 @@ function serializeParts(program: FlowProgram): { text: string; span: Span }[] {
     if (program.schedule) parts.push({ text: serializeSchedule(program.schedule), span: program.schedule.span });
     if (program.lifetime) parts.push({ text: `x${program.lifetime.count}`, span: program.lifetime.span });
     if (program.until) parts.push({ text: `until(${printExpr(program.until.expr)})`, span: program.until.span });
+    if (program.cells) {
+        // Values, not expressions: the clause is reprinted on every fire with
+        // whatever the block last wrote, and a written value is what a fire
+        // produces. `valueToLiteral` is the same spelling `printExpr` gives a
+        // literal, so the two roads to a line agree.
+        const cells = program.cells.entries.map(c => `${c.name}: ${valueToLiteral(c.value)}`);
+        parts.push({ text: `let(${cells.join(', ')})`, span: program.cells.span });
+    }
     if (program.use) parts.push({ text: `use(${printExpr(program.use.name)})`, span: program.use.span });
     if (program.sets) {
         for (const field of SET_FIELD_ORDER) {

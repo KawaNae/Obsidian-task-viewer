@@ -93,6 +93,29 @@ export class Scope {
     }
 }
 
+/**
+ * The cells a firing carries, by name.
+ *
+ * A copy made for one firing and thrown away with it. The values on the AST
+ * are what the line says; writing to those would let a firing that failed
+ * halfway — and therefore wrote nothing — still move the state on, so the next
+ * generation would start from a generation that never existed.
+ */
+export type CellStore = Map<string, Value>;
+
+/**
+ * The frame the cells live in: outside the section, not inside it.
+ *
+ * A section declaring the same name shadows the cell instead of replacing it,
+ * so the value read back afterwards is the cell's own. The checker says what
+ * that costs; the frame is what keeps it from costing the state as well.
+ */
+export function cellScope(cells: CellStore): Scope {
+    const scope = new Scope();
+    for (const [name, value] of cells) scope.declare(name, value, true);
+    return scope;
+}
+
 /** Thrown by `break` / `continue` / `return`, caught by whatever encloses them. */
 class BreakSignal { }
 class ContinueSignal { }
@@ -118,10 +141,14 @@ export const SECTION_FUEL = 100_000;
  * A budget is made here when the caller brought none. Statements can loop and
  * call, so "unmetered" is not a state a section may run in — the flow clause
  * that has no budget is one expression and cannot do either.
+ *
+ * `parent` is the cell frame when the command declares state. The section runs
+ * in a frame of its own beneath it, so its declarations shadow the cells
+ * instead of overwriting them.
  */
-export function execProgram(program: Program, ctx: EvalContext): Scope {
+export function execProgram(program: Program, ctx: EvalContext, parent: Scope | null = null): Scope {
     const metered: EvalContext = ctx.fuel ? ctx : { ...ctx, fuel: { left: SECTION_FUEL, depth: 0 } };
-    const scope = new Scope(null, metered.vars);
+    const scope = new Scope(parent, metered.vars);
     execBody(program.body, { ...metered, scope });
     return scope;
 }

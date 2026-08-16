@@ -1,6 +1,6 @@
 import type { Span } from '../lang/Diagnostic';
 import type { Expr } from '../lang/ExprAst';
-import type { DurUnit, Weekday } from '../lang/Value';
+import type { DurUnit, Value, Weekday } from '../lang/Value';
 
 /** Calendar-grid recurrence rules (`every ...`). */
 export type EveryRule =
@@ -31,6 +31,40 @@ export function setHeadName(field: SetField): string {
 }
 
 /**
+ * One state cell declared on the flow line: `let(n: 3)`.
+ *
+ * Unlike every other clause this holds a `Value` and not an `Expr`. A cell is
+ * printed back on every fire carrying whatever the block last wrote into it,
+ * and what a block writes is a value — keeping the node in that currency
+ * leaves one road from a value to the line instead of two. It also states the
+ * rule in the type: a cell holds what can be printed and read back.
+ */
+export interface FlowCell {
+    name: string;
+    value: Value;
+    /** The name token — for diagnostics about the name. */
+    nameSpan: Span;
+    /** The literal — for diagnostics about what it holds. */
+    valueSpan: Span;
+}
+
+/**
+ * What a cell may hold.
+ *
+ * Read twice: once on the written literal, and once on the value the block
+ * leaves behind, which is the only reading that can see a list arrive. Both
+ * ask the same question, so both ask it here.
+ */
+export function isCellValue(value: Value): boolean {
+    switch (value.type) {
+        case 'array': case 'record': case 'none':
+            return false;
+        default:
+            return true;
+    }
+}
+
+/**
  * Parsed flow command. Nodes are order-free in source (each is
  * self-identifying by its head token) and at most one of each kind exists;
  * the serializer emits them in canonical order.
@@ -50,6 +84,15 @@ export interface FlowProgram {
      * expression to be a string.
      */
     use?: { name: Expr; span: Span };
+    /**
+     * `let(n: 3, ...)` — the state that travels between generations.
+     *
+     * Declared here and nowhere else: the contract is visible on the line, so
+     * a reader learns what state a chain carries without opening the block.
+     * The block reads and writes the names as ordinary mutable variables, and
+     * the fire prints what they came to back into this clause.
+     */
+    cells?: { entries: FlowCell[]; span: Span };
     /**
      * setContent(...) / setStart(...) / setEnd(...) / setDue(...) — field
      * overrides applied to the generated instance AFTER the schedule shift.

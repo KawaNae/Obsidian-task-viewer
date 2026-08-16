@@ -5,14 +5,15 @@ import { TIMER_ICON_PREFIX_RE } from '../../utils/TimerIcons';
 import type { Diagnostic } from '../lang/Diagnostic';
 import type { PropName } from '../lang/ExprAst';
 import { type EvalContext, EvalError, evalExpr } from '../lang/ExprEvaluator';
-import type { EvalHost } from '../lang/functions';
+import type { EvalHost, StaticType } from '../lang/functions';
+import type { CellStore } from '../lang/StmtEvaluator';
 import { type Value, isDatishValue, parseDateStr, valueToDisplay } from '../lang/Value';
 import type { GenBlock } from '../parsing/gen/GenBlockCollector';
 import { parseGenBody } from '../parsing/gen/GenBodyParser';
 import { renderGenBody } from '../parsing/gen/GenBodyRenderer';
 import { TaskParser } from '../parsing/TaskParser';
 import type { GeneratedChild } from '../persistence/TaskCloner';
-import { type FlowProgram, SET_FIELD_ORDER } from './FlowAst';
+import { type FlowProgram, SET_FIELD_ORDER, isCellValue } from './FlowAst';
 import type { FlowEffect } from './FlowEffects';
 import { checkGeneratedChildLine, checkGeneratedParentLine } from './GeneratedLineCheck';
 import { flowRaws, joinSegments } from './FlowSegments';
@@ -181,7 +182,12 @@ function planGenerated(
         throw new GenerationError(`No generation block named '${name.value}' in this file`);
     }
 
-    const body = parseGenBody(block.body, block.openLine + 1);
+    // A copy per fire. The block writes into this one, and a fire that fails
+    // before it is read leaves the command holding what it held.
+    const cells: CellStore = new Map(
+        program.cells?.entries.map((c): [string, Value] => [c.name, c.value]));
+
+    const body = parseGenBody(block.body, block.openLine + 1, cellTypes(cells));
     const broken = body.diagnostics.find(
         d => d.severity === 'error' && !RENDER_DECIDES.has(d.code));
     if (broken) {
@@ -191,13 +197,12 @@ function planGenerated(
     // Dates come from the new instance and content from the one that fired,
     // which is what the post-shift context already holds — the same snapshot
     // the setter clauses evaluate against.
-    const rendered = renderGenBody(body, buildEvalContext(newTask, deps));
+    const rendered = renderGenBody(body, { ...buildEvalContext(newTask, deps), cells });
     if (!rendered.ok) throw new GenerationError(rendered.error.message);
 
-    // After the block, not before. Today the clause reads nothing the block
-    // could have touched, so the two orders agree; once a `let` cell can be
-    // assigned in the body, only this one prints the value that was written.
-    newTask.flow = nextFlow(program, task.flow!);
+    // After the block, not before: what the cells came to is only known now,
+    // and this is the step that prints it.
+    newTask.flow = nextFlow(withWrittenCells(program, rendered.cells), task.flow!);
 
     const warnings: Diagnostic[] = [];
     return {
@@ -207,6 +212,48 @@ function planGenerated(
         children: rendered.children.map(child => checkedChild(child)),
         warnings,
     };
+}
+
+// ---------------------------------------------------------------------------
+// Cells
+// ---------------------------------------------------------------------------
+
+/**
+ * What the block is told the cells hold, so it can be checked against them.
+ *
+ * The type is read off the value each generation starts from, which is the
+ * only type there is: a cell is declared by what is written in it, and the
+ * next generation is declared by what the last one wrote.
+ */
+function cellTypes(cells: CellStore): ReadonlyMap<string, StaticType> {
+    const types = new Map<string, StaticType>();
+    for (const [name, value] of cells) {
+        // Neither can be declared, so neither is a type a cell ever announces.
+        if (value.type === 'array' || value.type === 'record') continue;
+        types.set(name, value.type);
+    }
+    return types;
+}
+
+/**
+ * The command the next instance carries, with the cells the block wrote.
+ *
+ * The values are checked one last time here, where a list can finally appear:
+ * the written literal could not be one, but an assignment in the block can.
+ * Refusing at this point costs nothing that was going to be kept — no effect
+ * exists yet — and the alternative is a command the next scan cannot read.
+ */
+function withWrittenCells(program: FlowProgram, written: ReadonlyMap<string, Value>): FlowProgram {
+    if (!program.cells) return program;
+    const entries = program.cells.entries.map(cell => {
+        const value = written.get(cell.name) ?? cell.value;
+        if (!isCellValue(value)) {
+            throw new GenerationError(
+                `The cell '${cell.name}' ended as ${value.type}, which cannot be written back to the command`);
+        }
+        return { ...cell, value };
+    });
+    return { ...program, cells: { ...program.cells, entries } };
 }
 
 /**
