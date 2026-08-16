@@ -144,6 +144,7 @@ tv-content: ウェブサイトリニューアル
 | [ビュー詳細](docs/views/) | 各ビューの操作方法（準備中） |
 | [設定リファレンス](docs/settings.md) | 全設定項目の説明（準備中） |
 | [コマンド](docs/commands.md) | 繰り返しタスク（`==>` フロー記法、準備中） |
+| [式リファレンス](docs/expressions.md) | フローコマンドと生成ブロックで書ける式 |
 | [CLI](docs/cli.md) | CLI リファレンス（Experimental） |
 | [Public API](docs/api.md) | API リファレンス（Experimental） |
 | [開発者向け](docs/developer.md) | 内部アーキテクチャ・型仕様（準備中） |
