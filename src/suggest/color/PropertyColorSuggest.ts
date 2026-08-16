@@ -50,9 +50,8 @@ export class PropertyColorSuggest extends AbstractInputSuggest<string> {
         }
 
         const colorKey = this.plugin.settings.tvFileKeys.color;
-        await this.plugin.app.fileManager.processFrontMatter(activeFile, (frontmatter: Record<string, unknown>) => {
-            frontmatter[colorKey] = value;
-        });
+        await this.plugin.getTaskIndex().getRepository()
+            .setFrontmatterKeys(activeFile.path, { [colorKey]: value });
 
         this.syncValue(value);
     }

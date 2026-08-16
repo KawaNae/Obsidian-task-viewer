@@ -12,6 +12,8 @@ export * from './Lexer';
 export * from './Value';
 export * from './ExprAst';
 export * from './ExprParser';
+export * from './StmtAst';
+export * from './StmtParser';
 export * from './ExprPrinter';
 export * from './ExprChecker';
 export * from './ExprEvaluator';

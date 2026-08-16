@@ -3,11 +3,12 @@ import type { DuplicateOptions, TvFileKeys, Task } from '../../types';
 import { FileOperations } from './utils/FileOperations';
 import { InlineTaskWriter } from './writers/InlineTaskWriter';
 import { FrontmatterWriter } from './writers/FrontmatterWriter';
-import { TaskCloner } from './TaskCloner';
+import { TaskCloner, type GeneratedChild } from './TaskCloner';
 import { TaskConverter } from './TaskConverter';
 import { getFileBaseName } from '../parsing/utils/TaskContent';
 import { TaskLineClassifier } from '../parsing/utils/TaskLineClassifier';
 import { ChildLineClassifier } from '../parsing/utils/ChildLineClassifier';
+import { CodeFenceTracker } from '../../utils/CodeFenceTracker';
 import type { PropertyOp } from './PropertyUpdatePlanner';
 
 /**
@@ -33,7 +34,8 @@ export class TaskRepository {
 
     // --- Inline Task Operations ---
 
-    async updateTaskInFile(task: Task, updatedTask: Task, childOps: PropertyOp[] = []): Promise<void> {
+    /** @returns whether the write actually landed (see InlineTaskWriter). */
+    async updateTaskInFile(task: Task, updatedTask: Task, childOps: PropertyOp[] = []): Promise<boolean> {
         return this.inlineWriter.updateTaskInFile(task, updatedTask, childOps);
     }
 
@@ -83,12 +85,13 @@ export class TaskRepository {
 
     // --- tv-file Task Operations ---
 
+    /** @returns whether the write actually landed (see FrontmatterWriter). */
     async updateTvFile(
         task: Task,
         updates: Partial<Task>,
         frontmatterKeys: TvFileKeys,
         propertyOps: PropertyOp[] = []
-    ): Promise<void> {
+    ): Promise<boolean> {
         return this.frontmatterWriter.updateTvFile(task, updates, frontmatterKeys, propertyOps);
     }
 
@@ -98,6 +101,19 @@ export class TaskRepository {
 
     async insertLineAfterTvFile(filePath: string, lineContent: string, header: string, headerLevel: number): Promise<void> {
         return this.frontmatterWriter.insertLineAfterTvFile(filePath, lineContent, header, headerLevel);
+    }
+
+    /**
+     * Task を介さない frontmatter 書き込みの入口。タイマーの対象 ID や、
+     * プロパティ欄のサジェストが使う（いずれも Task ではなくファイルとキーで
+     * 書き先が決まる）。
+     */
+    async setFrontmatterKeys(filePath: string, updates: Record<string, string | null>): Promise<void> {
+        return this.frontmatterWriter.setKeys(filePath, updates);
+    }
+
+    async deleteFrontmatterKeyIfValue(filePath: string, key: string, expected: string): Promise<void> {
+        return this.frontmatterWriter.deleteKeyIfValue(filePath, key, expected);
     }
 
     // --- Task Cloning Operations ---
@@ -110,8 +126,22 @@ export class TaskRepository {
         return this.cloner.duplicateTvFile(task, keys, options);
     }
 
-    async insertRecurrenceForTask(task: Task, content: string, copyChildren = true, flowLines: string[] = []): Promise<void> {
-        return this.cloner.insertRecurrenceForTask(task, content, copyChildren, flowLines);
+    async insertRecurrenceForTask(task: Task, content: string, flowLines: string[] = []): Promise<void> {
+        return this.cloner.insertRecurrenceForTask(task, content, flowLines);
+    }
+
+    /**
+     * Write the next instance from a gen block's output. See
+     * {@link TaskCloner.insertGeneratedInstance} for what the caller owes and
+     * what this layer decides.
+     */
+    async insertGeneratedInstance(
+        task: Task,
+        parentLine: string,
+        flowLines: string[],
+        children: GeneratedChild[],
+    ): Promise<void> {
+        return this.cloner.insertGeneratedInstance(task, parentLine, flowLines, children);
     }
 
     // --- Task Conversion Operations ---
@@ -156,8 +186,11 @@ export class TaskRepository {
         const firstChild = childrenLines.find(l => l.trim() !== '');
         const childIndent = firstChild ? (firstChild.match(/^\s*/)?.[0] ?? '') : '';
         const normalized = FileOperations.adjustChildIndentation(childrenLines, childIndent);
-        // property 行 (- key:: value) は frontmatter へ昇格済みのため body から除外
-        return normalized.filter(line => !ChildLineClassifier.isPropertyLine(line));
+        // property 行 (- key:: value) は frontmatter へ昇格済みのため body から除外。
+        // ただしフェンス内の同じ形の行は宣言ではなく見本で、frontmatter へ昇格
+        // してもいないので、落とすと本文から消えるだけになる。
+        const fenced = CodeFenceTracker.subtreeMask(normalized);
+        return normalized.filter((line, i) => fenced[i] || !ChildLineClassifier.isPropertyLine(line));
     }
 
     /**

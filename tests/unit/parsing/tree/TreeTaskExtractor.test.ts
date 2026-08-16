@@ -747,4 +747,83 @@ describe('TreeTaskExtractor', () => {
             });
         });
     });
+
+    describe('コードフェンス内の記法', () => {
+        it('fence 内の `- ==>` はコマンドにならない', () => {
+            const tasks = extractTasks([
+                '- [ ] 手順メモ @2026-08-20',
+                '    ```markdown',
+                '    - ==> every 1d',
+                '    ```',
+            ]);
+            expect(tasks).toHaveLength(1);
+            expect(tasks[0].flow).toBeUndefined();
+        });
+
+        it('fence 内の行は childLines に残る（カードのコードブロックが壊れない）', () => {
+            const tasks = extractTasks([
+                '- [ ] 手順メモ @2026-08-20',
+                '    ```markdown',
+                '    - ==> every 1d',
+                '    ```',
+            ]);
+            expect(tasks[0].childLines.map(cl => cl.text.trim())).toEqual([
+                '```markdown',
+                '- ==> every 1d',
+                '```',
+            ]);
+        });
+
+        it('fence 内の `- ==>` は日付なし checkbox を昇格させない', () => {
+            const tasks = extractTasks([
+                '- [ ] ただのメモ',
+                '    ```markdown',
+                '    - ==> every 1d',
+                '    ```',
+            ]);
+            expect(tasks).toHaveLength(0);
+        });
+
+        it('fence 内の checkbox はタスクにならない（既存 baseline）', () => {
+            const tasks = extractTasks([
+                '- [ ] 手順メモ @2026-08-20',
+                '    ```markdown',
+                '    - [ ] fenced @2026-08-21',
+                '    ```',
+            ]);
+            expect(tasks.map(t => t.content)).toEqual(['手順メモ']);
+        });
+
+        it('fence が閉じた後の `- ==>` は通常どおりコマンドになる', () => {
+            const tasks = extractTasks([
+                '- [ ] 手順メモ @2026-08-20',
+                '    ```markdown',
+                '    - ==> every 1d',
+                '    ```',
+                '    - ==> every mon',
+            ]);
+            expect(tasks[0].flow?.program).not.toBeNull();
+            expect(tasks[0].flow?.childSegments.map(s => s.raw)).toEqual(['every mon']);
+        });
+
+        it('~~~ fence でも同じ', () => {
+            const tasks = extractTasks([
+                '- [ ] 手順メモ @2026-08-20',
+                '    ~~~',
+                '    - ==> every 1d',
+                '    ~~~',
+            ]);
+            expect(tasks[0].flow).toBeUndefined();
+        });
+
+        it('ドキュメント先頭からの fence 内も無視する', () => {
+            const tasks = extractTasks([
+                '```markdown',
+                '- [ ] 例 @2026-08-20',
+                '    - ==> every 1d',
+                '```',
+            ]);
+            expect(tasks).toHaveLength(0);
+        });
+    });
 });

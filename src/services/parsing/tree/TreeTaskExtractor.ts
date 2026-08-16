@@ -241,8 +241,13 @@ export class TreeTaskExtractor {
     private static mergeChildFlow(task: Task, block: TaskBlock): Set<number> {
         if (!isTvInline(task)) return new Set();
 
-        const indices = collectFlowLineIndices([block.rawLine, ...block.childRawLines], 0)
-            .map(i => i - 1);
+        // フェンス判定は DocumentTreeBuilder が済ませている（block.childFenced）。
+        // タスク行自身は task-block になっている時点で非フェンスが確定している。
+        const indices = collectFlowLineIndices(
+            [block.rawLine, ...block.childRawLines],
+            0,
+            [false, ...block.childFenced],
+        ).map(i => i - 1);
         if (indices.length === 0) return new Set();
 
         const oldFlow = task.flow;

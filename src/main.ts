@@ -44,6 +44,8 @@ import { TaskViewHoverParent } from './views/taskcard/TaskViewHoverParent';
 import { TaskHubPanel, type TaskHubPanelOptions } from './modals/hub/TaskHubPanel';
 import { createTaskMenuExtension } from './editor/TaskMenuExtension';
 import { createDiagnosticsExtension } from './editor/DiagnosticsExtension';
+import { createGenBlockPreview } from './editor/GenBlockPreview';
+import { GEN_LANGUAGE_TAG } from './services/parsing/gen/GenBlockCollector';
 import { toDisplayTask } from './services/display/DisplayTaskConverter';
 import { registerCliHandlers } from './cli/CliRegistrar';
 import { TaskApi } from './api/TaskApi';
@@ -362,6 +364,11 @@ export default class TaskViewerPlugin extends Plugin {
         // Wavy-underline diagnostics for `==>` flow commands and `@date`
         // blocks. Pure re-parse of visible lines — no TaskIndex.
         this.registerEditorExtension(createDiagnosticsExtension());
+
+        // Reading-view rendering of `tv-gen` blocks. Also the only place a
+        // Live Preview user sees their diagnostics: Obsidian replaces a
+        // closed fence with this widget, and the editor underlines go with it.
+        this.registerMarkdownCodeBlockProcessor(GEN_LANGUAGE_TAG, createGenBlockPreview());
 
         // File context menu integration for frontmatter tasks.
         // Frontmatter tasks have no inline anchor in the editor body (file menu is the only entry point),

@@ -4,6 +4,7 @@ import { parseFlow } from '../../../src/services/flow/FlowParser';
 import { parseFlowSegments } from '../../../src/services/flow/FlowSegments';
 import { EvalError } from '../../../src/services/lang/ExprEvaluator';
 import { Task } from '../../../src/types';
+import { TIMER_ICONS } from '../../../src/utils/TimerIcons';
 import { makeTask } from '../helpers/makeTask';
 
 // 2026-07-02 is a Thursday.
@@ -12,6 +13,7 @@ const DEPS: FlowPlanDeps = {
     now: { date: '2026-07-02', time: '10:00' },
     weekStartDay: 1,
     host: { formatDate: (v, tokens) => `[${tokens}]` },
+    getBlock: () => undefined,
 };
 
 function plan(src: string, overrides: Partial<Task> = {}) {
@@ -24,6 +26,24 @@ function plan(src: string, overrides: Partial<Task> = {}) {
 function createNextOf(effects: ReturnType<typeof plan>) {
     const e = effects.find(e => e.kind === 'create-next');
     if (!e || e.kind !== 'create-next') throw new Error('no create-next effect');
+    return e;
+}
+
+/** Plan a fire whose command names a block, with that block in hand. */
+function planGenerated(src: string, body: string[], overrides: Partial<Task> = {}) {
+    const { program, diagnostics } = parseFlow(src);
+    if (!program) throw new Error(`parse failed: ${diagnostics.map(d => d.message).join('; ')}`);
+    const task = makeTask({
+        statusChar: 'x',
+        flow: { raw: src, childSegments: [], program, diagnostics: [] },
+        ...overrides,
+    });
+    const effects = planFlow(task, program, {
+        ...DEPS,
+        getBlock: (_file, name) => ({ name, body, openLine: 0, closeLine: body.length + 1 }),
+    });
+    const e = effects.find(e => e.kind === 'create-generated');
+    if (!e || e.kind !== 'create-generated') throw new Error('no create-generated effect');
     return e;
 }
 
@@ -332,20 +352,119 @@ describe('FlowPlanner', () => {
     });
 
     describe('options', () => {
-        it('nochildren turns off child copying', () => {
-            expect(createNextOf(plan('at(today + 1d) nochildren', { startDate: '2026-07-01' })).copyChildren).toBe(false);
-            expect(createNextOf(plan('at(today + 1d)', { startDate: '2026-07-01' })).copyChildren).toBe(true);
+        it('plans the same effect with or without the retired clause', () => {
+            // Nothing in the effect answers for children any more. What a
+            // task's children hold is what that instance did, and the writer
+            // has no knob left to be asked otherwise.
+            const plain = createNextOf(plan('at(today + 1d)', { startDate: '2026-07-01' }));
+            const retired = createNextOf(plan('at(today + 1d) nochildren', { startDate: '2026-07-01' }));
+
+            expect(Object.keys(plain).sort()).toEqual(['kind', 'newTask']);
+            expect(retired.newTask.startDate).toBe(plain.newTask.startDate);
         });
 
         it('strips timer emoji prefixes from the copied content', () => {
             const { newTask } = createNextOf(plan('at(today + 1d)', { startDate: '2026-07-01', content: '⏱️ Test task' }));
             expect(newTask.content).toBe('Test task');
         });
+
+        // 一覧を TimerIcons に寄せる前は付ける側にしか無いアイコンがあり、
+        // interval（非ポモドーロ）の `🔁` が次インスタンスに残っていた。
+        it('strips every icon the timer can produce', () => {
+            for (const icon of TIMER_ICONS) {
+                const { newTask } = createNextOf(
+                    plan('at(today + 1d)', { startDate: '2026-07-01', content: `${icon} Test task` })
+                );
+                expect(newTask.content).toBe('Test task');
+            }
+        });
     });
 
     describe('runtime failures', () => {
         it('throws EvalError when a referenced property is unset (executor leaves command intact)', () => {
             expect(() => plan('every mon setDue(end + 1d)', { startDate: '2026-06-29' })).toThrow(EvalError);
+        });
+    });
+
+    describe('generation: what the engine corrected travels with the effect', () => {
+        it('reports the status it dropped from the parent line', () => {
+            // The written line differs from the one the block describes, and
+            // this is the only record of it — the block is not rewritten.
+            const effect = planGenerated(
+                'every mon use("週報")',
+                ['- [x] 週報 @${start}'],
+                { startDate: '2026-06-29' },
+            );
+
+            expect(effect.parentLine.startsWith('- [ ] ')).toBe(true);
+            expect(effect.warnings.map(w => w.code)).toEqual(['gen.generated-status']);
+        });
+
+        it('says nothing when there was nothing to correct', () => {
+            const effect = planGenerated(
+                'every mon use("週報")',
+                ['- [ ] 週報 @${start}'],
+                { startDate: '2026-06-29' },
+            );
+
+            expect(effect.warnings).toEqual([]);
+        });
+    });
+
+    describe('dates: the whole date block, for the block that has to write one', () => {
+        const dated = { startDate: '2026-06-29', endDate: '2026-07-03', due: '2026-07-05' };
+
+        it('carries start, end and due of the new instance', () => {
+            const effect = planGenerated(
+                'every mon use("週報")', ['- [ ] 週報 ${dates}'], dated);
+
+            expect(effect.parentLine)
+                .toBe('- [ ] 週報 @2026-07-06>2026-07-10>2026-07-12 ==> every mon use("週報")');
+        });
+
+        it('is what writing the parts by hand loses', () => {
+            // 動機そのもの。use() のブロックは親行の唯一の著者なので、
+            // 日付を手で組むと end と due が黙って落ちる。
+            const byHand = planGenerated(
+                'every mon use("週報")', ['- [ ] 週報 @${start}'], dated);
+
+            expect(byHand.parentLine).toContain('@2026-07-06 ');
+            expect(byHand.parentLine).not.toContain('2026-07-10');
+            expect(byHand.parentLine).not.toContain('2026-07-12');
+        });
+
+        it('writes the times too, in the notation the line uses', () => {
+            const effect = planGenerated(
+                'every mon use("週報")', ['- [ ] 週報 ${dates}'],
+                { startDate: '2026-06-29', startTime: '09:00', endDate: '2026-06-29', endTime: '10:30' });
+
+            expect(effect.parentLine).toContain('@2026-07-06T09:00>10:30');
+        });
+
+        it('is empty when the instance ends up with no dates at all', () => {
+            // 空文字であって失敗ではない。書く物が無いのだから、書かない。
+            // スケジュールは必ず日付を作るので、消えるのは set が消したとき。
+            const effect = planGenerated(
+                'every mon setStart(none) use("週報")', ['- [ ] 週報${dates}'],
+                { startDate: '2026-06-29' });
+
+            expect(effect.parentLine).toBe('- [ ] 週報 ==> every mon use("週報") setStart(none)');
+        });
+
+        it('leaves no trailing space behind when it is empty', () => {
+            // 空の dates は行末の空白になりうる。書き込み層が 2 か所で trim
+            // しているので出ない、を測っておく（tv-xparse の観察）。
+            const effect = planGenerated(
+                'every mon setStart(none) use("週報")', ['- [ ] ${content} ${dates}'],
+                { content: '週報', startDate: '2026-06-29' });
+
+            expect(effect.parentLine).toBe('- [ ] 週報 ==> every mon use("週報") setStart(none)');
+        });
+
+        it('reads on the flow line as well, against the same snapshot set() sees', () => {
+            const effect = createNextOf(plan('every mon setContent(dates)', dated));
+
+            expect(effect.newTask.content).toBe('@2026-07-06>2026-07-10>2026-07-12');
         });
     });
 });

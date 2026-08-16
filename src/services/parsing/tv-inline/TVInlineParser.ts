@@ -10,6 +10,7 @@ import { parseDateTimeField } from '../utils/DateTimeFieldParser';
 import { TaskLineClassifier } from '../utils/TaskLineClassifier';
 import { validateDateTimeRules, type DateTimeValidationResult } from '../utils/DateTimeRuleValidator';
 import { DATE_BLOCK_REGEX } from './DateBlockLocator';
+import { formatDateBlock } from './DateBlockFormat';
 
 interface DateBlockResult {
     date: string;
@@ -251,60 +252,12 @@ export class TVInlineParser implements LeafParserStrategy {
 
     format(task: Task): string {
         const statusChar = task.statusChar || ' ';
-        let metaStr = '';
-        let hasDateBlock = false;
-
-        let startStr = '';
-        if (task.startDate) {
-            startStr = `@${task.startDate}`;
-            if (task.startTime) startStr += `T${task.startTime}`;
-            hasDateBlock = true;
-        } else if (task.startTime) {
-            startStr = `@${task.startTime}`;
-            hasDateBlock = true;
-        } else if (task.endDate || task.endTime || task.due) {
-            startStr = '@';
-            hasDateBlock = true;
-        }
-
-        if (hasDateBlock) {
-            metaStr += ` ${startStr}`;
-
-            // End Part Logic
-            if (task.endDate) {
-                // endDate is explicitly set
-                // If future (no startDate), isSameDay is false.
-                const isSameDay = task.startDate ? (task.endDate === task.startDate) : false;
-
-                const hasEndTime = !!task.endTime;
-                const needsExplicitEnd = !isSameDay || hasEndTime;
-
-                if (needsExplicitEnd) {
-                    metaStr += '>';
-                    if (!isSameDay) {
-                        metaStr += task.endDate;
-                        if (hasEndTime) metaStr += `T${task.endTime}`;
-                    } else {
-                        metaStr += task.endTime;
-                    }
-                } else {
-                    // End=Start.
-                    if (task.due) metaStr += '>';
-                }
-            } else if (task.endTime) {
-                // endTime is set but endDate is not (same day case)
-                // Output: >HH:mm
-                metaStr += `>${task.endTime}`;
-            } else {
-                // No end date or time
-                if (task.due) metaStr += '>';
-            }
-
-            // Due Part
-            if (task.due) {
-                metaStr += `>${task.due}`;
-            }
-        }
+        // The block itself is built where the `dates` built-in reads it from,
+        // so the notation a line is written in and the notation a generation
+        // block is handed are one implementation rather than two that agree
+        // until one of them is changed.
+        const dateBlock = formatDateBlock(task);
+        const metaStr = dateBlock ? ` ${dateBlock}` : '';
 
         // Flow text is always re-emitted verbatim (round-trip safety, even
         // for unparseable commands). Canonical re-serialization happens only

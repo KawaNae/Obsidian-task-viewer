@@ -98,9 +98,9 @@ describe('ExprEvaluator', () => {
 
     it('computes next weekday strictly after the base', () => {
         // 2026-07-02 is a Thursday
-        expect(evaluate('next(thu)')).toEqual({ type: 'date', value: '2026-07-09' });
-        expect(evaluate('next(fri)')).toEqual({ type: 'date', value: '2026-07-03' });
-        expect(evaluate('next(mon, 2026-07-02)')).toEqual({ type: 'date', value: '2026-07-06' });
+        expect(evaluate('next("thu")')).toEqual({ type: 'date', value: '2026-07-09' });
+        expect(evaluate('next("fri")')).toEqual({ type: 'date', value: '2026-07-03' });
+        expect(evaluate('next("mon", 2026-07-02)')).toEqual({ type: 'date', value: '2026-07-06' });
     });
 
     it('computes grid occurrences (the engine behind every <interval>)', () => {
@@ -157,5 +157,99 @@ describe('ExprEvaluator', () => {
 
     it('evaluates time() on arithmetic result', () => {
         expect(evaluate('time(2026-07-15 + 2h)')).toEqual({ type: 'time', value: '02:00' });
+    });
+
+    describe('multiplicative', () => {
+        it('multiplies and takes the remainder of numbers', () => {
+            expect(evaluate('3 * 4')).toEqual({ type: 'number', value: 12 });
+            expect(evaluate('7 % 3')).toEqual({ type: 'number', value: 1 });
+        });
+
+        it('scales a duration, keeping its unit', () => {
+            // 間隔反復（gap を倍にする）で使う形。
+            expect(evaluate('1d * 2')).toEqual({ type: 'duration', amount: 2, unit: 'd' });
+            expect(evaluate('2 * 3h')).toEqual({ type: 'duration', amount: 6, unit: 'h' });
+            expect(evaluate('4w / 2')).toEqual({ type: 'duration', amount: 2, unit: 'w' });
+        });
+
+        it('refuses a fractional duration instead of writing one that cannot be read back', () => {
+            // duration リテラルは整数 + 単位なので、2.5d は書けても読み戻せない。
+            // 印字できない値を作らせないことで round-trip を守る。
+            expect(() => evaluate('1d / 2')).toThrow(EvalError);
+            expect(() => evaluate('3d / 2')).toThrow(EvalError);
+            // 小さい単位で言えば通る。
+            expect(evaluate('24h / 2')).toEqual({ type: 'duration', amount: 12, unit: 'h' });
+        });
+
+        it('rounds division to a fixed number of places', () => {
+            // 1 / 3 は終わらないので、桁数を規則で決める。
+            expect(evaluate('1 / 3')).toEqual({ type: 'number', value: 0.3333333333 });
+            expect(evaluate('10 / 4')).toEqual({ type: 'number', value: 2.5 });
+        });
+
+        it('fails on division by zero instead of producing infinity', () => {
+            // 評価が失敗すればコマンドは消費されない。無限大の値表現は持たない。
+            expect(() => evaluate('1 / 0')).toThrow(EvalError);
+            expect(() => evaluate('1d / 0')).toThrow(EvalError);
+        });
+
+        it('binds tighter than addition', () => {
+            expect(evaluate('1 + 2 * 3')).toEqual({ type: 'number', value: 7 });
+            expect(evaluate('(1 + 2) * 3')).toEqual({ type: 'number', value: 9 });
+        });
+    });
+
+    describe('members and methods', () => {
+        it('formats a date through the method form', () => {
+            expect(evaluate('start.format("YYYY-MM-DD")', { start: { type: 'date', value: '2026-08-17' } }))
+                .toEqual({ type: 'string', value: '[YYYY-MM-DD:2026-08-17]' });
+        });
+
+        it('names the weekday as a string', () => {
+            // 曜日は文字列で返す。引用符付きの比較が静かに false にならないため。
+            expect(evaluate('start.weekday()', { start: { type: 'date', value: '2026-08-18' } }))
+                .toEqual({ type: 'string', value: 'tue' });
+            expect(evaluate('start.weekday() === "tue"', { start: { type: 'date', value: '2026-08-18' } }))
+                .toEqual({ type: 'bool', value: true });
+        });
+
+        it('reads string members and methods', () => {
+            expect(evaluate('"週報".length')).toEqual({ type: 'number', value: 2 });
+            expect(evaluate('"abc".toUpperCase()')).toEqual({ type: 'string', value: 'ABC' });
+            expect(evaluate('"a-b".replace("-", "+")')).toEqual({ type: 'string', value: 'a+b' });
+            expect(evaluate('"abc".includes("b")')).toEqual({ type: 'bool', value: true });
+        });
+
+        it('short-circuits optional chaining on a missing value', () => {
+            expect(evaluate('end?.format("MM")', { end: { type: 'none' } })).toEqual({ type: 'none' });
+            expect(() => evaluate('end.format("MM")', { end: { type: 'none' } })).toThrow(EvalError);
+        });
+
+        it('resolves the tv namespace to the bare built-ins', () => {
+            expect(evaluate('tv.date.format(start, "MM/DD")', { start: { type: 'date', value: '2026-08-17' } }))
+                .toEqual({ type: 'string', value: '[MM/DD:2026-08-17]' });
+        });
+    });
+    it('falls back with ?? only when the left side is none', () => {
+        expect(evaluate('time(2026-07-15) ?? 09:00')).toEqual({ type: 'time', value: '09:00' });
+        expect(evaluate('time(2026-07-15T14:30) ?? 09:00')).toEqual({ type: 'time', value: '14:30' });
+    });
+
+    it('names the weekday in the same seven identifiers everywhere', () => {
+        const props = { start: { type: 'date', value: '2026-07-02' } } as EvalContext['props'];
+        expect(evaluate('start.weekday()', props)).toEqual({ type: 'string', value: 'thu' });
+        expect(evaluate('start.weekday() == "thu"', props)).toEqual({ type: 'bool', value: true });
+    });
+
+    it('replaces the first occurrence, replaceAll every one', () => {
+        const props = { content: { type: 'string', value: 'a-a-a' } } as EvalContext['props'];
+        expect(evaluate('content.replace("a", "b")', props)).toEqual({ type: 'string', value: 'b-a-a' });
+        expect(evaluate('content.replaceAll("a", "b")', props)).toEqual({ type: 'string', value: 'b-b-b' });
+    });
+
+    it('counts length in the same units indexOf and slice use', () => {
+        const props = { content: { type: 'string', value: '\u{1F389}ab' } } as EvalContext['props'];
+        expect(evaluate('content.length', props)).toEqual({ type: 'number', value: 4 });
+        expect(evaluate('content.indexOf("a")', props)).toEqual({ type: 'number', value: 2 });
     });
 });

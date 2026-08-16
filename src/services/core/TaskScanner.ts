@@ -154,6 +154,21 @@ export class TaskScanner {
             statusDefinitions: this.settings.statusDefinitions,
         });
 
+        // What this scan decided, which is the first question a report of a
+        // task generated twice has to answer: two scans of one change that
+        // each fired, or one scan that fired twice.
+        //
+        // A third shape — a pipeline that outlived its index and kept scanning
+        // — reads differently in the two places this line goes. The stored log
+        // cannot show it: every load of the plugin gets its own copy of this
+        // module, and only the live one's manager flushes, so the copies write
+        // where nobody reads. The console can: it belongs to the window rather
+        // than to a copy, so with verbose on, one change printing this line
+        // twice is a surviving pipeline saying so.
+        if (!this.isInitializing) {
+            logDebug(`[scan] file=${file.path} isLocal=${isLocalChange} fired=${tasksToTrigger.length}`);
+        }
+
         // --- commit (batched: 1 file = 1 revision bump) ---
         this.store.beginBatch();
         try {
@@ -166,6 +181,10 @@ export class TaskScanner {
             if (parsed.fmTask) {
                 this.store.setWikilinkRefs(parsed.fmTask.id, parsed.wikilinkRefs);
             }
+
+            // removeTasksByFile above dropped the previous ones, so this is a
+            // replacement, not a merge — the scan owns the file's blocks.
+            this.store.setGenBlocks(file.path, parsed.genBlocks);
         } finally {
             this.store.endBatch();
         }

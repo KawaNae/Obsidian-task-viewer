@@ -2,23 +2,97 @@ import { addDays, addMonths, addYears, differenceInCalendarDays } from 'date-fns
 import type { Span } from './Diagnostic';
 import type { Expr, FnName } from './ExprAst';
 import {
-    type DurUnit, type Value, type Weekday, formatDateStr, isDatishValue, parseDateStr,
+    type DurUnit, type Value, WEEKDAY_NAMES, type Weekday, dateAt, formatDateStr, isDatishValue, parseDateStr,
+    weekdayFromName,
 } from './Value';
 
 /**
  * Static types used by the checker. 'datish' is the date|datetime family
  * (task date fields may be either depending on whether a time is present).
  * 'error' is the poison type that suppresses cascading diagnostics.
+ *
+ * A list carries its element type: `map` has to know what its parameter is
+ * before it can check the body written for it. Spelled out rather than
+ * derived from `Value['type']` so a bare 'array' — a list of nothing in
+ * particular — cannot be written.
  */
-export type StaticType = Value['type'] | 'datish' | 'error';
+export type ScalarType =
+    | 'date' | 'datetime' | 'time' | 'duration'
+    | 'string' | 'number' | 'bool' | 'link' | 'none'
+    | 'datish' | 'error';
+
+export interface ArrayType { readonly array: StaticType }
+
+/** A record: the fields it holds, by name. Order is not part of the type. */
+export interface RecordType { readonly fields: Readonly<Record<string, StaticType>> }
+
+export type StaticType = ScalarType | ArrayType | RecordType;
+
+export function arrayOf(element: StaticType): ArrayType {
+    return { array: element };
+}
+
+export function recordOf(fields: Record<string, StaticType>): RecordType {
+    // No prototype, so `toString` and `constructor` are absent until someone
+    // writes them, and `__proto__` is an ordinary field name rather than a
+    // way to reach the prototype. A record's field names come from the
+    // document, so every name JS gives an object for free would otherwise be
+    // a field this language never declared.
+    const own: Record<string, StaticType> = Object.create(null);
+    for (const key of Object.keys(fields)) own[key] = fields[key];
+    return { fields: own };
+}
+
+/** A field this record actually has. */
+export function recordFieldType(t: RecordType, name: string): StaticType | undefined {
+    return Object.hasOwn(t.fields, name) ? t.fields[name] : undefined;
+}
+
+export function isArrayType(t: StaticType): t is ArrayType {
+    return typeof t === 'object' && 'array' in t;
+}
+
+export function isRecordType(t: StaticType): t is RecordType {
+    return typeof t === 'object' && 'fields' in t;
+}
+
+/** Display form for diagnostics: `string[]`, `number[][]`, `{a: string}`. */
+export function typeName(t: StaticType): string {
+    if (isArrayType(t)) return `${typeName(t.array)}[]`;
+    if (isRecordType(t)) {
+        const fields = Object.entries(t.fields).map(([k, v]) => `${k}: ${typeName(v)}`);
+        return `{${fields.join(', ')}}`;
+    }
+    return t;
+}
 
 export function isDatishType(t: StaticType): boolean {
     return t === 'date' || t === 'datetime' || t === 'datish';
 }
 
+/** Structural equality — two containers match when their contents do. */
+export function sameType(a: StaticType, b: StaticType): boolean {
+    if (isArrayType(a) || isArrayType(b)) {
+        return isArrayType(a) && isArrayType(b) && sameType(a.array, b.array);
+    }
+    if (isRecordType(a) || isRecordType(b)) {
+        if (!isRecordType(a) || !isRecordType(b)) return false;
+        const ak = Object.keys(a.fields);
+        const bk = Object.keys(b.fields);
+        return ak.length === bk.length
+            && ak.every(k => Object.hasOwn(b.fields, k) && sameType(a.fields[k], b.fields[k]));
+    }
+    return a === b;
+}
+
 export function isAssignable(actual: StaticType, expected: StaticType): boolean {
     if (actual === 'error') return true;
     if (actual === 'none') return true;
+    if (isArrayType(expected)) {
+        return isArrayType(actual) && isAssignable(actual.array, expected.array);
+    }
+    if (isRecordType(expected)) return isRecordType(actual) && sameType(actual, expected);
+    if (isArrayType(actual) || isRecordType(actual)) return false;
     if (expected === 'datish') return isDatishType(actual);
     return actual === expected;
 }
@@ -39,6 +113,8 @@ export interface FnSig {
     minArgs: number;
     /** Expected type per position (covers minArgs..params.length). */
     params: StaticType[];
+    /** When set, arguments past `params` are allowed and must have this type. */
+    rest?: StaticType;
     result: StaticType;
     /**
      * Extra constraint applied at check time (e.g. unit keyword must be a
@@ -62,14 +138,34 @@ function requireUnitKeyword(args: Expr[]): FnSigViolation | null {
     return null;
 }
 
+/** A constant weekday name is checkable now rather than at fire time. */
+function requireWeekdayName(args: Expr[]): FnSigViolation | null {
+    const first = args[0];
+    if (first && first.kind === 'lit' && first.value.type === 'string' && weekdayFromName(first.value.value) === null) {
+        return {
+            code: 'type.bad-weekday-name',
+            message: `Expected a weekday name (${WEEKDAY_NAMES.join(', ')}), got '${first.value.value}'`,
+            span: first.span,
+            params: { actual: first.value.value },
+        };
+    }
+    return null;
+}
+
 export const FN_SIGS: Record<FnName, FnSig> = {
     format: { name: 'format', minArgs: 2, params: ['datish', 'string'], result: 'string' },
-    next: { name: 'next', minArgs: 1, params: ['weekday', 'datish'], result: 'date' },
+    next: { name: 'next', minArgs: 1, params: ['string', 'datish'], result: 'date', checkArgs: requireWeekdayName },
     startOf: { name: 'startOf', minArgs: 1, params: ['string', 'datish'], result: 'date', checkArgs: requireUnitKeyword },
     endOf: { name: 'endOf', minArgs: 1, params: ['string', 'datish'], result: 'date', checkArgs: requireUnitKeyword },
     nextCycle: { name: 'nextCycle', minArgs: 2, params: ['datish', 'duration'], result: 'datish' },
     date: { name: 'date', minArgs: 1, params: ['datish'], result: 'date' },
     time: { name: 'time', minArgs: 1, params: ['datish'], result: 'time' },
+    'Math.floor': { name: 'Math.floor', minArgs: 1, params: ['number'], result: 'number' },
+    'Math.ceil': { name: 'Math.ceil', minArgs: 1, params: ['number'], result: 'number' },
+    'Math.round': { name: 'Math.round', minArgs: 1, params: ['number'], result: 'number' },
+    'Math.abs': { name: 'Math.abs', minArgs: 1, params: ['number'], result: 'number' },
+    'Math.min': { name: 'Math.min', minArgs: 1, params: ['number'], rest: 'number', result: 'number' },
+    'Math.max': { name: 'Math.max', minArgs: 1, params: ['number'], rest: 'number', result: 'number' },
 };
 
 // ---------------------------------------------------------------------------
@@ -94,53 +190,110 @@ export interface EvalRuntime {
     host: EvalHost;
 }
 
-export class FnCallError extends Error { }
+/**
+ * A built-in refusing the arguments it was handed at run time.
+ *
+ * Carries a `code` and `params` like `EvalError` does, because that is where
+ * it ends up: the evaluator catches it at the call and rethrows it with the
+ * call's span. Losing the code there would leave these sentences as the only
+ * untranslatable ones in the language.
+ */
+export class FnCallError extends Error {
+    constructor(
+        public readonly code: string,
+        message: string,
+        public readonly params?: Record<string, string | number>,
+    ) {
+        super(message);
+    }
+}
 
 export function callFn(fn: FnName, args: Value[], rt: EvalRuntime): Value {
     switch (fn) {
         case 'format': {
             const [target, tokens] = args;
-            if (!isDatishValue(target)) throw new FnCallError('format() expects a date or datetime');
-            if (tokens.type !== 'string') throw new FnCallError('format() expects a token string');
+            if (!isDatishValue(target)) throw new FnCallError('eval.fn-format-not-datish',
+                'format() expects a date or datetime');
+            if (tokens.type !== 'string') throw new FnCallError('eval.fn-format-token-string',
+                'format() expects a token string');
             return { type: 'string', value: rt.host.formatDate(target, tokens.value, rt.weekStartDay) };
         }
         case 'next': {
             const [weekday, from] = args;
-            if (weekday.type !== 'weekday') throw new FnCallError('next() expects a weekday');
-            return { type: 'date', value: nextWeekdayAfter(weekday.value, datishDateOr(from, rt.today)) };
+            const day = weekday.type === 'string' ? weekdayFromName(weekday.value) : null;
+            if (day === null) throw new FnCallError('eval.fn-next-weekday',
+                `next() expects a weekday name (${WEEKDAY_NAMES.join(', ')})`,
+                { names: WEEKDAY_NAMES.join(', ') });
+            return { type: 'date', value: nextWeekdayAfter(day, datishDateOr(from, rt.today)) };
         }
         case 'startOf':
         case 'endOf': {
             const [unit, from] = args;
-            if (unit.type !== 'string') throw new FnCallError(`${fn}() expects week, month or year`);
+            if (unit.type !== 'string') throw new FnCallError('eval.fn-unit-keyword',
+                `${fn}() expects week, month or year`, { fn });
             const base = parseDateStr(datishDateOr(from, rt.today));
             return { type: 'date', value: formatDateStr(fn === 'startOf' ? startOf(unit.value, base, rt.weekStartDay) : endOf(unit.value, base, rt.weekStartDay)) };
         }
         case 'nextCycle': {
             const [anchor, step] = args;
-            if (!isDatishValue(anchor)) throw new FnCallError('nextCycle() expects a date or datetime anchor');
-            if (step.type !== 'duration') throw new FnCallError('nextCycle() expects a duration step');
+            if (!isDatishValue(anchor)) throw new FnCallError('eval.fn-cycle-anchor',
+                'nextCycle() expects a date or datetime anchor');
+            if (step.type !== 'duration') throw new FnCallError('eval.fn-cycle-step',
+                'nextCycle() expects a duration step');
             const anchorDate = anchor.type === 'date' ? anchor.value : anchor.date;
             const anchorTime = anchor.type === 'datetime' ? anchor.time : undefined;
             return nextCycle(anchorDate, anchorTime, { amount: step.amount, unit: step.unit }, rt);
         }
         case 'date': {
             const [v] = args;
-            if (!isDatishValue(v)) throw new FnCallError('date() expects a date or datetime');
+            if (!isDatishValue(v)) throw new FnCallError('eval.fn-date-not-datish',
+                'date() expects a date or datetime');
             return { type: 'date', value: v.type === 'date' ? v.value : v.date };
         }
         case 'time': {
             const [v] = args;
-            if (!isDatishValue(v)) throw new FnCallError('time() expects a date or datetime');
+            if (!isDatishValue(v)) throw new FnCallError('eval.fn-time-not-datish',
+                'time() expects a date or datetime');
             if (v.type === 'date') return { type: 'none' };
             return { type: 'time', value: v.time };
         }
+        case 'Math.floor':
+        case 'Math.ceil':
+        case 'Math.round':
+        case 'Math.abs':
+        case 'Math.min':
+        case 'Math.max':
+            return callMath(fn, args);
+    }
+}
+
+/**
+ * The arithmetic helpers, under the name JS gives them.
+ *
+ * Rounding is what makes division usable: the quotient is carried to ten
+ * decimal places, and a count of days or items has to come back to a whole
+ * number before it can be written into a task.
+ */
+function callMath(fn: FnName, args: Value[]): Value {
+    const numbers = args.map(a => {
+        if (a.type !== 'number') throw new FnCallError('eval.fn-expects-numbers',
+            `${fn}() expects numbers`, { fn });
+        return a.value;
+    });
+    switch (fn) {
+        case 'Math.floor': return { type: 'number', value: Math.floor(numbers[0]) };
+        case 'Math.ceil': return { type: 'number', value: Math.ceil(numbers[0]) };
+        case 'Math.round': return { type: 'number', value: Math.round(numbers[0]) };
+        case 'Math.abs': return { type: 'number', value: Math.abs(numbers[0]) };
+        case 'Math.min': return { type: 'number', value: Math.min(...numbers) };
+        default: return { type: 'number', value: Math.max(...numbers) };
     }
 }
 
 function datishDateOr(v: Value | undefined, fallback: string): string {
     if (v === undefined) return fallback;
-    if (!isDatishValue(v)) throw new FnCallError('Expected a date or datetime argument');
+    if (!isDatishValue(v)) throw new FnCallError('eval.fn-arg-not-datish',
+        'Expected a date or datetime argument');
     return v.type === 'date' ? v.value : v.date;
 }
 
@@ -171,7 +324,8 @@ export function nextCycle(
     step: { amount: number; unit: DurUnit },
     rt: Pick<EvalRuntime, 'today' | 'now'>
 ): Value & { type: 'date' | 'datetime' } {
-    if (step.amount < 1) throw new FnCallError('nextCycle() step must be at least 1');
+    if (step.amount < 1) throw new FnCallError('eval.fn-cycle-step-too-small',
+        'nextCycle() step must be at least 1');
 
     if (step.unit === 'min' || step.unit === 'h') {
         const stepMin = step.amount * (step.unit === 'h' ? 60 : 1);
@@ -195,7 +349,7 @@ export function nextCycle(
         const s = formatDateStr(candidate);
         if (s > rt.today) return { type: 'date', value: s };
     }
-    throw new FnCallError('nextCycle() overflow');
+    throw new FnCallError('eval.fn-cycle-overflow', 'nextCycle() overflow');
 }
 
 /** Local reference day for TZ-safe minute arithmetic (not epoch-based). */
@@ -210,7 +364,7 @@ function toGridMinutes(date: string, time: string): number {
 function fromGridMinutes(totalMin: number): Value & { type: 'datetime' } {
     const dayNumber = Math.floor(totalMin / 1440);
     const minOfDay = totalMin - dayNumber * 1440;
-    const date = new Date(GRID_REF_DAY.getFullYear(), GRID_REF_DAY.getMonth(), GRID_REF_DAY.getDate() + dayNumber);
+    const date = dateAt(GRID_REF_DAY.getFullYear(), GRID_REF_DAY.getMonth(), GRID_REF_DAY.getDate() + dayNumber);
     const h = Math.floor(minOfDay / 60);
     const m = minOfDay % 60;
     return {
@@ -226,15 +380,15 @@ function startOf(unit: string, d: Date, weekStartDay: 0 | 1): Date {
             const back = (d.getDay() - weekStartDay + 7) % 7;
             return addDays(d, -back);
         }
-        case 'month': return new Date(d.getFullYear(), d.getMonth(), 1);
-        default: return new Date(d.getFullYear(), 0, 1);
+        case 'month': return dateAt(d.getFullYear(), d.getMonth(), 1);
+        default: return dateAt(d.getFullYear(), 0, 1);
     }
 }
 
 function endOf(unit: string, d: Date, weekStartDay: 0 | 1): Date {
     switch (unit) {
         case 'week': return addDays(startOf('week', d, weekStartDay), 6);
-        case 'month': return new Date(d.getFullYear(), d.getMonth() + 1, 0);
-        default: return new Date(d.getFullYear(), 11, 31);
+        case 'month': return dateAt(d.getFullYear(), d.getMonth() + 1, 0);
+        default: return dateAt(d.getFullYear(), 11, 31);
     }
 }

@@ -8,6 +8,14 @@
  * (DiagnosticsExtension) all share it — do not duplicate the judgment.
  */
 
+import { CodeFenceTracker } from '../../utils/CodeFenceTracker';
+
+/**
+ * The marker that turns the tail of a line into a flow command, on a task
+ * line as much as on a flow child line.
+ */
+export const FLOW_MARKER = '==>';
+
 /** `- ==> <tail>` with any list bullet. Group 1 = indent, group 2 = tail. */
 export const FLOW_LINE_RE = /^(\s*)(?:[-*+]|\d+[.)])\s*==>\s?(.*)$/;
 
@@ -52,8 +60,18 @@ export function isFlowLine(line: string): boolean {
  * indent strictly greater than the task line (a blank line ends the block —
  * same convention as FileOperations.collectChildrenFromLines and
  * DocumentTreeBuilder).
+ *
+ * `fenced` is the parallel per-line code-fence mask. It is REQUIRED: a
+ * `- ==>` written inside a fenced block is an example, not a command, and
+ * every caller must answer that question the same way the checkbox scan
+ * does. Callers holding whole-file lines can use
+ * {@link collectFlowLineIndicesInFile}, which builds the mask itself.
  */
-export function collectFlowLineIndices(lines: string[], taskLineIndex: number): number[] {
+export function collectFlowLineIndices(
+    lines: string[],
+    taskLineIndex: number,
+    fenced: boolean[],
+): number[] {
     const taskIndent = lines[taskLineIndex].search(/\S|$/);
     const result: number[] = [];
 
@@ -70,13 +88,28 @@ export function collectFlowLineIndices(lines: string[], taskLineIndex: number): 
             ancestorIndents.pop();
         }
         const parentIsTaskLine = ancestorIndents.length === 1;
-        if (parentIsTaskLine && isFlowLine(line)) {
+        if (parentIsTaskLine && !fenced[j] && isFlowLine(line)) {
             result.push(j);
         }
         ancestorIndents.push(indent);
     }
 
     return result;
+}
+
+/**
+ * {@link collectFlowLineIndices} for callers that hold the whole file's
+ * lines: builds the fence mask itself, matching DocumentTreeBuilder's
+ * judgment (document-level mask OR the dedented subtree mask, since a fence
+ * nested under a task carries the list item's indentation).
+ */
+export function collectFlowLineIndicesInFile(lines: string[], taskLineIndex: number): number[] {
+    const documentMask = CodeFenceTracker.mask(lines);
+    const subtreeMask = CodeFenceTracker.subtreeMask(lines.slice(taskLineIndex + 1));
+    const fenced = lines.map((_, i) =>
+        documentMask[i] || (i > taskLineIndex && subtreeMask[i - taskLineIndex - 1])
+    );
+    return collectFlowLineIndices(lines, taskLineIndex, fenced);
 }
 
 /** Canonical physical form of a flow child line. */

@@ -1,9 +1,11 @@
-import { type Diagnostic, type Span, error } from '../lang/Diagnostic';
-import { parseExpr } from '../lang/ExprParser';
+import { type Diagnostic, type Span, error, warning } from '../lang/Diagnostic';
+import type { Expr } from '../lang/ExprAst';
+import { nestingOverflow, parseExpr } from '../lang/ExprParser';
 import { splitDurationText, tokenize } from '../lang/Lexer';
-import { TokenCursor, tokenSpan } from '../lang/Token';
-import { type Weekday, weekdayFromName } from '../lang/Value';
-import { type EveryRule, type FlowProgram, SET_FIELD_ORDER, type SetField, type ScheduleNode, setHeadName } from './FlowAst';
+import { type Token, TokenCursor, tokenSpan } from '../lang/Token';
+import { type Value, type Weekday, weekdayFromName } from '../lang/Value';
+import { lookupWord } from '../lang/WordTable';
+import { type EveryRule, type FlowCell, type FlowProgram, SET_FIELD_ORDER, type SetField, type ScheduleNode, setHeadName } from './FlowAst';
 import { checkFlow } from './FlowChecker';
 
 export interface ParseFlowResult {
@@ -12,7 +14,9 @@ export interface ParseFlowResult {
     diagnostics: Diagnostic[];
 }
 
-const HEAD_HINT = 'clauses start with every / + / at(...) / xN / until(...) / nochildren / setContent|setStart|setStartTime|setEnd|setEndTime|setDue|setDueTime(...) / move(...)';
+// `nochildren` is missing on purpose: it is still read, but a hint is a
+// list of what to write, and a retired clause does not belong on one.
+const HEAD_HINT = 'clauses start with every / + / at(...) / xN / until(...) / state(...) / use(...) / setContent|setStart|setStartTime|setEnd|setEndTime|setDue|setDueTime(...) / move(...)';
 const SET_HEADS: Record<string, SetField> = Object.fromEntries(
     SET_FIELD_ORDER.map(field => [setHeadName(field), field])
 );
@@ -25,9 +29,46 @@ const SET_HEADS: Record<string, SetField> = Object.fromEntries(
  * misordering like `tue every` fails loudly instead of being misread.
  */
 export function parseFlow(raw: string): ParseFlowResult {
-    const { tokens, diagnostics } = tokenize(raw);
+    try {
+        const { program, diagnostics, hasError } = readFlow(raw);
+        return { program: hasError ? null : program, diagnostics };
+    } catch (e) {
+        return { program: null, diagnostics: [nestingOverflow(e, { start: 0, end: raw.length })] };
+    }
+}
+
+/**
+ * The cells a command declares, whatever else is wrong with it.
+ *
+ * The editor checks a generation block without knowing which command uses it,
+ * so it needs the cell names of the file to tell a cell from a typo. It reads
+ * every line on its own, and a line that carries only part of a multi-line
+ * command does not parse into a program — the declarations are still there and
+ * still true, which is all this answers.
+ */
+export function parseFlowCells(raw: string): FlowCell[] {
+    try {
+        return readFlow(raw).program.cells?.entries ?? [];
+    } catch {
+        return [];
+    }
+}
+
+function readFlow(raw: string): { program: FlowProgram; diagnostics: Diagnostic[]; hasError: boolean } {
+    const { tokens, diagnostics, comments } = tokenize(raw);
     const cursor = new TokenCursor(tokens);
     const program: FlowProgram = {};
+
+    // A comment is fine inside a generation block, whose source is kept as
+    // written. Here it is not: every fire reprints the command from its AST,
+    // and the AST has nowhere to hold a comment — so it would be dropped the
+    // first time the task moves on. Refusing is the only form of this that
+    // does not lose what someone wrote.
+    for (const span of comments) {
+        diagnostics.push(error('flow.comment-not-here',
+            'A // comment cannot be written in a command — the command is rewritten on every fire, and the comment would be dropped',
+            span));
+    }
 
     while (!cursor.atEof()) {
         parseNode(cursor, program, diagnostics);
@@ -35,8 +76,7 @@ export function parseFlow(raw: string): ParseFlowResult {
 
     checkFlow(program, diagnostics);
 
-    const hasError = diagnostics.some(d => d.severity === 'error');
-    return { program: hasError ? null : program, diagnostics };
+    return { program, diagnostics, hasError: diagnostics.some(d => d.severity === 'error') };
 }
 
 function parseNode(cursor: TokenCursor, program: FlowProgram, diagnostics: Diagnostic[]): void {
@@ -96,9 +136,30 @@ function parseNode(cursor: TokenCursor, program: FlowProgram, diagnostics: Diagn
             return;
         }
         case 'nochildren':
+            // Read and dropped. Refusing the token would null the program and
+            // take the rest of the command down with it, so it stays in the
+            // grammar; keeping it on the AST would put it back on the line
+            // every time a fire regenerates the clause. Between those, the
+            // value goes and the notice stays.
             cursor.next();
-            assignNode(program, 'nochildren', { span: tokenSpan(head) }, diagnostics, tokenSpan(head));
+            diagnostics.push(warning('flow.nochildren-retired',
+                "'nochildren' is retired: child lines no longer travel to the next instance, so the clause can be deleted",
+                tokenSpan(head)));
             return;
+        case 'state':
+            cursor.next();
+            parseCells(cursor, head, program, diagnostics);
+            return;
+        case 'use': {
+            cursor.next();
+            const name = parseParenExpr(cursor, 'use', diagnostics);
+            if (name) {
+                assignNode(program, 'use', { name, span: { start: head.start, end: name.span.end + 1 } }, diagnostics, tokenSpan(head));
+            } else {
+                skipToNextNode(cursor);
+            }
+            return;
+        }
         case 'move': {
             cursor.next();
             const target = parseParenExpr(cursor, 'move', diagnostics);
@@ -112,7 +173,7 @@ function parseNode(cursor: TokenCursor, program: FlowProgram, diagnostics: Diagn
     }
 
     // setContent(...) / setStart(...) / setEnd(...) / setDue(...)
-    const setField = SET_HEADS[head.text];
+    const setField = lookupWord(SET_HEADS, head.text);
     if (setField !== undefined) {
         cursor.next();
         const expr = parseParenExpr(cursor, head.text, diagnostics);
@@ -220,6 +281,110 @@ function parseMonthDay(cursor: TokenCursor, intervalMonths: number, diagnostics:
 }
 
 // ---------------------------------------------------------------------------
+// state
+// ---------------------------------------------------------------------------
+
+/** The one sentence every malformed `state(...)` gets, since it is the whole grammar. */
+const CELL_SHAPE = 'state(...) declares cells as name: value — e.g. state(n: 3)';
+
+/**
+ * `state(n: 3, done: false)` — the cells carried between generations.
+ *
+ * Named for what it holds rather than for how it is written. `let` said the
+ * opposite of the truth: what it declares outlives the block it is read in,
+ * and is written back to the line on every fire.
+ *
+ * One clause holds every cell rather than one clause each. A second `state` is
+ * a duplicate like any other node, which keeps "at most one node of a kind" true
+ * for the whole grammar and leaves the canonical print with one place to put
+ * them.
+ *
+ * Values are literals and not expressions. What the clause holds is printed
+ * back on every fire, so an expression would be evaluated once and then
+ * replaced by its result — the line would stop saying what its author wrote
+ * after the first firing. A literal reads back as itself, generation after
+ * generation.
+ */
+function parseCells(cursor: TokenCursor, head: Token, program: FlowProgram, diagnostics: Diagnostic[]): void {
+    if (!cursor.tryEat('lparen')) {
+        diagnostics.push(error('flow.expected-lparen', "Expected '(' after 'state'", tokenSpan(cursor.peek()), { fn: 'state' }));
+        return;
+    }
+
+    const entries: FlowCell[] = [];
+    for (;;) {
+        const nameToken = cursor.peek();
+        if (nameToken.kind !== 'ident') {
+            diagnostics.push(error('flow.expected-cell', CELL_SHAPE, tokenSpan(nameToken)));
+            skipToNextNode(cursor);
+            return;
+        }
+        cursor.next();
+        if (!cursor.tryEat('colon')) {
+            diagnostics.push(error('flow.expected-cell', CELL_SHAPE, tokenSpan(cursor.peek())));
+            skipToNextNode(cursor);
+            return;
+        }
+        const expr = parseExpr(cursor, diagnostics, 'flow');
+        if (!expr) {
+            skipToNextNode(cursor);
+            return;
+        }
+        readCell(nameToken, expr, entries, diagnostics);
+
+        if (!cursor.tryEat('comma')) break;
+        // A trailing comma is written wherever a list is, and refusing it here
+        // alone would make the flow line the one place it is not allowed.
+        if (cursor.at('rparen')) break;
+    }
+
+    if (!cursor.tryEat('rparen')) {
+        diagnostics.push(error('flow.expected-rparen', "Expected ')' to close state(...)", tokenSpan(cursor.peek()), { fn: 'state' }));
+        return;
+    }
+    if (program.cells) {
+        diagnostics.push(error('flow.duplicate-node', "Duplicate 'state' clause", tokenSpan(head), { clause: 'state' }));
+        return;
+    }
+    program.cells = { entries, span: { start: head.start, end: cursor.peek(-1).end } };
+}
+
+/** One `name: value` pair, once both halves have been read. */
+function readCell(nameToken: Token, expr: Expr, entries: FlowCell[], diagnostics: Diagnostic[]): void {
+    const name = nameToken.text;
+    // Nothing is checked against the language's own names. A cell is read as
+    // `state.n`, so `state(typeof: 3)` collides with nothing, and refusing a
+    // name that cannot collide is a rule with nothing behind it. What the
+    // check used to prevent — a cell that could be written and never read —
+    // the namespace prevents by construction.
+    if (entries.some(c => c.name === name)) {
+        diagnostics.push(error('flow.duplicate-cell', `Cell '${name}' is declared twice`, tokenSpan(nameToken), { name }));
+        return;
+    }
+    const value = literalValue(expr);
+    if (value === null) {
+        diagnostics.push(error('flow.cell-not-literal',
+            `Cell '${name}' starts from a written value — a computed one would be replaced by its result on the first fire`,
+            expr.span, { name }));
+        return;
+    }
+    entries.push({ name, value, nameSpan: tokenSpan(nameToken), valueSpan: expr.span });
+}
+
+/** The value an expression already is, or null when it has to be computed. */
+function literalValue(expr: Expr): Value | null {
+    if (expr.kind === 'lit') return expr.value;
+    // A counter that runs down writes a negative number back, and `-1` is a
+    // node rather than a literal — so the print would not read back.
+    if (expr.kind === 'unary' && expr.op === '-' && expr.operand.kind === 'lit') {
+        const inner = expr.operand.value;
+        if (inner.type === 'number') return { type: 'number', value: -inner.value };
+        if (inner.type === 'duration') return { type: 'duration', amount: -inner.amount, unit: inner.unit };
+    }
+    return null;
+}
+
+// ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
 
@@ -228,7 +393,7 @@ function parseParenExpr(cursor: TokenCursor, fnName: string, diagnostics: Diagno
         diagnostics.push(error('flow.expected-lparen', `Expected '(' after '${fnName}'`, tokenSpan(cursor.peek()), { fn: fnName }));
         return null;
     }
-    const expr = parseExpr(cursor, diagnostics);
+    const expr = parseExpr(cursor, diagnostics, 'flow');
     if (!expr) return null;
     if (!cursor.tryEat('rparen')) {
         diagnostics.push(error('flow.expected-rparen', `Expected ')' to close ${fnName}(...)`, tokenSpan(cursor.peek()), { fn: fnName }));
@@ -245,7 +410,7 @@ function assignSchedule(program: FlowProgram, node: ScheduleNode, diagnostics: D
     program.schedule = node;
 }
 
-function assignNode<K extends 'lifetime' | 'until' | 'nochildren' | 'move'>(
+function assignNode<K extends 'lifetime' | 'until' | 'use' | 'move'>(
     program: FlowProgram,
     key: K,
     node: NonNullable<FlowProgram[K]>,
@@ -262,13 +427,17 @@ function assignNode<K extends 'lifetime' | 'until' | 'nochildren' | 'move'>(
 /**
  * Error recovery: skip tokens until something that can start a node, so one
  * mistake yields one diagnostic instead of a cascade.
+ *
+ * `nochildren` belongs on this list even though it is retired. Recovery has
+ * to recognize every head the parser accepts, and it is still accepted; drop
+ * it and a command written after one would be skipped along with the mistake.
  */
 function skipToNextNode(cursor: TokenCursor): void {
     while (!cursor.atEof()) {
         const t = cursor.peek();
         if (t.kind === 'ident' && (
-            ['every', 'at', 'until', 'nochildren', 'move'].includes(t.text)
-            || t.text in SET_HEADS
+            ['every', 'at', 'until', 'nochildren', 'state', 'use', 'move'].includes(t.text)
+            || lookupWord(SET_HEADS, t.text) !== undefined
             || /^x\d+$/.test(t.text)
         )) return;
         cursor.next();

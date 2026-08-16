@@ -1,4 +1,5 @@
-import { type App, TFile } from 'obsidian';
+import { type App, type EventRef, Notice, TFile } from 'obsidian';
+import { t } from '../../i18n';
 import type { DuplicateOptions, Task, TaskViewerSettings } from '../../types';
 import { isTvFile, isTvInline, hasBodyLine } from '../../types';
 import { TaskRepository } from '../persistence/TaskRepository';
@@ -17,6 +18,7 @@ import { DateUtils as CoreDateUtils } from '../../utils/DateUtils';
 import { toDisplayTask } from '../display/DisplayTaskConverter';
 import { getTaskDateRange } from '../display/VisualDateRange';
 import { TaskParser } from '../parsing/TaskParser';
+import type { GenBlock } from '../parsing/gen/GenBlockCollector';
 import { HeadingInserter } from '../../utils/HeadingInserter';
 import { FileOperations } from '../persistence/utils/FileOperations';
 import { logError, logInfo, logWarn } from '../../log/log';
@@ -55,6 +57,19 @@ export class TaskIndex {
     private apiWriteInFlight: Map<string, NodeJS.Timeout> = new Map();
     private readonly API_WRITE_SUPPRESSION_MS = 2000;
 
+    /**
+     * Every vault subscription this index opened, with the emitter that closes
+     * it.
+     *
+     * Held because a subscription outlives the object that made it. An index
+     * left listening after the plugin unloads keeps its own scanner, its own
+     * completion memory and its own flow executor, and the next load adds a
+     * second set: one file change is then processed twice, and a completed
+     * command generates its next instance once per surviving listener. That is
+     * what an update without a restart used to look like.
+     */
+    private eventRefs: { emitter: { offref(ref: EventRef): void }; ref: EventRef }[] = [];
+
     constructor(private app: App, settings: TaskViewerSettings) {
         this.settings = settings;
         this.parseFingerprint = computeParseFingerprint(settings);
@@ -90,7 +105,7 @@ export class TaskIndex {
         this.editorObserver.setupInteractionListeners();
 
         // Vault イベントハンドラー
-        this.app.vault.on('modify', async (file) => {
+        this.own(this.app.vault, this.app.vault.on('modify', async (file) => {
             if (file instanceof TFile && file.extension === 'md') {
                 const isLocal = this.syncDetector.isLocalEdit(file.path);
                 this.syncDetector.clearLocalEditFlag(file.path);
@@ -116,9 +131,9 @@ export class TaskIndex {
                     this.debouncedNotify();
                 }
             }
-        });
+        }));
 
-        this.app.vault.on('delete', (file) => {
+        this.own(this.app.vault, this.app.vault.on('delete', (file) => {
             if (file instanceof TFile && file.extension === 'md') {
                 this.store.removeTasksByFile(file.path);
                 this.scanner.handleFileRenamed(file.path);
@@ -126,18 +141,18 @@ export class TaskIndex {
                 WikiLinkResolver.resolve(this.store.getTasksMap(), this.store.getWikilinkRefsMap(), this.app);
                 this.debouncedNotify();
             }
-        });
+        }));
 
-        this.app.vault.on('create', (file) => {
+        this.own(this.app.vault, this.app.vault.on('create', (file) => {
             if (file instanceof TFile && file.extension === 'md') {
                 this.scanner.queueScan(file).then(() => {
                     WikiLinkResolver.resolve(this.store.getTasksMap(), this.store.getWikilinkRefsMap(), this.app);
                     this.debouncedNotify();
                     });
             }
-        });
+        }));
 
-        this.app.metadataCache.on('changed', (file) => {
+        this.own(this.app.metadataCache, this.app.metadataCache.on('changed', (file) => {
             if (file instanceof TFile && file.extension === 'md') {
                 // ドラッグ中のファイルはスキャンをスキップ
                 if (this.draggingFilePath === file.path) {
@@ -154,9 +169,9 @@ export class TaskIndex {
                     this.debouncedNotify();
                     });
             }
-        });
+        }));
 
-        this.app.vault.on('rename', async (file, oldPath) => {
+        this.own(this.app.vault, this.app.vault.on('rename', async (file, oldPath) => {
             // md → 非md（拡張子変更）: delete 扱い
             if (!(file instanceof TFile) || file.extension !== 'md') {
                 this.store.removeTasksByFile(oldPath);
@@ -187,7 +202,12 @@ export class TaskIndex {
             await this.scanner.queueScan(file);
             WikiLinkResolver.resolve(this.store.getTasksMap(), this.store.getWikilinkRefsMap(), this.app);
             this.debouncedNotify();
-        });
+        }));
+    }
+
+    /** Remember a subscription so `dispose` can close it. */
+    private own(emitter: { offref(ref: EventRef): void }, ref: EventRef): void {
+        this.eventRefs.push({ emitter, ref });
     }
 
     // ===== 通知制御 =====
@@ -306,7 +326,19 @@ export class TaskIndex {
         }
     }
 
+    /**
+     * Let go of everything this index is holding the vault by.
+     *
+     * The subscriptions come first: a timer that fires after unload wastes a
+     * frame, while a listener that survives it keeps a whole second pipeline
+     * alive — one that scans, detects completions and fires flow commands
+     * against the vault the next load is already working on.
+     */
     dispose(): void {
+        for (const { emitter, ref } of this.eventRefs) emitter.offref(ref);
+        this.eventRefs = [];
+        this.editorObserver.dispose();
+
         if (this.notifyDebounceTimer) {
             clearTimeout(this.notifyDebounceTimer);
             this.notifyDebounceTimer = null;
@@ -315,6 +347,10 @@ export class TaskIndex {
             clearTimeout(timer);
         }
         this.recentSelfWriteTimers.clear();
+        for (const timer of this.apiWriteInFlight.values()) {
+            clearTimeout(timer);
+        }
+        this.apiWriteInFlight.clear();
         this.pendingNotify = null;
     }
 
@@ -331,6 +367,14 @@ export class TaskIndex {
 
     getTask(taskId: string): Task | undefined {
         return this.store.getTask(taskId);
+    }
+
+    /**
+     * A generation block by name. Resolution is file-local: a command
+     * reaches only the blocks of the file it is written in.
+     */
+    getGenBlock(filePath: string, name: string): GenBlock | undefined {
+        return this.store.getGenBlock(filePath, name);
     }
 
     getTaskByFileLine(filePath: string, line: number): Task | undefined {
@@ -498,6 +542,9 @@ export class TaskIndex {
         // ここで評価する。
         const propertyOps = PropertyUpdatePlanner.plan(task, updates, this.settings.tvFileKeys);
 
+        // 更新前の姿。行の探索と、書けなかったときの巻き戻しの両方で要る。
+        const before: Task = { ...task };
+
         this.syncDetector.markLocalEdit(task.file);
         Object.assign(task, updates);
         this.store.bumpRevision();
@@ -507,15 +554,58 @@ export class TaskIndex {
             this.store.notifyListeners(taskId, Object.keys(updates));
         }
 
-        if (isTvFile(task)) {
-            await this.repository.updateTvFile(task, updates, this.settings.tvFileKeys, propertyOps);
-        } else {
+        const written = isTvFile(task)
+            // tv-file は書き先がキー名で決まるので、渡すのは更新後の値でよい。
+            ? await this.repository.updateTvFile(task, updates, this.settings.tvFileKeys, propertyOps)
             // All inline tasks route through InlineTaskWriter; TaskParser.format
             // dispatches by parserId. TVInlineParser.format() handles both
             // bare-checkbox and @notation-bearing output, so a task gaining or
             // losing date fields just produces the right line — no parserId
             // promotion/demotion needed.
-            await this.repository.updateTaskInFile(task, { ...task, ...updates }, propertyOps);
+            //
+            // 探索は更新前の姿で行う。ファイルに書かれているのは更新前の行なので、
+            // 更新後の日付や時刻で探しに行くと、まさにその値を変える更新のときに
+            // 空振りする。第 2 引数が書く内容、第 1 引数がどの行かを決める。
+            : await this.repository.updateTaskInFile(before, task, propertyOps);
+
+        if (!written) {
+            this.revertUnwrittenUpdate(task, taskId, before, updates);
+        }
+    }
+
+    /**
+     * 書き込みが 1 バイトも書かなかった更新を取り消す。
+     *
+     * index を先に書き換える設計なので、書けなかった更新を残すと画面とファイルが
+     * 食い違ったまま居座る。しかも何も書かなければ `vault.modify` が発火せず
+     * 再スキャンも走らないため、index を正す唯一の経路が、まさに落ちたその書き込み
+     * 自身に依存してしまう。値を戻し、再スキャンを促し、これまで警告ログだけで
+     * 黙って捨てていた失敗をユーザーにも伝える。
+     */
+    private revertUnwrittenUpdate(
+        task: Task,
+        taskId: string,
+        before: Task,
+        updates: Partial<Task>,
+    ): void {
+        // 触ったキーだけを戻す。更新で新たに生えたキーは、スナップショットに
+        // undefined として写っているので同じ手順で消える。
+        const source = before as unknown as Record<string, unknown>;
+        const target = task as unknown as Record<string, unknown>;
+        for (const key of Object.keys(updates)) {
+            target[key] = source[key];
+        }
+        this.store.bumpRevision();
+        if (this.draggingFilePath !== task.file) {
+            this.store.notifyListeners(taskId, Object.keys(updates));
+        }
+
+        logWarn(`[TaskIndex] update was not written, reverted: id=${taskId} fields=[${Object.keys(updates)}]`);
+        new Notice(t('notice.taskWriteFailed'));
+
+        const file = this.app.vault.getAbstractFileByPath(task.file);
+        if (file instanceof TFile) {
+            void this.scanner.requestScan(file);
         }
     }
 
@@ -628,8 +718,10 @@ export class TaskIndex {
                     this.settings.tvFileChildHeaderLevel
                 );
             } else {
-                const childIndent = FileOperations.getChildIndent(task.originalText);
-                await this.repository.insertLineAsFirstChild(task, childIndent + childLine);
+                // インデントは書き込み層が既存子行から決める（親行だけからは
+                // トップレベルのとき 4 スペース固定になり、タブ書きのファイルに
+                // スペースが混ざる）。
+                await this.repository.insertLineAsFirstChild(task, childLine);
             }
 
             await this.scanner.waitForScan(task.file);
@@ -657,8 +749,7 @@ export class TaskIndex {
                     this.settings.tvFileChildHeaderLevel
                 );
             } else {
-                const childIndent = FileOperations.getChildIndent(task.originalText);
-                await this.repository.insertLineAfterTask(task, childIndent + childLine);
+                await this.repository.insertLineAfterTask(task, childLine);
             }
 
             await this.scanner.waitForScan(task.file);

@@ -1,58 +1,265 @@
 import { type Diagnostic, type Span, error } from './Diagnostic';
-import { type BinaryOp, type Expr, FN_NAMES, type FnName, type PropName } from './ExprAst';
-import { splitDurationText } from './Lexer';
-import { type Token, type TokenCursor, tokenSpan } from './Token';
+import {
+    type BinaryOp, type Expr, FN_NAMES, type FnName, type InterpolationPart, LITERAL_WORDS,
+    NAMESPACE_WORDS, PROP_NAMES, type PropName, STATE_NAMESPACE, UNIT_KEYWORDS,
+} from './ExprAst';
+import { scanInterpolations, splitDurationText, tokenize } from './Lexer';
+import { looksLikeRecord, parseArrowBlockBody } from './StmtParser';
+import { type Token, type TokenKind, TokenCursor, tokenSpan } from './Token';
 import { weekdayFromName } from './Value';
+import { lookupWord } from './WordTable';
 
-/** Bare idents inside expressions that read as unit keywords (startOf(week)). */
-const UNIT_KEYWORDS = ['week', 'month', 'year'] as const;
+/**
+ * Properties written as one bare word.
+ *
+ * Derived rather than listed: a property spelled with a dot arrives through the
+ * rule for its head (`file` then `.name`), and every other one is read here. A
+ * new property added to `PROP_NAMES` is therefore readable the moment it is
+ * declared, instead of being an unknown identifier until someone remembers the
+ * second list.
+ */
+const SIMPLE_PROPS: readonly string[] = PROP_NAMES.filter(name => !name.includes('.'));
 
-const SIMPLE_PROPS = ['start', 'end', 'due', 'content', 'done', 'today'] as const;
+/**
+ * Names refused in expression position, each with its way out. The design's
+ * exclusion list is worth having only if stepping on it explains itself —
+ * `new Date()` and `console.log` get named answers, not "unknown identifier".
+ *
+ * One code per name, so each answer is one message shape and can be
+ * translated. Sharing a code would leave every locale but English with a
+ * single generic sentence, which is the part of the refusal that carries no
+ * information.
+ */
+const REFUSED_EXPR_NAMES: Record<string, { code: string; message: string }> = {
+    new: { code: 'expr.no-new', message: "'new' is not in this language — dates come from today / start / tv.date.*" },
+    Date: { code: 'expr.no-date', message: "'Date' is not in this language — the clock here is today, start, done and tv.date.*" },
+    console: { code: 'expr.no-console', message: "'console' is not in this language — the reading view previews what a block generates" },
+    function: { code: 'expr.no-function', message: 'A function keyword is not in this language — write an arrow: x => ...' },
+    await: { code: 'expr.no-await', message: "'await' is not in this language — evaluation is synchronous" },
+    typeof: { code: 'expr.no-typeof', message: "'typeof' is not in this language — a value's type is fixed where it is written, and the checker reports a mismatch before anything runs" },
+    delete: { code: 'expr.no-delete', message: "'delete' is not in this language — values here are immutable" },
+};
+
+/**
+ * The same names as a set, for the editor.
+ *
+ * Derived from the table rather than written twice: a word painted as refused
+ * has to be a word this parser refuses, and the day the two lists disagree is
+ * the day a colour says the opposite of the squiggle beside it.
+ */
+export const REFUSED_EXPR_KEYWORDS: ReadonlySet<string> = new Set(Object.keys(REFUSED_EXPR_NAMES));
+
+/**
+ * Which surface an expression is being read for. One grammar, profiles apart:
+ * a flow command is a single expression that has to print back to canonical
+ * source, while a generation block is verbatim and may use the wider forms.
+ *
+ * Lists and functions are refused in the flow profile at the point they are
+ * written, which both keeps the printer's vocabulary closed and puts the
+ * diagnostic on the literal rather than on the whole clause.
+ *
+ * 'stmt' is the js section: everything 'block' reads, plus arrow functions
+ * with a block body. Assignments are read in both non-flow profiles — a
+ * `${n += 1}` in the body is the shape the cells design exists for.
+ */
+export type ParseProfile = 'flow' | 'block' | 'stmt';
+
+/**
+ * Profile for the parse in progress. Set by {@link parseExpr} only —
+ * recursive descent calls {@link parseTernary} directly so a nested
+ * expression cannot silently reset it.
+ */
+let profile: ParseProfile = 'flow';
 
 /**
  * Recursive-descent expression parser. Consumes tokens from the cursor and
  * returns null after emitting a diagnostic when the input is malformed.
  *
- * Precedence (loose to tight): ?: < || < && < comparison < + - < unary < primary
+ * Precedence (loose to tight):
+ * ?: < ?? < || < && < comparison < + - < * / % < unary < postfix < primary
  */
-export function parseExpr(cursor: TokenCursor, diagnostics: Diagnostic[]): Expr | null {
-    return parseTernary(cursor, diagnostics);
+export function parseExpr(cursor: TokenCursor, diagnostics: Diagnostic[], forProfile: ParseProfile = 'flow'): Expr | null {
+    // Saved and restored rather than merely set: a nested call — someone
+    // reaching for the exported entry point from inside a bracket or an
+    // argument list — would otherwise drop a block back to flow rules
+    // mid-expression, and lists would start being refused with no sign why.
+    const outer = profile;
+    profile = forProfile;
+    try {
+        return parseAssignment(cursor, diagnostics);
+    } finally {
+        profile = outer;
+    }
+}
+
+/**
+ * `n = 1` / `n += 1` — looser than everything, right-associative, and an
+ * expression: it yields the new value. The flow profile refuses it where the
+ * `=` is written: a clause runs at schedule time, outside the block's
+ * document order, so it must not be a second way to write a cell.
+ *
+ * Only this level and the parenthesized-expression branch read assignments.
+ * An argument or a list item wanting one says it with parentheses, which is
+ * also what makes an intentional `if ((n = next))` visible.
+ */
+function parseAssignment(cursor: TokenCursor, diagnostics: Diagnostic[]): Expr | null {
+    const left = parseTernary(cursor, diagnostics);
+    if (!left) return null;
+    if (assignOp(cursor) === null) return left;
+    if (refuseFlowAssignment(cursor, diagnostics)) return null;
+    return finishAssignment(cursor, diagnostics, left);
+}
+
+/**
+ * A whole value in a place that reads one and stops: an argument, a list
+ * element, a record's value, a branch of a ternary, an arrow's expression
+ * body. An assignment is not read at this depth — it says itself with
+ * parentheses, which is what keeps an intended write visible.
+ *
+ * That refusal only works if it is said. Left as a bare "expected ')'", the
+ * accumulate idiom everyone writes first — `xs.forEach(x => total += x)` —
+ * comes back as a missing bracket, and the two forms that do work,
+ * `x => (total += x)` and `x => { total += x }`, are never named. So the
+ * assignment is named and then read through, and one diagnostic stands in
+ * for the cascade the unread `=` would otherwise cause.
+ */
+function parseSubExpr(cursor: TokenCursor, diagnostics: Diagnostic[]): Expr | null {
+    const value = parseTernary(cursor, diagnostics);
+    if (!value) return null;
+    if (assignOp(cursor) === null) return value;
+    if (refuseFlowAssignment(cursor, diagnostics)) return null;
+    diagnostics.push(error('expr.assign-needs-parens',
+        'An assignment here is written in parentheses: (n = 1)', tokenSpan(cursor.peek())));
+    return finishAssignment(cursor, diagnostics, value);
+}
+
+function assignOp(cursor: TokenCursor): '=' | '+=' | '-=' | null {
+    switch (cursor.peek().kind) {
+        case 'assign': return '=';
+        case 'pluseq': return '+=';
+        case 'minuseq': return '-=';
+        default: return null;
+    }
+}
+
+/** Cursor sits on an assignment operator, in a profile that reads one. */
+function finishAssignment(cursor: TokenCursor, diagnostics: Diagnostic[], left: Expr): Expr | null {
+    const op = assignOp(cursor)!;
+    cursor.next();
+    if (left.kind !== 'var') {
+        diagnostics.push(error('expr.assign-target',
+            'Only a variable can be assigned to', left.span));
+        return null;
+    }
+    const value = parseAssignment(cursor, diagnostics);
+    if (!value) return null;
+    // `via` travels with the target: `state.n += 1` is a write to a cell, and
+    // the checker has to know that before it looks for `n` in the scope.
+    return {
+        kind: 'assign', op, name: left.name, nameSpan: left.span, value,
+        span: spanBetween(left.span, value.span), via: left.via,
+    };
+}
+
+/** Cursor sits on an assignment operator. In a flow clause that is the end of it. */
+function refuseFlowAssignment(cursor: TokenCursor, diagnostics: Diagnostic[]): boolean {
+    if (profile !== 'flow') return false;
+    diagnostics.push(error('expr.assign-not-here',
+        'An assignment only means something inside a generation block — a flow clause cannot write a cell',
+        tokenSpan(cursor.peek())));
+    return true;
 }
 
 function spanBetween(a: Span, b: Span): Span {
     return { start: a.start, end: b.end };
 }
 
+/**
+ * Turn the host's stack overflow into a diagnostic, and rethrow anything else.
+ *
+ * The parser is recursive descent, so a thousand nested brackets exhaust the
+ * host's call stack before any rule of this language is broken. What comes
+ * back is a `RangeError`, which is not something the layers above can report:
+ * a generation treats only `EvalError` as "did not fire", and the editor's
+ * diagnostics have nowhere to put a crash. Caught at the two entry points —
+ * a flow command and a generation block — so the depth is bounded by the host
+ * rather than by a number this parser would have to guess at.
+ */
+export function nestingOverflow(e: unknown, span: Span): Diagnostic {
+    if (!(e instanceof RangeError)) throw e;
+    return error('expr.nesting-too-deep',
+        'This is nested too deeply to read — take some of the brackets apart', span);
+}
+
 function parseTernary(cursor: TokenCursor, diagnostics: Diagnostic[]): Expr | null {
-    const cond = parseOr(cursor, diagnostics);
+    const cond = parseNullish(cursor, diagnostics);
     if (!cond) return null;
     if (!cursor.tryEat('question')) return cond;
-    const thenExpr = parseTernary(cursor, diagnostics);
+    const thenExpr = parseSubExpr(cursor, diagnostics);
     if (!thenExpr) return null;
     if (!cursor.tryEat('colon')) {
         diagnostics.push(error('expr.expected-colon', "Expected ':' in conditional expression", tokenSpan(cursor.peek())));
         return null;
     }
-    const elseExpr = parseTernary(cursor, diagnostics);
+    const elseExpr = parseSubExpr(cursor, diagnostics);
     if (!elseExpr) return null;
     return { kind: 'cond', cond, then: thenExpr, else: elseExpr, span: spanBetween(cond.span, elseExpr.span) };
 }
 
-function parseOr(cursor: TokenCursor, diagnostics: Diagnostic[]): Expr | null {
-    let left = parseAnd(cursor, diagnostics);
+/**
+ * `a ?? b` — b only when a is none. Looser than `||`, as in JS.
+ *
+ * Mixing the two without parentheses is a syntax error in JS, and reading
+ * `a || b ?? c` silently as `(a || b) ?? c` is exactly the kind of quiet
+ * disagreement this language avoids. The parenthesized form is not affected:
+ * parentheses are consumed by the primary parser, so `||` inside them never
+ * appears on this level's token run.
+ */
+function parseNullish(cursor: TokenCursor, diagnostics: Diagnostic[]): Expr | null {
+    const logic: LogicSeen = { any: false };
+    let left = parseOr(cursor, diagnostics, logic);
+    if (!left) return null;
+    while (cursor.tryEat('qq')) {
+        const right = parseOr(cursor, diagnostics, logic);
+        if (!right) return null;
+        if (logic.any) {
+            diagnostics.push(error('expr.nullish-mixed-with-logic',
+                "'??' cannot be mixed with '||' or '&&' — parenthesize the one you mean",
+                spanBetween(left.span, right.span)));
+            return null;
+        }
+        left = { kind: 'binary', op: '??', left, right, span: spanBetween(left.span, right.span) };
+    }
+    return left;
+}
+
+/**
+ * Whether this `??` level actually consumed a `||`/`&&`.
+ *
+ * Recorded by the levels themselves rather than read back off the token run:
+ * a parenthesized `a || b` is parsed by a nested descent from the primary
+ * parser, so it never sets this flag — and the rule stays right no matter
+ * which bracket kinds the lexer grows later.
+ */
+interface LogicSeen { any: boolean }
+
+function parseOr(cursor: TokenCursor, diagnostics: Diagnostic[], logic?: LogicSeen): Expr | null {
+    let left = parseAnd(cursor, diagnostics, logic);
     if (!left) return null;
     while (cursor.tryEat('pipepipe')) {
-        const right = parseAnd(cursor, diagnostics);
+        if (logic) logic.any = true;
+        const right = parseAnd(cursor, diagnostics, logic);
         if (!right) return null;
         left = { kind: 'binary', op: '||', left, right, span: spanBetween(left.span, right.span) };
     }
     return left;
 }
 
-function parseAnd(cursor: TokenCursor, diagnostics: Diagnostic[]): Expr | null {
+function parseAnd(cursor: TokenCursor, diagnostics: Diagnostic[], logic?: LogicSeen): Expr | null {
     let left = parseComparison(cursor, diagnostics);
     if (!left) return null;
     while (cursor.tryEat('ampamp')) {
+        if (logic) logic.any = true;
         const right = parseComparison(cursor, diagnostics);
         if (!right) return null;
         left = { kind: 'binary', op: '&&', left, right, span: spanBetween(left.span, right.span) };
@@ -64,6 +271,12 @@ const COMPARISON_OPS: Partial<Record<Token['kind'], BinaryOp>> = {
     eq: '==', neq: '!=', lt: '<', lte: '<=', gt: '>', gte: '>=',
 };
 
+/**
+ * Comparisons do not chain: `a < b < c` reads as `(a < b) < c` in JS, which
+ * compares a bool with c and is never what anyone means. This level takes one
+ * operator and stops — and says so when a second one follows, rather than
+ * dropping the rest of the expression on the floor.
+ */
 function parseComparison(cursor: TokenCursor, diagnostics: Diagnostic[]): Expr | null {
     const left = parseAdditive(cursor, diagnostics);
     if (!left) return null;
@@ -72,15 +285,71 @@ function parseComparison(cursor: TokenCursor, diagnostics: Diagnostic[]): Expr |
     cursor.next();
     const right = parseAdditive(cursor, diagnostics);
     if (!right) return null;
-    return { kind: 'binary', op, left, right, span: spanBetween(left.span, right.span) };
+    const expr: Expr = { kind: 'binary', op, left, right, span: spanBetween(left.span, right.span) };
+    const chained = COMPARISON_OPS[cursor.peek().kind];
+    if (chained) {
+        diagnostics.push(error('expr.comparison-chain',
+            `Comparisons do not chain — parenthesize what you mean: (a ${op} b) ${chained} c`,
+            spanBetween(expr.span, tokenSpan(cursor.peek())), { first: op, second: chained }));
+        return null;
+    }
+    return expr;
+}
+
+/**
+ * Operands one run of the same operator may chain.
+ *
+ * A run is read in a loop, so the parser walks it flat — but the tree it
+ * builds leans to the left one node per operand, and the checker and the
+ * evaluator do walk that. Around two thousand of them exhaust the host's
+ * stack, and the failure lands as a RangeError from wherever the stack ran
+ * out: in the middle of reading, or later in the middle of a fire, depending
+ * on how deep the call already was. Which of the two happened decided which
+ * message came back, so the same block could be read two ways on two days.
+ *
+ * A number here instead. It has an order of magnitude of room over anything a
+ * person writes, and it makes the refusal the same sentence every time.
+ */
+const MAX_CHAIN = 100;
+
+/** Reached only by generated text; said plainly all the same. */
+function chainTooLong(cursor: TokenCursor, diagnostics: Diagnostic[]): null {
+    diagnostics.push(error('expr.chain-too-long',
+        `More than ${MAX_CHAIN} operators in a row — break the expression up`,
+        tokenSpan(cursor.peek()), { max: MAX_CHAIN }));
+    return null;
 }
 
 function parseAdditive(cursor: TokenCursor, diagnostics: Diagnostic[]): Expr | null {
-    let left = parseUnary(cursor, diagnostics);
+    let left = parseMultiplicative(cursor, diagnostics);
     if (!left) return null;
-    for (;;) {
+    for (let chained = 0; ; chained++) {
         const op: BinaryOp | null = cursor.at('plus') ? '+' : cursor.at('minus') ? '-' : null;
         if (!op) return left;
+        if (chained >= MAX_CHAIN) return chainTooLong(cursor, diagnostics);
+        cursor.next();
+        const right = parseMultiplicative(cursor, diagnostics);
+        if (!right) return null;
+        left = { kind: 'binary', op, left, right, span: spanBetween(left.span, right.span) };
+    }
+}
+
+/**
+ * Multiplicative binds tighter than additive, as in JS. `%` is the remainder
+ * operator here; the line-leading marker of a generation block is a different
+ * layer and never reaches this parser.
+ */
+function parseMultiplicative(cursor: TokenCursor, diagnostics: Diagnostic[]): Expr | null {
+    let left = parseUnary(cursor, diagnostics);
+    if (!left) return null;
+    for (let chained = 0; ; chained++) {
+        const t = cursor.peek();
+        const op: BinaryOp | null =
+            t.kind === 'star' ? '*' :
+            t.kind === 'slash' ? '/' :
+            t.kind === 'percent' ? '%' : null;
+        if (!op) return left;
+        if (chained >= MAX_CHAIN) return chainTooLong(cursor, diagnostics);
         cursor.next();
         const right = parseUnary(cursor, diagnostics);
         if (!right) return null;
@@ -89,6 +358,7 @@ function parseAdditive(cursor: TokenCursor, diagnostics: Diagnostic[]): Expr | n
 }
 
 function parseUnary(cursor: TokenCursor, diagnostics: Diagnostic[]): Expr | null {
+    if (refuseIncrement(cursor, diagnostics)) return null;
     if (cursor.at('bang') || cursor.at('minus')) {
         const opToken = cursor.next();
         const operand = parseUnary(cursor, diagnostics);
@@ -100,14 +370,140 @@ function parseUnary(cursor: TokenCursor, diagnostics: Diagnostic[]): Expr | null
             span: spanBetween(tokenSpan(opToken), operand.span),
         };
     }
-    return parsePrimary(cursor, diagnostics);
+    return parsePostfix(cursor, diagnostics);
+}
+
+/**
+ * Property reads and method calls on a value: `start.format("MM/DD")`,
+ * `title.length`, `xs?.first`.
+ *
+ * `file.name` never reaches here — it is consumed as a single property by
+ * {@link parseIdentLed}, so the two spellings do not compete.
+ */
+function parsePostfix(cursor: TokenCursor, diagnostics: Diagnostic[]): Expr | null {
+    let obj = parsePrimary(cursor, diagnostics);
+    if (!obj) return null;
+    // Counted for the same reason a run of `+` is: the loop is flat and the
+    // tree it leaves is not.
+    for (let chained = 0; ; chained++) {
+        if (refuseIncrement(cursor, diagnostics)) return null;
+        // Asked once the token says the chain goes on, so a chain that is
+        // exactly the limit long and then stops is not refused for stopping.
+        const goesOn = cursor.at('lbracket') || cursor.at('dot') || cursor.at('qdot');
+        if (goesOn && chained >= MAX_CHAIN) return chainTooLong(cursor, diagnostics);
+        if (cursor.at('lbracket')) {
+            const next = parseIndex(cursor, diagnostics, obj, false);
+            if (!next) return null;
+            obj = next;
+            continue;
+        }
+        const optional = cursor.at('qdot');
+        if (!optional && !cursor.at('dot')) return obj;
+        cursor.next();
+
+        // `xs?.[0]` — the optional form of an element read.
+        if (optional && cursor.at('lbracket')) {
+            const next = parseIndex(cursor, diagnostics, obj, true);
+            if (!next) return null;
+            obj = next;
+            continue;
+        }
+
+        const nameToken = cursor.peek();
+        if (nameToken.kind !== 'ident') {
+            diagnostics.push(error('expr.expected-member', 'Expected a property or method name after the dot',
+                tokenSpan(nameToken)));
+            return null;
+        }
+        cursor.next();
+
+        if (cursor.at('lparen')) {
+            const args = parseArgs(cursor, diagnostics, nameToken.text);
+            if (!args) return null;
+            obj = {
+                kind: 'method', obj, name: nameToken.text, args, optional,
+                span: spanBetween(obj.span, tokenSpan(cursor.peek(-1))),
+            };
+            continue;
+        }
+        obj = {
+            kind: 'member', obj, name: nameToken.text, optional,
+            span: spanBetween(obj.span, tokenSpan(nameToken)),
+        };
+    }
+}
+
+/**
+ * `++` and `--` are lexed but never parsed. Postfix `n++` returns the old
+ * value and then updates, so `第${n++}回` would splice one number and write
+ * back another — the off-by-one the cells design exists to prevent. One
+ * diagnostic covers the prefix and postfix positions.
+ */
+function refuseIncrement(cursor: TokenCursor, diagnostics: Diagnostic[]): boolean {
+    if (!cursor.at('plusplus') && !cursor.at('minusminus')) return false;
+    const t = cursor.next();
+    const fix = t.text === '++' ? '+= 1' : '-= 1';
+    diagnostics.push(error('expr.increment-not-here',
+        `'${t.text}' is not in this language — write '${fix}', which returns the new value`,
+        tokenSpan(t), { op: t.text, fix }));
+    return true;
+}
+
+/**
+ * Consume a separating comma and say whether another item follows.
+ *
+ * A comma sitting right before the closer ends the list rather than
+ * promising an item that is not there. Every JS formatter writes one there
+ * on purpose, and anyone editing a list down the page leaves one behind, so
+ * refusing it would be refusing the shape this language is imitating. The
+ * canonical printer never writes one back, so a flow clause that arrives
+ * with a trailing comma leaves without it.
+ *
+ * The newlines are skipped for the one bracket that can hold them: a record
+ * literal, whose braces the lexer cannot tell from a block's.
+ */
+function moreItems(cursor: TokenCursor, closer: TokenKind): boolean {
+    if (!cursor.tryEat('comma')) return false;
+    cursor.skipNewlines();
+    return !cursor.at(closer);
+}
+
+/** `xs[i]`. Cursor sits on '['. */
+function parseIndex(cursor: TokenCursor, diagnostics: Diagnostic[], obj: Expr, optional: boolean): Expr | null {
+    cursor.next(); // consume '['
+    const index = parseSubExpr(cursor, diagnostics);
+    if (!index) return null;
+    const close = cursor.tryEat('rbracket');
+    if (!close) {
+        diagnostics.push(error('expr.expected-rbracket', "Expected ']'", tokenSpan(cursor.peek())));
+        return null;
+    }
+    return { kind: 'index', obj, index, optional, span: spanBetween(obj.span, tokenSpan(close)) };
 }
 
 function parsePrimary(cursor: TokenCursor, diagnostics: Diagnostic[]): Expr | null {
     const token = cursor.peek();
     const span = tokenSpan(token);
 
+    // `x => ...` / `(a, b) => ...`. Checked before the parenthesized-expression
+    // branch, which would otherwise eat the parameter list.
+    if (isArrowAhead(cursor)) {
+        return parseArrow(cursor, diagnostics);
+    }
+
     switch (token.kind) {
+        case 'lbracket':
+            return parseArrayLiteral(cursor, diagnostics);
+        case 'lbrace':
+            return parseRecordLiteral(cursor, diagnostics);
+        case 'ellipsis': {
+            // Accepted here so the diagnostic can say where a spread belongs;
+            // the list literal consumes its own before reaching this.
+            cursor.next();
+            diagnostics.push(error('expr.spread-not-here',
+                'A spread only means something inside a list: [...xs, y]', span));
+            return null;
+        }
         case 'date':
             cursor.next();
             return { kind: 'lit', value: { type: 'date', value: token.text }, span };
@@ -126,17 +522,39 @@ function parsePrimary(cursor: TokenCursor, diagnostics: Diagnostic[]): Expr | nu
         }
         case 'number':
             cursor.next();
-            return { kind: 'lit', value: { type: 'number', value: parseInt(token.text, 10) }, span };
+            return { kind: 'lit', value: { type: 'number', value: parseFloat(token.text) }, span };
         case 'string':
             cursor.next();
             return { kind: 'lit', value: { type: 'string', value: token.text }, span };
         case 'wikilink':
             cursor.next();
             return { kind: 'lit', value: { type: 'link', target: token.text }, span };
+        case 'template': {
+            cursor.next();
+            // Block-only, like lists. A flow command is re-serialized on every
+            // firing, and carrying interpolation back out canonically is a
+            // heavy contract for the printer to hold for a rare shape — so
+            // the surface that has to print says to join with + instead.
+            if (profile === 'flow') {
+                diagnostics.push(error('expr.template-not-here',
+                    'A template literal is only available inside a generation block — join with + here', span));
+                return null;
+            }
+            // The token holds the text between the backticks, so an offset of
+            // one puts the interpolations back where the reader sees them.
+            const parts = splitInterpolations(token.text, diagnostics, span.start + 1, 'block');
+            return { kind: 'template', parts, span };
+        }
         case 'lparen': {
             cursor.next();
-            const inner = parseExpr(cursor, diagnostics);
+            // Assignments parse inside parentheses — `(n = next)` is the
+            // written-out way to mean one where a bare `=` would be refused
+            // or warned, the same convention JS linters teach. Recorded on the
+            // node, because that is the only place the two spellings differ:
+            // parentheses leave no token of their own in the tree.
+            const inner = parseAssignment(cursor, diagnostics);
             if (!inner) return null;
+            if (inner.kind === 'assign') inner.parenthesized = true;
             if (!cursor.tryEat('rparen')) {
                 diagnostics.push(error('expr.expected-rparen', "Expected ')'", tokenSpan(cursor.peek())));
                 return null;
@@ -148,11 +566,177 @@ function parsePrimary(cursor: TokenCursor, diagnostics: Diagnostic[]): Expr | nu
         default:
             if (token.kind === 'eof') {
                 diagnostics.push(error('expr.unexpected-eof', 'Unexpected end of expression', span));
+            } else if (token.kind === 'newline') {
+                // Only the statement profile keeps newlines, so this is a
+                // statement broken across lines with every bracket closed.
+                diagnostics.push(error('stmt.unexpected-line-break',
+                    'The statement ended at the line break above — an open ( or [ is what carries one across lines',
+                    span));
             } else {
                 diagnostics.push(error('expr.unexpected-token', `Unexpected token '${token.text}'`, span, { token: token.text }));
             }
             return null;
     }
+}
+
+/** `["a", "b"]`. Cursor sits on '['. */
+function parseArrayLiteral(cursor: TokenCursor, diagnostics: Diagnostic[]): Expr | null {
+    const open = cursor.next();
+    if (profile === 'flow') {
+        diagnostics.push(error('expr.list-not-here',
+            'A list is only available inside a generation block', tokenSpan(open)));
+        return null;
+    }
+    const items: Expr[] = [];
+    if (!cursor.at('rbracket')) {
+        for (;;) {
+            const item = cursor.at('ellipsis')
+                ? parseSpread(cursor, diagnostics)
+                : parseSubExpr(cursor, diagnostics);
+            if (!item) return null;
+            items.push(item);
+            if (moreItems(cursor, 'rbracket')) continue;
+            break;
+        }
+    }
+    const close = cursor.tryEat('rbracket');
+    if (!close) {
+        diagnostics.push(error('expr.expected-rbracket-list', "Expected ']' to close the list", tokenSpan(cursor.peek())));
+        return null;
+    }
+    return { kind: 'array', items, span: spanBetween(tokenSpan(open), tokenSpan(close)) };
+}
+
+/** `...xs`, inside a list literal. Cursor sits on the ellipsis. */
+function parseSpread(cursor: TokenCursor, diagnostics: Diagnostic[]): Expr | null {
+    const open = cursor.next();
+    const arg = parseSubExpr(cursor, diagnostics);
+    if (!arg) return null;
+    return { kind: 'spread', arg, span: spanBetween(tokenSpan(open), arg.span) };
+}
+
+/**
+ * `{ mon: "a", tue: "b" }`. Cursor sits on the brace.
+ *
+ * Keys are written as names or as strings; a computed key is not read here,
+ * because a record's fields are what the checker knows about it and a key
+ * decided at evaluation would leave it knowing nothing.
+ */
+function parseRecordLiteral(cursor: TokenCursor, diagnostics: Diagnostic[]): Expr | null {
+    const open = cursor.next();
+    if (profile === 'flow') {
+        diagnostics.push(error('expr.record-not-here',
+            'A record is only available inside a generation block', tokenSpan(open)));
+        return null;
+    }
+    const entries: { key: string; value: Expr }[] = [];
+    // The lexer cannot tell a record's braces from a block's, so the record
+    // skips its own newlines: `{a: 1,\n b: 2}` is one literal, not two lines.
+    cursor.skipNewlines();
+    if (!cursor.at('rbrace')) {
+        for (;;) {
+            const keyToken = cursor.peek();
+            if (keyToken.kind !== 'ident' && keyToken.kind !== 'string') {
+                diagnostics.push(error('expr.expected-field-name',
+                    'Expected a field name', tokenSpan(keyToken)));
+                return null;
+            }
+            cursor.next();
+            if (!cursor.tryEat('colon')) {
+                diagnostics.push(error('expr.expected-field-value',
+                    `Expected ':' after the field name '${keyToken.text}'`, tokenSpan(cursor.peek()),
+                    { name: keyToken.text }));
+                return null;
+            }
+            const value = parseSubExpr(cursor, diagnostics);
+            if (!value) return null;
+            entries.push({ key: keyToken.text, value });
+            cursor.skipNewlines();
+            if (moreItems(cursor, 'rbrace')) continue;
+            break;
+        }
+    }
+    const close = cursor.tryEat('rbrace');
+    if (!close) {
+        diagnostics.push(error('expr.expected-rbrace', "Expected '}' to close the record",
+            tokenSpan(cursor.peek())));
+        return null;
+    }
+    return { kind: 'record', entries, span: spanBetween(tokenSpan(open), tokenSpan(close)) };
+}
+
+/**
+ * Does an arrow function start here? `x =>` is one token of lookahead;
+ * `(a, b) =>` needs the matching ')' first, since a parameter list and a
+ * parenthesized expression start the same way.
+ */
+function isArrowAhead(cursor: TokenCursor): boolean {
+    if (cursor.at('ident')) return cursor.peek(1).kind === 'arrow';
+    if (!cursor.at('lparen')) return false;
+    let depth = 0;
+    for (let i = 0; ; i++) {
+        const t = cursor.peek(i);
+        if (t.kind === 'eof') return false;
+        if (t.kind === 'lparen') depth++;
+        else if (t.kind === 'rparen') {
+            depth--;
+            if (depth === 0) return cursor.peek(i + 1).kind === 'arrow';
+        }
+    }
+}
+
+/** `x => body` / `(a, b) => body`. Expression bodies only; blocks are statements. */
+function parseArrow(cursor: TokenCursor, diagnostics: Diagnostic[]): Expr | null {
+    const start = cursor.peek();
+    if (profile === 'flow') {
+        diagnostics.push(error('expr.function-not-here',
+            'A function is only available inside a generation block', tokenSpan(start)));
+        return null;
+    }
+    const params: string[] = [];
+    if (cursor.at('ident')) {
+        params.push(cursor.next().text);
+    } else {
+        cursor.next(); // '('
+        if (!cursor.at('rparen')) {
+            for (;;) {
+                const p = cursor.peek();
+                if (p.kind !== 'ident') {
+                    diagnostics.push(error('expr.expected-param', 'Expected a parameter name', tokenSpan(p)));
+                    return null;
+                }
+                cursor.next();
+                params.push(p.text);
+                if (moreItems(cursor, 'rparen')) continue;
+                break;
+            }
+        }
+        if (!cursor.tryEat('rparen')) {
+            diagnostics.push(error('expr.expected-rparen', "Expected ')'", tokenSpan(cursor.peek())));
+            return null;
+        }
+    }
+    cursor.next(); // '=>'
+    // `x => { ... }`. A `{` here is a record when it looks like one, which is
+    // how `xs.map(x => {a: 1})` has always read — the same test the statement
+    // parser uses, shared rather than written twice. Otherwise it is a block
+    // body, and that is a js section form: outside one there are no
+    // statements to hold, so it is named instead of falling through to the
+    // record parser, which would call `return` a field name.
+    if (cursor.at('lbrace') && !looksLikeRecord(cursor)) {
+        if (profile !== 'stmt') {
+            diagnostics.push(error('expr.fn-body-not-here',
+                'A function with a { } body can only be written in a js section — here the body is an expression: x => x.length',
+                tokenSpan(cursor.peek())));
+            return null;
+        }
+        const blockBody = parseArrowBlockBody(cursor, diagnostics);
+        if (!blockBody) return null;
+        return { kind: 'arrow', params, body: blockBody, span: spanBetween(tokenSpan(start), blockBody.span) };
+    }
+    const body = parseSubExpr(cursor, diagnostics);
+    if (!body) return null;
+    return { kind: 'arrow', params, body, span: spanBetween(tokenSpan(start), body.span) };
 }
 
 function parseIdentLed(cursor: TokenCursor, diagnostics: Diagnostic[]): Expr | null {
@@ -165,20 +749,12 @@ function parseIdentLed(cursor: TokenCursor, diagnostics: Diagnostic[]): Expr | n
         return parseCall(name as FnName, span, cursor, diagnostics);
     }
 
-    // Boolean literals
-    if (name === 'true' || name === 'false') {
-        return { kind: 'lit', value: { type: 'bool', value: name === 'true' }, span };
-    }
-
-    // None literal
-    if (name === 'none') {
-        return { kind: 'lit', value: { type: 'none' }, span };
-    }
-
-    // Weekday literals
-    const weekday = weekdayFromName(name);
-    if (weekday !== null) {
-        return { kind: 'lit', value: { type: 'weekday', value: weekday }, span };
+    // Literal words: the two booleans and the three spellings of the missing
+    // value. Copied out of the table rather than handed over, so nothing later
+    // can be holding the same object as an unrelated expression.
+    const literal = lookupWord(LITERAL_WORDS, name);
+    if (literal) {
+        return { kind: 'lit', value: { ...literal }, span };
     }
 
     // Unit keywords (arguments to startOf/endOf) are carried as strings
@@ -187,9 +763,17 @@ function parseIdentLed(cursor: TokenCursor, diagnostics: Diagnostic[]): Expr | n
     }
 
     // Property references
-    if ((SIMPLE_PROPS as readonly string[]).includes(name)) {
+    if (SIMPLE_PROPS.includes(name)) {
         return { kind: 'prop', name: name as PropName, span };
     }
+    // `tv.date.format(...)` / `tv.file.name` is the namespaced spelling of the
+    // built-ins, accepted as an alias and resolved here so the canonical form
+    // stays the bare one; `Math.floor(...)` keeps its namespace in the name.
+    // One resolution for both, and one list of the words that open one.
+    if ((NAMESPACE_WORDS as readonly string[]).includes(name)) {
+        return parseNamespaced(name, cursor, diagnostics, span);
+    }
+
     if (name === 'file') {
         if (cursor.tryEat('dot')) {
             const member = cursor.peek();
@@ -204,32 +788,260 @@ function parseIdentLed(cursor: TokenCursor, diagnostics: Diagnostic[]): Expr | n
         return null;
     }
 
+    // Names a JS habit reaches for and this language refuses on purpose —
+    // said here with the way out, not left to trip the evaluator as an
+    // unknown binding.
+    const refused = lookupWord(REFUSED_EXPR_NAMES, name);
+    if (refused && profile !== 'flow') {
+        diagnostics.push(error(refused.code, refused.message, span, { name }));
+        return null;
+    }
+
+    // Inside a block, a name the built-ins do not claim is a binding — today
+    // an arrow parameter or a local, later a cell. The built-ins resolve
+    // first, which is what makes those names effectively reserved.
+    if (profile !== 'flow') {
+        if (!cursor.at('lparen')) return { kind: 'var', name, span };
+        // `f(1)`. Read here rather than in the postfix loop, so the callee is
+        // a name by construction and no expression can grow into one.
+        const args = parseArgs(cursor, diagnostics, name);
+        if (!args) return null;
+        return {
+            kind: 'call-local', name, nameSpan: span, args,
+            span: spanBetween(span, tokenSpan(cursor.peek(-1))),
+        };
+    }
+
+    // A weekday is a string here, so `start.weekday() == "tue"` — the form
+    // everyone writes — compares equal. Bare `mon` survives only in the
+    // schedule syntax (`every mon,fri`), which never reaches this parser.
+    if (weekdayFromName(name) !== null) {
+        diagnostics.push(error('expr.weekday-not-literal',
+            `Weekdays are strings in expressions — write "${name}" (bare ${name} is only for 'every ${name}')`,
+            span, { name }));
+        return null;
+    }
+
     diagnostics.push(error('expr.unknown-ident', `Unknown identifier '${name}'`, span, { name }));
     return null;
 }
 
+/**
+ * A built-in reached through a namespace: `tv.date.format(...)`,
+ * `tv.file.name`, `Math.floor(...)`.
+ *
+ * One resolver for all of them. `tv.date.*` is an alias that resolves to the
+ * bare function so the canonical form stays single, while `Math.*` keeps its
+ * namespace in the name itself — a dot cannot appear in an identifier, so
+ * there is no bare spelling to collide with and the printed form reads back
+ * as the same call.
+ */
+function parseNamespaced(root: string, cursor: TokenCursor, diagnostics: Diagnostic[], span: Span): Expr | null {
+    const hint = root === 'tv' ? "'tv' requires a member (tv.date.format(...) / tv.file.name)"
+        : root === STATE_NAMESPACE
+            ? "'state' requires a member (state.n, where n is a cell the command declares)"
+            : "'Math' requires a member (Math.floor(...))";
+    if (!cursor.tryEat('dot')) {
+        diagnostics.push(error('expr.namespace-needs-member', hint, span, { name: root }));
+        return null;
+    }
+
+    // The cells the command declared, folded away as they are read: `state.n`
+    // becomes the name `n` carrying a mark for how it was written. Everything
+    // past the parse goes on working in names — the evaluator, the store that
+    // carries a value to the next instance — and what the fold must not lose
+    // is the mark, which is what makes a cell checkable against the command
+    // rather than against the scope.
+    if (root === STATE_NAMESPACE) return parseCellRef(cursor, diagnostics, span);
+
+    // `tv` has one more level; `Math` holds its functions directly.
+    let group = root;
+    if (root === 'tv') {
+        const groupToken = cursor.peek();
+        if (groupToken.kind !== 'ident' || (groupToken.text !== 'date' && groupToken.text !== 'file')) {
+            diagnostics.push(error('expr.unknown-property', `Unknown namespace 'tv.${groupToken.text}'`,
+                tokenSpan(groupToken), { name: `tv.${groupToken.text}` }));
+            return null;
+        }
+        cursor.next();
+        group = `tv.${groupToken.text}`;
+        if (!cursor.tryEat('dot')) {
+            diagnostics.push(error('expr.namespace-needs-member', `'${group}' requires a member`, span, { name: group }));
+            return null;
+        }
+    }
+
+    const member = cursor.peek();
+    if (member.kind !== 'ident') {
+        diagnostics.push(error('expr.expected-member', 'Expected a name after the dot', tokenSpan(member)));
+        return null;
+    }
+    const written = `${group}.${member.text}`;
+
+    if (group === 'tv.file') {
+        if (member.text !== 'name') {
+            diagnostics.push(error('expr.unknown-property', `Unknown property '${written}'`,
+                tokenSpan(member), { name: written }));
+            return null;
+        }
+        cursor.next();
+        return { kind: 'prop', name: 'file.name', span: spanBetween(span, tokenSpan(member)) };
+    }
+
+    // `tv.date.format` resolves to `format`; `Math.floor` keeps its name.
+    const resolved = group === 'tv.date' ? member.text : written;
+    if (!(FN_NAMES as readonly string[]).includes(resolved)) {
+        diagnostics.push(error('expr.unknown-property', `Unknown function '${written}'`,
+            tokenSpan(member), { name: written }));
+        return null;
+    }
+    cursor.next();
+    if (!cursor.at('lparen')) {
+        diagnostics.push(error('expr.expected-call', `'${written}' is a function — call it`, tokenSpan(member), { name: written }));
+        return null;
+    }
+    return parseCall(resolved as FnName, spanBetween(span, tokenSpan(member)), cursor, diagnostics);
+}
+
+/**
+ * `state.n` — the cell `n`, wherever a value or an assignment target may go.
+ *
+ * Refused in the flow profile at the point it is written. A clause runs at
+ * schedule time, before the block the cells belong to has said anything, so a
+ * cell read there would answer with the value of a generation that has not
+ * happened. The block is where a cell means something.
+ */
+function parseCellRef(cursor: TokenCursor, diagnostics: Diagnostic[], rootSpan: Span): Expr | null {
+    const member = cursor.peek();
+    if (member.kind !== 'ident') {
+        diagnostics.push(error('expr.expected-member', 'Expected a name after the dot', tokenSpan(member)));
+        return null;
+    }
+    cursor.next();
+    const span = spanBetween(rootSpan, tokenSpan(member));
+
+    if (profile === 'flow') {
+        diagnostics.push(error('expr.cell-not-here',
+            'A cell is read in the generation block, not in a command clause',
+            span, { name: member.text }));
+        return null;
+    }
+
+    return { kind: 'var', name: member.text, span, via: STATE_NAMESPACE };
+}
+
 function parseCall(fn: FnName, fnSpan: Span, cursor: TokenCursor, diagnostics: Diagnostic[]): Expr | null {
+    const args = parseArgs(cursor, diagnostics, fn);
+    if (!args) return null;
+    return { kind: 'call', fn, args, span: spanBetween(fnSpan, tokenSpan(cursor.peek(-1))) };
+}
+
+/** `( a, b )` — shared by plain calls and method calls. Cursor sits on '('. */
+function parseArgs(cursor: TokenCursor, diagnostics: Diagnostic[], fn = 'the call'): Expr[] | null {
     cursor.next(); // consume '('
     const args: Expr[] = [];
     if (!cursor.at('rparen')) {
         for (;;) {
-            const arg = parseExpr(cursor, diagnostics);
+            const arg = parseSubExpr(cursor, diagnostics);
             if (!arg) return null;
             args.push(arg);
-            if (cursor.tryEat('comma')) continue;
+            if (moreItems(cursor, 'rparen')) continue;
             break;
         }
     }
-    const close = cursor.tryEat('rparen');
-    if (!close) {
+    if (!cursor.tryEat('rparen')) {
         diagnostics.push(error('expr.expected-rparen-call', `Expected ')' to close ${fn}(...)`, tokenSpan(cursor.peek()), { fn }));
         return null;
     }
-    return { kind: 'call', fn, args, span: spanBetween(fnSpan, tokenSpan(close)) };
+    return args;
 }
 
 /** Normalize H:mm to HH:mm so time values compare lexicographically. */
 function normalizeTime(text: string): string {
     const [h, m] = text.split(':');
     return `${h.padStart(2, '0')}:${m}`;
+}
+
+
+/**
+ * Split text into its literal parts and its `${...}` expressions.
+ *
+ * Used for a template literal and for a line of a generation block's body,
+ * which are the same problem written two ways. Diagnostic spans are absolute:
+ * `offset` is where `text` sits in whatever the reader is looking at.
+ *
+ * Everything that goes wrong is reported — a line with two broken
+ * interpolations says so twice rather than stopping at the first.
+ *
+ * Where the interpolations are is not decided here. `scanInterpolations`
+ * says that, for this and for whoever else has to ask, and what is left for
+ * this function is the part that needs a parser.
+ */
+export function splitInterpolations(
+    text: string,
+    diagnostics: Diagnostic[],
+    offset = 0,
+    forProfile: ParseProfile = 'block'
+): InterpolationPart[] {
+    const parts: InterpolationPart[] = [];
+    let at = 0;
+    // The backslash of an escaped brace has done its work by now: the scan
+    // read it and refused to open an interpolation there, and the text keeps
+    // the braces without it.
+    const pushText = (from: number, to: number) => {
+        const literal = text.slice(from, to).replaceAll('\\${', '${');
+        if (literal !== '') parts.push({ kind: 'text', text: literal });
+    };
+
+    for (const seam of scanInterpolations(text, offset)) {
+        const open = seam.span.start - offset;
+        pushText(at, open);
+        if (!seam.closed) {
+            diagnostics.push(error('gen.unterminated-interpolation',
+                "Unterminated '${' — the closing brace is missing",
+                { start: seam.span.start, end: offset + text.length }));
+            return parts;
+        }
+        const close = seam.span.end - offset - 1;
+        const source = text.slice(open + 2, close);
+        const expr = parseWholeExpr(source, seam.span.start + 2, seam.span, diagnostics, forProfile);
+        if (expr) parts.push({ kind: 'expr', expr, span: seam.span });
+
+        at = close + 1;
+    }
+    pushText(at, text.length);
+    return parts;
+}
+
+/**
+ * One `${...}`, read to the end.
+ *
+ * The expression parser reads one expression and stops, which is fine inside
+ * a call where the `)` catches whatever is left over. Nothing catches it here.
+ * Without this check `${a == b == c}` would quietly generate from `a == b`,
+ * and no round-trip test can see it: the half that was read prints and reads
+ * back perfectly well.
+ */
+function parseWholeExpr(
+    source: string,
+    offset: number,
+    span: Span,
+    diagnostics: Diagnostic[],
+    forProfile: ParseProfile
+): Expr | null {
+    // Lexed with the offset, so every span the parse produces — the tokens,
+    // the AST nodes, and anything the checker or the evaluator reports later
+    // against them — already points into the line the reader is looking at.
+    const { tokens, diagnostics: lexDiagnostics } = tokenize(source, offset);
+    diagnostics.push(...lexDiagnostics);
+    const cursor = new TokenCursor(tokens);
+    const expr = parseExpr(cursor, diagnostics, forProfile);
+    if (!expr) return null;
+    if (!cursor.atEof()) {
+        diagnostics.push(error('gen.trailing-input',
+            `Not all of this was read — there is more after the expression in '${source.trim()}'`,
+            span, { source: source.trim() }));
+        return null;
+    }
+    return expr;
 }

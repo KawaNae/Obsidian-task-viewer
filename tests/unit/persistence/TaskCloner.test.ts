@@ -11,10 +11,6 @@ function callShiftInlineDates(line: string, dayOffset: number): string {
     return proto.shiftInlineDates.call(null, line, dayOffset);
 }
 
-function callResetChildCheckboxes(lines: string[]): string[] {
-    return proto.resetChildCheckboxes.call(null, lines);
-}
-
 function callShiftFrontmatterDates(content: string, dayOffset: number, keys?: TvFileKeys): string {
     return proto.shiftFrontmatterDates.call(null, content, dayOffset, keys ?? DEFAULT_TV_FILE_KEYS);
 }
@@ -58,25 +54,6 @@ describe('TaskCloner', () => {
         it('line without @notation is unchanged', () => {
             const line = '- [ ] Plain task without date';
             expect(callShiftInlineDates(line, 5)).toBe(line);
-        });
-    });
-
-    describe('resetChildCheckboxes', () => {
-        it('resets - [x] to - [ ]', () => {
-            expect(callResetChildCheckboxes(['- [x] done'])).toEqual(['- [ ] done']);
-        });
-
-        it('resets * [X] to * [ ]', () => {
-            expect(callResetChildCheckboxes(['* [X] done'])).toEqual(['* [ ] done']);
-        });
-
-        it('resets numbered list 1. [>]', () => {
-            expect(callResetChildCheckboxes(['1. [>] in progress'])).toEqual(['1. [ ] in progress']);
-        });
-
-        it('leaves non-checkbox lines unchanged', () => {
-            const lines = ['  plain text', '  - note without checkbox'];
-            expect(callResetChildCheckboxes(lines)).toEqual(lines);
         });
     });
 

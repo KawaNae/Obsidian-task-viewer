@@ -206,6 +206,13 @@ describe('FileOperations', () => {
             const result = ops.stripBlockIds(['text ^my-block-id']);
             expect(result[0]).toBe('text');
         });
+
+        it('removes an ID the parser reads, trailing space and all', () => {
+            // The reading has to match the one every parser uses: a stricter
+            // one leaves the copy claiming the original's anchor.
+            const result = ops.stripBlockIds(['- [ ] task ^abc ']);
+            expect(result[0]).toBe('- [ ] task');
+        });
     });
 
     // ── findTaskLineNumber ──
@@ -481,6 +488,367 @@ describe('FileOperations', () => {
                 '- [ ] only task',
             ];
             expect(ops.findSiblingGroupStart(lines, 0)).toBe(0);
+        });
+    });
+
+    // ── findTaskLineNumber: tasks with no name ──
+    //
+    // A line like `- [ ]  @2026-08-15` carries no name, so every strategy that
+    // compares content used to miss and the write was dropped in silence. These
+    // pin both halves of the trade: resolve when the date makes it unambiguous,
+    // refuse when it does not.
+    describe('findTaskLineNumber for a content-less task', () => {
+        const emptyTask = (overrides: Partial<Task> = {}) => makeTask({
+            content: '',
+            startDate: '2026-08-15',
+            originalText: '- [ ]  @2026-08-15',
+            line: 0,
+            ...overrides,
+        });
+
+        it('resolves after the stored text goes stale', () => {
+            // The line was rewritten by an earlier write; the index still holds
+            // the pre-write text.
+            const lines = ['- [x]  @2026-08-15'];
+            expect(ops.findTaskLineNumber(lines, emptyTask({ statusChar: 'x' }))).toBe(0);
+        });
+
+        it('resolves when the line still matches exactly', () => {
+            const lines = ['- [ ]  @2026-08-15'];
+            expect(ops.findTaskLineNumber(lines, emptyTask())).toBe(0);
+        });
+
+        it('resolves past a shift, ignoring named tasks on the same date', () => {
+            const lines = [
+                '- [ ] 名前あり @2026-08-15',
+                '- [x]  @2026-08-15',
+            ];
+            expect(ops.findTaskLineNumber(lines, emptyTask({ statusChar: 'x' }))).toBe(1);
+        });
+
+        it('breaks a tie between same-date tasks with the stored line', () => {
+            const lines = [
+                '- [x]  @2026-08-15',
+                '- [x]  @2026-08-15 ==> +1d',
+            ];
+            // Both answer the date; the line number says which one.
+            expect(ops.findTaskLineNumber(lines, emptyTask({ statusChar: 'x', line: 1 }))).toBe(1);
+        });
+
+        it('refuses when the tie cannot be broken', () => {
+            const lines = [
+                '- [ ] 別のタスク @2026-08-15',
+                '- [x]  @2026-08-15',
+                '- [x]  @2026-08-15 ==> +1d',
+            ];
+            // The stored line points outside the candidates, so nothing decides.
+            expect(ops.findTaskLineNumber(lines, emptyTask({ statusChar: 'x', line: 0 }))).toBe(-1);
+        });
+
+        it('refuses when there is no date to match on', () => {
+            const lines = ['- [x] '];
+            const task = makeTask({
+                content: '', startDate: undefined, originalText: '- [ ] ', line: 0,
+            });
+            expect(ops.findTaskLineNumber(lines, task)).toBe(-1);
+        });
+
+        it('keeps trailing notation matchable (flow command after the date)', () => {
+            const lines = ['- [x]  @2026-08-15 ==> +1d setStartTime(none) setEnd(none)'];
+            expect(ops.findTaskLineNumber(lines, emptyTask({ statusChar: 'x' }))).toBe(0);
+        });
+
+        it('falls back to the stored line when it still holds a matching task', () => {
+            const lines = [
+                '- [ ] 別のタスク @2026-08-15',
+                '- [x]  @2026-08-15 ^tv-t-abc',
+                '- [ ] さらに別 @2026-08-15',
+            ];
+            // Strategy 2b sees exactly one content-less line, so it resolves there.
+            expect(ops.findTaskLineNumber(lines, emptyTask({ statusChar: 'x', line: 1 }))).toBe(1);
+        });
+
+        it('does not match a named task when the task has no name', () => {
+            const lines = ['- [x] 名前あり @2026-08-15'];
+            expect(ops.findTaskLineNumber(lines, emptyTask({ statusChar: 'x' }))).toBe(-1);
+        });
+
+        it('resolves by end date when the task has no start date', () => {
+            const lines = ['- [x]  @>2026-08-20'];
+            const task = makeTask({
+                content: '', startDate: undefined, endDate: '2026-08-20',
+                originalText: '- [ ]  @>2026-08-20', line: 0,
+            });
+            expect(ops.findTaskLineNumber(lines, task)).toBe(0);
+        });
+
+        it('still prefers the block id when the task carries one', () => {
+            const lines = [
+                '- [x]  @2026-08-15',
+                '- [x]  @2026-08-16 ^tv-t-abc',
+            ];
+            const task = emptyTask({ statusChar: 'x', blockId: 'tv-t-abc', startDate: '2026-08-16' });
+            expect(ops.findTaskLineNumber(lines, task)).toBe(1);
+        });
+    });
+
+    // ── findTaskLineNumber: named tasks are unaffected ──
+    describe('findTaskLineNumber for a named task (regression)', () => {
+        it('still returns the first hit when several share content and date', () => {
+            const lines = [
+                '- [x] 設計 @2026-08-15',
+                '- [x] 設計 @2026-08-15',
+            ];
+            const task = makeTask({
+                content: '設計', startDate: '2026-08-15', statusChar: 'x',
+                originalText: '- [ ] 設計 @2026-08-15', line: 0,
+            });
+            expect(ops.findTaskLineNumber(lines, task)).toBe(0);
+        });
+    });
+
+    // ── indent resolution (static) ──
+    describe('indentWidth', () => {
+        it('counts a tab as four columns', () => {
+            expect(FileOperations.indentWidth('\t- [ ] x')).toBe(4);
+            expect(FileOperations.indentWidth('    - [ ] x')).toBe(4);
+        });
+
+        it('gives the same depth the same width regardless of spelling', () => {
+            expect(FileOperations.indentWidth('\t\t- x')).toBe(FileOperations.indentWidth('        - x'));
+        });
+
+        it('is zero for a top-level line', () => {
+            expect(FileOperations.indentWidth('- [ ] x')).toBe(0);
+        });
+    });
+
+    describe('detectIndentUnit', () => {
+        it('takes the spelling of the first indented line', () => {
+            expect(FileOperations.detectIndentUnit(['- a', '\t- b'])).toBe('\t');
+            expect(FileOperations.detectIndentUnit(['- a', '    - b'])).toBe('    ');
+        });
+
+        it('ignores blank lines while looking', () => {
+            expect(FileOperations.detectIndentUnit(['- a', '   ', '\t- b'])).toBe('\t');
+        });
+
+        it('defaults to a tab when nothing is indented', () => {
+            expect(FileOperations.detectIndentUnit(['- a', '- b'])).toBe('\t');
+        });
+    });
+
+    describe('resolveChildIndent', () => {
+        it('copies the first existing child', () => {
+            const lines = ['- [ ] parent', '\t- [ ] child'];
+            expect(FileOperations.resolveChildIndent(lines, 0)).toBe('\t');
+        });
+
+        it('prefers the task\'s own children over the rest of the file', () => {
+            const lines = ['- [ ] other', '    - [ ] other child', '- [ ] parent', '\t- [ ] child'];
+            expect(FileOperations.resolveChildIndent(lines, 2)).toBe('\t');
+        });
+
+        it('falls back to the file when the task has no children', () => {
+            const lines = ['- [ ] parent', '- [ ] other', '    - [ ] other child'];
+            expect(FileOperations.resolveChildIndent(lines, 0)).toBe('    ');
+        });
+
+        it('nests below an already indented parent', () => {
+            const lines = ['- [ ] top', '\t- [ ] parent', '\t\t- [ ] child'];
+            expect(FileOperations.resolveChildIndent(lines, 1)).toBe('\t\t');
+        });
+
+        it('does not treat a line past a blank as a child', () => {
+            const lines = ['- [ ] parent', '', '    - [ ] not a child'];
+            // Nothing indented before the blank, so the file's own unit decides.
+            expect(FileOperations.resolveChildIndent(lines, 0)).toBe('    ');
+        });
+    });
+
+    // ── same-name records, in the shapes real vaults hold ──
+    //
+    // Timer records repeat the target's name, so a day of pomodoros is a column
+    // of identical names. Matching on the date alone cannot say which one a
+    // write means; the start time can.
+    describe('findTaskLineNumber across a run of same-name records', () => {
+        const pomodoro = [
+            '- [x] 🍅 スタディ3 @2026-08-14T09:00>09:25',
+            '- [x] 🍅 スタディ3 @2026-08-14T09:30>09:55',
+            '- [x] 🍅 スタディ3 @2026-08-14T10:00>10:25',
+            '- [x] 🍅 スタディ3 @2026-08-14T10:30>10:55',
+            '- [x] 🍅 スタディ3 @2026-08-14T11:00>11:25',
+            '- [x] 🍅 スタディ3 @2026-08-14T11:30>11:55',
+        ];
+        const record = (startTime: string, line: number) => makeTask({
+            content: '🍅 スタディ3', statusChar: 'x',
+            startDate: '2026-08-14', startTime,
+            // Stale on purpose: the exact-text strategies must not be what answers.
+            originalText: '- [ ] 🍅 スタディ3 @stale', line,
+        });
+
+        it('picks the record whose start time matches, not the first of the run', () => {
+            expect(ops.findTaskLineNumber(pomodoro, record('10:30', 3))).toBe(3);
+        });
+
+        it('picks the last of the run', () => {
+            expect(ops.findTaskLineNumber(pomodoro, record('11:30', 5))).toBe(5);
+        });
+
+        it('answers even when the stored line points elsewhere', () => {
+            // Only one line carries 09:30, so the time alone decides.
+            expect(ops.findTaskLineNumber(pomodoro, record('09:30', 0))).toBe(1);
+        });
+
+        it('refuses two records that share the same minute', () => {
+            const sameMinute = [
+                '- [ ] 別 @2026-08-14T08:00',
+                '- [x] ⏱️ 設計 @2026-08-14T10:00>10:00',
+                '- [x] ⏱️ 設計 @2026-08-14T10:00>10:30',
+            ];
+            const task = makeTask({
+                content: '⏱️ 設計', statusChar: 'x',
+                startDate: '2026-08-14', startTime: '10:00',
+                originalText: '- [ ] ⏱️ 設計 @stale', line: 0,
+            });
+            expect(ops.findTaskLineNumber(sameMinute, task)).toBe(-1);
+        });
+
+        it('breaks a same-minute tie with the stored line', () => {
+            const sameMinute = [
+                '- [x] ⏱️ 設計 @2026-08-14T10:00>10:00',
+                '- [x] ⏱️ 設計 @2026-08-14T10:00>10:30',
+            ];
+            const task = makeTask({
+                content: '⏱️ 設計', statusChar: 'x',
+                startDate: '2026-08-14', startTime: '10:00',
+                originalText: '- [ ] ⏱️ 設計 @stale', line: 1,
+            });
+            expect(ops.findTaskLineNumber(sameMinute, task)).toBe(1);
+        });
+    });
+
+    describe('findTaskLineNumber across a run of nameless records', () => {
+        // Old habit files hold columns of icon-only records; the timestamps are
+        // unique to the minute.
+        const nameless = [
+            '- [x] ⏱️ @2026-08-14T07:00>07:30',
+            '- [x] ⏱️ @2026-08-14T08:00>08:30',
+            '- [x] ⏱️ @2026-08-14T09:00>09:30',
+        ];
+        const containers = [
+            '- [x]  @2026-08-14T07:00>07:30',
+            '- [x]  @2026-08-14T08:00>08:30',
+            '- [x]  @2026-08-14T09:00>09:30',
+        ];
+
+        it('separates icon-only records by time', () => {
+            const task = makeTask({
+                content: '⏱️', statusChar: 'x',
+                startDate: '2026-08-14', startTime: '08:00',
+                originalText: '- [ ] ⏱️ @stale', line: 0,
+            });
+            expect(ops.findTaskLineNumber(nameless, task)).toBe(1);
+        });
+
+        it('separates content-less containers by time', () => {
+            // Matching on the date alone made this whole column ambiguous, so
+            // every write to it was refused.
+            const task = makeTask({
+                content: '', statusChar: 'x',
+                startDate: '2026-08-14', startTime: '09:00',
+                originalText: '- [ ]  @stale', line: 0,
+            });
+            expect(ops.findTaskLineNumber(containers, task)).toBe(2);
+        });
+    });
+
+    describe('findTaskLineNumber for all-day tasks', () => {
+        it('resolves a lone all-day task by date', () => {
+            const lines = ['- [x] 読書 @2026-08-14'];
+            const task = makeTask({
+                content: '読書', statusChar: 'x', startDate: '2026-08-14',
+                originalText: '- [ ] 読書 @stale', line: 0,
+            });
+            expect(ops.findTaskLineNumber(lines, task)).toBe(0);
+        });
+
+        it('refuses same-name all-day tasks that the stored line cannot separate', () => {
+            // No time to tell them apart. This is the case the change gives up
+            // on; before, it wrote to the first one without saying so.
+            const lines = [
+                '- [ ] 別 @2026-08-14',
+                '- [x] 読書 @2026-08-14',
+                '- [x] 読書 @2026-08-14',
+            ];
+            const task = makeTask({
+                content: '読書', statusChar: 'x', startDate: '2026-08-14',
+                originalText: '- [ ] 読書 @stale', line: 0,
+            });
+            expect(ops.findTaskLineNumber(lines, task)).toBe(-1);
+        });
+    });
+
+    // ── fenced lines are not candidates ──
+    //
+    // The parser refuses to index a line inside a fence, so no task lives
+    // there. The search still has to skip them: a sample in a fence can be a
+    // character-for-character copy of the task being looked for.
+    describe('findTaskLineNumber ignores fenced lines', () => {
+        it('does not match an identical line inside a fence', () => {
+            const line = '- [ ] 設計 @2026-08-14T10:00';
+            const lines = ['```md', line, '```', line];
+            const task = makeTask({
+                content: '設計', startDate: '2026-08-14', startTime: '10:00',
+                originalText: line, line: 3,
+            });
+            expect(ops.findTaskLineNumber(lines, task)).toBe(3);
+        });
+
+        it('does not match by block id inside a fence', () => {
+            const lines = [
+                '```md',
+                '- [ ] 例 ^abc123',
+                '```',
+                '- [ ] 本物 ^abc123',
+            ];
+            const task = makeTask({ content: '本物', blockId: 'abc123', line: 3 });
+            expect(ops.findTaskLineNumber(lines, task)).toBe(3);
+        });
+
+        it('does not match by content and date inside a fence', () => {
+            const lines = [
+                '```md',
+                '- [x] 設計 @2026-08-14T10:00',
+                '```',
+                '- [x] 設計 @2026-08-14T10:00',
+            ];
+            const task = makeTask({
+                content: '設計', statusChar: 'x',
+                startDate: '2026-08-14', startTime: '10:00',
+                originalText: '- [ ] 設計 @stale', line: 0,
+            });
+            // Only the line outside the fence answers, so it resolves uniquely.
+            expect(ops.findTaskLineNumber(lines, task)).toBe(3);
+        });
+
+        it('refuses when the only candidate sits inside a fence', () => {
+            const lines = ['```md', '- [x] 設計 @2026-08-14T10:00', '```'];
+            const task = makeTask({
+                content: '設計', statusChar: 'x',
+                startDate: '2026-08-14', startTime: '10:00',
+                originalText: '- [ ] 設計 @stale', line: 1,
+            });
+            expect(ops.findTaskLineNumber(lines, task)).toBe(-1);
+        });
+
+        it('does not fall back to a stored line that is now fenced', () => {
+            const lines = ['```md', '- [x] 設計 @2026-08-14T10:00', '```'];
+            const task = makeTask({
+                content: '設計', statusChar: 'x', startDate: '2026-08-14',
+                originalText: '- [x] 設計 @2026-08-14T10:00', line: 1,
+            });
+            expect(ops.findTaskLineNumber(lines, task)).toBe(-1);
         });
     });
 });

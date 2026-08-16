@@ -22,6 +22,34 @@ export class FrontmatterLineEditor {
     }
 
     /**
+     * frontmatter を持たないファイルのために空の block を先頭へ挿し、
+     * 書き込み可能な lines と fmEnd を返す。既にある場合はそのまま返す。
+     *
+     * `processFrontMatter` はキーを書くときに block を作るので、surgical edit
+     * へ寄せる経路（{@link FrontmatterWriter.setKeys}）が block 無しのファイルで
+     * 黙って何もしないと機能が落ちる。本文は後ろにそのまま残す。
+     */
+    static ensureBlock(lines: string[]): { lines: string[]; fmEnd: number } {
+        const existing = this.findEnd(lines);
+        if (existing >= 0) return { lines, fmEnd: existing };
+        return { lines: ['---', '---', ...lines], fmEnd: 1 };
+    }
+
+    /**
+     * キーの値を**書かれたまま**（引用符を外さず）返す。キーが無ければ null。
+     *
+     * 条件付き削除のための読み取りなので、値の解釈はしない。比較側は
+     * {@link escapeYamlScalar} を通した形と生の形の双方を許す。マルチライン値は
+     * 対象外で、キー行の右側だけを見る。
+     */
+    static readRawScalar(lines: string[], fmEnd: number, key: string): string | null {
+        const range = this.findKeyRange(lines, fmEnd, key);
+        if (!range) return null;
+        const m = lines[range[0]].match(/^[^:\s]+\s*:\s*(.*)$/);
+        return m ? m[1].trim() : null;
+    }
+
+    /**
      * frontmatter 内でトップレベルキーの行範囲 [start, end) を返す。
      * 継続行（配列項目・ブロックスカラー等）も含む。
      * キーが存在しない場合は null。

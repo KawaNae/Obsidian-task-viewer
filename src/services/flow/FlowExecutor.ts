@@ -1,5 +1,6 @@
-import { type App, TFile } from 'obsidian';
+import { type App, Notice, TFile } from 'obsidian';
 import type { Task, TaskViewerSettings } from '../../types';
+import { t } from '../../i18n';
 import { DateUtils } from '../../utils/DateUtils';
 import { logError, logInfo, logWarn } from '../../log/log';
 import type { TaskIndex } from '../core/TaskIndex';
@@ -8,9 +9,10 @@ import type { TaskRepository } from '../persistence/TaskRepository';
 import { EvalError } from '../lang/ExprEvaluator';
 import type { FlowEffect } from './FlowEffects';
 import { flowSource } from './FlowSegments';
-import { type FlowPlanDeps, planFlow } from './FlowPlanner';
+import { type FlowPlanDeps, GenerationError, planFlow } from './FlowPlanner';
 import { canTriggerFlow } from './FlowTrigger';
 import { createMomentEvalHost } from './MomentEvalHost';
+import { runtimeText } from './runtimeText';
 
 /**
  * Flow-command runtime: queues completion events, re-resolves the task
@@ -22,10 +24,20 @@ import { createMomentEvalHost } from './MomentEvalHost';
  * rewritten), which changes the completion-detection signature. Running
  * two fires against a stale index would double-generate.
  */
+/** How long one failure stays quiet after it has been shown. */
+const FAILURE_NOTICE_WINDOW_MS = 5000;
+
+/** The file as it is named in the vault, which is how a user knows it. */
+function fileName(path: string): string {
+    return (path.split('/').pop() ?? path).replace(/\.md$/i, '');
+}
+
 export class FlowExecutor {
     private taskQueue: Task[] = [];
     private isProcessing = false;
     private readonly host = createMomentEvalHost();
+    /** Failures already shown, by task and message, with when they were shown. */
+    private readonly recentFailures = new Map<string, number>();
 
     constructor(
         private repository: TaskRepository,
@@ -99,11 +111,13 @@ export class FlowExecutor {
         try {
             effects = planFlow(task, program, this.buildDeps());
         } catch (err) {
-            if (err instanceof EvalError) {
-                // Runtime expression failure (e.g. unset property): do not
-                // fire and do not consume — the command stays for the user
-                // to fix, and the diagnostic explains why.
+            if (err instanceof EvalError || err instanceof GenerationError) {
+                // Runtime expression failure (e.g. unset property), or a
+                // block that cannot produce the next instance: do not fire
+                // and do not consume — the command stays for the user to
+                // fix, and the message explains why.
                 logWarn(`[FlowExecutor] Flow did not fire for ${task.id}: ${err.message}`);
+                this.reportDidNotFire(task, err);
                 return false;
             }
             throw err;
@@ -119,6 +133,35 @@ export class FlowExecutor {
         return effects.length > 0;
     }
 
+    /**
+     * Tell the user that the check they ticked did nothing.
+     *
+     * Not firing and not consuming is the design — a command whose expression
+     * failed has to stay on the line — but from the outside it is a checkbox
+     * that answers with nothing at all. The log line was the only trace, and
+     * nobody has the console open while ticking a task.
+     *
+     * The same failure is shown once per window. A task is toggled on and off
+     * while its author works out what is wrong, and a notice per toggle would
+     * bury the file behind its own complaint. A different failure is a
+     * different message, so fixing one and hitting the next is still visible.
+     */
+    private reportDidNotFire(task: Task, err: EvalError | GenerationError): void {
+        const now = Date.now();
+        // Drop what has aged out on the way past, so a long session does not
+        // keep a key for every failure it has ever seen.
+        for (const [key, at] of this.recentFailures) {
+            if (now - at >= FAILURE_NOTICE_WINDOW_MS) this.recentFailures.delete(key);
+        }
+        // Which failure this is, said in neither language: the code and the
+        // values it was given. Keying on the sentence would make the same
+        // failure a different one as soon as the vault changes language.
+        const key = `${task.id}::${err.code}::${JSON.stringify(err.params ?? {})}`;
+        if (this.recentFailures.has(key)) return;
+        this.recentFailures.set(key, now);
+        new Notice(t('notice.flowDidNotFire', { reason: runtimeText(err), file: fileName(task.file) }));
+    }
+
     private async applyEffect(task: Task, effect: FlowEffect): Promise<void> {
         switch (effect.kind) {
             case 'create-next': {
@@ -127,9 +170,21 @@ export class FlowExecutor {
                 // (line-level canonical, from FlowPlanner) are emitted right
                 // after the task line.
                 const flowLines = (effect.newTask.flow?.childSegments ?? []).map(s => s.raw);
-                await this.repository.insertRecurrenceForTask(task, line, effect.copyChildren, flowLines);
+                await this.repository.insertRecurrenceForTask(task, line, flowLines);
                 return;
             }
+            case 'create-generated':
+                // Finished lines: the planner composed the parent, checked
+                // it and normalized its status, so there is nothing to
+                // format here. What it corrected on the way is reported
+                // rather than dropped — the written line differs from the
+                // one the block describes, and nothing else will say so.
+                for (const w of effect.warnings) {
+                    logWarn(`[Flow:generated] ${task.id}: ${w.message}`);
+                }
+                await this.repository.insertGeneratedInstance(
+                    task, effect.parentLine, effect.flowLines, effect.children);
+                return;
             case 'archive-to': {
                 const line = TaskParser.format(effect.archivedTask);
                 await this.repository.appendTaskWithChildren(effect.destPath, line, task);
@@ -157,6 +212,7 @@ export class FlowExecutor {
             },
             weekStartDay: this.getSettings().weekStartDay,
             host: this.host,
+            getBlock: (filePath, name) => this.taskIndex.getGenBlock(filePath, name),
         };
     }
 }

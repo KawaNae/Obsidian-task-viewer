@@ -15,7 +15,10 @@ import { createTempTask } from '../services/data/createTempTask';
 import { TimeFormatter } from '../utils/TimeFormatter';
 import { TimerTaskResolver } from './TimerTaskResolver';
 import { isTimerTargetId } from '../utils/TimerTargetIdUtils';
+import { type TimerIcon, getTimerIcon, withTimerIcon } from '../utils/TimerIcons';
+import { decideLazyEnd } from './TimerLazyEnd';
 import type { TimerStorageUtils } from './TimerStorageUtils';
+import { logWarn } from '../log/log';
 
 export class TimerRecorder {
     private resolver: TimerTaskResolver;
@@ -38,8 +41,9 @@ export class TimerRecorder {
         const endTime = new Date();
         const startTime = new Date(endTime.getTime() - elapsedSeconds * 1000);
 
+        const icon = this.getTimerIcon(timer);
         const taskObj = this.createTaskObject(
-            timer.customLabel.trim() ? `⏱️ ${timer.customLabel.trim()}` : '⏱️',
+            this.recordLabel(timer),
             this.formatDate(startTime),
             this.formatTime(startTime),
             this.formatDate(endTime),
@@ -48,7 +52,7 @@ export class TimerRecorder {
         const formattedLine = TaskParser.format(taskObj);
 
         await this.insertChildRecord(timer, formattedLine);
-        new Notice(t('notice.timerRecorded', { icon: '⏱️', duration: TimeFormatter.formatSeconds(elapsedSeconds) }));
+        new Notice(t('notice.timerRecorded', { icon, duration: TimeFormatter.formatSeconds(elapsedSeconds) }));
     }
 
     /**
@@ -59,8 +63,9 @@ export class TimerRecorder {
         const endTime = new Date();
         const startTime = new Date(endTime.getTime() - elapsedSeconds * 1000);
 
+        const icon = this.getTimerIcon(timer);
         const taskObj = this.createTaskObject(
-            timer.customLabel.trim() ? `⏲️ ${timer.customLabel.trim()}` : '⏲️',
+            this.recordLabel(timer),
             this.formatDate(startTime),
             this.formatTime(startTime),
             this.formatDate(endTime),
@@ -69,7 +74,7 @@ export class TimerRecorder {
         const formattedLine = TaskParser.format(taskObj);
 
         await this.insertChildRecord(timer, formattedLine);
-        new Notice(t('notice.countdownRecorded', { icon: '⏲️', duration: TimeFormatter.formatSeconds(elapsedSeconds) }));
+        new Notice(t('notice.countdownRecorded', { icon, duration: TimeFormatter.formatSeconds(elapsedSeconds) }));
     }
 
     /**
@@ -82,12 +87,10 @@ export class TimerRecorder {
         const startTime = new Date(endTime.getTime() - elapsedSeconds * 1000);
 
         const isPomodoroSource = timer.timerType === 'interval' && timer.intervalSource === 'pomodoro';
-        const icon = isPomodoroSource ? '🍅' : '🔁';
-        const custom = timer.customLabel.trim();
-        const label = custom ? `${icon} ${custom}` : icon;
+        const icon = this.getTimerIcon(timer);
 
         const taskObj = this.createTaskObject(
-            label,
+            this.recordLabel(timer),
             this.formatDate(startTime),
             this.formatTime(startTime),
             this.formatDate(endTime),
@@ -162,7 +165,19 @@ export class TimerRecorder {
             ? this.resolver.resolveTvFile(timer)
             : this.resolver.resolveTvInline(timer);
 
-        if (!task) return;
+        if (!task) {
+            // 開始時の書き込みが落ちるとセッションを丸ごと失う。黙って戻ると
+            // ユーザーは計測を終えるまで気づけないので、書き込めない形式だと
+            // 分かっている場合はその場で伝える。行を見失っただけの場合は
+            // 再スキャンで直ることがあるのでログに留める。
+            const reason = this.resolver.explainFailure(timer);
+            if (reason === 'read-only') {
+                new Notice(t('notice.timerTargetReadOnly'));
+            } else {
+                logWarn('[TimerRecorder] start-time write skipped: timer target not resolved');
+            }
+            return;
+        }
 
         const updates: Record<string, string | undefined> = {
             startDate: this.formatDate(now),
@@ -196,6 +211,43 @@ export class TimerRecorder {
     }
 
     /**
+     * 走行中の行の end を、実効 end を過ぎていたら先へ書き足す。
+     *
+     * 書き先は「今どの行に走っているか」＝ {@link resolveTailRecord} が返す行で、
+     * 停止時の記録と同じ判断に乗る（self の 1 本目は対象タスク行、それ以外は
+     * 自分が書いたセッション行）。行を引けなければ何も書かない — 次の見直しで
+     * また試す。
+     *
+     * 実効 end は `DisplayTask` から取る。end の無い時刻付きタスクが既定の 1 時間
+     * で終わる規則はそちらが持っており、ここで再現すると二重管理になる。明示 end
+     * を持つ行も同じ経路で扱えるのはその副産物である。
+     *
+     * @returns 次に見直す時刻（ミリ秒）。行を引けなかったときは undefined。
+     */
+    async extendRunningSession(timer: TimerInstance): Promise<number | undefined> {
+        const target = this.resolveTailRecord(timer);
+        if (!target) return undefined;
+
+        const display = this.plugin.getTaskReadService().getDisplayTask(target.id);
+        if (!display?.effectiveEndDate || !display.effectiveEndTime) return undefined;
+
+        const effectiveEndMs = new Date(
+            `${display.effectiveEndDate}T${display.effectiveEndTime}`
+        ).getTime();
+        if (Number.isNaN(effectiveEndMs)) return undefined;
+
+        const decision = decideLazyEnd(Date.now(), effectiveEndMs);
+        if (decision.kind === 'hold') return decision.floorMs;
+
+        const end = new Date(decision.endMs);
+        await this.plugin.getTaskIndex().updateTask(target.id, {
+            endDate: this.formatDate(end),
+            endTime: this.formatTime(end),
+        });
+        return decision.endMs;
+    }
+
+    /**
      * 走行中セッションの行（placeholder）を組み立てる。
      *
      * 開始時刻だけを持つ未完了行で、`blockId` は書き込んだ後に「どの行が今の
@@ -211,7 +263,7 @@ export class TimerRecorder {
         const blockId = this.storageUtils.generateTimerTargetId();
 
         const taskObj = this.createTaskObject(
-            timer.customLabel.trim() || timer.taskName.trim(),
+            this.sessionName(timer),
             this.formatDate(now),
             this.formatTime(now),
             '', ''
@@ -287,6 +339,8 @@ export class TimerRecorder {
 
         timer.tailRecordBlockId = blockId;
         timer.recordedChildTaskId = sessionTaskId;
+        // 新しい行に走り始めたので、end 書き足しの門は引き直す。
+        timer.lazyEndFloorMs = undefined;
         return sessionTaskId;
     }
 
@@ -314,14 +368,10 @@ export class TimerRecorder {
         const endTime = new Date();
 
         const icon = this.getTimerIcon(timer);
-        const existingContent = child.content.trim();
         // 名前は対象タスクから継ぐので、既にアイコン付きの行（完了済みレコードの
-        // 「続き」など）を起点にすると二重に付く。
-        const content = existingContent.startsWith(icon)
-            ? existingContent
-            : existingContent
-                ? `${icon} ${existingContent}`
-                : icon;
+        // 「続き」など）を起点にすると二重に付く。付け直しの規則は
+        // {@link withTimerIcon} が持つ。
+        const content = withTimerIcon(icon, child.content.trim());
 
         await taskIndex.updateTask(child.id, {
             content,
@@ -339,14 +389,46 @@ export class TimerRecorder {
     }
 
     /**
-     * Get the emoji icon for a timer type.
+     * 対象を引けなかったことを、原因に応じた文言で伝える。
+     *
+     * 読み取り専用の形式（day-planner / tasks-plugin）は最初から書き込めない。
+     * 「削除、移動、またはリネームされた可能性」と言うと、実際には在る行を
+     * 探しに行かせることになる。
      */
-    private getTimerIcon(timer: TimerInstance): string {
-        if (timer.timerType === 'interval') {
-            return timer.intervalSource === 'pomodoro' ? '🍅' : '🔁';
-        }
-        if (timer.timerType === 'countdown') return '⏳';
-        return '⏱️';
+    private noticeResolveFailure(timer: TimerInstance): void {
+        const reason = this.resolver.explainFailure(timer);
+        new Notice(t(reason === 'read-only'
+            ? 'notice.timerTargetReadOnly'
+            : 'notice.timerTargetNotFound'));
+    }
+
+    /**
+     * レコードが名乗る名前の素。
+     *
+     * ユーザーが付けたラベルが無ければ**対象タスクの名前を継ぐ**。セッションは
+     * 同じ作業の分割であって別物ではないので、名前を落とすと後から読めない。
+     * 走行中の行を書く {@link buildSessionPlaceholder} と、行を引けずに 1 行
+     * 足すフォールバック（{@link addCountupRecord} 系）で規則が割れていて、
+     * 後者だけが名前を失っていた。
+     */
+    private sessionName(timer: TimerInstance): string {
+        return timer.customLabel.trim() || timer.taskName.trim();
+    }
+
+    /** レコード行の content（アイコン + 名前）。 */
+    private recordLabel(timer: TimerInstance): string {
+        return withTimerIcon(this.getTimerIcon(timer), this.sessionName(timer));
+    }
+
+    /**
+     * Get the emoji icon for a timer type.
+     * 一覧は {@link TimerIcons} が持つ — 剥がす側（フロー発火）と共有する。
+     */
+    private getTimerIcon(timer: TimerInstance): TimerIcon {
+        return getTimerIcon(
+            timer.timerType,
+            timer.timerType === 'interval' ? timer.intervalSource : undefined
+        );
     }
 
     /**
@@ -525,12 +607,11 @@ export class TimerRecorder {
                 : this.resolver.resolveTvInline(timer);
 
             if (!task) {
-                new Notice(t('notice.timerTargetNotFound'));
+                this.noticeResolveFailure(timer);
                 return;
             }
 
             const icon = this.getTimerIcon(timer);
-            const existingContent = task.content.trim();
 
             const updates: Partial<Task> = {
                 startDate: startDateStr,
@@ -544,11 +625,7 @@ export class TimerRecorder {
                 // 内容一致では解決できなくなる）。自動生成 id は再開時か widget を
                 // 閉じるときに外れる。ユーザーの手動 blockId はもとより保持。
                 blockId: task.blockId,
-                content: existingContent.startsWith(icon)
-                    ? existingContent
-                    : existingContent
-                        ? `${icon} ${existingContent}`
-                        : icon,
+                content: withTimerIcon(icon, task.content.trim()),
             };
 
             await taskIndex.updateTask(task.id, updates);
@@ -578,7 +655,7 @@ export class TimerRecorder {
             : this.resolver.resolveTvInline(timer);
 
         if (!resolvedTask) {
-            new Notice(t('notice.timerTargetNotFound'));
+            this.noticeResolveFailure(timer);
             return;
         }
 

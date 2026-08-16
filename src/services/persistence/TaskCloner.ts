@@ -1,9 +1,22 @@
 import { type App, TFile } from 'obsidian';
 import type { DuplicateOptions, TvFileKeys, Task } from '../../types';
-import { collectFlowLineIndices, formatFlowLine } from '../flow/FlowLineScanner';
+import { collectFlowLineIndicesInFile, formatFlowLine } from '../flow/FlowLineScanner';
 import { DateUtils } from '../../utils/DateUtils';
-import type { FileOperations } from './utils/FileOperations';
+import { logWarn } from '../../log/log';
+import { FileOperations } from './utils/FileOperations';
 import { FrontmatterLineEditor } from './utils/FrontmatterLineEditor';
+
+/**
+ * One generated child line, as the block described it.
+ *
+ * `depth` counts levels below the generated parent, so 1 is its direct child.
+ * `body` carries no indentation — this layer decides what one level looks like
+ * in the file being written.
+ */
+export interface GeneratedChild {
+    depth: number;
+    body: string;
+}
 
 
 /**
@@ -102,13 +115,17 @@ export class TaskCloner {
     }
 
     /**
-     * タスクの再発処理：元タスク+子行の直後に新しいタスク（+子行コピー）を挿入する。
-     * 既存タスクがある場合はその直後に、なければ新しいタスクとして追加する。
+     * タスクの再発処理：元タスクの兄弟位置に新しいタスク行を挿入する。
      * `content` は呼び出し側（FlowExecutor interpreter）が format 済みの行文字列。
      * `flowLines` は新インスタンスの `- ==>` フロー子行の raw 列（行単位
      * canonical、FlowPlanner 産）。タスク行直後に正規化位置で挿入する。
+     *
+     * 子行は運ばない。発火したインスタンスの下にある行はそのインスタンスが
+     * 何をしたかの記録で、次インスタンスに何を持たせるかは生成ブロックが
+     * 記述する（gen v3）。既存子行はここでも読むが、用途はフロー子行の
+     * インデントをファイルの綴りに揃えることだけである。
      */
-    async insertRecurrenceForTask(task: Task, content: string, copyChildren = true, flowLines: string[] = []): Promise<void> {
+    async insertRecurrenceForTask(task: Task, content: string, flowLines: string[] = []): Promise<void> {
         const file = this.app.vault.getAbstractFileByPath(task.file);
         if (!(file instanceof TFile)) return;
 
@@ -128,38 +145,79 @@ export class TaskCloner {
             const originalIndent = originalLine.match(/^(\s*)/)?.[1] || '';
             const newParentLine = originalIndent + content.trim();
 
-            // 元タスクの直下 flow 行は発火で消費される側 — コピーすると未減算
-            // xN の stale 複製 + 新タスク行の canonical と二重化するため除外。
-            // 子孫タスクの flow 行は直下でない（構造親規則）のでテンプレート
-            // として自然に残る。
-            const flowAbs = new Set(collectFlowLineIndices(lines, currentLine));
+            // 新インスタンスの flow 行インデント: 既存子行の綴りに揃え、
+            // なければタブ。直下の flow 行は発火で消費される側なので、綴りの
+            // 見本としては後回しにする（それしか無ければ使う）。
+            const flowAbs = new Set(collectFlowLineIndicesInFile(lines, currentLine));
             const { childrenLines } = this.fileOps.collectChildrenFromLines(lines, currentLine);
-            const keptChildren = childrenLines.filter((_, i) => !flowAbs.has(currentLine + 1 + i));
+            const ordinaryChildren = childrenLines.filter((_, i) => !flowAbs.has(currentLine + 1 + i));
 
-            // 新インスタンスの flow 行インデント: 既存子行に揃え、なければタブ
-            const childIndent = keptChildren.find(l => l.trim() !== '')?.match(/^\s*/)?.[0]
+            const childIndent = ordinaryChildren.find(l => l.trim() !== '')?.match(/^\s*/)?.[0]
                 ?? childrenLines.find(l => l.trim() !== '')?.match(/^\s*/)?.[0]
                 ?? originalIndent + '\t';
             const newFlowLines = flowLines.map(raw => formatFlowLine(childIndent, raw));
 
             const insertAt = this.fileOps.findSiblingGroupStart(lines, currentLine);
-            if (copyChildren) {
-                const cleaned = this.fileOps.stripBlockIds(keptChildren);
-                const reset = this.resetChildCheckboxes(cleaned);
-                lines.splice(insertAt, 0, newParentLine, ...newFlowLines, ...reset);
-            } else {
-                lines.splice(insertAt, 0, newParentLine, ...newFlowLines);
+            lines.splice(insertAt, 0, newParentLine, ...newFlowLines);
+
+            return lines.join('\n');
+        });
+    }
+
+    /**
+     * Write the next instance from what a gen block described.
+     *
+     * The caller hands over finished values: the parent line with its flow
+     * clause already composed, the flow child lines in canonical form, and the
+     * children as depth and body. Nothing here reads the block or evaluates
+     * anything — this layer only decides where the lines go and how deep they
+     * sit, which is the same division of labour the recurrence path has always
+     * had.
+     *
+     * Indentation is resolved from the file, not from the caller. The parent is
+     * a sibling of the task that fired, so it takes that task's own indent; the
+     * children take one unit per level of `depth`, where a depth of 1 means the
+     * first level below the parent. The unit follows the task's existing
+     * children, falling back to however the rest of the file is written — the
+     * same rule the child-insert primitives use, so a subtree keeps one
+     * spelling.
+     */
+    async insertGeneratedInstance(
+        task: Task,
+        parentLine: string,
+        flowLines: string[],
+        children: GeneratedChild[],
+    ): Promise<void> {
+        const file = this.app.vault.getAbstractFileByPath(task.file);
+        if (!(file instanceof TFile)) return;
+
+        await this.app.vault.process(file, (fileContent) => {
+            const lines = fileContent.split('\n');
+
+            const currentLine = this.fileOps.findTaskLineNumber(lines, task);
+            if (currentLine < 0 || currentLine >= lines.length) {
+                logWarn('[TaskCloner] Task not found in file (insertGeneratedInstance)');
+                return fileContent;
             }
+
+            const parentIndent = lines[currentLine].match(/^(\s*)/)?.[1] ?? '';
+            const unit = FileOperations.resolveChildIndent(lines, currentLine)
+                .slice(parentIndent.length) || FileOperations.detectIndentUnit(lines);
+
+            const rendered = [
+                parentIndent + parentLine.trim(),
+                ...flowLines.map(raw => formatFlowLine(parentIndent + unit, raw)),
+                ...children.map(c => parentIndent + unit.repeat(Math.max(1, c.depth)) + c.body.trim()),
+            ];
+
+            const insertAt = this.fileOps.findSiblingGroupStart(lines, currentLine);
+            lines.splice(insertAt, 0, ...rendered);
 
             return lines.join('\n');
         });
     }
 
     // --- Private helpers ---
-
-    private resetChildCheckboxes(lines: string[]): string[] {
-        return lines.map(line => line.replace(/^(\s*(?:[-*+]|\d+[.)]) *\[)[^\]]/, '$1 '));
-    }
 
     /**
      * Inline task duplication core: collect parent+children, replace parent line,

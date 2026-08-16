@@ -1,0 +1,236 @@
+import { FN_NAMES, LITERAL_WORDS, PROP_NAMES, UNIT_KEYWORDS } from '../../lang/ExprAst';
+import { REFUSED_EXPR_KEYWORDS } from '../../lang/ExprParser';
+import { scanInterpolations, tokenize } from '../../lang/Lexer';
+import { REFUSED_STMT_KEYWORDS, STMT_KEYWORDS } from '../../lang/StmtParser';
+import type { Token } from '../../lang/Token';
+import { type GenBody, type GenLine, lineIndex } from './GenBodyParser';
+
+/**
+ * What a run of characters is, as far as this language is concerned.
+ *
+ * Not a palette: which colour each one takes is the editor's business, and
+ * the reading view may answer differently. What is decided here is the only
+ * thing a reader of the source can decide — what the engine made of the text.
+ */
+export type TokenRole =
+    | 'keyword'
+    /** A statement this language names and refuses. Written, and never read. */
+    | 'refused'
+    | 'value'
+    /** A date, a datetime, a time, a duration. */
+    | 'temporal'
+    | 'string'
+    | 'link'
+    /** The name in a call: a built-in, a method, or a local arrow. */
+    | 'fn'
+    /** A property of the task, or a member read through a dot. */
+    | 'prop'
+    | 'comment'
+    /**
+     * The `${` and `}` around a spliced expression.
+     *
+     * Punctuation of a kind, and told apart from it because it says something
+     * no other symbol says: the language starts here. A body line is prose
+     * everywhere else, so this is the one mark whose absence would leave a
+     * reader hunting for where the expression begins.
+     */
+    | 'interp'
+    | 'punct';
+
+/** One run of one line, and what it is. */
+export interface HighlightMark {
+    /** Absolute line index in the file. */
+    line: number;
+    /** Columns within that line. */
+    from: number;
+    to: number;
+    role: TokenRole;
+}
+
+/** Bare names the parser resolves to a property of the task being generated. */
+const BARE_PROPS: ReadonlySet<string> = new Set(
+    // `file.name` is written as two tokens, and the `file` half is what a
+    // reader sees first; the `name` half arrives through the dot rule.
+    PROP_NAMES.map(p => p.split('.')[0])
+);
+
+/** Names the parser reads as a value rather than as a binding. */
+const VALUE_WORDS: ReadonlySet<string> = new Set([
+    ...Object.keys(LITERAL_WORDS), ...UNIT_KEYWORDS,
+]);
+
+/** Built-ins, by the bare word a reader sees. */
+const BUILTIN_FNS: ReadonlySet<string> = new Set(FN_NAMES.map(f => f.split('.')[0]));
+
+/**
+ * What each run of a block's source is, for whoever draws it.
+ *
+ * Driven by the lexer this language actually reads with, and by the words its
+ * parsers actually treat as syntax — never by a second grammar written to look
+ * like this one. A construct this language does not accept therefore cannot be
+ * painted as though it does: an unknown name is a name with no role, which is
+ * the same silence the checker's squiggle sits on.
+ *
+ * A cell has no role of its own. It is written `state.n`, so the text says
+ * what a colour used to: the name after the dot is a member read like any
+ * other, and the namespace before it is left alone as `tv` and `Math` are.
+ */
+export function highlightGenBody(body: GenBody): HighlightMark[] {
+    const marks: HighlightMark[] = [];
+
+    if (body.js) {
+        const { starts, lineAt } = lineIndex(body.js.source);
+        const firstLine = body.js.firstLine;
+        // A section is one string and the page is lines, so a run that crosses
+        // a line break becomes one mark per line — a mark is a range on a line
+        // and cannot be anything else.
+        const emit = (role: TokenRole, from: number, to: number) => {
+            let at = from;
+            while (at < to) {
+                const index = lineAt(at);
+                const lineEnd = index + 1 < starts.length ? starts[index + 1] - 1 : body.js!.source.length;
+                const stop = Math.min(to, lineEnd);
+                if (stop > at) {
+                    marks.push({ line: firstLine + index, from: at - starts[index], to: stop - starts[index], role });
+                }
+                at = stop + 1;
+            }
+        };
+        collect(body.js.source, 0, true, emit);
+    }
+
+    for (const line of bodyLines(body)) {
+        const emit = (role: TokenRole, from: number, to: number) => {
+            marks.push({ line: line.line, from, to, role });
+        };
+        // Read off the seams rather than the parts, which is the difference
+        // between describing the line and running it: a `${` whose expression
+        // did not parse leaves no part, and it is the line most in need of
+        // being described. The words inside are read the same way a section's
+        // are — from the token stream, where a word is refused or a literal
+        // whatever happened to the sentence around it.
+        for (const seam of line.seams) {
+            emit('interp', seam.span.start, seam.span.start + 2);
+            // Where the brace never closed, how far the interpolation reaches
+            // is not decided, so the opening is the whole of what is known.
+            if (!seam.closed) continue;
+            emit('interp', seam.span.end - 1, seam.span.end);
+            const from = seam.span.start + 2 - line.indent;
+            const to = seam.span.end - 1 - line.indent;
+            collect(line.text.slice(from, to), seam.span.start + 2, false, emit);
+        }
+    }
+
+    marks.sort((a, b) => a.line - b.line || a.from - b.from || a.to - b.to);
+    return marks;
+}
+
+function bodyLines(body: GenBody): GenLine[] {
+    return body.parent ? [body.parent, ...body.children] : body.children;
+}
+
+type Emit = (role: TokenRole, from: number, to: number) => void;
+
+/**
+ * Read one stretch of source and say what each token is.
+ *
+ * `base` is where `src` sits in the coordinates the marks are measured in, and
+ * the lexer carries it, so a token's own span is already the answer.
+ *
+ * `statements` is the js section: there `let` is syntax, and in an
+ * interpolation the same word is a name, because that is what the two profiles
+ * of the parser do with it.
+ */
+function collect(src: string, base: number, statements: boolean, emit: Emit): void {
+    const { tokens, comments } = tokenize(src, base);
+    for (const span of comments) emit('comment', span.start, span.end);
+
+    for (let i = 0; i < tokens.length; i++) {
+        const token = tokens[i];
+        const role = roleOf(token, tokens[i - 1], tokens[i + 1], statements);
+        if (role) emit(role, token.start, token.end);
+        // A template is one token to the lexer and the parser reads its
+        // interpolations afterwards, so the same is done here: the whole runs
+        // as text, and what is spliced into it runs again inside.
+        if (token.kind === 'template') collectTemplate(token, emit);
+    }
+}
+
+/**
+ * The `${...}` of a template literal, read with the template's own rule.
+ *
+ * The same scan a body line asks, so a template's braces follow one rule
+ * rather than a copy of one. Only the scan: what is spliced into a template
+ * has been parsed already, where the template was, and a second parse whose
+ * result is thrown away would buy nothing this needs.
+ */
+function collectTemplate(token: Token, emit: Emit): void {
+    // The token's span covers the backticks; its text is what is between them.
+    const base = token.start + 1;
+    for (const seam of scanInterpolations(token.text, base)) {
+        emit('interp', seam.span.start, seam.span.start + 2);
+        if (!seam.closed) continue;
+        emit('interp', seam.span.end - 1, seam.span.end);
+        collect(token.text.slice(seam.span.start - base + 2, seam.span.end - base - 1),
+            seam.span.start + 2, false, emit);
+    }
+}
+
+function roleOf(
+    token: Token,
+    before: Token | undefined,
+    after: Token | undefined,
+    statements: boolean
+): TokenRole | null {
+    switch (token.kind) {
+        case 'string': case 'template': return 'string';
+        case 'number': return 'value';
+        case 'date': case 'datetime': case 'time': case 'duration': return 'temporal';
+        case 'wikilink': return 'link';
+        case 'newline': case 'eof': return null;
+        case 'ident': return identRole(token, before, after, statements);
+        default: return 'punct';
+    }
+}
+
+/**
+ * A bare word, which is where the lexer stops being able to answer: `let`, `n`
+ * and `format` are one kind of token and three different things.
+ *
+ * The order below is the parser's own, question for question. It matters that
+ * it is: the parser asks about a call twice, once for the built-ins and once,
+ * much later, for a name bound in the block — and between the two it resolves
+ * the words that are values and the words that are properties. Asking about
+ * the bracket once, up front, paints `true(1)` as a call, which is the one
+ * thing this design exists to prevent.
+ */
+function identRole(
+    token: Token,
+    before: Token | undefined,
+    after: Token | undefined,
+    statements: boolean
+): TokenRole | null {
+    const word = token.text;
+    const called = after?.kind === 'lparen';
+    if (statements && REFUSED_STMT_KEYWORDS.has(word)) return 'refused';
+    if (statements && STMT_KEYWORDS.has(word)) return 'keyword';
+    // A built-in, and only where it is called: bare, the parser reads the same
+    // word as a binding, and so does this.
+    if (BUILTIN_FNS.has(word) && called) return 'fn';
+    // Through a dot the postfix reader decides by the bracket too — a method
+    // is a call, a member is a read.
+    if (before?.kind === 'dot' || before?.kind === 'qdot') return called ? 'fn' : 'prop';
+    if (VALUE_WORDS.has(word)) return 'value';
+    if (BARE_PROPS.has(word)) return 'prop';
+    // Before the general call rule, exactly as in the parser: these names are
+    // refused where they are written, so the bracket after one is not a call
+    // and painting it as one would say the opposite of the squiggle under it.
+    if (REFUSED_EXPR_KEYWORDS.has(word)) return 'refused';
+    // Last, as in the parser: a name the block bound, called.
+    if (called) return 'fn';
+    // A local, an arrow parameter, a namespace, or a name this language does
+    // not know. They read alike on purpose: only the last is wrong, and the
+    // checker already draws under it. A colour here would either repeat that
+    // or, worse, dress an unknown name as something the language recognizes.
+    return null;
+}

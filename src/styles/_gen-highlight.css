@@ -1,0 +1,56 @@
+/* tv-gen block highlighting — roles decided by the engine, colours by the theme
+ *
+ * Every colour here is one of Obsidian's own code variables, so a vault that
+ * changes theme changes these with it and light and dark need no branch. The
+ * plugin holds no palette of its own.
+ *
+ * Red is not among them on purpose: --code-operator and --code-tag are the
+ * same red as --color-red, which is the colour of an error's underline. An
+ * operator painted in it reads as something being wrong.
+ */
+
+.tv-tok--keyword,
+.tv-tok--refused {
+    color: var(--code-keyword);
+}
+
+.tv-tok--string {
+    color: var(--code-string);
+}
+
+.tv-tok--value,
+.tv-tok--temporal {
+    color: var(--code-value);
+}
+
+.tv-tok--link {
+    color: var(--code-property);
+}
+
+.tv-tok--fn {
+    color: var(--code-function);
+}
+
+.tv-tok--prop {
+    color: var(--code-property);
+}
+
+/* A cell has no rule here. It is written `state.n`, and the name after the dot
+ * is a member read like any other — the italic that used to say "this one
+ * outlives the firing" would be saying what the text already says. */
+
+.tv-tok--comment {
+    color: var(--code-comment);
+}
+
+/* Punctuation, and the seam an interpolation opens and closes with. Two roles
+ * because they say different things, one colour because this variable is the
+ * theme's dimming one — measured lighter than the plain text in the light
+ * theme (#5c5c5c against #222222) and darker in the dark one (#b3b3b3 against
+ * #dadada) — and both of these want to sit behind what they surround, not in
+ * front of it. Giving the seam a colour of its own is a separate decision, and
+ * this rule is where it would be made. */
+.tv-tok--punct,
+.tv-tok--interp {
+    color: var(--code-punctuation);
+}

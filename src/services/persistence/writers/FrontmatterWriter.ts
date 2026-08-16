@@ -27,7 +27,7 @@ export class FrontmatterWriter {
         updates: Partial<Task>,
         frontmatterKeys: TvFileKeys,
         propertyOps: PropertyOp[] = []
-    ): Promise<void> {
+    ): Promise<boolean> {
         const fmUpdates: Record<string, string | null> = {};
 
         if ('statusChar' in updates) {
@@ -55,7 +55,7 @@ export class FrontmatterWriter {
         if (Object.keys(fmUpdates).length > 0 || propertyOps.length > 0) {
             // tags（配列値）の表現決定は既存キーの形（ブロックリスト / 単一行）
             // に依存するため、ファイル行を見られる builder 内で解決する。
-            await this.updateFrontmatterFields(task.file, (lines, fmEnd) => {
+            return this.updateFrontmatterFields(task.file, (lines, fmEnd) => {
                 const merged: Record<string, string | string[] | null> = { ...fmUpdates };
                 for (const op of propertyOps) {
                     if (op.op === 'delete') {
@@ -69,6 +69,10 @@ export class FrontmatterWriter {
                 return merged;
             });
         }
+
+        // 書くものが無い更新（時刻も非時刻プロパティも変わっていない）は
+        // 書き込みが起きなくても失敗ではない。
+        return true;
     }
 
     /**
@@ -118,6 +122,66 @@ export class FrontmatterWriter {
         });
     }
 
+    /**
+     * Task を介さずに frontmatter のキーを設定・削除する汎用経路。
+     * `null` は削除、それ以外は {@link FrontmatterLineEditor.escapeYamlScalar}
+     * を通して書く。
+     *
+     * `processFrontMatter` を使う経路（タイマーの対象 ID、色・線種のサジェスト）
+     * をここへ寄せるために公開している。あちらは frontmatter 全体を YAML として
+     * 読み直して書き戻すので、コメント行が消え、引用符が外れ、フロー形式の配列が
+     * ブロックリストへ変わる。surgical edit は対象キーの行しか触らないため、
+     * 表現を保ったまま書ける。
+     *
+     * 設定するキーが1つでもあれば block の無いファイルには block を作る。
+     * 削除だけの場合は作らない（消す相手が無いので書く必要がない）。
+     */
+    async setKeys(filePath: string, updates: Record<string, string | null>): Promise<void> {
+        const file = this.app.vault.getAbstractFileByPath(filePath);
+        if (!(file instanceof TFile)) return;
+
+        const hasSet = Object.values(updates).some(v => v !== null);
+
+        await this.app.vault.process(file, (content) => {
+            const raw = content.split('\n');
+            if (FrontmatterLineEditor.findEnd(raw) < 0 && !hasSet) return content;
+
+            const { lines, fmEnd } = FrontmatterLineEditor.ensureBlock(raw);
+            const escaped: Record<string, string | null> = {};
+            for (const [key, value] of Object.entries(updates)) {
+                escaped[key] = value === null ? null : FrontmatterLineEditor.escapeYamlScalar(value);
+            }
+            return FrontmatterLineEditor.applyUpdates(lines, fmEnd, escaped);
+        });
+    }
+
+    /**
+     * 値が `expected` と一致するときに限りキーを削除する。
+     *
+     * 読み取りと削除を同じ `vault.process` に収めるのが要点で、外で値を確かめて
+     * から消しに行くと、その隙間で誰かが書き換えた値を消しうる。書かれた形と
+     * エスケープ後の形の双方を一致とみなすのは、書いた側がどちらの経路でも
+     * 同じ値を指しているためである。
+     */
+    async deleteKeyIfValue(filePath: string, key: string, expected: string): Promise<void> {
+        const file = this.app.vault.getAbstractFileByPath(filePath);
+        if (!(file instanceof TFile)) return;
+
+        await this.app.vault.process(file, (content) => {
+            const lines = content.split('\n');
+            const fmEnd = FrontmatterLineEditor.findEnd(lines);
+            if (fmEnd < 0) return content;
+
+            const current = FrontmatterLineEditor.readRawScalar(lines, fmEnd, key);
+            if (current === null) return content;
+            if (current !== expected && current !== FrontmatterLineEditor.escapeYamlScalar(expected)) {
+                return content;
+            }
+
+            return FrontmatterLineEditor.applyUpdates(lines, fmEnd, { [key]: null });
+        });
+    }
+
     // --- Frontmatter helpers ---
 
     /**
@@ -129,17 +193,22 @@ export class FrontmatterWriter {
     private async updateFrontmatterFields(
         filePath: string,
         build: (lines: string[], fmEnd: number) => Record<string, string | string[] | null>
-    ): Promise<void> {
+    ): Promise<boolean> {
         const file = this.app.vault.getAbstractFileByPath(filePath);
-        if (!(file instanceof TFile)) return;
+        if (!(file instanceof TFile)) return false;
+
+        let written = false;
 
         await this.app.vault.process(file, (content) => {
             const lines = content.split('\n');
             const fmEnd = FrontmatterLineEditor.findEnd(lines);
             if (fmEnd < 0) return content;
 
+            written = true;
             return FrontmatterLineEditor.applyUpdates(lines, fmEnd, build(lines, fmEnd));
         });
+
+        return written;
     }
 
 }

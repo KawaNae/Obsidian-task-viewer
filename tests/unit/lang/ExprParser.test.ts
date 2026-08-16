@@ -20,7 +20,6 @@ describe('ExprParser', () => {
         expect(parse('"abc"').expr).toMatchObject({ kind: 'lit', value: { type: 'string', value: 'abc' } });
         expect(parse('42').expr).toMatchObject({ kind: 'lit', value: { type: 'number', value: 42 } });
         expect(parse('true').expr).toMatchObject({ kind: 'lit', value: { type: 'bool', value: true } });
-        expect(parse('tue').expr).toMatchObject({ kind: 'lit', value: { type: 'weekday', value: 2 } });
         expect(parse('[[Archive]]').expr).toMatchObject({ kind: 'lit', value: { type: 'link', target: 'Archive' } });
         expect(parse('none').expr).toMatchObject({ kind: 'lit', value: { type: 'none' } });
     });
@@ -91,13 +90,13 @@ describe('ExprParser', () => {
     });
 
     it('parses startOf with unit keyword and nested next()', () => {
-        const { expr, diagnostics } = parse('startOf(week, next(tue))');
+        const { expr, diagnostics } = parse('startOf(week, next("tue"))');
         expect(diagnostics).toEqual([]);
         expect(expr).toMatchObject({
             kind: 'call', fn: 'startOf',
             args: [
                 { kind: 'lit', value: { type: 'string', value: 'week' } },
-                { kind: 'call', fn: 'next', args: [{ kind: 'lit', value: { type: 'weekday', value: 2 } }] },
+                { kind: 'call', fn: 'next', args: [{ kind: 'lit', value: { type: 'string', value: 'tue' } }] },
             ],
         });
     });
@@ -129,5 +128,70 @@ describe('ExprParser', () => {
         const { expr, diagnostics } = parse('true ? 1');
         expect(expr).toBeNull();
         expect(diagnostics.some(d => d.code === 'expr.expected-colon')).toBe(true);
+    });
+
+    it('reads strict equality as equality', () => {
+        // LLM は === と !== を書く。受理して canonical では == / != に寄せる。
+        const { expr } = parse('1 === 1');
+        expect(expr?.kind).toBe('binary');
+        expect(expr?.kind === 'binary' && expr.op).toBe('==');
+        const neq = parse('1 !== 2');
+        expect(neq.expr?.kind === 'binary' && neq.expr.op).toBe('!=');
+    });
+
+    it('accepts single-quoted strings', () => {
+        const { expr, diagnostics } = parse("'text'");
+        expect(diagnostics).toEqual([]);
+        expect(expr?.kind === 'lit' && expr.value).toEqual({ type: 'string', value: 'text' });
+    });
+
+    it('reads a decimal, and refuses one finer than the grid', () => {
+        const { expr, diagnostics } = parse('0.5');
+        expect(diagnostics).toEqual([]);
+        expect(expr).toMatchObject({ kind: 'lit', value: { type: 'number', value: 0.5 } });
+        // 11 桁目からは格子に載らない。黙って丸めず、字句の段階で名指しする
+        expect(parse('0.00000000001').diagnostics.map(d => d.code)).toContain('lex.decimal-too-precise');
+        // duration は整数 + 単位なので、書けない形をその場で言う
+        expect(parse('1.5d').diagnostics.map(d => d.code)).toContain('lex.decimal-duration');
+    });
+
+    it('reads the tv namespace as the bare form', () => {
+        const { expr, diagnostics } = parse('tv.date.startOf("month", start)');
+        expect(diagnostics).toEqual([]);
+        expect(expr?.kind === 'call' && expr.fn).toBe('startOf');
+        expect(parse('tv.file.name').expr?.kind === 'prop').toBe(true);
+    });
+    it('binds ?? looser than comparison', () => {
+        const { expr, diagnostics } = parse('time(start) ?? content == "x"');
+        expect(diagnostics).toEqual([]);
+        expect(expr).toMatchObject({ kind: 'binary', op: '??', right: { kind: 'binary', op: '==' } });
+    });
+
+    it('refuses ?? mixed with || or && the way JS does', () => {
+        // 括弧なしの混在は JS では構文エラー。黙って片方の解釈を選ばない。
+        expect(parse('true || false ?? none').diagnostics.map(d => d.code))
+            .toContain('expr.nullish-mixed-with-logic');
+        expect(parse('true && false ?? none').diagnostics.map(d => d.code))
+            .toContain('expr.nullish-mixed-with-logic');
+
+        // 括弧で意図が書いてあれば通る。括弧の中の || はこの段には現れない
+        expect(parse('(true || false) ?? none').diagnostics).toEqual([]);
+        // 呼び出しの括弧の中も同じ
+        expect(parse('time(start) ?? (true || false)').diagnostics).toEqual([]);
+    });
+
+    it('names a bare weekday instead of calling it unknown', () => {
+        const { expr, diagnostics } = parse('next(tue)');
+        expect(expr).toBeNull();
+        expect(diagnostics.map(d => d.code)).toContain('expr.weekday-not-literal');
+    });
+
+    it('reads a quoted weekday as a plain string', () => {
+        const { expr, diagnostics } = parse('next("tue")');
+        expect(diagnostics).toEqual([]);
+        expect(expr).toMatchObject({
+            kind: 'call', fn: 'next',
+            args: [{ kind: 'lit', value: { type: 'string', value: 'tue' } }],
+        });
     });
 });

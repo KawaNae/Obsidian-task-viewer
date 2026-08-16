@@ -1,4 +1,6 @@
 import { ChildLineClassifier } from '../../parsing/utils/ChildLineClassifier';
+import { CodeFenceTracker } from '../../../utils/CodeFenceTracker';
+import { FileOperations } from './FileOperations';
 import type { PropertyOp } from '../PropertyUpdatePlanner';
 
 interface OwnPropertyLine {
@@ -36,11 +38,21 @@ export class ChildPropertyLineEditor {
         const result: OwnPropertyLine[] = [];
         let skipDeeperThan: number | null = null;
 
+        // `- key:: value` written inside a fence is a sample, not a declaration.
+        // The parser never turned it into a property, so treating it as one here
+        // would let an edit to the task rewrite a line in someone's code block.
+        // The subtree reading is the one that applies: a fence under a task
+        // carries the list item's indentation, which the document-level reading
+        // cannot see.
+        const fenced = CodeFenceTracker.subtreeMask(lines.slice(taskLineIdx + 1));
+
         for (let j = taskLineIdx + 1; j < lines.length; j++) {
             const line = lines[j];
             if (line.trim() === '') break;
             const indent = line.search(/\S|$/);
             if (indent <= taskIndent) break;
+
+            if (fenced[j - taskLineIdx - 1]) continue;
 
             if (skipDeeperThan !== null) {
                 if (indent > skipDeeperThan) continue;
@@ -108,26 +120,10 @@ export class ChildPropertyLineEditor {
                 indent = lines[last.lineIdx].match(/^(\s*)/)?.[1] ?? '';
             } else {
                 insertIdx = taskLineIdx + 1;
-                indent = this.firstChildIndent(lines, taskLineIdx)
-                    ?? (lines[taskLineIdx].match(/^(\s*)/)?.[1] ?? '') + '\t';
+                indent = FileOperations.resolveChildIndent(lines, taskLineIdx);
             }
             lines.splice(insertIdx, 0, `${indent}- ${op.key}:: ${this.formatValue(op.value, null)}`);
         }
-    }
-
-    /**
-     * タスク直下の最初の子行（空行・dedent で終端）のインデント文字列を返す。
-     * 子行が無ければ null。
-     */
-    private static firstChildIndent(lines: string[], taskLineIdx: number): string | null {
-        const taskIndent = lines[taskLineIdx].search(/\S|$/);
-        for (let j = taskLineIdx + 1; j < lines.length; j++) {
-            const line = lines[j];
-            if (line.trim() === '') break;
-            if (line.search(/\S|$/) <= taskIndent) break;
-            return line.match(/^(\s*)/)?.[1] ?? null;
-        }
-        return null;
     }
 
     /**
