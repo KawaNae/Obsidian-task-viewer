@@ -12,105 +12,117 @@ import type { Diagnostic } from '../../../src/services/lang/Diagnostic';
  * declares them. Sweeping the list through every entrance is what found that:
  * `x.toString()` threw out of the parser, `every mon toString(1)` was accepted
  * and then dropped by the printer, and `${constructor}` produced a diagnostic
- * with no code. The same sweep is what keeps them shut.
+ * with no code.
  *
- * The assertion is a comparison, not a list of expected codes: a word this
- * language does not know has to be treated exactly like any other word it does
- * not know. Written that way, a reader added later is covered by the same
- * test as long as the control goes through it.
+ * Two rules keep it shut, and they are the whole of what this file is for.
+ * Every entrance that takes a word out of a file belongs in the sweep. And the
+ * sweep is written as a comparison against control words rather than as a list
+ * of expected codes, so a reader added later is covered the moment its
+ * entrance is added — no ledger of what is safe has to be maintained by hand.
  */
 const INHERITED = Object.getOwnPropertyNames(Object.prototype);
 
-/** A word no table has, and no table ever will. */
-const CONTROL = 'zzzUnknownWord';
+/**
+ * Words no table has, and no table ever will.
+ *
+ * Two of them, differing in the characters and not in what they mean: half the
+ * inherited names begin with an underscore, and an entrance that is sensitive
+ * to that would otherwise show up as a difference here and read as pollution.
+ * The controls have to agree with each other before either can stand in for
+ * "a word this language does not know".
+ */
+const CONTROLS = ['zzzUnknownWord', '__zzzUnknownWord__'];
 
-const codes = (diagnostics: Diagnostic[]) => diagnostics.map(d => d.code);
+const codes = (diagnostics: Diagnostic[]) => diagnostics.map(d => d.code ?? '(no code)');
 
 /** Every diagnostic can be translated and read. Undefined is neither. */
-function assertSpeaks(diagnostics: Diagnostic[], where: string): void {
-    for (const d of diagnostics) {
-        expect(d.code, `${where}: a diagnostic with no code cannot be translated`).toBeTypeOf('string');
-        expect(d.message, `${where}: a diagnostic with no message says nothing`).toBeTypeOf('string');
+function speaks(diagnostics: Diagnostic[]): string[] {
+    return diagnostics.flatMap(d => [
+        typeof d.code === 'string' ? [] : ['a diagnostic with no code cannot be translated'],
+        typeof d.message === 'string' ? [] : ['a diagnostic with no message says nothing'],
+    ].flat());
+}
+
+/**
+ * Run one entrance over the controls and every inherited name.
+ *
+ * `read` answers with whatever the entrance produced, written as strings: the
+ * diagnostic codes, and whatever else that entrance decides (a refusal, the
+ * shape of what it parsed).
+ */
+function sweep(where: string, read: (word: string) => string[]): void {
+    const [first, ...rest] = CONTROLS.map(read);
+    for (let i = 0; i < rest.length; i++) {
+        expect(rest[i], `${where}: the controls disagree, so neither can stand for an unknown word`)
+            .toEqual(first);
+    }
+    for (const name of INHERITED) {
+        expect(read(name), `${where}: '${name}' is read differently from a word this language does not know`)
+            .toEqual(first);
     }
 }
 
 describe('a name every object inherits is still just a name', () => {
     it('at the head of a statement', () => {
-        const control = parseProgram(CONTROL);
-        for (const name of INHERITED) {
-            const got = parseProgram(name);
-            assertSpeaks(got.diagnostics, `statement '${name}'`);
-            expect(codes(got.diagnostics), `statement '${name}'`).toEqual(codes(control.diagnostics));
-            expect(got.program.body.map(s => s.kind), `statement '${name}'`)
-                .toEqual(control.program.body.map(s => s.kind));
-        }
+        sweep('statement head', word => {
+            const { program, diagnostics } = parseProgram(word);
+            return [...speaks(diagnostics), ...codes(diagnostics), ...program.body.map(s => `stmt:${s.kind}`)];
+        });
     });
 
     it('at the head of a flow clause', () => {
-        const control = parseFlow(`every mon ${CONTROL}(1)`);
-        expect(control.program, 'the control has to be refused, or this proves nothing').toBeNull();
-        for (const name of INHERITED) {
-            const got = parseFlow(`every mon ${name}(1)`);
-            assertSpeaks(got.diagnostics, `clause '${name}'`);
-            expect(codes(got.diagnostics), `clause '${name}'`).toEqual(codes(control.diagnostics));
-            expect(got.program, `clause '${name}'`).toBeNull();
-        }
+        sweep('flow head', word => {
+            const { program, diagnostics } = parseFlow(`every mon ${word}(1)`);
+            return [...speaks(diagnostics), ...codes(diagnostics), program === null ? 'refused' : 'accepted'];
+        });
+        // The control has to be refused, or the comparison proves nothing.
+        expect(parseFlow(`every mon ${CONTROLS[0]}(1)`).program).toBeNull();
     });
 
     it('as a bare identifier in a body line', () => {
-        const control = parseGenBody([`- [ ] c \${${CONTROL}}`], 0);
-        expect(codes(control.diagnostics)).toEqual(['expr.unknown-ident']);
-        for (const name of INHERITED) {
-            const got = parseGenBody([`- [ ] c \${${name}}`], 0);
-            assertSpeaks(got.diagnostics, `identifier '${name}'`);
-            expect(codes(got.diagnostics), `identifier '${name}'`).toEqual(codes(control.diagnostics));
-        }
+        sweep('bare identifier', word => {
+            const body = parseGenBody([`- [ ] c \${${word}}`], 0);
+            return [...speaks(body.diagnostics), ...codes(body.diagnostics)];
+        });
+        expect(codes(parseGenBody([`- [ ] c \${${CONTROLS[0]}}`], 0).diagnostics)).toEqual(['expr.unknown-ident']);
     });
 
     it('as a member read', () => {
-        const control = parseGenBody([`- [ ] c \${"a".${CONTROL}}`], 0);
-        expect(codes(control.diagnostics)).toEqual(['type.unknown-member']);
-        for (const name of INHERITED) {
-            const got = parseGenBody([`- [ ] c \${"a".${name}}`], 0);
-            assertSpeaks(got.diagnostics, `member '${name}'`);
-            expect(codes(got.diagnostics), `member '${name}'`).toEqual(codes(control.diagnostics));
-        }
+        sweep('member read', word => {
+            const body = parseGenBody([`- [ ] c \${"a".${word}}`], 0);
+            return [...speaks(body.diagnostics), ...codes(body.diagnostics)];
+        });
+        expect(codes(parseGenBody([`- [ ] c \${"a".${CONTROLS[0]}}`], 0).diagnostics)).toEqual(['type.unknown-member']);
     });
 
     it('as a method call, on a scalar and on a list', () => {
-        // Two receivers because the signatures live in two tables: the scalar
-        // members are one lookup, a list's methods another.
-        for (const receiver of ['"a"', '[1]', '(2)']) {
-            const control = parseGenBody([`- [ ] c \${${receiver}.${CONTROL}()}`], 0);
-            expect(codes(control.diagnostics), `control on ${receiver}`).toEqual(['type.unknown-member']);
-            for (const name of INHERITED) {
-                const got = parseGenBody([`- [ ] c \${${receiver}.${name}()}`], 0);
-                assertSpeaks(got.diagnostics, `method '${receiver}.${name}()'`);
-                expect(codes(got.diagnostics), `method '${receiver}.${name}()'`)
-                    .toEqual(codes(control.diagnostics));
-            }
+        // Three receivers because the signatures live in three tables: the
+        // string members, the number methods, and a list's own.
+        for (const receiver of ['"a"', '(2)', '[1]']) {
+            sweep(`method on ${receiver}`, word => {
+                const body = parseGenBody([`- [ ] c \${${receiver}.${word}()}`], 0);
+                return [...speaks(body.diagnostics), ...codes(body.diagnostics)];
+            });
+            expect(codes(parseGenBody([`- [ ] c \${${receiver}.${CONTROLS[0]}()}`], 0).diagnostics))
+                .toEqual(['type.unknown-member']);
         }
     });
 
     it('inside a flow clause, which the scanner reads on every file', () => {
-        // Not the head this time but the expression a clause holds. The block
-        // is only read where a block is written; a command is read by the scan
-        // of every file, so the same lookup sits on a much wider path.
-        const control = parseFlow(`until(start.${CONTROL}())`);
-        expect(codes(control.diagnostics)).toContain('type.unknown-member');
-        for (const name of INHERITED) {
-            const got = parseFlow(`until(start.${name}())`);
-            assertSpeaks(got.diagnostics, `flow argument '${name}'`);
-            expect(codes(got.diagnostics), `flow argument '${name}'`).toEqual(codes(control.diagnostics));
-        }
+        // Not the head this time but the expression a clause holds. A block is
+        // only read where a block is written; a command is read by the scan of
+        // every file, so the same lookup sits on a much wider path.
+        sweep('flow argument', word => {
+            const { diagnostics } = parseFlow(`until(start.${word}())`);
+            return [...speaks(diagnostics), ...codes(diagnostics)];
+        });
+        expect(codes(parseFlow(`until(start.${CONTROLS[0]}())`).diagnostics)).toContain('type.unknown-member');
     });
 
     it('inside a js section, where a statement and an expression meet', () => {
-        const control = parseGenBody(['<js', `const s = "a".${CONTROL}();`, '/js>', '- [ ] c ${s}'], 0);
-        for (const name of INHERITED) {
-            const got = parseGenBody(['<js', `const s = "a".${name}();`, '/js>', '- [ ] c ${s}'], 0);
-            assertSpeaks(got.diagnostics, `section '${name}'`);
-            expect(codes(got.diagnostics), `section '${name}'`).toEqual(codes(control.diagnostics));
-        }
+        sweep('js section', word => {
+            const body = parseGenBody(['<js', `const s = "a".${word}();`, '/js>', '- [ ] c ${s}'], 0);
+            return [...speaks(body.diagnostics), ...codes(body.diagnostics)];
+        });
     });
 });
