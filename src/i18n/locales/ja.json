@@ -747,6 +747,7 @@
       "unexpected-token": "予期しないトークン '{{token}}'",
       "unexpected-eof": "式が途中で終わっています",
       "nesting-too-deep": "入れ子が深すぎて読み取れません。括弧をいくつか分けてください",
+      "chain-too-long": "演算子が {{max}} 個を超えて連続しています。式を分けてください",
       "unknown-property": "不明なプロパティ '{{name}}'",
       "file-needs-member": "'file' にはメンバー指定が必要です（file.name）",
       "unknown-ident": "不明な識別子 '{{name}}'",

@@ -747,6 +747,7 @@
       "unexpected-token": "Unexpected token '{{token}}'",
       "unexpected-eof": "Unexpected end of expression",
       "nesting-too-deep": "This is nested too deeply to read — take some of the brackets apart",
+      "chain-too-long": "More than {{max}} operators in a row — break the expression up",
       "unknown-property": "Unknown property '{{name}}'",
       "file-needs-member": "Property 'file' requires a member (file.name)",
       "unknown-ident": "Unknown identifier '{{name}}'",

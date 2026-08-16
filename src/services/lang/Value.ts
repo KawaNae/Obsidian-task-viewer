@@ -82,10 +82,37 @@ export function parseDateStr(s: string): Date {
 }
 
 export function formatDateStr(d: Date): string {
-    const y = d.getFullYear();
+    // Padded like the month and the day, and for the same reason: the notation
+    // reads four digits, so a year written with fewer is a date the next scan
+    // does not see. Every ordinary year is already four, so this shows up only
+    // where arithmetic has walked back past the year 1000.
+    const y = String(d.getFullYear()).padStart(4, '0');
     const m = String(d.getMonth() + 1).padStart(2, '0');
     const day = String(d.getDate()).padStart(2, '0');
     return `${y}-${m}-${day}`;
+}
+
+/**
+ * The years a date can be written in and read back out of.
+ *
+ * Four digits, because that is what the lexer's date token is and what the
+ * `@` notation on a task line accepts. Outside them the shape is still
+ * printable and no longer readable: a fire writing `@12025-08-17` produces a
+ * line whose date is not a date any more — the text lands in the task's title
+ * and the task loses the day it was on. `NaN-NaN-NaN` is the same failure with
+ * a louder spelling.
+ */
+const WRITABLE_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+
+/**
+ * Whether a date value can still be written down and read back.
+ *
+ * Asked of the printed shape rather than of the year, because being read back
+ * is the whole of the rule: this is the same test the notation applies, so the
+ * two cannot drift apart.
+ */
+export function isWritableDatish(v: Value & { type: 'date' | 'datetime' }): boolean {
+    return WRITABLE_DATE_RE.test(v.type === 'date' ? v.value : v.date);
 }
 
 function pad2(n: number): string {

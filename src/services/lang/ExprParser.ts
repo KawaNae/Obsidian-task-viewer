@@ -278,12 +278,37 @@ function parseComparison(cursor: TokenCursor, diagnostics: Diagnostic[]): Expr |
     return expr;
 }
 
+/**
+ * Operands one run of the same operator may chain.
+ *
+ * A run is read in a loop, so the parser walks it flat — but the tree it
+ * builds leans to the left one node per operand, and the checker and the
+ * evaluator do walk that. Around two thousand of them exhaust the host's
+ * stack, and the failure lands as a RangeError from wherever the stack ran
+ * out: in the middle of reading, or later in the middle of a fire, depending
+ * on how deep the call already was. Which of the two happened decided which
+ * message came back, so the same block could be read two ways on two days.
+ *
+ * A number here instead. It has an order of magnitude of room over anything a
+ * person writes, and it makes the refusal the same sentence every time.
+ */
+const MAX_CHAIN = 100;
+
+/** Reached only by generated text; said plainly all the same. */
+function chainTooLong(cursor: TokenCursor, diagnostics: Diagnostic[]): null {
+    diagnostics.push(error('expr.chain-too-long',
+        `More than ${MAX_CHAIN} operators in a row — break the expression up`,
+        tokenSpan(cursor.peek()), { max: MAX_CHAIN }));
+    return null;
+}
+
 function parseAdditive(cursor: TokenCursor, diagnostics: Diagnostic[]): Expr | null {
     let left = parseMultiplicative(cursor, diagnostics);
     if (!left) return null;
-    for (;;) {
+    for (let chained = 0; ; chained++) {
         const op: BinaryOp | null = cursor.at('plus') ? '+' : cursor.at('minus') ? '-' : null;
         if (!op) return left;
+        if (chained >= MAX_CHAIN) return chainTooLong(cursor, diagnostics);
         cursor.next();
         const right = parseMultiplicative(cursor, diagnostics);
         if (!right) return null;
@@ -299,13 +324,14 @@ function parseAdditive(cursor: TokenCursor, diagnostics: Diagnostic[]): Expr | n
 function parseMultiplicative(cursor: TokenCursor, diagnostics: Diagnostic[]): Expr | null {
     let left = parseUnary(cursor, diagnostics);
     if (!left) return null;
-    for (;;) {
+    for (let chained = 0; ; chained++) {
         const t = cursor.peek();
         const op: BinaryOp | null =
             t.kind === 'star' ? '*' :
             t.kind === 'slash' ? '/' :
             t.kind === 'percent' ? '%' : null;
         if (!op) return left;
+        if (chained >= MAX_CHAIN) return chainTooLong(cursor, diagnostics);
         cursor.next();
         const right = parseUnary(cursor, diagnostics);
         if (!right) return null;
@@ -339,8 +365,14 @@ function parseUnary(cursor: TokenCursor, diagnostics: Diagnostic[]): Expr | null
 function parsePostfix(cursor: TokenCursor, diagnostics: Diagnostic[]): Expr | null {
     let obj = parsePrimary(cursor, diagnostics);
     if (!obj) return null;
-    for (;;) {
+    // Counted for the same reason a run of `+` is: the loop is flat and the
+    // tree it leaves is not.
+    for (let chained = 0; ; chained++) {
         if (refuseIncrement(cursor, diagnostics)) return null;
+        // Asked once the token says the chain goes on, so a chain that is
+        // exactly the limit long and then stops is not refused for stopping.
+        const goesOn = cursor.at('lbracket') || cursor.at('dot') || cursor.at('qdot');
+        if (goesOn && chained >= MAX_CHAIN) return chainTooLong(cursor, diagnostics);
         if (cursor.at('lbracket')) {
             const next = parseIndex(cursor, diagnostics, obj, false);
             if (!next) return null;

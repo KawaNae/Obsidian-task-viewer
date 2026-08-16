@@ -6,7 +6,7 @@ import { type EvalRuntime, FnCallError, callFn } from './functions';
 // each other the way the two parsers do.
 import { type CellStore, type Scope, burn, callFunction, execArrowBody } from './StmtEvaluator';
 import {
-    type DurUnit, type Value, WEEKDAY_NAMES, addDuration, compareValues, isDatishValue, parseDateStr,
+    type DurUnit, type Value, WEEKDAY_NAMES, addDuration, compareValues, isDatishValue, isWritableDatish, parseDateStr,
     DECIMAL_SCALE, MAX_EXACT_FRACTION, recordField, valueToDisplay,
 } from './Value';
 
@@ -37,6 +37,16 @@ export class EvalError extends Error {
  * across that circle would be reading a binding that is not initialized yet.
  */
 export class BudgetError extends EvalError { }
+
+/**
+ * Digits `toFixed` will write, which is the host's own limit said here.
+ *
+ * Every ceiling in this language is a number with a reason and a sentence. This
+ * one is neither ours nor arbitrary — it is what `Number.prototype.toFixed`
+ * accepts — but it has to be said all the same, or it arrives as a RangeError
+ * from outside the language with nothing to catch it.
+ */
+const MAX_FIXED_DIGITS = 100;
 
 export interface EvalContext extends EvalRuntime {
     /** Property snapshot the expression evaluates against. */
@@ -396,7 +406,16 @@ function callMember(obj: Value, name: string, args: Value[], ctx: EvalContext, s
         // No argument means zero digits, as in JS.
         const digits = args[0];
         if (digits !== undefined && digits.type !== 'number') throw new EvalError(`'toFixed' expects a number`, span);
-        return { type: 'string', value: obj.value.toFixed(digits?.type === 'number' ? wholeOrThrow(digits.value, 'toFixed', span) : 0) };
+        const places = digits?.type === 'number' ? wholeOrThrow(digits.value, 'toFixed', span) : 0;
+        // The host's own range, said here. Left to the host it arrives as a
+        // RangeError with nowhere to be caught: not an EvalError, so the fire
+        // does not fail the way a failure is supposed to — it takes the whole
+        // read down with it, in an editor as well as in a fire.
+        if (places < 0 || places > MAX_FIXED_DIGITS) {
+            throw new EvalError(
+                `'toFixed' takes 0 to ${MAX_FIXED_DIGITS} digits, got ${places}`, span);
+        }
+        return { type: 'string', value: obj.value.toFixed(places) };
     }
 
     throw new EvalError(`${obj.type} has no member '${name}'`, span);
@@ -465,10 +484,33 @@ function evalBinary(expr: Expr & { kind: 'binary' }, ctx: EvalContext): Value {
  * through the expression form — and writing the addition a second time is how
  * `+=` and `+` would quietly come to disagree.
  */
+/**
+ * A shifted date, or the end of this evaluation.
+ *
+ * Arithmetic on dates can leave the calendar the way arithmetic on numbers can
+ * leave the grid, and the two have to fail the same way. Nothing downstream
+ * asks whether a date is real: the shifted value is written onto the next
+ * instance's line, and a year the notation cannot read takes the date off the
+ * task and leaves the text in its title — with the command still attached, so
+ * the fire after it has no day to count from. `NaN-NaN-NaN` is that same
+ * failure, spelled loudly.
+ *
+ * Failing here means the fire does not happen and the command is not consumed,
+ * which is the behaviour every other evaluation failure already has.
+ */
+function shifted(value: Value, span: Span): Value {
+    if (isDatishValue(value) && !isWritableDatish(value)) {
+        throw new EvalError(
+            'This lands outside the four-digit years a date can be written in (0001 to 9999)',
+            span);
+    }
+    return value;
+}
+
 export function applyAddSub(op: '+' | '-', l: Value, r: Value, span: Span): Value {
     const sign = op === '+' ? 1 : -1;
-    if (isDatishValue(l) && r.type === 'duration') return addDuration(l, r, sign as 1 | -1);
-    if (op === '+' && l.type === 'duration' && isDatishValue(r)) return addDuration(r, l, 1);
+    if (isDatishValue(l) && r.type === 'duration') return shifted(addDuration(l, r, sign as 1 | -1), span);
+    if (op === '+' && l.type === 'duration' && isDatishValue(r)) return shifted(addDuration(r, l, 1), span);
     if (op === '+' && l.type === 'date' && r.type === 'time') {
         return { type: 'datetime', date: l.value, time: r.value };
     }

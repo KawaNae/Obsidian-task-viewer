@@ -107,6 +107,20 @@ export function renderGenBody(body: GenBody, outerCtx: EvalContext): GenRenderRe
         };
     } catch (e) {
         if (e instanceof EvalError) return { ok: false, error: e };
+        // The host's stack, not this language's budget. Every shape that can
+        // reach it is refused while it is written, so arriving here means one
+        // was missed — and a raw RangeError leaving this function is not a
+        // failed fire but a broken read, in the editor as much as in a fire.
+        // Answering as a failure keeps the one rule: nothing is written and
+        // the command is not consumed.
+        if (e instanceof RangeError) {
+            return {
+                ok: false,
+                error: new EvalError(
+                    'This expression is too deep to evaluate — break it up',
+                    { start: 0, end: 0 }),
+            };
+        }
         throw e;
     }
 }

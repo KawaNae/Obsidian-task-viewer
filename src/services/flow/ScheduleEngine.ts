@@ -1,7 +1,7 @@
 import { addMonths } from 'date-fns';
 import { type EvalContext, EvalError, evalExpr } from '../lang/ExprEvaluator';
 import { nextCycle, nextWeekdayAfter } from '../lang/functions';
-import { addDuration, formatDateStr, isDatishValue, parseDateStr } from '../lang/Value';
+import { addDuration, formatDateStr, isDatishValue, isWritableDatish, parseDateStr } from '../lang/Value';
 import type { EveryRule, ScheduleNode } from './FlowAst';
 
 /** The task's primary date (start > end > due priority), if any. */
@@ -60,6 +60,14 @@ export function nextOccurrence(
                     : { type: 'date', value: base.date },
                 { amount: schedule.amount, unit: schedule.unit }
             );
+            // The same ceiling the expression side has, on the other road to a
+            // written date: `+9999y` needs no block and no interpolation, and
+            // the year it lands on goes straight onto the next instance's line.
+            if (!isWritableDatish(v)) {
+                throw new EvalError(
+                    'This lands outside the four-digit years a date can be written in (0001 to 9999)',
+                    schedule.span);
+            }
             return v.type === 'date' ? { date: v.value } : { date: v.date, time: v.time };
         }
 
