@@ -2,7 +2,7 @@ import { type Diagnostic, type Span, error } from './Diagnostic';
 import { type BinaryOp, type Expr, FN_NAMES, type FnName, type InterpolationPart, type PropName } from './ExprAst';
 import { findInterpolationEnd, splitDurationText, tokenize } from './Lexer';
 import { looksLikeRecord, parseArrowBlockBody } from './StmtParser';
-import { type Token, TokenCursor, tokenSpan } from './Token';
+import { type Token, type TokenKind, TokenCursor, tokenSpan } from './Token';
 import { weekdayFromName } from './Value';
 
 /** Bare idents inside expressions that read as unit keywords (startOf(week)). */
@@ -393,6 +393,25 @@ function refuseIncrement(cursor: TokenCursor, diagnostics: Diagnostic[]): boolea
     return true;
 }
 
+/**
+ * Consume a separating comma and say whether another item follows.
+ *
+ * A comma sitting right before the closer ends the list rather than
+ * promising an item that is not there. Every JS formatter writes one there
+ * on purpose, and anyone editing a list down the page leaves one behind, so
+ * refusing it would be refusing the shape this language is imitating. The
+ * canonical printer never writes one back, so a flow clause that arrives
+ * with a trailing comma leaves without it.
+ *
+ * The newlines are skipped for the one bracket that can hold them: a record
+ * literal, whose braces the lexer cannot tell from a block's.
+ */
+function moreItems(cursor: TokenCursor, closer: TokenKind): boolean {
+    if (!cursor.tryEat('comma')) return false;
+    cursor.skipNewlines();
+    return !cursor.at(closer);
+}
+
 /** `xs[i]`. Cursor sits on '['. */
 function parseIndex(cursor: TokenCursor, diagnostics: Diagnostic[], obj: Expr, optional: boolean): Expr | null {
     cursor.next(); // consume '['
@@ -520,7 +539,7 @@ function parseArrayLiteral(cursor: TokenCursor, diagnostics: Diagnostic[]): Expr
                 : parseSubExpr(cursor, diagnostics);
             if (!item) return null;
             items.push(item);
-            if (cursor.tryEat('comma')) continue;
+            if (moreItems(cursor, 'rbracket')) continue;
             break;
         }
     }
@@ -577,7 +596,7 @@ function parseRecordLiteral(cursor: TokenCursor, diagnostics: Diagnostic[]): Exp
             if (!value) return null;
             entries.push({ key: keyToken.text, value });
             cursor.skipNewlines();
-            if (cursor.tryEat('comma')) { cursor.skipNewlines(); continue; }
+            if (moreItems(cursor, 'rbrace')) continue;
             break;
         }
     }
@@ -632,7 +651,7 @@ function parseArrow(cursor: TokenCursor, diagnostics: Diagnostic[]): Expr | null
                 }
                 cursor.next();
                 params.push(p.text);
-                if (cursor.tryEat('comma')) continue;
+                if (moreItems(cursor, 'rparen')) continue;
                 break;
             }
         }
@@ -840,7 +859,7 @@ function parseArgs(cursor: TokenCursor, diagnostics: Diagnostic[], fn = 'the cal
             const arg = parseSubExpr(cursor, diagnostics);
             if (!arg) return null;
             args.push(arg);
-            if (cursor.tryEat('comma')) continue;
+            if (moreItems(cursor, 'rparen')) continue;
             break;
         }
     }
