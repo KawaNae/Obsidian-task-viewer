@@ -1,4 +1,4 @@
-import { type App, type WorkspaceLeaf, MarkdownView } from 'obsidian';
+import { type App, type EventRef, type WorkspaceLeaf, MarkdownView } from 'obsidian';
 import type { SyncDetector } from './SyncDetector';
 
 /**
@@ -9,6 +9,7 @@ export class EditorObserver {
     private currentEditorEl: HTMLElement | null = null;
     private editorListenerBound: ((e: InputEvent) => void) | null = null;
     private mousedownListenerBound: ((e: MouseEvent) => void) | null = null;
+    private leafChangeRef: EventRef | null = null;
 
     constructor(
         private app: App,
@@ -21,7 +22,7 @@ export class EditorObserver {
      */
     setupInteractionListeners(): void {
         // アクティブリーフが変わるたびに、そのeditorにbeforeinputリスナーを付け直す
-        this.app.workspace.on('active-leaf-change', (leaf: WorkspaceLeaf | null) => {
+        this.leafChangeRef = this.app.workspace.on('active-leaf-change', (leaf: WorkspaceLeaf | null) => {
             this.attachEditorListener(leaf);
         });
 
@@ -30,21 +31,27 @@ export class EditorObserver {
     }
 
     /**
+     * Stop watching, and leave no listener behind.
+     *
+     * What this observer marks is "the user typed here", which decides whether
+     * a change is local and therefore whether a completed command may fire. An
+     * observer that outlives its index goes on marking edits into a detector
+     * nobody reads, and the workspace subscription would keep re-attaching the
+     * pair to whichever editor is opened next.
+     */
+    dispose(): void {
+        if (this.leafChangeRef) {
+            this.app.workspace.offref(this.leafChangeRef);
+            this.leafChangeRef = null;
+        }
+        this.detachEditorListener();
+    }
+
+    /**
      * 指定リーフのエディタにリスナーを設定
      */
     private attachEditorListener(leaf: WorkspaceLeaf | null): void {
-        // 既存のリスナーを解除
-        if (this.currentEditorEl) {
-            if (this.editorListenerBound) {
-                this.currentEditorEl.removeEventListener('beforeinput', this.editorListenerBound as EventListener);
-            }
-            if (this.mousedownListenerBound) {
-                this.currentEditorEl.removeEventListener('mousedown', this.mousedownListenerBound);
-            }
-            this.currentEditorEl = null;
-            this.editorListenerBound = null;
-            this.mousedownListenerBound = null;
-        }
+        this.detachEditorListener();
 
         if (!leaf) return;
         const view = leaf.view;
@@ -78,5 +85,19 @@ export class EditorObserver {
             }
         };
         editorEl.addEventListener('mousedown', this.mousedownListenerBound);
+    }
+
+    /** Take the pair off whichever editor currently carries it. */
+    private detachEditorListener(): void {
+        if (!this.currentEditorEl) return;
+        if (this.editorListenerBound) {
+            this.currentEditorEl.removeEventListener('beforeinput', this.editorListenerBound as EventListener);
+        }
+        if (this.mousedownListenerBound) {
+            this.currentEditorEl.removeEventListener('mousedown', this.mousedownListenerBound);
+        }
+        this.currentEditorEl = null;
+        this.editorListenerBound = null;
+        this.mousedownListenerBound = null;
     }
 }

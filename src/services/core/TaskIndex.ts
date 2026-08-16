@@ -1,4 +1,4 @@
-import { type App, Notice, TFile } from 'obsidian';
+import { type App, type EventRef, Notice, TFile } from 'obsidian';
 import { t } from '../../i18n';
 import type { DuplicateOptions, Task, TaskViewerSettings } from '../../types';
 import { isTvFile, isTvInline, hasBodyLine } from '../../types';
@@ -57,6 +57,19 @@ export class TaskIndex {
     private apiWriteInFlight: Map<string, NodeJS.Timeout> = new Map();
     private readonly API_WRITE_SUPPRESSION_MS = 2000;
 
+    /**
+     * Every vault subscription this index opened, with the emitter that closes
+     * it.
+     *
+     * Held because a subscription outlives the object that made it. An index
+     * left listening after the plugin unloads keeps its own scanner, its own
+     * completion memory and its own flow executor, and the next load adds a
+     * second set: one file change is then processed twice, and a completed
+     * command generates its next instance once per surviving listener. That is
+     * what an update without a restart used to look like.
+     */
+    private eventRefs: { emitter: { offref(ref: EventRef): void }; ref: EventRef }[] = [];
+
     constructor(private app: App, settings: TaskViewerSettings) {
         this.settings = settings;
         this.parseFingerprint = computeParseFingerprint(settings);
@@ -92,7 +105,7 @@ export class TaskIndex {
         this.editorObserver.setupInteractionListeners();
 
         // Vault イベントハンドラー
-        this.app.vault.on('modify', async (file) => {
+        this.own(this.app.vault, this.app.vault.on('modify', async (file) => {
             if (file instanceof TFile && file.extension === 'md') {
                 const isLocal = this.syncDetector.isLocalEdit(file.path);
                 this.syncDetector.clearLocalEditFlag(file.path);
@@ -118,9 +131,9 @@ export class TaskIndex {
                     this.debouncedNotify();
                 }
             }
-        });
+        }));
 
-        this.app.vault.on('delete', (file) => {
+        this.own(this.app.vault, this.app.vault.on('delete', (file) => {
             if (file instanceof TFile && file.extension === 'md') {
                 this.store.removeTasksByFile(file.path);
                 this.scanner.handleFileRenamed(file.path);
@@ -128,18 +141,18 @@ export class TaskIndex {
                 WikiLinkResolver.resolve(this.store.getTasksMap(), this.store.getWikilinkRefsMap(), this.app);
                 this.debouncedNotify();
             }
-        });
+        }));
 
-        this.app.vault.on('create', (file) => {
+        this.own(this.app.vault, this.app.vault.on('create', (file) => {
             if (file instanceof TFile && file.extension === 'md') {
                 this.scanner.queueScan(file).then(() => {
                     WikiLinkResolver.resolve(this.store.getTasksMap(), this.store.getWikilinkRefsMap(), this.app);
                     this.debouncedNotify();
                     });
             }
-        });
+        }));
 
-        this.app.metadataCache.on('changed', (file) => {
+        this.own(this.app.metadataCache, this.app.metadataCache.on('changed', (file) => {
             if (file instanceof TFile && file.extension === 'md') {
                 // ドラッグ中のファイルはスキャンをスキップ
                 if (this.draggingFilePath === file.path) {
@@ -156,9 +169,9 @@ export class TaskIndex {
                     this.debouncedNotify();
                     });
             }
-        });
+        }));
 
-        this.app.vault.on('rename', async (file, oldPath) => {
+        this.own(this.app.vault, this.app.vault.on('rename', async (file, oldPath) => {
             // md → 非md（拡張子変更）: delete 扱い
             if (!(file instanceof TFile) || file.extension !== 'md') {
                 this.store.removeTasksByFile(oldPath);
@@ -189,7 +202,12 @@ export class TaskIndex {
             await this.scanner.queueScan(file);
             WikiLinkResolver.resolve(this.store.getTasksMap(), this.store.getWikilinkRefsMap(), this.app);
             this.debouncedNotify();
-        });
+        }));
+    }
+
+    /** Remember a subscription so `dispose` can close it. */
+    private own(emitter: { offref(ref: EventRef): void }, ref: EventRef): void {
+        this.eventRefs.push({ emitter, ref });
     }
 
     // ===== 通知制御 =====
@@ -308,7 +326,19 @@ export class TaskIndex {
         }
     }
 
+    /**
+     * Let go of everything this index is holding the vault by.
+     *
+     * The subscriptions come first: a timer that fires after unload wastes a
+     * frame, while a listener that survives it keeps a whole second pipeline
+     * alive — one that scans, detects completions and fires flow commands
+     * against the vault the next load is already working on.
+     */
     dispose(): void {
+        for (const { emitter, ref } of this.eventRefs) emitter.offref(ref);
+        this.eventRefs = [];
+        this.editorObserver.dispose();
+
         if (this.notifyDebounceTimer) {
             clearTimeout(this.notifyDebounceTimer);
             this.notifyDebounceTimer = null;
