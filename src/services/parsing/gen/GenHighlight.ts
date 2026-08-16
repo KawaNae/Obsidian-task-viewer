@@ -1,5 +1,5 @@
 import { FN_NAMES, PROP_NAMES } from '../../lang/ExprAst';
-import { UNIT_KEYWORDS } from '../../lang/ExprParser';
+import { REFUSED_EXPR_KEYWORDS, UNIT_KEYWORDS } from '../../lang/ExprParser';
 import { findInterpolationEnd, tokenize } from '../../lang/Lexer';
 import { REFUSED_STMT_KEYWORDS, STMT_KEYWORDS } from '../../lang/StmtParser';
 import type { Token } from '../../lang/Token';
@@ -233,6 +233,10 @@ function identRole(
     if (before?.kind === 'dot' || before?.kind === 'qdot') return called ? 'fn' : 'prop';
     if (VALUE_WORDS.has(word)) return 'value';
     if (BARE_PROPS.has(word)) return 'prop';
+    // Before the general call rule, exactly as in the parser: these names are
+    // refused where they are written, so the bracket after one is not a call
+    // and painting it as one would say the opposite of the squiggle under it.
+    if (REFUSED_EXPR_KEYWORDS.has(word)) return 'refused';
     // Last, as in the parser: a name the block bound, called.
     if (called) return 'fn';
     if (cells.has(word)) return 'cell';

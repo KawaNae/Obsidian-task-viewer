@@ -8,6 +8,7 @@ import {
 } from '../services/parsing/gen/GenBlockCollector';
 import { parseGenBody } from '../services/parsing/gen/GenBodyParser';
 import { declaredCells } from '../services/parsing/gen/GenCellScan';
+import { type HighlightMark, highlightGenBody } from '../services/parsing/gen/GenHighlight';
 import type { Diagnostic } from '../services/lang/Diagnostic';
 import {
     joinSegments,
@@ -129,6 +130,14 @@ export function createDiagnosticsExtension(): Extension {
         fenced: boolean[];
         /** `tv-gen` diagnostics bucketed by 0-indexed line. */
         gen: Map<number, LocatedDiagnostic[]>;
+        /**
+         * What each run of a `tv-gen` block is, bucketed by 0-indexed line.
+         *
+         * Read off the same parse as the diagnostics above. Reading the block
+         * a second time to colour it is what would let the colour and the
+         * squiggle describe two different readings of one line.
+         */
+        tokens: Map<number, HighlightMark[]>;
     }
     let docCache: { doc: Text; analysis: DocAnalysis } | null = null;
     const analyze = (doc: Text): DocAnalysis => {
@@ -154,13 +163,21 @@ export function createDiagnosticsExtension(): Extension {
         const cells = blocks.size > 0
             ? declaredCells(lines, lines.map((_, i) => scan.fenced[i] || dedented[i]))
             : undefined;
+        const tokens = new Map<number, HighlightMark[]>();
         for (const block of blocks.values()) {
-            parseGenBody(block.body, block.openLine + 1, cells).diagnostics.forEach(bucket);
+            const body = parseGenBody(block.body, block.openLine + 1, cells);
+            body.diagnostics.forEach(bucket);
+            for (const mark of highlightGenBody(body)) {
+                const at = tokens.get(mark.line);
+                if (at) at.push(mark);
+                else tokens.set(mark.line, [mark]);
+            }
         }
 
         const analysis: DocAnalysis = {
             fenced: lines.map((_, i) => scan.fenced[i] || dedented[i]),
             gen,
+            tokens,
         };
         docCache = { doc, analysis };
         return analysis;
@@ -256,6 +273,18 @@ export function createDiagnosticsExtension(): Extension {
             while (pos <= to) {
                 const line = view.state.doc.lineAt(pos);
                 pos = line.to + 1;
+
+                // What the block's own words are, under the squiggles. Drawn
+                // first so a diagnostic's mark nests inside a colour's rather
+                // than the other way round: the colour is what the run is, the
+                // squiggle is what is wrong with it, and the inner one wins
+                // the property they share.
+                for (const mark of analyze(view.state.doc).tokens.get(line.number - 1) ?? []) {
+                    const from = line.from + mark.from;
+                    const to = Math.min(line.from + mark.to, line.to);
+                    if (to <= from) continue;
+                    marks.push({ from, to, deco: Decoration.mark({ class: `tv-tok tv-tok--${mark.role}` }) });
+                }
 
                 // Block diagnostics anchor on the delimiter and on body
                 // lines, neither of which is a task or flow line — so they
