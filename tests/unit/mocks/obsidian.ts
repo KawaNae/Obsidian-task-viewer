@@ -135,14 +135,28 @@ export const editorInfoField = {} as any;
 
 // --- moment stub (returns object with basic format/toDate) ---
 
-export function moment(input?: any) {
-    const d = input ? new Date(input) : new Date();
-    return {
-        format: (fmt?: string) => fmt ? d.toISOString() : d.toISOString(),
-        toDate: () => d,
-        isValid: () => !isNaN(d.getTime()),
-    };
+/**
+ * What `moment.locale()` answers, and therefore which locale `initI18n()`
+ * picks. Settable so a test can read the other language's file through the
+ * real path rather than reaching into the JSON itself.
+ */
+let localeName = 'en';
+
+export function setMockLocale(name: string): void {
+    localeName = name;
 }
+
+export const moment = Object.assign(
+    function moment(input?: any) {
+        const d = input ? new Date(input) : new Date();
+        return {
+            format: (fmt?: string) => fmt ? d.toISOString() : d.toISOString(),
+            toDate: () => d,
+            isValid: () => !isNaN(d.getTime()),
+        };
+    },
+    { locale: () => localeName },
+);
 
 // --- Type stubs ---
 

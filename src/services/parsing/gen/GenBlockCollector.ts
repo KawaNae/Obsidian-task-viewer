@@ -108,7 +108,8 @@ export function collectGenBlocks(lines: string[], scan?: FenceScan): GenBlockSca
         if (tag !== GEN_LANGUAGE_TAG) {
             if (tag.startsWith(OWNED_TAG_PREFIX)) {
                 diagnostics.push({
-                    ...warning('gen.unknown-tag', `Unknown language tag '${tag}'`,
+                    ...warning('gen.unknown-tag',
+                        `Unknown language tag '${tag}' — a generation block is tagged ${GEN_LANGUAGE_TAG}`,
                         wholeLine(open.line), { tag }),
                     line: open.line,
                 });
@@ -121,7 +122,7 @@ export function collectGenBlocks(lines: string[], scan?: FenceScan): GenBlockSca
         if (open.close === null) {
             diagnostics.push({
                 ...error('gen.unterminated-block',
-                    'This block is never closed, so everything below it is read as its body',
+                    'This block is never closed, so everything below it is read as its body and the tasks written there stop appearing',
                     wholeLine(open.line)),
                 line: open.line,
             });
@@ -130,7 +131,8 @@ export function collectGenBlocks(lines: string[], scan?: FenceScan): GenBlockSca
 
         if (!name) {
             diagnostics.push({
-                ...error('gen.missing-name', 'A generation block needs a name to be referenced',
+                ...error('gen.missing-name',
+                    'A generation block needs a name — reference it with use("name")',
                     wholeLine(open.line)),
                 line: open.line,
             });
@@ -139,7 +141,8 @@ export function collectGenBlocks(lines: string[], scan?: FenceScan): GenBlockSca
 
         if (blocks.has(name)) {
             diagnostics.push({
-                ...error('gen.duplicate-name', `A block named '${name}' is already defined`,
+                ...error('gen.duplicate-name',
+                    `A block named '${name}' is already defined; the first one is used`,
                     wholeLine(open.line), { name }),
                 line: open.line,
             });

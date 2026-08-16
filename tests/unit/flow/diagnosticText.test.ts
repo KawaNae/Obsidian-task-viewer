@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import en from '../../../src/i18n/locales/en.json';
+import { setMockLocale } from '../mocks/obsidian';
+import { initI18n } from '../../../src/i18n';
 import ja from '../../../src/i18n/locales/ja.json';
 import { diagnosticText } from '../../../src/services/flow/diagnosticText';
 import { parseFlow } from '../../../src/services/flow/FlowParser';
@@ -12,23 +13,35 @@ import { parseProgram } from '../../../src/services/lang/StmtParser';
 import { TokenCursor } from '../../../src/services/lang/Token';
 import { parseGenBody } from '../../../src/services/parsing/gen/GenBodyParser';
 
-/** Whether `flowDiag.<family>.<name>` is actually spelled out in a locale. */
-function hasLocaleEntry(locale: unknown, code: string): boolean {
+/** Whether `flowDiag.<family>.<name>` is actually spelled out in Japanese. */
+function hasJapanese(code: string): boolean {
     const dot = code.indexOf('.');
-    const family = (locale as { flowDiag?: Record<string, Record<string, string>> })
+    const family = (ja as { flowDiag?: Record<string, Record<string, string>> })
         .flowDiag?.[code.slice(0, dot)];
     return typeof family?.[code.slice(dot + 1)] === 'string';
 }
 
 describe('diagnosticText', () => {
     it('renders the locale template with params interpolated', () => {
-        // Default locale in tests is en; the en template must render params
-        const { diagnostics } = parseFlow('tue every');
-        const unknownHead = diagnostics.find(d => d.code === 'flow.unknown-head');
-        expect(unknownHead).toBeDefined();
-        const text = diagnosticText(unknownHead!);
-        expect(text).toContain("'tue'");
-        expect(text).not.toContain('{{');
+        // 波括弧テンプレートを持つのは ja だけなので、差し込み機構は ja で見る。
+        // en で見ると、値が既に埋まった既定英文へフォールバックしたときも
+        // 合格してしまい、機構を通らずに通ってしまう。
+        setMockLocale('ja');
+        initI18n();
+        try {
+            const { diagnostics } = parseFlow('tue every');
+            const unknownHead = diagnostics.find(d => d.code === 'flow.unknown-head');
+            expect(unknownHead).toBeDefined();
+            const text = diagnosticText(unknownHead!);
+            expect(text).toContain("'tue'");
+            expect(text).not.toContain('{{');
+            // フォールバックではなく訳が出ていること。これが無いと、ja の
+            // エントリを消しても上の 2 つは通る。
+            expect(text).not.toBe(unknownHead!.message);
+        } finally {
+            setMockLocale('en');
+            initI18n();
+        }
     });
 
     it('covers every emitted diagnostic code with a locale entry', () => {
@@ -299,13 +312,13 @@ describe('diagnosticText', () => {
             for (const code of EXPECTED) expect(seen).toContain(code);
         });
 
-        // 文言のフォールバックは英語なので、ロケールの欠落は表示では気づけない。
-        // キーの実在を直に見る。日本語だけ落ちる形（1 code に複数のメッセージを
-        // 持たせた結果、訳が 1 つしか置けない）もここで止まる。
-        it('has a locale entry in every language for each of them', () => {
+        // 英語は src の既定文が正本なので、訳を持つのは ja だけ。フォールバック
+        // が英語である以上、訳の欠落は表示では気づけないので、キーの実在を直に
+        // 見る。1 code に複数のメッセージを持たせた結果、訳が 1 つしか置けない
+        // 形もここで止まる。
+        it('has a Japanese translation for each of them', () => {
             for (const code of EXPECTED) {
-                expect({ code, en: hasLocaleEntry(en, code) }).toEqual({ code, en: true });
-                expect({ code, ja: hasLocaleEntry(ja, code) }).toEqual({ code, ja: true });
+                expect({ code, ja: hasJapanese(code) }).toEqual({ code, ja: true });
             }
         });
 
