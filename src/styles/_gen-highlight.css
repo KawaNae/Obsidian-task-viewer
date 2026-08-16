@@ -1,0 +1,54 @@
+/* tv-gen block highlighting — roles decided by the engine, colours by the theme
+ *
+ * Every colour here is one of Obsidian's own code variables, so a vault that
+ * changes theme changes these with it and light and dark need no branch. The
+ * plugin holds no palette of its own.
+ *
+ * Red is not among them on purpose: --code-operator and --code-tag are the
+ * same red as --color-red, which is the colour of an error's underline. An
+ * operator painted in it reads as something being wrong.
+ */
+
+.tv-tok--keyword,
+.tv-tok--refused {
+    color: var(--code-keyword);
+}
+
+.tv-tok--string {
+    color: var(--code-string);
+}
+
+.tv-tok--value,
+.tv-tok--temporal {
+    color: var(--code-value);
+}
+
+.tv-tok--link {
+    color: var(--code-property);
+}
+
+.tv-tok--fn {
+    color: var(--code-function);
+}
+
+.tv-tok--prop {
+    color: var(--code-property);
+}
+
+/* A cell is a property of the command rather than of the task, and the one
+ * name in a block whose value outlives the firing. Said with the shape of the
+ * letters rather than with a colour of its own: the palette is the theme's,
+ * and a second channel carries where a colour cannot (a reader who does not
+ * separate these hues still sees the difference). */
+.tv-tok--cell {
+    color: var(--code-property);
+    font-style: italic;
+}
+
+.tv-tok--comment {
+    color: var(--code-comment);
+}
+
+.tv-tok--punct {
+    color: var(--code-punctuation);
+}
