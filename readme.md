@@ -124,7 +124,7 @@ tv-content: ウェブサイトリニューアル
 
 ## その他の機能
 
-- **繰り返しタスク** — `==>` フロー記法（every / + / at / x / until / move）でタスクを自動生成（[詳細](docs/commands.md)）
+- **繰り返しタスク** — `==>` フロー記法（every / + / at / x / until / set系 / move / let / use）でタスクを自動生成（[詳細](docs/commands.md)）
 - **フィルタ・ソート** — タグ、ステータス、日付などで絞り込み・並べ替え
 - **プロパティ** — タスクカードの色や線スタイルをカスタマイズ
 - **ビューテンプレート** — フィルタやレイアウトの設定を保存・再利用
@@ -143,7 +143,7 @@ tv-content: ウェブサイトリニューアル
 | [記法リファレンス](docs/notation.md) | インライン・Frontmatter記法の詳細（準備中） |
 | [ビュー詳細](docs/views/) | 各ビューの操作方法（準備中） |
 | [設定リファレンス](docs/settings.md) | 全設定項目の説明（準備中） |
-| [コマンド](docs/commands.md) | 繰り返しタスク（`==>` フロー記法、準備中） |
+| [コマンド](docs/commands.md) | 繰り返しタスク（`==>` フロー記法） |
 | [CLI](docs/cli.md) | CLI リファレンス（Experimental） |
 | [Public API](docs/api.md) | API リファレンス（Experimental） |
 | [開発者向け](docs/developer.md) | 内部アーキテクチャ・型仕様（準備中） |
