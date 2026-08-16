@@ -81,7 +81,8 @@ export class Scope {
                 continue;
             }
             if (s.consts.has(name)) {
-                throw new EvalError(`'${name}' is a const and cannot be written to`, span);
+                throw new EvalError('eval.assign-to-const',
+                    `'${name}' is a const and cannot be written to`, span, { name });
             }
             s.values.set(name, value);
             return;
@@ -89,7 +90,7 @@ export class Scope {
         // The checker refuses this while the block is being written; reaching
         // it means the section ran without one, so it fails rather than
         // inventing a binding the way JS's implicit globals would.
-        throw new EvalError(`'${name}' was never declared`, span);
+        throw new EvalError('eval.assign-undeclared', `'${name}' was never declared`, span, { name });
     }
 }
 
@@ -170,9 +171,9 @@ export function callFunction(def: FnDef, args: Value[], ctx: EvalContext, span: 
     // back into one, far below where the host would give up.
     if (fuel) {
         if (fuel.depth >= MAX_CALL_DEPTH) {
-            throw new BudgetError(
+            throw new BudgetError('eval.call-depth-exceeded',
                 `This went ${MAX_CALL_DEPTH} calls deep — a function here is calling itself with no way out`,
-                span);
+                span, { max: MAX_CALL_DEPTH });
         }
         fuel.depth++;
     }
@@ -224,7 +225,8 @@ export function execArrowBody(body: ArrowBlockBody, ctx: EvalContext): Value {
 export function burn(ctx: EvalContext, span: Span): void {
     if (!ctx.fuel) return;
     if (ctx.fuel.left <= 0) {
-        throw new BudgetError('This block did not finish — it ran past what one generation is allowed to compute', span);
+        throw new BudgetError('eval.fuel-exhausted',
+            'This block did not finish — it ran past what one generation is allowed to compute', span);
     }
     ctx.fuel.left--;
 }
@@ -282,7 +284,9 @@ function execStmt(stmt: Stmt, ctx: EvalContext): void {
             const head = scoped(ctx);
             const source = evalExpr(stmt.iterable, head);
             if (source.type !== 'array') {
-                throw new EvalError(`This goes through a list, got ${source.type}`, stmt.iterable.span);
+                throw new EvalError('eval.not-iterable',
+                    `This goes through a list, got ${source.type}`, stmt.iterable.span,
+                    { actual: source.type });
             }
             for (const item of source.items) {
                 burn(head, stmt.span);
@@ -323,7 +327,8 @@ function runLoopBody(body: Stmt[], ctx: EvalContext): boolean {
 
 function truth(cond: Expr, ctx: EvalContext): boolean {
     const v = evalExpr(cond, ctx);
-    if (v.type !== 'bool') throw new EvalError(`Condition must be bool, got ${v.type}`, cond.span);
+    if (v.type !== 'bool') throw new EvalError('eval.cond-not-bool',
+        `Condition must be bool, got ${v.type}`, cond.span, { actual: v.type });
     return v.value;
 }
 
@@ -350,7 +355,9 @@ function bindTarget(target: BindTarget, value: Value, mutable: boolean, ctx: Eva
 
     if (target.kind === 'array-pattern') {
         if (value.type !== 'array') {
-            throw new EvalError(`Taking a list apart needs a list, got ${value.type}`, target.span);
+            throw new EvalError('eval.destructure-not-a-list',
+                `Taking a list apart needs a list, got ${value.type}`, target.span,
+                { actual: value.type });
         }
         target.names.forEach((slot, i) => {
             if (slot) scope.declare(slot.name, value.items[i] ?? { type: 'none' }, mutable);
@@ -359,7 +366,8 @@ function bindTarget(target: BindTarget, value: Value, mutable: boolean, ctx: Eva
     }
 
     if (value.type !== 'record') {
-        throw new EvalError(`Taking fields apart needs a record, got ${value.type}`, span);
+        throw new EvalError('eval.destructure-not-a-record',
+            `Taking fields apart needs a record, got ${value.type}`, span, { actual: value.type });
     }
     for (const field of target.fields) {
         const found = value.entries.find(e => e.key === field.key);

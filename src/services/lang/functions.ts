@@ -190,45 +190,70 @@ export interface EvalRuntime {
     host: EvalHost;
 }
 
-export class FnCallError extends Error { }
+/**
+ * A built-in refusing the arguments it was handed at run time.
+ *
+ * Carries a `code` and `params` like `EvalError` does, because that is where
+ * it ends up: the evaluator catches it at the call and rethrows it with the
+ * call's span. Losing the code there would leave these sentences as the only
+ * untranslatable ones in the language.
+ */
+export class FnCallError extends Error {
+    constructor(
+        public readonly code: string,
+        message: string,
+        public readonly params?: Record<string, string | number>,
+    ) {
+        super(message);
+    }
+}
 
 export function callFn(fn: FnName, args: Value[], rt: EvalRuntime): Value {
     switch (fn) {
         case 'format': {
             const [target, tokens] = args;
-            if (!isDatishValue(target)) throw new FnCallError('format() expects a date or datetime');
-            if (tokens.type !== 'string') throw new FnCallError('format() expects a token string');
+            if (!isDatishValue(target)) throw new FnCallError('eval.fn-format-not-datish',
+                'format() expects a date or datetime');
+            if (tokens.type !== 'string') throw new FnCallError('eval.fn-format-token-string',
+                'format() expects a token string');
             return { type: 'string', value: rt.host.formatDate(target, tokens.value, rt.weekStartDay) };
         }
         case 'next': {
             const [weekday, from] = args;
             const day = weekday.type === 'string' ? weekdayFromName(weekday.value) : null;
-            if (day === null) throw new FnCallError(`next() expects a weekday name (${WEEKDAY_NAMES.join(', ')})`);
+            if (day === null) throw new FnCallError('eval.fn-next-weekday',
+                `next() expects a weekday name (${WEEKDAY_NAMES.join(', ')})`,
+                { names: WEEKDAY_NAMES.join(', ') });
             return { type: 'date', value: nextWeekdayAfter(day, datishDateOr(from, rt.today)) };
         }
         case 'startOf':
         case 'endOf': {
             const [unit, from] = args;
-            if (unit.type !== 'string') throw new FnCallError(`${fn}() expects week, month or year`);
+            if (unit.type !== 'string') throw new FnCallError('eval.fn-unit-keyword',
+                `${fn}() expects week, month or year`, { fn });
             const base = parseDateStr(datishDateOr(from, rt.today));
             return { type: 'date', value: formatDateStr(fn === 'startOf' ? startOf(unit.value, base, rt.weekStartDay) : endOf(unit.value, base, rt.weekStartDay)) };
         }
         case 'nextCycle': {
             const [anchor, step] = args;
-            if (!isDatishValue(anchor)) throw new FnCallError('nextCycle() expects a date or datetime anchor');
-            if (step.type !== 'duration') throw new FnCallError('nextCycle() expects a duration step');
+            if (!isDatishValue(anchor)) throw new FnCallError('eval.fn-cycle-anchor',
+                'nextCycle() expects a date or datetime anchor');
+            if (step.type !== 'duration') throw new FnCallError('eval.fn-cycle-step',
+                'nextCycle() expects a duration step');
             const anchorDate = anchor.type === 'date' ? anchor.value : anchor.date;
             const anchorTime = anchor.type === 'datetime' ? anchor.time : undefined;
             return nextCycle(anchorDate, anchorTime, { amount: step.amount, unit: step.unit }, rt);
         }
         case 'date': {
             const [v] = args;
-            if (!isDatishValue(v)) throw new FnCallError('date() expects a date or datetime');
+            if (!isDatishValue(v)) throw new FnCallError('eval.fn-date-not-datish',
+                'date() expects a date or datetime');
             return { type: 'date', value: v.type === 'date' ? v.value : v.date };
         }
         case 'time': {
             const [v] = args;
-            if (!isDatishValue(v)) throw new FnCallError('time() expects a date or datetime');
+            if (!isDatishValue(v)) throw new FnCallError('eval.fn-time-not-datish',
+                'time() expects a date or datetime');
             if (v.type === 'date') return { type: 'none' };
             return { type: 'time', value: v.time };
         }
@@ -251,7 +276,8 @@ export function callFn(fn: FnName, args: Value[], rt: EvalRuntime): Value {
  */
 function callMath(fn: FnName, args: Value[]): Value {
     const numbers = args.map(a => {
-        if (a.type !== 'number') throw new FnCallError(`${fn}() expects numbers`);
+        if (a.type !== 'number') throw new FnCallError('eval.fn-expects-numbers',
+            `${fn}() expects numbers`, { fn });
         return a.value;
     });
     switch (fn) {
@@ -266,7 +292,8 @@ function callMath(fn: FnName, args: Value[]): Value {
 
 function datishDateOr(v: Value | undefined, fallback: string): string {
     if (v === undefined) return fallback;
-    if (!isDatishValue(v)) throw new FnCallError('Expected a date or datetime argument');
+    if (!isDatishValue(v)) throw new FnCallError('eval.fn-arg-not-datish',
+        'Expected a date or datetime argument');
     return v.type === 'date' ? v.value : v.date;
 }
 
@@ -297,7 +324,8 @@ export function nextCycle(
     step: { amount: number; unit: DurUnit },
     rt: Pick<EvalRuntime, 'today' | 'now'>
 ): Value & { type: 'date' | 'datetime' } {
-    if (step.amount < 1) throw new FnCallError('nextCycle() step must be at least 1');
+    if (step.amount < 1) throw new FnCallError('eval.fn-cycle-step-too-small',
+        'nextCycle() step must be at least 1');
 
     if (step.unit === 'min' || step.unit === 'h') {
         const stepMin = step.amount * (step.unit === 'h' ? 60 : 1);
@@ -321,7 +349,7 @@ export function nextCycle(
         const s = formatDateStr(candidate);
         if (s > rt.today) return { type: 'date', value: s };
     }
-    throw new FnCallError('nextCycle() overflow');
+    throw new FnCallError('eval.fn-cycle-overflow', 'nextCycle() overflow');
 }
 
 /** Local reference day for TZ-safe minute arithmetic (not epoch-based). */
