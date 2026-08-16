@@ -36,7 +36,7 @@ interface ProbeEntry {
     id: string;
     /** Cells the flow line declares, by their starting value (JSON scalars). */
     cells?: Record<string, string | number | boolean>;
-    /** The js section, without the `<js` / `/js>` delimiters. */
+    /** The js section, without the `<js>` / `</js>` delimiters. */
     js?: string;
     expr: string;
 }
@@ -115,7 +115,7 @@ function cellTypes(cells: CellStore): ReadonlyMap<string, StaticType> {
 function run(entry: ProbeEntry): ProbeResult {
     const cells = cellsOf(entry);
     const lines: string[] = [];
-    if (entry.js !== undefined) lines.push('<js', ...entry.js.split('\n'), '/js>');
+    if (entry.js !== undefined) lines.push('<js>', ...entry.js.split('\n'), '</js>');
     lines.push('- [ ] ${' + entry.expr + '}');
 
     const body = parseGenBody(lines, 1, cellTypes(cells));

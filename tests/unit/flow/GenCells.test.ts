@@ -116,9 +116,9 @@ describe('a cell travels from one generation to the next', () => {
             '- [x] 記録 @2026-08-17 ==> every mon state(prev: "") use("記録")',
             {
                 記録: block('記録', [
-                    '<js',
+                    '<js>',
                     'state.prev = ["- [ ] a", "- [ ] b"].join("\\n")',
-                    '/js>',
+                    '</js>',
                     '- [ ] 記録 @${start}',
                 ]),
             });
@@ -140,10 +140,10 @@ describe('a cell travels from one generation to the next', () => {
             '- [x] 記録 @2026-08-17 ==> every mon state(prev: "") use("記録")',
             {
                 記録: block('記録', [
-                    '<js',
+                    '<js>',
                     'state.prev = `one',
                     'two`',
-                    '/js>',
+                    '</js>',
                     '- [ ] 記録 @${start}',
                 ]),
             });
@@ -220,12 +220,12 @@ describe('a value that cannot be written back stops the fire', () => {
     it('when the block is written to put a list in a cell', async () => {
         // ここは静的検査（type.cell-not-storable）で止まる。ブロックが
         // 壊れている発火は評価にも入らない。
-        await refuses(['<js', 'state.n = [1, 2]', '/js>', '- [ ] 週報 @${start}']);
+        await refuses(['<js>', 'state.n = [1, 2]', '</js>', '- [ ] 週報 @${start}']);
     });
 
     it('when the type went unknown on the way and a list arrived anyway', async () => {
         // 静的には決まらない形。1 本目の代入で型が unknown に広がるので
         // 2 本目は何も言えず、書き戻しの直前の検査だけが残る関門になる。
-        await refuses(['<js', 'state.n = "text"', 'state.n = [1, 2]', '/js>', '- [ ] 週報 @${start}']);
+        await refuses(['<js>', 'state.n = "text"', 'state.n = [1, 2]', '</js>', '- [ ] 週報 @${start}']);
     });
 });

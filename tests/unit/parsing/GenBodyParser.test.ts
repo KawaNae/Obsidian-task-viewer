@@ -96,10 +96,10 @@ describe('parseGenBody — diagnostics', () => {
 
     it('reads a js section and keeps it out of the body', () => {
         const { parent, children, js, diagnostics } = parse([
-            '<js',
+            '<js>',
             'let n = 1',
             'n = n + 1',
-            '/js>',
+            '</js>',
             '- [ ] 週報 第${n}回',
             '    - [ ] 資料集め',
         ]);
@@ -110,7 +110,7 @@ describe('parseGenBody — diagnostics', () => {
     });
 
     it('does not swallow the body when the section closes on its own line', () => {
-        const { parent, js } = parse(['<js let n = 1 /js>', '- [ ] 週報']);
+        const { parent, js } = parse(['<js>let n = 1</js>', '- [ ] 週報']);
         expect(parent!.text).toBe('- [ ] 週報');
         expect(js!.program.body).toHaveLength(1);
     });
@@ -118,10 +118,10 @@ describe('parseGenBody — diagnostics', () => {
     // セクションのソースは行をまたぐので、文字オフセットを行に写す必要がある。
     it('puts a diagnostic from inside the section on its own line', () => {
         const found = parse([
-            '<js',
+            '<js>',
             'let n = 1',
             'var m = 2',
-            '/js>',
+            '</js>',
             '- [ ] 週報',
         ]).diagnostics;
         expect(found.map(d => [d.code, d.line])).toEqual([['stmt.no-var', 3]]);
@@ -132,11 +132,11 @@ describe('parseGenBody — diagnostics', () => {
     // （開始行へ寄せて切り詰めると、あとで行ごとに切り直せない）。
     it('carries both ends of a span that crosses lines', () => {
         const found = parse([
-            '<js',
+            '<js>',
             'let ok = false',
             'if (ok =',
             'true) { }',
-            '/js>',
+            '</js>',
             '- [ ] 週報',
         ]).diagnostics;
         expect(found.map(d => [d.code, d.line, d.endLine]))
@@ -146,49 +146,49 @@ describe('parseGenBody — diagnostics', () => {
     });
 
     it('reports a section that never closes', () => {
-        expect(codes(['<js', 'let n = 1']).map(([code]) => code))
+        expect(codes(['<js>', 'let n = 1']).map(([code]) => code))
             .toContain('gen.js-section-unclosed');
     });
 
     it('reports a second section, and one written after the body', () => {
         expect(codes([
-            '<js', 'let n = 1', '/js>',
-            '<js', 'let m = 2', '/js>',
+            '<js>', 'let n = 1', '</js>',
+            '<js>', 'let m = 2', '</js>',
             '- [ ] 週報',
         ])).toEqual([['gen.js-section-duplicate', 4]]);
         expect(codes([
             '- [ ] 週報',
-            '<js', 'let n = 1', '/js>',
+            '<js>', 'let n = 1', '</js>',
         ])).toEqual([['gen.js-section-after-body', 2]]);
     });
 
     // markdown のフェンスは行頭でしか閉じない。文字列の途中のバッククォート
     // 3 本は何も壊さないので、何も言わない。
     it('says nothing about backticks inside a string', () => {
-        expect(codes(['<js', 'const s = "```"', '/js>', '- [ ] 週報'])).toEqual([]);
+        expect(codes(['<js>', 'const s = "```"', '</js>', '- [ ] 週報'])).toEqual([]);
     });
 
     // 行頭のフェンスは外側の tv-gen フェンスを閉じるので、そこでブロックが
     // 終わる。残るのは閉じていないセクションだけで、それが観測できる唯一の
     // 症状になる。案内はその文言が持つ。
     it('points a section that never closes at the fence that may have cut it', () => {
-        const found = parse(['<js', 'let n = 1']).diagnostics;
+        const found = parse(['<js>', 'let n = 1']).diagnostics;
         expect(found.map(d => d.code)).toContain('gen.js-section-unclosed');
         expect(found[0].message).toContain('four or more backticks');
     });
 
     // ブロックの差し込みは、段 2b で初めて静的検査を受ける。
     it('checks the body interpolations against what the section declared', () => {
-        expect(parse(['<js', 'const n = 1', '/js>', '- [ ] 第${n}回']).diagnostics).toEqual([]);
+        expect(parse(['<js>', 'const n = 1', '</js>', '- [ ] 第${n}回']).diagnostics).toEqual([]);
         expect(codes(['- [ ] 第${n}回'])).toEqual([['expr.unknown-ident', 1]]);
-        expect(codes(['<js', 'const n = 1', '/js>', '- [ ] ${n.nope}']))
+        expect(codes(['<js>', 'const n = 1', '</js>', '- [ ] ${n.nope}']))
             .toEqual([['type.unknown-member', 4]]);
     });
 
     it('stays quiet about the body when the section itself is broken', () => {
         // セクションの束縛が分からない状態で本文を検査すると、借りている名前が
         // 全部 unknown になって本命の診断が埋もれる。
-        expect(codes(['<js', 'let 1 = 2', '/js>', '- [ ] 第${n}回']))
+        expect(codes(['<js>', 'let 1 = 2', '</js>', '- [ ] 第${n}回']))
             .toEqual([['stmt.expected-binding', 2]]);
     });
 
@@ -216,19 +216,19 @@ describe('parseGenBody — the cells the command declares', () => {
         // 渡し忘れると全部『宣言されていないセル』になる（沈黙しない）。
         expect(withCells(['- [ ] 第${state.n = state.n + 1}回']).diagnostics).toEqual([]);
         expect(withCells(['- [ ] 第${state.n += 1}回']).diagnostics).toEqual([]);
-        expect(withCells(['<js', 'state.n = state.n + 1', '/js>', '- [ ] 第${state.n}回']).diagnostics).toEqual([]);
+        expect(withCells(['<js>', 'state.n = state.n + 1', '</js>', '- [ ] 第${state.n}回']).diagnostics).toEqual([]);
     });
 
     it('names the cell that was meant when the prefix is missing', () => {
         // 改名前の書き方をそのまま持ってきた人が最初に踏む形。宣言の集合を
         // 持っているので、未知の名前ではなく『それはセルだ』と言える。
         expect(cellCodes(['- [ ] 第${n}回'])).toEqual([['expr.cell-needs-state', 1]]);
-        expect(cellCodes(['<js', 'n = 1', '/js>', '- [ ] 週報'])).toEqual([['expr.cell-needs-state', 2]]);
+        expect(cellCodes(['<js>', 'n = 1', '</js>', '- [ ] 週報'])).toEqual([['expr.cell-needs-state', 2]]);
     });
 
     it('still calls a name no command declares what it is', () => {
         expect(cellCodes(['- [ ] 第${m}回'])).toEqual([['expr.unknown-ident', 1]]);
-        expect(cellCodes(['<js', 'm = 1', '/js>', '- [ ] 週報'])).toEqual([['stmt.assign-undeclared', 2]]);
+        expect(cellCodes(['<js>', 'm = 1', '</js>', '- [ ] 週報'])).toEqual([['stmt.assign-undeclared', 2]]);
     });
 
     it('names a cell the command does not declare', () => {
@@ -242,7 +242,7 @@ describe('parseGenBody — the cells the command declares', () => {
     });
 
     it('knows what type a cell holds', () => {
-        expect(cellCodes(['<js', 'state.n = "text"', '/js>', '- [ ] 週報']))
+        expect(cellCodes(['<js>', 'state.n = "text"', '</js>', '- [ ] 週報']))
             .toEqual([['stmt.assign-type-change', 2]]);
     });
 
@@ -254,25 +254,86 @@ describe('parseGenBody — the cells the command declares', () => {
     it('lets a section declare the same name without touching the cell', () => {
         // 改名の眼目。セルはスコープに居ないので、この宣言は隠していない。
         // 別物として普通に読み書きされ、セルは state.n のまま動き続ける。
-        expect(cellCodes(['<js', 'let n = 0', 'n = n + 1', '/js>', '- [ ] 第${state.n}回']))
+        expect(cellCodes(['<js>', 'let n = 0', 'n = n + 1', '</js>', '- [ ] 第${state.n}回']))
             .toEqual([]);
-        expect(cellCodes(['<js', 'const xs = [1, 2].map(n => n + 1)', '/js>', '- [ ] 週報']))
+        expect(cellCodes(['<js>', 'const xs = [1, 2].map(n => n + 1)', '</js>', '- [ ] 週報']))
             .toEqual([]);
     });
 
     it('refuses a declaration of state itself', () => {
         // 隠すと state.n が全部その宣言を読み、コマンドの値は動かなくなる。
         // ほかの名前を隠すのは警告だが、これは error。
-        expect(cellCodes(['<js', 'let state = 1', '/js>', '- [ ] 週報']))
+        expect(cellCodes(['<js>', 'let state = 1', '</js>', '- [ ] 週報']))
             .toEqual([['stmt.shadows-state', 2]]);
     });
 
     it('refuses a value that could never be printed back', () => {
         // 実行時のガードは残る（型が unknown に広がる経路があるため）。
         // 書いている時点で決まるものは、書いている時点で言う。
-        expect(cellCodes(['<js', 'state.n = [1, 2]', '/js>', '- [ ] 週報']))
+        expect(cellCodes(['<js>', 'state.n = [1, 2]', '</js>', '- [ ] 週報']))
             .toEqual([['type.cell-not-storable', 2]]);
-        expect(cellCodes(['<js', 'state.n = {a: 1}', '/js>', '- [ ] 週報']))
+        expect(cellCodes(['<js>', 'state.n = {a: 1}', '</js>', '- [ ] 週報']))
             .toEqual([['type.cell-not-storable', 2]]);
+    });
+});
+
+describe('parseGenBody — the js section is written as a tag', () => {
+    it('reads the whole section written on one line', () => {
+        const { parent, js, diagnostics } = parse(['<js>let n = 1</js>', '- [ ] 第${n}回']);
+        expect(diagnostics).toEqual([]);
+        expect(js!.program.body).toHaveLength(1);
+        expect(parent!.text).toBe('- [ ] 第${n}回');
+    });
+
+    // タグを剥がすと、その行に書いたコードだけが左へずれていた。同じ長さの
+    // 空白に置き換えてあるので、セクションの桁はページの桁と一致する。
+    it('keeps the columns of code written on the opening line', () => {
+        const found = parse(['<js>var m = 2', '</js>', '- [ ] 週報']).diagnostics;
+        expect(found.map(d => [d.code, d.line])).toEqual([['stmt.no-var', 1]]);
+        expect(found[0].span.start).toBe('<js>'.length);
+    });
+
+    // 旧記法はもう区切りではない。黙って通らず、本文の行として読まれる。
+    it('reads the old delimiters as body lines, which the block then refuses', () => {
+        expect(codes(['<js', 'let n = 1', '/js>', '- [ ] 週報'])).toEqual([
+            ['gen.root-not-a-task', 1],
+            ['gen.multiple-roots', 2],
+            ['gen.multiple-roots', 3],
+            ['gen.multiple-roots', 4],
+        ]);
+    });
+
+    it('refuses a section written between the body lines', () => {
+        expect(codes([
+            '- [ ] 親',
+            '<js>', 'let n = 1', '</js>',
+            '    - [ ] 子',
+        ])).toEqual([['gen.js-section-after-body', 2]]);
+    });
+});
+
+describe('parseGenBody — a block with no body lines', () => {
+    // 本文が 1 行も無いブロックは、計算した値をどこにも置けない。以前は何も
+    // 言わずに通り、発火すると元のタスクの複製ができていた。
+    it('reports a section with nothing after it, under its opening tag', () => {
+        const found = parse(['<js>', 'let n = 1', '</js>']).diagnostics;
+        expect(found.map(d => [d.code, d.line])).toEqual([['gen.empty-body', 1]]);
+        expect(found[0].span).toEqual({ start: 0, end: '<js>'.length });
+    });
+
+    // 下線を引ける文字が 1 つも無い形。行の上に文字が無いマークは描かれる前に
+    // 捨てられるので、本文の 1 つ前の行 = 開きのフェンスに付ける。
+    it('reports a block that is empty, or only blank lines, on its fence', () => {
+        for (const body of [[], ['', '   ']]) {
+            const found = parseGenBody(body, 1).diagnostics;
+            expect(found.map(d => [d.code, d.line])).toEqual([['gen.empty-body', 0]]);
+            expect(found[0].span).toEqual({ start: 0, end: 3 });
+        }
+    });
+
+    // 判定は本文の行数で、親の有無ではない。子だけ書くブロックは機能なので、
+    // 親が null でも当たらないこと。
+    it('says nothing about a block that writes only children', () => {
+        expect(codes(['    - [ ] 資料集め', '    - [ ] 下書き'])).toEqual([]);
     });
 });

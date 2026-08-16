@@ -187,10 +187,10 @@ describe('a line that is only an interpolation', () => {
 describe('renderGenBody — the js section', () => {
     it('runs the section first and lets the body read what it left', () => {
         expect(render([
-            '<js',
+            '<js>',
             'const areas = ["仕事", "健康"]',
             'const rows = areas.map(a => "    - [ ] " + a).join("\\n")',
-            '/js>',
+            '</js>',
             '- [ ] 週報',
             '${rows}',
         ])).toEqual({
@@ -207,7 +207,7 @@ describe('renderGenBody — the js section', () => {
     // 文書順が規則そのもの。後続の差し込みは更新後の値を見る。
     it('reads the body in document order, updates included', () => {
         expect(render([
-            '<js', 'let n = 0', '/js>',
+            '<js>', 'let n = 0', '</js>',
             '- [ ] 第${n += 1}回',
             '    - [ ] その次は第${n + 1}回',
         ])).toMatchObject({
@@ -219,33 +219,33 @@ describe('renderGenBody — the js section', () => {
 
     it('lets a function the section declared build a line', () => {
         expect(render([
-            '<js',
+            '<js>',
             'const title = n => "- [ ] 第" + n + "回"',
-            '/js>',
+            '</js>',
             '${title("3")}',
         ])).toMatchObject({ ok: true, parentText: '- [ ] 第3回' });
     });
 
     // 失敗は結果であって例外ではない。2 相なので、ここで落ちれば何も書かれない。
     it('hands back the failure rather than throwing it', () => {
-        const result = render(['<js', 'const n = 1 / 0', '/js>', '- [ ] 週報']);
+        const result = render(['<js>', 'const n = 1 / 0', '</js>', '- [ ] 週報']);
         expect(result.ok).toBe(false);
         expect(!result.ok && result.error.message).toContain('Division by zero');
     });
 
     it('stops a section that will not stop on its own', () => {
-        const result = render(['<js', 'let n = 0', 'while (true) { n = n + 1 }', '/js>', '- [ ] 週報']);
+        const result = render(['<js>', 'let n = 0', 'while (true) { n = n + 1 }', '</js>', '- [ ] 週報']);
         expect(result.ok).toBe(false);
         expect(!result.ok && result.error.message).toContain('ran past');
     });
 
     it('refuses more lines than a task can be', () => {
         const result = render([
-            '<js',
+            '<js>',
             'let rows = []',
             'for (let i = 0; i < 300; i += 1) { rows = rows.concat(["    - [ ] row"]) }',
             'const body = rows.join("\\n")',
-            '/js>',
+            '</js>',
             '- [ ] 週報',
             '${body}',
         ]);
@@ -257,9 +257,9 @@ describe('renderGenBody — the js section', () => {
     // 来るとは限らない。最後の 1 本だけを見ると素通りする。
     it('refuses a deep line even when a shallow one follows it', () => {
         const result = render([
-            '<js',
+            '<js>',
             `const rows = ["${' '.repeat(4 * 12)}- [ ] 底", "    - [ ] 浅"].join("\\n")`,
-            '/js>',
+            '</js>',
             '- [ ] 週報',
             '${rows}',
         ]);
@@ -269,9 +269,9 @@ describe('renderGenBody — the js section', () => {
 
     it('refuses a line nested deeper than a task can hold', () => {
         const result = render([
-            '<js',
+            '<js>',
             `const deep = "${' '.repeat(4 * 11)}- [ ] 底"`,
-            '/js>',
+            '</js>',
             '- [ ] 週報',
             '${deep}',
         ]);
@@ -295,7 +295,7 @@ describe('renderGenBody — the cells the command carries', () => {
 
     it('carries what the section wrote, not what the line started from', () => {
         const result = withCells(
-            ['<js', 'n = n + 10', '/js>', '- [ ] 第${n}回'],
+            ['<js>', 'n = n + 10', '</js>', '- [ ] 第${n}回'],
             [['n', { type: 'number', value: 3 }]]);
         expect(result).toMatchObject({ ok: true, parentText: '- [ ] 第13回' });
         expect(result.ok && result.cells.get('n')).toEqual({ type: 'number', value: 13 });
@@ -310,7 +310,7 @@ describe('renderGenBody — the cells the command carries', () => {
         // セクションが作った束縛は状態ではない。持ち帰る名前をフロー行の
         // 宣言に限ることが、状態がどこにあるかを行の上に留める。
         const result = withCells(
-            ['<js', 'const m = 99', '/js>', '- [ ] 週報'],
+            ['<js>', 'const m = 99', '</js>', '- [ ] 週報'],
             [['n', { type: 'number', value: 3 }]]);
         expect(result.ok && [...result.cells.keys()]).toEqual(['n']);
     });
@@ -319,7 +319,7 @@ describe('renderGenBody — the cells the command carries', () => {
         // 隠すこと自体は書けてしまう（診断は checker が出す）。隠された
         // まま書き戻しが影の値を拾うと、行に出ない状態が動くことになる。
         const result = withCells(
-            ['<js', 'let n = 100', 'n = n + 1', '/js>', '- [ ] 第${n}回'],
+            ['<js>', 'let n = 100', 'n = n + 1', '</js>', '- [ ] 第${n}回'],
             [['n', { type: 'number', value: 3 }]]);
         expect(result).toMatchObject({ ok: true, parentText: '- [ ] 第101回' });
         expect(result.ok && result.cells.get('n')).toEqual({ type: 'number', value: 3 });
@@ -328,7 +328,7 @@ describe('renderGenBody — the cells the command carries', () => {
     it('lets a value of another type land in a cell, for the planner to refuse', () => {
         // 実行は止めない。印字できるかどうかは書き戻しの直前で 1 回だけ見る。
         const result = withCells(
-            ['<js', 'n = [1, 2]', '/js>', '- [ ] 週報'],
+            ['<js>', 'n = [1, 2]', '</js>', '- [ ] 週報'],
             [['n', { type: 'number', value: 3 }]]);
         expect(result.ok && result.cells.get('n')?.type).toBe('array');
     });

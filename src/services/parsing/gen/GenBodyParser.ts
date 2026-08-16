@@ -47,7 +47,7 @@ export interface GenLine {
 }
 
 /**
- * The `<js ... /js>` section at the head of a block, parsed.
+ * The `<js> ... </js>` section at the head of a block, parsed.
  *
  * The source is kept as one string with its lines joined, because that is
  * what the statement parser reads and what its character offsets measure
@@ -83,6 +83,9 @@ export interface GenBody {
 /** Spaces that make up one level of depth (Obsidian accepts 1 tab or 4 spaces). */
 const SPACES_PER_LEVEL = 4;
 
+/** Backticks of a fence, which is all of it a diagnostic can count on. */
+const FENCE_MARKER = 3;
+
 /**
  * Levels of indentation in a run of leading whitespace.
  *
@@ -106,8 +109,10 @@ export function leadingIndent(raw: string): string {
 }
 
 /** Opening and closing tags of the leading js section. */
-const JS_OPEN_RE = /^\s*<js\b/;
-const JS_CLOSE_RE = /^\s*\/js>\s*$/;
+const JS_OPEN_RE = /^\s*<js>/;
+const JS_CLOSE_RE = /^\s*<\/js>\s*$/;
+/** The whole section on one line, which is a shape worth writing. */
+const JS_INLINE_RE = /^\s*<js>.*<\/js>\s*$/;
 
 /**
  * Read the literal lines of a block body.
@@ -162,12 +167,13 @@ function readGenBody(body: string[], firstLine: number, cells?: GenCellTypes): G
             const section = readJsSection(body, i, firstLine, diagnostics);
             i = section.lastIndex;
             if (js !== null) {
-                // The second one is refused rather than merged: a block has
-                // one place its logic lives, and running both in order would
-                // make that place two.
+                // The second one is refused rather than merged: for now a
+                // block has one place its logic lives. Said as what holds
+                // today rather than as a law, because running several in
+                // document order is a relaxation that stays open.
                 diagnostics.push({
                     ...error('gen.js-section-duplicate',
-                        'A block has one js section — put the rest of the logic in the first one',
+                        'A block runs one js section for now — put the rest of the logic in the first one',
                         { start: 0, end: raw.length }),
                     line,
                 });
@@ -176,7 +182,7 @@ function readGenBody(body: string[], firstLine: number, cells?: GenCellTypes): G
             if (lines.length > 0) {
                 diagnostics.push({
                     ...error('gen.js-section-after-body',
-                        'The js section runs before the body, so it is written before it',
+                        'The js section goes at the head of the block for now — it runs before the body, so it is written before it',
                         { start: 0, end: raw.length }),
                     line,
                 });
@@ -218,12 +224,39 @@ function readGenBody(body: string[], firstLine: number, cells?: GenCellTypes): G
         });
     }
 
+    if (lines.length === 0) {
+        // Read off the body lines rather than off the parent: a block with no
+        // depth-0 line is the children-only shape, which is a feature and has
+        // lines. Nothing at all is the shape that used to pass in silence and
+        // then generate a copy of the task that fired it — the section on its
+        // own computes values with nowhere to put them.
+        //
+        // The mark goes on the first line something is written on, which is
+        // the section's opening tag in the usual shape. A block with nothing
+        // in it at all has no such line, and a mark with no characters under
+        // it is dropped before it is drawn, so that one falls back to the
+        // fence: the body begins on the line after it, always.
+        const at = body.findIndex(l => l.trim() !== '');
+        diagnostics.push({
+            ...error('gen.empty-body',
+                'This block generates nothing — its lines become the next instance, so it needs at least one',
+                { start: 0, end: at >= 0 ? body[at].length : FENCE_MARKER }),
+            line: at >= 0 ? firstLine + at : firstLine - 1,
+        });
+    }
+
     const bindings = checkBody(js, jsBroken, lines, diagnostics, cells);
     return classify(lines, js, bindings, diagnostics);
 }
 
+/** The opening tag replaced by as much blank space as it took up. */
+function blankOpenTag(openLine: string): string {
+    const tag = openLine.match(JS_OPEN_RE)?.[0] ?? '';
+    return ' '.repeat(tag.length) + openLine.slice(tag.length);
+}
+
 /**
- * Read one `<js ... /js>` section and parse it.
+ * Read one `<js> ... </js>` section and parse it.
  *
  * `lastIndex` is where the caller's loop should resume — the closing tag, or
  * the end of the block when there is none. An unclosed section swallows the
@@ -236,19 +269,21 @@ function readJsSection(
     diagnostics: LocatedDiagnostic[]
 ): { parsed: GenJsSection; broken: boolean; lastIndex: number } {
     const openLine = body[open];
-    const inline = openLine.match(/^\s*<js\b(.*?)\/js>\s*$/);
+    // The rest of the opening line counts: `<js>const a = 1` is one statement
+    // someone wrote on the tag's line, not nothing. The tag it follows is
+    // blanked rather than cut away, so a column of the section is the column
+    // on the page — the opening line is the one place where the section
+    // begins partway along a line, and a diagnostic or a colour drawn there
+    // has to land under what it is about.
+    const masked = blankOpenTag(openLine);
     const source: string[] = [];
     let lastIndex = open;
-    let sourceFirstLine = firstLine + open;
+    const sourceFirstLine = firstLine + open;
 
-    if (inline) {
-        source.push(inline[1]);
+    if (JS_INLINE_RE.test(openLine)) {
+        source.push(masked.replace(/<\/js>\s*$/, ''));
     } else {
-        // The rest of the opening line counts: `<js const a = 1` is one
-        // statement someone wrote on the tag's line, not nothing.
-        const trailing = openLine.replace(/^\s*<js\b/, '');
-        source.push(trailing);
-        sourceFirstLine = firstLine + open;
+        source.push(masked);
         let i = open + 1;
         while (i < body.length && !JS_CLOSE_RE.test(body[i])) {
             source.push(body[i]);
@@ -258,11 +293,11 @@ function readJsSection(
             // The other way to get here is a line inside the section that
             // starts with three backticks: it closes the tv-gen fence, the
             // block ends before its own delimiter, and what is left is a
-            // section with no `/js>`. Both readings are answered at once,
+            // section with no `</js>`. Both readings are answered at once,
             // because this is the only symptom either of them shows.
             diagnostics.push({
                 ...error('gen.js-section-unclosed',
-                    "This js section is never closed with '/js>' — if a line inside it starts with three backticks, that ended the block early, and the block needs four or more backticks around it",
+                    "This js section is never closed with '</js>' — if a line inside it starts with three backticks, that ended the block early, and the block needs four or more backticks around it",
                     { start: 0, end: openLine.length }),
                 line: firstLine + open,
             });

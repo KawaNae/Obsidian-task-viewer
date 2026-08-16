@@ -29,7 +29,7 @@ describe('nesting past what the host stack holds', () => {
     });
 
     it('comes back from a js section too', () => {
-        const body = parseGenBody(['<js', `let n = ${deep}`, '/js>'], 1);
+        const body = parseGenBody(['<js>', `let n = ${deep}`, '</js>'], 1);
         expect(body.diagnostics.map(d => d.code)).toEqual(['expr.nesting-too-deep']);
     });
 

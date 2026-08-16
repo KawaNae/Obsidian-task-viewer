@@ -121,7 +121,7 @@ describe('a name every object inherits is still just a name', () => {
 
     it('inside a js section, where a statement and an expression meet', () => {
         sweep('js section', word => {
-            const body = parseGenBody(['<js', `const s = "a".${word}();`, '/js>', '- [ ] c ${s}'], 0);
+            const body = parseGenBody(['<js>', `const s = "a".${word}();`, '</js>', '- [ ] c ${s}'], 0);
             return [...speaks(body.diagnostics), ...codes(body.diagnostics)];
         });
     });

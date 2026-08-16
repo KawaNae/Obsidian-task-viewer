@@ -250,9 +250,10 @@ describe('diagnosticText', () => {
 
         // ブロック構造の診断はブロックのパーサから出る。
         const BLOCK_SAMPLES: string[][] = [
-            ['<js', 'let n = 1'],                                   // gen.js-section-unclosed
-            ['<js', 'let n = 1', '/js>', '<js', 'let m = 2', '/js>'], // gen.js-section-duplicate
-            ['- [ ] a', '<js', 'let n = 1', '/js>'],                // gen.js-section-after-body
+            ['<js>', 'let n = 1'],                                   // gen.js-section-unclosed
+            ['<js>', 'let n = 1', '</js>', '<js>', 'let m = 2', '</js>'], // gen.js-section-duplicate
+            ['- [ ] a', '<js>', 'let n = 1', '</js>'],                // gen.js-section-after-body
+            ['<js>', 'let n = 1', '</js>'],                         // gen.empty-body
         ];
 
         // 代入とコメントはブロックでは通る形なので、拒否はフロー行の側から出る。
@@ -282,7 +283,7 @@ describe('diagnosticText', () => {
             'stmt.not-destructurable', 'stmt.not-iterable',
             'type.not-callable', 'type.call-arity', 'expr.fn-not-a-value',
             'gen.js-section-unclosed', 'gen.js-section-duplicate',
-            'gen.js-section-after-body', 'expr.nesting-too-deep',
+            'gen.js-section-after-body', 'gen.empty-body', 'expr.nesting-too-deep',
             'stmt.shadows-state', 'expr.cell-needs-state', 'expr.unknown-cell',
             'expr.no-cells-declared', 'expr.cell-not-here',
         ];
@@ -297,7 +298,7 @@ describe('diagnosticText', () => {
             }
             for (const lines of BLOCK_SAMPLES) all.push(...parseGenBody(lines, 1).diagnostics);
             // セルはフロー行から渡って来るので、ブロック単体の網には載らない。
-            all.push(...parseGenBody(['<js', 'let state = 0', '/js>', '- [ ] 第${n}回'], 1,
+            all.push(...parseGenBody(['<js>', 'let state = 0', '</js>', '- [ ] 第${n}回'], 1,
                 new Map([['n', 'number']])).diagnostics);
             all.push(...parseGenBody(['- [ ] 第${state.m}回'], 1,
                 new Map([['n', 'number']])).diagnostics);
