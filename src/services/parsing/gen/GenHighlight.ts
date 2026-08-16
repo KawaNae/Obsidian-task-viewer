@@ -1,8 +1,6 @@
-import {
-    FN_NAMES, type InterpolationSeam, LITERAL_WORDS, PROP_NAMES, UNIT_KEYWORDS,
-} from '../../lang/ExprAst';
-import { REFUSED_EXPR_KEYWORDS, splitInterpolations } from '../../lang/ExprParser';
-import { tokenize } from '../../lang/Lexer';
+import { FN_NAMES, LITERAL_WORDS, PROP_NAMES, UNIT_KEYWORDS } from '../../lang/ExprAst';
+import { REFUSED_EXPR_KEYWORDS } from '../../lang/ExprParser';
+import { scanInterpolations, tokenize } from '../../lang/Lexer';
 import { REFUSED_STMT_KEYWORDS, STMT_KEYWORDS } from '../../lang/StmtParser';
 import type { Token } from '../../lang/Token';
 import { type GenBody, type GenLine, lineIndex } from './GenBodyParser';
@@ -183,22 +181,15 @@ function collect(src: string, base: number, statements: boolean, cells: Readonly
 /**
  * The `${...}` of a template literal, read with the template's own rule.
  *
- * Asked of the splitter rather than scanned for here: a template's braces
- * follow the same rule as a body line's, down to the backslash that makes one
- * literal, and two readers of one rule is how they come to disagree. The parts
- * it returns are of no use — the checker has already read them — and its
- * diagnostics are already reported where the template was parsed, so both are
- * dropped and only the seams are kept.
+ * The same scan a body line asks, so a template's braces follow one rule
+ * rather than a copy of one. Only the scan: what is spliced into a template
+ * has been parsed already, where the template was, and a second parse whose
+ * result is thrown away would buy nothing this needs.
  */
 function collectTemplate(token: Token, cells: ReadonlySet<string>, emit: Emit): void {
-    const seams: InterpolationSeam[] = [];
     // The token's span covers the backticks; its text is what is between them.
     const base = token.start + 1;
-    // Never as statements, whatever encloses the template: the splitter reads
-    // a template's interpolations in the block profile, so the statement
-    // reader is not there and its words are ordinary names.
-    splitInterpolations(token.text, [], base, 'block', seams);
-    for (const seam of seams) {
+    for (const seam of scanInterpolations(token.text, base)) {
         emit('interp', seam.span.start, seam.span.start + 2);
         if (!seam.closed) continue;
         emit('interp', seam.span.end - 1, seam.span.end);

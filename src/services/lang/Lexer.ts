@@ -412,6 +412,54 @@ export function findInterpolationEnd(src: string, open: number): number {
     return -1;
 }
 
+/**
+ * Where a `${` was written, whether or not what follows it parsed.
+ *
+ * Lexical, and that is the whole of it: a reader that has to describe the
+ * source needs this answer even where the parts an expression would become
+ * do not exist.
+ */
+export interface InterpolationSeam {
+    /**
+     * The whole `${...}` where the brace closes, and the `${` alone where it
+     * does not: how far a broken one reaches is not decided.
+     */
+    span: Span;
+    closed: boolean;
+}
+
+/**
+ * Every interpolation opened in `text`, in the order they were written.
+ *
+ * The one answer to where an interpolation begins. The rule is small enough
+ * to copy without noticing — a `${` opens one unless a backslash stands in
+ * front of it, and `findInterpolationEnd` says where it closes — and two
+ * readers of a rule that small is how they come to disagree.
+ *
+ * `offset` is where `text` sits in whatever the spans are measured in.
+ */
+export function scanInterpolations(text: string, offset = 0): InterpolationSeam[] {
+    const seams: InterpolationSeam[] = [];
+    let i = 0;
+    while (i < text.length) {
+        if (text[i] !== '$' || text[i + 1] !== '{') { i++; continue; }
+        // The one thing a backslash does here, and nowhere else in a body
+        // line: everywhere else it is an ordinary character, so a Windows
+        // path can be written as it is.
+        if (i > 0 && text[i - 1] === '\\') { i += 2; continue; }
+        const end = findInterpolationEnd(text, i);
+        // Nothing after an unclosed one can be read, since where it would
+        // have ended is exactly what is missing.
+        if (end === -1) {
+            seams.push({ span: { start: offset + i, end: offset + i + 2 }, closed: false });
+            return seams;
+        }
+        seams.push({ span: { start: offset + i, end: offset + end + 1 }, closed: true });
+        i = end + 1;
+    }
+    return seams;
+}
+
 export function splitDurationText(text: string): { amount: number; unit: DurUnit } {
     const m = text.match(/^(\d+)([A-Za-z]+)$/)!;
     return { amount: parseInt(m[1], 10), unit: m[2] as DurUnit };

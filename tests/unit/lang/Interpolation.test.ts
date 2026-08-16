@@ -5,7 +5,7 @@ import type { EvalContext } from '../../../src/services/lang/ExprEvaluator';
 import { parseExpr, splitInterpolations } from '../../../src/services/lang/ExprParser';
 import { printExpr } from '../../../src/services/lang/ExprPrinter';
 import { renderInterpolation, renderInterpolationText } from '../../../src/services/lang/Interpolation';
-import { findInterpolationEnd, tokenize } from '../../../src/services/lang/Lexer';
+import { findInterpolationEnd, scanInterpolations, tokenize } from '../../../src/services/lang/Lexer';
 import { TokenCursor } from '../../../src/services/lang/Token';
 import type { EvalHost } from '../../../src/services/lang/functions';
 
@@ -60,6 +60,34 @@ describe('finding the end of an interpolation', () => {
         const diagnostics: Diagnostic[] = [];
         splitInterpolations('- [ ] ${a', diagnostics);
         expect(codes(diagnostics)).toContain('gen.unterminated-interpolation');
+    });
+});
+
+describe('scanning a line for its interpolations', () => {
+    // 位置を答えるのはこの 1 か所で、開き記号の探し方もエスケープの規則も
+    // ここにしかない。分割（構文解析つき）と装飾（構文解析なし）が同じ答えを
+    // 見るのはそのため。
+    const scanned = (text: string, offset = 0) =>
+        scanInterpolations(text, offset).map(s => `${s.closed ? 'closed' : 'open'}:${text.slice(s.span.start - offset, s.span.end - offset)}`);
+
+    it('finds each one where it was written', () => {
+        expect(scanned('- [ ] ${a} と ${b}')).toEqual(['closed:${a}', 'closed:${b}']);
+    });
+
+    it('does not open one behind a backslash', () => {
+        expect(scanned('- [ ] \\${start}')).toEqual([]);
+        // 直前の 1 個だけが効くので、2 個並べても開かない
+        expect(scanned('- [ ] \\\\${start}')).toEqual([]);
+    });
+
+    it('says an unclosed one opened, and stops there', () => {
+        // どこまでが式かは決まらないので、開いたという事実だけを返す。後続は
+        // その中身なのか外なのかが決められない
+        expect(scanned('- [ ] ${format( と ${b}')).toEqual(['open:${']);
+    });
+
+    it('measures from where the text sits', () => {
+        expect(scanInterpolations('${a}', 4)[0].span).toEqual({ start: 4, end: 8 });
     });
 });
 
