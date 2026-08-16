@@ -67,6 +67,18 @@ describe('what a block is made of, said in the engine s own terms', () => {
             .toContain('fn:f');
     });
 
+    it('names a refused expression word, bracket or no bracket', () => {
+        // The parser refuses these where they are written, so the bracket
+        // after one is not a call. Painted as a call it would say the
+        // opposite of the squiggle sitting on the same word.
+        for (const word of ['new', 'Date', 'console', 'await', 'typeof', 'delete']) {
+            expect(paint(['<js', `let x = ${word}(1)`, '/js>', '- [ ] c']), word)
+                .toContain(`refused:${word}`);
+            expect(paint(['<js', `let x = ${word}`, '/js>', '- [ ] c']), word)
+                .toContain(`refused:${word}`);
+        }
+    });
+
     it('leaves a built-in alone where it is not called', () => {
         // Bare, the parser reads `format` as a binding like any other name,
         // and the checker calls it unknown. A colour would say otherwise.
