@@ -451,6 +451,16 @@ describe('FlowPlanner', () => {
             expect(effect.parentLine).toBe('- [ ] 週報 ==> every mon use("週報") setStart(none)');
         });
 
+        it('leaves no trailing space behind when it is empty', () => {
+            // 空の dates は行末の空白になりうる。書き込み層が 2 か所で trim
+            // しているので出ない、を測っておく（tv-xparse の観察）。
+            const effect = planGenerated(
+                'every mon setStart(none) use("週報")', ['- [ ] ${content} ${dates}'],
+                { content: '週報', startDate: '2026-06-29' });
+
+            expect(effect.parentLine).toBe('- [ ] 週報 ==> every mon use("週報") setStart(none)');
+        });
+
         it('reads on the flow line as well, against the same snapshot set() sees', () => {
             const effect = createNextOf(plan('every mon setContent(dates)', dated));
 

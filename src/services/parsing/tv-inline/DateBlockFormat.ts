@@ -16,6 +16,12 @@ export type DatedTask = Pick<Task, 'startDate' | 'startTime' | 'endDate' | 'endT
  * block, and the caller decides what an absent block looks like — a space
  * before it in the line, nothing at all in an interpolation.
  *
+ * What it promises is that the block reads back as the same task, not that
+ * every field survives as a field. An end on the start's own day is not
+ * written — the notation says that by leaving it out — so reading the line
+ * again gives a task with no end date. That is the notation's rule and it is
+ * what saving a hand-written line does too; it is not a leak in this function.
+ *
  * The shapes it produces, which are the notation's own:
  * - `@2026-08-19` / `@2026-08-19T09:00` — a start, with its time
  * - `@09:00` — a time with no date
