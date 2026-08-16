@@ -2,7 +2,7 @@ import type { Span } from './Diagnostic';
 import type { Stmt } from './StmtAst';
 import type { Value } from './Value';
 
-export const PROP_NAMES = ['start', 'end', 'due', 'content', 'done', 'today', 'file.name'] as const;
+export const PROP_NAMES = ['start', 'end', 'due', 'content', 'done', 'today', 'dates', 'file.name'] as const;
 export type PropName = typeof PROP_NAMES[number];
 
 export const FN_NAMES = [

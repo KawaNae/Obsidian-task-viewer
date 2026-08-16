@@ -410,4 +410,51 @@ describe('FlowPlanner', () => {
             expect(effect.warnings).toEqual([]);
         });
     });
+
+    describe('dates: the whole date block, for the block that has to write one', () => {
+        const dated = { startDate: '2026-06-29', endDate: '2026-07-03', due: '2026-07-05' };
+
+        it('carries start, end and due of the new instance', () => {
+            const effect = planGenerated(
+                'every mon use("週報")', ['- [ ] 週報 ${dates}'], dated);
+
+            expect(effect.parentLine)
+                .toBe('- [ ] 週報 @2026-07-06>2026-07-10>2026-07-12 ==> every mon use("週報")');
+        });
+
+        it('is what writing the parts by hand loses', () => {
+            // 動機そのもの。use() のブロックは親行の唯一の著者なので、
+            // 日付を手で組むと end と due が黙って落ちる。
+            const byHand = planGenerated(
+                'every mon use("週報")', ['- [ ] 週報 @${start}'], dated);
+
+            expect(byHand.parentLine).toContain('@2026-07-06 ');
+            expect(byHand.parentLine).not.toContain('2026-07-10');
+            expect(byHand.parentLine).not.toContain('2026-07-12');
+        });
+
+        it('writes the times too, in the notation the line uses', () => {
+            const effect = planGenerated(
+                'every mon use("週報")', ['- [ ] 週報 ${dates}'],
+                { startDate: '2026-06-29', startTime: '09:00', endDate: '2026-06-29', endTime: '10:30' });
+
+            expect(effect.parentLine).toContain('@2026-07-06T09:00>10:30');
+        });
+
+        it('is empty when the instance ends up with no dates at all', () => {
+            // 空文字であって失敗ではない。書く物が無いのだから、書かない。
+            // スケジュールは必ず日付を作るので、消えるのは set が消したとき。
+            const effect = planGenerated(
+                'every mon setStart(none) use("週報")', ['- [ ] 週報${dates}'],
+                { startDate: '2026-06-29' });
+
+            expect(effect.parentLine).toBe('- [ ] 週報 ==> every mon use("週報") setStart(none)');
+        });
+
+        it('reads on the flow line as well, against the same snapshot set() sees', () => {
+            const effect = createNextOf(plan('every mon setContent(dates)', dated));
+
+            expect(effect.newTask.content).toBe('@2026-07-06>2026-07-10>2026-07-12');
+        });
+    });
 });
