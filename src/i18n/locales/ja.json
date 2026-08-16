@@ -649,6 +649,7 @@
     "kindRecorded": "{{icon}} {{kind}}記録完了！（{{duration}}）",
     "taskUpdated": "{{icon}} タスク更新完了！（{{duration}}）",
     "childTaskNotFound": "子タスクが見つかりません。新しいレコードを作成します。",
+    "flowDidNotFire": "フローは発火しませんでした: {{reason}}（{{file}}）",
     "timerTargetNotFound": "タイマーターゲットタスクが見つかりません。削除、移動、またはリネームされた可能性があります。",
     "timerTargetReadOnly": "このタスクは読み取り専用の形式です。タイマーの記録を書き込めません。",
     "taskConverted": "タスクをfrontmatterファイルに変換しました",

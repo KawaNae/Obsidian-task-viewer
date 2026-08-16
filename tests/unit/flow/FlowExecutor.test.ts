@@ -1,4 +1,5 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { Notice } from 'obsidian';
 import { FlowExecutor } from '../../../src/services/flow/FlowExecutor';
 import { parseFlowSegments, singleLineFlow } from '../../../src/services/flow/FlowSegments';
 import { TaskIndex } from '../../../src/services/core/TaskIndex';
@@ -201,5 +202,70 @@ describe('FlowExecutor', () => {
 
         const [, line] = repository.insertRecurrenceForTask.mock.calls[0];
         expect(line).not.toContain('==>');
+    });
+});
+
+describe('a fire that does not happen says so', () => {
+    // 非発火・非消費は設計どおりだが、外から見えるのは「チェックしても何も
+    // 起きないチェックボックス」。ログしか残らないと、タスクを触っている人
+    // には何も届かない。
+    beforeEach(() => {
+        Notice.messages.length = 0;
+    });
+
+    /** `end` is unset on the task, so the expression fails while it runs. */
+    const failing = () => flowTask('at(end + 1d)', { file: 'notes/週報.md' });
+
+    it('shows what stopped it, and which file it was in', async () => {
+        const repository = makeRepository();
+        const { executor } = makeExecutor(repository);
+
+        await executor.handleTaskCompletion(failing());
+        await flush();
+
+        expect(repository.insertRecurrenceForTask).not.toHaveBeenCalled();
+        expect(Notice.messages).toHaveLength(1);
+        expect(Notice.messages[0]).toContain("Property 'end' is not set on this task");
+        expect(Notice.messages[0]).toContain('週報');
+    });
+
+    it('says it once while the same task keeps failing the same way', async () => {
+        // 直すために付けたり外したりする間、同じ文言が積み上がるとファイル
+        // 自体が見えなくなる。
+        const repository = makeRepository();
+        const { executor } = makeExecutor(repository);
+
+        await executor.handleTaskCompletion(failing());
+        await flush();
+        await executor.handleTaskCompletion(failing());
+        await flush();
+
+        expect(Notice.messages).toHaveLength(1);
+    });
+
+    it('says the next failure, since it is a different thing to fix', async () => {
+        const repository = makeRepository();
+        const { executor } = makeExecutor(repository);
+
+        await executor.handleTaskCompletion(failing());
+        await flush();
+        // 同じタスクの別の失敗。窓は「同じ失敗」に効くのであって、
+        // 「そのタスクを黙らせる」ためのものではない。
+        await executor.handleTaskCompletion(
+            flowTask('at(due + 1d)', { file: 'notes/週報.md' }));
+        await flush();
+
+        expect(Notice.messages).toHaveLength(2);
+        expect(Notice.messages[1]).toContain("Property 'due' is not set on this task");
+    });
+
+    it('stays quiet when the fire went through', async () => {
+        const repository = makeRepository();
+        const { executor } = makeExecutor(repository);
+
+        await executor.handleTaskCompletion(flowTask('at(today + 1d)'));
+        await flush();
+
+        expect(Notice.messages).toEqual([]);
     });
 });

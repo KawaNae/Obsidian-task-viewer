@@ -649,6 +649,7 @@
     "kindRecorded": "{{icon}} {{kind}} recorded! ({{duration}})",
     "taskUpdated": "{{icon}} Task updated! ({{duration}})",
     "childTaskNotFound": "Child task not found, creating new record.",
+    "flowDidNotFire": "Flow did not fire: {{reason}} ({{file}})",
     "timerTargetNotFound": "Timer target task was not found. It may have been deleted, moved, or renamed.",
     "timerTargetReadOnly": "This task's format is read-only. The timer cannot write records to it.",
     "taskConverted": "Task converted to frontmatter file",

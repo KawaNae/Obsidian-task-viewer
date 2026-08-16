@@ -1,5 +1,6 @@
-import { type App, TFile } from 'obsidian';
+import { type App, Notice, TFile } from 'obsidian';
 import type { Task, TaskViewerSettings } from '../../types';
+import { t } from '../../i18n';
 import { DateUtils } from '../../utils/DateUtils';
 import { logError, logInfo, logWarn } from '../../log/log';
 import type { TaskIndex } from '../core/TaskIndex';
@@ -22,10 +23,20 @@ import { createMomentEvalHost } from './MomentEvalHost';
  * rewritten), which changes the completion-detection signature. Running
  * two fires against a stale index would double-generate.
  */
+/** How long one failure stays quiet after it has been shown. */
+const FAILURE_NOTICE_WINDOW_MS = 5000;
+
+/** The file as it is named in the vault, which is how a user knows it. */
+function fileName(path: string): string {
+    return (path.split('/').pop() ?? path).replace(/\.md$/i, '');
+}
+
 export class FlowExecutor {
     private taskQueue: Task[] = [];
     private isProcessing = false;
     private readonly host = createMomentEvalHost();
+    /** Failures already shown, by task and message, with when they were shown. */
+    private readonly recentFailures = new Map<string, number>();
 
     constructor(
         private repository: TaskRepository,
@@ -105,6 +116,7 @@ export class FlowExecutor {
                 // and do not consume — the command stays for the user to
                 // fix, and the message explains why.
                 logWarn(`[FlowExecutor] Flow did not fire for ${task.id}: ${err.message}`);
+                this.reportDidNotFire(task, err.message);
                 return false;
             }
             throw err;
@@ -118,6 +130,32 @@ export class FlowExecutor {
             await this.applyEffect(task, effect);
         }
         return effects.length > 0;
+    }
+
+    /**
+     * Tell the user that the check they ticked did nothing.
+     *
+     * Not firing and not consuming is the design — a command whose expression
+     * failed has to stay on the line — but from the outside it is a checkbox
+     * that answers with nothing at all. The log line was the only trace, and
+     * nobody has the console open while ticking a task.
+     *
+     * The same failure is shown once per window. A task is toggled on and off
+     * while its author works out what is wrong, and a notice per toggle would
+     * bury the file behind its own complaint. A different failure is a
+     * different message, so fixing one and hitting the next is still visible.
+     */
+    private reportDidNotFire(task: Task, reason: string): void {
+        const now = Date.now();
+        // Drop what has aged out on the way past, so a long session does not
+        // keep a key for every failure it has ever seen.
+        for (const [key, at] of this.recentFailures) {
+            if (now - at >= FAILURE_NOTICE_WINDOW_MS) this.recentFailures.delete(key);
+        }
+        const key = `${task.id}::${reason}`;
+        if (this.recentFailures.has(key)) return;
+        this.recentFailures.set(key, now);
+        new Notice(t('notice.flowDidNotFire', { reason, file: fileName(task.file) }));
     }
 
     private async applyEffect(task: Task, effect: FlowEffect): Promise<void> {
