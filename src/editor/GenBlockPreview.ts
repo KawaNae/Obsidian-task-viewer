@@ -4,7 +4,8 @@ import {
     collectGenBlocks,
     type GenBlockScan,
 } from '../services/parsing/gen/GenBlockCollector';
-import { parseGenBody } from '../services/parsing/gen/GenBodyParser';
+import { type GenCellTypes, parseGenBody } from '../services/parsing/gen/GenBodyParser';
+import { declaredCells } from '../services/parsing/gen/GenCellScan';
 import { TaskLineClassifier } from '../services/parsing/utils/TaskLineClassifier';
 
 /**
@@ -25,20 +26,30 @@ import { TaskLineClassifier } from '../services/parsing/utils/TaskLineClassifier
  * mistakes in one file, Live Preview showed only the unterminated block,
  * the one Obsidian never renders. Repeating the diagnostics here is what
  * a Live Preview user actually sees.
+ *
+ * Which is why this reads the file's cells the way the editor's underlines
+ * do. A block is checked apart from the command that fires it, so a reader
+ * without them calls every cell a name nobody declared — and this reader is
+ * the one most people are looking at.
  */
 export function createGenBlockPreview() {
-    // One-entry memo: every block of a document asks about the same text.
-    let cache: { text: string; scan: GenBlockScan } | null = null;
-    const scanOf = (text: string): GenBlockScan => {
-        if (cache?.text === text) return cache.scan;
-        const scan = collectGenBlocks(text.split('\n'));
-        cache = { text, scan };
-        return scan;
+    // One-entry memo: every block of a document asks about the same text, and
+    // both readings of it — where the blocks are, and what cells the commands
+    // declare — answer to that one key.
+    let cache: { text: string; scan: GenBlockScan; cells: GenCellTypes } | null = null;
+    const readOf = (text: string) => {
+        if (cache?.text === text) return cache;
+        const lines = text.split('\n');
+        cache = { text, scan: collectGenBlocks(lines), cells: declaredCells(lines) };
+        return cache;
     };
 
     return (source: string, el: HTMLElement, ctx: MarkdownPostProcessorContext): void => {
         const info = ctx.getSectionInfo(el);
-        const scan = info ? scanOf(info.text) : null;
+        // Without the section there is no file text, and therefore no way to
+        // learn the cells — the same degradation as the missing name below.
+        const read = info ? readOf(info.text) : null;
+        const scan = read?.scan ?? null;
         const root = el.createDiv({ cls: 'tv-gen-preview' });
 
         // The name comes from the collector's own reading of the block, not
@@ -52,7 +63,7 @@ export function createGenBlockPreview() {
         }
 
         const bodyStart = info ? info.lineStart + 1 : 0;
-        const body = parseGenBody(source.split('\n'), bodyStart);
+        const body = parseGenBody(source.split('\n'), bodyStart, read?.cells);
 
         const lines = body.parent ? [body.parent, ...body.children] : body.children;
         if (lines.length === 0) {
