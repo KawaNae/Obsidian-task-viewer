@@ -174,9 +174,15 @@ describe('what a block is made of, said in the engine s own terms', () => {
 
     it('reads the bracket as the parser does when a line break is between', () => {
         // Both readers walk the same token stream, and in a section a line
-        // break is a token there. Neither sees a call.
-        expect(paint(['<js', 'let x = format', '(1)', '/js>', '- [ ] c']))
-            .not.toContain('fn:format');
+        // break is a token there. Neither sees a call across one.
+        //
+        // Measured on a name the block bound, since that is the only role the
+        // bracket decides on its own — a built-in reads the same either way,
+        // so it would prove nothing here.
+        expect(paint(['<js', 'const f = x => x', 'let y = f(1)', '/js>', '- [ ] c']))
+            .toContain('fn:f');
+        expect(paint(['<js', 'const f = x => x', 'let y = f', '(1)', '/js>', '- [ ] c']))
+            .not.toContain('fn:f');
     });
 
     it('says nothing about a line that is only prose', () => {
