@@ -7,8 +7,10 @@ import { Diagnostic } from '../../../src/services/lang/Diagnostic';
 import { FLOW_TYPE_ENV, checkExpr } from '../../../src/services/lang/ExprChecker';
 import { parseExpr, splitInterpolations } from '../../../src/services/lang/ExprParser';
 import { tokenize } from '../../../src/services/lang/Lexer';
+import { checkProgram } from '../../../src/services/lang/StmtChecker';
 import { parseProgram } from '../../../src/services/lang/StmtParser';
 import { TokenCursor } from '../../../src/services/lang/Token';
+import { parseGenBody } from '../../../src/services/parsing/gen/GenBodyParser';
 
 /** Whether `flowDiag.<family>.<name>` is actually spelled out in a locale. */
 function hasLocaleEntry(locale: unknown, code: string): boolean {
@@ -209,6 +211,32 @@ describe('diagnosticText', () => {
             'let x = 1 /* c */',                // lex.no-block-comment
         ];
 
+        // 検査は文パーサが通ったあとの層なので、サンプルを分けて持つ。
+        const CHECK_SAMPLES = [
+            'n = 1',                                 // stmt.assign-undeclared
+            'const n = 1\nn = 2',                    // stmt.assign-to-const
+            'let f = x => x\nf = 2',                 // stmt.assign-to-function
+            'let n = 1\nn = "text"',                 // stmt.assign-type-change
+            'let content = 1',                       // stmt.shadows-reserved
+            'let n = 1\nlet n = 2',                  // stmt.already-declared
+            'let ok = false\nif (ok = true) { }',    // stmt.assign-in-condition
+            'break',                                 // stmt.break-not-in-loop
+            'continue',                              // stmt.continue-not-in-loop
+            'let [f] = [1]\nlet y = f(1)',           // type.not-callable
+            'const f = a => a\nlet y = f(1, 2)',     // type.call-arity
+            'const f = a => a\nlet y = f',           // expr.fn-not-a-value
+            'let n = 1\nlet {b} = n',                // stmt.not-destructurable
+            'for (const x of content) { }',          // stmt.not-iterable
+        ];
+
+        // ブロック構造の診断はブロックのパーサから出る。
+        const BLOCK_SAMPLES: string[][] = [
+            ['<js', 'let n = 1'],                                   // gen.js-section-unclosed
+            ['<js', 'let n = 1', '/js>', '<js', 'let m = 2', '/js>'], // gen.js-section-duplicate
+            ['- [ ] a', '<js', 'let n = 1', '/js>'],                // gen.js-section-after-body
+            ['<js', 'const s = "```"', '/js>'],                     // gen.js-section-fence
+        ];
+
         // 代入とコメントはブロックでは通る形なので、拒否はフロー行の側から出る。
         const FLOW_SAMPLES = [
             'every mon setContent(content = "x")', // expr.assign-not-here
@@ -229,12 +257,24 @@ describe('diagnosticText', () => {
             'expr.no-typeof', 'expr.no-delete', 'expr.increment-not-here', 'expr.assign-target',
             'expr.assign-needs-parens', 'expr.fn-body-not-here', 'expr.assign-not-here',
             'lex.no-block-comment', 'flow.comment-not-here',
+            'stmt.assign-undeclared', 'stmt.assign-to-const', 'stmt.assign-to-function',
+            'stmt.assign-type-change', 'stmt.shadows-reserved', 'stmt.already-declared',
+            'stmt.assign-in-condition', 'stmt.break-not-in-loop', 'stmt.continue-not-in-loop',
+            'stmt.not-destructurable', 'stmt.not-iterable',
+            'type.not-callable', 'type.call-arity', 'expr.fn-not-a-value',
+            'gen.js-section-unclosed', 'gen.js-section-duplicate',
+            'gen.js-section-after-body', 'gen.js-section-fence',
         ];
 
         function emitted(): Diagnostic[] {
             const all: Diagnostic[] = [];
             for (const src of STATEMENT_SAMPLES) all.push(...parseProgram(src).diagnostics);
             for (const src of FLOW_SAMPLES) all.push(...parseFlow(src).diagnostics);
+            for (const src of CHECK_SAMPLES) {
+                const { program } = parseProgram(src);
+                checkProgram(program, FLOW_TYPE_ENV, all);
+            }
+            for (const lines of BLOCK_SAMPLES) all.push(...parseGenBody(lines, 1).diagnostics);
             // ブロックには文が無いので、{ } 本体の関数はブロック側からしか出ない。
             const { tokens, diagnostics } = tokenize('xs.map(x => { return x })');
             parseExpr(new TokenCursor(tokens), diagnostics, 'block');

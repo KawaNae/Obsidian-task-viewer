@@ -93,24 +93,78 @@ describe('parseGenBody — diagnostics', () => {
         ])).toEqual([['gen.root-not-first', 2]]);
     });
 
-    it('reports a js section as unsupported and skips it', () => {
-        const { parent, children, diagnostics } = parse([
+    it('reads a js section and keeps it out of the body', () => {
+        const { parent, children, js, diagnostics } = parse([
             '<js',
+            'let n = 1',
             'n = n + 1',
             '/js>',
             '- [ ] 週報 第${n}回',
             '    - [ ] 資料集め',
         ]);
-        expect(diagnostics.map(d => [d.code, d.line])).toEqual([
-            ['gen.js-section-unsupported', 1],
-        ]);
+        expect(diagnostics).toEqual([]);
+        expect(js!.program.body.map(s => s.kind)).toEqual(['decl', 'expr']);
         expect(parent!.text).toBe('- [ ] 週報 第${n}回');
         expect(children.map(c => c.text)).toEqual(['- [ ] 資料集め']);
     });
 
     it('does not swallow the body when the section closes on its own line', () => {
-        const { parent } = parse(['<js n = n + 1 /js>', '- [ ] 週報']);
+        const { parent, js } = parse(['<js let n = 1 /js>', '- [ ] 週報']);
         expect(parent!.text).toBe('- [ ] 週報');
+        expect(js!.program.body).toHaveLength(1);
+    });
+
+    // セクションのソースは行をまたぐので、文字オフセットを行に写す必要がある。
+    it('puts a diagnostic from inside the section on its own line', () => {
+        expect(codes([
+            '<js',
+            'let n = 1',
+            'var m = 2',
+            '/js>',
+            '- [ ] 週報',
+        ])).toEqual([['stmt.no-var', 3]]);
+    });
+
+    it('reports a section that never closes', () => {
+        expect(codes(['<js', 'let n = 1']).map(([code]) => code))
+            .toContain('gen.js-section-unclosed');
+    });
+
+    it('reports a second section, and one written after the body', () => {
+        expect(codes([
+            '<js', 'let n = 1', '/js>',
+            '<js', 'let m = 2', '/js>',
+            '- [ ] 週報',
+        ])).toEqual([['gen.js-section-duplicate', 4]]);
+        expect(codes([
+            '- [ ] 週報',
+            '<js', 'let n = 1', '/js>',
+        ])).toEqual([['gen.js-section-after-body', 2]]);
+    });
+
+    // 3 本のバッククォートは外側の tv-gen フェンスを閉じてしまう。
+    it('warns about a markdown fence written inside the section', () => {
+        expect(codes([
+            '<js',
+            'const s = "```"',
+            '/js>',
+            '- [ ] 週報',
+        ])).toEqual([['gen.js-section-fence', 1]]);
+    });
+
+    // ブロックの差し込みは、段 2b で初めて静的検査を受ける。
+    it('checks the body interpolations against what the section declared', () => {
+        expect(parse(['<js', 'const n = 1', '/js>', '- [ ] 第${n}回']).diagnostics).toEqual([]);
+        expect(codes(['- [ ] 第${n}回'])).toEqual([['expr.unknown-ident', 1]]);
+        expect(codes(['<js', 'const n = 1', '/js>', '- [ ] ${n.nope}']))
+            .toEqual([['type.unknown-member', 4]]);
+    });
+
+    it('stays quiet about the body when the section itself is broken', () => {
+        // セクションの束縛が分からない状態で本文を検査すると、借りている名前が
+        // 全部 unknown になって本命の診断が埋もれる。
+        expect(codes(['<js', 'let 1 = 2', '/js>', '- [ ] 第${n}回']))
+            .toEqual([['stmt.expected-binding', 2]]);
     });
 
     it('keeps a line starting with % as ordinary content', () => {

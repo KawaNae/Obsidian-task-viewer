@@ -718,6 +718,7 @@
     "expr": {
       "assign-not-here": "An assignment only means something inside a generation block — a flow clause cannot write a cell",
       "assign-needs-parens": "An assignment here is written in parentheses: (n = 1)",
+      "fn-not-a-value": "'{{name}}' is a function — call it with {{name}}(...), or write the arrow where the value goes",
       "assign-target": "Only a variable can be assigned to",
       "fn-body-not-here": "A function with a { } body can only be written in a js section — here the body is an expression: x => x.length",
       "increment-not-here": "'{{op}}' is not in this language — write '{{fix}}', which returns the new value",
@@ -794,7 +795,9 @@
       "member-arity": "'{{name}}' takes {{expected}} argument(s), got {{actual}}",
       "member-arg": "'{{name}}' expects {{expected}} for argument {{index}}, got {{actual}}",
       "nullish-mismatch": "'??' sides have different types ({{left}} vs {{right}})",
-      "bad-weekday-name": "Expected a weekday name (sun, mon, tue, wed, thu, fri, sat), got '{{actual}}'"
+      "bad-weekday-name": "Expected a weekday name (sun, mon, tue, wed, thu, fri, sat), got '{{actual}}'",
+      "not-callable": "'{{name}}' is a value, not a function",
+      "call-arity": "'{{name}}' takes {{expected}} argument(s), got {{actual}}"
     },
     "stmt": {
       "expected-end": "A statement ends at the line break — there is more after it ('{{token}}')",
@@ -826,7 +829,19 @@
       "no-do": "'do' is not in this language — write 'while'",
       "no-async": "'async' is not in this language — evaluation is synchronous",
       "no-import": "'import' is not in this language — the injected API is all there is",
-      "no-export": "A section is not a module — a block is named on its tv-gen tag and reached with use(\"name\")"
+      "no-export": "A section is not a module — a block is named on its tv-gen tag and reached with use(\"name\")",
+      "assign-undeclared": "'{{name}}' was never declared — write 'let {{name}} = ...' first",
+      "assign-to-const": "'{{name}}' is a const — declare it with 'let' if it has to change",
+      "assign-to-function": "'{{name}}' is a function, and a function stays where it was declared",
+      "assign-type-change": "'{{name}}' was holding {{expected}} and this writes {{actual}}",
+      "assign-in-condition": "This writes to '{{name}}' rather than comparing it — write '==' to compare, or wrap it in its own parentheses to mean the write",
+      "shadows-reserved": "'{{name}}' already means something here, so this binding cannot be read",
+      "already-declared": "'{{name}}' is already declared in this scope",
+      "break-not-in-loop": "'break' only means something inside a for or a while",
+      "continue-not-in-loop": "'continue' only means something inside a for or a while",
+      "fn-pattern": "A function is bound to one name, not taken apart",
+      "not-destructurable": "Taking fields apart needs a record, got {{actual}}",
+      "not-iterable": "This goes through a list, got {{actual}}"
     },
     "flow": {
       "comment-not-here": "A // comment cannot be written in a command — the command is rewritten on every fire, and the comment would be dropped",
@@ -856,7 +871,10 @@
       "missing-name": "A generation block needs a name — reference it with use(\"name\")",
       "duplicate-name": "A block named '{{name}}' is already defined; the first one is used",
       "indented-block": "An indented block is not collected — move it to the top level of the file",
-      "js-section-unsupported": "A js section is not supported yet — this block generates its body only",
+      "js-section-unclosed": "This js section is never closed with '/js>', so the rest of the block is read as code",
+      "js-section-duplicate": "A block has one js section — put the rest of the logic in the first one",
+      "js-section-after-body": "The js section runs before the body, so it is written before it",
+      "js-section-fence": "Three backticks here close the block early — write the block with four or more backticks around it",
       "ragged-indent": "Indent with one tab or four spaces per level; this line rounds up",
       "multiple-roots": "A block generates one task: only the first line may sit at depth 0",
       "root-not-a-task": "The depth-0 line becomes the generated task, so it must be a checkbox line",

@@ -1,6 +1,10 @@
 import type { Span } from './Diagnostic';
 import { type Expr, type PropName, isExprBody } from './ExprAst';
 import { type EvalRuntime, FnCallError, callFn } from './functions';
+// An expression can hold statements again, through an arrow's block body and
+// through a call of a locally declared function, so the two evaluators call
+// each other the way the two parsers do.
+import { type Scope, burn, callFunction, execArrowBody } from './StmtEvaluator';
 import {
     type DurUnit, type Value, WEEKDAY_NAMES, addDuration, compareValues, isDatishValue, parseDateStr,
     DECIMAL_SCALE, MAX_EXACT_FRACTION, recordField, valueToDisplay,
@@ -25,24 +29,44 @@ export interface EvalContext extends EvalRuntime {
      * than mutated, so a list method cannot leak a binding to its caller.
      */
     vars?: ReadonlyMap<string, Value>;
+    /**
+     * The js section's lexical scope, when one is running. Absent for a flow
+     * clause, which has no statements and therefore nothing to bind.
+     */
+    scope?: Scope;
+    /**
+     * What is left of the evaluation budget, and how many calls are open.
+     * Absent means unmetered — a flow clause is one expression, and it can
+     * neither loop nor call anything it wrote itself.
+     */
+    fuel?: { left: number; depth: number };
 }
 
 export function evalExpr(expr: Expr, ctx: EvalContext): Value {
+    burn(ctx, expr.span);
     switch (expr.kind) {
         case 'lit':
             return expr.value;
 
-        case 'assign':
-            // Lands with the js section's evaluator, which owns the mutable
-            // environment an assignment writes. Until then it fails the
-            // evaluation — two-phase, so nothing is half-written.
-            throw new EvalError('An assignment is not available here yet', expr.span);
+        case 'assign': {
+            if (!ctx.scope) {
+                throw new EvalError('An assignment only means something inside a generation block', expr.span);
+            }
+            const current = expr.op === '=' ? null : lookupVar(expr.name, ctx, expr.nameSpan);
+            const written = expr.op === '='
+                ? evalExpr(expr.value, ctx)
+                : applyAddSub(expr.op === '+=' ? '+' : '-', current!, evalExpr(expr.value, ctx), expr.span);
+            ctx.scope.assign(expr.name, written, expr.nameSpan);
+            // An assignment is an expression and yields what it wrote, which
+            // is what makes `${n = n + 1}` splice the new value.
+            return written;
+        }
 
-        case 'call-local':
-            // Needs the js section's scope chain to find what the name is
-            // bound to. Same two-phase shape as an assignment: fail rather
-            // than guess.
-            throw new EvalError(`Calling '${expr.name}' is not available here yet`, expr.span);
+        case 'call-local': {
+            const def = ctx.scope?.lookupFn(expr.name);
+            if (!def) throw new EvalError(`'${expr.name}' is not a function here`, expr.nameSpan);
+            return callFunction(def, expr.args.map(a => evalExpr(a, ctx)), ctx, expr.span);
+        }
 
         case 'prop': {
             const v = ctx.props[expr.name];
@@ -82,11 +106,8 @@ export function evalExpr(expr: Expr, ctx: EvalContext): Value {
             }
         }
 
-        case 'var': {
-            const v = ctx.vars?.get(expr.name);
-            if (v === undefined) throw new EvalError(`'${expr.name}' is not bound here`, expr.span);
-            return v;
-        }
+        case 'var':
+            return lookupVar(expr.name, ctx, expr.span);
 
         case 'array': {
             const items: Value[] = [];
@@ -163,6 +184,24 @@ export function evalExpr(expr: Expr, ctx: EvalContext): Value {
 }
 
 /**
+ * A bare name: a local of the js section, or an arrow parameter.
+ *
+ * The scope is asked first. Its own chain ends at `ctx.vars`, so a section
+ * running inside a list method's callback still reaches the element — the two
+ * kinds of binding are one lookup, not two that could disagree.
+ */
+function lookupVar(name: string, ctx: EvalContext, span: Span): Value {
+    const v = ctx.scope ? ctx.scope.lookup(name) : ctx.vars?.get(name);
+    if (v === undefined) {
+        if (ctx.scope?.lookupFn(name)) {
+            throw new EvalError(`'${name}' is a function — call it with ${name}(...)`, span);
+        }
+        throw new EvalError(`'${name}' is not bound here`, span);
+    }
+    return v;
+}
+
+/**
  * Members and methods of a list. Mirrors the list branch of the checker —
  * every method typed there has a case here.
  */
@@ -184,9 +223,21 @@ function callListMember(
     /** Apply the function argument to one element. */
     const apply = (fnExpr: Expr, values: Value[]): Value => {
         if (fnExpr.kind !== 'arrow') throw new EvalError(`'${name}' expects a function`, fnExpr.span);
+        // Inside a section the parameters go into a scope frame, which is the
+        // one mechanism a `{ }` body can declare into and an expression body
+        // reads just as well. Outside one — a flow clause, a body line with no
+        // section — there is no scope to hang a frame on, and the flat map
+        // that has always carried callback parameters still does.
+        if (ctx.scope) {
+            const frame = ctx.scope.child();
+            fnExpr.params.forEach((p, i) => frame.declare(p, values[i] ?? { type: 'none' }, true));
+            const inner = { ...ctx, scope: frame };
+            return isExprBody(fnExpr.body)
+                ? evalExpr(fnExpr.body, inner)
+                : execArrowBody(fnExpr.body, inner);
+        }
         if (!isExprBody(fnExpr.body)) {
-            // Runs on the statement evaluator, wired with the js section.
-            throw new EvalError('A function with a { } body is not available here yet', fnExpr.span);
+            throw new EvalError('A function with a { } body only means something inside a generation block', fnExpr.span);
         }
         const bound = new Map(ctx.vars ?? []);
         fnExpr.params.forEach((p, i) => bound.set(p, values[i] ?? { type: 'none' }));
@@ -362,30 +413,7 @@ function evalBinary(expr: Expr & { kind: 'binary' }, ctx: EvalContext): Value {
         throw new EvalError(`'${op}' cannot combine ${l.type} and ${r.type}`, span);
     }
 
-    if (op === '+' || op === '-') {
-        const sign = op === '+' ? 1 : -1;
-        if (isDatishValue(l) && r.type === 'duration') return addDuration(l, r, sign as 1 | -1);
-        if (op === '+' && l.type === 'duration' && isDatishValue(r)) return addDuration(r, l, 1);
-        if (op === '+' && l.type === 'date' && r.type === 'time') {
-            return { type: 'datetime', date: l.value, time: r.value };
-        }
-        if (op === '+' && l.type === 'datetime' && r.type === 'time') {
-            throw new EvalError('Adding a time to a datetime is ambiguous — truncate first: date(x) + 14:00', span);
-        }
-        if (l.type === 'duration' && r.type === 'duration') {
-            if (l.unit === r.unit) return { type: 'duration', amount: l.amount + sign * r.amount, unit: l.unit };
-            const lm = minutesOrThrow(l, span);
-            const rm = minutesOrThrow(r, span);
-            return { type: 'duration', amount: lm + sign * rm, unit: 'min' };
-        }
-        if (l.type === 'number' && r.type === 'number') {
-            return { type: 'number', value: quantize(l.value + sign * r.value, span) };
-        }
-        if (op === '+' && isStringish(l) && isStringish(r)) {
-            return { type: 'string', value: stringishText(l) + stringishText(r) };
-        }
-        throw new EvalError(`'${op}' cannot combine ${l.type} and ${r.type}`, span);
-    }
+    if (op === '+' || op === '-') return applyAddSub(op, l, r, span);
 
     // Comparisons
     if (op === '==' || op === '!=') {
@@ -401,6 +429,39 @@ function evalBinary(expr: Expr & { kind: 'binary' }, ctx: EvalContext): Value {
         case '>': return { type: 'bool', value: cmp > 0 };
         default: return { type: 'bool', value: cmp >= 0 };
     }
+}
+
+/**
+ * `a + b` / `a - b` on two values.
+ *
+ * Its own function because `n += 1` means exactly this and nothing else. The
+ * compound assignment has one value in hand already, so it cannot go back
+ * through the expression form — and writing the addition a second time is how
+ * `+=` and `+` would quietly come to disagree.
+ */
+export function applyAddSub(op: '+' | '-', l: Value, r: Value, span: Span): Value {
+    const sign = op === '+' ? 1 : -1;
+    if (isDatishValue(l) && r.type === 'duration') return addDuration(l, r, sign as 1 | -1);
+    if (op === '+' && l.type === 'duration' && isDatishValue(r)) return addDuration(r, l, 1);
+    if (op === '+' && l.type === 'date' && r.type === 'time') {
+        return { type: 'datetime', date: l.value, time: r.value };
+    }
+    if (op === '+' && l.type === 'datetime' && r.type === 'time') {
+        throw new EvalError('Adding a time to a datetime is ambiguous — truncate first: date(x) + 14:00', span);
+    }
+    if (l.type === 'duration' && r.type === 'duration') {
+        if (l.unit === r.unit) return { type: 'duration', amount: l.amount + sign * r.amount, unit: l.unit };
+        const lm = minutesOrThrow(l, span);
+        const rm = minutesOrThrow(r, span);
+        return { type: 'duration', amount: lm + sign * rm, unit: 'min' };
+    }
+    if (l.type === 'number' && r.type === 'number') {
+        return { type: 'number', value: quantize(l.value + sign * r.value, span) };
+    }
+    if (op === '+' && isStringish(l) && isStringish(r)) {
+        return { type: 'string', value: stringishText(l) + stringishText(r) };
+    }
+    throw new EvalError(`'${op}' cannot combine ${l.type} and ${r.type}`, span);
 }
 
 /**

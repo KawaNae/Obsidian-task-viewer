@@ -178,3 +178,84 @@ describe('a line that is only an interpolation', () => {
         expect(!result.ok && result.error.message).toContain('checkbox');
     });
 });
+
+describe('renderGenBody — the js section', () => {
+    it('runs the section first and lets the body read what it left', () => {
+        expect(render([
+            '<js',
+            'const areas = ["仕事", "健康"]',
+            'const rows = areas.map(a => "    - [ ] " + a).join("\\n")',
+            '/js>',
+            '- [ ] 週報',
+            '${rows}',
+        ])).toEqual({
+            ok: true,
+            parentText: '- [ ] 週報',
+            children: [
+                { depth: 1, body: '- [ ] 仕事' },
+                { depth: 1, body: '- [ ] 健康' },
+            ],
+        });
+    });
+
+    // 文書順が規則そのもの。後続の差し込みは更新後の値を見る。
+    it('reads the body in document order, updates included', () => {
+        expect(render([
+            '<js', 'let n = 0', '/js>',
+            '- [ ] 第${n += 1}回',
+            '    - [ ] その次は第${n + 1}回',
+        ])).toMatchObject({
+            ok: true,
+            parentText: '- [ ] 第1回',
+            children: [{ depth: 1, body: '- [ ] その次は第2回' }],
+        });
+    });
+
+    it('lets a function the section declared build a line', () => {
+        expect(render([
+            '<js',
+            'const title = n => "- [ ] 第" + n + "回"',
+            '/js>',
+            '${title("3")}',
+        ])).toMatchObject({ ok: true, parentText: '- [ ] 第3回' });
+    });
+
+    // 失敗は結果であって例外ではない。2 相なので、ここで落ちれば何も書かれない。
+    it('hands back the failure rather than throwing it', () => {
+        const result = render(['<js', 'const n = 1 / 0', '/js>', '- [ ] 週報']);
+        expect(result.ok).toBe(false);
+        expect(!result.ok && result.error.message).toContain('Division by zero');
+    });
+
+    it('stops a section that will not stop on its own', () => {
+        const result = render(['<js', 'let n = 0', 'while (true) { n = n + 1 }', '/js>', '- [ ] 週報']);
+        expect(result.ok).toBe(false);
+        expect(!result.ok && result.error.message).toContain('ran past');
+    });
+
+    it('refuses more lines than a task can be', () => {
+        const result = render([
+            '<js',
+            'let rows = []',
+            'for (let i = 0; i < 300; i += 1) { rows = rows.concat(["    - [ ] row"]) }',
+            'const body = rows.join("\\n")',
+            '/js>',
+            '- [ ] 週報',
+            '${body}',
+        ]);
+        expect(result.ok).toBe(false);
+        expect(!result.ok && result.error.message).toContain('more than 200 lines');
+    });
+
+    it('refuses a line nested deeper than a task can hold', () => {
+        const result = render([
+            '<js',
+            `const deep = "${' '.repeat(4 * 11)}- [ ] 底"`,
+            '/js>',
+            '- [ ] 週報',
+            '${deep}',
+        ]);
+        expect(result.ok).toBe(false);
+        expect(!result.ok && result.error.message).toContain('levels deep');
+    });
+});

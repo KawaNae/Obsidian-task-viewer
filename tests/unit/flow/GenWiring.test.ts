@@ -275,9 +275,17 @@ describe('a fire that cannot generate writes nothing and keeps its command', () 
         await refuses({ 週報: block('週報', ['- [ ] 一つ目', '- [ ] 二つ目']) });
     });
 
-    it('when the block holds a js section this release cannot read', async () => {
+    it('when the js section fails while it runs', async () => {
+        // Two-phase: the section runs before anything is written, so a
+        // failure inside it leaves the page exactly as it was.
         await refuses({
-            週報: block('週報', ['<js', 'const n = 1', '/js>', '- [ ] 週報 @${start}']),
+            週報: block('週報', ['<js', 'const n = 1 / 0', '/js>', '- [ ] 週報 @${start}']),
+        });
+    });
+
+    it('when the js section runs past its budget', async () => {
+        await refuses({
+            週報: block('週報', ['<js', 'let n = 0', 'while (true) { n = n + 1 }', '/js>', '- [ ] 週報 @${start}']),
         });
     });
 

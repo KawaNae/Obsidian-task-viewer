@@ -1,9 +1,12 @@
-import { type Diagnostic, type Span, error } from './Diagnostic';
+import { type Diagnostic, type Span, error, warning } from './Diagnostic';
 import { type Expr, type PropName, isExprBody } from './ExprAst';
 import {
     type ArrayType, FN_SIGS, type StaticType, arrayOf, isArrayType, isAssignable, isDatishType,
     type RecordType, isRecordType, recordFieldType, recordOf, sameType, typeName,
 } from './functions';
+// An expression can hold statements again, through an arrow's block body, so
+// the two checkers call each other the way the two parsers do.
+import { checkFunctionBody } from './StmtChecker';
 import { type Value, weekdayFromName } from './Value';
 
 /** Static types of the property references available in an evaluation context. */
@@ -22,33 +25,59 @@ export const FLOW_TYPE_ENV: TypeEnv = {
     today: 'date',
 };
 
+/** A value in scope: an arrow parameter, or a local of the js section. */
+export interface VarBinding {
+    type: StaticType;
+    /** `let` and arrow parameters, not `const`. Decides what may be assigned. */
+    mutable: boolean;
+}
+
+/** A function in scope, by the name a declaration bound it to. */
+export interface FnBinding {
+    params: string[];
+    /** Where it was declared, for "already declared here" style reporting. */
+    span: Span;
+}
+
+/**
+ * What the names in scope mean here.
+ *
+ * Values and functions are two tables rather than one, and a function
+ * deliberately has no `StaticType`. That absence is the containment: a
+ * function cannot be an element of a list, a record's field, or later a cell,
+ * because there is nowhere in the type language to put one — and the contents
+ * of all three have to be printable, which a function is not. Enforcing it by
+ * structure means no boundary check can be forgotten.
+ */
+export interface Bindings {
+    readonly vars: ReadonlyMap<string, VarBinding>;
+    readonly fns: ReadonlyMap<string, FnBinding>;
+}
+
+/** Names bound by enclosing arrow parameters and js-section locals. */
+export type VarTypes = ReadonlyMap<string, VarBinding>;
+
+export const NO_BINDINGS: Bindings = { vars: new Map(), fns: new Map() };
+
+/** The same bindings with `vars` replaced — entering an arrow, or a scope. */
+function withVars(bindings: Bindings, vars: ReadonlyMap<string, VarBinding>): Bindings {
+    return { vars, fns: bindings.fns };
+}
+
 /**
  * Parse-time type check. Emits diagnostics and returns the expression's
  * static type; 'error' poisons upward so one mistake reports once.
  */
-/** Names bound by enclosing arrow parameters, innermost last. */
-export type VarTypes = ReadonlyMap<string, StaticType>;
-
-const NO_VARS: VarTypes = new Map();
-
-export function checkExpr(expr: Expr, env: TypeEnv, diagnostics: Diagnostic[], vars: VarTypes = NO_VARS): StaticType {
+export function checkExpr(expr: Expr, env: TypeEnv, diagnostics: Diagnostic[], bindings: Bindings = NO_BINDINGS): StaticType {
     switch (expr.kind) {
         case 'lit':
             return literalType(expr.value);
 
         case 'assign':
-            // The scope-aware pass (undeclared names, const, cells) is the
-            // statement checker's, wired with the js section. Here the
-            // assignment has the type of its value, which is what it yields.
-            return checkExpr(expr.value, env, diagnostics, vars);
+            return checkAssign(expr, env, diagnostics, bindings);
 
         case 'call-local':
-            // Resolving the name to a declared arrow, and the call's type to
-            // that arrow's result, needs the scope tree the statement checker
-            // builds. The arguments are still walked, so a mistake inside one
-            // is reported where it was written rather than swallowed.
-            expr.args.forEach(a => checkExpr(a, env, diagnostics, vars));
-            return 'none';
+            return checkLocalCall(expr, env, diagnostics, bindings);
 
         case 'prop': {
             const t = env[expr.name];
@@ -60,7 +89,7 @@ export function checkExpr(expr: Expr, env: TypeEnv, diagnostics: Diagnostic[], v
         }
 
         case 'unary': {
-            const t = checkExpr(expr.operand, env, diagnostics, vars);
+            const t = checkExpr(expr.operand, env, diagnostics, bindings);
             if (t === 'error') return 'error';
             if (expr.op === '!') {
                 if (t !== 'bool') {
@@ -77,8 +106,17 @@ export function checkExpr(expr: Expr, env: TypeEnv, diagnostics: Diagnostic[], v
         }
 
         case 'var': {
-            const t = vars.get(expr.name);
-            if (t !== undefined) return t;
+            const bound = bindings.vars.get(expr.name);
+            if (bound !== undefined) return bound.type;
+            // A function is not a value here. Naming which one it is beats
+            // "unknown identifier" on a name that is plainly in scope, and it
+            // states the containment rule at the one place it is felt.
+            if (bindings.fns.has(expr.name)) {
+                diagnostics.push(error('expr.fn-not-a-value',
+                    `'${expr.name}' is a function — call it with ${expr.name}(...), or write the arrow where the value goes`,
+                    expr.span, { name: expr.name }));
+                return 'error';
+            }
             // Bare weekdays lost their literal form; say so here too, since a
             // block resolves unclaimed names as bindings before reaching this.
             if (weekdayFromName(expr.name) !== null) {
@@ -96,8 +134,8 @@ export function checkExpr(expr: Expr, env: TypeEnv, diagnostics: Diagnostic[], v
             // A spread contributes the elements of the list it holds, so it is
             // typed by that list's element rather than by the spread itself.
             const itemTypes = expr.items.map(item => {
-                if (item.kind !== 'spread') return checkExpr(item, env, diagnostics, vars);
-                const t = checkExpr(item.arg, env, diagnostics, vars);
+                if (item.kind !== 'spread') return checkExpr(item, env, diagnostics, bindings);
+                const t = checkExpr(item.arg, env, diagnostics, bindings);
                 if (t === 'error') return 'error';
                 if (!isArrayType(t)) {
                     diagnostics.push(error('type.spread-not-a-list',
@@ -129,7 +167,7 @@ export function checkExpr(expr: Expr, env: TypeEnv, diagnostics: Diagnostic[], v
             // way to change what the object inherits.
             const fields: Record<string, StaticType> = Object.create(null);
             for (const entry of expr.entries) {
-                const t = checkExpr(entry.value, env, diagnostics, vars);
+                const t = checkExpr(entry.value, env, diagnostics, bindings);
                 if (t === 'error') return 'error';
                 fields[entry.key] = t;
             }
@@ -142,8 +180,8 @@ export function checkExpr(expr: Expr, env: TypeEnv, diagnostics: Diagnostic[], v
             return 'error';
 
         case 'index': {
-            const ot = checkExpr(expr.obj, env, diagnostics, vars);
-            const it = checkExpr(expr.index, env, diagnostics, vars);
+            const ot = checkExpr(expr.obj, env, diagnostics, bindings);
+            const it = checkExpr(expr.index, env, diagnostics, bindings);
             if (ot === 'error' || it === 'error') return 'error';
             if (isRecordType(ot)) return recordIndexType(ot, expr, it, diagnostics);
             if (!isArrayType(ot)) {
@@ -163,7 +201,7 @@ export function checkExpr(expr: Expr, env: TypeEnv, diagnostics: Diagnostic[], v
             // Every piece has to be renderable as text. Only a function is
             // not, and it reports itself when checked.
             for (const part of expr.parts) {
-                if (part.kind === 'expr') checkExpr(part.expr, env, diagnostics, vars);
+                if (part.kind === 'expr') checkExpr(part.expr, env, diagnostics, bindings);
             }
             return 'string';
         }
@@ -176,7 +214,7 @@ export function checkExpr(expr: Expr, env: TypeEnv, diagnostics: Diagnostic[], v
 
         case 'member':
         case 'method': {
-            const ot = checkExpr(expr.obj, env, diagnostics, vars);
+            const ot = checkExpr(expr.obj, env, diagnostics, bindings);
             if (ot === 'error') return 'error';
             if (isRecordType(ot)) {
                 if (expr.kind === 'method') {
@@ -196,9 +234,9 @@ export function checkExpr(expr: Expr, env: TypeEnv, diagnostics: Diagnostic[], v
             }
             // A list needs the element type in hand to check the function
             // written for it, which a flat signature table cannot express.
-            if (isArrayType(ot)) return checkListMember(expr, ot, env, diagnostics, vars);
+            if (isArrayType(ot)) return checkListMember(expr, ot, env, diagnostics, bindings);
             const argTypes = expr.kind === 'method'
-                ? expr.args.map(a => checkExpr(a, env, diagnostics, vars))
+                ? expr.args.map(a => checkExpr(a, env, diagnostics, bindings))
                 : [];
             if (argTypes.includes('error')) return 'error';
             const sig = memberSignature(ot, expr.name, expr.kind === 'method');
@@ -231,19 +269,19 @@ export function checkExpr(expr: Expr, env: TypeEnv, diagnostics: Diagnostic[], v
         }
 
         case 'binary': {
-            const lt = checkExpr(expr.left, env, diagnostics, vars);
-            const rt = checkExpr(expr.right, env, diagnostics, vars);
+            const lt = checkExpr(expr.left, env, diagnostics, bindings);
+            const rt = checkExpr(expr.right, env, diagnostics, bindings);
             if (lt === 'error' || rt === 'error') return 'error';
             return checkBinary(expr, lt, rt, diagnostics);
         }
 
         case 'cond': {
-            const ct = checkExpr(expr.cond, env, diagnostics, vars);
+            const ct = checkExpr(expr.cond, env, diagnostics, bindings);
             if (ct !== 'bool' && ct !== 'error') {
                 diagnostics.push(error('type.cond-not-bool', `Condition must be bool, got ${typeName(ct)}`, expr.cond.span, { actual: typeName(ct) }));
             }
-            const tt = checkExpr(expr.then, env, diagnostics, vars);
-            const et = checkExpr(expr.else, env, diagnostics, vars);
+            const tt = checkExpr(expr.then, env, diagnostics, bindings);
+            const et = checkExpr(expr.else, env, diagnostics, bindings);
             if (tt === 'error' || et === 'error') return 'error';
             const unified = unifyTypes(tt, et);
             if (unified) return unified;
@@ -265,7 +303,7 @@ export function checkExpr(expr: Expr, env: TypeEnv, diagnostics: Diagnostic[], v
             let ok = true;
             expr.args.forEach((arg, i) => {
                 const expected = sig.params[i] ?? sig.rest!;
-                const at = checkExpr(arg, env, diagnostics, vars);
+                const at = checkExpr(arg, env, diagnostics, bindings);
                 if (at !== 'error' && !isAssignable(at, expected)) {
                     diagnostics.push(error('type.arg-mismatch', `${expr.fn}() argument ${i + 1} expects ${typeName(expected)}, got ${typeName(at)}`, arg.span,
                         { fn: expr.fn, index: i + 1, expected: typeName(expected), actual: typeName(at) }));
@@ -283,6 +321,96 @@ export function checkExpr(expr: Expr, env: TypeEnv, diagnostics: Diagnostic[], v
 }
 
 /**
+ * `n = expr` / `n += expr`.
+ *
+ * The design has no implicit globals: a name that was never declared is a
+ * typo, not a new binding, and saying so is the whole reason the checker knows
+ * about scopes at all.
+ */
+function checkAssign(
+    expr: Expr & { kind: 'assign' },
+    env: TypeEnv,
+    diagnostics: Diagnostic[],
+    bindings: Bindings
+): StaticType {
+    const value = checkExpr(expr.value, env, diagnostics, bindings);
+    const target = bindings.vars.get(expr.name);
+    if (target === undefined) {
+        if (bindings.fns.has(expr.name)) {
+            diagnostics.push(error('stmt.assign-to-function',
+                `'${expr.name}' is a function, and a function stays where it was declared`,
+                expr.nameSpan, { name: expr.name }));
+        } else {
+            diagnostics.push(error('stmt.assign-undeclared',
+                `'${expr.name}' was never declared — write 'let ${expr.name} = ...' first`,
+                expr.nameSpan, { name: expr.name }));
+        }
+        return 'error';
+    }
+    if (!target.mutable) {
+        diagnostics.push(error('stmt.assign-to-const',
+            `'${expr.name}' is a const — declare it with 'let' if it has to change`,
+            expr.nameSpan, { name: expr.name }));
+        return 'error';
+    }
+    if (value === 'error') return 'error';
+    // `+=` and `-=` mean the binary operator, so they answer to the same table
+    // that would have judged `n = n + 1`.
+    const result = expr.op === '='
+        ? value
+        : checkBinary({ kind: 'binary', op: expr.op === '+=' ? '+' : '-', left: expr.value, right: expr.value, span: expr.span },
+            target.type, value, diagnostics);
+    if (result === 'error' || target.type === 'error') return result;
+    // A warning, not an error. JS lets a binding change what it holds, and
+    // nothing in the design takes that away — but a counter that becomes a
+    // string is nearly always a slip, and the reads after it will be checked
+    // against the type the declaration gave.
+    if (!isAssignable(result, target.type)) {
+        diagnostics.push(warning('stmt.assign-type-change',
+            `'${expr.name}' was holding ${typeName(target.type)} and this writes ${typeName(result)}`,
+            expr.span, { name: expr.name, expected: typeName(target.type), actual: typeName(result) }));
+    }
+    return target.type;
+}
+
+/**
+ * `f(1)` — a call of a locally declared arrow.
+ *
+ * The result type is not inferred. There are no annotations to read it from,
+ * a body may call back into itself, and a block body's answer lives in its
+ * `return` statements — so a call reports what it can (the name resolves, the
+ * count matches, the arguments themselves are sound) and hands back the
+ * unknown that keeps everything downstream quiet rather than guessing.
+ */
+function checkLocalCall(
+    expr: Expr & { kind: 'call-local' },
+    env: TypeEnv,
+    diagnostics: Diagnostic[],
+    bindings: Bindings
+): StaticType {
+    // Walked first, so a mistake inside an argument is reported where it was
+    // written even when the callee itself is the problem.
+    expr.args.forEach(a => checkExpr(a, env, diagnostics, bindings));
+    const fn = bindings.fns.get(expr.name);
+    if (!fn) {
+        if (bindings.vars.has(expr.name)) {
+            diagnostics.push(error('type.not-callable',
+                `'${expr.name}' is a value, not a function`, expr.nameSpan, { name: expr.name }));
+        } else {
+            diagnostics.push(error('expr.unknown-ident', `Unknown identifier '${expr.name}'`,
+                expr.nameSpan, { name: expr.name }));
+        }
+        return 'error';
+    }
+    if (expr.args.length !== fn.params.length) {
+        diagnostics.push(error('type.call-arity',
+            `'${expr.name}' takes ${fn.params.length} argument(s), got ${expr.args.length}`,
+            expr.span, { name: expr.name, expected: fn.params.length, actual: expr.args.length }));
+    }
+    return 'error';
+}
+
+/**
  * Members and methods of a list. Not a table like the scalar ones: the
  * element type decides the parameter of the function written for it, and that
  * function's own result decides what `map` returns.
@@ -292,7 +420,7 @@ function checkListMember(
     listType: ArrayType,
     env: TypeEnv,
     diagnostics: Diagnostic[],
-    vars: VarTypes
+    bindings: Bindings
 ): StaticType {
     const elem = listType.array;
     const name = expr.name;
@@ -314,7 +442,7 @@ function checkListMember(
             return fail('type.member-arity', `'${name}' takes 1 argument(s), got ${args.length}`,
                 { name, expected: 1, actual: args.length });
         }
-        return checkCallback(args[0], name, paramTypes, env, diagnostics, vars);
+        return checkCallback(args[0], name, paramTypes, env, diagnostics, bindings);
     };
 
     /** Methods whose function must answer a yes/no question. */
@@ -367,7 +495,7 @@ function checkListMember(
             return listType;
         }
         default:
-            return checkListPlainMethod(listType, name, args, env, diagnostics, vars, fail);
+            return checkListPlainMethod(listType, name, args, env, diagnostics, bindings, fail);
     }
 }
 
@@ -378,7 +506,7 @@ function checkListPlainMethod(
     args: Expr[],
     env: TypeEnv,
     diagnostics: Diagnostic[],
-    vars: VarTypes,
+    bindings: Bindings,
     fail: (code: string, msg: string, params?: Diagnostic['params'], span?: Span) => StaticType
 ): StaticType {
     const elem = listType.array;
@@ -408,7 +536,7 @@ function checkListPlainMethod(
             { name, expected: range, actual: args.length });
     }
     for (let i = 0; i < args.length; i++) {
-        const at = checkExpr(args[i], env, diagnostics, vars);
+        const at = checkExpr(args[i], env, diagnostics, bindings);
         if (at === 'error') return 'error';
         if (!isAssignable(at, sig.params[i])) {
             return fail('type.member-arg',
@@ -426,7 +554,7 @@ function checkCallback(
     paramTypes: StaticType[],
     env: TypeEnv,
     diagnostics: Diagnostic[],
-    vars: VarTypes
+    bindings: Bindings
 ): StaticType {
     if (arg.kind !== 'arrow') {
         diagnostics.push(error('type.expects-function',
@@ -439,7 +567,7 @@ function checkCallback(
             arg.span, { name: method, expected: paramTypes.length, actual: arg.params.length }));
         return 'error';
     }
-    const bound = new Map(vars);
+    const bound = new Map(bindings.vars);
     arg.params.forEach((p, i) => {
         // An error, where shadowing a built-in with `let` is only a warning.
         // A parameter is the only handle on the element, so a body that cannot
@@ -451,22 +579,28 @@ function checkCallback(
                 `'${p}' already means something here — the built-in wins and this parameter cannot be read`,
                 arg.span, { name: p }));
         }
-        bound.set(p, paramTypes[i]);
+        // Assignable: a parameter is an ordinary binding once a block body can
+        // hold statements, and JS lets one be written to.
+        bound.set(p, { type: paramTypes[i], mutable: true });
     });
-    // A block body carries statements, whose checking arrives with the js
-    // section's own pass. Until it is wired, its result is simply unknown.
-    if (!isExprBody(arg.body)) return 'none';
-    return checkExpr(arg.body, env, diagnostics, bound);
+    const inner = withVars(bindings, bound);
+    // A block body is statements, and what it yields is what its returns say.
+    if (!isExprBody(arg.body)) return checkFunctionBody(arg.body.body, env, diagnostics, inner);
+    return checkExpr(arg.body, env, diagnostics, inner);
 }
 
 /**
  * Names the parser resolves before it ever looks for a binding. Shadowing one
  * is not an error — the built-in simply wins — but it is always a mistake.
+ *
+ * Exported for the statement checker, which applies the same list to `let` and
+ * `const`: the reason a shadowed name cannot be read is the resolution order
+ * in the parser, and that does not care which form of declaration wrote it.
  */
-function isReservedName(name: string): boolean {
-    return ['true', 'false', 'none', 'week', 'month', 'year', 'start', 'end', 'due',
-        'content', 'done', 'today', 'file', 'tv', 'Math', 'format', 'next', 'startOf', 'endOf',
-        'nextCycle', 'date', 'time'].includes(name);
+export function isReservedName(name: string): boolean {
+    return ['true', 'false', 'none', 'undefined', 'null', 'week', 'month', 'year',
+        'start', 'end', 'due', 'content', 'done', 'today', 'file', 'tv', 'Math',
+        'format', 'next', 'startOf', 'endOf', 'nextCycle', 'date', 'time'].includes(name);
 }
 
 /**

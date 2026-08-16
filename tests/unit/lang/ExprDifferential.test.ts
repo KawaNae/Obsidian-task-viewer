@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { Diagnostic } from '../../../src/services/lang/Diagnostic';
 import type { Expr } from '../../../src/services/lang/ExprAst';
-import { FLOW_TYPE_ENV, type VarTypes, checkExpr } from '../../../src/services/lang/ExprChecker';
+import { type Bindings, FLOW_TYPE_ENV, checkExpr } from '../../../src/services/lang/ExprChecker';
 import { EvalContext, EvalError, evalExpr } from '../../../src/services/lang/ExprEvaluator';
 import { parseExpr } from '../../../src/services/lang/ExprParser';
 import { tokenize } from '../../../src/services/lang/Lexer';
@@ -85,8 +85,11 @@ function typeOfValue(v: Value): StaticType {
     return v.type;
 }
 
-const VAR_TYPES: VarTypes = new Map(
-    Object.entries(BINDINGS).map(([name, js]) => [name, typeOfValue(toValue(js))]));
+const VAR_TYPES: Bindings = {
+    vars: new Map(Object.entries(BINDINGS).map(
+        ([name, js]) => [name, { type: typeOfValue(toValue(js)), mutable: false }])),
+    fns: new Map(),
+};
 
 const stubHost: EvalHost = {
     formatDate: (value, tokens) => `[${tokens}:${value.type === 'date' ? value.value : '?'}]`,

@@ -718,6 +718,7 @@
     "expr": {
       "assign-not-here": "代入は生成ブロックの中でのみ意味を持ちます。フロー節からセルには書き込めません",
       "assign-needs-parens": "ここに代入を置くには括弧が必要です: (n = 1)",
+      "fn-not-a-value": "'{{name}}' は関数です。{{name}}(...) と呼び出すか、値の位置にアローを直接書いてください",
       "assign-target": "代入できるのは変数だけです",
       "fn-body-not-here": "波括弧の本体を持つ関数は js セクションにだけ書けます。ここでの本体は式です: x => x.length",
       "increment-not-here": "'{{op}}' は使えません。新しい値を返す '{{fix}}' と書いてください",
@@ -794,7 +795,9 @@
       "member-arity": "'{{name}}' の引数は {{expected}} 個です（{{actual}} 個が渡されました）",
       "member-arg": "'{{name}}' の第{{index}}引数には {{expected}} が必要です（{{actual}} が渡されました）",
       "nullish-mismatch": "'??' の左右の型が一致しません（{{left}} と {{right}}）",
-      "bad-weekday-name": "曜日名（sun, mon, tue, wed, thu, fri, sat）が必要です（'{{actual}}' が渡されました）"
+      "bad-weekday-name": "曜日名（sun, mon, tue, wed, thu, fri, sat）が必要です（'{{actual}}' が渡されました）",
+      "not-callable": "'{{name}}' は値であって関数ではありません",
+      "call-arity": "'{{name}}' の引数は {{expected}} 個です（{{actual}} 個が渡されました）"
     },
     "stmt": {
       "expected-end": "文は改行で終わります。その後にまだ続きがあります（'{{token}}'）",
@@ -826,7 +829,19 @@
       "no-do": "'do' は使えません。'while' で書いてください",
       "no-async": "'async' は使えません。評価は同期的に行われます",
       "no-import": "'import' は使えません。外部との接点は注入 API だけです",
-      "no-export": "セクションはモジュールではありません。ブロックの名前は tv-gen タグに書き、use(\"名前\") で参照します"
+      "no-export": "セクションはモジュールではありません。ブロックの名前は tv-gen タグに書き、use(\"名前\") で参照します",
+      "assign-undeclared": "'{{name}}' は宣言されていません。先に 'let {{name}} = ...' と書いてください",
+      "assign-to-const": "'{{name}}' は const です。変える必要があるなら 'let' で宣言してください",
+      "assign-to-function": "'{{name}}' は関数です。関数は宣言した場所から動きません",
+      "assign-type-change": "'{{name}}' は {{expected}} を保持していましたが、ここで {{actual}} を書き込んでいます",
+      "assign-in-condition": "これは '{{name}}' の比較ではなく書き込みです。比べるなら '==' を、書き込むつもりならさらに括弧で囲んでください",
+      "shadows-reserved": "'{{name}}' は既に別の意味を持つ名前なので、この束縛は参照できません",
+      "already-declared": "'{{name}}' はこのスコープで既に宣言されています",
+      "break-not-in-loop": "'break' は for か while の中でのみ意味を持ちます",
+      "continue-not-in-loop": "'continue' は for か while の中でのみ意味を持ちます",
+      "fn-pattern": "関数は 1 つの名前に束縛します。分解はできません",
+      "not-destructurable": "フィールドを取り出すにはレコードが必要です（{{actual}} が渡されました）",
+      "not-iterable": "これは配列を走査します（{{actual}} が渡されました）"
     },
     "flow": {
       "comment-not-here": "コマンドに // のコメントは書けません。コマンドは発火のたびに書き直されるため、コメントは失われます",
@@ -856,7 +871,10 @@
       "missing-name": "生成ブロックには名前が必要です（use(\"名前\") で参照します）",
       "duplicate-name": "'{{name}}' という名前のブロックが既にあります。先に書いたほうが使われます",
       "indented-block": "字下げされたブロックは収集されません。ファイル直下へ移してください",
-      "js-section-unsupported": "js セクションにはまだ対応していません。このブロックは本文だけを生成します",
+      "js-section-unclosed": "この js セクションが '/js>' で閉じられていないため、ブロックの残り全部がコードとして読まれます",
+      "js-section-duplicate": "js セクションはブロックに 1 つです。残りのロジックは最初のセクションに書いてください",
+      "js-section-after-body": "js セクションは本文より先に実行されるので、本文より前に書きます",
+      "js-section-fence": "ここのバッククォート 3 本がブロックを途中で閉じてしまいます。ブロックの囲みをバッククォート 4 本以上にしてください",
       "ragged-indent": "字下げはタブ1つか4スペースで1段です。この行は切り上げて扱われます",
       "multiple-roots": "1つのブロックが生成するタスクは1つです。字下げのない行は最初の1行だけにしてください",
       "root-not-a-task": "字下げのない行が生成されるタスクになるので、チェックボックスの行である必要があります",

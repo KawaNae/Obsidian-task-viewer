@@ -457,9 +457,12 @@ function parsePrimary(cursor: TokenCursor, diagnostics: Diagnostic[]): Expr | nu
             cursor.next();
             // Assignments parse inside parentheses — `(n = next)` is the
             // written-out way to mean one where a bare `=` would be refused
-            // or warned, the same convention JS linters teach.
+            // or warned, the same convention JS linters teach. Recorded on the
+            // node, because that is the only place the two spellings differ:
+            // parentheses leave no token of their own in the tree.
             const inner = parseAssignment(cursor, diagnostics);
             if (!inner) return null;
+            if (inner.kind === 'assign') inner.parenthesized = true;
             if (!cursor.tryEat('rparen')) {
                 diagnostics.push(error('expr.expected-rparen', "Expected ')'", tokenSpan(cursor.peek())));
                 return null;

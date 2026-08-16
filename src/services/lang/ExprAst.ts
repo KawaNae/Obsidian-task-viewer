@@ -48,7 +48,17 @@ export type Expr =
      * refuses it where it is written (a clause runs at schedule time, outside
      * the block's document order).
      */
-    | { kind: 'assign'; op: '=' | '+=' | '-='; name: string; nameSpan: Span; value: Expr; span: Span }
+    | {
+        kind: 'assign'; op: '=' | '+=' | '-='; name: string; nameSpan: Span; value: Expr; span: Span;
+        /**
+         * Written inside its own parentheses. `if (n = 1)` is a mistyped `==`
+         * far more often than a deliberate write, so the checker warns about
+         * it — and the parentheses are the long-standing way to say the write
+         * was meant. Nothing else reads this; it is only ever the difference
+         * between a warning and silence.
+         */
+        parenthesized?: boolean;
+    }
     /** A name bound by an enclosing arrow parameter (block profile only). */
     | { kind: 'var'; name: string; span: Span }
     /**

@@ -1,6 +1,7 @@
 import type { Span } from '../../lang/Diagnostic';
 import { type EvalContext, EvalError } from '../../lang/ExprEvaluator';
 import { type RenderedPart, renderInterpolation } from '../../lang/Interpolation';
+import { execProgram } from '../../lang/StmtEvaluator';
 import { TaskLineClassifier } from '../utils/TaskLineClassifier';
 import { type GenBody, type GenLine, indentDepth, isSpliceLine, leadingIndent } from './GenBodyParser';
 
@@ -41,12 +42,17 @@ export type GenRenderResult =
  * makes sense at the end of a line: text may lead into the first of them, but
  * text after the last has nowhere to go and is refused rather than guessed at.
  */
-export function renderGenBody(body: GenBody, ctx: EvalContext): GenRenderResult {
+export function renderGenBody(body: GenBody, outerCtx: EvalContext): GenRenderResult {
     try {
-        // Document order, parent line included. Today no expression has an
-        // effect, so the order cannot be observed in the result — but cells
-        // give lines assignment, and `${n = n + 1}` has to run in the order
-        // the writer reads. Rendering the parent line first would move it.
+        // The section runs first because it is written first — the whole of
+        // the evaluation order is that one sentence, and the body reads the
+        // scope it leaves behind.
+        const ctx: EvalContext = { ...outerCtx, fuel: { left: FUEL, depth: 0 } };
+        if (body.js) ctx.scope = execProgram(body.js.program, ctx);
+
+        // Document order, parent line included: `${n = n + 1}` has to run in
+        // the order the writer reads. Rendering the parent line first would
+        // move it.
         const ordered = body.parent === null ? body.children :
             [body.parent, ...body.children].sort((a, b) => a.line - b.line);
         const entries: RenderedEntry[] = [];
@@ -56,6 +62,7 @@ export function renderGenBody(body: GenBody, ctx: EvalContext): GenRenderResult 
             } else {
                 entries.push(...renderChild(line, ctx));
             }
+            checkSize(entries);
         }
 
         // What sits at depth 0 is only known now: a line that is nothing but
@@ -86,6 +93,40 @@ export function renderGenBody(body: GenBody, ctx: EvalContext): GenRenderResult 
 /** A rendered line, with the block line it came from for diagnostics. */
 interface RenderedEntry extends RenderedChild {
     from: GenLine;
+}
+
+/**
+ * What one generation is allowed to spend and produce.
+ *
+ * Three numbers rather than one, because a section can run away in three
+ * ways: computing forever, writing forever, or nesting forever. None of them
+ * is decidable in advance — that is the halting problem — so each is a
+ * ceiling that only an already-broken block can reach. A weekly checklist is
+ * ten to thirty lines and a few hundred steps.
+ */
+const FUEL = 100_000;
+const MAX_LINES = 200;
+const MAX_DEPTH = 10;
+
+/**
+ * Refuse a result that has grown past what a task can be.
+ *
+ * Checked as the lines appear rather than at the end, so a loop writing lines
+ * forever stops at the ceiling instead of building the whole of it in memory
+ * first.
+ */
+function checkSize(entries: RenderedEntry[]): void {
+    if (entries.length > MAX_LINES) {
+        throw new EvalError(
+            `This block generated more than ${MAX_LINES} lines, which is past what one task can be`,
+            lineSpan(entries[entries.length - 1].from));
+    }
+    const deep = entries[entries.length - 1];
+    if (deep && deep.depth > MAX_DEPTH) {
+        throw new EvalError(
+            `This line sits ${deep.depth} levels deep, past the ${MAX_DEPTH} a task can hold`,
+            lineSpan(deep.from));
+    }
 }
 
 /**

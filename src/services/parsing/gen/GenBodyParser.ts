@@ -1,6 +1,10 @@
 import { type Diagnostic, error, warning } from '../../lang/Diagnostic';
 import type { InterpolationPart } from '../../lang/ExprAst';
+import { FLOW_TYPE_ENV, checkExpr } from '../../lang/ExprChecker';
 import { splitInterpolations } from '../../lang/ExprParser';
+import type { Program } from '../../lang/StmtAst';
+import { checkProgram } from '../../lang/StmtChecker';
+import { parseProgram } from '../../lang/StmtParser';
 import { TaskLineClassifier } from '../utils/TaskLineClassifier';
 import type { LocatedDiagnostic } from './GenBlockCollector';
 
@@ -20,10 +24,26 @@ export interface GenLine {
     line: number;
 }
 
+/**
+ * The `<js ... /js>` section at the head of a block, parsed.
+ *
+ * The source is kept as one string with its lines joined, because that is
+ * what the statement parser reads and what its character offsets measure
+ * against; `firstLine` puts those offsets back on the page.
+ */
+export interface GenJsSection {
+    program: Program;
+    /** Absolute file line of the first source line inside the tags. */
+    firstLine: number;
+    source: string;
+}
+
 export interface GenBody {
     /** The depth-0 task line, or null for a children-only block. */
     parent: GenLine | null;
     children: GenLine[];
+    /** The leading js section, or null when the block is body only. */
+    js: GenJsSection | null;
     diagnostics: LocatedDiagnostic[];
 }
 
@@ -76,25 +96,41 @@ const JS_CLOSE_RE = /^\s*\/js>\s*$/;
 export function parseGenBody(body: string[], firstLine: number): GenBody {
     const diagnostics: LocatedDiagnostic[] = [];
     const lines: GenLine[] = [];
+    let js: GenJsSection | null = null;
+    /** Errors inside the section itself, which make its bindings unknowable. */
+    let jsBroken = false;
 
     for (let i = 0; i < body.length; i++) {
         const raw = body[i];
         const line = firstLine + i;
         if (raw.trim() === '') continue;
 
-        // The js section is read by a later stage. Until then, say so and
-        // skip it: emitting its lines as markdown would print the tag and
-        // then generate whatever the logic was meant to decide.
         if (JS_OPEN_RE.test(raw)) {
-            diagnostics.push({
-                ...error('gen.js-section-unsupported',
-                    'A js section is not supported yet — this block generates its body only',
-                    { start: 0, end: raw.length }),
-                line,
-            });
-            if (!raw.includes('/js>')) {
-                while (i < body.length && !JS_CLOSE_RE.test(body[i])) i++;
+            const section = readJsSection(body, i, firstLine, diagnostics);
+            i = section.lastIndex;
+            if (js !== null) {
+                // The second one is refused rather than merged: a block has
+                // one place its logic lives, and running both in order would
+                // make that place two.
+                diagnostics.push({
+                    ...error('gen.js-section-duplicate',
+                        'A block has one js section — put the rest of the logic in the first one',
+                        { start: 0, end: raw.length }),
+                    line,
+                });
+                continue;
             }
+            if (lines.length > 0) {
+                diagnostics.push({
+                    ...error('gen.js-section-after-body',
+                        'The js section runs before the body, so it is written before it',
+                        { start: 0, end: raw.length }),
+                    line,
+                });
+                continue;
+            }
+            js = section.parsed;
+            jsBroken = section.broken;
             continue;
         }
 
@@ -127,7 +163,138 @@ export function parseGenBody(body: string[], firstLine: number): GenBody {
         });
     }
 
-    return classify(lines, diagnostics);
+    checkBody(js, jsBroken, lines, diagnostics);
+    return classify(lines, js, diagnostics);
+}
+
+/**
+ * Read one `<js ... /js>` section and parse it.
+ *
+ * `lastIndex` is where the caller's loop should resume — the closing tag, or
+ * the end of the block when there is none. An unclosed section swallows the
+ * body, which is why it is said rather than left to fail as markdown.
+ */
+function readJsSection(
+    body: string[],
+    open: number,
+    firstLine: number,
+    diagnostics: LocatedDiagnostic[]
+): { parsed: GenJsSection; broken: boolean; lastIndex: number } {
+    const openLine = body[open];
+    const inline = openLine.match(/^\s*<js\b(.*?)\/js>\s*$/);
+    const source: string[] = [];
+    let lastIndex = open;
+    let sourceFirstLine = firstLine + open;
+
+    if (inline) {
+        source.push(inline[1]);
+    } else {
+        // The rest of the opening line counts: `<js const a = 1` is one
+        // statement someone wrote on the tag's line, not nothing.
+        const trailing = openLine.replace(/^\s*<js\b/, '');
+        source.push(trailing);
+        sourceFirstLine = firstLine + open;
+        let i = open + 1;
+        while (i < body.length && !JS_CLOSE_RE.test(body[i])) {
+            source.push(body[i]);
+            i++;
+        }
+        if (i >= body.length) {
+            diagnostics.push({
+                ...error('gen.js-section-unclosed',
+                    "This js section is never closed with '/js>', so the rest of the block is read as code",
+                    { start: 0, end: openLine.length }),
+                line: firstLine + open,
+            });
+        }
+        lastIndex = Math.min(i, body.length - 1);
+    }
+
+    const text = source.join('\n');
+    const { program, diagnostics: parsed } = parseProgram(text);
+    const locate = lineLocator(text, sourceFirstLine);
+    for (const d of parsed) diagnostics.push(locate(d));
+
+    // A markdown fence written inside the section closes the tv-gen fence
+    // that holds the block, so everything after it stops being the block.
+    // Visible only from here, where the section's own text is in hand.
+    if (text.includes('```')) {
+        diagnostics.push({
+            ...warning('gen.js-section-fence',
+                'Three backticks here close the block early — write the block with four or more backticks around it',
+                { start: 0, end: openLine.length }),
+            line: firstLine + open,
+        });
+    }
+
+    return {
+        parsed: { program, firstLine: sourceFirstLine, source: text },
+        broken: parsed.some(d => d.severity === 'error'),
+        lastIndex,
+    };
+}
+
+/**
+ * Put a diagnostic measured in characters of `text` back on a page line.
+ *
+ * A span that runs past the end of its line is clamped to it. The section is
+ * the first place a diagnostic can cover several lines at once, and the
+ * decoration that can draw one arrives with the editor work; until then the
+ * first line is where it points.
+ */
+function lineLocator(text: string, firstLine: number): (d: Diagnostic) => LocatedDiagnostic {
+    const lines = text.split('\n');
+    const starts: number[] = [];
+    let at = 0;
+    for (const line of lines) {
+        starts.push(at);
+        at += line.length + 1;
+    }
+    return (d: Diagnostic): LocatedDiagnostic => {
+        let index = 0;
+        while (index + 1 < starts.length && starts[index + 1] <= d.span.start) index++;
+        const start = d.span.start - starts[index];
+        return {
+            ...d,
+            span: { start, end: Math.min(d.span.end - starts[index], lines[index].length) },
+            line: firstLine + index,
+        };
+    };
+}
+
+/**
+ * Type-check the section and the body's interpolations.
+ *
+ * The body reads what the section left behind, so the two are one pass in one
+ * order — and the block is the first surface where an interpolation is checked
+ * at all. Skipped when the section did not parse: without its bindings every
+ * name the body borrows would be reported as unknown, burying the one
+ * diagnostic that matters.
+ */
+function checkBody(
+    js: GenJsSection | null,
+    jsBroken: boolean,
+    lines: GenLine[],
+    diagnostics: LocatedDiagnostic[]
+): void {
+    if (jsBroken) return;
+    const sectionDiagnostics: Diagnostic[] = [];
+    const bindings = js
+        ? checkProgram(js.program, FLOW_TYPE_ENV, sectionDiagnostics)
+        : undefined;
+    if (js) {
+        const locate = lineLocator(js.source, js.firstLine);
+        for (const d of sectionDiagnostics) diagnostics.push(locate(d));
+    }
+
+    for (const line of lines) {
+        for (const part of line.parts) {
+            if (part.kind !== 'expr') continue;
+            const found: Diagnostic[] = [];
+            checkExpr(part.expr, FLOW_TYPE_ENV, found, bindings);
+            for (const d of found) diagnostics.push({ ...d, line: line.line });
+        }
+    }
 }
 
 /**
@@ -143,7 +310,7 @@ export function isSpliceLine(line: GenLine): boolean {
     return line.parts.length === 1 && line.parts[0].kind === 'expr';
 }
 
-function classify(lines: GenLine[], diagnostics: LocatedDiagnostic[]): GenBody {
+function classify(lines: GenLine[], js: GenJsSection | null, diagnostics: LocatedDiagnostic[]): GenBody {
     const roots = lines.filter(l => l.depth === 0 && !isSpliceLine(l));
     const parent = roots[0] ?? null;
 
@@ -178,6 +345,7 @@ function classify(lines: GenLine[], diagnostics: LocatedDiagnostic[]): GenBody {
     return {
         parent,
         children: lines.filter(l => l !== parent && (l.depth > 0 || isSpliceLine(l))),
+        js,
         diagnostics,
     };
 }
