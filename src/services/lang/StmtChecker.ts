@@ -307,7 +307,7 @@ class CheckState {
                 // is what makes it worse than a binding nobody can read.
                 if (isReservedName(p)) {
                     this.diagnostics.push(error('type.param-shadows-builtin',
-                        `'${p}' already means something here — the built-in wins and this parameter cannot be read`,
+                        `'${p}' already means something here — the language takes the name first and this parameter cannot be read`,
                         arrow.span, { name: p }));
                 }
                 this.declareVar(p, { type: 'error', mutable: true }, arrow.span, 'said');

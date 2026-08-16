@@ -419,6 +419,17 @@ describe('FlowParser', () => {
             expect(errors('every mon let(mon: 3)')).toContain('flow.cell-reserved-name');
         });
 
+        // 答える語だけでなく、名指しで断る語も同じ。ここを通すとセルは書けて
+        // 読めない状態になり、本文で読んだ瞬間に expr.no-typeof という、この
+        // 検査が避けると言っている無関係な苦情になる。一覧は verbatim: 表から
+        // 導くと、表が動いたとき期待値も一緒に動いて何も固定できない。
+        it('refuses a name the expression language refuses outright', () => {
+            for (const name of ['new', 'Date', 'console', 'function', 'await', 'typeof', 'delete']) {
+                expect({ name, errors: errors(`every mon let(${name}: 3)`) })
+                    .toEqual({ name, errors: ['flow.cell-reserved-name'] });
+            }
+        });
+
         it('refuses the same cell twice', () => {
             expect(errors('every mon let(n: 3, n: 4)')).toContain('flow.duplicate-cell');
         });

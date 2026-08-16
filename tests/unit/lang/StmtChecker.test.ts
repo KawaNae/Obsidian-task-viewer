@@ -60,6 +60,18 @@ describe('StmtChecker', () => {
             }
         });
 
+        // 拒否語は位置を問わず取られるので、隠すとどこでも読めない。一覧は
+        // verbatim: REFUSED_EXPR_KEYWORDS から導くと、表が動いたとき期待値も
+        // 一緒に動いて何も固定できない。
+        it('warns for a declaration of a word this language refuses, too', () => {
+            for (const name of ['new', 'Date', 'console', 'function', 'await', 'typeof', 'delete']) {
+                const found = check(`let ${name} = 1`);
+                expect({ name, codes: found.map(d => d.code) })
+                    .toEqual({ name, codes: ['stmt.shadows-reserved'] });
+                expect(found[0].severity).toBe('warning');
+            }
+        });
+
         it('holds the unknown for a let with nothing to go on', () => {
             // `let x` then writing it on the next line is an ordinary shape;
             // typing it as the missing value would refuse every write.
@@ -179,6 +191,13 @@ describe('StmtChecker', () => {
             const found = check('const f = start => 1');
             expect(found.map(d => [d.code, d.severity])).toEqual([['type.param-shadows-builtin', 'error']]);
             expect(codes('["a"].map(content => content)')).toEqual(['type.param-shadows-builtin']);
+        });
+
+        it('refuses a parameter named after a word this language refuses', () => {
+            for (const name of ['new', 'Date', 'console', 'function', 'await', 'typeof', 'delete']) {
+                expect({ name, codes: codes(`const f = ${name} => 1`) })
+                    .toEqual({ name, codes: ['type.param-shadows-builtin'] });
+            }
         });
     });
 

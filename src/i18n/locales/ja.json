@@ -764,7 +764,7 @@
       "record-fields-differ": "計算したキーで引くには、フィールドの型が揃っている必要があります（{{receiver}}）",
       "index-not-string": "レコードの添字は string です（{{actual}} が渡されました）",
       "unknown-field": "{{receiver}} に '{{name}}' というフィールドはありません",
-      "param-shadows-builtin": "'{{name}}' は既に別の意味を持つ名前です。組み込みが優先され、この引数は参照できません",
+      "param-shadows-builtin": "'{{name}}' は既に別の意味を持つ名前です。この言語が先にその名前を取るため、この引数は参照できません",
       "sort-needs-comparator": "{{receiver}} の並べ替えには比較を書く必要があります: sort((a, b) => a - b)",
       "list-immutable": "配列には追加できません。一度に組み立てるか concat を使ってください",
       "too-many-params": "'{{name}}' が関数に渡す値は {{expected}} 個です（引数が {{actual}} 個あります）",

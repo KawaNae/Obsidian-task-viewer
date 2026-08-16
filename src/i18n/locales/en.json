@@ -764,7 +764,7 @@
       "record-fields-differ": "Looking a field up by a computed key needs the fields to share a type ({{receiver}})",
       "index-not-string": "A record is indexed by a string, got {{actual}}",
       "unknown-field": "{{receiver}} has no field '{{name}}'",
-      "param-shadows-builtin": "'{{name}}' already means something here — the built-in wins and this parameter cannot be read",
+      "param-shadows-builtin": "'{{name}}' already means something here — the language takes the name first and this parameter cannot be read",
       "sort-needs-comparator": "Sorting {{receiver}} needs the comparison written out: sort((a, b) => a - b)",
       "list-immutable": "A list cannot be added to — build it in one go, or use concat",
       "too-many-params": "'{{name}}' passes {{expected}} value(s) to its function, got {{actual}} parameter(s)",

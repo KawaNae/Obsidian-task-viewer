@@ -174,10 +174,14 @@ describe('the built-in vocabulary is one description', () => {
     /** 予約なのにパーサが取らない語。括弧が続く位置でだけ呼び出しになる。 */
     const RESERVED_BUT_LEFT_AS_A_BINDING = ['format', 'next', 'startOf', 'endOf', 'nextCycle', 'date', 'time'];
 
-    /** パーサは取るのに予約でない語。拒否表が束縛を探すより先に当たる。 */
-    const CLAIMED_BUT_NOT_RESERVED = ['new', 'Date', 'console', 'function', 'await', 'typeof', 'delete'];
+    /**
+     * かつて「パーサは取るのに予約でない」側にいた 7 語。拒否表が束縛を探すより
+     * 先に当たるのに予約されておらず、typeof という名前のセルが作れて、読んだ
+     * 瞬間にブロック内で expr.no-typeof になっていた。いまは予約側にいる。
+     */
+    const REFUSED_AND_NOW_RESERVED = ['new', 'Date', 'console', 'function', 'await', 'typeof', 'delete'];
 
-    it('reserves what the parser claims, apart from two gaps it does not close yet', () => {
+    it('reserves what the parser claims, apart from one gap it does not close yet', () => {
         const vocabulary = [...new Set([
             ...Object.keys(LITERAL_WORDS),
             ...UNIT_KEYWORDS,
@@ -191,15 +195,23 @@ describe('the built-in vocabulary is one description', () => {
         const claimed = vocabulary.filter(word => claimedBeforeBinding(word));
         const reserved = vocabulary.filter(word => isReservedName(word));
 
-        // 予約と解決は一致しているべきで、いま一致していない 2 群がこれ。
-        // 裸の関数名は var のまま残るので、警告文の this binding cannot be
-        // read はその位置では偽になる。拒否語のほうは、予約でないためセル名に
-        // 使えてしまい、読んだ瞬間にブロック内で無関係な苦情になる。どちらも
-        // 旧実装から変わっていない既存のずれで、解消は別 PR の題。
+        // 残っているずれは 1 方向だけ。裸の関数名は var のまま残るので、警告文
+        // の this binding cannot be read はその位置では偽になる。これは意図の
+        // ある広さで（format という名前の局所を作らせない）、doc がそう書いて
+        // いる。
         expect(reserved.filter(word => !claimed.includes(word)).sort())
             .toEqual([...RESERVED_BUT_LEFT_AS_A_BINDING].sort());
-        expect(claimed.filter(word => !reserved.includes(word)).sort())
-            .toEqual([...CLAIMED_BUT_NOT_RESERVED].sort());
+        // もう 1 方向は閉じた。パーサが束縛より先に取る語で予約でないものは、
+        // もう無い。
+        expect(claimed.filter(word => !reserved.includes(word))).toEqual([]);
+    });
+
+    it('reserves every word the parser refuses, wherever it stands', () => {
+        // 一覧は verbatim。REFUSED_EXPR_KEYWORDS から導くと、表が動いたとき
+        // 期待値も一緒に動いて何も固定できない。
+        for (const word of REFUSED_AND_NOW_RESERVED) {
+            expect({ word, reserved: isReservedName(word) }).toEqual({ word, reserved: true });
+        }
     });
 
     it('reserves nothing else', () => {

@@ -7,6 +7,7 @@ import {
     type ArrayType, FN_SIGS, type StaticType, arrayOf, isArrayType, isAssignable, isDatishType,
     type RecordType, isRecordType, recordFieldType, recordOf, sameType, typeName,
 } from './functions';
+import { REFUSED_EXPR_KEYWORDS } from './ExprParser';
 // An expression can hold statements again, through an arrow's block body, so
 // the two checkers call each other the way the two parsers do.
 import { checkFunctionBody } from './StmtChecker';
@@ -645,7 +646,7 @@ function checkCallback(
         // and lets everything through, writing plausible nonsense.
         if (isReservedName(p)) {
             diagnostics.push(error('type.param-shadows-builtin',
-                `'${p}' already means something here — the built-in wins and this parameter cannot be read`,
+                `'${p}' already means something here — the language takes the name first and this parameter cannot be read`,
                 arg.span, { name: p }));
         }
         // A warning, like every other way of hiding a cell: the parameter is
@@ -684,8 +685,15 @@ function isCellType(type: StaticType): boolean {
  * Names the parser can claim for itself, each in the position its word is
  * written in: a property or a value word standing bare, a built-in function
  * where the call's parenthesis follows it, `tv` and `Math` where a namespace
- * opens. Shadowing one is not an error — the built-in wins wherever it is
- * claimed — but it is always a mistake.
+ * opens, and a refused word anywhere at all. Shadowing one is not an error —
+ * the parser takes the name first wherever it claims it — but it is always a
+ * mistake.
+ *
+ * The refused words are the group with no position of their own, and the
+ * reason they belong here is what happens without them: a cell may be named
+ * `typeof`, `readCell` lets it through, and reading it in the block answers
+ * with `expr.no-typeof` — the unrelated complaint that the check exists to
+ * prevent.
  *
  * Reserved is therefore wider than resolved, and deliberately: a bare `format`
  * is still read as a binding, so `let format = 1` can be declared and read and
@@ -712,6 +720,10 @@ const RESERVED_NAMES: ReadonlySet<string> = new Set([
     ...PROP_NAMES.map(prop => prop.split('.')[0]),
     ...FN_NAMES.map(fn => fn.split('.')[0]),
     ...NAMESPACE_WORDS,
+    // The one group with no position of its own: the parser reads these before
+    // it looks for a binding and refuses them wherever they stand, so a name
+    // that is one of them cannot be read anywhere at all.
+    ...REFUSED_EXPR_KEYWORDS,
 ]);
 
 export function isReservedName(name: string): boolean {
