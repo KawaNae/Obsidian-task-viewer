@@ -5,6 +5,7 @@ import { nestingOverflow, parseExpr } from '../lang/ExprParser';
 import { splitDurationText, tokenize } from '../lang/Lexer';
 import { type Token, TokenCursor, tokenSpan } from '../lang/Token';
 import { type Value, type Weekday, weekdayFromName } from '../lang/Value';
+import { lookupWord } from '../lang/WordTable';
 import { type EveryRule, type FlowCell, type FlowProgram, SET_FIELD_ORDER, type SetField, type ScheduleNode, setHeadName } from './FlowAst';
 import { checkFlow } from './FlowChecker';
 
@@ -173,7 +174,7 @@ function parseNode(cursor: TokenCursor, program: FlowProgram, diagnostics: Diagn
     }
 
     // setContent(...) / setStart(...) / setEnd(...) / setDue(...)
-    const setField = SET_HEADS[head.text];
+    const setField = lookupWord(SET_HEADS, head.text);
     if (setField !== undefined) {
         cursor.next();
         const expr = parseParenExpr(cursor, head.text, diagnostics);
@@ -437,7 +438,7 @@ function skipToNextNode(cursor: TokenCursor): void {
         const t = cursor.peek();
         if (t.kind === 'ident' && (
             ['every', 'at', 'until', 'nochildren', 'let', 'use', 'move'].includes(t.text)
-            || t.text in SET_HEADS
+            || lookupWord(SET_HEADS, t.text) !== undefined
             || /^x\d+$/.test(t.text)
         )) return;
         cursor.next();

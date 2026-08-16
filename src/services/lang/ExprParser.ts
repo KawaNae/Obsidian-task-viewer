@@ -4,6 +4,7 @@ import { findInterpolationEnd, splitDurationText, tokenize } from './Lexer';
 import { looksLikeRecord, parseArrowBlockBody } from './StmtParser';
 import { type Token, type TokenKind, TokenCursor, tokenSpan } from './Token';
 import { weekdayFromName } from './Value';
+import { lookupWord } from './WordTable';
 
 /** Bare idents inside expressions that read as unit keywords (startOf(week)). */
 const UNIT_KEYWORDS = ['week', 'month', 'year'] as const;
@@ -743,7 +744,7 @@ function parseIdentLed(cursor: TokenCursor, diagnostics: Diagnostic[]): Expr | n
     // Names a JS habit reaches for and this language refuses on purpose —
     // said here with the way out, not left to trip the evaluator as an
     // unknown binding.
-    const refused = REFUSED_EXPR_NAMES[name];
+    const refused = lookupWord(REFUSED_EXPR_NAMES, name);
     if (refused && profile !== 'flow') {
         diagnostics.push(error(refused.code, refused.message, span, { name }));
         return null;
