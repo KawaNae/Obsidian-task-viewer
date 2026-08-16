@@ -24,6 +24,14 @@ export const FLOW_TYPE_ENV: TypeEnv = {
     done: 'datetime',
     /** Completion calendar date (no time) — for day-granular offsets. */
     today: 'date',
+    /**
+     * The whole `@` block of the task as the notation writes it.
+     *
+     * A string rather than a value with parts, because what it is for is being
+     * written back out: a block that assembles `@${start}` is a block that
+     * drops the end and the due without saying so.
+     */
+    dates: 'string',
 };
 
 /** A value in scope: an arrow parameter, or a local of the js section. */
@@ -671,7 +679,7 @@ function isCellType(type: StaticType): boolean {
 
 export function isReservedName(name: string): boolean {
     return ['true', 'false', 'none', 'undefined', 'null', 'week', 'month', 'year',
-        'start', 'end', 'due', 'content', 'done', 'today', 'file', 'tv', 'Math',
+        'start', 'end', 'due', 'content', 'done', 'today', 'dates', 'file', 'tv', 'Math',
         'format', 'next', 'startOf', 'endOf', 'nextCycle', 'date', 'time'].includes(name);
 }
 

@@ -14,7 +14,7 @@ import { lookupWord } from './WordTable';
  */
 export const UNIT_KEYWORDS = ['week', 'month', 'year'] as const;
 
-const SIMPLE_PROPS = ['start', 'end', 'due', 'content', 'done', 'today'] as const;
+const SIMPLE_PROPS = ['start', 'end', 'due', 'content', 'done', 'today', 'dates'] as const;
 
 /**
  * Names refused in expression position, each with its way out. The design's
