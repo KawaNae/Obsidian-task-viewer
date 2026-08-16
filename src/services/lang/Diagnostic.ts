@@ -21,7 +21,11 @@ export interface Diagnostic {
      * (see services/flow/diagnosticText.ts).
      */
     code: string;
-    /** English default text (logs / tests / i18n fallback). */
+    /**
+     * The English text, written here and nowhere else. Locale files hold
+     * translations only; display falls back to this one (see
+     * services/flow/diagnosticText.ts).
+     */
     message: string;
     span: Span;
     /** Values interpolated into the translated template. */
