@@ -95,25 +95,24 @@ describe('what a block is made of, said in the engine s own terms', () => {
             .not.toContain('keyword:of');
     });
 
-    it('paints a cell as state, and its type comes from the command', () => {
-        expect(paint(['- [ ] c ${n}'], CELL_N)).toEqual(['interp:${', 'cell:n', 'interp:}']);
+    it('leaves a cell to its own words, having no colour to add', () => {
+        // `state` is a namespace, which this file has never had a role for
+        // (the same answer `tv` and `Math` get), and the name after the dot is
+        // a member read like any other. What a colour used to say — this one
+        // outlives the firing — the text now says.
+        expect(paint(['- [ ] c ${state.n}'], CELL_N))
+            .toEqual(['interp:${', 'punct:.', 'prop:n', 'interp:}']);
     });
 
-    it('stops painting a cell the section declares for itself', () => {
-        // The declaration hides it and the writes stop carrying, which the
-        // checker says out loud. The colour has to agree with the warning.
-        const lines = ['<js', 'let n = 1', 'n = n + 1', '/js>', '- [ ] c ${n}'];
-        expect(parseGenBody(lines, 0, CELL_N).diagnostics.map(d => d.code)).toContain('stmt.shadows-cell');
-        expect(paint(lines, CELL_N).filter(p => p.startsWith('cell:'))).toEqual([]);
-    });
-
-    it('keeps painting a cell that is hidden only inside a block', () => {
-        // The warning says a name was hidden but not where, and a name hidden
-        // inside an `if` is the cell again on the way out. What the body
-        // resolves is what the bindings say, so that is what is read.
-        const lines = ['<js', 'if (true) { let n = 0 }', '/js>', '- [ ] c ${n}'];
-        expect(parseGenBody(lines, 0, CELL_N).diagnostics.map(d => d.code)).toContain('stmt.shadows-cell');
-        expect(paint(lines, CELL_N)).toContain('cell:n');
+    it('paints a local of the same name as the local it is', () => {
+        // A section may declare `n` while the command carries a cell called
+        // `n`, and the two have nothing to do with each other any more. The
+        // marks say so: nothing on the declaration, and the cell keeps its
+        // own two words.
+        const lines = ['<js', 'let n = 1', 'n = n + 1', '/js>', '- [ ] c ${state.n}'];
+        expect(parseGenBody(lines, 0, CELL_N).diagnostics).toEqual([]);
+        expect(paint(lines, CELL_N).filter(p => p.endsWith(':n')))
+            .toEqual(['prop:n']);
     });
 
     it('paints the name of a call, through a dot or not', () => {
@@ -215,16 +214,17 @@ describe('what a block is made of, said in the engine s own terms', () => {
     });
 
     it('runs a template as text, and what is spliced into it again inside', () => {
-        expect(paint(['- [ ] c ${`n is ${n}`}'], CELL_N)).toEqual([
-            'interp:${', 'string:`n is ${n}`', 'interp:${', 'cell:n', 'interp:}', 'interp:}',
+        expect(paint(['- [ ] c ${`n is ${state.n}`}'], CELL_N)).toEqual([
+            'interp:${', 'string:`n is ${state.n}`',
+            'interp:${', 'punct:.', 'prop:n', 'interp:}', 'interp:}',
         ]);
     });
 
     it('measures a child line from the start of the line it was written on', () => {
         // The parts carry the indent, so a mark on an indented line has to
         // point past it. Reading the text back is what proves it.
-        expect(paint(['- [ ] parent', '    - [ ] child ${n}'], CELL_N))
-            .toEqual(['interp:${', 'cell:n', 'interp:}']);
+        expect(paint(['- [ ] parent', '    - [ ] child ${state.n}'], CELL_N))
+            .toEqual(['interp:${', 'punct:.', 'prop:n', 'interp:}']);
     });
 
     it('puts every mark of a section on the line it was written on', () => {

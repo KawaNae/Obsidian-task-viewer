@@ -342,12 +342,20 @@ function lineLocator(text: string, firstLine: number): (d: Diagnostic) => Locate
  */
 export type GenCellTypes = ReadonlyMap<string, StaticType>;
 
-/** The cells as the checker sees them: ordinary locals that may be written. */
+/**
+ * The cells as the checker sees them: reachable through `state`, and nowhere
+ * in scope.
+ *
+ * They used to be declared as ordinary locals, which is what made a section's
+ * `let n = 1` able to hide one — legal, useless, and worth a warning of its
+ * own. Reached through a namespace instead, there is nothing to hide: a name
+ * in scope and a cell are not the same kind of thing any more.
+ */
 function cellBindings(cells: GenCellTypes | undefined): Bindings {
     if (!cells?.size) return NO_BINDINGS;
-    const vars = new Map<string, VarBinding>();
-    for (const [name, type] of cells) vars.set(name, { type, mutable: true, cell: true });
-    return { vars, fns: new Map() };
+    const table = new Map<string, VarBinding>();
+    for (const [name, type] of cells) table.set(name, { type, mutable: true, cell: true });
+    return { vars: new Map(), fns: new Map(), cells: table };
 }
 
 /**

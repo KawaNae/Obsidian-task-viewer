@@ -35,15 +35,9 @@
     color: var(--code-property);
 }
 
-/* A cell is a property of the command rather than of the task, and the one
- * name in a block whose value outlives the firing. Said with the shape of the
- * letters rather than with a colour of its own: the palette is the theme's,
- * and a second channel carries where a colour cannot (a reader who does not
- * separate these hues still sees the difference). */
-.tv-tok--cell {
-    color: var(--code-property);
-    font-style: italic;
-}
+/* A cell has no rule here. It is written `state.n`, and the name after the dot
+ * is a member read like any other — the italic that used to say "this one
+ * outlives the firing" would be saying what the text already says. */
 
 .tv-tok--comment {
     color: var(--code-comment);

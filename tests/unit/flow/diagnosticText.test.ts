@@ -78,7 +78,6 @@ describe('diagnosticText', () => {
             'every mon setContent(content == "a" == true)', // expr.comparison-chain
             'every mon state(3)',                 // flow.expected-cell
             'every mon state(n: 3, n: 4)',        // flow.duplicate-cell
-            'every mon state(start: 3)',          // flow.cell-reserved-name
             'every mon state(n: 1 + 2)',          // flow.cell-not-literal
             'every mon state(n: none)',           // type.cell-not-storable
         ];
@@ -98,7 +97,7 @@ describe('diagnosticText', () => {
             'type.nullish-mismatch', 'type.member-arity', 'type.unknown-member',
             'type.member-arg', 'lex.decimal-duration', 'lex.decimal-too-precise',
             'lex.decimal-too-large', 'expr.nullish-mixed-with-logic', 'expr.comparison-chain',
-            'flow.expected-cell', 'flow.duplicate-cell', 'flow.cell-reserved-name',
+            'flow.expected-cell', 'flow.duplicate-cell',
             'flow.cell-not-literal', 'type.cell-not-storable']) {
             expect(seen).toContain(code);
         }
@@ -259,6 +258,7 @@ describe('diagnosticText', () => {
         // 代入とコメントはブロックでは通る形なので、拒否はフロー行の側から出る。
         const FLOW_SAMPLES = [
             'every mon setContent(content = "x")', // expr.assign-not-here
+            'every mon setContent(state.n)',       // expr.cell-not-here
             'every mon // weekly',                 // flow.comment-not-here
         ];
 
@@ -283,7 +283,8 @@ describe('diagnosticText', () => {
             'type.not-callable', 'type.call-arity', 'expr.fn-not-a-value',
             'gen.js-section-unclosed', 'gen.js-section-duplicate',
             'gen.js-section-after-body', 'expr.nesting-too-deep',
-            'stmt.shadows-cell',
+            'stmt.shadows-state', 'expr.cell-needs-state', 'expr.unknown-cell',
+            'expr.no-cells-declared', 'expr.cell-not-here',
         ];
 
         function emitted(): Diagnostic[] {
@@ -296,8 +297,11 @@ describe('diagnosticText', () => {
             }
             for (const lines of BLOCK_SAMPLES) all.push(...parseGenBody(lines, 1).diagnostics);
             // セルはフロー行から渡って来るので、ブロック単体の網には載らない。
-            all.push(...parseGenBody(['<js', 'let n = 0', '/js>', '- [ ] 第${n}回'], 1,
+            all.push(...parseGenBody(['<js', 'let state = 0', '/js>', '- [ ] 第${n}回'], 1,
                 new Map([['n', 'number']])).diagnostics);
+            all.push(...parseGenBody(['- [ ] 第${state.m}回'], 1,
+                new Map([['n', 'number']])).diagnostics);
+            all.push(...parseGenBody(['- [ ] 第${state.m}回'], 1).diagnostics);
             // ホストのスタックが尽きる形は、書いて確かめるほうが早い。
             all.push(...parseFlow('at(' + '('.repeat(4000) + '1').diagnostics);
             // ブロックには文が無いので、{ } 本体の関数はブロック側からしか出ない。

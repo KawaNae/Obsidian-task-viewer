@@ -211,11 +211,19 @@ describe('parseGenBody — the cells the command declares', () => {
     const withCells = (body: string[]) => parseGenBody(body, 1, cells);
     const cellCodes = (body: string[]) => withCells(body).diagnostics.map(d => [d.code, d.line]);
 
-    it('reads a cell as a name the block may use', () => {
+    it('reads a cell through state, in the body and in the section', () => {
         // ブロックはどのコマンドが自分を使うか知らないので、名前は外から来る。
-        // 渡し忘れると全部 unknown / undeclared になる（沈黙しない）。
-        expect(withCells(['- [ ] 第${n = n + 1}回']).diagnostics).toEqual([]);
-        expect(withCells(['<js', 'n = n + 1', '/js>', '- [ ] 第${n}回']).diagnostics).toEqual([]);
+        // 渡し忘れると全部『宣言されていないセル』になる（沈黙しない）。
+        expect(withCells(['- [ ] 第${state.n = state.n + 1}回']).diagnostics).toEqual([]);
+        expect(withCells(['- [ ] 第${state.n += 1}回']).diagnostics).toEqual([]);
+        expect(withCells(['<js', 'state.n = state.n + 1', '/js>', '- [ ] 第${state.n}回']).diagnostics).toEqual([]);
+    });
+
+    it('names the cell that was meant when the prefix is missing', () => {
+        // 改名前の書き方をそのまま持ってきた人が最初に踏む形。宣言の集合を
+        // 持っているので、未知の名前ではなく『それはセルだ』と言える。
+        expect(cellCodes(['- [ ] 第${n}回'])).toEqual([['expr.cell-needs-state', 1]]);
+        expect(cellCodes(['<js', 'n = 1', '/js>', '- [ ] 週報'])).toEqual([['expr.cell-needs-state', 2]]);
     });
 
     it('still calls a name no command declares what it is', () => {
@@ -223,29 +231,43 @@ describe('parseGenBody — the cells the command declares', () => {
         expect(cellCodes(['<js', 'm = 1', '/js>', '- [ ] 週報'])).toEqual([['stmt.assign-undeclared', 2]]);
     });
 
+    it('names a cell the command does not declare', () => {
+        expect(cellCodes(['- [ ] 第${state.m}回'])).toEqual([['expr.unknown-cell', 1]]);
+    });
+
+    it('says so differently when the command declares no cells at all', () => {
+        // 宣言が 1 つも無いのは書き忘れで、綴り違いとは別の話。
+        expect(parseGenBody(['- [ ] 第${state.n}回'], 1, undefined).diagnostics.map(d => d.code))
+            .toEqual(['expr.no-cells-declared']);
+    });
+
     it('knows what type a cell holds', () => {
-        expect(cellCodes(['<js', 'n = "text"', '/js>', '- [ ] 週報']))
+        expect(cellCodes(['<js', 'state.n = "text"', '/js>', '- [ ] 週報']))
             .toEqual([['stmt.assign-type-change', 2]]);
     });
 
-    it('names a declaration that hides a cell', () => {
-        // 書けてしまう形なので警告。隠したまま代入しても状態は動かない。
-        expect(cellCodes(['<js', 'let n = 0', '/js>', '- [ ] 第${n}回']))
-            .toEqual([['stmt.shadows-cell', 2]]);
+    it('lets a section declare the same name without touching the cell', () => {
+        // 改名の眼目。セルはスコープに居ないので、この宣言は隠していない。
+        // 別物として普通に読み書きされ、セルは state.n のまま動き続ける。
+        expect(cellCodes(['<js', 'let n = 0', 'n = n + 1', '/js>', '- [ ] 第${state.n}回']))
+            .toEqual([]);
+        expect(cellCodes(['<js', 'const xs = [1, 2].map(n => n + 1)', '/js>', '- [ ] 週報']))
+            .toEqual([]);
     });
 
-    it('names a callback parameter that hides a cell', () => {
-        // コールバックの引数は自分で束縛するので、宣言の経路に乗らない。
-        expect(cellCodes(['<js', 'const xs = [1, 2].map(n => n + 1)', '/js>', '- [ ] 週報']))
-            .toEqual([['stmt.shadows-cell', 2]]);
+    it('refuses a declaration of state itself', () => {
+        // 隠すと state.n が全部その宣言を読み、コマンドの値は動かなくなる。
+        // ほかの名前を隠すのは警告だが、これは error。
+        expect(cellCodes(['<js', 'let state = 1', '/js>', '- [ ] 週報']))
+            .toEqual([['stmt.shadows-state', 2]]);
     });
 
     it('refuses a value that could never be printed back', () => {
         // 実行時のガードは残る（型が unknown に広がる経路があるため）。
         // 書いている時点で決まるものは、書いている時点で言う。
-        expect(cellCodes(['<js', 'n = [1, 2]', '/js>', '- [ ] 週報']))
+        expect(cellCodes(['<js', 'state.n = [1, 2]', '/js>', '- [ ] 週報']))
             .toEqual([['type.cell-not-storable', 2]]);
-        expect(cellCodes(['<js', 'n = {a: 1}', '/js>', '- [ ] 週報']))
+        expect(cellCodes(['<js', 'state.n = {a: 1}', '/js>', '- [ ] 週報']))
             .toEqual([['type.cell-not-storable', 2]]);
     });
 });

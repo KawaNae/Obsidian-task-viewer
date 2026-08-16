@@ -92,16 +92,67 @@ export interface FnBinding {
 export interface Bindings {
     readonly vars: ReadonlyMap<string, VarBinding>;
     readonly fns: ReadonlyMap<string, FnBinding>;
+    /**
+     * The cells the flow command declared, reached as `state.n`.
+     *
+     * A table of their own rather than names in `vars`, which is the whole of
+     * what the `state.` prefix buys: a cell cannot be shadowed by a
+     * declaration, because it was never a name in scope to begin with, and a
+     * bare `n` cannot quietly mean one.
+     */
+    readonly cells: ReadonlyMap<string, VarBinding>;
 }
 
 /** Names bound by enclosing arrow parameters and js-section locals. */
 export type VarTypes = ReadonlyMap<string, VarBinding>;
 
-export const NO_BINDINGS: Bindings = { vars: new Map(), fns: new Map() };
+export const NO_BINDINGS: Bindings = { vars: new Map(), fns: new Map(), cells: new Map() };
 
 /** The same bindings with `vars` replaced — entering an arrow, or a scope. */
 function withVars(bindings: Bindings, vars: ReadonlyMap<string, VarBinding>): Bindings {
-    return { vars, fns: bindings.fns };
+    return { vars, fns: bindings.fns, cells: bindings.cells };
+}
+
+/**
+ * What `state.n` refers to, and what to say when it refers to nothing.
+ *
+ * The command holds the declarations, so this is decidable where it is
+ * written — and the two ways of being wrong are worth telling apart. A
+ * command with no cells at all is someone who has not declared one yet; a
+ * command with cells but not this one is a typo or a stale name.
+ */
+function resolveCell(
+    name: string,
+    span: Span,
+    diagnostics: Diagnostic[],
+    bindings: Bindings
+): VarBinding | undefined {
+    const cell = bindings.cells.get(name);
+    if (cell) return cell;
+    if (bindings.cells.size === 0) {
+        diagnostics.push(error('expr.no-cells-declared',
+            `This command declares no cells — add state(${name}: ...) to the flow line to keep a value between instances`,
+            span, { name }));
+    } else {
+        diagnostics.push(error('expr.unknown-cell',
+            `This command declares no cell called '${name}' — declare it on the flow line: state(${name}: ...)`,
+            span, { name }));
+    }
+    return undefined;
+}
+
+/**
+ * True when a bare name is the cell someone meant to write.
+ *
+ * The one mistake every command written before the rename makes, and the only
+ * one this checker can answer by name: the declarations are right there.
+ */
+function saidBareCell(name: string, span: Span, diagnostics: Diagnostic[], bindings: Bindings): boolean {
+    if (!bindings.cells.has(name)) return false;
+    diagnostics.push(error('expr.cell-needs-state',
+        `'${name}' is a cell of this command, and a cell is read through state — write state.${name}`,
+        span, { name }));
+    return true;
 }
 
 /**
@@ -146,8 +197,12 @@ export function checkExpr(expr: Expr, env: TypeEnv, diagnostics: Diagnostic[], b
         }
 
         case 'var': {
+            if (expr.via) {
+                return resolveCell(expr.name, expr.span, diagnostics, bindings)?.type ?? 'error';
+            }
             const bound = bindings.vars.get(expr.name);
             if (bound !== undefined) return bound.type;
+            if (saidBareCell(expr.name, expr.span, diagnostics, bindings)) return 'error';
             // A function is not a value here. Naming which one it is beats
             // "unknown identifier" on a name that is plainly in scope, and it
             // states the containment rule at the one place it is felt.
@@ -374,8 +429,14 @@ function checkAssign(
     bindings: Bindings
 ): StaticType {
     const value = checkExpr(expr.value, env, diagnostics, bindings);
+    if (expr.via) {
+        const cell = resolveCell(expr.name, expr.nameSpan, diagnostics, bindings);
+        if (!cell) return 'error';
+        return checkAssignTo(cell, expr, value, diagnostics);
+    }
     const target = bindings.vars.get(expr.name);
     if (target === undefined) {
+        if (saidBareCell(expr.name, expr.nameSpan, diagnostics, bindings)) return 'error';
         if (bindings.fns.has(expr.name)) {
             diagnostics.push(error('stmt.assign-to-function',
                 `'${expr.name}' is a function, and a function stays where it was declared`,
@@ -393,6 +454,23 @@ function checkAssign(
             expr.nameSpan, { name: expr.name }));
         return 'error';
     }
+    return checkAssignTo(target, expr, value, diagnostics);
+}
+
+/**
+ * The write itself, once it is known what is being written to.
+ *
+ * Shared by the two ways of naming a target — a binding in scope, and a cell
+ * reached through `state` — because everything from here is about the value:
+ * what the operator makes of it, whether a cell can hold it, and whether it is
+ * the kind of thing the target was holding.
+ */
+function checkAssignTo(
+    target: VarBinding,
+    expr: Expr & { kind: 'assign' },
+    value: StaticType,
+    diagnostics: Diagnostic[]
+): StaticType {
     if (value === 'error') return 'error';
     // `+=` and `-=` mean the binary operator, so they answer to the same table
     // that would have judged `n = n + 1`.
@@ -647,16 +725,6 @@ function checkCallback(
         if (isReservedName(p)) {
             diagnostics.push(error('type.param-shadows-builtin',
                 `'${p}' already means something here — the language takes the name first and this parameter cannot be read`,
-                arg.span, { name: p }));
-        }
-        // A warning, like every other way of hiding a cell: the parameter is
-        // read normally, and what is lost is only the writing — an assignment
-        // inside the body reaches the parameter and never the state. Said here
-        // because a callback binds its parameters itself rather than through
-        // the declaration path where the other three forms are caught.
-        if (bindings.vars.get(p)?.cell) {
-            diagnostics.push(warning('stmt.shadows-cell',
-                `'${p}' is a cell of the flow command, and this parameter hides it — writing to it will not carry to the next instance`,
                 arg.span, { name: p }));
         }
         // Assignable: a parameter is an ordinary binding once a block body can

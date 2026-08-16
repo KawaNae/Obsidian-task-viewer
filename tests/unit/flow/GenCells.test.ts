@@ -83,7 +83,7 @@ async function fire(line: string, blocks: Record<string, GenBlock>): Promise<Wri
         : { parentLine: '', flowLines: [], children: [], fired: false };
 }
 
-const COUNTER = { 週報: block('週報', ['- [ ] 週報 第${n = n + 1}回 @${start}']) };
+const COUNTER = { 週報: block('週報', ['- [ ] 週報 第${state.n = state.n + 1}回 @${start}']) };
 
 describe('a cell travels from one generation to the next', () => {
     it('prints what the block wrote, not what the line started from', async () => {
@@ -117,7 +117,7 @@ describe('a cell travels from one generation to the next', () => {
             {
                 記録: block('記録', [
                     '<js',
-                    'prev = ["- [ ] a", "- [ ] b"].join("\\n")',
+                    'state.prev = ["- [ ] a", "- [ ] b"].join("\\n")',
                     '/js>',
                     '- [ ] 記録 @${start}',
                 ]),
@@ -141,7 +141,7 @@ describe('a cell travels from one generation to the next', () => {
             {
                 記録: block('記録', [
                     '<js',
-                    'prev = `one',
+                    'state.prev = `one',
                     'two`',
                     '/js>',
                     '- [ ] 記録 @${start}',
@@ -220,12 +220,12 @@ describe('a value that cannot be written back stops the fire', () => {
     it('when the block is written to put a list in a cell', async () => {
         // ここは静的検査（type.cell-not-storable）で止まる。ブロックが
         // 壊れている発火は評価にも入らない。
-        await refuses(['<js', 'n = [1, 2]', '/js>', '- [ ] 週報 @${start}']);
+        await refuses(['<js', 'state.n = [1, 2]', '/js>', '- [ ] 週報 @${start}']);
     });
 
     it('when the type went unknown on the way and a list arrived anyway', async () => {
         // 静的には決まらない形。1 本目の代入で型が unknown に広がるので
         // 2 本目は何も言えず、書き戻しの直前の検査だけが残る関門になる。
-        await refuses(['<js', 'n = "text"', 'n = [1, 2]', '/js>', '- [ ] 週報 @${start}']);
+        await refuses(['<js', 'state.n = "text"', 'state.n = [1, 2]', '/js>', '- [ ] 週報 @${start}']);
     });
 });

@@ -414,19 +414,15 @@ describe('FlowParser', () => {
             expect(errors('every mon state(n: none)')).toContain('type.cell-not-storable');
         });
 
-        it('refuses a name the expression language already answers to', () => {
-            expect(errors('every mon state(start: 3)')).toContain('flow.cell-reserved-name');
-            expect(errors('every mon state(mon: 3)')).toContain('flow.cell-reserved-name');
-        });
-
-        // 答える語だけでなく、名指しで断る語も同じ。ここを通すとセルは書けて
-        // 読めない状態になり、本文で読んだ瞬間に expr.no-typeof という、この
-        // 検査が避けると言っている無関係な苦情になる。一覧は verbatim: 表から
-        // 導くと、表が動いたとき期待値も一緒に動いて何も固定できない。
-        it('refuses a name the expression language refuses outright', () => {
+        // セル名は式言語の名前と衝突しない。読むときは state.start であって
+        // start ではないので、この行が禁じるものは何も無い。一覧は verbatim:
+        // 表から導くと、表が動いたとき期待値も一緒に動いて何も固定できない。
+        it('takes a name the expression language uses, since a cell is not read bare', () => {
+            expect(errors('every mon state(start: 3)')).toEqual([]);
+            expect(errors('every mon state(mon: 3)')).toEqual([]);
             for (const name of ['new', 'Date', 'console', 'function', 'await', 'typeof', 'delete']) {
                 expect({ name, errors: errors(`every mon state(${name}: 3)`) })
-                    .toEqual({ name, errors: ['flow.cell-reserved-name'] });
+                    .toEqual({ name, errors: [] });
             }
         });
 

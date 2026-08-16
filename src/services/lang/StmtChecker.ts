@@ -1,5 +1,5 @@
 import { type Diagnostic, type Span, error, warning } from './Diagnostic';
-import type { Expr } from './ExprAst';
+import { type Expr, STATE_NAMESPACE } from './ExprAst';
 import {
     type Bindings, type FnBinding, NO_BINDINGS, type TypeEnv, type VarBinding,
     checkExpr, isReservedName,
@@ -64,6 +64,15 @@ class CheckState {
     /** Non-null while a function body is being read: the types its returns give. */
     private returns: StaticType[] | null = null;
 
+    /**
+     * The command's cells, which no scope owns.
+     *
+     * Carried rather than copied into `vars`: a section cannot declare one, so
+     * it cannot hide one, and the frame that used to hold them is gone with
+     * the diagnostic that policed it.
+     */
+    private readonly cells: ReadonlyMap<string, VarBinding>;
+
     constructor(
         private readonly env: TypeEnv,
         private readonly diagnostics: Diagnostic[],
@@ -71,10 +80,11 @@ class CheckState {
     ) {
         for (const [name, b] of outer.vars) this.vars.set(name, b);
         for (const [name, f] of outer.fns) this.fns.set(name, f);
+        this.cells = outer.cells;
     }
 
     snapshot(): Bindings {
-        return { vars: new Map(this.vars), fns: new Map(this.fns) };
+        return { vars: new Map(this.vars), fns: new Map(this.fns), cells: this.cells };
     }
 
     runBody(body: Stmt[]): void {
@@ -142,15 +152,19 @@ class CheckState {
 
     /** False when the declaration is refused outright. */
     private reportRedeclaration(name: string, span: Span, reserved: 'warn' | 'said' = 'warn'): boolean {
-        if (this.vars.get(name)?.cell) {
-            // Legal, and almost never meant: the block goes on reading and
-            // writing this name, and none of it reaches the cell the flow line
-            // carries — so the state stops moving with no other sign.
-            this.diagnostics.push(warning('stmt.shadows-cell',
-                `'${name}' is a cell of the flow command, and this declaration hides it — writing to it will not carry to the next instance`,
+        // An error where shadowing anything else is a warning. Hiding a
+        // built-in costs a name; hiding this one costs the cells — every
+        // `state.n` in the block would read a declaration that dies with the
+        // section, and the value the command carries would stop moving with
+        // nothing else to show for it.
+        if (name === STATE_NAMESPACE) {
+            // And nothing else: `state` is a reserved name too, but the
+            // general warning under this one would say the smaller half of
+            // what is wrong.
+            this.diagnostics.push(error('stmt.shadows-state',
+                `'${STATE_NAMESPACE}' is where this command's cells live, and a declaration here would hide them — choose another name`,
                 span, { name }));
-        }
-        if (reserved === 'warn' && isReservedName(name)) {
+        } else if (reserved === 'warn' && isReservedName(name)) {
             // A warning, not an error: the program means what it says, the
             // binding simply cannot be read — the built-in resolves first.
             this.diagnostics.push(warning('stmt.shadows-reserved',
@@ -167,7 +181,7 @@ class CheckState {
     }
 
     private bindings(): Bindings {
-        return { vars: this.vars, fns: this.fns };
+        return { vars: this.vars, fns: this.fns, cells: this.cells };
     }
 
     private expr(e: Expr): StaticType {

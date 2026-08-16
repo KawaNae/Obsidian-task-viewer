@@ -353,15 +353,11 @@ function parseCells(cursor: TokenCursor, head: Token, program: FlowProgram, diag
 /** One `name: value` pair, once both halves have been read. */
 function readCell(nameToken: Token, expr: Expr, entries: FlowCell[], diagnostics: Diagnostic[]): void {
     const name = nameToken.text;
-    // A name the expression language resolves for itself cannot be read as a
-    // cell, so the cell would be write-only — said here rather than left to
-    // surface as an unrelated complaint inside the block.
-    if (isReservedName(name) || weekdayFromName(name) !== null) {
-        diagnostics.push(error('flow.cell-reserved-name',
-            `'${name}' already means something in an expression, so a cell cannot be named it`,
-            tokenSpan(nameToken), { name }));
-        return;
-    }
+    // Nothing is checked against the language's own names. A cell is read as
+    // `state.n`, so `state(typeof: 3)` collides with nothing, and refusing a
+    // name that cannot collide is a rule with nothing behind it. What the
+    // check used to prevent — a cell that could be written and never read —
+    // the namespace prevents by construction.
     if (entries.some(c => c.name === name)) {
         diagnostics.push(error('flow.duplicate-cell', `Cell '${name}' is declared twice`, tokenSpan(nameToken), { name }));
         return;

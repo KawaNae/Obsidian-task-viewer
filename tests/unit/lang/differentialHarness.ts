@@ -88,6 +88,8 @@ export function bindingTypes(mutable: boolean): Bindings {
         vars: new Map(Object.entries(BINDINGS).map(
             ([name, js]) => [name, { type: typeOfValue(toValue(js)), mutable }])),
         fns: new Map(),
+        // The sweep compares this language against JS, which has no cells.
+        cells: new Map(),
     };
 }
 

@@ -47,8 +47,33 @@ export const UNIT_KEYWORDS = ['week', 'month', 'year'] as const;
  * `tv.date.format(...)` resolves to the bare `format`, so `tv` appears nowhere
  * else; `Math.floor` keeps its namespace in the name and is therefore also in
  * `FN_NAMES`. Both are listed because both are what the parser branches on.
+ *
+ * `state` opens the cells the flow command declared, which resolve to nothing
+ * in this file — the command holds them. It is listed here rather than on a
+ * shelf of its own because this list is also what the reserved names are
+ * derived from, and a second list of words the parser will not read as a name
+ * is a second list to forget.
  */
-export const NAMESPACE_WORDS = ['tv', 'Math'] as const;
+export const NAMESPACE_WORDS = ['tv', 'Math', 'state'] as const;
+
+/** The namespace whose members are the flow command's cells. */
+export const STATE_NAMESPACE = 'state';
+
+/**
+ * A reference written as `state.n` rather than as a bare name.
+ *
+ * The prefix is folded away at the parse: `state.n` becomes the name `n`, so
+ * the evaluator, the printer and the cell store go on working in the currency
+ * they already use. What the mark keeps is what folding would otherwise throw
+ * away — that the reader wrote a cell.
+ *
+ * Three things need that. A diagnostic has to name what was written, not what
+ * it became. A reference has to be checked against the cells the command
+ * declared rather than against the names in scope. And a bare name that
+ * happens to match a cell has to be told it is one, which is the mistake
+ * anyone carrying an older command will make first.
+ */
+export type StateWritten = typeof STATE_NAMESPACE;
 
 export type BinaryOp =
     | '+' | '-'
@@ -94,9 +119,11 @@ export type Expr =
          * between a warning and silence.
          */
         parenthesized?: boolean;
+        /** Written as `state.n`. See {@link StateWritten}. */
+        via?: typeof STATE_NAMESPACE;
     }
     /** A name bound by an enclosing arrow parameter (block profile only). */
-    | { kind: 'var'; name: string; span: Span }
+    | { kind: 'var'; name: string; span: Span; via?: typeof STATE_NAMESPACE }
     /**
      * `f(1)` — a call of an arrow bound by a local declaration, which is what
      * makes `const f = x => ...` a real answer to "write a function" instead

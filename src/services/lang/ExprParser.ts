@@ -1,7 +1,7 @@
 import { type Diagnostic, type Span, error } from './Diagnostic';
 import {
     type BinaryOp, type Expr, FN_NAMES, type FnName, type InterpolationPart, LITERAL_WORDS,
-    NAMESPACE_WORDS, PROP_NAMES, type PropName, UNIT_KEYWORDS,
+    NAMESPACE_WORDS, PROP_NAMES, type PropName, STATE_NAMESPACE, UNIT_KEYWORDS,
 } from './ExprAst';
 import { scanInterpolations, splitDurationText, tokenize } from './Lexer';
 import { looksLikeRecord, parseArrowBlockBody } from './StmtParser';
@@ -153,7 +153,12 @@ function finishAssignment(cursor: TokenCursor, diagnostics: Diagnostic[], left: 
     }
     const value = parseAssignment(cursor, diagnostics);
     if (!value) return null;
-    return { kind: 'assign', op, name: left.name, nameSpan: left.span, value, span: spanBetween(left.span, value.span) };
+    // `via` travels with the target: `state.n += 1` is a write to a cell, and
+    // the checker has to know that before it looks for `n` in the scope.
+    return {
+        kind: 'assign', op, name: left.name, nameSpan: left.span, value,
+        span: spanBetween(left.span, value.span), via: left.via,
+    };
 }
 
 /** Cursor sits on an assignment operator. In a flow clause that is the end of it. */
@@ -832,11 +837,22 @@ function parseIdentLed(cursor: TokenCursor, diagnostics: Diagnostic[]): Expr | n
  * as the same call.
  */
 function parseNamespaced(root: string, cursor: TokenCursor, diagnostics: Diagnostic[], span: Span): Expr | null {
-    const hint = root === 'tv' ? "'tv' requires a member (tv.date.format(...) / tv.file.name)" : "'Math' requires a member (Math.floor(...))";
+    const hint = root === 'tv' ? "'tv' requires a member (tv.date.format(...) / tv.file.name)"
+        : root === STATE_NAMESPACE
+            ? "'state' requires a member (state.n, where n is a cell the command declares)"
+            : "'Math' requires a member (Math.floor(...))";
     if (!cursor.tryEat('dot')) {
         diagnostics.push(error('expr.namespace-needs-member', hint, span, { name: root }));
         return null;
     }
+
+    // The cells the command declared, folded away as they are read: `state.n`
+    // becomes the name `n` carrying a mark for how it was written. Everything
+    // past the parse goes on working in names — the evaluator, the store that
+    // carries a value to the next instance — and what the fold must not lose
+    // is the mark, which is what makes a cell checkable against the command
+    // rather than against the scope.
+    if (root === STATE_NAMESPACE) return parseCellRef(cursor, diagnostics, span);
 
     // `tv` has one more level; `Math` holds its functions directly.
     let group = root;
@@ -885,6 +901,33 @@ function parseNamespaced(root: string, cursor: TokenCursor, diagnostics: Diagnos
         return null;
     }
     return parseCall(resolved as FnName, spanBetween(span, tokenSpan(member)), cursor, diagnostics);
+}
+
+/**
+ * `state.n` — the cell `n`, wherever a value or an assignment target may go.
+ *
+ * Refused in the flow profile at the point it is written. A clause runs at
+ * schedule time, before the block the cells belong to has said anything, so a
+ * cell read there would answer with the value of a generation that has not
+ * happened. The block is where a cell means something.
+ */
+function parseCellRef(cursor: TokenCursor, diagnostics: Diagnostic[], rootSpan: Span): Expr | null {
+    const member = cursor.peek();
+    if (member.kind !== 'ident') {
+        diagnostics.push(error('expr.expected-member', 'Expected a name after the dot', tokenSpan(member)));
+        return null;
+    }
+    cursor.next();
+    const span = spanBetween(rootSpan, tokenSpan(member));
+
+    if (profile === 'flow') {
+        diagnostics.push(error('expr.cell-not-here',
+            'A cell is read in the generation block, not in a command clause',
+            span, { name: member.text }));
+        return null;
+    }
+
+    return { kind: 'var', name: member.text, span, via: STATE_NAMESPACE };
 }
 
 function parseCall(fn: FnName, fnSpan: Span, cursor: TokenCursor, diagnostics: Diagnostic[]): Expr | null {
