@@ -133,6 +133,26 @@ describe('a cell travels from one generation to the next', () => {
             .toEqual({ type: 'string', value: '- [ ] a\n- [ ] b' });
     });
 
+    it('writes one line when the value came from a template written over two', async () => {
+        // join とは別の入口。エスケープを 1 つも書かずに改行が値へ入る形で、
+        // 通る関数は同じでもピンの言葉としては別のもの。
+        const written = await fire(
+            '- [x] 記録 @2026-08-17 ==> every mon let(prev: "") use("記録")',
+            {
+                記録: block('記録', [
+                    '<js',
+                    'prev = `one',
+                    'two`',
+                    '/js>',
+                    '- [ ] 記録 @${start}',
+                ]),
+            });
+        expect(written.fired).toBe(true);
+        expect(written.parentLine.split('\n')).toHaveLength(1);
+        expect(TaskParser.parse(written.parentLine, FILE, 0)!.flow!.program!.cells!.entries[0].value)
+            .toEqual({ type: 'string', value: 'one\ntwo' });
+    });
+
     it('carries a cell no block ever reads', async () => {
         // use() の無いコマンドは評価する物を持たない。宣言された値がその
         // まま次インスタンスへ運ばれる。
