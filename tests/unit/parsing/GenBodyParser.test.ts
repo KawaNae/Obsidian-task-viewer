@@ -116,13 +116,32 @@ describe('parseGenBody — diagnostics', () => {
 
     // セクションのソースは行をまたぐので、文字オフセットを行に写す必要がある。
     it('puts a diagnostic from inside the section on its own line', () => {
-        expect(codes([
+        const found = parse([
             '<js',
             'let n = 1',
             'var m = 2',
             '/js>',
             '- [ ] 週報',
-        ])).toEqual([['stmt.no-var', 3]]);
+        ]).diagnostics;
+        expect(found.map(d => [d.code, d.line])).toEqual([['stmt.no-var', 3]]);
+        expect(found[0].endLine).toBeUndefined();
+    });
+
+    // セクションは複数行なので、span が行をまたぐことがある。両端を運ぶ
+    // （開始行へ寄せて切り詰めると、あとで行ごとに切り直せない）。
+    it('carries both ends of a span that crosses lines', () => {
+        const found = parse([
+            '<js',
+            'let ok = false',
+            'if (ok =',
+            'true) { }',
+            '/js>',
+            '- [ ] 週報',
+        ]).diagnostics;
+        expect(found.map(d => [d.code, d.line, d.endLine]))
+            .toEqual([['stmt.assign-in-condition', 3, 4]]);
+        // 開始行の桁と終了行の桁。'if (' の後から 'true' の後まで。
+        expect(found[0].span).toEqual({ start: 4, end: 4 });
     });
 
     it('reports a section that never closes', () => {

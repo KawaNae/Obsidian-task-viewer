@@ -246,12 +246,13 @@ function readJsSection(
 }
 
 /**
- * Put a diagnostic measured in characters of `text` back on a page line.
+ * Put a diagnostic measured in characters of `text` back onto page lines.
  *
- * A span that runs past the end of its line is clamped to it. The section is
- * the first place a diagnostic can cover several lines at once, and the
- * decoration that can draw one arrives with the editor work; until then the
- * first line is where it points.
+ * The section is the first source that is more than one line, so a span can
+ * begin on one and end on another. Both ends are carried — `span.start` is a
+ * column on `line`, `span.end` a column on `endLine` — and the decorator cuts
+ * the run into one mark per line. Keeping both here rather than clamping to
+ * the first line is what lets it: a clamp cannot be undone later.
  */
 function lineLocator(text: string, firstLine: number): (d: Diagnostic) => LocatedDiagnostic {
     const lines = text.split('\n');
@@ -261,14 +262,23 @@ function lineLocator(text: string, firstLine: number): (d: Diagnostic) => Locate
         starts.push(at);
         at += line.length + 1;
     }
-    return (d: Diagnostic): LocatedDiagnostic => {
+    /** Index of the line an offset falls on. */
+    const lineAt = (offset: number): number => {
         let index = 0;
-        while (index + 1 < starts.length && starts[index + 1] <= d.span.start) index++;
-        const start = d.span.start - starts[index];
+        while (index + 1 < starts.length && starts[index + 1] <= offset) index++;
+        return index;
+    };
+    return (d: Diagnostic): LocatedDiagnostic => {
+        const from = lineAt(d.span.start);
+        const to = Math.max(from, lineAt(Math.max(d.span.start, d.span.end - 1)));
         return {
             ...d,
-            span: { start, end: Math.min(d.span.end - starts[index], lines[index].length) },
-            line: firstLine + index,
+            span: {
+                start: d.span.start - starts[from],
+                end: Math.min(d.span.end - starts[to], lines[to].length),
+            },
+            line: firstLine + from,
+            ...(to > from ? { endLine: firstLine + to } : {}),
         };
     };
 }

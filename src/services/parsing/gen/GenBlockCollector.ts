@@ -22,6 +22,54 @@ export interface GenBlock {
 export interface LocatedDiagnostic extends Diagnostic {
     /** Absolute index of the line the span belongs to. */
     line: number;
+    /**
+     * Last line the span reaches, when it reaches past its first.
+     *
+     * A js section is the first source here that is more than one line, so a
+     * statement broken across two of them has a span that no single line
+     * holds. `span.start` is then a column on `line` and `span.end` a column
+     * on `endLine`. Absent means the two are the same, which is every
+     * diagnostic that came before the section existed.
+     *
+     * One diagnostic still means one problem. Cutting it into a mark per line
+     * is the decorator's job — doing it here would make the count of
+     * diagnostics stop matching the count of things wrong.
+     */
+    endLine?: number;
+}
+
+/**
+ * One diagnostic cut into the lines it covers, one piece per line.
+ *
+ * For whoever draws it: a mark is a range on a line, and a span that begins
+ * on one line and ends on another is not one. The cut is here rather than in
+ * the parser so that the count of diagnostics stays the count of things
+ * wrong — and so that every covered line carries its own piece, which is what
+ * keeps a continuation line underlined when the line the span began on has
+ * scrolled out of view.
+ *
+ * `lineLength` answers for the lines in between, whose piece is the whole
+ * line. A single-line diagnostic comes back as itself.
+ */
+export function spreadOverLines(
+    d: LocatedDiagnostic,
+    lineLength: (line: number) => number
+): LocatedDiagnostic[] {
+    const last = d.endLine ?? d.line;
+    if (last <= d.line) return [d];
+    const pieces: LocatedDiagnostic[] = [];
+    for (let line = d.line; line <= last; line++) {
+        pieces.push({
+            ...d,
+            line,
+            endLine: undefined,
+            span: {
+                start: line === d.line ? d.span.start : 0,
+                end: line === last ? d.span.end : lineLength(line),
+            },
+        });
+    }
+    return pieces;
 }
 
 export interface GenBlockScan {

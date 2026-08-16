@@ -560,7 +560,12 @@ function checkListPlainMethod(
     for (let i = 0; i < args.length; i++) {
         const at = checkExpr(args[i], env, diagnostics, bindings);
         if (at === 'error') return 'error';
-        if (!isAssignable(at, sig.params[i])) {
+        // A list method's parameters are typed from its receiver, so an empty
+        // receiver narrows them to `none` and would refuse the very thing that
+        // fills it: `let xs = []` then `xs.concat(["a"])`. The two only have
+        // to meet, which is the unification a list literal already uses on its
+        // own elements.
+        if (!isAssignable(at, sig.params[i]) && unifyTypes(sig.params[i], at) === null) {
             return fail('type.member-arg',
                 `'${name}' expects ${typeName(sig.params[i])} for argument ${i + 1}, got ${typeName(at)}`,
                 { name, index: i + 1, expected: typeName(sig.params[i]), actual: typeName(at) }, args[i].span);

@@ -1,5 +1,9 @@
 import { describe, it, expect } from 'vitest';
-import { collectGenBlocks } from '../../../src/services/parsing/gen/GenBlockCollector';
+import {
+    collectGenBlocks,
+    type LocatedDiagnostic,
+    spreadOverLines,
+} from '../../../src/services/parsing/gen/GenBlockCollector';
 
 const codes = (lines: string[]) =>
     collectGenBlocks(lines).diagnostics.map(d => [d.code, d.line]);
@@ -121,5 +125,44 @@ describe('collectGenBlocks', () => {
                 '```',
             ])).toEqual([['gen.indented-block', 1], ['gen.missing-name', 3]]);
         });
+    });
+});
+
+// 装飾は 1 行の範囲でしかない。行をまたぐ span を持てるのは js セクションが
+// 初めてなので、描く直前に行ごとへ切る。
+describe('spreadOverLines', () => {
+    const at = (line: number, start: number, end: number, endLine?: number): LocatedDiagnostic => ({
+        severity: 'error', code: 'x.y', message: 'm', line, endLine, span: { start, end },
+    });
+    const lengths = (line: number) => [10, 20, 30, 40][line] ?? 0;
+
+    it('leaves a diagnostic that fits one line alone', () => {
+        const one = at(1, 2, 5);
+        expect(spreadOverLines(one, lengths)).toEqual([one]);
+    });
+
+    it('cuts a two-line span at the line break', () => {
+        expect(spreadOverLines(at(1, 4, 7, 2), lengths).map(p => [p.line, p.span.start, p.span.end]))
+            .toEqual([[1, 4, 20], [2, 0, 7]]);
+    });
+
+    it('gives a line in the middle the whole of itself', () => {
+        expect(spreadOverLines(at(1, 4, 7, 3), lengths).map(p => [p.line, p.span.start, p.span.end]))
+            .toEqual([[1, 4, 20], [2, 0, 30], [3, 0, 7]]);
+    });
+
+    it('keeps the message on every piece, so any line can be hovered', () => {
+        const pieces = spreadOverLines(at(1, 4, 7, 3), lengths);
+        expect(pieces.map(p => [p.code, p.severity])).toEqual([
+            ['x.y', 'error'], ['x.y', 'error'], ['x.y', 'error'],
+        ]);
+    });
+
+    // 各ピースは自分の行だけを指す。開始行がビューポートの外へ出ても継続行の
+    // 下線が残るのは、ピースが別の行を参照しないから。
+    it('leaves no piece pointing at another line', () => {
+        for (const piece of spreadOverLines(at(1, 4, 7, 3), lengths)) {
+            expect(piece.endLine).toBeUndefined();
+        }
     });
 });

@@ -4,6 +4,7 @@ import { CodeFenceTracker } from '../utils/CodeFenceTracker';
 import {
     collectGenBlocks,
     type LocatedDiagnostic,
+    spreadOverLines,
 } from '../services/parsing/gen/GenBlockCollector';
 import { parseGenBody } from '../services/parsing/gen/GenBodyParser';
 import type { Diagnostic } from '../services/lang/Diagnostic';
@@ -138,10 +139,15 @@ export function createDiagnosticsExtension(): Extension {
 
         const { blocks, diagnostics } = collectGenBlocks(lines, scan);
         const gen = new Map<number, LocatedDiagnostic[]>();
+        // A js section is several lines, so a diagnostic can span more than
+        // one and a mark cannot. Cut into a piece per line before bucketing,
+        // so each covered line is decorated on its own terms.
         const bucket = (d: LocatedDiagnostic) => {
-            const at = gen.get(d.line);
-            if (at) at.push(d);
-            else gen.set(d.line, [d]);
+            for (const piece of spreadOverLines(d, line => lines[line]?.length ?? 0)) {
+                const at = gen.get(piece.line);
+                if (at) at.push(piece);
+                else gen.set(piece.line, [piece]);
+            }
         };
         diagnostics.forEach(bucket);
         for (const block of blocks.values()) {
