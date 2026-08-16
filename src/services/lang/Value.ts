@@ -76,9 +76,25 @@ export type LangType = Value['type'];
 // Date string helpers (local time, matching DateUtils conventions)
 // ---------------------------------------------------------------------------
 
+/**
+ * A date built from a year this language computed.
+ *
+ * `new Date(y, ...)` maps a two-digit year onto 1900 + y, and the years here
+ * are four digits: `0026` is the year 26 and not 1926. Every construction from
+ * a year that arithmetic could have produced goes through this, so the shift
+ * cannot come back in one of them — it is silent where it happens and only
+ * visible much later, on a line that says a different century than the one
+ * that was written.
+ */
+export function dateAt(year: number, monthIndex: number, day: number): Date {
+    const date = new Date(year, monthIndex, day);
+    if (year >= 0 && year <= 99) date.setFullYear(year);
+    return date;
+}
+
 export function parseDateStr(s: string): Date {
     const [y, m, d] = s.split('-').map(n => parseInt(n, 10));
-    return new Date(y, m - 1, d);
+    return dateAt(y, m - 1, d);
 }
 
 export function formatDateStr(d: Date): string {
@@ -107,12 +123,21 @@ const WRITABLE_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 /**
  * Whether a date value can still be written down and read back.
  *
- * Asked of the printed shape rather than of the year, because being read back
- * is the whole of the rule: this is the same test the notation applies, so the
- * two cannot drift apart.
+ * Two readers have to agree with the printer, so both are asked. The notation
+ * on a task line takes four digits and nothing else, which is what refuses a
+ * year that overflowed into five or fell below zero. And what this language
+ * itself reads out of those four digits has to be the day that was written,
+ * which is a different question: a shape can be perfectly well formed and
+ * still be read as another date.
+ *
+ * Written as the property rather than as a shape, so that a change to either
+ * reader shows up here instead of quietly leaving the rule behind.
  */
 export function isWritableDatish(v: Value & { type: 'date' | 'datetime' }): boolean {
-    return WRITABLE_DATE_RE.test(v.type === 'date' ? v.value : v.date);
+    const printed = v.type === 'date' ? v.value : v.date;
+    if (!WRITABLE_DATE_RE.test(printed)) return false;
+    const read = parseDateStr(printed);
+    return Number.isFinite(read.getTime()) && formatDateStr(read) === printed;
 }
 
 function pad2(n: number): string {

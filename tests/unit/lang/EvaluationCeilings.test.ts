@@ -64,7 +64,19 @@ describe('a date that leaves the calendar stops the evaluation', () => {
         expect(run('today + 7000y')).toBe('wrote: - [ ] c 9026-08-16');
         // Padded, because the notation reads four digits and not fewer.
         expect(run('today - 2000y')).toBe('wrote: - [ ] c 0026-08-16');
+        expect(run('today - 1927y')).toBe('wrote: - [ ] c 0099-08-16');
         expect(run('done + 1d')).toBe('wrote: - [ ] c 2026-08-17T10:00');
+    });
+
+    it('reads a padded year as the year it wrote, not as a two-digit one', () => {
+        // JS maps a two-digit year onto 1900 + y. Padding alone would have
+        // turned a loud failure — `26-08-16` is not a date and gets swallowed
+        // by the title — into a silent one, a date off by nineteen centuries.
+        // Worse inside the language than on the page: this one reads, computes
+        // and writes back before any ceiling can look at it.
+        expect(run('startOf(year, today - 2000y)')).toBe('wrote: - [ ] c 0026-01-01');
+        expect(run('date(today - 2026y)')).toBe('wrote: - [ ] c 0000-08-16');
+        expect(run('(today - 2000y) + 1y')).toBe('wrote: - [ ] c 0027-08-16');
     });
 
     it('holds for every built-in that produces a date', () => {

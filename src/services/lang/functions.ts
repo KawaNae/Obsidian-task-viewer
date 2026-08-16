@@ -2,7 +2,7 @@ import { addDays, addMonths, addYears, differenceInCalendarDays } from 'date-fns
 import type { Span } from './Diagnostic';
 import type { Expr, FnName } from './ExprAst';
 import {
-    type DurUnit, type Value, WEEKDAY_NAMES, type Weekday, formatDateStr, isDatishValue, parseDateStr,
+    type DurUnit, type Value, WEEKDAY_NAMES, type Weekday, dateAt, formatDateStr, isDatishValue, parseDateStr,
     weekdayFromName,
 } from './Value';
 
@@ -336,7 +336,7 @@ function toGridMinutes(date: string, time: string): number {
 function fromGridMinutes(totalMin: number): Value & { type: 'datetime' } {
     const dayNumber = Math.floor(totalMin / 1440);
     const minOfDay = totalMin - dayNumber * 1440;
-    const date = new Date(GRID_REF_DAY.getFullYear(), GRID_REF_DAY.getMonth(), GRID_REF_DAY.getDate() + dayNumber);
+    const date = dateAt(GRID_REF_DAY.getFullYear(), GRID_REF_DAY.getMonth(), GRID_REF_DAY.getDate() + dayNumber);
     const h = Math.floor(minOfDay / 60);
     const m = minOfDay % 60;
     return {
@@ -352,15 +352,15 @@ function startOf(unit: string, d: Date, weekStartDay: 0 | 1): Date {
             const back = (d.getDay() - weekStartDay + 7) % 7;
             return addDays(d, -back);
         }
-        case 'month': return new Date(d.getFullYear(), d.getMonth(), 1);
-        default: return new Date(d.getFullYear(), 0, 1);
+        case 'month': return dateAt(d.getFullYear(), d.getMonth(), 1);
+        default: return dateAt(d.getFullYear(), 0, 1);
     }
 }
 
 function endOf(unit: string, d: Date, weekStartDay: 0 | 1): Date {
     switch (unit) {
         case 'week': return addDays(startOf('week', d, weekStartDay), 6);
-        case 'month': return new Date(d.getFullYear(), d.getMonth() + 1, 0);
-        default: return new Date(d.getFullYear(), 11, 31);
+        case 'month': return dateAt(d.getFullYear(), d.getMonth() + 1, 0);
+        default: return dateAt(d.getFullYear(), 11, 31);
     }
 }

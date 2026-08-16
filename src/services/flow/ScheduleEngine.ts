@@ -1,7 +1,7 @@
 import { addMonths } from 'date-fns';
 import { type EvalContext, EvalError, evalExpr } from '../lang/ExprEvaluator';
 import { nextCycle, nextWeekdayAfter } from '../lang/functions';
-import { addDuration, formatDateStr, isDatishValue, isWritableDatish, parseDateStr } from '../lang/Value';
+import { addDuration, dateAt, formatDateStr, isDatishValue, isWritableDatish, parseDateStr } from '../lang/Value';
 import type { EveryRule, ScheduleNode } from './FlowAst';
 
 /** The task's primary date (start > end > due priority), if any. */
@@ -105,12 +105,12 @@ function nextGridOccurrence(rule: EveryRule, anchor: DateAnchor | null, rt: Sche
 
         case 'monthday': {
             const baseDate = parseDateStr(anchor?.date ?? rt.today);
-            const baseMonthStart = new Date(baseDate.getFullYear(), baseDate.getMonth(), 1);
+            const baseMonthStart = dateAt(baseDate.getFullYear(), baseDate.getMonth(), 1);
             for (let k = 0; k <= MAX_GRID_STEPS; k++) {
                 const month = addMonths(baseMonthStart, k * rule.intervalMonths);
-                const lastDay = new Date(month.getFullYear(), month.getMonth() + 1, 0).getDate();
+                const lastDay = dateAt(month.getFullYear(), month.getMonth() + 1, 0).getDate();
                 const day = rule.day === 'last' ? lastDay : Math.min(rule.day, lastDay);
-                const s = formatDateStr(new Date(month.getFullYear(), month.getMonth(), day));
+                const s = formatDateStr(dateAt(month.getFullYear(), month.getMonth(), day));
                 if (s > lowerBound) return { date: s };
             }
             throw new EvalError('Recurrence grid overflow', { start: 0, end: 0 });
