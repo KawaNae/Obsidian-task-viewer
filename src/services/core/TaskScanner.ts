@@ -154,6 +154,19 @@ export class TaskScanner {
             statusDefinitions: this.settings.statusDefinitions,
         });
 
+        // What this scan decided, which is the first question a report of a
+        // task generated twice has to answer: two scans of one change that
+        // each fired, or one scan that fired twice.
+        //
+        // It cannot answer a third shape — a pipeline that outlived its index
+        // and kept scanning — because each load of the plugin gets its own
+        // copy of this module and therefore its own log. The count of live
+        // listeners is the only thing that sees those, and it is read from the
+        // console rather than from here.
+        if (!this.isInitializing) {
+            logDebug(`[scan] file=${file.path} isLocal=${isLocalChange} fired=${tasksToTrigger.length}`);
+        }
+
         // --- commit (batched: 1 file = 1 revision bump) ---
         this.store.beginBatch();
         try {
