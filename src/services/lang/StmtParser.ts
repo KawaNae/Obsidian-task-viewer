@@ -4,6 +4,7 @@ import { parseExpr } from './ExprParser';
 import { tokenize } from './Lexer';
 import type { BindTarget, Program, Stmt } from './StmtAst';
 import { TokenCursor, tokenSpan } from './Token';
+import { lookupWord } from './WordTable';
 
 /**
  * Statement parser for the js section.
@@ -125,7 +126,7 @@ function parseStmt(cursor: TokenCursor, diagnostics: Diagnostic[]): Stmt | null 
     const t = cursor.peek();
 
     if (t.kind === 'ident') {
-        const refused = REFUSED_STMT[t.text];
+        const refused = lookupWord(REFUSED_STMT, t.text);
         if (refused) {
             diagnostics.push(error(refused.code, refused.message, tokenSpan(t), { name: t.text }));
             return null;
