@@ -245,7 +245,7 @@ export interface Features {
     //    the comparison, because only accepted sources are compared.
 }
 
-export function detectFeatures(expr: Expr): Features {
+export function detectFeatures(expr: Expr, bindings: Bindings = VAR_TYPES): Features {
     const f: Features = {
         decimalGrid: false,
         decimalStep: false,
@@ -255,7 +255,7 @@ export function detectFeatures(expr: Expr): Features {
         strictEq: false,
     };
     const marks = { decimal: false, step: false };
-    walk(expr, f, marks);
+    walk(expr, f, marks, bindings);
     if (marks.decimal) {
         if (marks.step) f.decimalStep = true;
         else f.decimalGrid = true;
@@ -307,7 +307,7 @@ const STEP_OPS = new Set(['%', '==', '!=', '<', '<=', '>', '>=']);
 const STEP_FNS = new Set(['Math.floor', 'Math.ceil', 'Math.round']);
 const STEP_METHODS = new Set(['toFixed', 'slice', 'padStart']);
 
-function walk(expr: Expr, f: Features, marks: { decimal: boolean; step: boolean }): void {
+function walk(expr: Expr, f: Features, marks: { decimal: boolean; step: boolean }, bindings: Bindings): void {
     switch (expr.kind) {
         case 'lit':
             if (['date', 'datetime', 'time', 'duration', 'link'].includes(expr.value.type)) f.domain = true;
@@ -316,59 +316,67 @@ function walk(expr: Expr, f: Features, marks: { decimal: boolean; step: boolean 
         case 'prop':
             if (DOMAIN_PROPS.has(expr.name)) f.domain = true;
             return;
-        case 'unary': return walk(expr.operand, f, marks);
+        case 'unary': return walk(expr.operand, f, marks, bindings);
         case 'binary': {
             if (STEP_OPS.has(expr.op)) marks.step = true;
             if (expr.op === '==' || expr.op === '!=') {
-                const lt = staticTypeOf(expr.left);
-                const rt = staticTypeOf(expr.right);
+                const lt = staticTypeOf(expr.left, bindings);
+                const rt = staticTypeOf(expr.right, bindings);
                 const container = (t: StaticType) => typeof t === 'object';
-                // An unknown side decides nothing. A subtree typed on its own
-                // is unknown whenever a name is bound by something outside it
-                // — a callback's parameter, a loop variable, a local of the
-                // section — and calling that the deviation would exclude
-                // every comparison written inside a loop. The comparison this
-                // language accepted is one it considers well-typed, so a
-                // mismatch cannot be hiding here; what can is the container
-                // case and the datish case, and those are claimed below and
-                // by `domain`.
+                // An unknown side decides nothing.
+                //
+                // A subtree typed on its own is unknown whenever a name comes
+                // from outside it — a callback's parameter, a loop variable —
+                // and the old reading called that the deviation, which took
+                // every comparison written inside a loop out of the net.
+                //
+                // The choice is between two ways of being wrong, and they are
+                // not symmetric. Calling unknown a deviation shrinks the net
+                // and says nothing; calling it comparable can only produce a
+                // red line, and a red line gets read. Loud beats quiet.
+                //
+                // Not "an accepted comparison must be well-typed" — that is
+                // false twice over. `checkExpr` short-circuits on an unknown
+                // operand before it ever judges the comparison, so acceptance
+                // means it did not look; and the sweep does not type-check
+                // every expression it runs either.
                 const unknown = lt === 'error' || rt === 'error';
                 if (!unknown && (container(lt) || container(rt) || lt !== rt)) {
                     f.strictEq = true;
                 }
             }
-            walk(expr.left, f, marks);
-            walk(expr.right, f, marks);
+            walk(expr.left, f, marks, bindings);
+            walk(expr.right, f, marks, bindings);
             return;
         }
         case 'cond':
-            walk(expr.cond, f, marks); walk(expr.then, f, marks); walk(expr.else, f, marks);
+            walk(expr.cond, f, marks, bindings); walk(expr.then, f, marks, bindings); walk(expr.else, f, marks, bindings);
             return;
         case 'call':
             if (isDomainFn(expr.fn)) f.domain = true;
             if (STEP_FNS.has(expr.fn)) marks.step = true;
-            expr.args.forEach(arg => walk(arg, f, marks));
+            expr.args.forEach(arg => walk(arg, f, marks, bindings));
             return;
         case 'member':
-            return walk(expr.obj, f, marks);
+            return walk(expr.obj, f, marks, bindings);
         case 'method':
             if (STEP_METHODS.has(expr.name)) marks.step = true;
-            walk(expr.obj, f, marks);
-            expr.args.forEach(arg => walk(arg, f, marks));
+            walk(expr.obj, f, marks, bindings);
+            expr.args.forEach(arg => walk(arg, f, marks, bindings));
             return;
         case 'index':
-            walk(expr.obj, f, marks); walk(expr.index, f, marks);
+            walk(expr.obj, f, marks, bindings); walk(expr.index, f, marks, bindings);
             return;
         case 'var': return;
-        case 'assign': return walk(expr.value, f, marks);
-        case 'call-local': return expr.args.forEach(arg => walk(arg, f, marks));
+        case 'assign': return walk(expr.value, f, marks, bindings);
+        case 'call-local': return expr.args.forEach(arg => walk(arg, f, marks, bindings));
         case 'arrow':
             // A block body's statements are walked by the caller that has
             // them; from here only an expression body is reachable.
-            return isExprBody(expr.body) ? walk(expr.body, f, marks) : undefined;
-        case 'array': return expr.items.forEach(item => walk(item, f, marks));
-        case 'record': return expr.entries.forEach(e => walk(e.value, f, marks));
-        case 'spread': return walk(expr.arg, f, marks);
+            return isExprBody(expr.body) ? walk(expr.body, f, marks, bindings) : undefined;
+        case 'array': return expr.items.forEach(item => walk(item, f, marks, bindings));
+        case 'record': return expr.entries.forEach(e => walk(e.value, f, marks, bindings));
+        case 'spread': return walk(expr.arg, f, marks, bindings);
         case 'template':
             for (const part of expr.parts) {
                 if (part.kind === 'text') {
@@ -378,7 +386,7 @@ function walk(expr: Expr, f: Features, marks: { decimal: boolean; step: boolean 
                     // source mean two different strings.
                     if (part.text.includes('\\') || part.text.includes('${')) f.domain = true;
                 } else {
-                    walk(part.expr, f, marks);
+                    walk(part.expr, f, marks, bindings);
                 }
             }
             return;
@@ -386,9 +394,9 @@ function walk(expr: Expr, f: Features, marks: { decimal: boolean; step: boolean 
 }
 
 /** The static type of a subtree, for the equality predicate. 'error' when it cannot be known alone. */
-export function staticTypeOf(expr: Expr): StaticType {
+export function staticTypeOf(expr: Expr, bindings: Bindings = VAR_TYPES): StaticType {
     const scratch: Diagnostic[] = [];
-    return checkExpr(expr, FLOW_TYPE_ENV, scratch, VAR_TYPES);
+    return checkExpr(expr, FLOW_TYPE_ENV, scratch, bindings);
 }
 
 // ---------------------------------------------------------------------------
@@ -437,11 +445,11 @@ export function expressionsOf(body: Stmt[]): Expr[] {
 }
 
 /** The deviations a whole program touches, folded from its expressions. */
-export function detectProgramFeatures(body: Stmt[], read: Expr): Features {
+export function detectProgramFeatures(body: Stmt[], read: Expr, bindings: Bindings = VAR_TYPES): Features {
     const all = [...expressionsOf(body), read];
-    const folded = detectFeatures(read);
+    const folded = detectFeatures(read, bindings);
     for (const expr of all) {
-        const f = detectFeatures(expr);
+        const f = detectFeatures(expr, bindings);
         folded.decimalGrid ||= f.decimalGrid;
         folded.decimalStep ||= f.decimalStep;
         folded.divisionRoot ||= f.divisionRoot;

@@ -21,6 +21,23 @@ export class EvalError extends Error {
     }
 }
 
+/**
+ * A ceiling was reached: the evaluation budget, or the depth of open calls.
+ *
+ * An `EvalError`, so the two-phase handling is unchanged — nothing is written
+ * and the command is not consumed. Its own class so a caller that needs to
+ * tell "this did not finish" from "this went wrong" can ask the type instead
+ * of matching on the sentence. The differential sweep is that caller: it runs
+ * this language before native JS precisely so a corpus source that never ends
+ * fails here rather than hanging where there is no budget at all, and a
+ * signal made of English comes apart the next time the message is reworded.
+ *
+ * Declared beside `EvalError` rather than beside the ceilings that throw it:
+ * the two evaluator modules import each other, and a class that extends
+ * across that circle would be reading a binding that is not initialized yet.
+ */
+export class BudgetError extends EvalError { }
+
 export interface EvalContext extends EvalRuntime {
     /** Property snapshot the expression evaluates against. */
     props: Partial<Record<PropName, Value>>;

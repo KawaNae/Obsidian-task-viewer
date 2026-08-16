@@ -1,6 +1,6 @@
 import type { Span } from './Diagnostic';
 import type { ArrowBlockBody, Expr } from './ExprAst';
-import { type EvalContext, EvalError, evalExpr } from './ExprEvaluator';
+import { BudgetError, type EvalContext, EvalError, evalExpr } from './ExprEvaluator';
 import type { BindTarget, Program, Stmt } from './StmtAst';
 import type { Value } from './Value';
 
@@ -139,7 +139,7 @@ export function callFunction(def: FnDef, args: Value[], ctx: EvalContext, span: 
     // back into one, far below where the host would give up.
     if (fuel) {
         if (fuel.depth >= MAX_CALL_DEPTH) {
-            throw new EvalError(
+            throw new BudgetError(
                 `This went ${MAX_CALL_DEPTH} calls deep — a function here is calling itself with no way out`,
                 span);
         }
@@ -193,7 +193,7 @@ export function execArrowBody(body: ArrowBlockBody, ctx: EvalContext): Value {
 export function burn(ctx: EvalContext, span: Span): void {
     if (!ctx.fuel) return;
     if (ctx.fuel.left <= 0) {
-        throw new EvalError('This block did not finish — it ran past what one generation is allowed to compute', span);
+        throw new BudgetError('This block did not finish — it ran past what one generation is allowed to compute', span);
     }
     ctx.fuel.left--;
 }
