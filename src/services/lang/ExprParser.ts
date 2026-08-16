@@ -37,6 +37,15 @@ const REFUSED_EXPR_NAMES: Record<string, { code: string; message: string }> = {
 };
 
 /**
+ * The same names as a set, for the editor.
+ *
+ * Derived from the table rather than written twice: a word painted as refused
+ * has to be a word this parser refuses, and the day the two lists disagree is
+ * the day a colour says the opposite of the squiggle beside it.
+ */
+export const REFUSED_EXPR_KEYWORDS: ReadonlySet<string> = new Set(Object.keys(REFUSED_EXPR_NAMES));
+
+/**
  * Which surface an expression is being read for. One grammar, profiles apart:
  * a flow command is a single expression that has to print back to canonical
  * source, while a generation block is verbatim and may use the wider forms.
