@@ -1,10 +1,9 @@
 import { type Diagnostic, type Span, error } from './Diagnostic';
 import {
-    type BinaryOp, type Expr, FN_NAMES, type FnName, type InterpolationPart,
-    type InterpolationSeam, LITERAL_WORDS,
+    type BinaryOp, type Expr, FN_NAMES, type FnName, type InterpolationPart, LITERAL_WORDS,
     NAMESPACE_WORDS, PROP_NAMES, type PropName, UNIT_KEYWORDS,
 } from './ExprAst';
-import { findInterpolationEnd, splitDurationText, tokenize } from './Lexer';
+import { scanInterpolations, splitDurationText, tokenize } from './Lexer';
 import { looksLikeRecord, parseArrowBlockBody } from './StmtParser';
 import { type Token, type TokenKind, TokenCursor, tokenSpan } from './Token';
 import { weekdayFromName } from './Value';
@@ -931,55 +930,43 @@ function normalizeTime(text: string): string {
  * Everything that goes wrong is reported — a line with two broken
  * interpolations says so twice rather than stopping at the first.
  *
- * `seams` is filled with every `${` this finds, parsed or not, for a reader
- * that has to describe the line rather than run it. Collected here rather
- * than scanned for again elsewhere: where an interpolation begins is one
- * question, and a backslash before the brace is the only answer to it.
+ * Where the interpolations are is not decided here. `scanInterpolations`
+ * says that, for this and for whoever else has to ask, and what is left for
+ * this function is the part that needs a parser.
  */
 export function splitInterpolations(
     text: string,
     diagnostics: Diagnostic[],
     offset = 0,
-    forProfile: ParseProfile = 'block',
-    seams?: InterpolationSeam[]
+    forProfile: ParseProfile = 'block'
 ): InterpolationPart[] {
     const parts: InterpolationPart[] = [];
-    let literal = '';
-    const flushLiteral = () => {
+    let at = 0;
+    // The backslash of an escaped brace has done its work by now: the scan
+    // read it and refused to open an interpolation there, and the text keeps
+    // the braces without it.
+    const pushText = (from: number, to: number) => {
+        const literal = text.slice(from, to).replaceAll('\\${', '${');
         if (literal !== '') parts.push({ kind: 'text', text: literal });
-        literal = '';
     };
-    let i = 0;
 
-    while (i < text.length) {
-        if (text[i] !== '$' || text[i + 1] !== '{') { literal += text[i]; i++; continue; }
-        // A backslash immediately before makes the `${` literal, and is the
-        // only thing a backslash ever does here: everywhere else it is an
-        // ordinary character, so a Windows path can be written as it is.
-        if (literal.endsWith('\\')) {
-            literal = literal.slice(0, -1) + '${';
-            i += 2;
-            continue;
-        }
-        const end = findInterpolationEnd(text, i);
-        if (end === -1) {
-            seams?.push({ span: { start: offset + i, end: offset + i + 2 }, closed: false });
+    for (const seam of scanInterpolations(text, offset)) {
+        const open = seam.span.start - offset;
+        pushText(at, open);
+        if (!seam.closed) {
             diagnostics.push(error('gen.unterminated-interpolation',
                 "Unterminated '${' — the closing brace is missing",
-                { start: offset + i, end: offset + text.length }));
-            break;
+                { start: seam.span.start, end: offset + text.length }));
+            return parts;
         }
-        flushLiteral();
+        const close = seam.span.end - offset - 1;
+        const source = text.slice(open + 2, close);
+        const expr = parseWholeExpr(source, seam.span.start + 2, seam.span, diagnostics, forProfile);
+        if (expr) parts.push({ kind: 'expr', expr, span: seam.span });
 
-        const source = text.slice(i + 2, end);
-        const span = { start: offset + i, end: offset + end + 1 };
-        seams?.push({ span, closed: true });
-        const expr = parseWholeExpr(source, offset + i + 2, span, diagnostics, forProfile);
-        if (expr) parts.push({ kind: 'expr', expr, span });
-
-        i = end + 1;
+        at = close + 1;
     }
-    flushLiteral();
+    pushText(at, text.length);
     return parts;
 }
 

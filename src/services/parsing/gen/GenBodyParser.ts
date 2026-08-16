@@ -1,9 +1,10 @@
 import { type Diagnostic, error, warning } from '../../lang/Diagnostic';
-import type { InterpolationPart, InterpolationSeam } from '../../lang/ExprAst';
+import type { InterpolationPart } from '../../lang/ExprAst';
 import {
     type Bindings, FLOW_TYPE_ENV, NO_BINDINGS, type VarBinding, checkExpr,
 } from '../../lang/ExprChecker';
 import { nestingOverflow, splitInterpolations } from '../../lang/ExprParser';
+import { type InterpolationSeam, scanInterpolations } from '../../lang/Lexer';
 import type { StaticType } from '../../lang/functions';
 import type { Program } from '../../lang/StmtAst';
 import { checkProgram } from '../../lang/StmtChecker';
@@ -204,15 +205,14 @@ function readGenBody(body: string[], firstLine: number, cells?: GenCellTypes): G
         // the editor puts them, so the interpolations carry the indent.
         const text = raw.trimStart();
         const lineDiagnostics: Diagnostic[] = [];
-        const seams: InterpolationSeam[] = [];
-        const parts = splitInterpolations(text, lineDiagnostics, indent.length, 'block', seams);
+        const parts = splitInterpolations(text, lineDiagnostics, indent.length);
         for (const d of lineDiagnostics) diagnostics.push({ ...d, line });
 
         lines.push({
             depth: indentDepth(indent),
             text,
             parts,
-            seams,
+            seams: scanInterpolations(text, indent.length),
             indent: indent.length,
             line,
         });
