@@ -12,6 +12,7 @@ import type { GenBlock } from '../parsing/gen/GenBlockCollector';
 import { parseGenBody } from '../parsing/gen/GenBodyParser';
 import { renderGenBody } from '../parsing/gen/GenBodyRenderer';
 import { TaskParser } from '../parsing/TaskParser';
+import { formatDateBlock } from '../parsing/tv-inline/DateBlockFormat';
 import type { GeneratedChild } from '../persistence/TaskCloner';
 import { type FlowProgram, SET_FIELD_ORDER, isCellValue } from './FlowAst';
 import type { FlowEffect } from './FlowEffects';
@@ -489,6 +490,11 @@ function buildEvalContext(task: Task, deps: FlowPlanDeps): EvalContext {
         // so day-granular offsets don't smear the completion time onto tasks.
         done: { type: 'datetime', date: deps.now.date, time: deps.now.time },
         today: { type: 'date', value: deps.today },
+        // The whole date block, built where the line formatter builds it. A
+        // block that writes the next instance is the only author of its line,
+        // so `@${start}` is how an end and a due disappear without a word;
+        // this is the one string that carries all of them.
+        dates: { type: 'string', value: formatDateBlock(task) },
     };
     if (task.startDate) props.start = datish(task.startDate, task.startTime);
     if (task.endDate) props.end = datish(task.endDate, task.endTime);
