@@ -1,6 +1,5 @@
 import { type Diagnostic, type Span, error, warning } from '../lang/Diagnostic';
 import type { Expr } from '../lang/ExprAst';
-import { isReservedName } from '../lang/ExprChecker';
 import { nestingOverflow, parseExpr } from '../lang/ExprParser';
 import { splitDurationText, tokenize } from '../lang/Lexer';
 import { type Token, TokenCursor, tokenSpan } from '../lang/Token';

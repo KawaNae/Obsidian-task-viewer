@@ -426,6 +426,13 @@ describe('FlowParser', () => {
             }
         });
 
+        it('takes state as a cell name too, since the namespace is the only way in', () => {
+            // 質問として上がった形（tv-xparse）。読むときは state.state で、
+            // 名前空間そのものと取り違えようが無い。禁じれば、衝突しない名前を
+            // 断る規則がまた 1 つ増える。認めた上でここに書いておく。
+            expect(errors('every mon state(state: 3)')).toEqual([]);
+        });
+
         it('refuses the same cell twice', () => {
             expect(errors('every mon state(n: 3, n: 4)')).toContain('flow.duplicate-cell');
         });

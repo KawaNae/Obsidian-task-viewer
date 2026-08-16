@@ -246,6 +246,11 @@ describe('parseGenBody — the cells the command declares', () => {
             .toEqual([['stmt.assign-type-change', 2]]);
     });
 
+    it('reads a cell called state, which is only reachable through the prefix', () => {
+        const named = new Map<string, StaticType>([['state', 'number']]);
+        expect(parseGenBody(['- [ ] 第${state.state}回'], 1, named).diagnostics).toEqual([]);
+    });
+
     it('lets a section declare the same name without touching the cell', () => {
         // 改名の眼目。セルはスコープに居ないので、この宣言は隠していない。
         // 別物として普通に読み書きされ、セルは state.n のまま動き続ける。
