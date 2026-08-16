@@ -9,11 +9,6 @@ import { type Token, type TokenKind, TokenCursor, tokenSpan } from './Token';
 import { weekdayFromName } from './Value';
 import { lookupWord } from './WordTable';
 
-// Re-exported for the editor, which paints a word as a value only where this
-// parser makes one of it. The list itself lives with the rest of the language's
-// vocabulary.
-export { UNIT_KEYWORDS } from './ExprAst';
-
 /**
  * Properties written as one bare word.
  *

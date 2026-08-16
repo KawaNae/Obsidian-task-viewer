@@ -681,14 +681,23 @@ function isCellType(type: StaticType): boolean {
 }
 
 /**
- * Names the parser resolves before it ever looks for a binding. Shadowing one
- * is not an error — the built-in simply wins — but it is always a mistake.
+ * Names the parser can claim for itself, each in the position its word is
+ * written in: a property or a value word standing bare, a built-in function
+ * where the call's parenthesis follows it, `tv` and `Math` where a namespace
+ * opens. Shadowing one is not an error — the built-in wins wherever it is
+ * claimed — but it is always a mistake.
  *
- * Derived from what the parser resolves, rather than listed beside it. A list
- * would be a second description of the same rule, and what that allows is quiet
- * in both directions: a name missing from it can be declared and then never
- * read, and a name left in it after its built-in is gone refuses an ordinary
- * binding for a reason nobody can find.
+ * Reserved is therefore wider than resolved, and deliberately: a bare `format`
+ * is still read as a binding, so `let format = 1` can be declared and read and
+ * only never called, and the name is refused anyway rather than left to mean
+ * two things a paren apart. What the tests hold is the shape of that gap, so
+ * that widening it takes saying so.
+ *
+ * Derived from the vocabulary, rather than listed beside it. A list would be a
+ * second description of the same rule, and what that allows is quiet in both
+ * directions: a name missing from it can be declared and then never read, and a
+ * name left in it after its built-in is gone refuses an ordinary binding for a
+ * reason nobody can find.
  *
  * `isReservedName` is exported for the statement checker, which asks the same
  * question of `let` and `const`: what makes a shadowed name unreadable is the

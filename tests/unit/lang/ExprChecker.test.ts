@@ -4,7 +4,7 @@ import {
     FN_NAMES, LITERAL_WORDS, NAMESPACE_WORDS, PROP_NAMES, UNIT_KEYWORDS,
 } from '../../../src/services/lang/ExprAst';
 import { FLOW_TYPE_ENV, checkExpr, isReservedName } from '../../../src/services/lang/ExprChecker';
-import { parseExpr } from '../../../src/services/lang/ExprParser';
+import { REFUSED_EXPR_KEYWORDS, parseExpr } from '../../../src/services/lang/ExprParser';
 import { StaticType } from '../../../src/services/lang/functions';
 import { tokenize } from '../../../src/services/lang/Lexer';
 import { TokenCursor } from '../../../src/services/lang/Token';
@@ -150,22 +150,56 @@ describe('the built-in vocabulary is one description', () => {
     // ここで固定する。
 
     it('offers a type for every property the language declares', () => {
-        // 型が全域なので欠けはビルドが止める。余り（消した prop の型が残る）
-        // 側は型では見えないので、両方向をここで見る。
+        // 全域型なので、欠け（TS2741）も余り（余剰プロパティ検査の TS2353）も
+        // ビルドが止める。実測済みで、この一致を守っているのは型のほう。
+        // ここに残しているのは、型が Partial に戻された日の番人として。
         expect(Object.keys(FLOW_TYPE_ENV).sort()).toEqual([...PROP_NAMES].sort());
     });
 
-    it('reserves every word the parser resolves before a binding', () => {
-        const resolved = [
+    /**
+     * 名前 1 語を js セクションのプロファイルで読ませ、パーサがそれを束縛より
+     * 先に取ったかを見る。var ノードとして残れば束縛、そうでなければ（値・
+     * プロパティ・名前空間・拒否のどれであっても）先に取られた。
+     *
+     * 予約とは本来この問いのことなので、答えはパーサに聞く。RESERVED_NAMES の
+     * 定義式をここで組み直すと、式を書き換えたとき期待値も一緒に動いて何も
+     * 固定できない。
+     */
+    function claimedBeforeBinding(name: string): boolean {
+        const { tokens, diagnostics } = tokenize(name);
+        const expr = parseExpr(new TokenCursor(tokens), diagnostics, 'stmt');
+        return expr === null || expr.kind !== 'var';
+    }
+
+    /** 予約なのにパーサが取らない語。括弧が続く位置でだけ呼び出しになる。 */
+    const RESERVED_BUT_LEFT_AS_A_BINDING = ['format', 'next', 'startOf', 'endOf', 'nextCycle', 'date', 'time'];
+
+    /** パーサは取るのに予約でない語。拒否表が束縛を探すより先に当たる。 */
+    const CLAIMED_BUT_NOT_RESERVED = ['new', 'Date', 'console', 'function', 'await', 'typeof', 'delete'];
+
+    it('reserves what the parser claims, apart from two gaps it does not close yet', () => {
+        const vocabulary = [...new Set([
             ...Object.keys(LITERAL_WORDS),
             ...UNIT_KEYWORDS,
             ...PROP_NAMES.map(p => p.split('.')[0]),
             ...FN_NAMES.map(f => f.split('.')[0]),
             ...NAMESPACE_WORDS,
-        ];
-        for (const name of resolved) {
-            expect({ name, reserved: isReservedName(name) }).toEqual({ name, reserved: true });
-        }
+            ...REFUSED_EXPR_KEYWORDS,
+            // 対照。曜日はフロー記法だけの語で、js セクションでは普通の名前。
+            'mon', 'n', 'label', 'startTime',
+        ])];
+        const claimed = vocabulary.filter(word => claimedBeforeBinding(word));
+        const reserved = vocabulary.filter(word => isReservedName(word));
+
+        // 予約と解決は一致しているべきで、いま一致していない 2 群がこれ。
+        // 裸の関数名は var のまま残るので、警告文の this binding cannot be
+        // read はその位置では偽になる。拒否語のほうは、予約でないためセル名に
+        // 使えてしまい、読んだ瞬間にブロック内で無関係な苦情になる。どちらも
+        // 旧実装から変わっていない既存のずれで、解消は別 PR の題。
+        expect(reserved.filter(word => !claimed.includes(word)).sort())
+            .toEqual([...RESERVED_BUT_LEFT_AS_A_BINDING].sort());
+        expect(claimed.filter(word => !reserved.includes(word)).sort())
+            .toEqual([...CLAIMED_BUT_NOT_RESERVED].sort());
     });
 
     it('reserves nothing else', () => {
