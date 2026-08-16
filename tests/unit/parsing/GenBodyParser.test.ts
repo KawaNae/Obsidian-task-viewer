@@ -233,4 +233,19 @@ describe('parseGenBody — the cells the command declares', () => {
         expect(cellCodes(['<js', 'let n = 0', '/js>', '- [ ] 第${n}回']))
             .toEqual([['stmt.shadows-cell', 2]]);
     });
+
+    it('names a callback parameter that hides a cell', () => {
+        // コールバックの引数は自分で束縛するので、宣言の経路に乗らない。
+        expect(cellCodes(['<js', 'const xs = [1, 2].map(n => n + 1)', '/js>', '- [ ] 週報']))
+            .toEqual([['stmt.shadows-cell', 2]]);
+    });
+
+    it('refuses a value that could never be printed back', () => {
+        // 実行時のガードは残る（型が unknown に広がる経路があるため）。
+        // 書いている時点で決まるものは、書いている時点で言う。
+        expect(cellCodes(['<js', 'n = [1, 2]', '/js>', '- [ ] 週報']))
+            .toEqual([['type.cell-not-storable', 2]]);
+        expect(cellCodes(['<js', 'n = {a: 1}', '/js>', '- [ ] 週報']))
+            .toEqual([['type.cell-not-storable', 2]]);
+    });
 });

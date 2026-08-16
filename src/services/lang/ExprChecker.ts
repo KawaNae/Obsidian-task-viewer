@@ -381,6 +381,20 @@ function checkAssign(
             target.type, value, diagnostics);
     if (result === 'error' || target.type === 'error') return result;
 
+    // A cell is printed back into the command, so a value that has no written
+    // form ends the fire. The write-back checks that too — it has to, since a
+    // type that widened to unknown gets here saying nothing — but a reader who
+    // is told only at fire time is told by a task that does not fire and says
+    // nothing about why. What is decidable while it is being written is said
+    // while it is being written.
+    if (target.cell && !isCellType(result)) {
+        diagnostics.push(error('type.cell-not-storable',
+            `A cell holds a number, string, bool, date, time, duration or link — '${expr.name}' holds ${typeName(result)}`,
+            expr.span, { name: expr.name, actual: typeName(result) }));
+        target.type = 'error';
+        return 'error';
+    }
+
     // The same unification a list literal uses on its elements, for the same
     // reason: `none` is the bottom, so `let xs = []` takes the shape of the
     // first real list written into it and an empty start costs nothing.
@@ -614,6 +628,16 @@ function checkCallback(
                 `'${p}' already means something here — the built-in wins and this parameter cannot be read`,
                 arg.span, { name: p }));
         }
+        // A warning, like every other way of hiding a cell: the parameter is
+        // read normally, and what is lost is only the writing — an assignment
+        // inside the body reaches the parameter and never the state. Said here
+        // because a callback binds its parameters itself rather than through
+        // the declaration path where the other three forms are caught.
+        if (bindings.vars.get(p)?.cell) {
+            diagnostics.push(warning('stmt.shadows-cell',
+                `'${p}' is a cell of the flow command, and this parameter hides it — writing to it will not carry to the next instance`,
+                arg.span, { name: p }));
+        }
         // Assignable: a parameter is an ordinary binding once a block body can
         // hold statements, and JS lets one be written to.
         bound.set(p, { type: paramTypes[i], mutable: true });
@@ -632,6 +656,18 @@ function checkCallback(
  * `const`: the reason a shadowed name cannot be read is the resolution order
  * in the parser, and that does not care which form of declaration wrote it.
  */
+/**
+ * What a cell may hold, said about a type.
+ *
+ * The same rule as `isCellValue`, which says it about a value. Two sides
+ * because the two readings happen at different times — one while the block is
+ * being written, one after it has run — and neither can stand in for the
+ * other. Change one and the other has to move with it.
+ */
+function isCellType(type: StaticType): boolean {
+    return !isArrayType(type) && !isRecordType(type) && type !== 'none';
+}
+
 export function isReservedName(name: string): boolean {
     return ['true', 'false', 'none', 'undefined', 'null', 'week', 'month', 'year',
         'start', 'end', 'due', 'content', 'done', 'today', 'file', 'tv', 'Math',

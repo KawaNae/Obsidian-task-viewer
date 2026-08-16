@@ -49,11 +49,12 @@ export interface FlowCell {
 }
 
 /**
- * What a cell may hold.
+ * What a cell may hold, said about a value.
  *
  * Read twice: once on the written literal, and once on the value the block
- * leaves behind, which is the only reading that can see a list arrive. Both
- * ask the same question, so both ask it here.
+ * leaves behind, which is the only reading that can see a list arrive. The
+ * checker asks the same question of a type (`isCellType`) while the block is
+ * being written; the two say one rule and move together.
  */
 export function isCellValue(value: Value): boolean {
     switch (value.type) {

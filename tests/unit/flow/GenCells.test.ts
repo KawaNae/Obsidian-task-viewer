@@ -197,11 +197,15 @@ describe('a value that cannot be written back stops the fire', () => {
         expect(repository.stripFlow).not.toHaveBeenCalled();
     };
 
-    it('when the block leaves a list in a cell', async () => {
+    it('when the block is written to put a list in a cell', async () => {
+        // ここは静的検査（type.cell-not-storable）で止まる。ブロックが
+        // 壊れている発火は評価にも入らない。
         await refuses(['<js', 'n = [1, 2]', '/js>', '- [ ] 週報 @${start}']);
     });
 
-    it('when the block leaves a record in a cell', async () => {
-        await refuses(['<js', 'n = {a: 1}', '/js>', '- [ ] 週報 @${start}']);
+    it('when the type went unknown on the way and a list arrived anyway', async () => {
+        // 静的には決まらない形。1 本目の代入で型が unknown に広がるので
+        // 2 本目は何も言えず、書き戻しの直前の検査だけが残る関門になる。
+        await refuses(['<js', 'n = "text"', 'n = [1, 2]', '/js>', '- [ ] 週報 @${start}']);
     });
 });
