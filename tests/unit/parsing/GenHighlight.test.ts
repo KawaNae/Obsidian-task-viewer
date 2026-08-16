@@ -154,6 +154,54 @@ describe('what a block is made of, said in the engine s own terms', () => {
             .toEqual(['keyword:let', 'punct:=', 'value:1', 'comment:// why']);
     });
 
+    it('says where an interpolation opens even when its expression does not parse', () => {
+        // The line the marks are least able to describe is the line being
+        // repaired, and it is the one a reader most needs described: without
+        // the seam, the brace of a broken splice is prose like any other
+        // character. The words inside are read from the token stream, so they
+        // say what they say in a section — no more.
+        const lines = ['- [ ] c ${typeof n}'];
+        expect(parseGenBody(lines, 0, undefined).diagnostics.map(d => d.code)).toContain('expr.no-typeof');
+        expect(paint(lines)).toEqual(['interp:${', 'refused:typeof', 'interp:}']);
+        expect(paint(['- [ ] c ${1 +}'])).toEqual(['interp:${', 'value:1', 'punct:+', 'interp:}']);
+    });
+
+    it('paints a refused word the same on either surface', () => {
+        // A section is read from its source and a body line was read from its
+        // parts, so the same word used to be `refused` in one place and plain
+        // in the other. What a word is cannot depend on which reader reached
+        // it first.
+        expect(paint(['<js', 'let x = typeof n', '/js>', '- [ ] c'])).toContain('refused:typeof');
+        expect(paint(['- [ ] c ${typeof n}'])).toContain('refused:typeof');
+    });
+
+    it('says only that an unclosed interpolation opened', () => {
+        // How far it reaches is not decided — the closing brace is what would
+        // decide it — so the opening is the whole of what is known, and the
+        // diagnostic sits on the same characters.
+        const lines = ['- [ ] c ${format('];
+        expect(parseGenBody(lines, 0, undefined).diagnostics.map(d => d.code))
+            .toContain('gen.unterminated-interpolation');
+        expect(paint(lines)).toEqual(['interp:${']);
+    });
+
+    it('reads a template s braces by the same rule as a line s', () => {
+        // Both ask the splitter where an interpolation begins, so the
+        // backslash means the same thing in both places. The template runs as
+        // text either way; what changes is whether a seam is claimed inside
+        // it.
+        expect(paint(['- [ ] c ${`a \\${n} b`}'], CELL_N)).toEqual([
+            'interp:${', 'string:`a \\${n} b`', 'interp:}',
+        ]);
+    });
+
+    it('leaves an escaped brace alone, since no interpolation opens there', () => {
+        // The backslash is the one thing this language reads in a body line,
+        // and what follows it is text. A seam here would be an interpolation
+        // the engine never saw.
+        expect(paint(['- [ ] c \\${n}'], CELL_N)).toEqual([]);
+    });
+
     it('tells the seam of an interpolation from the punctuation inside it', () => {
         // The braces are the one symbol in a body line that says where this
         // language starts, and the brackets and commas inside say what any

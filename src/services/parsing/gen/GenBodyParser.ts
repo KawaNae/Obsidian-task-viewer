@@ -1,5 +1,5 @@
 import { type Diagnostic, error, warning } from '../../lang/Diagnostic';
-import type { InterpolationPart } from '../../lang/ExprAst';
+import type { InterpolationPart, InterpolationSeam } from '../../lang/ExprAst';
 import {
     type Bindings, FLOW_TYPE_ENV, NO_BINDINGS, type VarBinding, checkExpr,
 } from '../../lang/ExprChecker';
@@ -23,6 +23,15 @@ export interface GenLine {
      * is reported while it is being written, not when a task is completed.
      */
     parts: InterpolationPart[];
+    /**
+     * Where every `${` on this line was written, whether or not it parsed.
+     *
+     * The parts above are the line's meaning, and an expression that did not
+     * parse has none to carry, so it leaves no part. Anything describing the
+     * source rather than running it reads this instead and sees the line a
+     * reader sees — including the one being repaired.
+     */
+    seams: InterpolationSeam[];
     /**
      * Characters of indentation that were trimmed off `text`.
      *
@@ -195,13 +204,15 @@ function readGenBody(body: string[], firstLine: number, cells?: GenCellTypes): G
         // the editor puts them, so the interpolations carry the indent.
         const text = raw.trimStart();
         const lineDiagnostics: Diagnostic[] = [];
-        const parts = splitInterpolations(text, lineDiagnostics, indent.length);
+        const seams: InterpolationSeam[] = [];
+        const parts = splitInterpolations(text, lineDiagnostics, indent.length, 'block', seams);
         for (const d of lineDiagnostics) diagnostics.push({ ...d, line });
 
         lines.push({
             depth: indentDepth(indent),
             text,
             parts,
+            seams,
             indent: indent.length,
             line,
         });

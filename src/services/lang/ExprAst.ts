@@ -121,6 +121,24 @@ export type InterpolationPart =
     | { kind: 'text'; text: string }
     | { kind: 'expr'; expr: Expr; span: Span };
 
+/**
+ * Where a `${` was written, whether or not what follows it parsed.
+ *
+ * The parts above are what the line means, and an expression that did not
+ * parse has no meaning to carry — so it leaves no part. This says something
+ * weaker and lexical: an interpolation was opened here. A reader of the
+ * source needs that answer for the lines the parts cannot describe, which are
+ * exactly the lines being repaired.
+ */
+export interface InterpolationSeam {
+    /**
+     * The whole `${...}` where the brace closes, and the `${` alone where it
+     * does not: how far a broken one reaches is not decided.
+     */
+    span: Span;
+    closed: boolean;
+}
+
 /** An arrow function's `{ ... }` body: statements, ended by `return`. */
 export interface ArrowBlockBody {
     kind: 'block-body';

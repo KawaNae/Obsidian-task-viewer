@@ -1,6 +1,8 @@
-import { FN_NAMES, LITERAL_WORDS, PROP_NAMES, UNIT_KEYWORDS } from '../../lang/ExprAst';
-import { REFUSED_EXPR_KEYWORDS } from '../../lang/ExprParser';
-import { findInterpolationEnd, tokenize } from '../../lang/Lexer';
+import {
+    FN_NAMES, type InterpolationSeam, LITERAL_WORDS, PROP_NAMES, UNIT_KEYWORDS,
+} from '../../lang/ExprAst';
+import { REFUSED_EXPR_KEYWORDS, splitInterpolations } from '../../lang/ExprParser';
+import { tokenize } from '../../lang/Lexer';
 import { REFUSED_STMT_KEYWORDS, STMT_KEYWORDS } from '../../lang/StmtParser';
 import type { Token } from '../../lang/Token';
 import { type GenBody, type GenLine, lineIndex } from './GenBodyParser';
@@ -106,15 +108,21 @@ export function highlightGenBody(body: GenBody): HighlightMark[] {
         const emit = (role: TokenRole, from: number, to: number) => {
             marks.push({ line: line.line, from, to, role });
         };
-        for (const part of line.parts) {
-            if (part.kind !== 'expr') continue;
-            // The braces belong to nobody's expression: they are the seam
-            // between the prose and the language, which is a role of its own.
-            emit('interp', part.span.start, part.span.start + 2);
-            emit('interp', part.span.end - 1, part.span.end);
-            const from = part.span.start + 2 - line.indent;
-            const to = part.span.end - 1 - line.indent;
-            collect(line.text.slice(from, to), part.span.start + 2, false, live, emit);
+        // Read off the seams rather than the parts, which is the difference
+        // between describing the line and running it: a `${` whose expression
+        // did not parse leaves no part, and it is the line most in need of
+        // being described. The words inside are read the same way a section's
+        // are — from the token stream, where a word is refused or a literal
+        // whatever happened to the sentence around it.
+        for (const seam of line.seams) {
+            emit('interp', seam.span.start, seam.span.start + 2);
+            // Where the brace never closed, how far the interpolation reaches
+            // is not decided, so the opening is the whole of what is known.
+            if (!seam.closed) continue;
+            emit('interp', seam.span.end - 1, seam.span.end);
+            const from = seam.span.start + 2 - line.indent;
+            const to = seam.span.end - 1 - line.indent;
+            collect(line.text.slice(from, to), seam.span.start + 2, false, live, emit);
         }
     }
 
@@ -172,25 +180,30 @@ function collect(src: string, base: number, statements: boolean, cells: Readonly
     }
 }
 
-/** The `${...}` of a template literal, read with the template's own rule. */
+/**
+ * The `${...}` of a template literal, read with the template's own rule.
+ *
+ * Asked of the splitter rather than scanned for here: a template's braces
+ * follow the same rule as a body line's, down to the backslash that makes one
+ * literal, and two readers of one rule is how they come to disagree. The parts
+ * it returns are of no use — the checker has already read them — and its
+ * diagnostics are already reported where the template was parsed, so both are
+ * dropped and only the seams are kept.
+ */
 function collectTemplate(token: Token, cells: ReadonlySet<string>, emit: Emit): void {
-    const text = token.text;
+    const seams: InterpolationSeam[] = [];
     // The token's span covers the backticks; its text is what is between them.
     const base = token.start + 1;
-    let i = 0;
-    while (i < text.length) {
-        if (text[i] !== '$' || text[i + 1] !== '{') { i++; continue; }
-        // The one thing a backslash does here, as in the splitter.
-        if (i > 0 && text[i - 1] === '\\') { i += 2; continue; }
-        const end = findInterpolationEnd(text, i);
-        if (end === -1) return;
-        emit('interp', base + i, base + i + 2);
-        emit('interp', base + end, base + end + 1);
-        // Never as statements, whatever encloses the template: the splitter
-        // reads a template's interpolations in the block profile, so the
-        // statement reader is not there and its words are ordinary names.
-        collect(text.slice(i + 2, end), base + i + 2, false, cells, emit);
-        i = end + 1;
+    // Never as statements, whatever encloses the template: the splitter reads
+    // a template's interpolations in the block profile, so the statement
+    // reader is not there and its words are ordinary names.
+    splitInterpolations(token.text, [], base, 'block', seams);
+    for (const seam of seams) {
+        emit('interp', seam.span.start, seam.span.start + 2);
+        if (!seam.closed) continue;
+        emit('interp', seam.span.end - 1, seam.span.end);
+        collect(token.text.slice(seam.span.start - base + 2, seam.span.end - base - 1),
+            seam.span.start + 2, false, cells, emit);
     }
 }
 

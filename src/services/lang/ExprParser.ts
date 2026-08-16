@@ -1,6 +1,7 @@
 import { type Diagnostic, type Span, error } from './Diagnostic';
 import {
-    type BinaryOp, type Expr, FN_NAMES, type FnName, type InterpolationPart, LITERAL_WORDS,
+    type BinaryOp, type Expr, FN_NAMES, type FnName, type InterpolationPart,
+    type InterpolationSeam, LITERAL_WORDS,
     NAMESPACE_WORDS, PROP_NAMES, type PropName, UNIT_KEYWORDS,
 } from './ExprAst';
 import { findInterpolationEnd, splitDurationText, tokenize } from './Lexer';
@@ -929,12 +930,18 @@ function normalizeTime(text: string): string {
  *
  * Everything that goes wrong is reported — a line with two broken
  * interpolations says so twice rather than stopping at the first.
+ *
+ * `seams` is filled with every `${` this finds, parsed or not, for a reader
+ * that has to describe the line rather than run it. Collected here rather
+ * than scanned for again elsewhere: where an interpolation begins is one
+ * question, and a backslash before the brace is the only answer to it.
  */
 export function splitInterpolations(
     text: string,
     diagnostics: Diagnostic[],
     offset = 0,
-    forProfile: ParseProfile = 'block'
+    forProfile: ParseProfile = 'block',
+    seams?: InterpolationSeam[]
 ): InterpolationPart[] {
     const parts: InterpolationPart[] = [];
     let literal = '';
@@ -956,6 +963,7 @@ export function splitInterpolations(
         }
         const end = findInterpolationEnd(text, i);
         if (end === -1) {
+            seams?.push({ span: { start: offset + i, end: offset + i + 2 }, closed: false });
             diagnostics.push(error('gen.unterminated-interpolation',
                 "Unterminated '${' — the closing brace is missing",
                 { start: offset + i, end: offset + text.length }));
@@ -965,6 +973,7 @@ export function splitInterpolations(
 
         const source = text.slice(i + 2, end);
         const span = { start: offset + i, end: offset + end + 1 };
+        seams?.push({ span, closed: true });
         const expr = parseWholeExpr(source, offset + i + 2, span, diagnostics, forProfile);
         if (expr) parts.push({ kind: 'expr', expr, span });
 
