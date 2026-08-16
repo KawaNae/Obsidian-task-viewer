@@ -158,11 +158,13 @@ export class TaskScanner {
         // task generated twice has to answer: two scans of one change that
         // each fired, or one scan that fired twice.
         //
-        // It cannot answer a third shape — a pipeline that outlived its index
-        // and kept scanning — because each load of the plugin gets its own
-        // copy of this module and therefore its own log. The count of live
-        // listeners is the only thing that sees those, and it is read from the
-        // console rather than from here.
+        // A third shape — a pipeline that outlived its index and kept scanning
+        // — reads differently in the two places this line goes. The stored log
+        // cannot show it: every load of the plugin gets its own copy of this
+        // module, and only the live one's manager flushes, so the copies write
+        // where nobody reads. The console can: it belongs to the window rather
+        // than to a copy, so with verbose on, one change printing this line
+        // twice is a surviving pipeline saying so.
         if (!this.isInitializing) {
             logDebug(`[scan] file=${file.path} isLocal=${isLocalChange} fired=${tasksToTrigger.length}`);
         }
