@@ -28,6 +28,15 @@ export type TokenRole =
     /** A name the flow command's `let(...)` declared. */
     | 'cell'
     | 'comment'
+    /**
+     * The `${` and `}` around a spliced expression.
+     *
+     * Punctuation of a kind, and told apart from it because it says something
+     * no other symbol says: the language starts here. A body line is prose
+     * everywhere else, so this is the one mark whose absence would leave a
+     * reader hunting for where the expression begins.
+     */
+    | 'interp'
     | 'punct';
 
 /** One run of one line, and what it is. */
@@ -99,10 +108,10 @@ export function highlightGenBody(body: GenBody): HighlightMark[] {
         };
         for (const part of line.parts) {
             if (part.kind !== 'expr') continue;
-            // The braces belong to nobody's expression, and leaving them plain
-            // would make an interpolation hard to find in a line of prose.
-            emit('punct', part.span.start, part.span.start + 2);
-            emit('punct', part.span.end - 1, part.span.end);
+            // The braces belong to nobody's expression: they are the seam
+            // between the prose and the language, which is a role of its own.
+            emit('interp', part.span.start, part.span.start + 2);
+            emit('interp', part.span.end - 1, part.span.end);
             const from = part.span.start + 2 - line.indent;
             const to = part.span.end - 1 - line.indent;
             collect(line.text.slice(from, to), part.span.start + 2, false, live, emit);
@@ -175,8 +184,8 @@ function collectTemplate(token: Token, cells: ReadonlySet<string>, emit: Emit): 
         if (i > 0 && text[i - 1] === '\\') { i += 2; continue; }
         const end = findInterpolationEnd(text, i);
         if (end === -1) return;
-        emit('punct', base + i, base + i + 2);
-        emit('punct', base + end, base + end + 1);
+        emit('interp', base + i, base + i + 2);
+        emit('interp', base + end, base + end + 1);
         // Never as statements, whatever encloses the template: the splitter
         // reads a template's interpolations in the block profile, so the
         // statement reader is not there and its words are ordinary names.

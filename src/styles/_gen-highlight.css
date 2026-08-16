@@ -49,6 +49,14 @@
     color: var(--code-comment);
 }
 
-.tv-tok--punct {
+/* Punctuation, and the seam an interpolation opens and closes with. Two roles
+ * because they say different things, one colour because this variable is the
+ * theme's dimming one — measured lighter than the plain text in the light
+ * theme (#5c5c5c against #222222) and darker in the dark one (#b3b3b3 against
+ * #dadada) — and both of these want to sit behind what they surround, not in
+ * front of it. Giving the seam a colour of its own is a separate decision, and
+ * this rule is where it would be made. */
+.tv-tok--punct,
+.tv-tok--interp {
     color: var(--code-punctuation);
 }

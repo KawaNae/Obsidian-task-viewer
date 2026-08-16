@@ -36,7 +36,7 @@ describe('what a block is made of, said in the engine s own terms', () => {
         // has no statements, so painting it as one would be a claim the
         // parser does not make.
         expect(paint(['<js', 'let of = 1', '/js>', '- [ ] c'])).toContain('keyword:let');
-        expect(paint(['- [ ] c ${of}'])).toEqual(['punct:${', 'punct:}']);
+        expect(paint(['- [ ] c ${of}'])).toEqual(['interp:${', 'interp:}']);
     });
 
     it('names a refused statement as what it is', () => {
@@ -82,7 +82,7 @@ describe('what a block is made of, said in the engine s own terms', () => {
     it('leaves a built-in alone where it is not called', () => {
         // Bare, the parser reads `format` as a binding like any other name,
         // and the checker calls it unknown. A colour would say otherwise.
-        expect(paint(['- [ ] c ${format}'])).toEqual(['punct:${', 'punct:}']);
+        expect(paint(['- [ ] c ${format}'])).toEqual(['interp:${', 'interp:}']);
         expect(paint(['- [ ] c ${format(start, "YYYY")}'])).toContain('fn:format');
     });
 
@@ -96,7 +96,7 @@ describe('what a block is made of, said in the engine s own terms', () => {
     });
 
     it('paints a cell as state, and its type comes from the command', () => {
-        expect(paint(['- [ ] c ${n}'], CELL_N)).toEqual(['punct:${', 'cell:n', 'punct:}']);
+        expect(paint(['- [ ] c ${n}'], CELL_N)).toEqual(['interp:${', 'cell:n', 'interp:}']);
     });
 
     it('stops painting a cell the section declares for itself', () => {
@@ -118,17 +118,17 @@ describe('what a block is made of, said in the engine s own terms', () => {
 
     it('paints the name of a call, through a dot or not', () => {
         expect(paint(['- [ ] c ${"a".padStart(2, "0")}'])).toEqual([
-            'punct:${', 'string:"a"', 'punct:.', 'fn:padStart', 'punct:(',
-            'value:2', 'punct:,', 'string:"0"', 'punct:)', 'punct:}',
+            'interp:${', 'string:"a"', 'punct:.', 'fn:padStart', 'punct:(',
+            'value:2', 'punct:,', 'string:"0"', 'punct:)', 'interp:}',
         ]);
     });
 
     it('paints a property of the task, and a member read off one', () => {
         expect(paint(['- [ ] c ${start.weekday()}'])).toEqual([
-            'punct:${', 'prop:start', 'punct:.', 'fn:weekday', 'punct:(', 'punct:)', 'punct:}',
+            'interp:${', 'prop:start', 'punct:.', 'fn:weekday', 'punct:(', 'punct:)', 'interp:}',
         ]);
         expect(paint(['- [ ] c ${file.name}'])).toEqual([
-            'punct:${', 'prop:file', 'punct:.', 'prop:name', 'punct:}',
+            'interp:${', 'prop:file', 'punct:.', 'prop:name', 'interp:}',
         ]);
     });
 
@@ -139,14 +139,14 @@ describe('what a block is made of, said in the engine s own terms', () => {
                 'keyword:const', 'punct:=', 'temporal:3d',
                 'keyword:const', 'punct:=', 'temporal:09:30',
             ]);
-        expect(paint(['- [ ] c ${[[A Note]]}'])).toEqual(['punct:${', 'link:[[A Note]]', 'punct:}']);
+        expect(paint(['- [ ] c ${[[A Note]]}'])).toEqual(['interp:${', 'link:[[A Note]]', 'interp:}']);
     });
 
     it('paints a value word the parser resolves before any binding', () => {
         expect(paint(['- [ ] c ${startOf(week)}'])).toEqual([
-            'punct:${', 'fn:startOf', 'punct:(', 'value:week', 'punct:)', 'punct:}',
+            'interp:${', 'fn:startOf', 'punct:(', 'value:week', 'punct:)', 'interp:}',
         ]);
-        expect(paint(['- [ ] c ${true}'])).toEqual(['punct:${', 'value:true', 'punct:}']);
+        expect(paint(['- [ ] c ${true}'])).toEqual(['interp:${', 'value:true', 'interp:}']);
     });
 
     it('paints a comment, which only a block may carry', () => {
@@ -154,9 +154,21 @@ describe('what a block is made of, said in the engine s own terms', () => {
             .toEqual(['keyword:let', 'punct:=', 'value:1', 'comment:// why']);
     });
 
+    it('tells the seam of an interpolation from the punctuation inside it', () => {
+        // The braces are the one symbol in a body line that says where this
+        // language starts, and the brackets and commas inside say what any
+        // bracket says anywhere. Two roles, because a reader of these marks is
+        // entitled to know which is which — whether the editor paints them the
+        // same colour is a question for the editor.
+        expect(paint(['- [ ] c ${format(start, "YYYY")}'])).toEqual([
+            'interp:${', 'fn:format', 'punct:(', 'prop:start', 'punct:,',
+            'string:"YYYY"', 'punct:)', 'interp:}',
+        ]);
+    });
+
     it('runs a template as text, and what is spliced into it again inside', () => {
         expect(paint(['- [ ] c ${`n is ${n}`}'], CELL_N)).toEqual([
-            'punct:${', 'string:`n is ${n}`', 'punct:${', 'cell:n', 'punct:}', 'punct:}',
+            'interp:${', 'string:`n is ${n}`', 'interp:${', 'cell:n', 'interp:}', 'interp:}',
         ]);
     });
 
@@ -164,7 +176,7 @@ describe('what a block is made of, said in the engine s own terms', () => {
         // The parts carry the indent, so a mark on an indented line has to
         // point past it. Reading the text back is what proves it.
         expect(paint(['- [ ] parent', '    - [ ] child ${n}'], CELL_N))
-            .toEqual(['punct:${', 'cell:n', 'punct:}']);
+            .toEqual(['interp:${', 'cell:n', 'interp:}']);
     });
 
     it('puts every mark of a section on the line it was written on', () => {
@@ -178,7 +190,7 @@ describe('what a block is made of, said in the engine s own terms', () => {
         // property, a value or a call — and inventing a role for them would be
         // a claim these roles do not carry. Both or neither; neither.
         expect(paint(['- [ ] c ${Math.floor(1.5)}'])).toEqual([
-            'punct:${', 'punct:.', 'fn:floor', 'punct:(', 'value:1.5', 'punct:)', 'punct:}',
+            'interp:${', 'punct:.', 'fn:floor', 'punct:(', 'value:1.5', 'punct:)', 'interp:}',
         ]);
         expect(paint(['- [ ] c ${tv.date.format(start, "YYYY")}'])
             .filter(p => p.endsWith(':tv') || p.endsWith(':Math'))).toEqual([]);
