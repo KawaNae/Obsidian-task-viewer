@@ -142,14 +142,19 @@ describe('parseGenBody — diagnostics', () => {
         ])).toEqual([['gen.js-section-after-body', 2]]);
     });
 
-    // 3 本のバッククォートは外側の tv-gen フェンスを閉じてしまう。
-    it('warns about a markdown fence written inside the section', () => {
-        expect(codes([
-            '<js',
-            'const s = "```"',
-            '/js>',
-            '- [ ] 週報',
-        ])).toEqual([['gen.js-section-fence', 1]]);
+    // markdown のフェンスは行頭でしか閉じない。文字列の途中のバッククォート
+    // 3 本は何も壊さないので、何も言わない。
+    it('says nothing about backticks inside a string', () => {
+        expect(codes(['<js', 'const s = "```"', '/js>', '- [ ] 週報'])).toEqual([]);
+    });
+
+    // 行頭のフェンスは外側の tv-gen フェンスを閉じるので、そこでブロックが
+    // 終わる。残るのは閉じていないセクションだけで、それが観測できる唯一の
+    // 症状になる。案内はその文言が持つ。
+    it('points a section that never closes at the fence that may have cut it', () => {
+        const found = parse(['<js', 'let n = 1']).diagnostics;
+        expect(found.map(d => d.code)).toContain('gen.js-section-unclosed');
+        expect(found[0].message).toContain('four or more backticks');
     });
 
     // ブロックの差し込みは、段 2b で初めて静的検査を受ける。

@@ -1,7 +1,7 @@
 import type { Span } from '../../lang/Diagnostic';
 import { type EvalContext, EvalError } from '../../lang/ExprEvaluator';
 import { type RenderedPart, renderInterpolation } from '../../lang/Interpolation';
-import { execProgram } from '../../lang/StmtEvaluator';
+import { SECTION_FUEL, execProgram } from '../../lang/StmtEvaluator';
 import { TaskLineClassifier } from '../utils/TaskLineClassifier';
 import { type GenBody, type GenLine, indentDepth, isSpliceLine, leadingIndent } from './GenBodyParser';
 
@@ -47,7 +47,7 @@ export function renderGenBody(body: GenBody, outerCtx: EvalContext): GenRenderRe
         // The section runs first because it is written first — the whole of
         // the evaluation order is that one sentence, and the body reads the
         // scope it leaves behind.
-        const ctx: EvalContext = { ...outerCtx, fuel: { left: FUEL, depth: 0 } };
+        const ctx: EvalContext = { ...outerCtx, fuel: { left: SECTION_FUEL, depth: 0 } };
         if (body.js) ctx.scope = execProgram(body.js.program, ctx);
 
         // Document order, parent line included: `${n = n + 1}` has to run in
@@ -57,12 +57,13 @@ export function renderGenBody(body: GenBody, outerCtx: EvalContext): GenRenderRe
             [body.parent, ...body.children].sort((a, b) => a.line - b.line);
         const entries: RenderedEntry[] = [];
         for (const line of ordered) {
+            const before = entries.length;
             if (line === body.parent) {
                 entries.push({ depth: 0, body: renderParent(line, ctx), from: line });
             } else {
                 entries.push(...renderChild(line, ctx));
             }
-            checkSize(entries);
+            checkSize(entries, before);
         }
 
         // What sits at depth 0 is only known now: a line that is nothing but
@@ -96,15 +97,14 @@ interface RenderedEntry extends RenderedChild {
 }
 
 /**
- * What one generation is allowed to spend and produce.
+ * What one generation is allowed to produce.
  *
- * Three numbers rather than one, because a section can run away in three
- * ways: computing forever, writing forever, or nesting forever. None of them
- * is decidable in advance — that is the halting problem — so each is a
- * ceiling that only an already-broken block can reach. A weekly checklist is
- * ten to thirty lines and a few hundred steps.
+ * Two numbers here and one next to the evaluator, because a section can run
+ * away in more than one way: computing forever, writing forever, or nesting
+ * forever. None of them is decidable in advance — that is the halting problem
+ * — so each is a ceiling that only an already-broken block can reach. A
+ * weekly checklist is ten to thirty lines and a few hundred steps.
  */
-const FUEL = 100_000;
 const MAX_LINES = 200;
 const MAX_DEPTH = 10;
 
@@ -114,18 +114,25 @@ const MAX_DEPTH = 10;
  * Checked as the lines appear rather than at the end, so a loop writing lines
  * forever stops at the ceiling instead of building the whole of it in memory
  * first.
+ *
+ * `from` is where the last source line was, and the whole run added by it is
+ * measured: one source line becomes several when its value has several, and
+ * each of those reads its own indentation as a depth. Looking only at the one
+ * that happens to be last would let a deep line through whenever a shallow
+ * one followed it.
  */
-function checkSize(entries: RenderedEntry[]): void {
+function checkSize(entries: RenderedEntry[], from: number): void {
     if (entries.length > MAX_LINES) {
         throw new EvalError(
             `This block generated more than ${MAX_LINES} lines, which is past what one task can be`,
             lineSpan(entries[entries.length - 1].from));
     }
-    const deep = entries[entries.length - 1];
-    if (deep && deep.depth > MAX_DEPTH) {
-        throw new EvalError(
-            `This line sits ${deep.depth} levels deep, past the ${MAX_DEPTH} a task can hold`,
-            lineSpan(deep.from));
+    for (const entry of entries.slice(from)) {
+        if (entry.depth > MAX_DEPTH) {
+            throw new EvalError(
+                `This line sits ${entry.depth} levels deep, past the ${MAX_DEPTH} a task can hold`,
+                lineSpan(entry.from));
+        }
     }
 }
 

@@ -234,7 +234,6 @@ describe('diagnosticText', () => {
             ['<js', 'let n = 1'],                                   // gen.js-section-unclosed
             ['<js', 'let n = 1', '/js>', '<js', 'let m = 2', '/js>'], // gen.js-section-duplicate
             ['- [ ] a', '<js', 'let n = 1', '/js>'],                // gen.js-section-after-body
-            ['<js', 'const s = "```"', '/js>'],                     // gen.js-section-fence
         ];
 
         // 代入とコメントはブロックでは通る形なので、拒否はフロー行の側から出る。
@@ -263,7 +262,7 @@ describe('diagnosticText', () => {
             'stmt.not-destructurable', 'stmt.not-iterable',
             'type.not-callable', 'type.call-arity', 'expr.fn-not-a-value',
             'gen.js-section-unclosed', 'gen.js-section-duplicate',
-            'gen.js-section-after-body', 'gen.js-section-fence',
+            'gen.js-section-after-body', 'expr.nesting-too-deep',
         ];
 
         function emitted(): Diagnostic[] {
@@ -275,6 +274,8 @@ describe('diagnosticText', () => {
                 checkProgram(program, FLOW_TYPE_ENV, all);
             }
             for (const lines of BLOCK_SAMPLES) all.push(...parseGenBody(lines, 1).diagnostics);
+            // ホストのスタックが尽きる形は、書いて確かめるほうが早い。
+            all.push(...parseFlow('at(' + '('.repeat(4000) + '1').diagnostics);
             // ブロックには文が無いので、{ } 本体の関数はブロック側からしか出ない。
             const { tokens, diagnostics } = tokenize('xs.map(x => { return x })');
             parseExpr(new TokenCursor(tokens), diagnostics, 'block');

@@ -247,6 +247,20 @@ describe('renderGenBody — the js section', () => {
         expect(!result.ok && result.error.message).toContain('more than 200 lines');
     });
 
+    // 1 ソース行が複数行の値で複数エントリに展開されるので、深い行が最後に
+    // 来るとは限らない。最後の 1 本だけを見ると素通りする。
+    it('refuses a deep line even when a shallow one follows it', () => {
+        const result = render([
+            '<js',
+            `const rows = ["${' '.repeat(4 * 12)}- [ ] 底", "    - [ ] 浅"].join("\\n")`,
+            '/js>',
+            '- [ ] 週報',
+            '${rows}',
+        ]);
+        expect(result.ok).toBe(false);
+        expect(!result.ok && result.error.message).toContain('levels deep');
+    });
+
     it('refuses a line nested deeper than a task can hold', () => {
         const result = render([
             '<js',

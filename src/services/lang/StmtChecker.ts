@@ -118,8 +118,8 @@ class CheckState {
         }
     }
 
-    private declareVar(name: string, binding: VarBinding, span: Span): void {
-        if (!this.reportRedeclaration(name, span)) return;
+    private declareVar(name: string, binding: VarBinding, span: Span, reserved: 'warn' | 'said' = 'warn'): void {
+        if (!this.reportRedeclaration(name, span, reserved)) return;
         this.undo.push({ map: this.vars, name, had: this.vars.has(name), was: this.vars.get(name) });
         // A name can only be one thing here, so a value declaration retires
         // whatever function the same name held in an enclosing scope.
@@ -141,8 +141,8 @@ class CheckState {
     }
 
     /** False when the declaration is refused outright. */
-    private reportRedeclaration(name: string, span: Span): boolean {
-        if (isReservedName(name)) {
+    private reportRedeclaration(name: string, span: Span, reserved: 'warn' | 'said' = 'warn'): boolean {
+        if (reserved === 'warn' && isReservedName(name)) {
             // A warning, not an error: the program means what it says, the
             // binding simply cannot be read — the built-in resolves first.
             this.diagnostics.push(warning('stmt.shadows-reserved',
@@ -268,13 +268,16 @@ class CheckState {
                 return;
             }
             const arrow = stmt.init;
-            this.declareFn(stmt.target.name, { params: arrow.params, span: stmt.target.span }, stmt.target.span);
+            const binding: FnBinding = { params: arrow.params, span: stmt.target.span };
+            // Declared before the body is read, so a function that calls
+            // itself resolves rather than reporting an unknown name.
+            this.declareFn(stmt.target.name, binding, stmt.target.span);
             // Checked once, here. The parameter types are not knowable — there
             // are no annotations and a call site does not report back — so
             // they are bound as unknown: what the body says about names and
             // refused constructs is caught, what it says about the shape of a
             // parameter is not.
-            this.checkArrowDeclaration(arrow);
+            binding.result = this.checkArrowDeclaration(arrow);
             return;
         }
 
@@ -286,17 +289,26 @@ class CheckState {
     }
 
     /** The body of `const f = ... => ...`, with its parameters bound unknown. */
-    private checkArrowDeclaration(arrow: Expr & { kind: 'arrow' }): void {
+    private checkArrowDeclaration(arrow: Expr & { kind: 'arrow' }): StaticType {
+        let result: StaticType = 'error';
         this.scoped(() => {
             for (const p of arrow.params) {
-                this.declareVar(p, { type: 'error', mutable: true }, arrow.span);
+                // An error, not the warning a `let` gets. R6b: a parameter is
+                // the only handle on what was passed, so a body that cannot
+                // see it has no correct reading — and it fails quietly, which
+                // is what makes it worse than a binding nobody can read.
+                if (isReservedName(p)) {
+                    this.diagnostics.push(error('type.param-shadows-builtin',
+                        `'${p}' already means something here — the built-in wins and this parameter cannot be read`,
+                        arrow.span, { name: p }));
+                }
+                this.declareVar(p, { type: 'error', mutable: true }, arrow.span, 'said');
             }
-            if (arrow.body.kind === 'block-body') {
-                this.runFunctionBody(arrow.body.body);
-            } else {
-                this.expr(arrow.body);
-            }
+            result = arrow.body.kind === 'block-body'
+                ? this.runFunctionBody(arrow.body.body)
+                : this.expr(arrow.body);
         });
+        return result;
     }
 
     /** `let x` / `let [a, b]` / `let {a, b: c}`, given the value's type. */

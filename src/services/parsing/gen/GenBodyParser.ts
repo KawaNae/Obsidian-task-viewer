@@ -1,7 +1,7 @@
 import { type Diagnostic, error, warning } from '../../lang/Diagnostic';
 import type { InterpolationPart } from '../../lang/ExprAst';
 import { FLOW_TYPE_ENV, checkExpr } from '../../lang/ExprChecker';
-import { splitInterpolations } from '../../lang/ExprParser';
+import { nestingOverflow, splitInterpolations } from '../../lang/ExprParser';
 import type { Program } from '../../lang/StmtAst';
 import { checkProgram } from '../../lang/StmtChecker';
 import { parseProgram } from '../../lang/StmtParser';
@@ -94,6 +94,24 @@ const JS_CLOSE_RE = /^\s*\/js>\s*$/;
  * @param firstLine absolute index of `body[0]` in the file
  */
 export function parseGenBody(body: string[], firstLine: number): GenBody {
+    try {
+        return readGenBody(body, firstLine);
+    } catch (e) {
+        // A block is many lines of recursive descent, so it is the likelier
+        // of the two places where nesting outruns the host's stack.
+        return {
+            parent: null,
+            children: [],
+            js: null,
+            diagnostics: [{
+                ...nestingOverflow(e, { start: 0, end: (body[0] ?? '').length }),
+                line: firstLine,
+            }],
+        };
+    }
+}
+
+function readGenBody(body: string[], firstLine: number): GenBody {
     const diagnostics: LocatedDiagnostic[] = [];
     const lines: GenLine[] = [];
     let js: GenJsSection | null = null;
@@ -200,9 +218,14 @@ function readJsSection(
             i++;
         }
         if (i >= body.length) {
+            // The other way to get here is a line inside the section that
+            // starts with three backticks: it closes the tv-gen fence, the
+            // block ends before its own delimiter, and what is left is a
+            // section with no `/js>`. Both readings are answered at once,
+            // because this is the only symptom either of them shows.
             diagnostics.push({
                 ...error('gen.js-section-unclosed',
-                    "This js section is never closed with '/js>', so the rest of the block is read as code",
+                    "This js section is never closed with '/js>' — if a line inside it starts with three backticks, that ended the block early, and the block needs four or more backticks around it",
                     { start: 0, end: openLine.length }),
                 line: firstLine + open,
             });
@@ -214,18 +237,6 @@ function readJsSection(
     const { program, diagnostics: parsed } = parseProgram(text);
     const locate = lineLocator(text, sourceFirstLine);
     for (const d of parsed) diagnostics.push(locate(d));
-
-    // A markdown fence written inside the section closes the tv-gen fence
-    // that holds the block, so everything after it stops being the block.
-    // Visible only from here, where the section's own text is in hand.
-    if (text.includes('```')) {
-        diagnostics.push({
-            ...warning('gen.js-section-fence',
-                'Three backticks here close the block early — write the block with four or more backticks around it',
-                { start: 0, end: openLine.length }),
-            line: firstLine + open,
-        });
-    }
 
     return {
         parsed: { program, firstLine: sourceFirstLine, source: text },

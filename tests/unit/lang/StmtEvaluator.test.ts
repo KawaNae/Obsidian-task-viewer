@@ -148,6 +148,14 @@ describe('StmtEvaluator', () => {
             expect(fails('const f = x => f(x)', 'f(1)')).toContain('calls deep');
         });
 
+        // 天井は入口ではなくここに置いてある。プレビューや段 3 で 2 つ目の
+        // 入口ができても、そこで抜けない。
+        it('makes its own budget when the caller brought none', () => {
+            const { program } = parseProgram('let n = 0\nwhile (true) { n = n + 1 }');
+            const bare: EvalContext = { ...context(), fuel: undefined };
+            expect(() => execProgram(program, bare)).toThrow(/ran past/);
+        });
+
         it('leaves a flow clause unmetered', () => {
             // fuel の無い文脈では burn は何もしない。フロー節は式ひとつで、
             // ループも自作関数の呼び出しも書けない。

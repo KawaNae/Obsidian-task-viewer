@@ -150,6 +150,23 @@ function spanBetween(a: Span, b: Span): Span {
     return { start: a.start, end: b.end };
 }
 
+/**
+ * Turn the host's stack overflow into a diagnostic, and rethrow anything else.
+ *
+ * The parser is recursive descent, so a thousand nested brackets exhaust the
+ * host's call stack before any rule of this language is broken. What comes
+ * back is a `RangeError`, which is not something the layers above can report:
+ * a generation treats only `EvalError` as "did not fire", and the editor's
+ * diagnostics have nowhere to put a crash. Caught at the two entry points —
+ * a flow command and a generation block — so the depth is bounded by the host
+ * rather than by a number this parser would have to guess at.
+ */
+export function nestingOverflow(e: unknown, span: Span): Diagnostic {
+    if (!(e instanceof RangeError)) throw e;
+    return error('expr.nesting-too-deep',
+        'This is nested too deeply to read — take some of the brackets apart', span);
+}
+
 function parseTernary(cursor: TokenCursor, diagnostics: Diagnostic[]): Expr | null {
     const cond = parseNullish(cursor, diagnostics);
     if (!cond) return null;

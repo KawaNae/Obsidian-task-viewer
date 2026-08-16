@@ -101,14 +101,28 @@ class ReturnSignal {
 }
 
 /**
+ * What one section may spend before it is stopped.
+ *
+ * Lives here rather than at the caller so that every entry point is bounded
+ * by the same number. A reading-view preview or a second evaluator added
+ * later inherits the ceiling instead of having to remember it.
+ */
+export const SECTION_FUEL = 100_000;
+
+/**
  * Run a js section and hand back the scope it leaves.
  *
  * The block's body lines read from that scope, which is what makes document
  * order the whole rule: the section runs first because it is written first.
+ *
+ * A budget is made here when the caller brought none. Statements can loop and
+ * call, so "unmetered" is not a state a section may run in — the flow clause
+ * that has no budget is one expression and cannot do either.
  */
 export function execProgram(program: Program, ctx: EvalContext): Scope {
-    const scope = new Scope(null, ctx.vars);
-    execBody(program.body, { ...ctx, scope });
+    const metered: EvalContext = ctx.fuel ? ctx : { ...ctx, fuel: { left: SECTION_FUEL, depth: 0 } };
+    const scope = new Scope(null, metered.vars);
+    execBody(program.body, { ...metered, scope });
     return scope;
 }
 

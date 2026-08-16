@@ -1,5 +1,5 @@
 import { type Diagnostic, type Span, error, warning } from '../lang/Diagnostic';
-import { parseExpr } from '../lang/ExprParser';
+import { nestingOverflow, parseExpr } from '../lang/ExprParser';
 import { splitDurationText, tokenize } from '../lang/Lexer';
 import { TokenCursor, tokenSpan } from '../lang/Token';
 import { type Weekday, weekdayFromName } from '../lang/Value';
@@ -27,6 +27,14 @@ const SET_HEADS: Record<string, SetField> = Object.fromEntries(
  * misordering like `tue every` fails loudly instead of being misread.
  */
 export function parseFlow(raw: string): ParseFlowResult {
+    try {
+        return readFlow(raw);
+    } catch (e) {
+        return { program: null, diagnostics: [nestingOverflow(e, { start: 0, end: raw.length })] };
+    }
+}
+
+function readFlow(raw: string): ParseFlowResult {
     const { tokens, diagnostics, comments } = tokenize(raw);
     const cursor = new TokenCursor(tokens);
     const program: FlowProgram = {};

@@ -37,6 +37,17 @@ export interface FnBinding {
     params: string[];
     /** Where it was declared, for "already declared here" style reporting. */
     span: Span;
+    /**
+     * What the body came to when it was checked at the declaration, or
+     * 'error' when that says nothing useful.
+     *
+     * The parameters are bound unknown there, so a body that touches one
+     * lands on 'error' by itself and a call gets the unknown it deserves.
+     * What survives is the case where the answer does not depend on the
+     * arguments at all — `() => "第" + n + "回"` really is a string — and
+     * keeping it costs nothing and constrains nothing.
+     */
+    result?: StaticType;
 }
 
 /**
@@ -361,16 +372,27 @@ function checkAssign(
         : checkBinary({ kind: 'binary', op: expr.op === '+=' ? '+' : '-', left: expr.value, right: expr.value, span: expr.span },
             target.type, value, diagnostics);
     if (result === 'error' || target.type === 'error') return result;
-    // A warning, not an error. JS lets a binding change what it holds, and
-    // nothing in the design takes that away — but a counter that becomes a
-    // string is nearly always a slip, and the reads after it will be checked
-    // against the type the declaration gave.
-    if (!isAssignable(result, target.type)) {
-        diagnostics.push(warning('stmt.assign-type-change',
-            `'${expr.name}' was holding ${typeName(target.type)} and this writes ${typeName(result)}`,
-            expr.span, { name: expr.name, expected: typeName(target.type), actual: typeName(result) }));
+
+    // The same unification a list literal uses on its elements, for the same
+    // reason: `none` is the bottom, so `let xs = []` takes the shape of the
+    // first real list written into it and an empty start costs nothing.
+    const unified = unifyTypes(target.type, result);
+    if (unified) {
+        target.type = unified;
+        return unified;
     }
-    return target.type;
+
+    // A warning, not an error. JS lets a binding change what it holds and
+    // nothing in the design takes that away, but a counter that becomes a
+    // string is nearly always a slip. The binding then holds the unknown:
+    // leaving the declared type would make every later read wrong in one
+    // direction or the other — silently passing a `+` that fails at fire
+    // time, or refusing a `.length` that would have worked.
+    diagnostics.push(warning('stmt.assign-type-change',
+        `'${expr.name}' was holding ${typeName(target.type)} and this writes ${typeName(result)}`,
+        expr.span, { name: expr.name, expected: typeName(target.type), actual: typeName(result) }));
+    target.type = 'error';
+    return 'error';
 }
 
 /**
@@ -407,7 +429,7 @@ function checkLocalCall(
             `'${expr.name}' takes ${fn.params.length} argument(s), got ${expr.args.length}`,
             expr.span, { name: expr.name, expected: fn.params.length, actual: expr.args.length }));
     }
-    return 'error';
+    return fn.result ?? 'error';
 }
 
 /**

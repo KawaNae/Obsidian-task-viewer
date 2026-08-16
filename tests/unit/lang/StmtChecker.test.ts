@@ -70,6 +70,21 @@ describe('StmtChecker', () => {
             const found = check('let n = 1\nn = "text"');
             expect(found.map(d => [d.code, d.severity])).toEqual([['stmt.assign-type-change', 'warning']]);
         });
+
+        // 型が変わったら束縛は unknown を持つ。宣言時の型のまま残すと、以降の
+        // 読みが両方向に間違う（動く形を止め、止まる形を通す）。
+        it('holds the unknown after a change, so later reads say nothing either way', () => {
+            expect(codes('let n = 1\nn = "text"\nlet a = n + 1')).toEqual(['stmt.assign-type-change']);
+            expect(codes('let n = 1\nn = "text"\nlet b = n.length')).toEqual(['stmt.assign-type-change']);
+        });
+
+        // 空リストから詰めるのは配列を作る最も普通の書き方。none は unification
+        // の底なので、最初に入った本物のリストの形をそのまま取る。
+        it('lets an empty list take the shape of what is written into it', () => {
+            expect(codes('let xs = []\nxs = [...xs, "a"]')).toEqual([]);
+            expect(codes('let x = none\nx = 5')).toEqual([]);
+            expect(codes('let xs = []\nxs = [...xs, "a"]\nlet n = xs.join("-").length')).toEqual([]);
+        });
     });
 
     describe('scope', () => {
@@ -148,6 +163,22 @@ describe('StmtChecker', () => {
             expect(codes('const f = x => { let y = nope\nreturn y }')).toEqual(['expr.unknown-ident']);
             expect(codes('const f = x => content.nope')).toEqual(['type.unknown-member']);
             expect(codes('const f = x => x.anything')).toEqual([]);
+        });
+
+        // 引数に触らない本体の型は捨てずに持つ。引数に触る本体は unknown に
+        // 落ちるので、新しい制約は増えない。
+        it('keeps the body type when it does not depend on the arguments', () => {
+            expect(codes('const label = () => "x"\nlet n = label().length')).toEqual([]);
+            expect(codes('const label = () => "x"\nlet n = label().nope')).toEqual(['type.unknown-member']);
+            expect(codes('const f = x => x + 1\nlet n = f(1).nope')).toEqual([]);
+        });
+
+        // R6b: 引数が予約名を隠すのは error。let の隠蔽は束縛が読めないだけ
+        // だが、引数は要素に触る唯一の手段なので本体に正しい読みが無い。
+        it('refuses a parameter that shadows a reserved name, in a declaration too', () => {
+            const found = check('const f = start => 1');
+            expect(found.map(d => [d.code, d.severity])).toEqual([['type.param-shadows-builtin', 'error']]);
+            expect(codes('["a"].map(content => content)')).toEqual(['type.param-shadows-builtin']);
         });
     });
 
