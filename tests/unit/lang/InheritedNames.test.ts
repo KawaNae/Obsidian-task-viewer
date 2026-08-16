@@ -92,6 +92,19 @@ describe('a name every object inherits is still just a name', () => {
         }
     });
 
+    it('inside a flow clause, which the scanner reads on every file', () => {
+        // Not the head this time but the expression a clause holds. The block
+        // is only read where a block is written; a command is read by the scan
+        // of every file, so the same lookup sits on a much wider path.
+        const control = parseFlow(`until(start.${CONTROL}())`);
+        expect(codes(control.diagnostics)).toContain('type.unknown-member');
+        for (const name of INHERITED) {
+            const got = parseFlow(`until(start.${name}())`);
+            assertSpeaks(got.diagnostics, `flow argument '${name}'`);
+            expect(codes(got.diagnostics), `flow argument '${name}'`).toEqual(codes(control.diagnostics));
+        }
+    });
+
     it('inside a js section, where a statement and an expression meet', () => {
         const control = parseGenBody(['<js', `const s = "a".${CONTROL}();`, '/js>', '- [ ] c ${s}'], 0);
         for (const name of INHERITED) {
