@@ -78,4 +78,39 @@
     animation: tv-modal-close-fade 100ms cubic-bezier(0.33, 1, 0.68, 1) forwards;
 }
 
+/* Flow delete choice modal — the line the fire would write.
+
+   Shown verbatim because the delete-time fire does not always land on the
+   date a completion would have produced (`at(today + 3d)` reads the day of
+   the deletion), so the date is something to read rather than to trust. The
+   monospace block says "this is the text, as text". */
+.tv-flow-delete__preview {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    margin-bottom: 12px;
+}
+
+.tv-flow-delete__preview-label {
+    font-size: 0.85em;
+    color: var(--tv-text-muted);
+}
+
+.tv-flow-delete__preview-line {
+    padding: 8px;
+    border-radius: var(--tv-radius-s);
+    background: var(--tv-bg-input);
+    color: var(--tv-text);
+    font-family: var(--tv-font-mono);
+    font-size: 0.9em;
+    /* A long clause wraps rather than pushing the dialog wide. */
+    white-space: pre-wrap;
+    word-break: break-word;
+}
+
+.tv-flow-delete__descendants {
+    color: var(--tv-text-muted);
+    font-size: 0.9em;
+}
+
 /* hub-preview card styling → _task-hub.css */

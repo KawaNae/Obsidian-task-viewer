@@ -8,6 +8,7 @@ import { TaskParser } from '../parsing/TaskParser';
 import type { TaskRepository } from '../persistence/TaskRepository';
 import { EvalError } from '../lang/ExprEvaluator';
 import type { FlowEffect } from './FlowEffects';
+import { type FlowDeleteAssessment, assessFlowDelete, planFlowForDeletion } from './FlowDeletion';
 import { flowSource } from './FlowSegments';
 import { type FlowPlanDeps, GenerationError, planFlow } from './FlowPlanner';
 import { canTriggerFlow } from './FlowTrigger';
@@ -32,8 +33,23 @@ function fileName(path: string): string {
     return (path.split('/').pop() ?? path).replace(/\.md$/i, '');
 }
 
+/**
+ * One entry of work, and which of the two ways of consuming a command it is.
+ *
+ * `completion` is a check the user ticked. `delete` is a task the user is
+ * removing, having asked for its next instance to be written first. Both
+ * rewrite the same line, which is why they share one queue rather than each
+ * having their own.
+ */
+interface FlowQueueEntry {
+    task: Task;
+    mode: 'completion' | 'delete';
+    /** Resolved when the entry leaves the queue, for callers that wait. */
+    settle?: () => void;
+}
+
 export class FlowExecutor {
-    private taskQueue: Task[] = [];
+    private taskQueue: FlowQueueEntry[] = [];
     private isProcessing = false;
     private readonly host = createMomentEvalHost();
     /** Failures already shown, by task and message, with when they were shown. */
@@ -49,9 +65,35 @@ export class FlowExecutor {
     async handleTaskCompletion(task: Task): Promise<void> {
         if (!canTriggerFlow(task, this.getSettings().statusDefinitions)) return;
         logInfo(`[Flow:completion] taskId=${task.id} flow="${task.flow ? flowSource(task.flow) : ''}"`);
-        this.taskQueue.push(task);
+        this.taskQueue.push({ task, mode: 'completion' });
         // Fire and forget; the queue serializes execution.
         this.processQueue();
+    }
+
+    /**
+     * What deleting this task would cost, decided before anything is written.
+     *
+     * The planner is pure, so the dialog can be shown the very line the fire
+     * would go on to write. Nothing is queued and nothing is touched.
+     */
+    assessDeletion(task: Task): FlowDeleteAssessment {
+        return assessFlowDelete(task, this.buildDeps(), id => this.taskIndex.getTask(id));
+    }
+
+    /**
+     * Write the next instance, then remove this one.
+     *
+     * Goes through the same queue as a completion because it rewrites the
+     * same file: a fire racing the completion queue against a stale index
+     * would double-generate, which is the reason the queue exists at all.
+     * Awaited, so the caller's own rescan runs after the writes have landed.
+     */
+    async fireAndDelete(task: Task): Promise<void> {
+        logInfo(`[Flow:delete] taskId=${task.id} flow="${task.flow ? flowSource(task.flow) : ''}"`);
+        return new Promise<void>(resolve => {
+            this.taskQueue.push({ task, mode: 'delete', settle: resolve });
+            this.processQueue();
+        });
     }
 
     private async processQueue(): Promise<void> {
@@ -61,37 +103,18 @@ export class FlowExecutor {
 
         try {
             while (this.taskQueue.length > 0) {
-                const originalTask = this.taskQueue[0]; // Peek
-
-                // 1. Wait for any pending file scans (file state re-acquisition)
-                await this.taskIndex.waitForScan(originalTask.file);
-
-                // 2. Resolve the task to its latest line/state
-                const currentTask = this.taskIndex.resolveTask(originalTask);
-                if (!currentTask) {
-                    this.taskQueue.shift();
-                    continue;
-                }
-
-                // 3. Re-check triggerability (it may have been unchecked)
-                if (!canTriggerFlow(currentTask, this.getSettings().statusDefinitions)) {
-                    this.taskQueue.shift();
-                    continue;
-                }
-
+                const entry = this.taskQueue[0]; // Peek
                 try {
-                    didExecute = (await this.executeFlow(currentTask)) || didExecute;
+                    didExecute = (await this.processEntry(entry)) || didExecute;
                 } catch (err) {
-                    logError(`[FlowExecutor] Error processing task ${currentTask.id}: ${(err as Error)?.message ?? err}`);
-                }
-
-                this.taskQueue.shift();
-
-                // 4. Await the rescan triggered by our own writes so the next
-                //    queue entry (and completion detection) sees fresh state.
-                const file = this.app.vault.getAbstractFileByPath(currentTask.file);
-                if (file instanceof TFile) {
-                    await this.taskIndex.requestScan(file);
+                    logError(`[FlowExecutor] Error processing task ${entry.task.id}: ${(err as Error)?.message ?? err}`);
+                } finally {
+                    // Leaving the queue and waking the caller happen here and
+                    // nowhere else, so a throw on any road out still frees
+                    // both — a delete that never settled would hang the menu
+                    // that asked for it.
+                    this.taskQueue.shift();
+                    entry.settle?.();
                 }
             }
         } finally {
@@ -100,6 +123,70 @@ export class FlowExecutor {
                 this.taskIndex.notifyImmediate();
             }
         }
+    }
+
+    /** @returns true when effects were applied (false = did not fire). */
+    private async processEntry(entry: FlowQueueEntry): Promise<boolean> {
+        // 1. Wait for any pending file scans (file state re-acquisition)
+        await this.taskIndex.waitForScan(entry.task.file);
+
+        // 2. Resolve the task to its latest line/state
+        const currentTask = this.taskIndex.resolveTask(entry.task);
+        if (!currentTask) return false;
+
+        // 3. Re-check triggerability (it may have been unchecked). A delete
+        //    is not a completion and carries no status condition — the user
+        //    asked for it directly.
+        if (entry.mode === 'completion'
+            && !canTriggerFlow(currentTask, this.getSettings().statusDefinitions)) {
+            return false;
+        }
+
+        const didExecute = entry.mode === 'delete'
+            ? await this.executeDeletionFire(currentTask)
+            : await this.executeFlow(currentTask);
+
+        // 4. Await the rescan triggered by our own writes so the next
+        //    queue entry (and completion detection) sees fresh state.
+        const file = this.app.vault.getAbstractFileByPath(currentTask.file);
+        if (file instanceof TFile) {
+            await this.taskIndex.requestScan(file);
+        }
+        return didExecute;
+    }
+
+    /**
+     * The delete the user asked for, with the series carried past it.
+     *
+     * A failed plan stops the delete. The command is still on the line and
+     * the line is what was about to go, so removing it now would lose exactly
+     * what the user asked to keep. Having nothing to generate is a different
+     * answer: an expired command has nothing left to lose, and the delete
+     * goes ahead.
+     *
+     * @returns true when anything was written.
+     */
+    private async executeDeletionFire(task: Task): Promise<boolean> {
+        const outlook = planFlowForDeletion(task, this.buildDeps());
+
+        if (outlook.kind === 'failed') {
+            logWarn(`[FlowExecutor] Delete cancelled, flow did not fire for ${task.id}: ${outlook.error.message}`);
+            this.reportDidNotFire(task, outlook.error, 'notice.flowDeleteDidNotFire');
+            return false;
+        }
+
+        if (outlook.kind === 'creates') {
+            for (const effect of outlook.effects) {
+                logInfo(`[Flow:effect] ${effect.kind} taskId=${task.id} (before delete)`);
+                await this.applyEffect(task, effect);
+            }
+        }
+
+        // Last, by the same rule the effects follow: line resolution matches
+        // on originalText, so the line that is being read must stay put until
+        // everything that reads it is done.
+        await this.repository.deleteTaskFromFile(task);
+        return true;
     }
 
     /** @returns true when effects were applied (false = did not fire). */
@@ -145,8 +232,17 @@ export class FlowExecutor {
      * while its author works out what is wrong, and a notice per toggle would
      * bury the file behind its own complaint. A different failure is a
      * different message, so fixing one and hitting the next is still visible.
+     *
+     * A delete that stopped for the same reason says so in its own sentence.
+     * The task is still on the page and the user is watching for it to go, so
+     * "the flow did not fire" would leave them to work out that the delete
+     * did not happen either.
      */
-    private reportDidNotFire(task: Task, err: EvalError | GenerationError): void {
+    private reportDidNotFire(
+        task: Task,
+        err: EvalError | GenerationError,
+        messageKey: 'notice.flowDidNotFire' | 'notice.flowDeleteDidNotFire' = 'notice.flowDidNotFire',
+    ): void {
         const now = Date.now();
         // Drop what has aged out on the way past, so a long session does not
         // keep a key for every failure it has ever seen.
@@ -156,10 +252,10 @@ export class FlowExecutor {
         // Which failure this is, said in neither language: the code and the
         // values it was given. Keying on the sentence would make the same
         // failure a different one as soon as the vault changes language.
-        const key = `${task.id}::${err.code}::${JSON.stringify(err.params ?? {})}`;
+        const key = `${messageKey}::${task.id}::${err.code}::${JSON.stringify(err.params ?? {})}`;
         if (this.recentFailures.has(key)) return;
         this.recentFailures.set(key, now);
-        new Notice(t('notice.flowDidNotFire', { reason: runtimeText(err), file: fileName(task.file) }));
+        new Notice(t(messageKey, { reason: runtimeText(err), file: fileName(task.file) }));
     }
 
     private async applyEffect(task: Task, effect: FlowEffect): Promise<void> {

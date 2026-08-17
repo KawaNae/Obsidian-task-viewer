@@ -1,6 +1,7 @@
 import type { TFile } from 'obsidian';
 import type { DuplicateOptions, Task } from '../../types';
 import type { TaskIndex } from '../core/TaskIndex';
+import type { FlowDeleteAssessment } from '../flow/FlowDeletion';
 import { TaskIdGenerator } from '../display/TaskIdGenerator';
 import { buildChildEntries } from './ChildEntryBuilder';
 
@@ -33,10 +34,22 @@ export class TaskWriteService {
         return this.taskIndex.updateTask(this.resolveTaskId(taskId), updates);
     }
 
-    async deleteTask(taskId: string): Promise<void> {
+    async deleteTask(taskId: string, options: { fireFlow?: boolean } = {}): Promise<void> {
         const id = this.resolveTaskId(taskId);
-        await this.taskIndex.deleteTask(id);
+        await this.taskIndex.deleteTask(id, options);
         for (const cb of this.deleteListeners) cb(id);
+    }
+
+    /**
+     * What a delete would do to this task's flow command, and how many
+     * commands go down with it.
+     *
+     * A query on the write side because it is part of planning the write: the
+     * delete menu asks it to decide which dialog to open, and the answer names
+     * the very line the write would produce.
+     */
+    assessFlowDelete(taskId: string): FlowDeleteAssessment {
+        return this.taskIndex.assessFlowDelete(this.resolveTaskId(taskId));
     }
 
     /**
