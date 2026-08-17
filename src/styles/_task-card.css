@@ -818,7 +818,9 @@
 
 .timeline-view .timeline-scroll-area__day-column > .task-card {
     top: calc(var(--start-minutes, 0) * var(--hour-height) / 60 + 1px);
-    height: max(0px, calc(var(--duration-minutes, 0) * var(--hour-height) / 60 - 3px));
+    --task-card-real-height: max(0px, calc(var(--duration-minutes, 0) * var(--hour-height) / 60 - 3px));
+    --task-card-slope: max(0px, calc(var(--task-card-floor-height) - var(--task-card-real-height)));
+    height: max(var(--task-card-floor-height), var(--task-card-real-height));
     container-type: size;
 }
 
@@ -828,6 +830,60 @@
     }
     .task-card .task-card__content {
         margin-top: 0;
+    }
+}
+
+/* Floored cards (height pinned to --task-card-floor-height, i.e. real
+   duration shrinks below the floor): clip __shape into a trapezoid whose
+   left edge is the true duration and whose 45°-ish slope carries it up to
+   the floor. Applied to __shape, not the host `.task-card` — bg/accent-bar
+   (::before)/selection-border (::after) all live on __shape (see section 2
+   banner above), and a container cannot query itself, only descendants of
+   its own `container-type` element (same reason the 32px query above
+   targets __time/__content rather than .task-card).
+   NOTE: 22px here must stay in sync with --task-card-floor-height in
+   _variables.css — @container conditions can't reference var(). */
+@container (max-height: 22px) {
+    .task-card__shape {
+        clip-path: polygon(
+            0 0, 100% 0, 100% 100%,
+            var(--task-card-slope) 100%,
+            0 max(2px, var(--task-card-real-height))
+        );
+    }
+    .task-card__content {
+        padding-left: var(--task-card-slope);
+    }
+    .task-card__content > ul {
+        margin: 0;
+        padding-inline-start: 0;
+    }
+    .task-card__content .task-list-item {
+        display: flex;
+        align-items: center;
+        gap: 5px;
+        list-style: none;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        margin: 0;
+    }
+    .task-card__content .task-list-item-checkbox {
+        flex: none;
+    }
+    /* Obsidian's own `ul > li.task-list-item > .task-list-item-checkbox`
+       rule sets `margin-inline-start: calc(var(--checkbox-size) * -1.5)`
+       (it expects the 30px list-indent this view resets above) — 2 classes
+       + 2 type selectors, out-specifying a plain `.task-card__content
+       .task-list-item-checkbox` override. Left uncancelled, the checkbox
+       lands at/outside `.task-card__content`'s own edge — that box has
+       overflow-y:auto, and per spec a single non-visible overflow axis
+       forces the other axis to auto too, so anything at or past the edge is
+       clipped. flex layout + the li's own `gap` already position it, so the
+       legacy indent margin serves no purpose here; the extra `ul >
+       li.task-list-item >` here only exists to clear Obsidian's specificity. */
+    .task-card__content ul > li.task-list-item > .task-list-item-checkbox {
+        margin-inline-start: 0;
     }
 }
 

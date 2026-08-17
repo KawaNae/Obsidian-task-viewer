@@ -15,6 +15,11 @@
 
     /* Task Card */
     --task-card-border-radius: 4px;
+    /* Timeline-only floor: cards shorter than this collapse to a
+       trapezoid (see _task-card.css timeline section). The @container
+       condition that reads this can't use var(), so 22px is duplicated
+       there as a literal — keep both in sync. */
+    --task-card-floor-height: 22px;
 
     --task-card-accent-solid-width: 4px;
     
