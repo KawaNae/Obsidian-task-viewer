@@ -108,7 +108,9 @@ export class TimerRenderer {
                 const labelInput = titleContainer.createEl('input', {
                     type: 'text',
                     cls: 'timer-widget__title-input',
-                    placeholder: '\u2014',
+                    // \u540d\u524d\u306e\u7121\u3044\u884c\uff08tv-content \u672a\u8a2d\u5b9a\u306e tvFile \u306a\u3069\uff09\u3067\u3082\u3001\u4f55\u3092
+                    // \u8a08\u3063\u3066\u3044\u308b\u306e\u304b\u306f\u898b\u3048\u3066\u3044\u308b\u5fc5\u8981\u304c\u3042\u308b\u3002
+                    placeholder: timer.taskName || '\u2014',
                     value: this.contentBinding.displayValue(timer),
                     attr: { size: '1' },
                 });
