@@ -158,7 +158,6 @@ export class TimerView extends ItemView {
             isRunning: false,
             isExpanded: true,
             intervalId: null,
-            customLabel: '',
             recordMode: 'self' as const,
             parserId: 'tv-inline',
             taskColor: '',

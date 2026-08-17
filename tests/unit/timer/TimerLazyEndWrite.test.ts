@@ -76,7 +76,6 @@ function runningTimer(): TimerInstance {
         recordedElapsedTime: 0,
         isExpanded: true,
         intervalId: null,
-        customLabel: '',
         recordMode: 'child',
         parserId: 'tv-inline',
         taskColor: '',

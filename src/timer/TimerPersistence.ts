@@ -66,7 +66,9 @@ export interface PersistedTimer {
     sessionCount?: number;
     recordedElapsedTime?: number;
     isExpanded: boolean;
-    customLabel: string;
+    pendingContent?: string;
+    /** v0.51.0 以前の下書き。読むときだけ拾う（書き出しは pendingContent）。 */
+    customLabel?: string;
     timerType: TimerStartConfig['timerType'];
     recordMode: TimerRecordMode;
     parserId: string;
@@ -259,7 +261,7 @@ export class TimerPersistence {
             sessionCount: timer.sessionCount,
             recordedElapsedTime: timer.recordedElapsedTime,
             isExpanded: timer.isExpanded,
-            customLabel: timer.customLabel,
+            pendingContent: timer.pendingContent,
             timerType: timer.timerType,
             recordMode: timer.recordMode,
             parserId: timer.parserId,
@@ -333,7 +335,9 @@ export class TimerPersistence {
             recordedElapsedTime: persisted.recordedElapsedTime ?? 0,
             isExpanded: persisted.isExpanded !== false,
             intervalId: null,
-            customLabel: persisted.customLabel || '',
+            // v0.51.0 以前の customLabel は下書きとして引き継ぐ。書き先の行がある
+            // なら次の書き出しで消える。
+            pendingContent: persisted.pendingContent ?? persisted.customLabel ?? undefined,
             recordMode: persisted.recordMode || 'child',
             parserId: normalizeParserId(persisted.parserId),
             taskColor: persisted.taskColor || ''

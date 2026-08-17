@@ -47,3 +47,19 @@ export function withTimerIcon(icon: TimerIcon, name: string): string {
     const bare = name.replace(TIMER_ICON_PREFIX_RE, '').trim();
     return bare ? `${icon} ${bare}` : icon;
 }
+
+/**
+ * レコード行の content を、先頭のアイコンと素の名前に分ける。
+ *
+ * widget の入力欄は素の名前だけを扱い、行に付いていたアイコンは書き戻すときに
+ * そのまま復元する — 走行中の行（アイコン無し）に編集でアイコンが生えたり、
+ * 記録済みの行のアイコンが編集で消えたりしないため。
+ */
+export function splitTimerIcon(content: string): { icon?: TimerIcon; name: string } {
+    const matched = content.match(TIMER_ICON_PREFIX_RE);
+    if (!matched) return { name: content.trim() };
+    return {
+        icon: matched[0].trim() as TimerIcon,
+        name: content.slice(matched[0].length).trim(),
+    };
+}

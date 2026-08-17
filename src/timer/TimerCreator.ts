@@ -52,7 +52,6 @@ export class TimerCreator {
             recordedElapsedTime: 0,
             isExpanded: true,
             intervalId: null,
-            customLabel: '',
             recordMode: config.recordMode ?? 'child',
             parserId: config.parserId ?? 'tv-inline',
             taskColor: config.taskColor ?? ''
