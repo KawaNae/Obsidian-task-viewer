@@ -115,9 +115,8 @@ export interface TimerBase {
      *
      * content の正は**尻尾の行**（`TimerRecorder.resolveTailRecord`）で、widget の
      * 入力欄はその行の編集器である。行が無い間だけ入力の行き先が無いので、ここへ
-     * 溜めて行が生えた時点で書き出す。溜まるのは (1) デイリーノート起点（停止時に
-     * 1 行足す形なので走行中の行を持たない）と (2) widget を開いてから走行中の行の
-     * 書き込みが返るまでの往復の 2 つ。
+     * 溜めて行が生えた時点で書き出す。行が無いのは widget を開いてから走行中の行の
+     * 書き込みが返るまでの往復だけで、その間の打鍵を捨てないために要る。
      */
     pendingContent?: string;
     recordMode: TimerRecordMode;
@@ -183,6 +182,23 @@ export interface TimerStartConfig {
     countdownSeconds?: number;
     intervalGroups?: IntervalGroup[];
     intervalSource?: 'pomodoro';
+}
+
+/** デイリーノート起点のタイマーが名乗る taskId の頭。 */
+const DAILY_TASK_ID_PREFIX = 'daily-';
+
+/**
+ * デイリーノート起点か。**対象タスクを持たない**のがこの種の性質で、対象行に
+ * 目印を付ける経路と、対象を引けたかを確かめる経路がここで分かれる。走行中の行は
+ * 通常タスクと同じように持つ。
+ */
+export function isDailyTimer(timer: Pick<TimerBase, 'taskId'>): boolean {
+    return timer.taskId.startsWith(DAILY_TASK_ID_PREFIX);
+}
+
+/** デイリーノート起点のタイマーが指す日付（`YYYY-MM-DD`）。 */
+export function dailyDateOf(timer: Pick<TimerBase, 'taskId'>): string {
+    return timer.taskId.slice(DAILY_TASK_ID_PREFIX.length);
 }
 
 export function getTimerElapsedSeconds(timer: TimerInstance): number {

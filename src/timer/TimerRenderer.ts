@@ -17,6 +17,7 @@ import type {
     IntervalTimer,
     TimerInstance,
 } from './TimerInstance';
+import { isDailyTimer } from './TimerInstance';
 import type { TimerContext } from './TimerContext';
 import type { TimerCreator } from './TimerCreator';
 import type { TimerLifecycle } from './TimerLifecycle';
@@ -103,20 +104,20 @@ export class TimerRenderer {
             const titleContainer = header.createDiv('timer-widget__title');
 
             if (timer.timerType !== 'idle') {
-                // \u8d70\u3063\u3066\u3044\u308b\u884c\uff08\u5c3b\u5c3e\uff09\u306e content \u3092\u305d\u306e\u5834\u3067\u7de8\u96c6\u3059\u308b\u3002self \u3082\u542b\u3081\u3066
-                // \u540c\u3058\u6271\u3044\u3067\u3001self \u306e\u7de8\u96c6\u306f\u5bfe\u8c61\u30bf\u30b9\u30af\u884c\u305d\u306e\u3082\u306e\u306e\u6539\u540d\u306b\u306a\u308b\u3002
+                // 走っている行（尻尾）の content をその場で編集する。self も含めて
+                // 同じ扱いで、self の編集は対象タスク行そのものの改名になる。
                 const labelInput = titleContainer.createEl('input', {
                     type: 'text',
                     cls: 'timer-widget__title-input',
-                    // \u540d\u524d\u306e\u7121\u3044\u884c\uff08tv-content \u672a\u8a2d\u5b9a\u306e tvFile \u306a\u3069\uff09\u3067\u3082\u3001\u4f55\u3092
-                    // \u8a08\u3063\u3066\u3044\u308b\u306e\u304b\u306f\u898b\u3048\u3066\u3044\u308b\u5fc5\u8981\u304c\u3042\u308b\u3002
+                    // 名前の無い行（tv-content 未設定の tvFile など）でも、何を
+                    // 計っているのかは見えている必要がある。
                     placeholder: timer.taskName || '\u2014',
                     value: this.contentBinding.displayValue(timer),
                     attr: { size: '1' },
                 });
                 this.contentBinding.bind(timer, labelInput);
             } else {
-                // Idle: \u5bfe\u8c61\u304c\u7121\u3044\u306e\u3067\u7de8\u96c6\u3059\u308b\u884c\u3082\u7121\u3044
+                // Idle: 対象が無いので編集する行も無い
                 const nameSpan = titleContainer.createSpan('timer-widget__title-name');
                 nameSpan.setText(timer.taskName);
             }
@@ -288,7 +289,7 @@ export class TimerRenderer {
         if (inputEl) this.contentBinding.syncFromFile(timer, inputEl);
 
         // デイリーノート起点は対象タスクを持たない（id は `daily-<date>`）。
-        if (timer.taskId.startsWith('daily-')) return;
+        if (isDailyTimer(timer)) return;
 
         const task = this.ctx.plugin.getTaskIndex().getTask(timer.taskId);
         if (!task) return;

@@ -56,8 +56,6 @@ export class TimerLifecycle {
     private maybeExtendSessionEnd(timer: TimerInstance): void {
         if (timer.timerType === 'idle') return;
         if (timer.runState !== 'running') return;
-        // デイリーノートへの記録は停止時に 1 行足す形で、走行中の行を持たない。
-        if (timer.taskId.startsWith('daily-')) return;
 
         const floor = timer.lazyEndFloorMs;
         if (floor !== undefined && Date.now() < floor) return;

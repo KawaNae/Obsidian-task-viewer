@@ -13,6 +13,7 @@ import type {
     TimerInstance,
     TimerStartConfig
 } from './TimerInstance';
+import { isDailyTimer } from './TimerInstance';
 import { TimerRecorder } from './TimerRecorder';
 import { TaskIdGenerator } from '../services/display/TaskIdGenerator';
 import { TimerStorageUtils } from './TimerStorageUtils';
@@ -78,7 +79,7 @@ export class TimerWidget implements TimerContext {
                 if (timer
                     && timer.recordMode === 'self'
                     && !timer.timerTargetId
-                    && !timer.taskId.startsWith('daily-')) {
+                    && !isDailyTimer(timer)) {
                     void this.targetManager.ensureTimerTargetId(timerId);
                 }
             }
@@ -159,7 +160,7 @@ export class TimerWidget implements TimerContext {
      */
     private isReadOnlyTarget(config: TimerStartConfig): boolean {
         if (config.timerType === 'idle') return false;
-        if (!config.taskId || config.taskId.startsWith('daily-')) return false;
+        if (!config.taskId || isDailyTimer(config)) return false;
         return !!this.plugin.getTaskReadService().getTask(config.taskId)?.isReadOnly;
     }
 
@@ -170,7 +171,7 @@ export class TimerWidget implements TimerContext {
      */
     private shouldAskAboutCompletedTask(config: TimerStartConfig): boolean {
         if (config.timerType === 'idle') return false;
-        if (!config.taskId || config.taskId.startsWith('daily-')) return false;
+        if (!config.taskId || isDailyTimer(config)) return false;
         if (config.recordMode !== 'self') return false;
 
         const task = this.plugin.getTaskReadService().getTask(config.taskId);
@@ -208,7 +209,7 @@ export class TimerWidget implements TimerContext {
         }
 
         // Write start time immediately so the task moves on Timeline
-        if (config.timerType !== 'idle' && !config.taskId.startsWith('daily-')) {
+        if (config.timerType !== 'idle') {
             if (timer.recordMode === 'self') {
                 void this.recorder.updateTaskStartTime(timer);
             } else {
@@ -222,7 +223,7 @@ export class TimerWidget implements TimerContext {
         // child / sibling は自分が書いたレコード行が尻尾 id を持つので、対象行に
         // 目印を足さない（ノートに残る自動 id を増やさない）。
         if (!this.lifecycle.isIdleTimer(timer.id)
-            && !timer.taskId.startsWith('daily-')
+            && !isDailyTimer(timer)
             && timer.recordMode === 'self') {
             void this.targetManager.ensureTimerTargetId(timer.id);
         }

@@ -223,6 +223,10 @@ export class DailyNoteUtils {
      * @param line The line to append (should include full task format, e.g., "- [x] ...")
      * @param header Header text (without # prefix)
      * @param headerLevel Number of # to use (e.g., 2 for ##)
+     * @returns 書き込んだノートのパス。ノートを用意できなければ null。
+     *
+     * パスを返すのは、書いた行を後から引き直す呼び出し側があるため。タイマーは
+     * 走行中の行を `^id` で追い、停止時に同じ行を閉じる。
      */
     static async appendLineToDailyNote(
         app: App,
@@ -230,15 +234,16 @@ export class DailyNoteUtils {
         line: string,
         header: string,
         headerLevel: number
-    ): Promise<void> {
+    ): Promise<string | null> {
         let file = this.getDailyNote(app, date);
         if (!file) {
             file = await this.createDailyNote(app, date);
         }
-        if (!file) return;
+        if (!file) return null;
 
         await app.vault.process(file, (fileContent) => {
             return HeadingInserter.insertUnderHeading(fileContent, line, header, headerLevel).content;
         });
+        return file.path;
     }
 }

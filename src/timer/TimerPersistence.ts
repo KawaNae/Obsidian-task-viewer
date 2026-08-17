@@ -12,6 +12,7 @@ import type {
     TimerRunState,
     TimerStartConfig,
 } from './TimerInstance';
+import { isDailyTimer } from './TimerInstance';
 import type { TimerContext } from './TimerContext';
 import { OBSOLETE_STORAGE_VERSIONS, STORAGE_VERSION } from './TimerStorageUtils';
 import type { TimerCreator } from './TimerCreator';
@@ -215,7 +216,9 @@ export class TimerPersistence {
         const resolver = new TimerTaskResolver(this.ctx.plugin);
         for (const [timerId, timer] of [...this.ctx.timers]) {
             if (this.lifecycle.isIdleTimer(timerId)) continue;
-            if (timer.taskId.startsWith('daily-')) continue;
+            // デイリーノート起点は対象タスクを持たない。引けないのが正常なので、
+            // ここで閉じると復元のたびに生きているタイマーを壊す。
+            if (isDailyTimer(timer)) continue;
 
             const task = isTvFile(timer) ? resolver.resolveTvFile(timer) : resolver.resolveTvInline(timer);
             if (task) continue;
@@ -308,7 +311,7 @@ export class TimerPersistence {
         }
 
         const taskId = persisted.taskId;
-        if (!this.lifecycle.isIdleTimer(taskId) && !taskId.startsWith('daily-') && !TaskIdGenerator.parse(taskId)) {
+        if (!this.lifecycle.isIdleTimer(taskId) && !isDailyTimer({ taskId }) && !TaskIdGenerator.parse(taskId)) {
             return null;
         }
 
