@@ -382,9 +382,13 @@ export class TaskActionsMenuBuilder {
                     menu.close();
                     const { outlook, descendantFlows } = this.writeService.assessFlowDelete(task.id);
 
+                    // 発火に失敗すると削除も中止される。そのときタスクはまだ
+                    // ページ上にあるので、パネルを閉じる・選択を外すといった
+                    // 「消えた前提」の後始末は走らせない。
                     const remove = async (fireFlow: boolean) => {
-                        await this.writeService.deleteTask(task.id, { fireFlow });
-                        onDestructive?.();
+                        if (await this.writeService.deleteTask(task.id, { fireFlow })) {
+                            onDestructive?.();
+                        }
                     };
 
                     if (outlook.kind === 'creates') {

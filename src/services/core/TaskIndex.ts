@@ -625,18 +625,21 @@ export class TaskIndex {
      * removing this one. A fire that cannot be planned stops the delete —
      * see {@link FlowExecutor.fireAndDelete} — so the task can survive this
      * call, with a notice saying why.
+     * @returns whether the task is gone. Only a stopped fire and a read-only
+     * task answer no; every other road here removes it.
      */
-    async deleteTask(taskId: string, options: { fireFlow?: boolean } = {}): Promise<void> {
+    async deleteTask(taskId: string, options: { fireFlow?: boolean } = {}): Promise<boolean> {
         const task = this.store.getTask(taskId);
-        if (!task) return;
+        if (!task) return false;
         return this.withNotify(task.file, async () => {
             logInfo(`[deleteTask] id=${taskId} fireFlow=${options.fireFlow === true}`);
-            if (task.isReadOnly) return;
+            if (task.isReadOnly) return false;
 
             this.syncDetector.markLocalEdit(task.file);
 
+            let removed = true;
             if (options.fireFlow && isTvInline(task)) {
-                await this.commandExecutor.fireAndDelete(task);
+                removed = await this.commandExecutor.fireAndDelete(task);
             } else if (isTvFile(task)) {
                 await this.repository.deleteTvFile(task, this.settings.tvFileKeys);
             } else {
@@ -644,6 +647,7 @@ export class TaskIndex {
             }
 
             await this.scanner.waitForScan(task.file);
+            return removed;
         });
     }
 

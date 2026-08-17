@@ -34,10 +34,19 @@ export class TaskWriteService {
         return this.taskIndex.updateTask(this.resolveTaskId(taskId), updates);
     }
 
-    async deleteTask(taskId: string, options: { fireFlow?: boolean } = {}): Promise<void> {
+    /**
+     * @returns whether the task is gone. A `fireFlow` delete whose fire could
+     * not be planned keeps the task and answers no, and the listeners stay
+     * quiet — a view told to drop its selection would be dropping it for a
+     * task still on the page.
+     */
+    async deleteTask(taskId: string, options: { fireFlow?: boolean } = {}): Promise<boolean> {
         const id = this.resolveTaskId(taskId);
-        await this.taskIndex.deleteTask(id, options);
-        for (const cb of this.deleteListeners) cb(id);
+        const removed = await this.taskIndex.deleteTask(id, options);
+        if (removed) {
+            for (const cb of this.deleteListeners) cb(id);
+        }
+        return removed;
     }
 
     /**
