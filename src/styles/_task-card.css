@@ -891,7 +891,7 @@
 
    NOTE: 22px in the condition must stay in sync with
    --task-card-floor-height — @container conditions can't reference var(). */
-@container (height < 22px) {
+@container tv-timed-card (height < 22px) {
     .task-card__content {
         position: absolute;
         left: var(--task-card-overflow-ext-offset);
