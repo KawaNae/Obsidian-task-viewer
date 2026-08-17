@@ -38,6 +38,15 @@ export interface TimerContext {
     /** Called after a non-idle timer is closed (for target ID cleanup). */
     onTimerClosed(timer: TimerInstance): void;
 
+    /**
+     * 未書き込みの content 入力を書き出す。**記録を書く前に待つ** — 飛ばすと
+     * 停止時の記録が古い content を読み、入力が 1 セッション繰り越される。
+     */
+    flushTimerContent(timerId: string): Promise<void>;
+
+    /** 未書き込みの content 入力を捨てる（✕ 破棄。行ごと消えるので書かない）。 */
+    discardTimerContent(timerId: string): void;
+
     /** Acquire the floating overlay container (creates it on first call). */
     ensureContainer(): HTMLElement;
 

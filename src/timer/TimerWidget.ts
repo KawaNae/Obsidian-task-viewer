@@ -21,6 +21,7 @@ import { TimerStartChoiceModal } from '../modals/TimerStartChoiceModal';
 import { TimerCreator } from './TimerCreator';
 import { TimerLifecycle } from './TimerLifecycle';
 import { TimerRenderer } from './TimerRenderer';
+import { TimerContentBinding } from './TimerContentBinding';
 import { TimerPersistence } from './TimerPersistence';
 import { TimerTargetManager } from './TimerTargetManager';
 import { TimerWidgetWindowObserver, type PinState } from './TimerWidgetWindowObserver';
@@ -40,6 +41,7 @@ export class TimerWidget implements TimerContext {
     private creator: TimerCreator;
     private lifecycle: TimerLifecycle;
     private renderer: TimerRenderer;
+    private contentBinding: TimerContentBinding;
     private persistence: TimerPersistence;
     private targetManager: TimerTargetManager;
     private observer: TimerWidgetWindowObserver | null = null;
@@ -51,7 +53,8 @@ export class TimerWidget implements TimerContext {
         this.recorder = new TimerRecorder(app, plugin, this.storageUtils);
         this.creator = new TimerCreator(this, this.storageUtils);
         this.lifecycle = new TimerLifecycle(this, this.creator);
-        this.renderer = new TimerRenderer(this, this.lifecycle, this.creator);
+        this.contentBinding = new TimerContentBinding(this);
+        this.renderer = new TimerRenderer(this, this.lifecycle, this.creator, this.contentBinding);
         this.persistence = new TimerPersistence(this, this.creator, this.lifecycle, this.storageUtils);
         this.targetManager = new TimerTargetManager(this, this.storageUtils);
     }
@@ -69,7 +72,13 @@ export class TimerWidget implements TimerContext {
         this.persistence.restoreTimersFromStorage((timerId) => {
             if (!this.lifecycle.isIdleTimer(timerId)) {
                 const timer = this.timers.get(timerId);
-                if (timer && !timer.timerTargetId && !timer.taskId.startsWith('daily-')) {
+                // 対象行に id が要るのは self だけ（開始経路と同じ条件）。child /
+                // sibling は自分が書いたレコード行が尻尾 id を持つので、復元を
+                // きっかけにユーザーのタスク行へ id を足すのは筋が違う。
+                if (timer
+                    && timer.recordMode === 'self'
+                    && !timer.timerTargetId
+                    && !timer.taskId.startsWith('daily-')) {
                     void this.targetManager.ensureTimerTargetId(timerId);
                 }
             }
@@ -226,6 +235,21 @@ export class TimerWidget implements TimerContext {
         if (sessionTaskId) {
             this.persistTimersToStorage();
         }
+        // 書き込みの往復中に打たれた入力は行き先が無く下書きに溜まっている。
+        // 行が生えた今なら書ける。
+        await this.flushTimerContent(timer.id);
+    }
+
+    async flushTimerContent(timerId: string): Promise<void> {
+        const timer = this.timers.get(timerId);
+        if (!timer) return;
+        await this.contentBinding.flush(timer);
+    }
+
+    discardTimerContent(timerId: string): void {
+        const timer = this.timers.get(timerId);
+        if (!timer) return;
+        this.contentBinding.discard(timer);
     }
 
     /**
@@ -235,6 +259,9 @@ export class TimerWidget implements TimerContext {
      */
     onTimerClosed(timer: TimerInstance): void {
         void (async () => {
+            // 尻尾の `^id` を外す前に書き切る。先に外すと書き先を引けなくなる。
+            await this.contentBinding.flush(timer);
+            this.contentBinding.release(timer.id);
             await this.recorder.clearTailRecordId(timer);
             await this.targetManager.cleanupGeneratedTargetId(timer);
         })();

@@ -403,16 +403,18 @@ export class TimerRecorder {
     }
 
     /**
-     * レコードが名乗る名前の素。
+     * レコードが名乗る名前の素。**行を新しく作るときだけ**使う。
      *
-     * ユーザーが付けたラベルが無ければ**対象タスクの名前を継ぐ**。セッションは
+     * 行が既にあるなら content の正はその行で、widget の入力欄がその行を直接書き
+     * 換える（`TimerContentBinding`）。ここへ来るのは書く相手がまだ無い場合だけで、
+     * 未書き込みの下書きがあればそれ、無ければ**対象タスクの名前を継ぐ**。セッションは
      * 同じ作業の分割であって別物ではないので、名前を落とすと後から読めない。
      * 走行中の行を書く {@link buildSessionPlaceholder} と、行を引けずに 1 行
      * 足すフォールバック（{@link addCountupRecord} 系）で規則が割れていて、
      * 後者だけが名前を失っていた。
      */
     private sessionName(timer: TimerInstance): string {
-        return timer.customLabel.trim() || timer.taskName.trim();
+        return timer.pendingContent?.trim() || timer.taskName.trim();
     }
 
     /** レコード行の content（アイコン + 名前）。 */

@@ -30,6 +30,7 @@ import { t } from '../i18n';
 import { getEffectiveColor } from '../services/data/EffectiveProperties';
 import { canTriggerFlow } from '../services/flow/FlowTrigger';
 import { NextTaskSuggester, suggestionKey } from './NextTaskSuggester';
+import type { TimerContentBinding } from './TimerContentBinding';
 
 export class TimerRenderer {
     private closeConfirmTimers = new Map<string, number>();
@@ -39,6 +40,7 @@ export class TimerRenderer {
         private ctx: TimerContext,
         private lifecycle: TimerLifecycle,
         private creator: TimerCreator,
+        private contentBinding: TimerContentBinding,
     ) {
         this.suggester = new NextTaskSuggester(ctx.plugin);
     }
@@ -100,21 +102,19 @@ export class TimerRenderer {
 
             const titleContainer = header.createDiv('timer-widget__title');
 
-            if (timer.recordMode !== 'self' && timer.timerType !== 'idle') {
-                // Child mode: inline input as title
+            if (timer.timerType !== 'idle') {
+                // \u8d70\u3063\u3066\u3044\u308b\u884c\uff08\u5c3b\u5c3e\uff09\u306e content \u3092\u305d\u306e\u5834\u3067\u7de8\u96c6\u3059\u308b\u3002self \u3082\u542b\u3081\u3066
+                // \u540c\u3058\u6271\u3044\u3067\u3001self \u306e\u7de8\u96c6\u306f\u5bfe\u8c61\u30bf\u30b9\u30af\u884c\u305d\u306e\u3082\u306e\u306e\u6539\u540d\u306b\u306a\u308b\u3002
                 const labelInput = titleContainer.createEl('input', {
                     type: 'text',
                     cls: 'timer-widget__title-input',
                     placeholder: '\u2014',
-                    value: timer.customLabel,
+                    value: this.contentBinding.displayValue(timer),
                     attr: { size: '1' },
                 });
-                labelInput.oninput = () => {
-                    timer.customLabel = labelInput.value;
-                    this.ctx.persistTimersToStorage();
-                };
+                this.contentBinding.bind(timer, labelInput);
             } else {
-                // Self/idle mode: static task name
+                // Idle: \u5bfe\u8c61\u304c\u7121\u3044\u306e\u3067\u7de8\u96c6\u3059\u308b\u884c\u3082\u7121\u3044
                 const nameSpan = titleContainer.createSpan('timer-widget__title-name');
                 nameSpan.setText(timer.taskName);
             }
@@ -278,7 +278,15 @@ export class TimerRenderer {
     }
 
     private syncTimerTaskInfo(itemEl: HTMLElement, timer: TimerInstance): void {
-        if (this.lifecycle.isIdleTimer(timer.id) || timer.id.startsWith('daily-')) return;
+        if (this.lifecycle.isIdleTimer(timer.id)) return;
+
+        // 入力欄は md 側の変化に追随する（打鍵中と未書き込みの入力があるときは
+        // binding が見送る）。デイリーノート起点でも尻尾があれば同じ扱い。
+        const inputEl = itemEl.querySelector('.timer-widget__title-input') as HTMLInputElement | null;
+        if (inputEl) this.contentBinding.syncFromFile(timer, inputEl);
+
+        // デイリーノート起点は対象タスクを持たない（id は `daily-<date>`）。
+        if (timer.taskId.startsWith('daily-')) return;
 
         const task = this.ctx.plugin.getTaskIndex().getTask(timer.taskId);
         if (!task) return;
@@ -505,6 +513,7 @@ export class TimerRenderer {
             stopBtn.onclick = async () => {
                 this.lifecycle.pauseOrSnapshotIntervalForStop(timer);
                 AudioUtils.playFinishSound();
+                await this.ctx.flushTimerContent(timer.id);
                 await this.ctx.recorder.recordSessionEnd(timer);
                 this.lifecycle.closeTimer(timer.id);
             };

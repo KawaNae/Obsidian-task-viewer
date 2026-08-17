@@ -110,7 +110,16 @@ export interface TimerBase {
     isExpanded: boolean;
     intervalId: number | null;
 
-    customLabel: string;
+    /**
+     * 尻尾の行がまだ無い間の content の下書き。
+     *
+     * content の正は**尻尾の行**（`TimerRecorder.resolveTailRecord`）で、widget の
+     * 入力欄はその行の編集器である。行が無い間だけ入力の行き先が無いので、ここへ
+     * 溜めて行が生えた時点で書き出す。溜まるのは (1) デイリーノート起点（停止時に
+     * 1 行足す形なので走行中の行を持たない）と (2) widget を開いてから走行中の行の
+     * 書き込みが返るまでの往復の 2 つ。
+     */
+    pendingContent?: string;
     recordMode: TimerRecordMode;
     /** Always a current {@link ParserId}; legacy persisted values are normalized at load. */
     parserId: ParserId;

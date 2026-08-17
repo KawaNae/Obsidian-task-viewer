@@ -81,7 +81,6 @@ function makeTimer(overrides: Partial<TimerInstance> = {}): TimerInstance {
         recordedElapsedTime: 0,
         isExpanded: true,
         intervalId: null,
-        customLabel: '',
         recordMode: 'child',
         parserId: 'tv-inline',
         taskColor: '',
@@ -136,9 +135,9 @@ describe('recordSessionEnd: one session writes one line', () => {
     });
 
     it('the fallback record still carries the task name', async () => {
-        // 走行中の行を書く経路は customLabel が無ければ対象名を継ぐのに、
-        // フォールバックだけが customLabel しか見ておらず、名前を失った
-        // 「⏱️」だけのレコードを書いていた（move 発火中の停止で実機観測）。
+        // 走行中の行を書く経路は下書きが無ければ対象名を継ぐのに、フォールバック
+        // だけが下書きしか見ておらず、名前を失った「⏱️」だけのレコードを書いて
+        // いた（move 発火中の停止で実機観測）。
         const gone = makeHarness({ childExists: false });
         await gone.recorder.recordSessionEnd(makeTimer());
         expect(gone.inserted[0]).toContain('⏱️ parent');
@@ -146,7 +145,7 @@ describe('recordSessionEnd: one session writes one line', () => {
 
     it('the fallback record prefers an explicit label over the task name', async () => {
         const gone = makeHarness({ childExists: false });
-        await gone.recorder.recordSessionEnd(makeTimer({ customLabel: '資料集め' }));
+        await gone.recorder.recordSessionEnd(makeTimer({ pendingContent: '資料集め' }));
         expect(gone.inserted[0]).toContain('⏱️ 資料集め');
         expect(gone.inserted[0]).not.toContain('parent');
     });
