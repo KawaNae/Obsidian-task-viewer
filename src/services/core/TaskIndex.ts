@@ -6,6 +6,7 @@ import { TaskRepository } from '../persistence/TaskRepository';
 import { PropertyUpdatePlanner } from '../persistence/PropertyUpdatePlanner';
 import { createTempTask } from '../data/createTempTask';
 import { FlowExecutor } from '../flow/FlowExecutor';
+import type { FlowDeleteAssessment } from '../flow/FlowDeletion';
 import { WikiLinkResolver } from './WikiLinkResolver';
 import { TaskStore } from './TaskStore';
 import { TaskScanner } from './TaskScanner';
@@ -609,16 +610,34 @@ export class TaskIndex {
         }
     }
 
-    async deleteTask(taskId: string): Promise<void> {
+    /**
+     * What deleting this task would cost its flow command, answered without
+     * writing anything. The delete menu asks before it decides what to offer.
+     */
+    assessFlowDelete(taskId: string): FlowDeleteAssessment {
+        const task = this.store.getTask(taskId);
+        if (!task) return { outlook: { kind: 'nothing' }, descendantFlows: 0 };
+        return this.commandExecutor.assessDeletion(task);
+    }
+
+    /**
+     * @param options.fireFlow write the command's next instance before
+     * removing this one. A fire that cannot be planned stops the delete —
+     * see {@link FlowExecutor.fireAndDelete} — so the task can survive this
+     * call, with a notice saying why.
+     */
+    async deleteTask(taskId: string, options: { fireFlow?: boolean } = {}): Promise<void> {
         const task = this.store.getTask(taskId);
         if (!task) return;
         return this.withNotify(task.file, async () => {
-            logInfo(`[deleteTask] id=${taskId}`);
+            logInfo(`[deleteTask] id=${taskId} fireFlow=${options.fireFlow === true}`);
             if (task.isReadOnly) return;
 
             this.syncDetector.markLocalEdit(task.file);
 
-            if (isTvFile(task)) {
+            if (options.fireFlow && isTvInline(task)) {
+                await this.commandExecutor.fireAndDelete(task);
+            } else if (isTvFile(task)) {
                 await this.repository.deleteTvFile(task, this.settings.tvFileKeys);
             } else {
                 await this.repository.deleteTaskFromFile(task);
