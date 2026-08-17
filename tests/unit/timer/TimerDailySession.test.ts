@@ -143,6 +143,18 @@ describe('daily note timers own a running line too', () => {
         expect(h.appended[0]).toContain('資料集め');
     });
 
+    it('carries the name of the previous record into the next session', async () => {
+        // 兄弟レコードは同名、が v2 の規則。継ぐ対象タスクが無いデイリーでは
+        // 直前のレコードが名前の出どころになる（毎回打ち直させない）。
+        const h = makeHarness();
+        const timer = makeDailyTimer({ pendingContent: '資料集め' });
+        await h.recorder.createChildAtStart(timer);
+
+        await h.recorder.startNextSession(timer);
+
+        expect(h.siblings[0].line).toContain('資料集め');
+    });
+
     it('puts the second session next to the first, not under the heading again', async () => {
         const h = makeHarness();
         const timer = makeDailyTimer();
