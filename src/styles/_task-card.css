@@ -884,6 +884,26 @@
         margin-inline-start: 0;
         vertical-align: middle;
     }
+    /* Cascade halo (section 2 banner above, `.task-card[data-cascade-offset]
+       ::before`) paints --tv-bg-primary in a box inset -3px 0 -3px -4px from
+       the host — 4px wider on the left, 3px taller top/bottom than the card
+       clip-path above cuts. Left unclipped, that white/bg rectangle shows
+       through the trapezoid notch instead of the card behind it. A
+       container query can target a container's own ::before (the pseudo is
+       a generated child box of the container, not the container itself —
+       verified live), so the same notch can be cut here too. Points are the
+       shape's polygon translated into the halo's larger box: the left edge
+       stays at x=0 (the 4px rim reads as part of the real-duration edge
+       rather than getting its own cut), y gets +3px for the halo's own
+       top-bleed, and the slope's foot gets +4px so the ~45° line continues
+       at roughly the same angle into the wider box. */
+    .task-card[data-cascade-offset]::before {
+        clip-path: polygon(
+            0 0, 100% 0, 100% 100%,
+            calc(var(--task-card-slope) + 4px) 100%,
+            0 calc(max(2px, var(--task-card-real-height)) + 3px)
+        );
+    }
 }
 
 /* --- Timeline AllDay --- */
