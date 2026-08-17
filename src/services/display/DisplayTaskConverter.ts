@@ -1,5 +1,6 @@
 import type { Task, DisplayTask } from '../../types';
 import { DateUtils } from '../../utils/DateUtils';
+import { dayBoundaryAt } from './DayBoundary';
 import { TaskIdGenerator } from './TaskIdGenerator';
 import { buildChildEntries } from '../data/ChildEntryBuilder';
 
@@ -292,25 +293,23 @@ export function splitDisplayTaskAtBoundary(dt: DisplayTask, startHour: number): 
     }
 
     let boundaryCalendarDate: string;
-    const boundaryTime = `${startHour.toString().padStart(2, '0')}:00`;
-    // 直前 boundary 時刻 (例: startHour=5 なら '04:59')。head の effective end に
-    // これを使うことで、`toVisualDate` が前日に -1 day シフトし、tail の visual
-    // start day と重ならない。boundaryTime ('05:00') を head end に置くと
-    // toVisualDate (`h < startHour`) が当日扱いとなり tail と同日に重複し、
-    // GridTaskLayout の greedy track 割り当てで別 track に飛ぶバグを生む。
-    // (cf. TaskSplitter.splitAtDateBoundary が同じ pattern を採用済み)
-    const beforeBoundaryTime = startHour === 0
-        ? '23:59'
-        : `${(startHour - 1).toString().padStart(2, '0')}:59`;
-
     if (dt.effectiveStartDate === dt.effectiveEndDate) {
         boundaryCalendarDate = dt.effectiveStartDate;
     } else {
         boundaryCalendarDate = DateUtils.addDays(dt.effectiveStartDate, 1);
     }
 
+    // head の effective end は boundary の 1 分前。これにより `toVisualDate` が
+    // head を前日に置き、tail の visual start day と重ならない。boundary 時刻
+    // ちょうど ('05:00') を head end にすると toVisualDate (`h < startHour`) が
+    // 当日扱いとなり tail と同日に重複し、GridTaskLayout の greedy track 割り当てで
+    // 別 track に飛ぶバグを生む。日付と時刻を対で受け取るのは、両者がずれると
+    // head が 1 日長くなり、23.5h 閾値を越えて allDay に誤分類されるため
+    // (startHour=0 で実際に起きていた。dayBoundaryAt の doc を参照)。
+    const boundary = dayBoundaryAt(boundaryCalendarDate, startHour);
+
     const beforeSegmentDate = DateUtils.toVisualDate(dt.effectiveStartDate, dt.effectiveStartTime, startHour);
-    const afterSegmentDate = DateUtils.toVisualDate(boundaryCalendarDate, boundaryTime, startHour);
+    const afterSegmentDate = DateUtils.toVisualDate(boundary.date, boundary.time, startHour);
 
     const headSegment: DisplayTask = {
         ...dt,
@@ -319,10 +318,10 @@ export function splitDisplayTaskAtBoundary(dt: DisplayTask, startHour: number): 
         splitContinuesBefore: dt.splitContinuesBefore ?? false,
         splitContinuesAfter: true,
         // Override both raw and effective end to boundary - 1min (前日 inclusive)
-        endDate: boundaryCalendarDate,
-        endTime: beforeBoundaryTime,
-        effectiveEndDate: boundaryCalendarDate,
-        effectiveEndTime: beforeBoundaryTime,
+        endDate: boundary.beforeDate,
+        endTime: boundary.beforeTime,
+        effectiveEndDate: boundary.beforeDate,
+        effectiveEndTime: boundary.beforeTime,
     };
 
     const tailSegment: DisplayTask = {
@@ -332,10 +331,10 @@ export function splitDisplayTaskAtBoundary(dt: DisplayTask, startHour: number): 
         splitContinuesBefore: true,
         splitContinuesAfter: dt.splitContinuesAfter ?? false,
         // Override both raw and effective start to boundary
-        startDate: boundaryCalendarDate,
-        startTime: boundaryTime,
-        effectiveStartDate: boundaryCalendarDate,
-        effectiveStartTime: boundaryTime,
+        startDate: boundary.date,
+        startTime: boundary.time,
+        effectiveStartDate: boundary.date,
+        effectiveStartTime: boundary.time,
     };
 
     return [headSegment, tailSegment];
