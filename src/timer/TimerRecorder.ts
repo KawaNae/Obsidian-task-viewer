@@ -15,7 +15,7 @@ import { createTempTask } from '../services/data/createTempTask';
 import { TimeFormatter } from '../utils/TimeFormatter';
 import { TimerTaskResolver } from './TimerTaskResolver';
 import { isTimerTargetId } from '../utils/TimerTargetIdUtils';
-import { type TimerIcon, getTimerIcon, withTimerIcon } from '../utils/TimerIcons';
+import { type TimerIcon, getTimerIcon, splitTimerIcon, withTimerIcon } from '../utils/TimerIcons';
 import { decideLazyEnd } from './TimerLazyEnd';
 import type { TimerStorageUtils } from './TimerStorageUtils';
 import { logWarn } from '../log/log';
@@ -433,9 +433,14 @@ export class TimerRecorder {
     private sessionName(timer: TimerInstance): string {
         const drafted = timer.pendingContent?.trim();
         if (drafted) return drafted;
-        // デイリーノート起点の `taskName` は日付。作業名として継ぐと
-        // 「2026-08-17 を 25 分やった」という読めない記録が残る。
-        return isDailyTimer(timer) ? '' : timer.taskName.trim();
+        if (!isDailyTimer(timer)) return timer.taskName.trim();
+
+        // デイリーノート起点の `taskName` は日付で、作業名として継ぐと
+        // 「2026-08-17 を 25 分やった」という読めない記録が残る。1 本目は空で
+        // 始めて widget で付けさせ、2 本目以降は直前のレコードから継ぐ
+        // （兄弟レコードは同名、が v2 の規則）。
+        const tail = this.resolveTailRecord(timer);
+        return tail ? splitTimerIcon(tail.content).name : '';
     }
 
     /** レコード行の content（アイコン + 名前）。 */
