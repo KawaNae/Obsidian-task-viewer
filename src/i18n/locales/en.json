@@ -594,6 +594,15 @@
     "openCountupForDailyNote": "⏱️ Open Countup for Daily Note",
     "openPomodoroForDailyNote": "🍅 Open Pomodoro for Daily Note"
   },
+  "flowDelete": {
+    "title": "This task carries a flow command",
+    "message": "Deleting it ends the series. Firing the command first writes the next instance, then deletes this one.",
+    "nextInstance": "Next instance",
+    "fireAndDelete": "Fire and delete",
+    "deleteOnly": "Delete without firing",
+    "descendants": "{{count}} child task(s) carry a command of their own and are deleted along with it.",
+    "cannotFire": "The command cannot fire, so it goes with the task: {{reason}}"
+  },
   "timer": {
     "countup": "Countup",
     "countdown": "Countdown",
@@ -650,6 +659,7 @@
     "taskUpdated": "{{icon}} Task updated! ({{duration}})",
     "childTaskNotFound": "Child task not found, creating new record.",
     "flowDidNotFire": "Flow did not fire: {{reason}} ({{file}})",
+    "flowDeleteDidNotFire": "The flow did not fire, so the task was not deleted: {{reason}} ({{file}})",
     "timerTargetNotFound": "Timer target task was not found. It may have been deleted, moved, or renamed.",
     "timerTargetReadOnly": "This task's format is read-only. The timer cannot write records to it.",
     "taskConverted": "Task converted to frontmatter file",

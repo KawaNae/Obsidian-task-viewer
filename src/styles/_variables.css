@@ -15,6 +15,13 @@
 
     /* Task Card */
     --task-card-border-radius: 4px;
+    /* Content overflow extension (see _task-card.css section 8): when a
+       card is too short to fit its content, the content moves into a box
+       of this height, offset this far to the right, overlaid on the card.
+       The @container condition that decides "too short" can't reference
+       var(), so 22px is duplicated there as a literal — keep both in sync. */
+    --task-card-floor-height: 22px;
+    --task-card-overflow-ext-offset: 14px;
 
     --task-card-accent-solid-width: 4px;
     

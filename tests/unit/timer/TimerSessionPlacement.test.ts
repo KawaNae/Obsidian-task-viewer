@@ -112,7 +112,6 @@ function makeTimer(overrides: Partial<TimerInstance> = {}): TimerInstance {
         recordedElapsedTime: 600,
         isExpanded: true,
         intervalId: null,
-        customLabel: '',
         recordMode: 'self',
         parserId: 'tv-inline',
         taskColor: '',

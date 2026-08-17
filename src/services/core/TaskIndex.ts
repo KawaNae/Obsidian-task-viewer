@@ -6,6 +6,7 @@ import { TaskRepository } from '../persistence/TaskRepository';
 import { PropertyUpdatePlanner } from '../persistence/PropertyUpdatePlanner';
 import { createTempTask } from '../data/createTempTask';
 import { FlowExecutor } from '../flow/FlowExecutor';
+import type { FlowDeleteAssessment } from '../flow/FlowDeletion';
 import { WikiLinkResolver } from './WikiLinkResolver';
 import { TaskStore } from './TaskStore';
 import { TaskScanner } from './TaskScanner';
@@ -609,22 +610,44 @@ export class TaskIndex {
         }
     }
 
-    async deleteTask(taskId: string): Promise<void> {
+    /**
+     * What deleting this task would cost its flow command, answered without
+     * writing anything. The delete menu asks before it decides what to offer.
+     */
+    assessFlowDelete(taskId: string): FlowDeleteAssessment {
         const task = this.store.getTask(taskId);
-        if (!task) return;
+        if (!task) return { outlook: { kind: 'nothing' }, descendantFlows: 0 };
+        return this.commandExecutor.assessDeletion(task);
+    }
+
+    /**
+     * @param options.fireFlow write the command's next instance before
+     * removing this one. A fire that cannot be planned stops the delete —
+     * see {@link FlowExecutor.fireAndDelete} — so the task can survive this
+     * call, with a notice saying why.
+     * @returns whether the task is gone. Only a stopped fire and a read-only
+     * task answer no; every other road here removes it.
+     */
+    async deleteTask(taskId: string, options: { fireFlow?: boolean } = {}): Promise<boolean> {
+        const task = this.store.getTask(taskId);
+        if (!task) return false;
         return this.withNotify(task.file, async () => {
-            logInfo(`[deleteTask] id=${taskId}`);
-            if (task.isReadOnly) return;
+            logInfo(`[deleteTask] id=${taskId} fireFlow=${options.fireFlow === true}`);
+            if (task.isReadOnly) return false;
 
             this.syncDetector.markLocalEdit(task.file);
 
-            if (isTvFile(task)) {
+            let removed = true;
+            if (options.fireFlow && isTvInline(task)) {
+                removed = await this.commandExecutor.fireAndDelete(task);
+            } else if (isTvFile(task)) {
                 await this.repository.deleteTvFile(task, this.settings.tvFileKeys);
             } else {
                 await this.repository.deleteTaskFromFile(task);
             }
 
             await this.scanner.waitForScan(task.file);
+            return removed;
         });
     }
 

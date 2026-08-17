@@ -4,6 +4,9 @@ import type { TaskWriteService } from '../../../services/data/TaskWriteService';
 import type TaskViewerPlugin from '../../../main';
 import { CreateTaskModal, formatTaskLine } from '../../../modals/CreateTaskModal';
 import { ConfirmModal } from '../../../modals/ConfirmModal';
+import { FlowDeleteChoiceModal } from '../../../modals/FlowDeleteChoiceModal';
+import type { FlowDeleteOutlook } from '../../../services/flow/FlowDeletion';
+import { runtimeText } from '../../../services/flow/runtimeText';
 import { getTaskDisplayName } from '../../../services/parsing/utils/TaskContent';
 import { openFileInExistingOrNewTab } from '../../../utils/NavigationUtils';
 import { DateUtils } from '../../../utils/DateUtils';
@@ -364,6 +367,11 @@ export class TaskActionsMenuBuilder {
 
     /**
      * "Delete"項目を追加
+     *
+     * フローコマンドを持つタスクは、削除がその系列の終わりになる。発火が実際に
+     * 次のインスタンスを書く場合だけ 3 択を出し、それ以外（コマンドなし、until
+     * 切れ、テロメア尽き、move 単独、発火不能）は通常の確認ダイアログのまま。
+     * 答えが常に同じ選択肢を毎回聞かないため。
      */
     private addDeleteItem(menu: Menu, task: Task, onDestructive?: () => void): void {
         menu.addItem((item) => {
@@ -372,17 +380,54 @@ export class TaskActionsMenuBuilder {
                 .setWarning(true)
                 .onClick(async () => {
                     menu.close();
+                    const { outlook, descendantFlows } = this.writeService.assessFlowDelete(task.id);
+
+                    // 発火に失敗すると削除も中止される。そのときタスクはまだ
+                    // ページ上にあるので、パネルを閉じる・選択を外すといった
+                    // 「消えた前提」の後始末は走らせない。
+                    const remove = async (fireFlow: boolean) => {
+                        if (await this.writeService.deleteTask(task.id, { fireFlow })) {
+                            onDestructive?.();
+                        }
+                    };
+
+                    if (outlook.kind === 'creates') {
+                        new FlowDeleteChoiceModal(
+                            this.app,
+                            { previewLine: outlook.previewLine, descendantFlows },
+                            (choice) => {
+                                if (choice === 'cancel') return;
+                                void remove(choice === 'fireAndDelete');
+                            }
+                        ).open();
+                        return;
+                    }
+
                     new ConfirmModal(
                         this.app,
                         t('menu.deleteTaskTitle'),
-                        t('menu.deleteTaskMessage'),
-                        async () => {
-                            await this.writeService.deleteTask(task.id);
-                            onDestructive?.();
-                        },
+                        this.deleteMessage(outlook, descendantFlows),
+                        () => void remove(false),
                         { confirmLabel: t('modal.delete'), warning: true }
                     ).open();
                 });
         });
+    }
+
+    /**
+     * 確認ダイアログの本文。削除がフローに与える影響を、分かっている分だけ足す。
+     *
+     * 発火不能だった場合に理由を出すのは、コマンドを書いた本人が「なぜ発火して
+     * 削除を選べないのか」をその場で知れる唯一の機会だから。
+     */
+    private deleteMessage(outlook: FlowDeleteOutlook, descendantFlows: number): string[] {
+        const lines = [t('menu.deleteTaskMessage')];
+        if (outlook.kind === 'failed') {
+            lines.push(t('flowDelete.cannotFire', { reason: runtimeText(outlook.error) }));
+        }
+        if (descendantFlows > 0) {
+            lines.push(t('flowDelete.descendants', { count: String(descendantFlows) }));
+        }
+        return lines;
     }
 }

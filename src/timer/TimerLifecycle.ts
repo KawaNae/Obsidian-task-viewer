@@ -56,8 +56,6 @@ export class TimerLifecycle {
     private maybeExtendSessionEnd(timer: TimerInstance): void {
         if (timer.timerType === 'idle') return;
         if (timer.runState !== 'running') return;
-        // デイリーノートへの記録は停止時に 1 行足す形で、走行中の行を持たない。
-        if (timer.taskId.startsWith('daily-')) return;
 
         const floor = timer.lazyEndFloorMs;
         if (floor !== undefined && Date.now() < floor) return;
@@ -180,6 +178,7 @@ export class TimerLifecycle {
         this.stopTimerTick(timerId);
 
         AudioUtils.playFinishSound();
+        await this.ctx.flushTimerContent(timerId);
         await this.ctx.recorder.recordSessionEnd(timer);
         this.closeTimer(timerId);
     }
@@ -242,6 +241,9 @@ export class TimerLifecycle {
 
         this.pauseTimer(timer);
         const sessionSeconds = getTimerElapsedSeconds(timer);
+        // 記録は走行中の行の content を読む。未書き込みの入力を先に流し込まないと、
+        // 打った名前が 1 セッション繰り越される。
+        await this.ctx.flushTimerContent(timer.id);
         await this.ctx.recorder.recordSessionEnd(timer);
 
         timer.recordedElapsedTime += Math.max(0, sessionSeconds);
@@ -288,10 +290,14 @@ export class TimerLifecycle {
         AudioUtils.playStartSound();
 
         // 書き先（尻尾の兄弟 / フォールバックの子）の判断は recorder が持つ。
-        void this.ctx.recorder.startNextSession(timer).then((sessionTaskId) => {
-            if (!sessionTaskId) return;
-            this.ctx.persistTimersToStorage();
-        });
+        void (async () => {
+            // 中断中に打たれた入力は直前のレコード宛。新しい行を挿す前に流し込む。
+            await this.ctx.flushTimerContent(timer.id);
+            const sessionTaskId = await this.ctx.recorder.startNextSession(timer);
+            // 挿入の往復中に打たれた分は、尻尾が移った今の行が受け取る。
+            await this.ctx.flushTimerContent(timer.id);
+            if (sessionTaskId) this.ctx.persistTimersToStorage();
+        })();
 
         this.ctx.render();
         this.ctx.persistTimersToStorage();
@@ -310,6 +316,7 @@ export class TimerLifecycle {
         if (timer.runState === 'running' && timer.timerType !== 'idle') {
             this.pauseTimer(timer);
             const sessionSeconds = getTimerElapsedSeconds(timer);
+            await this.ctx.flushTimerContent(timer.id);
             await this.ctx.recorder.recordSessionEnd(timer);
             timer.recordedElapsedTime += Math.max(0, sessionSeconds);
             timer.sessionCount += 1;
@@ -329,6 +336,8 @@ export class TimerLifecycle {
         // 先に tick を止める。走行中の行は end の書き足し対象でもあるので、
         // 消している最中の行に書き足しが飛ぶ経路を作らない。
         this.stopTimerTick(timer.id);
+        // 走行中の行ごと消えるので、未書き込みの入力は書かずに捨てる。
+        this.ctx.discardTimerContent(timer.id);
         await this.ctx.recorder.discardRunningPlaceholder(timer);
         this.closeTimer(timer.id);
     }
@@ -481,7 +490,6 @@ export class TimerLifecycle {
             recordedElapsedTime: 0,
             isExpanded: true,
             intervalId: null,
-            customLabel: '',
             timerType: 'idle',
             elapsedTime: 0,
             recordMode: 'child',

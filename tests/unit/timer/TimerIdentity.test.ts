@@ -39,6 +39,8 @@ function makeCtx(): TimerContext & { renders: number } {
         renderTimerItem: () => { /* unused */ },
         persistTimersToStorage: () => { /* unused */ },
         onTimerClosed: () => { /* unused */ },
+        flushTimerContent: async () => { /* unused */ },
+        discardTimerContent: () => { /* unused */ },
         ensureContainer: () => ({}) as HTMLElement,
         destroyContainer: () => { /* unused */ },
         getPinState: () => 'pinned' as const,

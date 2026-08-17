@@ -48,6 +48,8 @@ function build() {
         renderTimerItem: () => { /* unused */ },
         persistTimersToStorage: () => { persisted++; },
         onTimerClosed: () => { /* unused */ },
+        flushTimerContent: async () => { calls.order.push('flush'); },
+        discardTimerContent: () => { calls.order.push('discardContent'); },
         ensureContainer: () => ({}) as HTMLElement,
         destroyContainer: () => { /* unused */ },
         getPinState: () => 'pinned' as const,
@@ -76,7 +78,6 @@ function startCountup(ctx: TimerContext, overrides: Partial<CountupTimer> = {}):
         recordedElapsedTime: 0,
         isExpanded: true,
         intervalId: null,
-        customLabel: '',
         recordMode: 'self',
         parserId: 'tv-inline',
         taskColor: '',
@@ -195,8 +196,9 @@ describe('finish', () => {
         await h.lifecycle.finishTimer(timer);
 
         // 記録して閉じるだけ。完了は checkbox でユーザーが宣言するものなので、
-        // v1 の completeTargetTask に当たる書き込みはもう存在しない。
-        expect(h.calls.order).toEqual(['record']);
+        // v1 の completeTargetTask に当たる書き込みはもう存在しない。記録は走行中の
+        // 行の content を読むので、未書き込みの入力を先に流し込む。
+        expect(h.calls.order).toEqual(['flush', 'record']);
         expect(timer.sessionCount).toBe(1);
         expect(h.ctx.timers.has(timer.id)).toBe(false);
     });
@@ -228,7 +230,8 @@ describe('discard', () => {
         const timer = startCountup(h.ctx);
         await h.lifecycle.discardTimer(timer);
 
-        expect(h.calls.order).toEqual(['discard']);
+        // 行ごと消えるので、未書き込みの入力は書かずに捨てる。
+        expect(h.calls.order).toEqual(['discardContent', 'discard']);
         expect(h.calls.recordSessionEnd).toBe(0);
         expect(timer.sessionCount).toBe(0);
         expect(h.ctx.timers.has(timer.id)).toBe(false);
@@ -249,7 +252,12 @@ describe('the session cycle', () => {
         await h.lifecycle.finishTimer(timer);
 
         // 1 セッション = 1 レコード。開始で行を書き、終いに記録する、が 2 周。
-        expect(h.calls.order).toEqual(['record', 'nextSession', 'record']);
+        // 記録と、尻尾が動く再開の前後には content の書き出しが挟まる。
+        expect(h.calls.order).toEqual([
+            'flush', 'record',
+            'flush', 'nextSession', 'flush',
+            'flush', 'record',
+        ]);
         expect(h.calls.startNextSession).toBe(1);
         expect(timer.sessionCount).toBe(2);
         expect(h.ctx.timers.has(timer.id)).toBe(false);

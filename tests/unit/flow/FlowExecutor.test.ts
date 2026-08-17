@@ -290,3 +290,138 @@ describe('a fire that does not happen says so', () => {
         expect(Notice.messages).toEqual([]);
     });
 });
+
+describe('fireAndDelete', () => {
+    // 削除は「コマンドを消費するもう一つの道」。行ごと消えるので strip の
+    // 出番はなく、生成だけを先に済ませてから消す。
+    beforeEach(() => {
+        Notice.messages.length = 0;
+    });
+
+    it('writes the next instance, then deletes the original', async () => {
+        const repository = makeRepository();
+        const { executor } = makeExecutor(repository);
+        const task = flowTask('every mon', { statusChar: ' ' });
+
+        await executor.fireAndDelete(task);
+
+        expect(repository.insertRecurrenceForTask).toHaveBeenCalledTimes(1);
+        expect(repository.deleteTaskFromFile).toHaveBeenCalledWith(task);
+        // 行の特定は originalText 照合なので、読む側が済むまで元行は動かせない。
+        expect(repository.insertRecurrenceForTask.mock.invocationCallOrder[0])
+            .toBeLessThan(repository.deleteTaskFromFile.mock.invocationCallOrder[0]);
+        // 行ごと消えるのだから、コマンドを剥がす書き込みは無駄でしかない。
+        expect(repository.stripFlow).not.toHaveBeenCalled();
+    });
+
+    it('fires an unchecked task: deletion is not a completion', async () => {
+        // handleTaskCompletion なら statusChar ' ' で門前払いされる経路。
+        const repository = makeRepository();
+        const { executor } = makeExecutor(repository);
+
+        await executor.fireAndDelete(flowTask('every mon', { statusChar: ' ' }));
+
+        expect(repository.insertRecurrenceForTask).toHaveBeenCalledTimes(1);
+    });
+
+    it('does not archive a move: a delete was not a request to keep a copy', async () => {
+        const repository = makeRepository();
+        const { executor } = makeExecutor(repository);
+
+        await executor.fireAndDelete(flowTask('every mon move([[Archive]])', { statusChar: ' ' }));
+
+        expect(repository.appendTaskWithChildren).not.toHaveBeenCalled();
+        expect(repository.insertRecurrenceForTask).toHaveBeenCalledTimes(1);
+        expect(repository.deleteTaskFromFile).toHaveBeenCalledTimes(1);
+    });
+
+    it('deletes without generating when until has expired', async () => {
+        const repository = makeRepository();
+        const { executor } = makeExecutor(repository);
+
+        await executor.fireAndDelete(flowTask('every mon until(2026-06-30)', { statusChar: ' ' }));
+
+        expect(repository.insertRecurrenceForTask).not.toHaveBeenCalled();
+        expect(repository.deleteTaskFromFile).toHaveBeenCalledTimes(1);
+    });
+
+    it('keeps the task when the fire fails, and says why', async () => {
+        // 発火できないコマンドは行の上に残っており、その行が消える寸前だった。
+        // ここで消すと、残そうとしたものをちょうど失う。
+        const repository = makeRepository();
+        const { executor } = makeExecutor(repository);
+
+        const removed = await executor.fireAndDelete(
+            flowTask('every mon setDue(end + 1d)', { statusChar: ' ' }));
+
+        expect(removed).toBe(false);
+        expect(repository.insertRecurrenceForTask).not.toHaveBeenCalled();
+        expect(repository.deleteTaskFromFile).not.toHaveBeenCalled();
+        expect(Notice.messages).toHaveLength(1);
+        expect(Notice.messages[0]).toContain('the task was not deleted');
+    });
+
+    it('reports the task gone when it deleted it', async () => {
+        // 呼んだ側はこの答えでパネルを閉じるかを決める。書き込んだかどうかでは
+        // なく、タスクが消えたかどうかを聞いている。
+        const repository = makeRepository();
+        const { executor } = makeExecutor(repository);
+
+        const fired = await executor.fireAndDelete(flowTask('every mon', { statusChar: ' ' }));
+        const expired = await executor.fireAndDelete(
+            flowTask('every mon until(2026-06-30)', { statusChar: ' ' }));
+
+        expect(fired).toBe(true);
+        expect(expired).toBe(true);
+    });
+
+    it('resolves only after the work is done, so the caller can rescan', async () => {
+        const repository = makeRepository();
+        const { executor, taskIndex } = makeExecutor(repository);
+
+        await executor.fireAndDelete(flowTask('every mon', { statusChar: ' ' }));
+
+        // await が返った時点で書き込みも再スキャン要求も済んでいる。
+        expect(repository.deleteTaskFromFile).toHaveBeenCalledTimes(1);
+        expect(taskIndex.waitForScan).toHaveBeenCalledTimes(1);
+    });
+
+    it('resolves even when the task is gone from the index', async () => {
+        // 待ち手を残したまま返らないと、呼んだメニューがそのまま固まる。
+        const repository = makeRepository();
+        const { executor } = makeExecutor(repository, () => undefined);
+
+        const removed = await executor.fireAndDelete(flowTask('every mon', { statusChar: ' ' }));
+
+        // 解決できない行は既に無い行で、それは呼んだ側が求めていた状態そのもの。
+        expect(removed).toBe(true);
+        expect(repository.deleteTaskFromFile).not.toHaveBeenCalled();
+    });
+
+    it('resolves even when a write throws', async () => {
+        const repository = makeRepository();
+        repository.insertRecurrenceForTask.mockRejectedValueOnce(new Error('disk on fire'));
+        const { executor } = makeExecutor(repository);
+
+        const removed = await executor.fireAndDelete(flowTask('every mon', { statusChar: ' ' }));
+
+        expect(removed).toBe(false);
+        expect(repository.deleteTaskFromFile).not.toHaveBeenCalled();
+    });
+
+    it('runs behind a completion already in the queue', async () => {
+        // 同じ行を書き換える二つの道が並ぶと、古いインデックスに対する二重生成に
+        // なる。順番待ちは一本のキューが担う。
+        const repository = makeRepository();
+        const { executor } = makeExecutor(repository);
+
+        const completion = executor.handleTaskCompletion(
+            flowTask('every mon', { content: 'A', originalText: '- [x] A' }));
+        const deletion = executor.fireAndDelete(
+            flowTask('every tue', { content: 'B', originalText: '- [ ] B', statusChar: ' ' }));
+        await Promise.all([completion, deletion]);
+
+        expect(repository.stripFlow.mock.invocationCallOrder[0])
+            .toBeLessThan(repository.deleteTaskFromFile.mock.invocationCallOrder[0]);
+    });
+});

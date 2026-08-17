@@ -1,6 +1,7 @@
 import type { TFile } from 'obsidian';
 import type { DuplicateOptions, Task } from '../../types';
 import type { TaskIndex } from '../core/TaskIndex';
+import type { FlowDeleteAssessment } from '../flow/FlowDeletion';
 import { TaskIdGenerator } from '../display/TaskIdGenerator';
 import { buildChildEntries } from './ChildEntryBuilder';
 
@@ -33,10 +34,31 @@ export class TaskWriteService {
         return this.taskIndex.updateTask(this.resolveTaskId(taskId), updates);
     }
 
-    async deleteTask(taskId: string): Promise<void> {
+    /**
+     * @returns whether the task is gone. A `fireFlow` delete whose fire could
+     * not be planned keeps the task and answers no, and the listeners stay
+     * quiet — a view told to drop its selection would be dropping it for a
+     * task still on the page.
+     */
+    async deleteTask(taskId: string, options: { fireFlow?: boolean } = {}): Promise<boolean> {
         const id = this.resolveTaskId(taskId);
-        await this.taskIndex.deleteTask(id);
-        for (const cb of this.deleteListeners) cb(id);
+        const removed = await this.taskIndex.deleteTask(id, options);
+        if (removed) {
+            for (const cb of this.deleteListeners) cb(id);
+        }
+        return removed;
+    }
+
+    /**
+     * What a delete would do to this task's flow command, and how many
+     * commands go down with it.
+     *
+     * A query on the write side because it is part of planning the write: the
+     * delete menu asks it to decide which dialog to open, and the answer names
+     * the very line the write would produce.
+     */
+    assessFlowDelete(taskId: string): FlowDeleteAssessment {
+        return this.taskIndex.assessFlowDelete(this.resolveTaskId(taskId));
     }
 
     /**

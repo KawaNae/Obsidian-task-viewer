@@ -1,5 +1,6 @@
 import type { DisplayTask } from '../../types';
 import { DateUtils } from '../../utils/DateUtils';
+import { dayBoundaryAt } from './DayBoundary';
 import {
     getOriginalTaskId,
     shouldSplitDisplayTask,
@@ -87,24 +88,24 @@ function splitAtDateRange(
 
 /**
  * Splits a DisplayTask at a visual-day boundary (boundaryDate's startHour).
- * Head segment covers [taskStart, boundaryDate startHour-1:59].
+ * Head segment covers [taskStart, the minute before the boundary].
  * Tail segment covers [boundaryDate startHour:00, taskEnd].
  * Continuation flags accumulate (OR) across multiple splits.
  */
 function splitAtDateBoundary(dt: DisplayTask, boundaryDate: string, startHour: number): [DisplayTask, DisplayTask] {
     const originalId = getOriginalTaskId(dt);
 
-    const boundaryTime = `${startHour.toString().padStart(2, '0')}:00`;
-    const beforeBoundaryTime = startHour === 0
-        ? '23:59'
-        : `${(startHour - 1).toString().padStart(2, '0')}:59`;
+    // 日付と時刻を対で受け取る。時刻だけを boundary の 1 分前にして日付を
+    // 据え置くと、startHour=0 で head が 1 日長くなり、ビュー端のクリップが
+    // 1 日ずれる（dayBoundaryAt の doc を参照）。
+    const boundary = dayBoundaryAt(boundaryDate, startHour);
 
     const head: DisplayTask = {
         ...dt,
         id: TaskIdGenerator.makeSegmentId(originalId, dt.effectiveStartDate),
-        effectiveEndDate: boundaryDate,
-        effectiveEndTime: beforeBoundaryTime,
-        endDate: boundaryDate,
+        effectiveEndDate: boundary.beforeDate,
+        effectiveEndTime: boundary.beforeTime,
+        endDate: boundary.beforeDate,
         isSplit: true,
         splitContinuesBefore: dt.splitContinuesBefore ?? false,
         splitContinuesAfter: true,
@@ -113,10 +114,10 @@ function splitAtDateBoundary(dt: DisplayTask, boundaryDate: string, startHour: n
 
     const tail: DisplayTask = {
         ...dt,
-        id: TaskIdGenerator.makeSegmentId(originalId, boundaryDate),
-        effectiveStartDate: boundaryDate,
-        effectiveStartTime: boundaryTime,
-        startDate: boundaryDate,
+        id: TaskIdGenerator.makeSegmentId(originalId, boundary.date),
+        effectiveStartDate: boundary.date,
+        effectiveStartTime: boundary.time,
+        startDate: boundary.date,
         isSplit: true,
         splitContinuesBefore: true,
         splitContinuesAfter: dt.splitContinuesAfter ?? false,

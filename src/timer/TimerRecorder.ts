@@ -7,7 +7,7 @@
 import { type App, Notice } from 'obsidian';
 import { t } from '../i18n';
 import type TaskViewerPlugin from '../main';
-import { type TimerInstance, getTimerElapsedSeconds } from './TimerInstance';
+import { type TimerInstance, dailyDateOf, getTimerElapsedSeconds, isDailyTimer } from './TimerInstance';
 import { DailyNoteUtils } from '../utils/DailyNoteUtils';
 import { TaskParser } from '../services/parsing/TaskParser';
 import { type Task, isTvFile } from '../types';
@@ -15,7 +15,7 @@ import { createTempTask } from '../services/data/createTempTask';
 import { TimeFormatter } from '../utils/TimeFormatter';
 import { TimerTaskResolver } from './TimerTaskResolver';
 import { isTimerTargetId } from '../utils/TimerTargetIdUtils';
-import { type TimerIcon, getTimerIcon, withTimerIcon } from '../utils/TimerIcons';
+import { type TimerIcon, getTimerIcon, splitTimerIcon, withTimerIcon } from '../utils/TimerIcons';
 import { decideLazyEnd } from './TimerLazyEnd';
 import type { TimerStorageUtils } from './TimerStorageUtils';
 import { logWarn } from '../log/log';
@@ -257,6 +257,7 @@ export class TimerRecorder {
      *
      * 名前は**対象タスクの名前を継ぐ**。セッションは同じ作業の分割であって別物
      * ではないので、レコードが無名（アイコンだけ）になると後から読めない。
+     * デイリーノート起点だけは継ぐ相手が無く、空名で始めて widget で付けさせる。
      */
     buildSessionPlaceholder(timer: TimerInstance): { line: string; blockId: string } {
         const now = new Date();
@@ -290,7 +291,7 @@ export class TimerRecorder {
      * Returns the child task ID, or undefined if insertion failed.
      */
     async createChildAtStart(timer: TimerInstance): Promise<string | undefined> {
-        if (timer.taskId.startsWith('daily-')) return undefined;
+        if (isDailyTimer(timer)) return this.createDailyLineAtStart(timer);
 
         const { line, blockId } = this.buildSessionPlaceholder(timer);
         await this.insertChildRecord(timer, line);
@@ -301,6 +302,22 @@ export class TimerRecorder {
         if (!parentTask) return undefined;
 
         return this.adoptWrittenSession(timer, parentTask.file, blockId);
+    }
+
+    /**
+     * デイリーノート起点の 1 本目。
+     *
+     * 器になるタスクが無いので、設定の見出しの下へ行を直接置く。書いた後にノートの
+     * パスを `taskFile` へ引き取るのが要点で、これで尻尾の解決（ファイルで絞る）と
+     * 2 本目以降の兄弟挿入が通常タスクと同じ経路に乗る。
+     */
+    private async createDailyLineAtStart(timer: TimerInstance): Promise<string | undefined> {
+        const { line, blockId } = this.buildSessionPlaceholder(timer);
+        const filePath = await this.addTimerRecordToDailyNote(dailyDateOf(timer), line);
+        if (!filePath) return undefined;
+
+        timer.taskFile = filePath;
+        return this.adoptWrittenSession(timer, filePath, blockId);
     }
 
     /**
@@ -403,16 +420,27 @@ export class TimerRecorder {
     }
 
     /**
-     * レコードが名乗る名前の素。
+     * レコードが名乗る名前の素。**行を新しく作るときだけ**使う。
      *
-     * ユーザーが付けたラベルが無ければ**対象タスクの名前を継ぐ**。セッションは
+     * 行が既にあるなら content の正はその行で、widget の入力欄がその行を直接書き
+     * 換える（`TimerContentBinding`）。ここへ来るのは書く相手がまだ無い場合だけで、
+     * 未書き込みの下書きがあればそれ、無ければ**対象タスクの名前を継ぐ**。セッションは
      * 同じ作業の分割であって別物ではないので、名前を落とすと後から読めない。
      * 走行中の行を書く {@link buildSessionPlaceholder} と、行を引けずに 1 行
      * 足すフォールバック（{@link addCountupRecord} 系）で規則が割れていて、
      * 後者だけが名前を失っていた。
      */
     private sessionName(timer: TimerInstance): string {
-        return timer.customLabel.trim() || timer.taskName.trim();
+        const drafted = timer.pendingContent?.trim();
+        if (drafted) return drafted;
+        if (!isDailyTimer(timer)) return timer.taskName.trim();
+
+        // デイリーノート起点の `taskName` は日付で、作業名として継ぐと
+        // 「2026-08-17 を 25 分やった」という読めない記録が残る。1 本目は空で
+        // 始めて widget で付けさせ、2 本目以降は直前のレコードから継ぐ
+        // （兄弟レコードは同名、が v2 の規則）。
+        const tail = this.resolveTailRecord(timer);
+        return tail ? splitTimerIcon(tail.content).name : '';
     }
 
     /** レコード行の content（アイコン + 名前）。 */
@@ -483,20 +511,16 @@ export class TimerRecorder {
     /**
      * 再開時にセッション行を書いて次の走行を始める。
      *
-     *   daily            → 何も書かない（デイリーノートには終わってから 1 行足す）
      *   尻尾を引ける     → **尻尾の兄弟**として追記し、尻尾アンカーを進める
      *   引けない         → 対象タスクの子として追記（フォールバック）
      *
      * self 起点か child 起点かで分けない。self は 1 本目がタスク行そのもの、
      * child は 1 本目が子で、どちらも 2 本目以降は「直前のレコードの隣」に並ぶ。
+     * デイリーノート起点も 1 本目を見出しの下に置くだけで、あとは同じ。
      * 最後の枝はフォールバックでもある: レコード行をユーザーが消して尻尾を失って
      * も、記録そのものは落とさない。
      */
     async startNextSession(timer: TimerInstance): Promise<string | undefined> {
-        // デイリーノートは走行中の行を持たない（開始時に書く相手がいない）。
-        // セッションの記録は停止時に 1 行足す従来どおりの経路。
-        if (timer.taskId.startsWith('daily-')) return undefined;
-
         const tail = this.resolveTailRecord(timer);
         // 新しい行を取れるまでは「走行中の行は無い」。書き込みが不発に終わったとき、
         // 前のセッションの行を走行中と誤認して上書きさせないため。
@@ -644,9 +668,11 @@ export class TimerRecorder {
      * Frontmatter/inline both resolve target with timerTargetId first.
      */
     private async insertChildRecord(timer: TimerInstance, formattedLine: string): Promise<void> {
-        if (timer.taskId.startsWith('daily-')) {
-            const dailyDate = timer.taskId.replace('daily-', '');
-            await this.addTimerRecordToDailyNote(dailyDate, formattedLine);
+        // デイリーノートには器になるタスクが無いので見出しの下へ直接置く。開始時の
+        // 1 本目は {@link createDailyLineAtStart} が通り、ここへ来るのは尻尾を
+        // 見失ったときのフォールバック（1 行だけ足して記録を落とさない）。
+        if (isDailyTimer(timer)) {
+            await this.addTimerRecordToDailyNote(dailyDateOf(timer), formattedLine);
             return;
         }
 
@@ -663,15 +689,15 @@ export class TimerRecorder {
     }
 
     /**
-     * Add timer record directly to daily note (completed task format).
+     * デイリーノートの見出しの下へ 1 行置き、書き込んだノートのパスを返す。
      */
-    private async addTimerRecordToDailyNote(dateStr: string, taskLine: string): Promise<void> {
+    private async addTimerRecordToDailyNote(dateStr: string, taskLine: string): Promise<string | null> {
         const [y, m, d] = dateStr.split('-').map(Number);
         const date = new Date();
         date.setFullYear(y, m - 1, d);
         date.setHours(0, 0, 0, 0);
 
-        await DailyNoteUtils.appendLineToDailyNote(
+        return DailyNoteUtils.appendLineToDailyNote(
             this.app,
             date,
             taskLine,

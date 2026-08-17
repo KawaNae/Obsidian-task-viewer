@@ -12,6 +12,7 @@ import type {
     TimerRunState,
     TimerStartConfig,
 } from './TimerInstance';
+import { isDailyTimer } from './TimerInstance';
 import type { TimerContext } from './TimerContext';
 import { OBSOLETE_STORAGE_VERSIONS, STORAGE_VERSION } from './TimerStorageUtils';
 import type { TimerCreator } from './TimerCreator';
@@ -66,7 +67,9 @@ export interface PersistedTimer {
     sessionCount?: number;
     recordedElapsedTime?: number;
     isExpanded: boolean;
-    customLabel: string;
+    pendingContent?: string;
+    /** v0.51.0 以前の下書き。読むときだけ拾う（書き出しは pendingContent）。 */
+    customLabel?: string;
     timerType: TimerStartConfig['timerType'];
     recordMode: TimerRecordMode;
     parserId: string;
@@ -213,7 +216,9 @@ export class TimerPersistence {
         const resolver = new TimerTaskResolver(this.ctx.plugin);
         for (const [timerId, timer] of [...this.ctx.timers]) {
             if (this.lifecycle.isIdleTimer(timerId)) continue;
-            if (timer.taskId.startsWith('daily-')) continue;
+            // デイリーノート起点は対象タスクを持たない。引けないのが正常なので、
+            // ここで閉じると復元のたびに生きているタイマーを壊す。
+            if (isDailyTimer(timer)) continue;
 
             const task = isTvFile(timer) ? resolver.resolveTvFile(timer) : resolver.resolveTvInline(timer);
             if (task) continue;
@@ -259,7 +264,7 @@ export class TimerPersistence {
             sessionCount: timer.sessionCount,
             recordedElapsedTime: timer.recordedElapsedTime,
             isExpanded: timer.isExpanded,
-            customLabel: timer.customLabel,
+            pendingContent: timer.pendingContent,
             timerType: timer.timerType,
             recordMode: timer.recordMode,
             parserId: timer.parserId,
@@ -306,7 +311,7 @@ export class TimerPersistence {
         }
 
         const taskId = persisted.taskId;
-        if (!this.lifecycle.isIdleTimer(taskId) && !taskId.startsWith('daily-') && !TaskIdGenerator.parse(taskId)) {
+        if (!this.lifecycle.isIdleTimer(taskId) && !isDailyTimer({ taskId }) && !TaskIdGenerator.parse(taskId)) {
             return null;
         }
 
@@ -333,7 +338,9 @@ export class TimerPersistence {
             recordedElapsedTime: persisted.recordedElapsedTime ?? 0,
             isExpanded: persisted.isExpanded !== false,
             intervalId: null,
-            customLabel: persisted.customLabel || '',
+            // v0.51.0 以前の customLabel は下書きとして引き継ぐ。書き先の行がある
+            // なら次の書き出しで消える。
+            pendingContent: persisted.pendingContent ?? persisted.customLabel ?? undefined,
             recordMode: persisted.recordMode || 'child',
             parserId: normalizeParserId(persisted.parserId),
             taskColor: persisted.taskColor || ''

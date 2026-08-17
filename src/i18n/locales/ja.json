@@ -594,6 +594,15 @@
     "openCountupForDailyNote": "⏱️ デイリーノートのカウントアップを開く",
     "openPomodoroForDailyNote": "🍅 デイリーノートのポモドーロを開く"
   },
+  "flowDelete": {
+    "title": "このタスクはフローコマンドを持っています",
+    "message": "このまま削除すると系列が終わります。先にコマンドを発火させると、次のインスタンスを書いてからこのタスクを削除します。",
+    "nextInstance": "次のインスタンス",
+    "fireAndDelete": "発火して削除",
+    "deleteOnly": "発火せずに削除",
+    "descendants": "子タスク {{count}} 件が自身のコマンドを持っており、一緒に削除されます。",
+    "cannotFire": "コマンドを発火できないため、タスクと一緒に失われます: {{reason}}"
+  },
   "timer": {
     "countup": "カウントアップ",
     "countdown": "カウントダウン",
@@ -650,6 +659,7 @@
     "taskUpdated": "{{icon}} タスク更新完了！（{{duration}}）",
     "childTaskNotFound": "子タスクが見つかりません。新しいレコードを作成します。",
     "flowDidNotFire": "フローは発火しませんでした: {{reason}}（{{file}}）",
+    "flowDeleteDidNotFire": "フローが発火しなかったため、タスクは削除されませんでした: {{reason}}（{{file}}）",
     "timerTargetNotFound": "タイマーターゲットタスクが見つかりません。削除、移動、またはリネームされた可能性があります。",
     "timerTargetReadOnly": "このタスクは読み取り専用の形式です。タイマーの記録を書き込めません。",
     "taskConverted": "タスクをfrontmatterファイルに変換しました",
