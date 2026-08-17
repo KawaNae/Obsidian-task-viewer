@@ -53,17 +53,24 @@
 
 /* Tint the card surface with the task's --file-accent so cards carry a
    per-task hue against the view bg. Fallback to --tv-accent so colorless
-   cards still tint with the theme's interactive-accent. */
+   cards still tint with the theme's interactive-accent.
+   Declared on the host so the content overflow extension (section 8) can
+   paint the same surface without restating the mix — the two boxes must
+   match exactly or the overlap stops reading as one shape. */
+.task-card {
+    --task-card-surface: color-mix(
+        in srgb,
+        var(--tv-bg-card) 90%,
+        var(--file-accent, var(--tv-accent)) 10%
+    );
+}
+
 .task-card__shape {
     position: absolute;
     inset: 0;
     z-index: -1;
     pointer-events: none;
-    background-color: color-mix(
-        in srgb,
-        var(--tv-bg-card) 90%,
-        var(--file-accent, var(--tv-accent)) 10%
-    );
+    background-color: var(--task-card-surface);
     border-radius: var(--task-card-border-radius);
 }
 
@@ -769,7 +776,11 @@
     pointer-events: none;
 }
 
-.task-card.is-selected .task-card__shape::after {
+/* Declared on the host, not on `__shape::after`, so every box that draws a
+   piece of the frame reads the same width — the content overflow extension
+   (section 8) draws the rest of the outline on its own pseudo-element and
+   would otherwise fall back to the 1px default while the host went 2px. */
+.task-card.is-selected {
     --task-card-frame-width: 2px;
 }
 
@@ -816,15 +827,37 @@
     position: absolute;
 }
 
-.timeline-view .timeline-scroll-area__day-column > .task-card {
-    top: calc(var(--start-minutes, 0) * var(--hour-height) / 60 + 1px);
-    --task-card-real-height: max(0px, calc(var(--duration-minutes, 0) * var(--hour-height) / 60 - 3px));
-    --task-card-slope: max(0px, calc(var(--task-card-floor-height) - var(--task-card-real-height)));
-    height: max(var(--task-card-floor-height), var(--task-card-real-height));
+/* The drag ghost is a cloneNode that lives outside the day column, so it
+   matches none of the column's rules — without repeating these two it has
+   no `container-type` at all and the overflow extension silently vanishes
+   for the duration of the drag. `--duration-minutes` survives the clone
+   because the renderer sets it inline. Height is not repeated: the ghost
+   carries its own inline height from the drag plan. */
+.timeline-view .timeline-scroll-area__day-column > .task-card,
+.timeline-view .task-card--ghost-positioned {
+    /* The card's true duration in px. Floor of 2px so an ultra-short task
+       still draws a visible stub — this box IS the statement of how long
+       the task actually is, so letting it vanish defeats its purpose.
+       Kept as a custom property (not just `height`) because the overflow
+       extension's selection frame needs this length as a coordinate: its
+       clip-path percentages resolve against the extension's own box, so
+       the host's bottom edge has to be handed over in px. */
+    --task-card-real-height: max(2px, calc(var(--duration-minutes, 0) * var(--hour-height) / 60 - 3px));
+    /* Named so the height queries below can only ever resolve against a
+       timed card. An unnamed `@container` binds to the nearest ancestor
+       container of any name, and other views declare `container-type: size`
+       too (`.timer-view`) — a card rendered under one of those would
+       otherwise pick up the short-card layout from an unrelated box. */
     container-type: size;
+    container-name: tv-timed-card;
 }
 
-@container (max-height: 32px) {
+.timeline-view .timeline-scroll-area__day-column > .task-card {
+    top: calc(var(--start-minutes, 0) * var(--hour-height) / 60 + 1px);
+    height: var(--task-card-real-height);
+}
+
+@container tv-timed-card (height <= 32px) {
     .task-card__time {
         display: none;
     }
@@ -833,26 +866,44 @@
     }
 }
 
-/* Floored cards (height pinned to --task-card-floor-height, i.e. real
-   duration shrinks below the floor): clip __shape into a trapezoid whose
-   left edge is the true duration and whose 45°-ish slope carries it up to
-   the floor. Applied to __shape, not the host `.task-card` — bg/accent-bar
-   (::before)/selection-border (::after) all live on __shape (see section 2
-   banner above), and a container cannot query itself, only descendants of
-   its own `container-type` element (same reason the 32px query above
-   targets __time/__content rather than .task-card).
-   NOTE: 22px here must stay in sync with --task-card-floor-height in
-   _variables.css — @container conditions can't reference var(). */
-@container (max-height: 22px) {
-    .task-card__shape {
-        clip-path: polygon(
-            0 0, 100% 0, 100% 100%,
-            var(--task-card-slope) 100%,
-            0 max(2px, var(--task-card-real-height))
-        );
-    }
+/* === Content overflow extension ===
+
+   The general mechanism for "the content does not fit the card." The card
+   keeps its true geometry — background, accent bar (= the real duration),
+   handles, drag, resize and overlap math all stay in the original
+   coordinate system — and the content is lifted out of the flow into a
+   fixed-height box offset to the right, overlaid on top. Both boxes share
+   one surface color, so they read as a single shape with a rectangular
+   notch cut out of the lower left.
+
+   Today the only trigger is a timeline timed card too short to fit one
+   line, so the rules live in this view section and key off the card's own
+   height. If a second view ever needs it, promote the extension to a real
+   element (`.task-card__content-ext`) and move this block up to the shared
+   sections — the content element is doing double duty here precisely
+   because nothing else needs to distinguish the two roles yet.
+
+   `.task-card__content` is used as-is rather than wrapping it in a new
+   element: it is already a sibling of `__shape`, so it escapes the split
+   sawtooth mask (mask applies to `__shape`'s subtree only — see the
+   section 2 banner), and reusing it avoids re-parenting the rendered
+   markdown on every transition. Shape stays purely decorative.
+
+   NOTE: 22px in the condition must stay in sync with
+   --task-card-floor-height — @container conditions can't reference var(). */
+@container (height < 22px) {
     .task-card__content {
-        padding-left: var(--task-card-slope);
+        position: absolute;
+        left: var(--task-card-overflow-ext-offset);
+        right: 0;
+        top: 0;
+        height: var(--task-card-floor-height);
+        padding: 0 6px;
+        box-sizing: border-box;
+        background: var(--task-card-surface);
+        border-radius: var(--task-card-border-radius);
+        margin-top: 0;
+        overflow: hidden;
     }
     .task-card__content > ul {
         margin: 0;
@@ -884,24 +935,36 @@
         margin-inline-start: 0;
         vertical-align: middle;
     }
-    /* Cascade halo (section 2 banner above, `.task-card[data-cascade-offset]
-       ::before`) paints --tv-bg-primary in a box inset -3px 0 -3px -4px from
-       the host — 4px wider on the left, 3px taller top/bottom than the card
-       clip-path above cuts. Left unclipped, that white/bg rectangle shows
-       through the trapezoid notch instead of the card behind it. A
-       container query can target a container's own ::before (the pseudo is
-       a generated child box of the container, not the container itself —
-       verified live), so the same notch can be cut here too. Points are the
-       shape's polygon translated into the halo's larger box: the left edge
-       stays at x=0 (the 4px rim reads as part of the real-duration edge
-       rather than getting its own cut), y gets +3px for the halo's own
-       top-bleed, and the slope's foot gets +4px so the ~45° line continues
-       at roughly the same angle into the wider box. */
-    .task-card[data-cascade-offset]::before {
+
+    /* Selection / hover frame follows the union outline of the two boxes.
+       Each box draws its own full frame and then clips away the one segment
+       that runs through the interior: the host drops the part of its bottom
+       edge that the extension covers (x >= offset), and the extension drops
+       the part of its left edge that runs down the host's band
+       (y < the host's real height). What survives is a single loop around
+       the outside, notch included. */
+    .task-card:where(:not(.task-card--in-hub-preview)):hover .task-card__shape::after,
+    .task-card.is-selected .task-card__shape::after {
         clip-path: polygon(
-            0 0, 100% 0, 100% 100%,
-            calc(var(--task-card-slope) + 4px) 100%,
-            0 calc(max(2px, var(--task-card-real-height)) + 3px)
+            0 0, 100% 0,
+            100% calc(100% - var(--task-card-frame-width, 1px)),
+            var(--task-card-overflow-ext-offset) calc(100% - var(--task-card-frame-width, 1px)),
+            var(--task-card-overflow-ext-offset) 100%,
+            0 100%
+        );
+    }
+    .task-card:where(:not(.task-card--in-hub-preview)):hover .task-card__content::after,
+    .task-card.is-selected .task-card__content::after {
+        content: '';
+        position: absolute;
+        inset: 0;
+        border: var(--task-card-frame-width, 1px) solid var(--file-accent, var(--tv-accent));
+        border-radius: inherit;
+        pointer-events: none;
+        clip-path: polygon(
+            var(--task-card-frame-width, 1px) 0, 100% 0, 100% 100%, 0 100%,
+            0 var(--task-card-real-height),
+            var(--task-card-frame-width, 1px) var(--task-card-real-height)
         );
     }
 }
