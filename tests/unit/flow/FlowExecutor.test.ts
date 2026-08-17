@@ -351,12 +351,28 @@ describe('fireAndDelete', () => {
         const repository = makeRepository();
         const { executor } = makeExecutor(repository);
 
-        await executor.fireAndDelete(flowTask('every mon setDue(end + 1d)', { statusChar: ' ' }));
+        const removed = await executor.fireAndDelete(
+            flowTask('every mon setDue(end + 1d)', { statusChar: ' ' }));
 
+        expect(removed).toBe(false);
         expect(repository.insertRecurrenceForTask).not.toHaveBeenCalled();
         expect(repository.deleteTaskFromFile).not.toHaveBeenCalled();
         expect(Notice.messages).toHaveLength(1);
         expect(Notice.messages[0]).toContain('the task was not deleted');
+    });
+
+    it('reports the task gone when it deleted it', async () => {
+        // 呼んだ側はこの答えでパネルを閉じるかを決める。書き込んだかどうかでは
+        // なく、タスクが消えたかどうかを聞いている。
+        const repository = makeRepository();
+        const { executor } = makeExecutor(repository);
+
+        const fired = await executor.fireAndDelete(flowTask('every mon', { statusChar: ' ' }));
+        const expired = await executor.fireAndDelete(
+            flowTask('every mon until(2026-06-30)', { statusChar: ' ' }));
+
+        expect(fired).toBe(true);
+        expect(expired).toBe(true);
     });
 
     it('resolves only after the work is done, so the caller can rescan', async () => {
@@ -375,8 +391,10 @@ describe('fireAndDelete', () => {
         const repository = makeRepository();
         const { executor } = makeExecutor(repository, () => undefined);
 
-        await executor.fireAndDelete(flowTask('every mon', { statusChar: ' ' }));
+        const removed = await executor.fireAndDelete(flowTask('every mon', { statusChar: ' ' }));
 
+        // 解決できない行は既に無い行で、それは呼んだ側が求めていた状態そのもの。
+        expect(removed).toBe(true);
         expect(repository.deleteTaskFromFile).not.toHaveBeenCalled();
     });
 
@@ -385,8 +403,9 @@ describe('fireAndDelete', () => {
         repository.insertRecurrenceForTask.mockRejectedValueOnce(new Error('disk on fire'));
         const { executor } = makeExecutor(repository);
 
-        await executor.fireAndDelete(flowTask('every mon', { statusChar: ' ' }));
+        const removed = await executor.fireAndDelete(flowTask('every mon', { statusChar: ' ' }));
 
+        expect(removed).toBe(false);
         expect(repository.deleteTaskFromFile).not.toHaveBeenCalled();
     });
 

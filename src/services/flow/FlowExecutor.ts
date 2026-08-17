@@ -44,8 +44,16 @@ function fileName(path: string): string {
 interface FlowQueueEntry {
     task: Task;
     mode: 'completion' | 'delete';
+    /**
+     * Whether the task is gone, for a delete entry.
+     *
+     * A fire that could not be planned keeps the task, so the answer is not
+     * always yes, and the caller acts on it — the menu closes the panel it
+     * was deleting from.
+     */
+    removed?: boolean;
     /** Resolved when the entry leaves the queue, for callers that wait. */
-    settle?: () => void;
+    settle?: (removed: boolean) => void;
 }
 
 export class FlowExecutor {
@@ -87,10 +95,13 @@ export class FlowExecutor {
      * same file: a fire racing the completion queue against a stale index
      * would double-generate, which is the reason the queue exists at all.
      * Awaited, so the caller's own rescan runs after the writes have landed.
+     *
+     * @returns whether the task is gone. False when the fire could not be
+     * planned, which stops the delete.
      */
-    async fireAndDelete(task: Task): Promise<void> {
+    async fireAndDelete(task: Task): Promise<boolean> {
         logInfo(`[Flow:delete] taskId=${task.id} flow="${task.flow ? flowSource(task.flow) : ''}"`);
-        return new Promise<void>(resolve => {
+        return new Promise<boolean>(resolve => {
             this.taskQueue.push({ task, mode: 'delete', settle: resolve });
             this.processQueue();
         });
@@ -114,7 +125,7 @@ export class FlowExecutor {
                     // both — a delete that never settled would hang the menu
                     // that asked for it.
                     this.taskQueue.shift();
-                    entry.settle?.();
+                    entry.settle?.(entry.removed === true);
                 }
             }
         } finally {
@@ -132,7 +143,12 @@ export class FlowExecutor {
 
         // 2. Resolve the task to its latest line/state
         const currentTask = this.taskIndex.resolveTask(entry.task);
-        if (!currentTask) return false;
+        if (!currentTask) {
+            // Nothing to resolve is nothing to delete: the line is already
+            // gone, which is the state the caller was asking for.
+            entry.removed = entry.mode === 'delete';
+            return false;
+        }
 
         // 3. Re-check triggerability (it may have been unchecked). A delete
         //    is not a completion and carries no status condition — the user
@@ -142,9 +158,15 @@ export class FlowExecutor {
             return false;
         }
 
-        const didExecute = entry.mode === 'delete'
-            ? await this.executeDeletionFire(currentTask)
-            : await this.executeFlow(currentTask);
+        let didExecute: boolean;
+        if (entry.mode === 'delete') {
+            didExecute = await this.executeDeletionFire(currentTask);
+            // The delete path writes exactly when it removes the task, so
+            // the two answers are one.
+            entry.removed = didExecute;
+        } else {
+            didExecute = await this.executeFlow(currentTask);
+        }
 
         // 4. Await the rescan triggered by our own writes so the next
         //    queue entry (and completion detection) sees fresh state.
