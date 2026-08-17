@@ -858,32 +858,31 @@
         margin: 0;
         padding-inline-start: 0;
     }
+    /* li stays block (NOT flex): text-overflow only truncates block
+       containers — a flex container never ellipsizes an overflowing flex
+       item's text, it just hard-clips. Checkbox is an inline replaced
+       element, so it flows on this same nowrap line ahead of the title and
+       gets truncated (ellipsized) together with it as one line box. */
     .task-card__content .task-list-item {
-        display: flex;
-        align-items: center;
-        gap: 5px;
         list-style: none;
         white-space: nowrap;
         overflow: hidden;
         text-overflow: ellipsis;
         margin: 0;
-    }
-    .task-card__content .task-list-item-checkbox {
-        flex: none;
+        line-height: var(--task-card-floor-height);
     }
     /* Obsidian's own `ul > li.task-list-item > .task-list-item-checkbox`
        rule sets `margin-inline-start: calc(var(--checkbox-size) * -1.5)`
        (it expects the 30px list-indent this view resets above) — 2 classes
        + 2 type selectors, out-specifying a plain `.task-card__content
        .task-list-item-checkbox` override. Left uncancelled, the checkbox
-       lands at/outside `.task-card__content`'s own edge — that box has
-       overflow-y:auto, and per spec a single non-visible overflow axis
-       forces the other axis to auto too, so anything at or past the edge is
-       clipped. flex layout + the li's own `gap` already position it, so the
-       legacy indent margin serves no purpose here; the extra `ul >
-       li.task-list-item >` here only exists to clear Obsidian's specificity. */
+       lands at/outside the li's own edge — the li has overflow:hidden (for
+       the ellipsis above), so anything before its edge is clipped. The
+       extra `ul > li.task-list-item >` here only exists to clear
+       Obsidian's specificity. */
     .task-card__content ul > li.task-list-item > .task-list-item-checkbox {
         margin-inline-start: 0;
+        vertical-align: middle;
     }
 }
 
