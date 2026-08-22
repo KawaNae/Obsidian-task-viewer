@@ -16,7 +16,7 @@ import { TaskStyling } from '../sharedUI/TaskStyling';
 import { getEffectiveColor, getEffectiveLinestyle } from '../../services/data/EffectiveProperties';
 import { TaskPagingController } from '../sharedUI/TaskPagingController';
 import { CardReconciler } from '../sharedUI/CardReconciler';
-import { shouldRenderForChanges } from '../sharedUI/RenderScheduler';
+import { RenderScheduler } from '../sharedUI/RenderScheduler';
 
 import { openTaskInEditor } from '../../utils/NavigationUtils';
 import { TASK_VIEWER_HOVER_SOURCE_ID } from '../../constants/hover';
@@ -50,6 +50,8 @@ export class KanbanView extends ItemView {
 
     private container: HTMLElement;
     private unsubscribe: (() => void) | null = null;
+    /** rAF coalescing for data-change bursts. Created in onOpen. */
+    private renderScheduler: RenderScheduler | null = null;
     private customName: string | undefined;
     private viewFilterState: FilterState | undefined;
     private grid: PinnedListDefinition[][] = [];
@@ -221,9 +223,17 @@ export class KanbanView extends ItemView {
 
         this.render();
 
-        this.unsubscribe = this.readService.onChange((_taskId, changes) => {
-            if (!shouldRenderForChanges(changes)) return;
-            this.render();
+        // Coalesce data-change bursts into one render per frame, as the other
+        // three card views do. Kanban's render is synchronous, so it needs no
+        // AsyncRenderSerializer on top (Calendar and Schedule await inside
+        // theirs and do).
+        this.renderScheduler = new RenderScheduler({
+            performFull: () => this.render(),
+            getHost: () => this.container,
+        });
+
+        this.unsubscribe = this.readService.onChange((taskId, changes) => {
+            this.renderScheduler?.handleChange(taskId, changes);
         });
     }
 
@@ -235,6 +245,8 @@ export class KanbanView extends ItemView {
         this.viewFilterMenu.close();
         this.unsubscribe?.();
         this.unsubscribe = null;
+        this.renderScheduler?.dispose();
+        this.renderScheduler = null;
     }
 
     refresh(): void {
