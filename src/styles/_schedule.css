@@ -242,3 +242,27 @@
     z-index: 10;
     pointer-events: none;
 }
+
+.schedule-grid__now-label {
+    position: absolute;
+    /* Text-origin alignment with .schedule-grid__label, not box alignment:
+       that label sits inside .schedule-grid__marker (left:4px) at its own
+       left:8px, i.e. its glyphs start 12px from the grid's left edge. This
+       chip's own left:8px plus its padding:0 4px puts its glyphs at the same
+       12px — the opaque chip background is then allowed to overhang 4px to
+       the left of the label column. Measured on real render (2026-08-22). */
+    left: 8px;
+    padding: 0 4px;
+    border-radius: 3px;
+    font-size: 0.82em;
+    font-weight: 500;
+    line-height: 16px;
+    font-family: var(--tv-font-mono);
+    color: var(--tv-accent);
+    background-color: var(--tv-bg-input);
+    /* Same layer as .schedule-grid__now-line so the chip rides along with
+       it above task cards; deliberately covers a fixed time label /
+       task-boundary label sharing this time slot instead of hiding either. */
+    z-index: 10;
+    pointer-events: none;
+}
