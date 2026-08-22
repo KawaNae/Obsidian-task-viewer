@@ -13,17 +13,10 @@ import { t } from '../../i18n';
 import { PopoverStack } from '../sharedUI/PopoverStack';
 import type { PopoverShell } from '../sharedUI/PopoverShell';
 import { OverlayShell } from '../sharedUI/OverlayShell';
+import { type SelectItem, openSelectPopover } from '../sharedUI/PopoverSelectMenu';
 
 export interface SortMenuCallbacks {
     onSortChange: () => void;
-}
-
-interface SelectItem {
-    label: string;
-    value: string;
-    checked: boolean;
-    icon?: string;
-    cls?: string;
 }
 
 /**
@@ -203,10 +196,10 @@ export class SortMenuComponent {
             icon: SORT_PROPERTY_ICONS[p],
         }));
 
-        this.showSelectPopover(anchorEl, items, (val) => {
+        this.childShell = openSelectPopover(this.stack, anchorEl, items, (val) => {
             rule.property = val as SortProperty;
             this.refreshPopover();
-        });
+        }, { onClose: () => { this.childShell = null; } });
     }
 
     private showDirectionMenu(anchorEl: HTMLElement, rule: SortRule): void {
@@ -217,48 +210,10 @@ export class SortMenuComponent {
             checked: rule.direction === d,
         }));
 
-        this.showSelectPopover(anchorEl, items, (val) => {
+        this.childShell = openSelectPopover(this.stack, anchorEl, items, (val) => {
             rule.direction = val as SortDirection;
             this.refreshPopover();
-        });
-    }
-
-    // ── Select Popover (reuses filter-child-popover CSS) ──
-
-    private showSelectPopover(
-        anchorEl: HTMLElement,
-        items: SelectItem[],
-        onSelect: (value: string) => void,
-    ): void {
-        this.childShell = this.stack.openChild({
-            anchor: { kind: 'element', element: anchorEl },
-            className: 'filter-child-popover',
-            build: (popover) => {
-                for (const item of items) {
-                    const row = popover.createDiv(
-                        `filter-child-popover__item${item.checked ? ' filter-child-popover__item--selected' : ''}`,
-                    );
-
-                    if (item.cls) row.classList.add(item.cls);
-
-                    if (item.icon) {
-                        const iconEl = row.createSpan('filter-child-popover__icon');
-                        setIcon(iconEl, item.icon);
-                    }
-
-                    row.createSpan('filter-child-popover__label').setText(item.label);
-
-                    row.addEventListener('click', (e) => {
-                        e.stopPropagation();
-                        if (this.childShell) this.stack.close(this.childShell);
-                        onSelect(item.value);
-                    });
-                }
-            },
-            onClose: () => {
-                this.childShell = null;
-            },
-        });
+        }, { onClose: () => { this.childShell = null; } });
     }
 
     // ── Drag Reorder ──
