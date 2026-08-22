@@ -91,9 +91,16 @@ describe('openViewFromUri', () => {
 });
 
 describe('openViewFromUri: the timer view', () => {
-    it('is reachable by short name even though it has no schema', async () => {
-        // Mutation: drop the legacy lookup and every timer URI stops working,
-        // silently — the registry has never known this name.
+    // The timer view reaches the registry like every other view now that it
+    // has a schema; it used to need a hand-written fallback here because it
+    // did not. What still sets it apart is where its state comes from.
+    beforeEach(() => {
+        resolveViewTypeFromShortName.mockImplementation(
+            (name: string) => (name === 'timer' ? 'timer-view' : undefined),
+        );
+    });
+
+    it('is reachable by its registered short name', async () => {
         await openViewFromUri(app, settings, { view: 'timer' });
 
         expect(openLeafFromState).toHaveBeenCalledOnce();

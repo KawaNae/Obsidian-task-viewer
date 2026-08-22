@@ -2,6 +2,7 @@ import { setIcon, Notice } from 'obsidian';
 import type { App, Menu, MenuItem, WorkspaceLeaf } from 'obsidian';
 import { t } from '../../i18n';
 import { ViewUriBuilder, type LeafPosition, type ViewUriOptions } from '../sharedLogic/ViewUriBuilder';
+import { shortNameFor } from '../../services/viewConfig';
 import { InputModal } from '../../modals/InputModal';
 import type { Task, ViewTemplate } from '../../types';
 import type { FilterMenuComponent } from '../customMenus/FilterMenuComponent';
@@ -607,7 +608,12 @@ export class ViewSettingsMenu {
         });
     }
 
+    /**
+     * Short name for filenames and template lookups. Reads the schema rather
+     * than stripping a `-view` suffix, which only worked as long as every view
+     * type happened to end in one.
+     */
     private static toShortViewType(viewType: string): string {
-        return viewType.replace(/-view$/, '');
+        return shortNameFor(viewType) ?? viewType;
     }
 }
