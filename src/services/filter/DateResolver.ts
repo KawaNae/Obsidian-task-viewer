@@ -1,3 +1,4 @@
+import { DateUtils } from '../../utils/DateUtils';
 import type { DateFilterValue } from './FilterTypes';
 
 /**
@@ -6,7 +7,7 @@ import type { DateFilterValue } from './FilterTypes';
  * Point presets (today) and absolute dates return start === end.
  */
 export class DateResolver {
-    static resolve(value: DateFilterValue, weekStartDay: 0 | 1 = 1, startHour: number = 0): { start: string; end: string } {
+    static resolve(value: DateFilterValue, weekStartDay: 0 | 1, startHour: number): { start: string; end: string } {
         if (typeof value === 'string') {
             return { start: value, end: value };
         }
@@ -21,58 +22,50 @@ export class DateResolver {
 
         switch (value.preset) {
             case 'today':
-                return { start: toISO(today), end: toISO(today) };
+                return { start: DateUtils.getLocalDateString(today), end: DateUtils.getLocalDateString(today) };
 
             case 'thisWeek': {
                 const { monday, sunday } = getWeekBounds(today, weekStartDay);
-                return { start: toISO(monday), end: toISO(sunday) };
+                return { start: DateUtils.getLocalDateString(monday), end: DateUtils.getLocalDateString(sunday) };
             }
 
             case 'nextWeek': {
                 const next = new Date(today);
                 next.setDate(next.getDate() + 7);
                 const { monday, sunday } = getWeekBounds(next, weekStartDay);
-                return { start: toISO(monday), end: toISO(sunday) };
+                return { start: DateUtils.getLocalDateString(monday), end: DateUtils.getLocalDateString(sunday) };
             }
 
             case 'pastWeek': {
                 const past = new Date(today);
                 past.setDate(past.getDate() - 7);
                 const { monday, sunday } = getWeekBounds(past, weekStartDay);
-                return { start: toISO(monday), end: toISO(sunday) };
+                return { start: DateUtils.getLocalDateString(monday), end: DateUtils.getLocalDateString(sunday) };
             }
 
             case 'nextNDays': {
                 const n = value.n ?? 7;
                 const end = new Date(today);
                 end.setDate(end.getDate() + n - 1);
-                return { start: toISO(today), end: toISO(end) };
+                return { start: DateUtils.getLocalDateString(today), end: DateUtils.getLocalDateString(end) };
             }
 
             case 'thisMonth': {
                 const monthStart = new Date(today.getFullYear(), today.getMonth(), 1);
                 const monthEnd = new Date(today.getFullYear(), today.getMonth() + 1, 0);
-                return { start: toISO(monthStart), end: toISO(monthEnd) };
+                return { start: DateUtils.getLocalDateString(monthStart), end: DateUtils.getLocalDateString(monthEnd) };
             }
 
             case 'thisYear': {
                 const yearStart = new Date(today.getFullYear(), 0, 1);
                 const yearEnd = new Date(today.getFullYear(), 11, 31);
-                return { start: toISO(yearStart), end: toISO(yearEnd) };
+                return { start: DateUtils.getLocalDateString(yearStart), end: DateUtils.getLocalDateString(yearEnd) };
             }
 
             default:
-                return { start: toISO(today), end: toISO(today) };
+                return { start: DateUtils.getLocalDateString(today), end: DateUtils.getLocalDateString(today) };
         }
     }
-}
-
-/** Format Date as YYYY-MM-DD */
-function toISO(d: Date): string {
-    const y = d.getFullYear();
-    const m = String(d.getMonth() + 1).padStart(2, '0');
-    const day = String(d.getDate()).padStart(2, '0');
-    return `${y}-${m}-${day}`;
 }
 
 /** Get the week start (monday) and end (sunday) containing the given date */
