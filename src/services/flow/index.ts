@@ -12,5 +12,8 @@ export * from './FlowLineScanner';
 export * from './FlowSerializer';
 export * from './ScheduleEngine';
 export * from './FlowPlanner';
+export * from './FlowSetClause';
+export * from './FlowNextTask';
+export * from './FlowEvalContext';
 export * from './FlowEffects';
 export * from './FlowTrigger';
