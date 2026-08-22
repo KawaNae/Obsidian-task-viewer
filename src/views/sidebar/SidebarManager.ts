@@ -35,10 +35,17 @@ export class SidebarManager {
      * Call once in onOpen(). Sets up ResizeObserver and Escape key handler.
      * `registerDomEvent` should be the view's own registerDomEvent so that
      * Obsidian automatically cleans up listeners on view close.
+     *
+     * The parameter is typed for the one call this method makes (a keydown
+     * listener on a Window) rather than for everything Obsidian's
+     * registerDomEvent accepts. Obsidian declares that method as three
+     * separate overloads, so a widened `HTMLElement | Window | Document`
+     * union matches none of them and forces every caller to launder the
+     * arguments through `as any`.
      */
     attach(
         container: HTMLElement,
-        registerDomEvent: (el: HTMLElement | Window | Document, event: string, handler: (e: Event) => void) => void,
+        registerDomEvent: (el: Window, event: 'keydown', handler: (e: KeyboardEvent) => void) => void,
     ): void {
         this.containerEl = container;
 

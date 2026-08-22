@@ -3,7 +3,8 @@ import type { App, Menu, MenuItem, WorkspaceLeaf } from 'obsidian';
 import { t } from '../../i18n';
 import { ViewUriBuilder, type LeafPosition, type ViewUriOptions } from '../sharedLogic/ViewUriBuilder';
 import { InputModal } from '../../modals/InputModal';
-import type { ViewTemplate } from '../../types';
+import type { Task, ViewTemplate } from '../../types';
+import type { FilterMenuComponent } from '../customMenus/FilterMenuComponent';
 import { ViewTemplateLoader } from '../../services/template/ViewTemplateLoader';
 import { ViewTemplateWriter } from '../../services/template/ViewTemplateWriter';
 import { ViewExporter } from '../../services/export/ViewExporter';
@@ -133,6 +134,19 @@ export class DateNavigator {
 }
 
 /**
+ * Days-per-screen choices. Declared once so the button's dropdown and the
+ * compact "⋮" submenu cannot drift apart.
+ */
+const VIEW_MODE_VALUES: readonly number[] = [1, 3, 7];
+
+/** Label for a days-per-screen value. */
+function viewModeLabel(value: number): string {
+    if (value === 1) return t('toolbar.viewMode1Day');
+    if (value === 3) return t('toolbar.viewMode3Days');
+    return t('toolbar.viewModeWeek');
+}
+
+/**
  * View mode selector (1 Day / 3 Days / Week).
  *
  * Returns an `update()` handle so external state changes (layout restore, URI
@@ -140,49 +154,61 @@ export class DateNavigator {
  * every menu open so the checked item always reflects current state.
  */
 export class ViewModeSelector {
+    /**
+     * Add one checkable item per view mode. Shared by the button's dropdown
+     * and by {@link appendSubmenu}, so the option list has a single home.
+     */
+    static appendMenuItems(
+        menu: Menu,
+        getValue: () => number,
+        onChange: (newValue: number) => void
+    ): void {
+        const current = getValue();
+        for (const value of VIEW_MODE_VALUES) {
+            menu.addItem((item: MenuItem) => {
+                item.setTitle(viewModeLabel(value))
+                    .setChecked(current === value)
+                    .onClick(() => onChange(value));
+            });
+        }
+    }
+
+    /** Add the same choices as a labelled submenu (compact toolbar mode). */
+    static appendSubmenu(
+        menu: Menu,
+        getValue: () => number,
+        onChange: (newValue: number) => void
+    ): void {
+        menu.addItem((item: MenuItem) => {
+            item.setTitle(t('toolbar.viewModeLabel', { label: viewModeLabel(getValue()) }));
+            ViewModeSelector.appendMenuItems(item.setSubmenu(), getValue, onChange);
+        });
+    }
+
     static render(
         toolbar: HTMLElement,
         getValue: () => number,
         onChange: (newValue: number) => void,
         menuPresenter: MenuPresenter
     ): { update: () => void } {
-        const getLabel = (val: number) => {
-            if (val === 1) return t('toolbar.viewMode1Day');
-            if (val === 3) return t('toolbar.viewMode3Days');
-            return t('toolbar.viewModeWeek');
-        };
-
-        const button = toolbar.createEl('button', { cls: 'timeline-toolbar__btn--range timeline-toolbar__btn--view-mode' });
-        const iconEl = button.createSpan('timeline-toolbar__btn-icon');
-        const labelEl = button.createSpan({ cls: 'timeline-toolbar__btn-label' });
+        const button = toolbar.createEl('button', { cls: 'view-toolbar__btn--range view-toolbar__btn--view-mode' });
+        const iconEl = button.createSpan('view-toolbar__btn-icon');
+        const labelEl = button.createSpan({ cls: 'view-toolbar__btn-label' });
         setIcon(iconEl, 'chevrons-up-down');
 
         const update = () => {
-            const label = getLabel(getValue());
+            const label = viewModeLabel(getValue());
             labelEl.setText(label);
             button.setAttribute('aria-label', t('toolbar.viewModeLabel', { label }));
         };
         update();
 
-        const options: Array<{ value: number; title: string }> = [
-            { value: 1, title: t('toolbar.viewMode1Day') },
-            { value: 3, title: t('toolbar.viewMode3Days') },
-            { value: 7, title: t('toolbar.viewModeWeek') },
-        ];
-
         button.onclick = (e) => {
-            const current = getValue();
             menuPresenter.present((menu) => {
-                for (const opt of options) {
-                    menu.addItem((item: MenuItem) => {
-                        item.setTitle(opt.title)
-                            .setChecked(current === opt.value)
-                            .onClick(() => {
-                                onChange(opt.value);
-                                update();
-                            });
-                    });
-                }
+                ViewModeSelector.appendMenuItems(menu, getValue, (value) => {
+                    onChange(value);
+                    update();
+                });
             }, { kind: 'position', x: e.pageX, y: e.pageY });
         };
 
@@ -191,9 +217,51 @@ export class ViewModeSelector {
 }
 
 /**
+ * Selectable zoom steps. Declared once so the button's dropdown and the
+ * compact "⋮" submenu cannot drift apart.
+ */
+const ZOOM_LEVELS: readonly number[] = [0.5, 0.75, 1.0, 1.25, 1.5, 2.0, 3.0];
+
+/** Percentage label for a zoom level (1.0 → "100%"). */
+function zoomLabel(level: number): string {
+    return `${Math.round(level * 100)}%`;
+}
+
+/**
  * Zoom selector for timeline scaling.
  */
 export class ZoomSelector {
+    /**
+     * Add one checkable item per zoom step. Shared by the button's dropdown
+     * and by {@link appendSubmenu}, so the option list has a single home.
+     */
+    static appendMenuItems(
+        menu: Menu,
+        getZoom: () => number,
+        onZoomChange: (newZoom: number) => void
+    ): void {
+        const current = getZoom();
+        for (const level of ZOOM_LEVELS) {
+            menu.addItem((item: MenuItem) => {
+                item.setTitle(zoomLabel(level))
+                    .setChecked(current === level)
+                    .onClick(() => onZoomChange(level));
+            });
+        }
+    }
+
+    /** Add the same steps as a labelled submenu (compact toolbar mode). */
+    static appendSubmenu(
+        menu: Menu,
+        getZoom: () => number,
+        onZoomChange: (newZoom: number) => void
+    ): void {
+        menu.addItem((item: MenuItem) => {
+            item.setTitle(t('toolbar.zoomLabel', { pct: zoomLabel(getZoom()) }));
+            ZoomSelector.appendMenuItems(item.setSubmenu(), getZoom, onZoomChange);
+        });
+    }
+
     /**
      * Renders zoom selector button with dropdown options.
      * @param toolbar - Parent element to render into
@@ -204,36 +272,27 @@ export class ZoomSelector {
     static render(
         toolbar: HTMLElement,
         getZoom: () => number,
-        onZoomChange: (newZoom: number) => Promise<void>,
+        onZoomChange: (newZoom: number) => void,
         menuPresenter: MenuPresenter
     ): { update: () => void } {
-        const button = toolbar.createEl('button', { cls: 'timeline-toolbar__btn--range timeline-toolbar__btn--zoom' });
-        const iconEl = button.createSpan('timeline-toolbar__btn-icon');
-        const labelEl = button.createSpan({ cls: 'timeline-toolbar__btn-label' });
+        const button = toolbar.createEl('button', { cls: 'view-toolbar__btn--range view-toolbar__btn--zoom' });
+        const iconEl = button.createSpan('view-toolbar__btn-icon');
+        const labelEl = button.createSpan({ cls: 'view-toolbar__btn-label' });
         setIcon(iconEl, 'chevrons-up-down');
 
         const update = () => {
-            const pct = `${Math.round(getZoom() * 100)}%`;
+            const pct = zoomLabel(getZoom());
             labelEl.setText(pct);
             button.setAttribute('aria-label', t('toolbar.zoomLabel', { pct }));
         };
         update();
 
-        const zoomLevels = [0.5, 0.75, 1.0, 1.25, 1.5, 2.0, 3.0];
         button.onclick = (e) => {
-            const current = getZoom();
             menuPresenter.present((menu) => {
-                for (const level of zoomLevels) {
-                    const pct = `${Math.round(level * 100)}%`;
-                    menu.addItem((item: MenuItem) => {
-                        item.setTitle(pct)
-                            .setChecked(current === level)
-                            .onClick(async () => {
-                                await onZoomChange(level);
-                                update();
-                            });
-                    });
-                }
+                ZoomSelector.appendMenuItems(menu, getZoom, (level) => {
+                    onZoomChange(level);
+                    update();
+                });
             }, { kind: 'position', x: e.pageX, y: e.pageY });
         };
 
@@ -276,6 +335,56 @@ export class MaskToggleButton {
 
         return { update };
     }
+}
+
+/**
+ * The two entries every compact ("⋮") toolbar menu carries: open the filter
+ * popover, and toggle mask mode. Timeline, Calendar and Schedule each used to
+ * spell these out; the wording, icons and the "refresh the toolbar afterwards"
+ * step now live here.
+ */
+export interface CompactMenuDeps {
+    filterMenu: FilterMenuComponent;
+    getTasks: () => Task[];
+    getStartHour: () => number;
+    onFilterChange: () => void;
+    getMaskMode: () => boolean;
+    setMaskMode: (next: boolean) => void;
+    /** Called after either item acts — the toolbars pass their `update()`. */
+    onAfter: () => void;
+}
+
+/** Append the filter + mask entries to a compact toolbar menu. */
+export function appendCompactFilterAndMask(
+    menu: Menu,
+    anchorEl: HTMLElement,
+    deps: CompactMenuDeps,
+): void {
+    menu.addItem((item: MenuItem) => {
+        item.setTitle(t('toolbar.filter'))
+            .setIcon('filter')
+            .onClick(() => {
+                deps.filterMenu.showMenuAtElement(anchorEl, {
+                    onFilterChange: () => {
+                        deps.onFilterChange();
+                        deps.onAfter();
+                    },
+                    getTasks: () => deps.getTasks(),
+                    getStartHour: () => deps.getStartHour(),
+                });
+            });
+    });
+
+    const maskOn = deps.getMaskMode();
+    menu.addItem((item: MenuItem) => {
+        item.setTitle(t('toolbar.maskMode'))
+            .setIcon(maskOn ? 'eye-off' : 'eye')
+            .setChecked(maskOn)
+            .onClick(() => {
+                deps.setMaskMode(!maskOn);
+                deps.onAfter();
+            });
+    });
 }
 
 /**

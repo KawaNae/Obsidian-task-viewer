@@ -321,7 +321,7 @@ export class CalendarView extends ItemView {
         this.container.empty();
         this.container.addClass('calendar-view');
         this.sidebarManager.attach(this.container, (el, ev, handler) =>
-            this.registerDomEvent(el as any, ev as any, handler),
+            this.registerDomEvent(el, ev, handler),
         );
 
         this.menuHandler = new MenuHandler(this.app, this.readService, this.writeService, this.plugin);

@@ -312,7 +312,7 @@ export class TimelineView extends ItemView {
         this.container.empty();
         this.container.addClass('timeline-view');
         this.sidebarManager.attach(this.container, (el, ev, handler) =>
-            this.registerDomEvent(el as any, ev as any, handler),
+            this.registerDomEvent(el, ev, handler),
         );
 
         // Initialize MenuHandler
@@ -554,10 +554,7 @@ export class TimelineView extends ItemView {
 
             this.viewState.zoomLevel = newZoom;
             this.container.style.setProperty('--hour-height', `${60 * newZoom}px`);
-            const zoomLabel = this.container.querySelector('.timeline-toolbar__btn--zoom .timeline-toolbar__btn-label');
-            if (zoomLabel) {
-                zoomLabel.textContent = `${Math.round(newZoom * 100)}%`;
-            }
+            this.toolbar?.update();
             void this.app.workspace.requestSaveLayout();
         }, { passive: false });
 
@@ -601,10 +598,7 @@ export class TimelineView extends ItemView {
 
             this.viewState.zoomLevel = newZoom;
             this.container.style.setProperty('--hour-height', `${60 * newZoom}px`);
-            const zoomLabel = this.container.querySelector('.timeline-toolbar__btn--zoom .timeline-toolbar__btn-label');
-            if (zoomLabel) {
-                zoomLabel.textContent = `${Math.round(newZoom * 100)}%`;
-            }
+            this.toolbar?.update();
         }, { passive: false });
 
         this.registerDomEvent(this.container, 'touchend', (e: TouchEvent) => {
