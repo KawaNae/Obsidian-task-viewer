@@ -20,6 +20,7 @@ import type {
 import { isDailyTimer } from './TimerInstance';
 import type { TimerContext } from './TimerContext';
 import type { TimerCreator } from './TimerCreator';
+import { computeCompletedDuration, getCurrentSegment } from './IntervalMath';
 import type { TimerLifecycle } from './TimerLifecycle';
 import { getDisplayFileName, getTaskDisplayName } from '../services/parsing/utils/TaskContent';
 import { TaskStyling } from '../views/sharedUI/TaskStyling';
@@ -151,7 +152,7 @@ export class TimerRenderer {
 
                 if (timer.timerType === 'interval') {
                     const group = timer.groups[timer.currentGroupIndex];
-                    const segment = this.creator.getCurrentIntervalSegment(timer);
+                    const segment = getCurrentSegment(timer);
                     if (group && segment) {
                         const repeatSpan = header.createSpan('timer-widget__header-repeat');
                         const repeatText = group.repeatCount === 0
@@ -550,13 +551,13 @@ export class TimerRenderer {
             setIcon(startBtn, 'play');
             startBtn.createSpan({ text: ` ${t('timer.start')}` });
             startBtn.onclick = () => {
-                const segment = this.creator.getCurrentIntervalSegment(timer);
+                const segment = getCurrentSegment(timer);
                 if (!segment) return;
                 timer.phase = segment.type;
                 timer.segmentTimeRemaining = segment.durationSeconds;
                 timer.startTimeMs = Date.now();
                 timer.pausedElapsedTime = 0;
-                timer.totalElapsedTime = this.creator.computeIntervalCompletedDuration(timer);
+                timer.totalElapsedTime = computeCompletedDuration(timer);
                 timer.isRunning = true;
                 this.lifecycle.startTimerTicker(timer.id);
                 AudioUtils.playStartSound();

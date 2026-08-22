@@ -2,6 +2,7 @@ import type { App } from 'obsidian';
 import type TaskViewerPlugin from '../main';
 import { InputModal } from '../modals/InputModal';
 import type { IntervalTimer } from './TimerInstance';
+import { computeTotalDuration } from './IntervalMath';
 
 interface PomodoroSettingsMenuOptions {
     app: App;
@@ -117,7 +118,7 @@ export class TimerSettingsMenu {
             item.setTitle(`Auto Repeat${autoRepeat ? ' ✓' : ''}`)
                 .onClick(() => {
                     group.repeatCount = autoRepeat ? 1 : 0;
-                    timer.totalDuration = this.computeTotalDuration(timer);
+                    timer.totalDuration = computeTotalDuration(timer.groups);
                     onPersist();
                 });
         });
@@ -126,7 +127,7 @@ export class TimerSettingsMenu {
     }
 
     private static syncIdleDisplay(timer: IntervalTimer, onRender: () => void): void {
-        timer.totalDuration = this.computeTotalDuration(timer);
+        timer.totalDuration = computeTotalDuration(timer.groups);
         if (timer.phase !== 'idle') {
             return;
         }
@@ -140,13 +141,4 @@ export class TimerSettingsMenu {
         onRender();
     }
 
-    private static computeTotalDuration(timer: IntervalTimer): number {
-        if (timer.groups.some((group) => group.repeatCount === 0)) {
-            return 0;
-        }
-        return timer.groups.reduce((total, group) => {
-            const groupTotal = group.segments.reduce((sum, segment) => sum + segment.durationSeconds, 0);
-            return total + groupTotal * Math.max(1, group.repeatCount);
-        }, 0);
-    }
 }
