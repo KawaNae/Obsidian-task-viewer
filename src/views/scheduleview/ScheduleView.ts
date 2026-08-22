@@ -25,7 +25,7 @@ import { AsyncRenderSerializer } from '../sharedUI/AsyncRenderSerializer';
 import { RenderScheduler } from '../sharedUI/RenderScheduler';
 import { PixelScrollRestorer } from '../sharedUI/PixelScrollRestorer';
 import { PeriodicHeaderRenderer } from '../sharedUI/PeriodicHeaderRenderer';
-import type { CollapsibleSectionKey, TimedDisplayTask } from './ScheduleTypes';
+import type { CollapsibleSectionKey, GridRow, TimedDisplayTask } from './ScheduleTypes';
 import { ScheduleGridCalculator } from './utils/ScheduleGridCalculator';
 import { ScheduleTaskCategorizer } from './utils/ScheduleTaskCategorizer';
 import { ScheduleOverlapLayout } from './utils/ScheduleOverlapLayout';
@@ -73,6 +73,10 @@ export class ScheduleView extends ItemView {
     private unsubscribe: (() => void) | null = null;
     private currentVisualDate = '';
     private scrollToNowOnNextRender = false;
+    // Latest grid layout, cached off the last full render so the per-minute
+    // now-line interval can re-paint without re-running buildAdaptiveGrid.
+    private gridRows: GridRow[] = [];
+    private gridTimelineHeight = 0;
     private readonly scrollRestorer = new PixelScrollRestorer(
         () => this.container?.querySelector('.schedule-view__body-scroll') as HTMLElement | null,
     );
@@ -298,6 +302,22 @@ export class ScheduleView extends ItemView {
         this.unsubscribe = this.readService.onChange((taskId, changes) => {
             this.renderScheduler?.handleChange(taskId, changes);
         });
+
+        // Keep the now-line moving between full renders (task changes /
+        // navigation are the only other trigger). Mirrors TimelineView's
+        // 60s current-time interval.
+        this.registerInterval(window.setInterval(() => this.updateNowLine(), 60000));
+    }
+
+    private updateNowLine(): void {
+        if (!this.container || !this.isCurrentVisualDate(this.currentVisualDate)) {
+            return;
+        }
+        const main = this.container.querySelector('.schedule-grid') as HTMLElement | null;
+        if (!main || this.gridRows.length === 0) {
+            return;
+        }
+        this.gridRenderer.updateNowLine(main, this.gridRows, this.gridTimelineHeight);
     }
 
     async onClose(): Promise<void> {
@@ -440,6 +460,8 @@ export class ScheduleView extends ItemView {
         const layout = this.gridCalculator.buildAdaptiveGrid(tasks);
         const timelineHeight = layout.totalHeight + ScheduleView.TIMELINE_TOP_PADDING_PX + ScheduleView.TIMELINE_BOTTOM_PADDING_PX;
         main.style.height = `${timelineHeight}px`;
+        this.gridRows = layout.rows;
+        this.gridTimelineHeight = timelineHeight;
 
         this.gridRenderer.renderTimeMarkers(main, layout.rows, tasks);
         const placements = this.scheduleTaskRenderer.placeTasksOnGrid(tasks, layout.rows);

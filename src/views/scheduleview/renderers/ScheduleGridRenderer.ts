@@ -37,13 +37,26 @@ export class ScheduleGridRenderer {
     }
 
     renderNowLine(container: HTMLElement, rows: GridRow[], timelineHeight: number): void {
+        this.paintNowLine(container, rows, timelineHeight);
+    }
+
+    /**
+     * Re-paints the now-line in place: removes whatever is already there and
+     * redraws at the current time. Driven by a per-minute interval in
+     * ScheduleView so the indicator keeps moving between full re-renders
+     * (which only happen on task changes / navigation).
+     */
+    updateNowLine(container: HTMLElement, rows: GridRow[], timelineHeight: number): void {
+        container.querySelector('.schedule-grid__now-line')?.remove();
+        this.paintNowLine(container, rows, timelineHeight);
+    }
+
+    private paintNowLine(container: HTMLElement, rows: GridRow[], timelineHeight: number): void {
         if (rows.length === 0) {
             return;
         }
 
-        const now = new Date();
-        const timeStr = `${now.getHours()}:${now.getMinutes().toString().padStart(2, '0')}`;
-        const nowMinute = this.gridCalculator.timeToVisualMinute(timeStr);
+        const nowMinute = this.getNowVisualMinute();
         const firstMinute = rows[0].minute;
         const lastMinute = rows[rows.length - 1].minute;
 
@@ -58,5 +71,22 @@ export class ScheduleGridRenderer {
 
         const nowLine = container.createDiv('schedule-grid__now-line');
         nowLine.style.top = `${topPx}px`;
+    }
+
+    /**
+     * Current time as a visual (startHour-relative) minute, with seconds
+     * folded in as a fraction. `getTopForMinute` interpolates linearly within
+     * a row, so a fractional minute is fine here and keeps the line's
+     * position from snapping in whole-minute steps — the gap can be up to
+     * ~41px in a compressed (sqrt-scaled) row when seconds are dropped.
+     */
+    private getNowVisualMinute(): number {
+        const now = new Date();
+        const dayStart = this.gridCalculator.getDayStartMinute();
+        let total = (now.getHours() * 60) + now.getMinutes() + (now.getSeconds() / 60);
+        if (total < dayStart) {
+            total += 24 * 60;
+        }
+        return total;
     }
 }
