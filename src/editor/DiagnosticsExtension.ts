@@ -17,7 +17,7 @@ import {
     segmentIndexAt,
 } from '../services/flow/FlowSegments';
 import { childCopyMigrationWarning } from '../services/flow/ChildCopyMigration';
-import { collectFlowLineIndices, isFlowLine, matchFlowLine } from '../services/flow/FlowLineScanner';
+import { FLOW_MARKER, collectFlowLineIndices, isFlowLine, matchFlowLine } from '../services/flow/FlowLineScanner';
 import { diagnosticText } from '../services/flow/diagnosticText';
 import { TaskLineClassifier } from '../services/parsing/utils/TaskLineClassifier';
 import { TaskParser } from '../services/parsing/TaskParser';
@@ -28,9 +28,23 @@ import {
     type InertNotation,
 } from '../services/parsing/tv-inline/InertFlowDiagnostics';
 
-const FLOW_MARKER = '==>';
 /** Bound for the up/down document scans around the viewport. */
 const SCAN_LIMIT = 100;
+
+/**
+ * Look up `key` in `cache`, computing and storing it on a miss. The cache is
+ * cleared entirely once it grows past `cap` — a blunt but simple bound for a
+ * long editing session, not an LRU (repeatedly-hot keys just get recomputed
+ * once after each clear).
+ */
+function memoize<K, V>(cache: Map<K, V>, cap: number, key: K, compute: () => V): V {
+    const hit = cache.get(key);
+    if (hit !== undefined || cache.has(key)) return hit as V;
+    if (cache.size >= cap) cache.clear();
+    const value = compute();
+    cache.set(key, value);
+    return value;
+}
 
 /** One physical segment of a flow group, located in the editor document. */
 interface SegmentLoc {
@@ -76,34 +90,15 @@ export function createDiagnosticsExtension(): Extension {
      * the diagnostics because the migration notice asks what the command
      * says (does it name a block?) rather than how it is written.
      */
-    const parseFor = (raws: string[]): ParseFlowSegmentsResult => {
-        const key = raws.join('\n');
-        const hit = cache.get(key);
-        if (hit) return hit;
-        if (cache.size >= CACHE_CAP) cache.clear();
-        const result = parseFlowSegments(raws);
-        cache.set(key, result);
-        return result;
-    };
+    const parseFor = (raws: string[]): ParseFlowSegmentsResult =>
+        memoize(cache, CACHE_CAP, raws.join('\n'), () => parseFlowSegments(raws));
 
-    const dateDiagnosticsFor = (lineText: string): Diagnostic[] => {
-        const hit = dateCache.get(lineText);
-        if (hit) return hit;
-        if (dateCache.size >= CACHE_CAP) dateCache.clear();
-        const diagnostics = dateBlockDiagnostics(lineText);
-        dateCache.set(lineText, diagnostics);
-        return diagnostics;
-    };
+    const dateDiagnosticsFor = (lineText: string): Diagnostic[] =>
+        memoize(dateCache, CACHE_CAP, lineText, () => dateBlockDiagnostics(lineText));
 
     /** Memoized `inertNotationOf` — same chain-generation lifetime as the rest. */
-    const inertNotationFor = (lineText: string): InertNotation | null => {
-        const hit = inertCache.get(lineText);
-        if (hit !== undefined) return hit;
-        if (inertCache.size >= CACHE_CAP) inertCache.clear();
-        const notation = inertNotationOf(lineText);
-        inertCache.set(lineText, notation);
-        return notation;
-    };
+    const inertNotationFor = (lineText: string): InertNotation | null =>
+        memoize(inertCache, CACHE_CAP, lineText, () => inertNotationOf(lineText));
 
     /**
      * Per-line code-fence membership, 0-indexed by (line number - 1).
