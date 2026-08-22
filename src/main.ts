@@ -1,4 +1,4 @@
-import { apiVersion, Notice, Platform, Plugin, type Workspace, type WorkspaceLeaf, TFile } from 'obsidian';
+import { apiVersion, Notice, Platform, Plugin, TFile } from 'obsidian';
 import './views/registerAllSchemas';
 import { TaskIndex } from './services/core/TaskIndex';
 import { TimelineView, VIEW_TYPE_TIMELINE } from './views/timelineview';
@@ -14,7 +14,7 @@ import {
     normalizeTvFileKeys,
     validateTvFileKeys,
 } from './types';
-import type { DefaultLeafPosition, Task } from './types';
+import type { Task } from './types';
 import { isTvFile } from './types';
 import { TaskViewerSettingTab } from './settings';
 import { ColorSuggest } from './suggest/color/ColorSuggest';
@@ -26,9 +26,9 @@ import { registerWeekStartLocales } from './utils/momentWeekLocale';
 import { AudioUtils } from './timer/AudioUtils';
 import { TASK_VIEWER_HOVER_SOURCE_DISPLAY, TASK_VIEWER_HOVER_SOURCE_ID } from './constants/hover';
 import { getViewMeta } from './constants/viewRegistry';
-import { resolveViewTypeFromShortName } from './services/viewConfig';
-import { buildViewStateFromParams } from './services/viewConfig/ViewStateFactory';
-import { migrateAstronomySettings } from './services/settings/migration';
+import { openLeafFromState } from './services/viewConfig/LeafOpener';
+import { openViewFromUri } from './services/viewConfig/UriViewOpener';
+import { migrateSettings } from './services/settings/migration';
 import { PropertiesMenuBuilder } from './interaction/menu/builders/PropertiesMenuBuilder';
 import { PropertyCalculator } from './interaction/menu/PropertyCalculator';
 import { PropertyFormatter } from './interaction/menu/PropertyFormatter';
@@ -400,101 +400,18 @@ export default class TaskViewerPlugin extends Plugin {
         );
         this.propertySuggestObserver.start();
 
-        // Register URI handler: obsidian://task-viewer?view=<shortName>&template=<name>&...
-        //
-        // After the ViewConfigSchema refactor the handler is uniform across all
-        // views: per-view differences live in the schema, not here. The handler
-        // role shrinks to (1) resolve view type, (2) load template (if any),
-        // (3) overlay URI-query overrides, (4) re-serialize through codec into
-        // canonical state dict, (5) hand to openLeafFromState. Adding a new
-        // persisted field requires zero changes in this function.
+        // obsidian://task-viewer?view=<shortName>&template=<name>&...
+        // The road from a URI to an open view lives in UriViewOpener.
         this.registerObsidianProtocolHandler('task-viewer', (params) => {
-            void (async () => {
-                const viewType = resolveViewTypeFromShortName(params.view) ?? this.resolveLegacyViewShortName(params.view);
-                if (!viewType) return;
-
-                const position = this.parseUriPosition(params.position);
-
-                if (viewType === VIEW_TYPE_TIMER) {
-                    await this.openTimerFromUri(params, position);
-                    return;
-                }
-
-                const state = await this.buildViewStateFromUri(viewType, params);
-                await this.openLeafFromState(viewType, position, state);
-            })();
+            void openViewFromUri(this.app, this.settings, params);
         });
-    }
-
-    private async buildViewStateFromUri(
-        viewType: string,
-        params: Record<string, string>,
-    ): Promise<Record<string, unknown>> {
-        const result = await buildViewStateFromParams(
-            this.app, this.settings.viewTemplateFolder, viewType, params,
-        );
-        if (result.templateNotFound) {
-            new Notice(t('notice.templateNotFound', { name: result.templateNotFound }));
-        }
-        return result.state;
-    }
-
-    /**
-     * Legacy short-name compat for old URIs/code that referenced views by
-     * the obsidian view-type suffix-style. Returns undefined if unknown.
-     */
-    private resolveLegacyViewShortName(shortName: string): string | undefined {
-        // Timer never had a schema; it stays in this lookup since
-        // resolveViewTypeFromShortName only knows registered schemas.
-        if (shortName === 'timer') return VIEW_TYPE_TIMER;
-        return undefined;
-    }
-
-    private parseUriPosition(raw: string | undefined): DefaultLeafPosition | 'tab' | 'window' | 'override' | undefined {
-        const valid = new Set(['left', 'right', 'tab', 'window', 'override']);
-        if (raw && valid.has(raw)) return raw as DefaultLeafPosition | 'tab' | 'window' | 'override';
-        return undefined;
-    }
-
-    private async openTimerFromUri(
-        params: Record<string, string>,
-        position: DefaultLeafPosition | 'tab' | 'window' | 'override' | undefined,
-    ): Promise<void> {
-        const state: Record<string, unknown> = {};
-        if (params.mode) state.timerViewMode = params.mode;
-        if (params.intervalTemplate) state.intervalTemplate = params.intervalTemplate;
-        if (params.name) state.customName = params.name;
-        await this.openLeafFromState(VIEW_TYPE_TIMER, position, state);
     }
 
     async loadSettings() {
         const raw = await this.loadData();
         const rawObject = (raw && typeof raw === 'object') ? raw as Record<string, unknown> : {};
 
-        // Legacy setting key migration (v0.33 → v0.34): values written under the
-        // old Frontmatter* names are transcribed to the new Tv* names. Next
-        // saveSettings persists only the new keys so legacy ones disappear.
-        const migrate = (oldKey: string, newKey: string) => {
-            if (rawObject[oldKey] !== undefined && rawObject[newKey] === undefined) {
-                rawObject[newKey] = rawObject[oldKey];
-            }
-            delete rawObject[oldKey];
-        };
-        migrate('frontmatterTaskKeys', 'tvFileKeys');
-        migrate('frontmatterTaskHeader', 'tvFileChildHeader');
-        migrate('frontmatterTaskHeaderLevel', 'tvFileChildHeaderLevel');
-        migrate('fileMenuForFrontmatterTasks', 'fileMenuForTvFile');
-        migrate('calendarWeekStartDay', 'weekStartDay');
-
-        // Astronomy migration (v0.39 → v0.40): flat showSunTimes / showMoonPhase
-        // / homeLatitude / homeLongitude → nested astronomy.{display,location}.
-        migrateAstronomySettings(rawObject);
-
-        // doubleTapAction migration (v0.44 → v0.45): 'properties' はタスクハブ
-        // モーダル統合で 'detail'（= ハブ）に吸収された。
-        if (rawObject['doubleTapAction'] === 'properties') {
-            rawObject['doubleTapAction'] = 'detail';
-        }
+        migrateSettings(rawObject);
 
         const merged = Object.assign({}, DEFAULT_SETTINGS, rawObject) as TaskViewerSettings;
         const normalizedKeys = normalizeTvFileKeys(merged.tvFileKeys);
@@ -633,68 +550,7 @@ export default class TaskViewerPlugin extends Plugin {
 
     /** Open a view via ribbon / command. No state seeding — view uses its own defaults. */
     async activateView(viewType: string): Promise<void> {
-        await this.openLeafFromState(viewType, undefined, {});
-    }
-
-    /**
-     * Resolve a leaf for `viewType` at `position`, then `setViewState` with
-     * the supplied state dict. Single entry point used by both the no-params
-     * ribbon/command path and the URI-handler-build state path.
-     */
-    async openLeafFromState(
-        viewType: string,
-        position: DefaultLeafPosition | 'tab' | 'window' | 'override' | undefined,
-        state: Record<string, unknown>,
-    ): Promise<void> {
-        const { workspace } = this.app;
-
-        let leaf: WorkspaceLeaf | null = null;
-
-        if (position === 'override') {
-            const leaves = workspace.getLeavesOfType(viewType);
-            leaf = leaves.length > 0
-                ? leaves[0]
-                : this.getLeafForPosition(workspace, this.getDefaultPosition(viewType));
-        } else if (position) {
-            switch (position) {
-                case 'left':   leaf = workspace.getLeftLeaf(false); break;
-                case 'right':  leaf = workspace.getRightLeaf(false); break;
-                case 'tab':    leaf = workspace.getLeaf('tab'); break;
-                case 'window': leaf = workspace.getLeaf('window'); break;
-            }
-        } else {
-            const leaves = workspace.getLeavesOfType(viewType);
-            leaf = leaves.length === 0
-                ? this.getLeafForPosition(workspace, this.getDefaultPosition(viewType))
-                : workspace.getLeaf(true);
-        }
-
-        if (leaf) {
-            await leaf.setViewState({ type: viewType, active: true, state });
-            workspace.revealLeaf(leaf);
-        }
-    }
-
-    private getDefaultPosition(viewType: string): DefaultLeafPosition {
-        const positions = this.settings.defaultViewPositions;
-        const map: Record<string, DefaultLeafPosition | undefined> = {
-            [VIEW_TYPE_TIMELINE]: positions.timeline,
-            [VIEW_TYPE_SCHEDULE]: positions.schedule,
-            [VIEW_TYPE_CALENDAR]: positions.calendar,
-            [VIEW_TYPE_MINI_CALENDAR]: positions.miniCalendar,
-            [VIEW_TYPE_TIMER]: positions.timer,
-            [VIEW_TYPE_KANBAN]: positions.kanban,
-        };
-        return map[viewType] ?? 'right';
-    }
-
-    private getLeafForPosition(workspace: Workspace, position: DefaultLeafPosition): WorkspaceLeaf | null {
-        switch (position) {
-            case 'left':   return workspace.getLeftLeaf(false);
-            case 'right':  return workspace.getRightLeaf(false);
-            case 'tab':    return workspace.getLeaf('tab');
-            case 'window': return workspace.getLeaf('window');
-        }
+        await openLeafFromState(this.app, this.settings, viewType, undefined, {});
     }
 
     onunload() {
