@@ -2,6 +2,11 @@ import type { GridRow, TimedDisplayTask } from '../ScheduleTypes';
 import type { ScheduleGridCalculator } from '../utils/ScheduleGridCalculator';
 
 export class ScheduleGridRenderer {
+    // Mirrors `.schedule-grid__label`'s `top: -10px` offset (see _schedule.css)
+    // so the now-time chip's text centers on the line the same way a normal
+    // row label centers on its grid line.
+    private static readonly NOW_LABEL_TOP_OFFSET_PX = 10;
+
     private readonly gridCalculator: ScheduleGridCalculator;
     private readonly timelineTopPaddingPx: number;
 
@@ -41,13 +46,14 @@ export class ScheduleGridRenderer {
     }
 
     /**
-     * Re-paints the now-line in place: removes whatever is already there and
-     * redraws at the current time. Driven by a per-minute interval in
-     * ScheduleView so the indicator keeps moving between full re-renders
-     * (which only happen on task changes / navigation).
+     * Re-paints the now-line and its time chip in place: removes whatever is
+     * already there and redraws at the current time. Driven by a per-minute
+     * interval in ScheduleView so the indicator keeps moving between full
+     * re-renders (which only happen on task changes / navigation).
      */
     updateNowLine(container: HTMLElement, rows: GridRow[], timelineHeight: number): void {
         container.querySelector('.schedule-grid__now-line')?.remove();
+        container.querySelector('.schedule-grid__now-label')?.remove();
         this.paintNowLine(container, rows, timelineHeight);
     }
 
@@ -71,6 +77,10 @@ export class ScheduleGridRenderer {
 
         const nowLine = container.createDiv('schedule-grid__now-line');
         nowLine.style.top = `${topPx}px`;
+
+        const nowLabel = container.createDiv('schedule-grid__now-label');
+        nowLabel.style.top = `${topPx - ScheduleGridRenderer.NOW_LABEL_TOP_OFFSET_PX}px`;
+        nowLabel.setText(this.gridCalculator.visualMinuteToTime(Math.floor(nowMinute)));
     }
 
     /**

@@ -242,3 +242,26 @@
     z-index: 10;
     pointer-events: none;
 }
+
+.schedule-grid__now-label {
+    position: absolute;
+    /* Same column as .schedule-grid__label: that label sits inside
+       .schedule-grid__marker (left:4px) at its own left:8px, i.e. 12px from
+       the grid's left edge. The chip is a direct .schedule-grid child (not
+       nested in a per-row marker), so the two offsets are composed here —
+       keep this in sync if either one changes. */
+    left: 12px;
+    padding: 0 4px;
+    border-radius: 3px;
+    font-size: 0.82em;
+    font-weight: 500;
+    line-height: 16px;
+    font-family: var(--tv-font-mono);
+    color: var(--tv-accent);
+    background-color: var(--tv-bg-input);
+    /* Same layer as .schedule-grid__now-line so the chip rides along with
+       it above task cards; deliberately covers a fixed time label /
+       task-boundary label sharing this time slot instead of hiding either. */
+    z-index: 10;
+    pointer-events: none;
+}

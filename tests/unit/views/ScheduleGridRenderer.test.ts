@@ -76,7 +76,7 @@ describe('ScheduleGridRenderer.updateNowLine', () => {
     ];
     const timelineHeight = 250;
 
-    it('replaces the now-line in place (no accumulation) and moves top with the clock', () => {
+    it('replaces the now-line/chip in place (no accumulation) and moves top with the clock', () => {
         const container = new MiniElement('schedule-grid');
 
         vi.useFakeTimers();
@@ -84,23 +84,29 @@ describe('ScheduleGridRenderer.updateNowLine', () => {
         renderer.renderNowLine(asContainer(container), rows, timelineHeight);
 
         let lines = container.querySelectorAll('.schedule-grid__now-line');
+        let labels = container.querySelectorAll('.schedule-grid__now-label');
         expect(lines).toHaveLength(1);
+        expect(labels).toHaveLength(1);
 
         // ratio = (555.5 - 540) / 60 = 0.2583..; top = 25.83 + 16 padding
         const topA = parseFloat(lines[0].style.top);
         expect(topA).toBeCloseTo(41.83, 1);
+        expect(labels[0].textContent).toBe('09:15');
 
         vi.setSystemTime(new Date(2026, 7, 22, 9, 45, 0)); // 09:45:00 → minute 585
         renderer.updateNowLine(asContainer(container), rows, timelineHeight);
 
         lines = container.querySelectorAll('.schedule-grid__now-line');
-        // Still exactly one — the old element was removed, not left in place
-        // alongside a new one.
+        labels = container.querySelectorAll('.schedule-grid__now-label');
+        // Still exactly one of each — the old elements were removed, not
+        // left in place alongside a new pair.
         expect(lines).toHaveLength(1);
+        expect(labels).toHaveLength(1);
 
         // ratio = (585 - 540) / 60 = 0.75; top = 75 + 16 padding
         const topB = parseFloat(lines[0].style.top);
         expect(topB).toBeCloseTo(91, 1);
         expect(topB).not.toBeCloseTo(topA, 1);
+        expect(labels[0].textContent).toBe('09:45');
     });
 });
