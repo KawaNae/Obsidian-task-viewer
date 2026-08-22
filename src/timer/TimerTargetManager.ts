@@ -112,7 +112,7 @@ export class TimerTargetManager {
         const newTargetId = this.storageUtils.generateTimerTargetId();
         try {
             const timerTargetIdKey = this.ctx.plugin.settings.tvFileKeys.timerTargetId;
-            await taskIndex.getRepository().setFrontmatterKeys(currentTask.file, {
+            await this.ctx.plugin.getTaskWriteService().setFrontmatterKeys(currentTask.file, {
                 [timerTargetIdKey]: newTargetId,
             });
             await taskIndex.waitForScan(currentTask.file);
@@ -200,7 +200,7 @@ export class TimerTargetManager {
             const timerTargetIdKey = this.ctx.plugin.settings.tvFileKeys.timerTargetId;
             // 値の確認と削除は書き込み層の 1 つの process に収める。外で確かめて
             // から消しに行くと、その隙間で書き換えられた値を消しうる。
-            await this.ctx.plugin.getTaskIndex().getRepository()
+            await this.ctx.plugin.getTaskWriteService()
                 .deleteFrontmatterKeyIfValue(targetPath, timerTargetIdKey, timer.timerTargetId!);
             await this.ctx.plugin.getTaskIndex().waitForScan(targetPath);
         } catch (error) {

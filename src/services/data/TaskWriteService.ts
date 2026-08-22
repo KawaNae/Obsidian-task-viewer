@@ -196,6 +196,22 @@ export class TaskWriteService {
         return parent;
     }
 
+    // ===== Frontmatter key writes (Task を介さない書き込み) =====
+    //
+    // Task ではなくファイルパス+キーで書き先が決まる操作（タイマーの対象 ID、
+    // プロパティ欄のサジェスト由来の色・線種書き込み）向けの薄い素通し。
+    // 実装は TaskRepository/FrontmatterWriter のまま変えない — 1 つの
+    // vault.process に収まっている性質（確認と削除の原子性）や、no-op な
+    // vault.process が modify を発火しない挙動もここでは変わらない。
+
+    async setFrontmatterKeys(filePath: string, updates: Record<string, string | null>): Promise<void> {
+        return this.taskIndex.getRepository().setFrontmatterKeys(filePath, updates);
+    }
+
+    async deleteFrontmatterKeyIfValue(filePath: string, key: string, expected: string): Promise<void> {
+        return this.taskIndex.getRepository().deleteFrontmatterKeyIfValue(filePath, key, expected);
+    }
+
     // ===== Drag state control =====
 
     setDraggingFile(filePath: string | null): void {

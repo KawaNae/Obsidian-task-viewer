@@ -203,7 +203,7 @@ export class WindowAttachment {
             ) as HTMLDivElement | null;
             if (currentValueDiv) currentValueDiv.textContent = hex;
 
-            this.queueColorWrite(() => this.ctx.suggestHost.getTaskIndex().getRepository()
+            this.queueColorWrite(() => this.ctx.suggestHost.getTaskWriteService()
                 .setFrontmatterKeys(activeFile.path, { [colorKey]: hex }));
         });
 

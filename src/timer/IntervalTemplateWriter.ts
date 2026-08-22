@@ -23,7 +23,9 @@ export class IntervalTemplateWriter {
             throw new Error('Template file not found.');
         }
         const content = this.buildFileContent(data);
-        await this.app.vault.modify(existing, content);
+        // 全体上書きで読み取り結果は使わないが、他の書き込み経路と揃えて
+        // vault.process を使う（read-modify-write の atomic 性を持つ）。
+        await this.app.vault.process(existing, () => content);
         return existing;
     }
 
