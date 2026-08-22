@@ -142,3 +142,16 @@ export function cliOk(data: Record<string, unknown>): string {
 export function cliError(message: string): string {
     return JSON.stringify({ error: message, help: 'obsidian obsidian-task-viewer:help' });
 }
+
+/**
+ * Runs a handler body and turns a thrown error into `cliError`, unwrapping
+ * `TaskApiError.rawMessage` when present. `label` names the operation for
+ * the fallback "Failed to X" message (e.g. "create task").
+ */
+export async function wrapCliResult(label: string, fn: () => Promise<string> | string): Promise<string> {
+    try {
+        return await fn();
+    } catch (e) {
+        return cliError(e instanceof TaskApiError ? e.rawMessage : `Failed to ${label}: ${e instanceof Error ? e.message : String(e)}`);
+    }
+}
