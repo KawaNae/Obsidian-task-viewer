@@ -263,6 +263,67 @@ describe('ViewConfigCodec', () => {
 });
 
 describe('SchemaRegistry', () => {
+    describe('withDefaults (REPLACE-over-defaults)', () => {
+        it('keeps every field the caller supplied', () => {
+            const merged = codec.withDefaults({ count: 7, rate: 2.0, name: 'pilot' });
+            expect(merged.count).toBe(7);
+            expect(merged.rate).toBe(2.0);
+            expect(merged.name).toBe('pilot');
+        });
+
+        it('restores schema defaults for fields the caller omitted', () => {
+            // The whole point of REPLACE: an omitted field reverts to its
+            // declared default instead of keeping whatever was there before.
+            const merged = codec.withDefaults({ name: 'pilot' });
+            expect(merged.count).toBe(3);
+            expect(merged.rate).toBe(1.0);
+            expect(merged.enabled).toBe(false);
+        });
+
+        it('leaves fields with no declared default undefined', () => {
+            const merged = codec.withDefaults({ count: 1 });
+            expect(merged.name).toBeUndefined();
+            expect(merged.filter).toBeUndefined();
+        });
+
+        it('emits a key for every declared field, defaulted or not', () => {
+            // Views that apply the result with Object.assign rely on this: a
+            // key that is simply absent would leave the previous value in
+            // place, so a field with no default would never clear.
+            const merged = codec.withDefaults({ count: 1 });
+            expect(Object.keys(merged).sort()).toEqual(Object.keys(SCHEMA.config).sort());
+            expect('name' in merged).toBe(true);
+            expect('filter' in merged).toBe(true);
+        });
+
+        it('clears a previously held value when the field is absent from cfg', () => {
+            const held = { name: 'stale', count: 7 as const, rate: 2.0 };
+            Object.assign(held, codec.withDefaults({ count: 1 }));
+            expect(held.name).toBeUndefined();
+            expect(held.count).toBe(1);
+            expect(held.rate).toBe(1.0);
+        });
+
+        it('lets an explicit undefined win over the default', () => {
+            const merged = codec.withDefaults({ count: undefined });
+            expect('count' in merged).toBe(true);
+            expect(merged.count).toBeUndefined();
+        });
+
+        it('treats a missing config as "all defaults"', () => {
+            expect(codec.withDefaults({})).toEqual(SCHEMA.defaults);
+            expect(codec.withDefaults(undefined)).toEqual(SCHEMA.defaults);
+            expect(codec.withDefaults(null)).toEqual(SCHEMA.defaults);
+        });
+
+        it('does not hand out the schema defaults object itself', () => {
+            const merged = codec.withDefaults({});
+            expect(merged).not.toBe(SCHEMA.defaults);
+            merged.count = 7;
+            expect(SCHEMA.defaults.count).toBe(3);
+        });
+    });
+
     it('codecFor unknown viewType returns undefined', async () => {
         const { codecFor } = await import('../../../../src/services/viewConfig');
         expect(codecFor('nonexistent-view')).toBeUndefined();

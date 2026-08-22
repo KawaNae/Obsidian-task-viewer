@@ -1,6 +1,5 @@
 import { ItemView, type WorkspaceLeaf, setIcon, type ViewStateResult } from 'obsidian';
 import { t } from '../../i18n';
-import { ViewUriBuilder } from '../sharedLogic/ViewUriBuilder';
 import { TaskCardRenderer } from '../taskcard/TaskCardRenderer';
 import type { Task, ViewState, PinnedListDefinition } from '../../types';
 import { findOldestOverdueDate } from '../../services/display/OverdueTaskFinder';
@@ -34,7 +33,7 @@ import { FilterMenuComponent } from '../customMenus/FilterMenuComponent';
 import { SortMenuComponent } from '../customMenus/SortMenuComponent';
 import { TopRightConfigEditor } from '../customMenus/TopRightConfigEditor';
 import { FilterValueCollector } from '../../services/filter/FilterValueCollector';
-import { createEmptyFilterState } from '../../services/filter/FilterTypes';
+import { createEmptyFilterState, hasConditions } from '../../services/filter/FilterTypes';
 import { createEmptySortState } from '../../services/sort/SortTypes';
 import { MoonPhaseRenderer } from '../sharedUI/MoonPhaseRenderer';
 import { SidebarManager } from '../sidebar/SidebarManager';
@@ -46,7 +45,7 @@ import { RenderScheduler } from '../sharedUI/RenderScheduler';
 import { HostFrameScheduler } from '../../utils/HostWindow';
 import { CardReconciler } from '../sharedUI/CardReconciler';
 import { codecFor } from '../../services/viewConfig';
-import { TimelineSchema, type TimelineConfig, type TimelineTransient } from './TimelineSchema';
+import type { TimelineConfig, TimelineTransient } from './TimelineSchema';
 import type { ViewConfigCodec } from '../../services/viewConfig';
 
 export const VIEW_TYPE_TIMELINE = VIEW_META_TIMELINE.type;
@@ -86,6 +85,12 @@ export class TimelineView extends ItemView {
     private allDayRenderer: AllDaySectionRenderer;
     private timelineRenderer: TimelineSectionRenderer;
     private pinnedListRenderer: PinnedListRenderer;
+    /**
+     * The view's own filter (toolbar funnel). Owned here rather than by the
+     * toolbar so that `applyConfig` / `getCurrentConfig` have one authority for
+     * "the current filter" — same arrangement as Calendar / Schedule / Kanban.
+     */
+    private readonly filterMenu = new FilterMenuComponent();
     private sidebarFilterMenu = new FilterMenuComponent();
     private sidebarSortMenu = new SortMenuComponent();
     private topRightEditor = new TopRightConfigEditor();
@@ -185,6 +190,9 @@ export class TimelineView extends ItemView {
             getHoverParent: () => this.hoverParent,
         }, () => this.plugin.settings, () => this.viewState.maskMode ?? false);
         this.addChild(this.taskRenderer);
+        this.filterMenu.setStartHourProvider(() => this.plugin.settings.startHour);
+        this.filterMenu.setTaskLookupProvider((id) => this.readService.getTask(id));
+        this.filterMenu.setStatusDefinitions(this.plugin.settings.statusDefinitions);
     }
 
     getViewType() {
@@ -203,24 +211,73 @@ export class TimelineView extends ItemView {
         return codecFor(VIEW_TYPE_TIMELINE) as ViewConfigCodec<TimelineConfig, TimelineTransient>;
     }
 
+    /**
+     * Apply a parsed config with REPLACE semantics over schema defaults.
+     * Single entry point used by setState AND by the toolbar's template apply,
+     * so reset / load / restore all go through one path.
+     *
+     * Note the deliberate difference from Calendar: Calendar takes an
+     * `explicit` flag and lets a user-driven apply keep the sidebar open on
+     * mobile, whereas Timeline always lets performRender's narrow-width check
+     * force it closed. Which rule is right (honour the user's request vs.
+     * honour the device constraint) is an open spec question; until it is
+     * settled each view keeps the behaviour it already had.
+     */
+    applyConfig(cfg: Partial<TimelineConfig>): void {
+        const { filterState, ...rest } = this.codec.withDefaults(cfg);
+        Object.assign(this.viewState, rest);
+
+        // FilterMenu owns the in-memory FilterState. viewState keeps no copy —
+        // a second, silently diverging mirror of the filter is exactly what
+        // this view used to have. (ViewState still declares the field; it is
+        // scheduled for removal with the types split.)
+        this.viewState.filterState = undefined;
+        this.filterMenu.setFilterState(filterState ?? createEmptyFilterState());
+
+        const sidebarOpen = rest.showSidebar ?? true;
+        this.viewState.showSidebar = sidebarOpen;
+        this.sidebarManager.applyOpen(sidebarOpen, { animate: false });
+    }
+
+    /** Snapshot for template save / URI build / workspace state. */
+    getCurrentConfig(): Partial<TimelineConfig> {
+        const filterState = this.filterMenu.getFilterState();
+        return {
+            customName: this.viewState.customName,
+            filterState: hasConditions(filterState) ? filterState : undefined,
+            maskMode: this.viewState.maskMode,
+            astronomyDisplay: this.viewState.astronomyDisplay,
+            showSidebar: this.viewState.showSidebar,
+            pinnedLists: this.viewState.pinnedLists,
+            daysToShow: this.viewState.daysToShow as TimelineConfig['daysToShow'],
+            zoomLevel: this.viewState.zoomLevel,
+            showAllDay: this.viewState.showAllDay,
+            showTimeline: this.viewState.showTimeline,
+        };
+    }
+
+    /**
+     * Reset to defaults. Beyond `applyConfig({})` this also drops the transient
+     * pinned-list collapse state, which is per-leaf and not part of the config.
+     */
+    private resetToDefaults(): void {
+        this.applyConfig({});
+        this.viewState.pinnedListCollapsed = undefined;
+    }
+
     async setState(state: TimelineViewState, result: ViewStateResult): Promise<void> {
         const stateDict = (state ?? {}) as Record<string, unknown>;
         const config = this.codec.parseConfig(stateDict);
         const transient = this.codec.parseTransient(stateDict);
 
-        // Apply config with REPLACE semantics over schema defaults — fields
-        // absent from `state` are restored to their declared defaults rather
-        // than retained. This is the single behavior that closes B5 across
-        // all views (no per-view "else undefined" branches needed).
-        const next: Partial<TimelineConfig> = { ...TimelineSchema.defaults, ...config };
-        Object.assign(this.viewState, next);
+        // Fields absent from `state` are restored to their declared defaults
+        // rather than retained. This is the single behavior that closes B5
+        // across all views (no per-view "else undefined" branches needed).
+        this.applyConfig(config);
 
         // Transient is overlaid additively (no defaults — these are per-leaf).
         Object.assign(this.viewState, transient);
         if (transient.startDate !== undefined) this.startDateExplicit = true;
-
-        // Side effect: sidebar DOM has to follow the boolean.
-        this.sidebarManager.applyOpen(this.viewState.showSidebar ?? true, { animate: false });
 
         await super.setState(state, result);
         // State-side of the init barrier is now satisfied. If onOpen has
@@ -238,10 +295,9 @@ export class TimelineView extends ItemView {
     }
 
     getState(): Record<string, unknown> {
-        const config = this.viewState as Partial<TimelineConfig>;
         const transient = this.viewState as Partial<TimelineTransient>;
         return {
-            ...this.codec.serializeConfig(config),
+            ...this.codec.serializeConfig(this.getCurrentConfig()),
             ...this.codec.serializeTransient(transient),
         };
     }
@@ -286,46 +342,110 @@ export class TimelineView extends ItemView {
 
         // Construct the toolbar once for the lifetime of this view. performRender()
         // calls toolbar.detach() before container.empty() and toolbar.mount(host)
-        // after, so the underlying DOM + filterMenu instance survive renders. This
-        // is what lets the filter popover stay open across data-driven re-renders.
-        this.toolbar = new TimelineToolbar(
-            this.app,
-            this.viewState,
-            this.plugin,
-            this.readService,
-            {
-                onRender: () => {
-                    this.render();
-                    // Toolbar filter changes can affect pinned lists with
-                    // applyViewFilter:true; PinnedList does not see view filter
-                    // state via onChange, so refresh explicitly here.
-                    this.pinnedListRenderer?.refresh();
-                },
-                onScrollToNow: () => {
-                    this.scrollToNowOnNextRender = true;
-                    this.render();
-                },
-                onStateChange: () => {
-                    this.app.workspace.requestSaveLayout();
-                },
-                getDatesToShow: () => this.getDatesToShow(),
-                onRequestSidebarToggle: (nextOpen) => {
-                    if (nextOpen) this.sidebarOpenedThisSession = true;
-                    this.viewState.showSidebar = nextOpen;
-                    this.sidebarManager.applyOpen(nextOpen, { animate: true, persist: true });
-                },
-                getLeafPosition: () => ViewUriBuilder.detectLeafPosition(this.leaf, this.app.workspace),
-                getCustomName: () => this.viewState.customName,
-                onRename: (newName) => {
-                    this.viewState.customName = newName;
-                    this.leaf.updateHeader();
-                    this.app.workspace.requestSaveLayout();
-                },
-                getLeaf: () => this.leaf,
-                linkInteractionManager: this.linkInteractionManager,
-                hoverParent: this.hoverParent,
-            }
-        );
+        // after, so the toolbar's DOM survives renders. That, plus the view-owned
+        // filterMenu, is what lets the filter popover stay open across
+        // data-driven re-renders.
+        this.toolbar = new TimelineToolbar({
+            app: this.app,
+            plugin: this.plugin,
+            readService: this.readService,
+            filterMenu: this.filterMenu,
+            getLeaf: () => this.leaf,
+            linkInteractionManager: this.linkInteractionManager,
+            hoverParent: this.hoverParent,
+
+            onFilterChange: () => {
+                this.app.workspace.requestSaveLayout();
+                this.render();
+                // Filter changes can affect pinned lists with
+                // applyViewFilter:true; PinnedList does not see view filter
+                // state via onChange, so refresh explicitly here.
+                this.pinnedListRenderer?.refresh();
+            },
+            onNavigateDays: (days) => {
+                this.viewState.startDate = DateUtils.addDays(this.viewState.startDate, days);
+                this.render();
+            },
+            onJumpToNow: () => {
+                this.jumpToNowStartDate();
+                this.scrollToNowOnNextRender = true;
+                this.render();
+            },
+
+            getCustomName: () => this.viewState.customName,
+            onRename: (newName) => {
+                this.viewState.customName = newName;
+                this.leaf.updateHeader();
+                this.app.workspace.requestSaveLayout();
+            },
+
+            getCurrentConfig: () => this.getCurrentConfig(),
+            applyConfig: (cfg) => this.applyConfig(cfg),
+            onReset: () => this.resetToDefaults(),
+            onConfigApplied: () => {
+                this.leaf.updateHeader();
+                this.app.workspace.requestSaveLayout();
+                this.render();
+                this.pinnedListRenderer?.refresh();
+            },
+
+            getReferenceMonth: () => this.getReferenceMonth(),
+
+            getDaysToShow: () => this.viewState.daysToShow,
+            setDaysToShow: (days) => {
+                this.viewState.daysToShow = days;
+                this.render();
+                this.app.workspace.requestSaveLayout();
+            },
+
+            getZoomLevel: () => this.getEffectiveZoomLevel(),
+            setZoomLevel: (zoom) => {
+                this.viewState.zoomLevel = zoom;
+                this.render();
+                this.app.workspace.requestSaveLayout();
+            },
+
+            getMaskMode: () => this.viewState.maskMode ?? false,
+            setMaskMode: (next) => {
+                this.viewState.maskMode = next;
+                this.render();
+                this.app.workspace.requestSaveLayout();
+            },
+
+            getAstronomyDisplay: () => this.viewState.astronomyDisplay,
+            setAstronomyDisplay: (next) => {
+                this.viewState.astronomyDisplay = next;
+                this.render();
+                this.app.workspace.requestSaveLayout();
+            },
+
+            getShowAllDay: () => this.viewState.showAllDay,
+            setShowAllDay: (next) => {
+                this.viewState.showAllDay = next;
+                this.render();
+                this.app.workspace.requestSaveLayout();
+            },
+            getShowTimeline: () => this.viewState.showTimeline,
+            setShowTimeline: (next) => {
+                this.viewState.showTimeline = next;
+                this.render();
+                this.app.workspace.requestSaveLayout();
+            },
+            onFollowGlobal: () => {
+                this.viewState.astronomyDisplay = undefined;
+                this.viewState.showAllDay = undefined;
+                this.viewState.showTimeline = undefined;
+                this.render();
+                this.app.workspace.requestSaveLayout();
+            },
+
+            getShowSidebar: () => this.viewState.showSidebar,
+            onRequestSidebarToggle: (nextOpen) => {
+                if (nextOpen) this.sidebarOpenedThisSession = true;
+                this.viewState.showSidebar = nextOpen;
+                this.sidebarManager.applyOpen(nextOpen, { animate: true, persist: true });
+            },
+        });
 
         // Initialize Renderers
         this.allDayRenderer = new AllDaySectionRenderer(this.plugin, this.menuHandler, this.handleManager, this.taskRenderer, () => this.viewState.daysToShow, VIEW_ID);
@@ -360,7 +480,7 @@ export class TimelineView extends ItemView {
             host: this.pinnedHost,
             getLists: () => this.viewState.pinnedLists ?? [],
             getCollapsed: () => this.buildCollapsedStateForRenderer(),
-            getViewFilterState: () => this.toolbar?.getFilterState(),
+            getViewFilterState: () => this.filterMenu.getFilterState(),
             callbacks: this.getPinnedListCallbacks(),
             viewId: VIEW_ID,
         });
@@ -569,16 +689,13 @@ export class TimelineView extends ItemView {
     private initializeStartDate(): void {
         if (this.startDateExplicit) return;
         if (!this.plugin.settings.startFromOldestOverdue) return;
-        const oldestOverdue = this.findOldestOverdueDate();
-        const visualToday = DateUtils.getVisualDateOfNow(this.plugin.settings.startHour);
-        const visualPastDate = DateUtils.addDays(visualToday, -this.plugin.settings.pastDaysToShow);
-        this.viewState.startDate = (oldestOverdue && oldestOverdue < visualPastDate) ? oldestOverdue : visualPastDate;
+        this.jumpToNowStartDate();
     }
 
     async onClose() {
         logDebug(`[${this.getViewType()}] closed`);
         this.hoverParent.dispose();
-        this.toolbar?.closeFilterPopover();
+        this.filterMenu.close();
         this.sidebarFilterMenu.close();
         this.sidebarSortMenu.close();
         this.dragHandler.destroy();
@@ -607,8 +724,18 @@ export class TimelineView extends ItemView {
         return this.viewState.zoomLevel ?? this.plugin.settings.zoomLevel;
     }
 
-    public refresh() {
-        // Re-evaluate startDate (Today button logic) for day boundary crossing or settings change
+    /** Year / month the toolbar's date label shows, derived from startDate. */
+    private getReferenceMonth(): { year: number; month: number } {
+        const d = this.viewState.startDate;
+        return { year: parseInt(d.substring(0, 4), 10), month: parseInt(d.substring(5, 7), 10) - 1 };
+    }
+
+    /**
+     * Move startDate to the "now" window: today minus the configured past-days
+     * span, pulled further back to the oldest overdue date when the setting
+     * asks for it. Shared by the Now button, refresh(), and initial state.
+     */
+    private jumpToNowStartDate(): void {
         const visualToday = DateUtils.getVisualDateOfNow(this.plugin.settings.startHour);
         const visualPastDate = DateUtils.addDays(visualToday, -this.plugin.settings.pastDaysToShow);
         if (this.plugin.settings.startFromOldestOverdue) {
@@ -617,7 +744,11 @@ export class TimelineView extends ItemView {
         } else {
             this.viewState.startDate = visualPastDate;
         }
+    }
 
+    public refresh() {
+        // Re-evaluate startDate (Now button logic) for day boundary crossing or settings change
+        this.jumpToNowStartDate();
         this.scrollToNowOnNextRender = true;
         this.render();
     }
@@ -881,7 +1012,7 @@ export class TimelineView extends ItemView {
 
         // Use GridRenderer (render into main column)
         const filteredTasks = this.readService.getTasksForDateRange(
-            dates[0], dates[dates.length - 1], this.toolbar!.getFilterState()
+            dates[0], dates[dates.length - 1], this.filterMenu.getFilterState()
         );
         this.gridRenderer.render(
             main,
@@ -1048,8 +1179,7 @@ export class TimelineView extends ItemView {
      */
     private findOldestOverdueDate(): string | null {
         const startHour = this.plugin.settings.startHour;
-        const filterState = this.viewState.filterState ?? createEmptyFilterState();
-        const displayTasks = this.readService.getFilteredTasks(filterState);
+        const displayTasks = this.readService.getFilteredTasks(this.filterMenu.getFilterState());
 
         return findOldestOverdueDate(displayTasks, startHour, this.plugin.settings.statusDefinitions, this.readService);
     }

@@ -155,7 +155,7 @@ export class MiniCalendarView extends ItemView {
     }
 
     applyConfig(cfg: Partial<MiniCalendarConfig>): void {
-        const next: Partial<MiniCalendarConfig> = { ...MiniCalendarSchema.defaults, ...cfg };
+        const next = this.codec.withDefaults(cfg);
         this.filterMenu.setFilterState(next.filterState ?? createEmptyFilterState());
         this.customName = next.customName;
         this.astronomyDisplay = next.astronomyDisplay
