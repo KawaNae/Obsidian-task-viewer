@@ -10,7 +10,7 @@ import type {
     TimerPhase,
     TimerRecordMode,
     TimerRunState,
-    TimerStartConfig,
+    TimerType,
 } from './TimerInstance';
 import { isDailyTimer } from './TimerInstance';
 import type { TimerContext } from './TimerContext';
@@ -69,7 +69,6 @@ export interface PersistedTimer {
     startTimeMs: number;
     pausedElapsedTime: number;
     phase?: TimerPhase;
-    mode?: 'work' | 'break' | 'idle';
     isRunning: boolean;
     runState?: TimerRunState;
     sessionCount?: number;
@@ -78,14 +77,17 @@ export interface PersistedTimer {
     pendingContent?: string;
     /** v0.51.0 以前の下書き。読むときだけ拾う（書き出しは pendingContent）。 */
     customLabel?: string;
-    timerType: TimerStartConfig['timerType'];
+    /**
+     * 保存するのは実行時の種別だけ。`TimerStartConfig` の `'pomodoro'` は
+     * 開始時の便宜値で、`TimerInstance` になった時点で `interval` に化けている。
+     */
+    timerType: TimerType;
     recordMode: TimerRecordMode;
     parserId: string;
     taskColor?: string;
 
     timeRemaining?: number;
     totalTime?: number;
-    autoRepeat?: boolean;
     elapsedTime?: number;
 
     groups?: IntervalGroup[];
@@ -323,7 +325,7 @@ export class TimerPersistence {
             return null;
         }
 
-        const phase = (persisted.phase ?? persisted.mode ?? 'idle') as TimerPhase;
+        const phase = (persisted.phase ?? 'idle') as TimerPhase;
         const common = {
             id: persisted.id,
             taskId,
@@ -355,34 +357,6 @@ export class TimerPersistence {
         };
 
         switch (persisted.timerType) {
-            case 'pomodoro': {
-                const workSec = Math.max(1, persisted.totalTime ?? this.ctx.plugin.settings.pomodoroWorkMinutes * 60);
-                const breakSec = Math.max(1, this.ctx.plugin.settings.pomodoroBreakMinutes * 60);
-                const repeatCount = persisted.autoRepeat ? 0 : 1;
-                const groups: IntervalGroup[] = [
-                    {
-                        segments: [
-                            { label: 'Work', durationSeconds: workSec, type: 'work' },
-                            { label: 'Break', durationSeconds: breakSec, type: 'break' }
-                        ],
-                        repeatCount
-                    }
-                ];
-                const migratedInterval: IntervalTimer = {
-                    ...common,
-                    timerType: 'interval',
-                    intervalSource: 'pomodoro',
-                    groups,
-                    currentGroupIndex: 0,
-                    currentSegmentIndex: phase === 'break' ? 1 : 0,
-                    currentRepeatIndex: 0,
-                    segmentTimeRemaining: Math.max(0, persisted.timeRemaining ?? workSec),
-                    totalElapsedTime: Math.max(0, persisted.pausedElapsedTime ?? 0),
-                    totalDuration: repeatCount === 0 ? 0 : computeTotalDuration(groups),
-                    phase
-                };
-                return migratedInterval;
-            }
             case 'countdown': {
                 const totalTime = Math.max(1, persisted.totalTime ?? this.ctx.plugin.settings.pomodoroWorkMinutes * 60);
                 const elapsedTime = Math.max(0, persisted.elapsedTime ?? persisted.pausedElapsedTime ?? 0);

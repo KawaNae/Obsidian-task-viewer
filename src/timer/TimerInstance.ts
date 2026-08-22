@@ -143,6 +143,13 @@ export interface IntervalSegment {
     type: 'work' | 'break' | 'prepare';
 }
 
+/**
+ * 区間の並びと、その繰り返し回数（0 は無限）。
+ *
+ * v2 で廃止した**記録のグループ**とは別物。あちらは 1 タイマーの複数レコードを
+ * 束ねる器で、今は兄弟として並べるだけになった。こちらは work / break / prepare
+ * の巡回を表す現役の概念で、記録の書き方とは関係しない。
+ */
 export interface IntervalGroup {
     segments: IntervalSegment[];
     repeatCount: number;

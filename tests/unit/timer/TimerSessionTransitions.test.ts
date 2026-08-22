@@ -39,7 +39,6 @@ function build() {
     let persisted = 0;
     const ctx = {
         timers: new Map<string, TimerInstance>(),
-        intervalPrepareBaseElapsed: new Map<string, number>(),
         recorder: recorder as unknown as TimerContext['recorder'],
         plugin: { settings: { pomodoroWorkMinutes: 25, pomodoroBreakMinutes: 5 } } as unknown as TimerContext['plugin'],
         app: {} as TimerContext['app'],
@@ -325,15 +324,15 @@ describe('interval stop', () => {
         expect(h.ctx.timers.has(timer.id)).toBe(false);
     });
 
-    it('takes the same path from prepare, and lets go of the prepare base', async () => {
-        const timer = startInterval(h.ctx, { phase: 'prepare' });
-        h.ctx.intervalPrepareBaseElapsed.set(timer.id, 120);
+    it('takes the same path from prepare', async () => {
+        const timer = startInterval(h.ctx);
+        // prepare は実際の遷移で作る（待機の起点は lifecycle が内部に持つ）。
+        h.lifecycle.pauseIntervalToPrepare(timer);
         await h.lifecycle.stopIntervalTimer(timer);
 
         expect(h.calls.order).toEqual(['flush', 'record']);
-        expect(h.ctx.intervalPrepareBaseElapsed.has(timer.id)).toBe(false);
-        // prepare 中の経過は積む（120 + 走った 600 秒）。
-        expect(timer.totalElapsedTime).toBeGreaterThanOrEqual(720);
+        // 走った 600 秒は prepare をまたいでも残る。
+        expect(timer.totalElapsedTime).toBe(600);
     });
 
     it('takes the same path from the state only a crash-restore can produce', async () => {

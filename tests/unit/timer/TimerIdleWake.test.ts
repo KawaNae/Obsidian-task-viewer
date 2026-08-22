@@ -19,7 +19,6 @@ import type { TimerStorageUtils } from '../../../src/timer/TimerStorageUtils';
 function build() {
     const ctx = {
         timers: new Map<string, TimerInstance>(),
-        intervalPrepareBaseElapsed: new Map<string, number>(),
         recorder: {
             recordSessionEnd: async () => { /* unused */ },
             createChildAtStart: async () => undefined,
@@ -98,10 +97,13 @@ describe('idle wake', () => {
         expect(h.ctx.timers.has('timer-1')).toBe(true);
     });
 
-    it('counts a suspended timer as not running', () => {
+    it('counts a suspended timer as not running, so the idle timer may come up', () => {
         addCountup(h.ctx, 'timer-1', { runState: 'suspended', isRunning: false });
-        expect(h.lifecycle.hasNonIdleTimers()).toBe(true);
         expect(h.lifecycle.hasRunningNonIdleTimers()).toBe(false);
+
+        // 中断はユーザーが手を止めた合図。タイマーが 1 つ残っていても提案を出す。
+        h.lifecycle.startIdleTimerIfNothingRunning();
+        expect(h.ctx.timers.has(IDLE_TIMER_ID)).toBe(true);
     });
 
     it('leaves the idle timer alone when it is already up', async () => {

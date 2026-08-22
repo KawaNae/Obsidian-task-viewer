@@ -18,7 +18,6 @@ export const IDLE_TIMER_ID = '__idle__';
 
 export interface TimerContext {
     readonly timers: Map<string, TimerInstance>;
-    readonly intervalPrepareBaseElapsed: Map<string, number>;
     readonly recorder: TimerRecorder;
     readonly plugin: TaskViewerPlugin;
     readonly app: App;
