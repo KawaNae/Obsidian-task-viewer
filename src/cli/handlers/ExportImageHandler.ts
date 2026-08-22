@@ -1,5 +1,6 @@
 import type { CliData } from 'obsidian';
 import type TaskViewerPlugin from '../../main';
+import { DateUtils } from '../../utils/DateUtils';
 import { cliOk, cliError } from '../CliOutputFormatter';
 import { resolveViewTypeFromShortName, schemaFor } from '../../services/viewConfig';
 import { exportDescriptorFor } from '../../services/export/ExportRegistry';
@@ -144,15 +145,15 @@ function computeRenderedRange(
                 ? parseInt(params['days-to-show'], 10)
                 : (schema?.defaults as Record<string, unknown>)?.daysToShow as number ?? 3;
             const from = resolvedAnchor;
-            const to = addDays(resolvedAnchor, daysToShow - 1);
+            const to = DateUtils.addDays(resolvedAnchor, daysToShow - 1);
             return { anchor: resolvedAnchor, from, to };
         }
         case 'calendar':
         case 'mini-calendar': {
             const [year, month] = resolvedAnchor.split('-').map(Number);
-            const monthStart = `${year}-${String(month).padStart(2, '0')}-01`;
+            const monthStart = DateUtils.getLocalDateString(new Date(year, month - 1, 1));
             const lastDay = new Date(year, month, 0).getDate();
-            const monthEnd = `${year}-${String(month).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
+            const monthEnd = DateUtils.getLocalDateString(new Date(year, month - 1, lastDay));
             return { anchor: resolvedAnchor, from: monthStart, to: monthEnd };
         }
         case 'schedule':
@@ -160,12 +161,6 @@ function computeRenderedRange(
         default:
             return null;
     }
-}
-
-function addDays(dateStr: string, days: number): string {
-    const [y, m, d] = dateStr.split('-').map(Number);
-    const dt = new Date(y, m - 1, d + days);
-    return `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}-${String(dt.getDate()).padStart(2, '0')}`;
 }
 
 // ── Existing helpers ──

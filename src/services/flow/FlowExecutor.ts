@@ -321,12 +321,11 @@ export class FlowExecutor {
 
     private buildDeps(): FlowPlanDeps {
         const now = new Date();
-        const pad = (n: number) => String(n).padStart(2, '0');
         return {
             today: DateUtils.getLocalDateString(now),
             now: {
                 date: DateUtils.getLocalDateString(now),
-                time: `${pad(now.getHours())}:${pad(now.getMinutes())}`,
+                time: DateUtils.formatHHMM(now.getHours(), now.getMinutes()),
             },
             weekStartDay: this.getSettings().weekStartDay,
             host: this.host,
