@@ -26,10 +26,19 @@ interface BindingState {
     writing: boolean;
 }
 
+/** 貼り付け・IME 由来の改行を含め、記録前に必ず 1 行へ畳む。 */
+function foldNewlines(value: string): string {
+    return value.replace(/[\r\n]+/g, ' ');
+}
+
 export class TimerContentBinding {
     private states = new Map<string, BindingState>();
 
-    constructor(private ctx: TimerContext) {}
+    constructor(
+        private ctx: TimerContext,
+        /** 値を書き換えた直後に呼ぶ（textarea のオートグロー用）。省略可。 */
+        private onValueChanged?: (el: HTMLInputElement | HTMLTextAreaElement) => void,
+    ) {}
 
     // ─── 表示 ────────────────────────────────────────────────
 
@@ -47,16 +56,19 @@ export class TimerContentBinding {
     /**
      * 入力欄をタイマーに結ぶ。renderer が入力欄を作るたびに呼ぶ。
      */
-    bind(timer: TimerInstance, inputEl: HTMLInputElement): void {
+    bind(timer: TimerInstance, inputEl: HTMLInputElement | HTMLTextAreaElement): void {
         inputEl.oninput = () => {
             const state = this.stateFor(timer.id);
-            const value = inputEl.value;
+            // 見た目の改行（貼り付け由来）はそのまま textarea に残してよいが、
+            // 下書き・localStorage には残さない — 書く相手は常に 1 行の記法。
+            const value = foldNewlines(inputEl.value);
 
             state.pending = value;
             // 未書き込みの入力は下書きにも置く。widget の組み直しやリロードを
             // またいでも打った字が消えない。
             timer.pendingContent = value;
             this.ctx.persistTimersToStorage();
+            this.onValueChanged?.(inputEl);
 
             if (state.timeoutId !== undefined) clearTimeout(state.timeoutId);
             state.timeoutId = setTimeout(() => {
@@ -72,12 +84,15 @@ export class TimerContentBinding {
      * 打鍵中（フォーカス中）と未書き込みの入力があるときは見送る — どちらも
      * ユーザーが今書いている値を、古い md の値で上書きすることになる。
      */
-    syncFromFile(timer: TimerInstance, inputEl: HTMLInputElement): void {
+    syncFromFile(timer: TimerInstance, inputEl: HTMLInputElement | HTMLTextAreaElement): void {
         if (timer.pendingContent !== undefined) return;
         if (inputEl.ownerDocument.activeElement === inputEl) return;
 
         const name = this.tailName(timer);
-        if (inputEl.value !== name) inputEl.value = name;
+        if (inputEl.value !== name) {
+            inputEl.value = name;
+            this.onValueChanged?.(inputEl);
+        }
     }
 
     // ─── 書き出し ────────────────────────────────────────────
@@ -158,11 +173,13 @@ export class TimerContentBinding {
     }
 
     private async writeOnce(timer: TimerInstance, name: string): Promise<void> {
-        const trimmed = name.trim();
+        // 単一の畳み関門。上流（bind の oninput）で既に畳んでいても、ここで
+        // 独立に保証する — 記法は 1 行のみで、改行が行を割ってタスクを壊す。
+        const trimmed = foldNewlines(name).trim();
         const tail = this.ctx.recorder.resolveTailRecord(timer);
         if (!tail) {
             // 書く相手がまだ居ない。下書きのまま置いて、行が生えたときに書き出す。
-            timer.pendingContent = name;
+            timer.pendingContent = foldNewlines(name);
             return;
         }
 

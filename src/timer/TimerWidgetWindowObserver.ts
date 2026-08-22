@@ -25,6 +25,7 @@ const NON_DRAGGABLE_SELECTORS = [
     '.timer-widget__pin-badge',
     '.timer-widget__item button',
     '.timer-widget__item input',
+    '.timer-widget__item textarea',
 ];
 
 export type PinState = 'pinned' | 'pending';

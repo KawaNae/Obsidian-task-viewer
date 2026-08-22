@@ -268,7 +268,11 @@
     border-radius: 8px 8px 0 0;
 }
 
-/* Title Input (child mode: inline label in header) */
+/* Title Input (child mode: inline label in header). textarea: display wraps
+   onto multiple lines, but the recorded content stays a single line — the
+   JS auto-grow (TextareaAutoGrow.ts) drives the height, so no internal
+   scrollbar is needed. field-sizing is a progressive enhancement only (iOS
+   WKWebView doesn't support it), the JS path stays the source of truth. */
 .timer-widget .timer-widget__title-input {
     display: block;
     width: 100%;
@@ -284,7 +288,14 @@
     font-family: var(--tv-font-ui);
     box-shadow: none;
     height: auto;
+    min-height: 0;
     line-height: 1.4;
+    resize: none;
+    overflow: hidden;
+    box-sizing: border-box;
+    cursor: text;
+    touch-action: pan-y;
+    field-sizing: content;
 }
 
 .timer-widget .timer-widget__title-input:hover {
