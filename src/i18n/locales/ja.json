@@ -594,7 +594,9 @@
     "remove": "削除",
     "createTaskForDailyNote": "デイリーノートにタスクを作成",
     "openCountupForDailyNote": "⏱️ デイリーノートのカウントアップを開く",
-    "openPomodoroForDailyNote": "🍅 デイリーノートのポモドーロを開く"
+    "openPomodoroForDailyNote": "🍅 デイリーノートのポモドーロを開く",
+    "ariaTaskMenu": "タスクメニュー",
+    "ariaChildLineMenu": "子行メニュー"
   },
   "flowDelete": {
     "title": "このタスクはフローコマンドを持っています",
@@ -645,7 +647,9 @@
     "nextCurrent": "予定時間中",
     "nextUpcoming": "次の予定",
     "pinPinned": "このウィンドウにピン留め中（クリックで解除）",
-    "pinPending": "解除中 — 移動先のウィンドウをクリック"
+    "pinPending": "解除中 — 移動先のウィンドウをクリック",
+    "autoRepeat": "自動繰り返し",
+    "minutesRange": "分 ({{min}}〜{{max}})"
   },
   "notice": {
     "uriCopied": "URIをクリップボードにコピーしました",
@@ -666,7 +670,12 @@
     "timerTargetReadOnly": "このタスクは読み取り専用の形式です。タイマーの記録を書き込めません。",
     "taskConverted": "タスクをfrontmatterファイルに変換しました",
     "taskConvertFailed": "タスクの変換に失敗しました",
-    "taskWriteFailed": "タスクの行が特定できず、保存されませんでした。変更は元に戻しました。"
+    "taskWriteFailed": "タスクの行が特定できず、保存されませんでした。変更は元に戻しました。",
+    "taskNotFoundInIndex": "インデックスにタスクが見つかりません",
+    "exportingImage": "画像を書き出しています…",
+    "exportFailed": "書き出しに失敗しました。詳細はコンソールを確認してください。",
+    "logCopied": "ログをクリップボードにコピーしました",
+    "logCopyFailed": "ログのコピーに失敗しました"
   },
   "pinnedList": {
     "noPinnedLists": "ピン留めリストがありません。",

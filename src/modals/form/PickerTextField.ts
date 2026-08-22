@@ -71,7 +71,7 @@ export function createPickerTextField(
     const clearButton = wrapper.createDiv({
         cls: 'tv-form__clear-button'
     });
-    clearButton.setAttribute('aria-label', 'Clear');
+    clearButton.setAttribute('aria-label', t('modal.clear'));
     setIcon(clearButton.createSpan(), 'x');
     clearButton.style.display = initialValue ? '' : 'none';
     clearButton.addEventListener('click', () => {

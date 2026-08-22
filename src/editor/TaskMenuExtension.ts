@@ -15,6 +15,7 @@ import type { MenuPresenter } from '../interaction/menu/MenuPresenter';
 import type { TaskHubOpener } from '../interaction/menu/MenuHandler';
 import { TaskLineClassifier } from '../services/parsing/utils/TaskLineClassifier';
 import { getTaskNotation } from '../services/filter/parserTaxonomy';
+import { t } from '../i18n';
 
 const taskIndexChanged = StateEffect.define<void>();
 const settingsChanged = StateEffect.define<void>();
@@ -34,7 +35,7 @@ class TaskMenuWidget extends WidgetType {
     toDOM(view: EditorView): HTMLElement {
         const btn = document.createElement('button');
         btn.className = 'tv-editor-menu-btn';
-        btn.setAttribute('aria-label', 'Task menu');
+        btn.setAttribute('aria-label', t('menu.ariaTaskMenu'));
         btn.setAttribute('tabindex', '-1');
 
         const span = document.createElement('span');
