@@ -3,7 +3,8 @@ import { ChildLineClassifier } from '../utils/ChildLineClassifier';
 import { TaskLineClassifier } from '../utils/TaskLineClassifier';
 import { CodeFenceTracker } from '../../../utils/CodeFenceTracker';
 
-const HEADING_REGEX = /^(#{1,6})\s+(.*)/;
+/** A markdown heading line: capture group 1 = `#` run, group 2 = title text. */
+export const HEADING_REGEX = /^(#{1,6})\s+(.*)/;
 const PROPERTY_GROUP_HEADER = /^\s*-\s+properties::\s*$/;
 
 /**

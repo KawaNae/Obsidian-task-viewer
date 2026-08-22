@@ -9,6 +9,7 @@
  */
 
 import { CodeFenceTracker } from '../../utils/CodeFenceTracker';
+import { LIST_BULLET_SOURCE } from '../parsing/utils/ListMarker';
 
 /**
  * The marker that turns the tail of a line into a flow command, on a task
@@ -17,7 +18,7 @@ import { CodeFenceTracker } from '../../utils/CodeFenceTracker';
 export const FLOW_MARKER = '==>';
 
 /** `- ==> <tail>` with any list bullet. Group 1 = indent, group 2 = tail. */
-export const FLOW_LINE_RE = /^(\s*)(?:[-*+]|\d+[.)])\s*==>\s?(.*)$/;
+export const FLOW_LINE_RE = new RegExp(`^(\\s*)${LIST_BULLET_SOURCE}\\s*==>\\s?(.*)$`);
 
 export interface FlowLineMatch {
     /** Leading whitespace of the line. */
