@@ -176,7 +176,7 @@ export class TaskFilterEngine {
         return true;
     }
 
-    private static evalDate(taskDate: string | undefined, c: FilterCondition, startHour: number = 0, weekStartDay: 0 | 1 = 1): boolean {
+    private static evalDate(taskDate: string | undefined, c: FilterCondition, startHour: number, weekStartDay: 0 | 1): boolean {
         if (c.operator === 'isSet') return !!taskDate;
         if (c.operator === 'isNotSet') return !taskDate;
 
