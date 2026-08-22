@@ -1,7 +1,57 @@
 import { describe, it, expect } from 'vitest';
+import { TFile } from 'obsidian';
 import { HeadingInserter } from '../../../src/utils/HeadingInserter';
 
+/**
+ * writeUnderHeading は TaskIndex.createTask / DailyNoteUtils.appendLineToDailyNote /
+ * FrontmatterWriter.insertLineUnderHeading の 3 重実装を一本化した先。この
+ * ラッパー自体は「insertUnderHeading の結果を vault.process で書き戻し、
+ * insertedLine を返す」だけなので、pin するのは vault.process への配線と
+ * ファイル不在時の -1 フォールバックの 2 点。
+ */
+function harness(initial: string) {
+    let content = initial;
+    const file = new TFile();
+    const app = {
+        vault: {
+            getAbstractFileByPath: (path: string) => (path === 'note.md' ? file : null),
+            process: async (_f: TFile, fn: (data: string) => string) => { content = fn(content); },
+        },
+    } as any;
+    return { app, text: () => content };
+}
+
 describe('HeadingInserter', () => {
+    describe('writeUnderHeading', () => {
+        it('writes the pure-function result back through vault.process and returns insertedLine', async () => {
+            const h = harness('some text\n## Tasks\nexisting line');
+            const insertedLine = await HeadingInserter.writeUnderHeading(
+                h.app, 'note.md', '- [ ] new task', 'Tasks', 2
+            );
+            expect(insertedLine).toBe(2);
+            expect(h.text().split('\n')[2]).toBe('- [ ] new task');
+        });
+
+        it('creates the heading when absent, matching insertUnderHeading', async () => {
+            const h = harness('some text');
+            const insertedLine = await HeadingInserter.writeUnderHeading(
+                h.app, 'note.md', '- [ ] task', 'Tasks', 2
+            );
+            const lines = h.text().split('\n');
+            expect(lines).toContain('## Tasks');
+            expect(lines[insertedLine]).toBe('- [ ] task');
+        });
+
+        it('returns -1 without writing when the file does not exist', async () => {
+            const h = harness('unchanged');
+            const insertedLine = await HeadingInserter.writeUnderHeading(
+                h.app, 'missing.md', '- [ ] task', 'Tasks', 2
+            );
+            expect(insertedLine).toBe(-1);
+            expect(h.text()).toBe('unchanged');
+        });
+    });
+
     describe('insertUnderHeading', () => {
         it('inserts under existing heading', () => {
             const content = 'some text\n## Tasks\nexisting line';

@@ -1,3 +1,4 @@
+import { type App, TFile } from 'obsidian';
 import { CodeFenceTracker } from './CodeFenceTracker';
 
 export interface InsertResult {
@@ -7,8 +8,12 @@ export interface InsertResult {
 
 /**
  * Heading-based line insertion utility.
- * Pure function: takes content string, returns modified content string.
- * Reusable across daily notes and frontmatter task files.
+ *
+ * `insertUnderHeading` is a pure function: content string in, modified
+ * content string out — this is the part every write site should test
+ * against directly. `writeUnderHeading` is a thin non-pure wrapper around
+ * it (vault.process) shared by every write site so the read-modify-write
+ * itself isn't reimplemented per caller.
  */
 export class HeadingInserter {
     /**
@@ -57,5 +62,29 @@ export class HeadingInserter {
         }
 
         return { content: lines.join('\n'), insertedLine };
+    }
+
+    /**
+     * Insert a line under a heading in the file at `filePath`, via
+     * `vault.process` (atomic read-modify-write). Returns the 0-based line
+     * number of the inserted line, or -1 if the file doesn't exist.
+     */
+    static async writeUnderHeading(
+        app: App,
+        filePath: string,
+        line: string,
+        header: string,
+        headerLevel: number
+    ): Promise<number> {
+        const file = app.vault.getAbstractFileByPath(filePath);
+        if (!(file instanceof TFile)) return -1;
+
+        let insertedLine = -1;
+        await app.vault.process(file, (content) => {
+            const result = HeadingInserter.insertUnderHeading(content, line, header, headerLevel);
+            insertedLine = result.insertedLine;
+            return result.content;
+        });
+        return insertedLine;
     }
 }

@@ -19,7 +19,6 @@ import { NotifyCoalescer } from './NotifyCoalescer';
 import { TaskIdGenerator } from '../display/TaskIdGenerator';
 import { TaskParser } from '../parsing/TaskParser';
 import type { GenBlock } from '../parsing/gen/GenBlockCollector';
-import { HeadingInserter } from '../../utils/HeadingInserter';
 import { FileOperations } from '../persistence/utils/FileOperations';
 import { logError, logInfo, logWarn } from '../../log/log';
 
@@ -557,13 +556,8 @@ export class TaskIndex {
             this.syncDetector.markLocalEdit(filePath);
 
             if (heading) {
-                const file = this.app.vault.getAbstractFileByPath(filePath);
-                if (!(file instanceof TFile)) return;
-                await this.app.vault.process(file, (content) => {
-                    const result = HeadingInserter.insertUnderHeading(content, taskLine, heading, 2);
-                    insertedLine = result.insertedLine;
-                    return result.content;
-                });
+                insertedLine = await this.repository.insertLineUnderHeading(filePath, taskLine, heading, 2);
+                if (insertedLine < 0) return; // ファイルが無ければ何も書けていない
             } else {
                 insertedLine = await this.repository.appendTaskToFile(filePath, taskLine);
             }
@@ -586,7 +580,7 @@ export class TaskIndex {
             this.syncDetector.markLocalEdit(task.file);
 
             if (isTvFile(task)) {
-                await this.repository.insertLineAfterTvFile(
+                await this.repository.insertLineUnderHeading(
                     task.file, childLine,
                     this.settings.tvFileChildHeader,
                     this.settings.tvFileChildHeaderLevel
@@ -617,7 +611,7 @@ export class TaskIndex {
             this.syncDetector.markLocalEdit(task.file);
 
             if (isTvFile(task)) {
-                await this.repository.insertLineAfterTvFile(
+                await this.repository.insertLineUnderHeading(
                     task.file, childLine,
                     this.settings.tvFileChildHeader,
                     this.settings.tvFileChildHeaderLevel
