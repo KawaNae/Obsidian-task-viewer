@@ -889,6 +889,89 @@ describe('TaskFilterEngine', () => {
             });
         });
 
+        // An ancestor is lifted into a DisplayTask before it is evaluated.
+        // That conversion used to be hand-written here and was incomplete:
+        // it assigned no `effectiveDue` (the field is optional, so the type
+        // never objected) and pinned `childEntries` to [], so these
+        // conditions all reported the opposite of the truth.
+        describe('ancestor is evaluated by the same rules as a top-level task', () => {
+            function ctxOf(...tasks: Task[]) {
+                const map = new Map(tasks.map(t => [t.id, t]));
+                return { startHour: 0, taskLookup: (id: string) => map.get(id) };
+            }
+
+            it('sees a due date written plainly on the parent', () => {
+                const par = makeTask({ id: 'p2', due: '2026-08-30' });
+                const kid = makeTask({ id: 'c2', parentId: 'p2' });
+                const state = stateFromCondition(cond('due', 'isSet', undefined, 'parent'));
+                expect(TaskFilterEngine.evaluate(kid, state, ctxOf(par, kid))).toBe(true);
+            });
+
+            it('matches a date range against the parent due date', () => {
+                const par = makeTask({ id: 'p2', due: '2026-08-30' });
+                const kid = makeTask({ id: 'c2', parentId: 'p2' });
+                const hit = stateFromCondition(cond('due', 'equals', '2026-08-30', 'parent'));
+                const miss = stateFromCondition(cond('due', 'equals', '2026-08-29', 'parent'));
+                expect(TaskFilterEngine.evaluate(kid, hit, ctxOf(par, kid))).toBe(true);
+                expect(TaskFilterEngine.evaluate(kid, miss, ctxOf(par, kid))).toBe(false);
+            });
+
+            it('counts a due-only parent as having a date (anyDate)', () => {
+                const par = makeTask({ id: 'p2', due: '2026-08-30' });
+                const kid = makeTask({ id: 'c2', parentId: 'p2' });
+                const state = stateFromCondition(cond('anyDate', 'isSet', undefined, 'parent'));
+                expect(TaskFilterEngine.evaluate(kid, state, ctxOf(par, kid))).toBe(true);
+            });
+
+            it('resolves the implicit start of an E-type parent (endDate only)', () => {
+                const par = makeTask({ id: 'p2', endDate: '2026-08-22', endTime: '10:00' });
+                const kid = makeTask({ id: 'c2', parentId: 'p2' });
+                const state = stateFromCondition(cond('startDate', 'isSet', undefined, 'parent'));
+                expect(TaskFilterEngine.evaluate(kid, state, ctxOf(par, kid))).toBe(true);
+            });
+
+            it('resolves a start the parent inherits from its section (cascade)', () => {
+                const par = makeTask({ id: 'p2', cascadeContext: { startDate: '2026-08-22' } });
+                const kid = makeTask({ id: 'c2', parentId: 'p2' });
+                const state = stateFromCondition(cond('startDate', 'isSet', undefined, 'parent'));
+                expect(TaskFilterEngine.evaluate(kid, state, ctxOf(par, kid))).toBe(true);
+            });
+
+            // startHour shifts an all-day parent's visual start day; passing 0
+            // regardless would put this task on the 22nd instead of the 21st.
+            it('honours startHour when resolving the parent visual date', () => {
+                const par = makeTask({ id: 'p2', endDate: '2026-08-22' });
+                const kid = makeTask({ id: 'c2', parentId: 'p2' });
+                const map = new Map<string, Task>([['p2', par], ['c2', kid]]);
+                const ctx = { startHour: 4, taskLookup: (id: string) => map.get(id) };
+                const on21 = stateFromCondition(cond('startDate', 'equals', '2026-08-21', 'parent'));
+                expect(TaskFilterEngine.evaluate(kid, on21, ctx)).toBe(true);
+            });
+
+            it('sees that the parent has child tasks', () => {
+                const par = makeTask({ id: 'p2', childIds: ['c2'] });
+                const kid = makeTask({ id: 'c2', parentId: 'p2', startDate: '2026-08-22' });
+                const state = stateFromCondition(cond('children', 'isSet', undefined, 'parent'));
+                expect(TaskFilterEngine.evaluate(kid, state, ctxOf(par, kid))).toBe(true);
+            });
+
+            it('reports no children for a childless grandparent', () => {
+                const gp = makeTask({ id: 'gp2', childIds: [] });
+                const par = makeTask({ id: 'p2', parentId: 'gp2', childIds: [] });
+                const kid = makeTask({ id: 'c2', parentId: 'p2' });
+                const state = stateFromCondition(cond('children', 'isSet', undefined, 'parent'));
+                expect(TaskFilterEngine.evaluate(kid, state, ctxOf(gp, par, kid))).toBe(false);
+            });
+
+            it('still traverses two levels for a date condition', () => {
+                const gp = makeTask({ id: 'gp2', due: '2026-08-30' });
+                const par = makeTask({ id: 'p2', parentId: 'gp2' });
+                const kid = makeTask({ id: 'c2', parentId: 'p2' });
+                const state = stateFromCondition(cond('due', 'isSet', undefined, 'parent'));
+                expect(TaskFilterEngine.evaluate(kid, state, ctxOf(gp, par, kid))).toBe(true);
+            });
+        });
+
         describe('circular reference protection', () => {
             it('does not infinite loop on circular parentId', () => {
                 const a = makeTask({ id: 'a', parentId: 'b', tags: [] });
