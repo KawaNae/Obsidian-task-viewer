@@ -50,6 +50,26 @@ describe('HeadingInserter', () => {
             expect(insertedLine).toBe(-1);
             expect(h.text()).toBe('unchanged');
         });
+
+        it('writes via a directly-passed TFile even when getAbstractFileByPath cannot resolve it yet', async () => {
+            // DailyNoteUtils.appendLineToDailyNote が createDailyNote 直後の
+            // TFile を渡す経路の pin。作成直後は vault index からパスで
+            // 引き直せるとは限らないため、TFile を経由しない配線が必須。
+            let content = '## Tasks\nexisting';
+            const file = new TFile();
+            const app = {
+                vault: {
+                    getAbstractFileByPath: () => null, // 意図的に解決できない状態を模す
+                    process: async (_f: TFile, fn: (data: string) => string) => { content = fn(content); },
+                },
+            } as any;
+
+            const insertedLine = await HeadingInserter.writeUnderHeading(
+                app, file, '- [ ] just created', 'Tasks', 2
+            );
+            expect(insertedLine).toBe(1);
+            expect(content.split('\n')[1]).toBe('- [ ] just created');
+        });
     });
 
     describe('insertUnderHeading', () => {

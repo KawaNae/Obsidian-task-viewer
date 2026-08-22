@@ -65,18 +65,25 @@ export class HeadingInserter {
     }
 
     /**
-     * Insert a line under a heading in the file at `filePath`, via
-     * `vault.process` (atomic read-modify-write). Returns the 0-based line
-     * number of the inserted line, or -1 if the file doesn't exist.
+     * Insert a line under a heading in the given file, via `vault.process`
+     * (atomic read-modify-write). Returns the 0-based line number of the
+     * inserted line, or -1 if the file doesn't exist.
+     *
+     * Accepts a `TFile` directly when the caller already has one — e.g. a
+     * file just created via `vault.create` may not yet resolve back through
+     * `getAbstractFileByPath` on every Obsidian version, so re-resolving by
+     * path would be a silent way to lose the write.
      */
     static async writeUnderHeading(
         app: App,
-        filePath: string,
+        fileOrPath: TFile | string,
         line: string,
         header: string,
         headerLevel: number
     ): Promise<number> {
-        const file = app.vault.getAbstractFileByPath(filePath);
+        const file = typeof fileOrPath === 'string'
+            ? app.vault.getAbstractFileByPath(fileOrPath)
+            : fileOrPath;
         if (!(file instanceof TFile)) return -1;
 
         let insertedLine = -1;

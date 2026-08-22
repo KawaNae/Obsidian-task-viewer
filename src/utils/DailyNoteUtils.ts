@@ -241,7 +241,10 @@ export class DailyNoteUtils {
         }
         if (!file) return null;
 
-        await HeadingInserter.writeUnderHeading(app, file.path, line, header, headerLevel);
+        // file は既に手元にある TFile を直接渡す。作成直後のファイルは
+        // getAbstractFileByPath で引き直せるとは限らないため、パスへ
+        // 変換すると書き込みが黙って失敗しうる。
+        await HeadingInserter.writeUnderHeading(app, file, line, header, headerLevel);
         return file.path;
     }
 }
