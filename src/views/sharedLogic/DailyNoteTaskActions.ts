@@ -43,7 +43,7 @@ export function openDailyNoteTimer(
  * the hour under the cursor, clicking the all-day lane does not.
  */
 export function openCreateTaskForDailyNote(
-    plugin: PluginContext & TimerHost,
+    plugin: PluginContext,
     date: string,
     seed: { startDate: string; startTime?: string },
 ): void {

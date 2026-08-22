@@ -18,7 +18,7 @@
 
 import type { App, WorkspaceLeaf, WorkspaceWindow } from 'obsidian';
 import type { Plugin } from 'obsidian';
-import type { PluginContext } from '../PluginContext';
+import type { EventRegistrar, PluginContext } from '../PluginContext';
 import { FloatingOverlayHost } from './FloatingOverlayHost';
 import type { TimerContext } from './TimerContext';
 
@@ -39,7 +39,7 @@ export class TimerWidgetWindowObserver {
 
     constructor(
         private app: App,
-        private plugin: PluginContext & Plugin,
+        private plugin: PluginContext & EventRegistrar,
         private widget: TimerContext,
     ) {
         this.host = new FloatingOverlayHost({

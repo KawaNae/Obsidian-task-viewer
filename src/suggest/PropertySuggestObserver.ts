@@ -1,6 +1,6 @@
-import type { App, Plugin, WorkspaceWindow } from 'obsidian';
+import type { App, WorkspaceWindow } from 'obsidian';
 import type { TaskViewerSettings } from '../types';
-import type { PluginContext } from '../PluginContext';
+import type { EventRegistrar, PluginContext } from '../PluginContext';
 import { WindowAttachment, type AttachmentContext } from './WindowAttachment';
 
 /**
@@ -17,7 +17,7 @@ export class PropertySuggestObserver {
     constructor(
         app: App,
         getSettings: () => TaskViewerSettings,
-        suggestHost: PluginContext & Plugin
+        suggestHost: PluginContext & EventRegistrar
     ) {
         this.ctx = {
             app,

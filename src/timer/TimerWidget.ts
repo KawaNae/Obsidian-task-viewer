@@ -7,7 +7,7 @@
 
 import { type App, Notice, type Plugin } from 'obsidian';
 import { t } from '../i18n';
-import type { PluginContext } from '../PluginContext';
+import type { EventRegistrar, PluginContext } from '../PluginContext';
 import { AudioUtils } from './AudioUtils';
 import type {
     TimerInstance,
@@ -45,7 +45,7 @@ export interface TimerHost {
 
 export class TimerWidget implements TimerContext {
     readonly app: App;
-    readonly plugin: PluginContext & Plugin;
+    readonly plugin: PluginContext & EventRegistrar;
     readonly timers: Map<string, TimerInstance> = new Map();
     readonly recorder: TimerRecorder;
     private storageUtils: TimerStorageUtils;
@@ -57,7 +57,7 @@ export class TimerWidget implements TimerContext {
     private targetManager: TimerTargetManager;
     private observer: TimerWidgetWindowObserver | null = null;
 
-    constructor(app: App, plugin: PluginContext & Plugin) {
+    constructor(app: App, plugin: PluginContext & EventRegistrar) {
         this.app = app;
         this.plugin = plugin;
         this.storageUtils = new TimerStorageUtils(app);

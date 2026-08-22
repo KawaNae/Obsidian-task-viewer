@@ -1,10 +1,23 @@
-import type { App, PluginManifest } from 'obsidian';
+import type { App, Component, Plugin, PluginManifest } from 'obsidian';
 import type { TaskViewerSettings } from './types';
 import type { TaskIndex } from './services/core/TaskIndex';
 import type { TaskReadService } from './services/data/TaskReadService';
 import type { TaskWriteService } from './services/data/TaskWriteService';
 import type { MenuPresenter } from './interaction/menu/MenuPresenter';
 import type { LogManager } from './log/log-manager';
+
+/**
+ * Ties a subscription to the plugin's lifetime.
+ *
+ * `registerEvent` is `Component`'s, not the plugin's own: it is about how long
+ * a listener lives, not about what a module may read. Asking for the whole
+ * `Plugin` to get it would hand the module `addCommand` and `loadData` too —
+ * the same undeclared appetite this file exists to end.
+ */
+export type EventRegistrar = Pick<Component, 'registerEvent'>;
+
+/** Registers a command with Obsidian's CLI. Narrow for the same reason. */
+export type CliRegistrar = Pick<Plugin, 'registerCliHandler'>;
 
 /**
  * What a feature module is allowed to want from the plugin.

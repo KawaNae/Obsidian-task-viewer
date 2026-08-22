@@ -1,6 +1,6 @@
 import { type App, setIcon, type Plugin } from 'obsidian';
 import type { TaskViewerSettings } from '../types';
-import type { PluginContext } from '../PluginContext';
+import type { EventRegistrar, PluginContext } from '../PluginContext';
 import { PropertyColorSuggest } from './color/PropertyColorSuggest';
 import { PropertyLineStyleSuggest } from './line/PropertyLineStyleSuggest';
 import { normalizeColor, cssColorToHex } from '../utils/ColorUtils';
@@ -8,7 +8,7 @@ import { normalizeColor, cssColorToHex } from '../utils/ColorUtils';
 export interface AttachmentContext {
     app: App;
     getSettings: () => TaskViewerSettings;
-    suggestHost: PluginContext & Plugin;
+    suggestHost: PluginContext & EventRegistrar;
     // moveLeafToPopout で valueDiv が window 間を移動しても多重 attach を防ぐため、
     // attach 済み要素は全 WindowAttachment で共有する。
     attachedInputs: WeakSet<HTMLElement>;
