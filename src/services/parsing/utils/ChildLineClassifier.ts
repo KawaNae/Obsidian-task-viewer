@@ -1,5 +1,6 @@
 import type { ChildLine, PropertyType, PropertyValue } from '../../../types';
 import { LIST_BULLET_SOURCE } from './ListMarker';
+import { extractWikilinkTarget } from '../../../utils/WikilinkUtils';
 
 /**
  * 子行のパース・分類ユーティリティ。
@@ -41,7 +42,7 @@ export class ChildLineClassifier {
             bodyLine,
             indent,
             checkboxChar: cbMatch ? cbMatch[1] : null,
-            wikilinkTarget: wikiMatch ? wikiMatch[1].split('|')[0].trim() : null,
+            wikilinkTarget: wikiMatch ? extractWikilinkTarget(wikiMatch[1]) : null,
             propertyKey,
             propertyValue,
         };
