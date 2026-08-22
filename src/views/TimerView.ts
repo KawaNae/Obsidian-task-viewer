@@ -6,10 +6,9 @@
  * TimerInstance 型と TimerProgressUI を再利用。
  */
 
-import { ItemView, type WorkspaceLeaf, Notice, type Menu, setIcon, type ViewStateResult } from 'obsidian';
+import { ItemView, type WorkspaceLeaf, Notice, setIcon, type ViewStateResult } from 'obsidian';
 import { logDebug } from '../log/log';
 import type TaskViewerPlugin from '../main';
-import { InputModal } from '../modals/InputModal';
 import { VIEW_META_TIMER } from '../constants/viewRegistry';
 import type {
     CountupTimer,
@@ -40,6 +39,8 @@ import { ViewUriBuilder } from './sharedLogic/ViewUriBuilder';
 import type { ViewUriOptions } from './sharedLogic/ViewUriBuilder';
 import { IntervalTemplateCreator } from './customMenus/IntervalTemplateCreator';
 import { TimerToolbar } from './TimerToolbar';
+import { TimerSettingsMenu } from '../timer/TimerSettingsMenu';
+import { createControlButton, type ControlButtonVariant } from '../timer/TimerControlButton';
 import { codecFor, type ViewConfigCodec } from '../services/viewConfig';
 import { TIMER_VIEW_MODES, type TimerConfig, type TimerViewMode } from './TimerSchema';
 import { t } from '../i18n';
@@ -467,55 +468,36 @@ export class TimerView extends ItemView {
 
     private renderControls(container: HTMLElement): void {
         if (!this.timer) {
-            // Start button
-            const startBtn = container.createEl('button', {
-                cls: 'timer-view__btn timer-view__btn--primary',
-            });
-            setIcon(startBtn, 'play');
-            startBtn.createSpan({ text: ` ${t('timer.start')}` });
-            startBtn.onclick = () => this.startTimer();
+            this.addViewButton(container, 'primary', 'play', t('timer.start'), () => this.startTimer());
             return;
         }
 
         if (this.timer.isRunning) {
-            // Pause button
-            const pauseBtn = container.createEl('button', {
-                cls: 'timer-view__btn timer-view__btn--secondary',
-            });
-            setIcon(pauseBtn, 'pause');
-            pauseBtn.createSpan({ text: ` ${t('timer.pause')}` });
-            pauseBtn.onclick = () => {
+            this.addViewButton(container, 'secondary', 'pause', t('timer.pause'), () => {
                 this.pauseTimer();
                 AudioUtils.playPauseSound();
-            };
-
-            // Stop button
-            const stopBtn = container.createEl('button', {
-                cls: 'timer-view__btn timer-view__btn--danger',
             });
-            setIcon(stopBtn, 'square');
-            stopBtn.createSpan({ text: ` ${t('timer.stop')}` });
-            stopBtn.onclick = () => {
+            this.addViewButton(container, 'danger', 'square', t('timer.stop'), () => {
                 AudioUtils.playFinishSound();
                 this.resetTimer();
-            };
+            });
             return;
         }
 
-        // Paused state
-        const resumeBtn = container.createEl('button', {
-            cls: 'timer-view__btn timer-view__btn--primary',
-        });
-        setIcon(resumeBtn, 'play');
-        resumeBtn.createSpan({ text: ` ${t('timer.resume')}` });
-        resumeBtn.onclick = () => this.resumeTimer();
+        // 一時停止中。カウントダウンが 0 を過ぎていてもここに来る。
+        this.addViewButton(container, 'primary', 'play', t('timer.resume'), () => this.resumeTimer());
+        this.addViewButton(container, 'danger', 'x', t('timer.reset'), () => this.resetTimer());
+    }
 
-        const resetBtn = container.createEl('button', {
-            cls: 'timer-view__btn timer-view__btn--danger',
-        });
-        setIcon(resetBtn, 'x');
-        resetBtn.createSpan({ text: ` ${t('timer.reset')}` });
-        resetBtn.onclick = () => this.resetTimer();
+    /** ビューの操作ボタン。ブロック名を固定しただけの薄い包み。 */
+    private addViewButton(
+        container: HTMLElement,
+        variant: ControlButtonVariant,
+        icon: string,
+        label: string,
+        onClick: () => void,
+    ): HTMLButtonElement {
+        return createControlButton(container, { block: 'timer-view', variant, icon, label, onClick });
     }
 
     // ─── Interval Templates ─────────────────────────────────────
@@ -612,18 +594,13 @@ export class TimerView extends ItemView {
         // Controls below (Start button)
         if (this.templates.length > 0) {
             const controls = parent.createDiv('timer-view__controls');
-            const startBtn = controls.createEl('button', {
-                cls: 'timer-view__btn timer-view__btn--primary',
+            const startBtn = this.addViewButton(controls, 'primary', 'play', t('timer.start'), () => {
+                if (this.selectedTemplate) this.startTimer();
             });
-            setIcon(startBtn, 'play');
-            startBtn.createSpan({ text: ` ${t('timer.start')}` });
             startBtn.disabled = !this.selectedTemplate;
             if (!this.selectedTemplate) {
                 startBtn.addClass('timer-view__btn--disabled');
             }
-            startBtn.onclick = () => {
-                if (this.selectedTemplate) this.startTimer();
-            };
         }
     }
 
@@ -631,12 +608,21 @@ export class TimerView extends ItemView {
 
     private showSettingsMenu(e: MouseEvent): void {
         this.plugin.menuPresenter.present((menu) => {
-            // Mode-specific settings
+            // Mode-specific settings。長さの選択肢はウィジェットと同じ部品。
+            // ビューは走行中タイマーを持たないので、設定を保存して作り直すだけ。
             if (this.timerViewMode === 'countdown') {
-                this.addCountdownSettings(menu);
+                TimerSettingsMenu.addCountdownField(menu, this.app, {
+                    get: () => this.plugin.settings.countdownMinutes,
+                    set: (minutes) => this.saveDurationSetting('countdownMinutes', minutes),
+                });
                 menu.addSeparator();
             } else if (this.timerViewMode === 'pomodoro') {
-                this.addPomodoroSettings(menu);
+                TimerSettingsMenu.addPomodoroFields(menu, this.app, {
+                    getWorkMinutes: () => this.plugin.settings.pomodoroWorkMinutes,
+                    setWorkMinutes: (minutes) => this.saveDurationSetting('pomodoroWorkMinutes', minutes),
+                    getBreakMinutes: () => this.plugin.settings.pomodoroBreakMinutes,
+                    setBreakMinutes: (minutes) => this.saveDurationSetting('pomodoroBreakMinutes', minutes),
+                });
                 menu.addSeparator();
             }
 
@@ -677,127 +663,13 @@ export class TimerView extends ItemView {
         return ViewUriBuilder.build(VIEW_TYPE_TIMER, opts);
     }
 
-    private addCountdownSettings(menu: Menu): void {
-        menu.addItem((item) => {
-            item.setTitle(t('timer.countdownDuration')).setDisabled(true);
-        });
-
-        const presets = [5, 10, 15, 25, 30, 45, 50, 60];
-        const current = this.plugin.settings.countdownMinutes;
-
-        for (const mins of presets) {
-            menu.addItem((item) => {
-                item.setTitle(`  ${mins} min${current === mins ? ' \u2713' : ''}`)
-                    .onClick(async () => {
-                        this.plugin.settings.countdownMinutes = mins;
-                        await this.plugin.saveSettings();
-                        this.applyDurationSettingsToTimer();
-                    });
-            });
-        }
-
-        menu.addItem((item) => {
-            const isCustom = !presets.includes(current);
-            item.setTitle(`  ${t('timer.custom')}${isCustom ? ` (${current} min) \u2713` : ''}`)
-                .onClick(() => {
-                    new InputModal(
-                        this.app,
-                        t('timer.countdownDuration'),
-                        'Minutes (1-120)',
-                        current.toString(),
-                        async (value) => {
-                            const mins = parseInt(value);
-                            if (!isNaN(mins) && mins > 0 && mins <= 120) {
-                                this.plugin.settings.countdownMinutes = mins;
-                                await this.plugin.saveSettings();
-                                this.applyDurationSettingsToTimer();
-                            }
-                        }
-                    ).open();
-                });
-        });
-    }
-
-    private addPomodoroSettings(menu: Menu): void {
-        menu.addItem((item) => {
-            item.setTitle(t('timer.workDuration')).setDisabled(true);
-        });
-
-        const workOptions = [15, 25, 30, 45, 50];
-        for (const mins of workOptions) {
-            menu.addItem((item) => {
-                const current = this.plugin.settings.pomodoroWorkMinutes;
-                item.setTitle(`  ${mins} min${current === mins ? ' \u2713' : ''}`)
-                    .onClick(async () => {
-                        this.plugin.settings.pomodoroWorkMinutes = mins;
-                        await this.plugin.saveSettings();
-                        this.applyDurationSettingsToTimer();
-                    });
-            });
-        }
-
-        menu.addItem((item) => {
-            const current = this.plugin.settings.pomodoroWorkMinutes;
-            const isCustom = !workOptions.includes(current);
-            item.setTitle(`  ${t('timer.custom')}${isCustom ? ` (${current} min) \u2713` : ''}`)
-                .onClick(() => {
-                    new InputModal(
-                        this.app,
-                        t('timer.workDuration'),
-                        'Minutes (1-120)',
-                        current.toString(),
-                        async (value) => {
-                            const mins = parseInt(value);
-                            if (!isNaN(mins) && mins > 0 && mins <= 120) {
-                                this.plugin.settings.pomodoroWorkMinutes = mins;
-                                await this.plugin.saveSettings();
-                                this.applyDurationSettingsToTimer();
-                            }
-                        }
-                    ).open();
-                });
-        });
-
-        menu.addSeparator();
-
-        menu.addItem((item) => {
-            item.setTitle(t('timer.breakDuration')).setDisabled(true);
-        });
-
-        const breakOptions = [5, 10, 15];
-        for (const mins of breakOptions) {
-            menu.addItem((item) => {
-                const current = this.plugin.settings.pomodoroBreakMinutes;
-                item.setTitle(`  ${mins} min${current === mins ? ' \u2713' : ''}`)
-                    .onClick(async () => {
-                        this.plugin.settings.pomodoroBreakMinutes = mins;
-                        await this.plugin.saveSettings();
-                        this.applyDurationSettingsToTimer();
-                    });
-            });
-        }
-
-        menu.addItem((item) => {
-            const current = this.plugin.settings.pomodoroBreakMinutes;
-            const isCustom = !breakOptions.includes(current);
-            item.setTitle(`  ${t('timer.custom')}${isCustom ? ` (${current} min) \u2713` : ''}`)
-                .onClick(() => {
-                    new InputModal(
-                        this.app,
-                        t('timer.breakDuration'),
-                        'Minutes (1-60)',
-                        current.toString(),
-                        async (value) => {
-                            const mins = parseInt(value);
-                            if (!isNaN(mins) && mins > 0 && mins <= 60) {
-                                this.plugin.settings.pomodoroBreakMinutes = mins;
-                                await this.plugin.saveSettings();
-                                this.applyDurationSettingsToTimer();
-                            }
-                        }
-                    ).open();
-                });
-        });
+    private async saveDurationSetting(
+        key: 'countdownMinutes' | 'pomodoroWorkMinutes' | 'pomodoroBreakMinutes',
+        minutes: number,
+    ): Promise<void> {
+        this.plugin.settings[key] = minutes;
+        await this.plugin.saveSettings();
+        this.applyDurationSettingsToTimer();
     }
 
     /**

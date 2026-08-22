@@ -1,145 +1,121 @@
-import type { App } from 'obsidian';
-import type TaskViewerPlugin from '../main';
+/**
+ * タイマーの長さを選ぶメニュー。ウィジェットと独立ビューが同じ部品を使う。
+ *
+ * 選択肢の並びも「Custom…」の入り方も両者で同じで、違うのは選んだ値の行き先
+ * だけ（ウィジェットは走行中タイマーの区間長も書き換え、ビューは設定を保存して
+ * タイマーを作り直す）。行き先を {@link DurationField} で注入して、メニューの
+ * 組み立てを 1 箇所に置く。
+ */
+
+import type { App, Menu } from 'obsidian';
 import { InputModal } from '../modals/InputModal';
 import { t } from '../i18n';
-import type { IntervalTimer } from './TimerInstance';
-import { computeTotalDuration } from './IntervalMath';
 
-interface PomodoroSettingsMenuOptions {
-    app: App;
-    plugin: TaskViewerPlugin;
-    timer: IntervalTimer;
-    event: MouseEvent;
-    onPersist: () => void;
-    onRender: () => void;
+/** 分数を 1 つ選ばせる項目。プリセットと Custom… を並べる。 */
+export interface DurationField {
+    /** 見出しと入力ダイアログに出す名前。 */
+    title: string;
+    presets: readonly number[];
+    /** Custom… で受け付ける上限（分）。 */
+    maxMinutes: number;
+    get(): number;
+    set(minutes: number): Promise<void>;
 }
 
+/** 作業 / 休憩の長さの行き先。自動繰り返しは走行中タイマーを持つ側だけが出す。 */
+export interface PomodoroSettingsTarget {
+    getWorkMinutes(): number;
+    setWorkMinutes(minutes: number): Promise<void>;
+    getBreakMinutes(): number;
+    setBreakMinutes(minutes: number): Promise<void>;
+    autoRepeat?: {
+        isOn(): boolean;
+        toggle(): void;
+    };
+}
+
+const WORK_PRESETS = [15, 25, 30, 45, 50] as const;
+const BREAK_PRESETS = [5, 10, 15] as const;
+const COUNTDOWN_PRESETS = [5, 10, 15, 25, 30, 45, 50, 60] as const;
+const CHECK = ' ✓';
+
 export class TimerSettingsMenu {
-    static showPomodoroSettings(options: PomodoroSettingsMenuOptions): void {
-        const { app, plugin, timer, event, onPersist, onRender } = options;
-        const group = timer.groups[0];
-        const workSegment = group?.segments[0];
-        const breakSegment = group?.segments[1];
-        if (!group || !workSegment || !breakSegment) {
-            return;
-        }
-
-        plugin.menuPresenter.present((menu) => {
-        menu.addItem((item) => {
-            item.setTitle(t('timer.workDuration')).setDisabled(true);
-        });
-
-        const workOptions = [15, 25, 30, 45, 50];
-        workOptions.forEach((mins) => {
-            menu.addItem((item) => {
-                const current = plugin.settings.pomodoroWorkMinutes;
-                item.setTitle(`  ${mins} ${t('timer.minSuffix')}${current === mins ? ' ✓' : ''}`)
-                    .onClick(async () => {
-                        plugin.settings.pomodoroWorkMinutes = mins;
-                        workSegment.durationSeconds = mins * 60;
-                        await plugin.saveSettings();
-                        this.syncIdleDisplay(timer, onRender);
-                        onPersist();
-                    });
-            });
-        });
-
-        menu.addItem((item) => {
-            const current = plugin.settings.pomodoroWorkMinutes;
-            const isCustom = !workOptions.includes(current);
-            item.setTitle(`  ${t('timer.custom')}${isCustom ? ` (${current} ${t('timer.minSuffix')}) ✓` : ''}`)
-                .onClick(() => {
-                    new InputModal(
-                        app,
-                        t('timer.workDuration'),
-                        t('timer.minutesRange', { min: 1, max: 120 }),
-                        current.toString(),
-                        async (value) => {
-                            const mins = parseInt(value, 10);
-                            if (!isNaN(mins) && mins > 0 && mins <= 120) {
-                                plugin.settings.pomodoroWorkMinutes = mins;
-                                workSegment.durationSeconds = mins * 60;
-                                await plugin.saveSettings();
-                                this.syncIdleDisplay(timer, onRender);
-                                onPersist();
-                            }
-                        }
-                    ).open();
-                });
+    /** 作業と休憩の長さ（と、あれば自動繰り返し）を既存のメニューに足す。 */
+    static addPomodoroFields(menu: Menu, app: App, target: PomodoroSettingsTarget): void {
+        this.addDurationField(menu, app, {
+            title: t('timer.workDuration'),
+            presets: WORK_PRESETS,
+            maxMinutes: 120,
+            get: () => target.getWorkMinutes(),
+            set: (minutes) => target.setWorkMinutes(minutes),
         });
 
         menu.addSeparator();
 
-        menu.addItem((item) => {
-            item.setTitle(t('timer.breakDuration')).setDisabled(true);
+        this.addDurationField(menu, app, {
+            title: t('timer.breakDuration'),
+            presets: BREAK_PRESETS,
+            maxMinutes: 60,
+            get: () => target.getBreakMinutes(),
+            set: (minutes) => target.setBreakMinutes(minutes),
         });
 
-        const breakOptions = [5, 10, 15];
-        breakOptions.forEach((mins) => {
-            menu.addItem((item) => {
-                const current = plugin.settings.pomodoroBreakMinutes;
-                item.setTitle(`  ${mins} ${t('timer.minSuffix')}${current === mins ? ' ✓' : ''}`)
-                    .onClick(async () => {
-                        plugin.settings.pomodoroBreakMinutes = mins;
-                        breakSegment.durationSeconds = mins * 60;
-                        await plugin.saveSettings();
-                        this.syncIdleDisplay(timer, onRender);
-                        onPersist();
-                    });
-            });
-        });
-
-        menu.addItem((item) => {
-            const current = plugin.settings.pomodoroBreakMinutes;
-            const isCustom = !breakOptions.includes(current);
-            item.setTitle(`  ${t('timer.custom')}${isCustom ? ` (${current} ${t('timer.minSuffix')}) ✓` : ''}`)
-                .onClick(() => {
-                    new InputModal(
-                        app,
-                        t('timer.breakDuration'),
-                        t('timer.minutesRange', { min: 1, max: 60 }),
-                        current.toString(),
-                        async (value) => {
-                            const mins = parseInt(value, 10);
-                            if (!isNaN(mins) && mins > 0 && mins <= 60) {
-                                plugin.settings.pomodoroBreakMinutes = mins;
-                                breakSegment.durationSeconds = mins * 60;
-                                await plugin.saveSettings();
-                                this.syncIdleDisplay(timer, onRender);
-                                onPersist();
-                            }
-                        }
-                    ).open();
-                });
-        });
+        const autoRepeat = target.autoRepeat;
+        if (!autoRepeat) return;
 
         menu.addSeparator();
         menu.addItem((item) => {
-            const autoRepeat = group.repeatCount === 0;
-            item.setTitle(`${t('timer.autoRepeat')}${autoRepeat ? ' ✓' : ''}`)
-                .onClick(() => {
-                    group.repeatCount = autoRepeat ? 1 : 0;
-                    timer.totalDuration = computeTotalDuration(timer.groups);
-                    onPersist();
-                });
+            item.setTitle(`${t('timer.autoRepeat')}${autoRepeat.isOn() ? CHECK : ''}`)
+                .onClick(() => autoRepeat.toggle());
+        });
+    }
+
+    /** カウントダウンの長さを既存のメニューに足す。 */
+    static addCountdownField(
+        menu: Menu,
+        app: App,
+        target: { get(): number; set(minutes: number): Promise<void> },
+    ): void {
+        this.addDurationField(menu, app, {
+            title: t('timer.countdownDuration'),
+            presets: COUNTDOWN_PRESETS,
+            maxMinutes: 120,
+            get: () => target.get(),
+            set: (minutes) => target.set(minutes),
+        });
+    }
+
+    private static addDurationField(menu: Menu, app: App, field: DurationField): void {
+        menu.addItem((item) => {
+            item.setTitle(field.title).setDisabled(true);
         });
 
-        }, { kind: 'mouseEvent', event });
-    }
-
-    private static syncIdleDisplay(timer: IntervalTimer, onRender: () => void): void {
-        timer.totalDuration = computeTotalDuration(timer.groups);
-        if (timer.phase !== 'idle') {
-            return;
+        for (const minutes of field.presets) {
+            menu.addItem((item) => {
+                const current = field.get();
+                item.setTitle(`  ${minutes} ${t('timer.minSuffix')}${current === minutes ? CHECK : ''}`)
+                    .onClick(() => void field.set(minutes));
+            });
         }
-        timer.currentGroupIndex = 0;
-        timer.currentSegmentIndex = 0;
-        timer.currentRepeatIndex = 0;
-        const firstSegment = timer.groups[0]?.segments[0];
-        if (firstSegment) {
-            timer.segmentTimeRemaining = firstSegment.durationSeconds;
-        }
-        onRender();
-    }
 
+        menu.addItem((item) => {
+            const current = field.get();
+            const isCustom = !field.presets.includes(current);
+            const suffix = isCustom ? ` (${current} ${t('timer.minSuffix')})${CHECK}` : '';
+            item.setTitle(`  ${t('timer.custom')}${suffix}`)
+                .onClick(() => {
+                    new InputModal(
+                        app,
+                        field.title,
+                        t('timer.minutesRange', { min: 1, max: field.maxMinutes }),
+                        current.toString(),
+                        async (value) => {
+                            const minutes = parseInt(value, 10);
+                            if (isNaN(minutes) || minutes <= 0 || minutes > field.maxMinutes) return;
+                            await field.set(minutes);
+                        },
+                    ).open();
+                });
+        });
+    }
 }
