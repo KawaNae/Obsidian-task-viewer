@@ -9,6 +9,7 @@ import { t } from '../i18n';
 import type TaskViewerPlugin from '../main';
 import { type TimerInstance, dailyDateOf, getTimerElapsedSeconds, isDailyTimer } from './TimerInstance';
 import { DailyNoteUtils } from '../utils/DailyNoteUtils';
+import { DateUtils } from '../utils/DateUtils';
 import { TaskParser } from '../services/parsing/TaskParser';
 import { type Task, isTvFile } from '../types';
 import { createTempTask } from '../services/data/createTempTask';
@@ -733,14 +734,11 @@ export class TimerRecorder {
     }
 
     private formatDate(d: Date): string {
-        const year = d.getFullYear();
-        const month = (d.getMonth() + 1).toString().padStart(2, '0');
-        const day = d.getDate().toString().padStart(2, '0');
-        return `${year}-${month}-${day}`;
+        return DateUtils.getLocalDateString(d);
     }
 
     private formatTime(d: Date): string {
-        return `${d.getHours().toString().padStart(2, '0')}:${d.getMinutes().toString().padStart(2, '0')}`;
+        return DateUtils.formatHHMM(d.getHours(), d.getMinutes());
     }
 
 }

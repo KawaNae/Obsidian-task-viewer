@@ -28,12 +28,6 @@ export interface DayBoundary {
 
 const MINUTES_PER_DAY = 24 * 60;
 
-function hhmm(minutes: number): string {
-    const h = Math.floor(minutes / 60);
-    const m = minutes % 60;
-    return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
-}
-
 /**
  * The boundary that opens `boundaryDate`'s visual day, and the minute before.
  *
@@ -48,8 +42,8 @@ export function dayBoundaryAt(boundaryDate: string, startHour: number): DayBound
 
     return {
         date: boundaryDate,
-        time: hhmm(boundaryMinutes),
+        time: DateUtils.minutesToTime(boundaryMinutes),
         beforeDate: beforeMinutes < 0 ? DateUtils.addDays(boundaryDate, -1) : boundaryDate,
-        beforeTime: hhmm((beforeMinutes + MINUTES_PER_DAY) % MINUTES_PER_DAY),
+        beforeTime: DateUtils.minutesToTime((beforeMinutes + MINUTES_PER_DAY) % MINUTES_PER_DAY),
     };
 }
