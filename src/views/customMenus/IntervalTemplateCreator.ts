@@ -129,7 +129,7 @@ export class IntervalTemplateCreator {
         const input = field.createEl('input', {
             cls: 'tv-ctrl__text-input',
             type: 'text',
-            placeholder: 'Template name',
+            placeholder: t('timer.template.namePlaceholder'),
         });
         input.value = this.state.name;
         input.addEventListener('input', () => { this.state.name = input.value; });
@@ -163,7 +163,7 @@ export class IntervalTemplateCreator {
 
         const browseBtn = row.createEl('button', {
             cls: 'template-creator__browse-btn',
-            text: 'Browse',
+            text: t('timer.template.browse'),
         });
         browseBtn.addEventListener('click', () => {
             this.showIconPopover(browseBtn, (iconName) => {
@@ -186,7 +186,7 @@ export class IntervalTemplateCreator {
                 const searchInput = popover.createEl('input', {
                     cls: 'template-creator__icon-search',
                     type: 'text',
-                    placeholder: 'Search icons...',
+                    placeholder: t('timer.template.searchIcons'),
                 });
 
                 const grid = popover.createDiv('template-creator__icon-grid');
@@ -228,7 +228,7 @@ export class IntervalTemplateCreator {
         const addBtn = groupsContainer.createEl('button', { cls: 'template-creator__add-btn' });
         const addIcon = addBtn.createSpan('template-creator__add-btn-icon');
         setIcon(addIcon, 'plus');
-        addBtn.createSpan({ text: 'Add Group' });
+        addBtn.createSpan({ text: t('timer.template.addGroup') });
         addBtn.addEventListener('click', () => {
             this.state.groups.push({
                 repeatCount: 1,
@@ -243,10 +243,10 @@ export class IntervalTemplateCreator {
 
         // Group header
         const header = groupEl.createDiv('template-creator__group-header');
-        header.createSpan({ cls: 'template-creator__group-label', text: `Group ${groupIndex + 1}` });
+        header.createSpan({ cls: 'template-creator__group-label', text: t('timer.template.groupN', { n: groupIndex + 1 }) });
 
         const repeatWrap = header.createSpan('template-creator__repeat-wrap');
-        repeatWrap.createSpan({ cls: 'template-creator__repeat-label', text: 'Repeat' });
+        repeatWrap.createSpan({ cls: 'template-creator__repeat-label', text: t('timer.template.repeat') });
         const repeatInput = this.createNumericInput(repeatWrap, {
             value: group.repeatCount, min: 0, placeholder: '1',
             cls: 'tv-ctrl__text-input template-creator__repeat-input',
@@ -272,7 +272,7 @@ export class IntervalTemplateCreator {
         const addSegBtn = segmentsEl.createEl('button', { cls: 'template-creator__add-btn template-creator__add-btn--inline' });
         const addIcon = addSegBtn.createSpan('template-creator__add-btn-icon');
         setIcon(addIcon, 'plus');
-        addSegBtn.createSpan({ text: 'Add Segment' });
+        addSegBtn.createSpan({ text: t('timer.template.addSegment') });
         addSegBtn.addEventListener('click', () => {
             group.segments.push({ label: 'Work', hours: 0, minutes: 5, seconds: 0, type: 'work' });
             this.refreshContent();
@@ -286,7 +286,7 @@ export class IntervalTemplateCreator {
         const labelInput = row.createEl('input', {
             cls: 'tv-ctrl__text-input template-creator__seg-label',
             type: 'text',
-            placeholder: 'Label',
+            placeholder: t('timer.template.labelPlaceholder'),
         });
         labelInput.value = seg.label;
         labelInput.addEventListener('input', () => { seg.label = labelInput.value; });
@@ -295,26 +295,28 @@ export class IntervalTemplateCreator {
         const durWrap = row.createDiv('template-creator__duration');
 
         const hInput = this.createNumericInput(durWrap, {
-            value: seg.hours, min: 0, placeholder: 'h',
+            value: seg.hours, min: 0, placeholder: t('timer.template.hoursAbbr'),
             onChange: (v) => { seg.hours = v; },
         });
 
         durWrap.createSpan({ cls: 'template-creator__dur-sep', text: ':' });
 
         const mInput = this.createNumericInput(durWrap, {
-            value: seg.minutes, min: 0, max: 59, placeholder: 'm',
+            value: seg.minutes, min: 0, max: 59, placeholder: t('timer.template.minutesAbbr'),
             onChange: (v) => { seg.minutes = v; },
         });
 
         durWrap.createSpan({ cls: 'template-creator__dur-sep', text: ':' });
 
         const sInput = this.createNumericInput(durWrap, {
-            value: seg.seconds, min: 0, max: 59, placeholder: 's',
+            value: seg.seconds, min: 0, max: 59, placeholder: t('timer.template.secondsAbbr'),
             onChange: (v) => { seg.seconds = v; },
         });
 
         // Type toggle button (cycles work → break → work)
-        const typeLabel = seg.type === 'work' ? 'Work' : seg.type === 'break' ? 'Break' : 'Prep';
+        const typeLabel = seg.type === 'work' ? t('timer.template.typeWork')
+            : seg.type === 'break' ? t('timer.template.typeBreak')
+            : t('timer.template.typePrepare');
         const typeBtn = row.createEl('button', {
             cls: `template-creator__type-btn template-creator__type-btn--${seg.type}`,
             text: typeLabel,
@@ -343,7 +345,7 @@ export class IntervalTemplateCreator {
         const isEditing = !!this.editingFilePath;
         const saveBtn = footer.createEl('button', {
             cls: 'template-creator__save-btn',
-            text: isEditing ? 'Save' : 'Create',
+            text: isEditing ? t('modal.save') : t('modal.create'),
         });
         saveBtn.addEventListener('click', async () => {
             const error = this.validate();
@@ -445,12 +447,12 @@ export class IntervalTemplateCreator {
     }
 
     private validate(): string | null {
-        if (!this.state.name.trim()) return 'Template name is required.';
+        if (!this.state.name.trim()) return t('timer.template.errNameRequired');
         for (const group of this.state.groups) {
-            if (group.segments.length === 0) return 'Each group must have at least one segment.';
+            if (group.segments.length === 0) return t('timer.template.errGroupNeedsSegment');
             for (const seg of group.segments) {
                 const total = seg.hours * 3600 + seg.minutes * 60 + seg.seconds;
-                if (total <= 0) return 'Duration must be greater than 0.';
+                if (total <= 0) return t('timer.template.errDurationPositive');
             }
         }
         return null;
