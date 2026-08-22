@@ -3,14 +3,11 @@ import type { FilterProperty, FilterOperator } from '../../services/filter/Filte
 import { getStatusLabel } from '../../constants/statusOptions';
 import { FilterValueCollector } from '../../services/filter/FilterValueCollector';
 import { TASK_KIND_VALUES } from '../../services/filter/parserTaxonomy';
+import { DateUtils } from '../../utils/DateUtils';
 import { t } from '../../i18n';
 
 export function getToday(): string {
-    const d = new Date();
-    const y = d.getFullYear();
-    const m = String(d.getMonth() + 1).padStart(2, '0');
-    const day = String(d.getDate()).padStart(2, '0');
-    return `${y}-${m}-${day}`;
+    return DateUtils.getToday();
 }
 
 export function resolveGlue(slot: string, property: FilterProperty, operator: FilterOperator): string {

@@ -16,22 +16,20 @@ export function normalizeYamlDate(value: unknown): string | null {
     if (value === null || value === undefined) return null;
 
     if (value instanceof Date) {
-        const y = value.getFullYear();
-        const m = (value.getMonth() + 1).toString().padStart(2, '0');
-        const d = value.getDate().toString().padStart(2, '0');
+        const dateStr = DateUtils.getLocalDateString(value);
         const h = value.getHours();
         const min = value.getMinutes();
         if (h === 0 && min === 0) {
-            return `${y}-${m}-${d}`;
+            return dateStr;
         }
-        return `${y}-${m}-${d}T${h.toString().padStart(2, '0')}:${min.toString().padStart(2, '0')}`;
+        return `${dateStr}T${DateUtils.formatHHMM(h, min)}`;
     }
 
     if (typeof value === 'number') {
         if (value >= 0 && value < 1440) {
             const hours = Math.floor(value / 60);
             const minutes = value % 60;
-            return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`;
+            return DateUtils.formatHHMM(hours, minutes);
         }
         return null;
     }
