@@ -9,6 +9,11 @@ export class DateUtils {
         return `${year}-${month}-${day}`;
     }
 
+    /** Format hours/minutes as `HH:mm`, zero-padded. */
+    static formatHHMM(hours: number, minutes: number): string {
+        return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`;
+    }
+
     static getVisualDateOfNow(startHour: number): string {
         const now = new Date();
         const visualDateOfNow = new Date(now);
