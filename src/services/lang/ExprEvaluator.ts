@@ -5,6 +5,7 @@ import { type EvalRuntime, FnCallError, callFn } from './functions';
 // through a call of a locally declared function, so the two evaluators call
 // each other the way the two parsers do.
 import { type CellStore, type Scope, burn, callFunction, execArrowBody } from './StmtEvaluator';
+import { TranslatableError } from './TranslatableError';
 import {
     type DurUnit, type Value, WEEKDAY_NAMES, addDuration, compareValues, isDatishValue, isWritableDatish, parseDateStr,
     DECIMAL_SCALE, MAX_EXACT_FRACTION, durationToMinutes, recordField, valueToDisplay,
@@ -21,14 +22,14 @@ import {
  * same rule as the diagnostics applies — English lives at the throw, locale
  * files hold translations (services/flow/runtimeText.ts).
  */
-export class EvalError extends Error {
+export class EvalError extends TranslatableError {
     constructor(
-        public readonly code: string,
+        code: string,
         message: string,
         public readonly span: Span,
-        public readonly params?: Diagnostic['params'],
+        params?: Diagnostic['params'],
     ) {
-        super(message);
+        super(code, message, params);
     }
 }
 
