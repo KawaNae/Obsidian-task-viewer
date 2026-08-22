@@ -902,6 +902,14 @@
         box-sizing: border-box;
         background: var(--task-card-surface);
         border-radius: var(--task-card-border-radius);
+        /* The left edge is the seam that runs through the host band, and the
+           clip-path below needs to cut it off exactly there — a rounded
+           corner's arc slips past that straight clip and hangs a stray sliver
+           below the frame. `::after` inherits this via `border-radius:
+           inherit`, so this declaration alone is enough; don't set radius on
+           `::after` directly or it'll disagree with the clip. */
+        border-top-left-radius: 0;
+        border-bottom-left-radius: 0;
         margin-top: 0;
         overflow: hidden;
     }
@@ -961,10 +969,18 @@
         border: var(--task-card-frame-width, 1px) solid var(--file-accent, var(--tv-accent));
         border-radius: inherit;
         pointer-events: none;
+        /* Overclip the seam by 0.5px past frame-width to swallow the
+           sub-pixel AA residue that a clip cut exactly at frame-width leaves
+           behind as a faint vertical line through the host band — the
+           interior there is transparent, so cutting a bit deep is harmless.
+           The top-left frame-width corner stays put so the top edge doesn't
+           get a hole punched in it while selected. */
         clip-path: polygon(
-            var(--task-card-frame-width, 1px) 0, 100% 0, 100% 100%, 0 100%,
+            0 0, 100% 0, 100% 100%, 0 100%,
             0 var(--task-card-real-height),
-            var(--task-card-frame-width, 1px) var(--task-card-real-height)
+            calc(var(--task-card-frame-width, 1px) + 0.5px) var(--task-card-real-height),
+            calc(var(--task-card-frame-width, 1px) + 0.5px) var(--task-card-frame-width, 1px),
+            0 var(--task-card-frame-width, 1px)
         );
     }
 }
