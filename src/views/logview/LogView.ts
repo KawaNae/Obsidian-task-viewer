@@ -123,8 +123,8 @@ export class LogView extends ItemView {
             .map((e) => `${formatTimestamp(e.timestamp)} [${e.level.toUpperCase()}] ${e.message}`)
             .join("\n");
         navigator.clipboard.writeText(text).then(
-            () => new Notice("Log copied to clipboard"),
-            () => new Notice("Failed to copy log"),
+            () => new Notice(t('notice.logCopied')),
+            () => new Notice(t('notice.logCopyFailed')),
         );
     }
 

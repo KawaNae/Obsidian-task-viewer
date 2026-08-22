@@ -592,7 +592,9 @@
     "remove": "Remove",
     "createTaskForDailyNote": "Create Task for Daily Note",
     "openCountupForDailyNote": "⏱️ Open Countup for Daily Note",
-    "openPomodoroForDailyNote": "🍅 Open Pomodoro for Daily Note"
+    "openPomodoroForDailyNote": "🍅 Open Pomodoro for Daily Note",
+    "ariaTaskMenu": "Task menu",
+    "ariaChildLineMenu": "Child line menu"
   },
   "flowDelete": {
     "title": "This task carries a flow command",
@@ -643,7 +645,9 @@
     "nextCurrent": "Scheduled now",
     "nextUpcoming": "Up next",
     "pinPinned": "Pinned to this window — click to release",
-    "pinPending": "Release pending — click another window to move there"
+    "pinPending": "Release pending — click another window to move there",
+    "autoRepeat": "Auto Repeat",
+    "minutesRange": "Minutes ({{min}}-{{max}})"
   },
   "notice": {
     "uriCopied": "URI copied to clipboard",
@@ -664,7 +668,12 @@
     "timerTargetReadOnly": "This task's format is read-only. The timer cannot write records to it.",
     "taskConverted": "Task converted to frontmatter file",
     "taskConvertFailed": "Failed to convert task",
-    "taskWriteFailed": "The task line could not be located, so nothing was saved. The change has been undone."
+    "taskWriteFailed": "The task line could not be located, so nothing was saved. The change has been undone.",
+    "taskNotFoundInIndex": "Task not found in index",
+    "exportingImage": "Exporting image…",
+    "exportFailed": "Export failed. See console for details.",
+    "logCopied": "Log copied to clipboard",
+    "logCopyFailed": "Failed to copy log"
   },
   "pinnedList": {
     "noPinnedLists": "No pinned lists.",

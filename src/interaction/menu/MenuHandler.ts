@@ -12,6 +12,7 @@ import { TaskActionsMenuBuilder } from './builders/TaskActionsMenuBuilder';
 import { ValidationMenuBuilder } from './builders/ValidationMenuBuilder';
 import { toDisplayTask, getOriginalTaskId } from '../../services/display/DisplayTaskConverter';
 import type { TaskHubFocusField } from '../../modals/hub/TaskHubForm';
+import { t } from '../../i18n';
 
 export type TaskMenuHooks = {
     /** Invoked after a destructive action (open in editor / convert to file / delete). */
@@ -130,7 +131,7 @@ export class MenuHandler {
         const task = this.readService.getTask(originalId);
 
         if (!task) {
-            new Notice('Task not found in index');
+            new Notice(t('notice.taskNotFoundInIndex'));
             return;
         }
         if (task.isReadOnly) return;

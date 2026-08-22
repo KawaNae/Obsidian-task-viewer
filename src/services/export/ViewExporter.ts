@@ -2,6 +2,7 @@ import { Notice } from 'obsidian';
 import type { ViewExportOptions, ExportTargetSpec } from './ExportTypes';
 import { ExportUtils } from './ExportUtils';
 import { logError } from '../../log/log';
+import { t } from '../../i18n';
 
 export interface CaptureResult {
     blob: Blob;
@@ -110,7 +111,7 @@ export class ViewExporter {
     /** UI entry point: shows progress Notice, captures, saves, shows result. */
     static async exportAsPng(options: ViewExportOptions, spec: ExportTargetSpec): Promise<void> {
         const { app, container, filename, folder } = options;
-        const progress = new Notice('Exporting image…', 0);
+        const progress = new Notice(t('notice.exportingImage'), 0);
 
         try {
             const { blob } = await ViewExporter.captureExpanded(container, spec);
@@ -120,7 +121,7 @@ export class ViewExporter {
         } catch (err) {
             logError(`[ViewExporter] Export failed: ${(err as Error)?.message ?? err}`);
             progress.hide();
-            new Notice('Export failed. See console for details.');
+            new Notice(t('notice.exportFailed'));
         }
     }
 }
