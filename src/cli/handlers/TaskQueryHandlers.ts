@@ -2,11 +2,10 @@ import type { CliData } from 'obsidian';
 import type TaskViewerPlugin from '../../main';
 import type { FilterState } from '../../services/filter/FilterTypes';
 import { loadFilterFile } from '../../api/FilterFileLoader';
-import { TaskApiError } from '../../api/TaskApiTypes';
 import type { ListParams, TodayParams } from '../../api/TaskApiTypes';
 import { parseSortFlag } from '../CliFilterBuilder';
 import {
-    formatOutput, formatSingleTask, resolveFields, cliError,
+    formatOutput, formatSingleTask, resolveFields, cliError, wrapCliResult,
     validateFormat, parseLimit, defaultLimitForFormat,
     type OutputFormat,
 } from '../CliOutputFormatter';
@@ -56,7 +55,7 @@ export function createListHandler(plugin: TaskViewerPlugin) {
         const formatErr = validateFormat(params.format);
         if (formatErr) return cliError(formatErr);
 
-        try {
+        return wrapCliResult('list tasks', async () => {
             const format = (params.format as OutputFormat) || 'json';
 
             let preloadedFilter: FilterState | undefined;
@@ -73,43 +72,37 @@ export function createListHandler(plugin: TaskViewerPlugin) {
             const fields = resolveFields(params['output-fields']);
             const meta = { total: listResult.total, truncated: listResult.truncated, limit: listResult.limit };
             return formatOutput(listResult.tasks, format, fields, meta);
-        } catch (e) {
-            return cliError(e instanceof TaskApiError ? e.rawMessage : `Failed to list tasks: ${e instanceof Error ? e.message : String(e)}`);
-        }
+        });
     };
 }
 
 export function createTodayHandler(plugin: TaskViewerPlugin) {
-    return (params: CliData): string => {
+    return async (params: CliData): Promise<string> => {
         const formatErr = validateFormat(params.format);
         if (formatErr) return cliError(formatErr);
 
-        try {
+        return wrapCliResult("list today's tasks", () => {
             const format = (params.format as OutputFormat) || 'json';
             const apiParams = cliDataToTodayParams(params, format);
             const result = plugin.api.today(apiParams);
             const fields = resolveFields(params['output-fields']);
             const meta = { total: result.total, truncated: result.truncated, limit: result.limit };
             return formatOutput(result.tasks, format, fields, meta);
-        } catch (e) {
-            return cliError(e instanceof TaskApiError ? e.rawMessage : `Failed to list today's tasks: ${e instanceof Error ? e.message : String(e)}`);
-        }
+        });
     };
 }
 
 export function createGetHandler(plugin: TaskViewerPlugin) {
-    return (params: CliData): string => {
+    return async (params: CliData): Promise<string> => {
         if (!params.id) return cliError('Missing required flag: --id');
         const formatErr = validateFormat(params.format);
         if (formatErr) return cliError(formatErr);
 
-        try {
+        return wrapCliResult('get task', () => {
             const displayTask = plugin.api.get({ id: params.id });
             const format = (params.format as OutputFormat) || 'json';
             const fields = resolveFields(params['output-fields']);
             return formatSingleTask(displayTask, format, fields);
-        } catch (e) {
-            return cliError(e instanceof TaskApiError ? e.rawMessage : `Failed to get task: ${e instanceof Error ? e.message : String(e)}`);
-        }
+        });
     };
 }
