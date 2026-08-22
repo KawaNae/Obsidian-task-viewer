@@ -17,7 +17,7 @@ import { ChildLineMenuBuilder } from '../../interaction/menu/builders/ChildLineM
 import type TaskViewerPlugin from '../../main';
 import { MOBILE_BREAKPOINT_PX } from '../../constants/layout';
 
-import { HandleManager } from './HandleManager';
+import { HandleManager } from '../sharedUI/handles/HandleManager';
 import { SelectionController } from '../../interaction/selection/SelectionController';
 import { TimelineToolbar } from './TimelineToolbar';
 import { TaskIdGenerator } from '../../services/display/TaskIdGenerator';

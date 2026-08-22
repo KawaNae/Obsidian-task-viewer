@@ -115,10 +115,6 @@ export class DateHeaderRenderer {
                 }
             });
 
-            if (referenceYearMonth) {
-                cell.addClass('is-compact');
-                cell.addClass('is-narrow');
-            }
         });
 
         if (!referenceYearMonth) {
@@ -163,8 +159,6 @@ export class DateHeaderRenderer {
 
                 const isCompact = entry.contentRect.width < COMPACT_THRESHOLD_PX;
                 const isNarrow = entry.contentRect.width < NARROW_THRESHOLD_PX;
-                cell.toggleClass('is-compact', isCompact);
-                cell.toggleClass('is-narrow', isNarrow);
 
                 const nextLabel = isNarrow
                     ? displayEntry.shortLabel
