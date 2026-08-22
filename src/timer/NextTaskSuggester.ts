@@ -58,7 +58,7 @@ export class NextTaskSuggester {
         const defs = this.plugin.settings.statusDefinitions;
 
         const now = new Date();
-        const nowTime = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`;
+        const nowTime = DateUtils.formatHHMM(now.getHours(), now.getMinutes());
         const nowStamp = `${DateUtils.getLocalDateString(now)}T${nowTime}`;
         const visualToday = DateUtils.getVisualDateOfNow(startHour);
 

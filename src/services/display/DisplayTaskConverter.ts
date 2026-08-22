@@ -80,11 +80,11 @@ export function toDisplayTask(task: Task, startHour: number, getTask: TaskLookup
         } else {
             // E-AllDay: resolve endTime first, then find visual day start
             const endHour = startHour === 0 ? 23 : startHour - 1;
-            const implicitEndTime = `${endHour.toString().padStart(2, '0')}:59`;
+            const implicitEndTime = DateUtils.formatHHMM(endHour, 59);
             effectiveEndTime = implicitEndTime;
             endTimeDefaulted = true;
             effectiveStartDate = DateUtils.toVisualDate(effectiveEndDate!, implicitEndTime, startHour);
-            effectiveStartTime = startHour.toString().padStart(2, '0') + ':00';
+            effectiveStartTime = DateUtils.formatHHMM(startHour, 0);
         }
         startTimeDefaulted = true;
         // startDateImplicit / startTimeImplicit remain true
@@ -92,7 +92,7 @@ export function toDisplayTask(task: Task, startHour: number, getTask: TaskLookup
 
     // Resolve implicit start time for all-day tasks (date only, no time)
     if (effectiveStartDate && !effectiveStartTime) {
-        effectiveStartTime = startHour.toString().padStart(2, '0') + ':00';
+        effectiveStartTime = DateUtils.formatHHMM(startHour, 0);
         startTimeDefaulted = true;
     }
 
@@ -132,7 +132,7 @@ export function toDisplayTask(task: Task, startHour: number, getTask: TaskLookup
     // Resolve implicit end time for SE/SED types (have endDate, no endTime)
     if (effectiveEndDate && !effectiveEndTime) {
         const endHour = startHour === 0 ? 23 : startHour - 1;
-        effectiveEndTime = `${endHour.toString().padStart(2, '0')}:59`;
+        effectiveEndTime = DateUtils.formatHHMM(endHour, 59);
         endTimeDefaulted = true;
     }
 
