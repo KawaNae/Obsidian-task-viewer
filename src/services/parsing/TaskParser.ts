@@ -1,10 +1,45 @@
-import type { Task, TaskViewerSettings } from '../../types';
+import type { ParserId, Task, TaskViewerSettings } from '../../types';
 import type { LeafParserStrategy, ParserStrategy } from './strategies/ParserStrategy';
 import { ParserChain } from './strategies/ParserChain';
 import { TVInlineParser } from './tv-inline/TVInlineParser';
 import { DayPlannerParser } from './tv-inline/DayPlannerParser';
 import { TasksPluginParser } from './tv-inline/TasksPluginParser';
 import { logDebug } from '../../log/log';
+
+/**
+ * A parser that reads task lines. Every {@link ParserId} but `tv-file`, whose
+ * tasks are a note's frontmatter and never reach the chain.
+ */
+export type LineParserId = Exclude<ParserId, 'tv-file'>;
+
+/**
+ * Which line parsers a settings object turns on, in the order the chain runs
+ * them.
+ *
+ * External notation parsers come first when enabled — each is strict about
+ * its own syntax and only claims lines it owns. `tv-inline` is always last
+ * and catches every remaining checkbox line, with or without `@notation`.
+ *
+ * Separate from {@link TaskParser.rebuildChain} because the answer is wanted
+ * in two forms: the chain wants instances, the diagnostics want names. Deriving
+ * both from this list keeps a newly added parser from appearing in one and not
+ * the other.
+ */
+export function enabledLineParserIds(settings: TaskViewerSettings): LineParserId[] {
+    const ids: LineParserId[] = [];
+    if (settings.enableDayPlanner) ids.push('day-planner');
+    if (settings.enableTasksPlugin) ids.push('tasks-plugin');
+    ids.push('tv-inline');
+    return ids;
+}
+
+function makeLineParser(id: LineParserId, settings: TaskViewerSettings): LeafParserStrategy {
+    switch (id) {
+        case 'day-planner':  return new DayPlannerParser();
+        case 'tasks-plugin': return new TasksPluginParser(settings.tasksPluginMapping);
+        case 'tv-inline':    return new TVInlineParser();
+    }
+}
 
 /**
  * TaskParser facade - delegates to the active parser strategy.
@@ -35,22 +70,14 @@ export class TaskParser {
     /**
      * Rebuild the parser chain based on current settings.
      *
-     * External notation parsers (tasks-plugin, day-planner) come first when
-     * enabled — they're strict about their own syntax and only match lines
-     * they own. TVInlineParser is always last and acts as the catch-all for
-     * every remaining checkbox line (with or without @notation).
+     * Which parsers, and in what order, is {@link enabledLineParserIds}; this
+     * turns that answer into instances.
      */
     static rebuildChain(settings: TaskViewerSettings): void {
-        const parsers: LeafParserStrategy[] = [];
-        if (settings.enableDayPlanner) {
-            parsers.push(new DayPlannerParser());
-        }
-        if (settings.enableTasksPlugin) {
-            parsers.push(new TasksPluginParser(settings.tasksPluginMapping));
-        }
-        parsers.push(new TVInlineParser());
+        const ids = enabledLineParserIds(settings);
+        const parsers: LeafParserStrategy[] = ids.map(id => makeLineParser(id, settings));
         this.swapStrategy(new ParserChain(parsers));
-        logDebug(`[TaskParser:rebuildChain] parsers=[${parsers.map(p => p.id)}]`);
+        logDebug(`[TaskParser:rebuildChain] parsers=[${ids}]`);
     }
 
     /**

@@ -53,7 +53,7 @@ import { ExportService } from './services/export/ExportService';
 import { TaskReadService } from './services/data/TaskReadService';
 import { TaskWriteService } from './services/data/TaskWriteService';
 import { initI18n, t } from './i18n';
-import { TaskParser } from './services/parsing/TaskParser';
+import { TaskParser, enabledLineParserIds } from './services/parsing/TaskParser';
 import { initLog, logInfo } from './log/log';
 import { LogStorage } from './log/log-storage';
 import { LogManager } from './log/log-manager';
@@ -662,11 +662,15 @@ export default class TaskViewerPlugin extends Plugin {
         return count;
     }
 
+    /**
+     * The task sources currently active, for the diagnostics report.
+     *
+     * `tv-file` is unconditional and is not a line parser — a tv-file task is
+     * a note's frontmatter, so it never reaches the chain. Everything else is
+     * whatever the chain was built from.
+     */
     private getEnabledParsers(): string[] {
-        const parsers = ['tv-inline', 'tv-file'];
-        if (this.settings.enableTasksPlugin) parsers.push('tasks-plugin');
-        if (this.settings.enableDayPlanner) parsers.push('day-planner');
-        return parsers;
+        return ['tv-file', ...enabledLineParserIds(this.settings)];
     }
 
 }
