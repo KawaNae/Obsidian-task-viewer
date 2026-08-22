@@ -902,14 +902,25 @@
         box-sizing: border-box;
         background: var(--task-card-surface);
         border-radius: var(--task-card-border-radius);
-        /* The left edge is the seam that runs through the host band, and the
-           clip-path below needs to cut it off exactly there — a rounded
-           corner's arc slips past that straight clip and hangs a stray sliver
-           below the frame. `::after` inherits this via `border-radius:
-           inherit`, so this declaration alone is enough; don't set radius on
-           `::after` directly or it'll disagree with the clip. */
+        /* Only the TOP-left corner is squared off. It is the one that sits
+           inside the host band, where the frame clip below cuts the left edge
+           with a straight vertical line — a rounded arc there pokes out past
+           that cut and hangs a stray sliver under the top edge. The BOTTOM-left
+           corner is an outer corner of the union outline (the free end of the
+           notch), sits below the host band, and its arc falls inside the
+           clip's x < frame-width + 0.5px cut only up to a point: the radius
+           can't exceed how far the extension overhangs below the host (floor
+           - real-height), or the arc reaches up into the notch corner's
+           mitre square and punches a hole in the frame. min() caps it at the
+           overhang so short overhangs (real-height > 18px) get a
+           proportionally smaller — down to square — corner instead.
+           `::after` inherits both via `border-radius: inherit`; don't set
+           radius on `::after` directly or it'll disagree with the clip. */
         border-top-left-radius: 0;
-        border-bottom-left-radius: 0;
+        border-bottom-left-radius: min(
+            var(--task-card-border-radius),
+            calc(var(--task-card-floor-height) - var(--task-card-real-height))
+        );
         margin-top: 0;
         overflow: hidden;
     }
@@ -941,7 +952,16 @@
        Obsidian's specificity. */
     .task-card__content ul > li.task-list-item > .task-list-item-checkbox {
         margin-inline-start: 0;
-        vertical-align: middle;
+        /* `_checkboxes.css` sets `top: 0.2em !important` on every card's
+           checkbox; in this 22px band that pushes its bottom edge to
+           23.97px, past the li's `overflow: hidden`. `vertical-align: top`
+           pins the checkbox to the line box's top edge (the li's
+           line-height equals the band height), then the geometric offset
+           below re-centers it — font-metric-independent, unlike the base
+           rule's em offset. Must be `!important` to win over that base
+           rule's `!important`. */
+        vertical-align: top;
+        top: calc((var(--task-card-floor-height) - var(--checkbox-size, 16px)) / 2) !important;
     }
 
     /* Selection / hover frame follows the union outline of the two boxes.
@@ -974,11 +994,20 @@
            behind as a faint vertical line through the host band — the
            interior there is transparent, so cutting a bit deep is harmless.
            The top-left frame-width corner stays put so the top edge doesn't
-           get a hole punched in it while selected. */
+           get a hole punched in it while selected.
+
+           The notch stops 1 frame-width ABOVE the host's bottom edge, not
+           at it: that last square (x 0..frame-width, y real-height-frame-
+           width..real-height) is the notch corner's mitre — where the
+           host's bottom edge turns into the extension's left edge — and it
+           has to be drawn from here. `__shape` sits at z-index: -1, so its
+           `::after` paints behind the extension's opaque background;
+           widening the host's bottom edge instead can't make the corner
+           visible (confirmed against the real host). */
         clip-path: polygon(
             0 0, 100% 0, 100% 100%, 0 100%,
-            0 var(--task-card-real-height),
-            calc(var(--task-card-frame-width, 1px) + 0.5px) var(--task-card-real-height),
+            0 calc(var(--task-card-real-height) - var(--task-card-frame-width, 1px)),
+            calc(var(--task-card-frame-width, 1px) + 0.5px) calc(var(--task-card-real-height) - var(--task-card-frame-width, 1px)),
             calc(var(--task-card-frame-width, 1px) + 0.5px) var(--task-card-frame-width, 1px),
             0 var(--task-card-frame-width, 1px)
         );
