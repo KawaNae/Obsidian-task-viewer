@@ -38,6 +38,25 @@ describe('BuiltinPropertyExtractor', () => {
         expect(result.properties).toEqual({});
     });
 
+    // A declaration key this extractor has no field for is still a
+    // declaration key, not a custom property. Letting `tv-ignore` through
+    // put it back into the frontmatter of a converted file, which made the
+    // new file invisible to the plugin.
+    it.each(['tv-content', 'tv-status', 'tv-ignore', 'tv-timer-target-id', 'position'])(
+        'drops %s instead of making it a custom property',
+        (key) => {
+            const result = BuiltinPropertyExtractor.extract({ [key]: pv('x') }, keys);
+            expect(result.properties).toEqual({});
+        },
+    );
+
+    it('drops a renamed declaration key and keeps the name it freed', () => {
+        const custom = { ...keys, content: 'my-content' };
+        const raw = { 'my-content': pv('x'), 'tv-content': pv('y') };
+        const result = BuiltinPropertyExtractor.extract(raw, custom);
+        expect(result.properties).toEqual({ 'tv-content': pv('y') });
+    });
+
     it('keeps non-builtin properties in properties', () => {
         const raw = {
             'custom-prop': pv('hello'),
