@@ -247,44 +247,15 @@ export class TaskActionsMenuBuilder {
             if (isTimed) {
                 // → All-day
                 if (showBothVariants) {
-                    subMenu.addItem((sub) => {
-                        sub.setTitle(t('menu.allDayKeepDate'))
-                            .setIcon('calendar-with-checkmark')
-                            .onClick(async () => {
-                                menu.close();
-                                await this.writeService.updateTask(task.id, {
-                                    startTime: undefined,
-                                    endDate: undefined,
-                                    endTime: undefined,
-                                });
-                            });
+                    this.addSwitchToItem(subMenu, menu, task.id, t('menu.allDayKeepDate'), 'calendar-with-checkmark', {
+                        startTime: undefined, endDate: undefined, endTime: undefined,
                     });
-                    subMenu.addItem((sub) => {
-                        sub.setTitle(t('menu.allDayToday'))
-                            .setIcon('calendar-with-checkmark')
-                            .onClick(async () => {
-                                menu.close();
-                                await this.writeService.updateTask(task.id, {
-                                    startDate: today,
-                                    startTime: undefined,
-                                    endDate: undefined,
-                                    endTime: undefined,
-                                });
-                            });
+                    this.addSwitchToItem(subMenu, menu, task.id, t('menu.allDayToday'), 'calendar-with-checkmark', {
+                        startDate: today, startTime: undefined, endDate: undefined, endTime: undefined,
                     });
                 } else {
-                    subMenu.addItem((sub) => {
-                        sub.setTitle(t('menu.allDay'))
-                            .setIcon('calendar-with-checkmark')
-                            .onClick(async () => {
-                                menu.close();
-                                await this.writeService.updateTask(task.id, {
-                                    startDate: hasDate ? task.startDate : today,
-                                    startTime: undefined,
-                                    endDate: undefined,
-                                    endTime: undefined,
-                                });
-                            });
+                    this.addSwitchToItem(subMenu, menu, task.id, t('menu.allDay'), 'calendar-with-checkmark', {
+                        startDate: hasDate ? task.startDate : today, startTime: undefined, endDate: undefined, endTime: undefined,
                     });
                 }
             } else {
@@ -295,44 +266,15 @@ export class TaskActionsMenuBuilder {
                 const nowTime = `${hh}:${mm}`;
 
                 if (showBothVariants) {
-                    subMenu.addItem((sub) => {
-                        sub.setTitle(t('menu.timelineModeKeepDate'))
-                            .setIcon('clock')
-                            .onClick(async () => {
-                                menu.close();
-                                await this.writeService.updateTask(task.id, {
-                                    startTime: nowTime,
-                                    endDate: undefined,
-                                    endTime: undefined,
-                                });
-                            });
+                    this.addSwitchToItem(subMenu, menu, task.id, t('menu.timelineModeKeepDate'), 'clock', {
+                        startTime: nowTime, endDate: undefined, endTime: undefined,
                     });
-                    subMenu.addItem((sub) => {
-                        sub.setTitle(t('menu.timelineModeToday'))
-                            .setIcon('clock')
-                            .onClick(async () => {
-                                menu.close();
-                                await this.writeService.updateTask(task.id, {
-                                    startDate: today,
-                                    startTime: nowTime,
-                                    endDate: undefined,
-                                    endTime: undefined,
-                                });
-                            });
+                    this.addSwitchToItem(subMenu, menu, task.id, t('menu.timelineModeToday'), 'clock', {
+                        startDate: today, startTime: nowTime, endDate: undefined, endTime: undefined,
                     });
                 } else {
-                    subMenu.addItem((sub) => {
-                        sub.setTitle(t('menu.timelineMode'))
-                            .setIcon('clock')
-                            .onClick(async () => {
-                                menu.close();
-                                await this.writeService.updateTask(task.id, {
-                                    startDate: hasDate ? task.startDate : today,
-                                    startTime: nowTime,
-                                    endDate: undefined,
-                                    endTime: undefined,
-                                });
-                            });
+                    this.addSwitchToItem(subMenu, menu, task.id, t('menu.timelineMode'), 'clock', {
+                        startDate: hasDate ? task.startDate : today, startTime: nowTime, endDate: undefined, endTime: undefined,
                     });
                 }
             }
@@ -362,6 +304,18 @@ export class TaskActionsMenuBuilder {
                         });
                 });
             }
+        });
+    }
+
+    /** switch-to サブメニューの1項目: クリックで menu を閉じて updates を書き戻す。 */
+    private addSwitchToItem(subMenu: Menu, menu: Menu, taskId: string, title: string, icon: string, updates: Partial<Task>): void {
+        subMenu.addItem((sub) => {
+            sub.setTitle(title)
+                .setIcon(icon)
+                .onClick(async () => {
+                    menu.close();
+                    await this.writeService.updateTask(taskId, updates);
+                });
         });
     }
 
