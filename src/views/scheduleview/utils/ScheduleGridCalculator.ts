@@ -1,4 +1,5 @@
 import { toLogicalHeightPx } from '../../../services/display/TimelineCardPosition';
+import { DateUtils } from '../../../utils/DateUtils';
 import type { AdaptiveGridLayout, GridRow, TimedDisplayTask } from '../ScheduleTypes';
 
 export interface ScheduleGridCalculatorOptions {
@@ -130,7 +131,7 @@ export class ScheduleGridCalculator {
         const normalized = ((minute % dayMinutes) + dayMinutes) % dayMinutes;
         const hours = Math.floor(normalized / 60);
         const minutes = normalized % 60;
-        return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`;
+        return DateUtils.formatHHMM(hours, minutes);
     }
 
     clampMinute(value: number, min: number, max: number): number {
