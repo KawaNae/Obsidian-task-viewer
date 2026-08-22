@@ -7,7 +7,6 @@ import { CalendarView, VIEW_TYPE_CALENDAR, MiniCalendarView, VIEW_TYPE_MINI_CALE
 import { KanbanView, VIEW_TYPE_KANBAN } from './views/kanban';
 import { TimerView, VIEW_TYPE_TIMER } from './views/TimerView';
 import { TimerWidget } from './timer/TimerWidget';
-import { createTempTask } from './services/data/createTempTask';
 import {
     type TaskViewerSettings,
     DEFAULT_SETTINGS,
@@ -36,6 +35,7 @@ import { PropertyFormatter } from './interaction/menu/PropertyFormatter';
 import { TimerMenuBuilder } from './interaction/menu/builders/TimerMenuBuilder';
 import { TaskActionsMenuBuilder } from './interaction/menu/builders/TaskActionsMenuBuilder';
 import { CheckboxMenuBuilder } from './interaction/menu/builders/CheckboxMenuBuilder';
+import { createTvFileCallback } from './interaction/menu/builders/createTvFileCallback';
 import { ValidationMenuBuilder } from './interaction/menu/builders/ValidationMenuBuilder';
 import { MenuPresenter } from './interaction/menu/MenuPresenter';
 import { MenuHandler } from './interaction/menu/MenuHandler';
@@ -319,28 +319,7 @@ export default class TaskViewerPlugin extends Plugin {
         const editorCheckboxBuilder = new CheckboxMenuBuilder(
             this.app,
             () => this.settings.startHour,
-            async (result, statusChar) => {
-                const repository = this.getTaskRepository();
-                const tempTask = createTempTask({
-                    id: 'convert-temp',
-                    content: result.content,
-                    statusChar,
-                    startDate: result.startDate,
-                    startTime: result.startTime,
-                    // endDate が省略されていて endTime がある場合、startDate から同日推論
-                    endDate: result.endDate || (result.endTime && result.startDate ? result.startDate : undefined),
-                    endTime: result.endTime,
-                    due: result.due,
-                });
-                return await repository.createTvFile(
-                    tempTask,
-                    this.settings.tvFileChildHeader,
-                    this.settings.tvFileChildHeaderLevel,
-                    undefined,
-                    undefined,
-                    this.settings.tvFileKeys
-                );
-            }
+            createTvFileCallback(this.writeService)
         );
 
         // Register inline menu button on checkbox lines (CM6 extension)
@@ -617,10 +596,6 @@ export default class TaskViewerPlugin extends Plugin {
 
     getTaskWriteService(): TaskWriteService {
         return this.writeService;
-    }
-
-    getTaskRepository() {
-        return this.taskIndex.getRepository();
     }
 
     getTimerWidget(): TimerWidget {
