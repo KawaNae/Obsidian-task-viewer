@@ -7,6 +7,7 @@ import type { PropName } from '../lang/ExprAst';
 import { type EvalContext, EvalError, evalExpr } from '../lang/ExprEvaluator';
 import type { EvalHost, StaticType } from '../lang/functions';
 import type { CellStore } from '../lang/StmtEvaluator';
+import { TranslatableError } from '../lang/TranslatableError';
 import { type Value, isDatishValue, parseDateStr, valueToDisplay } from '../lang/Value';
 import type { GenBlock } from '../parsing/gen/GenBlockCollector';
 import { parseGenBody } from '../parsing/gen/GenBodyParser';
@@ -48,11 +49,11 @@ export interface FlowPlanDeps {
  * expression that failed, and the difference is what the reader has to act
  * on.
  */
-export class GenerationError extends Error {
+export class GenerationError extends TranslatableError {
     constructor(
-        public readonly code: string,
+        code: string,
         message: string,
-        public readonly params?: Diagnostic['params'],
+        params?: Diagnostic['params'],
         /**
          * A diagnostic quoted inside the message.
          *
@@ -63,7 +64,7 @@ export class GenerationError extends Error {
          */
         public readonly inner?: Diagnostic,
     ) {
-        super(message);
+        super(code, message, params);
         this.name = 'GenerationError';
     }
 }

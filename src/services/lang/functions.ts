@@ -1,6 +1,7 @@
 import { addDays, addMonths, addYears, differenceInCalendarDays } from 'date-fns';
 import type { Span } from './Diagnostic';
 import type { Expr, FnName } from './ExprAst';
+import { TranslatableError } from './TranslatableError';
 import {
     type DurUnit, type Value, WEEKDAY_NAMES, type Weekday, dateAt, formatDateStr, isDatishValue, parseDateStr,
     weekdayFromName,
@@ -198,14 +199,7 @@ export interface EvalRuntime {
  * call's span. Losing the code there would leave these sentences as the only
  * untranslatable ones in the language.
  */
-export class FnCallError extends Error {
-    constructor(
-        public readonly code: string,
-        message: string,
-        public readonly params?: Record<string, string | number>,
-    ) {
-        super(message);
-    }
+export class FnCallError extends TranslatableError {
 }
 
 export function callFn(fn: FnName, args: Value[], rt: EvalRuntime): Value {
