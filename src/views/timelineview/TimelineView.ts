@@ -312,7 +312,7 @@ export class TimelineView extends ItemView {
         this.container.empty();
         this.container.addClass('timeline-view');
         this.sidebarManager.attach(this.container, (el, ev, handler) =>
-            this.registerDomEvent(el as any, ev as any, handler),
+            this.registerDomEvent(el, ev, handler),
         );
 
         // Initialize MenuHandler
