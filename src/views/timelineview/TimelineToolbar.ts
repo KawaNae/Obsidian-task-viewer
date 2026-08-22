@@ -3,7 +3,7 @@ import { t } from '../../i18n';
 import type { AstronomyDisplay } from '../../types';
 import type { TaskReadService } from '../../services/data/TaskReadService';
 import type TaskViewerPlugin from '../../main';
-import { DateNavigator, ViewModeSelector, ZoomSelector, ViewSettingsMenu, MaskToggleButton, ViewToolbarBase, type ViewSettingsOptions } from '../sharedUI/ViewToolbar';
+import { DateNavigator, ViewModeSelector, ZoomSelector, ViewSettingsMenu, MaskToggleButton, ViewToolbarBase, appendCompactFilterAndMask, type ViewSettingsOptions, type CompactMenuDeps } from '../sharedUI/ViewToolbar';
 import { DateLabel } from '../sharedUI/DateLabel';
 import { appendAstronomyMenuSection } from '../sharedUI/AstronomyMenuSection';
 import type { FilterMenuComponent } from '../customMenus/FilterMenuComponent';
@@ -220,9 +220,23 @@ export class TimelineToolbar extends ViewToolbarBase {
         this.zoomHandle = ZoomSelector.render(
             toolbar,
             () => this.deps.getZoomLevel(),
-            async (newZoom) => this.deps.setZoomLevel(newZoom),
+            (newZoom) => this.deps.setZoomLevel(newZoom),
             this.deps.plugin.menuPresenter
         );
+    }
+
+    /** Shared filter + mask entries for the compact menu. */
+    private get compactDeps(): CompactMenuDeps {
+        const { deps } = this;
+        return {
+            filterMenu: deps.filterMenu,
+            getTasks: () => deps.readService.getTasks(),
+            getStartHour: () => deps.plugin.settings.startHour,
+            onFilterChange: () => deps.onFilterChange(),
+            getMaskMode: () => deps.getMaskMode(),
+            setMaskMode: (next) => deps.setMaskMode(next),
+            onAfter: () => this.update(),
+        };
     }
 
     private renderFilterButton(toolbar: HTMLElement): void {
@@ -303,76 +317,25 @@ export class TimelineToolbar extends ViewToolbarBase {
     private appendCompactMenuItems(menu: Menu, moreBtn: HTMLElement): void {
         const { deps } = this;
 
-        // View mode (submenu)
-        const currentDays = deps.getDaysToShow();
-        const viewModeLabel = currentDays === 1 ? t('toolbar.viewMode1Day')
-            : currentDays === 3 ? t('toolbar.viewMode3Days')
-            : t('toolbar.viewModeWeek');
-        menu.addItem((item) => {
-            item.setTitle(t('toolbar.viewModeLabel', { label: viewModeLabel }));
-            const sub = item.setSubmenu();
-            for (const opt of [
-                { value: 1, title: t('toolbar.viewMode1Day') },
-                { value: 3, title: t('toolbar.viewMode3Days') },
-                { value: 7, title: t('toolbar.viewModeWeek') },
-            ]) {
-                sub.addItem((si) => {
-                    si.setTitle(opt.title)
-                        .setChecked(currentDays === opt.value)
-                        .onClick(() => {
-                            deps.setDaysToShow(opt.value);
-                            this.update();
-                        });
-                });
-            }
-        });
-
-        // Zoom (submenu)
-        const currentZoom = deps.getZoomLevel();
-        menu.addItem((item) => {
-            item.setTitle(t('toolbar.zoomLabel', { pct: `${Math.round(currentZoom * 100)}%` }));
-            const sub = item.setSubmenu();
-            for (const level of [0.5, 0.75, 1.0, 1.25, 1.5, 2.0, 3.0]) {
-                sub.addItem((si) => {
-                    si.setTitle(`${Math.round(level * 100)}%`)
-                        .setChecked(currentZoom === level)
-                        .onClick(() => {
-                            deps.setZoomLevel(level);
-                            this.update();
-                        });
-                });
-            }
-        });
+        ViewModeSelector.appendSubmenu(
+            menu,
+            () => deps.getDaysToShow(),
+            (value) => {
+                deps.setDaysToShow(value);
+                this.update();
+            },
+        );
+        ZoomSelector.appendSubmenu(
+            menu,
+            () => deps.getZoomLevel(),
+            (level) => {
+                deps.setZoomLevel(level);
+                this.update();
+            },
+        );
 
         menu.addSeparator();
 
-        // Filter
-        menu.addItem((item) => {
-            item.setTitle(t('toolbar.filter'))
-                .setIcon('filter')
-                .onClick(() => {
-                    const allTasks = deps.readService.getTasks();
-                    deps.filterMenu.showMenuAtElement(moreBtn, {
-                        onFilterChange: () => {
-                            deps.onFilterChange();
-                            this.update();
-                        },
-                        getTasks: () => allTasks,
-                        getStartHour: () => deps.plugin.settings.startHour,
-                    });
-                });
-        });
-
-        // Mask
-        const maskOn = deps.getMaskMode();
-        menu.addItem((item) => {
-            item.setTitle(t('toolbar.maskMode'))
-                .setIcon(maskOn ? 'eye-off' : 'eye')
-                .setChecked(maskOn)
-                .onClick(() => {
-                    deps.setMaskMode(!maskOn);
-                    this.update();
-                });
-        });
+        appendCompactFilterAndMask(menu, moreBtn, this.compactDeps);
     }
 }

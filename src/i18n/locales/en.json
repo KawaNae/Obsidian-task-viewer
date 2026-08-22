@@ -292,6 +292,8 @@
     "exportAsImage": "Export as image",
     "maskMode": "Mask mode",
     "sidebar": "Sidebar",
+    "showSidebar": "Show sidebar",
+    "hideSidebar": "Hide sidebar",
     "position": "Position",
     "noFolderConfigured": "No folder configured",
     "noTemplatesFound": "No templates found",

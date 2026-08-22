@@ -3,7 +3,7 @@ import { t } from '../../i18n';
 import type TaskViewerPlugin from '../../main';
 import type { TaskReadService } from '../../services/data/TaskReadService';
 import { VIEW_META_SCHEDULE } from '../../constants/viewRegistry';
-import { DateNavigator, ViewSettingsMenu, MaskToggleButton, ViewToolbarBase, type ViewSettingsOptions } from '../sharedUI/ViewToolbar';
+import { DateNavigator, ViewSettingsMenu, MaskToggleButton, ViewToolbarBase, appendCompactFilterAndMask, type ViewSettingsOptions, type CompactMenuDeps } from '../sharedUI/ViewToolbar';
 import { DateLabel } from '../sharedUI/DateLabel';
 import { appendAstronomyMenuSection } from '../sharedUI/AstronomyMenuSection';
 import type { FilterMenuComponent } from '../customMenus/FilterMenuComponent';
@@ -174,31 +174,16 @@ export class ScheduleToolbar extends ViewToolbarBase {
 
     private appendCompactMenuItems(menu: Menu, moreBtn: HTMLElement): void {
         const { deps } = this;
-        menu.addItem((item) => {
-            item.setTitle(t('toolbar.filter'))
-                .setIcon('filter')
-                .onClick(() => {
-                    deps.filterMenu.showMenuAtElement(moreBtn, {
-                        onFilterChange: () => {
-                            deps.onFilterChange();
-                            this.update();
-                        },
-                        getTasks: () => deps.readService.getTasks(),
-                        getStartHour: () => deps.plugin.settings.startHour,
-                    });
-                });
-        });
-
-        const maskOn = deps.getMaskMode();
-        menu.addItem((item) => {
-            item.setTitle(t('toolbar.maskMode'))
-                .setIcon(maskOn ? 'eye-off' : 'eye')
-                .setChecked(maskOn)
-                .onClick(() => {
-                    deps.setMaskMode(!maskOn);
-                    this.update();
-                });
-        });
+        const compact: CompactMenuDeps = {
+            filterMenu: deps.filterMenu,
+            getTasks: () => deps.readService.getTasks(),
+            getStartHour: () => deps.plugin.settings.startHour,
+            onFilterChange: () => deps.onFilterChange(),
+            getMaskMode: () => deps.getMaskMode(),
+            setMaskMode: (next) => deps.setMaskMode(next),
+            onAfter: () => this.update(),
+        };
+        appendCompactFilterAndMask(menu, moreBtn, compact);
     }
 
     override update(): void {

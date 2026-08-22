@@ -1,4 +1,5 @@
 import { setIcon } from 'obsidian';
+import { t } from '../../i18n';
 
 /**
  * Updates a sidebar toggle button's icon, classes, and aria-label
@@ -17,6 +18,6 @@ export function updateSidebarToggleButton(btn: HTMLElement, isOpen: boolean): vo
     btn.classList.toggle('is-closed', !isOpen);
     btn.classList.toggle('is-active', isOpen);
 
-    const label = isOpen ? 'Hide Sidebar' : 'Show Sidebar';
+    const label = isOpen ? t('toolbar.hideSidebar') : t('toolbar.showSidebar');
     btn.setAttribute('aria-label', label);
 }
