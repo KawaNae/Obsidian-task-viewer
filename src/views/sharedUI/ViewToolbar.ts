@@ -11,6 +11,7 @@ import { ViewExporter } from '../../services/export/ViewExporter';
 import { exportDescriptorFor, resolveExportContainer } from '../../services/export/ExportRegistry';
 import { buildExportFilename } from '../../services/export/ExportFilename';
 import type { MenuPresenter } from '../../interaction/menu/MenuPresenter';
+import { viewContentEl } from '../../utils/ObsidianView';
 
 /**
  * Persistent toolbar root with mount/detach lifecycle.
@@ -569,7 +570,7 @@ export class ViewSettingsMenu {
                 item.setTitle(t('toolbar.exportAsImage'))
                     .setIcon('image')
                     .onClick(async () => {
-                        const contentEl = (leaf.view as any).contentEl as HTMLElement | undefined;
+                        const contentEl = viewContentEl(leaf);
                         if (!contentEl) {
                             new Notice(t('notice.noContentToExport'));
                             return;

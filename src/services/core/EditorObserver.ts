@@ -1,5 +1,6 @@
 import { type App, type EventRef, type WorkspaceLeaf, MarkdownView } from 'obsidian';
 import type { SyncDetector } from './SyncDetector';
+import { editorCm } from '../../utils/editorCm';
 
 /**
  * エディタオブザーバー - エディタイベントの監視
@@ -58,7 +59,7 @@ export class EditorObserver {
         if (!(view instanceof MarkdownView)) return;
 
         const editor = view.editor;
-        const editorEl = (editor as any).cm?.contentDOM as HTMLElement | undefined;
+        const editorEl = editorCm(editor)?.contentDOM;
         if (!editorEl) return;
 
         this.currentEditorEl = editorEl;

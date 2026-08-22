@@ -59,6 +59,8 @@ import { LogStorage } from './log/log-storage';
 import { LogManager } from './log/log-manager';
 import { LogView, VIEW_TYPE_LOG } from './views/logview/LogView';
 import type { DeviceInfo } from './log/markdown-formatter';
+import { refreshView } from './utils/ObsidianView';
+import { deviceMemoryGb, jsHeapStats, nodeOs } from './utils/hostEnv';
 
 export default class TaskViewerPlugin extends Plugin {
     private taskIndex: TaskIndex;
@@ -625,8 +627,7 @@ export default class TaskViewerPlugin extends Plugin {
     public refreshAllViews(): void {
         [VIEW_TYPE_TIMELINE, VIEW_TYPE_SCHEDULE, VIEW_TYPE_CALENDAR, VIEW_TYPE_MINI_CALENDAR, VIEW_TYPE_KANBAN].forEach(viewType => {
             this.app.workspace.getLeavesOfType(viewType).forEach(leaf => {
-                // @ts-ignore — refresh() is a custom method on plugin views, not in Obsidian typings
-                (leaf.view as any).refresh?.();
+                refreshView(leaf.view);
             });
         });
     }
@@ -760,12 +761,12 @@ export default class TaskViewerPlugin extends Plugin {
                     d.cpuCores = navigator.hardwareConcurrency;
                 }
                 if (navigator.userAgent) d.userAgent = navigator.userAgent;
-                const dm = (navigator as any).deviceMemory;
-                if (typeof dm === 'number') d.deviceMemoryGb = dm;
+                const dm = deviceMemoryGb();
+                if (dm !== undefined) d.deviceMemoryGb = dm;
             }
         } catch { /* best effort */ }
         try {
-            const pm = typeof performance !== 'undefined' ? (performance as any).memory : undefined;
+            const pm = jsHeapStats();
             if (pm) {
                 if (typeof pm.usedJSHeapSize === 'number') {
                     d.jsHeapUsedMb = Math.round(pm.usedJSHeapSize / 1048576);
@@ -776,9 +777,8 @@ export default class TaskViewerPlugin extends Plugin {
             }
         } catch { /* best effort */ }
         try {
-            const req = typeof window !== 'undefined' ? (window as any).require : undefined;
-            if (typeof req === 'function') {
-                const os = req('os');
+            const os = nodeOs();
+            if (os) {
                 d.arch = os.arch();
                 d.osRelease = os.release();
                 const cpus = os.cpus();
