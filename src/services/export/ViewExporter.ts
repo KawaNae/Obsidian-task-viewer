@@ -117,7 +117,7 @@ export class ViewExporter {
             const { blob } = await ViewExporter.captureExpanded(container, spec);
             const filePath = await ExportUtils.saveBlobToVault(blob, filename, folder, app);
             progress.hide();
-            new Notice(`Image saved to ${filePath}`);
+            new Notice(t('notice.imageSaved', { path: filePath }));
         } catch (err) {
             logError(`[ViewExporter] Export failed: ${(err as Error)?.message ?? err}`);
             progress.hide();

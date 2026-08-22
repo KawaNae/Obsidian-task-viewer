@@ -371,7 +371,9 @@ export class IntervalTemplateCreator {
                 this.callbacks?.onSaved(file.path);
             } catch (e) {
                 const msg = e instanceof Error ? e.message : String(e);
-                new Notice(`Failed to ${isEditing ? 'save' : 'create'} template: ${msg}`);
+                new Notice(isEditing
+                    ? t('timer.template.saveFailed', { error: msg })
+                    : t('timer.template.createFailed', { error: msg }));
                 errorEl.setText(msg);
             }
         });

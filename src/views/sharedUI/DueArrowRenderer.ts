@@ -1,4 +1,5 @@
 import type { GridTaskEntry } from '../sharedLogic/GridTaskLayout';
+import { t } from '../../i18n';
 
 export interface DueArrowOptions {
     /** Row offset applied to trackIndex (e.g. 2 for calendar date-header row) */
@@ -21,7 +22,7 @@ export function renderDueArrow(
     const { arrowStartCol, arrowEndCol, isClipped, dueStr } = entry.dueArrow;
     const arrowEl = container.createDiv('due-arrow');
     arrowEl.dataset.taskId = entry.task.id;
-    arrowEl.setAttribute('aria-label', `Due: ${dueStr}`);
+    arrowEl.setAttribute('aria-label', t('aria.due', { date: dueStr }));
 
     const gridRowOffset = options.gridRowOffset ?? 0;
     const gridColOffset = options.gridColOffset ?? 0;

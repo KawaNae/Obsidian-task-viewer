@@ -78,7 +78,7 @@ export function render(el: HTMLElement, plugin: PluginContext): void {
                         path: result.path,
                     }));
                 } catch (e: any) {
-                    new Notice(`Export failed: ${e?.message ?? e}`);
+                    new Notice(t('settings.log.exportFailed', { error: String(e?.message ?? e) }));
                 }
             }));
 

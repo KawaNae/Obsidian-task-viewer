@@ -83,7 +83,7 @@ export class DateHeaderRenderer {
             const linkEl = cell.createEl('a', { cls: 'internal-link date-header__date-link', text: initialLabel });
             linkEl.dataset.href = linkTarget;
             linkEl.setAttribute('href', linkTarget);
-            linkEl.setAttribute('aria-label', `Open daily note: ${linkLabel} ${dayName}`);
+            linkEl.setAttribute('aria-label', t('aria.openDailyNote', { label: `${linkLabel} ${dayName}` }));
             linkEl.addEventListener('click', (event: MouseEvent) => {
                 event.preventDefault();
             });
