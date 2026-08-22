@@ -4,6 +4,7 @@ import * as pathNode from 'path';
 import type TaskViewerPlugin from '../../main';
 import { ViewExporter } from './ViewExporter';
 import { exportDescriptorFor, resolveExportContainer } from './ExportRegistry';
+import { buildExportFilename } from './ExportFilename';
 
 export interface ExportOptions {
     filename?: string;
@@ -58,12 +59,9 @@ function resolveFolder(opts: ExportOptions | undefined, plugin: TaskViewerPlugin
     return folder;
 }
 
-function resolveFilename(opts: ExportOptions | undefined, viewType: string, plugin: TaskViewerPlugin): string {
+function resolveFilename(opts: ExportOptions | undefined, viewType: string): string {
     if (opts?.filename) return opts.filename;
-    const label = opts?.name || viewType.replace('-view', '');
-    const sanitized = label.replace(/[\\/:*?"<>|]/g, '_');
-    const date = new Date().toISOString().slice(0, 10);
-    return `${sanitized}_${date}.png`;
+    return buildExportFilename(opts?.name || viewType.replace('-view', ''));
 }
 
 export class ExportService {
@@ -145,7 +143,7 @@ export class ExportService {
         const result = await ViewExporter.captureExpanded(container, spec);
 
         const folder = resolveFolder(opts, this.plugin);
-        const filename = resolveFilename(opts, viewType, this.plugin);
+        const filename = resolveFilename(opts, viewType);
         const savedPath = await this.saveToFs(result.blob, filename, folder);
 
         const out: ExportResult = {
