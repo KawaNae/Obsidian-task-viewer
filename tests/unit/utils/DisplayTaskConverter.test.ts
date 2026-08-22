@@ -3,8 +3,8 @@ import {
     NO_TASK_LOOKUP,
     materializeRawDates,
     shouldSplitDisplayTask,
+    splitDisplayTaskAtBoundary,
     toDisplayTask,
-    toDisplayTaskWithSplit,
 } from '../../../src/services/display/DisplayTaskConverter';
 import { getTaskDateRange } from '../../../src/services/display/VisualDateRange';
 import { classifyForSection } from '../../../src/services/display/SectionClassifier';
@@ -169,32 +169,23 @@ describe('shouldSplitDisplayTask', () => {
     });
 });
 
-describe('toDisplayTaskWithSplit', () => {
-    it('returns 1 element for non-split task', () => {
-        const task = makeTask({
-            startDate: '2026-01-15',
-            startTime: '09:00',
-            endDate: '2026-01-15',
-            endTime: '17:00',
-        });
-        const result = toDisplayTaskWithSplit(task, startHour);
-        expect(result).toHaveLength(1);
-        expect(result[0].isSplit).toBe(false);
-    });
-
-    it('returns 2 elements for cross-day task', () => {
+describe('splitDisplayTaskAtBoundary', () => {
+    it('leaves each half open only towards the other', () => {
+        // Which end of a segment continues is what the card's notched corner
+        // reads: the head runs off its day forward, the tail arrives from
+        // behind, and neither claims the side it actually ends on.
         const task = makeTask({
             startDate: '2026-01-15',
             startTime: '22:00',
             endDate: '2026-01-16',
             endTime: '08:00',
         });
-        const result = toDisplayTaskWithSplit(task, startHour);
-        expect(result).toHaveLength(2);
-        expect(result[0].splitContinuesAfter).toBe(true);
-        expect(result[0].splitContinuesBefore).toBe(false);
-        expect(result[1].splitContinuesBefore).toBe(true);
-        expect(result[1].splitContinuesAfter).toBe(false);
+        const [head, tail] = splitDisplayTaskAtBoundary(toDisplayTask(task, startHour), startHour);
+
+        expect(head.splitContinuesAfter).toBe(true);
+        expect(head.splitContinuesBefore).toBe(false);
+        expect(tail.splitContinuesBefore).toBe(true);
+        expect(tail.splitContinuesAfter).toBe(false);
     });
 });
 
