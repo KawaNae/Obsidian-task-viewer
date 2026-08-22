@@ -1,7 +1,9 @@
-import type { Task } from '../../types';
-import { GridHandleStrategy } from './handles/GridHandleStrategy';
-import { TimelineHandleStrategy } from './handles/TimelineHandleStrategy';
-import type { HandleStrategy } from './handles/HandleStrategy';
+import type { Task } from '../../../types';
+import type { SelectionHost } from '../../../interaction/selection/SelectionHost';
+import { GridHandleStrategy } from './GridHandleStrategy';
+import { TimelineHandleStrategy } from './TimelineHandleStrategy';
+import type { HandleStrategy } from './HandleStrategy';
+import { resolveHandleSurface } from './HandleSurface';
 
 interface HandleManagerDeps {
     getTask(id: string): Task | undefined;
@@ -9,10 +11,10 @@ interface HandleManagerDeps {
 }
 
 /**
- * Manages drag handles for selected tasks in TimelineView.
- * Handles are rendered directly inside task card elements for native scroll sync.
+ * Manages drag handles for the selected task. Shared by Timeline and Calendar
+ * — handles are rendered directly inside the task card element so they scroll
+ * with it natively.
  */
-import type { SelectionHost } from '../../interaction/selection/SelectionHost';
 
 export class HandleManager implements SelectionHost {
     private selectedTaskId: string | null = null;
@@ -125,14 +127,7 @@ export class HandleManager implements SelectionHost {
         });
     }
 
-    /**
-     * cal-week-row 配下、または .task-card--allday は両方とも grid 系（同じ
-     * handle セット: detail + resize-{L,R} + move-bottom-{L,R}）。それ以外は
-     * timed task として timeline 戦略。
-     */
     private pickStrategy(taskEl: HTMLElement): HandleStrategy {
-        if (taskEl.closest('.cal-week-row')) return this.gridStrategy;
-        if (taskEl.classList.contains('task-card--allday')) return this.gridStrategy;
-        return this.timelineStrategy;
+        return resolveHandleSurface(taskEl) === 'grid' ? this.gridStrategy : this.timelineStrategy;
     }
 }

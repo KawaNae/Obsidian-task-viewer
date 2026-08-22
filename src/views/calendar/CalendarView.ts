@@ -39,7 +39,8 @@ import { TaskLinkInteractionManager } from '../taskcard/TaskLinkInteractionManag
 import { VIEW_META_CALENDAR } from '../../constants/viewRegistry';
 import { codecFor, type ViewConfigCodec } from '../../services/viewConfig';
 import { CalendarSchema, type CalendarConfig, type CalendarTransient } from './CalendarSchema';
-import { HandleManager } from '../timelineview/HandleManager';
+import { HandleManager } from '../sharedUI/handles/HandleManager';
+import { markHandleSurface } from '../sharedUI/handles/HandleSurface';
 import { SelectionController } from '../../interaction/selection/SelectionController';
 import { TaskIdGenerator } from '../../services/display/TaskIdGenerator';
 import { SidebarManager } from '../sidebar/SidebarManager';
@@ -754,10 +755,6 @@ export class CalendarView extends ItemView {
 
         cell.style.gridColumn = `${this.getGridColumnForDay(colIndex)}`;
         cell.style.gridRow = '1';
-        if (colIndex === 7) {
-            cell.addClass('is-last-col');
-        }
-
         if (date.getFullYear() !== referenceMonth.year || date.getMonth() !== referenceMonth.month) {
             cell.addClass('is-outside-month');
         }
@@ -848,6 +845,7 @@ export class CalendarView extends ItemView {
             const cardInstanceId = `${VIEW_ID}::lane-multi::${entry.segmentId}`;
             const reused = reconciler.acquire(cardInstanceId);
             const barEl = reused ?? weekRow.createDiv('task-card task-card--multi-day');
+            markHandleSurface(barEl, 'grid');
             if (reused) weekRow.appendChild(reused);
 
             this.decorateCalendarBar(barEl, entry, colOffset);
@@ -863,6 +861,7 @@ export class CalendarView extends ItemView {
         const cardInstanceId = `${VIEW_ID}::lane::${entry.task.id}`;
         const reused = reconciler.acquire(cardInstanceId);
         const card = reused ?? weekRow.createDiv('task-card');
+        markHandleSurface(card, 'grid');
         if (reused) weekRow.appendChild(reused);
 
         this.decorateCalendarCell(card, entry, colOffset);

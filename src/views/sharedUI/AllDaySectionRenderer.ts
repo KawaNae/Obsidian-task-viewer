@@ -5,9 +5,14 @@ import { TouchLongPressBinder } from '../../interaction/menu/TouchLongPressBinde
 import { TaskStyling } from './TaskStyling';
 import { getEffectiveColor, getEffectiveLinestyle } from '../../services/data/EffectiveProperties';
 import type { TaskCardRenderer } from '../taskcard/TaskCardRenderer';
-import type { HandleManager } from '../timelineview/HandleManager';
+import type { HandleManager } from './handles/HandleManager';
+import { markHandleSurface } from './handles/HandleSurface';
 import type { DisplayTask } from '../../types';
-import { CreateTaskModal, formatTaskLine } from '../../modals/CreateTaskModal';
+import {
+    appendEmptySpaceMenuItems,
+    openCreateTaskForDailyNote,
+    openDailyNoteTimer,
+} from '../sharedLogic/DailyNoteTaskActions';
 import { computeGridLayout, type GridTaskEntry } from '../sharedLogic/GridTaskLayout';
 import { renderDueArrow } from './DueArrowRenderer';
 import { splitTasks } from '../../services/display/TaskSplitter';
@@ -105,6 +110,7 @@ export class AllDaySectionRenderer {
         const cardInstanceId = `${this.viewId}::allday::${entry.segmentId}`;
         const reused = reconciler.acquire(cardInstanceId);
         const el = reused ?? container.createDiv('task-card task-card--allday');
+        markHandleSurface(el, 'grid');
         if (reused) container.appendChild(reused);
 
         this.decorateAllDay(el, entry, gridColOffset, gridRowOffset);
@@ -179,62 +185,10 @@ export class AllDaySectionRenderer {
     /** Show context menu for empty space click */
     private showEmptySpaceMenu(x: number, y: number, date: string) {
         this.plugin.menuPresenter.present((menu) => {
-            // Create Task (All-Day type)
-            menu.addItem((item) => {
-                item.setTitle(t('menu.createTaskForDailyNote'))
-                    .setIcon('plus')
-                    .onClick(() => this.handleCreateTask(date));
-            });
-
-            menu.addSeparator();
-
-            // Open Pomodoro (Daily Note)
-            menu.addItem((item) => {
-                item.setTitle(t('menu.openPomodoroForDailyNote'))
-                    .setIcon('timer')
-                    .onClick(() => this.openDailyNoteTimer(date, 'pomodoro'));
-            });
-
-            // Open Timer (Daily Note)
-            menu.addItem((item) => {
-                item.setTitle(t('menu.openCountupForDailyNote'))
-                    .setIcon('clock')
-                    .onClick(() => this.openDailyNoteTimer(date, 'countup'));
+            appendEmptySpaceMenuItems(menu, {
+                onCreate: () => openCreateTaskForDailyNote(this.plugin, date, { startDate: date }),
+                onTimer: (timerType) => openDailyNoteTimer(this.plugin, date, timerType),
             });
         }, { kind: 'position', x, y });
-    }
-
-    /** Create an all-day task for the specified date */
-    private handleCreateTask(date: string) {
-        new CreateTaskModal(this.plugin.app, async (result) => {
-            const taskLine = formatTaskLine(result);
-            const [y, m, d] = date.split('-').map(Number);
-            const dateObj = new Date();
-            dateObj.setFullYear(y, m - 1, d);
-            dateObj.setHours(0, 0, 0, 0);
-
-            const { DailyNoteUtils } = await import('../../utils/DailyNoteUtils');
-            await DailyNoteUtils.appendLineToDailyNote(
-                this.plugin.app,
-                dateObj,
-                taskLine,
-                this.plugin.settings.dailyNoteHeader,
-                this.plugin.settings.dailyNoteHeaderLevel
-            );
-        }, { startDate: date }, { warnOnEmptyTask: true, dailyNoteDate: date, startHour: this.plugin.settings.startHour }).open();
-    }
-
-    /** Open timer for daily note */
-    private openDailyNoteTimer(date: string, timerType: 'pomodoro' | 'countup') {
-        const dailyNoteId = `daily-${date}`;
-        const displayName = date;
-        const widget = this.plugin.getTimerWidget();
-        widget.startTimer({
-            taskId: dailyNoteId,
-            taskName: displayName,
-            recordMode: 'child',
-            timerType,
-            autoStart: false
-        });
     }
 }

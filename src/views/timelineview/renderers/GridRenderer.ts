@@ -3,7 +3,7 @@ import type { ViewState } from '../../../types';
 import type TaskViewerPlugin from '../../../main';
 import type { MenuHandler } from '../../../interaction/menu/MenuHandler';
 import { DateUtils } from '../../../utils/DateUtils';
-import type { HandleManager } from '../HandleManager';
+import type { HandleManager } from '../../sharedUI/handles/HandleManager';
 import { t } from '../../../i18n';
 
 import type { AllDaySectionRenderer } from '../../sharedUI/AllDaySectionRenderer';
