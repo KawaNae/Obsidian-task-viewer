@@ -1,7 +1,7 @@
 import { type App, TFile, type EventRef } from 'obsidian';
 import { t } from '../../i18n';
 import type { Task } from '../../types';
-import type TaskViewerPlugin from '../../main';
+import type { PluginContext } from '../../PluginContext';
 import type { TaskCardRenderer } from '../../views/taskcard/TaskCardRenderer';
 import { TaskStyling } from '../../views/sharedUI/TaskStyling';
 import type { MenuHandler } from '../../interaction/menu/MenuHandler';
@@ -20,7 +20,7 @@ export interface TaskHubDeps {
     menuHandler: MenuHandler;
     readService: TaskReadService;
     writeService: TaskWriteService;
-    plugin: TaskViewerPlugin;
+    plugin: PluginContext;
 }
 
 export interface TaskHubPanelOptions {

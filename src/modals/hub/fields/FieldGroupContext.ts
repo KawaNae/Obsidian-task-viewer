@@ -1,6 +1,6 @@
 import type { App } from 'obsidian';
 import type { Task } from '../../../types';
-import type TaskViewerPlugin from '../../../main';
+import type { PluginContext } from '../../../PluginContext';
 import type { TaskReadService } from '../../../services/data/TaskReadService';
 import type { PopoverStack } from '../../../views/sharedUI/PopoverStack';
 import type { CascadeSourceKind } from '../CascadeSource';
@@ -17,7 +17,7 @@ export interface FieldGroupContext {
     isMissing: () => boolean;
     queue: (updates: Partial<Task> | null) => void;
     app: App;
-    plugin: TaskViewerPlugin;
+    plugin: PluginContext;
     readService: TaskReadService;
     stack: PopoverStack;
     attachSuggest: (

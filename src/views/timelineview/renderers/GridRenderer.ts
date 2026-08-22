@@ -1,6 +1,6 @@
 import type { HoverParent } from 'obsidian';
 import type { ViewState } from '../TimelineViewState';
-import type TaskViewerPlugin from '../../../main';
+import type { PluginContext } from '../../../PluginContext';
 import type { MenuHandler } from '../../../interaction/menu/MenuHandler';
 import { DateUtils } from '../../../utils/DateUtils';
 import type { HandleManager } from '../../sharedUI/handles/HandleManager';
@@ -25,7 +25,7 @@ export class GridRenderer {
     constructor(
         private container: HTMLElement,
         private viewState: ViewState,
-        private plugin: TaskViewerPlugin,
+        private plugin: PluginContext,
         private menuHandler: MenuHandler,
         private hoverParent: HoverParent,
         private dateHeaderRenderer: DateHeaderRenderer,

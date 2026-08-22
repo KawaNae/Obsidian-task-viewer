@@ -13,7 +13,7 @@ import type { DisplayTask, PinnedListDefinition } from '../../types';
 import type { TaskCardRenderer } from '../taskcard/TaskCardRenderer';
 import type { MenuHandler } from '../../interaction/menu/MenuHandler';
 import { combineFilterStates, type FilterState } from '../../services/filter/FilterTypes';
-import type TaskViewerPlugin from '../../main';
+import type { PluginContext } from '../../PluginContext';
 import { TaskStyling } from './TaskStyling';
 import { getEffectiveColor, getEffectiveLinestyle } from '../../services/data/EffectiveProperties';
 import { TaskPagingController } from './TaskPagingController';
@@ -102,7 +102,7 @@ export class PinnedListRenderer {
 
     constructor(
         private taskRenderer: TaskCardRenderer,
-        private plugin: TaskViewerPlugin,
+        private plugin: PluginContext,
         private menuHandler: MenuHandler,
         private readService: TaskReadService,
     ) {

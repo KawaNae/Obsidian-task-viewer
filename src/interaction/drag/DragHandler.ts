@@ -1,6 +1,6 @@
 import type { TaskReadService } from '../../services/data/TaskReadService';
 import type { TaskWriteService } from '../../services/data/TaskWriteService';
-import type TaskViewerPlugin from '../../main';
+import type { PluginContext } from '../../PluginContext';
 import type { SelectionController } from '../selection/SelectionController';
 import type { DragContext } from './DragStrategy';
 import { DragRouter } from './DragRouter';
@@ -35,7 +35,7 @@ export class DragHandler {
         private readonly container: HTMLElement,
         readService: TaskReadService,
         writeService: TaskWriteService,
-        plugin: TaskViewerPlugin,
+        plugin: PluginContext,
         selectionController: SelectionController,
         onTaskClick: (taskId: string) => void,
         onTaskMove: () => void,

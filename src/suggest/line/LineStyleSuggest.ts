@@ -1,5 +1,5 @@
 import { type App, type Editor, type EditorPosition, EditorSuggest, type EditorSuggestContext, type EditorSuggestTriggerInfo, type TFile } from 'obsidian';
-import type TaskViewerPlugin from '../../main';
+import type { PluginContext } from '../../PluginContext';
 import { filterLineStyles, renderLineStyleSuggestion } from './lineStyleUtils';
 
 /**
@@ -7,9 +7,9 @@ import { filterLineStyles, renderLineStyleSuggestion } from './lineStyleUtils';
  * Provides line style suggestions when editing the configured linestyle key in YAML frontmatter.
  */
 export class LineStyleSuggest extends EditorSuggest<string> {
-    plugin: TaskViewerPlugin;
+    plugin: PluginContext;
 
-    constructor(app: App, plugin: TaskViewerPlugin) {
+    constructor(app: App, plugin: PluginContext) {
         super(app);
         this.plugin = plugin;
     }

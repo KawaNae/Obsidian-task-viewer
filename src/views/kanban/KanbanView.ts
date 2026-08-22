@@ -4,7 +4,8 @@ import { t } from '../../i18n';
 import { TaskCardRenderer } from '../taskcard/TaskCardRenderer';
 import { MenuHandler } from '../../interaction/menu/MenuHandler';
 import { createTaskHubOpener } from '../../modals/hub/openTaskHub';
-import type TaskViewerPlugin from '../../main';
+import type { PluginContext } from '../../PluginContext';
+import type { TimerHost } from '../../timer/TimerWidget';
 import { FilterMenuComponent } from '../customMenus/FilterMenuComponent';
 import { SortMenuComponent } from '../customMenus/SortMenuComponent';
 import { KanbanToolbar } from './KanbanToolbar';
@@ -59,7 +60,7 @@ const KANBAN_CELL_CLASSES: ListSectionClasses = {
 type KanbanViewState = Partial<KanbanConfig> & Partial<KanbanTransient>;
 
 export class KanbanView extends ItemView {
-    private readonly plugin: TaskViewerPlugin;
+    private readonly plugin: PluginContext & TimerHost;
     private readonly readService: TaskReadService;
     private readonly writeService: TaskWriteService;
     private readonly taskRenderer: TaskCardRenderer;
@@ -98,7 +99,7 @@ export class KanbanView extends ItemView {
      */
     private currentReconciler: CardReconciler | null = null;
 
-    constructor(leaf: WorkspaceLeaf, plugin: TaskViewerPlugin) {
+    constructor(leaf: WorkspaceLeaf, plugin: PluginContext & TimerHost) {
         super(leaf);
         this.plugin = plugin;
         this.readService = this.plugin.getTaskReadService();

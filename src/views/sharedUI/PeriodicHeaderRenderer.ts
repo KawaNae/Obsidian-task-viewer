@@ -1,6 +1,6 @@
 import type { TFile } from 'obsidian';
 import type { App, HoverParent } from 'obsidian';
-import type TaskViewerPlugin from '../../main';
+import type { PluginContext } from '../../PluginContext';
 import { DailyNoteUtils } from '../../utils/DailyNoteUtils';
 import { DateUtils } from '../../utils/DateUtils';
 import { withWeekStartDay } from '../../utils/momentWeekLocale';
@@ -10,7 +10,7 @@ import { TASK_VIEWER_HOVER_SOURCE_ID } from '../../constants/hover';
 
 interface PeriodicHeaderRendererDeps {
     app: App;
-    plugin: TaskViewerPlugin;
+    plugin: PluginContext;
     hoverParent: HoverParent;
     linkInteractionManager: TaskLinkInteractionManager;
 }

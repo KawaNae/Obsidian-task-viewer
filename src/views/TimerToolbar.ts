@@ -1,12 +1,12 @@
 import { setIcon } from 'obsidian';
 import { t } from '../i18n';
-import type TaskViewerPlugin from '../main';
+import type { PluginContext } from '../PluginContext';
 import { ViewToolbarBase } from './sharedUI/ViewToolbar';
 
 export type TimerViewMode = 'countup' | 'countdown' | 'pomodoro' | 'interval';
 
 export interface TimerToolbarDeps {
-    plugin: TaskViewerPlugin;
+    plugin: PluginContext;
     getMode: () => TimerViewMode;
     isIdle: () => boolean;
     onSelectMode: (event: MouseEvent) => void;

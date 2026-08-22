@@ -1,5 +1,5 @@
 import type { App, HoverParent } from 'obsidian';
-import type TaskViewerPlugin from '../../main';
+import type { PluginContext } from '../../PluginContext';
 import { DateUtils } from '../../utils/DateUtils';
 import { DailyNoteUtils } from '../../utils/DailyNoteUtils';
 import type { TaskLinkInteractionManager } from '../taskcard/TaskLinkInteractionManager';
@@ -8,7 +8,7 @@ import { t } from '../../i18n';
 
 interface DateHeaderRendererDeps {
     app: App;
-    plugin: TaskViewerPlugin;
+    plugin: PluginContext;
     hoverParent: HoverParent;
     linkInteractionManager: TaskLinkInteractionManager;
 }

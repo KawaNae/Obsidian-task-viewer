@@ -2,7 +2,8 @@ import { type App, Notice } from 'obsidian';
 import type { Task } from '../../types';
 import type { TaskReadService } from '../../services/data/TaskReadService';
 import type { TaskWriteService } from '../../services/data/TaskWriteService';
-import type TaskViewerPlugin from '../../main';
+import type { PluginContext } from '../../PluginContext';
+import type { TimerHost } from '../../timer/TimerWidget';
 import { TouchLongPressBinder } from './TouchLongPressBinder';
 import { PropertyCalculator } from './PropertyCalculator';
 import { PropertyFormatter } from './PropertyFormatter';
@@ -52,7 +53,7 @@ export class MenuHandler {
         private app: App,
         private readService: TaskReadService,
         private writeService: TaskWriteService,
-        private plugin: TaskViewerPlugin
+        private plugin: PluginContext & TimerHost
     ) {
         // Initialize services
         this.propertyCalculator = new PropertyCalculator();

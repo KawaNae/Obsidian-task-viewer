@@ -1,7 +1,7 @@
 import { FileSystemAdapter } from 'obsidian';
 import * as fsNode from 'fs';
 import * as pathNode from 'path';
-import type TaskViewerPlugin from '../../main';
+import type { PluginContext } from '../../PluginContext';
 import { ViewExporter } from './ViewExporter';
 import { exportDescriptorFor, resolveExportContainer } from './ExportRegistry';
 import { buildExportFilename } from './ExportFilename';
@@ -50,7 +50,7 @@ function resizePopout(win: Window, bw: BrowserWindowLike | null, width: number, 
     }
 }
 
-function resolveFolder(opts: ExportOptions | undefined, plugin: TaskViewerPlugin): string {
+function resolveFolder(opts: ExportOptions | undefined, plugin: PluginContext): string {
     const folder = opts?.folder?.trim() || plugin.settings.exportFolder?.trim() || 'task-viewer-export';
     return folder;
 }
@@ -60,8 +60,16 @@ function resolveFilename(opts: ExportOptions | undefined, viewType: string): str
     return buildExportFilename(opts?.name || viewType.replace('-view', ''));
 }
 
+/**
+ * Hands out the export service. Declared beside it — see `ApiHost` in
+ * `api/TaskApi.ts` for why these do not live in `PluginContext`.
+ */
+export interface ExportHost {
+    readonly exportService: ExportService;
+}
+
 export class ExportService {
-    constructor(private plugin: TaskViewerPlugin) {}
+    constructor(private plugin: PluginContext) {}
 
     async exportOpenView(viewType: string, opts?: ExportOptions): Promise<ExportResult> {
         const totalStart = performance.now();

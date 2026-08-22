@@ -9,8 +9,8 @@ import { MenuHandler } from '../../interaction/menu/MenuHandler';
 import { createTaskHubOpener } from '../../modals/hub/openTaskHub';
 import { DateUtils } from '../../utils/DateUtils';
 import { ChildLineMenuBuilder } from '../../interaction/menu/builders/ChildLineMenuBuilder';
-import type TaskViewerPlugin from '../../main';
-
+import type { PluginContext } from '../../PluginContext';
+import type { TimerHost } from '../../timer/TimerWidget';
 import { FilterMenuComponent } from '../customMenus/FilterMenuComponent';
 import { createEmptyFilterState, hasConditions } from '../../services/filter/FilterTypes';
 import { ScheduleToolbar } from './ScheduleToolbar';
@@ -51,7 +51,7 @@ export class ScheduleView extends ItemView {
     private static readonly MAX_GAP_HEIGHT_PX = 100;
     private static readonly TIMELINE_TOP_PADDING_PX = 16;
     private static readonly TIMELINE_BOTTOM_PADDING_PX = 16;
-    private readonly plugin: TaskViewerPlugin;
+    private readonly plugin: PluginContext & TimerHost;
     private readonly readService: TaskReadService;
     private readonly writeService: TaskWriteService;
     private readonly taskRenderer: TaskCardRenderer;
@@ -90,7 +90,7 @@ export class ScheduleView extends ItemView {
 
     private readonly hoverParent = new TaskViewHoverParent();
 
-    constructor(leaf: WorkspaceLeaf, plugin: TaskViewerPlugin) {
+    constructor(leaf: WorkspaceLeaf, plugin: PluginContext & TimerHost) {
         super(leaf);
         this.plugin = plugin;
         this.readService = plugin.getTaskReadService();

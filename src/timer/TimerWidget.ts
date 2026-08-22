@@ -5,9 +5,9 @@
  * アコーディオン形式で個別にトグル可能。
  */
 
-import { type App, Notice } from 'obsidian';
+import { type App, Notice, type Plugin } from 'obsidian';
 import { t } from '../i18n';
-import type TaskViewerPlugin from '../main';
+import type { PluginContext } from '../PluginContext';
 import { AudioUtils } from './AudioUtils';
 import type {
     TimerInstance,
@@ -34,9 +34,18 @@ import {
 } from './TimerContext';
 import { logInfo } from '../log/log';
 
+/**
+ * Hands out the running timer widget. Declared beside the widget for the same
+ * reason `ApiHost` lives beside `TaskApi`: naming it in `PluginContext` would
+ * relocate the import cycle rather than close it.
+ */
+export interface TimerHost {
+    getTimerWidget(): TimerWidget;
+}
+
 export class TimerWidget implements TimerContext {
     readonly app: App;
-    readonly plugin: TaskViewerPlugin;
+    readonly plugin: PluginContext & Plugin;
     readonly timers: Map<string, TimerInstance> = new Map();
     readonly recorder: TimerRecorder;
     private storageUtils: TimerStorageUtils;
@@ -48,7 +57,7 @@ export class TimerWidget implements TimerContext {
     private targetManager: TimerTargetManager;
     private observer: TimerWidgetWindowObserver | null = null;
 
-    constructor(app: App, plugin: TaskViewerPlugin) {
+    constructor(app: App, plugin: PluginContext & Plugin) {
         this.app = app;
         this.plugin = plugin;
         this.storageUtils = new TimerStorageUtils(app);

@@ -1,12 +1,12 @@
 import type { Task } from '../../types';
-import type TaskViewerPlugin from '../../main';
+import type { PluginContext } from '../../PluginContext';
 import type { TaskReadService } from '../../services/data/TaskReadService';
 import type { TaskWriteService } from '../../services/data/TaskWriteService';
 import type { SelectionController } from '../selection/SelectionController';
 
 export interface DragContext {
     container: HTMLElement;
-    plugin: TaskViewerPlugin;
+    plugin: PluginContext;
     readService: TaskReadService;
     writeService: TaskWriteService;
     selectionController: SelectionController;

@@ -16,7 +16,7 @@
  * 1-second idle tick never rescans the index.
  */
 
-import type TaskViewerPlugin from '../main';
+import type { PluginContext } from '../PluginContext';
 import type { DisplayTask } from '../types';
 import { DateUtils } from '../utils/DateUtils';
 import { isTaskCompleted } from '../services/display/TaskStatusQuery';
@@ -38,7 +38,7 @@ export class NextTaskSuggester {
     private cacheRevision = -1;
     private cacheMinute = -1;
 
-    constructor(private plugin: TaskViewerPlugin) {}
+    constructor(private plugin: PluginContext) {}
 
     getSuggestion(): NextTaskSuggestion | null {
         const revision = this.plugin.getTaskIndex().getRevision();

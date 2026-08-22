@@ -6,7 +6,7 @@
 
 import { type App, Notice } from 'obsidian';
 import { t } from '../i18n';
-import type TaskViewerPlugin from '../main';
+import type { PluginContext } from '../PluginContext';
 import { type TimerInstance, dailyDateOf, getTimerElapsedSeconds, isDailyTimer } from './TimerInstance';
 import { DailyNoteUtils } from '../utils/DailyNoteUtils';
 import { DateUtils } from '../utils/DateUtils';
@@ -27,7 +27,7 @@ export class TimerRecorder {
 
     constructor(
         private app: App,
-        private plugin: TaskViewerPlugin,
+        private plugin: PluginContext,
         storageUtils: TimerStorageUtils
     ) {
         this.resolver = new TimerTaskResolver(plugin);

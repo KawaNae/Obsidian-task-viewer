@@ -1,7 +1,7 @@
 import type { App, Menu } from 'obsidian';
 import type { Task, DisplayTask, PropertyType } from '../../../types';
 import type { TaskWriteService } from '../../../services/data/TaskWriteService';
-import type TaskViewerPlugin from '../../../main';
+import type { PluginContext } from '../../../PluginContext';
 import type { PropertyCalculator, PropertyCalculationContext, CalculatedProperty } from '../PropertyCalculator';
 import type { PropertyFormatter } from '../PropertyFormatter';
 import { DateUtils } from '../../../utils/DateUtils';
@@ -26,7 +26,7 @@ export class PropertiesMenuBuilder {
     constructor(
         private app: App,
         private writeService: TaskWriteService,
-        private plugin: TaskViewerPlugin,
+        private plugin: PluginContext,
         private propertyCalculator: PropertyCalculator,
         private propertyFormatter: PropertyFormatter
     ) { }

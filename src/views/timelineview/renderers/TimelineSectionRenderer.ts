@@ -1,6 +1,7 @@
 import { t } from '../../../i18n';
 import type { DisplayTask } from '../../../types';
-import type TaskViewerPlugin from '../../../main';
+import type { PluginContext } from '../../../PluginContext';
+import type { TimerHost } from '../../../timer/TimerWidget';
 import type { MenuHandler } from '../../../interaction/menu/MenuHandler';
 import { TouchLongPressBinder } from '../../../interaction/menu/TouchLongPressBinder';
 import { DateUtils } from '../../../utils/DateUtils';
@@ -27,7 +28,7 @@ const Z_MAX = 190;
 
 export class TimelineSectionRenderer {
     constructor(
-        private plugin: TaskViewerPlugin,
+        private plugin: PluginContext & TimerHost,
         private menuHandler: MenuHandler,
         private handleManager: HandleManager,
         private taskRenderer: TaskCardRenderer,
