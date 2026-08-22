@@ -62,13 +62,9 @@ export class GridMoveGesture extends BaseDragStrategy {
     private initialVisualStart: string = '';
     private initialVisualEnd: string = '';
     private initialGridColumn: string = '';
-    private container: HTMLElement | null = null;
     private refHeaderCell: HTMLElement | null = null;
     private baseTask: Task | null = null;
     private hiddenElements: HTMLElement[] = [];
-    /** Calendar / AllDay どちらの Surface か。一部の機能 (due-arrow, cross-view drop)
-     *  が AllDay 限定なのでフラグで分岐する。 */
-    private isAllDay: boolean = false;
     /** Pointer がカード内のどこを掴んだかの相対オフセット (px)。cross-view drop の
      *  fixed ghost を pointer 追従しつつ「掴んだ位置」を維持するため。 */
     private grabOffsetX: number = 0;
@@ -137,12 +133,7 @@ export class GridMoveGesture extends BaseDragStrategy {
         const doc = context.container.ownerDocument || document;
         this.ghostRenderer = new GhostRenderer(el, doc);
 
-        const selector = `.task-card[data-id="${originalId}"], .task-card[data-split-original-id="${originalId}"]`;
-        context.container.querySelectorAll(selector).forEach(segment => {
-            if (segment instanceof HTMLElement && !segment.closest('.tv-sidebar__pinned-lists')) {
-                this.hiddenElements.push(segment);
-            }
-        });
+        this.hiddenElements.push(...this.collectSplitSiblings(context, originalId));
 
         el.addClass('is-dragging');
     }
@@ -430,19 +421,6 @@ export class GridMoveGesture extends BaseDragStrategy {
     }
 
     // ========== UI side-effects ==========
-
-    /** AllDay の due-arrow 位置更新 (Calendar では .due-arrow が無いので no-op)。 */
-    private updateArrowPosition(taskEndGridLine: number): void {
-        if (!this.isAllDay) return;
-        if (!this.dragEl?.dataset.id || !this.container) return;
-        const taskId = this.dragEl.dataset.id;
-        const arrow = this.container.querySelector(`.due-arrow[data-task-id="${taskId}"]`) as HTMLElement;
-        if (arrow) {
-            arrow.style.gridColumnStart = taskEndGridLine.toString();
-            const arrowEnd = parseInt(arrow.style.gridColumnEnd) || 0;
-            arrow.style.display = taskEndGridLine >= arrowEnd ? 'none' : '';
-        }
-    }
 
     private updateDropZoneHighlight(e: PointerEvent, context: DragContext): void {
         const doc = context.container.ownerDocument || document;

@@ -115,12 +115,7 @@ export class TimelineMoveGesture extends BaseDragStrategy {
             : mouseMinutes - visualStartMinutes;
 
         // 同一 originalId の split segments を hide リストへ
-        const selector = `.task-card[data-id="${originalId}"], .task-card[data-split-original-id="${originalId}"]`;
-        context.container.querySelectorAll(selector).forEach(segment => {
-            if (segment instanceof HTMLElement && !segment.closest('.tv-sidebar__pinned-lists')) {
-                this.hiddenElements.push(segment);
-            }
-        });
+        this.hiddenElements.push(...this.collectSplitSiblings(context, originalId));
 
         el.addClass('is-dragging');
     }

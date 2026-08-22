@@ -26,6 +26,13 @@ export abstract class BaseDragStrategy implements DragStrategy {
     // ビュータイプ（Timeline or AllDay or Calendar）
     protected viewType: 'timeline' | 'allday' | 'calendar' = 'timeline';
 
+    // Grid 系 Gesture (Move/Resize) のみ使用。
+    /** Calendar / AllDay どちらの Surface か。due-arrow・cross-view drop など
+     *  AllDay 限定の機能がこのフラグで分岐する。 */
+    protected isAllDay: boolean = false;
+    /** due-arrow 検索対象のコンテナ (AllDay: week-row 要素 / Calendar: drag container)。 */
+    protected container: HTMLElement | null = null;
+
     // 初期位置
     protected initialX: number = 0;
     protected initialY: number = 0;
@@ -202,5 +209,34 @@ export abstract class BaseDragStrategy implements DragStrategy {
         const start = range.effectiveStart || task.startDate || '';
         const end = range.effectiveEnd || start;
         return { start, end };
+    }
+
+    /**
+     * Split segments (siblings sharing `originalId`) currently rendered for
+     * this task, outside the pinned-list sidebar. Collected on drag start so
+     * they can be hidden together with the grabbed element.
+     */
+    protected collectSplitSiblings(context: DragContext, originalId: string): HTMLElement[] {
+        const selector = `.task-card[data-id="${originalId}"], .task-card[data-split-original-id="${originalId}"]`;
+        const siblings: HTMLElement[] = [];
+        context.container.querySelectorAll(selector).forEach(segment => {
+            if (segment instanceof HTMLElement && !segment.closest('.tv-sidebar__pinned-lists')) {
+                siblings.push(segment);
+            }
+        });
+        return siblings;
+    }
+
+    /** AllDay の due-arrow 位置更新 (Calendar では .due-arrow が無いので no-op)。Grid 系 Gesture 専用。 */
+    protected updateArrowPosition(taskEndGridLine: number): void {
+        if (!this.isAllDay) return;
+        if (!this.dragEl?.dataset.id || !this.container) return;
+        const taskId = this.dragEl.dataset.id;
+        const arrow = this.container.querySelector(`.due-arrow[data-task-id="${taskId}"]`) as HTMLElement;
+        if (arrow) {
+            arrow.style.gridColumnStart = taskEndGridLine.toString();
+            const arrowEnd = parseInt(arrow.style.gridColumnEnd) || 0;
+            arrow.style.display = taskEndGridLine >= arrowEnd ? 'none' : '';
+        }
     }
 }
