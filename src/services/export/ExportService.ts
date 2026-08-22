@@ -1,10 +1,12 @@
-import type { ItemView } from 'obsidian';
+import { FileSystemAdapter } from 'obsidian';
 import * as fsNode from 'fs';
 import * as pathNode from 'path';
 import type TaskViewerPlugin from '../../main';
 import { ViewExporter } from './ViewExporter';
 import { exportDescriptorFor, resolveExportContainer } from './ExportRegistry';
 import { buildExportFilename } from './ExportFilename';
+import { viewContentEl } from '../../utils/ObsidianView';
+import { currentBrowserWindow, type BrowserWindowLike } from '../../utils/hostEnv';
 
 export interface ExportOptions {
     filename?: string;
@@ -40,13 +42,7 @@ function doubleRaf(win: Window): Promise<void> {
     });
 }
 
-function getElectronWindow(win: Window): any | null {
-    const remote = (win as any).require?.('electron')?.remote
-        ?? (win as any).require?.('@electron/remote');
-    return remote?.getCurrentWindow?.() ?? null;
-}
-
-function resizePopout(win: Window, bw: any | null, width: number, height: number): void {
+function resizePopout(win: Window, bw: BrowserWindowLike | null, width: number, height: number): void {
     if (bw) {
         bw.setSize(width, height);
     } else {
@@ -74,14 +70,14 @@ export class ExportService {
 
         const leaves = this.plugin.app.workspace.getLeavesOfType(viewType);
         const visibleLeaf = leaves.find(l => {
-            const el = (l.view as any)?.contentEl as HTMLElement | undefined;
-            return el && el.offsetWidth > 0;
+            const el = viewContentEl(l);
+            return !!el && el.offsetWidth > 0;
         });
         if (!visibleLeaf) {
             throw new Error(`No visible '${viewType}' view is open. Open the view first or use template= to create a temporary one.`);
         }
 
-        const contentEl = (visibleLeaf.view as any).contentEl as HTMLElement;
+        const contentEl = viewContentEl(visibleLeaf)!;
         const container = resolveExportContainer(contentEl, descriptor);
         if (!container) throw new Error('Export container not found in the open view');
 
@@ -105,8 +101,8 @@ export class ExportService {
         });
 
         try {
-            const popoutWin = (leaf.getContainer() as any).win as Window;
-            const bw = getElectronWindow(popoutWin);
+            const popoutWin = leaf.getContainer().win;
+            const bw = currentBrowserWindow(popoutWin);
             if (bw && !opts?.keepOpen) bw.setOpacity(0);
             resizePopout(popoutWin, bw, popoutWidth, DEFAULT_POPOUT_HEIGHT);
 
@@ -115,7 +111,7 @@ export class ExportService {
             await doubleRaf(popoutWin);
             await sleep(opts?.waitMs ?? 500);
 
-            const contentEl = ((leaf.view as ItemView).contentEl ?? (leaf.view as any).contentEl) as HTMLElement | undefined;
+            const contentEl = viewContentEl(leaf);
             if (!contentEl) throw new Error('View did not produce a contentEl');
 
             const container = resolveExportContainer(contentEl, descriptor);
@@ -163,9 +159,18 @@ export class ExportService {
 
     private async saveToFs(blob: Blob, filename: string, folder: string): Promise<string> {
         const isAbsolute = pathNode.isAbsolute(folder);
-        const dir = isAbsolute
-            ? folder
-            : pathNode.join((this.plugin.app.vault.adapter as any).getBasePath(), folder);
+        let dir: string;
+        if (isAbsolute) {
+            dir = folder;
+        } else {
+            // A relative folder is resolved against the vault's own path, which
+            // only a filesystem-backed vault has.
+            const adapter = this.plugin.app.vault.adapter;
+            if (!(adapter instanceof FileSystemAdapter)) {
+                throw new Error('Image export needs a filesystem vault');
+            }
+            dir = pathNode.join(adapter.getBasePath(), folder);
+        }
 
         if (!fsNode.existsSync(dir)) {
             fsNode.mkdirSync(dir, { recursive: true });

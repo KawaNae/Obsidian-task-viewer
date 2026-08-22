@@ -16,6 +16,7 @@ import type { TaskHubOpener } from '../interaction/menu/MenuHandler';
 import { TaskLineClassifier } from '../services/parsing/utils/TaskLineClassifier';
 import { getTaskNotation } from '../services/filter/parserTaxonomy';
 import { t } from '../i18n';
+import { editorCm } from '../utils/editorCm';
 
 const taskIndexChanged = StateEffect.define<void>();
 const settingsChanged = StateEffect.define<void>();
@@ -205,7 +206,7 @@ export function createTaskMenuExtension(
     const unsubscribe = readService.onChange(() => {
         app.workspace.iterateAllLeaves((leaf) => {
             if (leaf.view instanceof MarkdownView) {
-                const cm = (leaf.view.editor as any).cm as EditorView | undefined;
+                const cm = editorCm(leaf.view.editor);
                 if (cm) {
                     cm.dispatch({ effects: taskIndexChanged.of(undefined) });
                 }
@@ -216,7 +217,7 @@ export function createTaskMenuExtension(
     const notifySettingsChanged = () => {
         app.workspace.iterateAllLeaves((leaf) => {
             if (leaf.view instanceof MarkdownView) {
-                const cm = (leaf.view.editor as any).cm as EditorView | undefined;
+                const cm = editorCm(leaf.view.editor);
                 cm?.dispatch({ effects: settingsChanged.of(undefined) });
             }
         });
