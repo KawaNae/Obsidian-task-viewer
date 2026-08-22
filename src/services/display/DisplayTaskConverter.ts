@@ -359,16 +359,3 @@ export function isDisplayTaskOnVisualDate(
     const end = dt.effectiveEndDate || dt.effectiveStartDate;
     return dt.effectiveStartDate <= visualDate && visualDate <= end;
 }
-
-/**
- * Convert a Task to DisplayTask(s), splitting at the visual day boundary if needed.
- * Returns 1 element for non-split tasks, 2 for split tasks.
- */
-export function toDisplayTaskWithSplit(task: Task, startHour: number, getTask: TaskLookup): DisplayTask[] {
-    const dt = toDisplayTask(task, startHour, getTask);
-    if (shouldSplitDisplayTask(dt, startHour)) {
-        const [head, tail] = splitDisplayTaskAtBoundary(dt, startHour);
-        return [head, tail];
-    }
-    return [dt];
-}
