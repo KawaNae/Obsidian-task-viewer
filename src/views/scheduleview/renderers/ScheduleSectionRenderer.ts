@@ -84,7 +84,7 @@ export class ScheduleSectionRenderer {
         const header = section.createEl('h4', { cls: 'schedule-section__header' });
         header.setAttribute('role', 'button');
         header.setAttribute('tabindex', '0');
-        header.setAttribute('aria-label', `Toggle ${title} section`);
+        header.setAttribute('aria-label', t('aria.toggleSection', { title }));
 
         const icon = header.createEl('button', { cls: 'tv-section-toggle tv-section-toggle--header' });
         icon.tabIndex = -1;

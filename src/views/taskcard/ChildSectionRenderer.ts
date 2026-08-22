@@ -212,7 +212,7 @@ export class ChildSectionRenderer {
     private createChildMenuButton(taskId: string): HTMLButtonElement {
         const btn = document.createElement('button');
         btn.className = 'task-card__child-menu-btn';
-        btn.setAttribute('aria-label', t('menu.ariaTaskMenu'));
+        btn.setAttribute('aria-label', t('aria.taskMenu'));
         btn.setAttribute('tabindex', '-1');
 
         const span = document.createElement('span');
@@ -236,7 +236,7 @@ export class ChildSectionRenderer {
     private createChildLineEditButton(parentTask: Task, line: ChildLine, bodyLine: number): HTMLButtonElement {
         const btn = document.createElement('button');
         btn.className = 'task-card__child-menu-btn';
-        btn.setAttribute('aria-label', t('menu.ariaChildLineMenu'));
+        btn.setAttribute('aria-label', t('aria.childLineMenu'));
         btn.setAttribute('tabindex', '-1');
 
         const span = document.createElement('span');

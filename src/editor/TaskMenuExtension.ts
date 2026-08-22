@@ -36,7 +36,7 @@ class TaskMenuWidget extends WidgetType {
     toDOM(view: EditorView): HTMLElement {
         const btn = document.createElement('button');
         btn.className = 'tv-editor-menu-btn';
-        btn.setAttribute('aria-label', t('menu.ariaTaskMenu'));
+        btn.setAttribute('aria-label', t('aria.taskMenu'));
         btn.setAttribute('tabindex', '-1');
 
         const span = document.createElement('span');

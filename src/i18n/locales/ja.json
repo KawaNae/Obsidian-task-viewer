@@ -235,7 +235,8 @@
       "deleteDatabase": "ログデータベースを削除",
       "deleteDatabaseDesc": "IndexedDB ストア全体を削除します。データベースが破損した場合のみ使用してください。",
       "deleteDatabaseConfirm": "IndexedDB ストア全体を削除しますか？このデバイス上の全永続ログデータが失われます。",
-      "deleted": "ログデータベースを削除しました"
+      "deleted": "ログデータベースを削除しました",
+      "exportFailed": "書き出しに失敗しました: {{error}}"
     }
   },
   "view": {
@@ -246,6 +247,14 @@
     "kanban": "カンバンビュー",
     "timer": "タイマービュー",
     "log": "Task Viewer ログ"
+  },
+  "aria": {
+    "taskMenu": "タスクメニュー",
+    "childLineMenu": "子行メニュー",
+    "toggleSection": "{{title}} セクションを切り替え",
+    "openDailyNote": "デイリーノートを開く: {{label}}",
+    "openWeeklyNote": "週次ノートを開く: {{label}}",
+    "due": "期限: {{date}}"
   },
   "command": {
     "openTimeline": "タイムラインビューを開く",
@@ -594,9 +603,7 @@
     "remove": "削除",
     "createTaskForDailyNote": "デイリーノートにタスクを作成",
     "openCountupForDailyNote": "⏱️ デイリーノートのカウントアップを開く",
-    "openPomodoroForDailyNote": "🍅 デイリーノートのポモドーロを開く",
-    "ariaTaskMenu": "タスクメニュー",
-    "ariaChildLineMenu": "子行メニュー"
+    "openPomodoroForDailyNote": "🍅 デイリーノートのポモドーロを開く"
   },
   "flowDelete": {
     "title": "このタスクはフローコマンドを持っています",
@@ -667,7 +674,9 @@
       "typePrepare": "準備",
       "errNameRequired": "テンプレート名を入力してください。",
       "errGroupNeedsSegment": "各グループには少なくとも 1 つのセグメントが必要です。",
-      "errDurationPositive": "時間は 0 より大きい値にしてください。"
+      "errDurationPositive": "時間は 0 より大きい値にしてください。",
+      "saveFailed": "テンプレートの保存に失敗しました: {{error}}",
+      "createFailed": "テンプレートの作成に失敗しました: {{error}}"
     }
   },
   "notice": {
@@ -694,7 +703,8 @@
     "exportingImage": "画像を書き出しています…",
     "exportFailed": "書き出しに失敗しました。詳細はコンソールを確認してください。",
     "logCopied": "ログをクリップボードにコピーしました",
-    "logCopyFailed": "ログのコピーに失敗しました"
+    "logCopyFailed": "ログのコピーに失敗しました",
+    "imageSaved": "画像を {{path}} に保存しました"
   },
   "pinnedList": {
     "noPinnedLists": "ピン留めリストがありません。",
