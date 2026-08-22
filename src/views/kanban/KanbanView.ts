@@ -17,6 +17,7 @@ import { getEffectiveColor, getEffectiveLinestyle } from '../../services/data/Ef
 import { TaskPagingController } from '../sharedUI/TaskPagingController';
 import { CardReconciler } from '../sharedUI/CardReconciler';
 import { RenderScheduler } from '../sharedUI/RenderScheduler';
+import { PixelScrollRestorer } from '../sharedUI/PixelScrollRestorer';
 
 import { openTaskInEditor } from '../../utils/NavigationUtils';
 import { TASK_VIEWER_HOVER_SOURCE_ID } from '../../constants/hover';
@@ -52,6 +53,14 @@ export class KanbanView extends ItemView {
     private unsubscribe: (() => void) | null = null;
     /** rAF coalescing for data-change bursts. Created in onOpen. */
     private renderScheduler: RenderScheduler | null = null;
+    /**
+     * Scroll position across full re-renders, on both axes. The element is
+     * re-queried each time because `render()` builds a fresh grid host.
+     */
+    private readonly scrollRestorer = new PixelScrollRestorer(
+        () => this.container?.querySelector('.kanban-view__grid-host') as HTMLElement | null,
+        { axis: 'both' },
+    );
     private customName: string | undefined;
     private viewFilterState: FilterState | undefined;
     private grid: PinnedListDefinition[][] = [];
@@ -247,6 +256,7 @@ export class KanbanView extends ItemView {
         this.unsubscribe = null;
         this.renderScheduler?.dispose();
         this.renderScheduler = null;
+        this.scrollRestorer.dispose();
     }
 
     refresh(): void {
@@ -256,6 +266,10 @@ export class KanbanView extends ItemView {
     // ─── Render ───────────────────────────────────────────────
 
     private render(): void {
+        // The board is rebuilt from scratch below, so the scroll offsets of the
+        // old grid host die with it. Both axes matter here: columns run
+        // horizontally, so scrollLeft is the position a user notices most.
+        this.scrollRestorer.save();
         this.toolbar.detach();
 
         // Keyed reconciliation: lift surviving cards before tearing down the
@@ -296,6 +310,8 @@ export class KanbanView extends ItemView {
         // Dispose any cards that did not turn up in the new render.
         reconciler.forEachStale(card => this.taskRenderer.dispose(card));
         this.currentReconciler = null;
+
+        this.scrollRestorer.restore();
     }
 
     private renderCell(gridEl: HTMLElement, listDef: PinnedListDefinition, row: number, col: number): void {
