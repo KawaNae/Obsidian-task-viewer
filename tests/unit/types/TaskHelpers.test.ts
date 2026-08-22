@@ -6,7 +6,6 @@ import {
     isTpInline,
     isTvFileUnscheduled,
     hasScheduling,
-    hasDates,
 } from '../../../src/types';
 
 const baseFm = { parserId: 'tv-file' as const };
@@ -53,18 +52,6 @@ describe('hasScheduling', () => {
         expect(hasScheduling({ endDate: '2026-01-01' })).toBe(true);
         expect(hasScheduling({ endTime: '17:00' })).toBe(true);
         expect(hasScheduling({ due: '2026-01-01' })).toBe(true);
-    });
-});
-
-describe('hasDates', () => {
-    it('ignores time-only fields', () => {
-        expect(hasDates({ startTime: '09:00', endTime: '17:00' })).toBe(false);
-    });
-
-    it('returns true for any date field', () => {
-        expect(hasDates({ startDate: '2026-01-01' })).toBe(true);
-        expect(hasDates({ endDate: '2026-01-01' })).toBe(true);
-        expect(hasDates({ due: '2026-01-01' })).toBe(true);
     });
 });
 

@@ -1,5 +1,5 @@
 import type { HoverParent } from 'obsidian';
-import type { ViewState } from '../../../types';
+import type { ViewState } from '../TimelineViewState';
 import type TaskViewerPlugin from '../../../main';
 import type { MenuHandler } from '../../../interaction/menu/MenuHandler';
 import { DateUtils } from '../../../utils/DateUtils';

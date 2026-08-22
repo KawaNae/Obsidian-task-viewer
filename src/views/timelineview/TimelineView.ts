@@ -1,7 +1,8 @@
 import { ItemView, type WorkspaceLeaf, setIcon, type ViewStateResult } from 'obsidian';
 import { t } from '../../i18n';
 import { TaskCardRenderer } from '../taskcard/TaskCardRenderer';
-import type { Task, ViewState, PinnedListDefinition } from '../../types';
+import type { Task, PinnedListDefinition } from '../../types';
+import type { ViewState } from './TimelineViewState';
 import { findOldestOverdueDate } from '../../services/display/OverdueTaskFinder';
 import { DragHandler } from '../../interaction/drag/DragHandler';
 import { MenuHandler } from '../../interaction/menu/MenuHandler';
