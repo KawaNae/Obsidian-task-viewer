@@ -709,7 +709,6 @@ export class TimelineView extends ItemView {
             this.stickyAnchorObserver.disconnect();
             this.stickyAnchorObserver = null;
         }
-        this.dateHeaderRenderer?.dispose();
         this.renderScheduler?.dispose();
         this.frames.dispose();
     }

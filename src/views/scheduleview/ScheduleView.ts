@@ -324,7 +324,6 @@ export class ScheduleView extends ItemView {
         logDebug(`[${this.getViewType()}] closed`);
         this.hoverParent.dispose();
         this.filterMenu.close();
-        this.dateHeaderRenderer.dispose();
         if (this.unsubscribe) {
             this.unsubscribe();
             this.unsubscribe = null;
