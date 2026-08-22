@@ -18,6 +18,28 @@ export class ViewConfigCodec<
 > {
     constructor(readonly schema: ViewSchema<TConfig, TTransient>) {}
 
+    /**
+     * Overlay a parsed config on the schema defaults (REPLACE semantics).
+     *
+     * Every view applies a config the same way: fields present in `cfg` win,
+     * fields absent from it revert to the schema default rather than keeping
+     * whatever the view happened to hold. Views call this at the top of their
+     * `applyConfig()` so the rule lives in one place instead of five.
+     *
+     * Every field the schema declares is present in the result, holding
+     * `undefined` when it has neither an incoming value nor a default. That
+     * matters for views that apply the result with `Object.assign`: a missing
+     * key would silently preserve the previous value, which is the opposite of
+     * REPLACE. Fields with no default therefore clear rather than linger.
+     */
+    withDefaults(cfg: Partial<TConfig> | undefined | null): Partial<TConfig> {
+        const out: Partial<TConfig> = {};
+        for (const k in this.schema.config) {
+            (out as Record<string, unknown>)[k] = undefined;
+        }
+        return Object.assign(out, this.schema.defaults, cfg ?? {});
+    }
+
     /** Parse a JSON-like dict (workspace state, template JSON, URI dict) → typed config. */
     parseConfig(raw: Record<string, unknown> | undefined | null): Partial<TConfig> {
         const out: Partial<TConfig> = {};

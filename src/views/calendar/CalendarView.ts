@@ -245,7 +245,7 @@ export class CalendarView extends ItemView {
      * heuristic continues to fire for fresh sessions.
      */
     applyConfig(cfg: Partial<CalendarConfig>, opts: { explicit?: boolean } = {}): void {
-        const next: Partial<CalendarConfig> = { ...CalendarSchema.defaults, ...cfg };
+        const next = this.codec.withDefaults(cfg);
 
         // FilterMenu owns the in-memory FilterState — keep it in sync.
         this.filterMenu.setFilterState(next.filterState ?? createEmptyFilterState());

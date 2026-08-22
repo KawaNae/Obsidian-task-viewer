@@ -234,7 +234,7 @@ export class ScheduleView extends ItemView {
 
     /** REPLACE-over-defaults application of a parsed config. */
     applyConfig(cfg: Partial<ScheduleConfig>): void {
-        const next: Partial<ScheduleConfig> = { ...ScheduleSchema.defaults, ...cfg };
+        const next = this.codec.withDefaults(cfg);
         this.filterMenu.setFilterState(next.filterState ?? createEmptyFilterState());
         this.customName = next.customName;
         this.maskMode = next.maskMode === true;

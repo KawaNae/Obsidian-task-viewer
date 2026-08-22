@@ -160,7 +160,7 @@ export class KanbanView extends ItemView {
     }
 
     applyConfig(cfg: Partial<KanbanConfig>): void {
-        const next: Partial<KanbanConfig> = { ...KanbanSchema.defaults, ...cfg };
+        const next = this.codec.withDefaults(cfg);
         if (next.grid && next.grid.length > 0) {
             this.grid = next.grid;
             this.gridCollapsed = {};
