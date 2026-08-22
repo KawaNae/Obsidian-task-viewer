@@ -3,7 +3,16 @@ import { ChildLineClassifier } from '../utils/ChildLineClassifier';
 import { TaskLineClassifier } from '../utils/TaskLineClassifier';
 import { CodeFenceTracker } from '../../../utils/CodeFenceTracker';
 
-/** A markdown heading line: capture group 1 = `#` run, group 2 = title text. */
+/**
+ * A markdown heading line: capture group 1 = `#` run, group 2 = title text.
+ *
+ * No trailing `$` anchor — callers must pass a single line with no embedded
+ * newline (both current callers do: DocumentTreeBuilder splits the document
+ * into lines before matching, and TVFileBuilder's lines come from
+ * TaskScanner's `\n`-split content). Matching this against a string that can
+ * contain `\n` would let group 2 swallow past the line the caller thinks it
+ * matched.
+ */
 export const HEADING_REGEX = /^(#{1,6})\s+(.*)/;
 const PROPERTY_GROUP_HEADER = /^\s*-\s+properties::\s*$/;
 
