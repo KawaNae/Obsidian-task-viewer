@@ -1,5 +1,5 @@
 import { type App, type Editor, type EditorPosition, EditorSuggest, type EditorSuggestContext, type EditorSuggestTriggerInfo, type TFile } from 'obsidian';
-import type TaskViewerPlugin from '../../main';
+import type { PluginContext } from '../../PluginContext';
 import { filterColors, renderColorSuggestion } from './colorUtils';
 
 /**
@@ -7,9 +7,9 @@ import { filterColors, renderColorSuggestion } from './colorUtils';
  * Provides color suggestions when editing timeline-color in YAML frontmatter
  */
 export class ColorSuggest extends EditorSuggest<string> {
-    plugin: TaskViewerPlugin;
+    plugin: PluginContext;
 
-    constructor(app: App, plugin: TaskViewerPlugin) {
+    constructor(app: App, plugin: PluginContext) {
         super(app);
         this.plugin = plugin;
     }

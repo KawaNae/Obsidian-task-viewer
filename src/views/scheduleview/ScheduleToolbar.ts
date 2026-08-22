@@ -1,6 +1,6 @@
 import { setIcon, type App, type Menu, type WorkspaceLeaf } from 'obsidian';
 import { t } from '../../i18n';
-import type TaskViewerPlugin from '../../main';
+import type { PluginContext } from '../../PluginContext';
 import type { TaskReadService } from '../../services/data/TaskReadService';
 import { VIEW_META_SCHEDULE } from '../../constants/viewRegistry';
 import { DateNavigator, ViewSettingsMenu, MaskToggleButton, ViewToolbarBase, appendCompactFilterAndMask, type ViewSettingsOptions, type CompactMenuDeps } from '../sharedUI/ViewToolbar';
@@ -16,7 +16,7 @@ import { ScheduleSchema, type ScheduleConfig, type ScheduleTransient } from './S
 export interface ScheduleToolbarDeps {
     app: App;
     leaf: WorkspaceLeaf;
-    plugin: TaskViewerPlugin;
+    plugin: PluginContext;
     readService: TaskReadService;
     filterMenu: FilterMenuComponent;
     container: HTMLElement;

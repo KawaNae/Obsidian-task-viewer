@@ -1,7 +1,8 @@
 import { type App, MarkdownView, type Menu, Notice } from 'obsidian';
 import { type Task, isTvInline, hasBodyLine } from '../../../types';
 import type { TaskWriteService } from '../../../services/data/TaskWriteService';
-import type TaskViewerPlugin from '../../../main';
+import type { PluginContext } from '../../../PluginContext';
+import type { TimerHost } from '../../../timer/TimerWidget';
 import { CreateTaskModal, formatTaskLine } from '../../../modals/CreateTaskModal';
 import { ConfirmModal } from '../../../modals/ConfirmModal';
 import { FlowDeleteChoiceModal } from '../../../modals/FlowDeleteChoiceModal';
@@ -20,7 +21,7 @@ export class TaskActionsMenuBuilder {
     constructor(
         private app: App,
         private writeService: TaskWriteService,
-        private plugin: TaskViewerPlugin
+        private plugin: PluginContext & TimerHost
     ) { }
 
     /**

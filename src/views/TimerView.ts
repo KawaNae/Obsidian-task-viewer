@@ -8,7 +8,7 @@
 
 import { ItemView, type WorkspaceLeaf, Notice, setIcon, type ViewStateResult } from 'obsidian';
 import { logDebug } from '../log/log';
-import type TaskViewerPlugin from '../main';
+import type { PluginContext } from '../PluginContext';
 import { VIEW_META_TIMER } from '../constants/viewRegistry';
 import type {
     CountupTimer,
@@ -50,7 +50,7 @@ export const VIEW_TYPE_TIMER = VIEW_META_TIMER.type;
 const TIMER_VIEW_ID = '__timer-view__';
 
 export class TimerView extends ItemView {
-    private plugin: TaskViewerPlugin;
+    private plugin: PluginContext;
     private container: HTMLElement;
     private timerViewMode: TimerViewMode = 'pomodoro';
     private customName?: string;
@@ -63,7 +63,7 @@ export class TimerView extends ItemView {
     private selectedTemplate: IntervalTemplate | null = null;
     private toolbar: TimerToolbar;
 
-    constructor(leaf: WorkspaceLeaf, plugin: TaskViewerPlugin) {
+    constructor(leaf: WorkspaceLeaf, plugin: PluginContext) {
         super(leaf);
         this.plugin = plugin;
         this.templateLoader = new IntervalTemplateLoader(plugin.app);

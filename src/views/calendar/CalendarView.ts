@@ -25,7 +25,8 @@ import {
     openOrCreateDailyNote,
 } from './CalendarDateUtils';
 import { DragHandler } from '../../interaction/drag/DragHandler';
-import type TaskViewerPlugin from '../../main';
+import type { PluginContext } from '../../PluginContext';
+import type { TimerHost } from '../../timer/TimerWidget';
 import { TaskStyling } from '../sharedUI/TaskStyling';
 import { getEffectiveColor, getEffectiveLinestyle } from '../../services/data/EffectiveProperties';
 import { FilterMenuComponent } from '../customMenus/FilterMenuComponent';
@@ -80,7 +81,7 @@ interface CalendarViewState {
 }
 
 export class CalendarView extends ItemView {
-    private readonly plugin: TaskViewerPlugin;
+    private readonly plugin: PluginContext & TimerHost;
     private readonly readService: TaskReadService;
     private readonly writeService: TaskWriteService;
     private readonly taskRenderer: TaskCardRenderer;
@@ -122,7 +123,7 @@ export class CalendarView extends ItemView {
     private readonly hoverParent = new TaskViewHoverParent();
     private renderScheduler: RenderScheduler;
 
-    constructor(leaf: WorkspaceLeaf, plugin: TaskViewerPlugin) {
+    constructor(leaf: WorkspaceLeaf, plugin: PluginContext & TimerHost) {
         super(leaf);
         this.plugin = plugin;
         this.readService = plugin.getTaskReadService();

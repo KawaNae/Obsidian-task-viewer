@@ -1,7 +1,7 @@
 import { type App } from 'obsidian';
 import { t } from '../../i18n';
 import { type Task } from '../../types';
-import type TaskViewerPlugin from '../../main';
+import type { PluginContext } from '../../PluginContext';
 import type { TaskReadService } from '../../services/data/TaskReadService';
 import type { TaskWriteService } from '../../services/data/TaskWriteService';
 import { DateFieldGroup } from '../form/DateFieldGroup';
@@ -29,7 +29,7 @@ export type TaskHubFocusField =
 
 export interface TaskHubFormDeps {
     app: App;
-    plugin: TaskViewerPlugin;
+    plugin: PluginContext;
     readService: TaskReadService;
     writeService: TaskWriteService;
     /** suggest（SuggestController）の子ポップオーバーを積む先（パネル所有） */

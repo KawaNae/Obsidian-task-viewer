@@ -1,6 +1,7 @@
 import type { Menu } from 'obsidian';
 import type { Task } from '../../../types';
-import type TaskViewerPlugin from '../../../main';
+import type { PluginContext } from '../../../PluginContext';
+import type { TimerHost } from '../../../timer/TimerWidget';
 import { getTaskDisplayName } from '../../../services/parsing/utils/TaskContent';
 import { DateUtils } from '../../../utils/DateUtils';
 import { canTriggerFlow } from '../../../services/flow/FlowTrigger';
@@ -11,7 +12,7 @@ import { getEffectiveColor } from '../../../services/data/EffectiveProperties';
  * Builder for timer-related menu items.
  */
 export class TimerMenuBuilder {
-    constructor(private plugin: TaskViewerPlugin) { }
+    constructor(private plugin: PluginContext & TimerHost) { }
 
     /**
      * Adds Countup / Pomodoro / Countdown items directly to the root menu (G2: 自身を記録).

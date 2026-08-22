@@ -1,5 +1,6 @@
 import type { CliData } from 'obsidian';
-import type TaskViewerPlugin from '../../main';
+import type { PluginContext } from '../../PluginContext';
+import type { ExportHost } from '../../services/export/ExportService';
 import { cliOk, cliError } from '../CliOutputFormatter';
 import { resolveViewTypeFromShortName, schemaFor } from '../../services/viewConfig';
 import { exportDescriptorFor } from '../../services/export/ExportRegistry';
@@ -13,7 +14,7 @@ const EXPORT_SPECIFIC_KEYS = new Set([
     'anchor-date',
 ]);
 
-export function createExportImageHandler(plugin: TaskViewerPlugin) {
+export function createExportImageHandler(plugin: PluginContext & ExportHost) {
     return async (params: CliData): Promise<string> => {
         try {
             // 1. Resolve view type
@@ -170,7 +171,7 @@ function addDays(dateStr: string, days: number): string {
 
 // ── Existing helpers ──
 
-function resolveViewType(params: CliData, plugin: TaskViewerPlugin): string {
+function resolveViewType(params: CliData, plugin: PluginContext & ExportHost): string {
     if (params.view) {
         const resolved = resolveViewTypeFromShortName(params.view);
         if (!resolved) return cliError(`Unknown view: '${params.view}'. Use: timeline, calendar, schedule, kanban`);
@@ -243,7 +244,7 @@ function extractConfigParams(params: CliData): Record<string, string> {
     return out;
 }
 
-function listTemplateNames(plugin: TaskViewerPlugin): string {
+function listTemplateNames(plugin: PluginContext & ExportHost): string {
     const loader = new ViewTemplateLoader(plugin.app);
     return loader.loadTemplates(plugin.settings.viewTemplateFolder).map(s => s.name).join(', ');
 }

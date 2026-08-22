@@ -1,6 +1,6 @@
 import { setIcon, type App, type WorkspaceLeaf } from 'obsidian';
 import { t } from '../../i18n';
-import type TaskViewerPlugin from '../../main';
+import type { PluginContext } from '../../PluginContext';
 import type { TaskReadService } from '../../services/data/TaskReadService';
 import { VIEW_META_KANBAN } from '../../constants/viewRegistry';
 import { ViewSettingsMenu, MaskToggleButton, ViewToolbarBase } from '../sharedUI/ViewToolbar';
@@ -11,7 +11,7 @@ import { KanbanSchema, type KanbanConfig, type KanbanTransient } from './KanbanS
 export interface KanbanToolbarDeps {
     app: App;
     leaf: WorkspaceLeaf;
-    plugin: TaskViewerPlugin;
+    plugin: PluginContext;
     readService: TaskReadService;
     filterMenu: FilterMenuComponent;
     container: HTMLElement;

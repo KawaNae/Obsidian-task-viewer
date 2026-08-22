@@ -1,6 +1,6 @@
 import { setIcon, type App, type Menu, type WorkspaceLeaf } from 'obsidian';
 import { t } from '../../i18n';
-import type TaskViewerPlugin from '../../main';
+import type { PluginContext } from '../../PluginContext';
 import type { TaskReadService } from '../../services/data/TaskReadService';
 import type { PinnedListDefinition, AstronomyDisplay } from '../../types';
 import { VIEW_META_CALENDAR } from '../../constants/viewRegistry';
@@ -17,7 +17,7 @@ import { CalendarSchema, type CalendarConfig, type CalendarTransient } from './C
 export interface CalendarToolbarDeps {
     app: App;
     leaf: WorkspaceLeaf;
-    plugin: TaskViewerPlugin;
+    plugin: PluginContext;
     readService: TaskReadService;
     filterMenu: FilterMenuComponent;
     container: HTMLElement;

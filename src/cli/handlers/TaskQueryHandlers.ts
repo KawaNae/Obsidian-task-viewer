@@ -1,5 +1,6 @@
 import type { CliData } from 'obsidian';
-import type TaskViewerPlugin from '../../main';
+import type { PluginContext } from '../../PluginContext';
+import type { ApiHost } from '../../api/TaskApi';
 import type { FilterState } from '../../services/filter/FilterTypes';
 import { loadFilterFile } from '../../api/FilterFileLoader';
 import type { ListParams, TodayParams } from '../../api/TaskApiTypes';
@@ -50,7 +51,7 @@ function cliDataToTodayParams(params: CliData, format: OutputFormat): TodayParam
 
 // ── Handlers ──
 
-export function createListHandler(plugin: TaskViewerPlugin) {
+export function createListHandler(plugin: PluginContext & ApiHost) {
     return async (params: CliData): Promise<string> => {
         const formatErr = validateFormat(params.format);
         if (formatErr) return cliError(formatErr);
@@ -76,7 +77,7 @@ export function createListHandler(plugin: TaskViewerPlugin) {
     };
 }
 
-export function createTodayHandler(plugin: TaskViewerPlugin) {
+export function createTodayHandler(plugin: PluginContext & ApiHost) {
     return async (params: CliData): Promise<string> => {
         const formatErr = validateFormat(params.format);
         if (formatErr) return cliError(formatErr);
@@ -92,7 +93,7 @@ export function createTodayHandler(plugin: TaskViewerPlugin) {
     };
 }
 
-export function createGetHandler(plugin: TaskViewerPlugin) {
+export function createGetHandler(plugin: PluginContext & ApiHost) {
     return async (params: CliData): Promise<string> => {
         if (!params.id) return cliError('Missing required flag: --id');
         const formatErr = validateFormat(params.format);

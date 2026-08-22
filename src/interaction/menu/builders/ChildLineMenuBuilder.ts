@@ -2,7 +2,7 @@ import type { App } from 'obsidian';
 import type { TaskWriteService } from '../../../services/data/TaskWriteService';
 import { CheckboxMenuBuilder, type CheckboxLineOps } from './CheckboxMenuBuilder';
 import { createTvFileCallback } from './createTvFileCallback';
-import type TaskViewerPlugin from '../../../main';
+import type { PluginContext } from '../../../PluginContext';
 import type { Task, ChildLine } from '../../../types';
 
 /**
@@ -16,7 +16,7 @@ export class ChildLineMenuBuilder {
     constructor(
         private app: App,
         private writeService: TaskWriteService,
-        private plugin: TaskViewerPlugin
+        private plugin: PluginContext
     ) {
         this.checkboxMenuBuilder = new CheckboxMenuBuilder(
             app,

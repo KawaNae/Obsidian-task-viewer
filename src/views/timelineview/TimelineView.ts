@@ -15,7 +15,8 @@ import type { TaskReadService } from '../../services/data/TaskReadService';
 import type { TaskWriteService } from '../../services/data/TaskWriteService';
 import { ChildLineMenuBuilder } from '../../interaction/menu/builders/ChildLineMenuBuilder';
 
-import type TaskViewerPlugin from '../../main';
+import type { PluginContext } from '../../PluginContext';
+import type { TimerHost } from '../../timer/TimerWidget';
 import { MOBILE_BREAKPOINT_PX } from '../../constants/layout';
 
 import { HandleManager } from '../sharedUI/handles/HandleManager';
@@ -72,7 +73,7 @@ export class TimelineView extends ItemView {
     // ==================== Services & Handlers ====================
     private readService: TaskReadService;
     private writeService: TaskWriteService;
-    private plugin: TaskViewerPlugin;
+    private plugin: PluginContext & TimerHost;
     private taskRenderer: TaskCardRenderer;
     private dragHandler: DragHandler;
     private menuHandler: MenuHandler;
@@ -165,7 +166,7 @@ export class TimelineView extends ItemView {
 
     // ==================== Lifecycle ====================
 
-    constructor(leaf: WorkspaceLeaf, plugin: TaskViewerPlugin) {
+    constructor(leaf: WorkspaceLeaf, plugin: PluginContext & TimerHost) {
         super(leaf);
         this.readService = plugin.getTaskReadService();
         this.writeService = plugin.getTaskWriteService();

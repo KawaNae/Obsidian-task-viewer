@@ -2,7 +2,7 @@ import { type App, setIcon, type Menu, type WorkspaceLeaf } from 'obsidian';
 import { t } from '../../i18n';
 import type { AstronomyDisplay } from '../../types';
 import type { TaskReadService } from '../../services/data/TaskReadService';
-import type TaskViewerPlugin from '../../main';
+import type { PluginContext } from '../../PluginContext';
 import { DateNavigator, ViewModeSelector, ZoomSelector, ViewSettingsMenu, MaskToggleButton, ViewToolbarBase, appendCompactFilterAndMask, type ViewSettingsOptions, type CompactMenuDeps } from '../sharedUI/ViewToolbar';
 import { DateLabel } from '../sharedUI/DateLabel';
 import { appendAstronomyMenuSection } from '../sharedUI/AstronomyMenuSection';
@@ -23,7 +23,7 @@ import { TimelineSchema, type TimelineConfig, type TimelineTransient } from './T
  */
 export interface TimelineToolbarDeps {
     app: App;
-    plugin: TaskViewerPlugin;
+    plugin: PluginContext;
     readService: TaskReadService;
     /** Owned by the view — the toolbar only opens and closes the popover. */
     filterMenu: FilterMenuComponent;

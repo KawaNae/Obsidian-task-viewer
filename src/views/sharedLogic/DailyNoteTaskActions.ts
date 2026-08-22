@@ -10,7 +10,8 @@
 
 import type { Menu } from 'obsidian';
 import { t } from '../../i18n';
-import type TaskViewerPlugin from '../../main';
+import type { PluginContext } from '../../PluginContext';
+import type { TimerHost } from '../../timer/TimerWidget';
 import { CreateTaskModal, formatTaskLine } from '../../modals/CreateTaskModal';
 
 export type DailyNoteTimerType = 'pomodoro' | 'countup';
@@ -21,7 +22,7 @@ export type DailyNoteTimerType = 'pomodoro' | 'countup';
  * that day's daily note.
  */
 export function openDailyNoteTimer(
-    plugin: TaskViewerPlugin,
+    plugin: PluginContext & TimerHost,
     date: string,
     timerType: DailyNoteTimerType,
 ): void {
@@ -42,7 +43,7 @@ export function openDailyNoteTimer(
  * the hour under the cursor, clicking the all-day lane does not.
  */
 export function openCreateTaskForDailyNote(
-    plugin: TaskViewerPlugin,
+    plugin: PluginContext,
     date: string,
     seed: { startDate: string; startTime?: string },
 ): void {
