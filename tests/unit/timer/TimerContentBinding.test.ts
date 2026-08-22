@@ -114,6 +114,16 @@ describe('TimerContentBinding: the running line owns the content', () => {
         expect(h.updates[0].updates.content).toBe('資料集め メモ書き');
     });
 
+    it('folds newlines in a pendingContent draft that bypassed bind (defense in depth)', async () => {
+        // pendingContent は localStorage 経由でも復元されうる — bind の oninput を
+        // 一度も通らない値でも、書き込みの単一関門である writeOnce 側で必ず畳む。
+        h.timer.pendingContent = '資料集め\nメモ書き';
+        await h.binding.flush(h.timer);
+
+        expect(h.updates).toHaveLength(1);
+        expect(h.updates[0].updates.content).toBe('資料集め メモ書き');
+    });
+
     it('collapses a burst of keystrokes into one write', async () => {
         for (const s of ['あ', 'あい', 'あいう']) {
             type(h, s);
