@@ -1,4 +1,4 @@
-import type TaskViewerPlugin from '../main';
+import type { PluginContext } from '../PluginContext';
 import { type Task, isTvFile, isTvInline } from '../types';
 import type { TimerInstance } from './TimerInstance';
 
@@ -9,7 +9,7 @@ export type TimerResolveFailure = 'read-only' | 'not-found';
  * Shared timer target resolution helpers.
  */
 export class TimerTaskResolver {
-    constructor(private plugin: TaskViewerPlugin) { }
+    constructor(private plugin: PluginContext) { }
 
     /**
      * 解決に失敗した理由を分ける。

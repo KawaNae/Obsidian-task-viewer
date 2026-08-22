@@ -1,6 +1,7 @@
 import { type App, MarkdownRenderer, Component } from 'obsidian';
 import { type Task, type DisplayTask, type TaskViewerSettings, type DoubleTapAction, isCompleteStatusChar, isTvFile, type TopRightConfig } from '../../types';
 import { getOverdueLevel } from '../../services/display/TaskStatusQuery';
+import { extractWikilinkTarget } from '../../utils/WikilinkUtils';
 import { resolveTopRightField } from './TopRightFieldResolver';
 
 export type TopRightSpec =
@@ -353,7 +354,7 @@ export class TaskCardRenderer extends Component {
     }
 
     private resolveWikilinkChild(parent: DisplayTask, target: string): Task | undefined {
-        const t = target.split('|')[0].trim();
+        const t = extractWikilinkTarget(target);
         const lookup = this.childItemBuilder.getReadService();
         for (const entry of parent.childEntries) {
             if (entry.kind !== 'task') continue;

@@ -25,7 +25,8 @@ import {
     openOrCreateDailyNote,
 } from './CalendarDateUtils';
 import { DragHandler } from '../../interaction/drag/DragHandler';
-import type TaskViewerPlugin from '../../main';
+import type { PluginContext } from '../../PluginContext';
+import type { TimerHost } from '../../timer/TimerWidget';
 import { TaskStyling } from '../sharedUI/TaskStyling';
 import { getEffectiveColor, getEffectiveLinestyle } from '../../services/data/EffectiveProperties';
 import { FilterMenuComponent } from '../customMenus/FilterMenuComponent';
@@ -39,7 +40,8 @@ import { TaskLinkInteractionManager } from '../taskcard/TaskLinkInteractionManag
 import { VIEW_META_CALENDAR } from '../../constants/viewRegistry';
 import { codecFor, type ViewConfigCodec } from '../../services/viewConfig';
 import { CalendarSchema, type CalendarConfig, type CalendarTransient } from './CalendarSchema';
-import { HandleManager } from '../timelineview/HandleManager';
+import { HandleManager } from '../sharedUI/handles/HandleManager';
+import { markHandleSurface } from '../sharedUI/handles/HandleSurface';
 import { SelectionController } from '../../interaction/selection/SelectionController';
 import { TaskIdGenerator } from '../../services/display/TaskIdGenerator';
 import { SidebarManager } from '../sidebar/SidebarManager';
@@ -79,7 +81,7 @@ interface CalendarViewState {
 }
 
 export class CalendarView extends ItemView {
-    private readonly plugin: TaskViewerPlugin;
+    private readonly plugin: PluginContext & TimerHost;
     private readonly readService: TaskReadService;
     private readonly writeService: TaskWriteService;
     private readonly taskRenderer: TaskCardRenderer;
@@ -121,7 +123,7 @@ export class CalendarView extends ItemView {
     private readonly hoverParent = new TaskViewHoverParent();
     private renderScheduler: RenderScheduler;
 
-    constructor(leaf: WorkspaceLeaf, plugin: TaskViewerPlugin) {
+    constructor(leaf: WorkspaceLeaf, plugin: PluginContext & TimerHost) {
         super(leaf);
         this.plugin = plugin;
         this.readService = plugin.getTaskReadService();
@@ -191,7 +193,7 @@ export class CalendarView extends ItemView {
                 this.sidebarManager.applyOpen(open, opts);
             },
             getCurrentConfig: () => this.getCurrentConfig(),
-            applyConfig: (cfg, opts) => this.applyConfig(cfg, opts),
+            applyConfig: (cfg) => this.applyConfig(cfg),
             onConfigApplied: () => {
                 this.leaf.updateHeader();
                 this.app.workspace.requestSaveLayout();
@@ -240,18 +242,18 @@ export class CalendarView extends ItemView {
      * Single entry point used by setState AND by toolbar's template apply,
      * so reset/load/restore all go through one path.
      *
-     * `opts.explicit` flags user-driven applies (template-load / reset).
-     * Workspace restore sets explicit=false so the mobile auto-collapse
-     * heuristic continues to fire for fresh sessions.
+     * `showSidebar` states the desktop-width starting position only. At mobile
+     * width the sidebar always starts closed whatever the config says, and
+     * only the toggle button opens it (see `sidebarOpenedThisSession`), so
+     * applying a config never marks the sidebar as user-opened.
      */
-    applyConfig(cfg: Partial<CalendarConfig>, opts: { explicit?: boolean } = {}): void {
-        const next: Partial<CalendarConfig> = { ...CalendarSchema.defaults, ...cfg };
+    applyConfig(cfg: Partial<CalendarConfig>): void {
+        const next = this.codec.withDefaults(cfg);
 
         // FilterMenu owns the in-memory FilterState — keep it in sync.
         this.filterMenu.setFilterState(next.filterState ?? createEmptyFilterState());
 
         const sidebarOpen = next.showSidebar ?? true;
-        if (opts.explicit && sidebarOpen) this.sidebarOpenedThisSession = true;
         this.showSidebar = sidebarOpen;
         this.sidebarManager.applyOpen(sidebarOpen, { animate: false });
 
@@ -321,7 +323,7 @@ export class CalendarView extends ItemView {
         this.container.empty();
         this.container.addClass('calendar-view');
         this.sidebarManager.attach(this.container, (el, ev, handler) =>
-            this.registerDomEvent(el as any, ev as any, handler),
+            this.registerDomEvent(el, ev, handler),
         );
 
         this.menuHandler = new MenuHandler(this.app, this.readService, this.writeService, this.plugin);
@@ -677,18 +679,6 @@ export class CalendarView extends ItemView {
      * listId-only entry from before viewId-namespacing was introduced.
      * Prefix it with `${viewId}::` so calendar owns it.
      */
-    private migrateCollapsedKeys(stored: Record<string, boolean>): Record<string, boolean> {
-        const migrated: Record<string, boolean> = {};
-        for (const [key, val] of Object.entries(stored)) {
-            if (key.includes('::')) {
-                migrated[key] = val;
-            } else {
-                migrated[`${COLLAPSE_KEY_PREFIX}${key}`] = val;
-            }
-        }
-        return migrated;
-    }
-
     private openPinnedListSort(listDef: PinnedListDefinition, anchorEl: HTMLElement): void {
         this.sidebarSortMenu.setSortState(listDef.sortState ?? createEmptySortState());
         this.sidebarSortMenu.showMenuAtElement(anchorEl, {
@@ -754,10 +744,6 @@ export class CalendarView extends ItemView {
 
         cell.style.gridColumn = `${this.getGridColumnForDay(colIndex)}`;
         cell.style.gridRow = '1';
-        if (colIndex === 7) {
-            cell.addClass('is-last-col');
-        }
-
         if (date.getFullYear() !== referenceMonth.year || date.getMonth() !== referenceMonth.month) {
             cell.addClass('is-outside-month');
         }
@@ -848,6 +834,7 @@ export class CalendarView extends ItemView {
             const cardInstanceId = `${VIEW_ID}::lane-multi::${entry.segmentId}`;
             const reused = reconciler.acquire(cardInstanceId);
             const barEl = reused ?? weekRow.createDiv('task-card task-card--multi-day');
+            markHandleSurface(barEl, 'grid');
             if (reused) weekRow.appendChild(reused);
 
             this.decorateCalendarBar(barEl, entry, colOffset);
@@ -863,6 +850,7 @@ export class CalendarView extends ItemView {
         const cardInstanceId = `${VIEW_ID}::lane::${entry.task.id}`;
         const reused = reconciler.acquire(cardInstanceId);
         const card = reused ?? weekRow.createDiv('task-card');
+        markHandleSurface(card, 'grid');
         if (reused) weekRow.appendChild(reused);
 
         this.decorateCalendarCell(card, entry, colOffset);

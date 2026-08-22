@@ -13,10 +13,29 @@ import type {
 import { getTimerElapsedSeconds } from './TimerInstance';
 import { type TimerContext, IDLE_TIMER_ID } from './TimerContext';
 import type { TimerCreator } from './TimerCreator';
+import {
+    advanceSegment,
+    clampToTotalDuration,
+    computeCompletedDuration,
+    getCurrentSegment,
+} from './IntervalMath';
+import {
+    accumulatePausedElapsed,
+    applyCountdownTick,
+    applyCountupTick,
+    applyIntervalPauseSnapshot,
+    applyIntervalTick,
+} from './TimerTickMath';
 
 export class TimerLifecycle {
     /** end の書き足しが飛んでいるタイマー。1 秒 tick の二重発行を防ぐ。 */
     private extending = new Set<string>();
+
+    /**
+     * prepare（interval の一時停止）に入る前の合計経過。待っている間は区間が
+     * 進まないので、待ち時間だけをここを起点に足す。触るのはこのクラスだけ。
+     */
+    private prepareBaseElapsed = new Map<string, number>();
 
     constructor(
         private ctx: TimerContext,
@@ -77,50 +96,45 @@ export class TimerLifecycle {
         this.maybeExtendSessionEnd(timer);
 
         const now = Date.now();
-        const currentSessionElapsed = Math.floor((now - timer.startTimeMs) / 1000);
-        const totalElapsed = Math.max(0, timer.pausedElapsedTime + currentSessionElapsed);
 
         switch (timer.timerType) {
             case 'countup':
             case 'idle':
-                timer.elapsedTime = totalElapsed;
+                applyCountupTick(timer, now);
                 this.ctx.renderTimerItem(timerId);
                 return;
-            case 'countdown':
-                timer.elapsedTime = totalElapsed;
-                timer.timeRemaining = timer.totalTime - totalElapsed;
-                timer.phase = timer.timeRemaining < 0 ? 'idle' : 'work';
+            case 'countdown': {
+                const tick = applyCountdownTick(timer, now);
+                // 超過中は idle 扱いで見せる（表示色の切り替えだけ）。ウィジェットは
+                // 0 を割っても鳴らさない — 記録が続いているので終わってはいない。
+                timer.phase = tick.remaining < 0 ? 'idle' : 'work';
                 this.ctx.renderTimerItem(timerId);
                 return;
+            }
             case 'interval': {
                 if (timer.phase === 'prepare') {
-                    const baseElapsed = this.ctx.intervalPrepareBaseElapsed.get(timerId) ?? timer.totalElapsedTime;
-                    timer.totalElapsedTime = baseElapsed + Math.max(0, currentSessionElapsed);
+                    // prepare はウィジェット固有の待機。区間は進まず、待った分だけを
+                    // 足すので共有の区間計算には乗らない。
+                    const sinceStart = Math.floor((now - timer.startTimeMs) / 1000);
+                    const baseElapsed = this.prepareBaseElapsed.get(timerId) ?? timer.totalElapsedTime;
+                    timer.totalElapsedTime = baseElapsed + Math.max(0, sinceStart);
                     this.ctx.renderTimerItem(timerId);
                     return;
                 }
 
-                const segment = this.creator.getCurrentIntervalSegment(timer);
-                if (!segment) {
+                const tick = applyIntervalTick(timer, now);
+                if (tick.outcome === 'no-segment') {
                     void this.finishIntervalTimer(timerId, timer);
                     return;
                 }
-                const segmentElapsed = Math.max(0, timer.pausedElapsedTime + currentSessionElapsed);
-                timer.segmentTimeRemaining = Math.max(0, segment.durationSeconds - segmentElapsed);
-                const completedBefore = this.creator.computeIntervalCompletedDuration(timer);
-                timer.totalElapsedTime = this.creator.clampToTotalDuration(
-                    timer,
-                    completedBefore + Math.min(segment.durationSeconds, segmentElapsed)
-                );
-
-                if (timer.segmentTimeRemaining > 0) {
-                    if (timer.segmentTimeRemaining <= 3) {
-                        AudioUtils.playWarningBeep();
-                    }
-                    this.ctx.renderTimerItem(timerId);
-                } else {
+                if (tick.outcome === 'segment-complete') {
                     void this.handleIntervalSegmentComplete(timerId, timer);
+                    return;
                 }
+                if (tick.warn) {
+                    AudioUtils.playWarningBeep();
+                }
+                this.ctx.renderTimerItem(timerId);
                 return;
             }
             default:
@@ -130,18 +144,18 @@ export class TimerLifecycle {
 
     async handleIntervalSegmentComplete(timerId: string, timer: IntervalTimer): Promise<void> {
         this.stopTimerTick(timerId);
-        const currentSegment = this.creator.getCurrentIntervalSegment(timer);
+        const currentSegment = getCurrentSegment(timer);
         if (!currentSegment) {
             await this.finishIntervalTimer(timerId, timer);
             return;
         }
 
-        timer.totalElapsedTime = this.creator.clampToTotalDuration(
-            timer,
-            this.creator.computeIntervalCompletedDuration(timer) + currentSegment.durationSeconds
+        timer.totalElapsedTime = clampToTotalDuration(
+            timer.totalDuration,
+            computeCompletedDuration(timer) + currentSegment.durationSeconds
         );
 
-        const moved = this.creator.advanceIntervalSegment(timer);
+        const moved = advanceSegment(timer);
         if (!moved) {
             await this.finishIntervalTimer(timerId, timer);
             return;
@@ -149,7 +163,7 @@ export class TimerLifecycle {
 
         AudioUtils.playTransitionConfirm();
 
-        const nextSegment = this.creator.getCurrentIntervalSegment(timer);
+        const nextSegment = getCurrentSegment(timer);
         if (!nextSegment) {
             await this.finishIntervalTimer(timerId, timer);
             return;
@@ -166,7 +180,7 @@ export class TimerLifecycle {
     }
 
     private async finishIntervalTimer(timerId: string, timer: IntervalTimer): Promise<void> {
-        this.ctx.intervalPrepareBaseElapsed.delete(timerId);
+        this.prepareBaseElapsed.delete(timerId);
         if (timer.totalDuration > 0) {
             timer.totalElapsedTime = timer.totalDuration;
         }
@@ -178,19 +192,29 @@ export class TimerLifecycle {
         this.stopTimerTick(timerId);
 
         AudioUtils.playFinishSound();
-        await this.ctx.flushTimerContent(timerId);
-        await this.ctx.recorder.recordSessionEnd(timer);
+        await this.flushAndRecord(timer);
         this.closeTimer(timerId);
+    }
+
+    // ─── 記録 ─────────────────────────────────────────────────
+
+    /**
+     * セッションを 1 本書く。**記録の唯一の入口**で、`recordSessionEnd` を呼ぶのは
+     * ここだけ。
+     *
+     * 記録は走行中の行の content を読むので、未書き込みの入力を先に流し込まないと
+     * 打った名前が 1 セッション繰り越される。2 行を並べて書くと片方だけに手が入り、
+     * 実際に interval の停止でそうなった（`TimerRenderer` の 2 つの停止ハンドラ）。
+     */
+    private async flushAndRecord(timer: TimerInstance): Promise<void> {
+        await this.ctx.flushTimerContent(timer.id);
+        await this.ctx.recorder.recordSessionEnd(timer);
     }
 
     // ─── Pause / Resume / Close ───────────────────────────────
 
     pauseTimer(timer: TimerInstance): void {
-        const now = Date.now();
-        if (timer.startTimeMs > 0) {
-            const currentSessionElapsed = Math.floor((now - timer.startTimeMs) / 1000);
-            timer.pausedElapsedTime += Math.max(0, currentSessionElapsed);
-        }
+        accumulatePausedElapsed(timer, Date.now());
         timer.isRunning = false;
         this.stopTimerTick(timer.id);
 
@@ -204,17 +228,9 @@ export class TimerLifecycle {
                 timer.timeRemaining = timer.totalTime - timer.elapsedTime;
                 timer.phase = timer.timeRemaining < 0 ? 'idle' : 'work';
                 break;
-            case 'interval': {
-                const segment = this.creator.getCurrentIntervalSegment(timer);
-                if (!segment) break;
-                timer.segmentTimeRemaining = Math.max(0, segment.durationSeconds - timer.pausedElapsedTime);
-                const completedBefore = this.creator.computeIntervalCompletedDuration(timer);
-                timer.totalElapsedTime = this.creator.clampToTotalDuration(
-                    timer,
-                    completedBefore + Math.min(segment.durationSeconds, timer.pausedElapsedTime)
-                );
+            case 'interval':
+                applyIntervalPauseSnapshot(timer);
                 break;
-            }
             default:
                 break;
         }
@@ -241,10 +257,7 @@ export class TimerLifecycle {
 
         this.pauseTimer(timer);
         const sessionSeconds = getTimerElapsedSeconds(timer);
-        // 記録は走行中の行の content を読む。未書き込みの入力を先に流し込まないと、
-        // 打った名前が 1 セッション繰り越される。
-        await this.ctx.flushTimerContent(timer.id);
-        await this.ctx.recorder.recordSessionEnd(timer);
+        await this.flushAndRecord(timer);
 
         timer.recordedElapsedTime += Math.max(0, sessionSeconds);
         timer.sessionCount += 1;
@@ -316,8 +329,7 @@ export class TimerLifecycle {
         if (timer.runState === 'running' && timer.timerType !== 'idle') {
             this.pauseTimer(timer);
             const sessionSeconds = getTimerElapsedSeconds(timer);
-            await this.ctx.flushTimerContent(timer.id);
-            await this.ctx.recorder.recordSessionEnd(timer);
+            await this.flushAndRecord(timer);
             timer.recordedElapsedTime += Math.max(0, sessionSeconds);
             timer.sessionCount += 1;
         }
@@ -347,35 +359,50 @@ export class TimerLifecycle {
         timer.phase = 'prepare';
         timer.startTimeMs = Date.now();
         timer.isRunning = true;
-        this.ctx.intervalPrepareBaseElapsed.set(timer.id, timer.totalElapsedTime);
+        this.prepareBaseElapsed.set(timer.id, timer.totalElapsedTime);
         this.startTimerTicker(timer.id);
     }
 
-    pauseOrSnapshotIntervalForStop(timer: IntervalTimer): void {
+    /**
+     * ■ interval の停止: 走行分を記録して閉じる。
+     *
+     * countup / countdown の 4 出口（{@link suspendTimer} / {@link finishTimer} /
+     * {@link discardTimer}）と同じく、遷移を 1 メソッドで持つ。以前は prepare 中と
+     * 走行中で別々のハンドラが `TimerRenderer` に書かれていて、2026-08-17 に flush
+     * を足したとき片方だけが直った。同じ形を 2 箇所に書ける限り、また割れる。
+     */
+    async stopIntervalTimer(timer: IntervalTimer): Promise<void> {
+        this.pauseOrSnapshotIntervalForStop(timer);
+        AudioUtils.playFinishSound();
+        await this.flushAndRecord(timer);
+        this.closeTimer(timer.id);
+    }
+
+    private pauseOrSnapshotIntervalForStop(timer: IntervalTimer): void {
         if (timer.phase === 'prepare' && timer.isRunning) {
             const now = Date.now();
             const prepareElapsed = Math.max(0, Math.floor((now - timer.startTimeMs) / 1000));
-            const baseElapsed = this.ctx.intervalPrepareBaseElapsed.get(timer.id) ?? timer.totalElapsedTime;
+            const baseElapsed = this.prepareBaseElapsed.get(timer.id) ?? timer.totalElapsedTime;
             timer.totalElapsedTime = baseElapsed + prepareElapsed;
             timer.isRunning = false;
             this.stopTimerTick(timer.id);
-            this.ctx.intervalPrepareBaseElapsed.delete(timer.id);
+            this.prepareBaseElapsed.delete(timer.id);
             return;
         }
 
         if (timer.isRunning) {
             this.pauseTimer(timer);
         }
-        this.ctx.intervalPrepareBaseElapsed.delete(timer.id);
+        this.prepareBaseElapsed.delete(timer.id);
     }
 
     resumeTimer(timer: TimerInstance): void {
         if (timer.timerType === 'interval') {
-            const segment = this.creator.getCurrentIntervalSegment(timer);
+            const segment = getCurrentSegment(timer);
             if (segment) {
                 timer.phase = segment.type;
             }
-            this.ctx.intervalPrepareBaseElapsed.delete(timer.id);
+            this.prepareBaseElapsed.delete(timer.id);
         } else if (timer.timerType === 'countdown') {
             timer.phase = timer.timeRemaining < 0 ? 'idle' : 'work';
         } else if (timer.timerType !== 'idle' && timer.phase === 'idle') {
@@ -395,7 +422,7 @@ export class TimerLifecycle {
         if (!timer) return;
         const closingIdleTimer = this.isIdleTimer(timerId);
 
-        this.ctx.intervalPrepareBaseElapsed.delete(timerId);
+        this.prepareBaseElapsed.delete(timerId);
         this.stopTimerTick(timerId);
         this.ctx.timers.delete(timerId);
 
@@ -411,19 +438,15 @@ export class TimerLifecycle {
         }
     }
 
+    /** widget を畳むときの後始末。次に組み直したときへ持ち越さない。 */
+    clearPrepareState(): void {
+        this.prepareBaseElapsed.clear();
+    }
+
     // ─── Idle Timer ───────────────────────────────────────────
 
     isIdleTimer(timerId: string): boolean {
         return timerId === IDLE_TIMER_ID;
-    }
-
-    hasNonIdleTimers(): boolean {
-        for (const timerId of this.ctx.timers.keys()) {
-            if (!this.isIdleTimer(timerId)) {
-                return true;
-            }
-        }
-        return false;
     }
 
     /**

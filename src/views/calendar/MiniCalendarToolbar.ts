@@ -1,6 +1,6 @@
 import { setIcon, type App, type Menu, type WorkspaceLeaf } from 'obsidian';
 import { t } from '../../i18n';
-import type TaskViewerPlugin from '../../main';
+import type { PluginContext } from '../../PluginContext';
 import type { TaskReadService } from '../../services/data/TaskReadService';
 import type { AstronomyDisplay } from '../../types';
 import { ViewToolbarBase, ViewSettingsMenu, type ViewSettingsOptions } from '../sharedUI/ViewToolbar';
@@ -17,7 +17,7 @@ import type { MiniCalendarConfig, MiniCalendarTransient } from './MiniCalendarSc
 export interface MiniCalendarToolbarDeps {
     app: App;
     leaf: WorkspaceLeaf;
-    plugin: TaskViewerPlugin;
+    plugin: PluginContext;
     readService: TaskReadService;
     filterMenu: FilterMenuComponent;
     linkInteractionManager: TaskLinkInteractionManager;

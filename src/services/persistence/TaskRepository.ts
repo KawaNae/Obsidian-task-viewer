@@ -99,8 +99,9 @@ export class TaskRepository {
         return this.frontmatterWriter.deleteTvFile(task, frontmatterKeys);
     }
 
-    async insertLineAfterTvFile(filePath: string, lineContent: string, header: string, headerLevel: number): Promise<void> {
-        return this.frontmatterWriter.insertLineAfterTvFile(filePath, lineContent, header, headerLevel);
+    /** @returns 挿入した行の 0-based 行番号。ファイルが無ければ -1。 */
+    async insertLineUnderHeading(filePath: string, lineContent: string, header: string, headerLevel: number): Promise<number> {
+        return this.frontmatterWriter.insertLineUnderHeading(filePath, lineContent, header, headerLevel);
     }
 
     /**

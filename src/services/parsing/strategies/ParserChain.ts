@@ -43,18 +43,4 @@ export class ParserChain implements ParserStrategy {
         // Fallback: use originalText or first parser
         return task.originalText || this.parsers[0].format(task);
     }
-
-    /**
-     * Add a parser to the chain.
-     */
-    addParser(parser: LeafParserStrategy): void {
-        this.parsers.push(parser);
-    }
-
-    /**
-     * Get all parsers in the chain.
-     */
-    getParsers(): readonly LeafParserStrategy[] {
-        return this.parsers;
-    }
 }

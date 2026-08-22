@@ -105,21 +105,18 @@ export class FrontmatterWriter {
     }
 
     /**
-     * tv-file タスクファイルの指定見出し下に子タスク行を挿入する。
-     * 見出しが存在しない場合はファイル末尾に作成する。
+     * 指定ファイルの見出し下に行を挿入する（tv-file の子タスク行、通常タスクの
+     * 見出し作成先いずれにも使う汎用操作）。見出しが存在しない場合はファイル
+     * 末尾に作成する。
+     * @returns 挿入した行の 0-based 行番号。ファイルが無ければ -1。
      */
-    async insertLineAfterTvFile(
+    async insertLineUnderHeading(
         filePath: string,
         lineContent: string,
         header: string,
         headerLevel: number
-    ): Promise<void> {
-        const file = this.app.vault.getAbstractFileByPath(filePath);
-        if (!(file instanceof TFile)) return;
-
-        await this.app.vault.process(file, (content) => {
-            return HeadingInserter.insertUnderHeading(content, lineContent, header, headerLevel).content;
-        });
+    ): Promise<number> {
+        return HeadingInserter.writeUnderHeading(this.app, filePath, lineContent, header, headerLevel);
     }
 
     /**

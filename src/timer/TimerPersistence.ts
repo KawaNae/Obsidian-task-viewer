@@ -10,12 +10,20 @@ import type {
     TimerPhase,
     TimerRecordMode,
     TimerRunState,
-    TimerStartConfig,
+    TimerType,
 } from './TimerInstance';
 import { isDailyTimer } from './TimerInstance';
 import type { TimerContext } from './TimerContext';
 import { OBSOLETE_STORAGE_VERSIONS, STORAGE_VERSION } from './TimerStorageUtils';
 import type { TimerCreator } from './TimerCreator';
+import {
+    clampToTotalDuration,
+    computeCompletedDuration,
+    computeTotalDuration,
+    getCurrentSegment,
+    normalizeGroups,
+    type IntervalDefaults,
+} from './IntervalMath';
 import type { TimerLifecycle } from './TimerLifecycle';
 import type { TimerStorageUtils } from './TimerStorageUtils';
 import { TaskIdGenerator } from '../services/display/TaskIdGenerator';
@@ -61,7 +69,6 @@ export interface PersistedTimer {
     startTimeMs: number;
     pausedElapsedTime: number;
     phase?: TimerPhase;
-    mode?: 'work' | 'break' | 'idle';
     isRunning: boolean;
     runState?: TimerRunState;
     sessionCount?: number;
@@ -70,14 +77,17 @@ export interface PersistedTimer {
     pendingContent?: string;
     /** v0.51.0 以前の下書き。読むときだけ拾う（書き出しは pendingContent）。 */
     customLabel?: string;
-    timerType: TimerStartConfig['timerType'];
+    /**
+     * 保存するのは実行時の種別だけ。`TimerStartConfig` の `'pomodoro'` は
+     * 開始時の便宜値で、`TimerInstance` になった時点で `interval` に化けている。
+     */
+    timerType: TimerType;
     recordMode: TimerRecordMode;
     parserId: string;
     taskColor?: string;
 
     timeRemaining?: number;
     totalTime?: number;
-    autoRepeat?: boolean;
     elapsedTime?: number;
 
     groups?: IntervalGroup[];
@@ -315,7 +325,7 @@ export class TimerPersistence {
             return null;
         }
 
-        const phase = (persisted.phase ?? persisted.mode ?? 'idle') as TimerPhase;
+        const phase = (persisted.phase ?? 'idle') as TimerPhase;
         const common = {
             id: persisted.id,
             taskId,
@@ -347,34 +357,6 @@ export class TimerPersistence {
         };
 
         switch (persisted.timerType) {
-            case 'pomodoro': {
-                const workSec = Math.max(1, persisted.totalTime ?? this.ctx.plugin.settings.pomodoroWorkMinutes * 60);
-                const breakSec = Math.max(1, this.ctx.plugin.settings.pomodoroBreakMinutes * 60);
-                const repeatCount = persisted.autoRepeat ? 0 : 1;
-                const groups: IntervalGroup[] = [
-                    {
-                        segments: [
-                            { label: 'Work', durationSeconds: workSec, type: 'work' },
-                            { label: 'Break', durationSeconds: breakSec, type: 'break' }
-                        ],
-                        repeatCount
-                    }
-                ];
-                const migratedInterval: IntervalTimer = {
-                    ...common,
-                    timerType: 'interval',
-                    intervalSource: 'pomodoro',
-                    groups,
-                    currentGroupIndex: 0,
-                    currentSegmentIndex: phase === 'break' ? 1 : 0,
-                    currentRepeatIndex: 0,
-                    segmentTimeRemaining: Math.max(0, persisted.timeRemaining ?? workSec),
-                    totalElapsedTime: Math.max(0, persisted.pausedElapsedTime ?? 0),
-                    totalDuration: repeatCount === 0 ? 0 : this.creator.computeIntervalTotalDuration(groups),
-                    phase
-                };
-                return migratedInterval;
-            }
             case 'countdown': {
                 const totalTime = Math.max(1, persisted.totalTime ?? this.ctx.plugin.settings.pomodoroWorkMinutes * 60);
                 const elapsedTime = Math.max(0, persisted.elapsedTime ?? persisted.pausedElapsedTime ?? 0);
@@ -388,7 +370,7 @@ export class TimerPersistence {
                 };
             }
             case 'interval': {
-                const groups = this.creator.normalizeIntervalGroups(persisted.groups);
+                const groups = normalizeGroups(persisted.groups, this.intervalDefaults());
                 const intervalTimer: IntervalTimer = {
                     ...common,
                     timerType: 'interval',
@@ -399,9 +381,9 @@ export class TimerPersistence {
                     currentRepeatIndex: Math.max(0, persisted.currentRepeatIndex ?? 0),
                     segmentTimeRemaining: Math.max(0, persisted.segmentTimeRemaining ?? groups[0].segments[0].durationSeconds),
                     totalElapsedTime: Math.max(0, persisted.totalElapsedTime ?? 0),
-                    totalDuration: Math.max(0, persisted.totalDuration ?? this.creator.computeIntervalTotalDuration(groups))
+                    totalDuration: Math.max(0, persisted.totalDuration ?? computeTotalDuration(groups))
                 };
-                const segment = this.creator.getCurrentIntervalSegment(intervalTimer);
+                const segment = getCurrentSegment(intervalTimer);
                 if (!segment) {
                     return null;
                 }
@@ -456,12 +438,12 @@ export class TimerPersistence {
                 timer.timeRemaining = timer.totalTime - timer.elapsedTime;
                 timer.phase = timer.timeRemaining < 0 ? 'idle' : 'work';
             } else if (timer.timerType === 'interval') {
-                const segment = this.creator.getCurrentIntervalSegment(timer);
+                const segment = getCurrentSegment(timer);
                 if (segment) {
                     timer.segmentTimeRemaining = Math.max(0, segment.durationSeconds - timer.pausedElapsedTime);
-                    timer.totalElapsedTime = this.creator.clampToTotalDuration(
-                        timer,
-                        this.creator.computeIntervalCompletedDuration(timer) + Math.min(segment.durationSeconds, timer.pausedElapsedTime)
+                    timer.totalElapsedTime = clampToTotalDuration(
+                        timer.totalDuration,
+                        computeCompletedDuration(timer) + Math.min(segment.durationSeconds, timer.pausedElapsedTime)
                     );
                 }
             }
@@ -487,21 +469,30 @@ export class TimerPersistence {
                 timer.phase = timer.timeRemaining < 0 ? 'idle' : 'work';
                 break;
             case 'interval': {
-                const segment = this.creator.getCurrentIntervalSegment(timer);
+                const segment = getCurrentSegment(timer);
                 if (!segment) {
                     timer.segmentTimeRemaining = 0;
                     timer.totalElapsedTime = timer.totalDuration;
                     break;
                 }
                 timer.segmentTimeRemaining = Math.max(0, segment.durationSeconds - totalElapsed);
-                timer.totalElapsedTime = this.creator.clampToTotalDuration(
-                    timer,
-                    this.creator.computeIntervalCompletedDuration(timer) + Math.min(segment.durationSeconds, totalElapsed)
+                timer.totalElapsedTime = clampToTotalDuration(
+                    timer.totalDuration,
+                    computeCompletedDuration(timer) + Math.min(segment.durationSeconds, totalElapsed)
                 );
                 break;
             }
             default:
                 break;
         }
+    }
+
+    /** 空の永続グループに当てる既定。{@link TimerCreator} と同じ設定を読む。 */
+    private intervalDefaults(): IntervalDefaults {
+        return {
+            prepareSeconds: 10,
+            workSeconds: this.ctx.plugin.settings.pomodoroWorkMinutes * 60,
+            breakSeconds: this.ctx.plugin.settings.pomodoroBreakMinutes * 60,
+        };
     }
 }

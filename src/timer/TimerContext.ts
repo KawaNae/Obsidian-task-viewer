@@ -6,7 +6,7 @@
  */
 
 import type { App } from 'obsidian';
-import type TaskViewerPlugin from '../main';
+import type { PluginContext } from '../PluginContext';
 import type { TimerInstance, TimerStartConfig } from './TimerInstance';
 import type { TimerRecorder } from './TimerRecorder';
 
@@ -18,9 +18,8 @@ export const IDLE_TIMER_ID = '__idle__';
 
 export interface TimerContext {
     readonly timers: Map<string, TimerInstance>;
-    readonly intervalPrepareBaseElapsed: Map<string, number>;
     readonly recorder: TimerRecorder;
-    readonly plugin: TaskViewerPlugin;
+    readonly plugin: PluginContext;
     readonly app: App;
 
     /** Unified timer start API (implemented by TimerWidget). */

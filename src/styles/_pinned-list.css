@@ -47,10 +47,8 @@
     font-weight: 400;
 }
 
-/* Shared icon button base for sort-btn, filter-btn, and more-btn */
-.tv-sidebar__panel .pinned-list__sort-btn,
-.tv-sidebar__panel .pinned-list__filter-btn,
-.tv-sidebar__panel .pinned-list__more-btn {
+/* Icon button base, shared by the sort, filter, and more buttons */
+.tv-sidebar__panel .pinned-list__header-btn {
     width: 22px;
     height: 22px;
     display: inline-flex;
@@ -72,21 +70,15 @@
         color 120ms ease;
 }
 
-.tv-sidebar__panel .pinned-list__sort-btn:hover,
-.tv-sidebar__panel .pinned-list__filter-btn:hover,
-.tv-sidebar__panel .pinned-list__more-btn:hover {
+.tv-sidebar__panel .pinned-list__header-btn:hover {
     background-color: var(--tv-bg-hover);
     border-color: var(--tv-border);
     color: var(--tv-text);
 }
 
-/* Filter active: accent color */
-.tv-sidebar__panel .pinned-list__filter-btn.is-filtered {
-    color: var(--tv-text-accent);
-}
-
-/* Sort active: accent color */
-.tv-sidebar__panel .pinned-list__sort-btn.is-sorted {
+/* Filter or sort active: accent color */
+.tv-sidebar__panel .pinned-list__header-btn.is-filtered,
+.tv-sidebar__panel .pinned-list__header-btn.is-sorted {
     color: var(--tv-text-accent);
 }
 

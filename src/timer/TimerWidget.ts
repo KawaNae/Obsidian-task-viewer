@@ -7,7 +7,7 @@
 
 import { type App, Notice } from 'obsidian';
 import { t } from '../i18n';
-import type TaskViewerPlugin from '../main';
+import type { EventRegistrar, PluginContext } from '../PluginContext';
 import { AudioUtils } from './AudioUtils';
 import type {
     TimerInstance,
@@ -18,6 +18,7 @@ import { TimerRecorder } from './TimerRecorder';
 import { TaskIdGenerator } from '../services/display/TaskIdGenerator';
 import { TimerStorageUtils } from './TimerStorageUtils';
 import { decideTimerStartMode, type TimerStartChoice } from './TimerStartMode';
+import type { Task } from '../types';
 import { TimerStartChoiceModal } from '../modals/TimerStartChoiceModal';
 import { TimerCreator } from './TimerCreator';
 import { TimerLifecycle } from './TimerLifecycle';
@@ -33,12 +34,20 @@ import {
 } from './TimerContext';
 import { logInfo } from '../log/log';
 
+/**
+ * Hands out the running timer widget. Declared beside the widget for the same
+ * reason `ApiHost` lives beside `TaskApi`: naming it in `PluginContext` would
+ * relocate the import cycle rather than close it.
+ */
+export interface TimerHost {
+    getTimerWidget(): TimerWidget;
+}
+
 export class TimerWidget implements TimerContext {
     readonly app: App;
-    readonly plugin: TaskViewerPlugin;
+    readonly plugin: PluginContext & EventRegistrar;
     readonly timers: Map<string, TimerInstance> = new Map();
     readonly recorder: TimerRecorder;
-    readonly intervalPrepareBaseElapsed: Map<string, number> = new Map();
     private storageUtils: TimerStorageUtils;
     private creator: TimerCreator;
     private lifecycle: TimerLifecycle;
@@ -48,7 +57,7 @@ export class TimerWidget implements TimerContext {
     private targetManager: TimerTargetManager;
     private observer: TimerWidgetWindowObserver | null = null;
 
-    constructor(app: App, plugin: TaskViewerPlugin) {
+    constructor(app: App, plugin: PluginContext & EventRegistrar) {
         this.app = app;
         this.plugin = plugin;
         this.storageUtils = new TimerStorageUtils(app);
@@ -134,7 +143,14 @@ export class TimerWidget implements TimerContext {
             return;
         }
 
-        if (this.isReadOnlyTarget(config)) {
+        // 対象タスクは 1 度だけ引く。読み取り専用の判定も `[x]` の判定も同じ行を見る。
+        const target = this.resolveStartTarget(config);
+
+        // 読み取り専用の記法（day-planner / tasks-plugin）にタイマーを掛けても、
+        // 開始時の書き込みも停止時の記録も落ちる。計測そのものは動いてしまうので、
+        // ユーザーは終わるまで何も残らないことに気づけない。開始経路は提案・カード
+        // メニュー・各ビューに散っているので、全経路が通るここで 1 度だけ止める。
+        if (target?.isReadOnly) {
             new Notice(t('notice.timerTargetReadOnly'));
             return;
         }
@@ -145,7 +161,7 @@ export class TimerWidget implements TimerContext {
             return;
         }
 
-        if (this.shouldAskAboutCompletedTask(config)) {
+        if (this.shouldAskAboutCompletedTask(config, target)) {
             this.askStartChoice(config);
             return;
         }
@@ -154,17 +170,12 @@ export class TimerWidget implements TimerContext {
     }
 
     /**
-     * 記録を書き込めない形式のタスクか。
-     *
-     * 読み取り専用の記法（day-planner / tasks-plugin）にタイマーを掛けても、
-     * 開始時の書き込みも停止時の記録も落ちる。計測そのものは動いてしまうので、
-     * ユーザーは終わるまで何も残らないことに気づけない。開始経路は提案・カード
-     * メニュー・各ビューに散っているので、全経路が通るここで 1 度だけ止める。
+     * 開始前に見る対象タスク。idle と daily と taskId 無しは引く先が無い。
      */
-    private isReadOnlyTarget(config: TimerStartConfig): boolean {
-        if (config.timerType === 'idle') return false;
-        if (!config.taskId || isDailyTimer(config)) return false;
-        return !!this.plugin.getTaskReadService().getTask(config.taskId)?.isReadOnly;
+    private resolveStartTarget(config: TimerStartConfig): Task | undefined {
+        if (config.timerType === 'idle') return undefined;
+        if (!config.taskId || isDailyTimer(config)) return undefined;
+        return this.plugin.getTaskReadService().getTask(config.taskId);
     }
 
     /**
@@ -172,13 +183,11 @@ export class TimerWidget implements TimerContext {
      * self 系（対象行を書き換えるモード）に限る — child 起点は器に足すだけなので
      * 完了済みでも失うものが無い。
      */
-    private shouldAskAboutCompletedTask(config: TimerStartConfig): boolean {
-        if (config.timerType === 'idle') return false;
-        if (!config.taskId || isDailyTimer(config)) return false;
+    private shouldAskAboutCompletedTask(config: TimerStartConfig, target: Task | undefined): boolean {
+        if (!target) return false;
         if (config.recordMode !== 'self') return false;
 
-        const task = this.plugin.getTaskReadService().getTask(config.taskId);
-        return decideTimerStartMode(task?.statusChar) === 'ask';
+        return decideTimerStartMode(target.statusChar) === 'ask';
     }
 
     private askStartChoice(config: TimerStartConfig): void {
@@ -308,7 +317,7 @@ export class TimerWidget implements TimerContext {
         for (const [timerId] of this.timers) {
             this.lifecycle.stopTimerTick(timerId);
         }
-        this.intervalPrepareBaseElapsed.clear();
+        this.lifecycle.clearPrepareState();
         this.timers.clear();
         this.renderer.destroy();
     }

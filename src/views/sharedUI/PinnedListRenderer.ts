@@ -3,14 +3,17 @@
  * and appears as a collapsible group with task cards.
  */
 
-import { setIcon } from 'obsidian';
 import { t } from '../../i18n';
+import {
+    renderListSection,
+    startListSectionRename,
+    type ListSectionClasses,
+} from './ListSectionRenderer';
 import type { DisplayTask, PinnedListDefinition } from '../../types';
 import type { TaskCardRenderer } from '../taskcard/TaskCardRenderer';
 import type { MenuHandler } from '../../interaction/menu/MenuHandler';
-import { combineFilterStates, hasConditions, type FilterState } from '../../services/filter/FilterTypes';
-import { hasSortRules } from '../../services/sort/SortTypes';
-import type TaskViewerPlugin from '../../main';
+import { combineFilterStates, type FilterState } from '../../services/filter/FilterTypes';
+import type { PluginContext } from '../../PluginContext';
 import { TaskStyling } from './TaskStyling';
 import { getEffectiveColor, getEffectiveLinestyle } from '../../services/data/EffectiveProperties';
 import { TaskPagingController } from './TaskPagingController';
@@ -18,6 +21,26 @@ import { CardReconciler } from './CardReconciler';
 import { shouldRenderForChanges } from './RenderScheduler';
 import { HostFrameScheduler } from '../../utils/HostWindow';
 import type { TaskReadService } from '../../services/data/TaskReadService';
+
+/**
+ * Sidebar variant of the shared list section: a compact row, no card frame.
+ *
+ * The sort, filter and more buttons used to carry a class each
+ * (`pinned-list__sort-btn` and friends) that the stylesheet only ever grouped
+ * back together; they now share `pinned-list__header-btn`, as kanban's already
+ * did.
+ */
+const PINNED_LIST_CLASSES: ListSectionClasses = {
+    root: 'pinned-list',
+    collapsed: 'pinned-list--collapsed',
+    header: 'pinned-list__header',
+    toggle: 'pinned-list__toggle',
+    name: 'pinned-list__name',
+    count: 'pinned-list__count',
+    button: 'pinned-list__header-btn',
+    body: 'pinned-list__body',
+    nameInput: 'pinned-list__name-input',
+};
 
 export interface PinnedListCallbacks {
     onCollapsedChange: (listId: string, collapsed: boolean) => void;
@@ -79,7 +102,7 @@ export class PinnedListRenderer {
 
     constructor(
         private taskRenderer: TaskCardRenderer,
-        private plugin: TaskViewerPlugin,
+        private plugin: PluginContext,
         private menuHandler: MenuHandler,
         private readService: TaskReadService,
     ) {
@@ -221,82 +244,32 @@ export class PinnedListRenderer {
         // Collapsed state is owned by the caller (view). Default = expanded.
         const isCollapsed = collapsedState[listDef.id] ?? false;
 
-        const listEl = container.createDiv('pinned-list');
-        listEl.dataset.listId = listDef.id;
-        if (isCollapsed) {
-            listEl.addClass('pinned-list--collapsed');
-        }
-
-        // Header
-        const header = listEl.createDiv('pinned-list__header');
-
-        const toggle = header.createSpan({ text: isCollapsed ? '▶' : '▼', cls: 'pinned-list__toggle' });
-        header.createSpan({ text: listDef.name, cls: 'pinned-list__name' });
-        header.createSpan({ text: ` (${tasks.length})`, cls: 'pinned-list__count' });
-
-        // Sort button
-        const sortBtn = header.createEl('button', { cls: 'pinned-list__sort-btn' });
-        setIcon(sortBtn, 'arrow-up-down');
-        if (listDef.sortState && hasSortRules(listDef.sortState)) {
-            sortBtn.addClass('is-sorted');
-        }
-        sortBtn.addEventListener('click', (e) => {
-            e.stopPropagation();
-            callbacks.onSortEdit(listDef, sortBtn);
+        const section = renderListSection(container, {
+            classes: PINNED_LIST_CLASSES,
+            name: listDef.name,
+            taskCount: tasks.length,
+            collapsed: isCollapsed,
+            sortState: listDef.sortState,
+            filterState: listDef.filterState,
+            onSortClick: (anchorEl) => callbacks.onSortEdit(listDef, anchorEl),
+            onFilterClick: (anchorEl) => callbacks.onFilterEdit(listDef, anchorEl),
+            onMoreClick: (anchorEl, event) =>
+                this.showMoreMenu(event, listDef, anchorEl, callbacks, index, totalCount),
+            onCollapsedChange: (collapsed) => callbacks.onCollapsedChange(listDef.id, collapsed),
+            renderBody: (body, opts) => {
+                if (opts.resetPaging) this.paging.resetOne(listDef.id);
+                this.paging.render(body, tasks, listDef.id);
+            },
         });
-
-        // Filter button
-        const filterBtn = header.createEl('button', { cls: 'pinned-list__filter-btn' });
-        setIcon(filterBtn, 'filter');
-        if (hasConditions(listDef.filterState)) {
-            filterBtn.addClass('is-filtered');
-        }
-        filterBtn.addEventListener('click', (e) => {
-            e.stopPropagation();
-            callbacks.onFilterEdit(listDef, filterBtn);
-        });
-
-        // More options button (...)
-        const moreBtn = header.createEl('button', { cls: 'pinned-list__more-btn' });
-        setIcon(moreBtn, 'more-horizontal');
-        moreBtn.addEventListener('click', (e) => {
-            e.stopPropagation();
-            this.showMoreMenu(e as MouseEvent, listDef, moreBtn, callbacks, index, totalCount);
-        });
-
-        // Task list body
-        const body = listEl.createDiv('pinned-list__body');
-        if (!isCollapsed) {
-            this.paging.render(body, tasks, listDef.id);
-        }
-
-        // Collapse toggle
-        header.addEventListener('click', () => {
-            const currentlyCollapsed = listEl.classList.contains('pinned-list--collapsed');
-            const nextCollapsed = !currentlyCollapsed;
-
-            if (nextCollapsed) {
-                listEl.addClass('pinned-list--collapsed');
-                toggle.textContent = '▶';
-            } else {
-                listEl.removeClass('pinned-list--collapsed');
-                toggle.textContent = '▼';
-                // Lazy render on expand (reset to first page)
-                if (body.childElementCount === 0 && tasks.length > 0) {
-                    this.paging.resetOne(listDef.id);
-                    this.paging.render(body, tasks, listDef.id);
-                }
-            }
-
-            callbacks.onCollapsedChange(listDef.id, nextCollapsed);
-        });
+        section.root.dataset.listId = listDef.id;
 
         // Auto-start rename for newly added lists
         if (this.pendingRenameId === listDef.id) {
             this.pendingRenameId = null;
             // Defer enough for Obsidian's layout/focus to settle
             setTimeout(() => {
-                const currentNameEl = listEl.querySelector('.pinned-list__name') as HTMLElement | null;
+                const currentNameEl = section.root
+                    .querySelector(`.${PINNED_LIST_CLASSES.name}`) as HTMLElement | null;
                 if (currentNameEl) this.startRename(currentNameEl, listDef, callbacks);
             }, 50);
         }
@@ -377,40 +350,10 @@ export class PinnedListRenderer {
         listDef: PinnedListDefinition,
         callbacks: PinnedListCallbacks,
     ): void {
-        const input = document.createElement('input');
-        input.type = 'text';
-        input.value = listDef.name;
-        input.className = 'pinned-list__name-input';
-        nameEl.replaceWith(input);
-        input.focus();
-        input.select();
-
-        let committed = false;
-        const commit = (newName: string) => {
-            if (committed) return;
-            committed = true;
+        startListSectionRename(nameEl, PINNED_LIST_CLASSES, listDef.name, (newName) => {
             listDef.name = newName;
             callbacks.onRename?.(listDef, newName);
-            // Replace input with span (no full re-render needed)
-            const span = document.createElement('span');
-            span.className = 'pinned-list__name';
-            span.textContent = newName;
-            if (input.parentElement) {
-                input.replaceWith(span);
-            }
-        };
-
-        input.addEventListener('blur', () => {
-            commit(input.value.trim() || listDef.name);
         });
-        input.addEventListener('keydown', (e) => {
-            if (e.key === 'Enter') { e.preventDefault(); input.blur(); }
-            if (e.key === 'Escape') { e.preventDefault(); commit(listDef.name); }
-        });
-        // Prevent header click (collapse) from triggering
-        input.addEventListener('click', (e) => e.stopPropagation());
-        input.addEventListener('mousedown', (e) => e.stopPropagation());
-        input.addEventListener('pointerdown', (e) => e.stopPropagation());
     }
 
     private renderTaskCards(body: HTMLElement, tasks: DisplayTask[], listId: string): void {

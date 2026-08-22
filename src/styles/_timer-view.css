@@ -142,6 +142,12 @@
 }
 
 .timer-view .timer-view__btn {
+    /* アイコンは span ラッパー越しに入る（WebKit は inline-flex ボタン直下の
+       SVG を描かない）。ラベルとの間隔は文字列の先頭空白ではなく gap が持つ。 */
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
     padding: clamp(8px, 2vw, 12px) clamp(16px, 4vw, 24px);
     border-radius: 8px;
     border: none;

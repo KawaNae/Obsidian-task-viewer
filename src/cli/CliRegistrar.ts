@@ -1,5 +1,7 @@
 import type { CliFlags, CliHandler } from 'obsidian';
-import type TaskViewerPlugin from '../main';
+import type { CliRegistrar, PluginContext } from '../PluginContext';
+import type { ExportHost } from '../services/export/ExportService';
+import type { ApiHost } from '../api/TaskApi';
 import { cliError } from './CliOutputFormatter';
 import {
     toCliFlags,
@@ -27,7 +29,7 @@ import { createHelpHandler } from './handlers/HelpHandler';
  * Commands (14): list, today, get, create, update, delete, duplicate, convert, tasks-for-date-range,
  *                 categorized-tasks-for-date-range, insert-child-task, create-tv-file, get-start-hour, help
  */
-export function registerCliHandlers(plugin: TaskViewerPlugin): void {
+export function registerCliHandlers(plugin: PluginContext & CliRegistrar & ApiHost & ExportHost): void {
     function register(action: string, description: string, flags: CliFlags | null, handler: CliHandler): void {
         const wrapped: CliHandler = async (params) => {
             const err = validateCliParams(params, flags, action);

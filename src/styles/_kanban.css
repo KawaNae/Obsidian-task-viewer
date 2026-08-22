@@ -102,6 +102,15 @@
     color: var(--tv-text-muted);
 }
 
+/*
+   `overflow-y` never actually engages today: .kanban-view__grid declares no
+   row heights, so a row grows to fit its tallest cell and the cell always
+   fits its cards. Measured 2026-08-22 in the dev vault — with one column
+   expanded to 204 cards the cell reported clientHeight === scrollHeight
+   (11173px) while the grid host scrolled instead. Kept because it comes back
+   into play the moment a row height is capped, which is also why the view
+   restores the grid host's scroll offsets rather than each cell's.
+*/
 .kanban-view__cell-body {
     flex: 1;
     min-height: 0;

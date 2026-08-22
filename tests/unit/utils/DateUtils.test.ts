@@ -12,6 +12,20 @@ describe('DateUtils', () => {
         });
     });
 
+    describe('formatHHMM', () => {
+        it('pads both hours and minutes', () => {
+            expect(DateUtils.formatHHMM(9, 5)).toBe('09:05');
+        });
+
+        it('leaves already-two-digit values unpadded', () => {
+            expect(DateUtils.formatHHMM(14, 30)).toBe('14:30');
+        });
+
+        it('handles midnight', () => {
+            expect(DateUtils.formatHHMM(0, 0)).toBe('00:00');
+        });
+    });
+
     describe('getDiffDays', () => {
         it('same day → 0', () => {
             expect(DateUtils.getDiffDays('2026-03-11', '2026-03-11')).toBe(0);

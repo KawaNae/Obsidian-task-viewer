@@ -1,9 +1,9 @@
 import { Setting } from 'obsidian';
-import type TaskViewerPlugin from '../main';
+import type { PluginContext } from '../PluginContext';
 import type { TaskFieldMapping } from '../types';
 import { t } from '../i18n';
 
-export function render(el: HTMLElement, plugin: TaskViewerPlugin, redisplay: () => void): void {
+export function render(el: HTMLElement, plugin: PluginContext, redisplay: () => void): void {
     el.createEl('h3', { text: t('settings.parsers.heading') });
     el.createEl('p', { text: t('settings.parsers.description'), cls: 'setting-item-description' });
 

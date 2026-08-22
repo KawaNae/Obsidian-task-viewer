@@ -35,13 +35,11 @@ export class GridResizeGesture extends BaseDragStrategy {
     private initialVisualStart: string = '';
     private initialVisualEnd: string = '';
     private initialGridColumn: string = '';
-    private container: HTMLElement | null = null;
     private refHeaderCell: HTMLElement | null = null;
     private baseTask: Task | null = null;
     private hiddenElements: HTMLElement[] = [];
     /** Resize 中の preview target date。`onUp` で commit に渡す絶対日付 (両 surface 共用)。 */
     private previewTargetDate: string | null = null;
-    private isAllDay: boolean = false;
     private ghostRenderer: GhostRenderer | null = null;
     /** 直近の cross-week preview で描いた ghost の配置。ドロップ時にソースカードへ
      *  移して「旧位置で再表示されるフレーム」を作らないために保持する。 */
@@ -108,12 +106,7 @@ export class GridResizeGesture extends BaseDragStrategy {
 
         // Calendar 限定: 跨週 resize で source segments を hide するため事前収集
         if (isCalendar) {
-            const selector = `.task-card[data-id="${originalId}"], .task-card[data-split-original-id="${originalId}"]`;
-            context.container.querySelectorAll(selector).forEach(segment => {
-                if (segment instanceof HTMLElement && !segment.closest('.tv-sidebar__pinned-lists')) {
-                    this.hiddenElements.push(segment);
-                }
-            });
+            this.hiddenElements.push(...this.collectSplitSiblings(context, originalId));
         }
 
         el.addClass('is-dragging');
@@ -280,18 +273,6 @@ export class GridResizeGesture extends BaseDragStrategy {
     }
 
     // ========== ヘルパー ==========
-
-    private updateArrowPosition(taskEndGridLine: number): void {
-        if (!this.isAllDay) return;
-        if (!this.dragEl?.dataset.id || !this.container) return;
-        const taskId = this.dragEl.dataset.id;
-        const arrow = this.container.querySelector(`.due-arrow[data-task-id="${taskId}"]`) as HTMLElement;
-        if (arrow) {
-            arrow.style.gridColumnStart = taskEndGridLine.toString();
-            const arrowEnd = parseInt(arrow.style.gridColumnEnd) || 0;
-            arrow.style.display = taskEndGridLine >= arrowEnd ? 'none' : '';
-        }
-    }
 
     protected cleanup(): void {
         // 再可視化はゲート越し（DropReveal 参照）。

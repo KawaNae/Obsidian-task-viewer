@@ -1,5 +1,8 @@
 /**
- * Timer factory and pure computation helpers.
+ * Timer factory — `TimerStartConfig` から走らせる `TimerInstance` を組む。
+ *
+ * 区間の計算は IntervalMath が持つ（ウィジェットと独立ビューの共有）。ここは
+ * 組み立てだけを担う。
  */
 
 import type {
@@ -7,7 +10,6 @@ import type {
     CountupTimer,
     IdleTimer,
     IntervalGroup,
-    IntervalSegment,
     IntervalTimer,
     TimerInstance,
     TimerPhase,
@@ -17,6 +19,7 @@ import type {
 import { newTimerId } from './TimerInstance';
 import { type TimerContext, IDLE_TIMER_ID } from './TimerContext';
 import type { TimerStorageUtils } from './TimerStorageUtils';
+import { computeTotalDuration, normalizeGroups, type IntervalDefaults } from './IntervalMath';
 
 export class TimerCreator {
     constructor(
@@ -104,7 +107,7 @@ export class TimerCreator {
                 return timer;
             }
             case 'interval': {
-                const groups = this.normalizeIntervalGroups(config.intervalGroups);
+                const groups = normalizeGroups(config.intervalGroups, this.intervalDefaults());
                 const firstGroup = groups[0];
                 const firstSegment = firstGroup.segments[0];
                 const timer: IntervalTimer = {
@@ -117,7 +120,7 @@ export class TimerCreator {
                     currentRepeatIndex: 0,
                     segmentTimeRemaining: firstSegment.durationSeconds,
                     totalElapsedTime: 0,
-                    totalDuration: this.computeIntervalTotalDuration(groups),
+                    totalDuration: computeTotalDuration(groups),
                     phase: autoStart ? firstSegment.type : 'idle'
                 };
                 return timer;
@@ -138,118 +141,15 @@ export class TimerCreator {
         }
     }
 
-    // ─── Interval Helpers ─────────────────────────────────────
-
-    normalizeIntervalGroups(input?: IntervalGroup[]): IntervalGroup[] {
-        const normalized = (input ?? [])
-            .map((group) => ({
-                repeatCount: group.repeatCount === 0 ? 0 : Math.max(1, Math.floor(group.repeatCount || 1)),
-                segments: (group.segments || [])
-                    .map((segment) => ({
-                        label: (segment.label || '').trim() || this.defaultSegmentLabel(segment.type),
-                        durationSeconds: Math.max(1, Math.floor(segment.durationSeconds || 0)),
-                        type: segment.type
-                    }))
-                    .filter((segment) => segment.durationSeconds > 0)
-            }))
-            .filter((group) => group.segments.length > 0);
-
-        if (normalized.length > 0) {
-            return normalized;
-        }
-
-        return this.getDefaultIntervalGroups();
-    }
-
-    computeIntervalTotalDuration(groups: IntervalGroup[]): number {
-        if (groups.some((group) => group.repeatCount === 0)) {
-            return 0;
-        }
-        return groups.reduce((total, group) => {
-            const groupTotal = group.segments.reduce((sum, segment) => sum + segment.durationSeconds, 0);
-            return total + groupTotal * Math.max(1, group.repeatCount);
-        }, 0);
-    }
-
-    clampToTotalDuration(timer: IntervalTimer, value: number): number {
-        return timer.totalDuration > 0 ? Math.min(timer.totalDuration, value) : value;
-    }
-
-    getCurrentIntervalSegment(timer: IntervalTimer): IntervalSegment | null {
-        const group = timer.groups[timer.currentGroupIndex];
-        if (!group) return null;
-        return group.segments[timer.currentSegmentIndex] ?? null;
-    }
-
-    computeIntervalCompletedDuration(timer: IntervalTimer): number {
-        let total = 0;
-        for (let g = 0; g < timer.groups.length; g++) {
-            const group = timer.groups[g];
-            const repeats = group.repeatCount === 0
-                ? (g === timer.currentGroupIndex ? timer.currentRepeatIndex : 0)
-                : Math.max(1, group.repeatCount || 1);
-            const groupDuration = group.segments.reduce((sum, segment) => sum + segment.durationSeconds, 0);
-
-            if (g < timer.currentGroupIndex) {
-                total += groupDuration * repeats;
-                continue;
-            }
-
-            if (g > timer.currentGroupIndex) {
-                break;
-            }
-
-            total += groupDuration * timer.currentRepeatIndex;
-            for (let s = 0; s < timer.currentSegmentIndex; s++) {
-                total += group.segments[s].durationSeconds;
-            }
-        }
-        return total;
-    }
-
-    advanceIntervalSegment(timer: IntervalTimer): boolean {
-        const currentGroup = timer.groups[timer.currentGroupIndex];
-        if (!currentGroup) return false;
-
-        if (timer.currentSegmentIndex + 1 < currentGroup.segments.length) {
-            timer.currentSegmentIndex++;
-            return true;
-        }
-
-        if (currentGroup.repeatCount === 0 || timer.currentRepeatIndex + 1 < Math.max(1, currentGroup.repeatCount || 1)) {
-            timer.currentRepeatIndex++;
-            timer.currentSegmentIndex = 0;
-            return true;
-        }
-
-        if (timer.currentGroupIndex + 1 < timer.groups.length) {
-            timer.currentGroupIndex++;
-            timer.currentRepeatIndex = 0;
-            timer.currentSegmentIndex = 0;
-            return true;
-        }
-
-        return false;
-    }
-
-    // ─── Private ──────────────────────────────────────────────
-
-    private getDefaultIntervalGroups(): IntervalGroup[] {
-        return [
-            {
-                repeatCount: 1,
-                segments: [
-                    { label: 'Prepare', durationSeconds: 10, type: 'prepare' },
-                    { label: 'Work', durationSeconds: this.ctx.plugin.settings.pomodoroWorkMinutes * 60, type: 'work' },
-                    { label: 'Break', durationSeconds: this.ctx.plugin.settings.pomodoroBreakMinutes * 60, type: 'break' }
-                ]
-            }
-        ];
-    }
-
-    private defaultSegmentLabel(type: IntervalSegment['type']): string {
-        if (type === 'prepare') return 'Prepare';
-        if (type === 'break') return 'Break';
-        return 'Work';
+    /**
+     * 空のグループ定義に当てる既定。設定は呼ぶたびに読む（起動時に固めると
+     * 設定変更が次のタイマーに乗らない）。
+     */
+    private intervalDefaults(): IntervalDefaults {
+        return {
+            prepareSeconds: 10,
+            workSeconds: this.ctx.plugin.settings.pomodoroWorkMinutes * 60,
+            breakSeconds: this.ctx.plugin.settings.pomodoroBreakMinutes * 60,
+        };
     }
 }

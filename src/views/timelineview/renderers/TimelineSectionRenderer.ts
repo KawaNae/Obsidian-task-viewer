@@ -1,6 +1,7 @@
 import { t } from '../../../i18n';
 import type { DisplayTask } from '../../../types';
-import type TaskViewerPlugin from '../../../main';
+import type { PluginContext } from '../../../PluginContext';
+import type { TimerHost } from '../../../timer/TimerWidget';
 import type { MenuHandler } from '../../../interaction/menu/MenuHandler';
 import { TouchLongPressBinder } from '../../../interaction/menu/TouchLongPressBinder';
 import { DateUtils } from '../../../utils/DateUtils';
@@ -8,9 +9,14 @@ import { TaskStyling } from '../../sharedUI/TaskStyling';
 import { getEffectiveColor, getEffectiveLinestyle } from '../../../services/data/EffectiveProperties';
 import { TaskLayout } from '../TaskLayout';
 import type { TaskCardRenderer } from '../../taskcard/TaskCardRenderer';
-import type { HandleManager } from '../HandleManager';
+import type { HandleManager } from '../../sharedUI/handles/HandleManager';
+import { markHandleSurface } from '../../sharedUI/handles/HandleSurface';
 import type { CardReconciler } from '../../sharedUI/CardReconciler';
-import { CreateTaskModal, formatTaskLine } from '../../../modals/CreateTaskModal';
+import {
+    appendEmptySpaceMenuItems,
+    openCreateTaskForDailyNote,
+    openDailyNoteTimer,
+} from '../../sharedLogic/DailyNoteTaskActions';
 import { attachSunIndicators } from '../../sharedUI/AstronomyCellAdorner';
 
 
@@ -22,7 +28,7 @@ const Z_MAX = 190;
 
 export class TimelineSectionRenderer {
     constructor(
-        private plugin: TaskViewerPlugin,
+        private plugin: PluginContext & TimerHost,
         private menuHandler: MenuHandler,
         private handleManager: HandleManager,
         private taskRenderer: TaskCardRenderer,
@@ -48,6 +54,7 @@ export class TimelineSectionRenderer {
             const cardInstanceId = `${this.viewId}::lane-${date}::${task.id}`;
             const reused = reconciler.acquire(cardInstanceId);
             const el = reused ?? container.createDiv('task-card');
+            markHandleSurface(el, 'timeline');
             if (reused) container.appendChild(reused);
 
             this.decorateLane(el, task, date, index, layout, startHour);
@@ -207,7 +214,7 @@ export class TimelineSectionRenderer {
         }
 
         // Format time HH:mm
-        const timeString = `${finalHours.toString().padStart(2, '0')}:${roundedMinutes.toString().padStart(2, '0')}`;
+        const timeString = DateUtils.formatHHMM(finalHours, roundedMinutes);
 
         // Determine Task Date
         // If finalHours + 24 (effectively) was >= 24, it means it's next day
@@ -226,66 +233,16 @@ export class TimelineSectionRenderer {
             taskDate = DateUtils.getLocalDateString(d);
         }
 
-        // Open Modal
-        new CreateTaskModal(this.plugin.app, async (result) => {
-            const taskLine = formatTaskLine(result);
-
-            // date is the FILE date (visual column date)
-            const [y, m, d] = date.split('-').map(Number);
-            const dateObj = new Date();
-            dateObj.setFullYear(y, m - 1, d);
-            dateObj.setHours(0, 0, 0, 0);
-
-            const { DailyNoteUtils } = await import('../../../utils/DailyNoteUtils');
-            await DailyNoteUtils.appendLineToDailyNote(
-                this.plugin.app,
-                dateObj,
-                taskLine,
-                this.plugin.settings.dailyNoteHeader,
-                this.plugin.settings.dailyNoteHeaderLevel
-            );
-        }, { startDate: taskDate, startTime: timeString }, { warnOnEmptyTask: true, dailyNoteDate: date, startHour: this.plugin.settings.startHour }).open();
+        openCreateTaskForDailyNote(this.plugin, date, { startDate: taskDate, startTime: timeString });
     }
 
     /** Show context menu for empty space click */
     private showEmptySpaceMenu(x: number, y: number, offsetY: number, date: string) {
         this.plugin.menuPresenter.present((menu) => {
-            // Create new Task
-            menu.addItem((item) => {
-                item.setTitle(t('menu.createTaskForDailyNote'))
-                    .setIcon('plus')
-                    .onClick(() => this.handleCreateTaskTrigger(offsetY, date));
-            });
-
-            menu.addSeparator();
-
-            // Open Countup (Daily Note)
-            menu.addItem((item) => {
-                item.setTitle(t('menu.openCountupForDailyNote'))
-                    .setIcon('clock')
-                    .onClick(() => this.openDailyNoteTimer(date, 'countup'));
-            });
-
-            // Open Pomodoro (Daily Note)
-            menu.addItem((item) => {
-                item.setTitle(t('menu.openPomodoroForDailyNote'))
-                    .setIcon('timer')
-                    .onClick(() => this.openDailyNoteTimer(date, 'pomodoro'));
+            appendEmptySpaceMenuItems(menu, {
+                onCreate: () => this.handleCreateTaskTrigger(offsetY, date),
+                onTimer: (timerType) => openDailyNoteTimer(this.plugin, date, timerType),
             });
         }, { kind: 'position', x, y });
-    }
-
-    /** Open timer for daily note */
-    private openDailyNoteTimer(date: string, timerType: 'pomodoro' | 'countup') {
-        const dailyNoteId = `daily-${date}`;
-        const displayName = date;
-        const widget = this.plugin.getTimerWidget();
-        widget.startTimer({
-            taskId: dailyNoteId,
-            taskName: displayName,
-            recordMode: 'child',
-            timerType,
-            autoStart: false
-        });
     }
 }

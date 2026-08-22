@@ -14,3 +14,4 @@ import './calendar/CalendarSchema';
 import './calendar/MiniCalendarSchema';
 import './scheduleview/ScheduleSchema';
 import './kanban/KanbanSchema';
+import './TimerSchema';

@@ -1,14 +1,14 @@
 import type { CliData } from 'obsidian';
-import type TaskViewerPlugin from '../../main';
-import { TaskApiError } from '../../api/TaskApiTypes';
-import { formatOutput, resolveFields, cliOk, cliError, validateFormat, parseLimit, defaultLimitForFormat, type OutputFormat } from '../CliOutputFormatter';
+import type { PluginContext } from '../../PluginContext';
+import type { ApiHost } from '../../api/TaskApi';
+import { formatOutput, resolveFields, cliOk, cliError, wrapCliResult, validateFormat, parseLimit, defaultLimitForFormat, type OutputFormat } from '../CliOutputFormatter';
 import { parseSortFlag } from '../CliFilterBuilder';
 
-export function createDuplicateHandler(plugin: TaskViewerPlugin) {
+export function createDuplicateHandler(plugin: PluginContext & ApiHost) {
     return async (params: CliData): Promise<string> => {
         if (!params.id) return cliError('Missing required flag: --id');
 
-        try {
+        return wrapCliResult('duplicate task', async () => {
             const dayOffset = params['day-offset'] ? parseInt(params['day-offset'], 10) : undefined;
             const count = params.count ? parseInt(params.count, 10) : undefined;
 
@@ -21,61 +21,53 @@ export function createDuplicateHandler(plugin: TaskViewerPlugin) {
 
             const result = await plugin.api.duplicate({ id: params.id, dayOffset, count });
             return cliOk({ duplicated: result.duplicated });
-        } catch (e) {
-            return cliError(e instanceof TaskApiError ? e.rawMessage : `Failed to duplicate task: ${e instanceof Error ? e.message : String(e)}`);
-        }
+        });
     };
 }
 
-export function createConvertHandler(plugin: TaskViewerPlugin) {
+export function createConvertHandler(plugin: PluginContext & ApiHost) {
     return async (params: CliData): Promise<string> => {
         if (!params.id) return cliError('Missing required flag: --id');
 
-        try {
+        return wrapCliResult('convert task', async () => {
             const result = await plugin.api.convertToTvFile({ id: params.id });
             return cliOk({ convertedFrom: result.convertedFrom, newFile: result.newFile });
-        } catch (e) {
-            return cliError(e instanceof TaskApiError ? e.rawMessage : `Failed to convert task: ${e instanceof Error ? e.message : String(e)}`);
-        }
+        });
     };
 }
 
-export function createCategorizedTasksForDateRangeHandler(plugin: TaskViewerPlugin) {
-    return (params: CliData): string => {
+export function createCategorizedTasksForDateRangeHandler(plugin: PluginContext & ApiHost) {
+    return async (params: CliData): Promise<string> => {
         if (!params.from) return cliError('Missing required flag: --from');
         if (!params.to) return cliError('Missing required flag: --to');
 
-        try {
+        return wrapCliResult('categorize tasks', () => {
             const result = plugin.api.categorizedTasksForDateRange({ from: params.from, to: params.to });
             return cliOk(result);
-        } catch (e) {
-            return cliError(e instanceof TaskApiError ? e.rawMessage : `Failed to categorize tasks: ${e instanceof Error ? e.message : String(e)}`);
-        }
+        });
     };
 }
 
-export function createInsertChildTaskHandler(plugin: TaskViewerPlugin) {
+export function createInsertChildTaskHandler(plugin: PluginContext & ApiHost) {
     return async (params: CliData): Promise<string> => {
         if (!params['parent-id']) return cliError('Missing required flag: --parent-id');
         if (!params.content) return cliError('Missing required flag: --content');
 
-        try {
+        return wrapCliResult('insert child task', async () => {
             const result = await plugin.api.insertChildTask({
                 parentId: params['parent-id'],
                 content: params.content,
             });
             return cliOk({ parentId: result.parentId });
-        } catch (e) {
-            return cliError(e instanceof TaskApiError ? e.rawMessage : `Failed to insert child task: ${e instanceof Error ? e.message : String(e)}`);
-        }
+        });
     };
 }
 
-export function createCreateTvFileHandler(plugin: TaskViewerPlugin) {
+export function createCreateTvFileHandler(plugin: PluginContext & ApiHost) {
     return async (params: CliData): Promise<string> => {
         if (!params.content) return cliError('Missing required flag: --content');
 
-        try {
+        return wrapCliResult('create frontmatter task', async () => {
             const result = await plugin.api.createTvFile({
                 content: params.content,
                 start: params.start,
@@ -84,20 +76,18 @@ export function createCreateTvFileHandler(plugin: TaskViewerPlugin) {
                 status: params.status,
             });
             return cliOk({ newFile: result.newFile });
-        } catch (e) {
-            return cliError(e instanceof TaskApiError ? e.rawMessage : `Failed to create frontmatter task: ${e instanceof Error ? e.message : String(e)}`);
-        }
+        });
     };
 }
 
-export function createGetStartHourHandler(plugin: TaskViewerPlugin) {
+export function createGetStartHourHandler(plugin: PluginContext & ApiHost) {
     return (): string => {
         const result = plugin.api.getStartHour();
         return cliOk({ ...result });
     };
 }
 
-export function createTasksForDateRangeHandler(plugin: TaskViewerPlugin) {
+export function createTasksForDateRangeHandler(plugin: PluginContext & ApiHost) {
     return async (params: CliData): Promise<string> => {
         if (!params.from) return cliError('Missing required flag: --from');
         if (!params.to) return cliError('Missing required flag: --to');
@@ -105,7 +95,7 @@ export function createTasksForDateRangeHandler(plugin: TaskViewerPlugin) {
         const formatErr = validateFormat(params.format);
         if (formatErr) return cliError(formatErr);
 
-        try {
+        return wrapCliResult('query date range', async () => {
             const format = (params.format as OutputFormat) || 'json';
             const sort = params.sort ? parseSortFlag(params.sort) : undefined;
             const limit = params.limit ? parseLimit(params.limit) : defaultLimitForFormat(format);
@@ -119,8 +109,6 @@ export function createTasksForDateRangeHandler(plugin: TaskViewerPlugin) {
             const fields = resolveFields(params['output-fields']);
             const meta = { total: result.total, truncated: result.truncated, limit: result.limit };
             return formatOutput(result.tasks, format, fields, meta);
-        } catch (e) {
-            return cliError(e instanceof TaskApiError ? e.rawMessage : `Failed to query date range: ${e instanceof Error ? e.message : String(e)}`);
-        }
+        });
     };
 }

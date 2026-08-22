@@ -41,7 +41,6 @@ const storageUtils = {
 function makeCtx(): TimerContext {
     const ctx = {
         timers: new Map<string, TimerInstance>(),
-        intervalPrepareBaseElapsed: new Map<string, number>(),
         recorder: {} as TimerContext['recorder'],
         plugin: {
             settings: { pomodoroWorkMinutes: 25, pomodoroBreakMinutes: 5 },

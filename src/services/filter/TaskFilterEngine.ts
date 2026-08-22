@@ -3,6 +3,7 @@ import type { FilterState, FilterCondition, FilterGroup, FilterItem, DateFilterV
 import type { FilterContext } from './FilterContext';
 import { isFilterCondition } from './FilterTypes';
 import { DateResolver } from './DateResolver';
+import { toDisplayTask, NO_TASK_LOOKUP } from '../display/DisplayTaskConverter';
 import { DateUtils } from '../../utils/DateUtils';
 import { getTaskKind, getTaskNotation } from './parserTaxonomy';
 import {
@@ -17,8 +18,9 @@ import {
  * Raw Task callers must convert via TaskReadService / DisplayTaskConverter
  * first — TaskReadService.getFilteredTasks is the canonical entry point.
  *
- * The `parent` target uses raw Task lookups from context.taskLookup since
- * ancestor resolution doesn't need date semantics.
+ * The `parent` target resolves ancestors through context.taskLookup and
+ * converts each one with toDisplayTask, so an ancestor is evaluated by
+ * exactly the rules a top-level task would be.
  */
 export class TaskFilterEngine {
     static evaluate(task: DisplayTask, filterState: FilterState, context?: FilterContext): boolean {
@@ -128,25 +130,17 @@ export class TaskFilterEngine {
             seen.add(currentParentId);
             const ancestor: Task | undefined = context?.taskLookup?.(currentParentId);
             if (!ancestor) return false;
-            // Lift raw Task into a minimal DisplayTask for filter evaluation.
-            // Effective dates fall back to raw values; ancestor filters in
-            // practice only inspect non-date properties (file/tag/status/etc),
-            // and childEntries is empty since we don't walk the ancestor's
-            // children during filter evaluation.
-            const ancestorDt: DisplayTask = {
-                ...ancestor,
-                effectiveStartDate: ancestor.startDate ?? '',
-                effectiveStartTime: ancestor.startTime,
-                effectiveEndDate: ancestor.endDate,
-                effectiveEndTime: ancestor.endTime,
-                startDateImplicit: false,
-                startTimeImplicit: false,
-                endDateImplicit: false,
-                endTimeImplicit: false,
-                originalTaskId: ancestor.id,
-                isSplit: false,
-                childEntries: [],
-            };
+            // Through the one conversion entry point, same as any other
+            // task the engine sees. The hand-built object this replaces set
+            // no `effectiveDue` at all (the field is optional, so nothing
+            // caught it) and pinned `childEntries` to [], so a `target:
+            // parent` filter could not see a due date written plainly on the
+            // parent, nor that the parent had children.
+            const ancestorDt = toDisplayTask(
+                ancestor,
+                context?.startHour ?? 0,
+                context?.taskLookup ?? NO_TASK_LOOKUP,
+            );
             if (this.evalCondition(ancestorDt, selfCondition, context)) return true;
             currentParentId = ancestor.parentId;
         }
@@ -182,7 +176,7 @@ export class TaskFilterEngine {
         return true;
     }
 
-    private static evalDate(taskDate: string | undefined, c: FilterCondition, startHour: number = 0, weekStartDay: 0 | 1 = 1): boolean {
+    private static evalDate(taskDate: string | undefined, c: FilterCondition, startHour: number, weekStartDay: 0 | 1): boolean {
         if (c.operator === 'isSet') return !!taskDate;
         if (c.operator === 'isNotSet') return !taskDate;
 

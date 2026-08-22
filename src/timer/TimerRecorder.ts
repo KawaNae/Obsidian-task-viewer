@@ -6,9 +6,10 @@
 
 import { type App, Notice } from 'obsidian';
 import { t } from '../i18n';
-import type TaskViewerPlugin from '../main';
+import type { PluginContext } from '../PluginContext';
 import { type TimerInstance, dailyDateOf, getTimerElapsedSeconds, isDailyTimer } from './TimerInstance';
 import { DailyNoteUtils } from '../utils/DailyNoteUtils';
+import { DateUtils } from '../utils/DateUtils';
 import { TaskParser } from '../services/parsing/TaskParser';
 import { type Task, isTvFile } from '../types';
 import { createTempTask } from '../services/data/createTempTask';
@@ -26,7 +27,7 @@ export class TimerRecorder {
 
     constructor(
         private app: App,
-        private plugin: TaskViewerPlugin,
+        private plugin: PluginContext,
         storageUtils: TimerStorageUtils
     ) {
         this.resolver = new TimerTaskResolver(plugin);
@@ -411,6 +412,11 @@ export class TimerRecorder {
      * 読み取り専用の形式（day-planner / tasks-plugin）は最初から書き込めない。
      * 「削除、移動、またはリネームされた可能性」と言うと、実際には在る行を
      * 探しに行かせることになる。
+     *
+     * 開始時の {@link updateTaskStartTime} は not-found を黙って見送るが、ここは
+     * 原因を問わず伝える。失うものが違うためで、非対称は意図したもの — 開始時の
+     * 書き込みが落ちても計測は続き、停止時の記録で回収できる。停止時に落ちると
+     * 計測そのものが消える。
      */
     private noticeResolveFailure(timer: TimerInstance): void {
         const reason = this.resolver.explainFailure(timer);
@@ -728,14 +734,11 @@ export class TimerRecorder {
     }
 
     private formatDate(d: Date): string {
-        const year = d.getFullYear();
-        const month = (d.getMonth() + 1).toString().padStart(2, '0');
-        const day = d.getDate().toString().padStart(2, '0');
-        return `${year}-${month}-${day}`;
+        return DateUtils.getLocalDateString(d);
     }
 
     private formatTime(d: Date): string {
-        return `${d.getHours().toString().padStart(2, '0')}:${d.getMinutes().toString().padStart(2, '0')}`;
+        return DateUtils.formatHHMM(d.getHours(), d.getMinutes());
     }
 
 }

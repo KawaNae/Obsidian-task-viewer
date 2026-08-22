@@ -17,9 +17,9 @@
  */
 
 import type { App, WorkspaceLeaf, WorkspaceWindow } from 'obsidian';
-import type TaskViewerPlugin from '../main';
+import type { EventRegistrar, PluginContext } from '../PluginContext';
 import { FloatingOverlayHost } from './FloatingOverlayHost';
-import type { TimerWidget } from './TimerWidget';
+import type { TimerContext } from './TimerContext';
 
 const NON_DRAGGABLE_SELECTORS = [
     '.timer-widget__pin-badge',
@@ -38,8 +38,8 @@ export class TimerWidgetWindowObserver {
 
     constructor(
         private app: App,
-        private plugin: TaskViewerPlugin,
-        private widget: TimerWidget,
+        private plugin: PluginContext & EventRegistrar,
+        private widget: TimerContext,
     ) {
         this.host = new FloatingOverlayHost({
             nonDraggableSelectors: NON_DRAGGABLE_SELECTORS,
@@ -86,10 +86,6 @@ export class TimerWidgetWindowObserver {
         this.host.detach();
         this.currentWin = null;
         this.pendingMigration = null;
-    }
-
-    hasContainer(): boolean {
-        return this.host.getContainer() !== null;
     }
 
     getPinState(): PinState {

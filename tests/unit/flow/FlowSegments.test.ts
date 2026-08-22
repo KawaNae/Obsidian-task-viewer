@@ -64,6 +64,51 @@ describe('FlowSegments', () => {
             expect(parseFlowSegments(['every', 'mon']).program).toBeNull();
         });
 
+        // One case per splittable clause kind: the boundary check reads ONE
+        // span list (FlowAst.clauseSpans), and a clause missing from it is
+        // accepted silently and then re-serialized onto the task line,
+        // deleting the child line the user wrote.
+        //
+        // `lifetime` has no case: `x3` lexes as a single token, so its span
+        // cannot cross a boundary by construction. Its entry in the map is
+        // held by the type, not by a test.
+        const SPLIT_BY_CLAUSE: [string, string[]][] = [
+            ['schedule', ['every', 'mon']],
+            ['until', ['every mon until(2026-09-28 +', '1d)']],
+            ['use', ['every mon use(', '"gen")']],
+            ['cells', ['every mon state(n: 1,', 'm: 2)']],
+            ['sets', ['every mon setDue(start +', '3d)']],
+            ['move', ['every mon move([[Log', ']])']],
+        ];
+
+        it.each(SPLIT_BY_CLAUSE)('rejects a split %s clause', (_clause, raws) => {
+            expect(errorCodes(raws)).toContain('flow.node-spans-lines');
+            expect(parseFlowSegments(raws).program).toBeNull();
+        });
+
+        // A string literal that crosses the boundary swallows the separator
+        // into its value, so the check must fire here too.
+        it('rejects a string literal spanning a boundary', () => {
+            expect(errorCodes(['every mon use("gen', '")'])).toContain('flow.node-spans-lines');
+        });
+
+        const WHOLE_BY_CLAUSE: [string, string[]][] = [
+            ['schedule', ['x3', 'every mon']],
+            ['lifetime', ['every mon', 'x3']],
+            ['until', ['every mon', 'until(2026-09-28)']],
+            ['use', ['every mon', 'use("gen")']],
+            ['cells', ['every mon', 'state(n: 1, m: 2)']],
+            ['sets', ['every mon', 'setDue(start + 3d)']],
+            ['move', ['every mon', 'move([[Log]])']],
+        ];
+
+        // The mirror of the above: a clause written whole on its own child
+        // line is the supported form and must not be caught by the check.
+        it.each(WHOLE_BY_CLAUSE)('accepts a whole %s clause on a child line', (_clause, raws) => {
+            expect(errorCodes(raws)).toEqual([]);
+            expect(parseFlowSegments(raws).program).not.toBeNull();
+        });
+
         it('detects duplicates across segments', () => {
             expect(errorCodes(['every mon', 'every tue'])).toContain('flow.duplicate-schedule');
         });

@@ -1,9 +1,9 @@
 import type { App } from 'obsidian';
 import type { TaskWriteService } from '../../../services/data/TaskWriteService';
-import { CheckboxMenuBuilder, type CheckboxLineOps, type CreateTvFileCallback } from './CheckboxMenuBuilder';
-import type TaskViewerPlugin from '../../../main';
+import { CheckboxMenuBuilder, type CheckboxLineOps } from './CheckboxMenuBuilder';
+import { createTvFileCallback } from './createTvFileCallback';
+import type { PluginContext } from '../../../PluginContext';
 import type { Task, ChildLine } from '../../../types';
-import type { CreateTaskResult } from '../../../modals/CreateTaskModal';
 
 /**
  * Menu builder for plain checkbox child lines on task cards.
@@ -16,16 +16,12 @@ export class ChildLineMenuBuilder {
     constructor(
         private app: App,
         private writeService: TaskWriteService,
-        private plugin: TaskViewerPlugin
+        private plugin: PluginContext
     ) {
-        const onCreateTvFile: CreateTvFileCallback = async (result, statusChar) => {
-            return this.createTvFile(result, statusChar);
-        };
-
         this.checkboxMenuBuilder = new CheckboxMenuBuilder(
             app,
             () => plugin.settings.startHour,
-            onCreateTvFile
+            createTvFileCallback(writeService)
         );
     }
 
@@ -42,17 +38,5 @@ export class ChildLineMenuBuilder {
         this.plugin.menuPresenter.present((menu) => {
             this.checkboxMenuBuilder.addFullMenu(menu, line.text, settings, ops, parentTask.file);
         }, { kind: 'position', x, y });
-    }
-
-    private async createTvFile(result: CreateTaskResult, statusChar: string): Promise<string> {
-        return this.writeService.createTvFileFromData({
-            content: result.content,
-            statusChar,
-            startDate: result.startDate,
-            startTime: result.startTime,
-            endDate: result.endDate || (result.endTime && result.startDate ? result.startDate : undefined),
-            endTime: result.endTime,
-            due: result.due,
-        });
     }
 }

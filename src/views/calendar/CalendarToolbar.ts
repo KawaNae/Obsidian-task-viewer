@@ -1,10 +1,10 @@
 import { setIcon, type App, type Menu, type WorkspaceLeaf } from 'obsidian';
 import { t } from '../../i18n';
-import type TaskViewerPlugin from '../../main';
+import type { PluginContext } from '../../PluginContext';
 import type { TaskReadService } from '../../services/data/TaskReadService';
 import type { PinnedListDefinition, AstronomyDisplay } from '../../types';
 import { VIEW_META_CALENDAR } from '../../constants/viewRegistry';
-import { DateNavigator, ViewSettingsMenu, MaskToggleButton, ViewToolbarBase, type ViewSettingsOptions } from '../sharedUI/ViewToolbar';
+import { DateNavigator, ViewSettingsMenu, MaskToggleButton, ViewToolbarBase, appendCompactFilterAndMask, type ViewSettingsOptions, type CompactMenuDeps } from '../sharedUI/ViewToolbar';
 import { DateLabel } from '../sharedUI/DateLabel';
 import { appendAstronomyMenuSection } from '../sharedUI/AstronomyMenuSection';
 import type { FilterMenuComponent } from '../customMenus/FilterMenuComponent';
@@ -17,7 +17,7 @@ import { CalendarSchema, type CalendarConfig, type CalendarTransient } from './C
 export interface CalendarToolbarDeps {
     app: App;
     leaf: WorkspaceLeaf;
-    plugin: TaskViewerPlugin;
+    plugin: PluginContext;
     readService: TaskReadService;
     filterMenu: FilterMenuComponent;
     container: HTMLElement;
@@ -37,7 +37,7 @@ export interface CalendarToolbarDeps {
     /** Snapshot the view's full persistable config for template-save / URI build. */
     getCurrentConfig: () => Partial<CalendarConfig>;
     /** Apply a parsed config (from template load / URI / reset). */
-    applyConfig: (cfg: Partial<CalendarConfig>, opts?: { explicit?: boolean }) => void;
+    applyConfig: (cfg: Partial<CalendarConfig>) => void;
     /** Trigger render + saveLayout side effects after applyConfig. */
     onConfigApplied: () => void;
 
@@ -172,12 +172,12 @@ export class CalendarToolbar extends ViewToolbarBase {
             getExportFolder: () => deps.plugin.settings.exportFolder,
             onApplyTemplate: (template) => {
                 const cfg = this.codec.parseConfig(template.config ?? null);
-                deps.applyConfig(cfg, { explicit: true });
+                deps.applyConfig(cfg);
                 if (template.name) deps.onRename(template.name);
                 deps.onConfigApplied();
             },
             onReset: () => {
-                deps.applyConfig({}, { explicit: true });
+                deps.applyConfig({});
                 deps.onRename(undefined);
                 deps.onConfigApplied();
             },
@@ -195,32 +195,16 @@ export class CalendarToolbar extends ViewToolbarBase {
 
     private appendCompactMenuItems(menu: Menu, moreBtn: HTMLElement): void {
         const { deps } = this;
-        menu.addItem((item) => {
-            item.setTitle(t('toolbar.filter'))
-                .setIcon('filter')
-                .onClick(() => {
-                    deps.filterMenu.showMenuAtElement(moreBtn, {
-                        onFilterChange: () => {
-                            deps.onFilterChange();
-                            this.update();
-                        },
-                        getTasks: () => deps.readService.getTasks(),
-                        getStartHour: () => deps.plugin.settings.startHour,
-                    });
-                });
-        });
-
-        const maskOn = deps.getMaskMode();
-        menu.addItem((item) => {
-            item.setTitle(t('toolbar.maskMode'))
-                .setIcon(maskOn ? 'eye-off' : 'eye')
-                .setChecked(maskOn)
-                .onClick(() => {
-                    deps.setMaskMode(!maskOn);
-                    this.update();
-                });
-        });
-
+        const compact: CompactMenuDeps = {
+            filterMenu: deps.filterMenu,
+            getTasks: () => deps.readService.getTasks(),
+            getStartHour: () => deps.plugin.settings.startHour,
+            onFilterChange: () => deps.onFilterChange(),
+            getMaskMode: () => deps.getMaskMode(),
+            setMaskMode: (next) => deps.setMaskMode(next),
+            onAfter: () => this.update(),
+        };
+        appendCompactFilterAndMask(menu, moreBtn, compact);
     }
 
     override update(): void {

@@ -4,6 +4,7 @@ import { VALID_LINE_STYLES } from '../../constants/style';
 import { normalizeColor } from '../../utils/ColorUtils';
 import { TagExtractor } from './utils/TagExtractor';
 import { normalizeYamlDate, parseDateTimeField } from './utils/DateTimeFieldParser';
+import { reservedPropertyKeys } from './utils/FrontmatterPolicy';
 
 /**
  * File-scope (frontmatter) property resolver.
@@ -17,9 +18,6 @@ import { normalizeYamlDate, parseDateTimeField } from './utils/DateTimeFieldPars
  * pipeline (see DEVELOPER.md).
  */
 export class FilePropertyResolver {
-    /** Obsidian metadataCache internal keys to exclude from custom properties */
-    private static readonly INTERNAL_KEYS = new Set<string>(['position']);
-
     static extract(
         frontmatter: Record<string, any> | undefined,
         keys: TvFileKeys
@@ -43,9 +41,7 @@ export class FilePropertyResolver {
             ? (dueParsed.time ? `${dueParsed.date}T${dueParsed.time}` : dueParsed.date)
             : undefined;
 
-        const excluded = new Set<string>(Object.values(keys));
-        excluded.add('tags');
-        for (const k of this.INTERNAL_KEYS) excluded.add(k);
+        const excluded = reservedPropertyKeys(keys);
 
         const properties: Record<string, PropertyValue> = {};
         for (const [key, value] of Object.entries(fm)) {

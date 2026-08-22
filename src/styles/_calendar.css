@@ -175,24 +175,6 @@
     top: 2px;
 }
 
-/* --- Calendar modal --- */
-.calendar-task-modal {
-    padding: 12px;
-}
-
-.calendar-task-modal h2 {
-    margin-top: 0;
-    margin-bottom: 10px;
-}
-
-.calendar-modal-task-list {
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-    max-height: min(70vh, 640px);
-    overflow: auto;
-}
-
 /* leaf 幅基準 (cell は leaf 幅の 1/7)。viewport ではなく .calendar-view コンテナ幅で判定。 */
 @container calendar-view (max-width: 600px) {
     .cal-week-row {

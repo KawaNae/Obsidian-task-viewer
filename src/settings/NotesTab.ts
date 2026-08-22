@@ -1,9 +1,9 @@
 import { Setting } from 'obsidian';
-import type TaskViewerPlugin from '../main';
+import type { PluginContext } from '../PluginContext';
 import { t } from '../i18n';
 import { FileSuggest } from '../suggest/FileSuggest';
 
-export function render(el: HTMLElement, plugin: TaskViewerPlugin): void {
+export function render(el: HTMLElement, plugin: PluginContext): void {
     // Daily Notes
     el.createEl('h3', { text: t('settings.notes.dailyNotes'), cls: 'setting-section-header' });
 

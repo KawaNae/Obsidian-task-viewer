@@ -1,15 +1,16 @@
 import type { TFile } from 'obsidian';
 import type { App, HoverParent } from 'obsidian';
-import type TaskViewerPlugin from '../../main';
+import type { PluginContext } from '../../PluginContext';
 import { DailyNoteUtils } from '../../utils/DailyNoteUtils';
 import { DateUtils } from '../../utils/DateUtils';
 import { withWeekStartDay } from '../../utils/momentWeekLocale';
+import { t } from '../../i18n';
 import type { TaskLinkInteractionManager } from '../taskcard/TaskLinkInteractionManager';
 import { TASK_VIEWER_HOVER_SOURCE_ID } from '../../constants/hover';
 
 interface PeriodicHeaderRendererDeps {
     app: App;
-    plugin: TaskViewerPlugin;
+    plugin: PluginContext;
     hoverParent: HoverParent;
     linkInteractionManager: TaskLinkInteractionManager;
 }
@@ -76,7 +77,7 @@ export class PeriodicHeaderRenderer {
         const target = DailyNoteUtils.getWeeklyNoteLinkTarget(this.deps.plugin.settings, dateObj);
         link.dataset.href = target;
         link.setAttribute('href', target);
-        link.setAttribute('aria-label', `Open weekly note: ${m.format('gggg-[W]ww')}`);
+        link.setAttribute('aria-label', t('aria.openWeeklyNote', { label: m.format('gggg-[W]ww') }));
         link.addEventListener('click', (event: MouseEvent) => {
             event.preventDefault();
             event.stopPropagation();

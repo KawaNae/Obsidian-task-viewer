@@ -1,6 +1,6 @@
 import type { DiagnosticCode, Task, TaskFlow } from '../../types';
 import { type Diagnostic, type Span, error } from '../lang/Diagnostic';
-import type { FlowProgram } from './FlowAst';
+import { clauseSpans } from './FlowAst';
 import { type ParseFlowResult, parseFlow } from './FlowParser';
 import { diagnosticText } from './diagnosticText';
 
@@ -59,7 +59,7 @@ export function parseFlowSegments(raws: string[]): ParseFlowSegmentsResult {
     const result = parseFlow(source);
 
     if (result.program) {
-        const spanning = nodeSpans(result.program).filter(span => crossesBoundary(span, table));
+        const spanning = clauseSpans(result.program).filter(span => crossesBoundary(span, table));
         if (spanning.length > 0) {
             const diagnostics: Diagnostic[] = [...result.diagnostics];
             for (const span of spanning) {
@@ -74,20 +74,6 @@ export function parseFlowSegments(raws: string[]): ParseFlowSegmentsResult {
     }
 
     return { ...result, table };
-}
-
-function nodeSpans(program: FlowProgram): Span[] {
-    const spans: Span[] = [];
-    if (program.schedule) spans.push(program.schedule.span);
-    if (program.lifetime) spans.push(program.lifetime.span);
-    if (program.until) spans.push(program.until.span);
-    if (program.sets) {
-        for (const node of Object.values(program.sets)) {
-            if (node) spans.push(node.span);
-        }
-    }
-    if (program.move) spans.push(program.move.span);
-    return spans;
 }
 
 function crossesBoundary(span: Span, table: SegmentTable): boolean {

@@ -1,6 +1,6 @@
 import { addMonths } from 'date-fns';
 import { type EvalContext, EvalError, evalExpr } from '../lang/ExprEvaluator';
-import { nextCycle, nextWeekdayAfter } from '../lang/functions';
+import { MAX_GRID_STEPS, nextCycle, nextWeekdayAfter } from '../lang/functions';
 import { addDuration, dateAt, formatDateStr, isDatishValue, isWritableDatish, parseDateStr } from '../lang/Value';
 import type { EveryRule, ScheduleNode } from './FlowAst';
 
@@ -21,8 +21,6 @@ export interface ScheduleRuntime {
     /** Local date+time of "now" (minute/hour grids). */
     now: { date: string; time: string };
 }
-
-const MAX_GRID_STEPS = 10000;
 
 /**
  * Compute the next occurrence for a schedule clause.

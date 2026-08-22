@@ -1,9 +1,10 @@
 import type { CliData } from 'obsidian';
-import type TaskViewerPlugin from '../../main';
+import type { PluginContext } from '../../PluginContext';
+import type { ApiHost } from '../../api/TaskApi';
 import { TaskApiError } from '../../api/TaskApiTypes';
-import { pickFields, resolveFields, cliOk, cliError } from '../CliOutputFormatter';
+import { pickFields, resolveFields, cliOk, cliError, wrapCliResult } from '../CliOutputFormatter';
 
-export function createCreateHandler(plugin: TaskViewerPlugin) {
+export function createCreateHandler(plugin: PluginContext & ApiHost) {
     return async (params: CliData): Promise<string> => {
         if (!params.file) return cliError('Missing required flag: --file');
         if (!params.content) return cliError('Missing required flag: --content');
@@ -13,7 +14,7 @@ export function createCreateHandler(plugin: TaskViewerPlugin) {
             return cliError(e instanceof TaskApiError ? e.rawMessage : String(e));
         }
 
-        try {
+        return wrapCliResult('create task', async () => {
             const result = await plugin.api.create({
                 file: params.file,
                 content: params.content,
@@ -24,13 +25,11 @@ export function createCreateHandler(plugin: TaskViewerPlugin) {
                 heading: params.heading,
             });
             return cliOk({ task: pickFields(result.task, fields) });
-        } catch (e) {
-            return cliError(e instanceof TaskApiError ? e.rawMessage : `Failed to create task: ${e instanceof Error ? e.message : String(e)}`);
-        }
+        });
     };
 }
 
-export function createUpdateHandler(plugin: TaskViewerPlugin) {
+export function createUpdateHandler(plugin: PluginContext & ApiHost) {
     return async (params: CliData): Promise<string> => {
         if (!params.id) return cliError('Missing required flag: --id');
 
@@ -39,7 +38,7 @@ export function createUpdateHandler(plugin: TaskViewerPlugin) {
             return cliError(e instanceof TaskApiError ? e.rawMessage : String(e));
         }
 
-        try {
+        return wrapCliResult('update task', async () => {
             const result = await plugin.api.update({
                 id: params.id,
                 content: params.content,
@@ -49,21 +48,17 @@ export function createUpdateHandler(plugin: TaskViewerPlugin) {
                 status: params.status,
             });
             return cliOk({ task: pickFields(result.task, fields) });
-        } catch (e) {
-            return cliError(e instanceof TaskApiError ? e.rawMessage : `Failed to update task: ${e instanceof Error ? e.message : String(e)}`);
-        }
+        });
     };
 }
 
-export function createDeleteHandler(plugin: TaskViewerPlugin) {
+export function createDeleteHandler(plugin: PluginContext & ApiHost) {
     return async (params: CliData): Promise<string> => {
         if (!params.id) return cliError('Missing required flag: --id');
 
-        try {
+        return wrapCliResult('delete task', async () => {
             const result = await plugin.api.delete({ id: params.id });
             return cliOk({ deleted: result.deleted });
-        } catch (e) {
-            return cliError(e instanceof TaskApiError ? e.rawMessage : `Failed to delete task: ${e instanceof Error ? e.message : String(e)}`);
-        }
+        });
     };
 }

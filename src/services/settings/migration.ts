@@ -31,3 +31,52 @@ export function migrateAstronomySettings(raw: Record<string, unknown>): void {
 
     for (const k of LEGACY_KEYS) delete raw[k];
 }
+
+/**
+ * Settings written by an older version, brought up to the current shape.
+ *
+ * Runs every load, on the raw object straight out of `loadData()` and before
+ * the defaults are merged in — a legacy value has to land on its new key
+ * while that key is still absent, or the merge would paper over it with a
+ * default. Each step is idempotent, so a vault that has already been through
+ * this comes out unchanged.
+ */
+export function migrateSettings(raw: Record<string, unknown>): void {
+    migrateLegacyKeyNames(raw);
+    migrateAstronomySettings(raw);
+    migrateDoubleTapAction(raw);
+}
+
+/**
+ * v0.33 → v0.34: the `Frontmatter*` names became `Tv*`.
+ *
+ * The old key is dropped whether or not it was transcribed, so the next
+ * `saveSettings` writes a file with no legacy names left in it. A new key that
+ * already holds a value wins — it was written by a newer version than the one
+ * that wrote the old key.
+ */
+function migrateLegacyKeyNames(raw: Record<string, unknown>): void {
+    const RENAMES: ReadonlyArray<readonly [string, string]> = [
+        ['frontmatterTaskKeys', 'tvFileKeys'],
+        ['frontmatterTaskHeader', 'tvFileChildHeader'],
+        ['frontmatterTaskHeaderLevel', 'tvFileChildHeaderLevel'],
+        ['fileMenuForFrontmatterTasks', 'fileMenuForTvFile'],
+        ['calendarWeekStartDay', 'weekStartDay'],
+    ];
+    for (const [oldKey, newKey] of RENAMES) {
+        if (raw[oldKey] !== undefined && raw[newKey] === undefined) {
+            raw[newKey] = raw[oldKey];
+        }
+        delete raw[oldKey];
+    }
+}
+
+/**
+ * v0.44 → v0.45: `properties` was absorbed by the task hub, which `detail`
+ * already opens.
+ */
+function migrateDoubleTapAction(raw: Record<string, unknown>): void {
+    if (raw.doubleTapAction === 'properties') {
+        raw.doubleTapAction = 'detail';
+    }
+}

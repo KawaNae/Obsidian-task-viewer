@@ -49,7 +49,6 @@
       "addStatus": "Add Status",
       "addStatusDesc": "Add a new status character.",
       "addButton": "+ Add",
-      "statusN": "Status {{n}}",
       "statusCharPlaceholder": "Char",
       "statusLabelPlaceholder": "Label",
       "removeStatus": "Remove status",
@@ -235,7 +234,8 @@
       "deleteDatabase": "Delete log database",
       "deleteDatabaseDesc": "Drop the entire IndexedDB store. Use only if the database is corrupted.",
       "deleteDatabaseConfirm": "Drop the entire IndexedDB store? All persistent log data on this device will be lost.",
-      "deleted": "Log database deleted"
+      "deleted": "Log database deleted",
+      "exportFailed": "Export failed: {{error}}"
     }
   },
   "view": {
@@ -246,6 +246,14 @@
     "kanban": "Kanban View",
     "timer": "Timer View",
     "log": "Task Viewer Log"
+  },
+  "aria": {
+    "taskMenu": "Task menu",
+    "childLineMenu": "Child line menu",
+    "toggleSection": "Toggle {{title}} section",
+    "openDailyNote": "Open daily note: {{label}}",
+    "openWeeklyNote": "Open weekly note: {{label}}",
+    "due": "Due: {{date}}"
   },
   "command": {
     "openTimeline": "Open Timeline View",
@@ -273,7 +281,6 @@
   },
   "toolbar": {
     "today": "Today",
-    "now": "Now",
     "previousDay": "Previous day",
     "nextDay": "Next day",
     "previousWeek": "Previous week",
@@ -291,7 +298,8 @@
     "copyAsLink": "Copy as link",
     "exportAsImage": "Export as image",
     "maskMode": "Mask mode",
-    "sidebar": "Sidebar",
+    "showSidebar": "Show sidebar",
+    "hideSidebar": "Hide sidebar",
     "position": "Position",
     "noFolderConfigured": "No folder configured",
     "noTemplatesFound": "No templates found",
@@ -400,10 +408,6 @@
     "remove": "Remove",
     "self": "Self",
     "parent": "Ancestor",
-    "statusTodo": "Todo",
-    "statusDone": "Done",
-    "statusCancelled": "Cancelled",
-    "statusException": "Exception",
     "kind": {
       "inline": "Inline",
       "file": "File"
@@ -573,7 +577,6 @@
     "deleteTaskMessage": "Are you sure you want to delete this task?",
     "addChildTask": "Add Child Task",
     "trackAsChild": "Track as Child",
-    "trackSelf": "Track Self",
     "openCountup": "⏱️ Open Countup",
     "openPomodoro": "🍅 Open Pomodoro",
     "startCountup": "⏱️ Countup",
@@ -643,7 +646,30 @@
     "nextCurrent": "Scheduled now",
     "nextUpcoming": "Up next",
     "pinPinned": "Pinned to this window — click to release",
-    "pinPending": "Release pending — click another window to move there"
+    "pinPending": "Release pending — click another window to move there",
+    "autoRepeat": "Auto Repeat",
+    "minutesRange": "Minutes ({{min}}-{{max}})",
+    "template": {
+      "namePlaceholder": "Template name",
+      "browse": "Browse",
+      "searchIcons": "Search icons...",
+      "addGroup": "Add Group",
+      "groupN": "Group {{n}}",
+      "repeat": "Repeat",
+      "addSegment": "Add Segment",
+      "labelPlaceholder": "Label",
+      "hoursAbbr": "h",
+      "minutesAbbr": "m",
+      "secondsAbbr": "s",
+      "typeWork": "Work",
+      "typeBreak": "Break",
+      "typePrepare": "Prep",
+      "errNameRequired": "Template name is required.",
+      "errGroupNeedsSegment": "Each group must have at least one segment.",
+      "errDurationPositive": "Duration must be greater than 0.",
+      "saveFailed": "Failed to save template: {{error}}",
+      "createFailed": "Failed to create template: {{error}}"
+    }
   },
   "notice": {
     "uriCopied": "URI copied to clipboard",
@@ -664,7 +690,13 @@
     "timerTargetReadOnly": "This task's format is read-only. The timer cannot write records to it.",
     "taskConverted": "Task converted to frontmatter file",
     "taskConvertFailed": "Failed to convert task",
-    "taskWriteFailed": "The task line could not be located, so nothing was saved. The change has been undone."
+    "taskWriteFailed": "The task line could not be located, so nothing was saved. The change has been undone.",
+    "taskNotFoundInIndex": "Task not found in index",
+    "exportingImage": "Exporting image…",
+    "exportFailed": "Export failed. See console for details.",
+    "logCopied": "Log copied to clipboard",
+    "logCopyFailed": "Failed to copy log",
+    "imageSaved": "Image saved to {{path}}"
   },
   "pinnedList": {
     "noPinnedLists": "No pinned lists.",
@@ -709,8 +741,5 @@
   },
   "periodicHeader": {},
   "cli": {
-    "title": "Task Viewer CLI Reference",
-    "commands": "Commands",
-    "commonFlags": "Common Flags"
   }
 }

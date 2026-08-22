@@ -1,5 +1,5 @@
 import { TFile } from 'obsidian';
-import type TaskViewerPlugin from '../main';
+import type { PluginContext } from '../PluginContext';
 import type { Task, DisplayTask } from '../types';
 import type { TaskReadService } from '../services/data/TaskReadService';
 import type { TaskWriteService } from '../services/data/TaskWriteService';
@@ -51,7 +51,7 @@ import {
     type StartHourResult,
 } from './TaskApiTypes';
 
-const API_HELP_TEXT = `
+export const API_HELP_TEXT = `
 Task Viewer API Reference
 =========================
 
@@ -189,7 +189,8 @@ FilterState (JSON format)
 
   Properties & Operators:
     file       : includes, excludes          (value: string[])
-    tag        : includes, excludes, equals  (value: string[])
+    tag        : includes, excludes, equals, only  (value: string[])
+                                             (only = tags are exactly this set, nothing more)
     status     : includes, excludes          (value: string[])
     content    : contains, notContains       (value: string)
     startDate  : isSet, isNotSet, equals, before, after, onOrBefore, onOrAfter
@@ -339,11 +340,23 @@ function parseDateTimeParam(value: string, fieldName: string): { date: string; t
 
 // ── Public API ──
 
+/**
+ * Hands out the public API object.
+ *
+ * Declared here rather than in `PluginContext` on purpose: `TaskApi` takes the
+ * plugin itself, so a context that named `TaskApi` would import the module that
+ * imports it back — the same cycle the context exists to close, moved one file
+ * along. A module that needs both asks for `PluginContext & ApiHost`.
+ */
+export interface ApiHost {
+    readonly api: TaskApi;
+}
+
 export class TaskApi {
     private readService: TaskReadService;
     private writeService: TaskWriteService;
 
-    constructor(private plugin: TaskViewerPlugin) {
+    constructor(private plugin: PluginContext) {
         this.readService = plugin.getTaskReadService();
         this.writeService = plugin.getTaskWriteService();
     }

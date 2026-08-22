@@ -1,38 +1,3 @@
-/* DateTime Input Modal Styles */
-.datetime-input-modal {
-    padding: 16px;
-}
-
-.datetime-input-modal h3 {
-    margin-top: 0;
-    margin-bottom: 16px;
-}
-
-.datetime-input-modal__row {
-    display: flex;
-    gap: 8px;
-}
-
-.datetime-input-modal__field {
-    flex: 1;
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
-    margin-bottom: 12px;
-}
-
-.datetime-input-modal__field label {
-    font-size: 0.9em;
-    color: var(--tv-text-muted);
-}
-
-/* Error message */
-.datetime-input-modal__error {
-    color: var(--tv-text-danger);
-    font-size: 0.85em;
-    margin-bottom: 12px;
-}
-
 /* 共有フォーム部品（tv-form__*）は _form.css へ移設。
    Task Hub は自前パネルに移行済み → _task-hub.css */
 

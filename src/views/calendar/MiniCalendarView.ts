@@ -21,7 +21,7 @@ import {
     getGridColumnForDay,
     openOrCreateDailyNote,
 } from './CalendarDateUtils';
-import type TaskViewerPlugin from '../../main';
+import type { PluginContext } from '../../PluginContext';
 import { TaskLinkInteractionManager } from '../taskcard/TaskLinkInteractionManager';
 import { TASK_VIEWER_HOVER_SOURCE_ID } from '../../constants/hover';
 import { TaskViewHoverParent } from '../taskcard/TaskViewHoverParent';
@@ -43,7 +43,7 @@ interface IndicatorState {
 type MiniCalendarViewState = Partial<MiniCalendarConfig> & Partial<MiniCalendarTransient>;
 
 export class MiniCalendarView extends ItemView {
-    private readonly plugin: TaskViewerPlugin;
+    private readonly plugin: PluginContext;
     private readonly readService: TaskReadService;
     private readonly linkInteractionManager: TaskLinkInteractionManager;
     private readonly filterMenu = new FilterMenuComponent();
@@ -59,7 +59,7 @@ export class MiniCalendarView extends ItemView {
     private pendingWeekOffset: number = 0;
     private readonly hoverParent = new TaskViewHoverParent();
 
-    constructor(leaf: WorkspaceLeaf, plugin: TaskViewerPlugin) {
+    constructor(leaf: WorkspaceLeaf, plugin: PluginContext) {
         super(leaf);
         this.plugin = plugin;
         this.readService = this.plugin.getTaskReadService();
@@ -155,7 +155,7 @@ export class MiniCalendarView extends ItemView {
     }
 
     applyConfig(cfg: Partial<MiniCalendarConfig>): void {
-        const next: Partial<MiniCalendarConfig> = { ...MiniCalendarSchema.defaults, ...cfg };
+        const next = this.codec.withDefaults(cfg);
         this.filterMenu.setFilterState(next.filterState ?? createEmptyFilterState());
         this.customName = next.customName;
         this.astronomyDisplay = next.astronomyDisplay

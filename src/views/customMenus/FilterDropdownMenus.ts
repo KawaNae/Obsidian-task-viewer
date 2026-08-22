@@ -1,4 +1,3 @@
-import { setIcon } from 'obsidian';
 import type {
     FilterCondition, FilterProperty, FilterOperator,
     DateFilterValue, RelativeDatePreset, FilterTarget,
@@ -17,19 +16,11 @@ import type { StatusDefinition, Task } from '../../types';
 import { getAvailableValues, getValueDisplay } from './FilterValueHelpers';
 import { t } from '../../i18n';
 import type { PopoverStack } from '../sharedUI/PopoverStack';
-import type { PopoverShell } from '../sharedUI/PopoverShell';
+import { type SelectItem, openSelectPopover } from '../sharedUI/PopoverSelectMenu';
 
-export interface SelectItem {
-    label: string;
-    value: string;
-    checked: boolean;
-    icon?: string;
-    cls?: string;
-}
+export type { SelectItem };
 
 export class FilterDropdownMenus {
-    private childShell: PopoverShell | null = null;
-
     constructor(
         private refreshPopover: () => void,
         private renderContent: () => void,
@@ -45,55 +36,11 @@ export class FilterDropdownMenus {
         onSelect: (value: string) => void,
         multiSelect = false,
     ): void {
-        const stack = this.getStack();
-        this.childShell = stack.openChild({
-            anchor: { kind: 'element', element: anchorEl },
-            className: 'filter-child-popover',
-            build: (popover) => {
-                if (items.length === 0) {
-                    popover.createDiv('filter-child-popover__empty').setText(t('filter.noOptions'));
-                    return;
-                }
-                for (const item of items) {
-                    const row = popover.createDiv(
-                        `filter-child-popover__item${item.checked && !multiSelect ? ' filter-child-popover__item--selected' : ''}`,
-                    );
-
-                    if (multiSelect) {
-                        const checkbox = row.createEl('input', { type: 'checkbox' });
-                        checkbox.checked = item.checked;
-                        checkbox.classList.add('filter-child-popover__checkbox');
-                    }
-
-                    if (item.cls) row.classList.add(item.cls);
-
-                    if (item.icon) {
-                        const iconEl = row.createSpan('filter-child-popover__icon');
-                        setIcon(iconEl, item.icon);
-                    }
-
-                    row.createSpan('filter-child-popover__label').setText(item.label);
-
-                    row.addEventListener('click', (e) => {
-                        e.stopPropagation();
-                        if (multiSelect) {
-                            item.checked = !item.checked;
-                            const cb = row.querySelector('input[type="checkbox"]') as HTMLInputElement | null;
-                            if (cb) cb.checked = item.checked;
-                            onSelect(item.value);
-                        } else {
-                            // Single-select: close child popover then commit.
-                            if (this.childShell) stack.close(this.childShell);
-                            onSelect(item.value);
-                        }
-                    });
-                }
-            },
+        openSelectPopover(this.getStack(), anchorEl, items, onSelect, {
+            multiSelect,
+            emptyLabel: t('filter.noOptions'),
             onClose: () => {
-                this.childShell = null;
-                if (multiSelect) {
-                    this.renderContent();
-                }
+                if (multiSelect) this.renderContent();
             },
         });
     }

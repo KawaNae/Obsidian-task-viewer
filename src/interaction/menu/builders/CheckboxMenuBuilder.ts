@@ -66,7 +66,7 @@ export class CheckboxMenuBuilder {
 
         menu.addItem((item) => {
             const statusDisplay = `[${currentChar}]`;
-            item.setTitle(`Status: ${statusDisplay}`)
+            item.setTitle(t('menu.status', { status: statusDisplay }))
                 .setIcon('check-square')
                 .setSubmenu();
 

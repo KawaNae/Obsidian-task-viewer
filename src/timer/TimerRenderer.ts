@@ -14,12 +14,15 @@ import type {
     CountdownTimer,
     CountupTimer,
     IdleTimer,
+    IntervalSegment,
     IntervalTimer,
     TimerInstance,
 } from './TimerInstance';
 import { isDailyTimer } from './TimerInstance';
 import type { TimerContext } from './TimerContext';
 import type { TimerCreator } from './TimerCreator';
+import { computeCompletedDuration, computeTotalDuration, getCurrentSegment } from './IntervalMath';
+import { createControlButton, type ControlButtonVariant } from './TimerControlButton';
 import type { TimerLifecycle } from './TimerLifecycle';
 import { getDisplayFileName, getTaskDisplayName } from '../services/parsing/utils/TaskContent';
 import { TaskStyling } from '../views/sharedUI/TaskStyling';
@@ -151,7 +154,7 @@ export class TimerRenderer {
 
                 if (timer.timerType === 'interval') {
                     const group = timer.groups[timer.currentGroupIndex];
-                    const segment = this.creator.getCurrentIntervalSegment(timer);
+                    const segment = getCurrentSegment(timer);
                     if (group && segment) {
                         const repeatSpan = header.createSpan('timer-widget__header-repeat');
                         const repeatText = group.repeatCount === 0
@@ -436,16 +439,18 @@ export class TimerRenderer {
             });
         }
 
-        const startBtn = next.createEl('button', {
-            cls: 'timer-widget__btn timer-widget__btn--primary timer-widget__next-start',
+        createControlButton(next, {
+            block: 'timer-widget',
+            variant: 'primary',
+            icon: 'play',
+            label: t('timer.start'),
+            extraClass: 'timer-widget__next-start',
+            onClick: () => {
+                // Same accidental-click guard as the idle close button
+                if (Date.now() - timer.startTimeMs < 500) return;
+                this.startSuggestedTask(task);
+            },
         });
-        setIcon(startBtn, 'play');
-        startBtn.createSpan({ text: ` ${t('timer.start')}` });
-        startBtn.onclick = () => {
-            // Same accidental-click guard as the idle close button
-            if (Date.now() - timer.startTimeMs < 500) return;
-            this.startSuggestedTask(task);
-        };
     }
 
     /**
@@ -486,7 +491,7 @@ export class TimerRenderer {
             && timer.elapsedTime === 0;
 
         if (neverStarted) {
-            this.addControlButton(container, 'primary', 'play', t('timer.start'), () => {
+            this.addWidgetButton(container, 'primary', 'play', t('timer.start'), () => {
                 timer.phase = 'work';
                 timer.startTimeMs = Date.now();
                 timer.pausedElapsedTime = 0;
@@ -504,11 +509,11 @@ export class TimerRenderer {
         }
 
         if (timer.runState === 'suspended') {
-            this.addControlButton(container, 'primary', 'play', t('timer.resume'), () => {
+            this.addWidgetButton(container, 'primary', 'play', t('timer.resume'), () => {
                 this.lifecycle.resumeSession(timer);
             });
         } else {
-            this.addControlButton(container, 'secondary', 'pause', t('timer.suspend'), () => {
+            this.addWidgetButton(container, 'secondary', 'pause', t('timer.suspend'), () => {
                 AudioUtils.playPauseSound();
                 void this.lifecycle.suspendTimer(timer);
             });
@@ -516,118 +521,73 @@ export class TimerRenderer {
 
         // ■ 終了は「記録して閉じる」。タスクの完了はユーザーが checkbox で宣言する
         // ものなので、ここでは状態を触らない（だから ✓ ではなく ■）。
-        this.addControlButton(container, 'primary', 'square', t('timer.finish'), () => {
+        this.addWidgetButton(container, 'primary', 'square', t('timer.finish'), () => {
             AudioUtils.playFinishSound();
             void this.lifecycle.finishTimer(timer);
         });
     }
 
-    /**
-     * controls のボタン 1 個。アイコンは **span ラッパー経由** で入れる —
-     * WebKit は inline-flex ボタン直下の SVG を描画しない（既知の iPad 制約）。
-     */
-    private addControlButton(
+    /** ウィジェットの操作ボタン。ブロック名を固定しただけの薄い包み。 */
+    private addWidgetButton(
         container: HTMLElement,
-        variant: 'primary' | 'secondary',
+        variant: ControlButtonVariant,
         icon: string,
         label: string,
         onClick: () => void,
     ): HTMLButtonElement {
-        const btn = container.createEl('button', {
-            cls: `timer-widget__btn timer-widget__btn--${variant}`,
-        });
-        setIcon(btn.createSpan({ cls: 'timer-widget__btn-icon' }), icon);
-        btn.createSpan({ text: label });
-        btn.onclick = onClick;
-        return btn;
+        return createControlButton(container, { block: 'timer-widget', variant, icon, label, onClick });
     }
 
     private renderIntervalControls(container: HTMLElement, timer: IntervalTimer): void {
         if (timer.phase === 'idle') {
-            const startBtn = container.createEl('button', {
-                cls: 'timer-widget__btn timer-widget__btn--primary'
-            });
-            setIcon(startBtn, 'play');
-            startBtn.createSpan({ text: ` ${t('timer.start')}` });
-            startBtn.onclick = () => {
-                const segment = this.creator.getCurrentIntervalSegment(timer);
+            this.addWidgetButton(container, 'primary', 'play', t('timer.start'), () => {
+                const segment = getCurrentSegment(timer);
                 if (!segment) return;
                 timer.phase = segment.type;
                 timer.segmentTimeRemaining = segment.durationSeconds;
                 timer.startTimeMs = Date.now();
                 timer.pausedElapsedTime = 0;
-                timer.totalElapsedTime = this.creator.computeIntervalCompletedDuration(timer);
+                timer.totalElapsedTime = computeCompletedDuration(timer);
                 timer.isRunning = true;
                 this.lifecycle.startTimerTicker(timer.id);
                 AudioUtils.playStartSound();
                 this.render();
                 this.ctx.persistTimersToStorage();
-            };
+            });
             return;
         }
 
         if (timer.phase === 'prepare') {
-            const resumeBtn = container.createEl('button', {
-                cls: 'timer-widget__btn timer-widget__btn--primary'
-            });
-            setIcon(resumeBtn, 'play');
-            resumeBtn.createSpan({ text: ` ${t('timer.resume')}` });
-            resumeBtn.onclick = () => {
+            this.addWidgetButton(container, 'primary', 'play', t('timer.resume'), () => {
                 this.lifecycle.resumeTimer(timer);
-            };
-
-            const stopBtn = container.createEl('button', {
-                cls: 'timer-widget__btn timer-widget__btn--secondary'
             });
-            setIcon(stopBtn, 'square');
-            stopBtn.createSpan({ text: ` ${t('timer.stop')}` });
-            stopBtn.onclick = async () => {
-                this.lifecycle.pauseOrSnapshotIntervalForStop(timer);
-                AudioUtils.playFinishSound();
-                await this.ctx.flushTimerContent(timer.id);
-                await this.ctx.recorder.recordSessionEnd(timer);
-                this.lifecycle.closeTimer(timer.id);
-            };
+            this.addWidgetButton(container, 'secondary', 'square', t('timer.stop'), () => {
+                void this.lifecycle.stopIntervalTimer(timer);
+            });
             return;
         }
 
         if (timer.isRunning) {
-            const pauseBtn = container.createEl('button', {
-                cls: 'timer-widget__btn timer-widget__btn--secondary'
-            });
-            setIcon(pauseBtn, 'pause');
-            pauseBtn.createSpan({ text: ` ${t('timer.pause')}` });
-            pauseBtn.onclick = () => {
+            this.addWidgetButton(container, 'secondary', 'pause', t('timer.pause'), () => {
                 this.lifecycle.pauseIntervalToPrepare(timer);
                 AudioUtils.playPauseSound();
                 this.render();
                 this.ctx.persistTimersToStorage();
-            };
+            });
             return;
         }
 
-        const resumeBtn = container.createEl('button', {
-            cls: 'timer-widget__btn timer-widget__btn--primary'
-        });
-        setIcon(resumeBtn, 'play');
-        resumeBtn.createSpan({ text: ` ${t('timer.resume')}` });
-        resumeBtn.onclick = () => {
+        // 区間中（work / break）で走っていない状態。UI 操作では作れない
+        // （一時停止は必ず prepare に入る）が、停止の記録待ちのまま Obsidian が
+        // 落ちると localStorage にこの形が残り、復元でここに来る。操作列が無いと
+        // 記録も終了もできなくなるので、prepare と同じ 2 つを出す。
+        this.addWidgetButton(container, 'primary', 'play', t('timer.resume'), () => {
             this.lifecycle.resumeTimer(timer);
-        };
-
-        const stopBtn = container.createEl('button', {
-            cls: 'timer-widget__btn timer-widget__btn--secondary'
         });
-        setIcon(stopBtn, 'square');
-        stopBtn.createSpan({ text: ` ${t('timer.stop')}` });
-        stopBtn.onclick = async () => {
-            this.lifecycle.pauseOrSnapshotIntervalForStop(timer);
-            AudioUtils.playFinishSound();
-            await this.ctx.recorder.recordSessionEnd(timer);
-            this.lifecycle.closeTimer(timer.id);
-        };
+        this.addWidgetButton(container, 'secondary', 'square', t('timer.stop'), () => {
+            void this.lifecycle.stopIntervalTimer(timer);
+        });
     }
-
 
     private formatSignedTime(seconds: number): string {
         return TimeFormatter.formatSignedSeconds(seconds);
@@ -654,13 +614,58 @@ export class TimerRenderer {
         const timer = this.ctx.timers.get(timerId);
         if (!timer || timer.timerType !== 'interval' || timer.intervalSource !== 'pomodoro') return;
 
-        TimerSettingsMenu.showPomodoroSettings({
-            app: this.ctx.app,
-            plugin: this.ctx.plugin,
-            timer,
-            event: e,
-            onPersist: () => this.ctx.persistTimersToStorage(),
-            onRender: () => this.render()
-        });
+        const group = timer.groups[0];
+        const workSegment = group?.segments[0];
+        const breakSegment = group?.segments[1];
+        if (!group || !workSegment || !breakSegment) return;
+
+        // ウィジェットの設定は走行中タイマーの区間長そのものも書き換える。
+        // メニューの組み立ては TimerSettingsMenu が持ち、ここは行き先だけを渡す。
+        const applyMinutes = async (
+            key: 'pomodoroWorkMinutes' | 'pomodoroBreakMinutes',
+            segment: IntervalSegment,
+            minutes: number,
+        ): Promise<void> => {
+            this.ctx.plugin.settings[key] = minutes;
+            segment.durationSeconds = minutes * 60;
+            await this.ctx.plugin.saveSettings();
+            this.syncIdleDisplay(timer);
+            this.ctx.persistTimersToStorage();
+        };
+
+        this.ctx.plugin.menuPresenter.present((menu) => {
+            TimerSettingsMenu.addPomodoroFields(menu, this.ctx.app, {
+                getWorkMinutes: () => this.ctx.plugin.settings.pomodoroWorkMinutes,
+                setWorkMinutes: (minutes) => applyMinutes('pomodoroWorkMinutes', workSegment, minutes),
+                getBreakMinutes: () => this.ctx.plugin.settings.pomodoroBreakMinutes,
+                setBreakMinutes: (minutes) => applyMinutes('pomodoroBreakMinutes', breakSegment, minutes),
+                autoRepeat: {
+                    isOn: () => group.repeatCount === 0,
+                    toggle: () => {
+                        group.repeatCount = group.repeatCount === 0 ? 1 : 0;
+                        timer.totalDuration = computeTotalDuration(timer.groups);
+                        this.ctx.persistTimersToStorage();
+                    },
+                },
+            });
+        }, { kind: 'mouseEvent', event: e });
+    }
+
+    /**
+     * 長さを変えた直後の表示合わせ。走り出す前（idle）だけカーソルを先頭へ戻す。
+     * 走行中に巻き戻すと、計っている区間が別物にすり替わる。
+     */
+    private syncIdleDisplay(timer: IntervalTimer): void {
+        timer.totalDuration = computeTotalDuration(timer.groups);
+        if (timer.phase !== 'idle') return;
+
+        timer.currentGroupIndex = 0;
+        timer.currentSegmentIndex = 0;
+        timer.currentRepeatIndex = 0;
+        const firstSegment = timer.groups[0]?.segments[0];
+        if (firstSegment) {
+            timer.segmentTimeRemaining = firstSegment.durationSeconds;
+        }
+        this.render();
     }
 }

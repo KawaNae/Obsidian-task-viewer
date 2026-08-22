@@ -49,7 +49,6 @@
       "addStatus": "ステータスを追加",
       "addStatusDesc": "新しいステータス文字を追加します。",
       "addButton": "+ 追加",
-      "statusN": "ステータス {{n}}",
       "statusCharPlaceholder": "文字",
       "statusLabelPlaceholder": "ラベル",
       "removeStatus": "ステータスを削除",
@@ -235,7 +234,8 @@
       "deleteDatabase": "ログデータベースを削除",
       "deleteDatabaseDesc": "IndexedDB ストア全体を削除します。データベースが破損した場合のみ使用してください。",
       "deleteDatabaseConfirm": "IndexedDB ストア全体を削除しますか？このデバイス上の全永続ログデータが失われます。",
-      "deleted": "ログデータベースを削除しました"
+      "deleted": "ログデータベースを削除しました",
+      "exportFailed": "書き出しに失敗しました: {{error}}"
     }
   },
   "view": {
@@ -246,6 +246,14 @@
     "kanban": "カンバンビュー",
     "timer": "タイマービュー",
     "log": "Task Viewer ログ"
+  },
+  "aria": {
+    "taskMenu": "タスクメニュー",
+    "childLineMenu": "子行メニュー",
+    "toggleSection": "{{title}} セクションを切り替え",
+    "openDailyNote": "デイリーノートを開く: {{label}}",
+    "openWeeklyNote": "週次ノートを開く: {{label}}",
+    "due": "期限: {{date}}"
   },
   "command": {
     "openTimeline": "タイムラインビューを開く",
@@ -273,7 +281,6 @@
   },
   "toolbar": {
     "today": "今日",
-    "now": "今",
     "previousDay": "前日",
     "nextDay": "翌日",
     "previousWeek": "前週",
@@ -291,7 +298,8 @@
     "copyAsLink": "リンクとしてコピー",
     "exportAsImage": "画像として保存",
     "maskMode": "マスクモード",
-    "sidebar": "サイドバー",
+    "showSidebar": "サイドバーを表示",
+    "hideSidebar": "サイドバーを隠す",
     "position": "表示位置",
     "noFolderConfigured": "フォルダ未設定",
     "noTemplatesFound": "テンプレートなし",
@@ -400,10 +408,6 @@
     "remove": "削除",
     "self": "自身",
     "parent": "祖先",
-    "statusTodo": "未完了",
-    "statusDone": "完了",
-    "statusCancelled": "キャンセル",
-    "statusException": "例外",
     "kind": {
       "inline": "インライン",
       "file": "ファイル"
@@ -573,7 +577,6 @@
     "deleteTaskMessage": "このタスクを削除してよろしいですか？",
     "addChildTask": "子タスクを追加",
     "trackAsChild": "子として記録",
-    "trackSelf": "自身を記録",
     "openCountup": "⏱️ カウントアップを開く",
     "openPomodoro": "🍅 ポモドーロを開く",
     "startCountup": "⏱️ カウントアップ",
@@ -643,7 +646,30 @@
     "nextCurrent": "予定時間中",
     "nextUpcoming": "次の予定",
     "pinPinned": "このウィンドウにピン留め中（クリックで解除）",
-    "pinPending": "解除中 — 移動先のウィンドウをクリック"
+    "pinPending": "解除中 — 移動先のウィンドウをクリック",
+    "autoRepeat": "自動繰り返し",
+    "minutesRange": "分 ({{min}}〜{{max}})",
+    "template": {
+      "namePlaceholder": "テンプレート名",
+      "browse": "一覧から選ぶ",
+      "searchIcons": "アイコンを検索...",
+      "addGroup": "グループを追加",
+      "groupN": "グループ {{n}}",
+      "repeat": "繰り返し",
+      "addSegment": "セグメントを追加",
+      "labelPlaceholder": "ラベル",
+      "hoursAbbr": "時",
+      "minutesAbbr": "分",
+      "secondsAbbr": "秒",
+      "typeWork": "作業",
+      "typeBreak": "休憩",
+      "typePrepare": "準備",
+      "errNameRequired": "テンプレート名を入力してください。",
+      "errGroupNeedsSegment": "各グループには少なくとも 1 つのセグメントが必要です。",
+      "errDurationPositive": "時間は 0 より大きい値にしてください。",
+      "saveFailed": "テンプレートの保存に失敗しました: {{error}}",
+      "createFailed": "テンプレートの作成に失敗しました: {{error}}"
+    }
   },
   "notice": {
     "uriCopied": "URIをクリップボードにコピーしました",
@@ -664,7 +690,13 @@
     "timerTargetReadOnly": "このタスクは読み取り専用の形式です。タイマーの記録を書き込めません。",
     "taskConverted": "タスクをfrontmatterファイルに変換しました",
     "taskConvertFailed": "タスクの変換に失敗しました",
-    "taskWriteFailed": "タスクの行が特定できず、保存されませんでした。変更は元に戻しました。"
+    "taskWriteFailed": "タスクの行が特定できず、保存されませんでした。変更は元に戻しました。",
+    "taskNotFoundInIndex": "インデックスにタスクが見つかりません",
+    "exportingImage": "画像を書き出しています…",
+    "exportFailed": "書き出しに失敗しました。詳細はコンソールを確認してください。",
+    "logCopied": "ログをクリップボードにコピーしました",
+    "logCopyFailed": "ログのコピーに失敗しました",
+    "imageSaved": "画像を {{path}} に保存しました"
   },
   "pinnedList": {
     "noPinnedLists": "ピン留めリストがありません。",
@@ -709,9 +741,6 @@
   },
   "periodicHeader": {},
   "cli": {
-    "title": "Task Viewer CLIリファレンス",
-    "commands": "コマンド",
-    "commonFlags": "共通フラグ"
   }  ,
   "flowDiag": {
     "lex": {

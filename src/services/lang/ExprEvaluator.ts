@@ -7,7 +7,7 @@ import { type EvalRuntime, FnCallError, callFn } from './functions';
 import { type CellStore, type Scope, burn, callFunction, execArrowBody } from './StmtEvaluator';
 import {
     type DurUnit, type Value, WEEKDAY_NAMES, addDuration, compareValues, isDatishValue, isWritableDatish, parseDateStr,
-    DECIMAL_SCALE, MAX_EXACT_FRACTION, recordField, valueToDisplay,
+    DECIMAL_SCALE, MAX_EXACT_FRACTION, durationToMinutes, recordField, valueToDisplay,
 } from './Value';
 
 /**
@@ -681,9 +681,8 @@ function stringishText(v: Value & { type: 'string' | 'link' }): string {
 }
 
 function minutesOrThrow(dur: Value & { type: 'duration' }, span: Span): number {
-    const factors: Partial<Record<string, number>> = { min: 1, h: 60, d: 1440, w: 10080 };
-    const f = factors[dur.unit];
-    if (f === undefined) throw new EvalError('eval.duration-unit-mix',
+    const m = durationToMinutes(dur);
+    if (m === null) throw new EvalError('eval.duration-unit-mix',
         `Cannot mix '${dur.unit}' with other duration units`, span, { unit: dur.unit });
-    return dur.amount * f;
+    return m;
 }

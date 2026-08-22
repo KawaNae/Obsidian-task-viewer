@@ -4,6 +4,8 @@ import type { FileOperations } from './utils/FileOperations';
 import { FrontmatterLineEditor } from './utils/FrontmatterLineEditor';
 import { DateUtils } from '../../utils/DateUtils';
 import { TagExtractor } from '../parsing/utils/TagExtractor';
+import { reservedPropertyKeys } from '../parsing/utils/FrontmatterPolicy';
+import { logWarn } from '../../log/log';
 import {
     getEffectiveColor, getEffectiveLinestyle, getEffectiveMask,
     getEffectiveTags, getEffectiveProperties,
@@ -156,7 +158,17 @@ export class TaskConverter {
         }
 
         // custom properties
+        // The parse layer keeps reserved keys out of Task.properties, but the
+        // cascade is merged in here and this function prints YAML keys — a
+        // writer should not need to trust its input for that. Emitting one
+        // would duplicate a key written above (YAML takes the last) or, for
+        // tv-ignore, hide the file this conversion just created.
+        const reserved = reservedPropertyKeys(frontmatterKeys);
         for (const [key, prop] of Object.entries(getEffectiveProperties(task))) {
+            if (reserved.has(key)) {
+                logWarn(`[TaskConverter] custom key "${key}" collides with a reserved key — skipped`);
+                continue;
+            }
             lines.push(`${key}: ${this.formatPropertyValueForYaml(prop)}`);
         }
 

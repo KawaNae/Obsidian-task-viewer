@@ -8,6 +8,8 @@ import { isTaskBearingFile } from '../utils/FrontmatterPolicy';
 import { FilePropertyResolver } from '../FilePropertyResolver';
 import { normalizeYamlDate, parseDateTimeField } from '../utils/DateTimeFieldParser';
 import { CodeFenceTracker } from '../../../utils/CodeFenceTracker';
+import { LIST_BULLET_SOURCE } from '../utils/ListMarker';
+import { HEADING_REGEX } from '../tree/DocumentTreeBuilder';
 
 export interface FrontmatterParseResult {
     task: Task;
@@ -189,7 +191,7 @@ export class TVFileBuilder {
     }
 
     private static parseHeaderLine(line: string): { level: number; text: string } | null {
-        const match = line.match(/^(#{1,6})\s+(.*)$/);
+        const match = line.match(HEADING_REGEX);
         if (!match) return null;
         return { level: match[1].length, text: match[2] };
     }
@@ -201,7 +203,7 @@ export class TVFileBuilder {
         fenceMask: boolean[]
     ): { lineIndices: number[] } {
         const lineIndices: number[] = [];
-        const listRegex = /^(\s*)(?:[-*+]|\d+[.)])\s+/;
+        const listRegex = new RegExp(`^(\\s*)${LIST_BULLET_SOURCE}\\s+`);
 
         let rootIndent: number | null = null;
 

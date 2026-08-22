@@ -1,8 +1,8 @@
 import { Notice, Setting } from 'obsidian';
-import type TaskViewerPlugin from '../main';
+import type { PluginContext } from '../PluginContext';
 import { t } from '../i18n';
 
-export function render(el: HTMLElement, plugin: TaskViewerPlugin): void {
+export function render(el: HTMLElement, plugin: PluginContext): void {
     new Setting(el)
         .setName(t('settings.log.verboseNotice'))
         .setDesc(t('settings.log.verboseNoticeDesc'))
@@ -78,7 +78,7 @@ export function render(el: HTMLElement, plugin: TaskViewerPlugin): void {
                         path: result.path,
                     }));
                 } catch (e: any) {
-                    new Notice(`Export failed: ${e?.message ?? e}`);
+                    new Notice(t('settings.log.exportFailed', { error: String(e?.message ?? e) }));
                 }
             }));
 

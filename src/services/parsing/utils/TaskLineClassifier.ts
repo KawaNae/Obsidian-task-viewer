@@ -1,3 +1,5 @@
+import { LIST_BULLET_SOURCE } from './ListMarker';
+
 export interface TaskLineMatch {
     /** Leading whitespace */
     indent: string;
@@ -17,8 +19,8 @@ export interface TaskLineMatch {
  * Supports `-`, `*`, `+`, and ordered list markers (`1.`, `1)`).
  */
 export class TaskLineClassifier {
-    private static readonly TASK_LINE_REGEX = /^(\s*)((?:[-*+]|\d+[.)]) *\[)(.)(\].*)$/;
-    private static readonly MARKER_REGEX = /^\s*([-*+]|\d+[.)])/;
+    private static readonly TASK_LINE_REGEX = new RegExp(`^(\\s*)(${LIST_BULLET_SOURCE} *\\[)(.)(\\].*)$`);
+    private static readonly MARKER_REGEX = new RegExp(`^\\s*(${LIST_BULLET_SOURCE})`);
     private static readonly BLOCK_ID_REGEX = /\s\^([A-Za-z0-9-]+)\s*$/;
 
     /**

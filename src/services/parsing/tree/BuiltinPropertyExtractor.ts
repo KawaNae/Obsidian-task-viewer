@@ -3,6 +3,7 @@ import { VALID_LINE_STYLES } from '../../../constants/style';
 import { normalizeColor } from '../../../utils/ColorUtils';
 import { TagExtractor } from '../utils/TagExtractor';
 import { parseDateTimeField } from '../utils/DateTimeFieldParser';
+import { reservedPropertyKeys } from '../utils/FrontmatterPolicy';
 
 export interface ExtractedProperties {
     color?: string;
@@ -31,6 +32,7 @@ export class BuiltinPropertyExtractor {
         keys: TvFileKeys
     ): ExtractedProperties {
         const result: ExtractedProperties = { properties: {} };
+        const reserved = reservedPropertyKeys(keys);
 
         for (const [key, pv] of Object.entries(rawProperties)) {
             if (key === keys.color) {
@@ -57,7 +59,13 @@ export class BuiltinPropertyExtractor {
                 if (parsed.date) {
                     result.due = parsed.time ? `${parsed.date}T${parsed.time}` : parsed.date;
                 }
-            } else {
+            } else if (!reserved.has(key)) {
+                // A declaration key this extractor has no field for
+                // (tv-content / tv-status / tv-ignore / tv-timer-target-id,
+                // and Obsidian's `position`) is not a custom property. It has
+                // no meaning on a child line, and letting it through put it
+                // back into frontmatter on conversion — same rule as the
+                // frontmatter resolver applies at the File layer.
                 result.properties[key] = pv;
             }
         }

@@ -4,6 +4,7 @@ import type { TaskReadService } from '../../services/data/TaskReadService';
 import type { ChildRenderItem } from './types';
 import type { CheckboxWiring } from './CheckboxWiring';
 import { NotationUtils } from './NotationUtils';
+import { t } from '../../i18n';
 
 export type ChildMenuCallback = (taskId: string, x: number, y: number) => void;
 export type ChildLineEditCallback = (
@@ -211,7 +212,7 @@ export class ChildSectionRenderer {
     private createChildMenuButton(taskId: string): HTMLButtonElement {
         const btn = document.createElement('button');
         btn.className = 'task-card__child-menu-btn';
-        btn.setAttribute('aria-label', 'Task menu');
+        btn.setAttribute('aria-label', t('aria.taskMenu'));
         btn.setAttribute('tabindex', '-1');
 
         const span = document.createElement('span');
@@ -235,7 +236,7 @@ export class ChildSectionRenderer {
     private createChildLineEditButton(parentTask: Task, line: ChildLine, bodyLine: number): HTMLButtonElement {
         const btn = document.createElement('button');
         btn.className = 'task-card__child-menu-btn';
-        btn.setAttribute('aria-label', 'Child line menu');
+        btn.setAttribute('aria-label', t('aria.childLineMenu'));
         btn.setAttribute('tabindex', '-1');
 
         const span = document.createElement('span');

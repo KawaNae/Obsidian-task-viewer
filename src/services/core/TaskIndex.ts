@@ -14,13 +14,11 @@ import { TaskValidator, type ValidationError } from './TaskValidator';
 import { SyncDetector } from './SyncDetector';
 import { EditorObserver } from './EditorObserver';
 import { TvInlineToTvFileConverter } from './TvInlineToTvFileConverter';
+import { PathTtlWindow } from './PathTtlWindow';
+import { NotifyCoalescer } from './NotifyCoalescer';
 import { TaskIdGenerator } from '../display/TaskIdGenerator';
-import { DateUtils as CoreDateUtils } from '../../utils/DateUtils';
-import { toDisplayTask } from '../display/DisplayTaskConverter';
-import { getTaskDateRange } from '../display/VisualDateRange';
 import { TaskParser } from '../parsing/TaskParser';
 import type { GenBlock } from '../parsing/gen/GenBlockCollector';
-import { HeadingInserter } from '../../utils/HeadingInserter';
 import { FileOperations } from '../persistence/utils/FileOperations';
 import { logError, logInfo, logWarn } from '../../log/log';
 
@@ -40,23 +38,20 @@ export class TaskIndex {
     private settings: TaskViewerSettings;
     private parseFingerprint: string;
     private draggingFilePath: string | null = null;  // ドラッグ中のファイルパス
-    private notifyDebounceTimer: NodeJS.Timeout | null = null;
-    private readonly NOTIFY_DEBOUNCE_MS = 16; // 約1フレーム
 
-    // 通知の coalesce バッファ。
-    // - null: 保留中なし
-    // - 'full': taskId 不明 or 複数 taskId の混在 → 全体無効化
-    // - { taskId, changes }: 単一 taskId への変更スパン（changes はマージされる）
-    private pendingNotify: { taskId: string; changes: Set<string> } | 'full' | null = null;
+    // 1 フレーム（16ms）分の通知を 1 回にまとめる。合流規則は NotifyCoalescer 側。
+    private readonly notify = new NotifyCoalescer(
+        (taskId, changes) => this.store.notifyListeners(taskId, changes),
+        16,
+    );
 
-    // 自己発信書き込みを覚えておくための TTL マップ（path → 解除 timer）。
+    // 自己発信書き込みを覚えておくためのウィンドウ。
     // vault.modify 後にメタデータキャッシュが遅延発火しても、自己書き込み由来であれば
-    // 重ねて notify を発火しないようにするためのウィンドウ。
-    private recentSelfWriteTimers: Map<string, NodeJS.Timeout> = new Map();
-    private readonly SELF_WRITE_SUPPRESSION_MS = 1000;
+    // 重ねて notify を発火しないようにするため。
+    private readonly selfWrites = new PathTtlWindow(1000);
 
-    private apiWriteInFlight: Map<string, NodeJS.Timeout> = new Map();
-    private readonly API_WRITE_SUPPRESSION_MS = 2000;
+    // API CRUD (withNotify) の実行中を覚えておくためのウィンドウ。
+    private readonly apiWrites = new PathTtlWindow(2000);
 
     /**
      * Every vault subscription this index opened, with the emitter that closes
@@ -114,7 +109,7 @@ export class TaskIndex {
                 // 自己書き込み: 後続の metadataCache.changed が遅延着弾しても
                 // 二重 notify にならないよう短時間だけマーク
                 if (isLocal) {
-                    this.markRecentSelfWrite(file.path);
+                    this.selfWrites.mark(file.path);
                 }
 
                 // ドラッグ中のファイルはスキャンをスキップ（古い値でストアが上書きされるのを防止）
@@ -123,13 +118,13 @@ export class TaskIndex {
                 }
 
                 await this.scanner.queueScan(file, isLocal);
-                WikiLinkResolver.resolve(this.store.getTasksMap(), this.store.getWikilinkRefsMap(), this.app);
+                this.resolveLinks();
                 // Skip notify when an API write (withNotify) is in flight for this
                 // file — withNotify's own notifyImmediate is the authoritative notify.
-                // Editor direct edits (no withNotify) are unaffected: apiWriteInFlight
-                // is only set during API CRUD operations.
-                if (!this.apiWriteInFlight.has(file.path)) {
-                    this.debouncedNotify();
+                // Editor direct edits (no withNotify) are unaffected: the API
+                // window is only marked during API CRUD operations.
+                if (!this.apiWrites.has(file.path)) {
+                    this.notify.schedule();
                 }
             }
         }));
@@ -139,17 +134,13 @@ export class TaskIndex {
                 this.store.removeTasksByFile(file.path);
                 this.scanner.handleFileRenamed(file.path);
                 this.validator.clearErrorsForFile(file.path);
-                WikiLinkResolver.resolve(this.store.getTasksMap(), this.store.getWikilinkRefsMap(), this.app);
-                this.debouncedNotify();
+                this.resolveLinksAndNotify();
             }
         }));
 
         this.own(this.app.vault, this.app.vault.on('create', (file) => {
             if (file instanceof TFile && file.extension === 'md') {
-                this.scanner.queueScan(file).then(() => {
-                    WikiLinkResolver.resolve(this.store.getTasksMap(), this.store.getWikilinkRefsMap(), this.app);
-                    this.debouncedNotify();
-                    });
+                void this.rescanAndNotify(file);
             }
         }));
 
@@ -162,13 +153,10 @@ export class TaskIndex {
                 // 自己書き込み直後のメタデータキャッシュ更新は完全に無視する。
                 // ドラッグ完了後 setDraggingFile(null) と相前後して着弾する遅延イベントが
                 // 余分な scan + notify を引き起こすのを防ぐ。
-                if (this.isRecentSelfWrite(file.path)) {
+                if (this.selfWrites.has(file.path)) {
                     return;
                 }
-                this.scanner.queueScan(file).then(() => {
-                    WikiLinkResolver.resolve(this.store.getTasksMap(), this.store.getWikilinkRefsMap(), this.app);
-                    this.debouncedNotify();
-                    });
+                void this.rescanAndNotify(file);
             }
         }));
 
@@ -178,16 +166,13 @@ export class TaskIndex {
                 this.store.removeTasksByFile(oldPath);
                 this.scanner.handleFileRenamed(oldPath);
                 this.validator.clearErrorsForFile(oldPath);
-                WikiLinkResolver.resolve(this.store.getTasksMap(), this.store.getWikilinkRefsMap(), this.app);
-                this.debouncedNotify();
+                this.resolveLinksAndNotify();
                 return;
             }
 
             // 非md → md: create 扱い
             if (!oldPath.endsWith('.md')) {
-                await this.scanner.queueScan(file);
-                WikiLinkResolver.resolve(this.store.getTasksMap(), this.store.getWikilinkRefsMap(), this.app);
-                this.debouncedNotify();
+                await this.rescanAndNotify(file);
                 return;
             }
 
@@ -200,9 +185,7 @@ export class TaskIndex {
             this.store.removeTasksByFile(oldPath);
             this.scanner.handleFileRenamed(oldPath);
 
-            await this.scanner.queueScan(file);
-            WikiLinkResolver.resolve(this.store.getTasksMap(), this.store.getWikilinkRefsMap(), this.app);
-            this.debouncedNotify();
+            await this.rescanAndNotify(file);
         }));
     }
 
@@ -211,57 +194,35 @@ export class TaskIndex {
         this.eventRefs.push({ emitter, ref });
     }
 
+    /**
+     * Re-point every wikilink at the store as it stands now.
+     *
+     * Every vault event ends here: a file that changed can have created or
+     * broken a link in a file that did not, so the resolution is whole-store
+     * rather than per-file.
+     */
+    private resolveLinks(): void {
+        WikiLinkResolver.resolve(this.store.getTasksMap(), this.store.getWikilinkRefsMap(), this.app);
+    }
+
+    /** The tail every vault handler shares: resolve links, then notify. */
+    private resolveLinksAndNotify(): void {
+        this.resolveLinks();
+        this.notify.schedule();
+    }
+
+    /**
+     * Read the file back into the store, then resolve and notify.
+     *
+     * The three steps are one unit: notifying before the links are resolved
+     * paints a frame whose parent/child arrows still point at the old store.
+     */
+    private async rescanAndNotify(file: TFile, isLocal?: boolean): Promise<void> {
+        await this.scanner.queueScan(file, isLocal);
+        this.resolveLinksAndNotify();
+    }
+
     // ===== 通知制御 =====
-
-    /**
-     * 保留中の通知バッファに新しい通知を取り込む。
-     * 同一 taskId への通知は changes をマージし、taskId 不明 / 複数 taskId が混ざる場合は
-     * 全体無効化（'full'）に降格する。
-     */
-    private mergeNotify(taskId?: string, changes?: string[]): void {
-        if (!taskId || !changes) {
-            this.pendingNotify = 'full';
-            return;
-        }
-        if (this.pendingNotify === null) {
-            this.pendingNotify = { taskId, changes: new Set(changes) };
-            return;
-        }
-        if (this.pendingNotify === 'full') return;
-        if (this.pendingNotify.taskId === taskId) {
-            for (const k of changes) this.pendingNotify.changes.add(k);
-        } else {
-            this.pendingNotify = 'full';
-        }
-    }
-
-    /** 保留中の通知を即時にリスナーへ流し、バッファをクリアする */
-    private flushPending(): void {
-        const pending = this.pendingNotify;
-        this.pendingNotify = null;
-        if (pending === null) return;
-        if (pending === 'full') {
-            this.store.notifyListeners();
-        } else {
-            this.store.notifyListeners(pending.taskId, [...pending.changes]);
-        }
-    }
-
-    /**
-     * notifyListenersをdebounceで呼び出す。
-     * 短時間（16ms）の連続呼び出しを統合して不要な再レンダリングを削減。
-     * 引数を渡すと changes スパンをマージしてリスナーに伝搬する。
-     */
-    private debouncedNotify(taskId?: string, changes?: string[]): void {
-        this.mergeNotify(taskId, changes);
-        if (this.notifyDebounceTimer) {
-            clearTimeout(this.notifyDebounceTimer);
-        }
-        this.notifyDebounceTimer = setTimeout(() => {
-            this.notifyDebounceTimer = null;
-            this.flushPending();
-        }, this.NOTIFY_DEBOUNCE_MS);
-    }
 
     /**
      * 即時通知（debounceなし）。
@@ -270,26 +231,7 @@ export class TaskIndex {
      * 既存のdebounceタイマーはキャンセルして即座に実行する。
      */
     notifyImmediate(taskId?: string, changes?: string[]): void {
-        this.mergeNotify(taskId, changes);
-        if (this.notifyDebounceTimer) {
-            clearTimeout(this.notifyDebounceTimer);
-            this.notifyDebounceTimer = null;
-        }
-        this.flushPending();
-    }
-
-    /** 自己書き込みを短時間記憶する（metadataCache.changed の遅延着弾を抑止するため） */
-    private markRecentSelfWrite(filePath: string): void {
-        const existing = this.recentSelfWriteTimers.get(filePath);
-        if (existing) clearTimeout(existing);
-        const timer = setTimeout(() => {
-            this.recentSelfWriteTimers.delete(filePath);
-        }, this.SELF_WRITE_SUPPRESSION_MS);
-        this.recentSelfWriteTimers.set(filePath, timer);
-    }
-
-    private isRecentSelfWrite(filePath: string): boolean {
-        return this.recentSelfWriteTimers.has(filePath);
+        this.notify.flushNow(taskId, changes);
     }
 
     // ===== ドラッグ制御 =====
@@ -340,19 +282,9 @@ export class TaskIndex {
         this.eventRefs = [];
         this.editorObserver.dispose();
 
-        if (this.notifyDebounceTimer) {
-            clearTimeout(this.notifyDebounceTimer);
-            this.notifyDebounceTimer = null;
-        }
-        for (const timer of this.recentSelfWriteTimers.values()) {
-            clearTimeout(timer);
-        }
-        this.recentSelfWriteTimers.clear();
-        for (const timer of this.apiWriteInFlight.values()) {
-            clearTimeout(timer);
-        }
-        this.apiWriteInFlight.clear();
-        this.pendingNotify = null;
+        this.notify.dispose();
+        this.selfWrites.dispose();
+        this.apiWrites.dispose();
     }
 
     // ===== データアクセス (TaskStoreへ委譲) =====
@@ -420,115 +352,33 @@ export class TaskIndex {
      * Wrap a write operation so that any successful completion is followed by
      * an immediate full notify. This guarantees that every TaskIndex write
      * triggers a UI refresh, regardless of whether the underlying file event
-     * pipeline fires a debouncedNotify (e.g. local writes are intentionally
+     * pipeline fires a debounced notify (e.g. local writes are intentionally
      * skipped in the vault.modify handler).
      *
      * Note: notifyImmediate() is called with no args → full invalidation.
      */
-    private markApiWrite(filePath: string): void {
-        const existing = this.apiWriteInFlight.get(filePath);
-        if (existing) clearTimeout(existing);
-        this.apiWriteInFlight.set(filePath, setTimeout(() => {
-            this.apiWriteInFlight.delete(filePath);
-        }, this.API_WRITE_SUPPRESSION_MS));
-    }
-
-    private clearApiWrite(filePath: string): void {
-        const timer = this.apiWriteInFlight.get(filePath);
-        if (timer) {
-            clearTimeout(timer);
-            this.apiWriteInFlight.delete(filePath);
-        }
-    }
-
     private async withNotify<T>(filePath: string, op: () => Promise<T>): Promise<T> {
-        this.markApiWrite(filePath);
+        this.apiWrites.mark(filePath);
         try {
             const result = await op();
             this.notifyImmediate();
             return result;
         } finally {
-            this.clearApiWrite(filePath);
+            this.apiWrites.clear(filePath);
         }
     }
 
     async updateTask(taskId: string, updates: Partial<Task>): Promise<void> {
         logInfo(`[updateTask] id=${taskId} fields=[${Object.keys(updates)}]`);
 
-        // スプリットタスク処理（##seg:YYYY-MM-DD）
+        // 合成セグメント ID (##seg:YYYY-MM-DD) は TaskWriteService が原タスクへ
+        // 解決してから渡す契約（3cd26e96 で consumer の規約から write 境界の構造的
+        // 保証へ移した）。ここに届くのはその境界を迂回した呼び出しなので、書き込みは
+        // baseId で通したうえで声を上げる。落として黙るより、再発を見つけられる方がよい。
         const segmentInfo = TaskIdGenerator.parseSegmentId(taskId);
         if (segmentInfo) {
-            const originalId = segmentInfo.baseId;
-            const originalTask = this.store.getTask(originalId);
-
-            if (!originalTask) {
-                logWarn(`[TaskIndex] Original task ${originalId} not found for split segment`);
-                return;
-            }
-
-            // Resolve effective dates to match splitDisplayTaskAtBoundary's logic
-            const dt = toDisplayTask(originalTask, this.settings.startHour, (id) => this.store.getTask(id));
-            if (!dt.effectiveStartDate) {
-                logWarn(`[TaskIndex] Original task ${originalId} has no effective start date`);
-                return;
-            }
-
-            const range = getTaskDateRange(dt, this.settings.startHour);
-            const originalVisualStartDate = range.effectiveStart || dt.effectiveStartDate;
-
-            // Compute afterSegmentDate the same way splitDisplayTaskAtBoundary does
-            let afterSegmentDate = originalVisualStartDate;
-            if (dt.effectiveStartDate && dt.effectiveEndDate) {
-                let boundaryCalendarDate: string;
-                if (dt.effectiveStartDate === dt.effectiveEndDate) {
-                    boundaryCalendarDate = dt.effectiveStartDate;
-                } else {
-                    boundaryCalendarDate = CoreDateUtils.addDays(dt.effectiveStartDate, 1);
-                }
-                const boundaryTime = `${this.settings.startHour.toString().padStart(2, '0')}:00`;
-                afterSegmentDate = CoreDateUtils.toVisualDate(
-                    boundaryCalendarDate, boundaryTime, this.settings.startHour
-                );
-            }
-
-            let segment: 'before' | 'after' | null = null;
-            if (segmentInfo.segmentDate === originalVisualStartDate) {
-                segment = 'before';
-            } else if (segmentInfo.segmentDate === afterSegmentDate) {
-                segment = 'after';
-            } else {
-                logWarn(`[TaskIndex] Unsupported split segment date: ${segmentInfo.segmentDate} for task ${originalId}`);
-                return;
-            }
-
-            // セグメント更新を元のタスクフィールドにマッピング
-            if (segment === 'before') {
-                if (updates.startDate) originalTask.startDate = updates.startDate;
-                if (updates.startTime) originalTask.startTime = updates.startTime;
-                if (updates.endTime) {
-                    const splitTime = TimeUtils.compareTimes(updates.endTime, this.settings.startHour) < 0
-                        ? updates.endTime
-                        : `23:59`;
-                    originalTask.startTime = originalTask.startTime || '00:00';
-                    originalTask.endTime = splitTime;
-                }
-            } else { // 'after'
-                if (updates.endDate) {
-                    originalTask.endDate = updates.endDate;
-                    if (!originalTask.endTime) originalTask.endTime = '23:59';
-                }
-                if (updates.endTime) originalTask.endTime = updates.endTime;
-            }
-
-            taskId = originalId;
-            // date/time 更新がある場合のみ、元タスクの全 date/time フィールドをマージ
-            if (updates.startDate || updates.startTime || updates.endDate || updates.endTime) {
-                const dateTimeUpdates = {
-                    startDate: originalTask.startDate, startTime: originalTask.startTime,
-                    endDate: originalTask.endDate, endTime: originalTask.endTime
-                };
-                updates = { ...updates, ...dateTimeUpdates };
-            }
+            logWarn(`[TaskIndex] segment id reached updateTask, resolving to base: ${taskId}`);
+            taskId = segmentInfo.baseId;
         }
 
         const task = this.store.getTask(taskId);
@@ -706,13 +556,8 @@ export class TaskIndex {
             this.syncDetector.markLocalEdit(filePath);
 
             if (heading) {
-                const file = this.app.vault.getAbstractFileByPath(filePath);
-                if (!(file instanceof TFile)) return;
-                await this.app.vault.process(file, (content) => {
-                    const result = HeadingInserter.insertUnderHeading(content, taskLine, heading, 2);
-                    insertedLine = result.insertedLine;
-                    return result.content;
-                });
+                insertedLine = await this.repository.insertLineUnderHeading(filePath, taskLine, heading, 2);
+                if (insertedLine < 0) return; // ファイルが無ければ何も書けていない
             } else {
                 insertedLine = await this.repository.appendTaskToFile(filePath, taskLine);
             }
@@ -735,7 +580,7 @@ export class TaskIndex {
             this.syncDetector.markLocalEdit(task.file);
 
             if (isTvFile(task)) {
-                await this.repository.insertLineAfterTvFile(
+                await this.repository.insertLineUnderHeading(
                     task.file, childLine,
                     this.settings.tvFileChildHeader,
                     this.settings.tvFileChildHeaderLevel
@@ -766,7 +611,7 @@ export class TaskIndex {
             this.syncDetector.markLocalEdit(task.file);
 
             if (isTvFile(task)) {
-                await this.repository.insertLineAfterTvFile(
+                await this.repository.insertLineUnderHeading(
                     task.file, childLine,
                     this.settings.tvFileChildHeader,
                     this.settings.tvFileChildHeaderLevel
@@ -919,14 +764,3 @@ export function computeParseFingerprint(settings: TaskViewerSettings): string {
         settings.statusDefinitions,
     ]);
 }
-
-// 時刻比較専用ヘルパー
-const TimeUtils = {
-    compareTimes(time1: string, time2: string | number): number {
-        const [h1, m1] = time1.split(':').map(Number);
-        const t2 = typeof time2 === 'number' ? time2 : parseInt(time2.split(':')[0]);
-        const minutes1 = h1 * 60 + m1;
-        const minutes2 = typeof time2 === 'number' ? t2 * 60 : parseInt(time2.split(':')[1]) + t2 * 60;
-        return minutes1 - minutes2;
-    }
-};

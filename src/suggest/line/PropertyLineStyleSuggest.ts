@@ -4,14 +4,14 @@
  */
 
 import { type App, AbstractInputSuggest } from 'obsidian';
-import type TaskViewerPlugin from '../../main';
+import type { PluginContext } from '../../PluginContext';
 import { filterLineStyles, renderLineStyleSuggestion } from './lineStyleUtils';
 
 export class PropertyLineStyleSuggest extends AbstractInputSuggest<string> {
-    private plugin: TaskViewerPlugin;
+    private plugin: PluginContext;
     private valueEl: HTMLInputElement | HTMLDivElement;
 
-    constructor(app: App, inputEl: HTMLInputElement | HTMLDivElement, plugin: TaskViewerPlugin) {
+    constructor(app: App, inputEl: HTMLInputElement | HTMLDivElement, plugin: PluginContext) {
         super(app, inputEl);
         this.plugin = plugin;
         this.valueEl = inputEl;
@@ -49,7 +49,7 @@ export class PropertyLineStyleSuggest extends AbstractInputSuggest<string> {
         }
 
         const linestyleKey = this.plugin.settings.tvFileKeys.linestyle;
-        await this.plugin.getTaskIndex().getRepository()
+        await this.plugin.getTaskWriteService()
             .setFrontmatterKeys(activeFile.path, { [linestyleKey]: value });
 
         this.syncValue(value);
