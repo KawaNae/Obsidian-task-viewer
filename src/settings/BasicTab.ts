@@ -1,10 +1,10 @@
 import { Setting } from 'obsidian';
-import type TaskViewerPlugin from '../main';
+import type { PluginContext } from '../PluginContext';
 import { FIXED_STATUS_CHARS } from '../types';
 import { t } from '../i18n';
 import { FolderSuggest } from '../suggest/FolderSuggest';
 
-export function render(el: HTMLElement, plugin: TaskViewerPlugin): void {
+export function render(el: HTMLElement, plugin: PluginContext): void {
     // Time & Calendar (timezone settings will live here too)
     el.createEl('h3', { text: t('settings.basic.timeAndCalendar'), cls: 'setting-section-header' });
 
@@ -153,7 +153,7 @@ export function render(el: HTMLElement, plugin: TaskViewerPlugin): void {
         });
 }
 
-function renderStatusDefinitionsList(container: HTMLElement, plugin: TaskViewerPlugin): void {
+function renderStatusDefinitionsList(container: HTMLElement, plugin: PluginContext): void {
     container.empty();
     const fixedChars = new Set<string>(FIXED_STATUS_CHARS as unknown as string[]);
     const defs = plugin.settings.statusDefinitions;

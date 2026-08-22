@@ -1,5 +1,5 @@
-import { type App, PluginSettingTab } from 'obsidian';
-import type TaskViewerPlugin from '../main';
+import { type App, type Plugin, PluginSettingTab } from 'obsidian';
+import type { PluginContext } from '../PluginContext';
 import { t } from '../i18n';
 import * as BasicTab from './BasicTab';
 import * as GeneralTab from './GeneralTab';
@@ -12,10 +12,13 @@ import * as LogTab from './LogTab';
 import * as AboutTab from './AboutTab';
 
 export class TaskViewerSettingTab extends PluginSettingTab {
-    plugin: TaskViewerPlugin;
+    plugin: PluginContext;
     private activeTabId = 'basic';
 
-    constructor(app: App, plugin: TaskViewerPlugin) {
+    // `PluginSettingTab` hands its own constructor argument to Obsidian, which
+    // wants the real Plugin. The tab itself only ever reads PluginContext, so
+    // the two are asked for separately rather than widening the field.
+    constructor(app: App, plugin: PluginContext & Plugin) {
         super(app, plugin);
         this.plugin = plugin;
     }

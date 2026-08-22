@@ -1,8 +1,8 @@
 import { Setting } from 'obsidian';
-import type TaskViewerPlugin from '../main';
+import type { PluginContext } from '../PluginContext';
 import { t } from '../i18n';
 
-export function render(el: HTMLElement, plugin: TaskViewerPlugin): void {
+export function render(el: HTMLElement, plugin: PluginContext): void {
     // Timeline
     el.createEl('h3', { text: t('settings.views.timeline'), cls: 'setting-section-header' });
 
