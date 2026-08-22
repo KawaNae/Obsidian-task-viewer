@@ -649,7 +649,26 @@
     "pinPinned": "このウィンドウにピン留め中（クリックで解除）",
     "pinPending": "解除中 — 移動先のウィンドウをクリック",
     "autoRepeat": "自動繰り返し",
-    "minutesRange": "分 ({{min}}〜{{max}})"
+    "minutesRange": "分 ({{min}}〜{{max}})",
+    "template": {
+      "namePlaceholder": "テンプレート名",
+      "browse": "一覧から選ぶ",
+      "searchIcons": "アイコンを検索...",
+      "addGroup": "グループを追加",
+      "groupN": "グループ {{n}}",
+      "repeat": "繰り返し",
+      "addSegment": "セグメントを追加",
+      "labelPlaceholder": "ラベル",
+      "hoursAbbr": "時",
+      "minutesAbbr": "分",
+      "secondsAbbr": "秒",
+      "typeWork": "作業",
+      "typeBreak": "休憩",
+      "typePrepare": "準備",
+      "errNameRequired": "テンプレート名を入力してください。",
+      "errGroupNeedsSegment": "各グループには少なくとも 1 つのセグメントが必要です。",
+      "errDurationPositive": "時間は 0 より大きい値にしてください。"
+    }
   },
   "notice": {
     "uriCopied": "URIをクリップボードにコピーしました",

@@ -649,7 +649,26 @@
     "pinPinned": "Pinned to this window — click to release",
     "pinPending": "Release pending — click another window to move there",
     "autoRepeat": "Auto Repeat",
-    "minutesRange": "Minutes ({{min}}-{{max}})"
+    "minutesRange": "Minutes ({{min}}-{{max}})",
+    "template": {
+      "namePlaceholder": "Template name",
+      "browse": "Browse",
+      "searchIcons": "Search icons...",
+      "addGroup": "Add Group",
+      "groupN": "Group {{n}}",
+      "repeat": "Repeat",
+      "addSegment": "Add Segment",
+      "labelPlaceholder": "Label",
+      "hoursAbbr": "h",
+      "minutesAbbr": "m",
+      "secondsAbbr": "s",
+      "typeWork": "Work",
+      "typeBreak": "Break",
+      "typePrepare": "Prep",
+      "errNameRequired": "Template name is required.",
+      "errGroupNeedsSegment": "Each group must have at least one segment.",
+      "errDurationPositive": "Duration must be greater than 0."
+    }
   },
   "notice": {
     "uriCopied": "URI copied to clipboard",
