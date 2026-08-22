@@ -103,6 +103,17 @@ describe('TimerContentBinding: the running line owns the content', () => {
         expect(h.timer.pendingContent).toBeUndefined();
     });
 
+    it('folds embedded newlines into spaces before writing (paste, IME)', async () => {
+        // インライン記法は 1 行でなければならない。display は複数行に折り返して
+        // よいが、貼り付け由来の改行が textarea の value に残っていても、記録は
+        // 常に 1 行へ畳む。
+        type(h, '資料集め\nメモ書き');
+        await vi.advanceTimersByTimeAsync(CONTENT_WRITE_DEBOUNCE_MS);
+
+        expect(h.updates).toHaveLength(1);
+        expect(h.updates[0].updates.content).toBe('資料集め メモ書き');
+    });
+
     it('collapses a burst of keystrokes into one write', async () => {
         for (const s of ['あ', 'あい', 'あいう']) {
             type(h, s);

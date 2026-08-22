@@ -32,6 +32,7 @@ import { getEffectiveColor } from '../services/data/EffectiveProperties';
 import { canTriggerFlow } from '../services/flow/FlowTrigger';
 import { NextTaskSuggester, suggestionKey } from './NextTaskSuggester';
 import type { TimerContentBinding } from './TimerContentBinding';
+import { autoGrowTextarea } from '../utils/TextareaAutoGrow';
 
 export class TimerRenderer {
     private closeConfirmTimers = new Map<string, number>();
@@ -106,16 +107,20 @@ export class TimerRenderer {
             if (timer.timerType !== 'idle') {
                 // 走っている行（尻尾）の content をその場で編集する。self も含めて
                 // 同じ扱いで、self の編集は対象タスク行そのものの改名になる。
-                const labelInput = titleContainer.createEl('input', {
-                    type: 'text',
+                // textarea: 記法は 1 行のままだが、長い名前は表示だけ複数行に
+                // 折り返す（オートグローで高さを追従、Enter は改行させず確定）。
+                const labelInput = titleContainer.createEl('textarea', {
                     cls: 'timer-widget__title-input',
                     // 名前の無い行（tv-content 未設定の tvFile など）でも、何を
                     // 計っているのかは見えている必要がある。
                     placeholder: timer.taskName || '\u2014',
-                    value: this.contentBinding.displayValue(timer),
-                    attr: { size: '1' },
+                    attr: { rows: '1', wrap: 'soft' },
                 });
+                // textarea に value 属性は無いので明示代入。
+                labelInput.value = this.contentBinding.displayValue(timer);
+                this.bindTitleInputConfirmKey(labelInput);
                 this.contentBinding.bind(timer, labelInput);
+                autoGrowTextarea(labelInput);
             } else {
                 // Idle: 対象が無いので編集する行も無い
                 const nameSpan = titleContainer.createSpan('timer-widget__title-name');
@@ -261,6 +266,25 @@ export class TimerRenderer {
 
     // ─── Private ─────────────────────────────────────────────
 
+    /**
+     * Enter で改行せず確定させる。IME 確定の Enter は isComposing 判定が
+     * ブラウザ間で揺れるので、compositionstart/end の自前フラグも併用する
+     * （`bracketPairing.ts` と同じイディオム）。改行はスペースに畳んで記録
+     * するので textarea に残っても実害は無いが、Enter 経由では最初から
+     * 入れさせない。
+     */
+    private bindTitleInputConfirmKey(el: HTMLTextAreaElement): void {
+        let composing = false;
+        el.addEventListener('compositionstart', () => { composing = true; });
+        el.addEventListener('compositionend', () => { composing = false; });
+        el.addEventListener('keydown', (e: KeyboardEvent) => {
+            if (e.key === 'Enter' && !e.isComposing && !composing) {
+                e.preventDefault();
+                el.blur();
+            }
+        });
+    }
+
     private clearCloseConfirmTimer(timerId: string): void {
         const id = this.closeConfirmTimers.get(timerId);
         if (id !== undefined) {
@@ -285,7 +309,7 @@ export class TimerRenderer {
 
         // 入力欄は md 側の変化に追随する（打鍵中と未書き込みの入力があるときは
         // binding が見送る）。デイリーノート起点でも尻尾があれば同じ扱い。
-        const inputEl = itemEl.querySelector('.timer-widget__title-input') as HTMLInputElement | null;
+        const inputEl = itemEl.querySelector('.timer-widget__title-input') as HTMLTextAreaElement | null;
         if (inputEl) this.contentBinding.syncFromFile(timer, inputEl);
 
         // デイリーノート起点は対象タスクを持たない（id は `daily-<date>`）。
