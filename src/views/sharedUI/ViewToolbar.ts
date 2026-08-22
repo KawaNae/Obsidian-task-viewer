@@ -8,6 +8,7 @@ import { ViewTemplateLoader } from '../../services/template/ViewTemplateLoader';
 import { ViewTemplateWriter } from '../../services/template/ViewTemplateWriter';
 import { ViewExporter } from '../../services/export/ViewExporter';
 import { exportDescriptorFor, resolveExportContainer } from '../../services/export/ExportRegistry';
+import { buildExportFilename } from '../../services/export/ExportFilename';
 import type { MenuPresenter } from '../../interaction/menu/MenuPresenter';
 
 /**
@@ -469,12 +470,8 @@ export class ViewSettingsMenu {
                             new Notice(t('notice.noContentToExport'));
                             return;
                         }
-                        const shortType = ViewSettingsMenu.toShortViewType(viewType);
-                        const date = new Date().toISOString().slice(0, 10);
-                        const name = getCustomName();
-                        const filename = name
-                            ? `${name}_${date}.png`
-                            : `${shortType}_${date}.png`;
+                        const label = getCustomName() || ViewSettingsMenu.toShortViewType(viewType);
+                        const filename = buildExportFilename(label);
                         const folder = options.getExportFolder?.()?.trim() || 'task-viewer-export';
                         await ViewExporter.exportAsPng({
                             app: options.app,
