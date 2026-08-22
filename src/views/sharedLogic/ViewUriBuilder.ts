@@ -1,4 +1,5 @@
 import type { Workspace, WorkspaceLeaf } from 'obsidian';
+import { shortNameFor } from '../../services/viewConfig';
 
 export type LeafPosition = 'left' | 'right' | 'tab' | 'window' | 'override';
 
@@ -28,17 +29,11 @@ export interface ViewUriOptions {
  * filter) remain readable via the codec's legacyKeys.
  */
 export class ViewUriBuilder {
-    private static readonly VIEW_SHORT_NAMES: Record<string, string> = {
-        'timeline-view': 'timeline',
-        'schedule-view': 'schedule',
-        'calendar-view': 'calendar',
-        'mini-calendar-view': 'mini-calendar',
-        'timer-view': 'timer',
-        'kanban-view': 'kanban',
-    };
-
     static build(viewType: string, options?: ViewUriOptions): string {
-        const shortName = this.VIEW_SHORT_NAMES[viewType];
+        // The schema registry is the one place a view's short name is
+        // declared; the reader (`resolveViewTypeFromShortName`) uses the same
+        // map, so the two directions cannot drift.
+        const shortName = shortNameFor(viewType);
         if (!shortName) return '';
         const opts = options ?? {};
 

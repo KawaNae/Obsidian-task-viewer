@@ -26,7 +26,7 @@ export async function openViewFromUri(
     settings: TaskViewerSettings,
     params: Record<string, string>,
 ): Promise<void> {
-    const viewType = resolveViewTypeFromShortName(params.view) ?? legacyShortName(params.view);
+    const viewType = resolveViewTypeFromShortName(params.view);
     if (!viewType) return;
 
     const position = parseLeafPosition(params.position);
@@ -36,16 +36,6 @@ export async function openViewFromUri(
         : await templatedState(app, settings, viewType, params);
 
     await openLeafFromState(app, settings, viewType, position, state);
-}
-
-/**
- * Short names for views that predate the schema registry.
- *
- * The timer view never had a schema, so `resolveViewTypeFromShortName` — which
- * only knows registered schemas — cannot find it.
- */
-function legacyShortName(shortName: string | undefined): string | undefined {
-    return shortName === 'timer' ? TIMER_VIEW : undefined;
 }
 
 /** The timer view carries its state in the query itself; it has no template. */
