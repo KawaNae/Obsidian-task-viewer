@@ -1,5 +1,6 @@
 import type { Task, TvFileKeys } from '../../types';
 import { TagExtractor } from '../parsing/utils/TagExtractor';
+import { reservedPropertyKeys } from '../parsing/utils/FrontmatterPolicy';
 import { logWarn } from '../../log/log';
 
 /**
@@ -61,9 +62,7 @@ export class PropertyUpdatePlanner {
             // set / delete に分解する。
             const after = updates.properties ?? {};
             const beforeProps = before.properties ?? {};
-            const reserved = new Set<string>(Object.values(keys));
-            reserved.add('tags');
-            reserved.add('position');
+            const reserved = reservedPropertyKeys(keys);
 
             for (const [key, pv] of Object.entries(after)) {
                 if (reserved.has(key)) {
