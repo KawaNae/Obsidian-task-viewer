@@ -7,8 +7,9 @@ import { DateUtils } from '../../utils/DateUtils';
  * (adjusted for startHour boundary). All code needing visual date ranges should
  * use this function rather than calling DateUtils.toVisualDate directly.
  *
- * Exceptions: DisplayTaskConverter (builds DisplayTask, can't consume it) and
- * TaskIndex split-segment boundary computation (dynamic boundary time).
+ * Exception: DisplayTaskConverter, which builds a DisplayTask and so cannot
+ * consume one. TaskIndex used to be a second exception; the split-segment
+ * boundary math it hand-rolled is gone (the branch was unreachable).
  */
 export function getTaskDateRange(
     task: DisplayTask,
