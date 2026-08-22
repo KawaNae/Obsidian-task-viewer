@@ -411,6 +411,11 @@ export class TimerRecorder {
      * 読み取り専用の形式（day-planner / tasks-plugin）は最初から書き込めない。
      * 「削除、移動、またはリネームされた可能性」と言うと、実際には在る行を
      * 探しに行かせることになる。
+     *
+     * 開始時の {@link updateTaskStartTime} は not-found を黙って見送るが、ここは
+     * 原因を問わず伝える。失うものが違うためで、非対称は意図したもの — 開始時の
+     * 書き込みが落ちても計測は続き、停止時の記録で回収できる。停止時に落ちると
+     * 計測そのものが消える。
      */
     private noticeResolveFailure(timer: TimerInstance): void {
         const reason = this.resolver.explainFailure(timer);

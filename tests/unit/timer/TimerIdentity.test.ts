@@ -29,7 +29,6 @@ const timerHandles: number[] = [];
 function makeCtx(): TimerContext & { renders: number } {
     const ctx = {
         timers: new Map<string, TimerInstance>(),
-        intervalPrepareBaseElapsed: new Map<string, number>(),
         recorder: {} as TimerContext['recorder'],
         plugin: { settings: { pomodoroWorkMinutes: 25, pomodoroBreakMinutes: 5 } } as unknown as TimerContext['plugin'],
         app: {} as TimerContext['app'],

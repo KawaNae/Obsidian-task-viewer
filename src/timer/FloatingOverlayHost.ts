@@ -112,14 +112,6 @@ export class FloatingOverlayHost {
         return this.container;
     }
 
-    getWin(): Window | null {
-        return this.win;
-    }
-
-    getDoc(): Document | null {
-        return this.doc;
-    }
-
     isDragInProgress(): boolean {
         return this.dragging;
     }

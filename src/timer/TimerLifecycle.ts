@@ -31,6 +31,12 @@ export class TimerLifecycle {
     /** end の書き足しが飛んでいるタイマー。1 秒 tick の二重発行を防ぐ。 */
     private extending = new Set<string>();
 
+    /**
+     * prepare（interval の一時停止）に入る前の合計経過。待っている間は区間が
+     * 進まないので、待ち時間だけをここを起点に足す。触るのはこのクラスだけ。
+     */
+    private prepareBaseElapsed = new Map<string, number>();
+
     constructor(
         private ctx: TimerContext,
         private creator: TimerCreator,
@@ -110,7 +116,7 @@ export class TimerLifecycle {
                     // prepare はウィジェット固有の待機。区間は進まず、待った分だけを
                     // 足すので共有の区間計算には乗らない。
                     const sinceStart = Math.floor((now - timer.startTimeMs) / 1000);
-                    const baseElapsed = this.ctx.intervalPrepareBaseElapsed.get(timerId) ?? timer.totalElapsedTime;
+                    const baseElapsed = this.prepareBaseElapsed.get(timerId) ?? timer.totalElapsedTime;
                     timer.totalElapsedTime = baseElapsed + Math.max(0, sinceStart);
                     this.ctx.renderTimerItem(timerId);
                     return;
@@ -174,7 +180,7 @@ export class TimerLifecycle {
     }
 
     private async finishIntervalTimer(timerId: string, timer: IntervalTimer): Promise<void> {
-        this.ctx.intervalPrepareBaseElapsed.delete(timerId);
+        this.prepareBaseElapsed.delete(timerId);
         if (timer.totalDuration > 0) {
             timer.totalElapsedTime = timer.totalDuration;
         }
@@ -353,7 +359,7 @@ export class TimerLifecycle {
         timer.phase = 'prepare';
         timer.startTimeMs = Date.now();
         timer.isRunning = true;
-        this.ctx.intervalPrepareBaseElapsed.set(timer.id, timer.totalElapsedTime);
+        this.prepareBaseElapsed.set(timer.id, timer.totalElapsedTime);
         this.startTimerTicker(timer.id);
     }
 
@@ -376,18 +382,18 @@ export class TimerLifecycle {
         if (timer.phase === 'prepare' && timer.isRunning) {
             const now = Date.now();
             const prepareElapsed = Math.max(0, Math.floor((now - timer.startTimeMs) / 1000));
-            const baseElapsed = this.ctx.intervalPrepareBaseElapsed.get(timer.id) ?? timer.totalElapsedTime;
+            const baseElapsed = this.prepareBaseElapsed.get(timer.id) ?? timer.totalElapsedTime;
             timer.totalElapsedTime = baseElapsed + prepareElapsed;
             timer.isRunning = false;
             this.stopTimerTick(timer.id);
-            this.ctx.intervalPrepareBaseElapsed.delete(timer.id);
+            this.prepareBaseElapsed.delete(timer.id);
             return;
         }
 
         if (timer.isRunning) {
             this.pauseTimer(timer);
         }
-        this.ctx.intervalPrepareBaseElapsed.delete(timer.id);
+        this.prepareBaseElapsed.delete(timer.id);
     }
 
     resumeTimer(timer: TimerInstance): void {
@@ -396,7 +402,7 @@ export class TimerLifecycle {
             if (segment) {
                 timer.phase = segment.type;
             }
-            this.ctx.intervalPrepareBaseElapsed.delete(timer.id);
+            this.prepareBaseElapsed.delete(timer.id);
         } else if (timer.timerType === 'countdown') {
             timer.phase = timer.timeRemaining < 0 ? 'idle' : 'work';
         } else if (timer.timerType !== 'idle' && timer.phase === 'idle') {
@@ -416,7 +422,7 @@ export class TimerLifecycle {
         if (!timer) return;
         const closingIdleTimer = this.isIdleTimer(timerId);
 
-        this.ctx.intervalPrepareBaseElapsed.delete(timerId);
+        this.prepareBaseElapsed.delete(timerId);
         this.stopTimerTick(timerId);
         this.ctx.timers.delete(timerId);
 
@@ -432,19 +438,15 @@ export class TimerLifecycle {
         }
     }
 
+    /** widget を畳むときの後始末。次に組み直したときへ持ち越さない。 */
+    clearPrepareState(): void {
+        this.prepareBaseElapsed.clear();
+    }
+
     // ─── Idle Timer ───────────────────────────────────────────
 
     isIdleTimer(timerId: string): boolean {
         return timerId === IDLE_TIMER_ID;
-    }
-
-    hasNonIdleTimers(): boolean {
-        for (const timerId of this.ctx.timers.keys()) {
-            if (!this.isIdleTimer(timerId)) {
-                return true;
-            }
-        }
-        return false;
     }
 
     /**
