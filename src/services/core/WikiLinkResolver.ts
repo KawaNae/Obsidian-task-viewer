@@ -1,6 +1,7 @@
 import type { App } from 'obsidian';
 import { type Task, type WikilinkRef, isTvFile, hasBodyLine } from '../../types';
 import { TaskIdGenerator } from '../display/TaskIdGenerator';
+import { extractWikilinkTarget } from '../../utils/WikilinkUtils';
 import { logDebug } from '../../log/log';
 
 /**
@@ -193,16 +194,12 @@ export class WikiLinkResolver {
      * リンク解決ロジック（完全パス → basename 検索）に委譲する。
      */
     private static resolveWikiLink(linkName: string, app: App): string | null {
-        const target = this.extractWikiLinkTarget(linkName);
+        const target = extractWikilinkTarget(linkName);
         if (!target) {
             return null;
         }
 
         const resolved = app.metadataCache.getFirstLinkpathDest(target, '');
         return resolved?.path ?? null;
-    }
-
-    private static extractWikiLinkTarget(linkName: string): string {
-        return linkName.split('|')[0].trim();
     }
 }
