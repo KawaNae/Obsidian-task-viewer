@@ -1,13 +1,14 @@
 import type { ChildLine, PropertyType, PropertyValue } from '../../../types';
+import { LIST_BULLET_SOURCE } from './ListMarker';
 
 /**
  * 子行のパース・分類ユーティリティ。
  * パース層で ChildLine を生成し、下流での regex 再実行を不要にする。
  */
 export class ChildLineClassifier {
-    /** `- [[link]]` with any list bullet (kept in sync with CHECKBOX_CHAR's bullet set). */
-    static readonly WIKILINK_CHILD = /^\s*(?:[-*+]|\d+[.)])\s+\[\[([^\]]+)\]\]\s*$/;
-    static readonly CHECKBOX_CHAR = /^\s*(?:[-*+]|\d+[.)])\s*\[(.)\]/;
+    /** `- [[link]]` with any list bullet. */
+    static readonly WIKILINK_CHILD = new RegExp(`^\\s*${LIST_BULLET_SOURCE}\\s+\\[\\[([^\\]]+)\\]\\]\\s*$`);
+    static readonly CHECKBOX_CHAR = new RegExp(`^\\s*${LIST_BULLET_SOURCE}\\s*\\[(.)\\]`);
     /**
      * Matches `- key:: value` (Dataview-compatible) but not checkbox or wikilink lines.
      * 値部は空を許す（`- key ::` は空値プロパティ）。`(.+)` にすると末尾空白の
