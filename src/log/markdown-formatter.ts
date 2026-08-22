@@ -33,6 +33,15 @@ export interface DeviceInfo {
 
 const LEVEL_KEYS: readonly LogLevel[] = ["debug", "info", "warn", "error"];
 
+/**
+ * File name for a log export: `task_viewer_log_<ISO seconds>.md`.
+ *
+ * UTC on purpose, unlike the image export's local calendar day. Everything
+ * this file writes is UTC — `exported_at`, `buffer_range`, and every entry's
+ * timestamp — and the name repeats `exported_at` verbatim, so the file says
+ * one time in one zone. A log export is read alongside a bug report, where a
+ * single absolute clock is worth more than a familiar one.
+ */
 export function buildExportFileName(exportedAtMs: number): string {
     const ts = new Date(exportedAtMs).toISOString().slice(0, 19).replace(/:/g, "-");
     return `task_viewer_log_${ts}.md`;
