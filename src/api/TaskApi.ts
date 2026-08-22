@@ -51,7 +51,7 @@ import {
     type StartHourResult,
 } from './TaskApiTypes';
 
-const API_HELP_TEXT = `
+export const API_HELP_TEXT = `
 Task Viewer API Reference
 =========================
 
@@ -189,7 +189,8 @@ FilterState (JSON format)
 
   Properties & Operators:
     file       : includes, excludes          (value: string[])
-    tag        : includes, excludes, equals  (value: string[])
+    tag        : includes, excludes, equals, only  (value: string[])
+                                             (only = tags are exactly this set, nothing more)
     status     : includes, excludes          (value: string[])
     content    : contains, notContains       (value: string)
     startDate  : isSet, isNotSet, equals, before, after, onOrBefore, onOrAfter

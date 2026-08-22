@@ -9,7 +9,7 @@ import {
 // Per-command flag tables are generated from OperationSchemas (the same
 // source as the actual flag declarations); the surrounding prose is
 // hand-written.
-const HELP_TEXT = `
+export const HELP_TEXT = `
 Task Viewer CLI Reference
 =========================
 
@@ -240,7 +240,7 @@ Groups can be nested up to 3 levels deep.
 Properties & Operators
 ----------------------
   file        : includes, excludes          (value: ["a", "b"])
-  tag         : includes (hierarchy), excludes, equals (exact)  (value: ["a"])
+  tag         : includes (hierarchy), excludes, equals (exact), only (exact set)  (value: ["a"])
   status      : includes, excludes          (value: [" ", "x"])
   content     : contains, notContains       (value: "text")
   startDate   : isSet, isNotSet, equals, before, after, onOrBefore, onOrAfter
