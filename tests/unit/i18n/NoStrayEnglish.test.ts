@@ -136,16 +136,6 @@ const EXEMPTIONS: Exemption[] = [
         why: 'Example path showing the expected shape of the setting.',
     },
     {
-        file: 'modals/DateTimeInputModal.ts',
-        text: 'YYYY-MM-DD',
-        why: 'The date format the field accepts, shown literally so it can be copied.',
-    },
-    {
-        file: 'modals/DateTimeInputModal.ts',
-        text: 'HH:mm',
-        why: 'The time format the field accepts, shown literally so it can be copied.',
-    },
-    {
         file: 'views/customMenus/IntervalTemplateCreator.ts',
         text: 'rotate-cw',
         why: 'An Obsidian icon id, shown as an example of what to type. Ids are not localized.',
