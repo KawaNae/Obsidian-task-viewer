@@ -2,10 +2,14 @@ import type { GridRow, TimedDisplayTask } from '../ScheduleTypes';
 import type { ScheduleGridCalculator } from '../utils/ScheduleGridCalculator';
 
 export class ScheduleGridRenderer {
-    // Mirrors `.schedule-grid__label`'s `top: -10px` offset (see _schedule.css)
-    // so the now-time chip's text centers on the line the same way a normal
-    // row label centers on its grid line.
-    private static readonly NOW_LABEL_TOP_OFFSET_PX = 10;
+    // Centers the 16px-tall chip on the now-line's own box, not on a grid
+    // row's line. `.schedule-grid__line` sits at top:-1px with 1px height
+    // (center at +0.5 relative to its row), but `.schedule-grid__now-line`
+    // has no such correction and is 2px tall (center at topPx + 1). So chip
+    // top = topPx - (8 - 1) = topPx - 7 puts the chip's own center (top + 8)
+    // on the line's center. Measured on real render: with the old offset of
+    // 10 the chip's center sat 2.5px above the line's (2026-08-22).
+    private static readonly NOW_LABEL_TOP_OFFSET_PX = 7;
 
     private readonly gridCalculator: ScheduleGridCalculator;
     private readonly timelineTopPaddingPx: number;

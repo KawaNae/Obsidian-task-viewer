@@ -245,12 +245,13 @@
 
 .schedule-grid__now-label {
     position: absolute;
-    /* Same column as .schedule-grid__label: that label sits inside
-       .schedule-grid__marker (left:4px) at its own left:8px, i.e. 12px from
-       the grid's left edge. The chip is a direct .schedule-grid child (not
-       nested in a per-row marker), so the two offsets are composed here —
-       keep this in sync if either one changes. */
-    left: 12px;
+    /* Text-origin alignment with .schedule-grid__label, not box alignment:
+       that label sits inside .schedule-grid__marker (left:4px) at its own
+       left:8px, i.e. its glyphs start 12px from the grid's left edge. This
+       chip's own left:8px plus its padding:0 4px puts its glyphs at the same
+       12px — the opaque chip background is then allowed to overhang 4px to
+       the left of the label column. Measured on real render (2026-08-22). */
+    left: 8px;
     padding: 0 4px;
     border-radius: 3px;
     font-size: 0.82em;
