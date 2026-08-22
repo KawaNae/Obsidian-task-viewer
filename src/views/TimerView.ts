@@ -28,6 +28,13 @@ import {
     computeTotalDuration,
     getCurrentSegment,
 } from '../timer/IntervalMath';
+import {
+    accumulatePausedElapsed,
+    applyCountdownTick,
+    applyCountupTick,
+    applyIntervalPauseSnapshot,
+    applyIntervalTick,
+} from '../timer/TimerTickMath';
 import { TimeFormatter } from '../utils/TimeFormatter';
 import { ViewUriBuilder } from './sharedLogic/ViewUriBuilder';
 import type { ViewUriOptions } from './sharedLogic/ViewUriBuilder';
@@ -63,7 +70,7 @@ export class TimerView extends ItemView {
         this.toolbar = new TimerToolbar({
             plugin: this.plugin,
             getMode: () => this.timerViewMode,
-            isIdle: () => !this.timer || this.timer.phase === 'idle',
+            isIdle: () => !this.timer,
             onSelectMode: (event) => this.showModeMenu(event),
             onReloadTemplates: () => {
                 void (async () => {
@@ -76,7 +83,7 @@ export class TimerView extends ItemView {
     }
 
     private showModeMenu(event: MouseEvent): void {
-        if (this.timer && this.timer.phase !== 'idle') return;
+        if (this.timer) return;
         const labels: Record<TimerViewMode, string> = {
             countup: t('timer.countup'),
             countdown: t('timer.countdown'),
@@ -272,11 +279,7 @@ export class TimerView extends ItemView {
     private pauseTimer(): void {
         if (!this.timer || !this.timer.isRunning) return;
 
-        const now = Date.now();
-        if (this.timer.startTimeMs > 0) {
-            const sessionElapsed = Math.floor((now - this.timer.startTimeMs) / 1000);
-            this.timer.pausedElapsedTime += Math.max(0, sessionElapsed);
-        }
+        accumulatePausedElapsed(this.timer, Date.now());
         this.timer.isRunning = false;
         this.stopTicker();
 
@@ -288,15 +291,9 @@ export class TimerView extends ItemView {
                 this.timer.elapsedTime = this.timer.pausedElapsedTime;
                 this.timer.timeRemaining = this.timer.totalTime - this.timer.elapsedTime;
                 break;
-            case 'interval': {
-                const segment = getCurrentSegment(this.timer);
-                if (segment) {
-                    this.timer.segmentTimeRemaining = Math.max(0, segment.durationSeconds - this.timer.pausedElapsedTime);
-                    const completedBefore = computeCompletedDuration(this.timer);
-                    this.timer.totalElapsedTime = completedBefore + Math.min(segment.durationSeconds, this.timer.pausedElapsedTime);
-                }
+            case 'interval':
+                applyIntervalPauseSnapshot(this.timer);
                 break;
-            }
         }
 
         this.render();
@@ -343,23 +340,21 @@ export class TimerView extends ItemView {
         if (!this.timer || !this.timer.isRunning) return;
 
         const now = Date.now();
-        const sessionElapsed = Math.floor((now - this.timer.startTimeMs) / 1000);
-        const totalElapsed = Math.max(0, this.timer.pausedElapsedTime + sessionElapsed);
 
         switch (this.timer.timerType) {
             case 'countup':
-                this.timer.elapsedTime = totalElapsed;
+                applyCountupTick(this.timer, now);
                 this.updateDisplay();
                 return;
             case 'countdown': {
-                this.timer.elapsedTime = totalElapsed;
-                const prevRemaining = this.timer.timeRemaining;
-                this.timer.timeRemaining = this.timer.totalTime - totalElapsed;
-                this.timer.phase = this.timer.timeRemaining < 0 ? 'idle' : 'work';
-                if (this.timer.timeRemaining > 0 && this.timer.timeRemaining <= 3) {
+                const tick = applyCountdownTick(this.timer, now);
+                // phase は進捗リングの色の元。セッションが在るかどうかは
+                // `this.timer` が持つので、ここを「未開始」の判定に使わない。
+                this.timer.phase = tick.remaining < 0 ? 'idle' : 'work';
+                if (tick.warn) {
                     AudioUtils.playWarningBeep();
                 }
-                if (prevRemaining > 0 && this.timer.timeRemaining <= 0) {
+                if (tick.crossedZero) {
                     AudioUtils.playFinishSound();
                     new Notice(t('timer.complete'));
                 }
@@ -367,24 +362,19 @@ export class TimerView extends ItemView {
                 return;
             }
             case 'interval': {
-                const segment = getCurrentSegment(this.timer);
-                if (!segment) {
+                const tick = applyIntervalTick(this.timer, now);
+                if (tick.outcome === 'no-segment') {
                     this.handleIntervalFinish();
                     return;
                 }
-                const segmentElapsed = Math.max(0, this.timer.pausedElapsedTime + sessionElapsed);
-                this.timer.segmentTimeRemaining = Math.max(0, segment.durationSeconds - segmentElapsed);
-                const completedBefore = computeCompletedDuration(this.timer);
-                this.timer.totalElapsedTime = completedBefore + Math.min(segment.durationSeconds, segmentElapsed);
-
-                if (this.timer.segmentTimeRemaining > 0) {
-                    if (this.timer.segmentTimeRemaining <= 3) {
-                        AudioUtils.playWarningBeep();
-                    }
-                    this.updateDisplay();
-                } else {
+                if (tick.outcome === 'segment-complete') {
                     this.handleSegmentComplete();
+                    return;
                 }
+                if (tick.warn) {
+                    AudioUtils.playWarningBeep();
+                }
+                this.updateDisplay();
                 return;
             }
         }
@@ -455,7 +445,7 @@ export class TimerView extends ItemView {
         const mainContainer = this.container.createDiv('timer-view__main');
 
         // Interval mode: show template selector when idle
-        if (this.timerViewMode === 'interval' && (!this.timer || this.timer.phase === 'idle')) {
+        if (this.timerViewMode === 'interval' && !this.timer) {
             this.renderTemplateSelector(mainContainer);
             return;
         }
@@ -476,7 +466,7 @@ export class TimerView extends ItemView {
     }
 
     private renderControls(container: HTMLElement): void {
-        if (!this.timer || this.timer.phase === 'idle') {
+        if (!this.timer) {
             // Start button
             const startBtn = container.createEl('button', {
                 cls: 'timer-view__btn timer-view__btn--primary',
@@ -701,10 +691,7 @@ export class TimerView extends ItemView {
                     .onClick(async () => {
                         this.plugin.settings.countdownMinutes = mins;
                         await this.plugin.saveSettings();
-                        if (!this.timer || this.timer.phase === 'idle') {
-                            this.timer = null;
-                            this.render();
-                        }
+                        this.applyDurationSettingsToTimer();
                     });
             });
         }
@@ -723,10 +710,7 @@ export class TimerView extends ItemView {
                             if (!isNaN(mins) && mins > 0 && mins <= 120) {
                                 this.plugin.settings.countdownMinutes = mins;
                                 await this.plugin.saveSettings();
-                                if (!this.timer || this.timer.phase === 'idle') {
-                                    this.timer = null;
-                                    this.render();
-                                }
+                                this.applyDurationSettingsToTimer();
                             }
                         }
                     ).open();
@@ -747,7 +731,7 @@ export class TimerView extends ItemView {
                     .onClick(async () => {
                         this.plugin.settings.pomodoroWorkMinutes = mins;
                         await this.plugin.saveSettings();
-                        this.applyPomodoroSettingsToTimer();
+                        this.applyDurationSettingsToTimer();
                     });
             });
         }
@@ -767,7 +751,7 @@ export class TimerView extends ItemView {
                             if (!isNaN(mins) && mins > 0 && mins <= 120) {
                                 this.plugin.settings.pomodoroWorkMinutes = mins;
                                 await this.plugin.saveSettings();
-                                this.applyPomodoroSettingsToTimer();
+                                this.applyDurationSettingsToTimer();
                             }
                         }
                     ).open();
@@ -788,7 +772,7 @@ export class TimerView extends ItemView {
                     .onClick(async () => {
                         this.plugin.settings.pomodoroBreakMinutes = mins;
                         await this.plugin.saveSettings();
-                        this.applyPomodoroSettingsToTimer();
+                        this.applyDurationSettingsToTimer();
                     });
             });
         }
@@ -808,7 +792,7 @@ export class TimerView extends ItemView {
                             if (!isNaN(mins) && mins > 0 && mins <= 60) {
                                 this.plugin.settings.pomodoroBreakMinutes = mins;
                                 await this.plugin.saveSettings();
-                                this.applyPomodoroSettingsToTimer();
+                                this.applyDurationSettingsToTimer();
                             }
                         }
                     ).open();
@@ -816,12 +800,13 @@ export class TimerView extends ItemView {
         });
     }
 
-    private applyPomodoroSettingsToTimer(): void {
-        // Only update timer if idle (not running/paused)
-        if (!this.timer || this.timer.phase === 'idle') {
-            this.timer = null;
-            this.render();
-        }
+    /**
+     * 変えた長さを次のタイマーに映す。走っている（超過中も含む）なら触らない —
+     * 計っている最中のセッションを設定変更で捨てるわけにはいかない。
+     */
+    private applyDurationSettingsToTimer(): void {
+        if (this.timer) return;
+        this.render();
     }
 
     // ─── Utilities ──────────────────────────────────────────────

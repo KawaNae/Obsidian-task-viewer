@@ -19,6 +19,13 @@ import {
     computeCompletedDuration,
     getCurrentSegment,
 } from './IntervalMath';
+import {
+    accumulatePausedElapsed,
+    applyCountdownTick,
+    applyCountupTick,
+    applyIntervalPauseSnapshot,
+    applyIntervalTick,
+} from './TimerTickMath';
 
 export class TimerLifecycle {
     /** end の書き足しが飛んでいるタイマー。1 秒 tick の二重発行を防ぐ。 */
@@ -83,50 +90,45 @@ export class TimerLifecycle {
         this.maybeExtendSessionEnd(timer);
 
         const now = Date.now();
-        const currentSessionElapsed = Math.floor((now - timer.startTimeMs) / 1000);
-        const totalElapsed = Math.max(0, timer.pausedElapsedTime + currentSessionElapsed);
 
         switch (timer.timerType) {
             case 'countup':
             case 'idle':
-                timer.elapsedTime = totalElapsed;
+                applyCountupTick(timer, now);
                 this.ctx.renderTimerItem(timerId);
                 return;
-            case 'countdown':
-                timer.elapsedTime = totalElapsed;
-                timer.timeRemaining = timer.totalTime - totalElapsed;
-                timer.phase = timer.timeRemaining < 0 ? 'idle' : 'work';
+            case 'countdown': {
+                const tick = applyCountdownTick(timer, now);
+                // 超過中は idle 扱いで見せる（表示色の切り替えだけ）。ウィジェットは
+                // 0 を割っても鳴らさない — 記録が続いているので終わってはいない。
+                timer.phase = tick.remaining < 0 ? 'idle' : 'work';
                 this.ctx.renderTimerItem(timerId);
                 return;
+            }
             case 'interval': {
                 if (timer.phase === 'prepare') {
+                    // prepare はウィジェット固有の待機。区間は進まず、待った分だけを
+                    // 足すので共有の区間計算には乗らない。
+                    const sinceStart = Math.floor((now - timer.startTimeMs) / 1000);
                     const baseElapsed = this.ctx.intervalPrepareBaseElapsed.get(timerId) ?? timer.totalElapsedTime;
-                    timer.totalElapsedTime = baseElapsed + Math.max(0, currentSessionElapsed);
+                    timer.totalElapsedTime = baseElapsed + Math.max(0, sinceStart);
                     this.ctx.renderTimerItem(timerId);
                     return;
                 }
 
-                const segment = getCurrentSegment(timer);
-                if (!segment) {
+                const tick = applyIntervalTick(timer, now);
+                if (tick.outcome === 'no-segment') {
                     void this.finishIntervalTimer(timerId, timer);
                     return;
                 }
-                const segmentElapsed = Math.max(0, timer.pausedElapsedTime + currentSessionElapsed);
-                timer.segmentTimeRemaining = Math.max(0, segment.durationSeconds - segmentElapsed);
-                const completedBefore = computeCompletedDuration(timer);
-                timer.totalElapsedTime = clampToTotalDuration(
-                    timer.totalDuration,
-                    completedBefore + Math.min(segment.durationSeconds, segmentElapsed)
-                );
-
-                if (timer.segmentTimeRemaining > 0) {
-                    if (timer.segmentTimeRemaining <= 3) {
-                        AudioUtils.playWarningBeep();
-                    }
-                    this.ctx.renderTimerItem(timerId);
-                } else {
+                if (tick.outcome === 'segment-complete') {
                     void this.handleIntervalSegmentComplete(timerId, timer);
+                    return;
                 }
+                if (tick.warn) {
+                    AudioUtils.playWarningBeep();
+                }
+                this.ctx.renderTimerItem(timerId);
                 return;
             }
             default:
@@ -206,11 +208,7 @@ export class TimerLifecycle {
     // ─── Pause / Resume / Close ───────────────────────────────
 
     pauseTimer(timer: TimerInstance): void {
-        const now = Date.now();
-        if (timer.startTimeMs > 0) {
-            const currentSessionElapsed = Math.floor((now - timer.startTimeMs) / 1000);
-            timer.pausedElapsedTime += Math.max(0, currentSessionElapsed);
-        }
+        accumulatePausedElapsed(timer, Date.now());
         timer.isRunning = false;
         this.stopTimerTick(timer.id);
 
@@ -224,17 +222,9 @@ export class TimerLifecycle {
                 timer.timeRemaining = timer.totalTime - timer.elapsedTime;
                 timer.phase = timer.timeRemaining < 0 ? 'idle' : 'work';
                 break;
-            case 'interval': {
-                const segment = getCurrentSegment(timer);
-                if (!segment) break;
-                timer.segmentTimeRemaining = Math.max(0, segment.durationSeconds - timer.pausedElapsedTime);
-                const completedBefore = computeCompletedDuration(timer);
-                timer.totalElapsedTime = clampToTotalDuration(
-                    timer.totalDuration,
-                    completedBefore + Math.min(segment.durationSeconds, timer.pausedElapsedTime)
-                );
+            case 'interval':
+                applyIntervalPauseSnapshot(timer);
                 break;
-            }
             default:
                 break;
         }
