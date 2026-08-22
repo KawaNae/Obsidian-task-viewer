@@ -213,7 +213,7 @@ export class TimelineSectionRenderer {
         }
 
         // Format time HH:mm
-        const timeString = `${finalHours.toString().padStart(2, '0')}:${roundedMinutes.toString().padStart(2, '0')}`;
+        const timeString = DateUtils.formatHHMM(finalHours, roundedMinutes);
 
         // Determine Task Date
         // If finalHours + 24 (effectively) was >= 24, it means it's next day

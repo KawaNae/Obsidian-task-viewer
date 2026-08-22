@@ -7,6 +7,7 @@ import {
     type SunTimes,
 } from '../../services/astronomy/AstronomyService';
 import { t } from '../../i18n';
+import { DateUtils } from '../../utils/DateUtils';
 
 /**
  * Cell-level decorators for astronomy overlays. Pure DOM attach helpers — the
@@ -195,7 +196,7 @@ export function attachSunAxisArrows(
             el.style.setProperty('--indicator-minutes', String(minutesFromStart));
         }
 
-        const timeLabel = `${String(sunDate.getHours()).padStart(2, '0')}:${String(sunDate.getMinutes()).padStart(2, '0')}`;
+        const timeLabel = DateUtils.formatHHMM(sunDate.getHours(), sunDate.getMinutes());
         setTooltip(el, `${t(`astronomy.${variant}`)} ${timeLabel}`);
         return true;
     };
