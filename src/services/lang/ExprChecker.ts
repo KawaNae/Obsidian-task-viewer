@@ -745,7 +745,7 @@ function checkCallback(
  * being written, one after it has run — and neither can stand in for the
  * other. Change one and the other has to move with it.
  */
-function isCellType(type: StaticType): boolean {
+export function isCellType(type: StaticType): boolean {
     return !isArrayType(type) && !isRecordType(type) && type !== 'none';
 }
 
