@@ -32,10 +32,13 @@ import { getEffectiveColor } from '../services/data/EffectiveProperties';
 import { canTriggerFlow } from '../services/flow/FlowTrigger';
 import { NextTaskSuggester, suggestionKey } from './NextTaskSuggester';
 import type { TimerContentBinding } from './TimerContentBinding';
+import { autoGrowTextarea } from '../utils/TextareaAutoGrow';
 
 export class TimerRenderer {
     private closeConfirmTimers = new Map<string, number>();
     private suggester: NextTaskSuggester;
+    /** {@link growTitleInputs} の次フレーム再適用ぶんの未発火 rAF。destroy で取り消す。 */
+    private titleGrowFrame: { win: Window; id: number } | null = null;
 
     constructor(
         private ctx: TimerContext,
@@ -59,6 +62,9 @@ export class TimerRenderer {
         for (const [timerId] of this.ctx.timers) {
             this.renderTimerItem(timerId);
         }
+        // 全 item が出揃った後（loop の外）でオートグロー — item 構築中に掛けると
+        // 兄弟がまだ無い未沈静化のレイアウトで scrollHeight を測ってしまう。
+        this.growTitleInputs(container);
     }
 
     renderTimerItem(timerId: string): void {
@@ -106,15 +112,20 @@ export class TimerRenderer {
             if (timer.timerType !== 'idle') {
                 // 走っている行（尻尾）の content をその場で編集する。self も含めて
                 // 同じ扱いで、self の編集は対象タスク行そのものの改名になる。
-                const labelInput = titleContainer.createEl('input', {
-                    type: 'text',
+                // textarea: 記法は 1 行のままだが、長い名前は表示だけ複数行に
+                // 折り返す（オートグローで高さを追従、Enter は改行させず確定）。
+                const labelInput = titleContainer.createEl('textarea', {
                     cls: 'timer-widget__title-input',
                     // 名前の無い行（tv-content 未設定の tvFile など）でも、何を
                     // 計っているのかは見えている必要がある。
                     placeholder: timer.taskName || '\u2014',
-                    value: this.contentBinding.displayValue(timer),
-                    attr: { size: '1' },
+                    attr: { rows: '1', wrap: 'soft' },
                 });
+                // textarea に value 属性は無いので明示代入。オートグローは
+                // ここではまだ掛けない — 兄弟がまだ出揃っていない（render 全体
+                // の組み立て完了後に growTitleInputs でまとめて掛ける）。
+                labelInput.value = this.contentBinding.displayValue(timer);
+                this.bindTitleInputConfirmKey(labelInput);
                 this.contentBinding.bind(timer, labelInput);
             } else {
                 // Idle: 対象が無いので編集する行も無い
@@ -167,6 +178,9 @@ export class TimerRenderer {
             toggleBtn.onclick = () => {
                 timer.isExpanded = !timer.isExpanded;
                 this.renderTimerItem(timerId);
+                // 単独呼び出し（render() の loop 経由ではない）なので、この item の
+                // 組み立て完了後という意味で自分でオートグローを掛け直す。
+                this.growTitleInputs(this.ctx.ensureContainer());
                 this.ctx.persistTimersToStorage();
             };
 
@@ -227,6 +241,10 @@ export class TimerRenderer {
             clearTimeout(id);
         }
         this.closeConfirmTimers.clear();
+        if (this.titleGrowFrame) {
+            this.titleGrowFrame.win.cancelAnimationFrame(this.titleGrowFrame.id);
+            this.titleGrowFrame = null;
+        }
         this.ctx.destroyContainer();
     }
 
@@ -261,6 +279,56 @@ export class TimerRenderer {
 
     // ─── Private ─────────────────────────────────────────────
 
+    /**
+     * Enter で改行せず確定させる。IME 確定の Enter は isComposing 判定が
+     * ブラウザ間で揺れるので、compositionstart/end の自前フラグも併用する
+     * （`bracketPairing.ts` と同じイディオム）。改行はスペースに畳んで記録
+     * するので textarea に残っても実害は無いが、Enter 経由では最初から
+     * 入れさせない。
+     */
+    private bindTitleInputConfirmKey(el: HTMLTextAreaElement): void {
+        let composing = false;
+        el.addEventListener('compositionstart', () => { composing = true; });
+        el.addEventListener('compositionend', () => { composing = false; });
+        el.addEventListener('keydown', (e: KeyboardEvent) => {
+            if (e.key === 'Enter' && !e.isComposing && !composing) {
+                e.preventDefault();
+                el.blur();
+            }
+        });
+    }
+
+    /**
+     * container 内の全 title textarea にオートグローを掛け直す。**呼び出し側
+     * は DOM の組み立てが完全に終わってから呼ぶこと** — item 構築の途中（兄弟
+     * がまだ append されていない）で呼ぶと、沈静化前のレイアウトで測った小さい
+     * scrollHeight が inline style に焼き付く（実測: 200 字で render 前 152px
+     * → render 後 114px。scrollHeight 自体は 152 のまま — ヘルパは正しく、呼ぶ
+     * 時点が早すぎるのが原因）。
+     *
+     * 同期 1 回だけでは足りないケースがあるため、Timeline のスクロール復元と
+     * 同じ「sync + 次フレーム再適用」で収束させる。window は popout を考慮し
+     * container 自身から解決する（`HostWindow.ts` と同じ理由）。
+     */
+    private growTitleInputs(container: HTMLElement): void {
+        const grow = (): void => {
+            container.querySelectorAll('.timer-widget__title-input')
+                .forEach((el) => autoGrowTextarea(el as HTMLTextAreaElement));
+        };
+        grow();
+
+        if (this.titleGrowFrame) {
+            this.titleGrowFrame.win.cancelAnimationFrame(this.titleGrowFrame.id);
+            this.titleGrowFrame = null;
+        }
+        const win = container.ownerDocument.defaultView ?? window;
+        const id = win.requestAnimationFrame(() => {
+            this.titleGrowFrame = null;
+            grow();
+        });
+        this.titleGrowFrame = { win, id };
+    }
+
     private clearCloseConfirmTimer(timerId: string): void {
         const id = this.closeConfirmTimers.get(timerId);
         if (id !== undefined) {
@@ -285,7 +353,7 @@ export class TimerRenderer {
 
         // 入力欄は md 側の変化に追随する（打鍵中と未書き込みの入力があるときは
         // binding が見送る）。デイリーノート起点でも尻尾があれば同じ扱い。
-        const inputEl = itemEl.querySelector('.timer-widget__title-input') as HTMLInputElement | null;
+        const inputEl = itemEl.querySelector('.timer-widget__title-input') as HTMLTextAreaElement | null;
         if (inputEl) this.contentBinding.syncFromFile(timer, inputEl);
 
         // デイリーノート起点は対象タスクを持たない（id は `daily-<date>`）。

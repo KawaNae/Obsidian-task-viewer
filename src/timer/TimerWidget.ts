@@ -26,6 +26,7 @@ import { TimerContentBinding } from './TimerContentBinding';
 import { TimerPersistence } from './TimerPersistence';
 import { TimerTargetManager } from './TimerTargetManager';
 import { TimerWidgetWindowObserver, type PinState } from './TimerWidgetWindowObserver';
+import { autoGrowTextarea } from '../utils/TextareaAutoGrow';
 import {
     type TimerContext,
     IDLE_TIMER_ID,
@@ -54,7 +55,9 @@ export class TimerWidget implements TimerContext {
         this.recorder = new TimerRecorder(app, plugin, this.storageUtils);
         this.creator = new TimerCreator(this, this.storageUtils);
         this.lifecycle = new TimerLifecycle(this, this.creator);
-        this.contentBinding = new TimerContentBinding(this);
+        // 値を書き換えた直後にオートグローを掛け直す（input 時 / syncFromFile 時）。
+        // bind 直後（初期値セット時）の一回は TimerRenderer 側が自分で呼ぶ。
+        this.contentBinding = new TimerContentBinding(this, autoGrowTextarea);
         this.renderer = new TimerRenderer(this, this.lifecycle, this.creator, this.contentBinding);
         this.persistence = new TimerPersistence(this, this.creator, this.lifecycle, this.storageUtils);
         this.targetManager = new TimerTargetManager(this, this.storageUtils);
