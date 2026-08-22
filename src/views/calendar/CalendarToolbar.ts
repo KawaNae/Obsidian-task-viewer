@@ -37,7 +37,7 @@ export interface CalendarToolbarDeps {
     /** Snapshot the view's full persistable config for template-save / URI build. */
     getCurrentConfig: () => Partial<CalendarConfig>;
     /** Apply a parsed config (from template load / URI / reset). */
-    applyConfig: (cfg: Partial<CalendarConfig>, opts?: { explicit?: boolean }) => void;
+    applyConfig: (cfg: Partial<CalendarConfig>) => void;
     /** Trigger render + saveLayout side effects after applyConfig. */
     onConfigApplied: () => void;
 
@@ -172,12 +172,12 @@ export class CalendarToolbar extends ViewToolbarBase {
             getExportFolder: () => deps.plugin.settings.exportFolder,
             onApplyTemplate: (template) => {
                 const cfg = this.codec.parseConfig(template.config ?? null);
-                deps.applyConfig(cfg, { explicit: true });
+                deps.applyConfig(cfg);
                 if (template.name) deps.onRename(template.name);
                 deps.onConfigApplied();
             },
             onReset: () => {
-                deps.applyConfig({}, { explicit: true });
+                deps.applyConfig({});
                 deps.onRename(undefined);
                 deps.onConfigApplied();
             },

@@ -191,7 +191,7 @@ export class CalendarView extends ItemView {
                 this.sidebarManager.applyOpen(open, opts);
             },
             getCurrentConfig: () => this.getCurrentConfig(),
-            applyConfig: (cfg, opts) => this.applyConfig(cfg, opts),
+            applyConfig: (cfg) => this.applyConfig(cfg),
             onConfigApplied: () => {
                 this.leaf.updateHeader();
                 this.app.workspace.requestSaveLayout();
@@ -240,18 +240,18 @@ export class CalendarView extends ItemView {
      * Single entry point used by setState AND by toolbar's template apply,
      * so reset/load/restore all go through one path.
      *
-     * `opts.explicit` flags user-driven applies (template-load / reset).
-     * Workspace restore sets explicit=false so the mobile auto-collapse
-     * heuristic continues to fire for fresh sessions.
+     * `showSidebar` states the desktop-width starting position only. At mobile
+     * width the sidebar always starts closed whatever the config says, and
+     * only the toggle button opens it (see `sidebarOpenedThisSession`), so
+     * applying a config never marks the sidebar as user-opened.
      */
-    applyConfig(cfg: Partial<CalendarConfig>, opts: { explicit?: boolean } = {}): void {
+    applyConfig(cfg: Partial<CalendarConfig>): void {
         const next = this.codec.withDefaults(cfg);
 
         // FilterMenu owns the in-memory FilterState — keep it in sync.
         this.filterMenu.setFilterState(next.filterState ?? createEmptyFilterState());
 
         const sidebarOpen = next.showSidebar ?? true;
-        if (opts.explicit && sidebarOpen) this.sidebarOpenedThisSession = true;
         this.showSidebar = sidebarOpen;
         this.sidebarManager.applyOpen(sidebarOpen, { animate: false });
 
