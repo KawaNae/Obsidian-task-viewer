@@ -2,7 +2,7 @@ import { type Task, type ChildEntry, isTvFile } from '../../types';
 import type { TaskReadService } from '../../services/data/TaskReadService';
 import type { ChildRenderItem } from './types';
 import { ChildRenderItemMapper } from './ChildRenderItemMapper';
-import { extractWikilinkTarget } from '../../services/data/ChildEntryBuilder';
+import { extractWikilinkTarget } from '../../utils/WikilinkUtils';
 import { getOriginalTaskId } from '../../services/display/DisplayTaskConverter';
 
 /**

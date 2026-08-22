@@ -96,8 +96,3 @@ function collectSubtreeLines(
     }
     return out;
 }
-
-/** Wikilink target normalization (strips `|alias`). */
-export function extractWikilinkTarget(linkName: string): string {
-    return linkName.split('|')[0].trim();
-}
