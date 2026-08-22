@@ -1,4 +1,4 @@
-import { ItemView, type WorkspaceLeaf, setIcon, type ViewStateResult } from 'obsidian';
+import { ItemView, type WorkspaceLeaf, type ViewStateResult } from 'obsidian';
 import { logDebug } from '../../log/log';
 import { t } from '../../i18n';
 import { TaskCardRenderer } from '../taskcard/TaskCardRenderer';
@@ -11,13 +11,18 @@ import { KanbanToolbar } from './KanbanToolbar';
 import { FilterSerializer } from '../../services/filter/FilterSerializer';
 import { combineFilterStates, createEmptyFilterState, hasConditions } from '../../services/filter/FilterTypes';
 import type { FilterState } from '../../services/filter/FilterTypes';
-import { createEmptySortState, hasSortRules } from '../../services/sort/SortTypes';
+import { createEmptySortState } from '../../services/sort/SortTypes';
 import { TaskStyling } from '../sharedUI/TaskStyling';
 import { getEffectiveColor, getEffectiveLinestyle } from '../../services/data/EffectiveProperties';
 import { TaskPagingController } from '../sharedUI/TaskPagingController';
 import { CardReconciler } from '../sharedUI/CardReconciler';
 import { RenderScheduler } from '../sharedUI/RenderScheduler';
 import { PixelScrollRestorer } from '../sharedUI/PixelScrollRestorer';
+import {
+    renderListSection,
+    startListSectionRename,
+    type ListSectionClasses,
+} from '../sharedUI/ListSectionRenderer';
 
 import { openTaskInEditor } from '../../utils/NavigationUtils';
 import { TASK_VIEWER_HOVER_SOURCE_ID } from '../../constants/hover';
@@ -34,6 +39,22 @@ import { TopRightConfigEditor } from '../customMenus/TopRightConfigEditor';
 import { FilterValueCollector } from '../../services/filter/FilterValueCollector';
 
 export const VIEW_TYPE_KANBAN = VIEW_META_KANBAN.type;
+
+/**
+ * Grid variant of the shared list section: a card with its own background and
+ * border, one per grid cell.
+ */
+const KANBAN_CELL_CLASSES: ListSectionClasses = {
+    root: 'kanban-view__cell',
+    collapsed: 'kanban-view__cell--collapsed',
+    header: 'kanban-view__cell-header',
+    toggle: 'kanban-view__cell-toggle',
+    name: 'kanban-view__cell-name',
+    count: 'kanban-view__cell-count',
+    button: 'kanban-view__cell-btn',
+    body: 'kanban-view__cell-body',
+    nameInput: 'kanban-view__cell-name-input',
+};
 
 type KanbanViewState = Partial<KanbanConfig> & Partial<KanbanTransient>;
 
@@ -317,94 +338,54 @@ export class KanbanView extends ItemView {
     private renderCell(gridEl: HTMLElement, listDef: PinnedListDefinition, row: number, col: number): void {
         const isCollapsed = this.gridCollapsed[listDef.id] ?? false;
 
-        const cell = gridEl.createDiv('kanban-view__cell');
-        if (isCollapsed) cell.addClass('kanban-view__cell--collapsed');
-
-        // ─── Header ─────────────────────────
-        const header = cell.createDiv('kanban-view__cell-header');
-
         const combinedFilter = (this.viewFilterState && hasConditions(this.viewFilterState) && listDef.applyViewFilter)
             ? combineFilterStates(listDef.filterState, this.viewFilterState)
             : listDef.filterState;
         const tasks = this.readService.getFilteredTasks(combinedFilter, listDef.sortState);
 
-        const toggle = header.createSpan({ text: isCollapsed ? '▶' : '▼', cls: 'kanban-view__cell-toggle' });
-        const nameEl = header.createSpan({ text: listDef.name, cls: 'kanban-view__cell-name' });
-        header.createSpan({ text: `(${tasks.length})`, cls: 'kanban-view__cell-count' });
-
-        // Sort button
-        const sortBtn = header.createEl('button', { cls: 'kanban-view__cell-btn' });
-        setIcon(sortBtn.createSpan(), 'arrow-up-down');
-        if (listDef.sortState && hasSortRules(listDef.sortState)) {
-            sortBtn.addClass('is-sorted');
-        }
-        sortBtn.addEventListener('click', (e) => {
-            e.stopPropagation();
-            this.sortMenu.setSortState(listDef.sortState ?? createEmptySortState());
-            this.sortMenu.showMenuAtElement(sortBtn, {
-                onSortChange: () => {
-                    listDef.sortState = this.sortMenu.getSortState();
-                    this.requestSaveLayout();
-                    this.render();
-                },
-            });
+        renderListSection(gridEl, {
+            classes: KANBAN_CELL_CLASSES,
+            name: listDef.name,
+            taskCount: tasks.length,
+            collapsed: isCollapsed,
+            sortState: listDef.sortState,
+            filterState: listDef.filterState,
+            onSortClick: (anchorEl) => {
+                this.sortMenu.setSortState(listDef.sortState ?? createEmptySortState());
+                this.sortMenu.showMenuAtElement(anchorEl, {
+                    onSortChange: () => {
+                        listDef.sortState = this.sortMenu.getSortState();
+                        this.requestSaveLayout();
+                        this.render();
+                    },
+                });
+            },
+            onFilterClick: (anchorEl) => {
+                this.filterMenu.setFilterState(listDef.filterState);
+                this.filterMenu.showMenuAtElement(anchorEl, {
+                    onFilterChange: () => {
+                        listDef.filterState = this.filterMenu.getFilterState();
+                        this.requestSaveLayout();
+                        this.render();
+                    },
+                    getTasks: () => this.readService.getTasks(),
+                    getStartHour: () => this.plugin.settings.startHour,
+                });
+            },
+            onMoreClick: (anchorEl, event) => {
+                const nameEl = anchorEl.parentElement
+                    ?.querySelector(`.${KANBAN_CELL_CLASSES.name}`) as HTMLElement | null;
+                if (nameEl) this.showCellMenu(event, listDef, nameEl, row, col);
+            },
+            onCollapsedChange: (collapsed) => {
+                this.gridCollapsed[listDef.id] = collapsed;
+                this.requestSaveLayout();
+            },
+            renderBody: (body, opts) => {
+                if (opts.resetPaging) this.paging.resetOne(listDef.id);
+                this.paging.render(body, tasks, listDef.id);
+            },
         });
-
-        // Filter button
-        const filterBtn = header.createEl('button', { cls: 'kanban-view__cell-btn' });
-        setIcon(filterBtn.createSpan(), 'filter');
-        if (hasConditions(listDef.filterState)) {
-            filterBtn.addClass('is-filtered');
-        }
-        filterBtn.addEventListener('click', (e) => {
-            e.stopPropagation();
-            this.filterMenu.setFilterState(listDef.filterState);
-            this.filterMenu.showMenuAtElement(filterBtn, {
-                onFilterChange: () => {
-                    listDef.filterState = this.filterMenu.getFilterState();
-                    this.requestSaveLayout();
-                    this.render();
-                },
-                getTasks: () => this.readService.getTasks(),
-                getStartHour: () => this.plugin.settings.startHour,
-            });
-        });
-
-        // More button
-        const moreBtn = header.createEl('button', { cls: 'kanban-view__cell-btn' });
-        setIcon(moreBtn.createSpan(), 'more-horizontal');
-        moreBtn.addEventListener('click', (e) => {
-            e.stopPropagation();
-            this.showCellMenu(e as MouseEvent, listDef, nameEl, row, col);
-        });
-
-        // Collapse toggle
-        header.addEventListener('click', () => {
-            const nextCollapsed = !this.gridCollapsed[listDef.id];
-            this.gridCollapsed[listDef.id] = nextCollapsed;
-
-            if (nextCollapsed) {
-                cell.addClass('kanban-view__cell--collapsed');
-                toggle.textContent = '▶';
-            } else {
-                cell.removeClass('kanban-view__cell--collapsed');
-                toggle.textContent = '▼';
-                // Lazy render on expand
-                const body = cell.querySelector('.kanban-view__cell-body') as HTMLElement | null;
-                if (body && body.childElementCount === 0 && tasks.length > 0) {
-                    this.paging.resetOne(listDef.id);
-                    this.paging.render(body, tasks, listDef.id);
-                }
-            }
-
-            this.requestSaveLayout();
-        });
-
-        // ─── Body ───────────────────────────
-        const body = cell.createDiv('kanban-view__cell-body');
-        if (!isCollapsed) {
-            this.paging.render(body, tasks, listDef.id);
-        }
     }
 
     private renderTaskCards(body: HTMLElement, tasks: import('../../types').DisplayTask[], listId: string): void {
@@ -535,39 +516,10 @@ export class KanbanView extends ItemView {
     }
 
     private startCellRename(nameEl: HTMLElement, listDef: PinnedListDefinition): void {
-        const input = document.createElement('input');
-        input.type = 'text';
-        input.value = listDef.name;
-        input.className = 'kanban-view__cell-name-input';
-        nameEl.replaceWith(input);
-        input.focus();
-        input.select();
-
-        let committed = false;
-        const commit = (newName: string) => {
-            if (committed) return;
-            committed = true;
+        startListSectionRename(nameEl, KANBAN_CELL_CLASSES, listDef.name, (newName) => {
             listDef.name = newName;
             this.requestSaveLayout();
-
-            const span = document.createElement('span');
-            span.className = 'kanban-view__cell-name';
-            span.textContent = newName;
-            if (input.parentElement) {
-                input.replaceWith(span);
-            }
-        };
-
-        input.addEventListener('blur', () => {
-            commit(input.value.trim() || listDef.name);
         });
-        input.addEventListener('keydown', (e) => {
-            if (e.key === 'Enter') { e.preventDefault(); input.blur(); }
-            if (e.key === 'Escape') { e.preventDefault(); commit(listDef.name); }
-        });
-        input.addEventListener('click', (e) => e.stopPropagation());
-        input.addEventListener('mousedown', (e) => e.stopPropagation());
-        input.addEventListener('pointerdown', (e) => e.stopPropagation());
     }
 
     // ─── Grid Operations ──────────────────────────────────────
