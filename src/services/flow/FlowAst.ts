@@ -103,3 +103,36 @@ export interface FlowProgram {
     /** Move the completed task (+children) to the target file. */
     move?: { target: Expr; span: Span };
 }
+
+/**
+ * Every clause's span, said once.
+ *
+ * The map is keyed by `keyof Required<FlowProgram>`, so a clause added to
+ * FlowProgram without an entry here is a compile error rather than a silent
+ * hole: `state(...)` and `use(...)` were once missing from the hand-written
+ * list that `parseFlowSegments` checks, and a clause split across two lines
+ * was accepted and then re-serialized onto the task line — the child line's
+ * text simply disappeared.
+ */
+const CLAUSE_SPANS: { [K in keyof Required<FlowProgram>]: (node: Required<FlowProgram>[K]) => Span[] } = {
+    schedule: node => [node.span],
+    lifetime: node => [node.span],
+    until: node => [node.span],
+    use: node => [node.span],
+    cells: node => [node.span],
+    sets: node => Object.values(node).map(set => set?.span).filter((s): s is Span => !!s),
+    move: node => [node.span],
+};
+
+/** Spans of every clause written in the program, in no particular order. */
+export function clauseSpans(program: FlowProgram): Span[] {
+    const spans: Span[] = [];
+    for (const key of Object.keys(CLAUSE_SPANS) as (keyof FlowProgram)[]) {
+        const node = program[key];
+        if (node === undefined) continue;
+        // The key indexes both sides of the same union, which TS can't narrow
+        // across a dynamic key — the map's own type is the guarantee.
+        spans.push(...(CLAUSE_SPANS[key] as (n: unknown) => Span[])(node));
+    }
+    return spans;
+}
