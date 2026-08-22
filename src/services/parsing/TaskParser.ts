@@ -81,14 +81,6 @@ export class TaskParser {
     }
 
     /**
-     * Set a different parser strategy.
-     * @param strategy The parser strategy to use
-     */
-    static setStrategy(strategy: ParserStrategy): void {
-        this.swapStrategy(strategy);
-    }
-
-    /**
      * Run `fn` with a chain built from `settings`, then restore the previous
      * strategy — even on throw. Test-only scoping helper: the static
      * strategy is process-global, so tests that need a non-default chain

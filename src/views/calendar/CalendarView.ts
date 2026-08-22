@@ -678,18 +678,6 @@ export class CalendarView extends ItemView {
      * listId-only entry from before viewId-namespacing was introduced.
      * Prefix it with `${viewId}::` so calendar owns it.
      */
-    private migrateCollapsedKeys(stored: Record<string, boolean>): Record<string, boolean> {
-        const migrated: Record<string, boolean> = {};
-        for (const [key, val] of Object.entries(stored)) {
-            if (key.includes('::')) {
-                migrated[key] = val;
-            } else {
-                migrated[`${COLLAPSE_KEY_PREFIX}${key}`] = val;
-            }
-        }
-        return migrated;
-    }
-
     private openPinnedListSort(listDef: PinnedListDefinition, anchorEl: HTMLElement): void {
         this.sidebarSortMenu.setSortState(listDef.sortState ?? createEmptySortState());
         this.sidebarSortMenu.showMenuAtElement(anchorEl, {

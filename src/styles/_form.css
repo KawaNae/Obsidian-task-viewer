@@ -69,13 +69,6 @@
     min-width: 0;
 }
 
-/* 追加行の key input: ラベル列幅にスナップして値列と桁を揃える */
-.tv-ctrl .tv-form__control--key {
-    flex: 0 0 var(--tv-form-label-width, 7em);
-    width: auto;
-    min-width: 0;
-}
-
 /* 日付/時刻フィールドラッパ — date:time = 2:1 配分 */
 .tv-form__field {
     flex: 1 1 0;
