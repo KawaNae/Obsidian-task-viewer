@@ -1,5 +1,5 @@
 import { Setting } from 'obsidian';
-import type TaskViewerPlugin from '../main';
+import type { PluginContext } from '../PluginContext';
 import { t } from '../i18n';
 
 const REPO_URL = 'https://github.com/KawaNae/Obsidian-task-viewer';
@@ -91,7 +91,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 `;
 
-export function render(el: HTMLElement, plugin: TaskViewerPlugin): void {
+export function render(el: HTMLElement, plugin: PluginContext): void {
     const manifest = plugin.manifest;
 
     // Plugin info

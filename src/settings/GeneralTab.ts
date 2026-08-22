@@ -1,9 +1,9 @@
 import { Setting } from 'obsidian';
-import type TaskViewerPlugin from '../main';
+import type { PluginContext } from '../PluginContext';
 import type { DoubleTapAction } from '../types';
 import { t } from '../i18n';
 
-export function render(el: HTMLElement, plugin: TaskViewerPlugin): void {
+export function render(el: HTMLElement, plugin: PluginContext): void {
     // Menu
     el.createEl('h3', { text: t('settings.general.menu'), cls: 'setting-section-header' });
 

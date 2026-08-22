@@ -1,9 +1,9 @@
 import { Notice, Setting } from 'obsidian';
-import type TaskViewerPlugin from '../main';
+import type { PluginContext } from '../PluginContext';
 import { type TvFileKeys, validateTvFileKeys } from '../types';
 import { t } from '../i18n';
 
-export function render(el: HTMLElement, plugin: TaskViewerPlugin): void {
+export function render(el: HTMLElement, plugin: PluginContext): void {
     el.createEl('h3', { text: t('settings.frontmatter.frontmatterKeys'), cls: 'setting-section-header' });
 
     addFrontmatterTaskKeySettings(el, plugin);
@@ -35,7 +35,7 @@ export function render(el: HTMLElement, plugin: TaskViewerPlugin): void {
             }));
 }
 
-function addFrontmatterTaskKeySettings(containerEl: HTMLElement, plugin: TaskViewerPlugin): void {
+function addFrontmatterTaskKeySettings(containerEl: HTMLElement, plugin: PluginContext): void {
     addFrontmatterTaskKeySetting(containerEl, plugin, t('settings.frontmatter.startKey'), t('settings.frontmatter.startKeyDesc'), 'tv-start', 'start');
     addFrontmatterTaskKeySetting(containerEl, plugin, t('settings.frontmatter.endKey'), t('settings.frontmatter.endKeyDesc'), 'tv-end', 'end');
     addFrontmatterTaskKeySetting(containerEl, plugin, t('settings.frontmatter.dueKey'), t('settings.frontmatter.dueKeyDesc'), 'tv-due', 'due');
@@ -50,7 +50,7 @@ function addFrontmatterTaskKeySettings(containerEl: HTMLElement, plugin: TaskVie
 
 function addFrontmatterTaskKeySetting(
     containerEl: HTMLElement,
-    plugin: TaskViewerPlugin,
+    plugin: PluginContext,
     name: string,
     description: string,
     placeholder: string,
