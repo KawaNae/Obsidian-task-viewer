@@ -581,12 +581,8 @@ export class TimerRenderer {
             });
             setIcon(stopBtn, 'square');
             stopBtn.createSpan({ text: ` ${t('timer.stop')}` });
-            stopBtn.onclick = async () => {
-                this.lifecycle.pauseOrSnapshotIntervalForStop(timer);
-                AudioUtils.playFinishSound();
-                await this.ctx.flushTimerContent(timer.id);
-                await this.ctx.recorder.recordSessionEnd(timer);
-                this.lifecycle.closeTimer(timer.id);
+            stopBtn.onclick = () => {
+                void this.lifecycle.stopIntervalTimer(timer);
             };
             return;
         }
@@ -606,6 +602,10 @@ export class TimerRenderer {
             return;
         }
 
+        // 区間中（work / break）で走っていない状態。UI 操作では作れない
+        // （一時停止は必ず prepare に入る）が、停止の記録待ちのまま Obsidian が
+        // 落ちると localStorage にこの形が残り、復元でここに来る。操作列が無いと
+        // 記録も終了もできなくなるので、prepare と同じ 2 つを出す。
         const resumeBtn = container.createEl('button', {
             cls: 'timer-widget__btn timer-widget__btn--primary'
         });
@@ -620,11 +620,8 @@ export class TimerRenderer {
         });
         setIcon(stopBtn, 'square');
         stopBtn.createSpan({ text: ` ${t('timer.stop')}` });
-        stopBtn.onclick = async () => {
-            this.lifecycle.pauseOrSnapshotIntervalForStop(timer);
-            AudioUtils.playFinishSound();
-            await this.ctx.recorder.recordSessionEnd(timer);
-            this.lifecycle.closeTimer(timer.id);
+        stopBtn.onclick = () => {
+            void this.lifecycle.stopIntervalTimer(timer);
         };
     }
 

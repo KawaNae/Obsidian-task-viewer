@@ -231,6 +231,27 @@ describe('stop paths do not bypass recordSessionEnd', () => {
         expect(source).not.toMatch(/recorder\.addCountdownRecord\(/);
         expect(source).not.toMatch(/recorder\.addIntervalRecord\(/);
         expect(source).not.toMatch(/recorder\.updateTaskDirectly\(/);
-        expect(source).toMatch(/recorder\.recordSessionEnd\(/);
+    });
+
+    /**
+     * 記録の前に content を流し込む規則は、書き方を守らせるのでは守れない。
+     * 2 箇所に同じ列を書けた結果、2026-08-17 に flush を足したとき interval の
+     * 停止ハンドラは片方だけが直った。呼び出し口を 1 つに閉じて、2 本目を書く
+     * 余地そのものを消す。
+     */
+    it('TimerRenderer leaves the whole stop sequence to TimerLifecycle', async () => {
+        const { readFileSync } = await import('node:fs');
+        const source = readFileSync('src/timer/TimerRenderer.ts', 'utf8');
+        expect(source).not.toMatch(/recorder\.recordSessionEnd\(/);
+        expect(source).not.toMatch(/flushTimerContent\(/);
+    });
+
+    it('TimerLifecycle records from exactly one place, right after the flush', async () => {
+        const { readFileSync } = await import('node:fs');
+        const source = readFileSync('src/timer/TimerLifecycle.ts', 'utf8');
+        expect(source.match(/recorder\.recordSessionEnd\(/g)).toHaveLength(1);
+        expect(source).toMatch(
+            /await this\.ctx\.flushTimerContent\(timer\.id\);\s*\n\s*await this\.ctx\.recorder\.recordSessionEnd\(timer\);/
+        );
     });
 });

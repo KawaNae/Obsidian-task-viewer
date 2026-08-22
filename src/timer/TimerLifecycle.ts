@@ -178,9 +178,23 @@ export class TimerLifecycle {
         this.stopTimerTick(timerId);
 
         AudioUtils.playFinishSound();
-        await this.ctx.flushTimerContent(timerId);
-        await this.ctx.recorder.recordSessionEnd(timer);
+        await this.flushAndRecord(timer);
         this.closeTimer(timerId);
+    }
+
+    // ─── 記録 ─────────────────────────────────────────────────
+
+    /**
+     * セッションを 1 本書く。**記録の唯一の入口**で、`recordSessionEnd` を呼ぶのは
+     * ここだけ。
+     *
+     * 記録は走行中の行の content を読むので、未書き込みの入力を先に流し込まないと
+     * 打った名前が 1 セッション繰り越される。2 行を並べて書くと片方だけに手が入り、
+     * 実際に interval の停止でそうなった（`TimerRenderer` の 2 つの停止ハンドラ）。
+     */
+    private async flushAndRecord(timer: TimerInstance): Promise<void> {
+        await this.ctx.flushTimerContent(timer.id);
+        await this.ctx.recorder.recordSessionEnd(timer);
     }
 
     // ─── Pause / Resume / Close ───────────────────────────────
@@ -241,10 +255,7 @@ export class TimerLifecycle {
 
         this.pauseTimer(timer);
         const sessionSeconds = getTimerElapsedSeconds(timer);
-        // 記録は走行中の行の content を読む。未書き込みの入力を先に流し込まないと、
-        // 打った名前が 1 セッション繰り越される。
-        await this.ctx.flushTimerContent(timer.id);
-        await this.ctx.recorder.recordSessionEnd(timer);
+        await this.flushAndRecord(timer);
 
         timer.recordedElapsedTime += Math.max(0, sessionSeconds);
         timer.sessionCount += 1;
@@ -316,8 +327,7 @@ export class TimerLifecycle {
         if (timer.runState === 'running' && timer.timerType !== 'idle') {
             this.pauseTimer(timer);
             const sessionSeconds = getTimerElapsedSeconds(timer);
-            await this.ctx.flushTimerContent(timer.id);
-            await this.ctx.recorder.recordSessionEnd(timer);
+            await this.flushAndRecord(timer);
             timer.recordedElapsedTime += Math.max(0, sessionSeconds);
             timer.sessionCount += 1;
         }
@@ -351,7 +361,22 @@ export class TimerLifecycle {
         this.startTimerTicker(timer.id);
     }
 
-    pauseOrSnapshotIntervalForStop(timer: IntervalTimer): void {
+    /**
+     * ■ interval の停止: 走行分を記録して閉じる。
+     *
+     * countup / countdown の 4 出口（{@link suspendTimer} / {@link finishTimer} /
+     * {@link discardTimer}）と同じく、遷移を 1 メソッドで持つ。以前は prepare 中と
+     * 走行中で別々のハンドラが `TimerRenderer` に書かれていて、2026-08-17 に flush
+     * を足したとき片方だけが直った。同じ形を 2 箇所に書ける限り、また割れる。
+     */
+    async stopIntervalTimer(timer: IntervalTimer): Promise<void> {
+        this.pauseOrSnapshotIntervalForStop(timer);
+        AudioUtils.playFinishSound();
+        await this.flushAndRecord(timer);
+        this.closeTimer(timer.id);
+    }
+
+    private pauseOrSnapshotIntervalForStop(timer: IntervalTimer): void {
         if (timer.phase === 'prepare' && timer.isRunning) {
             const now = Date.now();
             const prepareElapsed = Math.max(0, Math.floor((now - timer.startTimeMs) / 1000));

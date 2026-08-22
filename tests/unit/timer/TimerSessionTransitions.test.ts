@@ -2,7 +2,7 @@ import { describe, expect, it, beforeEach } from 'vitest';
 import { TimerCreator } from '../../../src/timer/TimerCreator';
 import { TimerLifecycle } from '../../../src/timer/TimerLifecycle';
 import { IDLE_TIMER_ID, type TimerContext } from '../../../src/timer/TimerContext';
-import type { CountdownTimer, CountupTimer, TimerInstance } from '../../../src/timer/TimerInstance';
+import type { CountdownTimer, CountupTimer, IntervalTimer, TimerInstance } from '../../../src/timer/TimerInstance';
 import type { TimerStorageUtils } from '../../../src/timer/TimerStorageUtils';
 
 /**
@@ -83,6 +83,48 @@ function startCountup(ctx: TimerContext, overrides: Partial<CountupTimer> = {}):
         taskColor: '',
         timerType: 'countup',
         elapsedTime: 600,
+        recordedChildTaskId: 'tv-inline:notes/a.md:ln:4',
+        tailRecordBlockId: 'tv-t-abc1234',
+        ...overrides,
+    };
+    ctx.timers.set(timer.id, timer);
+    return timer;
+}
+
+function startInterval(ctx: TimerContext, overrides: Partial<IntervalTimer> = {}): IntervalTimer {
+    const timer: IntervalTimer = {
+        id: 'timer-i1',
+        taskId: 'tv-inline:notes/a.md:ln:3',
+        taskName: 'A',
+        taskOriginalText: '- [ ] A',
+        taskFile: 'notes/a.md',
+        startTimeMs: Date.now() - 600_000, // 10 分走った
+        pausedElapsedTime: 0,
+        phase: 'work',
+        isRunning: true,
+        runState: 'running',
+        sessionCount: 0,
+        recordedElapsedTime: 0,
+        isExpanded: true,
+        intervalId: null,
+        recordMode: 'child',
+        parserId: 'tv-inline',
+        taskColor: '',
+        timerType: 'interval',
+        intervalSource: 'pomodoro',
+        groups: [{
+            repeatCount: 0,
+            segments: [
+                { label: 'Work', durationSeconds: 1500, type: 'work' },
+                { label: 'Break', durationSeconds: 300, type: 'break' },
+            ],
+        }],
+        currentGroupIndex: 0,
+        currentSegmentIndex: 0,
+        currentRepeatIndex: 0,
+        segmentTimeRemaining: 900,
+        totalElapsedTime: 600,
+        totalDuration: 0,
         recordedChildTaskId: 'tv-inline:notes/a.md:ln:4',
         tailRecordBlockId: 'tv-t-abc1234',
         ...overrides,
@@ -261,5 +303,53 @@ describe('the session cycle', () => {
         expect(h.calls.startNextSession).toBe(1);
         expect(timer.sessionCount).toBe(2);
         expect(h.ctx.timers.has(timer.id)).toBe(false);
+    });
+});
+
+/**
+ * ■ interval の停止。prepare を挟む点が countup / countdown と違うが、記録の
+ * 書き方は同じで、flush してから 1 本書いて閉じる。以前はこの列が
+ * `TimerRenderer` の 2 つの停止ハンドラに書かれていて、2026-08-17 に flush を
+ * 足したとき片方だけが直った。どの状態から入っても同じ 1 本を通ることを固定する。
+ */
+describe('interval stop', () => {
+    let h: ReturnType<typeof build>;
+    beforeEach(() => { h = build(); intervals.length = 0; });
+
+    it('flushes the typed content before writing the record', async () => {
+        const timer = startInterval(h.ctx);
+        await h.lifecycle.stopIntervalTimer(timer);
+
+        expect(h.calls.order).toEqual(['flush', 'record']);
+        expect(h.calls.recordSessionEnd).toBe(1);
+        expect(h.ctx.timers.has(timer.id)).toBe(false);
+    });
+
+    it('takes the same path from prepare, and lets go of the prepare base', async () => {
+        const timer = startInterval(h.ctx, { phase: 'prepare' });
+        h.ctx.intervalPrepareBaseElapsed.set(timer.id, 120);
+        await h.lifecycle.stopIntervalTimer(timer);
+
+        expect(h.calls.order).toEqual(['flush', 'record']);
+        expect(h.ctx.intervalPrepareBaseElapsed.has(timer.id)).toBe(false);
+        // prepare 中の経過は積む（120 + 走った 600 秒）。
+        expect(timer.totalElapsedTime).toBeGreaterThanOrEqual(720);
+    });
+
+    it('takes the same path from the state only a crash-restore can produce', async () => {
+        // 区間中のまま走っていない形。UI 操作では作れないが、停止の記録待ちで
+        // 落ちると localStorage に残り、復元でここに来る。
+        const timer = startInterval(h.ctx, { isRunning: false });
+        await h.lifecycle.stopIntervalTimer(timer);
+
+        expect(h.calls.order).toEqual(['flush', 'record']);
+        expect(h.ctx.timers.has(timer.id)).toBe(false);
+    });
+
+    it('counts the running stretch into the session before recording it', async () => {
+        const timer = startInterval(h.ctx);
+        await h.lifecycle.stopIntervalTimer(timer);
+
+        expect(timer.pausedElapsedTime).toBeGreaterThanOrEqual(600);
     });
 });
