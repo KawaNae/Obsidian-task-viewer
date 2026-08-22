@@ -308,7 +308,8 @@ export function nextWeekdayAfter(weekday: Weekday, fromDate: string): string {
 // Calendar cycle (`nextCycle(anchor, step)` / the engine behind `every <interval>`)
 // ---------------------------------------------------------------------------
 
-const MAX_GRID_STEPS = 10000;
+/** Ceiling on grid-step search loops (cycle/weekday advancement). */
+export const MAX_GRID_STEPS = 10000;
 
 /**
  * Next cycle point: the first of (anchor + k*step) strictly after
