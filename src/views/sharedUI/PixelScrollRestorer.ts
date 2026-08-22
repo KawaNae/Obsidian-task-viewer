@@ -18,21 +18,37 @@ import { HostFrameScheduler } from '../../utils/HostWindow';
  *
  * 次フレームは scroll 要素自身の window から取る（popout 対応。素の rAF は
  * main window のクロックなので popout では復元が遅延・停止する）。
+ *
+ * 既定では縦位置だけを扱う。横にもスクロールする面（カンバンの盤面など）は
+ * `{ axis: 'both' }` を渡す。既定を縦のままにしてあるのは、Calendar /
+ * Schedule の挙動を変えないため。
  */
+export type ScrollAxis = 'y' | 'both';
+
+interface ScrollPosition {
+    top: number;
+    left: number;
+}
+
 export class PixelScrollRestorer {
-    private saved: number | null = null;
+    private saved: ScrollPosition | null = null;
     private pending = false;
     private readonly frames: HostFrameScheduler;
+    private readonly axis: ScrollAxis;
 
-    constructor(private readonly getScrollEl: () => HTMLElement | null) {
+    constructor(
+        private readonly getScrollEl: () => HTMLElement | null,
+        options: { axis?: ScrollAxis } = {},
+    ) {
         this.frames = new HostFrameScheduler(getScrollEl);
+        this.axis = options.axis ?? 'y';
     }
 
     /** 現在のスクロール位置を保存する（復元適用中はスキップ）。 */
     save(): void {
         if (this.pending) return;
         const el = this.getScrollEl();
-        if (el) this.saved = el.scrollTop;
+        if (el) this.saved = { top: el.scrollTop, left: el.scrollLeft };
     }
 
     /** 保存位置があれば同期で復元し、次フレームで再適用する。 */
@@ -41,7 +57,9 @@ export class PixelScrollRestorer {
         const target = this.saved;
         this.runGuarded(() => {
             const el = this.getScrollEl();
-            if (el) el.scrollTop = target;
+            if (!el) return;
+            el.scrollTop = target.top;
+            if (this.axis === 'both') el.scrollLeft = target.left;
         });
     }
 
