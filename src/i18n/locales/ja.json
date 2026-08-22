@@ -49,7 +49,6 @@
       "addStatus": "ステータスを追加",
       "addStatusDesc": "新しいステータス文字を追加します。",
       "addButton": "+ 追加",
-      "statusN": "ステータス {{n}}",
       "statusCharPlaceholder": "文字",
       "statusLabelPlaceholder": "ラベル",
       "removeStatus": "ステータスを削除",
@@ -282,7 +281,6 @@
   },
   "toolbar": {
     "today": "今日",
-    "now": "今",
     "previousDay": "前日",
     "nextDay": "翌日",
     "previousWeek": "前週",
@@ -300,7 +298,6 @@
     "copyAsLink": "リンクとしてコピー",
     "exportAsImage": "画像として保存",
     "maskMode": "マスクモード",
-    "sidebar": "サイドバー",
     "showSidebar": "サイドバーを表示",
     "hideSidebar": "サイドバーを隠す",
     "position": "表示位置",
@@ -411,10 +408,6 @@
     "remove": "削除",
     "self": "自身",
     "parent": "祖先",
-    "statusTodo": "未完了",
-    "statusDone": "完了",
-    "statusCancelled": "キャンセル",
-    "statusException": "例外",
     "kind": {
       "inline": "インライン",
       "file": "ファイル"
@@ -584,7 +577,6 @@
     "deleteTaskMessage": "このタスクを削除してよろしいですか？",
     "addChildTask": "子タスクを追加",
     "trackAsChild": "子として記録",
-    "trackSelf": "自身を記録",
     "openCountup": "⏱️ カウントアップを開く",
     "openPomodoro": "🍅 ポモドーロを開く",
     "startCountup": "⏱️ カウントアップ",
@@ -749,9 +741,6 @@
   },
   "periodicHeader": {},
   "cli": {
-    "title": "Task Viewer CLIリファレンス",
-    "commands": "コマンド",
-    "commonFlags": "共通フラグ"
   }  ,
   "flowDiag": {
     "lex": {

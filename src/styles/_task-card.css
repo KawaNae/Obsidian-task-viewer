@@ -304,13 +304,6 @@
     margin-left: 0.4em;
 }
 
-.task-card__child-badge {
-    font-size: 0.75em;
-    color: var(--tv-text-muted);
-    padding: 0 4px;
-    white-space: nowrap;
-}
-
 /* Compact card child-count bar (non-clickable label).
    Detail modal is opened via card double-click, not by clicking this bar. */
 .task-card__child-count {

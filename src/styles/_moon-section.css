@@ -77,13 +77,6 @@
     margin-right: 4px;
 }
 
-/* Schedule date-header — sits right after the date link, with a small gap.
-   (Legacy positioning kept while we remove inline-moon callers; harmless when
-   no element carries this modifier.) */
-.date-header__cell > .moon-phase-inline--date-header {
-    margin-left: 6px;
-}
-
 /* Mini Calendar — replaces task indicator dots at the same spot. The
    `.cal-day-cell__indicators` flex row centers its contents already, so the
    moon SVG just sits there with no extra margin. */
