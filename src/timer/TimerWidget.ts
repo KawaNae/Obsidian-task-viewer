@@ -5,7 +5,7 @@
  * アコーディオン形式で個別にトグル可能。
  */
 
-import { type App, Notice, type Plugin } from 'obsidian';
+import { type App, Notice } from 'obsidian';
 import { t } from '../i18n';
 import type { EventRegistrar, PluginContext } from '../PluginContext';
 import { AudioUtils } from './AudioUtils';

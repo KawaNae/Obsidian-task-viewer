@@ -17,7 +17,6 @@
  */
 
 import type { App, WorkspaceLeaf, WorkspaceWindow } from 'obsidian';
-import type { Plugin } from 'obsidian';
 import type { EventRegistrar, PluginContext } from '../PluginContext';
 import { FloatingOverlayHost } from './FloatingOverlayHost';
 import type { TimerContext } from './TimerContext';
