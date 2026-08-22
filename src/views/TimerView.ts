@@ -28,23 +28,19 @@ import { ViewUriBuilder } from './sharedLogic/ViewUriBuilder';
 import type { ViewUriOptions } from './sharedLogic/ViewUriBuilder';
 import { IntervalTemplateCreator } from './customMenus/IntervalTemplateCreator';
 import { TimerToolbar } from './TimerToolbar';
+import { codecFor, type ViewConfigCodec } from '../services/viewConfig';
+import { TIMER_VIEW_MODES, type TimerConfig, type TimerViewMode } from './TimerSchema';
 import { t } from '../i18n';
 
 export const VIEW_TYPE_TIMER = VIEW_META_TIMER.type;
 
-type TimerViewMode = 'countup' | 'countdown' | 'pomodoro' | 'interval';
-
 const TIMER_VIEW_ID = '__timer-view__';
-
-interface TimerViewState {
-    timerViewMode?: 'countup' | 'countdown' | 'pomodoro' | 'interval';
-    intervalTemplate?: string;
-}
 
 export class TimerView extends ItemView {
     private plugin: TaskViewerPlugin;
     private container: HTMLElement;
     private timerViewMode: TimerViewMode = 'pomodoro';
+    private customName?: string;
     private timer: TimerInstance | null = null;
     private tickIntervalId: number | null = null;
 
@@ -83,7 +79,7 @@ export class TimerView extends ItemView {
             interval: t('timer.interval'),
         };
         this.plugin.menuPresenter.present((menu) => {
-            for (const mode of ['countup', 'countdown', 'pomodoro', 'interval'] as TimerViewMode[]) {
+            for (const mode of TIMER_VIEW_MODES) {
                 menu.addItem((item) => {
                     item.setTitle(labels[mode])
                         .setChecked(this.timerViewMode === mode)
@@ -95,6 +91,7 @@ export class TimerView extends ItemView {
                                 await this.loadTemplates();
                             }
                             this.render();
+                            this.requestSaveState();
                         });
                 });
             }
@@ -106,7 +103,7 @@ export class TimerView extends ItemView {
     }
 
     getDisplayText(): string {
-        return VIEW_META_TIMER.displayText;
+        return this.customName || VIEW_META_TIMER.displayText;
     }
 
     getIcon(): string {
@@ -121,17 +118,42 @@ export class TimerView extends ItemView {
         this.render();
     }
 
-    async setState(state: TimerViewState, result: ViewStateResult): Promise<void> {
+    private get codec(): ViewConfigCodec<TimerConfig> {
+        return codecFor(VIEW_TYPE_TIMER) as ViewConfigCodec<TimerConfig>;
+    }
+
+    /** 保存対象の状態が変わったことを workspace に伝える（次の保存で getState が呼ばれる）。 */
+    private requestSaveState(): void {
+        void this.app.workspace.requestSaveLayout();
+    }
+
+    /**
+     * ワークスペース保存に乗せる状態。
+     *
+     * 走行中のタイマーは持ち出さない。このビューのタイマーは記録を書かないので、
+     * 再起動をまたいで復元しても計っていない時間を計ったことにするだけになる
+     * （記録を持つウィジェット側は `TimerPersistence` が別に面倒を見る）。
+     */
+    getState(): Record<string, unknown> {
+        return this.codec.serializeConfig({
+            customName: this.customName,
+            timerViewMode: this.timerViewMode,
+            intervalTemplate: this.selectedTemplate?.name,
+        });
+    }
+
+    async setState(state: unknown, result: ViewStateResult): Promise<void> {
         await super.setState(state, result);
 
-        const mode = state?.timerViewMode;
-        if (mode && ['countup', 'countdown', 'pomodoro', 'interval'].includes(mode)) {
-            this.timerViewMode = mode as TimerViewMode;
-        }
+        const config = this.codec.parseConfig(state as Record<string, unknown>);
+        // 既定値は当てない。キーの無い状態辞書で呼ばれたときに今のモードを
+        // 捨ててしまう（Obsidian は復元以外でも setState を呼ぶ）。
+        if (config.timerViewMode) this.timerViewMode = config.timerViewMode;
+        if (config.customName !== undefined) this.customName = config.customName;
 
-        if (state?.intervalTemplate && this.timerViewMode === 'interval') {
+        if (config.intervalTemplate && this.timerViewMode === 'interval') {
             await this.loadTemplates();
-            this.selectedTemplate = this.templates.find(t => t.name === state.intervalTemplate) ?? null;
+            this.selectedTemplate = this.templates.find(t => t.name === config.intervalTemplate) ?? null;
         }
 
         if (this.container) this.render();
@@ -626,6 +648,7 @@ export class TimerView extends ItemView {
                             await this.loadTemplates();
                             this.selectedTemplate = this.templates.find(t => t.filePath === filePath) ?? null;
                             this.render();
+                            this.requestSaveState();
                         },
                     });
                 });
@@ -633,6 +656,7 @@ export class TimerView extends ItemView {
                 item.onclick = () => {
                     this.selectedTemplate = template;
                     this.render();
+                    this.requestSaveState();
                 };
             }
         }
@@ -653,6 +677,7 @@ export class TimerView extends ItemView {
                     await this.loadTemplates();
                     this.selectedTemplate = this.templates.find(t => t.filePath === filePath) ?? null;
                     this.render();
+                    this.requestSaveState();
                 },
             });
         };
