@@ -69,7 +69,6 @@ export class TimerView extends ItemView {
         this.templateLoader = new IntervalTemplateLoader(plugin.app);
 
         this.toolbar = new TimerToolbar({
-            plugin: this.plugin,
             getMode: () => this.timerViewMode,
             isIdle: () => !this.timer,
             onSelectMode: (event) => this.showModeMenu(event),
