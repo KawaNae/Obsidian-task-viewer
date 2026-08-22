@@ -16,6 +16,14 @@ import { isDailyTimer } from './TimerInstance';
 import type { TimerContext } from './TimerContext';
 import { OBSOLETE_STORAGE_VERSIONS, STORAGE_VERSION } from './TimerStorageUtils';
 import type { TimerCreator } from './TimerCreator';
+import {
+    clampToTotalDuration,
+    computeCompletedDuration,
+    computeTotalDuration,
+    getCurrentSegment,
+    normalizeGroups,
+    type IntervalDefaults,
+} from './IntervalMath';
 import type { TimerLifecycle } from './TimerLifecycle';
 import type { TimerStorageUtils } from './TimerStorageUtils';
 import { TaskIdGenerator } from '../services/display/TaskIdGenerator';
@@ -370,7 +378,7 @@ export class TimerPersistence {
                     currentRepeatIndex: 0,
                     segmentTimeRemaining: Math.max(0, persisted.timeRemaining ?? workSec),
                     totalElapsedTime: Math.max(0, persisted.pausedElapsedTime ?? 0),
-                    totalDuration: repeatCount === 0 ? 0 : this.creator.computeIntervalTotalDuration(groups),
+                    totalDuration: repeatCount === 0 ? 0 : computeTotalDuration(groups),
                     phase
                 };
                 return migratedInterval;
@@ -388,7 +396,7 @@ export class TimerPersistence {
                 };
             }
             case 'interval': {
-                const groups = this.creator.normalizeIntervalGroups(persisted.groups);
+                const groups = normalizeGroups(persisted.groups, this.intervalDefaults());
                 const intervalTimer: IntervalTimer = {
                     ...common,
                     timerType: 'interval',
@@ -399,9 +407,9 @@ export class TimerPersistence {
                     currentRepeatIndex: Math.max(0, persisted.currentRepeatIndex ?? 0),
                     segmentTimeRemaining: Math.max(0, persisted.segmentTimeRemaining ?? groups[0].segments[0].durationSeconds),
                     totalElapsedTime: Math.max(0, persisted.totalElapsedTime ?? 0),
-                    totalDuration: Math.max(0, persisted.totalDuration ?? this.creator.computeIntervalTotalDuration(groups))
+                    totalDuration: Math.max(0, persisted.totalDuration ?? computeTotalDuration(groups))
                 };
-                const segment = this.creator.getCurrentIntervalSegment(intervalTimer);
+                const segment = getCurrentSegment(intervalTimer);
                 if (!segment) {
                     return null;
                 }
@@ -456,12 +464,12 @@ export class TimerPersistence {
                 timer.timeRemaining = timer.totalTime - timer.elapsedTime;
                 timer.phase = timer.timeRemaining < 0 ? 'idle' : 'work';
             } else if (timer.timerType === 'interval') {
-                const segment = this.creator.getCurrentIntervalSegment(timer);
+                const segment = getCurrentSegment(timer);
                 if (segment) {
                     timer.segmentTimeRemaining = Math.max(0, segment.durationSeconds - timer.pausedElapsedTime);
-                    timer.totalElapsedTime = this.creator.clampToTotalDuration(
-                        timer,
-                        this.creator.computeIntervalCompletedDuration(timer) + Math.min(segment.durationSeconds, timer.pausedElapsedTime)
+                    timer.totalElapsedTime = clampToTotalDuration(
+                        timer.totalDuration,
+                        computeCompletedDuration(timer) + Math.min(segment.durationSeconds, timer.pausedElapsedTime)
                     );
                 }
             }
@@ -487,21 +495,30 @@ export class TimerPersistence {
                 timer.phase = timer.timeRemaining < 0 ? 'idle' : 'work';
                 break;
             case 'interval': {
-                const segment = this.creator.getCurrentIntervalSegment(timer);
+                const segment = getCurrentSegment(timer);
                 if (!segment) {
                     timer.segmentTimeRemaining = 0;
                     timer.totalElapsedTime = timer.totalDuration;
                     break;
                 }
                 timer.segmentTimeRemaining = Math.max(0, segment.durationSeconds - totalElapsed);
-                timer.totalElapsedTime = this.creator.clampToTotalDuration(
-                    timer,
-                    this.creator.computeIntervalCompletedDuration(timer) + Math.min(segment.durationSeconds, totalElapsed)
+                timer.totalElapsedTime = clampToTotalDuration(
+                    timer.totalDuration,
+                    computeCompletedDuration(timer) + Math.min(segment.durationSeconds, totalElapsed)
                 );
                 break;
             }
             default:
                 break;
         }
+    }
+
+    /** 空の永続グループに当てる既定。{@link TimerCreator} と同じ設定を読む。 */
+    private intervalDefaults(): IntervalDefaults {
+        return {
+            prepareSeconds: 10,
+            workSeconds: this.ctx.plugin.settings.pomodoroWorkMinutes * 60,
+            breakSeconds: this.ctx.plugin.settings.pomodoroBreakMinutes * 60,
+        };
     }
 }

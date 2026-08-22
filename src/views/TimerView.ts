@@ -16,13 +16,18 @@ import type {
     CountdownTimer,
     IntervalGroup,
     IntervalTimer,
-    IntervalSegment,
     TimerInstance,
     TimerPhase,
 } from '../timer/TimerInstance';
 import { TimerProgressUI } from '../timer/TimerProgressUI';
 import { IntervalTemplateLoader, type IntervalTemplate } from '../timer/IntervalTemplateLoader';
 import { AudioUtils } from '../timer/AudioUtils';
+import {
+    advanceSegment,
+    computeCompletedDuration,
+    computeTotalDuration,
+    getCurrentSegment,
+} from '../timer/IntervalMath';
 import { TimeFormatter } from '../utils/TimeFormatter';
 import { ViewUriBuilder } from './sharedLogic/ViewUriBuilder';
 import type { ViewUriOptions } from './sharedLogic/ViewUriBuilder';
@@ -227,7 +232,7 @@ export class TimerView extends ItemView {
                 }
                 const groups = this.selectedTemplate.groups;
                 const firstSeg = groups[0]?.segments[0];
-                const totalDuration = this.computeTotalDurationFromGroups(groups);
+                const totalDuration = computeTotalDuration(groups);
                 return {
                     ...base,
                     timerType: 'interval',
@@ -243,15 +248,6 @@ export class TimerView extends ItemView {
         }
     }
 
-    private computeTotalDurationFromGroups(groups: IntervalGroup[]): number {
-        let total = 0;
-        for (const group of groups) {
-            if (group.repeatCount === 0) return 0;
-            const groupSec = group.segments.reduce((sum, s) => sum + s.durationSeconds, 0);
-            total += groupSec * Math.max(1, group.repeatCount);
-        }
-        return total;
-    }
 
     // ─── Timer Actions ──────────────────────────────────────────
 
@@ -262,7 +258,7 @@ export class TimerView extends ItemView {
         this.timer.isRunning = true;
 
         if (this.timer.timerType === 'interval') {
-            const segment = this.getCurrentSegment(this.timer);
+            const segment = getCurrentSegment(this.timer);
             this.timer.phase = segment ? segment.type : 'work';
         } else {
             this.timer.phase = 'work';
@@ -293,10 +289,10 @@ export class TimerView extends ItemView {
                 this.timer.timeRemaining = this.timer.totalTime - this.timer.elapsedTime;
                 break;
             case 'interval': {
-                const segment = this.getCurrentSegment(this.timer);
+                const segment = getCurrentSegment(this.timer);
                 if (segment) {
                     this.timer.segmentTimeRemaining = Math.max(0, segment.durationSeconds - this.timer.pausedElapsedTime);
-                    const completedBefore = this.computeCompletedDuration(this.timer);
+                    const completedBefore = computeCompletedDuration(this.timer);
                     this.timer.totalElapsedTime = completedBefore + Math.min(segment.durationSeconds, this.timer.pausedElapsedTime);
                 }
                 break;
@@ -310,7 +306,7 @@ export class TimerView extends ItemView {
         if (!this.timer || this.timer.isRunning) return;
 
         if (this.timer.timerType === 'interval') {
-            const segment = this.getCurrentSegment(this.timer);
+            const segment = getCurrentSegment(this.timer);
             if (segment) {
                 this.timer.phase = segment.type;
             }
@@ -371,14 +367,14 @@ export class TimerView extends ItemView {
                 return;
             }
             case 'interval': {
-                const segment = this.getCurrentSegment(this.timer);
+                const segment = getCurrentSegment(this.timer);
                 if (!segment) {
                     this.handleIntervalFinish();
                     return;
                 }
                 const segmentElapsed = Math.max(0, this.timer.pausedElapsedTime + sessionElapsed);
                 this.timer.segmentTimeRemaining = Math.max(0, segment.durationSeconds - segmentElapsed);
-                const completedBefore = this.computeCompletedDuration(this.timer);
+                const completedBefore = computeCompletedDuration(this.timer);
                 this.timer.totalElapsedTime = completedBefore + Math.min(segment.durationSeconds, segmentElapsed);
 
                 if (this.timer.segmentTimeRemaining > 0) {
@@ -400,17 +396,17 @@ export class TimerView extends ItemView {
         if (!this.timer || this.timer.timerType !== 'interval') return;
 
         this.stopTicker();
-        const currentSegment = this.getCurrentSegment(this.timer);
+        const currentSegment = getCurrentSegment(this.timer);
         if (!currentSegment) {
             this.handleIntervalFinish();
             return;
         }
 
         // Update totalElapsedTime
-        this.timer.totalElapsedTime = this.computeCompletedDuration(this.timer) + currentSegment.durationSeconds;
+        this.timer.totalElapsedTime = computeCompletedDuration(this.timer) + currentSegment.durationSeconds;
 
         // Advance to next segment first to decide which sound to play
-        const moved = this.advanceSegment(this.timer);
+        const moved = advanceSegment(this.timer);
         if (!moved) {
             this.handleIntervalFinish();
             return;
@@ -424,7 +420,7 @@ export class TimerView extends ItemView {
             new Notice(t('timer.breakComplete'));
         }
 
-        const nextSegment = this.getCurrentSegment(this.timer);
+        const nextSegment = getCurrentSegment(this.timer);
         if (!nextSegment) {
             this.handleIntervalFinish();
             return;
@@ -445,65 +441,6 @@ export class TimerView extends ItemView {
         new Notice(t('timer.allIntervalsComplete'));
         this.timer = null;
         this.render();
-    }
-
-    // ─── Interval Helpers ───────────────────────────────────────
-
-    private getCurrentSegment(timer: IntervalTimer): IntervalSegment | null {
-        const group = timer.groups[timer.currentGroupIndex];
-        if (!group) return null;
-        return group.segments[timer.currentSegmentIndex] ?? null;
-    }
-
-    private advanceSegment(timer: IntervalTimer): boolean {
-        const currentGroup = timer.groups[timer.currentGroupIndex];
-        if (!currentGroup) return false;
-
-        // Next segment in current group
-        if (timer.currentSegmentIndex + 1 < currentGroup.segments.length) {
-            timer.currentSegmentIndex++;
-            return true;
-        }
-
-        // Next repeat of current group
-        if (currentGroup.repeatCount === 0 || timer.currentRepeatIndex + 1 < Math.max(1, currentGroup.repeatCount || 1)) {
-            timer.currentRepeatIndex++;
-            timer.currentSegmentIndex = 0;
-            return true;
-        }
-
-        // Next group
-        if (timer.currentGroupIndex + 1 < timer.groups.length) {
-            timer.currentGroupIndex++;
-            timer.currentRepeatIndex = 0;
-            timer.currentSegmentIndex = 0;
-            return true;
-        }
-
-        return false;
-    }
-
-    private computeCompletedDuration(timer: IntervalTimer): number {
-        let total = 0;
-        for (let g = 0; g < timer.groups.length; g++) {
-            const group = timer.groups[g];
-            const repeats = group.repeatCount === 0
-                ? (g === timer.currentGroupIndex ? timer.currentRepeatIndex : 0)
-                : Math.max(1, group.repeatCount || 1);
-            const groupDuration = group.segments.reduce((sum, s) => sum + s.durationSeconds, 0);
-
-            if (g < timer.currentGroupIndex) {
-                total += groupDuration * repeats;
-                continue;
-            }
-            if (g > timer.currentGroupIndex) break;
-
-            total += groupDuration * timer.currentRepeatIndex;
-            for (let s = 0; s < timer.currentSegmentIndex; s++) {
-                total += group.segments[s].durationSeconds;
-            }
-        }
-        return total;
     }
 
     // ─── Rendering ──────────────────────────────────────────────

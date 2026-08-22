@@ -13,6 +13,12 @@ import type {
 import { getTimerElapsedSeconds } from './TimerInstance';
 import { type TimerContext, IDLE_TIMER_ID } from './TimerContext';
 import type { TimerCreator } from './TimerCreator';
+import {
+    advanceSegment,
+    clampToTotalDuration,
+    computeCompletedDuration,
+    getCurrentSegment,
+} from './IntervalMath';
 
 export class TimerLifecycle {
     /** end の書き足しが飛んでいるタイマー。1 秒 tick の二重発行を防ぐ。 */
@@ -100,16 +106,16 @@ export class TimerLifecycle {
                     return;
                 }
 
-                const segment = this.creator.getCurrentIntervalSegment(timer);
+                const segment = getCurrentSegment(timer);
                 if (!segment) {
                     void this.finishIntervalTimer(timerId, timer);
                     return;
                 }
                 const segmentElapsed = Math.max(0, timer.pausedElapsedTime + currentSessionElapsed);
                 timer.segmentTimeRemaining = Math.max(0, segment.durationSeconds - segmentElapsed);
-                const completedBefore = this.creator.computeIntervalCompletedDuration(timer);
-                timer.totalElapsedTime = this.creator.clampToTotalDuration(
-                    timer,
+                const completedBefore = computeCompletedDuration(timer);
+                timer.totalElapsedTime = clampToTotalDuration(
+                    timer.totalDuration,
                     completedBefore + Math.min(segment.durationSeconds, segmentElapsed)
                 );
 
@@ -130,18 +136,18 @@ export class TimerLifecycle {
 
     async handleIntervalSegmentComplete(timerId: string, timer: IntervalTimer): Promise<void> {
         this.stopTimerTick(timerId);
-        const currentSegment = this.creator.getCurrentIntervalSegment(timer);
+        const currentSegment = getCurrentSegment(timer);
         if (!currentSegment) {
             await this.finishIntervalTimer(timerId, timer);
             return;
         }
 
-        timer.totalElapsedTime = this.creator.clampToTotalDuration(
-            timer,
-            this.creator.computeIntervalCompletedDuration(timer) + currentSegment.durationSeconds
+        timer.totalElapsedTime = clampToTotalDuration(
+            timer.totalDuration,
+            computeCompletedDuration(timer) + currentSegment.durationSeconds
         );
 
-        const moved = this.creator.advanceIntervalSegment(timer);
+        const moved = advanceSegment(timer);
         if (!moved) {
             await this.finishIntervalTimer(timerId, timer);
             return;
@@ -149,7 +155,7 @@ export class TimerLifecycle {
 
         AudioUtils.playTransitionConfirm();
 
-        const nextSegment = this.creator.getCurrentIntervalSegment(timer);
+        const nextSegment = getCurrentSegment(timer);
         if (!nextSegment) {
             await this.finishIntervalTimer(timerId, timer);
             return;
@@ -219,12 +225,12 @@ export class TimerLifecycle {
                 timer.phase = timer.timeRemaining < 0 ? 'idle' : 'work';
                 break;
             case 'interval': {
-                const segment = this.creator.getCurrentIntervalSegment(timer);
+                const segment = getCurrentSegment(timer);
                 if (!segment) break;
                 timer.segmentTimeRemaining = Math.max(0, segment.durationSeconds - timer.pausedElapsedTime);
-                const completedBefore = this.creator.computeIntervalCompletedDuration(timer);
-                timer.totalElapsedTime = this.creator.clampToTotalDuration(
-                    timer,
+                const completedBefore = computeCompletedDuration(timer);
+                timer.totalElapsedTime = clampToTotalDuration(
+                    timer.totalDuration,
                     completedBefore + Math.min(segment.durationSeconds, timer.pausedElapsedTime)
                 );
                 break;
@@ -396,7 +402,7 @@ export class TimerLifecycle {
 
     resumeTimer(timer: TimerInstance): void {
         if (timer.timerType === 'interval') {
-            const segment = this.creator.getCurrentIntervalSegment(timer);
+            const segment = getCurrentSegment(timer);
             if (segment) {
                 timer.phase = segment.type;
             }
