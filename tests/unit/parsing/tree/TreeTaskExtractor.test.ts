@@ -3,7 +3,7 @@ import { DocumentTreeBuilder } from '../../../../src/services/parsing/tree/Docum
 import { SectionPropertyResolver } from '../../../../src/services/parsing/tree/SectionPropertyResolver';
 import { TreeTaskExtractor, type TaskExtractionContext } from '../../../../src/services/parsing/tree/TreeTaskExtractor';
 import { TaskParser } from '../../../../src/services/parsing/TaskParser';
-import { DEFAULT_SETTINGS, DEFAULT_TV_FILE_KEYS } from '../../../../src/types';
+import { DEFAULT_SETTINGS, DEFAULT_SCOPE_KEYS } from '../../../../src/types';
 import {
     getEffectiveColor, getEffectiveLinestyle, getEffectiveMask,
     getEffectiveTags, getEffectiveProperties,
@@ -11,12 +11,12 @@ import {
 
 const defaultCtx: TaskExtractionContext = {
     filePath: 'test.md',
-    tvFileKeys: DEFAULT_TV_FILE_KEYS,
+    scopeKeys: DEFAULT_SCOPE_KEYS,
 };
 
 function extractTasks(bodyLines: string[], frontmatter?: Record<string, any>, ctx?: Partial<TaskExtractionContext>) {
     const doc = DocumentTreeBuilder.build('test.md', bodyLines, 0);
-    SectionPropertyResolver.resolve(doc, frontmatter, DEFAULT_TV_FILE_KEYS);
+    SectionPropertyResolver.resolve(doc, frontmatter, DEFAULT_SCOPE_KEYS);
     return TreeTaskExtractor.extract(doc, { ...defaultCtx, ...ctx });
 }
 

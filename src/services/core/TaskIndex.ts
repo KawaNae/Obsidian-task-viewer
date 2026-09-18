@@ -1,10 +1,9 @@
 import { type App, type EventRef, Notice, TFile } from 'obsidian';
 import { t } from '../../i18n';
 import type { DuplicateOptions, Task, TaskViewerSettings } from '../../types';
-import { isTvFile, isTvInline } from '../../types';
+import { isTvInline } from '../../types';
 import { TaskRepository } from '../persistence/TaskRepository';
 import { PropertyUpdatePlanner } from '../persistence/PropertyUpdatePlanner';
-import { createTempTask } from '../data/createTempTask';
 import { FlowExecutor } from '../flow/FlowExecutor';
 import type { FlowDeleteAssessment } from '../flow/FlowDeletion';
 import { TaskStore } from './TaskStore';
@@ -12,7 +11,6 @@ import { TaskScanner } from './TaskScanner';
 import { TaskValidator, type ValidationError } from './TaskValidator';
 import { SyncDetector } from './SyncDetector';
 import { EditorObserver } from './EditorObserver';
-import { TvInlineToTvFileConverter } from './TvInlineToTvFileConverter';
 import { PathTtlWindow } from './PathTtlWindow';
 import { NotifyCoalescer } from './NotifyCoalescer';
 import { TaskIdGenerator } from '../display/TaskIdGenerator';
@@ -32,7 +30,6 @@ export class TaskIndex {
     private syncDetector: SyncDetector;
     private editorObserver: EditorObserver;
     private repository: TaskRepository;
-    private tvInlineToTvFileConverter: TvInlineToTvFileConverter;
     private commandExecutor: FlowExecutor;
     private settings: TaskViewerSettings;
     private parseFingerprint: string;
@@ -74,7 +71,6 @@ export class TaskIndex {
         this.validator = new TaskValidator();
         this.syncDetector = new SyncDetector();
         this.repository = new TaskRepository(app);
-        this.tvInlineToTvFileConverter = new TvInlineToTvFileConverter(app, this.repository);
         // Settings getter (not a snapshot): updateSettings replaces the
         // settings object, and trigger judgment must always see the latest
         // statusDefinitions.
@@ -367,7 +363,7 @@ export class TaskIndex {
         // 非時刻プロパティ（color/tags/custom 等）の書き込み操作を導出。
         // before スナップショット（Object.assign 前）との diff が必要なので
         // ここで評価する。
-        const propertyOps = PropertyUpdatePlanner.plan(task, updates, this.settings.tvFileKeys);
+        const propertyOps = PropertyUpdatePlanner.plan(task, updates, this.settings.scopeKeys);
 
         // 更新前の姿。行の探索と、書けなかったときの巻き戻しの両方で要る。
         const before: Task = { ...task };
@@ -381,19 +377,16 @@ export class TaskIndex {
             this.store.notifyListeners(taskId, Object.keys(updates));
         }
 
-        const written = isTvFile(task)
-            // tv-file は書き先がキー名で決まるので、渡すのは更新後の値でよい。
-            ? await this.repository.updateTvFile(task, updates, this.settings.tvFileKeys, propertyOps)
-            // All inline tasks route through InlineTaskWriter; TaskParser.format
-            // dispatches by parserId. TVInlineParser.format() handles both
-            // bare-checkbox and @notation-bearing output, so a task gaining or
-            // losing date fields just produces the right line — no parserId
-            // promotion/demotion needed.
-            //
-            // 探索は更新前の姿で行う。ファイルに書かれているのは更新前の行なので、
-            // 更新後の日付や時刻で探しに行くと、まさにその値を変える更新のときに
-            // 空振りする。第 2 引数が書く内容、第 1 引数がどの行かを決める。
-            : await this.repository.updateTaskInFile(before, task, propertyOps);
+        // All inline tasks route through InlineTaskWriter; TaskParser.format
+        // dispatches by parserId. TVInlineParser.format() handles both
+        // bare-checkbox and @notation-bearing output, so a task gaining or
+        // losing date fields just produces the right line — no parserId
+        // promotion/demotion needed.
+        //
+        // 探索は更新前の姿で行う。ファイルに書かれているのは更新前の行なので、
+        // 更新後の日付や時刻で探しに行くと、まさにその値を変える更新のときに
+        // 空振りする。第 2 引数が書く内容、第 1 引数がどの行かを決める。
+        const written = await this.repository.updateTaskInFile(before, task, propertyOps);
 
         if (!written) {
             this.revertUnwrittenUpdate(task, taskId, before, updates);
@@ -466,8 +459,6 @@ export class TaskIndex {
             let removed = true;
             if (options.fireFlow && isTvInline(task)) {
                 removed = await this.commandExecutor.fireAndDelete(task);
-            } else if (isTvFile(task)) {
-                await this.repository.deleteTvFile(task, this.settings.tvFileKeys);
             } else {
                 await this.repository.deleteTaskFromFile(task);
             }
@@ -485,43 +476,9 @@ export class TaskIndex {
 
             this.syncDetector.markLocalEdit(task.file);
 
-            if (isTvFile(task)) {
-                await this.repository.duplicateTvFile(task, this.settings.tvFileKeys, options);
-            } else {
-                await this.repository.duplicateInlineTask(task, options);
-            }
+            await this.repository.duplicateInlineTask(task, options);
 
             await this.scanner.waitForScan(task.file);
-        });
-    }
-
-    /**
-     * inline タスクを frontmatter タスクファイルに変換。
-     * ソースファイル + 新ファイルの両方を再スキャン。
-     * @returns 新ファイルのパス
-     */
-    async convertToTvFile(taskId: string): Promise<string> {
-        const task = this.store.getTask(taskId);
-        if (!task) throw new Error('Task not found');
-        return this.withNotify(task.file, async () => {
-
-            if (!isTvInline(task)) {
-                throw new Error('Only tv-inline tasks can be converted to tv-file tasks');
-            }
-
-            this.syncDetector.markLocalEdit(task.file);
-
-            const newPath = await this.tvInlineToTvFileConverter.convertTvInlineToTvFile(
-                task,
-                this.settings.tvFileChildHeader,
-                this.settings.tvFileChildHeaderLevel,
-                this.settings.tvFileKeys
-            );
-
-            await this.scanner.waitForScan(task.file);
-            await this.scanner.waitForScan(newPath);
-
-            return newPath;
         });
     }
 
@@ -555,18 +512,10 @@ export class TaskIndex {
 
             this.syncDetector.markLocalEdit(task.file);
 
-            if (isTvFile(task)) {
-                await this.repository.insertLineUnderHeading(
-                    task.file, childLine,
-                    this.settings.tvFileChildHeader,
-                    this.settings.tvFileChildHeaderLevel
-                );
-            } else {
-                // インデントは書き込み層が既存子行から決める（親行だけからは
-                // トップレベルのとき 4 スペース固定になり、タブ書きのファイルに
-                // スペースが混ざる）。
-                await this.repository.insertLineAsFirstChild(task, childLine);
-            }
+            // インデントは書き込み層が既存子行から決める（親行だけからは
+            // トップレベルのとき 4 スペース固定になり、タブ書きのファイルに
+            // スペースが混ざる）。
+            await this.repository.insertLineAsFirstChild(task, childLine);
 
             await this.scanner.waitForScan(task.file);
         });
@@ -586,15 +535,7 @@ export class TaskIndex {
 
             this.syncDetector.markLocalEdit(task.file);
 
-            if (isTvFile(task)) {
-                await this.repository.insertLineUnderHeading(
-                    task.file, childLine,
-                    this.settings.tvFileChildHeader,
-                    this.settings.tvFileChildHeaderLevel
-                );
-            } else {
-                await this.repository.insertLineAfterTask(task, childLine);
-            }
+            await this.repository.insertLineAfterTask(task, childLine);
 
             await this.scanner.waitForScan(task.file);
         });
@@ -604,9 +545,6 @@ export class TaskIndex {
      * Insert a line as the task's next sibling — same indentation, just past
      * its subtree. Session records after the first one live beside the record
      * before them, not under it, so the log stays flat.
-     *
-     * Inline only. A tv-file task is a whole note and has no siblings to speak
-     * of; that case belongs to appendChildTask.
      */
     async insertSiblingAfterTask(
         taskId: string,
@@ -615,7 +553,7 @@ export class TaskIndex {
     ): Promise<number> {
         const task = this.store.getTask(taskId);
         if (!task) return -1;
-        if (task.isReadOnly || isTvFile(task)) return -1;
+        if (task.isReadOnly) return -1;
         return this.withNotify(task.file, async () => {
             logInfo(`[insertSiblingAfterTask] taskId=${taskId}`);
 
@@ -624,29 +562,6 @@ export class TaskIndex {
             await this.scanner.waitForScan(task.file);
 
             return insertedLine;
-        });
-    }
-
-    async createTvFileFromData(taskData: Partial<Task>): Promise<string> {
-        return this.withNotify('', async () => {
-            const tempTask = createTempTask({
-                id: 'convert-temp',
-                content: taskData.content ?? '',
-                statusChar: taskData.statusChar ?? ' ',
-                startDate: taskData.startDate,
-                startTime: taskData.startTime,
-                endDate: taskData.endDate,
-                endTime: taskData.endTime,
-                due: taskData.due,
-            });
-            return await this.repository.createTvFile(
-                tempTask,
-                this.settings.tvFileChildHeader,
-                this.settings.tvFileChildHeaderLevel,
-                undefined,
-                undefined,
-                this.settings.tvFileKeys
-            );
         });
     }
 
@@ -722,18 +637,14 @@ export class TaskIndex {
 // called with the same ref). Field-by-field prev/next comparison would always
 // see them as equal.
 //
-//   tvFileKeys          — frontmatter field names for tv-start/end/due/status/etc.
-//   tvFileChildHeader   — heading name that marks the child-items section
-//   tvFileChildHeaderLevel — heading level for the child-items section
+//   scopeKeys          — frontmatter field names for tv-start/end/due/etc.
 //   enableDayPlanner    — toggles DayPlanner parser in the chain
 //   enableTasksPlugin   — toggles TasksPlugin parser in the chain
 //   tasksPluginMapping  — emoji-to-field mapping for TasksPlugin parser
 //   statusDefinitions   — which status chars count as complete (CompletionDetector)
 export function computeParseFingerprint(settings: TaskViewerSettings): string {
     return JSON.stringify([
-        settings.tvFileKeys,
-        settings.tvFileChildHeader,
-        settings.tvFileChildHeaderLevel,
+        settings.scopeKeys,
         settings.enableDayPlanner,
         settings.enableTasksPlugin,
         settings.tasksPluginMapping,

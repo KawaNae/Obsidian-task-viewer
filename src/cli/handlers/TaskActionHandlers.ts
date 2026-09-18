@@ -25,17 +25,6 @@ export function createDuplicateHandler(plugin: PluginContext & ApiHost) {
     };
 }
 
-export function createConvertHandler(plugin: PluginContext & ApiHost) {
-    return async (params: CliData): Promise<string> => {
-        if (!params.id) return cliError('Missing required flag: --id');
-
-        return wrapCliResult('convert task', async () => {
-            const result = await plugin.api.convertToTvFile({ id: params.id });
-            return cliOk({ convertedFrom: result.convertedFrom, newFile: result.newFile });
-        });
-    };
-}
-
 export function createCategorizedTasksForDateRangeHandler(plugin: PluginContext & ApiHost) {
     return async (params: CliData): Promise<string> => {
         if (!params.from) return cliError('Missing required flag: --from');
@@ -59,23 +48,6 @@ export function createInsertChildTaskHandler(plugin: PluginContext & ApiHost) {
                 content: params.content,
             });
             return cliOk({ parentId: result.parentId });
-        });
-    };
-}
-
-export function createCreateTvFileHandler(plugin: PluginContext & ApiHost) {
-    return async (params: CliData): Promise<string> => {
-        if (!params.content) return cliError('Missing required flag: --content');
-
-        return wrapCliResult('create frontmatter task', async () => {
-            const result = await plugin.api.createTvFile({
-                content: params.content,
-                start: params.start,
-                end: params.end,
-                due: params.due,
-                status: params.status,
-            });
-            return cliOk({ newFile: result.newFile });
         });
     };
 }

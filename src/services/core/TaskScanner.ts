@@ -77,10 +77,9 @@ export class TaskScanner {
         const fm = cache.frontmatter;
         if (fm) {
             if ('tags' in fm) return true;
-            const keys = this.settings.tvFileKeys;
+            const keys = this.settings.scopeKeys;
             if (keys.start in fm || keys.end in fm || keys.due in fm ||
-                keys.status in fm || keys.content in fm || keys.color in fm ||
-                keys.linestyle in fm || keys.mask in fm || keys.timerTargetId in fm ||
+                keys.color in fm || keys.linestyle in fm || keys.mask in fm ||
                 keys.ignore in fm) return true;
         }
 

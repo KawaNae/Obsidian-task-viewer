@@ -45,8 +45,6 @@ function createMockApiForCreate(opts: {
         deleteTask: vi.fn(),
         duplicateTask: vi.fn(),
         insertChildTask: vi.fn(),
-        convertToTvFile: vi.fn().mockResolvedValue('new.md'),
-        createTvFileFromData: vi.fn().mockResolvedValue('new.md'),
     };
     const mockPlugin = {
         app: {

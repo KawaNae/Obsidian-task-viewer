@@ -1,5 +1,5 @@
 import type { PluginContext } from '../PluginContext';
-import { type Task, isTvFile, isTvInline } from '../types';
+import { type Task, isTvInline } from '../types';
 import type { TimerInstance } from './TimerInstance';
 
 /** 解決に失敗した理由。文言を選ぶためだけに使う。 */
@@ -14,7 +14,7 @@ export class TimerTaskResolver {
     /**
      * 解決に失敗した理由を分ける。
      *
-     * 解決手段はどれも候補に tvInline / tvFile を要求するので、day-planner や
+     * 解決手段はどれも候補に tvInline を要求するので、day-planner や
      * tasks-plugin のタスクは「見つからない」のと同じ経路で落ちる。しかし原因は
      * 別物で、こちらは最初から書き込めない形式であり、あちらは行を見失った状態
      * である。同じ文言（削除・移動・リネームの可能性）を出すと原因を取り違える。
@@ -71,43 +71,6 @@ export class TimerTaskResolver {
         }
 
         return undefined;
-    }
-
-    resolveTvFile(timer: Pick<TimerInstance, 'taskId' | 'taskFile' | 'timerTargetId'>): Task | undefined {
-        const taskIndex = this.plugin.getTaskIndex();
-        const allTasks = taskIndex.getTasks();
-
-        if (timer.timerTargetId) {
-            const byTargetInFile = timer.taskFile
-                ? allTasks.find((task) =>
-                    isTvFile(task)
-                    && task.file === timer.taskFile
-                    && task.timerTargetId === timer.timerTargetId
-                )
-                : undefined;
-            if (byTargetInFile) {
-                return byTargetInFile;
-            }
-
-            const byTarget = allTasks.find((task) =>
-                isTvFile(task)
-                && task.timerTargetId === timer.timerTargetId
-            );
-            if (byTarget) {
-                return byTarget;
-            }
-        }
-
-        const byId = taskIndex.getTask(timer.taskId);
-        if (byId && isTvFile(byId)) {
-            return byId;
-        }
-
-        if (!timer.taskFile) {
-            return undefined;
-        }
-
-        return allTasks.find((task) => isTvFile(task) && task.file === timer.taskFile);
     }
 }
 

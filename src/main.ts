@@ -10,9 +10,9 @@ import { TimerWidget } from './timer/TimerWidget';
 import {
     type TaskViewerSettings,
     DEFAULT_SETTINGS,
-    DEFAULT_TV_FILE_KEYS,
-    normalizeTvFileKeys,
-    validateTvFileKeys,
+    DEFAULT_SCOPE_KEYS,
+    normalizeScopeKeys,
+    validateScopeKeys,
 } from './types';
 import type { Task } from './types';
 import { isTvFile } from './types';
@@ -35,7 +35,6 @@ import { PropertyFormatter } from './interaction/menu/PropertyFormatter';
 import { TimerMenuBuilder } from './interaction/menu/builders/TimerMenuBuilder';
 import { TaskActionsMenuBuilder } from './interaction/menu/builders/TaskActionsMenuBuilder';
 import { CheckboxMenuBuilder } from './interaction/menu/builders/CheckboxMenuBuilder';
-import { createTvFileCallback } from './interaction/menu/builders/createTvFileCallback';
 import { ValidationMenuBuilder } from './interaction/menu/builders/ValidationMenuBuilder';
 import { MenuPresenter } from './interaction/menu/MenuPresenter';
 import { MenuHandler } from './interaction/menu/MenuHandler';
@@ -321,7 +320,6 @@ export default class TaskViewerPlugin extends Plugin {
         const editorCheckboxBuilder = new CheckboxMenuBuilder(
             this.app,
             () => this.settings.startHour,
-            createTvFileCallback(this.writeService)
         );
 
         // Register inline menu button on checkbox lines (CM6 extension)
@@ -416,13 +414,13 @@ export default class TaskViewerPlugin extends Plugin {
         migrateSettings(rawObject);
 
         const merged = Object.assign({}, DEFAULT_SETTINGS, rawObject) as TaskViewerSettings;
-        const normalizedKeys = normalizeTvFileKeys(merged.tvFileKeys);
-        const keysValidationError = validateTvFileKeys(normalizedKeys);
+        const normalizedKeys = normalizeScopeKeys(merged.scopeKeys);
+        const keysValidationError = validateScopeKeys(normalizedKeys);
 
         this.settings = {
             ...merged,
-            tvFileKeys: keysValidationError
-                ? { ...DEFAULT_TV_FILE_KEYS }
+            scopeKeys: keysValidationError
+                ? { ...DEFAULT_SCOPE_KEYS }
                 : normalizedKeys,
         };
     }

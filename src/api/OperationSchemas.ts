@@ -1,8 +1,8 @@
 import { TaskApiError } from './TaskApiTypes';
 import type {
     ListParams, TodayParams, GetParams, CreateParams, UpdateParams, DeleteParams,
-    DuplicateParams, ConvertParams, TasksForDateRangeParams,
-    CategorizedTasksForDateRangeParams, InsertChildTaskParams, CreateTvFileParams,
+    DuplicateParams, TasksForDateRangeParams,
+    CategorizedTasksForDateRangeParams, InsertChildTaskParams,
 } from './TaskApiTypes';
 
 /**
@@ -97,10 +97,6 @@ export const DUPLICATE_SCHEMA = {
     count:     { value: '<number>', description: 'Number of copies (default: 1)' },
 } as const satisfies ParamMap<DuplicateParams>;
 
-export const CONVERT_SCHEMA = {
-    id: { value: '<taskId>', description: 'Task ID', required: true },
-} as const satisfies ParamMap<ConvertParams>;
-
 export const TASKS_FOR_DATE_RANGE_SCHEMA = {
     from:   { value: '<date|preset>',   description: 'Query window start (inclusive)', required: true },
     to:     { value: '<date|preset>',   description: 'Query window end (inclusive)', required: true },
@@ -119,14 +115,6 @@ export const INSERT_CHILD_TASK_SCHEMA = {
     parentId: { value: '<taskId>', description: 'Parent task ID', required: true },
     content:  { value: '<text>',   description: 'Child task content', required: true },
 } as const satisfies ParamMap<InsertChildTaskParams>;
-
-export const CREATE_TV_FILE_SCHEMA = {
-    content: { value: '<text>',          description: 'Task content', required: true },
-    start:   { value: '<date|datetime>', description: 'Start date/datetime' },
-    end:     { value: '<date|datetime>', description: 'End date/datetime' },
-    due:     { value: '<YYYY-MM-DD>',    description: 'Due date' },
-    status:  { value: '<char>',          description: 'Status character (default: space)' },
-} as const satisfies ParamMap<CreateTvFileParams>;
 
 // ── CLI derivation ──
 

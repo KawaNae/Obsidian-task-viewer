@@ -28,7 +28,6 @@ import type { TimerLifecycle } from './TimerLifecycle';
 import type { TimerStorageUtils } from './TimerStorageUtils';
 import { TaskIdGenerator } from '../services/display/TaskIdGenerator';
 import { TimerTaskResolver } from './TimerTaskResolver';
-import { isTvFile } from '../types';
 import { Notice } from 'obsidian';
 import { t } from '../i18n';
 import { logError, logInfo } from '../log/log';
@@ -43,11 +42,16 @@ import { logError, logInfo } from '../log/log';
  */
 const PARSER_ID_MIGRATION: Record<string, ParserId> = {
     'at-notation': 'tv-inline',
-    'frontmatter': 'tv-file',
     'plain': 'tv-inline',
 };
 
-const CURRENT_PARSER_IDS: ReadonlySet<ParserId> = new Set(['tv-inline', 'tv-file', 'tasks-plugin', 'day-planner']);
+/**
+ * Parsers a restored timer may name. `tv-file` (and its older name
+ * `frontmatter`) is not one: frontmatter makes no task any more, so such a
+ * timer falls back to `tv-inline`, fails to resolve, and is closed with one
+ * notice by dropTimersWithMissingAnchor.
+ */
+const CURRENT_PARSER_IDS: ReadonlySet<ParserId> = new Set(['tv-inline', 'tasks-plugin', 'day-planner']);
 
 function normalizeParserId(value: string | undefined): ParserId {
     if (!value) return 'tv-inline';
@@ -230,7 +234,7 @@ export class TimerPersistence {
             // ここで閉じると復元のたびに生きているタイマーを壊す。
             if (isDailyTimer(timer)) continue;
 
-            const task = isTvFile(timer) ? resolver.resolveTvFile(timer) : resolver.resolveTvInline(timer);
+            const task = resolver.resolveTvInline(timer);
             if (task) continue;
 
             logInfo(`[Timer:anchorMissing] timerId=${timerId} taskId=${timer.taskId}`);

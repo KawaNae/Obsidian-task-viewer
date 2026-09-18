@@ -152,15 +152,6 @@ export interface DuplicateResult {
     duplicated: string;
 }
 
-export interface ConvertParams {
-    id: string;
-}
-
-export interface ConvertResult {
-    convertedFrom: string;
-    newFile: string;
-}
-
 export interface TasksForDateRangeParams extends PaginationParams {
     /** Query window start (inclusive). YYYY-MM-DD or a date preset. */
     from: string;
@@ -199,19 +190,6 @@ export interface InsertChildTaskResult {
     parentId: string;
 }
 
-// ── createTvFile ──
-
-export interface CreateTvFileParams {
-    content: string;
-    start?: string;
-    end?: string;
-    due?: string;
-    status?: string;
-}
-
-export interface CreateTvFileResult {
-    newFile: string;
-}
 
 // ── startHour ──
 

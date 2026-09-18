@@ -53,7 +53,7 @@ export type TimerRunState = 'running' | 'suspended';
  * この値が効くのは最初の 1 回だけ。
  *
  * - `self`   … 対象タスク行そのものをレコードに変形する（単発 1 行完結の体験）
- * - `child`  … 対象タスクの子として挿す（器タスク / tvFile / daily）
+ * - `child`  … 対象タスクの子として挿す（器タスク / daily）
  * - `sibling`… 対象タスク（完了済み）の兄弟として挿す。`[x]` 起点で「続きを開始」
  *              を選んだときだけ使う
  */

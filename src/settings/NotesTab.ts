@@ -35,32 +35,6 @@ export function render(el: HTMLElement, plugin: PluginContext): void {
                 await plugin.saveSettings();
             }));
 
-    // Child Tasks
-    el.createEl('h3', { text: t('settings.notes.childTasks'), cls: 'setting-section-header' });
-
-    new Setting(el)
-        .setName(t('settings.notes.childTaskHeading'))
-        .setDesc(t('settings.notes.childTaskHeadingDesc'))
-        .addText(text => text
-            .setPlaceholder('Tasks')
-            .setValue(plugin.settings.tvFileChildHeader)
-            .onChange(async (value) => {
-                plugin.settings.tvFileChildHeader = value;
-                await plugin.saveSettings();
-            }));
-
-    new Setting(el)
-        .setName(t('settings.notes.childTaskHeadingLevel'))
-        .setDesc(t('settings.notes.childTaskHeadingLevelDesc'))
-        .addSlider(slider => slider
-            .setLimits(1, 6, 1)
-            .setValue(plugin.settings.tvFileChildHeaderLevel)
-            .setDynamicTooltip()
-            .onChange(async (value) => {
-                plugin.settings.tvFileChildHeaderLevel = value;
-                await plugin.saveSettings();
-            }));
-
     // Periodic Notes
     el.createEl('h3', { text: t('settings.notes.periodicNotes'), cls: 'setting-section-header' });
 

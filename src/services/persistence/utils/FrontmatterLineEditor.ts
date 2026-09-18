@@ -118,7 +118,7 @@ export class FrontmatterLineEditor {
     /**
      * Converts an arbitrary string into a safe single-line YAML scalar.
      * The single canonical authority shared by every frontmatter write surface
-     * (create: TaskConverter, update: FrontmatterWriter + applyUpdates)
+     * (FrontmatterWriter.setKeys + applyUpdates)
      * so no value silently corrupts the block on write.
      *
      * Allowlist policy: emit a plain (unquoted) scalar ONLY for values that are

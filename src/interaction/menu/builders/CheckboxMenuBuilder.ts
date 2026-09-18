@@ -1,13 +1,11 @@
 import type { App, Menu } from 'obsidian';
 import type { StatusDefinition, TaskViewerSettings } from '../../../types';
 import { buildStatusOptions, createStatusTitle } from '../../../constants/statusOptions';
-import { CreateTaskModal, type CreateTaskResult, formatTaskLine } from '../../../modals/CreateTaskModal';
+import { CreateTaskModal, formatTaskLine } from '../../../modals/CreateTaskModal';
 import { DateUtils } from '../../../utils/DateUtils';
 import { DailyNoteUtils } from '../../../utils/DailyNoteUtils';
 import { TaskLineClassifier } from '../../../services/parsing/utils/TaskLineClassifier';
 import { t } from '../../../i18n';
-
-export type CreateTvFileCallback = (result: CreateTaskResult, statusChar: string) => Promise<string>;
 
 export interface CheckboxLineOps {
     updateLine(newContent: string): void | Promise<void>;
@@ -24,12 +22,11 @@ export class CheckboxMenuBuilder {
     constructor(
         private app: App,
         private getStartHour: () => number,
-        private onCreateTvFile?: CreateTvFileCallback
     ) {}
 
     /**
      * Build the full menu for a plain checkbox line:
-     * Status + Duplicate + Convert to Inline + Convert to File + Delete
+     * Status + Duplicate + Convert to Inline + Delete
      */
     addFullMenu(menu: Menu, lineText: string, settings: TaskViewerSettings, ops: CheckboxLineOps, filePath?: string): boolean {
         const classified = TaskLineClassifier.classify(lineText);
@@ -44,9 +41,7 @@ export class CheckboxMenuBuilder {
         // Duplicate
         this.addDuplicateItem(menu, lineText, ops);
 
-        // Convert to Inline / Convert to File (independent items)
         this.addConvertToInlineItem(menu, classified, lineText, ops, filePath);
-        this.addConvertToFileItem(menu, classified, lineText, ops, filePath);
 
         // Delete
         this.addDeleteItem(menu, ops);
@@ -124,40 +119,6 @@ export class CheckboxMenuBuilder {
                         },
                         { content, startDate: today },
                         { title: t('menu.convertToInline'), submitLabel: t('modal.convert'), startHour: this.getStartHour(), dailyNoteDate }
-                    ).open();
-                });
-        });
-    }
-
-    private addConvertToFileItem(
-        menu: Menu,
-        classified: NonNullable<ReturnType<typeof TaskLineClassifier.classify>>,
-        lineText: string,
-        ops: CheckboxLineOps,
-        filePath?: string
-    ): void {
-        if (!this.onCreateTvFile) return;
-        const { rawContent, statusChar, indent } = classified;
-        const marker = TaskLineClassifier.extractMarker(lineText);
-        const content = rawContent.trim();
-        const dailyNoteDate = filePath ? DailyNoteUtils.parseDateFromFilePath(this.app, filePath) ?? undefined : undefined;
-
-        menu.addItem((item) => {
-            item.setTitle(t('menu.convertToFile'))
-                .setIcon('file-plus')
-                .onClick(() => {
-                    menu.close();
-                    const today = DateUtils.getVisualDateOfNow(this.getStartHour());
-                    new CreateTaskModal(
-                        this.app,
-                        async (result) => {
-                            const newPath = await this.onCreateTvFile!(result, statusChar);
-                            const linkTarget = newPath.replace(/\.md$/, '');
-                            const fileName = linkTarget.split('/').pop() || 'task';
-                            await ops.updateLine(`${indent}${marker} [[${linkTarget}|${fileName}]]`);
-                        },
-                        { content, startDate: today },
-                        { title: t('menu.convertToFile'), submitLabel: t('modal.convert'), startHour: this.getStartHour(), dailyNoteDate }
                     ).open();
                 });
         });

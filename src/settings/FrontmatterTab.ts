@@ -1,12 +1,12 @@
 import { Notice, Setting } from 'obsidian';
 import type { PluginContext } from '../PluginContext';
-import { type TvFileKeys, validateTvFileKeys } from '../types';
+import { type ScopeKeys, validateScopeKeys } from '../types';
 import { t } from '../i18n';
 
 export function render(el: HTMLElement, plugin: PluginContext): void {
     el.createEl('h3', { text: t('settings.frontmatter.frontmatterKeys'), cls: 'setting-section-header' });
 
-    addFrontmatterTaskKeySettings(el, plugin);
+    addScopeKeySettings(el, plugin);
 
     el.createEl('h3', { text: t('settings.frontmatter.suggest'), cls: 'setting-section-header' });
 
@@ -35,47 +35,44 @@ export function render(el: HTMLElement, plugin: PluginContext): void {
             }));
 }
 
-function addFrontmatterTaskKeySettings(containerEl: HTMLElement, plugin: PluginContext): void {
-    addFrontmatterTaskKeySetting(containerEl, plugin, t('settings.frontmatter.startKey'), t('settings.frontmatter.startKeyDesc'), 'tv-start', 'start');
-    addFrontmatterTaskKeySetting(containerEl, plugin, t('settings.frontmatter.endKey'), t('settings.frontmatter.endKeyDesc'), 'tv-end', 'end');
-    addFrontmatterTaskKeySetting(containerEl, plugin, t('settings.frontmatter.dueKey'), t('settings.frontmatter.dueKeyDesc'), 'tv-due', 'due');
-    addFrontmatterTaskKeySetting(containerEl, plugin, t('settings.frontmatter.statusKey'), t('settings.frontmatter.statusKeyDesc'), 'tv-status', 'status');
-    addFrontmatterTaskKeySetting(containerEl, plugin, t('settings.frontmatter.contentKey'), t('settings.frontmatter.contentKeyDesc'), 'tv-content', 'content');
-    addFrontmatterTaskKeySetting(containerEl, plugin, t('settings.frontmatter.timerTargetIdKey'), t('settings.frontmatter.timerTargetIdKeyDesc'), 'tv-timer-target-id', 'timerTargetId');
-    addFrontmatterTaskKeySetting(containerEl, plugin, t('settings.frontmatter.colorKey'), t('settings.frontmatter.colorKeyDesc'), 'tv-color', 'color');
-    addFrontmatterTaskKeySetting(containerEl, plugin, t('settings.frontmatter.lineStyleKey'), t('settings.frontmatter.lineStyleKeyDesc'), 'tv-linestyle', 'linestyle');
-    addFrontmatterTaskKeySetting(containerEl, plugin, t('settings.frontmatter.maskKey'), t('settings.frontmatter.maskKeyDesc'), 'tv-mask', 'mask');
-    addFrontmatterTaskKeySetting(containerEl, plugin, t('settings.frontmatter.ignoreKey'), t('settings.frontmatter.ignoreKeyDesc'), 'tv-ignore', 'ignore');
+function addScopeKeySettings(containerEl: HTMLElement, plugin: PluginContext): void {
+    addScopeKeySetting(containerEl, plugin, t('settings.frontmatter.startKey'), t('settings.frontmatter.startKeyDesc'), 'tv-start', 'start');
+    addScopeKeySetting(containerEl, plugin, t('settings.frontmatter.endKey'), t('settings.frontmatter.endKeyDesc'), 'tv-end', 'end');
+    addScopeKeySetting(containerEl, plugin, t('settings.frontmatter.dueKey'), t('settings.frontmatter.dueKeyDesc'), 'tv-due', 'due');
+    addScopeKeySetting(containerEl, plugin, t('settings.frontmatter.colorKey'), t('settings.frontmatter.colorKeyDesc'), 'tv-color', 'color');
+    addScopeKeySetting(containerEl, plugin, t('settings.frontmatter.lineStyleKey'), t('settings.frontmatter.lineStyleKeyDesc'), 'tv-linestyle', 'linestyle');
+    addScopeKeySetting(containerEl, plugin, t('settings.frontmatter.maskKey'), t('settings.frontmatter.maskKeyDesc'), 'tv-mask', 'mask');
+    addScopeKeySetting(containerEl, plugin, t('settings.frontmatter.ignoreKey'), t('settings.frontmatter.ignoreKeyDesc'), 'tv-ignore', 'ignore');
 }
 
-function addFrontmatterTaskKeySetting(
+function addScopeKeySetting(
     containerEl: HTMLElement,
     plugin: PluginContext,
     name: string,
     description: string,
     placeholder: string,
-    key: keyof TvFileKeys
+    key: keyof ScopeKeys
 ): void {
     new Setting(containerEl)
         .setName(name)
         .setDesc(description)
         .addText((text) => {
             text.setPlaceholder(placeholder);
-            text.setValue(plugin.settings.tvFileKeys[key]);
+            text.setValue(plugin.settings.scopeKeys[key]);
             text.onChange(async (value) => {
-                const nextKeys: TvFileKeys = {
-                    ...plugin.settings.tvFileKeys,
+                const nextKeys: ScopeKeys = {
+                    ...plugin.settings.scopeKeys,
                     [key]: value.trim(),
                 };
 
-                const error = validateTvFileKeys(nextKeys);
+                const error = validateScopeKeys(nextKeys);
                 if (error) {
                     new Notice(error);
-                    text.setValue(plugin.settings.tvFileKeys[key]);
+                    text.setValue(plugin.settings.scopeKeys[key]);
                     return;
                 }
 
-                plugin.settings.tvFileKeys = nextKeys;
+                plugin.settings.scopeKeys = nextKeys;
                 await plugin.saveSettings();
             });
         });

@@ -56,9 +56,8 @@ function makeHarness(options: { childExists?: boolean; childContent?: string } =
     const recorder = new TimerRecorder({} as App, plugin, storageUtils);
 
     // resolver は plugin 経由で index を引く。テストでは常に parent に解決させる。
-    (recorder as unknown as { resolver: { resolveTvInline: () => unknown; resolveTvFile: () => unknown } }).resolver = {
+    (recorder as unknown as { resolver: { resolveTvInline: () => unknown } }).resolver = {
         resolveTvInline: () => parent,
-        resolveTvFile: () => parent,
     };
 
     return { recorder, inserted, updates };

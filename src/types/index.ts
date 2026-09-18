@@ -14,5 +14,5 @@ export * from './DisplayTask';
 export * from './Validation';
 export * from './Flow';
 export * from './ViewConfig';
-export * from './TvFileKeys';
+export * from './ScopeKeys';
 export * from './Settings';

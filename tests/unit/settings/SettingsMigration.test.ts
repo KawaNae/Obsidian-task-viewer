@@ -93,46 +93,70 @@ describe('migrateAstronomySettings', () => {
  */
 describe('migrateSettings: legacy key names', () => {
     it('transcribes an old key onto its new name and drops the old one', () => {
-        const raw: Record<string, unknown> = { frontmatterTaskHeader: '子要素' };
+        const raw: Record<string, unknown> = { calendarWeekStartDay: 1 };
         migrateSettings(raw);
-        expect(raw).toEqual({ tvFileChildHeader: '子要素' });
+        expect(raw).toEqual({ weekStartDay: 1 });
+    });
+
+    // The scope keys have had three names. The renames run in order, so a
+    // v0.33 file reaches the current name in one pass.
+    it('chains frontmatterTaskKeys → tvFileKeys → scopeKeys', () => {
+        const raw: Record<string, unknown> = { frontmatterTaskKeys: { start: 'my-start' } };
+        migrateSettings(raw);
+        expect(raw).toEqual({ scopeKeys: { start: 'my-start' } });
+    });
+
+    it('moves tvFileKeys onto scopeKeys', () => {
+        const raw: Record<string, unknown> = { tvFileKeys: { start: 'tv-start', status: 'tv-status' } };
+        migrateSettings(raw);
+        expect(raw).toEqual({ scopeKeys: { start: 'tv-start', status: 'tv-status' } });
     });
 
     it('renames every key that moved in v0.33 → v0.34', () => {
         const raw: Record<string, unknown> = {
             frontmatterTaskKeys: { start: 'tv-start' },
-            frontmatterTaskHeader: '子要素',
-            frontmatterTaskHeaderLevel: 3,
             fileMenuForFrontmatterTasks: true,
             calendarWeekStartDay: 0,
         };
         migrateSettings(raw);
         expect(raw).toEqual({
-            tvFileKeys: { start: 'tv-start' },
-            tvFileChildHeader: '子要素',
-            tvFileChildHeaderLevel: 3,
+            scopeKeys: { start: 'tv-start' },
             fileMenuForTvFile: true,
             weekStartDay: 0,
         });
     });
 
+    // The shape of a real settings file that used the file task: the child
+    // heading settings go with it, under both of their names.
+    it('drops the file task\'s child-heading settings', () => {
+        const raw: Record<string, unknown> = {
+            tvFileChildHeader: 'Tasks',
+            tvFileChildHeaderLevel: 2,
+            fileMenuForTvFile: true,
+            frontmatterTaskHeader: '子要素',
+            frontmatterTaskHeaderLevel: 3,
+        };
+        migrateSettings(raw);
+        expect(raw).toEqual({ fileMenuForTvFile: true });
+    });
+
     it('keeps the new key when both names are present', () => {
         // Both names means a newer version already wrote the new one.
         const raw: Record<string, unknown> = {
-            frontmatterTaskHeader: '古い', tvFileChildHeader: '新しい',
+            tvFileKeys: { start: '古い' }, scopeKeys: { start: '新しい' },
         };
         migrateSettings(raw);
-        expect(raw).toEqual({ tvFileChildHeader: '新しい' });
+        expect(raw).toEqual({ scopeKeys: { start: '新しい' } });
     });
 
     it('drops the legacy key even when nothing was transcribed', () => {
         // Mutation: move the delete inside the if and the old name survives
         // every save, so the settings file never stops carrying it.
         const raw: Record<string, unknown> = {
-            frontmatterTaskHeader: '古い', tvFileChildHeader: '新しい',
+            tvFileKeys: { start: '古い' }, scopeKeys: { start: '新しい' },
         };
         migrateSettings(raw);
-        expect('frontmatterTaskHeader' in raw).toBe(false);
+        expect('tvFileKeys' in raw).toBe(false);
     });
 
     it('transcribes a falsy legacy value rather than reading it as absent', () => {
@@ -163,12 +187,12 @@ describe('migrateSettings: doubleTapAction', () => {
 describe('migrateSettings: as a whole', () => {
     it('runs every step in one pass', () => {
         const raw: Record<string, unknown> = {
-            frontmatterTaskHeader: '子要素',
+            tvFileKeys: { start: 'tv-start' },
             showMoonPhase: true,
             doubleTapAction: 'properties',
         };
         migrateSettings(raw);
-        expect(raw.tvFileChildHeader).toBe('子要素');
+        expect(raw.scopeKeys).toEqual({ start: 'tv-start' });
         expect(raw.astronomy).toBeDefined();
         expect(raw.doubleTapAction).toBe('detail');
     });

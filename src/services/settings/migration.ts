@@ -48,26 +48,43 @@ export function migrateSettings(raw: Record<string, unknown>): void {
 }
 
 /**
- * v0.33 → v0.34: the `Frontmatter*` names became `Tv*`.
+ * Keys renamed across versions, applied in order so a chain reaches its end:
+ * `frontmatterTaskKeys` (≤ v0.33) → `tvFileKeys` (v0.34) → `scopeKeys` (once
+ * frontmatter stopped making tasks).
  *
  * The old key is dropped whether or not it was transcribed, so the next
  * `saveSettings` writes a file with no legacy names left in it. A new key that
  * already holds a value wins — it was written by a newer version than the one
  * that wrote the old key.
  */
+const RENAMES: ReadonlyArray<readonly [string, string]> = [
+    ['frontmatterTaskKeys', 'tvFileKeys'],
+    ['tvFileKeys', 'scopeKeys'],
+    ['fileMenuForFrontmatterTasks', 'fileMenuForTvFile'],
+    ['calendarWeekStartDay', 'weekStartDay'],
+];
+
+/**
+ * Keys of settings that no longer exist, under every name they have had. The
+ * file task's child-heading settings went with the file task: nothing writes
+ * under a heading on a task's behalf any more.
+ */
+const REMOVED_KEYS: ReadonlyArray<string> = [
+    'frontmatterTaskHeader',
+    'frontmatterTaskHeaderLevel',
+    'tvFileChildHeader',
+    'tvFileChildHeaderLevel',
+];
+
 function migrateLegacyKeyNames(raw: Record<string, unknown>): void {
-    const RENAMES: ReadonlyArray<readonly [string, string]> = [
-        ['frontmatterTaskKeys', 'tvFileKeys'],
-        ['frontmatterTaskHeader', 'tvFileChildHeader'],
-        ['frontmatterTaskHeaderLevel', 'tvFileChildHeaderLevel'],
-        ['fileMenuForFrontmatterTasks', 'fileMenuForTvFile'],
-        ['calendarWeekStartDay', 'weekStartDay'],
-    ];
     for (const [oldKey, newKey] of RENAMES) {
         if (raw[oldKey] !== undefined && raw[newKey] === undefined) {
             raw[newKey] = raw[oldKey];
         }
         delete raw[oldKey];
+    }
+    for (const key of REMOVED_KEYS) {
+        delete raw[key];
     }
 }
 

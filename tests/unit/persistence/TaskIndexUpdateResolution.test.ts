@@ -20,13 +20,12 @@ function buildHost(task: Task, written = true) {
             bumpRevision: vi.fn(),
             notifyListeners: vi.fn(),
         },
-        settings: { tvFileKeys: {} },
+        settings: { scopeKeys: {} },
         syncDetector: { markLocalEdit: vi.fn() },
         scanner: { requestScan: vi.fn(async () => {}) },
         app: { vault: { getAbstractFileByPath: () => null } },
         repository: {
             updateTaskInFile: vi.fn(async () => written),
-            updateTvFile: vi.fn(async () => written),
         },
         draggingFilePath: null,
         // The revert lives on the prototype; the host stands in for `this`.
