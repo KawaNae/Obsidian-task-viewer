@@ -229,6 +229,50 @@ describe('matchFile: buckets of identical siblings', () => {
     });
 });
 
+describe('matchFile: nearest ordinal in an uneven bucket', () => {
+    const open = (id: string, line: number, extra: Partial<Task> = {}) =>
+        t(id, line, 'ポモドーロ', { originalText: '- [ ] ポモドーロ', ...extra });
+    const done = (id: string, line: number, extra: Partial<Task> = {}) =>
+        t(id, line, 'ポモドーロ', { originalText: '- [x] ポモドーロ', statusChar: 'x', ...extra });
+
+    // Checking the third of four leaves "[ ]" four against three. A zip slid the
+    // fourth line onto the third's ID and handed the third the fourth's.
+    it('checking one of four identical lines keeps all four IDs', () => {
+        const before = [open('prov:0', 0), open('prov:1', 1), open('prov:2', 2), open('prov:3', 3)];
+        const after = [open('prov:a', 0), open('prov:b', 1), done('prov:c', 2), open('prov:d', 3)];
+
+        const { first, second } = roundTrip(before, after);
+
+        expect(['prov:a', 'prov:b', 'prov:c', 'prov:d'].map(p => id(second, p)))
+            .toEqual(['prov:0', 'prov:1', 'prov:2', 'prov:3'].map(p => id(first, p)));
+        expect(second.minted).toEqual([]);
+    });
+
+    // Two copies of a line, the second already checked; checking the first makes
+    // them verbatim equal. "[x]" is one against two: the old checked line must
+    // stay on the second, not jump to the first.
+    it('two lines becoming identical keep their own IDs', () => {
+        const dup = { blockId: 'dup1' };
+        const before = [open('prov:0', 0, dup), done('prov:1', 1, dup)];
+        const after = [done('prov:a', 0, dup), done('prov:b', 1, dup)];
+
+        const { first, second } = roundTrip(before, after);
+
+        expect(id(second, 'prov:a')).toBe(id(first, 'prov:0'));
+        expect(id(second, 'prov:b')).toBe(id(first, 'prov:1'));
+    });
+
+    it('breaks a tie toward the smaller previous ordinal', () => {
+        // "[ ]" at 0 and 2 before, one "[ ]" at 1 after: both gaps are 1.
+        const before = [open('prov:0', 0), done('prov:1', 1), open('prov:2', 2)];
+        const after = [done('prov:a', 0), open('prov:b', 1), done('prov:c', 2)];
+
+        const { first, second } = roundTrip(before, after);
+
+        expect(id(second, 'prov:b')).toBe(id(first, 'prov:0'));
+    });
+});
+
 describe('matchFile: scopes', () => {
     it('a new instance at the head of a sibling group does not steal the other parent\'s child', () => {
         const buildBefore = () => {

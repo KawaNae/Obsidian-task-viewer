@@ -143,8 +143,9 @@ interface LadderResult<P, C> {
  *    Editing the text *or* the dates keeps the ID; editing both is a new task —
  *    the documented price of "when in doubt, mint".
  *
- * Rungs 2 and 3 bucket by key and zip the two sides by ordinal, so an n-against-m
- * bucket resolves to min(n, m) pairs instead of guessing.
+ * Rungs 2 and 3 bucket by key and pair the two sides by nearest ordinal
+ * (`pairByOrdinal`), so an n-against-m bucket resolves to min(n, m) pairs
+ * instead of guessing.
  */
 function runLadder<P, C>(prev: Array<Rung<P>>, cur: Array<Rung<C>>): LadderResult<P, C> {
     const pairs: Array<[P, C]> = [];
@@ -160,13 +161,10 @@ function runLadder<P, C>(prev: Array<Rung<P>>, cur: Array<Rung<C>>): LadderResul
             if (!prevIndexes) continue;
             if (oneToOneOnly && (prevIndexes.length !== 1 || curIndexes.length !== 1)) continue;
 
-            // Both index lists are built in list order, so index order *is*
-            // ordinal order and the zip needs no sort.
-            const count = Math.min(prevIndexes.length, curIndexes.length);
-            for (let i = 0; i < count; i++) {
-                takenPrev.add(prevIndexes[i]);
-                takenCur.add(curIndexes[i]);
-                pairs.push([prev[prevIndexes[i]].item, cur[curIndexes[i]].item]);
+            for (const [p, c] of pairByOrdinal(prevIndexes, curIndexes)) {
+                takenPrev.add(p);
+                takenCur.add(c);
+                pairs.push([prev[p].item, cur[c].item]);
             }
         }
     };
@@ -193,6 +191,47 @@ function runLadder<P, C>(prev: Array<Rung<P>>, cur: Array<Rung<C>>): LadderResul
         prevLeft: remaining(prev, takenPrev).map(index => prev[index].item),
         curLeft: remaining(cur, takenCur).map(index => cur[index].item),
     };
+}
+
+/** Past this many candidate pairs a bucket is zipped instead of searched. */
+const NEAREST_PAIR_LIMIT = 1_000_000;
+
+/**
+ * Pair a bucket's two sides by nearest ordinal. Indexes are positions in the
+ * lists handed to the ladder — the ordinal within the scope on the 1st pass, file
+ * order within the leftover pool on the 2nd — and each side comes in ascending.
+ *
+ * Equal sizes zip in order, which on a contiguous run is the nearest pairing
+ * anyway. Unequal sizes are where a zip goes wrong: checking the third of four
+ * identical lines leaves "[ ]" three against four, and a zip slides the fourth
+ * line onto the third's ID. There, pairs are taken greedily by the smallest
+ * ordinal gap, ties to the smaller previous then current ordinal, so the answer
+ * is deterministic.
+ */
+function pairByOrdinal(prevIndexes: number[], curIndexes: number[]): Array<[number, number]> {
+    const count = Math.min(prevIndexes.length, curIndexes.length);
+    if (prevIndexes.length === curIndexes.length
+        || prevIndexes.length * curIndexes.length > NEAREST_PAIR_LIMIT) {
+        return prevIndexes.slice(0, count).map((p, i): [number, number] => [p, curIndexes[i]]);
+    }
+
+    const candidates: Array<[number, number]> = [];
+    for (const p of prevIndexes) {
+        for (const c of curIndexes) candidates.push([p, c]);
+    }
+    candidates.sort((a, b) => Math.abs(a[0] - a[1]) - Math.abs(b[0] - b[1]) || a[0] - b[0] || a[1] - b[1]);
+
+    const usedPrev = new Set<number>();
+    const usedCur = new Set<number>();
+    const result: Array<[number, number]> = [];
+    for (const [p, c] of candidates) {
+        if (usedPrev.has(p) || usedCur.has(c)) continue;
+        usedPrev.add(p);
+        usedCur.add(c);
+        result.push([p, c]);
+        if (result.length === count) break;
+    }
+    return result;
 }
 
 function bucket<T>(
