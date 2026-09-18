@@ -7,19 +7,27 @@ import type { TaskValidator } from './TaskValidator';
 import type { SyncDetector } from './SyncDetector';
 import { CompletionDetector } from './CompletionDetector';
 import type { FlowExecutor } from '../flow/FlowExecutor';
+import { TaskIdGenerator } from '../display/TaskIdGenerator';
+import { IdentityLedger } from './identity/IdentityLedger';
+import { matchFile } from './identity/IdentityMatcher';
+import { applyIdentity, assertNoProvisionalIds } from './identity/IdentityApplier';
 import { logDebug, logError, logInfo } from '../../log/log';
 
 /**
  * タスクスキャナー — ファイル単位のスキャンのオーケストレーション。
- * scanFile は 3 相を順に呼ぶだけ:
- *   parse  — FileParsePipeline（ファイル → Task[]、パース順序契約の所有者）
- *   detect — CompletionDetector（完了イベントの差分検出、署名メモリの所有者）
- *   commit — store 更新 + wikilinkRefs 登録 + フロー発火
+ * scanFile は 5 相を順に呼ぶだけ:
+ *   parse    — FileParsePipeline（ファイル → Task[]、仮 ID。パース順序契約の所有者）
+ *   identity — IdentityLedger との突き合わせで仮 ID を runtime ID に置き換える
+ *   validate — バリデーション警告の収集（以降は runtime ID しか見ない）
+ *   detect   — CompletionDetector（完了イベントの差分検出、署名メモリの所有者）
+ *   commit   — store 更新 + ledger 置換 + wikilinkRefs 登録 + フロー発火
  */
 export class TaskScanner {
     private scanQueue: Map<string, Promise<void>> = new Map();
     private completionDetector = new CompletionDetector();
     private isInitializing = true;
+    /** Written only by scanFile's commit, so the store and the ledger move together. */
+    private ledger = new IdentityLedger();
 
     constructor(
         private app: App,
@@ -114,7 +122,7 @@ export class TaskScanner {
     }
 
     /**
-     * ファイルをスキャンしてタスクを抽出（parse → detect → commit）
+     * ファイルをスキャンしてタスクを抽出（parse → identity → validate → detect → commit）
      */
     private async scanFile(file: TFile, isLocalChange: boolean = false): Promise<void> {
         this.validator.clearErrorsForFile(file.path);
@@ -135,7 +143,17 @@ export class TaskScanner {
             return;
         }
 
-        // バリデーション警告を収集
+        // --- identity ---
+        // Right after parse, so nothing downstream — validator included — ever
+        // sees a provisional ID.
+        const identity = matchFile(
+            this.ledger.snapshotFor(file.path),
+            parsed.tasks,
+            task => TaskIdGenerator.mintRuntimeId(task, () => this.ledger.mint())
+        );
+        applyIdentity(parsed, identity.mapping);
+
+        // --- validate ---
         for (const task of parsed.tasks) {
             if (task.validation) {
                 this.validator.addError({
@@ -166,10 +184,15 @@ export class TaskScanner {
         // than to a copy, so with verbose on, one change printing this line
         // twice is a surviving pipeline saying so.
         if (!this.isInitializing) {
-            logDebug(`[scan] file=${file.path} isLocal=${isLocalChange} fired=${tasksToTrigger.length}`);
+            logDebug(`[scan] file=${file.path} isLocal=${isLocalChange} fired=${tasksToTrigger.length} minted=${identity.minted.length} retired=${identity.retired.length}`);
         }
 
         // --- commit (batched: 1 file = 1 revision bump) ---
+        // Checked before the batch opens: throwing inside it would have already
+        // removed the file's tasks from the store.
+        if (__DEV__) {
+            assertNoProvisionalIds(parsed.tasks, id => !TaskIdGenerator.isRuntimeId(id));
+        }
         this.store.beginBatch();
         try {
             this.store.removeTasksByFile(file.path);
@@ -185,6 +208,10 @@ export class TaskScanner {
             // removeTasksByFile above dropped the previous ones, so this is a
             // replacement, not a merge — the scan owns the file's blocks.
             this.store.setGenBlocks(file.path, parsed.genBlocks);
+
+            // Last, so a store write that throws leaves the ledger on the
+            // previous generation too.
+            this.ledger.replaceFile(file.path, identity.entries);
         } finally {
             this.store.endBatch();
         }
@@ -202,6 +229,14 @@ export class TaskScanner {
     handleFileRenamed(oldPath: string): void {
         this.scanQueue.delete(oldPath);
         this.completionDetector.forgetFile(oldPath);
+    }
+
+    /**
+     * The identity ledger, for reverse lookups from the console and CLI.
+     * @internal Read-only use: only scanFile writes it.
+     */
+    getLedger(): IdentityLedger {
+        return this.ledger;
     }
 
     /**

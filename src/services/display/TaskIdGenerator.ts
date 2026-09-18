@@ -1,4 +1,4 @@
-import { isTvFile, type ParserId } from '../../types';
+import { isTvFile, type ParserId, type Task } from '../../types';
 
 const PARSER_IDS: ReadonlySet<ParserId> = new Set(['tv-inline', 'tv-file', 'tasks-plugin', 'day-planner']);
 
@@ -24,7 +24,8 @@ export interface ParsedSegmentId {
     segmentDate: string;
 }
 
-const TASK_ID_REGEX = /^([^:]+):(.+):(blk:[^:]+|tid:[^:]+|ln:\d+|fm-root)$/;
+const TASK_ID_REGEX = /^([^:]+):(.+):(blk:[^:]+|tid:[^:]+|seq:\d+|ln:\d+|fm-root)$/;
+const RUNTIME_ANCHOR_REGEX = /^(seq:\d+|fm-root)$/;
 const SEGMENT_ID_REGEX = /^(.*)##seg:(\d{4}-\d{2}-\d{2})$/;
 
 export class TaskIdGenerator {
@@ -53,6 +54,31 @@ export class TaskIdGenerator {
         }
 
         return 'ln:0';
+    }
+
+    /**
+     * The runtime ID a scan hands out to a task the ledger has not seen.
+     *
+     * Transitional shape: `seq:<n>` still sits behind the path, so the shape
+     * guards and `renameFile` keep working unchanged. The tv-file task keeps its
+     * `fm-root` ID and consumes no number — it is on its way out.
+     */
+    static mintRuntimeId(task: Pick<Task, 'id' | 'parserId' | 'file'>, next: () => number): string {
+        if (isTvFile(task)) {
+            return task.id;
+        }
+        return this.generate(task.parserId, task.file, `seq:${next()}`);
+    }
+
+    /**
+     * Whether `id` is shaped like an ID a scan commits to the store.
+     *
+     * A positive test on purpose: provisional IDs come in several shapes
+     * (`ln:`, `blk:`, `tid:`), and listing them would let a new one slip past.
+     */
+    static isRuntimeId(id: string): boolean {
+        const parsed = this.parse(id);
+        return parsed !== null && RUNTIME_ANCHOR_REGEX.test(parsed.anchor);
     }
 
     static parse(id: string): ParsedTaskId | null {
