@@ -23,7 +23,7 @@ describe('ChildLineClassifier', () => {
             expect(result.wikilinkTarget).toBe('path/to/note');
         });
 
-        it('parses wikilink child with any list bullet (unified with tv-file)', () => {
+        it('parses wikilink child with any list bullet', () => {
             expect(ChildLineClassifier.classify('  * [[Note A]]', 0).wikilinkTarget).toBe('Note A');
             expect(ChildLineClassifier.classify('  + [[Note B]]', 0).wikilinkTarget).toBe('Note B');
             expect(ChildLineClassifier.classify('  1. [[Note C]]', 0).wikilinkTarget).toBe('Note C');

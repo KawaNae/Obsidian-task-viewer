@@ -142,42 +142,10 @@ describe('TaskFilterEngine', () => {
     });
 
     // ── StringSet: kind (derived from parserId) ──
-    describe('kind filter', () => {
-        it('inline: tv-inline matches', () => {
-            const task = makeTask({ parserId: 'tv-inline' });
-            const state = stateFromCondition(cond('kind', 'includes', ['inline']));
-            expect(TaskFilterEngine.evaluate(task, state)).toBe(true);
-        });
-
-        it('inline: tv-file does not match', () => {
-            const task = makeTask({ parserId: 'tv-file' });
-            const state = stateFromCondition(cond('kind', 'includes', ['inline']));
-            expect(TaskFilterEngine.evaluate(task, state)).toBe(false);
-        });
-
-        it('file: tv-file matches', () => {
-            const task = makeTask({ parserId: 'tv-file' });
-            const state = stateFromCondition(cond('kind', 'includes', ['file']));
-            expect(TaskFilterEngine.evaluate(task, state)).toBe(true);
-        });
-
-        it('excludes file: tv-inline matches', () => {
-            const task = makeTask({ parserId: 'tv-inline' });
-            const state = stateFromCondition(cond('kind', 'excludes', ['file']));
-            expect(TaskFilterEngine.evaluate(task, state)).toBe(true);
-        });
-    });
-
     // ── StringSet: notation (derived from parserId) ──
     describe('notation filter', () => {
         it('taskviewer: tv-inline matches', () => {
             const task = makeTask({ parserId: 'tv-inline' });
-            const state = stateFromCondition(cond('notation', 'includes', ['taskviewer']));
-            expect(TaskFilterEngine.evaluate(task, state)).toBe(true);
-        });
-
-        it('taskviewer: tv-file matches (same notation family)', () => {
-            const task = makeTask({ parserId: 'tv-file' });
             const state = stateFromCondition(cond('notation', 'includes', ['taskviewer']));
             expect(TaskFilterEngine.evaluate(task, state)).toBe(true);
         });

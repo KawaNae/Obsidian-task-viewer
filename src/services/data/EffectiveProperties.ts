@@ -10,7 +10,7 @@ import { TagExtractor } from '../parsing/utils/TagExtractor';
  * counterpart of `DisplayTask.effective*` for dates. Dates materialize on
  * DisplayTask because their merge needs display context (startHour); the
  * property merge closes over the Task alone, so it stays a derived helper
- * (same pattern as `getTaskKind` / `isFrontmatterContainer`).
+ * (same pattern as `getTaskNotation`).
  *
  * Consumers: display, filter, sort, API output. Writers and format() must
  * keep reading raw fields only — inherited values are never serialized.

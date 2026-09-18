@@ -1,6 +1,6 @@
 import { setIcon } from 'obsidian';
 import { t } from '../../../i18n';
-import { isTvFile, type PropertyValue } from '../../../types';
+import type { PropertyValue } from '../../../types';
 import { getEffectiveProperties } from '../../../services/data/EffectiveProperties';
 import { ChildLineClassifier } from '../../../services/parsing/utils/ChildLineClassifier';
 import { FilterValueCollector } from '../../../services/filter/FilterValueCollector';
@@ -14,7 +14,6 @@ import type { FieldGroupContext } from './FieldGroupContext';
  * カスタムプロパティ行。
  * - own キー: value 編集可 + 行削除ボタン
  * - cascade 由来のみのキー: グレー行。value を編集し確定すると own 上書きに昇格
- * - tvFile の array 型 own キー: readonly（join 平坦化の round-trip 破壊防止）
  */
 export class PropertiesFieldGroup {
     private sectionEl: HTMLElement;
@@ -45,16 +44,14 @@ export class PropertiesFieldGroup {
 
         for (const [key, pv] of Object.entries(effective)) {
             const isOwn = key in own;
-            const arrayReadOnly = isOwn && isTvFile(task) && pv.type === 'array';
 
             const { row } = createFormRow(this.sectionEl, key);
             if (!isOwn) row.addClass('task-hub__row--cascade');
 
             const valueInput = row.createEl('input', { type: 'text', cls: 'tv-ctrl__text-input tv-ctrl__text-input--md tv-ctrl__text-input--glow tv-form__control' });
             valueInput.value = pv.value;
-            valueInput.disabled = missing || arrayReadOnly;
+            valueInput.disabled = missing;
             this.valueInputs.set(key, valueInput);
-            if (arrayReadOnly) valueInput.setAttribute('aria-label', t('modal.hub.arrayReadOnly'));
 
             const commitValue = () => {
                 const raw = valueInput.value;
@@ -63,20 +60,18 @@ export class PropertiesFieldGroup {
                 if (!isOwn && raw === pv.value) return; // cascade 値のまま → 上書きを作らない
                 this.commit({ ...live, [key]: { value: raw, type: ChildLineClassifier.inferType(raw) } });
             };
-            if (!arrayReadOnly) {
-                this.ctx.attachSuggest(valueInput, valueInput, {
-                    getCandidates: (q) => FilterValueCollector
-                        .collectPropertyValuesForKey(this.ctx.readService.getTasks(), key)
-                        .filter(v => !q || v.toLowerCase().includes(q.toLowerCase())),
-                    onPick: (val) => { valueInput.value = val; commitValue(); },
-                });
-            }
+            this.ctx.attachSuggest(valueInput, valueInput, {
+                getCandidates: (q) => FilterValueCollector
+                    .collectPropertyValuesForKey(this.ctx.readService.getTasks(), key)
+                    .filter(v => !q || v.toLowerCase().includes(q.toLowerCase())),
+                onPick: (val) => { valueInput.value = val; commitValue(); },
+            });
             valueInput.addEventListener('blur', commitValue);
             valueInput.addEventListener('keydown', (e: KeyboardEvent) => {
                 if (e.key === 'Enter' && !e.isComposing) commitValue();
             });
 
-            if (isOwn && !arrayReadOnly) {
+            if (isOwn) {
                 const removeBtn = row.createEl('button', { cls: 'tv-ctrl__pill-remove' });
                 setIcon(removeBtn.createSpan(), 'x');
                 removeBtn.setAttribute('aria-label', t('modal.hub.removeProperty', { key }));

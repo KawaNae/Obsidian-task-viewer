@@ -115,29 +115,30 @@ describe('migrateSettings: legacy key names', () => {
     it('renames every key that moved in v0.33 → v0.34', () => {
         const raw: Record<string, unknown> = {
             frontmatterTaskKeys: { start: 'tv-start' },
-            fileMenuForFrontmatterTasks: true,
             calendarWeekStartDay: 0,
         };
         migrateSettings(raw);
         expect(raw).toEqual({
             scopeKeys: { start: 'tv-start' },
-            fileMenuForTvFile: true,
             weekStartDay: 0,
         });
     });
 
-    // The shape of a real settings file that used the file task: the child
-    // heading settings go with it, under both of their names.
-    it('drops the file task\'s child-heading settings', () => {
+    // The shape of a real settings file that used the file task: its
+    // child-heading and file-menu settings go with it, under every name they
+    // have had.
+    it('drops the file task\'s child-heading and file-menu settings', () => {
         const raw: Record<string, unknown> = {
             tvFileChildHeader: 'Tasks',
             tvFileChildHeaderLevel: 2,
             fileMenuForTvFile: true,
             frontmatterTaskHeader: '子要素',
             frontmatterTaskHeaderLevel: 3,
+            fileMenuForFrontmatterTasks: false,
+            startHour: 5,
         };
         migrateSettings(raw);
-        expect(raw).toEqual({ fileMenuForTvFile: true });
+        expect(raw).toEqual({ startHour: 5 });
     });
 
     it('keeps the new key when both names are present', () => {
@@ -162,11 +163,9 @@ describe('migrateSettings: legacy key names', () => {
     it('transcribes a falsy legacy value rather than reading it as absent', () => {
         // Mutation: test the old key for truthiness instead of !== undefined
         // and `false` / `0` silently revert to their defaults.
-        const raw: Record<string, unknown> = {
-            fileMenuForFrontmatterTasks: false, calendarWeekStartDay: 0,
-        };
+        const raw: Record<string, unknown> = { calendarWeekStartDay: 0 };
         migrateSettings(raw);
-        expect(raw).toEqual({ fileMenuForTvFile: false, weekStartDay: 0 });
+        expect(raw).toEqual({ weekStartDay: 0 });
     });
 });
 

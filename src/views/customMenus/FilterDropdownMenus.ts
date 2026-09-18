@@ -49,7 +49,7 @@ export class FilterDropdownMenus {
         const properties: FilterProperty[] = [
             'file', 'tag', 'status', 'content',
             'startDate', 'endDate', 'due', 'anyDate',
-            'length', 'color', 'linestyle', 'kind', 'notation',
+            'length', 'color', 'linestyle', 'notation',
             'parent', 'children', 'property',
         ];
         const items: SelectItem[] = properties.map(p => ({

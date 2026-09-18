@@ -16,10 +16,11 @@ export interface NormalizedTask {
     due: string | null;
     tags: string[];
     /**
-     * Parser identity. Current values: 'tv-inline', 'tv-file', 'tasks-plugin', 'day-planner'.
+     * Parser identity. Current values: 'tv-inline', 'tasks-plugin', 'day-planner'.
      *
-     * Renamed from legacy values: 'at-notation' → 'tv-inline', 'frontmatter' → 'tv-file',
-     * 'plain' → folded into 'tv-inline'. Update external scripts accordingly.
+     * Renamed from legacy values: 'at-notation' → 'tv-inline', 'plain' → folded
+     * into 'tv-inline'. 'tv-file' (formerly 'frontmatter') is retired: frontmatter
+     * makes no task. Update external scripts accordingly.
      */
     parserId: string;
     parentId: string | null;

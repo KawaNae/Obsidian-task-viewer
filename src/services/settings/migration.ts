@@ -60,20 +60,22 @@ export function migrateSettings(raw: Record<string, unknown>): void {
 const RENAMES: ReadonlyArray<readonly [string, string]> = [
     ['frontmatterTaskKeys', 'tvFileKeys'],
     ['tvFileKeys', 'scopeKeys'],
-    ['fileMenuForFrontmatterTasks', 'fileMenuForTvFile'],
     ['calendarWeekStartDay', 'weekStartDay'],
 ];
 
 /**
  * Keys of settings that no longer exist, under every name they have had. The
- * file task's child-heading settings went with the file task: nothing writes
- * under a heading on a task's behalf any more.
+ * file task's child-heading and file-menu settings went with the file task:
+ * nothing writes under a heading on a task's behalf, and no note is a task
+ * whose menu a file could show.
  */
 const REMOVED_KEYS: ReadonlyArray<string> = [
     'frontmatterTaskHeader',
     'frontmatterTaskHeaderLevel',
     'tvFileChildHeader',
     'tvFileChildHeaderLevel',
+    'fileMenuForFrontmatterTasks',
+    'fileMenuForTvFile',
 ];
 
 function migrateLegacyKeyNames(raw: Record<string, unknown>): void {

@@ -38,8 +38,6 @@
       "showEditorMenuForTasksDesc": "Show a ··· menu button on recognized inline task lines in the editor.",
       "showEditorMenuForCheckboxes": "Show Editor Menu for Checkboxes",
       "showEditorMenuForCheckboxesDesc": "Show a ··· menu button on plain checkbox lines in the editor.",
-      "showFileMenuForFrontmatterTasks": "Show File Menu for Frontmatter Tasks",
-      "showFileMenuForFrontmatterTasksDesc": "Add task action items to the context menu of frontmatter task files (file explorer right-click / tab ··· / pane more options).",
       "applyCustomCheckboxStyles": "Apply Custom Checkboxes Styles",
       "applyCustomCheckboxStylesDesc": "If enabled, the plugin will apply its checkbox styles to the entire Obsidian editor, replacing the need for a separate CSS snippet.",
       "enableStatusMenu": "Enable Status Menu",
@@ -317,7 +315,6 @@
       "color": "Color",
       "linestyle": "Line style",
       "length": "Length",
-      "kind": "Kind",
       "notation": "Notation",
       "parent": "Parent",
       "children": "Children",
@@ -353,7 +350,6 @@
       "color":     { "includes": "includes", "excludes": "excludes" },
       "linestyle": { "includes": "includes", "excludes": "excludes" },
       "length":    { "lessThan": "is less than", "lessThanOrEqual": "is at most", "greaterThan": "is greater than", "greaterThanOrEqual": "is at least", "equals": "is", "isSet": "is set", "isNotSet": "is not set" },
-      "kind":      { "includes": "includes", "excludes": "excludes" },
       "notation":  { "includes": "includes", "excludes": "excludes" },
       "parent":    { "isSet": "is set", "isNotSet": "is not set" },
       "children":  { "isSet": "is set", "isNotSet": "is not set" },
@@ -396,10 +392,6 @@
     "remove": "Remove",
     "self": "Self",
     "parent": "Ancestor",
-    "kind": {
-      "inline": "Inline",
-      "file": "File"
-    },
     "notation": {
       "taskviewer": "TaskViewer",
       "tasks": "Tasks",
@@ -419,7 +411,6 @@
         "color":     { "includes": "", "excludes": "" },
         "linestyle": { "includes": "", "excludes": "" },
         "length":    { "lessThan": "", "lessThanOrEqual": "", "greaterThan": "", "greaterThanOrEqual": "", "equals": "", "isSet": "", "isNotSet": "" },
-        "kind":      { "includes": "", "excludes": "" },
         "notation":  { "includes": "", "excludes": "" },
         "parent":    { "isSet": "", "isNotSet": "" },
         "children":  { "isSet": "", "isNotSet": "" },
@@ -437,7 +428,6 @@
         "color":     { "includes": "", "excludes": "" },
         "linestyle": { "includes": "", "excludes": "" },
         "length":    { "lessThan": "", "lessThanOrEqual": "", "greaterThan": "", "greaterThanOrEqual": "", "equals": "", "isSet": "", "isNotSet": "" },
-        "kind":      { "includes": "", "excludes": "" },
         "notation":  { "includes": "", "excludes": "" },
         "parent":    { "isSet": "", "isNotSet": "" },
         "children":  { "isSet": "", "isNotSet": "" },
@@ -501,7 +491,6 @@
       "inheritedFromSection": "inherited: section",
       "contentTagLocked": "#tag inside the task name — edit it in the name field",
       "cascadeTagLocked": "Inherited tag ({{source}}) — edit the source to remove it",
-      "arrayReadOnly": "Array property — edit it in the file",
       "reservedKey": "\"{{key}}\" is a reserved key"
     }
   },

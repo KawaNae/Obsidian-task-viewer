@@ -7,12 +7,6 @@ import { TasksPluginParser } from './tv-inline/TasksPluginParser';
 import { logDebug } from '../../log/log';
 
 /**
- * A parser that reads task lines. Every {@link ParserId} but `tv-file`, whose
- * tasks are a note's frontmatter and never reach the chain.
- */
-export type LineParserId = Exclude<ParserId, 'tv-file'>;
-
-/**
  * Which line parsers a settings object turns on, in the order the chain runs
  * them.
  *
@@ -25,15 +19,15 @@ export type LineParserId = Exclude<ParserId, 'tv-file'>;
  * both from this list keeps a newly added parser from appearing in one and not
  * the other.
  */
-export function enabledLineParserIds(settings: TaskViewerSettings): LineParserId[] {
-    const ids: LineParserId[] = [];
+export function enabledLineParserIds(settings: TaskViewerSettings): ParserId[] {
+    const ids: ParserId[] = [];
     if (settings.enableDayPlanner) ids.push('day-planner');
     if (settings.enableTasksPlugin) ids.push('tasks-plugin');
     ids.push('tv-inline');
     return ids;
 }
 
-function makeLineParser(id: LineParserId, settings: TaskViewerSettings): LeafParserStrategy {
+function makeLineParser(id: ParserId, settings: TaskViewerSettings): LeafParserStrategy {
     switch (id) {
         case 'day-planner':  return new DayPlannerParser();
         case 'tasks-plugin': return new TasksPluginParser(settings.tasksPluginMapping);

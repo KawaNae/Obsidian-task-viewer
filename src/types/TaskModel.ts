@@ -75,11 +75,13 @@ export type ChildEntry =
 /**
  * Identifier of the parser that produced a task.
  *
- * Production parsers emit one of these four values. Legacy persisted values
- * (`'at-notation'`, `'frontmatter'`, `'plain'`) are migrated at load time
- * by `TimerPersistence.normalizeParserId`; they never appear on a live Task.
+ * Every task is a line in a note, read by one of these three parsers.
+ * Legacy persisted values (`'at-notation'`, `'plain'`) are migrated at load
+ * time by `TimerPersistence.normalizeParserId`; `'tv-file'` and `'frontmatter'`
+ * named the file task, which no longer exists, and fall back to `'tv-inline'`
+ * there. None of them appears on a live Task.
  */
-export type ParserId = 'tv-inline' | 'tv-file' | 'tasks-plugin' | 'day-planner';
+export type ParserId = 'tv-inline' | 'tasks-plugin' | 'day-planner';
 
 export interface Task {
     // Identity and source location.
@@ -206,11 +208,6 @@ export interface Task {
      * consumers read the merged view via `getEffectiveProperties()`.
      */
     properties: Record<string, PropertyValue>;
-}
-
-/** TaskViewer file-form (frontmatter) task. */
-export function isTvFile(task: Pick<Task, 'parserId'>): boolean {
-    return task.parserId === 'tv-file';
 }
 
 /** TaskViewer inline-form task (writable; primary write target). */

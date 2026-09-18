@@ -1,6 +1,6 @@
 import type { ParserId, Task } from '../../types';
 
-const PARSER_IDS: ReadonlySet<ParserId> = new Set(['tv-inline', 'tv-file', 'tasks-plugin', 'day-planner']);
+const PARSER_IDS: ReadonlySet<ParserId> = new Set(['tv-inline', 'tasks-plugin', 'day-planner']);
 
 function isParserId(value: string): value is ParserId {
     return PARSER_IDS.has(value as ParserId);

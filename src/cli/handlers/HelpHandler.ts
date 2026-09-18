@@ -179,6 +179,14 @@ Create a JSON file anywhere in your vault containing a FilterState object:
 
   obsidian obsidian-task-viewer:list filter-file=filters/exact-tag.json
 
+  Every checkbox is a task, dated or not, so list returns undated ones too.
+  To keep only tasks that carry a date, use anyDate; to keep only top-level
+  tasks, pass root:
+
+  { "logic": "and", "filters": [ { "property": "anyDate", "operator": "isSet" } ] }
+
+  obsidian obsidian-task-viewer:list root
+
 .md view templates
 ------------------
 Use a view template saved from the plugin's "Save view..." menu.
@@ -237,7 +245,6 @@ Properties & Operators
   linestyle   : includes, excludes          (value: ["dashed"])
   length      : lessThan, lessThanOrEqual, greaterThan, greaterThanOrEqual, equals, isSet, isNotSet
   anyDate     : isSet, isNotSet             (any of start/end/due set)
-  kind        : includes, excludes          (value: ["inline", "file"])
   notation    : includes, excludes          (value: ["taskviewer", "tasks", "dayplanner"])
   parent      : isSet, isNotSet             (no value)
   children    : isSet, isNotSet             (no value)
@@ -246,7 +253,7 @@ Properties & Operators
 Value Types
 -----------
   string[]  : ["a", "b"]
-              Used by: file, tag, status, color, linestyle, kind, notation
+              Used by: file, tag, status, color, linestyle, notation
 
   string    : "search text"
               Used by: content
