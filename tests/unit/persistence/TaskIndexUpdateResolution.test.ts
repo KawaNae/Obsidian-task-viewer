@@ -26,7 +26,6 @@ function buildHost(task: Task, written = true) {
         app: { vault: { getAbstractFileByPath: () => null } },
         repository: {
             updateTaskInFile: vi.fn(async () => written),
-            updateTvFile: vi.fn(async () => written),
         },
         draggingFilePath: null,
         // The revert lives on the prototype; the host stands in for `this`.

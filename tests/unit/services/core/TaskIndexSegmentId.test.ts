@@ -43,7 +43,6 @@ function buildHost(task: Task) {
         app: { vault: { getAbstractFileByPath: () => null } },
         repository: {
             updateTaskInFile: vi.fn(async () => true),
-            updateTvFile: vi.fn(async () => true),
         },
         draggingFilePath: null,
         revertUnwrittenUpdate: proto.revertUnwrittenUpdate,

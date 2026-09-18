@@ -12,7 +12,7 @@ describe('TaskWriteService frontmatter-key passthroughs', () => {
     it('setFrontmatterKeys delegates to repository.setFrontmatterKeys unchanged', async () => {
         const setFrontmatterKeys = vi.fn().mockResolvedValue(undefined);
         const taskIndex = {
-            getRepository: () => ({ setFrontmatterKeys, deleteFrontmatterKeyIfValue: vi.fn() }),
+            getRepository: () => ({ setFrontmatterKeys }),
         } as unknown as TaskIndex;
         const service = new TaskWriteService(taskIndex);
 
