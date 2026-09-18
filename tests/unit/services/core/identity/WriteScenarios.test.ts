@@ -90,3 +90,57 @@ describe('IDs held across a plugin write', () => {
         expect(live.index.getTask(sessionId!)!.parentId).toBe(top.id);
     });
 });
+
+/**
+ * Checking one of several identical siblings must not trade IDs between them.
+ *
+ * Checking a line moves it out of the "[ ]" text bucket, so that bucket is
+ * n-against-m. Zipping it by position slid every later line onto its
+ * neighbour's ID; the card just touched then pointed at the next line, and the
+ * next write through it landed there.
+ */
+describe('identical siblings under a check', () => {
+    async function check(session: VaultSession, id: string, statusChar: string): Promise<void> {
+        await session.index.updateTask(id, { statusChar });
+        await session.settle(FILE);
+    }
+
+    function idsInFileOrder(session: VaultSession): string[] {
+        return session.index.getTasks()
+            .filter(task => task.file === FILE)
+            .sort((a, b) => a.line - b.line)
+            .map(task => task.id);
+    }
+
+    it('case A: two lines sharing a ^id keep their IDs, and a write lands on its own line', async () => {
+        const contents = new Map([[FILE, ['- [ ] 複製 @2026-09-21 ^dup1', '- [ ] 複製 @2026-09-21 ^dup1', ''].join('\n')]]);
+        live = vaultSession(contents);
+        await live.scanAll();
+        const [first, second] = idsInFileOrder(live);
+
+        await check(live, second, 'x');
+        expect(idsInFileOrder(live)).toEqual([first, second]);
+
+        await check(live, first, 'x');
+        expect(idsInFileOrder(live)).toEqual([first, second]);
+
+        await check(live, first, ' ');
+        expect(taskLines(contents)).toEqual(['- [ ] 複製 @2026-09-21 ^dup1', '- [x] 複製 @2026-09-21 ^dup1']);
+        expect(idsInFileOrder(live)).toEqual([first, second]);
+    });
+
+    it('case B: four identical lines keep their IDs as they are checked one by one', async () => {
+        const contents = new Map([[FILE, Array(4).fill('- [ ] ポモドーロ @2026-09-21').concat('').join('\n')]]);
+        live = vaultSession(contents);
+        await live.scanAll();
+        const ids = idsInFileOrder(live);
+
+        await check(live, ids[2], 'x');
+        expect(idsInFileOrder(live)).toEqual(ids);
+        expect(live.index.getTask(ids[2])!.statusChar).toBe('x');
+
+        await check(live, ids[0], 'x');
+        expect(idsInFileOrder(live)).toEqual(ids);
+        expect(taskLines(contents).map(line => line.slice(0, 5))).toEqual(['- [x]', '- [ ]', '- [x]', '- [ ]']);
+    });
+});
