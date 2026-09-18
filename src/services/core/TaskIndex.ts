@@ -132,7 +132,7 @@ export class TaskIndex {
         this.own(this.app.vault, this.app.vault.on('delete', (file) => {
             if (file instanceof TFile && file.extension === 'md') {
                 this.store.removeTasksByFile(file.path);
-                this.scanner.handleFileRenamed(file.path);
+                this.scanner.handleFileDeleted(file.path);
                 this.validator.clearErrorsForFile(file.path);
                 this.resolveLinksAndNotify();
             }
@@ -164,7 +164,7 @@ export class TaskIndex {
             // md → 非md（拡張子変更）: delete 扱い
             if (!(file instanceof TFile) || file.extension !== 'md') {
                 this.store.removeTasksByFile(oldPath);
-                this.scanner.handleFileRenamed(oldPath);
+                this.scanner.handleFileDeleted(oldPath);
                 this.validator.clearErrorsForFile(oldPath);
                 this.resolveLinksAndNotify();
                 return;
@@ -183,7 +183,7 @@ export class TaskIndex {
             this.syncDetector.clearLocalEditFlag(oldPath);
 
             this.store.removeTasksByFile(oldPath);
-            this.scanner.handleFileRenamed(oldPath);
+            this.scanner.handleFileRenamed(oldPath, file.path);
 
             await this.rescanAndNotify(file);
         }));
