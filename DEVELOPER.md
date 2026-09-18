@@ -21,24 +21,20 @@ src/views/taskcard/
 ### Responsibility boundaries
 
 1. `TaskCardRenderer` is the entry point used by Timeline/Schedule renderers.
-2. `TaskCardRenderer` keeps frontmatter child rendering on a single path:
-   parent render -> frontmatter child section render (no inline child branch).
-3. `ChildSectionRenderer` owns child markdown render pipeline and notation injection.
-4. `CheckboxWiring` owns all checkbox event binding (delegates writes to `TaskWriteService.updateChildLine`).
-5. `ChildItemBuilder` walks `TaskReadService.getChildEntries(parent)` — the single source of truth for child render order.
+2. `ChildSectionRenderer` owns child markdown render pipeline and notation injection.
+3. `CheckboxWiring` owns all checkbox event binding. Every checkbox, parent or child, is a task, so every write goes through `TaskWriteService.updateTask(taskId, { statusChar })`.
+4. `ChildItemBuilder` walks `TaskReadService.getChildEntries(parent)` — the single source of truth for child render order.
 
 ### Child rendering rule
 
-1. The renderer consumes `getChildEntries(parent): ChildEntry[]` (`'task' | 'wikilink' | 'line'`).
-2. Each entry carries an absolute `bodyLine`. UI handlers carry the entry's `bodyLine` and a `line` snapshot — no line-number arithmetic in render or write code.
-3. The data layer (`buildChildEntries`) enforces a 1-line-1-owner invariant across siblings: a body line owned by a sibling task's subtree never surfaces in a `'line'` / `'wikilink'` entry, so the renderer never deduplicates.
-4. Frontmatter and inline tasks share the same render path; the only difference is `parser.line === -1` for the synthetic frontmatter container.
+1. The renderer consumes `getChildEntries(parent): ChildEntry[]` (`'task' | 'line'`). A `'line'` entry is never a checkbox: every checkbox line is a task of its own. A `- [ ]` inside a code fence is an example and renders as plain text (no checkbox, not counted in the card's n/m). A `- [[note]]` child is an ordinary link line.
+2. Each entry carries an absolute `bodyLine`, so render code does no line-number arithmetic.
+3. The data layer (`buildChildEntries`) enforces a 1-line-1-owner invariant across siblings: a body line owned by a sibling task's subtree never surfaces in a `'line'` entry, so the renderer never deduplicates.
+4. `ChildItemBuilder` walks the entries depth-first: a `'task'` entry renders the child and recurses into its own entries (depth-capped, cycle-guarded); a `'line'` entry renders the raw line.
 
-### Child line write rule
+### Line write rule
 
-1. UI write paths (card checkbox toggle, child line menu) call `TaskWriteService.updateChildLine` / `insertChildLineAfter` / `deleteChildLine` with `(parentTaskId, bodyLine, ...)`.
-2. The write service validates that `bodyLine` belongs to a writable (`'line'` / `'wikilink'`) entry of the named parent before delegating. Bad parent / wrong line / task entry all fail fast.
-3. Raw `updateLine(file, line, text)` is reserved for editor-cursor callers (`TaskMenuExtension`) and persistence internals — UI layers never call it.
+Raw `updateLine(file, line, text)` is reserved for editor-cursor callers (`TaskMenuExtension`) and persistence internals. Card and hub UI write through `updateTask` only.
 
 ### Shared type policy
 
@@ -49,7 +45,7 @@ src/views/taskcard/
 ### Task content invariant
 
 1. `Task.content` stores raw user-provided content only.
-2. Frontmatter parser keeps `content` as empty string when `tv-content` is absent.
+2. A bare `- [ ]` keeps `content` as an empty string.
 3. UI fallback labels (file basename / `Untitled`) must be resolved in view helpers (`src/services/parsing/utils/TaskContent.ts`), not in parsers.
 4. API normalizer (`TaskNormalizer`) passes `content` through as-is (`t => t.content`); it does not fall back to file basename. Basename fallback is a display-only concern handled by `getTaskDisplayName` (`src/services/parsing/utils/TaskContent.ts`).
 
@@ -100,22 +96,21 @@ graph TB
 src/
 ├── main.ts                    # Plugin entry point (onload / onunload)
 ├── types/                     # Cross-layer types and settings (Task, DisplayTask, TaskViewerSettings, etc.)
-├── settings/                  # Settings UI (6 tabs: General, Views, ViewDetails, Notes, Frontmatter, Parsers)
+├── settings/                  # Settings UI (9 tabs: Basic, Behavior, Views, View Details, Notes, Note scope, Parsers, Log, About)
 ├── constants/                 # Constants and view registry
 ├── i18n/                      # Internationalization (locale files)
 ├── api/                       # Public API (TaskApi, TaskNormalizer, FilterParamsBuilder, FilterFileLoader, TaskApiTypes)
 ├── cli/                       # CLI handlers (CliRegistrar, CliFilterBuilder, CliDatePresetParser, CliOutputFormatter, handlers/)
 ├── services/
-│   ├── core/                  # Core services (TaskIndex, TaskStore, WikiLinkResolver, TaskValidator, etc.)
+│   ├── core/                  # Core services (TaskIndex, TaskStore, TaskScanner, TaskValidator, identity/, etc.)
 │   ├── data/                  # Data access facade (TaskReadService, TaskWriteService)
 │   ├── display/               # Display conversion (DisplayTaskConverter, TaskSplitter, TaskDateCategorizer, TaskIdGenerator)
 │   ├── parsing/               # Parser layer
 │   │   ├── tv-inline/         # Line-level parsers (TVInlineParser, DayPlannerParser, TasksPluginParser, ReadOnlyParserBase)
-│   │   ├── tv-file/           # File-level builder (TVFileBuilder)
 │   │   ├── strategies/        # ParserChain, ParserStrategy
 │   │   ├── tree/              # Document structure tree (DocumentTree, DocumentTreeBuilder, SectionPropertyResolver, etc.)
 │   │   └── utils/             # Parser utilities (ChildLineClassifier, TagExtractor, TaskContent, TaskLineClassifier)
-│   ├── persistence/           # Write layer (TaskRepository, TaskCloner, TaskConverter)
+│   ├── persistence/           # Write layer (TaskRepository, TaskCloner)
 │   │   ├── writers/           # FrontmatterWriter, InlineTaskWriter
 │   │   └── utils/             # FrontmatterLineEditor, FileOperations
 │   ├── export/                # View data export (ViewExporter, per-view ExportStrategy)
@@ -202,33 +197,31 @@ Quick reference for locating the right layer when implementing a feature.
 | **TaskIndex** | `services/core/TaskIndex.ts` | Central orchestrator for scanning, indexing, and event management; branches on `parserId` |
 | **TaskStore** | `services/core/TaskStore.ts` | In-memory task cache; notifies UI via `onChange` listeners |
 | **TaskScanner** | `services/core/TaskScanner.ts` | File scanning → `FileParsePipeline` invocation (parse/detect/commit の3相 orchestration) |
-| **WikiLinkResolver** | `services/core/WikiLinkResolver.ts` | Resolves frontmatter wikilink parent–child relationships (via `WikilinkRef` in TaskStore / `childLines`) |
 | **SyncDetector / EditorObserver** | `services/core/SyncDetector.ts` et al. | Distinguishes local edits from remote sync changes |
 | **ParserChain** | `services/parsing/strategies/ParserChain.ts` | Tries multiple parsers in order (Strategy chain) |
 | **TVInlineParser** | `services/parsing/tv-inline/TVInlineParser.ts` | Parses `@date` inline notation (line-level) |
-| **TVFileBuilder** | `services/parsing/tv-file/TVFileBuilder.ts` | Converts YAML frontmatter to Task objects (file-level) |
-| **TaskRepository** | `services/persistence/TaskRepository.ts` | Write facade; dispatches to the correct writer based on `parserId` |
-| **FrontmatterWriter** | `services/persistence/writers/FrontmatterWriter.ts` | Surgical YAML edits + heading-based child insertion |
+| **TaskRepository** | `services/persistence/TaskRepository.ts` | Write facade over the inline writer, the cloner and frontmatter key writes |
+| **FrontmatterWriter** | `services/persistence/writers/FrontmatterWriter.ts` | Surgical frontmatter key writes (`setKeys`, used by the color / line-style property suggests) and insertion under a heading |
 | **FrontmatterLineEditor** | `services/persistence/utils/FrontmatterLineEditor.ts` | Low-level YAML line operations; never touches unrelated lines |
 | **InlineTaskWriter** | `services/persistence/writers/InlineTaskWriter.ts` | Direct inline task line rewriting |
 | **TaskFilterEngine** | `services/filter/TaskFilterEngine.ts` | Filter condition evaluation |
-| **FilterSerializer** | `services/filter/FilterSerializer.ts` | Filter state serialization (v4 recursive group format) |
+| **FilterSerializer** | `services/filter/FilterSerializer.ts` | Filter state serialization (v4 recursive group format). The one load path for saved views and pinned lists, so it drops conditions on retired properties (`kind`) on read; a group left empty stays, and evaluates as true |
 | **TaskSorter** | `services/sort/TaskSorter.ts` | Task sort processing |
 | **ViewTemplateLoader/Writer** | `services/template/` | View template read/write |
 | **TaskReadService** | `services/data/TaskReadService.ts` | Read facade; filter, sort, DisplayTask conversion |
-| **TaskWriteService** | `services/data/TaskWriteService.ts` | Write facade; create, update, delete, duplicate, convert |
+| **TaskWriteService** | `services/data/TaskWriteService.ts` | Write facade; create, update, delete, duplicate |
 | **DisplayTaskConverter** | `services/display/DisplayTaskConverter.ts` | Task → DisplayTask conversion with effective field resolution |
 | **TaskSplitter** | `services/display/TaskSplitter.ts` | Visual-date / date-range task splitting |
 | **SectionClassifier** | `services/display/SectionClassifier.ts` | Single owner of the allDay / timed / dueOnly kind decision (`classifyForSection`); `bucketBySection` for section dispatch |
 | **TaskDateCategorizer** | `services/display/TaskDateCategorizer.ts` | Per-date bucketing: delegates kind to `classifyForSection`, owns date membership (allDay/timed = visual span, dueOnly = calendar due) and sort via TaskRenderOrder |
 | **ViewExporter** | `services/export/ViewExporter.ts` | View data export with per-view ExportStrategy |
-| **FilePropertyResolver** | `services/parsing/FilePropertyResolver.ts` | File-scope frontmatter → ExtractedProperties; shared by TVFileBuilder and SectionPropertyResolver |
+| **FilePropertyResolver** | `services/parsing/FilePropertyResolver.ts` | File-scope frontmatter → ExtractedProperties; the cascade root for SectionPropertyResolver |
 | **EffectiveProperties** | `services/data/EffectiveProperties.ts` | `getEffective*()` derived helpers merging raw + cascadeContext for properties/tags/style; see "Inheritance pipeline" |
 | **TaskValidator** | `services/core/TaskValidator.ts` | Task validation |
 | **DocumentTreeBuilder** | `services/parsing/tree/DocumentTreeBuilder.ts` | Document structure tree for section property inheritance |
 | **DayPlannerParser** | `services/parsing/tv-inline/DayPlannerParser.ts` | Day Planner compatible parser (read-only) |
 | **TasksPluginParser** | `services/parsing/tv-inline/TasksPluginParser.ts` | Tasks plugin compatible parser (read-only) |
-| **TaskApi** | `api/TaskApi.ts` | Public API (15 methods) |
+| **TaskApi** | `api/TaskApi.ts` | Public API (13 methods) |
 | **TaskNormalizer** | `api/TaskNormalizer.ts` | Task → NormalizedTask conversion for API output |
 | **FilterFileLoader** | `api/FilterFileLoader.ts` | Filter file (.json/.md) loading |
 | **FlowExecutor** | `services/flow/FlowExecutor.ts` | Executes `==>` flow commands (every / + / at / x / until / move) |
@@ -241,14 +234,13 @@ Quick reference for locating the right layer when implementing a feature.
 | **TimerView** | `views/TimerView.ts` | Standalone timer view (Pomodoro / Countdown / Countup / Interval) |
 | **TaskCardRenderer** | `views/taskcard/TaskCardRenderer.ts` | Task card rendering orchestrator (see section above) |
 | **TaskLinkInteractionManager** | `views/taskcard/TaskLinkInteractionManager.ts` | Internal link click/hover handling within task cards |
-| **SidebarManager** | `views/sidebar/SidebarManager.ts` | Sidebar visibility and pinned list management |
-| **CreateTaskModal** | `modals/CreateTaskModal.ts` | Task creation / conversion modal UI (shared form widgets live in `modals/form/`) |
+| **SidebarManager** | `views/sidebar/SidebarManager.ts` | Sidebar visibility and pinned list management. A new list (Kanban, Calendar and Timeline alike) starts with `createDefaultListFilterState()`, i.e. `parent isNotSet`: every checkbox is a task, and a nested one is already drawn inside its parent's card |
+| **CreateTaskModal** | `modals/CreateTaskModal.ts` | Task creation modal UI, also used by "Convert to inline" (shared form widgets live in `modals/form/`) |
 | **TaskHubPanel** | `modals/hub/TaskHubPanel.ts` | Single "open task" destination: live card preview + per-field instant-save property form (content/status/dates/tags/color/linestyle/mask/custom). Self-hosted surface (not an Obsidian Modal) in the filter-popover family: own backdrop/close/Escape, root carries `tv-ctrl`, owns a PopoverStack for SuggestController-based fields. Entry: card double-tap, menu Properties items (with field focus) |
 | **SuggestController** | `views/customMenus/SuggestController.ts` | Shared suggest-dropdown machinery (tv-ctrl__suggest) used by both filter-popover value selectors and TaskHubPanel form fields |
 | **PropertyUpdatePlanner** | `services/persistence/PropertyUpdatePlanner.ts` | Pure diff: `Partial<Task>` updates → normalized PropertyOp[] for non-time properties (canonical-location / clear semantics) |
 | **ChildPropertyLineEditor** | `services/persistence/utils/ChildPropertyLineEditor.ts` | Surgical CRUD for inline child property lines (`- key:: value`), representation-preserving |
 | **TaskParser** | `services/parsing/TaskParser.ts` | Static facade wrapping active ParserChain; rebuilt on settings change |
-| **TvInlineToTvFileConverter** | `services/core/TvInlineToTvFileConverter.ts` | Inline task → frontmatter file conversion (creates file, replaces original with wikilink) |
 
 ---
 
@@ -257,12 +249,13 @@ Quick reference for locating the right layer when implementing a feature.
 `FileParsePipeline` (`services/parsing/FileParsePipeline.ts`) owns the parse order contract for each file. `TaskScanner` delegates the whole file to it and only handles the surrounding parse/detect/commit orchestration. The pipeline runs:
 
 ```
-0. Frontmatter boundary detection → tv-ignore check → TVFileBuilder.parse() (file-level task)
+0. Frontmatter boundary detection → tv-ignore check
 1. DocumentTreeBuilder.build()         — Parse file into heading-based hierarchy tree
 2. SectionPropertyResolver.resolve()   — Cascade properties through section nesting (delegates FM extraction to FilePropertyResolver)
 3. TreeTaskExtractor.extract()         — Extract Task[] from tree with section properties attached
-4. Orphan re-parent                    — re-link tasks whose parent wasn't found in the tree walk
 ```
+
+Frontmatter makes no task. It is only the root of the cascade below: its scope keys (`tv-start`/`tv-end`/`tv-due`/`tv-color`/`tv-linestyle`/`tv-mask`), `tags` and custom properties are inherited by every task in the note.
 
 ### Inheritance pipeline (File / Section)
 
@@ -270,7 +263,7 @@ Properties / tags / styling cascade through two scopes, each with a dedicated re
 
 | Scope | Resolver | Basis | Responsibility |
 |-------|----------|-------|----------------|
-| **File** | `FilePropertyResolver` | Frontmatter object | Extract builtin keys (`color`/`linestyle`/`mask`) with validation, normalize tags, separate custom properties. Used as the cascade root by both `SectionPropertyResolver` and `TVFileBuilder`. |
+| **File** | `FilePropertyResolver` | Frontmatter object | Extract builtin keys (`color`/`linestyle`/`mask`) with validation, normalize tags, separate custom properties. Used as the cascade root by `SectionPropertyResolver`. |
 | **Section** | `SectionPropertyResolver` | Heading hierarchy (`## A` → `### B`) + section property blocks | FM → root section → nested sections, child-wins cascade for `color`/`linestyle`/`mask`/`tags`/custom properties. Output stored on `SectionNode.resolvedX`. |
 
 **Tasks do not inherit from parent tasks.** Inheritance flows exclusively from document structure (frontmatter → sections); the task tree (`parentId`/`childIds`) never contributes properties, tags, or styling — the same principle dates established with `cascadeContext`. A task's values are fully determined by its own lines plus its section context, so property resolution completes locally during extraction with no cross-task post-pass. (Task-scope inheritance — `TaskPropertyResolver` BFS + `parentStyle` propagation — was removed 2026-07-03.)
@@ -279,37 +272,31 @@ Properties / tags / styling cascade through two scopes, each with a dedicated re
 
 | Layer | Dates | Properties / tags / style | Written by | Read by |
 |-------|-------|---------------------------|------------|---------|
-| **raw** | `task.startDate` etc. | `task.color`/`linestyle`/`mask`/`tags`/`properties` | Parser, from the task's own lines / own FM only | `format()`, all writers (round-trip fidelity) |
+| **raw** | `task.startDate` etc. | `task.color`/`linestyle`/`mask`/`tags`/`properties` | Parser, from the task's own lines only | `format()`, all writers (round-trip fidelity) |
 | **cascade** | `task.cascadeContext.startDate` etc. | `task.cascadeContext.color`/`tags`/`properties` etc. | `TreeTaskExtractor`, from `SectionNode.resolvedX` | Merge step below |
 | **effective** | `DisplayTask.effectiveStartDate` etc. (materialized — merge needs `startHour`) | `getEffective*()` derived helpers (`services/data/EffectiveProperties.ts` — merge closes over the Task alone) | — | Display, filter, sort, API output |
 
 Merge rules: style is `own ?? cascade`; tags are a sorted union; custom properties are per-key child-wins spread. The cascade layer stores style only when raw is absent (same guard as dates — equivalent for override semantics), but stores tags/properties unconditionally since they merge partially rather than shadow.
 
-**Builtin vs custom properties.** Builtin (`color`/`linestyle`/`mask`/`tags`) have a fixed schema, validation, and dedicated UI rendering; their FM keys are configurable via `TvFileKeys`. Custom properties are user-defined free-form key-value pairs stored in `task.properties: Record<string, PropertyValue>`. Both inherit with child-wins precedence at every layer; the only structural difference is type-level (separate Task fields vs `Record`).
+**Builtin vs custom properties.** Builtin (`color`/`linestyle`/`mask`/`tags`) have a fixed schema, validation, and dedicated UI rendering; their FM keys are configurable via `ScopeKeys` (setting `scopeKeys`). Custom properties are user-defined free-form key-value pairs stored in `task.properties: Record<string, PropertyValue>`. Both inherit with child-wins precedence at every layer; the only structural difference is type-level (separate Task fields vs `Record`).
 
 ### Inline child line extraction
 
-TreeTaskExtractor がインラインタスクの `childLines` を構築するルール:
+チェックボックス行はすべてタスクになり、`childLines` にはチェックボックスでない行だけが残る。TreeTaskExtractor は次の規則でタスクと `childLines` を組む。
 
-1. `DocumentTreeBuilder` がタスク行配下のインデント行を全て収集（`childRawLines`）
-2. `- [x]` パターンの行は `childTaskBlocks` として構造的にグループ化される
-3. `TreeTaskExtractor.classifyBlock()` が各 block を **1 回だけ** 判定（結果は
-   `BlockOutcome` として childLines 除外と再帰の両方が共有する）:
-   - @notation/日付/コマンド（`- ==>` フロー子行含む）がある → タスクとして抽出、`childLines` から除外
-   - ない → `childLines` に残す（プレーンチェックボックスとして表示）
-4. 各 `ChildLine.bodyLine` に絶対行番号を格納
+1. `DocumentTreeBuilder` がタスク行配下のインデント行を全て収集する（`childRawLines`）。コードフェンスの中の行は `childFenced` で印が付き、記法として読まれない
+2. フェンスの外のチェックボックス行は、直下のブロックとして `childTaskBlocks` にまとまる。間に非タスク行（`- メモ` など）を挟んだ深い行も、そのタスクの部分木の中にあれば同じ扱いになる
+3. `TreeTaskExtractor.classifyBlock()` が各 block を 1 回だけ判定し、パーサが読めればタスクにする。日付もコマンドも持たない `- [ ]` も、別のタスクの下の `- [ ]` もタスクになる。結果の `BlockOutcome` を、`childLines` からの除外と再帰の両方が共有する
+4. 親は直上のタスクブロックだけで、インデント幅（2 スペース、4 スペース、タブ）には依らない。孫は子の再帰が張るので、祖父の `childIds` には入らない。トップレベルの非タスク行の下のチェックボックスは、所有者のいない独立したタスクになる
+5. 各 `ChildLine.bodyLine` に絶対行番号を格納する
 
-原則: **ブロック内の全行がタスクカードに表示される。**
+フェンスの中の `- [ ]` はタスクにならず、`childLines` に普通の行として残る。カードではコードブロックの一部として描かれ、チェックボックスにはならない。
 
 #### ChildLine.bodyLine のセマンティクス
 
-frontmatter / inline タスク共に **ファイル先頭からの絶対行番号** を各 ChildLine が
-内包する（`Task.line` と同規約、`-1` = body 行なし）。レンダラ／ライタは
-`DisplayTask.childEntries[i].bodyLine` を直接読む（`buildChildEntries` が
-`ChildLine.bodyLine` をそのまま entry に転載する）。
+各 ChildLine は、ファイル先頭からの絶対行番号を内包する（`Task.line` と同規約）。レンダラとライタは `DisplayTask.childEntries[i].bodyLine` を直接読む（`buildChildEntries` が `ChildLine.bodyLine` をそのまま entry に転載する）。
 
-- `TVFileBuilder` では `bodyStartIndex + relIndex`（= 絶対行）を classify に渡す
-- `TreeTaskExtractor` では `block.childLineNumbers`（= 絶対行）を classify に渡す
+- `TreeTaskExtractor` は `block.childLineNumbers`（= 絶対行）を classify に渡す
 - `bodyLine < 0` の entry は `buildChildEntries` で除外される（parser 契約上発生しない想定）
 
 ---
@@ -434,21 +421,6 @@ Due represents a deadline date (calendarDate). If time complement is needed,
 - Duration < 23h30m → Timeline lane
 
 (`DateUtils.isAllDayTask`, threshold `23.5 * 60 * 60 * 1000` ms)
-
-### tv-file child element extraction (v0.13.1)
-
-The heading configured in settings (`tvFileChildHeader` / `tvFileChildHeaderLevel`) acts as the virtual root for child elements.
-
-1. `TVFileBuilder.parse()` receives `tvFileChildHeader` and `tvFileChildHeaderLevel` and locates the matching heading section.
-2. `collectAllListItems` scans the entire heading section, skipping blank and non-list lines without stopping at the first block break, and collects every list item whose indent is at or above the first item's indent found in the section.
-3. Results are stored in `Task.childLines` (each `ChildLine` carries its absolute line number in `bodyLine`).
-4. `FileParsePipeline` attaches unparented inline tasks to `fmTask.childIds`.
-5. `TaskCardRenderer` renders frontmatter tasks on a dedicated path (no inline branch) to prevent duplicate toggle rendering.
-6. `ChildItemBuilder` walks the 1-line-1-owner `ChildEntry[]` returned by `getChildEntries` and translates each entry into render items; it does no re-classification or consumed-line tracking of its own (duplicate prevention is a property of the `ChildEntry[]` data, not of the walker).
-
-Notes:
-- `WikilinkRef` entries are collected from the entire file body (not limited to the child-heading list block) and stored in `TaskStore`; `WikiLinkResolver.wireChild()` validates the target is a frontmatter task.
-- When the configured heading is absent, child elements are treated as empty.
 
 ---
 
@@ -670,7 +642,7 @@ pickerButton.addEventListener('click', () => {
 ### Wording: "Remove" vs "Delete"
 
 - **Remove** — internal data operations (removing a filter condition, removing an item from a list, removing a DOM element)
-- **Delete** — user-facing actions that erase text in a markdown file (deleting a task line, deleting a child line)
+- **Delete** — user-facing actions that erase text in a markdown file (deleting a task line)
 
 ```ts
 // Internal: removing a filter node from the tree
@@ -864,9 +836,9 @@ Timer phases: `'idle'` | `'work'` | `'break'` | `'prepare'`
 
 ### Task integration
 
-- `TimerTaskResolver` — resolves both inline and frontmatter tasks
-- `TimerRecorder` — inserts a child task line or calls `updateTask()` directly
-- `timerTargetId` (frontmatter key `tv-timer-target-id`) — tracks the task across file renames
+- `TimerTaskResolver` — resolves the timer's inline task (by `timerTargetId`, then task ID, then file + original text)
+- `TimerRecorder` — records a session to the target line itself (self), as a child of the target line (child), as a sibling after the last record (sibling), or under the daily note's heading when the timer started from the daily note
+- `timerTargetId` — the inline block ID (`^id`) the timer anchors to; it survives edits and file renames. Frontmatter holds no timer target: a leftover `tv-timer-target-id` key is only reserved so it never becomes a custom property
 
 ### Components (all in `src/timer/`)
 
@@ -918,9 +890,8 @@ State-transition-based sound mapping. All sounds use Web Audio API scheduling (n
 |---------|------|
 | `PropertiesMenuBuilder` | Date/time property editing |
 | `TimerMenuBuilder` | Timer launch shortcuts |
-| `TaskActionsMenuBuilder` | Complete, delete, convert, and move/clone actions |
+| `TaskActionsMenuBuilder` | Complete, delete, and move/clone actions |
 | `CheckboxMenuBuilder` | Checkbox status menu |
-| `ChildLineMenuBuilder` | Child line context menu |
 
 Touch support: `TouchEventHandler` detects long-press (configurable via `longPressThreshold`, default 400 ms) to open the menu.
 
@@ -943,27 +914,20 @@ When working with `FrontmatterWriter` / `FrontmatterLineEditor`:
 - All writes must use `vault.process()` for atomicity.
 - In collapsed handlers, forgetting `childLine.replace()` causes `vault.process` to become a no-op.
 
-### parserId-based write dispatch
+### Write dispatch
 
-```
-isTvFile(task)    →  FrontmatterWriter
-isTvInline(task)  →  InlineTaskWriter
-```
+Every task is a line in a note. Writable (`tv-inline`) tasks are rewritten by `InlineTaskWriter`; `tasks-plugin` and `day-planner` tasks are read-only and never written. Frontmatter is written only through `setFrontmatterKeys` (scope keys from the property suggests), never on a task's behalf.
 
-- `line: -1` means "no valid line number" only — **do not use it for type detection** (use `isTvFile()` / `isTvInline()`). The canonical writer of `-1` is `TVFileBuilder.ts` (tv-file task).
-- `TimerRecorder` calls `createTempTask()` without a `line`, so the resulting temp Task gets `line: 0` (the `createTempTask` default), not `-1`.
+- Every task has a real body line. `TimerRecorder` calls `createTempTask()` without a `line`, so the resulting temp Task gets `line: 0` (the `createTempTask` default).
 
-### tv-inline vs tv-file persistence rules
+### Inline persistence rules
 
 #### Date field handling
 
-| Aspect | tv-inline | tv-file |
-|--------|-----------|---------|
-| Time-only values | ✅ Allowed (`@10:00`) | ❌ Prohibited (returns null → key deleted) |
-| cascadeContext | ✅ Used (section/file cascade inheritance) | ✅ Used (section/file cascade inheritance) |
-| endDate same-day omission | ✅ Normal (`>14:00` = same day as start) | ❌ Always explicit date |
-| Update strategy | Full line re-format via `TVInlineParser.format()` | Surgical YAML key edit via `FrontmatterLineEditor` |
-| Empty field in Properties modal | Sparse update (field omitted → preserved) | Resolved value written (field filled from PropertyCalculator) |
+- Time-only values are allowed (`@10:00`); the date comes from the section or note scope via `cascadeContext`.
+- `endDate` is omitted when it equals `startDate` (`>14:00` = same day as start).
+- Updates re-format the whole line via `TVInlineParser.format()`.
+- An empty field in the hub is a sparse update: the field is omitted, so the cascade value shows through.
 
 #### tv-inline notation format rules (`TVInlineParser.format()`)
 
@@ -976,20 +940,6 @@ isTvInline(task)  →  InlineTaskWriter
 - `endDate !== startDate` → `>2026-03-08T02:00` (date explicit)
 - `endDate` undefined + endTime → `>14:00` (implicit same-day)
 - Round-trip safe: parser re-derives endDate=undefined → DisplayTaskConverter resolves it
-
-#### Frontmatter write rules
-
-**Time-only prohibition**: `DateUtils.formatDateTimeForStorage()` returns `null` when only time is available.
-Prevents YAML sexagesimal misinterpretation and Obsidian frontmatter editor incompatibility.
-
-**fallbackDate pattern**: When endDate is undefined but endTime exists, startDate is used as fallback.
-In FrontmatterWriter, task is already updated via `Object.assign(task, updates)` so startDate is current.
-In TaskConverter (inline→frontmatter), task comes from parser with parsed startDate.
-
-#### Properties modal update behavior (`PropertiesMenuBuilder.buildTaskUpdatesFromResult()`)
-
-- **Frontmatter**: Empty fields filled with PropertyCalculator resolved values → all dates always explicit in YAML
-- **Inline**: Empty fields excluded from updates → preserves `cascadeContext` and time-only notation
 
 ### cascadeContext lifecycle
 
@@ -1145,7 +1095,7 @@ Raw calendarDates (`baseTask.startDate` / `baseTask.endDate`, endDate exclusive)
 
 ## Settings Schema
 
-Defined in `src/types/index.ts` as `TaskViewerSettings`. Defaults are in `DEFAULT_SETTINGS` in the same file.
+Defined in `src/types/Settings.ts` as `TaskViewerSettings` (re-exported from `src/types/index.ts`). Defaults are in `DEFAULT_SETTINGS` in the same file; the scope keys live in `src/types/ScopeKeys.ts`.
 
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
@@ -1153,9 +1103,7 @@ Defined in `src/types/index.ts` as `TaskViewerSettings`. Defaults are in `DEFAUL
 | `applyGlobalStyles` | boolean | `false` | Apply plugin CSS globally |
 | `enableStatusMenu` | boolean | `true` | Show status menu on checkbox long-press |
 | `statusDefinitions` | StatusDefinition[] | *(see below)* | Status character definitions (char, label, isComplete) |
-| `tvFileKeys` | TvFileKeys | `tv-*` family | tv-file frontmatter key names (all fields are individually customisable) |
-| `tvFileChildHeader` | string | `'Tasks'` | Heading text under which tv-file child elements live |
-| `tvFileChildHeaderLevel` | number | 2 | Heading level for the above (2 = `##`) |
+| `scopeKeys` | ScopeKeys | `tv-*` family | Key names for the note scope (frontmatter) and section property lines; formerly `frontmatterTaskKeys`, then `tvFileKeys` (migrated in that order) |
 | `longPressThreshold` | number | 400 | Long-press detection time (ms) |
 | `zoomLevel` | number | 1.0 | Default timeline zoom level |
 | `pastDaysToShow` | number | 0 | Number of past days to show in timeline |
@@ -1194,7 +1142,7 @@ Defined in `src/types/index.ts` as `TaskViewerSettings`. Defaults are in `DEFAUL
 
 **`tasksPluginMapping` defaults**: `{ start: 'startDate', scheduled: 'startDate', due: 'due' }`
 
-All `TvFileKeys` fields (`start`, `end`, `due`, `status`, `content`, `timerTargetId`, `color`, `linestyle`, `mask`, `ignore`) are independently customisable. Duplicate key values are not allowed.
+All `ScopeKeys` fields (`start`, `end`, `due`, `color`, `linestyle`, `mask`, `ignore`) are independently customisable. Duplicate key values are not allowed. The file task's former keys `tv-status`, `tv-content` and `tv-timer-target-id` are not settings; they are reserved by name so that leftovers in old notes never become custom properties.
 
 ---
 
@@ -1259,7 +1207,7 @@ DataviewJS  →                TaskApi method → typed result (used directly)
 
 ```
 src/api/
-  TaskApi.ts             # Public API class (15 methods)
+  TaskApi.ts             # Public API class (13 methods)
   TaskApiTypes.ts        # Param/result interfaces + TaskApiError
   OperationSchemas.ts    # Single source of truth for the CLI/API parameter surface
                          #   (per-operation ParamSpec, satisfies-bound to the param types;
@@ -1269,7 +1217,7 @@ src/api/
   FilterFileLoader.ts    # Vault filter file (.json/.md) loading
 
 src/cli/
-  CliRegistrar.ts        # Registers 14 CLI handlers (flags derived from OperationSchemas)
+  CliRegistrar.ts        # Registers 13 CLI handlers, export-image included (flags derived from OperationSchemas)
   CliParamValidator.ts   # Strict flag validation (unknown flags error with did-you-mean)
   CliFilterBuilder.ts    # Flag value parsers (date/datetime, sort)
   CliDatePresetParser.ts # Date preset parsing (today, thisWeek, etc.)
@@ -1277,7 +1225,7 @@ src/cli/
   handlers/
     TaskQueryHandlers.ts   # list / today / get
     TaskCrudHandlers.ts    # create / update / delete
-    TaskActionHandlers.ts  # duplicate / convert / tasks-for-date-range / categorized-tasks-for-date-range / insert-child-task / create-tv-file / get-start-hour
+    TaskActionHandlers.ts  # duplicate / tasks-for-date-range / categorized-tasks-for-date-range / insert-child-task / get-start-hour
     HelpHandler.ts         # help
 ```
 
@@ -1306,16 +1254,14 @@ const api = app.plugins.plugins['obsidian-task-viewer'].api;
 | `update({ id, ... })` | async | `MutationResult` |
 | `delete({ id })` | async | `DeleteResult { deleted: string }` |
 | `duplicate({ id, ... })` | async | `DuplicateResult { duplicated: string }` |
-| `convertToTvFile({ id })` | async | `ConvertResult { convertedFrom, newFile }` |
 | `tasksForDateRange({ from, to, ... })` | async | `TaskListResult` |
 | `categorizedTasksForDateRange({ from, to, ... })` | sync | `CategorizedTasksForDateRangeResult` (`Record<date, { allDay, timed, dueOnly }>`) |
 | `insertChildTask({ parentId, content })` | async | `InsertChildTaskResult { parentId }` |
-| `createTvFile({ content, ... })` | async | `CreateTvFileResult { newFile }` |
 | `getStartHour()` | sync | `StartHourResult { startHour }` |
 | `onChange(callback)` | sync | `() => void` (unsubscribe) |
 | `help()` | sync | `string` |
 
-### CLI commands (14)
+### CLI commands (13)
 
 | Command | Description | Key flags |
 |---------|-------------|-----------|
@@ -1326,12 +1272,11 @@ const api = app.plugins.plugins['obsidian-task-viewer'].api;
 | `update` | Update task fields | id (req), content, start, end, due, status (use `none` to clear) |
 | `delete` | Delete task | id (required) |
 | `duplicate` | Duplicate task | id (req), day-offset, count |
-| `convert` | Inline → frontmatter | id (required) |
 | `tasks-for-date-range` | Tasks in date range | from (req), to (req), sort, limit |
 | `categorized-tasks-for-date-range` | Categorized tasks for date range | from (req), to (req) |
 | `insert-child-task` | Insert child task | parent-id (req), content (req) |
-| `create-tv-file` | Create tv-file (frontmatter) task | content (req), start, end, due, status |
 | `get-start-hour` | Get startHour setting | *(none)* |
+| `export-image` | Export a view as a PNG image | view-config flags (see `help`) |
 | `help` | Show CLI reference | *(none)* |
 
 ### Error handling
