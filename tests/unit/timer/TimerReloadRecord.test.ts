@@ -1,14 +1,6 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { TFile } from 'obsidian';
-import { TaskIndex } from '../../../src/services/core/TaskIndex';
-import type { TaskScanner } from '../../../src/services/core/TaskScanner';
-import { TaskWriteService } from '../../../src/services/data/TaskWriteService';
-import { TimerRecorder } from '../../../src/timer/TimerRecorder';
-import { TimerCreator } from '../../../src/timer/TimerCreator';
-import type { TimerContext } from '../../../src/timer/TimerContext';
 import type { TimerInstance, TimerRecordMode } from '../../../src/timer/TimerInstance';
-import type { TimerStorageUtils } from '../../../src/timer/TimerStorageUtils';
-import { DEFAULT_SETTINGS } from '../../../src/types';
+import { makeFile, vaultSession, type VaultSession } from '../helpers/vaultSession';
 
 /**
  * Stopping a timer after a reload writes into the session line it started.
@@ -29,65 +21,8 @@ import { DEFAULT_SETTINGS } from '../../../src/types';
 
 const FILE = 'notes/a.md';
 
-function makeFile(path: string): TFile {
-    const file = new TFile();
-    file.path = path;
-    file.name = path.split('/').pop() ?? path;
-    file.basename = file.name.replace(/\.md$/, '');
-    file.extension = 'md';
-    return file;
-}
-
-/** One plugin session over a shared vault. */
-function session(contents: Map<string, string>) {
-    let scanner: TaskScanner | undefined;
-    const noop = { on: () => ({}), offref: () => { } };
-    const vaultHandlers = new Map<string, (...args: unknown[]) => unknown>();
-    const app = {
-        vault: {
-            on: (name: string, fn: (...args: unknown[]) => unknown) => { vaultHandlers.set(name, fn); return {}; },
-            offref: () => { },
-            read: async (file: TFile) => contents.get(file.path) ?? '',
-            process: async (file: TFile, fn: (data: string) => string) => {
-                const next = fn(contents.get(file.path) ?? '');
-                contents.set(file.path, next);
-                // What metadataCache.changed would trigger in Obsidian.
-                void scanner!.requestScan(file);
-                return next;
-            },
-            getAbstractFileByPath: (path: string) => (contents.has(path) ? makeFile(path) : null),
-            getMarkdownFiles: () => [...contents.keys()].map(makeFile),
-        },
-        metadataCache: { ...noop, getCache: () => null },
-        workspace: { ...noop, onLayoutReady: () => { }, activeLeaf: null },
-    };
-
-    const index = new TaskIndex(app as never, { ...DEFAULT_SETTINGS });
-    scanner = (index as unknown as { scanner: TaskScanner }).scanner;
-    scanner.setInitializing(false);
-
-    let n = 0;
-    const storageUtils = {
-        generateTimerTargetId: () => `tv-t-test${++n}`,
-        isAutoManagedTimerTargetId: () => true,
-    } as unknown as TimerStorageUtils;
-    const plugin = {
-        settings: { ...DEFAULT_SETTINGS },
-        getTaskIndex: () => index,
-        getTaskWriteService: () => new TaskWriteService(index),
-    };
-    const recorder = new TimerRecorder(app as never, plugin as never, storageUtils);
-    const creator = new TimerCreator({} as TimerContext, storageUtils);
-
-    return {
-        index,
-        initialize: () => index.initialize(),
-        fireVault: (name: string, ...args: unknown[]) => vaultHandlers.get(name)!(...args),
-        recorder,
-        creator,
-        scanAll: () => scanner!.scanVault(),
-        settle: () => index.waitForScan(FILE),
-    };
+function session(contents: Map<string, string>): VaultSession {
+    return vaultSession(contents);
 }
 
 function lines(contents: Map<string, string>): string[] {
@@ -95,7 +30,7 @@ function lines(contents: Map<string, string>): string[] {
 }
 
 async function startTimer(
-    first: ReturnType<typeof session>,
+    first: VaultSession,
     recordMode: TimerRecordMode
 ): Promise<TimerInstance> {
     await first.scanAll();
@@ -113,7 +48,7 @@ async function startTimer(
     const sessionId = recordMode === 'child'
         ? await first.recorder.createChildAtStart(timer)
         : await first.recorder.startContinuationSession(timer);
-    await first.settle();
+    await first.settle(FILE);
     expect(sessionId).toBeDefined();
     expect(timer.tailRecordBlockId).toBeDefined();
     return timer;
@@ -162,7 +97,7 @@ describe('stopping a timer after a reload', () => {
 
         restored.startTimeMs = Date.now() - 60_000;
         await second.recorder.recordSessionEnd(restored);
-        await second.settle();
+        await second.settle(FILE);
 
         const after = lines(contents);
         expect(after).toHaveLength(before.length);
