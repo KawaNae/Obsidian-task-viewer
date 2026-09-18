@@ -335,3 +335,73 @@ describe('scan identity — whole-vault rescans', () => {
         expect(ledger.get(h.one('c').id)!.parent).toBe(h.one('P').id);
     });
 });
+
+describe('scan identity — file lifecycle', () => {
+    /** What TaskIndex's md → md rename handler does, in its order. */
+    async function rename(oldPath: string, newPath: string): Promise<void> {
+        h.contents.set(newPath, h.contents.get(oldPath)!);
+        h.contents.delete(oldPath);
+        h.store.removeTasksByFile(oldPath);
+        h.scanner.handleFileRenamed(oldPath, newPath);
+        await h.scanner.requestScan(makeFile(newPath));
+    }
+
+    it('a rename swaps only the path part, keeping numbers and edges', async () => {
+        await h.write('old.md', ['- [ ] P @2026-09-21', '    - [ ] c @2026-09-21']);
+        const before = { p: h.one('P', 'old.md').id, c: h.one('c', 'old.md').id };
+
+        await rename('old.md', 'dir/new.md');
+
+        const rewrite = (id: string) => TaskIdGenerator.renameFile(id, 'old.md', 'dir/new.md');
+        expect(h.one('P', 'dir/new.md').id).toBe(rewrite(before.p));
+        expect(h.one('c', 'dir/new.md').id).toBe(rewrite(before.c));
+        expect(h.one('c', 'dir/new.md').parentId).toBe(rewrite(before.p));
+        expect(h.scanner.getLedger().snapshotFor('old.md')).toEqual([]);
+        expect(h.scanner.getLedger().snapshotFor('dir/new.md').map(row => row.runtimeId))
+            .toEqual(h.ids('dir/new.md'));
+        expectConsistentTree(h.store);
+    });
+
+    it('a rename onto an occupied path discards the rows that were there', async () => {
+        await h.write('a.md', ['- [ ] A @2026-09-21']);
+        await h.write('b.md', ['- [ ] B @2026-09-21']);
+        const aId = h.one('A', 'a.md').id;
+        const bId = h.one('B', 'b.md').id;
+
+        h.store.removeTasksByFile('b.md');
+        await rename('a.md', 'b.md');
+
+        expect(h.scanner.getLedger().get(bId)).toBeUndefined();
+        expect(h.one('A', 'b.md').id).toBe(TaskIdGenerator.renameFile(aId, 'a.md', 'b.md'));
+    });
+
+    it('a delete drops the file from the ledger', async () => {
+        await h.write('a.md', ['- [ ] A @2026-09-21']);
+        const aId = h.one('A').id;
+
+        h.contents.delete('a.md');
+        h.store.removeTasksByFile('a.md');
+        h.scanner.handleFileDeleted('a.md');
+
+        expect(h.scanner.getLedger().snapshotFor('a.md')).toEqual([]);
+        expect(h.scanner.getLedger().get(aId)).toBeUndefined();
+    });
+
+    // "A retired ID never comes back": the design has no revival path, so a file
+    // that leaves the index and returns is a new set of tasks.
+    it('tv-ignore retires the IDs, and lifting it mints fresh ones', async () => {
+        const body = ['- [ ] A @2026-09-21', '- [ ] B @2026-09-21'];
+        await h.write('a.md', body);
+        const before = h.ids();
+
+        await h.write('a.md', ['---', 'tv-ignore: true', '---', ...body], { 'tv-ignore': true });
+        expect(h.tasks()).toEqual([]);
+        expect(h.scanner.getLedger().snapshotFor('a.md')).toEqual([]);
+
+        h.frontmatters.delete('a.md');
+        await h.write('a.md', body);
+        const after = h.ids();
+        expect(after).toHaveLength(2);
+        for (const id of after) expect(before).not.toContain(id);
+    });
+});

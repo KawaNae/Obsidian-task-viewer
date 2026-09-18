@@ -140,6 +140,8 @@ export class TaskScanner {
         if (parsed.ignored) {
             this.store.removeTasksByFile(file.path);
             this.completionDetector.clearForFile(file.path);
+            // Retired for good: lifting tv-ignore later mints fresh IDs.
+            this.ledger.dropFile(file.path);
             return;
         }
 
@@ -223,12 +225,27 @@ export class TaskScanner {
     }
 
     /**
-     * ファイルリネーム時の内部状態クリーンアップ。
-     * oldPath に紐づく scanQueue / 完了検出メモリを除去する。
+     * ファイルリネーム（md → md）時の内部状態の引き継ぎ。
+     * oldPath に紐づく scanQueue / 完了検出メモリを除去し、ledger を newPath へ再キーする。
+     *
+     * 新パスの再スキャンより前に呼ぶこと。逆順だと空の ledger と突き合わせて
+     * 全タスクが新発番になる。再キーは TaskHubPanel / TimerWidget が握る ID を
+     * 書き換えるのと同じ renameFile で行い、両者の文字列を一致させる。
      */
-    handleFileRenamed(oldPath: string): void {
+    handleFileRenamed(oldPath: string, newPath: string): void {
         this.scanQueue.delete(oldPath);
         this.completionDetector.forgetFile(oldPath);
+        this.ledger.rekeyFile(oldPath, newPath, id => TaskIdGenerator.renameFile(id, oldPath, newPath));
+    }
+
+    /**
+     * ファイル削除（md → 非 md のリネームを含む）時の内部状態の破棄。
+     * scanQueue / 完了検出メモリ / ledger から path を除去する。
+     */
+    handleFileDeleted(path: string): void {
+        this.scanQueue.delete(path);
+        this.completionDetector.forgetFile(path);
+        this.ledger.dropFile(path);
     }
 
     /**
