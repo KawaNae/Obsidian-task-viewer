@@ -5,8 +5,8 @@ import type { ParserId, Task } from '../../types';
  *
  * `originalText` is deliberately required (no default): its meaning differs
  * per producer — the verbatim source line for parsed tasks (round-trip /
- * line-resolution substrate) vs. `''` for synthetic tasks (tv-file,
- * temp tasks) that have no body line to round-trip.
+ * line-resolution substrate) vs. `''` for synthetic temp tasks that have
+ * no body line to round-trip.
  */
 export interface BaseTaskCore {
     id: string;

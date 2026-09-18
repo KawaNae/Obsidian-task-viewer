@@ -24,7 +24,6 @@ export interface TaskViewerSettings {
     reuseExistingTab: boolean;
     editorMenuForTasks: boolean;
     editorMenuForCheckboxes: boolean;
-    fileMenuForTvFile: boolean;
     weekStartDay: 0 | 1;
     calendarShowWeekNumbers: boolean;
     weeklyNoteFormat: string;
@@ -136,7 +135,6 @@ export const DEFAULT_SETTINGS: TaskViewerSettings = {
     reuseExistingTab: true,
     editorMenuForTasks: true,
     editorMenuForCheckboxes: true,
-    fileMenuForTvFile: true,
     weekStartDay: 0,
     calendarShowWeekNumbers: false,
     weeklyNoteFormat: 'gggg-[W]ww',

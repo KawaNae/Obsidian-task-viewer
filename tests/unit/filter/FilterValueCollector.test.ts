@@ -86,14 +86,12 @@ describe('FilterValueCollector', () => {
     });
 
     describe('collectNotations', () => {
-        it('collects unique sorted notations derived from parserId (tv-inline + tv-file collapse into taskviewer)', () => {
+        it('collects unique sorted notations derived from parserId', () => {
             const tasks = [
-                makeTask({ parserId: 'tv-file' }),
                 makeTask({ parserId: 'tv-inline' }),
                 makeTask({ parserId: 'tv-inline' }),
                 makeTask({ parserId: 'tasks-plugin' }),
             ];
-            // tv-inline + tv-file both collapse into 'taskviewer'
             expect(FilterValueCollector.collectNotations(tasks)).toEqual(['tasks', 'taskviewer']);
         });
     });

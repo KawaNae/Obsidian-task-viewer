@@ -1,6 +1,5 @@
 import { describe, it, expect } from 'vitest';
 import {
-    isTvFile,
     isTvInline,
     isDpInline,
     isTpInline,
@@ -8,18 +7,10 @@ import {
 } from '../../../src/types';
 
 
-describe('isTvFile', () => {
-    it('matches only parserId==="tv-file"', () => {
-        expect(isTvFile({ parserId: 'tv-file' })).toBe(true);
-        expect(isTvFile({ parserId: 'tv-inline' })).toBe(false);
-        expect(isTvFile({ parserId: 'tasks-plugin' })).toBe(false);
-    });
-});
-
 describe('isTvInline', () => {
     it('matches only parserId==="tv-inline"', () => {
         expect(isTvInline({ parserId: 'tv-inline' })).toBe(true);
-        expect(isTvInline({ parserId: 'tv-file' })).toBe(false);
+        expect(isTvInline({ parserId: 'tasks-plugin' })).toBe(false);
         expect(isTvInline({ parserId: 'day-planner' })).toBe(false);
     });
 });

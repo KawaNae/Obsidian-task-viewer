@@ -38,8 +38,6 @@
       "showEditorMenuForTasksDesc": "エディター内のインラインタスク行に ··· メニューボタンを表示します。",
       "showEditorMenuForCheckboxes": "チェックボックスにエディターメニューを表示",
       "showEditorMenuForCheckboxesDesc": "エディター内のプレーンチェックボックス行に ··· メニューボタンを表示します。",
-      "showFileMenuForFrontmatterTasks": "フロントマタータスクにファイルメニューを表示",
-      "showFileMenuForFrontmatterTasksDesc": "フロントマタータスクファイルのコンテキストメニュー（ファイルエクスプローラ右クリック / タブ ··· / ペインの more options）にタスク操作項目を追加します。",
       "applyCustomCheckboxStyles": "カスタムチェックボックススタイルを適用",
       "applyCustomCheckboxStylesDesc": "有効にすると、プラグインのチェックボックススタイルがObsidianエディター全体に適用されます。別途CSSスニペットは不要になります。",
       "enableStatusMenu": "ステータスメニューを有効化",
@@ -317,7 +315,6 @@
       "color": "カラー",
       "linestyle": "線種",
       "length": "長さ",
-      "kind": "種別",
       "notation": "記法",
       "parent": "親",
       "children": "子",
@@ -353,7 +350,6 @@
       "color":     { "includes": "含む", "excludes": "含まない" },
       "linestyle": { "includes": "含む", "excludes": "含まない" },
       "length":    { "lessThan": "より小さい", "lessThanOrEqual": "以下", "greaterThan": "より大きい", "greaterThanOrEqual": "以上", "equals": "一致", "isSet": "存在する", "isNotSet": "存在しない" },
-      "kind":      { "includes": "含む", "excludes": "含まない" },
       "notation":  { "includes": "含む", "excludes": "含まない" },
       "parent":    { "isSet": "存在する", "isNotSet": "存在しない" },
       "children":  { "isSet": "存在する", "isNotSet": "存在しない" },
@@ -396,10 +392,6 @@
     "remove": "削除",
     "self": "自身",
     "parent": "祖先",
-    "kind": {
-      "inline": "インライン",
-      "file": "ファイル"
-    },
     "notation": {
       "taskviewer": "TaskViewer",
       "tasks": "Tasks",
@@ -419,7 +411,6 @@
         "color":     { "includes": "以下の", "excludes": "以下の" },
         "linestyle": { "includes": "以下の", "excludes": "以下の" },
         "length":    { "lessThan": "", "lessThanOrEqual": "", "greaterThan": "", "greaterThanOrEqual": "", "equals": "", "isSet": "", "isNotSet": "" },
-        "kind":      { "includes": "以下の", "excludes": "以下の" },
         "notation":  { "includes": "以下の", "excludes": "以下の" },
         "parent":    { "isSet": "", "isNotSet": "" },
         "children":  { "isSet": "", "isNotSet": "" },
@@ -437,7 +428,6 @@
         "color":     { "includes": "を", "excludes": "を" },
         "linestyle": { "includes": "を", "excludes": "を" },
         "length":    { "lessThan": "が下の値", "lessThanOrEqual": "が下の値", "greaterThan": "が下の値", "greaterThanOrEqual": "が下の値", "equals": "が下の値と", "isSet": "が", "isNotSet": "が" },
-        "kind":      { "includes": "を", "excludes": "を" },
         "notation":  { "includes": "を", "excludes": "を" },
         "parent":    { "isSet": "が", "isNotSet": "が" },
         "children":  { "isSet": "が", "isNotSet": "が" },
@@ -501,7 +491,6 @@
       "inheritedFromSection": "継承: セクション",
       "contentTagLocked": "タスク名内の #タグ — 名前フィールドで編集してください",
       "cascadeTagLocked": "継承タグ（{{source}}）— 削除するには継承元を編集してください",
-      "arrayReadOnly": "配列プロパティ — ファイル側で編集してください",
       "reservedKey": "「{{key}}」は予約キーです"
     }
   },

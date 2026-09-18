@@ -6,7 +6,7 @@ export type FilterProperty =
     | 'file' | 'tag' | 'status' | 'content'
     | 'startDate' | 'endDate' | 'due' | 'anyDate'
     | 'color' | 'linestyle'
-    | 'length' | 'kind' | 'notation'
+    | 'length' | 'notation'
     | 'parent' | 'children'
     | 'property';
 
@@ -171,7 +171,6 @@ export const PROPERTY_OPERATORS: Record<FilterProperty, FilterOperator[]> = {
     color: ['includes', 'excludes'],
     linestyle: ['includes', 'excludes'],
     length: ['lessThan', 'lessThanOrEqual', 'greaterThan', 'greaterThanOrEqual', 'equals', 'isSet', 'isNotSet'],
-    kind: ['includes', 'excludes'],
     notation: ['includes', 'excludes'],
     parent: ['isSet', 'isNotSet'],
     children: ['isSet', 'isNotSet'],
@@ -206,7 +205,6 @@ export const PROPERTY_ICONS: Record<FilterProperty, string> = {
     color: 'palette',
     linestyle: 'minus',
     length: 'timer',
-    kind: 'map-pin',
     notation: 'file-type',
     parent: 'arrow-up',
     children: 'arrow-down',

@@ -184,7 +184,6 @@ FilterState (JSON format)
     length     : lessThan, lessThanOrEqual, greaterThan, greaterThanOrEqual, equals, isSet, isNotSet
                                              (value: number, unit?: 'hours'|'minutes')
     anyDate    : isSet, isNotSet             (no value needed; isSet = any of start/end/due set)
-    kind       : includes, excludes          (value: string[] of 'inline' | 'file')
     notation   : includes, excludes          (value: string[] of 'taskviewer' | 'tasks' | 'dayplanner')
     parent     : isSet, isNotSet             (no value needed)
     children   : isSet, isNotSet             (no value needed)

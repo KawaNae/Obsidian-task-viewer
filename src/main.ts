@@ -15,7 +15,6 @@ import {
     validateScopeKeys,
 } from './types';
 import type { Task } from './types';
-import { isTvFile } from './types';
 import { TaskViewerSettingTab } from './settings';
 import { ColorSuggest } from './suggest/color/ColorSuggest';
 import { LineStyleSuggest } from './suggest/line/LineStyleSuggest';
@@ -45,7 +44,6 @@ import { createTaskMenuExtension } from './editor/TaskMenuExtension';
 import { createDiagnosticsExtension } from './editor/DiagnosticsExtension';
 import { createGenBlockPreview } from './editor/GenBlockPreview';
 import { GEN_LANGUAGE_TAG } from './services/parsing/gen/GenBlockCollector';
-import { toDisplayTask } from './services/display/DisplayTaskConverter';
 import { registerCliHandlers } from './cli/CliRegistrar';
 import { TaskApi } from './api/TaskApi';
 import { ExportService } from './services/export/ExportService';
@@ -348,42 +346,6 @@ export default class TaskViewerPlugin extends Plugin {
         // Live Preview user sees their diagnostics: Obsidian replaces a
         // closed fence with this widget, and the editor underlines go with it.
         this.registerMarkdownCodeBlockProcessor(GEN_LANGUAGE_TAG, createGenBlockPreview());
-
-        // File context menu integration for frontmatter tasks.
-        // Frontmatter tasks have no inline anchor in the editor body (file menu is the only entry point),
-        // so we surface the full task menu via Obsidian's file-menu (file explorer / tab / pane).
-        this.registerEvent(
-            this.app.workspace.on('file-menu', (menu, file) => {
-                if (!this.settings.fileMenuForTvFile) return;
-                if (!(file instanceof TFile)) return;
-
-                const task = this.taskIndex.getTasks().find(t =>
-                    t.file === file.path && isTvFile(t)
-                );
-                if (!task) return;
-
-                menu.addSeparator();
-                editorValidationBuilder.addValidationWarning(menu, task);
-                const dt = toDisplayTask(task, this.settings.startHour, (id) => this.taskIndex.getTask(id));
-                // G1: 自身のデータ操作
-                editorPropertiesBuilder.addStatusSubmenu(menu, task);
-                editorActionsBuilder.addOwnDataActions(menu, task);
-                editorPropertiesBuilder.buildPropertiesSubmenu(menu, dt, null,
-                    (field) => this.openTaskHub(task.id, { focusField: field }));
-                menu.addSeparator();
-                // G2: 自身を記録
-                editorTimerBuilder.addTrackSelfItems(menu, task);
-                menu.addSeparator();
-                // G3: 子のデータ操作
-                editorActionsBuilder.addChildActions(menu, task);
-                menu.addSeparator();
-                // G4: 複製
-                editorActionsBuilder.addDuplicateActions(menu, task);
-                menu.addSeparator();
-                // G5: 破壊的変更
-                editorActionsBuilder.addDestructiveActions(menu, task);
-            })
-        );
 
         // Apply global styles if enabled
         this.updateGlobalStyles();

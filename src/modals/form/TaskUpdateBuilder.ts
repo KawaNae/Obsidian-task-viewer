@@ -8,9 +8,7 @@ import type { PropertyValue, Task } from '../../types';
  * - 値あり → own 宣言を設定
  * - undefined → own 宣言の削除（暗黙値 / cascade が透ける）
  *
- * 旧「プロパティ変更」フォーム（CreateTaskModal 流用）にあった
- * 「tvFile は空欄→暗黙値で充填して常に書く」は、フィールド単位コミット
- * では不要になったため廃止 — 空欄は一貫して「宣言なし」を意味する。
+ * 空欄は一貫して「宣言なし」を意味する。
  */
 export class TaskUpdateBuilder {
     static content(task: Task, content: string): Partial<Task> | null {
