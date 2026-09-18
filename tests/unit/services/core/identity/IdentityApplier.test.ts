@@ -7,49 +7,38 @@ import type { FileParseResult } from '../../../../../src/services/parsing/FilePa
 import { makeTask } from '../../../helpers/makeTask';
 import type { Task } from '../../../../../src/types';
 
-function parseResult(tasks: Task[], fmTask: Task | null = null): FileParseResult {
-    return { ignored: false, tasks, fmTask, wikilinkRefs: [], genBlocks: new Map() };
+function parseResult(tasks: Task[]): FileParseResult {
+    return { ignored: false, tasks, genBlocks: new Map() };
 }
 
 describe('applyIdentity', () => {
     it('rewrites id, parentId and childIds together', () => {
-        const fm = makeTask({ id: 'prov:fm', parserId: 'tv-file', line: -1, childIds: ['prov:a', 'prov:b'] });
-        const a = makeTask({ id: 'prov:a', line: 0, parentId: 'prov:fm', childIds: ['prov:b'] });
-        const b = makeTask({ id: 'prov:b', line: 1, parentId: 'prov:a' });
-        const parsed = parseResult([fm, a, b], fm);
+        const root = makeTask({ id: 'prov:root', line: 0, childIds: ['prov:a'] });
+        const a = makeTask({ id: 'prov:a', line: 1, parentId: 'prov:root', childIds: ['prov:b'] });
+        const b = makeTask({ id: 'prov:b', line: 2, parentId: 'prov:a' });
+        const parsed = parseResult([root, a, b]);
 
-        applyIdentity(parsed, new Map([['prov:fm', 'rt:fm'], ['prov:a', 'rt:a'], ['prov:b', 'rt:b']]));
+        applyIdentity(parsed, new Map([['prov:root', 'rt:root'], ['prov:a', 'rt:a'], ['prov:b', 'rt:b']]));
 
         // Mutation: rewrite only `task.id` and the cross-references dangle — the
         // card silently loses its children, with nothing to point at the cause.
-        expect([fm.id, a.id, b.id]).toEqual(['rt:fm', 'rt:a', 'rt:b']);
-        expect(fm.childIds).toEqual(['rt:a', 'rt:b']);
+        expect([root.id, a.id, b.id]).toEqual(['rt:root', 'rt:a', 'rt:b']);
+        expect(root.childIds).toEqual(['rt:a']);
         expect(a.childIds).toEqual(['rt:b']);
-        expect(a.parentId).toBe('rt:fm');
+        expect(a.parentId).toBe('rt:root');
         expect(b.parentId).toBe('rt:a');
-    });
-
-    it('rewrites an fm task that the pipeline kept out of `tasks`', () => {
-        // An empty container is returned as `fmTask` without being pushed into
-        // `tasks`, and `wikilinkRefs` are keyed by its ID downstream.
-        const fm = makeTask({ id: 'prov:fm', parserId: 'tv-file', line: -1 });
-        const parsed = parseResult([], fm);
-
-        applyIdentity(parsed, new Map([['prov:fm', 'rt:fm']]));
-
-        expect(fm.id).toBe('rt:fm');
     });
 
     it('rewrites each object exactly once', () => {
         // `rt:a` is also somebody's old ID. A second visit would map it on to
         // `rt:z`, so the single pass is what keeps the result correct.
-        const fm = makeTask({ id: 'prov:fm', parserId: 'tv-file', line: -1, childIds: ['prov:a'] });
-        const parsed = parseResult([fm], fm);
+        const root = makeTask({ id: 'prov:root', line: 0, childIds: ['prov:a'] });
+        const parsed = parseResult([root]);
 
-        applyIdentity(parsed, new Map([['prov:fm', 'rt:a'], ['rt:a', 'rt:z'], ['prov:a', 'rt:a']]));
+        applyIdentity(parsed, new Map([['prov:root', 'rt:a'], ['rt:a', 'rt:z'], ['prov:a', 'rt:a']]));
 
-        expect(fm.id).toBe('rt:a');
-        expect(fm.childIds).toEqual(['rt:a']);
+        expect(root.id).toBe('rt:a');
+        expect(root.childIds).toEqual(['rt:a']);
     });
 
     it('leaves IDs it was given no mapping for', () => {

@@ -1,7 +1,6 @@
 import { type App, MarkdownRenderer, Component } from 'obsidian';
-import { type Task, type DisplayTask, type TaskViewerSettings, type DoubleTapAction, isCompleteStatusChar, isTvFile, type TopRightConfig } from '../../types';
+import { type Task, type DisplayTask, type TaskViewerSettings, type DoubleTapAction, isCompleteStatusChar, type TopRightConfig } from '../../types';
 import { getOverdueLevel } from '../../services/display/TaskStatusQuery';
-import { extractWikilinkTarget } from '../../utils/WikilinkUtils';
 import { resolveTopRightField } from './TopRightFieldResolver';
 
 export type TopRightSpec =
@@ -38,7 +37,7 @@ import type { TaskReadService } from '../../services/data/TaskReadService';
 import type { TaskWriteService } from '../../services/data/TaskWriteService';
 import { getFileBaseName, hasTaskContent } from '../../services/parsing/utils/TaskContent';
 import { ChildItemBuilder } from './ChildItemBuilder';
-import { ChildSectionRenderer, type ChildMenuCallback, type ChildLineEditCallback } from './ChildSectionRenderer';
+import { ChildSectionRenderer, type ChildMenuCallback } from './ChildSectionRenderer';
 import { CheckboxWiring } from './CheckboxWiring';
 import type { MenuPresenter } from '../../interaction/menu/MenuPresenter';
 import { TaskLinkInteractionManager } from './TaskLinkInteractionManager';
@@ -59,9 +58,6 @@ export function computeContentSignature(
         if (e.kind === 'task') {
             const child = readService.getTask(e.taskId);
             return `t:${e.taskId}:${child?.statusChar ?? '?'}:${child?.content ?? ''}`;
-        }
-        if (e.kind === 'wikilink') {
-            return `w:${e.target}:${e.line.text}`;
         }
         return `l:${e.line.text}`;
     });
@@ -132,15 +128,13 @@ export class TaskCardRenderer extends Component {
         this.linkInteractionManager = new TaskLinkInteractionManager(app, getSettings);
         // Clean up expandedTaskIds entries for tasks deleted via the UI so the
         // set does not grow unbounded over the renderer's lifetime. Keys are
-        // `${viewId}::${scope}::${task.id}` (cardInstanceId), with frontmatter
-        // children adding a `::fm-children` suffix. Match by suffix so all
-        // card instances of the deleted task are dropped regardless of view /
+        // `${viewId}::${scope}::${task.id}` (cardInstanceId). Match by suffix so
+        // all card instances of the deleted task are dropped regardless of view /
         // scope (main grid, pinned list, etc.).
         this.unsubscribeTaskDeleted = writeService.onTaskDeleted((taskId) => {
             const suffix = `::${taskId}`;
-            const fmSuffix = `::${taskId}::fm-children`;
             for (const key of [...this.expandedTaskIds]) {
-                if (key.endsWith(fmSuffix) || key.endsWith(suffix)) {
+                if (key.endsWith(suffix)) {
                     this.expandedTaskIds.delete(key);
                 }
             }
@@ -157,10 +151,6 @@ export class TaskCardRenderer extends Component {
 
     setChildMenuCallback(cb: ChildMenuCallback): void {
         this.childSectionRenderer.setChildMenuCallback(cb);
-    }
-
-    setChildLineEditCallback(cb: ChildLineEditCallback): void {
-        this.childSectionRenderer.setChildLineEditCallback(cb);
     }
 
     setDetailCallback(cb: (task: Task) => void): void {
@@ -281,9 +271,6 @@ export class TaskCardRenderer extends Component {
             if (total > 0) {
                 countLabelSpan.setText(`${this.getChildOverdueIcon(task, settings)}${completed}/${total}`);
             }
-        } else if (isTvFile(task)) {
-            await MarkdownRenderer.render(this.app, parentMarkdown, contentContainer, task.file, cardComp);
-            await this.renderFrontmatterChildren(contentContainer, task, cardComp, settings, cardInstanceId, forceExpand);
         } else if (task.childEntries.length > 0) {
             await this.renderInlineChildren(contentContainer, task, cardComp, settings, parentMarkdown, cardInstanceId, forceExpand);
         } else {
@@ -337,34 +324,14 @@ export class TaskCardRenderer extends Component {
         const lookup = this.childItemBuilder.getReadService();
 
         for (const entry of task.childEntries) {
-            if (entry.kind === 'task' || entry.kind === 'wikilink') {
-                const child = entry.kind === 'task'
-                    ? lookup.getTask(entry.taskId)
-                    : this.resolveWikilinkChild(task, entry.target);
-                if (!child) continue;
-                total++;
-                if (isCompleteStatusChar(child.statusChar, settings.statusDefinitions)) completed++;
-            } else if (entry.kind === 'line' && entry.line.checkboxChar !== null) {
-                total++;
-                if (isCompleteStatusChar(entry.line.checkboxChar, settings.statusDefinitions)) completed++;
-            }
+            if (entry.kind !== 'task') continue;
+            const child = lookup.getTask(entry.taskId);
+            if (!child) continue;
+            total++;
+            if (isCompleteStatusChar(child.statusChar, settings.statusDefinitions)) completed++;
         }
 
         return { completed, total };
-    }
-
-    private resolveWikilinkChild(parent: DisplayTask, target: string): Task | undefined {
-        const t = extractWikilinkTarget(target);
-        const lookup = this.childItemBuilder.getReadService();
-        for (const entry of parent.childEntries) {
-            if (entry.kind !== 'task') continue;
-            const c = lookup.getTask(entry.taskId);
-            if (!c || !isTvFile(c)) continue;
-            const baseName = c.file.replace(/\.md$/, '').split('/').pop() || '';
-            const fullPath = c.file.replace(/\.md$/, '');
-            if (t === baseName || t === fullPath || t === c.file) return c;
-        }
-        return undefined;
     }
 
     private resolveTopRightString(task: DisplayTask, settings: TaskViewerSettings, spec: TopRightSpec): string {
@@ -475,49 +442,6 @@ export class TaskCardRenderer extends Component {
             contentContainer,
             parentMarkdown,
             indentedItems,
-            task.file,
-            component,
-            settings,
-            task.startDate
-        );
-    }
-
-    private async renderFrontmatterChildren(
-        contentContainer: HTMLElement,
-        task: DisplayTask,
-        component: Component,
-        settings: TaskViewerSettings,
-        cardInstanceId: string,
-        forceExpand = false
-    ): Promise<void> {
-        if (task.childEntries.length === 0) {
-            return;
-        }
-
-        const items = this.childItemBuilder.buildChildItems(task);
-        if (items.length === 0) {
-            return;
-        }
-
-        const shouldCollapse = !forceExpand && items.length >= settings.childCollapseThreshold;
-        if (shouldCollapse) {
-            await this.childSectionRenderer.renderCollapsed(
-                contentContainer,
-                items,
-                this.expandedTaskIds,
-                `${cardInstanceId}::fm-children`,
-                task.file,
-                component,
-                settings,
-                task.startDate,
-                this.getChildOverdueIcon(task, settings)
-            );
-            return;
-        }
-
-        await this.childSectionRenderer.renderExpanded(
-            contentContainer,
-            items,
             task.file,
             component,
             settings,

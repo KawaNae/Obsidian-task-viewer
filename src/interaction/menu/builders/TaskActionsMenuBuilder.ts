@@ -1,5 +1,5 @@
 import { type App, MarkdownView, type Menu, Notice } from 'obsidian';
-import { type Task, isTvInline, hasBodyLine } from '../../../types';
+import { type Task, isTvInline } from '../../../types';
 import type { TaskWriteService } from '../../../services/data/TaskWriteService';
 import type { PluginContext } from '../../../PluginContext';
 import type { TimerHost } from '../../../timer/TimerWidget';
@@ -136,20 +136,18 @@ export class TaskActionsMenuBuilder {
                     } else {
                         await this.app.workspace.openLinkText(task.file, '', true);
                     }
-                    if (hasBodyLine(task)) {
-                        setTimeout(() => {
-                            const view = this.app.workspace.getActiveViewOfType(MarkdownView);
-                            if (view) {
-                                const editor = view.editor;
-                                const lineText = editor.getLine(task.line);
-                                editor.setSelection(
-                                    { line: task.line, ch: 0 },
-                                    { line: task.line, ch: lineText.length }
-                                );
-                                editor.focus();
-                            }
-                        }, 100);
-                    }
+                    setTimeout(() => {
+                        const view = this.app.workspace.getActiveViewOfType(MarkdownView);
+                        if (view) {
+                            const editor = view.editor;
+                            const lineText = editor.getLine(task.line);
+                            editor.setSelection(
+                                { line: task.line, ch: 0 },
+                                { line: task.line, ch: lineText.length }
+                            );
+                            editor.focus();
+                        }
+                    }, 100);
                     onDestructive?.();
                 });
         });

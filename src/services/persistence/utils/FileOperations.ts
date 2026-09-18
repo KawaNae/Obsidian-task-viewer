@@ -1,6 +1,5 @@
 import { type App, TFolder } from 'obsidian';
 import type { Task } from '../../../types';
-import { hasBodyLine } from '../../../types';
 import { CodeFenceTracker } from '../../../utils/CodeFenceTracker';
 import { TaskLineClassifier } from '../../parsing/utils/TaskLineClassifier';
 
@@ -260,7 +259,7 @@ export class FileOperations {
      */
     private static pickUnique(hits: number[], task: Task): number {
         if (hits.length === 1) return hits[0];
-        if (hasBodyLine(task) && hits.includes(task.line)) return task.line;
+        if (hits.includes(task.line)) return task.line;
         return -1;
     }
 
@@ -310,7 +309,7 @@ export class FileOperations {
         // Strategy 0: Stored line number (O(1), correct when no line shift has occurred)
         // Must run before Strategy 1 to avoid returning the first duplicate when
         // multiple lines share the same originalText (e.g. duplicate bare-checkbox child lines).
-        if (hasBodyLine(task) && task.line < lines.length
+        if (task.line < lines.length
             && !fenced[task.line] && lines[task.line] === task.originalText) {
             return task.line;
         }
@@ -361,7 +360,7 @@ export class FileOperations {
         // The unverified fallback this replaces wrote to whatever happened to
         // sit at task.line, which silently clobbered unrelated lines whenever
         // the earlier strategies all missed on a shifted file.
-        if (hasBodyLine(task) && task.line < lines.length && !fenced[task.line]) {
+        if (task.line < lines.length && !fenced[task.line]) {
             const stored = lines[task.line];
             const stillHolds = content
                 ? FileOperations.lineHasTaskContent(stored, content)

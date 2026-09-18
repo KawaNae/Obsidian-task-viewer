@@ -1,4 +1,4 @@
-import type { Task, TaskViewerSettings, WikilinkRef } from '../../types';
+import type { Task, TaskViewerSettings } from '../../types';
 import type { GenBlock } from '../parsing/gen/GenBlockCollector';
 
 /**
@@ -7,7 +7,6 @@ import type { GenBlock } from '../parsing/gen/GenBlockCollector';
  */
 export class TaskStore {
     private tasks: Map<string, Task> = new Map();
-    private wikilinkRefs: Map<string, WikilinkRef[]> = new Map(); // taskId → refs
     /** filePath → (block name → block). Rebuilt by each scan of that file. */
     private genBlocks: Map<string, Map<string, GenBlock>> = new Map();
     private listeners: ((taskId?: string, changes?: string[]) => void)[] = [];
@@ -79,7 +78,6 @@ export class TaskStore {
      */
     clear(): void {
         this.tasks.clear();
-        this.wikilinkRefs.clear();
         this.genBlocks.clear();
         this.bumpRevision();
     }
@@ -100,7 +98,6 @@ export class TaskStore {
         if (toRemove.length > 0 || hadBlocks) {
             for (const id of toRemove) {
                 this.tasks.delete(id);
-                this.wikilinkRefs.delete(id);
             }
             this.bumpRevision();
         }
@@ -156,20 +153,6 @@ export class TaskStore {
         this.settings = settings;
     }
 
-    // ===== Wikilink Refs =====
-
-    setWikilinkRefs(taskId: string, refs: WikilinkRef[]): void {
-        if (refs.length > 0) {
-            this.wikilinkRefs.set(taskId, refs);
-        } else {
-            this.wikilinkRefs.delete(taskId);
-        }
-    }
-
-    getWikilinkRefsMap(): Map<string, WikilinkRef[]> {
-        return this.wikilinkRefs;
-    }
-
     // ===== Generation blocks =====
 
     /** Replace a file's blocks. The scan of that file is the only writer. */
@@ -192,14 +175,6 @@ export class TaskStore {
     /** All blocks of a file, empty when it has none. */
     getGenBlocks(filePath: string): Map<string, GenBlock> {
         return this.genBlocks.get(filePath) ?? new Map();
-    }
-
-    /**
-     * 内部タスクMapを取得（WikiLinkResolver用）
-     * @internal
-     */
-    getTasksMap(): Map<string, Task> {
-        return this.tasks;
     }
 }
 

@@ -17,9 +17,6 @@ import type { Task } from '../../../../../src/types';
 function makeMint() {
     let seq = 0;
     return (task: Task): string => {
-        // tv-file keeps `fm-root`: the matcher treats it like any other task and
-        // the mapping simply names it after itself.
-        if (task.parserId === 'tv-file') return task.id;
         return `${task.parserId}:${task.file}:seq:${++seq}`;
     };
 }
@@ -380,21 +377,15 @@ describe('matchFile: scopes', () => {
 
 describe('matchFile: the rows it hands back', () => {
     it('maps every task and describes the tree in file order', () => {
-        const fm = makeTask({
-            id: 'tv-file:note.md:fm-root',
-            parserId: 'tv-file',
-            line: -1,
-            content: 'note',
-            originalText: '',
-        });
-        const a = t('prov:a', 0, 'A');
-        const a1 = t('prov:a1', 1, 'A1');
-        const a2 = t('prov:a2', 2, 'A2');
-        const b = t('prov:b', 3, 'B');
-        link(fm, a, b);
+        const root = t('prov:root', 0, 'root');
+        const a = t('prov:a', 1, 'A');
+        const a1 = t('prov:a1', 2, 'A1');
+        const a2 = t('prov:a2', 3, 'A2');
+        const b = t('prov:b', 4, 'B');
+        link(root, a, b);
         link(a, a1, a2);
         // Deliberately out of file order: the matcher sorts by line itself.
-        const tasks = [b, a2, fm, a, a1];
+        const tasks = [b, a2, root, a, a1];
 
         const result = matchFile([], tasks, makeMint());
 
@@ -402,12 +393,9 @@ describe('matchFile: the rows it hands back', () => {
         for (const task of tasks) {
             expect(result.mapping.has(task.id)).toBe(true);
         }
-        // tv-file is not special-cased: `fm-root` simply maps to itself.
-        expect(result.mapping.get('tv-file:note.md:fm-root')).toBe('tv-file:note.md:fm-root');
-
         const runtime = (provisionalId: string) => result.mapping.get(provisionalId)!;
         expect(result.entries.map(e => e.runtimeId)).toEqual([
-            'tv-file:note.md:fm-root',
+            runtime('prov:root'),
             runtime('prov:a'),
             runtime('prov:a1'),
             runtime('prov:a2'),
@@ -415,10 +403,10 @@ describe('matchFile: the rows it hands back', () => {
         ]);
         expect(result.entries.map(e => e.parent)).toEqual([
             null,
-            'tv-file:note.md:fm-root',
+            runtime('prov:root'),
             result.mapping.get('prov:a'),
             result.mapping.get('prov:a'),
-            'tv-file:note.md:fm-root',
+            runtime('prov:root'),
         ]);
         // Ordinals are per scope, not per file.
         expect(result.entries.map(e => e.ordinal)).toEqual([0, 0, 0, 1, 1]);

@@ -16,15 +16,10 @@ export function isTaskCompleted(
     }
 
     for (const entry of task.childEntries) {
-        if (entry.kind === 'line') {
-            const ch = entry.line.checkboxChar;
-            if (ch !== null && !isCompleteStatusChar(ch, defs)) return false;
-        } else {
-            const childId = entry.kind === 'task' ? entry.taskId : null;
-            const child = childId ? readService.getTask(childId) : undefined;
-            if (!child) continue;
-            if (!isCompleteStatusChar(child.statusChar || ' ', defs)) return false;
-        }
+        if (entry.kind !== 'task') continue;
+        const child = readService.getTask(entry.taskId);
+        if (!child) continue;
+        if (!isCompleteStatusChar(child.statusChar || ' ', defs)) return false;
     }
 
     return true;

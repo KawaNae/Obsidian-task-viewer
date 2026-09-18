@@ -34,7 +34,7 @@ describe('TaskIdGenerator', () => {
             expect(result).toEqual({ parserId: 'tv-inline', filePath: 'notes/daily.md', anchor: 'blk:abc123' });
         });
 
-        it('parses fm-root anchor', () => {
+        it('parses a legacy fm-root anchor (read only)', () => {
             const result = TaskIdGenerator.parse('tv-file:project.md:fm-root');
             expect(result).toEqual({ parserId: 'tv-file', filePath: 'project.md', anchor: 'fm-root' });
         });
@@ -118,17 +118,10 @@ describe('TaskIdGenerator', () => {
             expect(TaskIdGenerator.mintRuntimeId(task, next)).toBe('tv-inline:a.md:seq:2');
         });
 
-        it('keeps fm-root for the tv-file task and spends no number', () => {
-            let n = 0;
-            const next = () => ++n;
-            const task = { id: 'tv-file:a.md:fm-root', parserId: 'tv-file' as const, file: 'a.md' };
-            expect(TaskIdGenerator.mintRuntimeId(task, next)).toBe('tv-file:a.md:fm-root');
-            expect(n).toBe(0);
-        });
-
-        it('accepts only seq and fm-root as runtime-shaped', () => {
+        it('accepts only seq as runtime-shaped', () => {
             expect(TaskIdGenerator.isRuntimeId('tv-inline:a.md:seq:1')).toBe(true);
-            expect(TaskIdGenerator.isRuntimeId('tv-file:a.md:fm-root')).toBe(true);
+            // Persisted by earlier versions: still parses, never committed.
+            expect(TaskIdGenerator.isRuntimeId('tv-file:a.md:fm-root')).toBe(false);
             expect(TaskIdGenerator.isRuntimeId('tv-inline:a.md:ln:1')).toBe(false);
             expect(TaskIdGenerator.isRuntimeId('tv-inline:a.md:blk:abc')).toBe(false);
             expect(TaskIdGenerator.isRuntimeId('tv-inline:a.md:tid:xyz')).toBe(false);

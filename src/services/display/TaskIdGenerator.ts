@@ -1,4 +1,4 @@
-import { isTvFile, type ParserId, type Task } from '../../types';
+import type { ParserId, Task } from '../../types';
 
 const PARSER_IDS: ReadonlySet<ParserId> = new Set(['tv-inline', 'tv-file', 'tasks-plugin', 'day-planner']);
 
@@ -17,12 +17,12 @@ export interface ParsedSegmentId {
     segmentDate: string;
 }
 
-// `blk:`, `tid:` and `ln:` are no longer minted. They stay readable because
-// timers persisted before the ledger still carry them, and the restore guard
-// (TimerPersistence.fromPersistedTimer) drops any ID `parse` rejects. `prov:` is
-// left out on purpose: a provisional ID that leaked should fail to parse.
+// `blk:`, `tid:`, `ln:` and `fm-root` are no longer minted. They stay readable
+// because timers persisted by earlier versions still carry them, and the restore
+// guard (TimerPersistence.fromPersistedTimer) drops any ID `parse` rejects.
+// `prov:` is left out on purpose: a provisional ID that leaked should fail to parse.
 const TASK_ID_REGEX = /^([^:]+):(.+):(blk:[^:]+|tid:[^:]+|seq:\d+|ln:\d+|fm-root)$/;
-const RUNTIME_ANCHOR_REGEX = /^(seq:\d+|fm-root)$/;
+const RUNTIME_ANCHOR_REGEX = /^seq:\d+$/;
 const SEGMENT_ID_REGEX = /^(.*)##seg:(\d{4}-\d{2}-\d{2})$/;
 
 export class TaskIdGenerator {
@@ -46,13 +46,9 @@ export class TaskIdGenerator {
      * The runtime ID a scan hands out to a task the ledger has not seen.
      *
      * Transitional shape: `seq:<n>` still sits behind the path, so the shape
-     * guards and `renameFile` keep working unchanged. The tv-file task keeps its
-     * `fm-root` ID and consumes no number — it is on its way out.
+     * guards and `renameFile` keep working unchanged.
      */
-    static mintRuntimeId(task: Pick<Task, 'id' | 'parserId' | 'file'>, next: () => number): string {
-        if (isTvFile(task)) {
-            return task.id;
-        }
+    static mintRuntimeId(task: Pick<Task, 'parserId' | 'file'>, next: () => number): string {
         return this.generate(task.parserId, task.file, `seq:${next()}`);
     }
 
@@ -60,7 +56,8 @@ export class TaskIdGenerator {
      * Whether `id` is shaped like an ID a scan commits to the store.
      *
      * A positive test on purpose: `prov:` is not the only shape that must stay
-     * out of the store — the legacy `ln:`, `blk:` and `tid:` still parse — and
+     * out of the store — the legacy `ln:`, `blk:`, `tid:` and `fm-root` still
+     * parse — and
      * listing the bad shapes would let a new one slip past.
      */
     static isRuntimeId(id: string): boolean {

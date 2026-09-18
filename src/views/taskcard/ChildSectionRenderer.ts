@@ -1,5 +1,5 @@
 import { type App, MarkdownRenderer, type Component, setIcon } from 'obsidian';
-import { type Task, type ChildLine, type TaskViewerSettings, isCompleteStatusChar } from '../../types';
+import { type TaskViewerSettings, isCompleteStatusChar } from '../../types';
 import type { TaskReadService } from '../../services/data/TaskReadService';
 import type { ChildRenderItem } from './types';
 import type { CheckboxWiring } from './CheckboxWiring';
@@ -7,13 +7,6 @@ import { NotationUtils } from './NotationUtils';
 import { t } from '../../i18n';
 
 export type ChildMenuCallback = (taskId: string, x: number, y: number) => void;
-export type ChildLineEditCallback = (
-    parentTask: Task,
-    line: ChildLine,
-    bodyLine: number,
-    x: number,
-    y: number
-) => void;
 
 function countChildCompletion(
     items: ChildRenderItem[],
@@ -25,16 +18,9 @@ function countChildCompletion(
     for (const item of items) {
         if (!item.isCheckbox || !item.handler) continue;
         total++;
-        if (item.handler.type === 'task') {
-            const child = readService.getTask(item.handler.taskId);
-            if (child && isCompleteStatusChar(child.statusChar, settings.statusDefinitions)) {
-                completed++;
-            }
-        } else {
-            const ch = item.handler.line.checkboxChar;
-            if (ch !== null && ch !== undefined && isCompleteStatusChar(ch, settings.statusDefinitions)) {
-                completed++;
-            }
+        const child = readService.getTask(item.handler.taskId);
+        if (child && isCompleteStatusChar(child.statusChar, settings.statusDefinitions)) {
+            completed++;
         }
     }
     return { completed, total };
@@ -45,7 +31,6 @@ function countChildCompletion(
  */
 export class ChildSectionRenderer {
     private onChildMenuClick: ChildMenuCallback | null = null;
-    private onChildLineEditClick: ChildLineEditCallback | null = null;
 
     constructor(
         private app: App,
@@ -55,10 +40,6 @@ export class ChildSectionRenderer {
 
     setChildMenuCallback(cb: ChildMenuCallback): void {
         this.onChildMenuClick = cb;
-    }
-
-    setChildLineEditCallback(cb: ChildLineEditCallback): void {
-        this.onChildLineEditClick = cb;
     }
 
     async renderCollapsed(
@@ -176,14 +157,11 @@ export class ChildSectionRenderer {
             const handler = item.handler;
             const isTask = handler && handler.type === 'task';
 
-            // For recognized tasks: show ⋯ menu button (if callback set)
-            // For plain childLines: show ⋯ edit button (if callback set)
+            // For tasks: show ⋯ menu button (if callback set)
             // For items with notation: show notation text
             let el: HTMLElement;
             if (isTask && this.onChildMenuClick) {
                 el = this.createChildMenuButton(handler.taskId);
-            } else if (!isTask && handler && handler.type === 'childLine' && this.onChildLineEditClick) {
-                el = this.createChildLineEditButton(handler.parentTask, handler.line, handler.bodyLine);
             } else if (item.notation) {
                 el = document.createElement('span');
                 el.className = 'task-card__child-notation';
@@ -224,30 +202,6 @@ export class ChildSectionRenderer {
             e.stopPropagation();
             const rect = btn.getBoundingClientRect();
             this.onChildMenuClick?.(taskId, rect.left, rect.bottom);
-        });
-
-        btn.addEventListener('mousedown', (e) => {
-            e.preventDefault();
-        });
-
-        return btn;
-    }
-
-    private createChildLineEditButton(parentTask: Task, line: ChildLine, bodyLine: number): HTMLButtonElement {
-        const btn = document.createElement('button');
-        btn.className = 'task-card__child-menu-btn';
-        btn.setAttribute('aria-label', t('aria.childLineMenu'));
-        btn.setAttribute('tabindex', '-1');
-
-        const span = document.createElement('span');
-        btn.appendChild(span);
-        setIcon(span, 'more-horizontal');
-
-        btn.addEventListener('click', (e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            const rect = btn.getBoundingClientRect();
-            this.onChildLineEditClick?.(parentTask, line, bodyLine, rect.left, rect.bottom);
         });
 
         btn.addEventListener('mousedown', (e) => {

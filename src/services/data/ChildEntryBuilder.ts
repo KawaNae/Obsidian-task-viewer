@@ -10,7 +10,7 @@ import type { Task, ChildEntry, ChildLine } from '../../types';
  *   - Each entry carries an absolute `bodyLine`, so render/write layers
  *     never recompute line numbers.
  *   - Entries are sorted by `bodyLine` (body order).
- *   - A line owned by a sibling task's subtree is omitted from `line`/`wikilink`
+ *   - A line owned by a sibling task's subtree is omitted from `line`
  *     entries — it surfaces as the descendant's own children. Enforces the
  *     "1 line = 1 owner across siblings" invariant relied on by the renderer.
  *
@@ -25,11 +25,7 @@ export function buildChildEntries(
 
     for (const cl of parent.childLines) {
         if (cl.bodyLine < 0) continue;
-        if (cl.wikilinkTarget) {
-            entries.push({ kind: 'wikilink', target: cl.wikilinkTarget, bodyLine: cl.bodyLine, line: cl });
-        } else {
-            entries.push({ kind: 'line', line: cl, bodyLine: cl.bodyLine });
-        }
+        entries.push({ kind: 'line', line: cl, bodyLine: cl.bodyLine });
     }
 
     for (const cid of parent.childIds) {

@@ -249,7 +249,6 @@
   },
   "aria": {
     "taskMenu": "Task menu",
-    "childLineMenu": "Child line menu",
     "toggleSection": "Toggle {{title}} section",
     "openDailyNote": "Open daily note: {{label}}",
     "openWeeklyNote": "Open weekly note: {{label}}",

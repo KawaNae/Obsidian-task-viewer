@@ -4,12 +4,9 @@ import {
     isTvInline,
     isDpInline,
     isTpInline,
-    isTvFileUnscheduled,
     hasScheduling,
 } from '../../../src/types';
 
-const baseFm = { parserId: 'tv-file' as const };
-const baseInline = { parserId: 'tv-inline' as const };
 
 describe('isTvFile', () => {
     it('matches only parserId==="tv-file"', () => {
@@ -55,19 +52,3 @@ describe('hasScheduling', () => {
     });
 });
 
-describe('isTvFileUnscheduled', () => {
-    it('is true for tv-file task with no scheduling', () => {
-        expect(isTvFileUnscheduled(baseFm)).toBe(true);
-    });
-
-    it('is false when tv-file task has any scheduling field', () => {
-        expect(isTvFileUnscheduled({ ...baseFm, startDate: '2026-01-01' })).toBe(false);
-        expect(isTvFileUnscheduled({ ...baseFm, startTime: '09:00' })).toBe(false);
-        expect(isTvFileUnscheduled({ ...baseFm, due: '2026-01-01' })).toBe(false);
-    });
-
-    it('is false for non-tv-file tasks regardless of scheduling', () => {
-        expect(isTvFileUnscheduled(baseInline)).toBe(false);
-        expect(isTvFileUnscheduled({ parserId: 'tasks-plugin' })).toBe(false);
-    });
-});

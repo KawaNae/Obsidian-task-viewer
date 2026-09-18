@@ -29,7 +29,6 @@ import { openTaskInEditor } from '../../utils/NavigationUtils';
 import { TASK_VIEWER_HOVER_SOURCE_ID } from '../../constants/hover';
 import { TaskViewHoverParent } from '../taskcard/TaskViewHoverParent';
 import { TaskLinkInteractionManager } from '../taskcard/TaskLinkInteractionManager';
-import { ChildLineMenuBuilder } from '../../interaction/menu/builders/ChildLineMenuBuilder';
 import { VIEW_META_KANBAN } from '../../constants/viewRegistry';
 import type { PinnedListDefinition, DisplayTask, Task } from '../../types';
 import { codecFor, type ViewConfigCodec } from '../../services/viewConfig';
@@ -112,10 +111,6 @@ export class KanbanView extends ItemView {
         this.linkInteractionManager = new TaskLinkInteractionManager(this.app, () => this.plugin.settings);
         this.menuHandler = new MenuHandler(this.app, this.readService, this.writeService, this.plugin);
         this.taskRenderer.setChildMenuCallback((taskId, x, y) => this.menuHandler.showMenuForTask(taskId, x, y));
-        const childLineMenuBuilder = new ChildLineMenuBuilder(this.app, this.writeService, this.plugin);
-        this.taskRenderer.setChildLineEditCallback((parentTask, line, bodyLine, x, y) => {
-            childLineMenuBuilder.showMenu(parentTask, line, bodyLine, x, y);
-        });
         const openTaskHub = createTaskHubOpener(this.app, {
             taskRenderer: this.taskRenderer,
             menuHandler: this.menuHandler,

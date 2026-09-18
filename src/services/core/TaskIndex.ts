@@ -1,13 +1,12 @@
 import { type App, type EventRef, Notice, TFile } from 'obsidian';
 import { t } from '../../i18n';
 import type { DuplicateOptions, Task, TaskViewerSettings } from '../../types';
-import { isTvFile, isTvInline, hasBodyLine } from '../../types';
+import { isTvFile, isTvInline } from '../../types';
 import { TaskRepository } from '../persistence/TaskRepository';
 import { PropertyUpdatePlanner } from '../persistence/PropertyUpdatePlanner';
 import { createTempTask } from '../data/createTempTask';
 import { FlowExecutor } from '../flow/FlowExecutor';
 import type { FlowDeleteAssessment } from '../flow/FlowDeletion';
-import { WikiLinkResolver } from './WikiLinkResolver';
 import { TaskStore } from './TaskStore';
 import { TaskScanner } from './TaskScanner';
 import { TaskValidator, type ValidationError } from './TaskValidator';
@@ -118,7 +117,6 @@ export class TaskIndex {
                 }
 
                 await this.scanner.queueScan(file, isLocal);
-                this.resolveLinks();
                 // Skip notify when an API write (withNotify) is in flight for this
                 // file — withNotify's own notifyImmediate is the authoritative notify.
                 // Editor direct edits (no withNotify) are unaffected: the API
@@ -134,7 +132,7 @@ export class TaskIndex {
                 this.store.removeTasksByFile(file.path);
                 this.scanner.handleFileDeleted(file.path);
                 this.validator.clearErrorsForFile(file.path);
-                this.resolveLinksAndNotify();
+                this.notify.schedule();
             }
         }));
 
@@ -166,7 +164,7 @@ export class TaskIndex {
                 this.store.removeTasksByFile(oldPath);
                 this.scanner.handleFileDeleted(oldPath);
                 this.validator.clearErrorsForFile(oldPath);
-                this.resolveLinksAndNotify();
+                this.notify.schedule();
                 return;
             }
 
@@ -194,32 +192,10 @@ export class TaskIndex {
         this.eventRefs.push({ emitter, ref });
     }
 
-    /**
-     * Re-point every wikilink at the store as it stands now.
-     *
-     * Every vault event ends here: a file that changed can have created or
-     * broken a link in a file that did not, so the resolution is whole-store
-     * rather than per-file.
-     */
-    private resolveLinks(): void {
-        WikiLinkResolver.resolve(this.store.getTasksMap(), this.store.getWikilinkRefsMap(), this.app);
-    }
-
-    /** The tail every vault handler shares: resolve links, then notify. */
-    private resolveLinksAndNotify(): void {
-        this.resolveLinks();
-        this.notify.schedule();
-    }
-
-    /**
-     * Read the file back into the store, then resolve and notify.
-     *
-     * The three steps are one unit: notifying before the links are resolved
-     * paints a frame whose parent/child arrows still point at the old store.
-     */
+    /** Read the file back into the store, then notify. */
     private async rescanAndNotify(file: TFile, isLocal?: boolean): Promise<void> {
         await this.scanner.queueScan(file, isLocal);
-        this.resolveLinksAndNotify();
+        this.notify.schedule();
     }
 
     // ===== 通知制御 =====
@@ -319,7 +295,7 @@ export class TaskIndex {
     getTaskLineNumbersForFile(filePath: string): Set<number> {
         const lines = new Set<number>();
         for (const task of this.getTasks()) {
-            if (task.file === filePath && hasBodyLine(task)) {
+            if (task.file === filePath) {
                 lines.add(task.line);
             }
         }
