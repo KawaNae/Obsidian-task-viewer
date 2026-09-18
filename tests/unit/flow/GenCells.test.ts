@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeAll, afterAll } from 'vitest';
 import { FlowExecutor } from '../../../src/services/flow/FlowExecutor';
 import { parseFlowSegments } from '../../../src/services/flow/FlowSegments';
 import { TaskParser } from '../../../src/services/parsing/TaskParser';
@@ -6,6 +6,18 @@ import type { GenBlock } from '../../../src/services/parsing/gen/GenBlockCollect
 import { TaskIndex } from '../../../src/services/core/TaskIndex';
 import { TaskRepository } from '../../../src/services/persistence/TaskRepository';
 import { DEFAULT_SETTINGS, type Task } from '../../../src/types';
+
+// `every` lands on the first grid point after the later of today and the
+// instance's own date, so the fixtures below (anchored on 2026-08-17) only
+// read as written while "today" is not past them. Only Date is faked: the
+// executor settles through a real setTimeout in flush().
+beforeAll(() => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date(2026, 7, 17, 12, 0, 0));
+});
+afterAll(() => {
+    vi.useRealTimers();
+});
 
 /**
  * The state a chain carries between its generations.
