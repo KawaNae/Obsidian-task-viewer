@@ -11,8 +11,8 @@ import { reservedPropertyKeys } from './utils/FrontmatterPolicy';
  *
  * Pure transformation: frontmatter object → ExtractedProperties.
  * Builtin keys (color/linestyle/mask) are normalized and validated; other
- * keys become custom properties. Used by both TVFileBuilder (for the
- * tv-file Task itself) and SectionPropertyResolver (as the cascade root).
+ * keys become custom properties. Used by SectionPropertyResolver as the
+ * cascade root: frontmatter makes no task, it only hands values down.
  *
  * Symmetry: this is the File layer in the File/Section/Task inheritance
  * pipeline (see DEVELOPER.md).

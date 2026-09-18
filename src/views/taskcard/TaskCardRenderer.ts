@@ -36,7 +36,7 @@ const RENDERER_OWNED_CHILD_CLASSES = [
 const SHAPE_CLASS = 'task-card__shape';
 import type { TaskReadService } from '../../services/data/TaskReadService';
 import type { TaskWriteService } from '../../services/data/TaskWriteService';
-import { getFileBaseName, hasTaskContent, isContentMatchingBaseName } from '../../services/parsing/utils/TaskContent';
+import { getFileBaseName, hasTaskContent } from '../../services/parsing/utils/TaskContent';
 import { ChildItemBuilder } from './ChildItemBuilder';
 import { ChildSectionRenderer, type ChildMenuCallback, type ChildLineEditCallback } from './ChildSectionRenderer';
 import { CheckboxWiring } from './CheckboxWiring';
@@ -431,9 +431,7 @@ export class TaskCardRenderer extends Component {
         const filePath = task.file.replace(/\.md$/, '');
         const fileBaseName = getFileBaseName(task.file) || filePath;
         const fileLink = `[[${filePath}|${fileBaseName}]]`;
-        const shouldShowContent = hasTaskContent(task) && !isContentMatchingBaseName(task);
-
-        if (shouldShowContent) {
+        if (hasTaskContent(task)) {
             return `- [${statusChar}] ${overdueIcon}${task.content} : ${fileLink}`;
         }
 

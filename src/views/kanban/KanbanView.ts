@@ -10,7 +10,7 @@ import { FilterMenuComponent } from '../customMenus/FilterMenuComponent';
 import { SortMenuComponent } from '../customMenus/SortMenuComponent';
 import { KanbanToolbar } from './KanbanToolbar';
 import { FilterSerializer } from '../../services/filter/FilterSerializer';
-import { combineFilterStates, createEmptyFilterState, hasConditions } from '../../services/filter/FilterTypes';
+import { combineFilterStates, createDefaultListFilterState, createEmptyFilterState, hasConditions } from '../../services/filter/FilterTypes';
 import type { FilterState } from '../../services/filter/FilterTypes';
 import { createEmptySortState } from '../../services/sort/SortTypes';
 import { TaskStyling } from '../sharedUI/TaskStyling';
@@ -529,7 +529,7 @@ export class KanbanView extends ItemView {
         return {
             id: this.generateId(),
             name: t('pinnedList.newList'),
-            filterState: createEmptyFilterState(),
+            filterState: createDefaultListFilterState(),
         };
     }
 

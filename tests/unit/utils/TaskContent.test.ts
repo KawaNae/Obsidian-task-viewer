@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { hasTaskContent, getFileBaseName, isContentMatchingBaseName, getTaskDisplayName } from '../../../src/services/parsing/utils/TaskContent';
+import { hasTaskContent, getFileBaseName, getTaskDisplayName } from '../../../src/services/parsing/utils/TaskContent';
 
 // ---------------------------------------------------------------------------
 // Tests
@@ -34,20 +34,6 @@ describe('getFileBaseName', () => {
 
     it('preserves name without .md', () => {
         expect(getFileBaseName('readme.txt')).toBe('readme.txt');
-    });
-});
-
-describe('isContentMatchingBaseName', () => {
-    it('returns true when content matches file basename', () => {
-        expect(isContentMatchingBaseName({ content: 'project', file: 'project.md' })).toBe(true);
-    });
-
-    it('returns false when content differs', () => {
-        expect(isContentMatchingBaseName({ content: 'other', file: 'project.md' })).toBe(false);
-    });
-
-    it('returns false for empty content', () => {
-        expect(isContentMatchingBaseName({ content: '', file: 'project.md' })).toBe(false);
     });
 });
 
