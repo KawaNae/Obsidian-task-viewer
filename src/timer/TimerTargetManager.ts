@@ -4,12 +4,12 @@
 
 import { TFile } from 'obsidian';
 import type { TimerInstance } from './TimerInstance';
-import { isDailyTimer } from './TimerInstance';
+import { describeTimerAnchor, isDailyTimer } from './TimerInstance';
 import type { TimerContext } from './TimerContext';
 import type { TimerStorageUtils } from './TimerStorageUtils';
 import { TimerTaskResolver } from './TimerTaskResolver';
 import { type Task, isTvFile, isTvInline } from '../types';
-import { logError } from '../log/log';
+import { logError, logWarn } from '../log/log';
 
 export class TimerTargetManager {
     private resolver: TimerTaskResolver;
@@ -49,7 +49,10 @@ export class TimerTargetManager {
     private async ensureInlineTimerTargetId(timer: TimerInstance): Promise<void> {
         const taskIndex = this.ctx.plugin.getTaskIndex();
         const currentTask = this.resolveInlineTaskForTimer(timer);
-        if (!currentTask) return;
+        if (!currentTask) {
+            logWarn(`[TimerTargetManager] inline target not resolved at start, timer runs without an anchor (${describeTimerAnchor(timer)})`);
+            return;
+        }
 
         if (currentTask.timerTargetId) {
             timer.taskId = currentTask.id;
@@ -95,7 +98,10 @@ export class TimerTargetManager {
     private async ensureFrontmatterTimerTargetId(timer: TimerInstance): Promise<void> {
         const taskIndex = this.ctx.plugin.getTaskIndex();
         const currentTask = this.resolveFrontmatterTaskForTimer(timer);
-        if (!currentTask) return;
+        if (!currentTask) {
+            logWarn(`[TimerTargetManager] frontmatter target not resolved at start, timer runs without an anchor (${describeTimerAnchor(timer)})`);
+            return;
+        }
 
         if (currentTask.timerTargetId) {
             timer.taskId = currentTask.id;
