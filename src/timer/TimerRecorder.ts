@@ -370,7 +370,10 @@ export class TimerRecorder {
      */
     private async updateChildAtEnd(timer: TimerInstance): Promise<void> {
         const taskIndex = this.plugin.getTaskIndex();
-        const child = taskIndex.getTask(timer.recordedChildTaskId!);
+        // id の直引きではなく尻尾アンカーで引く。task id はセッション限りなので、
+        // リロードを挟むと永続化された recordedChildTaskId は何も指さない。
+        const child = this.resolveRecordedSession(timer);
+        if (child) timer.recordedChildTaskId = child.id;
 
         if (!child) {
             // Fallback: child was deleted, create a new record
@@ -500,6 +503,18 @@ export class TimerRecorder {
      * 同じ深さ）にレコードを置いてしまう。
      */
     resolveTailRecord(timer: TimerInstance): Task | undefined {
+        return this.resolveRecordedSession(timer)
+            ?? (timer.recordMode === 'self' ? this.resolveAnchorTask(timer) : undefined);
+    }
+
+    /**
+     * 尻尾のうち、タイマーが自分で書いたレコード行だけを引く（対象アンカーへは
+     * 落ちない）。
+     *
+     * 停止時の書き込み先はこれで決める。self の 2 本目以降で対象アンカーに
+     * 落ちると、1 本目のレコードの終了時刻を上書きしてしまう。
+     */
+    private resolveRecordedSession(timer: TimerInstance): Task | undefined {
         const taskIndex = this.plugin.getTaskIndex();
 
         if (timer.tailRecordBlockId) {
@@ -515,7 +530,7 @@ export class TimerRecorder {
             if (byId) return byId;
         }
 
-        return timer.recordMode === 'self' ? this.resolveAnchorTask(timer) : undefined;
+        return undefined;
     }
 
     /**

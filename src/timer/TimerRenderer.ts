@@ -36,10 +36,13 @@ import { canTriggerFlow } from '../services/flow/FlowTrigger';
 import { NextTaskSuggester, suggestionKey } from './NextTaskSuggester';
 import type { TimerContentBinding } from './TimerContentBinding';
 import { autoGrowTextarea } from '../utils/TextareaAutoGrow';
+import { TimerTaskResolver } from './TimerTaskResolver';
+import { refreshTimerTask } from './TimerTaskSync';
 
 export class TimerRenderer {
     private closeConfirmTimers = new Map<string, number>();
     private suggester: NextTaskSuggester;
+    private resolver: TimerTaskResolver;
     /** {@link growTitleInputs} の次フレーム再適用ぶんの未発火 rAF。destroy で取り消す。 */
     private titleGrowFrame: { win: Window; id: number } | null = null;
 
@@ -50,6 +53,7 @@ export class TimerRenderer {
         private contentBinding: TimerContentBinding,
     ) {
         this.suggester = new NextTaskSuggester(ctx.plugin);
+        this.resolver = new TimerTaskResolver(ctx.plugin);
     }
 
     // ─── Render ──────────────────────────────────────────────
@@ -362,7 +366,10 @@ export class TimerRenderer {
         // デイリーノート起点は対象タスクを持たない（id は `daily-<date>`）。
         if (isDailyTimer(timer)) return;
 
-        const task = this.ctx.plugin.getTaskIndex().getTask(timer.taskId);
+        // 復元直後の taskId は前セッションの runtime ID で何も指さない。
+        // resolver で引けたら書き戻し、名前と色の追随を再開する。
+        const { task, rewritten } = refreshTimerTask(timer, this.ctx.plugin.getTaskIndex(), this.resolver);
+        if (rewritten) this.ctx.persistTimersToStorage();
         if (!task) return;
 
         const newName = getTaskDisplayName(task);

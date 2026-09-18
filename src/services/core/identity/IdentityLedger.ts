@@ -33,7 +33,15 @@ export interface LedgerEntry {
 export class IdentityLedger {
     private readonly entries = new Map<string, LedgerEntry>();
     private readonly files = new Map<string, string[]>();
-    private counter = 0;
+    private counter: number;
+
+    /**
+     * @param seed Numbers are handed out from `seed + 1`. The scanner seeds from
+     *   the clock so that a number never repeats across sessions (see TaskScanner).
+     */
+    constructor(seed = 0) {
+        this.counter = seed;
+    }
 
     /** Previous rows of a file, in the order they were stored (file order). */
     snapshotFor(file: string): LedgerEntry[] {
@@ -102,7 +110,7 @@ export class IdentityLedger {
         return this.entries.get(runtimeId);
     }
 
-    /** Next sequence number. Session-global and monotonic, starting at 1. */
+    /** Next sequence number. Monotonic, starting at `seed + 1`. */
     mint(): number {
         return ++this.counter;
     }
