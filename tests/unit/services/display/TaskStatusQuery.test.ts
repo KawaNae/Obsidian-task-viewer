@@ -67,33 +67,13 @@ describe('isTaskCompleted', () => {
         expect(isTaskCompleted(dt, defs, mockReadService)).toBe(false);
     });
 
-    it('parent complete + all child lines complete → true', () => {
-        const dt = makeDisplayTask({
-            statusChar: 'x',
-            childEntries: [
-                { kind: 'line', line: { checkboxChar: 'x', bodyLine: 'child1', indent: 0 } },
-                { kind: 'line', line: { checkboxChar: 'x', bodyLine: 'child2', indent: 0 } },
-            ],
-        });
-        expect(isTaskCompleted(dt, defs, mockReadService)).toBe(true);
-    });
-
-    it('parent complete + one child line incomplete → false', () => {
-        const dt = makeDisplayTask({
-            statusChar: 'x',
-            childEntries: [
-                { kind: 'line', line: { checkboxChar: 'x', bodyLine: 'child1', indent: 0 } },
-                { kind: 'line', line: { checkboxChar: ' ', bodyLine: 'child2', indent: 0 } },
-            ],
-        });
-        expect(isTaskCompleted(dt, defs, mockReadService)).toBe(false);
-    });
-
     it('parent incomplete → false regardless of children', () => {
+        const childTask = makeTask({ id: 'child-1', statusChar: 'x' });
+        vi.mocked(mockReadService.getTask).mockReturnValue(childTask);
         const dt = makeDisplayTask({
             statusChar: ' ',
             childEntries: [
-                { kind: 'line', line: { checkboxChar: 'x', bodyLine: 'child1', indent: 0 } },
+                { kind: 'task', taskId: 'child-1' },
             ],
         });
         expect(isTaskCompleted(dt, defs, mockReadService)).toBe(false);
@@ -123,11 +103,13 @@ describe('isTaskCompleted', () => {
         expect(isTaskCompleted(dt, defs, mockReadService)).toBe(false);
     });
 
-    it('non-checkbox child lines are ignored', () => {
+    // A child line is never a checkbox; even a `- [ ]` inside a code fence is
+    // an example, not an unfinished step.
+    it('child lines never count, even one that looks like a checkbox', () => {
         const dt = makeDisplayTask({
             statusChar: 'x',
             childEntries: [
-                { kind: 'line', line: { checkboxChar: null, bodyLine: 'plain text', indent: 0 } },
+                { kind: 'line', bodyLine: 1, line: { text: '- [ ] fenced example', bodyLine: 1, indent: '', wikilinkTarget: null, propertyKey: null, propertyValue: null } },
             ],
         });
         expect(isTaskCompleted(dt, defs, mockReadService)).toBe(true);

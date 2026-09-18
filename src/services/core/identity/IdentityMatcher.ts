@@ -95,9 +95,6 @@ export function matchFile(
 
     const mapping = new Map<string, string>();
     for (const task of ordered) {
-        // A task whose provisional ID is already runtime-shaped (tv-file's
-        // `fm-root`) is no special case — it maps to itself and stays in the map,
-        // so the applier has one rule and not two.
         mapping.set(task.id, runtimeIdOf.get(task)!);
     }
 

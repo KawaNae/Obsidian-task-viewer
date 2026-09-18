@@ -1,5 +1,5 @@
 import { type App, MarkdownView } from 'obsidian';
-import { type Task, hasBodyLine } from '../types';
+import type { Task } from '../types';
 
 /**
  * 既に開いているタブを検索し、あればフォーカスを移動する。
@@ -70,7 +70,7 @@ export function openTaskInEditor(app: App, task: Task, reuseTab: boolean): void 
     } else {
         void app.workspace.openLinkText(task.file, '', true);
     }
-    if (hasBodyLine(task)) {
+    {
         setTimeout(() => {
             const view = app.workspace.getActiveViewOfType(MarkdownView);
             if (view) {

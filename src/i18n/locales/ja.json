@@ -249,7 +249,6 @@
   },
   "aria": {
     "taskMenu": "タスクメニュー",
-    "childLineMenu": "子行メニュー",
     "toggleSection": "{{title}} セクションを切り替え",
     "openDailyNote": "デイリーノートを開く: {{label}}",
     "openWeeklyNote": "週次ノートを開く: {{label}}",

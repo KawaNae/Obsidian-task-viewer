@@ -134,11 +134,11 @@ describe('computeContentSignature', () => {
     it('line entry のテキスト変更で sig が変わる', () => {
         const entry1: ChildEntry = {
             kind: 'line', bodyLine: 1,
-            line: { text: 'line text', bodyLine: 1, indent: '', checkboxChar: null, wikilinkTarget: null, propertyKey: null },
+            line: { text: 'line text', bodyLine: 1, indent: '', wikilinkTarget: null, propertyKey: null },
         };
         const entry2: ChildEntry = {
             kind: 'line', bodyLine: 1,
-            line: { text: 'changed text', bodyLine: 1, indent: '', checkboxChar: null, wikilinkTarget: null, propertyKey: null },
+            line: { text: 'changed text', bodyLine: 1, indent: '', wikilinkTarget: null, propertyKey: null },
         };
         const settings = makeSettings();
         const options = makeOptions();
@@ -181,21 +181,21 @@ describe('computeContentSignature', () => {
 
         const entry1: ChildEntry = {
             kind: 'line', bodyLine: 1,
-            line: { text: 'a|b', bodyLine: 1, indent: '', checkboxChar: null, wikilinkTarget: null, propertyKey: null },
+            line: { text: 'a|b', bodyLine: 1, indent: '', wikilinkTarget: null, propertyKey: null },
         };
         const entry2: ChildEntry = {
             kind: 'line', bodyLine: 2,
-            line: { text: 'c', bodyLine: 2, indent: '', checkboxChar: null, wikilinkTarget: null, propertyKey: null },
+            line: { text: 'c', bodyLine: 2, indent: '', wikilinkTarget: null, propertyKey: null },
         };
         const taskA = makeDisplayTask({ childEntries: [entry1] });
 
         const entryX: ChildEntry = {
             kind: 'line', bodyLine: 1,
-            line: { text: 'a', bodyLine: 1, indent: '', checkboxChar: null, wikilinkTarget: null, propertyKey: null },
+            line: { text: 'a', bodyLine: 1, indent: '', wikilinkTarget: null, propertyKey: null },
         };
         const entryY: ChildEntry = {
             kind: 'line', bodyLine: 2,
-            line: { text: 'b', bodyLine: 2, indent: '', checkboxChar: null, wikilinkTarget: null, propertyKey: null },
+            line: { text: 'b', bodyLine: 2, indent: '', wikilinkTarget: null, propertyKey: null },
         };
         const taskB = makeDisplayTask({ childEntries: [entryX, entryY] });
 

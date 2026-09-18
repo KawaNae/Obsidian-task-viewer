@@ -10,7 +10,6 @@ import { DateUtils } from '../../utils/DateUtils';
 import { withWeekStartDay } from '../../utils/momentWeekLocale';
 import type { TaskReadService } from '../../services/data/TaskReadService';
 import type { TaskWriteService } from '../../services/data/TaskWriteService';
-import { ChildLineMenuBuilder } from '../../interaction/menu/builders/ChildLineMenuBuilder';
 import { DailyNoteUtils } from '../../utils/DailyNoteUtils';
 import { MOBILE_BREAKPOINT_PX } from '../../constants/layout';
 import {
@@ -328,10 +327,6 @@ export class CalendarView extends ItemView {
 
         this.menuHandler = new MenuHandler(this.app, this.readService, this.writeService, this.plugin);
         this.taskRenderer.setChildMenuCallback((taskId, x, y) => this.menuHandler.showMenuForTask(taskId, x, y));
-        const childLineMenuBuilder = new ChildLineMenuBuilder(this.app, this.writeService, this.plugin);
-        this.taskRenderer.setChildLineEditCallback((parentTask, line, bodyLine, x, y) => {
-            childLineMenuBuilder.showMenu(parentTask, line, bodyLine, x, y);
-        });
         this.taskRenderer.setContextMenuCallback((task, x, y) => this.menuHandler.showTaskContextMenu(task, x, y));
         this.taskRenderer.setOpenInEditorCallback((task) => openTaskInEditor(this.app, task, this.plugin.settings.reuseExistingTab));
         this.taskRenderer.setDoubleTapActionGetter(() => this.plugin.settings.doubleTapAction);

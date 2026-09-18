@@ -316,7 +316,6 @@ describe('TreeTaskExtractor', () => {
             expect(done.parentId).toBe(parent.id);
             // childLines はチェックボックスでない行だけ（順序は保持）
             expect(parent.childLines).toHaveLength(2);
-            expect(parent.childLines[0].checkboxChar).toBeNull();
             expect(parent.childLines[0].text).toContain('説明テキスト');
             expect(parent.childLines[1].propertyKey).toBe('priority');
         });
@@ -466,9 +465,7 @@ describe('TreeTaskExtractor', () => {
             ]);
             const cl = tasks[0].childLines;
             expect(cl).toHaveLength(2);
-            expect(cl[0].checkboxChar).toBeNull();
             expect(cl[0].text).toContain('plain text');
-            expect(cl[1].checkboxChar).toBeNull();
             expect(cl[1].text).toContain('plain bullet');
         });
     });

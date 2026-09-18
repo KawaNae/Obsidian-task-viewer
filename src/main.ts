@@ -662,15 +662,9 @@ export default class TaskViewerPlugin extends Plugin {
         return count;
     }
 
-    /**
-     * The task sources currently active, for the diagnostics report.
-     *
-     * `tv-file` is unconditional and is not a line parser — a tv-file task is
-     * a note's frontmatter, so it never reaches the chain. Everything else is
-     * whatever the chain was built from.
-     */
+    /** The task sources currently active, for the diagnostics report. */
     private getEnabledParsers(): string[] {
-        return ['tv-file', ...enabledLineParserIds(this.settings)];
+        return [...enabledLineParserIds(this.settings)];
     }
 
 }

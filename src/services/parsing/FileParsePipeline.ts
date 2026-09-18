@@ -1,5 +1,5 @@
 import { parseYaml } from 'obsidian';
-import type { Task, TaskViewerSettings, WikilinkRef } from '../../types';
+import type { Task, TaskViewerSettings } from '../../types';
 import { collectGenBlocks, type GenBlock } from './gen/GenBlockCollector';
 import { DocumentTreeBuilder } from './tree/DocumentTreeBuilder';
 import { SectionPropertyResolver } from './tree/SectionPropertyResolver';
@@ -10,10 +10,6 @@ export interface FileParseResult {
     ignored: boolean;
     /** All tasks of the file, fully resolved. */
     tasks: Task[];
-    /** Always null: frontmatter no longer makes a task. Removed with the type in stage 2 PR2. */
-    fmTask: Task | null;
-    /** Always empty, for the same reason as `fmTask`. */
-    wikilinkRefs: WikilinkRef[];
     /** `tv-gen` blocks of the file, by name. Referenced by `use("name")`. */
     genBlocks: Map<string, GenBlock>;
 }
@@ -63,7 +59,7 @@ export class FileParsePipeline {
         }
 
         if (this.isIgnoredByFrontmatter(frontmatterObj, lines, bodyStartIndex, settings)) {
-            return { ignored: true, tasks: [], fmTask: null, wikilinkRefs: [], genBlocks: new Map() };
+            return { ignored: true, tasks: [], genBlocks: new Map() };
         }
 
         // --- ツリーパイプライン（順序契約: build → resolve → extract）---
@@ -78,7 +74,7 @@ export class FileParsePipeline {
         // fence, and a block is not a task, so the body offset is irrelevant).
         const { blocks: genBlocks } = collectGenBlocks(lines);
 
-        return { ignored: false, tasks, fmTask: null, wikilinkRefs: [], genBlocks };
+        return { ignored: false, tasks, genBlocks };
     }
 
     private static isIgnoredByFrontmatter(

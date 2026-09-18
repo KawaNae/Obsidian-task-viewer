@@ -1,8 +1,7 @@
-import { type Task, type ChildEntry, isTvFile } from '../../types';
+import type { Task, ChildEntry } from '../../types';
 import type { TaskReadService } from '../../services/data/TaskReadService';
 import type { ChildRenderItem } from './types';
 import { ChildRenderItemMapper } from './ChildRenderItemMapper';
-import { extractWikilinkTarget } from '../../utils/WikilinkUtils';
 import { getOriginalTaskId } from '../../services/display/DisplayTaskConverter';
 
 /**
@@ -11,7 +10,7 @@ import { getOriginalTaskId } from '../../services/display/DisplayTaskConverter';
  * The data layer (`buildChildEntries`) produces an ordered, partitioned
  * `ChildEntry[]` where each absolute body line is owned by exactly one entry
  * across siblings. This walker simply translates each entry into render items
- * and recurses into 'task' / resolved 'wikilink' children — no re-classification,
+ * and recurses into 'task' children — no re-classification,
  * no consumed-line tracking, no orphan recovery.
  */
 export class ChildItemBuilder {
@@ -60,47 +59,12 @@ export class ChildItemBuilder {
         if (entry.kind === 'task') {
             const child = this.readService.getTask(entry.taskId);
             if (!child || visited.has(child.id)) return;
-            out.push(this.mapper.createTaskItem(child, indent, parent.file));
+            out.push(this.mapper.createTaskItem(child, indent));
             out.push(...this.walk(child, indent + '    ', visited, depth + 1));
             return;
         }
 
-        if (entry.kind === 'wikilink') {
-            const resolved = this.resolveWikilink(parent, entry.target);
-            if (resolved && !visited.has(resolved.id)) {
-                out.push(this.mapper.createWikiLinkItem(resolved, indent));
-                out.push(...this.walk(resolved, indent + '    ', visited, depth + 1));
-                return;
-            }
-            // Unresolved wikilink → fall through to raw render
-            out.push(this.mapper.createPlainItem(entry.line, entry.bodyLine, parent, indent));
-            return;
-        }
-
         // 'line'
-        out.push(this.mapper.createPlainItem(entry.line, entry.bodyLine, parent, indent));
-    }
-
-    /**
-     * Wikilink → child Task resolution.
-     *
-     * tv-file children carry `line === -1` (no body line) by design and are
-     * therefore intentionally absent from the parent's body-line-bearing
-     * 'task' ChildEntries. Resolve the wikilink against the parent's wired
-     * `childIds` directly — WikiLinkResolver populates these at parse time —
-     * matching by file path.
-     */
-    private resolveWikilink(parent: Task, linkName: string): Task | undefined {
-        const target = extractWikilinkTarget(linkName);
-        for (const cid of parent.childIds) {
-            const c = this.readService.getTask(cid);
-            if (!c || !isTvFile(c)) continue;
-            const baseName = c.file.replace(/\.md$/, '').split('/').pop() || '';
-            const fullPath = c.file.replace(/\.md$/, '');
-            if (target === baseName || target === fullPath || target === c.file) {
-                return c;
-            }
-        }
-        return undefined;
+        out.push(this.mapper.createPlainItem(entry.line, indent));
     }
 }

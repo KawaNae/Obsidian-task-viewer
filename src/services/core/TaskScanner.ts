@@ -1,7 +1,6 @@
 import type { App, TFile } from 'obsidian';
 import type { TaskViewerSettings } from '../../types';
 import { FileParsePipeline } from '../parsing/FileParsePipeline';
-import { WikiLinkResolver } from './WikiLinkResolver';
 import type { TaskStore } from './TaskStore';
 import type { TaskValidator } from './TaskValidator';
 import type { SyncDetector } from './SyncDetector';
@@ -20,7 +19,7 @@ import { logDebug, logError, logInfo } from '../../log/log';
  *   identity — IdentityLedger との突き合わせで仮 ID を runtime ID に置き換える
  *   validate — バリデーション警告の収集（以降は runtime ID しか見ない）
  *   detect   — CompletionDetector（完了イベントの差分検出、署名メモリの所有者）
- *   commit   — store 更新 + ledger 置換 + wikilinkRefs 登録 + フロー発火
+ *   commit   — store 更新 + ledger 置換 + フロー発火
  */
 export class TaskScanner {
     private scanQueue: Map<string, Promise<void>> = new Map();
@@ -60,7 +59,6 @@ export class TaskScanner {
             await this.queueScan(file);
         }
 
-        WikiLinkResolver.resolve(this.store.getTasksMap(), this.store.getWikilinkRefsMap(), this.app);
         this.store.notifyListenersStaggered();
         logInfo(`[scanVault:done] tasks=${this.store.getTasks().length}`);
         this.isInitializing = false;
@@ -213,10 +211,6 @@ export class TaskScanner {
 
             for (const task of parsed.tasks) {
                 this.store.setTask(task.id, task);
-            }
-
-            if (parsed.fmTask) {
-                this.store.setWikilinkRefs(parsed.fmTask.id, parsed.wikilinkRefs);
             }
 
             // removeTasksByFile above dropped the previous ones, so this is a
