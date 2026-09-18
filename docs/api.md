@@ -28,11 +28,9 @@ const api = app.plugins.plugins['obsidian-task-viewer'].api;
 | `api.update({ id, ... })` | タスク更新 | async |
 | `api.delete({ id })` | タスク削除 | async |
 | `api.duplicate({ id, ... })` | タスク複製 | async |
-| `api.convertToTvFile({ id })` | tv-inline → tv-file 変換 | async |
 | `api.tasksForDateRange({ from, to, ... })` | 日付範囲のタスク取得 | async |
 | `api.categorizedTasksForDateRange({ from, to, ... })` | 日付範囲のタスク（分類済み） | sync |
 | `api.insertChildTask({ parentId, content })` | 子タスク挿入 | async |
-| `api.createTvFile({ content, ... })` | tv-file タスク作成 | async |
 | `api.getStartHour()` | startHour設定値取得 | sync |
 | `api.onChange(callback)` | タスク変更の購読 | sync |
 | `api.help()` | API リファレンス表示 | sync |
@@ -176,15 +174,6 @@ const result = await api.duplicate({ id: 'abc123', dayOffset: 1, count: 3 });
 | `dayOffset` | | `number` | 日付シフト日数（デフォルト: 0） |
 | `count` | | `number` | コピー数（デフォルト: 1） |
 
-## convertToTvFile
-
-```javascript
-const result = await api.convertToTvFile({ id: 'abc123' });
-// => { convertedFrom: 'abc123', newFile: 'path/to/new-file.md' }
-```
-
-tv-inline タスクを tv-file（frontmatter ベース）タスクに変換します。
-
 ## tasksForDateRange
 
 ```javascript
@@ -237,27 +226,6 @@ const result = await api.insertChildTask({
 });
 // => { parentId: 'abc123' }
 ```
-
-## createTvFile
-
-```javascript
-const result = await api.createTvFile({
-  content: 'プロジェクト名',
-  start: '2026-03-15',
-  due: '2026-03-31',
-});
-// => { newFile: 'path/to/new-file.md' }
-```
-
-**CreateTvFileParams:**
-
-| パラメータ | 必須 | 型 | 説明 |
-|-----------|------|-----|------|
-| `content` | ○ | `string` | タスクの内容 |
-| `start` | | `string` | 開始日時 |
-| `end` | | `string` | 終了日時 |
-| `due` | | `string` | 締切日 |
-| `status` | | `string` | ステータス文字（デフォルト: ` `） |
 
 ## getStartHour
 
@@ -312,7 +280,7 @@ API が返すタスクオブジェクトのフィールド一覧です。CLI の
 | `endTime` | `string \| null` | 生の終了時刻 |
 | `due` | `string \| null` | 生の締切日 |
 | `tags` | `string[]` | タグ一覧（`#` なし） |
-| `parserId` | `string` | パーサー種別 |
+| `parserId` | `string` | パーサー種別（`tv-inline`、`tasks-plugin`、`day-planner` のいずれか） |
 | `parentId` | `string \| null` | 親タスクID |
 | `childIds` | `string[]` | 子タスクID一覧 |
 | `color` | `string \| null` | カードの色 |
