@@ -237,19 +237,20 @@ describe('scan identity — trees', () => {
         expectConsistentTree(h.store);
     });
 
-    it('keeps fm-root for the tv-file task and hangs orphans on it', async () => {
+    // Frontmatter makes no task: its dates are inherited by the checkboxes
+    // below, which are ordinary top-level tasks with their own runtime IDs.
+    it('a note with frontmatter dates yields only its checkboxes, and they keep their IDs', async () => {
         const frontmatter = { 'tv-start': '2026-09-21' };
-        await h.write('f.md', ['---', 'tv-start: 2026-09-21', '---', '- [ ] a @2026-09-21'], frontmatter);
-        const fmId = 'tv-file:f.md:fm-root';
-        const a = h.one('a', 'f.md').id;
-        expect(h.store.getTask(fmId)).toBeDefined();
-        expect(h.one('a', 'f.md').parentId).toBe(fmId);
+        await h.write('f.md', ['---', 'tv-start: 2026-09-21', '---', '- [ ] a', '- [ ] b'], frontmatter);
+        const before = h.ids('f.md');
+        expect(h.tasks('f.md').map(task => task.content)).toEqual(['a', 'b']);
+        expect(h.tasks('f.md').every(task => task.parentId === undefined)).toBe(true);
+        expect(h.tasks('f.md').every(task => task.cascadeContext?.startDate === '2026-09-21')).toBe(true);
+        expect(h.store.getTask('tv-file:f.md:fm-root')).toBeUndefined();
 
-        await h.write('f.md', ['---', 'tv-start: 2026-09-21', '---', '- [ ] b @2026-09-22', '- [ ] a @2026-09-21'], frontmatter);
+        await h.write('f.md', ['---', 'tv-start: 2026-09-21', '---', '- [ ] c', '- [ ] a', '- [ ] b'], frontmatter);
 
-        expect(h.one('a', 'f.md').id).toBe(a);
-        expect(h.one('a', 'f.md').parentId).toBe(fmId);
-        expect(h.store.getTask(fmId)!.childIds).toContain(a);
+        expect([h.one('a', 'f.md').id, h.one('b', 'f.md').id]).toEqual(before);
         expectConsistentTree(h.store);
     });
 });

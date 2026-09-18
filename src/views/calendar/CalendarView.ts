@@ -31,7 +31,7 @@ import { TaskStyling } from '../sharedUI/TaskStyling';
 import { getEffectiveColor, getEffectiveLinestyle } from '../../services/data/EffectiveProperties';
 import { FilterMenuComponent } from '../customMenus/FilterMenuComponent';
 import { SortMenuComponent } from '../customMenus/SortMenuComponent';
-import { createEmptyFilterState, hasConditions, type FilterState } from '../../services/filter/FilterTypes';
+import { createDefaultListFilterState, createEmptyFilterState, hasConditions, type FilterState } from '../../services/filter/FilterTypes';
 import { CalendarToolbar } from './CalendarToolbar';
 import { createEmptySortState } from '../../services/sort/SortTypes';
 import { TASK_VIEWER_HOVER_SOURCE_ID } from '../../constants/hover';
@@ -579,7 +579,7 @@ export class CalendarView extends ItemView {
             this.pinnedLists.push({
                 id: newId,
                 name: t('pinnedList.newList'),
-                filterState: createEmptyFilterState(),
+                filterState: createDefaultListFilterState(),
             });
             this.app.workspace.requestSaveLayout();
             this.pinnedListRenderer.scheduleRename(newId);

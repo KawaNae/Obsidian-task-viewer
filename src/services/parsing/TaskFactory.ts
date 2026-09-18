@@ -22,7 +22,7 @@ export interface BaseTaskCore {
  * The single source of Task substrate defaults.
  *
  * Every Task in the system is born here — parser outputs (TVInlineParser,
- * ReadOnlyParserBase, TVFileBuilder) and synthetic tasks (createTempTask)
+ * ReadOnlyParserBase) and synthetic tasks (createTempTask)
  * alike. Adding a field to Task means adding its default in exactly one
  * place; producer-specific fields (flow, validation, color, isReadOnly, …)
  * are supplied via `overrides` and have no factory default on purpose.

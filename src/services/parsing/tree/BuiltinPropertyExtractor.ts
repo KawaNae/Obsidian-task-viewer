@@ -23,8 +23,7 @@ export interface ExtractedProperties {
  * 専用フィールドに分離し、残りをカスタムプロパティとして返す。
  *
  * SectionPropertyResolver / TreeTaskExtractor で共通使用（section-scope と
- * task-scope のビルトインキー抽出）。TVFileBuilder はFM層専用の
- * FilePropertyResolver を別途使用する。
+ * task-scope のビルトインキー抽出）。FM層は FilePropertyResolver が担う。
  */
 export class BuiltinPropertyExtractor {
     static extract(

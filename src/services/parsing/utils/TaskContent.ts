@@ -16,18 +16,6 @@ export function getFileBaseName(filePath: string): string {
 }
 
 /**
- * Returns true when task content matches file basename.
- * Used to avoid redundant display like "project : [[project|project]]".
- */
-export function isContentMatchingBaseName(task: Pick<Task, 'content' | 'file'>): boolean {
-    if (!hasTaskContent(task)) {
-        return false;
-    }
-
-    return task.content.trim() === getFileBaseName(task.file);
-}
-
-/**
  * Returns file basename for display alongside a task name, or null if redundant.
  * Hides the file name when it matches the task name or is empty.
  */
