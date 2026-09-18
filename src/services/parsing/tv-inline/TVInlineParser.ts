@@ -107,16 +107,7 @@ export class TVInlineParser implements LeafParserStrategy {
         }
 
         return createBaseTask({
-            id: TaskIdGenerator.generate(
-                this.id,
-                filePath,
-                TaskIdGenerator.resolveAnchor({
-                    parserId: this.id,
-                    line: lineNumber,
-                    blockId,
-                    timerTargetId,
-                })
-            ),
+            id: TaskIdGenerator.provisionalId(this.id, filePath, lineNumber),
             file: filePath,
             line: lineNumber,
             content: content.trim(),

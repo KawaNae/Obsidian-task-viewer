@@ -8,25 +8,23 @@ describe('TaskIdGenerator', () => {
         });
     });
 
-    describe('resolveAnchor', () => {
-        it('prioritizes blockId', () => {
-            expect(TaskIdGenerator.resolveAnchor({ blockId: 'abc', timerTargetId: 'tid1', line: 5, parserId: 'tv-inline' })).toBe('blk:abc');
+    describe('provisionalId', () => {
+        it('is line-based, whatever block ID the line carries', () => {
+            expect(TaskIdGenerator.provisionalId('tv-inline', 'a.md', 5)).toBe('tv-inline:a.md:prov:5');
         });
 
-        it('uses timerTargetId when no blockId', () => {
-            expect(TaskIdGenerator.resolveAnchor({ timerTargetId: 'tid1', line: 5, parserId: 'tv-inline' })).toBe('tid:tid1');
+        it('is never runtime-shaped and never parses', () => {
+            const id = TaskIdGenerator.provisionalId('tasks-plugin', 'a.md', 0);
+            expect(TaskIdGenerator.isRuntimeId(id)).toBe(false);
+            expect(TaskIdGenerator.parse(id)).toBeNull();
         });
+    });
 
-        it('uses fm-root for the tv-file parser', () => {
-            expect(TaskIdGenerator.resolveAnchor({ parserId: 'tv-file' })).toBe('fm-root');
-        });
-
-        it('uses line number (1-based) when no other anchor', () => {
-            expect(TaskIdGenerator.resolveAnchor({ line: 5, parserId: 'tv-inline' })).toBe('ln:6');
-        });
-
-        it('falls back to ln:0', () => {
-            expect(TaskIdGenerator.resolveAnchor({ parserId: 'tv-inline' })).toBe('ln:0');
+    describe('legacy anchors', () => {
+        // Timers persisted before the ledger carry these; the restore guard
+        // drops any task ID parse rejects.
+        it.each(['ln:3', 'blk:abc', 'tid:tv-t-1'])('still parses %s', anchor => {
+            expect(TaskIdGenerator.parse(`tv-inline:a.md:${anchor}`)?.anchor).toBe(anchor);
         });
     });
 

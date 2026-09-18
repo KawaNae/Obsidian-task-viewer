@@ -10,7 +10,7 @@ import type { FlowExecutor } from '../flow/FlowExecutor';
 import { TaskIdGenerator } from '../display/TaskIdGenerator';
 import { IdentityLedger } from './identity/IdentityLedger';
 import { matchFile } from './identity/IdentityMatcher';
-import { applyIdentity, assertNoProvisionalIds } from './identity/IdentityApplier';
+import { applyIdentity, assertNoProvisionalIds, assertUniqueProvisionalIds } from './identity/IdentityApplier';
 import { logDebug, logError, logInfo } from '../../log/log';
 
 /**
@@ -148,6 +148,9 @@ export class TaskScanner {
         // --- identity ---
         // Right after parse, so nothing downstream — validator included — ever
         // sees a provisional ID.
+        if (__DEV__) {
+            assertUniqueProvisionalIds(parsed.tasks);
+        }
         const identity = matchFile(
             this.ledger.snapshotFor(file.path),
             parsed.tasks,

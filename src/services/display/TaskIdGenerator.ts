@@ -12,18 +12,15 @@ export interface ParsedTaskId {
     anchor: string;
 }
 
-export interface AnchorResolutionInput {
-    blockId?: string;
-    timerTargetId?: string;
-    line?: number;
-    parserId: ParserId;
-}
-
 export interface ParsedSegmentId {
     baseId: string;
     segmentDate: string;
 }
 
+// `blk:`, `tid:` and `ln:` are no longer minted. They stay readable because
+// timers persisted before the ledger still carry them, and the restore guard
+// (TimerPersistence.fromPersistedTimer) drops any ID `parse` rejects. `prov:` is
+// left out on purpose: a provisional ID that leaked should fail to parse.
 const TASK_ID_REGEX = /^([^:]+):(.+):(blk:[^:]+|tid:[^:]+|seq:\d+|ln:\d+|fm-root)$/;
 const RUNTIME_ANCHOR_REGEX = /^(seq:\d+|fm-root)$/;
 const SEGMENT_ID_REGEX = /^(.*)##seg:(\d{4}-\d{2}-\d{2})$/;
@@ -33,27 +30,16 @@ export class TaskIdGenerator {
         return `${parserId}:${filePath}:${anchor}`;
     }
 
-    static resolveAnchor(input: AnchorResolutionInput): string {
-        const blockId = input.blockId?.trim();
-        if (blockId) {
-            return `blk:${blockId}`;
-        }
-
-        const timerTargetId = input.timerTargetId?.trim();
-        if (timerTargetId) {
-            return `tid:${timerTargetId}`;
-        }
-
-        if (isTvFile(input)) {
-            return 'fm-root';
-        }
-
-        // Has explicit body line — use it as anchor. Otherwise fall through to ln:0.
-        if (typeof input.line === 'number' && input.line >= 0) {
-            return `ln:${input.line + 1}`;
-        }
-
-        return 'ln:0';
+    /**
+     * The ID a parser gives a task before the scan has matched it.
+     *
+     * Line-based on purpose: one line yields at most one task, so this is unique
+     * within a file even when two lines share a `^blockId`. It never outlives the
+     * scan — `applyIdentity` swaps it for a runtime ID before anything else reads
+     * it — so the line number cannot leak into what consumers hold.
+     */
+    static provisionalId(parserId: ParserId, filePath: string, line: number): string {
+        return this.generate(parserId, filePath, `prov:${line}`);
     }
 
     /**
@@ -73,8 +59,9 @@ export class TaskIdGenerator {
     /**
      * Whether `id` is shaped like an ID a scan commits to the store.
      *
-     * A positive test on purpose: provisional IDs come in several shapes
-     * (`ln:`, `blk:`, `tid:`), and listing them would let a new one slip past.
+     * A positive test on purpose: `prov:` is not the only shape that must stay
+     * out of the store — the legacy `ln:`, `blk:` and `tid:` still parse — and
+     * listing the bad shapes would let a new one slip past.
      */
     static isRuntimeId(id: string): boolean {
         const parsed = this.parse(id);

@@ -45,6 +45,26 @@ function rewriteTask(task: Task, mapping: Map<string, string>): void {
 }
 
 /**
+ * Throw if two tasks of one parse share a provisional ID.
+ *
+ * The mapping is keyed by that ID, so a shared one would quietly fold two tasks
+ * onto one runtime ID. Provisional IDs are line-based and one line yields one
+ * task, so this only fires if a parser starts emitting two tasks per line.
+ */
+export function assertUniqueProvisionalIds(tasks: Task[]): void {
+    const seen = new Set<string>();
+    const shared = new Set<string>();
+    for (const task of tasks) {
+        if (seen.has(task.id)) shared.add(task.id);
+        seen.add(task.id);
+    }
+
+    if (shared.size > 0) {
+        throw new Error(`Provisional task IDs shared within one parse: ${[...shared].join(', ')}`);
+    }
+}
+
+/**
  * Throw if any provisional ID survived the rewrite.
  *
  * A missed mapping breaks things quietly and far from its cause, so the scanner
