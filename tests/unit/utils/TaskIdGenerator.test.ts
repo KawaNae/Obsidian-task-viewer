@@ -99,5 +99,42 @@ describe('TaskIdGenerator', () => {
             const result = TaskIdGenerator.renameFile(id, 'old.md', 'new.md');
             expect(result).toBe('tv-inline:new.md:blk:abc##seg:2026-03-11');
         });
+
+        it('renames a runtime seq ID, keeping its number', () => {
+            const result = TaskIdGenerator.renameFile('tv-inline:old.md:seq:12', 'old.md', 'new.md');
+            expect(result).toBe('tv-inline:new.md:seq:12');
+        });
+    });
+
+    describe('runtime IDs (seq:)', () => {
+        it('parses a seq anchor', () => {
+            expect(TaskIdGenerator.parse('tv-inline:a/b.md:seq:7'))
+                .toEqual({ parserId: 'tv-inline', filePath: 'a/b.md', anchor: 'seq:7' });
+        });
+
+        it('mints parserId:file:seq:n from the counter', () => {
+            let n = 0;
+            const next = () => ++n;
+            const task = { id: 'tv-inline:a.md:ln:3', parserId: 'tv-inline' as const, file: 'a.md' };
+            expect(TaskIdGenerator.mintRuntimeId(task, next)).toBe('tv-inline:a.md:seq:1');
+            expect(TaskIdGenerator.mintRuntimeId(task, next)).toBe('tv-inline:a.md:seq:2');
+        });
+
+        it('keeps fm-root for the tv-file task and spends no number', () => {
+            let n = 0;
+            const next = () => ++n;
+            const task = { id: 'tv-file:a.md:fm-root', parserId: 'tv-file' as const, file: 'a.md' };
+            expect(TaskIdGenerator.mintRuntimeId(task, next)).toBe('tv-file:a.md:fm-root');
+            expect(n).toBe(0);
+        });
+
+        it('accepts only seq and fm-root as runtime-shaped', () => {
+            expect(TaskIdGenerator.isRuntimeId('tv-inline:a.md:seq:1')).toBe(true);
+            expect(TaskIdGenerator.isRuntimeId('tv-file:a.md:fm-root')).toBe(true);
+            expect(TaskIdGenerator.isRuntimeId('tv-inline:a.md:ln:1')).toBe(false);
+            expect(TaskIdGenerator.isRuntimeId('tv-inline:a.md:blk:abc')).toBe(false);
+            expect(TaskIdGenerator.isRuntimeId('tv-inline:a.md:tid:xyz')).toBe(false);
+            expect(TaskIdGenerator.isRuntimeId('not-an-id')).toBe(false);
+        });
     });
 });
