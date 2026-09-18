@@ -123,7 +123,7 @@ export class TimerRenderer {
                 // 折り返す（オートグローで高さを追従、Enter は改行させず確定）。
                 const labelInput = titleContainer.createEl('textarea', {
                     cls: 'timer-widget__title-input',
-                    // 名前の無い行（tv-content 未設定の tvFile など）でも、何を
+                    // 名前の無い行（空の `- [ ]` など）でも、何を
                     // 計っているのかは見えている必要がある。
                     placeholder: timer.taskName || '\u2014',
                     attr: { rows: '1', wrap: 'soft' },

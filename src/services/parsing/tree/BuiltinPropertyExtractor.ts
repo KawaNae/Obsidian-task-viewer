@@ -1,4 +1,4 @@
-import type { TvFileKeys, PropertyValue } from '../../../types';
+import type { ScopeKeys, PropertyValue } from '../../../types';
 import { VALID_LINE_STYLES } from '../../../constants/style';
 import { normalizeColor } from '../../../utils/ColorUtils';
 import { TagExtractor } from '../utils/TagExtractor';
@@ -28,7 +28,7 @@ export interface ExtractedProperties {
 export class BuiltinPropertyExtractor {
     static extract(
         rawProperties: Record<string, PropertyValue>,
-        keys: TvFileKeys
+        keys: ScopeKeys
     ): ExtractedProperties {
         const result: ExtractedProperties = { properties: {} };
         const reserved = reservedPropertyKeys(keys);
@@ -59,12 +59,11 @@ export class BuiltinPropertyExtractor {
                     result.due = parsed.time ? `${parsed.date}T${parsed.time}` : parsed.date;
                 }
             } else if (!reserved.has(key)) {
-                // A declaration key this extractor has no field for
-                // (tv-content / tv-status / tv-ignore / tv-timer-target-id,
-                // and Obsidian's `position`) is not a custom property. It has
-                // no meaning on a child line, and letting it through put it
-                // back into frontmatter on conversion — same rule as the
-                // frontmatter resolver applies at the File layer.
+                // A reserved key this extractor has no field for (tv-ignore,
+                // the file task's legacy tv-content / tv-status /
+                // tv-timer-target-id, and Obsidian's `position`) is not a
+                // custom property — same rule as the frontmatter resolver
+                // applies at the File layer.
                 result.properties[key] = pv;
             }
         }

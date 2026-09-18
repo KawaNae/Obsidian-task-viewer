@@ -1,4 +1,4 @@
-import type { Task, TvFileKeys, PropertyValue } from '../../../types';
+import type { Task, ScopeKeys, PropertyValue } from '../../../types';
 import { isTvInline } from '../../../types';
 import type { DocumentNode, SectionNode, TaskBlock } from './DocumentTree';
 import { BuiltinPropertyExtractor } from './BuiltinPropertyExtractor';
@@ -10,7 +10,7 @@ import { flowValidation, parseFlowSegments } from '../../flow/FlowSegments';
 
 export interface TaskExtractionContext {
     filePath: string;
-    tvFileKeys: TvFileKeys;
+    scopeKeys: ScopeKeys;
 }
 
 /**
@@ -167,7 +167,7 @@ export class TreeTaskExtractor {
         const rawProps = ChildLineClassifier.collectProperties(task.childLines);
 
         // 組み込みプロパティを専用フィールドに分離
-        const extracted = BuiltinPropertyExtractor.extract(rawProps, ctx.tvFileKeys);
+        const extracted = BuiltinPropertyExtractor.extract(rawProps, ctx.scopeKeys);
 
         // raw = 自分の宣言のみ（子行プロパティ + content タグ）。
         // section 継承分は日付と同様 cascadeContext に別置きし、合成は

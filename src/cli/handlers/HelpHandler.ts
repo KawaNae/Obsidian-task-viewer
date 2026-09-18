@@ -1,9 +1,9 @@
 import type { CliData } from 'obsidian';
 import {
     renderFlagTable,
-    LIST_SCHEMA, CREATE_SCHEMA, UPDATE_SCHEMA, DUPLICATE_SCHEMA, CONVERT_SCHEMA,
+    LIST_SCHEMA, CREATE_SCHEMA, UPDATE_SCHEMA, DUPLICATE_SCHEMA,
     TASKS_FOR_DATE_RANGE_SCHEMA, CATEGORIZED_TASKS_FOR_DATE_RANGE_SCHEMA,
-    INSERT_CHILD_TASK_SCHEMA, CREATE_TV_FILE_SCHEMA, EXPORT_IMAGE_SCHEMA,
+    INSERT_CHILD_TASK_SCHEMA, EXPORT_IMAGE_SCHEMA,
 } from '../../api/OperationSchemas';
 
 // Per-command flag tables are generated from OperationSchemas (the same
@@ -22,11 +22,9 @@ Commands
   update             Update an existing task
   delete             Delete a task
   duplicate          Duplicate a task with optional date shifting
-  convert            Convert a tv-inline task to a tv-file (frontmatter) task
   tasks-for-date-range  List tasks overlapping a date range (flat list)
   categorized-tasks-for-date-range  Get tasks in a date range, categorized per date
   insert-child-task     Insert a child task under a parent task
-  create-tv-file        Create a new tv-file (frontmatter) task
   get-start-hour        Get the current startHour setting
   export-image          Export a view as a PNG image
   help               Show this reference
@@ -38,7 +36,7 @@ Vocabulary
   from / to        = query window (inclusive overlap). A task matches when
                      its span intersects [from, to].
   date             = single-day window, sugar for from=X to=X
-  start / end / due = the task's own fields (create / update / create-tv-file)
+  start / end / due = the task's own fields (create / update)
 
   Unknown flags are errors (with a did-you-mean suggestion) — they are
   never silently ignored.
@@ -100,12 +98,6 @@ duplicate: Flags
 ----------------
 ${renderFlagTable(DUPLICATE_SCHEMA)}
 
-convert: Flags
---------------
-${renderFlagTable(CONVERT_SCHEMA)}
-                       Converts the tv-inline task to a new tv-file (frontmatter) task.
-                       Returns the path of the newly created file.
-
 tasks-for-date-range: Flags
 ---------------------------
 ${renderFlagTable(TASKS_FOR_DATE_RANGE_SCHEMA, { output: true })}
@@ -123,11 +115,6 @@ insert-child-task: Flags
 ------------------------
 ${renderFlagTable(INSERT_CHILD_TASK_SCHEMA)}
                      Inserts a new child task (- [ ] content) under the parent.
-
-create-tv-file: Flags
----------------------
-${renderFlagTable(CREATE_TV_FILE_SCHEMA)}
-                       Creates a new tv-file (frontmatter) task. Returns the new file path.
 
 get-start-hour: Flags
 ---------------------

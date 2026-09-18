@@ -57,10 +57,9 @@ export function buildChildEntries(
 
 /**
  * All body lines occupied by a task and its descendant subtree, as
- * file-qualified `file:line` keys. File-qualification prevents a sibling
- * subtree in another file from colliding with this parent's body lines —
- * a cross-file tv-file child and an unrelated note can share an absolute
- * line number.
+ * file-qualified `file:line` keys. The parser never links across files, so
+ * the qualification is a guard: a child from another file must not claim this
+ * parent's line of the same number.
  */
 function collectSubtreeLines(
     task: Task,
@@ -78,8 +77,7 @@ function collectSubtreeLines(
     }
     // Flow child lines (`- ==>`) are excluded from childLines by the
     // extractor but are still body lines owned by this task — without
-    // them here, an ancestor (e.g. a tv-file card) would surface them as
-    // plain text child entries.
+    // them here, an ancestor would surface them as plain text child entries.
     for (const seg of task.flow?.childSegments ?? []) {
         if (seg.bodyLine >= 0) out.add(`${task.file}:${seg.bodyLine}`);
     }

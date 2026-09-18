@@ -1,4 +1,4 @@
-import type { TvFileKeys, PropertyValue } from '../../types';
+import type { ScopeKeys, PropertyValue } from '../../types';
 import type { ExtractedProperties } from './tree/BuiltinPropertyExtractor';
 import { VALID_LINE_STYLES } from '../../constants/style';
 import { normalizeColor } from '../../utils/ColorUtils';
@@ -20,7 +20,7 @@ import { reservedPropertyKeys } from './utils/FrontmatterPolicy';
 export class FilePropertyResolver {
     static extract(
         frontmatter: Record<string, any> | undefined,
-        keys: TvFileKeys
+        keys: ScopeKeys
     ): ExtractedProperties {
         if (!frontmatter) return { properties: {} };
 

@@ -83,8 +83,8 @@ export class WindowAttachment {
 
     private syncAttach(): void {
         const settings = this.ctx.getSettings();
-        const colorKey = settings.tvFileKeys.color;
-        const linestyleKey = settings.tvFileKeys.linestyle;
+        const colorKey = settings.scopeKeys.color;
+        const linestyleKey = settings.scopeKeys.linestyle;
 
         if (!settings.suggestColor) this.restoreNativePropertySuggest(colorKey);
         if (!settings.suggestLinestyle) this.restoreNativePropertySuggest(linestyleKey);
@@ -194,7 +194,7 @@ export class WindowAttachment {
             if (!activeFile) return;
 
             const hex = normalizeColor(colorInput.value);
-            const colorKey = this.ctx.getSettings().tvFileKeys.color;
+            const colorKey = this.ctx.getSettings().scopeKeys.color;
 
             // 見た目は 1 手ごとに追随させ、ファイルへの書き込みだけ末尾に寄せる。
             // valueDiv は再描画で別要素に置き換わりうるので closure ではなく都度解決する。

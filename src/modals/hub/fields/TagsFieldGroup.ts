@@ -32,7 +32,7 @@ export class TagsFieldGroup {
         const missing = this.ctx.isMissing();
         const contentTags = new Set(TagExtractor.fromContent(task.content ?? ''));
         const ownTags = new Set(task.tags);
-        const keys = this.ctx.plugin.settings.tvFileKeys;
+        const keys = this.ctx.plugin.settings.scopeKeys;
 
         // pills（フル幅、行の外）
         const effectiveTags = getEffectiveTags(task);

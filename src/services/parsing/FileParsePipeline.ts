@@ -64,10 +64,10 @@ export class FileParsePipeline {
 
         // --- ツリーパイプライン（順序契約: build → resolve → extract）---
         const doc = DocumentTreeBuilder.build(filePath, lines, bodyStartIndex);
-        SectionPropertyResolver.resolve(doc, frontmatterObj, settings.tvFileKeys);
+        SectionPropertyResolver.resolve(doc, frontmatterObj, settings.scopeKeys);
         const tasks = TreeTaskExtractor.extract(doc, {
             filePath,
-            tvFileKeys: settings.tvFileKeys,
+            scopeKeys: settings.scopeKeys,
         });
 
         // Blocks are collected from the whole file (frontmatter cannot hold a
@@ -83,7 +83,7 @@ export class FileParsePipeline {
         bodyStartIndex: number,
         settings: TaskViewerSettings
     ): boolean {
-        const ignoreKey = settings.tvFileKeys.ignore;
+        const ignoreKey = settings.scopeKeys.ignore;
         if (this.isTruthyIgnoreValue(frontmatterObj?.[ignoreKey])) {
             return true;
         }

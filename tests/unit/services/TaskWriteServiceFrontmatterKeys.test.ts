@@ -21,17 +21,4 @@ describe('TaskWriteService frontmatter-key passthroughs', () => {
         expect(setFrontmatterKeys).toHaveBeenCalledWith('note.md', { color: 'ff0000' });
         expect(setFrontmatterKeys).toHaveBeenCalledTimes(1);
     });
-
-    it('deleteFrontmatterKeyIfValue delegates to repository.deleteFrontmatterKeyIfValue unchanged', async () => {
-        const deleteFrontmatterKeyIfValue = vi.fn().mockResolvedValue(undefined);
-        const taskIndex = {
-            getRepository: () => ({ setFrontmatterKeys: vi.fn(), deleteFrontmatterKeyIfValue }),
-        } as unknown as TaskIndex;
-        const service = new TaskWriteService(taskIndex);
-
-        await service.deleteFrontmatterKeyIfValue('note.md', 'timer-target-id', 'abc123');
-
-        expect(deleteFrontmatterKeyIfValue).toHaveBeenCalledWith('note.md', 'timer-target-id', 'abc123');
-        expect(deleteFrontmatterKeyIfValue).toHaveBeenCalledTimes(1);
-    });
 });

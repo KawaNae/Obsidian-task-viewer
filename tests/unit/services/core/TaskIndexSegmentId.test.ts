@@ -37,7 +37,7 @@ function buildHost(task: Task) {
             bumpRevision: vi.fn(),
             notifyListeners: vi.fn(),
         },
-        settings: { tvFileKeys: {} },
+        settings: { scopeKeys: {} },
         syncDetector: { markLocalEdit: vi.fn() },
         scanner: { requestScan: vi.fn(async () => { }) },
         app: { vault: { getAbstractFileByPath: () => null } },

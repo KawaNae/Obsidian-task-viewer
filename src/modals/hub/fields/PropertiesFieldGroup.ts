@@ -4,6 +4,7 @@ import { isTvFile, type PropertyValue } from '../../../types';
 import { getEffectiveProperties } from '../../../services/data/EffectiveProperties';
 import { ChildLineClassifier } from '../../../services/parsing/utils/ChildLineClassifier';
 import { FilterValueCollector } from '../../../services/filter/FilterValueCollector';
+import { reservedPropertyKeys } from '../../../services/parsing/utils/FrontmatterPolicy';
 import { CascadeSource } from '../CascadeSource';
 import { TaskUpdateBuilder } from '../../form/TaskUpdateBuilder';
 import { createFormRow } from '../../form/formRow';
@@ -40,7 +41,7 @@ export class PropertiesFieldGroup {
         // ctx.getTask().properties を発火時に読む（tags と同じ規則）。
         const own = task.properties ?? {};
         const effective = getEffectiveProperties(task);
-        const keys = this.ctx.plugin.settings.tvFileKeys;
+        const keys = this.ctx.plugin.settings.scopeKeys;
 
         for (const [key, pv] of Object.entries(effective)) {
             const isOwn = key in own;
@@ -135,9 +136,7 @@ export class PropertiesFieldGroup {
         const commitAdd = () => {
             const key = keyInput.value.trim();
             if (!key) return;
-            const reserved = new Set<string>(Object.values(this.ctx.plugin.settings.tvFileKeys));
-            reserved.add('tags');
-            reserved.add('position');
+            const reserved = reservedPropertyKeys(this.ctx.plugin.settings.scopeKeys);
             keyInput.classList.remove('tv-ctrl__text-input--invalid');
             if (reserved.has(key)) {
                 keyInput.classList.add('tv-ctrl__text-input--invalid');

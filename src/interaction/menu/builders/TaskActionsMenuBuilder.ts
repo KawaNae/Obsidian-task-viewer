@@ -1,5 +1,5 @@
-import { type App, MarkdownView, type Menu, Notice } from 'obsidian';
-import { type Task, isTvInline } from '../../../types';
+import { type App, MarkdownView, type Menu } from 'obsidian';
+import type { Task } from '../../../types';
 import type { TaskWriteService } from '../../../services/data/TaskWriteService';
 import type { PluginContext } from '../../../PluginContext';
 import type { TimerHost } from '../../../timer/TimerWidget';
@@ -48,12 +48,11 @@ export class TaskActionsMenuBuilder {
     }
 
     /**
-     * G5: 破壊的変更 — Open in Editor / Convert to File / Delete
+     * G5: 破壊的変更 — Open in Editor / Delete
      * onDestructive が渡されているとき各アクション実行後に invoke する。
      */
     addDestructiveActions(menu: Menu, task: Task, onDestructive?: () => void): void {
         this.addOpenInEditorItem(menu, task, onDestructive);
-        this.addConvertToFileItem(menu, task, onDestructive);
         this.addDeleteItem(menu, task, onDestructive);
     }
 
@@ -189,37 +188,6 @@ export class TaskActionsMenuBuilder {
                         await this.writeService.duplicateTask(task.id, { dayOffset: 1, count: 7 });
                     });
             });
-        });
-    }
-
-    /**
-     * "Convert to File" 単独項目 — tvInline → tvFile（ConfirmModal）
-     */
-    private addConvertToFileItem(menu: Menu, task: Task, onDestructive?: () => void): void {
-        // tvFile tasks have no convert options (reverse conversion is too complex)
-        if (!isTvInline(task)) return;
-
-        menu.addItem((item) => {
-            item.setTitle(t('menu.convertToFile'))
-                .setIcon('file-plus')
-                .onClick(() => {
-                    menu.close();
-                    new ConfirmModal(
-                        this.app,
-                        t('menu.convertToFile'),
-                        t('menu.convertToFileMessage'),
-                        async () => {
-                            try {
-                                await this.writeService.convertToTvFile(task.id);
-                                new Notice(t('notice.taskConverted'));
-                                onDestructive?.();
-                            } catch (e) {
-                                new Notice(t('notice.taskConvertFailed') + ': ' + (e as Error).message);
-                            }
-                        },
-                        { confirmLabel: t('modal.convert') }
-                    ).open();
-                });
         });
     }
 

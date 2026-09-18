@@ -1,5 +1,5 @@
 import { DEFAULT_STATUS_DEFINITIONS, type StatusDefinition } from './TaskModel';
-import { DEFAULT_TV_FILE_KEYS, type TvFileKeys } from './TvFileKeys';
+import { DEFAULT_SCOPE_KEYS, type ScopeKeys } from './ScopeKeys';
 
 export type DefaultLeafPosition = 'left' | 'right' | 'tab' | 'window';
 
@@ -10,7 +10,7 @@ export interface TaskViewerSettings {
     applyGlobalStyles: boolean;
     enableStatusMenu: boolean;
     statusDefinitions: StatusDefinition[];
-    tvFileKeys: TvFileKeys;
+    scopeKeys: ScopeKeys;
     zoomLevel: number;
     dailyNoteHeader: string;
     dailyNoteHeaderLevel: number;
@@ -19,8 +19,6 @@ export interface TaskViewerSettings {
     countdownMinutes: number;
     pastDaysToShow: number;
     startFromOldestOverdue: boolean;
-    tvFileChildHeader: string;
-    tvFileChildHeaderLevel: number;
     doubleTapAction: DoubleTapAction;
     longPressThreshold: number;
     reuseExistingTab: boolean;
@@ -124,7 +122,7 @@ export const DEFAULT_SETTINGS: TaskViewerSettings = {
     applyGlobalStyles: false,
     enableStatusMenu: true,
     statusDefinitions: [...DEFAULT_STATUS_DEFINITIONS],
-    tvFileKeys: { ...DEFAULT_TV_FILE_KEYS },
+    scopeKeys: { ...DEFAULT_SCOPE_KEYS },
     zoomLevel: 1.0,
     dailyNoteHeader: 'Tasks',
     dailyNoteHeaderLevel: 2,
@@ -133,8 +131,6 @@ export const DEFAULT_SETTINGS: TaskViewerSettings = {
     countdownMinutes: 25,
     pastDaysToShow: 0,
     startFromOldestOverdue: true,
-    tvFileChildHeader: 'Tasks',
-    tvFileChildHeaderLevel: 2,
     doubleTapAction: 'detail',
     longPressThreshold: 400,
     reuseExistingTab: true,

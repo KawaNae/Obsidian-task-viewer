@@ -53,16 +53,6 @@ describe('refreshTimerTask', () => {
         expect(t.taskFile).toBe('dir/a.md');
     });
 
-    it('asks the tv-file resolver for a tv-file timer', () => {
-        const t = { ...timer(), taskId: 'tv-file:p.md:fm-root', parserId: 'tv-file' as const };
-        const resolver = { resolveTvInline: vi.fn(), resolveTvFile: vi.fn(() => undefined) };
-
-        refreshTimerTask(t, index([]), resolver);
-
-        expect(resolver.resolveTvFile).toHaveBeenCalled();
-        expect(resolver.resolveTvInline).not.toHaveBeenCalled();
-    });
-
     it('reports nothing and changes nothing when neither finds the task', () => {
         const t = timer();
         const resolver = { resolveTvInline: vi.fn(() => undefined), resolveTvFile: vi.fn() };

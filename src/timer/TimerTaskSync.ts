@@ -1,8 +1,8 @@
-import { type Task, isTvFile } from '../types';
+import type { Task } from '../types';
 import type { TimerInstance } from './TimerInstance';
 import type { TimerTaskResolver } from './TimerTaskResolver';
 
-type SyncedTimer = Pick<TimerInstance, 'taskId' | 'taskFile' | 'taskOriginalText' | 'timerTargetId' | 'parserId'>;
+type SyncedTimer = Pick<TimerInstance, 'taskId' | 'taskFile' | 'taskOriginalText' | 'timerTargetId'>;
 
 export interface TimerTaskRefresh {
     task: Task | undefined;
@@ -22,12 +22,12 @@ export interface TimerTaskRefresh {
 export function refreshTimerTask(
     timer: SyncedTimer,
     index: { getTask(id: string): Task | undefined },
-    resolver: Pick<TimerTaskResolver, 'resolveTvInline' | 'resolveTvFile'>
+    resolver: Pick<TimerTaskResolver, 'resolveTvInline'>
 ): TimerTaskRefresh {
     const byId = index.getTask(timer.taskId);
     if (byId) return { task: byId, rewritten: false };
 
-    const resolved = isTvFile(timer) ? resolver.resolveTvFile(timer) : resolver.resolveTvInline(timer);
+    const resolved = resolver.resolveTvInline(timer);
     if (!resolved) return { task: undefined, rewritten: false };
 
     timer.taskId = resolved.id;

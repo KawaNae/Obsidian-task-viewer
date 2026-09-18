@@ -79,10 +79,6 @@ export class TaskWriteService {
         return this.taskIndex.duplicateTask(this.resolveTaskId(taskId), options);
     }
 
-    async convertToTvFile(taskId: string): Promise<string> {
-        return this.taskIndex.convertToTvFile(this.resolveTaskId(taskId));
-    }
-
     // ===== Task creation =====
 
     async createTask(filePath: string, taskLine: string, heading?: string): Promise<number> {
@@ -114,7 +110,7 @@ export class TaskWriteService {
      * and nothing else.
      *
      * Returns the inserted line index, or -1 when nothing was written
-     * (unknown / read-only / tv-file task, or an unresolvable line).
+     * (unknown / read-only task, or an unresolvable line).
      */
     async insertSiblingAfterTask(
         taskId: string,
@@ -122,10 +118,6 @@ export class TaskWriteService {
         opts: { afterCompletedRun?: boolean } = {}
     ): Promise<number> {
         return this.taskIndex.insertSiblingAfterTask(this.resolveTaskId(taskId), siblingLine, opts);
-    }
-
-    async createTvFileFromData(taskData: Partial<Task>): Promise<string> {
-        return this.taskIndex.createTvFileFromData(taskData);
     }
 
     // ===== Line-level operations =====
@@ -149,18 +141,13 @@ export class TaskWriteService {
 
     // ===== Frontmatter key writes (Task を介さない書き込み) =====
     //
-    // Task ではなくファイルパス+キーで書き先が決まる操作（タイマーの対象 ID、
-    // プロパティ欄のサジェスト由来の色・線種書き込み）向けの薄い素通し。
-    // 実装は TaskRepository/FrontmatterWriter のまま変えない — 1 つの
-    // vault.process に収まっている性質（確認と削除の原子性）や、no-op な
-    // vault.process が modify を発火しない挙動もここでは変わらない。
+    // Task ではなくファイルパス+キーで書き先が決まる操作（プロパティ欄の
+    // サジェスト由来の色・線種書き込み）向けの薄い素通し。frontmatter は
+    // ノートのスコープ属性で、タスクは作らない。no-op な vault.process が
+    // modify を発火しない挙動もここでは変わらない。
 
     async setFrontmatterKeys(filePath: string, updates: Record<string, string | null>): Promise<void> {
         return this.taskIndex.getRepository().setFrontmatterKeys(filePath, updates);
-    }
-
-    async deleteFrontmatterKeyIfValue(filePath: string, key: string, expected: string): Promise<void> {
-        return this.taskIndex.getRepository().deleteFrontmatterKeyIfValue(filePath, key, expected);
     }
 
     // ===== Drag state control =====

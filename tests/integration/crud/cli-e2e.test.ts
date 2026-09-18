@@ -14,8 +14,8 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import {
     cliList, cliToday, cliGet, cliCreate, cliUpdate, cliDelete,
-    cliDuplicate, cliConvert, cliTasksForDateRange, cliCategorizedTasksForDateRange,
-    cliInsertChildTask, cliCreateTvFile, cliGetStartHour, cliHelp,
+    cliDuplicate, cliTasksForDateRange, cliCategorizedTasksForDateRange,
+    cliInsertChildTask, cliGetStartHour, cliHelp,
     isObsidianRunning, obsidianCli, waitForTask, waitForTaskGone,
 } from '../helpers/cli-helper';
 import { deleteTestFile, writeTestFile, waitForFileIndexed, readTestFile } from '../helpers/test-file-manager';
@@ -390,42 +390,6 @@ describe('duplicate', () => {
 });
 
 // ────────────────────────────────────────────
-// 11. convert (inline → frontmatter)
-// ────────────────────────────────────────────
-describe('convert', () => {
-    const MUTATION_FILE = 'test-cli-convert.md';
-    const filesToCleanup: string[] = [MUTATION_FILE];
-
-    beforeAll(async () => {
-        writeTestFile(MUTATION_FILE, '- [ ] E2E-convert-test @2026-04-15\n');
-        await waitForFileIndexed(MUTATION_FILE);
-    });
-
-    afterAll(() => {
-        for (const f of filesToCleanup) {
-            deleteTestFile(f);
-        }
-    });
-
-    it('converts inline task to frontmatter file', () => {
-        const src = cliList({ file: MUTATION_FILE, 'output-fields': 'id' });
-        expect(src.count).toBe(1);
-        const id = src.tasks[0].id as string;
-
-        const r = cliConvert(id);
-        expect(r).not.toHaveProperty('error');
-        expect(r.convertedFrom).toBe(id);
-        expect(r.newFile).toBeTruthy();
-        filesToCleanup.push(r.newFile);
-    });
-
-    it('convert nonexistent ID returns error', () => {
-        const r = cliConvert('nonexistent-id-99999');
-        expect(r).toHaveProperty('error');
-    });
-});
-
-// ────────────────────────────────────────────
 // 12. tasks-for-date-range
 // ────────────────────────────────────────────
 describe('tasks-for-date-range', () => {
@@ -531,43 +495,6 @@ describe('insert-child-task', () => {
 });
 
 // ────────────────────────────────────────────
-// 15. create-tv-file
-// ────────────────────────────────────────────
-describe('create-tv-file', () => {
-    const filesToCleanup: string[] = [];
-
-    afterAll(() => {
-        for (const f of filesToCleanup) {
-            deleteTestFile(f);
-        }
-    });
-
-    it('creates frontmatter task file', () => {
-        const r = cliCreateTvFile({ content: 'E2E-fm-task' });
-        expect(r).not.toHaveProperty('error');
-        expect(r.newFile).toBeTruthy();
-        filesToCleanup.push(r.newFile);
-    });
-
-    it('creates with dates', () => {
-        const r = cliCreateTvFile({
-            content: 'E2E-fm-dated',
-            start: '2026-05-01 10:00',
-            end: '2026-05-01 12:00',
-            due: '2026-05-05',
-        });
-        expect(r).not.toHaveProperty('error');
-        expect(r.newFile).toBeTruthy();
-        filesToCleanup.push(r.newFile);
-    });
-
-    it('missing content returns error', () => {
-        const r = obsidianCli('create-tv-file', {}) as Record<string, unknown>;
-        expect(r).toHaveProperty('error');
-    });
-});
-
-// ────────────────────────────────────────────
 // 16. get-start-hour
 // ────────────────────────────────────────────
 describe('get-start-hour', () => {
@@ -591,6 +518,9 @@ describe('help', () => {
         expect(r).toContain('categorized-tasks-for-date-range');
         expect(r).toContain('insert-child-task');
         expect(r).toContain('get-start-hour');
+        // Frontmatter makes no task, so there is nothing to convert to or create.
+        expect(r).not.toContain('create-tv-file');
+        expect(r).not.toMatch(/^\s*convert\s/m);
     });
 });
 
