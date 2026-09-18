@@ -4,6 +4,7 @@ import { TaskScanner } from '../../../../../src/services/core/TaskScanner';
 import { TaskStore } from '../../../../../src/services/core/TaskStore';
 import { TaskValidator } from '../../../../../src/services/core/TaskValidator';
 import { TaskIdGenerator } from '../../../../../src/services/display/TaskIdGenerator';
+import { FileOperations } from '../../../../../src/services/persistence/utils/FileOperations';
 import { DEFAULT_SETTINGS } from '../../../../../src/types';
 import type { Task } from '../../../../../src/types';
 
@@ -403,5 +404,33 @@ describe('scan identity — file lifecycle', () => {
         const after = h.ids();
         expect(after).toHaveLength(2);
         for (const id of after) expect(before).not.toContain(id);
+    });
+});
+
+describe('scan identity — duplicated block IDs', () => {
+    // A line copied together with its `^id`. Provisional IDs used to be
+    // `blk:<id>`, so the two tasks collided and one of them vanished; line-based
+    // provisional IDs keep them apart.
+    it('two lines sharing a ^id become two cards, each writing to its own line', async () => {
+        const lines = ['- [ ] A @2026-09-21 ^dup', '- [ ] A @2026-09-21 ^dup'];
+        await h.write('a.md', lines);
+
+        const [first, second] = h.tasks();
+        expect(h.tasks()).toHaveLength(2);
+        expect(first.id).not.toBe(second.id);
+        expectConsistentTree(h.store);
+
+        const ops = new FileOperations({} as never);
+        expect(ops.findTaskLineNumber(lines, second)).toBe(1);
+        expect(ops.findTaskLineNumber(lines, first)).toBe(0);
+    });
+
+    it('keeps both IDs when a line is inserted above them', async () => {
+        await h.write('a.md', ['- [ ] A @2026-09-21 ^dup', '- [ ] A @2026-09-21 ^dup']);
+        const before = h.ids();
+
+        await h.write('a.md', ['- [ ] X @2026-09-21', '- [ ] A @2026-09-21 ^dup', '- [ ] A @2026-09-21 ^dup']);
+
+        expect(h.tasks().filter(task => task.content === 'A').map(task => task.id)).toEqual(before);
     });
 });

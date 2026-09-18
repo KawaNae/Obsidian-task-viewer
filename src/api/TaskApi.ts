@@ -243,16 +243,16 @@ Examples
   api.today({ sort: [{ property: 'startDate', direction: 'asc' }] });
 
   // Get a specific task
-  api.get({ id: 'tv-inline:daily/2026-03-15.md:ln:5' });
+  api.get({ id: 'tv-inline:daily/2026-03-15.md:seq:5' });
 
   // Duplicate a task, shifting dates by 1 day
-  await api.duplicate({ id: 'tv-inline:daily/2026-03-15.md:ln:5', dayOffset: 1 });
+  await api.duplicate({ id: 'tv-inline:daily/2026-03-15.md:seq:5', dayOffset: 1 });
 
   // Duplicate a task 3 times (no date shift)
-  await api.duplicate({ id: 'tv-inline:daily/2026-03-15.md:ln:5', count: 3 });
+  await api.duplicate({ id: 'tv-inline:daily/2026-03-15.md:seq:5', count: 3 });
 
   // Convert a tv-inline task to a tv-file (frontmatter) task
-  await api.convertToTvFile({ id: 'tv-inline:daily/2026-03-15.md:ln:5' });
+  await api.convertToTvFile({ id: 'tv-inline:daily/2026-03-15.md:seq:5' });
 
   // List tasks in a date range (window bounds accept presets too)
   await api.tasksForDateRange({ from: '2026-03-01', to: '2026-03-31' });
@@ -269,7 +269,7 @@ Examples
   api.categorizedTasksForDateRange({ from: '2026-03-23', to: '2026-03-29' });
 
   // Insert a child task
-  await api.insertChildTask({ parentId: 'tv-inline:daily/2026-03-15.md:ln:5', content: 'Sub-task' });
+  await api.insertChildTask({ parentId: 'tv-inline:daily/2026-03-15.md:seq:5', content: 'Sub-task' });
 
   // Create a tv-file (frontmatter) task
   await api.createTvFile({ content: 'Project task', start: '2026-03-20 10:00' });

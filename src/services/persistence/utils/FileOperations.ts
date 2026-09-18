@@ -287,12 +287,23 @@ export class FileOperations {
         const fenced = CodeFenceTracker.mask(lines);
 
         // Strategy -1: Resolve by block ID (most stable against content edits).
+        // Only a block ID that names exactly one line proves anything: a line
+        // copied together with its `^id` is a second card, and taking the first
+        // match would land that card's writes on the original. Several matches
+        // fall through to the stored line — the same rule as the first rung of
+        // the identity matcher.
         if (task.blockId) {
             const blockIdRegex = new RegExp(`\\s\\^${task.blockId.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s*$`);
+            let found = -1;
+            let count = 0;
             for (let i = 0; i < lines.length; i++) {
                 if (!fenced[i] && blockIdRegex.test(lines[i])) {
-                    return i;
+                    found = i;
+                    count++;
                 }
+            }
+            if (count === 1) {
+                return found;
             }
         }
 
