@@ -97,4 +97,11 @@ describe('IdentityLedger', () => {
         // A number handed out before the reset must never name a second task.
         expect(ledger.mint()).toBe(3);
     });
+
+    // The scanner seeds from the clock so a number never repeats across sessions.
+    it('mints from seed + 1 when seeded', () => {
+        const ledger = new IdentityLedger(1_000);
+        expect(ledger.mint()).toBe(1_001);
+        expect(ledger.mint()).toBe(1_002);
+    });
 });

@@ -26,8 +26,17 @@ export class TaskScanner {
     private scanQueue: Map<string, Promise<void>> = new Map();
     private completionDetector = new CompletionDetector();
     private isInitializing = true;
-    /** Written only by scanFile's commit, so the store and the ledger move together. */
-    private ledger = new IdentityLedger();
+    /**
+     * Written only by scanFile's commit, so the store and the ledger move together.
+     *
+     * Seeded from the clock so runtime IDs are unique across sessions, not just
+     * within one: timers persist task IDs, and a counter restarting at 1 would
+     * hand a previous session's number to a different task after a reload —
+     * a stale ID must name nothing, never someone else. In microseconds, the
+     * next session starts ahead of this one as long as it mints fewer than 1000
+     * IDs per millisecond on average; ~1.7e15 stays within safe integers.
+     */
+    private ledger = new IdentityLedger(Date.now() * 1000);
 
     constructor(
         private app: App,
