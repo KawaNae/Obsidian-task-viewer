@@ -136,20 +136,18 @@ export class TaskActionsMenuBuilder {
                     } else {
                         await this.app.workspace.openLinkText(task.file, '', true);
                     }
-                    {
-                        setTimeout(() => {
-                            const view = this.app.workspace.getActiveViewOfType(MarkdownView);
-                            if (view) {
-                                const editor = view.editor;
-                                const lineText = editor.getLine(task.line);
-                                editor.setSelection(
-                                    { line: task.line, ch: 0 },
-                                    { line: task.line, ch: lineText.length }
-                                );
-                                editor.focus();
-                            }
-                        }, 100);
-                    }
+                    setTimeout(() => {
+                        const view = this.app.workspace.getActiveViewOfType(MarkdownView);
+                        if (view) {
+                            const editor = view.editor;
+                            const lineText = editor.getLine(task.line);
+                            editor.setSelection(
+                                { line: task.line, ch: 0 },
+                                { line: task.line, ch: lineText.length }
+                            );
+                            editor.focus();
+                        }
+                    }, 100);
                     onDestructive?.();
                 });
         });

@@ -70,18 +70,16 @@ export function openTaskInEditor(app: App, task: Task, reuseTab: boolean): void 
     } else {
         void app.workspace.openLinkText(task.file, '', true);
     }
-    {
-        setTimeout(() => {
-            const view = app.workspace.getActiveViewOfType(MarkdownView);
-            if (view) {
-                const editor = view.editor;
-                const lineText = editor.getLine(task.line);
-                editor.setSelection(
-                    { line: task.line, ch: 0 },
-                    { line: task.line, ch: lineText.length }
-                );
-                editor.focus();
-            }
-        }, 100);
-    }
+    setTimeout(() => {
+        const view = app.workspace.getActiveViewOfType(MarkdownView);
+        if (view) {
+            const editor = view.editor;
+            const lineText = editor.getLine(task.line);
+            editor.setSelection(
+                { line: task.line, ch: 0 },
+                { line: task.line, ch: lineText.length }
+            );
+            editor.focus();
+        }
+    }, 100);
 }
