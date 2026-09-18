@@ -16,7 +16,7 @@ export class LineStyleSuggest extends EditorSuggest<string> {
 
     onTrigger(cursor: EditorPosition, editor: Editor, file: TFile): EditorSuggestTriggerInfo | null {
         const line = editor.getLine(cursor.line);
-        const linestyleKey = this.plugin.settings.tvFileKeys.linestyle;
+        const linestyleKey = this.plugin.settings.scopeKeys.linestyle;
         const escapedLinestyleKey = linestyleKey.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
         const regex = new RegExp(`^(${escapedLinestyleKey})(\\s*:\\s*)(.*)$`);
         const match = line.match(regex);
@@ -64,7 +64,7 @@ export class LineStyleSuggest extends EditorSuggest<string> {
             return;
         }
 
-        const linestyleKey = this.plugin.settings.tvFileKeys.linestyle;
+        const linestyleKey = this.plugin.settings.scopeKeys.linestyle;
         this.context.editor.setLine(this.context.start.line, `${linestyleKey}: ${value}`);
     }
 }

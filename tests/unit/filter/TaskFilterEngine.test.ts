@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { TaskFilterEngine } from '../../../src/services/filter/TaskFilterEngine';
 import type { Task, DisplayTask } from '../../../src/types';
 import type { FilterState, FilterCondition, FilterGroup } from '../../../src/services/filter/FilterTypes';
+import { createDefaultListFilterState } from '../../../src/services/filter/FilterTypes';
 
 // ── Helper: minimal Task factory ──
 
@@ -141,42 +142,10 @@ describe('TaskFilterEngine', () => {
     });
 
     // ── StringSet: kind (derived from parserId) ──
-    describe('kind filter', () => {
-        it('inline: tv-inline matches', () => {
-            const task = makeTask({ parserId: 'tv-inline' });
-            const state = stateFromCondition(cond('kind', 'includes', ['inline']));
-            expect(TaskFilterEngine.evaluate(task, state)).toBe(true);
-        });
-
-        it('inline: tv-file does not match', () => {
-            const task = makeTask({ parserId: 'tv-file' });
-            const state = stateFromCondition(cond('kind', 'includes', ['inline']));
-            expect(TaskFilterEngine.evaluate(task, state)).toBe(false);
-        });
-
-        it('file: tv-file matches', () => {
-            const task = makeTask({ parserId: 'tv-file' });
-            const state = stateFromCondition(cond('kind', 'includes', ['file']));
-            expect(TaskFilterEngine.evaluate(task, state)).toBe(true);
-        });
-
-        it('excludes file: tv-inline matches', () => {
-            const task = makeTask({ parserId: 'tv-inline' });
-            const state = stateFromCondition(cond('kind', 'excludes', ['file']));
-            expect(TaskFilterEngine.evaluate(task, state)).toBe(true);
-        });
-    });
-
     // ── StringSet: notation (derived from parserId) ──
     describe('notation filter', () => {
         it('taskviewer: tv-inline matches', () => {
             const task = makeTask({ parserId: 'tv-inline' });
-            const state = stateFromCondition(cond('notation', 'includes', ['taskviewer']));
-            expect(TaskFilterEngine.evaluate(task, state)).toBe(true);
-        });
-
-        it('taskviewer: tv-file matches (same notation family)', () => {
-            const task = makeTask({ parserId: 'tv-file' });
             const state = stateFromCondition(cond('notation', 'includes', ['taskviewer']));
             expect(TaskFilterEngine.evaluate(task, state)).toBe(true);
         });
@@ -1000,5 +969,21 @@ describe('TaskFilterEngine', () => {
                 expect(TaskFilterEngine.evaluate(child, state, context)).toBe(false);
             });
         });
+    });
+});
+
+// A new list starts with top-level tasks only: every checkbox is a task, and a
+// nested one is already drawn inside its parent's card.
+describe('createDefaultListFilterState', () => {
+    it('keeps top-level tasks and drops nested ones', () => {
+        const state = createDefaultListFilterState();
+        expect(TaskFilterEngine.evaluate(makeDisplayTask({ id: 'top' }), state)).toBe(true);
+        expect(TaskFilterEngine.evaluate(makeDisplayTask({ id: 'nested', parentId: 'top' }), state)).toBe(false);
+    });
+
+    it('hands out a fresh state each time', () => {
+        const a = createDefaultListFilterState();
+        a.filters.push({ property: 'tag', operator: 'includes', value: ['x'] });
+        expect(createDefaultListFilterState().filters).toHaveLength(1);
     });
 });

@@ -30,16 +30,6 @@ export function render(el: HTMLElement, plugin: PluginContext): void {
             }));
 
     new Setting(el)
-        .setName(t('settings.general.showFileMenuForFrontmatterTasks'))
-        .setDesc(t('settings.general.showFileMenuForFrontmatterTasksDesc'))
-        .addToggle(toggle => toggle
-            .setValue(plugin.settings.fileMenuForTvFile)
-            .onChange(async (value) => {
-                plugin.settings.fileMenuForTvFile = value;
-                await plugin.saveSettings();
-            }));
-
-    new Setting(el)
         .setName(t('settings.general.enableStatusMenu'))
         .setDesc(t('settings.general.enableStatusMenuDesc'))
         .addToggle(toggle => toggle

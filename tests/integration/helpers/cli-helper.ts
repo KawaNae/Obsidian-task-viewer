@@ -78,11 +78,6 @@ export function cliDuplicate(flags: Record<string, string>): DuplicateResult {
     return obsidianCli('duplicate', flags) as DuplicateResult;
 }
 
-/** Convert tv-inline task to tv-file. Returns { convertedFrom, newFile }. */
-export function cliConvert(id: string): ConvertResult {
-    return obsidianCli('convert', { id }) as ConvertResult;
-}
-
 /** List tasks in a date range. Returns { count, tasks }. */
 export function cliTasksForDateRange(flags: Record<string, string>): ListResult {
     return obsidianCli('tasks-for-date-range', flags) as ListResult;
@@ -96,11 +91,6 @@ export function cliCategorizedTasksForDateRange(from: string, to: string): Categ
 /** Insert a child task under a parent. Returns { parentId }. */
 export function cliInsertChildTask(flags: Record<string, string>): InsertChildTaskResult {
     return obsidianCli('insert-child-task', flags) as InsertChildTaskResult;
-}
-
-/** Create a tv-file (frontmatter) task. Returns { newFile }. */
-export function cliCreateTvFile(flags: Record<string, string>): CreateTvFileResult {
-    return obsidianCli('create-tv-file', flags) as CreateTvFileResult;
 }
 
 /** Get the current startHour setting. Returns { startHour }. */
@@ -188,11 +178,6 @@ export interface DuplicateResult {
     duplicated: string;
 }
 
-export interface ConvertResult {
-    convertedFrom: string;
-    newFile: string;
-}
-
 export interface CategorizedResult {
     allDay: Record<string, unknown>[];
     timed: Record<string, unknown>[];
@@ -203,10 +188,6 @@ export type CategorizedForDateRangeResult = Record<string, CategorizedResult>;
 
 export interface InsertChildTaskResult {
     parentId: string;
-}
-
-export interface CreateTvFileResult {
-    newFile: string;
 }
 
 export interface StartHourResult {

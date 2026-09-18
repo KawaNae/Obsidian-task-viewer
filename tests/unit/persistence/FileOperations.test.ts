@@ -407,6 +407,27 @@ describe('FileOperations', () => {
             expect(ops.findTaskLineNumber(linesWithBlock, task)).toBe(0);
         });
 
+        // A line copied together with its `^id`: two cards, one block ID. Taking
+        // the first match would land the second card's writes on the original.
+        it('does not trust a block ID that names several lines', () => {
+            const dupLines = [
+                '- [ ] task ^dup',
+                '- [ ] task ^dup',
+            ];
+            const second = makeTask({ blockId: 'dup', line: 1, originalText: '- [ ] task ^dup' });
+            expect(ops.findTaskLineNumber(dupLines, second)).toBe(1);
+        });
+
+        it('falls back to originalText when a duplicated block ID moved', () => {
+            const dupLines = [
+                '- [ ] inserted',
+                '- [ ] a ^dup',
+                '- [ ] b ^dup',
+            ];
+            const task = makeTask({ blockId: 'dup', line: 1, originalText: '- [ ] b ^dup' });
+            expect(ops.findTaskLineNumber(dupLines, task)).toBe(2);
+        });
+
         it('prefers stored line over scan when originalText matches', () => {
             // Two identical lines — stored line should be preferred
             const dupLines = [

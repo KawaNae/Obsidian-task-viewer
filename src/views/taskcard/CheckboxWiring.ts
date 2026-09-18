@@ -1,15 +1,13 @@
-import type { Task, ChildLine, TaskViewerSettings } from '../../types';
+import type { TaskViewerSettings } from '../../types';
 import type { TaskWriteService } from '../../services/data/TaskWriteService';
 import type { MenuPresenter } from '../../interaction/menu/MenuPresenter';
 import type { ChildRenderItem } from './types';
 import { buildStatusOptions, createStatusTitle } from '../../constants/statusOptions';
-import { logWarn } from '../../log/log';
 
 /**
  * Wires checkbox interactions for parent and child items.
  *
- * Child line writes use the `bodyLine` carried on the handler — the absolute
- * file line resolved at parse time. No line-number arithmetic happens here.
+ * Every checkbox, parent or child, is a task and writes through updateTask.
  */
 export class CheckboxWiring {
     constructor(
@@ -74,11 +72,7 @@ export class CheckboxWiring {
             const handler = items[i].handler;
             if (!handler) continue;
 
-            if (handler.type === 'task') {
-                this.wireTaskCheckbox(checkbox, handler.taskId, settings);
-            } else {
-                this.wireChildLineCheckbox(checkbox, handler.parentTask, handler.line, handler.bodyLine, settings);
-            }
+            this.wireTaskCheckbox(checkbox, handler.taskId, settings);
         }
     }
 
@@ -102,49 +96,6 @@ export class CheckboxWiring {
             e.stopPropagation();
             this.showStatusMenu(e as MouseEvent, settings, async (statusChar) => {
                 await this.writeService.updateTask(taskId, { statusChar });
-            });
-        });
-        checkbox.addEventListener('touchstart', (e) => e.stopPropagation(), { passive: true });
-    }
-
-    private wireChildLineCheckbox(
-        checkbox: Element,
-        parentTask: Task,
-        line: ChildLine,
-        bodyLine: number,
-        settings: TaskViewerSettings
-    ): void {
-        if (bodyLine < 0) {
-            logWarn('[CheckboxWiring] childLine handler has invalid bodyLine; skipping wire.');
-            return;
-        }
-
-        checkbox.addEventListener('click', async () => {
-            if (line.checkboxChar === null) return;
-
-            const newChar = line.checkboxChar === ' ' ? 'x' : ' ';
-            const newText = line.text.replace(`[${line.checkboxChar}]`, `[${newChar}]`);
-            this.updateCheckboxDataTask(checkbox as HTMLElement, newChar);
-
-            await this.writeService.updateChildLine(parentTask.id, bodyLine, newText);
-        });
-        checkbox.addEventListener('pointerdown', (e) => e.stopPropagation());
-
-        if (!settings.enableStatusMenu) return;
-
-        checkbox.addEventListener('contextmenu', (e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            const targetEl = e.target as HTMLElement | null;
-            this.showStatusMenu(e as MouseEvent, settings, async (statusChar) => {
-                if (line.checkboxChar === null) return;
-
-                const newText = line.text.replace(`[${line.checkboxChar}]`, `[${statusChar}]`);
-                if (targetEl) {
-                    this.updateCheckboxDataTask(targetEl, statusChar);
-                }
-
-                await this.writeService.updateChildLine(parentTask.id, bodyLine, newText);
             });
         });
         checkbox.addEventListener('touchstart', (e) => e.stopPropagation(), { passive: true });

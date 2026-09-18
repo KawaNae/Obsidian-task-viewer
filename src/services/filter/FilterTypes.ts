@@ -6,7 +6,7 @@ export type FilterProperty =
     | 'file' | 'tag' | 'status' | 'content'
     | 'startDate' | 'endDate' | 'due' | 'anyDate'
     | 'color' | 'linestyle'
-    | 'length' | 'kind' | 'notation'
+    | 'length' | 'notation'
     | 'parent' | 'children'
     | 'property';
 
@@ -75,6 +75,17 @@ export const EMPTY_FILTER_STATE: FilterState = Object.freeze({
 
 export function createEmptyFilterState(): FilterState {
     return { filters: [], logic: 'and' };
+}
+
+/**
+ * The filter a newly created list starts with: top-level tasks only.
+ *
+ * Every checkbox is a task, and a nested one is already drawn inside its
+ * parent's card, so listing it again at the top would show it twice. Saved
+ * lists keep whatever they were saved with.
+ */
+export function createDefaultListFilterState(): FilterState {
+    return { filters: [{ property: 'parent', operator: 'isNotSet' }], logic: 'and' };
 }
 
 export function createFilterGroup(): FilterGroup {
@@ -160,7 +171,6 @@ export const PROPERTY_OPERATORS: Record<FilterProperty, FilterOperator[]> = {
     color: ['includes', 'excludes'],
     linestyle: ['includes', 'excludes'],
     length: ['lessThan', 'lessThanOrEqual', 'greaterThan', 'greaterThanOrEqual', 'equals', 'isSet', 'isNotSet'],
-    kind: ['includes', 'excludes'],
     notation: ['includes', 'excludes'],
     parent: ['isSet', 'isNotSet'],
     children: ['isSet', 'isNotSet'],
@@ -195,7 +205,6 @@ export const PROPERTY_ICONS: Record<FilterProperty, string> = {
     color: 'palette',
     linestyle: 'minus',
     length: 'timer',
-    kind: 'map-pin',
     notation: 'file-type',
     parent: 'arrow-up',
     children: 'arrow-down',

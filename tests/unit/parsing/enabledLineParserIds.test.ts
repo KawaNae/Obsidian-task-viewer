@@ -45,11 +45,12 @@ describe('enabledLineParserIds', () => {
         }))).toEqual(['day-planner', 'tasks-plugin', 'tv-inline']);
     });
 
-    it('never names tv-file — a tv-file task is frontmatter, not a line', () => {
+    it('names each parser once, and only parsers the chain can build', () => {
         const ids = enabledLineParserIds(settingsWith({
             enableDayPlanner: true, enableTasksPlugin: true,
         }));
-        expect(ids).not.toContain('tv-file');
+        expect(new Set(ids).size).toBe(ids.length);
+        expect(ids.every(id => ['tv-inline', 'tasks-plugin', 'day-planner'].includes(id))).toBe(true);
     });
 });
 

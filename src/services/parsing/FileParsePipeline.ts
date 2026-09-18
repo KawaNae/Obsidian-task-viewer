@@ -1,21 +1,15 @@
 import { parseYaml } from 'obsidian';
-import type { Task, TaskViewerSettings, WikilinkRef } from '../../types';
-import { isTvFileUnscheduled } from '../../types';
+import type { Task, TaskViewerSettings } from '../../types';
 import { collectGenBlocks, type GenBlock } from './gen/GenBlockCollector';
 import { DocumentTreeBuilder } from './tree/DocumentTreeBuilder';
 import { SectionPropertyResolver } from './tree/SectionPropertyResolver';
 import { TreeTaskExtractor } from './tree/TreeTaskExtractor';
-import { TVFileBuilder } from './tv-file/TVFileBuilder';
 
 export interface FileParseResult {
     /** tv-ignore'd file: produce no tasks (caller clears existing state). */
     ignored: boolean;
-    /** All tasks of the file (fm task first when present), fully resolved. */
+    /** All tasks of the file, fully resolved. */
     tasks: Task[];
-    /** The tv-file (frontmatter) task, when the file is task-bearing. */
-    fmTask: Task | null;
-    /** Body wikilink refs of the fm task (parent-child wiring substrate). */
-    wikilinkRefs: WikilinkRef[];
     /** `tv-gen` blocks of the file, by name. Referenced by `use("name")`. */
     genBlocks: Map<string, GenBlock>;
 }
@@ -24,9 +18,11 @@ export interface FileParseResult {
  * File → Task[] parse pipeline — the single place that knows the parse
  * order contract:
  *
- *   frontmatter boundary → ignore check → TVFileBuilder (file-level task)
+ *   frontmatter boundary → ignore check
  *   → DocumentTreeBuilder → SectionPropertyResolver → TreeTaskExtractor
- *   → orphan re-parent
+ *
+ * Frontmatter makes no task: it is the root of the property cascade, which
+ * hands its dates, style and tags down to every task in the note.
  *
  * build → resolve → extract mutate one shared DocumentNode in that exact
  * order; wrapping them here means callers cannot get it wrong. Pure with
@@ -63,69 +59,22 @@ export class FileParsePipeline {
         }
 
         if (this.isIgnoredByFrontmatter(frontmatterObj, lines, bodyStartIndex, settings)) {
-            return { ignored: true, tasks: [], fmTask: null, wikilinkRefs: [], genBlocks: new Map() };
+            return { ignored: true, tasks: [], genBlocks: new Map() };
         }
-
-        const bodyLines = lines.slice(bodyStartIndex);
-        const fmResult = TVFileBuilder.parse(
-            filePath,
-            frontmatterObj,
-            bodyLines,
-            bodyStartIndex,
-            settings.tvFileKeys,
-            settings.tvFileChildHeader,
-            settings.tvFileChildHeaderLevel
-        );
 
         // --- ツリーパイプライン（順序契約: build → resolve → extract）---
         const doc = DocumentTreeBuilder.build(filePath, lines, bodyStartIndex);
-        SectionPropertyResolver.resolve(doc, frontmatterObj, settings.tvFileKeys);
-        const inlineTasks = TreeTaskExtractor.extract(doc, {
+        SectionPropertyResolver.resolve(doc, frontmatterObj, settings.scopeKeys);
+        const tasks = TreeTaskExtractor.extract(doc, {
             filePath,
-            hasTvFileParent: fmResult !== null,
-            tvFileKeys: settings.tvFileKeys,
+            scopeKeys: settings.scopeKeys,
         });
-
-        const tasks: Task[] = [];
-        let fmTask: Task | null = null;
-        let wikilinkRefs: WikilinkRef[] = [];
-
-        if (fmResult) {
-            fmTask = fmResult.task;
-            wikilinkRefs = fmResult.wikilinkRefs;
-
-            // Container の content フォールバック: ファイル名の basename を使用
-            if (isTvFileUnscheduled(fmTask) && !fmTask.content) {
-                fmTask.content = this.basename(filePath);
-            }
-
-            // 全孤児インラインタスクを FM/Container の子にする
-            for (const bt of inlineTasks) {
-                if (!bt.parentId) {
-                    bt.parentId = fmTask.id;
-                    fmTask.childIds.push(bt.id);
-                }
-            }
-
-            // Container は子がなければ作成しない
-            const isEmptyContainer = isTvFileUnscheduled(fmTask)
-                && fmTask.childIds.length === 0 && fmTask.childLines.length === 0;
-            if (!isEmptyContainer) {
-                tasks.push(fmTask);
-            }
-        }
-        tasks.push(...inlineTasks);
 
         // Blocks are collected from the whole file (frontmatter cannot hold a
         // fence, and a block is not a task, so the body offset is irrelevant).
         const { blocks: genBlocks } = collectGenBlocks(lines);
 
-        return { ignored: false, tasks, fmTask, wikilinkRefs, genBlocks };
-    }
-
-    private static basename(filePath: string): string {
-        const base = filePath.split('/').pop() ?? filePath;
-        return base.replace(/\.md$/i, '');
+        return { ignored: false, tasks, genBlocks };
     }
 
     private static isIgnoredByFrontmatter(
@@ -134,7 +83,7 @@ export class FileParsePipeline {
         bodyStartIndex: number,
         settings: TaskViewerSettings
     ): boolean {
-        const ignoreKey = settings.tvFileKeys.ignore;
+        const ignoreKey = settings.scopeKeys.ignore;
         if (this.isTruthyIgnoreValue(frontmatterObj?.[ignoreKey])) {
             return true;
         }

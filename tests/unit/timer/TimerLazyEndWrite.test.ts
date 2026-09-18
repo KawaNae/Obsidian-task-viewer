@@ -50,9 +50,8 @@ function makeHarness(effectiveEnd: Date) {
         {} as App, plugin,
         { generateTimerTargetId: () => 'tv-timer-2' } as unknown as TimerStorageUtils
     );
-    (recorder as unknown as { resolver: { resolveTvInline: () => unknown; resolveTvFile: () => unknown } }).resolver = {
+    (recorder as unknown as { resolver: { resolveTvInline: () => unknown } }).resolver = {
         resolveTvInline: () => parent,
-        resolveTvFile: () => parent,
     };
 
     return { recorder, updates };

@@ -1,8 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import { FilePropertyResolver } from '../../../src/services/parsing/FilePropertyResolver';
-import { DEFAULT_TV_FILE_KEYS } from '../../../src/types';
+import { DEFAULT_SCOPE_KEYS } from '../../../src/types';
 
-const keys = DEFAULT_TV_FILE_KEYS;
+const keys = DEFAULT_SCOPE_KEYS;
 
 describe('FilePropertyResolver', () => {
     describe('builtin keys', () => {
@@ -43,7 +43,7 @@ describe('FilePropertyResolver', () => {
     });
 
     describe('custom properties', () => {
-        it('TvFileKeys に該当しないキーを properties に格納', () => {
+        it('ScopeKeys に該当しないキーを properties に格納', () => {
             const result = FilePropertyResolver.extract({
                 'tv-color': 'ff0000',
                 'custom1': 'value1',

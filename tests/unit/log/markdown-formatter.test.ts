@@ -8,7 +8,7 @@ function meta(overrides: Partial<ExportMeta> = {}): ExportMeta {
         obsidianVersion: '1.12.0',
         platform: { os: 'windows', isMobile: false },
         exportedAt: Date.UTC(2026, 7, 22, 12, 0, 0),
-        taskState: { taskCount: 3, activeViewCount: 2, enabledParsers: ['tv-inline', 'tv-file'], startHour: 4 },
+        taskState: { taskCount: 3, activeViewCount: 2, enabledParsers: ['tv-inline', 'tasks-plugin'], startHour: 4 },
         ...overrides,
     };
 }
@@ -88,7 +88,7 @@ describe('formatLogExport frontmatter', () => {
         const out = formatLogExport([], meta());
         expect(out).toContain('  task_count: 3');
         expect(out).toContain('  active_view_count: 2');
-        expect(out).toContain('  enabled_parsers: [tv-inline, tv-file]');
+        expect(out).toContain('  enabled_parsers: [tv-inline, tasks-plugin]');
         expect(out).toContain('  start_hour: 4');
     });
 

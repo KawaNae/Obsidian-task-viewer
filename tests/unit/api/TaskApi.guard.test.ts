@@ -32,8 +32,6 @@ function createMockApi(task: Task | undefined): TaskApi {
         duplicateTask: vi.fn(),
         insertChildTask: vi.fn(),
         createTask: vi.fn(),
-        convertToTvFile: vi.fn().mockResolvedValue('new.md'),
-        createTvFileFromData: vi.fn().mockResolvedValue('new.md'),
     };
     const mockPlugin = {
         app: { vault: { getAbstractFileByPath: vi.fn() } },
@@ -125,11 +123,6 @@ describe('C2: status 単一文字検証', () => {
         }
     });
 
-    it('createTvFile: 多文字 status を拒否', async () => {
-        const api = createMockApi(undefined);
-        await expect(api.createTvFile({ content: 'task', status: 'ab' }))
-            .rejects.toThrow(/status must be a single character/);
-    });
 
     it('create: 単一文字 "x" は通過', async () => {
         const api = createMockApi(undefined);
@@ -138,32 +131,6 @@ describe('C2: status 単一文字検証', () => {
         } catch (e) {
             expect((e as Error).message).not.toMatch(/status must be/);
         }
-    });
-});
-
-describe('C4: createTvFile 日付検証統一', () => {
-    it('不正な start 日付を拒否', async () => {
-        const api = createMockApi(undefined);
-        await expect(api.createTvFile({ content: 'task', start: 'invalid' }))
-            .rejects.toThrow(/Invalid date format for start/);
-    });
-
-    it('不正な end 日付を拒否', async () => {
-        const api = createMockApi(undefined);
-        await expect(api.createTvFile({ content: 'task', end: 'invalid' }))
-            .rejects.toThrow(/Invalid date format for end/);
-    });
-
-    it('due の time-only 入力を拒否', async () => {
-        const api = createMockApi(undefined);
-        await expect(api.createTvFile({ content: 'task', due: '14:00' }))
-            .rejects.toThrow(/due must include a date/);
-    });
-
-    it('正しい日付は通過', async () => {
-        const api = createMockApi(undefined);
-        const result = await api.createTvFile({ content: 'task', start: '2026-07-18' });
-        expect(result.newFile).toBe('new.md');
     });
 });
 

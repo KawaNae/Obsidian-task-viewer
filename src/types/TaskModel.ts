@@ -50,7 +50,7 @@ export interface ChildLine {
      */
     bodyLine: number;
     indent: string;
-    checkboxChar: string | null;
+    /** `- [[target]]` link lines: the target, kept for masking. */
     wikilinkTarget: string | null;
     propertyKey: string | null;
     propertyValue: string | null;
@@ -61,37 +61,33 @@ export interface ChildLine {
  * absolute file line is owned by exactly one ChildEntry across all tasks.
  *
  * - `task`: line is occupied by an independent child task (resolved via TaskIndex)
- * - `wikilink`: line references another file's tv-file task (unresolved)
- * - `line`: raw checkbox / property / text line under this task (unrelated to
- *   the legacy `'plain'` parserId migration alias in TimerPersistence)
+ * - `line`: raw property / text / link line under this task — never a checkbox,
+ *   which is always a task of its own (unrelated to the legacy `'plain'`
+ *   parserId migration alias in TimerPersistence)
  *
  * Render layer walks `task.children` directly without re-classifying.
  * Write layer uses `bodyLine` as the absolute file line for surgical edits.
  */
 export type ChildEntry =
     | { kind: 'task'; taskId: string; bodyLine: number }
-    | { kind: 'wikilink'; target: string; bodyLine: number; line: ChildLine }
     | { kind: 'line'; line: ChildLine; bodyLine: number };
 
 /**
  * Identifier of the parser that produced a task.
  *
- * Production parsers emit one of these four values. Legacy persisted values
- * (`'at-notation'`, `'frontmatter'`, `'plain'`) are migrated at load time
- * by `TimerPersistence.normalizeParserId`; they never appear on a live Task.
+ * Every task is a line in a note, read by one of these three parsers.
+ * Legacy persisted values (`'at-notation'`, `'plain'`) are migrated at load
+ * time by `TimerPersistence.normalizeParserId`; `'tv-file'` and `'frontmatter'`
+ * named the file task, which no longer exists, and fall back to `'tv-inline'`
+ * there. None of them appears on a live Task.
  */
-export type ParserId = 'tv-inline' | 'tv-file' | 'tasks-plugin' | 'day-planner';
+export type ParserId = 'tv-inline' | 'tasks-plugin' | 'day-planner';
 
 export interface Task {
     // Identity and source location.
     id: string;
     file: string;
-    /**
-     * 0-indexed line number in the source file.
-     * `-1` is a generic sentinel meaning "no body line" (e.g., frontmatter root tasks).
-     * Use `hasBodyLine(task)` to test validity. `-1` is NOT a frontmatter discriminator
-     * — use `isTvFile(task)` for type identification.
-     */
+    /** 0-indexed line number in the source file. Every task has one. */
     line: number;
 
     // Core task text/status.
@@ -214,11 +210,6 @@ export interface Task {
     properties: Record<string, PropertyValue>;
 }
 
-/** TaskViewer file-form (frontmatter) task. */
-export function isTvFile(task: Pick<Task, 'parserId'>): boolean {
-    return task.parserId === 'tv-file';
-}
-
 /** TaskViewer inline-form task (writable; primary write target). */
 export function isTvInline(task: Pick<Task, 'parserId'>): boolean {
     return task.parserId === 'tv-inline';
@@ -234,45 +225,12 @@ export function isTpInline(task: Pick<Task, 'parserId'>): boolean {
     return task.parserId === 'tasks-plugin';
 }
 
-/**
- * task.line が body 行アクセスに使える有効値かを判定する。
- * `false` の場合: tv-file task (line === -1) など、ファイル本体に
- * 紐付く行を持たないタスク。
- *
- * 注意: 種別判定（file-form かどうか）には使わないこと。
- * `-1` は「body 行なし」の汎用 sentinel であり、形式 discriminator
- * ではない。種別判定は `isTvFile()` を使用する。
- */
-export function hasBodyLine(task: Pick<Task, 'line'>): boolean {
-    return task.line >= 0;
-}
-
 /** True when the task has any date/time scheduling field. */
 export function hasScheduling(
     task: Pick<Task, 'startDate' | 'startTime' | 'endDate' | 'endTime' | 'due'>
 ): boolean {
     return !!(task.startDate || task.startTime || task.endDate || task.endTime || task.due);
 }
-/**
- * Derived: a tv-file task with no scheduling. Groups inline tasks from the
- * same file without carrying dates itself. Replaces the former Task.isContainer
- * flag.
- */
-export function isTvFileUnscheduled(
-    task: Pick<Task, 'parserId' | 'startDate' | 'startTime' | 'endDate' | 'endTime' | 'due'>
-): boolean {
-    return isTvFile(task) && !hasScheduling(task);
-}
-
-/**
- * Wikilink reference extracted from frontmatter task body.
- * Stored separately from Task and consumed by WikiLinkResolver.
- */
-export interface WikilinkRef {
-    target: string;
-    bodyLine: number;
-}
-
 /**
  * Options for duplicating tasks.
  * dayOffset: number of days to shift dates (default: 0 = in-place copy)

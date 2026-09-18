@@ -37,15 +37,7 @@ export abstract class ReadOnlyParserBase implements LeafParserStrategy {
     /** Build a Task from parsed fields. Sets isReadOnly: true. */
     protected buildTask(params: ReadOnlyTaskParams): Task {
         return createBaseTask({
-            id: TaskIdGenerator.generate(
-                this.id,
-                params.filePath,
-                TaskIdGenerator.resolveAnchor({
-                    parserId: this.id,
-                    line: params.lineNumber,
-                    blockId: params.blockId,
-                }),
-            ),
+            id: TaskIdGenerator.provisionalId(this.id, params.filePath, params.lineNumber),
             file: params.filePath,
             line: params.lineNumber,
             content: params.content,

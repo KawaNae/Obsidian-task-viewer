@@ -8,7 +8,6 @@ import { getEffectiveAstronomyDisplay } from '../../services/astronomy/Astronomy
 import { MenuHandler } from '../../interaction/menu/MenuHandler';
 import { createTaskHubOpener } from '../../modals/hub/openTaskHub';
 import { DateUtils } from '../../utils/DateUtils';
-import { ChildLineMenuBuilder } from '../../interaction/menu/builders/ChildLineMenuBuilder';
 import type { PluginContext } from '../../PluginContext';
 import type { TimerHost } from '../../timer/TimerWidget';
 import { FilterMenuComponent } from '../customMenus/FilterMenuComponent';
@@ -116,10 +115,6 @@ export class ScheduleView extends ItemView {
         });
         this.menuHandler = new MenuHandler(this.app, this.readService, this.writeService, this.plugin);
         this.taskRenderer.setChildMenuCallback((taskId, x, y) => this.menuHandler.showMenuForTask(taskId, x, y));
-        const childLineMenuBuilder = new ChildLineMenuBuilder(this.app, this.writeService, this.plugin);
-        this.taskRenderer.setChildLineEditCallback((parentTask, line, bodyLine, x, y) => {
-            childLineMenuBuilder.showMenu(parentTask, line, bodyLine, x, y);
-        });
         const openTaskHub = createTaskHubOpener(this.app, {
             taskRenderer: this.taskRenderer,
             menuHandler: this.menuHandler,

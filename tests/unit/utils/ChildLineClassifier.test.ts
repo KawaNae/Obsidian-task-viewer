@@ -3,23 +3,19 @@ import { ChildLineClassifier } from '../../../src/services/parsing/utils/ChildLi
 
 describe('ChildLineClassifier', () => {
     describe('classify', () => {
-        it('parses checkbox child line', () => {
-            const result = ChildLineClassifier.classify('  - [x] sub task', 0);
+        // A checkbox is a task of its own and never lands in childLines outside a
+        // code fence; there it is an example, so it carries no property or link.
+        it('keeps a checkbox line as plain text with no property or link', () => {
+            const result = ChildLineClassifier.classify('  - [x] key:: sub task', 0);
             expect(result.indent).toBe('  ');
-            expect(result.checkboxChar).toBe('x');
             expect(result.wikilinkTarget).toBeNull();
-            expect(result.text).toBe('  - [x] sub task');
-        });
-
-        it('parses unchecked checkbox', () => {
-            const result = ChildLineClassifier.classify('  - [ ] todo', 0);
-            expect(result.checkboxChar).toBe(' ');
+            expect(result.propertyKey).toBeNull();
+            expect(result.text).toBe('  - [x] key:: sub task');
         });
 
         it('parses wikilink child line', () => {
             const result = ChildLineClassifier.classify('  - [[My Task]]', 0);
             expect(result.wikilinkTarget).toBe('My Task');
-            expect(result.checkboxChar).toBeNull();
         });
 
         it('parses wikilink with alias', () => {
@@ -27,7 +23,7 @@ describe('ChildLineClassifier', () => {
             expect(result.wikilinkTarget).toBe('path/to/note');
         });
 
-        it('parses wikilink child with any list bullet (unified with tv-file)', () => {
+        it('parses wikilink child with any list bullet', () => {
             expect(ChildLineClassifier.classify('  * [[Note A]]', 0).wikilinkTarget).toBe('Note A');
             expect(ChildLineClassifier.classify('  + [[Note B]]', 0).wikilinkTarget).toBe('Note B');
             expect(ChildLineClassifier.classify('  1. [[Note C]]', 0).wikilinkTarget).toBe('Note C');
@@ -36,37 +32,20 @@ describe('ChildLineClassifier', () => {
 
         it('parses plain text line', () => {
             const result = ChildLineClassifier.classify('  just text', 0);
-            expect(result.checkboxChar).toBeNull();
             expect(result.wikilinkTarget).toBeNull();
+            expect(result.propertyKey).toBeNull();
             expect(result.indent).toBe('  ');
         });
 
         it('parses empty line', () => {
             const result = ChildLineClassifier.classify('', 0);
             expect(result.indent).toBe('');
-            expect(result.checkboxChar).toBeNull();
             expect(result.wikilinkTarget).toBeNull();
         });
 
         it('handles tab indent', () => {
-            const result = ChildLineClassifier.classify('\t- [x] tab', 0);
+            const result = ChildLineClassifier.classify('\t- tab', 0);
             expect(result.indent).toBe('\t');
-            expect(result.checkboxChar).toBe('x');
-        });
-
-        it('handles asterisk marker checkbox', () => {
-            const result = ChildLineClassifier.classify('  * [x] star', 0);
-            expect(result.checkboxChar).toBe('x');
-        });
-
-        it('handles plus marker checkbox', () => {
-            const result = ChildLineClassifier.classify('  + [ ] plus', 0);
-            expect(result.checkboxChar).toBe(' ');
-        });
-
-        it('handles numbered marker checkbox', () => {
-            const result = ChildLineClassifier.classify('  1. [x] numbered', 0);
-            expect(result.checkboxChar).toBe('x');
         });
     });
 
@@ -75,7 +54,6 @@ describe('ChildLineClassifier', () => {
             const result = ChildLineClassifier.classify('\t- 金額:: 2000', 0);
             expect(result.propertyKey).toBe('金額');
             expect(result.propertyValue).toBe('2000');
-            expect(result.checkboxChar).toBeNull();
         });
 
         it('parses property with no space after ::', () => {
@@ -112,7 +90,6 @@ describe('ChildLineClassifier', () => {
 
         it('does not extract property from checkbox lines', () => {
             const result = ChildLineClassifier.classify('\t- [x] key:: value', 0);
-            expect(result.checkboxChar).toBe('x');
             expect(result.propertyKey).toBeNull();
         });
 
@@ -186,9 +163,9 @@ describe('ChildLineClassifier', () => {
                 '  plain text',
             ], [5, 6, 7]);
             expect(results).toHaveLength(3);
-            expect(results[0].checkboxChar).toBe('x');
+            expect(results[0].wikilinkTarget).toBeNull();
             expect(results[1].wikilinkTarget).toBe('Link');
-            expect(results[2].checkboxChar).toBeNull();
+            expect(results[2].wikilinkTarget).toBeNull();
             expect(results.map(r => r.bodyLine)).toEqual([5, 6, 7]);
         });
 

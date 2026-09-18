@@ -152,20 +152,6 @@ obsidian obsidian-task-viewer:duplicate id=abc123 day-offset=1 count=3
 
 **戻り値:** `{ "duplicated": "abc123" }`
 
-### convert — インライン→Frontmatter変換
-
-インラインタスクをfrontmatterタスクファイルに変換します。
-
-```bash
-obsidian obsidian-task-viewer:convert id=abc123
-```
-
-| フラグ | 必須 | 説明 |
-|-------|------|------|
-| `id` | ○ | タスクID |
-
-**戻り値:** `{ "convertedFrom": "abc123", "newFile": "path/to/new-file.md" }`
-
 ### tasks-for-date-range — 日付範囲のタスク取得
 
 ```bash
@@ -208,24 +194,6 @@ obsidian obsidian-task-viewer:insert-child-task parent-id=abc123 content="サブ
 | `content` | ○ | 子タスクの内容 |
 
 **戻り値:** `{ "parentId": "abc123" }`
-
-### create-tv-file — tv-file（frontmatter）タスク作成
-
-新しい tv-file タスクを作成します。
-
-```bash
-obsidian obsidian-task-viewer:create-tv-file content="プロジェクト名" start=2026-03-15 due=2026-03-31
-```
-
-| フラグ | 必須 | 説明 |
-|-------|------|------|
-| `content` | ○ | タスクの内容 |
-| `start` | | 開始日時 |
-| `end` | | 終了日時 |
-| `due` | | 締切日 |
-| `status` | | ステータス文字（デフォルト: ` `） |
-
-**戻り値:** `{ "newFile": "path/to/new-file.md" }`
 
 ### get-start-hour — startHour設定値取得
 
@@ -276,7 +244,7 @@ obsidian obsidian-task-viewer:help
 | `endTime` | `string \| null` | 生の終了時刻 |
 | `due` | `string \| null` | 生の締切日 |
 | `tags` | `string[]` | タグ一覧 |
-| `parserId` | `string` | パーサー種別（`tv-inline` / `tv-file` / `tasks-plugin` / `day-planner`） |
+| `parserId` | `string` | パーサー種別（`tv-inline`、`tasks-plugin`、`day-planner` のいずれか） |
 | `parentId` | `string \| null` | 親タスクID |
 | `childIds` | `string[]` | 子タスクID一覧 |
 | `color` | `string \| null` | カードの色 |

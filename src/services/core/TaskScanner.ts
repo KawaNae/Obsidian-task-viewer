@@ -1,25 +1,41 @@
 import type { App, TFile } from 'obsidian';
 import type { TaskViewerSettings } from '../../types';
 import { FileParsePipeline } from '../parsing/FileParsePipeline';
-import { WikiLinkResolver } from './WikiLinkResolver';
 import type { TaskStore } from './TaskStore';
 import type { TaskValidator } from './TaskValidator';
 import type { SyncDetector } from './SyncDetector';
 import { CompletionDetector } from './CompletionDetector';
 import type { FlowExecutor } from '../flow/FlowExecutor';
+import { TaskIdGenerator } from '../display/TaskIdGenerator';
+import { IdentityLedger } from './identity/IdentityLedger';
+import { matchFile } from './identity/IdentityMatcher';
+import { applyIdentity, assertNoProvisionalIds, assertUniqueProvisionalIds } from './identity/IdentityApplier';
 import { logDebug, logError, logInfo } from '../../log/log';
 
 /**
  * タスクスキャナー — ファイル単位のスキャンのオーケストレーション。
- * scanFile は 3 相を順に呼ぶだけ:
- *   parse  — FileParsePipeline（ファイル → Task[]、パース順序契約の所有者）
- *   detect — CompletionDetector（完了イベントの差分検出、署名メモリの所有者）
- *   commit — store 更新 + wikilinkRefs 登録 + フロー発火
+ * scanFile は 5 相を順に呼ぶだけ:
+ *   parse    — FileParsePipeline（ファイル → Task[]、仮 ID。パース順序契約の所有者）
+ *   identity — IdentityLedger との突き合わせで仮 ID を runtime ID に置き換える
+ *   validate — バリデーション警告の収集（以降は runtime ID しか見ない）
+ *   detect   — CompletionDetector（完了イベントの差分検出、署名メモリの所有者）
+ *   commit   — store 更新 + ledger 置換 + フロー発火
  */
 export class TaskScanner {
     private scanQueue: Map<string, Promise<void>> = new Map();
     private completionDetector = new CompletionDetector();
     private isInitializing = true;
+    /**
+     * Written only by scanFile's commit, so the store and the ledger move together.
+     *
+     * Seeded from the clock so runtime IDs are unique across sessions, not just
+     * within one: timers persist task IDs, and a counter restarting at 1 would
+     * hand a previous session's number to a different task after a reload —
+     * a stale ID must name nothing, never someone else. In microseconds, the
+     * next session starts ahead of this one as long as it mints fewer than 1000
+     * IDs per millisecond on average; ~1.7e15 stays within safe integers.
+     */
+    private ledger = new IdentityLedger(Date.now() * 1000);
 
     constructor(
         private app: App,
@@ -43,7 +59,6 @@ export class TaskScanner {
             await this.queueScan(file);
         }
 
-        WikiLinkResolver.resolve(this.store.getTasksMap(), this.store.getWikilinkRefsMap(), this.app);
         this.store.notifyListenersStaggered();
         logInfo(`[scanVault:done] tasks=${this.store.getTasks().length}`);
         this.isInitializing = false;
@@ -62,10 +77,9 @@ export class TaskScanner {
         const fm = cache.frontmatter;
         if (fm) {
             if ('tags' in fm) return true;
-            const keys = this.settings.tvFileKeys;
+            const keys = this.settings.scopeKeys;
             if (keys.start in fm || keys.end in fm || keys.due in fm ||
-                keys.status in fm || keys.content in fm || keys.color in fm ||
-                keys.linestyle in fm || keys.mask in fm || keys.timerTargetId in fm ||
+                keys.color in fm || keys.linestyle in fm || keys.mask in fm ||
                 keys.ignore in fm) return true;
         }
 
@@ -114,7 +128,7 @@ export class TaskScanner {
     }
 
     /**
-     * ファイルをスキャンしてタスクを抽出（parse → detect → commit）
+     * ファイルをスキャンしてタスクを抽出（parse → identity → validate → detect → commit）
      */
     private async scanFile(file: TFile, isLocalChange: boolean = false): Promise<void> {
         this.validator.clearErrorsForFile(file.path);
@@ -132,10 +146,25 @@ export class TaskScanner {
         if (parsed.ignored) {
             this.store.removeTasksByFile(file.path);
             this.completionDetector.clearForFile(file.path);
+            // Retired for good: lifting tv-ignore later mints fresh IDs.
+            this.ledger.dropFile(file.path);
             return;
         }
 
-        // バリデーション警告を収集
+        // --- identity ---
+        // Right after parse, so nothing downstream — validator included — ever
+        // sees a provisional ID.
+        if (__DEV__) {
+            assertUniqueProvisionalIds(parsed.tasks);
+        }
+        const identity = matchFile(
+            this.ledger.snapshotFor(file.path),
+            parsed.tasks,
+            task => TaskIdGenerator.mintRuntimeId(task, () => this.ledger.mint())
+        );
+        applyIdentity(parsed, identity.mapping);
+
+        // --- validate ---
         for (const task of parsed.tasks) {
             if (task.validation) {
                 this.validator.addError({
@@ -166,10 +195,15 @@ export class TaskScanner {
         // than to a copy, so with verbose on, one change printing this line
         // twice is a surviving pipeline saying so.
         if (!this.isInitializing) {
-            logDebug(`[scan] file=${file.path} isLocal=${isLocalChange} fired=${tasksToTrigger.length}`);
+            logDebug(`[scan] file=${file.path} isLocal=${isLocalChange} fired=${tasksToTrigger.length} minted=${identity.minted.length} retired=${identity.retired.length}`);
         }
 
         // --- commit (batched: 1 file = 1 revision bump) ---
+        // Checked before the batch opens: throwing inside it would have already
+        // removed the file's tasks from the store.
+        if (__DEV__) {
+            assertNoProvisionalIds(parsed.tasks, id => !TaskIdGenerator.isRuntimeId(id));
+        }
         this.store.beginBatch();
         try {
             this.store.removeTasksByFile(file.path);
@@ -178,13 +212,13 @@ export class TaskScanner {
                 this.store.setTask(task.id, task);
             }
 
-            if (parsed.fmTask) {
-                this.store.setWikilinkRefs(parsed.fmTask.id, parsed.wikilinkRefs);
-            }
-
             // removeTasksByFile above dropped the previous ones, so this is a
             // replacement, not a merge — the scan owns the file's blocks.
             this.store.setGenBlocks(file.path, parsed.genBlocks);
+
+            // Last, so a store write that throws leaves the ledger on the
+            // previous generation too.
+            this.ledger.replaceFile(file.path, identity.entries);
         } finally {
             this.store.endBatch();
         }
@@ -196,12 +230,35 @@ export class TaskScanner {
     }
 
     /**
-     * ファイルリネーム時の内部状態クリーンアップ。
-     * oldPath に紐づく scanQueue / 完了検出メモリを除去する。
+     * ファイルリネーム（md → md）時の内部状態の引き継ぎ。
+     * oldPath に紐づく scanQueue / 完了検出メモリを除去し、ledger を newPath へ再キーする。
+     *
+     * 新パスの再スキャンより前に呼ぶこと。逆順だと空の ledger と突き合わせて
+     * 全タスクが新発番になる。再キーは TaskHubPanel / TimerWidget が握る ID を
+     * 書き換えるのと同じ renameFile で行い、両者の文字列を一致させる。
      */
-    handleFileRenamed(oldPath: string): void {
+    handleFileRenamed(oldPath: string, newPath: string): void {
         this.scanQueue.delete(oldPath);
         this.completionDetector.forgetFile(oldPath);
+        this.ledger.rekeyFile(oldPath, newPath, id => TaskIdGenerator.renameFile(id, oldPath, newPath));
+    }
+
+    /**
+     * ファイル削除（md → 非 md のリネームを含む）時の内部状態の破棄。
+     * scanQueue / 完了検出メモリ / ledger から path を除去する。
+     */
+    handleFileDeleted(path: string): void {
+        this.scanQueue.delete(path);
+        this.completionDetector.forgetFile(path);
+        this.ledger.dropFile(path);
+    }
+
+    /**
+     * The identity ledger, for reverse lookups from the console and CLI.
+     * @internal Read-only use: only scanFile writes it.
+     */
+    getLedger(): IdentityLedger {
+        return this.ledger;
     }
 
     /**

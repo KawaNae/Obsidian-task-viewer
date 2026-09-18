@@ -88,9 +88,8 @@ function makeHarness(options: { tail?: Task | undefined; siblingFails?: boolean 
     const recorder = new TimerRecorder({} as App, plugin, storageUtils);
 
     // resolver は index を舐めて対象を引く。テストでは対象タスクに固定する。
-    (recorder as unknown as { resolver: { resolveTvInline: () => unknown; resolveTvFile: () => unknown } }).resolver = {
+    (recorder as unknown as { resolver: { resolveTvInline: () => unknown } }).resolver = {
         resolveTvInline: () => target,
-        resolveTvFile: () => target,
     };
 
     return { recorder, siblingInserts, childInserts, updates, deletes };

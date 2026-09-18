@@ -1,4 +1,4 @@
-import type { Task, TvFileKeys } from '../../types';
+import type { Task, ScopeKeys } from '../../types';
 import { TagExtractor } from '../parsing/utils/TagExtractor';
 import { reservedPropertyKeys } from '../parsing/utils/FrontmatterPolicy';
 import { logWarn } from '../../log/log';
@@ -6,8 +6,8 @@ import { logWarn } from '../../log/log';
 /**
  * 非時刻プロパティ（color/linestyle/mask/tags/custom）の書き込み操作。
  * `key` は物理的な宣言キー（tv-color 等の設定キー名 / リテラル 'tags' /
- * カスタムキー名）に解決済み。writer はこのキーをそのまま
- * frontmatter キー（tvFile）/ 子プロパティ行キー（tvInline）として使う。
+ * カスタムキー名）に解決済み。writer はこのキーをそのまま子プロパティ行の
+ * キーとして使う。
  */
 export interface PropertyOp {
     key: string;
@@ -29,7 +29,7 @@ export interface PropertyOp {
  * だけを担う。
  */
 export class PropertyUpdatePlanner {
-    static plan(before: Task, updates: Partial<Task>, keys: TvFileKeys): PropertyOp[] {
+    static plan(before: Task, updates: Partial<Task>, keys: ScopeKeys): PropertyOp[] {
         const ops: PropertyOp[] = [];
 
         for (const field of ['color', 'linestyle', 'mask'] as const) {

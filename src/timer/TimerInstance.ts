@@ -53,7 +53,7 @@ export type TimerRunState = 'running' | 'suspended';
  * この値が効くのは最初の 1 回だけ。
  *
  * - `self`   … 対象タスク行そのものをレコードに変形する（単発 1 行完結の体験）
- * - `child`  … 対象タスクの子として挿す（器タスク / tvFile / daily）
+ * - `child`  … 対象タスクの子として挿す（器タスク / daily）
  * - `sibling`… 対象タスク（完了済み）の兄弟として挿す。`[x]` 起点で「続きを開始」
  *              を選んだときだけ使う
  */
@@ -206,6 +206,27 @@ export function isDailyTimer(timer: Pick<TimerBase, 'taskId'>): boolean {
 /** デイリーノート起点のタイマーが指す日付（`YYYY-MM-DD`）。 */
 export function dailyDateOf(timer: Pick<TimerBase, 'taskId'>): string {
     return timer.taskId.slice(DAILY_TASK_ID_PREFIX.length);
+}
+
+/**
+ * ログ用に、タイマーが対象を引くときに頼る手がかりを 1 行にまとめる。
+ * 対象を見失ったとき「どの手がかりが残っていたか」を後から読めるようにする
+ * ための観察情報で、挙動には関与しない。
+ */
+export function describeTimerAnchor(
+    timer: Pick<TimerBase, 'taskId' | 'taskFile' | 'taskOriginalText' | 'timerTargetId' | 'tailRecordBlockId' | 'recordedChildTaskId' | 'recordMode'>,
+): string {
+    const text = timer.taskOriginalText.trim();
+    const excerpt = text.length > 60 ? `${text.slice(0, 60)}…` : text;
+    return [
+        `mode=${timer.recordMode}`,
+        `taskId=${timer.taskId}`,
+        `file=${timer.taskFile || '-'}`,
+        `targetId=${timer.timerTargetId ?? '-'}`,
+        `tail=${timer.tailRecordBlockId ?? '-'}`,
+        `recorded=${timer.recordedChildTaskId ?? '-'}`,
+        `text="${excerpt}"`,
+    ].join(' ');
 }
 
 export function getTimerElapsedSeconds(timer: TimerInstance): number {

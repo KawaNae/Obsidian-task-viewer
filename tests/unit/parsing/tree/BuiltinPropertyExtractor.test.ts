@@ -1,9 +1,9 @@
 import { describe, it, expect } from 'vitest';
 import { BuiltinPropertyExtractor } from '../../../../src/services/parsing/tree/BuiltinPropertyExtractor';
-import { DEFAULT_TV_FILE_KEYS } from '../../../../src/types';
+import { DEFAULT_SCOPE_KEYS } from '../../../../src/types';
 import type { PropertyValue } from '../../../../src/types';
 
-const keys = DEFAULT_TV_FILE_KEYS;
+const keys = DEFAULT_SCOPE_KEYS;
 
 function pv(value: string, type: 'string' | 'number' | 'boolean' | 'array' = 'string'): PropertyValue {
     return { value, type };
@@ -51,10 +51,15 @@ describe('BuiltinPropertyExtractor', () => {
     );
 
     it('drops a renamed declaration key and keeps the name it freed', () => {
-        const custom = { ...keys, content: 'my-content' };
-        const raw = { 'my-content': pv('x'), 'tv-content': pv('y') };
+        const custom = { ...keys, ignore: 'my-ignore' };
+        const raw = { 'my-ignore': pv('x'), 'tv-ignore': pv('y') };
         const result = BuiltinPropertyExtractor.extract(raw, custom);
-        expect(result.properties).toEqual({ 'tv-content': pv('y') });
+        expect(result.properties).toEqual({ 'tv-ignore': pv('y') });
+    });
+
+    it('never turns the file task\'s legacy keys into custom properties', () => {
+        const raw = { 'tv-status': pv('x'), 'tv-content': pv('名前'), 'tv-timer-target-id': pv('tv-t-1') };
+        expect(BuiltinPropertyExtractor.extract(raw, keys).properties).toEqual({});
     });
 
     it('keeps non-builtin properties in properties', () => {

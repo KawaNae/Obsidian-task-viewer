@@ -1,19 +1,16 @@
 import { type App, type EventRef, Notice, TFile } from 'obsidian';
 import { t } from '../../i18n';
 import type { DuplicateOptions, Task, TaskViewerSettings } from '../../types';
-import { isTvFile, isTvInline, hasBodyLine } from '../../types';
+import { isTvInline } from '../../types';
 import { TaskRepository } from '../persistence/TaskRepository';
 import { PropertyUpdatePlanner } from '../persistence/PropertyUpdatePlanner';
-import { createTempTask } from '../data/createTempTask';
 import { FlowExecutor } from '../flow/FlowExecutor';
 import type { FlowDeleteAssessment } from '../flow/FlowDeletion';
-import { WikiLinkResolver } from './WikiLinkResolver';
 import { TaskStore } from './TaskStore';
 import { TaskScanner } from './TaskScanner';
 import { TaskValidator, type ValidationError } from './TaskValidator';
 import { SyncDetector } from './SyncDetector';
 import { EditorObserver } from './EditorObserver';
-import { TvInlineToTvFileConverter } from './TvInlineToTvFileConverter';
 import { PathTtlWindow } from './PathTtlWindow';
 import { NotifyCoalescer } from './NotifyCoalescer';
 import { TaskIdGenerator } from '../display/TaskIdGenerator';
@@ -33,7 +30,6 @@ export class TaskIndex {
     private syncDetector: SyncDetector;
     private editorObserver: EditorObserver;
     private repository: TaskRepository;
-    private tvInlineToTvFileConverter: TvInlineToTvFileConverter;
     private commandExecutor: FlowExecutor;
     private settings: TaskViewerSettings;
     private parseFingerprint: string;
@@ -75,7 +71,6 @@ export class TaskIndex {
         this.validator = new TaskValidator();
         this.syncDetector = new SyncDetector();
         this.repository = new TaskRepository(app);
-        this.tvInlineToTvFileConverter = new TvInlineToTvFileConverter(app, this.repository);
         // Settings getter (not a snapshot): updateSettings replaces the
         // settings object, and trigger judgment must always see the latest
         // statusDefinitions.
@@ -118,7 +113,6 @@ export class TaskIndex {
                 }
 
                 await this.scanner.queueScan(file, isLocal);
-                this.resolveLinks();
                 // Skip notify when an API write (withNotify) is in flight for this
                 // file — withNotify's own notifyImmediate is the authoritative notify.
                 // Editor direct edits (no withNotify) are unaffected: the API
@@ -132,9 +126,9 @@ export class TaskIndex {
         this.own(this.app.vault, this.app.vault.on('delete', (file) => {
             if (file instanceof TFile && file.extension === 'md') {
                 this.store.removeTasksByFile(file.path);
-                this.scanner.handleFileRenamed(file.path);
+                this.scanner.handleFileDeleted(file.path);
                 this.validator.clearErrorsForFile(file.path);
-                this.resolveLinksAndNotify();
+                this.notify.schedule();
             }
         }));
 
@@ -164,9 +158,9 @@ export class TaskIndex {
             // md → 非md（拡張子変更）: delete 扱い
             if (!(file instanceof TFile) || file.extension !== 'md') {
                 this.store.removeTasksByFile(oldPath);
-                this.scanner.handleFileRenamed(oldPath);
+                this.scanner.handleFileDeleted(oldPath);
                 this.validator.clearErrorsForFile(oldPath);
-                this.resolveLinksAndNotify();
+                this.notify.schedule();
                 return;
             }
 
@@ -183,7 +177,7 @@ export class TaskIndex {
             this.syncDetector.clearLocalEditFlag(oldPath);
 
             this.store.removeTasksByFile(oldPath);
-            this.scanner.handleFileRenamed(oldPath);
+            this.scanner.handleFileRenamed(oldPath, file.path);
 
             await this.rescanAndNotify(file);
         }));
@@ -194,32 +188,10 @@ export class TaskIndex {
         this.eventRefs.push({ emitter, ref });
     }
 
-    /**
-     * Re-point every wikilink at the store as it stands now.
-     *
-     * Every vault event ends here: a file that changed can have created or
-     * broken a link in a file that did not, so the resolution is whole-store
-     * rather than per-file.
-     */
-    private resolveLinks(): void {
-        WikiLinkResolver.resolve(this.store.getTasksMap(), this.store.getWikilinkRefsMap(), this.app);
-    }
-
-    /** The tail every vault handler shares: resolve links, then notify. */
-    private resolveLinksAndNotify(): void {
-        this.resolveLinks();
-        this.notify.schedule();
-    }
-
-    /**
-     * Read the file back into the store, then resolve and notify.
-     *
-     * The three steps are one unit: notifying before the links are resolved
-     * paints a frame whose parent/child arrows still point at the old store.
-     */
+    /** Read the file back into the store, then notify. */
     private async rescanAndNotify(file: TFile, isLocal?: boolean): Promise<void> {
         await this.scanner.queueScan(file, isLocal);
-        this.resolveLinksAndNotify();
+        this.notify.schedule();
     }
 
     // ===== 通知制御 =====
@@ -319,7 +291,7 @@ export class TaskIndex {
     getTaskLineNumbersForFile(filePath: string): Set<number> {
         const lines = new Set<number>();
         for (const task of this.getTasks()) {
-            if (task.file === filePath && hasBodyLine(task)) {
+            if (task.file === filePath) {
                 lines.add(task.line);
             }
         }
@@ -391,7 +363,7 @@ export class TaskIndex {
         // 非時刻プロパティ（color/tags/custom 等）の書き込み操作を導出。
         // before スナップショット（Object.assign 前）との diff が必要なので
         // ここで評価する。
-        const propertyOps = PropertyUpdatePlanner.plan(task, updates, this.settings.tvFileKeys);
+        const propertyOps = PropertyUpdatePlanner.plan(task, updates, this.settings.scopeKeys);
 
         // 更新前の姿。行の探索と、書けなかったときの巻き戻しの両方で要る。
         const before: Task = { ...task };
@@ -405,19 +377,16 @@ export class TaskIndex {
             this.store.notifyListeners(taskId, Object.keys(updates));
         }
 
-        const written = isTvFile(task)
-            // tv-file は書き先がキー名で決まるので、渡すのは更新後の値でよい。
-            ? await this.repository.updateTvFile(task, updates, this.settings.tvFileKeys, propertyOps)
-            // All inline tasks route through InlineTaskWriter; TaskParser.format
-            // dispatches by parserId. TVInlineParser.format() handles both
-            // bare-checkbox and @notation-bearing output, so a task gaining or
-            // losing date fields just produces the right line — no parserId
-            // promotion/demotion needed.
-            //
-            // 探索は更新前の姿で行う。ファイルに書かれているのは更新前の行なので、
-            // 更新後の日付や時刻で探しに行くと、まさにその値を変える更新のときに
-            // 空振りする。第 2 引数が書く内容、第 1 引数がどの行かを決める。
-            : await this.repository.updateTaskInFile(before, task, propertyOps);
+        // All inline tasks route through InlineTaskWriter; TaskParser.format
+        // dispatches by parserId. TVInlineParser.format() handles both
+        // bare-checkbox and @notation-bearing output, so a task gaining or
+        // losing date fields just produces the right line — no parserId
+        // promotion/demotion needed.
+        //
+        // 探索は更新前の姿で行う。ファイルに書かれているのは更新前の行なので、
+        // 更新後の日付や時刻で探しに行くと、まさにその値を変える更新のときに
+        // 空振りする。第 2 引数が書く内容、第 1 引数がどの行かを決める。
+        const written = await this.repository.updateTaskInFile(before, task, propertyOps);
 
         if (!written) {
             this.revertUnwrittenUpdate(task, taskId, before, updates);
@@ -490,8 +459,6 @@ export class TaskIndex {
             let removed = true;
             if (options.fireFlow && isTvInline(task)) {
                 removed = await this.commandExecutor.fireAndDelete(task);
-            } else if (isTvFile(task)) {
-                await this.repository.deleteTvFile(task, this.settings.tvFileKeys);
             } else {
                 await this.repository.deleteTaskFromFile(task);
             }
@@ -509,43 +476,9 @@ export class TaskIndex {
 
             this.syncDetector.markLocalEdit(task.file);
 
-            if (isTvFile(task)) {
-                await this.repository.duplicateTvFile(task, this.settings.tvFileKeys, options);
-            } else {
-                await this.repository.duplicateInlineTask(task, options);
-            }
+            await this.repository.duplicateInlineTask(task, options);
 
             await this.scanner.waitForScan(task.file);
-        });
-    }
-
-    /**
-     * inline タスクを frontmatter タスクファイルに変換。
-     * ソースファイル + 新ファイルの両方を再スキャン。
-     * @returns 新ファイルのパス
-     */
-    async convertToTvFile(taskId: string): Promise<string> {
-        const task = this.store.getTask(taskId);
-        if (!task) throw new Error('Task not found');
-        return this.withNotify(task.file, async () => {
-
-            if (!isTvInline(task)) {
-                throw new Error('Only tv-inline tasks can be converted to tv-file tasks');
-            }
-
-            this.syncDetector.markLocalEdit(task.file);
-
-            const newPath = await this.tvInlineToTvFileConverter.convertTvInlineToTvFile(
-                task,
-                this.settings.tvFileChildHeader,
-                this.settings.tvFileChildHeaderLevel,
-                this.settings.tvFileKeys
-            );
-
-            await this.scanner.waitForScan(task.file);
-            await this.scanner.waitForScan(newPath);
-
-            return newPath;
         });
     }
 
@@ -579,18 +512,10 @@ export class TaskIndex {
 
             this.syncDetector.markLocalEdit(task.file);
 
-            if (isTvFile(task)) {
-                await this.repository.insertLineUnderHeading(
-                    task.file, childLine,
-                    this.settings.tvFileChildHeader,
-                    this.settings.tvFileChildHeaderLevel
-                );
-            } else {
-                // インデントは書き込み層が既存子行から決める（親行だけからは
-                // トップレベルのとき 4 スペース固定になり、タブ書きのファイルに
-                // スペースが混ざる）。
-                await this.repository.insertLineAsFirstChild(task, childLine);
-            }
+            // インデントは書き込み層が既存子行から決める（親行だけからは
+            // トップレベルのとき 4 スペース固定になり、タブ書きのファイルに
+            // スペースが混ざる）。
+            await this.repository.insertLineAsFirstChild(task, childLine);
 
             await this.scanner.waitForScan(task.file);
         });
@@ -610,15 +535,7 @@ export class TaskIndex {
 
             this.syncDetector.markLocalEdit(task.file);
 
-            if (isTvFile(task)) {
-                await this.repository.insertLineUnderHeading(
-                    task.file, childLine,
-                    this.settings.tvFileChildHeader,
-                    this.settings.tvFileChildHeaderLevel
-                );
-            } else {
-                await this.repository.insertLineAfterTask(task, childLine);
-            }
+            await this.repository.insertLineAfterTask(task, childLine);
 
             await this.scanner.waitForScan(task.file);
         });
@@ -628,9 +545,6 @@ export class TaskIndex {
      * Insert a line as the task's next sibling — same indentation, just past
      * its subtree. Session records after the first one live beside the record
      * before them, not under it, so the log stays flat.
-     *
-     * Inline only. A tv-file task is a whole note and has no siblings to speak
-     * of; that case belongs to appendChildTask.
      */
     async insertSiblingAfterTask(
         taskId: string,
@@ -639,7 +553,7 @@ export class TaskIndex {
     ): Promise<number> {
         const task = this.store.getTask(taskId);
         if (!task) return -1;
-        if (task.isReadOnly || isTvFile(task)) return -1;
+        if (task.isReadOnly) return -1;
         return this.withNotify(task.file, async () => {
             logInfo(`[insertSiblingAfterTask] taskId=${taskId}`);
 
@@ -648,29 +562,6 @@ export class TaskIndex {
             await this.scanner.waitForScan(task.file);
 
             return insertedLine;
-        });
-    }
-
-    async createTvFileFromData(taskData: Partial<Task>): Promise<string> {
-        return this.withNotify('', async () => {
-            const tempTask = createTempTask({
-                id: 'convert-temp',
-                content: taskData.content ?? '',
-                statusChar: taskData.statusChar ?? ' ',
-                startDate: taskData.startDate,
-                startTime: taskData.startTime,
-                endDate: taskData.endDate,
-                endTime: taskData.endTime,
-                due: taskData.due,
-            });
-            return await this.repository.createTvFile(
-                tempTask,
-                this.settings.tvFileChildHeader,
-                this.settings.tvFileChildHeaderLevel,
-                undefined,
-                undefined,
-                this.settings.tvFileKeys
-            );
         });
     }
 
@@ -746,18 +637,14 @@ export class TaskIndex {
 // called with the same ref). Field-by-field prev/next comparison would always
 // see them as equal.
 //
-//   tvFileKeys          — frontmatter field names for tv-start/end/due/status/etc.
-//   tvFileChildHeader   — heading name that marks the child-items section
-//   tvFileChildHeaderLevel — heading level for the child-items section
+//   scopeKeys          — frontmatter field names for tv-start/end/due/etc.
 //   enableDayPlanner    — toggles DayPlanner parser in the chain
 //   enableTasksPlugin   — toggles TasksPlugin parser in the chain
 //   tasksPluginMapping  — emoji-to-field mapping for TasksPlugin parser
 //   statusDefinitions   — which status chars count as complete (CompletionDetector)
 export function computeParseFingerprint(settings: TaskViewerSettings): string {
     return JSON.stringify([
-        settings.tvFileKeys,
-        settings.tvFileChildHeader,
-        settings.tvFileChildHeaderLevel,
+        settings.scopeKeys,
         settings.enableDayPlanner,
         settings.enableTasksPlugin,
         settings.tasksPluginMapping,

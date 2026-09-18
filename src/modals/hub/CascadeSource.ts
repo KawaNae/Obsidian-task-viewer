@@ -1,5 +1,5 @@
 import { type App, TFile } from 'obsidian';
-import type { Task, TvFileKeys } from '../../types';
+import type { Task, ScopeKeys } from '../../types';
 import { FilePropertyResolver } from '../../services/parsing/FilePropertyResolver';
 import type { ExtractedProperties } from '../../services/parsing/tree/BuiltinPropertyExtractor';
 
@@ -15,7 +15,7 @@ export type CascadeSourceKind = 'file' | 'section';
  * 見出し単位の特定はしない（ユーザー決定: file / section の粗い区別で十分）。
  */
 export class CascadeSource {
-    static fileLayer(app: App, task: Task, keys: TvFileKeys): ExtractedProperties {
+    static fileLayer(app: App, task: Task, keys: ScopeKeys): ExtractedProperties {
         const file = app.vault.getAbstractFileByPath(task.file);
         if (!(file instanceof TFile)) return { properties: {} };
         return FilePropertyResolver.extract(app.metadataCache.getFileCache(file)?.frontmatter, keys);
@@ -23,7 +23,7 @@ export class CascadeSource {
 
     /** color / linestyle / mask の cascade 出所。cascade 値がなければ null */
     static forStyleField(
-        app: App, task: Task, keys: TvFileKeys,
+        app: App, task: Task, keys: ScopeKeys,
         field: 'color' | 'linestyle' | 'mask',
     ): CascadeSourceKind | null {
         const cascadeValue = task.cascadeContext?.[field];
@@ -32,13 +32,13 @@ export class CascadeSource {
     }
 
     /** cascade 由来タグ 1 件の出所 */
-    static forTag(app: App, task: Task, keys: TvFileKeys, tag: string): CascadeSourceKind {
+    static forTag(app: App, task: Task, keys: ScopeKeys, tag: string): CascadeSourceKind {
         const fileTags = this.fileLayer(app, task, keys).tags ?? [];
         return fileTags.includes(tag) ? 'file' : 'section';
     }
 
     /** cascade 由来カスタムプロパティ 1 件の出所 */
-    static forProperty(app: App, task: Task, keys: TvFileKeys, key: string, value: string): CascadeSourceKind {
+    static forProperty(app: App, task: Task, keys: ScopeKeys, key: string, value: string): CascadeSourceKind {
         const fileProps = this.fileLayer(app, task, keys).properties;
         return fileProps[key]?.value === value ? 'file' : 'section';
     }

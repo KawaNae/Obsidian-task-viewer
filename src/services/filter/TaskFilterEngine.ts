@@ -5,7 +5,7 @@ import { isFilterCondition } from './FilterTypes';
 import { DateResolver } from './DateResolver';
 import { toDisplayTask, NO_TASK_LOOKUP } from '../display/DisplayTaskConverter';
 import { DateUtils } from '../../utils/DateUtils';
-import { getTaskKind, getTaskNotation } from './parserTaxonomy';
+import { getTaskNotation } from './parserTaxonomy';
 import {
     getEffectiveColor, getEffectiveLinestyle, getEffectiveTags, getEffectiveProperties,
 } from '../data/EffectiveProperties';
@@ -84,8 +84,6 @@ export class TaskFilterEngine {
                 return this.evalStringSet(getEffectiveLinestyle(task) ?? '', condition);
             case 'length':
                 return this.evalLength(task, condition, context?.startHour ?? 0);
-            case 'kind':
-                return this.evalStringSet(getTaskKind(task.parserId), condition);
             case 'notation':
                 return this.evalStringSet(getTaskNotation(task.parserId), condition);
             case 'parent':

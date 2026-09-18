@@ -1,5 +1,5 @@
 import type { DocumentNode, SectionNode } from './DocumentTree';
-import type { TvFileKeys, PropertyValue } from '../../../types';
+import type { ScopeKeys, PropertyValue } from '../../../types';
 import { BuiltinPropertyExtractor, type ExtractedProperties } from './BuiltinPropertyExtractor';
 import { ChildLineClassifier } from '../utils/ChildLineClassifier';
 import { TagExtractor } from '../utils/TagExtractor';
@@ -16,7 +16,7 @@ export class SectionPropertyResolver {
     static resolve(
         doc: DocumentNode,
         frontmatter: Record<string, any> | undefined,
-        keys: TvFileKeys
+        keys: ScopeKeys
     ): void {
         const fmBase = FilePropertyResolver.extract(frontmatter, keys);
 
@@ -28,7 +28,7 @@ export class SectionPropertyResolver {
     private static resolveSection(
         section: SectionNode,
         parentProps: ExtractedProperties,
-        keys: TvFileKeys
+        keys: ScopeKeys
     ): void {
         // セクション自身の PropertyBlock からプロパティ抽出
         const ownRaw = this.propertyBlockToRecord(section);

@@ -2,7 +2,6 @@ import type { StatusDefinition, Task } from '../../types';
 import type { FilterProperty, FilterOperator } from '../../services/filter/FilterTypes';
 import { getStatusLabel } from '../../constants/statusOptions';
 import { FilterValueCollector } from '../../services/filter/FilterValueCollector';
-import { TASK_KIND_VALUES } from '../../services/filter/parserTaxonomy';
 import { t } from '../../i18n';
 
 export function getToday(): string {
@@ -26,7 +25,6 @@ export function formatValueLabel(property: FilterProperty, values: string[], sta
         if (property === 'file') return v.split('/').pop() || v;
         if (property === 'tag') return `#${v}`;
         if (property === 'status') return getStatusLabelForChar(v, statusDefs);
-        if (property === 'kind') { const key = `filter.kind.${v}`; return t(key) !== key ? t(key) : v; }
         if (property === 'notation') { const key = `filter.notation.${v}`; return t(key) !== key ? t(key) : v; }
         return v;
     }
@@ -38,9 +36,6 @@ export function getValueDisplay(property: FilterProperty, value: string, statusD
     if (property === 'tag') return `#${value}`;
     if (property === 'status') {
         return getStatusLabelForChar(value, statusDefs);
-    }
-    if (property === 'kind') {
-        const key = `filter.kind.${value}`; return t(key) !== key ? t(key) : value;
     }
     if (property === 'notation') {
         const key = `filter.notation.${value}`; return t(key) !== key ? t(key) : value;
@@ -59,7 +54,6 @@ export function getAvailableValues(property: FilterProperty, tasks: Task[]): str
         case 'status': return FilterValueCollector.collectStatuses(tasks);
         case 'color': return FilterValueCollector.collectColors(tasks);
         case 'linestyle': return FilterValueCollector.collectLineStyles(tasks);
-        case 'kind': return [...TASK_KIND_VALUES];
         case 'notation': return FilterValueCollector.collectNotations(tasks);
         case 'property': return FilterValueCollector.collectPropertyKeys(tasks);
         default: return [];

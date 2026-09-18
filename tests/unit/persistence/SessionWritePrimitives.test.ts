@@ -206,13 +206,11 @@ describe('insertSiblingAfterTask afterCompletedRun', () => {
 function buildIndexHost(task: Task | undefined) {
     return {
         store: { getTask: () => task },
-        settings: { tvFileChildHeader: '', tvFileChildHeaderLevel: 2 },
         syncDetector: { markLocalEdit: vi.fn() },
         scanner: { waitForScan: vi.fn(async () => {}) },
         repository: {
             insertLineAsFirstChild: vi.fn(async () => 0),
             insertLineAfterTask: vi.fn(async () => 0),
-            insertLineAfterTvFile: vi.fn(async () => 0),
             insertSiblingAfterTask: vi.fn(async () => 7),
         },
         withNotify: vi.fn(async (_file: string, fn: () => Promise<unknown>) => await fn()),
@@ -291,18 +289,14 @@ describe('TaskIndex.insertSiblingAfterTask', () => {
         expect(host.repository.insertSiblingAfterTask.mock.calls[0][1]).toBe(NEW_SESSION);
     });
 
-    it('is a no-op for read-only, tv-file and unknown tasks', async () => {
+    it('is a no-op for read-only and unknown tasks', async () => {
         const readOnly = buildIndexHost(makeTask({ isReadOnly: true, parserId: 'tasks-plugin' }));
         expect(await proto.insertSiblingAfterTask.call(readOnly, 'x', NEW_SESSION)).toBe(-1);
-
-        // A tv-file task is a whole note; it has no siblings to insert between.
-        const tvFile = buildIndexHost(makeTask({ parserId: 'tv-file', line: -1 }));
-        expect(await proto.insertSiblingAfterTask.call(tvFile, 'x', NEW_SESSION)).toBe(-1);
 
         const unknown = buildIndexHost(undefined);
         expect(await proto.insertSiblingAfterTask.call(unknown, 'missing', NEW_SESSION)).toBe(-1);
 
-        for (const host of [readOnly, tvFile, unknown]) {
+        for (const host of [readOnly, unknown]) {
             expect(host.withNotify).not.toHaveBeenCalled();
             expect(host.repository.insertSiblingAfterTask).not.toHaveBeenCalled();
             expect(host.syncDetector.markLocalEdit).not.toHaveBeenCalled();

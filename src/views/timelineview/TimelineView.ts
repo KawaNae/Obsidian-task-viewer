@@ -13,7 +13,6 @@ import { logDebug, logError } from '../../log/log';
 import { DateUtils } from '../../utils/DateUtils';
 import type { TaskReadService } from '../../services/data/TaskReadService';
 import type { TaskWriteService } from '../../services/data/TaskWriteService';
-import { ChildLineMenuBuilder } from '../../interaction/menu/builders/ChildLineMenuBuilder';
 
 import type { PluginContext } from '../../PluginContext';
 import type { TimerHost } from '../../timer/TimerWidget';
@@ -35,7 +34,7 @@ import { FilterMenuComponent } from '../customMenus/FilterMenuComponent';
 import { SortMenuComponent } from '../customMenus/SortMenuComponent';
 import { TopRightConfigEditor } from '../customMenus/TopRightConfigEditor';
 import { FilterValueCollector } from '../../services/filter/FilterValueCollector';
-import { createEmptyFilterState, hasConditions } from '../../services/filter/FilterTypes';
+import { createDefaultListFilterState, createEmptyFilterState, hasConditions } from '../../services/filter/FilterTypes';
 import { createEmptySortState } from '../../services/sort/SortTypes';
 import { MoonPhaseRenderer } from '../sharedUI/MoonPhaseRenderer';
 import { SidebarManager } from '../sidebar/SidebarManager';
@@ -320,10 +319,6 @@ export class TimelineView extends ItemView {
         // Initialize MenuHandler
         this.menuHandler = new MenuHandler(this.app, this.readService, this.writeService, this.plugin);
         this.taskRenderer.setChildMenuCallback((taskId, x, y) => this.menuHandler.showMenuForTask(taskId, x, y));
-        const childLineMenuBuilder = new ChildLineMenuBuilder(this.app, this.writeService, this.plugin);
-        this.taskRenderer.setChildLineEditCallback((parentTask, line, bodyLine, x, y) => {
-            childLineMenuBuilder.showMenu(parentTask, line, bodyLine, x, y);
-        });
         this.taskRenderer.setDetailCallback((task) => this.openTaskHub(task));
         this.taskRenderer.setContextMenuCallback((task, x, y) => this.menuHandler.showTaskContextMenu(task, x, y));
         this.taskRenderer.setOpenInEditorCallback((task) => openTaskInEditor(this.app, task, this.plugin.settings.reuseExistingTab));
@@ -984,7 +979,7 @@ export class TimelineView extends ItemView {
             this.viewState.pinnedLists.push({
                 id: newId,
                 name: t('pinnedList.newList'),
-                filterState: createEmptyFilterState(),
+                filterState: createDefaultListFilterState(),
             });
             this.app.workspace.requestSaveLayout();
             this.pinnedListRenderer.scheduleRename(newId);

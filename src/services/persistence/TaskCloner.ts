@@ -1,10 +1,9 @@
 import { type App, TFile } from 'obsidian';
-import type { DuplicateOptions, TvFileKeys, Task } from '../../types';
+import type { DuplicateOptions, Task } from '../../types';
 import { collectFlowLineIndicesInFile, formatFlowLine } from '../flow/FlowLineScanner';
 import { DateUtils } from '../../utils/DateUtils';
 import { logWarn } from '../../log/log';
 import { FileOperations } from './utils/FileOperations';
-import { FrontmatterLineEditor } from './utils/FrontmatterLineEditor';
 
 /**
  * One generated child line, as the block described it.
@@ -21,7 +20,7 @@ export interface GeneratedChild {
 
 /**
  * タスク複製ロジックを担当するクラス
- * インラインタスクとFrontmatterタスクの複製、週次複製、再発処理を提供
+ * インラインタスクの複製、週次複製、再発処理を提供
  */
 export class TaskCloner {
     constructor(
@@ -82,36 +81,6 @@ export class TaskCloner {
                 return result ? result.join('\n') : content;
             }
         });
-    }
-
-    /**
-     * tv-file タスクを複製する（新規ファイル作成）。
-     * - dayOffset=0: `Name.md` → `Name copy.md` → `Name copy 2.md` → ...
-     * - dayOffset>0: dayOffset..dayOffset+count-1 の各日付でシフトしたファイルを作成
-     */
-    async duplicateTvFile(task: Task, frontmatterKeys: TvFileKeys, options?: DuplicateOptions): Promise<void> {
-        const { dayOffset = 0, count = 1 } = options ?? {};
-
-        const file = this.app.vault.getAbstractFileByPath(task.file);
-        if (!(file instanceof TFile)) return;
-
-        if (dayOffset === 0) {
-            const content = await this.app.vault.read(file);
-            const newPath = this.generateCopyPath(file);
-            await this.fileOps.ensureDirectoryExists(newPath);
-            await this.app.vault.create(newPath, content);
-        } else {
-            const content = await this.app.vault.read(file);
-            for (let offset = dayOffset; offset < dayOffset + count; offset++) {
-                const shiftedContent = this.shiftFrontmatterDates(content, offset, frontmatterKeys);
-                const newPath = this.generateDatedPath(file, task, offset);
-
-                if (!this.app.vault.getAbstractFileByPath(newPath)) {
-                    await this.fileOps.ensureDirectoryExists(newPath);
-                    await this.app.vault.create(newPath, shiftedContent);
-                }
-            }
-        }
     }
 
     /**
@@ -265,65 +234,5 @@ export class TaskCloner {
                 return '@' + shifted.join('>');
             },
         );
-    }
-
-    /** `Name.md` → `Name copy.md` → `Name copy 2.md` → ... */
-    private generateCopyPath(file: TFile): string {
-        const dir = file.parent?.path || '';
-        const name = file.basename.replace(/\.md$/, '');
-        const prefix = dir ? `${dir}/` : '';
-
-        let candidate = `${prefix}${name} copy.md`;
-        if (!this.app.vault.getAbstractFileByPath(candidate)) return candidate;
-
-        for (let i = 2; i < 100; i++) {
-            candidate = `${prefix}${name} copy ${i}.md`;
-            if (!this.app.vault.getAbstractFileByPath(candidate)) return candidate;
-        }
-        return candidate;
-    }
-
-    /**
-     * 日付付きコピー先パスを生成する。
-     * ファイル名に既存の日付がある場合は置換、なければ末尾に追加。
-     */
-    private generateDatedPath(file: TFile, task: Task, dayOffset: number): string {
-        const dir = file.parent?.path || '';
-        const name = file.basename.replace(/\.md$/, '');
-        const baseDate = task.startDate || DateUtils.getToday();
-        const newDate = DateUtils.addDays(baseDate, dayOffset);
-        const prefix = dir ? `${dir}/` : '';
-
-        // ファイル名に既存の日付があれば置換
-        const dateRegex = /\d{4}-\d{2}-\d{2}/;
-        if (dateRegex.test(name)) {
-            return `${prefix}${name.replace(dateRegex, newDate)}.md`;
-        }
-        return `${prefix}${name} ${newDate}.md`;
-    }
-
-    /** frontmatter の日付キー (start/end/due) の日付部分を N日シフトする。 */
-    private shiftFrontmatterDates(content: string, dayOffset: number, frontmatterKeys: TvFileKeys): string {
-        const lines = content.split('\n');
-        const fmEnd = FrontmatterLineEditor.findEnd(lines);
-        if (fmEnd < 0) return content;
-
-        const dateKeys = new Set([
-            frontmatterKeys.start,
-            frontmatterKeys.end,
-            frontmatterKeys.due,
-        ]);
-        const dateRegex = /(\d{4}-\d{2}-\d{2})/;
-
-        for (let i = 1; i < fmEnd; i++) {
-            const keyMatch = lines[i].match(/^([^:\s]+)\s*:/);
-            if (!keyMatch || !dateKeys.has(keyMatch[1])) continue;
-
-            lines[i] = lines[i].replace(dateRegex, (match) => {
-                return DateUtils.shiftDateString(match, dayOffset);
-            });
-        }
-
-        return lines.join('\n');
     }
 }

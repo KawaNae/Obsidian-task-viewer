@@ -10,7 +10,7 @@ import type { Task, ChildEntry, ChildLine } from '../../types';
  *   - Each entry carries an absolute `bodyLine`, so render/write layers
  *     never recompute line numbers.
  *   - Entries are sorted by `bodyLine` (body order).
- *   - A line owned by a sibling task's subtree is omitted from `line`/`wikilink`
+ *   - A line owned by a sibling task's subtree is omitted from `line`
  *     entries — it surfaces as the descendant's own children. Enforces the
  *     "1 line = 1 owner across siblings" invariant relied on by the renderer.
  *
@@ -25,11 +25,7 @@ export function buildChildEntries(
 
     for (const cl of parent.childLines) {
         if (cl.bodyLine < 0) continue;
-        if (cl.wikilinkTarget) {
-            entries.push({ kind: 'wikilink', target: cl.wikilinkTarget, bodyLine: cl.bodyLine, line: cl });
-        } else {
-            entries.push({ kind: 'line', line: cl, bodyLine: cl.bodyLine });
-        }
+        entries.push({ kind: 'line', line: cl, bodyLine: cl.bodyLine });
     }
 
     for (const cid of parent.childIds) {
@@ -61,10 +57,9 @@ export function buildChildEntries(
 
 /**
  * All body lines occupied by a task and its descendant subtree, as
- * file-qualified `file:line` keys. File-qualification prevents a sibling
- * subtree in another file from colliding with this parent's body lines —
- * a cross-file tv-file child and an unrelated note can share an absolute
- * line number.
+ * file-qualified `file:line` keys. The parser never links across files, so
+ * the qualification is a guard: a child from another file must not claim this
+ * parent's line of the same number.
  */
 function collectSubtreeLines(
     task: Task,
@@ -82,8 +77,7 @@ function collectSubtreeLines(
     }
     // Flow child lines (`- ==>`) are excluded from childLines by the
     // extractor but are still body lines owned by this task — without
-    // them here, an ancestor (e.g. a tv-file card) would surface them as
-    // plain text child entries.
+    // them here, an ancestor would surface them as plain text child entries.
     for (const seg of task.flow?.childSegments ?? []) {
         if (seg.bodyLine >= 0) out.add(`${task.file}:${seg.bodyLine}`);
     }

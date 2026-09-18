@@ -41,7 +41,6 @@ export class ChildLineClassifier {
             text,
             bodyLine,
             indent,
-            checkboxChar: cbMatch ? cbMatch[1] : null,
             wikilinkTarget: wikiMatch ? extractWikilinkTarget(wikiMatch[1]) : null,
             propertyKey,
             propertyValue,

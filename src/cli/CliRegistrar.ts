@@ -6,14 +6,14 @@ import { cliError } from './CliOutputFormatter';
 import {
     toCliFlags,
     LIST_SCHEMA, TODAY_SCHEMA, GET_SCHEMA, CREATE_SCHEMA, UPDATE_SCHEMA,
-    DELETE_SCHEMA, DUPLICATE_SCHEMA, CONVERT_SCHEMA,
+    DELETE_SCHEMA, DUPLICATE_SCHEMA,
     TASKS_FOR_DATE_RANGE_SCHEMA, CATEGORIZED_TASKS_FOR_DATE_RANGE_SCHEMA,
-    INSERT_CHILD_TASK_SCHEMA, CREATE_TV_FILE_SCHEMA, EXPORT_IMAGE_SCHEMA,
+    INSERT_CHILD_TASK_SCHEMA, EXPORT_IMAGE_SCHEMA,
 } from '../api/OperationSchemas';
 import { validateCliParams } from './CliParamValidator';
 import { createListHandler, createTodayHandler, createGetHandler } from './handlers/TaskQueryHandlers';
 import { createCreateHandler, createUpdateHandler, createDeleteHandler } from './handlers/TaskCrudHandlers';
-import { createDuplicateHandler, createConvertHandler, createTasksForDateRangeHandler, createCategorizedTasksForDateRangeHandler, createInsertChildTaskHandler, createCreateTvFileHandler, createGetStartHourHandler } from './handlers/TaskActionHandlers';
+import { createDuplicateHandler, createTasksForDateRangeHandler, createCategorizedTasksForDateRangeHandler, createInsertChildTaskHandler, createGetStartHourHandler } from './handlers/TaskActionHandlers';
 import { createExportImageHandler } from './handlers/ExportImageHandler';
 import { createHelpHandler } from './handlers/HelpHandler';
 
@@ -26,8 +26,8 @@ import { createHelpHandler } from './handlers/HelpHandler';
  * with strict validation: unknown flags error with a did-you-mean
  * suggestion instead of being silently ignored.
  *
- * Commands (14): list, today, get, create, update, delete, duplicate, convert, tasks-for-date-range,
- *                 categorized-tasks-for-date-range, insert-child-task, create-tv-file, get-start-hour, help
+ * Commands (12): list, today, get, create, update, delete, duplicate, tasks-for-date-range,
+ *                 categorized-tasks-for-date-range, insert-child-task, get-start-hour, help
  */
 export function registerCliHandlers(plugin: PluginContext & CliRegistrar & ApiHost & ExportHost): void {
     function register(action: string, description: string, flags: CliFlags | null, handler: CliHandler): void {
@@ -70,9 +70,6 @@ export function registerCliHandlers(plugin: PluginContext & CliRegistrar & ApiHo
     register('duplicate', 'Duplicate a task with optional date shifting. Details: obsidian obsidian-task-viewer:help',
         toCliFlags(DUPLICATE_SCHEMA), createDuplicateHandler(plugin));
 
-    register('convert', 'Convert tv-inline task to tv-file (frontmatter) task. Details: obsidian obsidian-task-viewer:help',
-        toCliFlags(CONVERT_SCHEMA), createConvertHandler(plugin));
-
     register('tasks-for-date-range', 'List tasks in a date range. Details: obsidian obsidian-task-viewer:help',
         toCliFlags(TASKS_FOR_DATE_RANGE_SCHEMA, { output: true }), createTasksForDateRangeHandler(plugin));
 
@@ -81,9 +78,6 @@ export function registerCliHandlers(plugin: PluginContext & CliRegistrar & ApiHo
 
     register('insert-child-task', 'Insert a child task under a parent. Details: obsidian obsidian-task-viewer:help',
         toCliFlags(INSERT_CHILD_TASK_SCHEMA), createInsertChildTaskHandler(plugin));
-
-    register('create-tv-file', 'Create a new tv-file (frontmatter) task. Details: obsidian obsidian-task-viewer:help',
-        toCliFlags(CREATE_TV_FILE_SCHEMA), createCreateTvFileHandler(plugin));
 
     register('get-start-hour', 'Get the current startHour setting (visual day boundary)',
         null, createGetStartHourHandler(plugin));

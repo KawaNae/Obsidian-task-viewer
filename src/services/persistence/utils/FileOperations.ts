@@ -1,6 +1,5 @@
 import { type App, TFolder } from 'obsidian';
 import type { Task } from '../../../types';
-import { hasBodyLine } from '../../../types';
 import { CodeFenceTracker } from '../../../utils/CodeFenceTracker';
 import { TaskLineClassifier } from '../../parsing/utils/TaskLineClassifier';
 
@@ -260,7 +259,7 @@ export class FileOperations {
      */
     private static pickUnique(hits: number[], task: Task): number {
         if (hits.length === 1) return hits[0];
-        if (hasBodyLine(task) && hits.includes(task.line)) return task.line;
+        if (hits.includes(task.line)) return task.line;
         return -1;
     }
 
@@ -287,19 +286,30 @@ export class FileOperations {
         const fenced = CodeFenceTracker.mask(lines);
 
         // Strategy -1: Resolve by block ID (most stable against content edits).
+        // Only a block ID that names exactly one line proves anything: a line
+        // copied together with its `^id` is a second card, and taking the first
+        // match would land that card's writes on the original. Several matches
+        // fall through to the stored line — the same rule as the first rung of
+        // the identity matcher.
         if (task.blockId) {
             const blockIdRegex = new RegExp(`\\s\\^${task.blockId.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s*$`);
+            let found = -1;
+            let count = 0;
             for (let i = 0; i < lines.length; i++) {
                 if (!fenced[i] && blockIdRegex.test(lines[i])) {
-                    return i;
+                    found = i;
+                    count++;
                 }
+            }
+            if (count === 1) {
+                return found;
             }
         }
 
         // Strategy 0: Stored line number (O(1), correct when no line shift has occurred)
         // Must run before Strategy 1 to avoid returning the first duplicate when
         // multiple lines share the same originalText (e.g. duplicate bare-checkbox child lines).
-        if (hasBodyLine(task) && task.line < lines.length
+        if (task.line < lines.length
             && !fenced[task.line] && lines[task.line] === task.originalText) {
             return task.line;
         }
@@ -350,7 +360,7 @@ export class FileOperations {
         // The unverified fallback this replaces wrote to whatever happened to
         // sit at task.line, which silently clobbered unrelated lines whenever
         // the earlier strategies all missed on a shifted file.
-        if (hasBodyLine(task) && task.line < lines.length && !fenced[task.line]) {
+        if (task.line < lines.length && !fenced[task.line]) {
             const stored = lines[task.line];
             const stillHolds = content
                 ? FileOperations.lineHasTaskContent(stored, content)

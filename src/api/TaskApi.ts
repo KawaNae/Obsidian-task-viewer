@@ -18,9 +18,9 @@ import { loadFilterFile } from './FilterFileLoader';
 import {
     assertParams, renderParamTable,
     LIST_SCHEMA, TODAY_SCHEMA, GET_SCHEMA, CREATE_SCHEMA, UPDATE_SCHEMA,
-    DELETE_SCHEMA, DUPLICATE_SCHEMA, CONVERT_SCHEMA,
+    DELETE_SCHEMA, DUPLICATE_SCHEMA,
     TASKS_FOR_DATE_RANGE_SCHEMA, CATEGORIZED_TASKS_FOR_DATE_RANGE_SCHEMA,
-    INSERT_CHILD_TASK_SCHEMA, CREATE_TV_FILE_SCHEMA,
+    INSERT_CHILD_TASK_SCHEMA,
 } from './OperationSchemas';
 import {
     TaskApiError,
@@ -38,16 +38,12 @@ import {
     type PaginationParams,
     type DuplicateParams,
     type DuplicateResult,
-    type ConvertParams,
-    type ConvertResult,
     type TasksForDateRangeParams,
     type CategorizedTasksForDateRangeParams,
     type CategorizedTasksResult,
     type CategorizedTasksForDateRangeResult,
     type InsertChildTaskParams,
     type InsertChildTaskResult,
-    type CreateTvFileParams,
-    type CreateTvFileResult,
     type StartHourResult,
 } from './TaskApiTypes';
 
@@ -62,7 +58,7 @@ Vocabulary
   from / to        = query window (inclusive overlap). A task matches when
                      its span intersects [from, to].
   date             = single-day window, sugar for from=X to=X (list only)
-  start / end / due = the task's own fields (create / update / createTvFile)
+  start / end / due = the task's own fields (create / update)
 
   Unknown parameter keys are errors (with a did-you-mean suggestion) —
   they are never silently ignored. Params documented as comma-separated
@@ -118,12 +114,6 @@ ${renderParamTable(DELETE_SCHEMA).replace(/^/gm, '    ')}
     DuplicateParams:
 ${renderParamTable(DUPLICATE_SCHEMA).replace(/^/gm, '    ')}
 
-  convertToTvFile(params: ConvertParams): Promise<ConvertResult>
-    Convert a tv-inline task to a tv-file (frontmatter) task.
-
-    ConvertParams:
-${renderParamTable(CONVERT_SCHEMA).replace(/^/gm, '    ')}
-
   tasksForDateRange(params: TasksForDateRangeParams): Promise<TaskListResult>
     List tasks whose visual span overlaps the window [from, to].
     Due-only tasks are included when due falls in the window.
@@ -145,14 +135,6 @@ ${renderParamTable(CATEGORIZED_TASKS_FOR_DATE_RANGE_SCHEMA).replace(/^/gm, '    
 
     InsertChildTaskParams:
 ${renderParamTable(INSERT_CHILD_TASK_SCHEMA).replace(/^/gm, '    ')}
-
-  createTvFile(params: CreateTvFileParams): Promise<CreateTvFileResult>
-    Create a new tv-file (frontmatter) task from structured data.
-
-    CreateTvFileParams:
-${renderParamTable(CREATE_TV_FILE_SCHEMA).replace(/^/gm, '    ')}
-
-    Returns: { newFile: string }
 
   getStartHour(): StartHourResult
     Get the current startHour setting (visual day boundary).
@@ -202,7 +184,6 @@ FilterState (JSON format)
     length     : lessThan, lessThanOrEqual, greaterThan, greaterThanOrEqual, equals, isSet, isNotSet
                                              (value: number, unit?: 'hours'|'minutes')
     anyDate    : isSet, isNotSet             (no value needed; isSet = any of start/end/due set)
-    kind       : includes, excludes          (value: string[] of 'inline' | 'file')
     notation   : includes, excludes          (value: string[] of 'taskviewer' | 'tasks' | 'dayplanner')
     parent     : isSet, isNotSet             (no value needed)
     children   : isSet, isNotSet             (no value needed)
@@ -243,16 +224,13 @@ Examples
   api.today({ sort: [{ property: 'startDate', direction: 'asc' }] });
 
   // Get a specific task
-  api.get({ id: 'tv-inline:daily/2026-03-15.md:ln:5' });
+  api.get({ id: 'tv-inline:daily/2026-03-15.md:seq:5' });
 
   // Duplicate a task, shifting dates by 1 day
-  await api.duplicate({ id: 'tv-inline:daily/2026-03-15.md:ln:5', dayOffset: 1 });
+  await api.duplicate({ id: 'tv-inline:daily/2026-03-15.md:seq:5', dayOffset: 1 });
 
   // Duplicate a task 3 times (no date shift)
-  await api.duplicate({ id: 'tv-inline:daily/2026-03-15.md:ln:5', count: 3 });
-
-  // Convert a tv-inline task to a tv-file (frontmatter) task
-  await api.convertToTvFile({ id: 'tv-inline:daily/2026-03-15.md:ln:5' });
+  await api.duplicate({ id: 'tv-inline:daily/2026-03-15.md:seq:5', count: 3 });
 
   // List tasks in a date range (window bounds accept presets too)
   await api.tasksForDateRange({ from: '2026-03-01', to: '2026-03-31' });
@@ -269,10 +247,7 @@ Examples
   api.categorizedTasksForDateRange({ from: '2026-03-23', to: '2026-03-29' });
 
   // Insert a child task
-  await api.insertChildTask({ parentId: 'tv-inline:daily/2026-03-15.md:ln:5', content: 'Sub-task' });
-
-  // Create a tv-file (frontmatter) task
-  await api.createTvFile({ content: 'Project task', start: '2026-03-20 10:00' });
+  await api.insertChildTask({ parentId: 'tv-inline:daily/2026-03-15.md:seq:5', content: 'Sub-task' });
 
   // Get visual day boundary setting
   api.getStartHour();
@@ -604,17 +579,6 @@ export class TaskApi {
     }
 
     /**
-     * Convert a tv-inline task to a tv-file (frontmatter) task.
-     */
-    async convertToTvFile(params: ConvertParams): Promise<ConvertResult> {
-        assertParams(params, CONVERT_SCHEMA, 'convertToTvFile');
-        const task = this.readService.getTask(params.id);
-        if (!task) throw new TaskApiError(`Task not found: ${params.id}`);
-        const newPath = await this.writeService.convertToTvFile(params.id);
-        return { convertedFrom: params.id, newFile: newPath };
-    }
-
-    /**
      * List tasks in a date range with optional filter, sort, and pagination.
      */
     async tasksForDateRange(params: TasksForDateRangeParams): Promise<TaskListResult> {
@@ -671,31 +635,6 @@ export class TaskApi {
         if (task.isReadOnly) throw new TaskApiError(`Task ${params.parentId} is read-only (parserId=${task.parserId})`);
         await this.writeService.insertChildTask(params.parentId, `- [ ] ${params.content}`);
         return { parentId: params.parentId };
-    }
-
-    /**
-     * Create a new tv-file (frontmatter) task from structured data.
-     */
-    async createTvFile(params: CreateTvFileParams): Promise<CreateTvFileResult> {
-        assertParams(params, CREATE_TV_FILE_SCHEMA, 'createTvFile');
-        const statusChar = params.status ?? ' ';
-        if (statusChar.length !== 1) throw new TaskApiError(`status must be a single character, got: "${statusChar}"`);
-        const parsed = params.start ? parseDateTimeParam(params.start, 'start') : null;
-        const parsedEnd = params.end ? parseDateTimeParam(params.end, 'end') : null;
-        if (params.due) {
-            const parsedDue = parseDateTimeParam(params.due, 'due');
-            if (!parsedDue.date) throw new TaskApiError(`due must include a date, got: "${params.due}"`);
-        }
-        const newFile = await this.writeService.createTvFileFromData({
-            content: params.content,
-            statusChar,
-            startDate: parsed?.date,
-            startTime: parsed?.time,
-            endDate: parsedEnd?.date || (parsedEnd?.time && parsed?.date ? parsed.date : undefined),
-            endTime: parsedEnd?.time,
-            due: params.due,
-        });
-        return { newFile };
     }
 
     /**

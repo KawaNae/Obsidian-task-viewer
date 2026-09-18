@@ -1,6 +1,6 @@
-import { isTvFile, type ParserId } from '../../types';
+import type { ParserId, Task } from '../../types';
 
-const PARSER_IDS: ReadonlySet<ParserId> = new Set(['tv-inline', 'tv-file', 'tasks-plugin', 'day-planner']);
+const PARSER_IDS: ReadonlySet<ParserId> = new Set(['tv-inline', 'tasks-plugin', 'day-planner']);
 
 function isParserId(value: string): value is ParserId {
     return PARSER_IDS.has(value as ParserId);
@@ -12,19 +12,17 @@ export interface ParsedTaskId {
     anchor: string;
 }
 
-export interface AnchorResolutionInput {
-    blockId?: string;
-    timerTargetId?: string;
-    line?: number;
-    parserId: ParserId;
-}
-
 export interface ParsedSegmentId {
     baseId: string;
     segmentDate: string;
 }
 
-const TASK_ID_REGEX = /^([^:]+):(.+):(blk:[^:]+|tid:[^:]+|ln:\d+|fm-root)$/;
+// `blk:`, `tid:`, `ln:` and `fm-root` are no longer minted. They stay readable
+// because timers persisted by earlier versions still carry them, and the restore
+// guard (TimerPersistence.fromPersistedTimer) drops any ID `parse` rejects.
+// `prov:` is left out on purpose: a provisional ID that leaked should fail to parse.
+const TASK_ID_REGEX = /^([^:]+):(.+):(blk:[^:]+|tid:[^:]+|seq:\d+|ln:\d+|fm-root)$/;
+const RUNTIME_ANCHOR_REGEX = /^seq:\d+$/;
 const SEGMENT_ID_REGEX = /^(.*)##seg:(\d{4}-\d{2}-\d{2})$/;
 
 export class TaskIdGenerator {
@@ -32,27 +30,39 @@ export class TaskIdGenerator {
         return `${parserId}:${filePath}:${anchor}`;
     }
 
-    static resolveAnchor(input: AnchorResolutionInput): string {
-        const blockId = input.blockId?.trim();
-        if (blockId) {
-            return `blk:${blockId}`;
-        }
+    /**
+     * The ID a parser gives a task before the scan has matched it.
+     *
+     * Line-based on purpose: one line yields at most one task, so this is unique
+     * within a file even when two lines share a `^blockId`. It never outlives the
+     * scan — `applyIdentity` swaps it for a runtime ID before anything else reads
+     * it — so the line number cannot leak into what consumers hold.
+     */
+    static provisionalId(parserId: ParserId, filePath: string, line: number): string {
+        return this.generate(parserId, filePath, `prov:${line}`);
+    }
 
-        const timerTargetId = input.timerTargetId?.trim();
-        if (timerTargetId) {
-            return `tid:${timerTargetId}`;
-        }
+    /**
+     * The runtime ID a scan hands out to a task the ledger has not seen.
+     *
+     * Transitional shape: `seq:<n>` still sits behind the path, so the shape
+     * guards and `renameFile` keep working unchanged.
+     */
+    static mintRuntimeId(task: Pick<Task, 'parserId' | 'file'>, next: () => number): string {
+        return this.generate(task.parserId, task.file, `seq:${next()}`);
+    }
 
-        if (isTvFile(input)) {
-            return 'fm-root';
-        }
-
-        // Has explicit body line — use it as anchor. Otherwise fall through to ln:0.
-        if (typeof input.line === 'number' && input.line >= 0) {
-            return `ln:${input.line + 1}`;
-        }
-
-        return 'ln:0';
+    /**
+     * Whether `id` is shaped like an ID a scan commits to the store.
+     *
+     * A positive test on purpose: `prov:` is not the only shape that must stay
+     * out of the store — the legacy `ln:`, `blk:`, `tid:` and `fm-root` still
+     * parse — and
+     * listing the bad shapes would let a new one slip past.
+     */
+    static isRuntimeId(id: string): boolean {
+        const parsed = this.parse(id);
+        return parsed !== null && RUNTIME_ANCHOR_REGEX.test(parsed.anchor);
     }
 
     static parse(id: string): ParsedTaskId | null {

@@ -1,7 +1,6 @@
-import { type Task, type ChildLine, isTvFile } from '../../types';
+import type { Task, ChildLine } from '../../types';
 import { NotationUtils } from './NotationUtils';
 import type { ChildRenderItem } from './types';
-import { getFileBaseName } from '../../services/parsing/utils/TaskContent';
 
 /**
  * Pure conversion: Task / raw line → ChildRenderItem.
@@ -9,21 +8,9 @@ import { getFileBaseName } from '../../services/parsing/utils/TaskContent';
  * No resolution logic — only formatting and item creation.
  */
 export class ChildRenderItemMapper {
-    /**
-     * Converts Task to ChildRenderItem.
-     * For frontmatter tasks in another file, render as wikilink text.
-     */
-    createTaskItem(task: Task, indent: string, contextFile: string): ChildRenderItem {
+    /** Converts Task to ChildRenderItem. */
+    createTaskItem(task: Task, indent: string): ChildRenderItem {
         const char = task.statusChar || ' ';
-        if (isTvFile(task) && task.file !== contextFile) {
-            return {
-                markdown: `${indent}- [${char}] ${this.formatWikiLink(task.file)}`,
-                notation: NotationUtils.buildNotationLabel(task),
-                isCheckbox: true,
-                handler: { type: 'task', taskId: task.id }
-            };
-        }
-
         return {
             markdown: `${indent}- [${char}] ${task.content || '​'}`,
             notation: NotationUtils.buildNotationLabel(task),
@@ -33,46 +20,19 @@ export class ChildRenderItemMapper {
     }
 
     /**
-     * Converts a wikilink-resolved Task to ChildRenderItem.
+     * Converts a plain child line to ChildRenderItem, rendered as-is.
+     *
+     * A child line is never a checkbox — every checkbox is a task. A `- [ ]`
+     * that shows up here sits inside a code fence, where it is an example and
+     * must stay inert.
      */
-    createWikiLinkItem(task: Task, indent: string): ChildRenderItem {
+    createPlainItem(line: ChildLine, indent: string): ChildRenderItem {
         return {
-            markdown: `${indent}- [${task.statusChar || ' '}] ${this.formatWikiLink(task.file)}`,
-            notation: NotationUtils.buildNotationLabel(task),
-            isCheckbox: true,
-            handler: { type: 'task', taskId: task.id }
-        };
-    }
-
-    /**
-     * Converts a plain child line to ChildRenderItem.
-     * Used for lines NOT recognized as tasks by the parser, so no @notation
-     * extraction is performed — the line is rendered as-is. The handler
-     * carries `bodyLine` (absolute file line) and a `line` snapshot, so
-     * write paths never recompute line numbers.
-     */
-    createPlainItem(line: ChildLine, bodyLine: number, parentTask: Task, indent: string): ChildRenderItem {
-        const isCb = line.checkboxChar !== null;
-
-        let cleaned = line.text.trimEnd();
-        if (isCb && /^\s*-\s*\[.\]$/.test(cleaned)) {
-            cleaned += ' ​';
-        }
-
-        return {
-            markdown: indent + cleaned,
+            markdown: indent + line.text.trimEnd(),
             notation: null,
-            isCheckbox: isCb,
-            handler: isCb
-                ? { type: 'childLine', parentTask, line, bodyLine }
-                : null,
+            isCheckbox: false,
+            handler: null,
             propertyKey: line.propertyKey ?? undefined,
         };
-    }
-
-    formatWikiLink(filePath: string): string {
-        const target = filePath.replace(/\.md$/, '');
-        const alias = getFileBaseName(filePath) || target.split('/').pop() || target;
-        return `[[${target}|${alias}]]`;
     }
 }

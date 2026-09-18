@@ -3,7 +3,7 @@ import { DocumentTreeBuilder } from '../../../../src/services/parsing/tree/Docum
 import { SectionPropertyResolver } from '../../../../src/services/parsing/tree/SectionPropertyResolver';
 import { TreeTaskExtractor, type TaskExtractionContext } from '../../../../src/services/parsing/tree/TreeTaskExtractor';
 import { TaskParser } from '../../../../src/services/parsing/TaskParser';
-import { DEFAULT_SETTINGS, DEFAULT_TV_FILE_KEYS } from '../../../../src/types';
+import { DEFAULT_SETTINGS, DEFAULT_SCOPE_KEYS } from '../../../../src/types';
 import {
     getEffectiveColor, getEffectiveLinestyle, getEffectiveMask,
     getEffectiveTags, getEffectiveProperties,
@@ -11,13 +11,12 @@ import {
 
 const defaultCtx: TaskExtractionContext = {
     filePath: 'test.md',
-    hasTvFileParent: false,
-    tvFileKeys: DEFAULT_TV_FILE_KEYS,
+    scopeKeys: DEFAULT_SCOPE_KEYS,
 };
 
 function extractTasks(bodyLines: string[], frontmatter?: Record<string, any>, ctx?: Partial<TaskExtractionContext>) {
     const doc = DocumentTreeBuilder.build('test.md', bodyLines, 0);
-    SectionPropertyResolver.resolve(doc, frontmatter, DEFAULT_TV_FILE_KEYS);
+    SectionPropertyResolver.resolve(doc, frontmatter, DEFAULT_SCOPE_KEYS);
     return TreeTaskExtractor.extract(doc, { ...defaultCtx, ...ctx });
 }
 
@@ -32,11 +31,13 @@ describe('TreeTaskExtractor', () => {
             expect(tasks[0].startDate).toBe('2026-03-24');
         });
 
-        it('日付なしタスクはデイリーノート/FM親なしで無視', () => {
+        it('日付なしのチェックボックスも独立タスクになる', () => {
             const tasks = extractTasks([
                 '- [ ] no date task',
             ]);
-            expect(tasks).toHaveLength(0);
+            expect(tasks).toHaveLength(1);
+            expect(tasks[0].content).toBe('no date task');
+            expect(tasks[0].parentId).toBeUndefined();
         });
 
         it('時刻のみでもデイリーノートなら抽出', () => {
@@ -208,15 +209,17 @@ describe('TreeTaskExtractor', () => {
             expect(parent.childLines[0].propertyKey).toBe('note');
         });
 
-        it('プレーンチェックボックスの子 @notation タスクはパースされる', () => {
+        it('日付なしチェックボックスの子 @notation タスクはその子になる', () => {
             const tasks = extractTasks([
                 '- [ ] plainCheckBox',
                 '    - [ ] inlineTask1 @2026-03-24',
             ]);
-            expect(tasks).toHaveLength(1);
-            expect(tasks[0].content).toBe('inlineTask1');
-            expect(tasks[0].startDate).toBe('2026-03-24');
-            expect(tasks[0].parentId).toBeUndefined();
+            expect(tasks).toHaveLength(2);
+            const plain = tasks.find(t => t.content === 'plainCheckBox')!;
+            const inline = tasks.find(t => t.content === 'inlineTask1')!;
+            expect(inline.startDate).toBe('2026-03-24');
+            expect(inline.parentId).toBe(plain.id);
+            expect(plain.childIds).toEqual([inline.id]);
         });
 
         it('セクション色 + 子行オーバーライド + 子タスクの完全シナリオ', () => {
@@ -229,7 +232,7 @@ describe('TreeTaskExtractor', () => {
                 '- [ ] B3 子行で色を上書き @T15:00>16:00',
                 '\t- tv-color:: 4ecdc4',
                 '\t- [ ] B4 @T15:00>16:00',
-            ], undefined, { hasTvFileParent: true });
+            ]);
 
             const b1 = tasks.find(t => t.content.includes('B1'))!;
             const b2 = tasks.find(t => t.content.includes('B2'))!;
@@ -256,50 +259,49 @@ describe('TreeTaskExtractor', () => {
             expect(b1.properties['customProp']).toBeUndefined();
         });
 
-        it('プレーンチェックボックスは childLines に残る', () => {
+        it('日付なしの子チェックボックスは子タスクになり childLines に残らない', () => {
             const tasks = extractTasks([
                 '- [ ] parent @2026-03-24',
                 '    - [ ] plain checkbox',
                 '    - note:: something',
             ]);
-            const parent = tasks[0];
-            expect(parent.childLines).toHaveLength(2);
-            expect(parent.childLines[0].checkboxChar).toBe(' ');
-            expect(parent.childLines[0].text).toContain('plain checkbox');
-            expect(parent.childLines[1].propertyKey).toBe('note');
+            expect(tasks).toHaveLength(2);
+            const parent = tasks.find(t => t.content === 'parent')!;
+            const plain = tasks.find(t => t.content === 'plain checkbox')!;
+            expect(plain.parentId).toBe(parent.id);
+            expect(parent.childLines).toHaveLength(1);
+            expect(parent.childLines[0].propertyKey).toBe('note');
         });
     });
 
-    describe('ブロック内の子行処理（@notation なし - [x] の保持）', () => {
-        it('@notation なしの複数 - [x] が全て childLines に残る', () => {
+    describe('ブロック内の子行処理（チェックボックスは子タスク、それ以外は childLines）', () => {
+        it('@notation なしの複数 - [x] はすべて子タスクになる', () => {
             const tasks = extractTasks([
                 '- [x] 更新 @2026-03-25T12:34>15:20',
                 '    - [x] mini-calendarの調整',
                 '    - [x] スタイル修正',
                 '    - [x] tv-colorの変更',
             ]);
-            expect(tasks).toHaveLength(1);
+            expect(tasks).toHaveLength(4);
             const parent = tasks[0];
-            expect(parent.childLines).toHaveLength(3);
-            expect(parent.childLines[0].checkboxChar).toBe('x');
-            expect(parent.childLines[1].checkboxChar).toBe('x');
-            expect(parent.childLines[2].checkboxChar).toBe('x');
+            expect(parent.childLines).toHaveLength(0);
+            expect(parent.childIds).toHaveLength(3);
+            expect(tasks.slice(1).map(t => t.statusChar)).toEqual(['x', 'x', 'x']);
+            expect(tasks.slice(1).every(t => t.parentId === parent.id)).toBe(true);
         });
 
-        it('@notation あり/なし混在: タスクと childLines が正しく分離される', () => {
+        it('@notation あり/なし混在: どちらも子タスクになりファイル順に並ぶ', () => {
             const tasks = extractTasks([
                 '- [ ] parent @2026-03-24',
                 '    - [x] plain checkbox',
                 '    - [ ] child task @2026-03-25',
             ]);
-            expect(tasks).toHaveLength(2);
+            expect(tasks).toHaveLength(3);
             const parent = tasks.find(t => t.content === 'parent')!;
+            const plain = tasks.find(t => t.content === 'plain checkbox')!;
             const child = tasks.find(t => t.content === 'child task')!;
-            // plain checkbox は childLines に残る
-            expect(parent.childLines).toHaveLength(1);
-            expect(parent.childLines[0].checkboxChar).toBe('x');
-            // child task は childIds に入る
-            expect(parent.childIds).toContain(child.id);
+            expect(parent.childLines).toHaveLength(0);
+            expect(parent.childIds).toEqual([plain.id, child.id]);
         });
 
         it('説明行とチェックボックスとプロパティの混在', () => {
@@ -309,28 +311,29 @@ describe('TreeTaskExtractor', () => {
                 '    - [x] done item',
                 '    - priority:: high',
             ]);
-            const parent = tasks[0];
-            expect(parent.childLines).toHaveLength(3);
-            // 順序が保持される
-            expect(parent.childLines[0].checkboxChar).toBeNull();
+            const parent = tasks.find(t => t.content === 'parent')!;
+            const done = tasks.find(t => t.content === 'done item')!;
+            expect(done.parentId).toBe(parent.id);
+            // childLines はチェックボックスでない行だけ（順序は保持）
+            expect(parent.childLines).toHaveLength(2);
             expect(parent.childLines[0].text).toContain('説明テキスト');
-            expect(parent.childLines[1].checkboxChar).toBe('x');
-            expect(parent.childLines[2].propertyKey).toBe('priority');
+            expect(parent.childLines[1].propertyKey).toBe('priority');
         });
 
-        it('非タスクラッパー内の孫タスクが抽出される', () => {
+        it('日付なしのラッパーも子タスクになり、孫はラッパーの子になる', () => {
             const tasks = extractTasks([
                 '- [ ] parent @2026-03-24',
                 '    - [x] wrapper without notation',
                 '        - [ ] grandchild @2026-03-26',
             ]);
-            // parent + grandchild（wrapper はタスクにならない）
-            expect(tasks).toHaveLength(2);
+            expect(tasks).toHaveLength(3);
             const parent = tasks.find(t => t.content === 'parent')!;
+            const wrapper = tasks.find(t => t.content === 'wrapper without notation')!;
             const grandchild = tasks.find(t => t.content === 'grandchild')!;
-            expect(grandchild).toBeDefined();
-            // wrapper は parent の childLines に残る
-            expect(parent.childLines.some(cl => cl.text.includes('wrapper'))).toBe(true);
+            expect(wrapper.parentId).toBe(parent.id);
+            expect(grandchild.parentId).toBe(wrapper.id);
+            expect(parent.childIds).toEqual([wrapper.id]);
+            expect(parent.childLines).toHaveLength(0);
         });
     });
 
@@ -358,60 +361,64 @@ describe('TreeTaskExtractor', () => {
             expect(parent.childLines.map(c => c.bodyLine)).toEqual([1, 4]);
         });
 
-        it('@notation なしチェックボックスの行番号が正しい', () => {
+        it('@notation なしチェックボックスは子タスクとして自分の行番号を持つ', () => {
             const tasks = extractTasks([
                 '- [ ] parent @2026-03-24',    // line 0
                 '    - [x] item A',             // line 1
                 '    - [x] item B',             // line 2
                 '    - [x] item C',             // line 3
             ]);
-            const parent = tasks[0];
-            expect(parent.childLines.map(c => c.bodyLine)).toEqual([1, 2, 3]);
+            expect(tasks.slice(1).map(t => t.line)).toEqual([1, 2, 3]);
+            expect(tasks[0].childLines).toHaveLength(0);
         });
     });
 
     describe('リストマーカーバリエーション', () => {
-        it('* マーカーのチェックボックスが childLines に残る', () => {
+        it('* マーカーのチェックボックスも子タスクになる', () => {
             const tasks = extractTasks([
                 '- [ ] parent @2026-03-24',
                 '    * [x] asterisk item',
             ]);
-            expect(tasks).toHaveLength(1);
-            expect(tasks[0].childLines).toHaveLength(1);
-            expect(tasks[0].childLines[0].checkboxChar).toBe('x');
+            expect(tasks).toHaveLength(2);
+            expect(tasks[0].childLines).toHaveLength(0);
+            expect(tasks[1].statusChar).toBe('x');
+            expect(tasks[1].parentId).toBe(tasks[0].id);
         });
 
-        it('+ マーカーのチェックボックスが childLines に残る', () => {
+        it('+ マーカーのチェックボックスも子タスクになる', () => {
             const tasks = extractTasks([
                 '- [ ] parent @2026-03-24',
                 '    + [x] plus item',
             ]);
-            expect(tasks).toHaveLength(1);
-            expect(tasks[0].childLines).toHaveLength(1);
-            expect(tasks[0].childLines[0].checkboxChar).toBe('x');
+            expect(tasks).toHaveLength(2);
+            expect(tasks[0].childLines).toHaveLength(0);
+            expect(tasks[1].statusChar).toBe('x');
+            expect(tasks[1].parentId).toBe(tasks[0].id);
         });
 
-        it('1. 番号付きチェックボックスが childLines に残る', () => {
+        it('1. 番号付きチェックボックスも子タスクになる', () => {
             const tasks = extractTasks([
                 '- [ ] parent @2026-03-24',
                 '    1. [x] ordered dot item',
             ]);
-            expect(tasks).toHaveLength(1);
-            expect(tasks[0].childLines).toHaveLength(1);
-            expect(tasks[0].childLines[0].checkboxChar).toBe('x');
+            expect(tasks).toHaveLength(2);
+            expect(tasks[0].childLines).toHaveLength(0);
+            expect(tasks[1].statusChar).toBe('x');
+            expect(tasks[1].parentId).toBe(tasks[0].id);
         });
 
-        it('1) 番号付きチェックボックスが childLines に残る', () => {
+        it('1) 番号付きチェックボックスも子タスクになる', () => {
             const tasks = extractTasks([
                 '- [ ] parent @2026-03-24',
                 '    1) [x] ordered paren item',
             ]);
-            expect(tasks).toHaveLength(1);
-            expect(tasks[0].childLines).toHaveLength(1);
-            expect(tasks[0].childLines[0].checkboxChar).toBe('x');
+            expect(tasks).toHaveLength(2);
+            expect(tasks[0].childLines).toHaveLength(0);
+            expect(tasks[1].statusChar).toBe('x');
+            expect(tasks[1].parentId).toBe(tasks[0].id);
         });
 
-        it('異なるマーカーが混在しても全て childLines に残る', () => {
+        it('異なるマーカーが混在しても全て子タスクになる', () => {
             const tasks = extractTasks([
                 '- [ ] parent @2026-03-24',
                 '    - [x] dash item',
@@ -419,13 +426,11 @@ describe('TreeTaskExtractor', () => {
                 '    + [ ] plus item',
                 '    1. [x] ordered item',
             ]);
-            expect(tasks).toHaveLength(1);
+            expect(tasks).toHaveLength(5);
             const parent = tasks[0];
-            expect(parent.childLines).toHaveLength(4);
-            expect(parent.childLines[0].checkboxChar).toBe('x');
-            expect(parent.childLines[1].checkboxChar).toBe('x');
-            expect(parent.childLines[2].checkboxChar).toBe(' ');
-            expect(parent.childLines[3].checkboxChar).toBe('x');
+            expect(parent.childLines).toHaveLength(0);
+            expect(parent.childIds).toHaveLength(4);
+            expect(tasks.slice(1).map(t => t.statusChar)).toEqual(['x', 'x', ' ', 'x']);
         });
 
         it('各種ステータス文字が正しく取得される', () => {
@@ -437,9 +442,8 @@ describe('TreeTaskExtractor', () => {
                 '    - [-] cancelled',
                 '    - [>] forwarded',
             ]);
-            const cl = tasks[0].childLines;
-            expect(cl).toHaveLength(5);
-            expect(cl.map(c => c.checkboxChar)).toEqual([' ', 'x', '/', '-', '>']);
+            expect(tasks.slice(1).map(t => t.statusChar)).toEqual([' ', 'x', '/', '-', '>']);
+            expect(tasks[0].childLines).toHaveLength(0);
         });
 
         it('* マーカー + @notation はタスクとして抽出される', () => {
@@ -461,9 +465,7 @@ describe('TreeTaskExtractor', () => {
             ]);
             const cl = tasks[0].childLines;
             expect(cl).toHaveLength(2);
-            expect(cl[0].checkboxChar).toBeNull();
             expect(cl[0].text).toContain('plain text');
-            expect(cl[1].checkboxChar).toBeNull();
             expect(cl[1].text).toContain('plain bullet');
         });
     });
@@ -562,91 +564,104 @@ describe('TreeTaskExtractor', () => {
         });
     });
 
-    describe('bare-checkbox inbox tasks (task-bearing files)', () => {
-        // After parser unification, "bare checkbox" is a tv-inline task with
-        // no scheduling fields — distinguished by absence of dates rather than
-        // by parserId. TVInlineParser uses '' (empty string) as the no-date
-        // sentinel for startDate; other date fields stay undefined when absent.
-        const isBare = (t: { startDate?: string; startTime?: string; endDate?: string; endTime?: string; due?: string }) =>
-            !t.startDate && !t.startTime && !t.endDate && !t.endTime && !t.due;
-        const isScheduled = (t: { startDate?: string; startTime?: string; endDate?: string; endTime?: string; due?: string }) =>
-            !!(t.startDate || t.startTime || t.endDate || t.endTime || t.due);
-
-        it('task-bearing file の top-level bare checkbox は inbox Task として抽出される', () => {
+    describe('裸チェックボックス（日付もコマンドも持たない）', () => {
+        // TVInlineParser uses '' (empty string) as the no-date sentinel for
+        // startDate; other date fields stay undefined when absent.
+        it('トップレベルの裸チェックボックスは親なしの独立タスク', () => {
             const tasks = extractTasks([
                 '- [ ] やりたいこと',
-            ], undefined, { hasTvFileParent: true });
+            ]);
             expect(tasks).toHaveLength(1);
             expect(tasks[0].parserId).toBe('tv-inline');
             expect(tasks[0].content).toBe('やりたいこと');
             expect(tasks[0].startDate).toBe('');
             expect(tasks[0].endDate).toBeUndefined();
             expect(tasks[0].due).toBeUndefined();
+            expect(tasks[0].parentId).toBeUndefined();
         });
 
-        it('非 task-bearing file の bare checkbox は従来どおり無視される', () => {
-            const tasks = extractTasks([
-                '- [ ] 議事メモ',
-            ]);
-            expect(tasks).toHaveLength(0);
-        });
-
-        it('@ タスク配下の bare checkbox は Task 化されず親の childLines に残る', () => {
+        it('タスク直下の裸チェックボックスはそのタスクの子', () => {
             const tasks = extractTasks([
                 '- [ ] parent @2026-03-24',
                 '    - [ ] 子手順',
-            ], undefined, { hasTvFileParent: true });
-            const scheduledTasks = tasks.filter(isScheduled);
-            const bareTasks = tasks.filter(isBare);
-            expect(scheduledTasks).toHaveLength(1);
-            expect(bareTasks).toHaveLength(0);
-            const parent = scheduledTasks[0];
-            expect(parent.childLines.some(c => c.text.includes('子手順'))).toBe(true);
+            ]);
+            const parent = tasks.find(t => t.content === 'parent')!;
+            const step = tasks.find(t => t.content === '子手順')!;
+            expect(step.parentId).toBe(parent.id);
+            expect(parent.childIds).toEqual([step.id]);
+            expect(parent.childLines).toHaveLength(0);
         });
 
-        it('bare checkbox の配下に置かれた @ タスクは bare checkbox の子になる', () => {
+        it('トップレベルの非タスク行の下の裸チェックボックスは親なしの独立タスク', () => {
             const tasks = extractTasks([
-                '- [ ] inbox 親',
-                '    - [ ] scheduled @2026-03-24',
-            ], undefined, { hasTvFileParent: true });
-            const inbox = tasks.find(isBare)!;
-            const scheduled = tasks.find(isScheduled)!;
-            expect(inbox).toBeDefined();
-            expect(scheduled).toBeDefined();
-            expect(scheduled.parentId).toBe(inbox.id);
-            expect(inbox.childIds).toContain(scheduled.id);
-        });
-
-        it('bare checkbox の孫になる bare checkbox は childLine として保持される（祖先ルール）', () => {
-            const tasks = extractTasks([
-                '- [ ] inbox 親',
-                '    - [ ] nested plain',
-            ], undefined, { hasTvFileParent: true });
-            const bareTasks = tasks.filter(isBare);
-            expect(bareTasks).toHaveLength(1);
-            expect(bareTasks[0].content).toBe('inbox 親');
-            expect(bareTasks[0].childLines.some(c => c.text.includes('nested plain'))).toBe(true);
-        });
-
-        it('カスケード日付を持つ bare checkbox は dated task になる（inbox ではない）', () => {
-            const tasks = extractTasks([
-                '- [ ] メモ',
-            ], { 'tv-start': '2026-03-24' });
+                '- メモ',
+                '    - [ ] ついでにやる',
+            ]);
             expect(tasks).toHaveLength(1);
-            expect(tasks[0].parserId).toBe('tv-inline');
-            expect(tasks[0].cascadeContext?.startDate).toBe('2026-03-24');
+            expect(tasks[0].content).toBe('ついでにやる');
+            expect(tasks[0].parentId).toBeUndefined();
         });
 
-        it('同一ファイル内で @ task と inbox task が共存できる', () => {
+        // タスクの部分木の中なら、間に非タスク行を挟んでも部分木の所有者の子。
+        // 行は親の childRawLines の中にあり、親を動かせば一緒に動く。
+        it('タスクの部分木の中で非タスク行の下にある裸チェックボックスは、部分木の所有者の子', () => {
             const tasks = extractTasks([
-                '- [ ] scheduled @2026-03-24',
-                '- [ ] inbox item',
-            ], undefined, { hasTvFileParent: true });
-            expect(tasks).toHaveLength(2);
-            const scheduled = tasks.find(isScheduled)!;
-            const inbox = tasks.find(isBare)!;
-            expect(scheduled.startDate).toBe('2026-03-24');
-            expect(inbox.startDate).toBe('');
+                '- [ ] P',
+                '    - メモ',
+                '        - [ ] x',
+            ]);
+            const p = tasks.find(t => t.content === 'P')!;
+            const x = tasks.find(t => t.content === 'x')!;
+            expect(x.parentId).toBe(p.id);
+            expect(p.childIds).toEqual([x.id]);
+            expect(p.childLines.map(c => c.text.trim())).toEqual(['- メモ']);
+        });
+
+        it('frontmatter の日付を持つノートでは、裸チェックボックスが全部その日付を継承し、ノート自身のタスクは無い', () => {
+            const tasks = extractTasks([
+                '- [ ] 一',
+                '- [ ] 二',
+                '    - [ ] 二の子',
+                '- [ ] 三',
+            ], { 'tv-start': '2026-03-24' });
+            expect(tasks.map(t => t.content)).toEqual(['一', '二', '二の子', '三']);
+            expect(tasks.every(t => t.cascadeContext?.startDate === '2026-03-24')).toBe(true);
+            expect(tasks.every(t => t.parserId === 'tv-inline')).toBe(true);
+        });
+    });
+
+    describe('親子は直上のブロックだけ（インデント幅に依らない）', () => {
+        const nested = (unit: string) => [
+            '- [ ] a',
+            `${unit}- [ ] b`,
+            `${unit}${unit}- [ ] c`,
+        ];
+
+        for (const [label, unit] of [['1スペース', ' '], ['2スペース', '  '], ['4スペース', '    '], ['8スペース', '        '], ['タブ', '\t']] as const) {
+            it(`${label}の3段ネストで、孫は子だけの子（祖父に二重登録されない）`, () => {
+                const tasks = extractTasks(nested(unit));
+                const [a, b, c] = ['a', 'b', 'c'].map(n => tasks.find(t => t.content === n)!);
+                expect(b.parentId).toBe(a.id);
+                expect(c.parentId).toBe(b.id);
+                expect(a.childIds).toEqual([b.id]);
+                expect(b.childIds).toEqual([c.id]);
+                expect(c.childIds).toEqual([]);
+            });
+        }
+
+        it('兄弟のインデント幅が揃っていなくても、直下ブロックはすべて子', () => {
+            const tasks = extractTasks([
+                '- [ ] a',
+                '  - [ ] b1',
+                '    - [ ] b1の子',
+                '  - [ ] b2',
+            ]);
+            const a = tasks.find(t => t.content === 'a')!;
+            const b1 = tasks.find(t => t.content === 'b1')!;
+            const b2 = tasks.find(t => t.content === 'b2')!;
+            const deep = tasks.find(t => t.content === 'b1の子')!;
+            expect(a.childIds).toEqual([b1.id, b2.id]);
+            expect(deep.parentId).toBe(b1.id);
         });
     });
 
@@ -774,14 +789,16 @@ describe('TreeTaskExtractor', () => {
             ]);
         });
 
-        it('fence 内の `- ==>` は日付なし checkbox を昇格させない', () => {
+        it('fence 内の `- ==>` はコマンドにならず、日付なし checkbox はフローを持たないタスクのまま', () => {
             const tasks = extractTasks([
                 '- [ ] ただのメモ',
                 '    ```markdown',
                 '    - ==> every 1d',
                 '    ```',
             ]);
-            expect(tasks).toHaveLength(0);
+            expect(tasks).toHaveLength(1);
+            expect(tasks[0].flow?.program).toBeFalsy();
+            expect(tasks[0].childLines.some(c => c.text.includes('==> every 1d'))).toBe(true);
         });
 
         it('fence 内の checkbox はタスクにならない（既存 baseline）', () => {

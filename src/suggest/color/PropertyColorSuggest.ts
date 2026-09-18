@@ -49,7 +49,7 @@ export class PropertyColorSuggest extends AbstractInputSuggest<string> {
             return;
         }
 
-        const colorKey = this.plugin.settings.tvFileKeys.color;
+        const colorKey = this.plugin.settings.scopeKeys.color;
         await this.plugin.getTaskWriteService()
             .setFrontmatterKeys(activeFile.path, { [colorKey]: value });
 

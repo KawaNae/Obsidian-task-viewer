@@ -4,7 +4,7 @@ import { DateUtils } from '../../../utils/DateUtils';
  * Shared date/time field parsing utilities — the single implementation of
  * "what counts as a date/time fragment" for BOTH notation surfaces
  * (@block via TVInlineParser and frontmatter/section/builtin-property via
- * TVFileBuilder / FilePropertyResolver / BuiltinPropertyExtractor).
+ * FilePropertyResolver / BuiltinPropertyExtractor).
  */
 
 /**

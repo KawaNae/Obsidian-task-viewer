@@ -9,10 +9,10 @@ describe('computeParseFingerprint', () => {
         expect(computeParseFingerprint(a)).toBe(computeParseFingerprint(b));
     });
 
-    it('detects tvFileKeys change even on same object reference', () => {
-        const settings = { ...DEFAULT_SETTINGS, tvFileKeys: { ...DEFAULT_SETTINGS.tvFileKeys } };
+    it('detects scopeKeys change even on same object reference', () => {
+        const settings = { ...DEFAULT_SETTINGS, scopeKeys: { ...DEFAULT_SETTINGS.scopeKeys } };
         const before = computeParseFingerprint(settings);
-        settings.tvFileKeys.start = 'custom-start';
+        settings.scopeKeys.start = 'custom-start';
         const after = computeParseFingerprint(settings);
         expect(before).not.toBe(after);
     });
@@ -29,14 +29,6 @@ describe('computeParseFingerprint', () => {
         const settings = { ...DEFAULT_SETTINGS };
         const before = computeParseFingerprint(settings);
         settings.enableTasksPlugin = true;
-        const after = computeParseFingerprint(settings);
-        expect(before).not.toBe(after);
-    });
-
-    it('detects tvFileChildHeader change on same object', () => {
-        const settings = { ...DEFAULT_SETTINGS };
-        const before = computeParseFingerprint(settings);
-        settings.tvFileChildHeader = 'Custom Header';
         const after = computeParseFingerprint(settings);
         expect(before).not.toBe(after);
     });

@@ -21,7 +21,7 @@ export class FilterSerializer {
 
         // Single condition: has "property" directly
         if ('property' in obj && 'operator' in obj) {
-            return { filters: [parseCondition(obj)], logic: 'and' };
+            return { filters: isRetiredCondition(obj) ? [] : [parseCondition(obj)], logic: 'and' };
         }
 
         // Group with "logic" but no filters key
@@ -88,7 +88,7 @@ function parseV6Group(obj: Record<string, unknown>): FilterGroup {
             const c = child as Record<string, unknown>;
             if ('filters' in c || 'logic' in c) {
                 filters.push(parseV6Group(c));
-            } else if ('property' in c) {
+            } else if ('property' in c && !isRetiredCondition(c)) {
                 filters.push(parseCondition(c));
             }
         }
@@ -97,6 +97,19 @@ function parseV6Group(obj: Record<string, unknown>): FilterGroup {
         filters,
         logic: obj.logic === 'or' ? 'or' : 'and',
     };
+}
+
+/**
+ * Conditions on a property that no longer exists, dropped on read.
+ *
+ * `kind` told inline tasks from file tasks; with frontmatter no longer making
+ * tasks, every task is inline. Saved views and pinned lists both load through
+ * here, so this is the one place a retired condition has to be recognised. A
+ * group left empty stays, as an empty group, which the engine reads as true —
+ * so the conditions beside it keep their meaning.
+ */
+function isRetiredCondition(c: Record<string, unknown>): boolean {
+    return c.property === 'kind';
 }
 
 function parseCondition(c: Record<string, unknown>): FilterCondition {

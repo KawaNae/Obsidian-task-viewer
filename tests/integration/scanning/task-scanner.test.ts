@@ -88,10 +88,14 @@ describe('time-only on non-daily note', () => {
     });
     afterAll(() => fixture.teardown());
 
-    it('skips time-only task on non-daily note (no date context)', () => {
-        const r = cliList({ file: 'test-int-scanner-timeonly', 'output-fields': OUTPUT_FIELDS });
-        // Time-only without daily note context should produce no tasks
-        expect(r.count).toBe(0);
+    // Every checkbox is a task: without a date to inherit, a time-only line
+    // is a dateless task that keeps its time (it has no place on a date axis).
+    it('keeps a time-only task on a note without a date, dateless', () => {
+        const r = cliList({ file: 'test-int-scanner-timeonly', 'output-fields': OUTPUT_FIELDS + ',effectiveStartDate' });
+        expect(r.count).toBe(1);
+        expect(r.tasks[0].content).toBe('Meeting');
+        expect(r.tasks[0].startTime).toBe('09:00');
+        expect(r.tasks[0].effectiveStartDate ?? '').toBe('');
     });
 });
 
@@ -139,7 +143,7 @@ describe('daily note date inheritance', () => {
 // ────────────────────────────────────────────
 // 4. Frontmatter task detection
 // ────────────────────────────────────────────
-describe('frontmatter tasks', () => {
+describe('frontmatter makes no task', () => {
     const FILE = 'test-int-scanner-frontmatter.md';
     const fixture = createFixture(FILE, [
         '---',
@@ -147,17 +151,21 @@ describe('frontmatter tasks', () => {
         'tv-content: Project Alpha',
         '---',
         'Body text here.',
+        '- [ ] step one',
+        '- [ ] step two',
     ].join('\n'));
 
     beforeAll(() => fixture.setup());
     afterAll(() => fixture.teardown());
 
-    it('creates frontmatter task when tv-start is present', () => {
-        const r = cliList({ file: FILE, 'output-fields': OUTPUT_FIELDS });
-        const fmTask = r.tasks.find(t => t.parserId === 'tv-file');
-        expect(fmTask).toBeDefined();
-        expect(fmTask!.startDate).toBe('2026-03-11');
-        expect(fmTask!.content).toBe('Project Alpha');
+    it('yields only the checkboxes, each inheriting the frontmatter date', () => {
+        const r = cliList({ file: FILE, 'output-fields': OUTPUT_FIELDS + ',effectiveStartDate' });
+        expect(r.tasks.filter(t => t.parserId === 'tv-file')).toHaveLength(0);
+        expect(r.tasks.map(t => t.content)).toEqual(['step one', 'step two']);
+        for (const task of r.tasks) {
+            expect(task.effectiveStartDate).toBe('2026-03-11');
+            expect(task.parentId ?? null).toBeNull();
+        }
     });
 });
 

@@ -8,25 +8,23 @@ describe('TaskIdGenerator', () => {
         });
     });
 
-    describe('resolveAnchor', () => {
-        it('prioritizes blockId', () => {
-            expect(TaskIdGenerator.resolveAnchor({ blockId: 'abc', timerTargetId: 'tid1', line: 5, parserId: 'tv-inline' })).toBe('blk:abc');
+    describe('provisionalId', () => {
+        it('is line-based, whatever block ID the line carries', () => {
+            expect(TaskIdGenerator.provisionalId('tv-inline', 'a.md', 5)).toBe('tv-inline:a.md:prov:5');
         });
 
-        it('uses timerTargetId when no blockId', () => {
-            expect(TaskIdGenerator.resolveAnchor({ timerTargetId: 'tid1', line: 5, parserId: 'tv-inline' })).toBe('tid:tid1');
+        it('is never runtime-shaped and never parses', () => {
+            const id = TaskIdGenerator.provisionalId('tasks-plugin', 'a.md', 0);
+            expect(TaskIdGenerator.isRuntimeId(id)).toBe(false);
+            expect(TaskIdGenerator.parse(id)).toBeNull();
         });
+    });
 
-        it('uses fm-root for the tv-file parser', () => {
-            expect(TaskIdGenerator.resolveAnchor({ parserId: 'tv-file' })).toBe('fm-root');
-        });
-
-        it('uses line number (1-based) when no other anchor', () => {
-            expect(TaskIdGenerator.resolveAnchor({ line: 5, parserId: 'tv-inline' })).toBe('ln:6');
-        });
-
-        it('falls back to ln:0', () => {
-            expect(TaskIdGenerator.resolveAnchor({ parserId: 'tv-inline' })).toBe('ln:0');
+    describe('legacy anchors', () => {
+        // Timers persisted before the ledger carry these; the restore guard
+        // drops any task ID parse rejects.
+        it.each(['ln:3', 'blk:abc', 'tid:tv-t-1'])('still parses %s', anchor => {
+            expect(TaskIdGenerator.parse(`tv-inline:a.md:${anchor}`)?.anchor).toBe(anchor);
         });
     });
 
@@ -36,7 +34,7 @@ describe('TaskIdGenerator', () => {
             expect(result).toEqual({ parserId: 'tv-inline', filePath: 'notes/daily.md', anchor: 'blk:abc123' });
         });
 
-        it('parses fm-root anchor', () => {
+        it('parses a legacy fm-root anchor (read only)', () => {
             const result = TaskIdGenerator.parse('tv-file:project.md:fm-root');
             expect(result).toEqual({ parserId: 'tv-file', filePath: 'project.md', anchor: 'fm-root' });
         });
@@ -98,6 +96,36 @@ describe('TaskIdGenerator', () => {
             const id = 'tv-inline:old.md:blk:abc##seg:2026-03-11';
             const result = TaskIdGenerator.renameFile(id, 'old.md', 'new.md');
             expect(result).toBe('tv-inline:new.md:blk:abc##seg:2026-03-11');
+        });
+
+        it('renames a runtime seq ID, keeping its number', () => {
+            const result = TaskIdGenerator.renameFile('tv-inline:old.md:seq:12', 'old.md', 'new.md');
+            expect(result).toBe('tv-inline:new.md:seq:12');
+        });
+    });
+
+    describe('runtime IDs (seq:)', () => {
+        it('parses a seq anchor', () => {
+            expect(TaskIdGenerator.parse('tv-inline:a/b.md:seq:7'))
+                .toEqual({ parserId: 'tv-inline', filePath: 'a/b.md', anchor: 'seq:7' });
+        });
+
+        it('mints parserId:file:seq:n from the counter', () => {
+            let n = 0;
+            const next = () => ++n;
+            const task = { id: 'tv-inline:a.md:ln:3', parserId: 'tv-inline' as const, file: 'a.md' };
+            expect(TaskIdGenerator.mintRuntimeId(task, next)).toBe('tv-inline:a.md:seq:1');
+            expect(TaskIdGenerator.mintRuntimeId(task, next)).toBe('tv-inline:a.md:seq:2');
+        });
+
+        it('accepts only seq as runtime-shaped', () => {
+            expect(TaskIdGenerator.isRuntimeId('tv-inline:a.md:seq:1')).toBe(true);
+            // Persisted by earlier versions: still parses, never committed.
+            expect(TaskIdGenerator.isRuntimeId('tv-file:a.md:fm-root')).toBe(false);
+            expect(TaskIdGenerator.isRuntimeId('tv-inline:a.md:ln:1')).toBe(false);
+            expect(TaskIdGenerator.isRuntimeId('tv-inline:a.md:blk:abc')).toBe(false);
+            expect(TaskIdGenerator.isRuntimeId('tv-inline:a.md:tid:xyz')).toBe(false);
+            expect(TaskIdGenerator.isRuntimeId('not-an-id')).toBe(false);
         });
     });
 });
