@@ -203,6 +203,66 @@ obsidian obsidian-task-viewer:get-start-hour
 
 **戻り値:** `{ "startHour": 5 }`
 
+### export-image — ビューを PNG に書き出す
+
+タイムライン / カレンダー / スケジュール / カンバンのビューを PNG 画像として書き出します。
+
+```bash
+# 開いているタイムラインをそのまま撮る
+obsidian obsidian-task-viewer:export-image view=timeline
+
+# 一時ウィンドウを開き、指定した日付を基準に描いて撮る
+obsidian obsidian-task-viewer:export-image view=timeline anchor-date=2026-09-19 days-to-show=7
+
+# ビューテンプレートの設定で撮る
+obsidian obsidian-task-viewer:export-image template=週次レビュー output-folder=Exports
+```
+
+`view=` か `template=` のどちらかが必須です。
+
+| フラグ | 説明 | デフォルト |
+|-------|------|-----------|
+| `view` | ビューの種類: `timeline`, `calendar`, `schedule`, `kanban` | |
+| `template` | ビューテンプレート名（省略時は `view` から種類を決める。指定すると種類も決まる） | |
+| `name` | 書き出したビューの名前（既定ファイル名に使われる） | |
+| `anchor-date` | 基準日（`YYYY-MM-DD`）。ビューの「今日」ボタンを任意の日付に向けたものに相当し、ビューごとの日付キーへ解決される | |
+| `width` | 描画幅（CSS ピクセル） | `1200` |
+| `output-folder` | 出力先フォルダ（vault 相対パスまたは絶対パス） | 設定の書き出し先フォルダ、未設定なら `task-viewer-export` |
+| `filename` | 出力ファイル名 | `{name または template または view の種類}_{今日の日付}.png`（基準日ではなく実行日） |
+| `wait` | 描画後の待ち時間（ミリ秒）。一時ウィンドウのときだけ効く | `500` |
+| `keep-open` | 書き出し後も一時ウィンドウを閉じない（ブーリアン） | |
+
+**2つのモード**
+
+| 条件 | 動作 |
+|---|---|
+| `view` だけ（ビュー設定フラグも `template` も無い） | 開いているそのビューを撮る。**表示されている必要がある**（無ければエラー） |
+| ビュー設定フラグか `template` がある | 一時ウィンドウを開き、その設定で描いて撮り、閉じる |
+
+**ビュー設定フラグ**
+
+`anchor-date` のほかに、ビューごとの設定フラグをそのまま渡せます（タイムラインの `days-to-show=`、`zoom-level=`、カレンダーの `window-start=` など）。使える名前はビューの種類で変わるので、存在しないフラグを1つ渡すと、そのビューで有効なフラグの一覧がエラーメッセージに出ます。
+
+`anchor-date` とビュー固有の日付フラグ（タイムラインの `start-date=` など）を同時に、違う値で渡すとエラーになります。どちらか一方を使ってください。
+
+**戻り値:**
+
+```json
+{ "path": "Exports/timeline_2026-09-19.png", "width": 1200, "height": 2400,
+  "captureDurationMs": 820, "totalDurationMs": 1640,
+  "resolvedAnchor": "2026-09-19", "renderedRange": { "from": "2026-09-19", "to": "2026-09-25" } }
+```
+
+`resolvedAnchor` と `renderedRange` は、基準日が決まるビューで日付を指定したときだけ付きます。画像が上限で縮小されたときは `clamped`, `actualWidth`, `actualHeight` も付きます。
+
+**挙動**
+
+- PNG は `pixelRatio=2` で書き出すので、実際の画素は `width×2 × height×2`。キャンバスの上限 16384px を超える縦長のビューは、比率を保って縮小されます
+- `width`/`height` は展開後のコンテンツの CSS ピクセル
+- 同じ日に撮り直すと上書きします（同じ入力なら同じ結果）
+- `output-folder` は vault 相対でも絶対パスでもよく、戻り値の `path` はどちらもスラッシュ区切り。vault 内なら vault 相対、外なら絶対パスで返します
+- タスクカードが数千枚あるビューは描画に時間がかかり、書き出しに失敗することがあります
+
 ### help — CLI リファレンス
 
 ```bash
