@@ -37,7 +37,8 @@ const FIXTURE_CONTENT = [
     '- [ ] flow-telomere-C @2026-04-01 ==> at(start + 3d) x1',
     '',
     '## until (expired)',
-    '- [ ] flow-until-D @2026-04-01 ==> every mon until 2026-04-30',
+    // until(start) は at(start + 1d) より必ず手前なので、今日がいつでも expired になる。
+    '- [ ] flow-until-D @2026-04-01 ==> at(start + 1d) until(start)',
     '',
     '## move',
     '- [ ] flow-move-E @2026-04-01 ==> move([[test-archive]])',
@@ -198,7 +199,7 @@ describe('telomere (xN)', () => {
 describe('until (expired)', () => {
     beforeAll(() => resetFixture());
 
-    it('consumes the command without generating when past the until date', async () => {
+    it('consumes the command without generating when the next date is past until', async () => {
         const task = findTask('flow-until-D');
         expect(task).toBeDefined();
 
