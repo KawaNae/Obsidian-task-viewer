@@ -14,6 +14,7 @@ import type { ValidationMenuBuilder } from '../interaction/menu/builders/Validat
 import type { MenuPresenter } from '../interaction/menu/MenuPresenter';
 import type { TaskHubOpener } from '../interaction/menu/MenuHandler';
 import { TaskLineClassifier } from '../services/parsing/utils/TaskLineClassifier';
+import { docFenceReading } from './docFenceReading';
 import { getTaskNotation } from '../services/filter/parserTaxonomy';
 import { t } from '../i18n';
 import { editorCm } from '../utils/editorCm';
@@ -153,6 +154,16 @@ export function createTaskMenuExtension(
 
                 if (TaskLineClassifier.isTaskLine(lineText) && !seen.has(line.number)) {
                     seen.add(line.number);
+                    // A checkbox inside a code fence is an example. The scanner
+                    // makes no task of it and the cards draw no checkbox for it,
+                    // so a menu here would offer to edit a line the rest of the
+                    // plugin does not own. Asked only for lines that would
+                    // otherwise get a button, so ordinary prose never pays for
+                    // the document walk.
+                    if (docFenceReading(view.state.doc).mask[lineNumber]) {
+                        pos = line.to + 1;
+                        continue;
+                    }
                     let show = true;
                     if (needsFilter && filePath) {
                         const found = readService.getTaskByFileLine(filePath, lineNumber);

@@ -1,6 +1,6 @@
 import { Decoration, type DecorationSet, type EditorView, ViewPlugin, type ViewUpdate } from '@codemirror/view';
 import { RangeSet, type Extension, type Text } from '@codemirror/state';
-import { CodeFenceTracker } from '../utils/CodeFenceTracker';
+import { docFenceReading } from './docFenceReading';
 import {
     collectGenBlocks,
     type LocatedDiagnostic,
@@ -101,25 +101,14 @@ export function createDiagnosticsExtension(): Extension {
         memoize(inertCache, CACHE_CAP, lineText, () => inertNotationOf(lineText));
 
     /**
-     * Per-line code-fence membership, 0-indexed by (line number - 1).
+     * The document-wide readings the decorations need, computed lazily — a
+     * viewport with no task, flow or fence line never pays for them — and
+     * cached on the doc, which CodeMirror replaces on every change.
      *
-     * The scanner never turns a fenced line into a task or a flow segment
-     * (DocumentTreeBuilder feeds the same judgment into TaskBlock), so
-     * decorating one here would make the editor claim a command the file
-     * does not have.
-     *
-     * Two readings are OR'd, mirroring DocumentTreeBuilder: the plain one
-     * (CommonMark measures the ≤3-space allowance from column 0) and the
-     * dedented one (a fence nested under a task carries the list item's
-     * indentation). The extractor scopes its dedented reading to one
-     * subtree while this runs over the whole document; the two diverge only
-     * for a fence that is never closed, and there Obsidian's own renderer
-     * also treats the remainder as code.
-     *
-     * Computed lazily — a viewport with no task, flow or fence line never
-     * pays for it — and cached on the doc, which CodeMirror replaces on
-     * every change. The `tv-gen` diagnostics ride along: they need the same
-     * walk of the same lines, so one pass answers both.
+     * `fenced` is the shared fence reading (see docFenceReading for why a
+     * fenced line is never decorated, and which two readings it OR's). The
+     * `tv-gen` diagnostics ride along: they need the same walk of the same
+     * lines, so one pass answers both.
      */
     interface DocAnalysis {
         fenced: boolean[];
@@ -139,8 +128,9 @@ export function createDiagnosticsExtension(): Extension {
         if (docCache?.doc === doc) return docCache.analysis;
         const lines: string[] = [];
         for (let n = 1; n <= doc.lines; n++) lines.push(doc.line(n).text);
-        const scan = CodeFenceTracker.scan(lines);
-        const dedented = CodeFenceTracker.subtreeMask(lines);
+        // Shared with TaskMenuExtension: one rule for which lines are examples,
+        // and one reading per document however many extensions ask.
+        const { scan, mask } = docFenceReading(doc);
 
         const { blocks, diagnostics } = collectGenBlocks(lines, scan);
         const gen = new Map<number, LocatedDiagnostic[]>();
@@ -156,7 +146,7 @@ export function createDiagnosticsExtension(): Extension {
         };
         diagnostics.forEach(bucket);
         const cells = blocks.size > 0
-            ? declaredCells(lines, lines.map((_, i) => scan.fenced[i] || dedented[i]))
+            ? declaredCells(lines, mask)
             : undefined;
         const tokens = new Map<number, HighlightMark[]>();
         for (const block of blocks.values()) {
@@ -170,7 +160,7 @@ export function createDiagnosticsExtension(): Extension {
         }
 
         const analysis: DocAnalysis = {
-            fenced: lines.map((_, i) => scan.fenced[i] || dedented[i]),
+            fenced: mask,
             gen,
             tokens,
         };
