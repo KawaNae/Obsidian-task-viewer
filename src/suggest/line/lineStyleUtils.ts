@@ -2,15 +2,17 @@
  * Shared constants and helpers for line style suggestions.
  */
 
+import { rankCandidates } from '../rankCandidates';
+
 export const LINE_STYLES = ['solid', 'dashed', 'dotted', 'double', 'dashdotted'] as const;
 
 /**
- * Filter line styles by query.
+ * Line styles matching the query, best match first — exact, then prefix, then
+ * substring. The list order is not alphabetical and is preserved inside each
+ * rank, so `d` still offers dashed before dashdotted (see rankCandidates).
  */
 export function filterLineStyles(query: string, limit?: number): string[] {
-    const lowerQuery = query.toLowerCase().trim();
-    const filtered = LINE_STYLES.filter((style) => style.includes(lowerQuery));
-    return limit ? filtered.slice(0, limit) : filtered;
+    return rankCandidates(LINE_STYLES, query, limit);
 }
 
 /**

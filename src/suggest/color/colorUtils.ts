@@ -2,6 +2,8 @@
  * Shared CSS color constants and utilities for color suggestions
  */
 
+import { rankCandidates } from '../rankCandidates';
+
 // Standard CSS color names
 export const CSS_COLORS = [
     "aliceblue", "antiquewhite", "aqua", "aquamarine", "azure",
@@ -27,12 +29,11 @@ export const CSS_COLORS = [
 ];
 
 /**
- * Filter colors by query string
+ * Colors matching the query, best match first — exact, then prefix, then
+ * substring, alphabetical within each (see rankCandidates).
  */
 export function filterColors(query: string, limit?: number): string[] {
-    const lowerQuery = query.toLowerCase().trim();
-    const filtered = CSS_COLORS.filter(color => color.toLowerCase().includes(lowerQuery));
-    return limit ? filtered.slice(0, limit) : filtered;
+    return rankCandidates(CSS_COLORS, query, limit);
 }
 
 /**
