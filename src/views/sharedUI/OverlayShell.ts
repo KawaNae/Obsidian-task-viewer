@@ -36,8 +36,40 @@ export interface OverlayOpenOpts {
     hostDoc?: Document;
 }
 
+/**
+ * Every overlay that currently owns DOM, whether open or mid-close animation.
+ *
+ * An overlay mounts on `hostDoc.body`, outside any workspace leaf, so nothing
+ * in Obsidian's own teardown reaches it: on plugin unload (an update, or
+ * `plugin:reload` while developing) the panel stayed on screen, still wired to
+ * the services of the instance that just went away. Pressing a checkbox there
+ * wrote the task as that dead instance last knew it, overwriting the line with
+ * information from before the reload.
+ *
+ * Membership is kept here rather than at each of the six call sites, so a new
+ * overlay cannot forget to enlist: `open()` is the one door in.
+ */
+const liveOverlays = new Set<OverlayShell>();
+
+/**
+ * Tear down every overlay, DOM and listeners, without animation.
+ *
+ * Called from the plugin's `onunload`. Each shell runs its ordinary logical
+ * teardown — the hub's unsubscribes, the renderer's disposal — which writes
+ * nothing, and the root is removed in the same tick rather than 200ms later,
+ * because by then the plugin is gone and the panel would just be sitting there.
+ */
+export function closeAllOverlays(): void {
+    for (const shell of [...liveOverlays]) shell.close({ immediate: true });
+    // A shell that somehow failed to deregister would keep the set alive for
+    // the life of the module; the door out is cheap, so shut it here too.
+    liveOverlays.clear();
+}
+
 export class OverlayShell {
     private rootEl: HTMLElement | null = null;
+    /** Root still on screen while the close animation plays. */
+    private closingRootEl: HTMLElement | null = null;
     private panelEl: HTMLElement | null = null;
     private bodyEl: HTMLElement | null = null;
     private handleEl: HTMLElement | null = null;
@@ -58,7 +90,11 @@ export class OverlayShell {
     private pageHideHandler: (() => void) | null = null;
 
     open(opts: OverlayOpenOpts): void {
-        if (this.rootEl) this.close();
+        // The overlay being replaced goes at once, animation and all: it is
+        // about to be covered by this one, and leaving its root behind would
+        // hand the pending `finish` a say over the overlay opening now.
+        if (this.rootEl) this.close({ immediate: true });
+        this.dropClosingRoot();
 
         this.mode = opts.mode;
         this.anchor = opts.anchor ?? null;
@@ -84,6 +120,7 @@ export class OverlayShell {
         const cls = `tv-overlay tv-overlay--${opts.mode} tv-ctrl`;
         const root = hostDoc.body.createDiv({ cls });
         this.rootEl = root;
+        liveOverlays.add(this);
 
         const backdrop = root.createDiv({ cls: 'tv-overlay__backdrop' });
         // タップスルー防止: 閉じは document の pointerdown（capture）で始まる
@@ -155,8 +192,19 @@ export class OverlayShell {
         hostWin.addEventListener('pagehide', this.pageHideHandler);
     }
 
-    close(): void {
-        if (!this.rootEl || this.closing) return;
+    /**
+     * @param opts.immediate skip the close animation and drop the DOM in this
+     *        tick. Used by {@link closeAllOverlays} on plugin unload, where an
+     *        animating panel would outlive the plugin that owns it.
+     */
+    close(opts?: { immediate?: boolean }): void {
+        if (this.closing) {
+            // The logical teardown already ran; an immediate close still has to
+            // take the animating DOM with it.
+            if (opts?.immediate) this.dropClosingRoot();
+            return;
+        }
+        if (!this.rootEl) return;
         this.closing = true;
 
         // Logical teardown (immediate — overlay is inert from here)
@@ -194,19 +242,37 @@ export class OverlayShell {
         const root = this.rootEl;
         this.rootEl = null;
 
+        this.closingRootEl = root;
+
         const isPhone = this.isCurrentlyPhone(root);
-        const hasAnimation = this.mode === 'centered' || isPhone;
+        const hasAnimation = !opts?.immediate && (this.mode === 'centered' || isPhone);
 
         if (hasAnimation) {
             const panel = root.querySelector<HTMLElement>('.tv-overlay__panel');
             root.addClass('is-closing');
-            let done = false;
-            const finish = () => { if (done) return; done = true; root.remove(); };
+            const finish = () => this.dropClosingRoot();
             panel?.addEventListener('animationend', finish);
             window.setTimeout(finish, 200);
         } else {
-            root.remove();
+            this.dropClosingRoot();
         }
+    }
+
+    /**
+     * Remove the root that is on its way out, once, and stop being tracked.
+     *
+     * Reopening within the animation window is ordinary — the same shell serves
+     * the next popover — and then the pending `finish` must not deregister the
+     * overlay that is now open, nor touch its DOM. Both guards below say that:
+     * no closing root means there is nothing left to do here, and a live
+     * `rootEl` means the shell is enlisted for the new overlay.
+     */
+    private dropClosingRoot(): void {
+        const root = this.closingRootEl;
+        if (!root) return;
+        this.closingRootEl = null;
+        root.remove();
+        if (!this.rootEl) liveOverlays.delete(this);
     }
 
     isOpen(): boolean {

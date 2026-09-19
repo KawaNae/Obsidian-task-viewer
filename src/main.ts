@@ -58,6 +58,7 @@ import { LogView, VIEW_TYPE_LOG } from './views/logview/LogView';
 import type { DeviceInfo } from './log/markdown-formatter';
 import { refreshView } from './utils/ObsidianView';
 import { deviceMemoryGb, jsHeapStats, nodeOs } from './utils/hostEnv';
+import { closeAllOverlays } from './views/sharedUI/OverlayShell';
 
 export default class TaskViewerPlugin extends Plugin {
     private taskIndex: TaskIndex;
@@ -515,6 +516,12 @@ export default class TaskViewerPlugin extends Plugin {
     }
 
     onunload() {
+        // First, before anything this plugin owns is torn down: an overlay
+        // lives on `body`, outside every workspace leaf, so Obsidian's own
+        // teardown never reaches it. Left behind, the panel stays on screen
+        // wired to the services of this instance, and the next click writes
+        // the task as this instance last knew it.
+        closeAllOverlays();
         this.logManager?.stop();
         this.logStorage?.close();
         this.taskMenuCleanup?.();
