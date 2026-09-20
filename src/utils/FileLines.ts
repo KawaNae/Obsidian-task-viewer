@@ -29,14 +29,20 @@ export interface SplitLines {
  */
 export function splitLines(content: string): SplitLines {
     const lines = content.split('\n');
+
+    // Only the lines that have a terminator can say what the terminator is.
+    // The last element has none — a CR at its end is a character the file
+    // happens to end with, and counting it as evidence would let one stray CR
+    // rewrite an entire LF file (and take that CR with it).
+    const terminators = lines.length - 1;
     let crlf = 0;
-    for (let i = 0; i < lines.length; i++) {
+    for (let i = 0; i < terminators; i++) {
         if (lines[i].endsWith('\r')) {
             lines[i] = lines[i].slice(0, -1);
             crlf++;
         }
     }
-    const terminators = lines.length - 1;
+
     return { lines, eol: crlf > terminators - crlf ? '\r\n' : '\n' };
 }
 

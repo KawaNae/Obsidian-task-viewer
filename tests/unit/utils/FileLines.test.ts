@@ -36,6 +36,16 @@ describe('splitLines', () => {
     it('keeps a CR that is not a terminator', () => {
         expect(splitLines('a\rb\n').lines).toEqual(['a\rb', '']);
     });
+
+    it('does not read the last line\'s trailing CR as evidence', () => {
+        // The file's one terminator is LF; the CR at the end has none after it
+        // and is part of the text. Counting it would rewrite the whole file to
+        // CRLF and eat that CR on the way.
+        const split = splitLines('a\nb\r');
+        expect(split.eol).toBe('\n');
+        expect(split.lines).toEqual(['a', 'b\r']);
+        expect(joinLines(split.lines, split.eol)).toBe('a\nb\r');
+    });
 });
 
 describe('joinLines', () => {

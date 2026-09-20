@@ -186,7 +186,13 @@ export class FlowExecutor {
      * answer: an expired command has nothing left to lose, and the delete
      * goes ahead.
      *
-     * @returns true when anything was written.
+     * @returns whether the task is gone. A fire that could not be planned
+     * answers no and writes nothing. A fire that ran but could not delete the
+     * original also answers no — the next instance is on the page and the
+     * original is still there beside it, which is not the delete the user
+     * asked for, and saying yes would drop the selection off a task they can
+     * still see. Re-running the delete would write the next instance twice, so
+     * the notice has to reach them rather than a silent retry.
      */
     private async executeDeletionFire(task: Task): Promise<boolean> {
         const outlook = planFlowForDeletion(task, this.buildDeps());
@@ -207,8 +213,12 @@ export class FlowExecutor {
         // Last, by the same rule the effects follow: line resolution matches
         // on originalText, so the line that is being read must stay put until
         // everything that reads it is done.
-        await this.repository.deleteTaskFromFile(task);
-        return true;
+        const removed = await this.repository.deleteTaskFromFile(task);
+        if (!removed) {
+            logWarn(`[FlowExecutor] Flow fired but the original could not be deleted: ${task.id}`);
+            new Notice(t('notice.taskWriteFailed'));
+        }
+        return removed;
     }
 
     /** @returns true when effects were applied (false = did not fire). */
@@ -313,9 +323,18 @@ export class FlowExecutor {
                 // task's direct flow child lines in one atomic process.
                 await this.repository.stripFlow(task);
                 return;
-            case 'delete-original':
-                await this.repository.deleteTaskFromFile(task);
+            case 'delete-original': {
+                // The move already wrote the task into the destination. If the
+                // original cannot be resolved now, it stays where it is and the
+                // task exists in two places — the one outcome of a move the user
+                // must be told about, since nothing on screen shows it.
+                const removed = await this.repository.deleteTaskFromFile(task);
+                if (!removed) {
+                    logWarn(`[FlowExecutor] Moved but the original could not be deleted: ${task.id}`);
+                    new Notice(t('notice.taskWriteFailed'));
+                }
                 return;
+            }
         }
     }
 
