@@ -153,15 +153,20 @@ describe('WriteClaims: what it builds on', () => {
         expect(claim.hint).toBeNull();
     });
 
-    it('forgets its base when it could not answer', () => {
-        // A write it could not follow leaves it with no idea where the rows
-        // are; the next write starts from the ledger instead.
+    it('stays silent after a write it could not follow, until a scan commits', () => {
         const claims = claimsWith([known('r1', 0, '- [ ] 甲')]);
         claims.claim(FILE, ['- [ ] 甲'], ['- [ ] 甲', '- [ ] 乙'], [inserted(1, 1)]);
+        // Someone had edited the note, so this write could not be followed.
         claims.claim(FILE, ['他人の編集'], ['他人の編集'], [replaced(0)]);
 
         const next = claims.claim(FILE, ['- [ ] 甲'], ['- [x] 甲'], [replaced(0)]);
-        expect(next.hint!.rows).toEqual([{ runtimeId: 'r1', text: '- [x] 甲' }]);
+        expect(next.hint).toBeNull();
+
+        // A scan committed, so the ledger is the authority again.
+        claims.forget(FILE);
+
+        const after = claims.claim(FILE, ['- [ ] 甲'], ['- [x] 甲'], [replaced(0)]);
+        expect(after.hint!.rows).toEqual([{ runtimeId: 'r1', text: '- [x] 甲' }]);
     });
 
     it('claims a file the ledger knows nothing about as all new', () => {
@@ -199,6 +204,13 @@ describe('WriteClaims: a base that no longer fits', () => {
         // the original's identity, with every text lining up, so the scan
         // would adopt it.
         expect(third.hint).toBeNull();
+
+        // Nor the write after that one. Noticing that the file had moved is
+        // not the same as the file having moved back: the ledger is exactly as
+        // stale as it was a moment ago, and it stays that way until a scan
+        // commits. A refusal that dropped the base would open it again here.
+        const fourth = claims.claim(FILE, between, [...between, '- [ ] 丁'], [inserted(3, 1)]);
+        expect(fourth.hint).toBeNull();
     });
 
     it('says nothing about a file the parser refuses to read', () => {

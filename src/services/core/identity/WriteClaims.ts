@@ -34,15 +34,24 @@ export interface ClaimResult {
 }
 
 /**
- * The file as one write left it: every line, and the rows among them.
+ * What this file's last write left for the next one.
  *
- * The lines are kept whole, not just the rows, because they are what decides
- * whether this base may be used at all — see {@link WriteClaims.baseFor}.
+ * Either the file as that write left it — every line, and the rows among them,
+ * kept whole because the lines are what decides whether the rows may be used
+ * at all (see {@link WriteClaims.baseFor}) — or a refusal: a write landed that
+ * this class could not describe, so nothing it holds is true of the file any
+ * more, and nothing older is either.
  */
-interface Base {
-    lines: string[];
-    rows: ClaimBase[];
-}
+type Base =
+    | { lines: string[]; rows: ClaimBase[] }
+    | { lines: null; rows: null };
+
+/**
+ * A write changed the file and could not say how.
+ *
+ * Shared, and never mutated: what matters is that the entry is there.
+ */
+const SILENT: Base = { lines: null, rows: null };
 
 /**
  * Turns a write's report of what it did to the lines into a claim about what
@@ -101,8 +110,14 @@ export class WriteClaims {
         edits: readonly LineEdit[],
     ): ClaimResult {
         const withdraw = this.rollback(path);
+        // Every way out of here without a claim is the same situation: this
+        // write changed the file — `processLines` calls a sink for nothing
+        // else — and nothing here can say what the file now is. Dropping the
+        // base would say the opposite, that the ledger may be read again, and
+        // the ledger is older still. So the file is marked silent instead, and
+        // stays silent until a scan of it commits.
         const nothing = (): ClaimResult => {
-            this.bases.delete(path);
+            this.bases.set(path, SILENT);
             return { hint: null, withdraw };
         };
 
@@ -140,8 +155,13 @@ export class WriteClaims {
      * Put this file's base back the way it is at this moment.
      *
      * Taken before the call changes anything, so one handle covers every way
-     * out of {@link claim} — the claim that was filed, and the bookkeeping a
-     * refusal cleared.
+     * out of {@link claim} — the claim that was filed, the mark a refusal left.
+     *
+     * "The way it is at this moment", not "the way the file is": two writes to
+     * one file can be in flight at once, and the later one to fail puts back a
+     * state older than the one on disk. What keeps that harmless is that a base
+     * is only ever used on a file that still reads, line for line, as the base
+     * says — an older base simply goes unused.
      */
     private rollback(path: string): () => void {
         const previous = this.bases.get(path);
@@ -159,10 +179,6 @@ export class WriteClaims {
      */
     forget(path: string): void {
         this.bases.delete(path);
-    }
-
-    clear(): void {
-        this.bases.clear();
     }
 
     /**
@@ -188,19 +204,23 @@ export class WriteClaims {
      * adding a task line passes here — but a claim missing a row does not
      * reproduce what the scan reads, so it is refused there instead.
      *
-     * A base that does not fit stops the search rather than falling through.
-     * Its existence says a reporting write of ours landed after the last scan
-     * committed, so the ledger describes a file at least two writes old — known
-     * to be stale, and stale in the direction that matters: the rows it holds
-     * sit at the line numbers the file had *before* our own write moved them.
-     * Handed a copy inserted above its original, the ledger's row would name
-     * the copy and this would claim the copy carries the original's identity —
-     * with every text lining up, so the scan would adopt it. Silence is the
-     * only honest answer once the base is gone.
+     * An entry that is there at all stops the search rather than falling
+     * through, whether or not it still fits. Its presence says a write of ours
+     * landed after the last scan committed, so the ledger describes a file at
+     * least two writes old — known to be stale, and stale in the direction that
+     * matters: the rows it holds sit at the line numbers the file had *before*
+     * our own write moved them. Handed a copy inserted above its original, the
+     * ledger's row names the copy, and this would claim the copy carries the
+     * original's identity — with every text lining up, so the scan would adopt
+     * it. That is why a refusal leaves {@link SILENT} behind instead of
+     * removing the entry: the answer has to stay "nothing" for every write
+     * until a scan commits, not just for the one that noticed.
      */
     private baseFor(path: string, before: readonly string[]): ClaimBase[] | null {
         const base = this.bases.get(path);
-        if (base) return sameLines(base.lines, before) ? base.rows : null;
+        if (base) {
+            return base.lines !== null && sameLines(base.lines, before) ? base.rows : null;
+        }
 
         const ledger = this.ledgerRows(path);
         if (fits(ledger, before)) return ledger;
