@@ -9,8 +9,8 @@ import type { FlowExecutor } from '../flow/FlowExecutor';
 import { TaskIdGenerator } from '../display/TaskIdGenerator';
 import { IdentityLedger, type LedgerEntry } from './identity/IdentityLedger';
 import { HintLog, type Hint } from './identity/IdentityHints';
-import { matchFile } from './identity/IdentityMatcher';
-import { applyIdentity, assertNoProvisionalIds, assertUniqueProvisionalIds } from './identity/IdentityApplier';
+import { matchFile, matchWithoutRepeatedIds } from './identity/IdentityMatcher';
+import { applyIdentity, assertDistinctRuntimeIds, assertNoProvisionalIds, assertUniqueProvisionalIds } from './identity/IdentityApplier';
 import { splitLines } from '../../utils/FileLines';
 import { logDebug, logError, logInfo } from '../../log/log';
 
@@ -144,10 +144,14 @@ export class TaskScanner {
     private async scanFile(file: TFile, isLocalChange: boolean = false): Promise<void> {
         this.validator.clearErrorsForFile(file.path);
 
-        // Taken before the read, and handed back at the commit: a hint raised
-        // before this read has had its one chance at this scan, and the ledger
-        // is about to move past whatever this read saw (see HintLog.tip).
-        const readTip = this.hints.tip(file.path);
+        // Everything from here to the match below is synchronous, so the claims
+        // this scan weighs are, near enough, the ones filed by the time the read
+        // resolved. Near enough rather than exactly: another write's callback
+        // can slip in between the read settling and this line running, and its
+        // claim describes a file this read never saw. Nothing here tries to
+        // fence that off, because a position cannot — what keeps such a claim
+        // from deciding anything is that it has to be the only one that fits
+        // (see resolveHints).
         const content = await this.app.vault.read(file);
         const { lines } = splitLines(content);
 
@@ -177,12 +181,25 @@ export class TaskScanner {
         }
         const now = Date.now();
         const previousRows = this.ledger.snapshotFor(file.path);
-        const identity = matchFile(
-            previousRows,
-            parsed.tasks,
-            task => TaskIdGenerator.mintRuntimeId(task, () => this.ledger.mint()),
-            this.hints.pendingFor(file.path, now)
+        const guarded = matchWithoutRepeatedIds(
+            claims => matchFile(
+                previousRows,
+                parsed.tasks,
+                task => TaskIdGenerator.mintRuntimeId(task, () => this.ledger.mint()),
+                claims,
+            ),
+            this.hints.pendingFor(file.path, now),
         );
+        if (guarded.withoutClaims) {
+            // The log said something no file can be: one row on two lines. What
+            // it would cost to commit is a task the index cannot see again (see
+            // matchWithoutRepeatedIds), so the ladder answered instead and the
+            // file's claims go — a log that produced this is not one to weigh
+            // the next read against.
+            logError(`[TaskScanner] ${file.path}: a claim gave one runtime ID to two rows; matched without the log`);
+            this.hints.dropFile(file.path);
+        }
+        const identity = guarded.result;
         applyIdentity(parsed, identity.mapping);
 
         // --- validate ---
@@ -224,6 +241,7 @@ export class TaskScanner {
         // removed the file's tasks from the store.
         if (__DEV__) {
             assertNoProvisionalIds(parsed.tasks, id => !TaskIdGenerator.isRuntimeId(id));
+            assertDistinctRuntimeIds(identity.entries);
         }
         this.store.beginBatch();
         try {
@@ -241,7 +259,7 @@ export class TaskScanner {
             // previous generation too.
             this.ledger.replaceFile(file.path, identity.entries);
             this.hints.settle(
-                file.path, identity.consumedHints, readTip, now,
+                file.path, identity.consumedHints,
                 ledgerMoved(previousRows, identity.entries),
             );
         } finally {
@@ -290,6 +308,14 @@ export class TaskScanner {
      */
     getLedger(): IdentityLedger {
         return this.ledger;
+    }
+
+    /**
+     * The hint log, for seeing from the console what the write layer claimed.
+     * @internal Read-only use: only scanFile and `addHints` change it.
+     */
+    getHintLog(): HintLog {
+        return this.hints;
     }
 
     /**

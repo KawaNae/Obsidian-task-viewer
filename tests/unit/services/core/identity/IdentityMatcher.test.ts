@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { matchFile } from '../../../../../src/services/core/identity/IdentityMatcher';
+import { matchFile, matchWithoutRepeatedIds } from '../../../../../src/services/core/identity/IdentityMatcher';
 import type { MatchResult } from '../../../../../src/services/core/identity/IdentityMatcher';
 import { makeTask } from '../../../helpers/makeTask';
 import type { Task } from '../../../../../src/types';
@@ -434,5 +434,60 @@ describe('matchFile: the rows it hands back', () => {
         expect(second.entries).toEqual([]);
         expect(second.mapping.size).toBe(0);
         expect(second.retired).toEqual([first.mapping.get('prov:a')]);
+    });
+});
+
+describe('matchWithoutRepeatedIds', () => {
+    // The damage a duplicate does is permanent: the store is keyed by ID, so
+    // one row overwrites the other and the file shows a task short of its
+    // lines, while the ledger keeps both positions and one entry — which is
+    // then what the next scan compares against. So the answer is checked
+    // before it is used, and the ladder, which cannot repeat a row, answers
+    // instead.
+    const answer = (...runtimeIds: string[]): MatchResult => ({
+        mapping: new Map(runtimeIds.map((id, i) => [`prov:${i}`, id])),
+        entries: runtimeIds.map((runtimeId, i) => ({
+            runtimeId, file: 'f.md', parent: null, ordinal: i,
+            fingerprint: { parserId: 'tv-inline', originalText: '', contentKey: '', dateKey: '', blockId: null },
+        })),
+        minted: [],
+        retired: [],
+        consumedHints: runtimeIds.length,
+    });
+    const claims = [{ seq: 1, at: 0, hint: { rows: [] } }];
+
+    it('keeps an answer that gives each row its own ID', () => {
+        const runs: Array<readonly unknown[]> = [];
+        const guarded = matchWithoutRepeatedIds(pending => {
+            runs.push(pending);
+            return answer('r1', 'r2');
+        }, claims);
+
+        expect(guarded.withoutClaims).toBe(false);
+        expect(runs).toHaveLength(1);
+        expect(guarded.result.consumedHints).toBe(2);
+    });
+
+    it('matches again with no claims when one ID landed on two rows', () => {
+        const seen: number[] = [];
+        const guarded = matchWithoutRepeatedIds(pending => {
+            seen.push(pending.length);
+            return pending.length > 0 ? answer('r1', 'r1', 'r2') : answer('r1', 'r3', 'r2');
+        }, claims);
+
+        expect(seen).toEqual([1, 0]);
+        expect(guarded.withoutClaims).toBe(true);
+        expect(guarded.result.entries.map(entry => entry.runtimeId)).toEqual(['r1', 'r3', 'r2']);
+    });
+
+    it('does not run twice when there were no claims to blame', () => {
+        let runs = 0;
+        const guarded = matchWithoutRepeatedIds(() => {
+            runs++;
+            return answer('r1', 'r1');
+        }, []);
+
+        expect(runs).toBe(1);
+        expect(guarded.withoutClaims).toBe(false);
     });
 });

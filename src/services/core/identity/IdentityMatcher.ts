@@ -14,7 +14,10 @@ export interface MatchResult {
     minted: string[];
     /** Previous runtime IDs nothing matched. They are gone for good. */
     retired: string[];
-    /** How many pending hints this scan believed, counted from the head. */
+    /**
+     * How many pending claims this scan is done with, counted from the head —
+     * the one it adopted and everything older. 0 when it adopted none.
+     */
     consumedHints: number;
 }
 
@@ -30,10 +33,11 @@ export interface MatchResult {
  * ladder once over whatever is left, which is how a task whose parent changed (or
  * whose parent's text was merely edited) is rescued instead of being renumbered.
  *
- * Ahead of both passes is rung 0: the hints the plugin's own writes left behind,
- * as many of them as the file actually bears out (see IdentityHints). They are
- * settled file-wide rather than inside the ladder because a hint names a runtime
- * ID outright — there is no bucket for it to be ambiguous in.
+ * Ahead of both passes is rung 0: the claims the plugin's own writes left
+ * behind, when one of them and only one describes the rows that were read (see
+ * IdentityHints). They are settled file-wide rather than inside the ladder
+ * because a claim names a runtime ID outright — there is no bucket for it to be
+ * ambiguous in.
  *
  * Pure and deterministic: no clock, no randomness, no I/O. Minting is the caller's,
  * through `mintRuntimeId`.
@@ -59,7 +63,7 @@ export function matchFile(
     const pairedWith = new Map<Task, LedgerEntry>();
     const matchedPrev = new Set<string>();
 
-    // --- rung 0: what our own writes said, as far as the file bears it out ---
+    // --- rung 0: what our own writes said, when the file bears exactly one of them out ---
     const resolution = resolveHints(previous, ordered, pending);
     const consumedHints = resolution.consumed;
     const hinted = settleHints(resolution, previous, ordered);
@@ -73,16 +77,11 @@ export function matchFile(
     for (const runtimeId of hinted.retired) matchedPrev.add(runtimeId);
 
     // --- 1st pass: scope by scope, from the roots down ---
+    // An adopted claim leaves nothing for the two passes below: it answers for
+    // every row of the file, children included, so each task is either paired
+    // or newly written and both pools come out empty. They run all the same,
+    // because rung 0 usually has nothing to say.
     const scopes: Array<{ prev: LedgerEntry[]; cur: Task[] }> = [{ prev: prevRoots, cur: roots }];
-    // A pair settled by a hint opens its children's scope too. Only a parent the
-    // ladder matched does so below, so without this the children of a hinted
-    // parent would skip the 1st pass and be matched file-wide in the 2nd.
-    for (const [entry, task] of hinted.pairs) {
-        scopes.push({
-            prev: prevChildren.get(entry.runtimeId) ?? [],
-            cur: childrenOf.get(task) ?? [],
-        });
-    }
 
     while (scopes.length > 0) {
         const scope = scopes.pop()!;
@@ -167,12 +166,12 @@ interface HintOutcome {
 }
 
 /**
- * Read the believed claims off as pairs.
+ * Read the adopted claim off as pairs.
  *
- * `resolveHints` has already rebuilt the file from the previous rows and found
- * it line for line identical to what was read, so there is nothing left to
- * decide: line i is whatever the rebuild says line i is. A row the rebuild no
- * longer holds is one a write removed.
+ * `resolveHints` has already found the claim line for line identical to what
+ * was read, and found no other candidate that would decide differently, so
+ * there is nothing left to decide: line i is whatever the claim says line i is.
+ * A row the claim no longer holds is one a write removed.
  */
 function settleHints(
     resolution: HintResolution,
@@ -425,4 +424,50 @@ function buildOrdinals(roots: Task[], childrenOf: Map<Task, Task[]>): Map<Task, 
         siblings.forEach((task, index) => ordinals.set(task, index));
     }
     return ordinals;
+}
+
+export interface GuardedMatch {
+    result: MatchResult;
+    /** Whether the claims were thrown out and the file matched again without them. */
+    withoutClaims: boolean;
+}
+
+/**
+ * Match, and if the answer would give one runtime ID to two rows, match again
+ * with no claims at all.
+ *
+ * A duplicate is the one answer that does lasting damage. The store is keyed by
+ * ID, so the second row overwrites the first and the file comes out a task
+ * short of its lines; the ledger keeps both positions and one entry, and since
+ * that ledger is what the next scan compares against, the state is stable and
+ * wrong. The task whose ID went missing then refuses every write as "not
+ * found" while its line sits there in plain sight. Nothing recovers it.
+ *
+ * So the answer is checked before it is used, and the fallback is the ladder on
+ * its own: it takes each previous row at most once, which is the property that
+ * makes a duplicate impossible. What that costs is the precision of one scan.
+ *
+ * Only a claim can bring this about, which is why matching again without them
+ * is the whole remedy — and why the second run is not checked again here. A
+ * dev-build assertion at the store's threshold covers the case where the ladder
+ * itself learns to repeat an ID.
+ */
+export function matchWithoutRepeatedIds(
+    run: (pending: readonly PendingHint[]) => MatchResult,
+    pending: readonly PendingHint[],
+): GuardedMatch {
+    const result = run(pending);
+    if (pending.length === 0 || !repeatsAnId(result.entries)) {
+        return { result, withoutClaims: false };
+    }
+    return { result: run([]), withoutClaims: true };
+}
+
+function repeatsAnId(entries: readonly LedgerEntry[]): boolean {
+    const seen = new Set<string>();
+    for (const entry of entries) {
+        if (seen.has(entry.runtimeId)) return true;
+        seen.add(entry.runtimeId);
+    }
+    return false;
 }
