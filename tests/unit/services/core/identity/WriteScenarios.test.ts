@@ -355,4 +355,32 @@ describe('IDs held across a delete', () => {
         expect(next).not.toBe(fired);
         expect(live.index.getTask(fired)).toBeUndefined();
     });
+
+    it('a child that outlives its parent keeps the identity it had', async () => {
+        // The editor's menu deletes one line by its coordinate, so a parent can
+        // go while its child stays. The child is the same row it was, one line
+        // higher — which is exactly what the claim says, and nothing more.
+        const contents = new Map([[FILE, [
+            '- [ ] 親 @2026-09-21',
+            '\t- [ ] 子 @2026-09-21 ^tv-child',
+            '- [ ] 下の行 @2026-09-21',
+            '',
+        ].join('\n')]]);
+        live = vaultSession(contents);
+        await live.scanAll();
+        const [parent, child, below] = idsInFileOrder(live);
+
+        await live.index.deleteLine(FILE, 0);
+        await live.settle(FILE);
+
+        // `taskLines` only reads flush-left rows, so the orphan is checked here
+        // against the file itself: it is still there, still indented.
+        expect(contents.get(FILE)!.split('\n')).toEqual([
+            '\t- [ ] 子 @2026-09-21 ^tv-child',
+            '- [ ] 下の行 @2026-09-21',
+            '',
+        ]);
+        expect(idsInFileOrder(live)).toEqual([child, below]);
+        expect(live.index.getTask(parent)).toBeUndefined();
+    });
 });
