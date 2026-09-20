@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { TFile } from 'obsidian';
 import { appendLines, joinLines, processLines, splitLines } from '../../../src/utils/FileLines';
+import type { Hint } from '../../../src/services/core/identity/IdentityHints';
 
 /**
  * The one place that decides what a line is and how the file gets put back
@@ -84,20 +85,46 @@ describe('appendLines', () => {
     });
 });
 
-function harness(initial: string) {
+function harness(initial: string, opts: { throwAfterCallback?: boolean; callbackRuns?: number } = {}) {
     let content = initial;
     let calls = 0;
     const file = new TFile();
     const app = {
         vault: {
             process: async (_f: TFile, fn: (data: string) => string) => {
-                calls++;
-                content = fn(content);
+                // Obsidian re-runs the callback when another write landed in
+                // between, and throws when the write itself fails.
+                for (let run = 0; run < (opts.callbackRuns ?? 1); run++) {
+                    calls++;
+                    content = fn(content);
+                }
+                if (opts.throwAfterCallback) throw new Error('write failed');
             },
         },
     } as never;
     return { app, file, text: () => content, calls: () => calls };
 }
+
+/**
+ * Stands in for HintLog: every batch handed over can be taken back, and
+ * `standing` is what would still be waiting for the next scan.
+ */
+function hintLog() {
+    const batches: Hint[][] = [];
+    const live = new Set<number>();
+    return {
+        sink: (hints: readonly Hint[]) => {
+            const at = batches.length;
+            batches.push([...hints]);
+            live.add(at);
+            return () => { live.delete(at); };
+        },
+        standing: () => [...live].flatMap(at => batches[at]),
+    };
+}
+
+const TICKED: Hint = { kind: 'rewrite', runtimeId: 'r1', before: '- [ ] a', after: '- [x] a' };
+const COPY: Hint = { kind: 'insert', text: '- [ ] a', anchor: 'r1', side: 'before' };
 
 describe('processLines', () => {
     it('writes the edited lines back with the file\'s own terminator', async () => {
@@ -117,6 +144,82 @@ describe('processLines', () => {
         await processLines(h.app, h.file, (lines) => { seen = [...lines]; return lines; });
 
         expect(seen).toEqual(['- [ ] a', '']);
+    });
+
+    it('hands over the hints a write raised', async () => {
+        const h = harness('- [ ] a\n');
+        const log = hintLog();
+
+        await processLines(h.app, h.file, (lines, _eol, hint) => {
+            lines[0] = '- [x] a';
+            hint(TICKED);
+            return lines;
+        }, log.sink);
+
+        expect(log.standing()).toEqual([TICKED]);
+    });
+
+    it('drops the hints of a write that changed nothing', async () => {
+        // Same bytes out as in: Obsidian fires no `modify`, so no scan follows,
+        // and a hint filed here would sit until it expired.
+        const h = harness('- [ ] a\n');
+        const log = hintLog();
+
+        const written = await processLines(h.app, h.file, (lines, _eol, hint) => {
+            hint(COPY);
+            return lines;
+        }, log.sink);
+
+        // The line was found, which is what the caller asked.
+        expect(written).toBe(true);
+        expect(log.standing()).toEqual([]);
+    });
+
+    it('drops the hints of a write that declined', async () => {
+        const h = harness('- [ ] a\n');
+        const log = hintLog();
+
+        await processLines(h.app, h.file, (_lines, _eol, hint) => {
+            hint(COPY);
+            return null;
+        }, log.sink);
+
+        expect(log.standing()).toEqual([]);
+    });
+
+    it('takes the hints back when the write throws after the callback', async () => {
+        // The file never changed, so the claims describe a state that never
+        // existed. Left standing, they would be matched against whatever the
+        // next scan happens to read.
+        const h = harness('- [ ] a\n', { throwAfterCallback: true });
+        const log = hintLog();
+
+        await expect(processLines(h.app, h.file, (lines, _eol, hint) => {
+            lines[0] = '- [x] a';
+            hint(TICKED);
+            return lines;
+        }, log.sink)).rejects.toThrow('write failed');
+
+        expect(log.standing()).toEqual([]);
+    });
+
+    it('takes back the first attempt\'s hints when the callback runs again', async () => {
+        // Obsidian retries the callback on a conflicting write. Only the
+        // attempt that actually reached disk may leave claims behind.
+        const h = harness('- [ ] a\n', { callbackRuns: 2 });
+        const log = hintLog();
+        let run = 0;
+
+        await processLines(h.app, h.file, (lines, _eol, hint) => {
+            run++;
+            lines[0] = `- [x] a (${run})`;
+            hint({ kind: 'rewrite', runtimeId: 'r1', before: '- [ ] a', after: `- [x] a (${run})` });
+            return lines;
+        }, log.sink);
+
+        expect(log.standing()).toEqual([
+            { kind: 'rewrite', runtimeId: 'r1', before: '- [ ] a', after: '- [x] a (2)' },
+        ]);
     });
 
     it('leaves the file byte-identical when the edit declines', async () => {

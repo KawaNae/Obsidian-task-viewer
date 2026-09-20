@@ -1,4 +1,5 @@
 import type { App, TFile } from 'obsidian';
+import type { Hint } from '../services/core/identity/IdentityHints';
 
 /**
  * A file's line terminator. Obsidian writes LF, but notes arrive with CRLF
@@ -83,17 +84,52 @@ export function appendLines(lines: string[], body: string[]): number {
 export async function processLines(
     app: App,
     file: TFile,
-    edit: (lines: string[], eol: Eol) => string[] | null,
+    edit: (lines: string[], eol: Eol, hint: (claim: Hint) => void) => string[] | null,
+    sink?: (hints: readonly Hint[]) => () => void,
 ): Promise<boolean> {
     let written = false;
+    // A list rather than one slot: `vault.process` may run the callback again,
+    // and everything filed has to be withdrawable.
+    const withdrawals: Array<() => void> = [];
 
-    await app.vault.process(file, (content) => {
-        const { lines, eol } = splitLines(content);
-        const next = edit(lines, eol);
-        if (next === null) return content;
-        written = true;
-        return joinLines(next, eol);
-    });
+    try {
+        await app.vault.process(file, (content) => {
+            // Obsidian may run the callback again (it retries on a conflicting
+            // write). The previous attempt's claims describe a file that never
+            // reached disk, so they go before this attempt files its own.
+            for (const withdraw of withdrawals.splice(0)) withdraw();
+
+            const { lines, eol } = splitLines(content);
+            const collected: Hint[] = [];
+            const next = edit(lines, eol, claim => collected.push(claim));
+            if (next === null) return content;
+
+            written = true;
+            const rebuilt = joinLines(next, eol);
+
+            // A rewrite that produced the same bytes is not a write: Obsidian
+            // fires no `modify` for it, so no scan follows, and a hint filed
+            // here would wait for a scan that never comes. The caller still
+            // hears `true` — the line was found, which is what it asked.
+            //
+            // Hints are handed over here rather than after the `await` on
+            // purpose: the scan this write triggers starts reading before
+            // `vault.process` resolves, so a hint raised afterwards is too late
+            // for it. Filing early means filing before the write is known to
+            // have succeeded, which is what the withdrawal below is for.
+            if (sink && collected.length > 0 && rebuilt !== content) {
+                withdrawals.push(sink(collected));
+            }
+
+            return rebuilt;
+        });
+    } catch (error) {
+        // The file never changed, so claims about it describe a state that
+        // never existed. Left in the log they would be matched against whatever
+        // the next scan happens to read.
+        for (const withdraw of withdrawals) withdraw();
+        throw error;
+    }
 
     return written;
 }

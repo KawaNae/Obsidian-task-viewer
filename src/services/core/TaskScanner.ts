@@ -7,7 +7,8 @@ import type { SyncDetector } from './SyncDetector';
 import { CompletionDetector } from './CompletionDetector';
 import type { FlowExecutor } from '../flow/FlowExecutor';
 import { TaskIdGenerator } from '../display/TaskIdGenerator';
-import { IdentityLedger } from './identity/IdentityLedger';
+import { IdentityLedger, type LedgerEntry } from './identity/IdentityLedger';
+import { HintLog, type Hint } from './identity/IdentityHints';
 import { matchFile } from './identity/IdentityMatcher';
 import { applyIdentity, assertNoProvisionalIds, assertUniqueProvisionalIds } from './identity/IdentityApplier';
 import { splitLines } from '../../utils/FileLines';
@@ -37,6 +38,15 @@ export class TaskScanner {
      * IDs per millisecond on average; ~1.7e15 stays within safe integers.
      */
     private ledger = new IdentityLedger(Date.now() * 1000);
+
+    /**
+     * What the plugin's own writes left for the next scan of each file.
+     *
+     * Owned here for the same reason the ledger is: a scan is the only thing
+     * that consumes a hint, and the consuming and the ledger's commit have to
+     * happen in the same step or a hint could outlive the state it describes.
+     */
+    private hints = new HintLog();
 
     constructor(
         private app: App,
@@ -133,6 +143,11 @@ export class TaskScanner {
      */
     private async scanFile(file: TFile, isLocalChange: boolean = false): Promise<void> {
         this.validator.clearErrorsForFile(file.path);
+
+        // Taken before the read, and handed back at the commit: a hint raised
+        // before this read has had its one chance at this scan, and the ledger
+        // is about to move past whatever this read saw (see HintLog.tip).
+        const readTip = this.hints.tip(file.path);
         const content = await this.app.vault.read(file);
         const { lines } = splitLines(content);
 
@@ -149,6 +164,8 @@ export class TaskScanner {
             this.completionDetector.clearForFile(file.path);
             // Retired for good: lifting tv-ignore later mints fresh IDs.
             this.ledger.dropFile(file.path);
+            // With no rows to match against, a hint has nothing left to claim.
+            this.hints.dropFile(file.path);
             return;
         }
 
@@ -158,10 +175,13 @@ export class TaskScanner {
         if (__DEV__) {
             assertUniqueProvisionalIds(parsed.tasks);
         }
+        const now = Date.now();
+        const previousRows = this.ledger.snapshotFor(file.path);
         const identity = matchFile(
-            this.ledger.snapshotFor(file.path),
+            previousRows,
             parsed.tasks,
-            task => TaskIdGenerator.mintRuntimeId(task, () => this.ledger.mint())
+            task => TaskIdGenerator.mintRuntimeId(task, () => this.ledger.mint()),
+            this.hints.pendingFor(file.path, now)
         );
         applyIdentity(parsed, identity.mapping);
 
@@ -220,6 +240,10 @@ export class TaskScanner {
             // Last, so a store write that throws leaves the ledger on the
             // previous generation too.
             this.ledger.replaceFile(file.path, identity.entries);
+            this.hints.settle(
+                file.path, identity.consumedHints, readTip, now,
+                ledgerMoved(previousRows, identity.entries),
+            );
         } finally {
             this.store.endBatch();
         }
@@ -242,6 +266,11 @@ export class TaskScanner {
         this.scanQueue.delete(oldPath);
         this.completionDetector.forgetFile(oldPath);
         this.ledger.rekeyFile(oldPath, newPath, id => TaskIdGenerator.renameFile(id, oldPath, newPath));
+        // Hints name runtime IDs, and a rename rewrites those, so carrying the
+        // log across would leave claims about rows nothing answers to. They
+        // would fail to apply and cost the file its next hint anyway.
+        this.hints.dropFile(oldPath);
+        this.hints.dropFile(newPath);
     }
 
     /**
@@ -252,6 +281,7 @@ export class TaskScanner {
         this.scanQueue.delete(path);
         this.completionDetector.forgetFile(path);
         this.ledger.dropFile(path);
+        this.hints.dropFile(path);
     }
 
     /**
@@ -260,6 +290,20 @@ export class TaskScanner {
      */
     getLedger(): IdentityLedger {
         return this.ledger;
+    }
+
+    /**
+     * File what a write just claimed about a file's lines.
+     *
+     * The write layer calls this from inside its `vault.process` callback (see
+     * `processLines`); the next scan of that file verifies the claims against
+     * what it reads and believes as many as hold up.
+     *
+     * @returns a handle that takes the claims back, for a write that raised
+     *   them and then failed.
+     */
+    addHints(file: string, hints: readonly Hint[]): () => void {
+        return this.hints.add(file, hints, Date.now());
     }
 
     /**
@@ -275,4 +319,21 @@ export class TaskScanner {
     updateSettings(settings: TaskViewerSettings): void {
         this.settings = settings;
     }
+}
+
+/**
+ * Whether a scan changed the file's rows — which lines exist, in what order,
+ * carrying which identity.
+ *
+ * Used to decide what happens to hints this scan did not believe: if the rows
+ * moved anyway, something the hints could not account for reached the file, and
+ * the ladder has already placed it. See {@link HintLog.settle}.
+ */
+function ledgerMoved(before: LedgerEntry[], after: LedgerEntry[]): boolean {
+    if (before.length !== after.length) return true;
+    for (let i = 0; i < before.length; i++) {
+        if (before[i].runtimeId !== after[i].runtimeId) return true;
+        if (before[i].fingerprint.originalText !== after[i].fingerprint.originalText) return true;
+    }
+    return false;
 }

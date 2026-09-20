@@ -1,6 +1,8 @@
 import type { Task } from '../../../types';
 import type { Fingerprint } from './IdentityFingerprint';
 import { fingerprintOf } from './IdentityFingerprint';
+import type { HintResolution, PendingHint } from './IdentityHints';
+import { resolveHints } from './IdentityHints';
 import type { LedgerEntry } from './IdentityLedger';
 
 export interface MatchResult {
@@ -12,6 +14,8 @@ export interface MatchResult {
     minted: string[];
     /** Previous runtime IDs nothing matched. They are gone for good. */
     retired: string[];
+    /** How many pending hints this scan believed, counted from the head. */
+    consumedHints: number;
 }
 
 /**
@@ -26,13 +30,19 @@ export interface MatchResult {
  * ladder once over whatever is left, which is how a task whose parent changed (or
  * whose parent's text was merely edited) is rescued instead of being renumbered.
  *
+ * Ahead of both passes is rung 0: the hints the plugin's own writes left behind,
+ * as many of them as the file actually bears out (see IdentityHints). They are
+ * settled file-wide rather than inside the ladder because a hint names a runtime
+ * ID outright — there is no bucket for it to be ambiguous in.
+ *
  * Pure and deterministic: no clock, no randomness, no I/O. Minting is the caller's,
  * through `mintRuntimeId`.
  */
 export function matchFile(
     previous: LedgerEntry[],
     tasks: Task[],
-    mintRuntimeId: (task: Task) => string
+    mintRuntimeId: (task: Task) => string,
+    pending: readonly PendingHint[] = []
 ): MatchResult {
     const fingerprints = new Map<Task, Fingerprint>();
     for (const task of tasks) {
@@ -49,13 +59,40 @@ export function matchFile(
     const pairedWith = new Map<Task, LedgerEntry>();
     const matchedPrev = new Set<string>();
 
+    // --- rung 0: what our own writes said, as far as the file bears it out ---
+    const resolution = resolveHints(previous, ordered, pending);
+    const consumedHints = resolution.consumed;
+    const hinted = settleHints(resolution, previous, ordered);
+    for (const [entry, task] of hinted.pairs) {
+        pairedWith.set(task, entry);
+        matchedPrev.add(entry.runtimeId);
+    }
+    // A retired row is spoken for: the write said its line is gone, so it must
+    // not be offered to the ladder, where an identically worded sibling would
+    // hand it on.
+    for (const runtimeId of hinted.retired) matchedPrev.add(runtimeId);
+
     // --- 1st pass: scope by scope, from the roots down ---
     const scopes: Array<{ prev: LedgerEntry[]; cur: Task[] }> = [{ prev: prevRoots, cur: roots }];
+    // A pair settled by a hint opens its children's scope too. Only a parent the
+    // ladder matched does so below, so without this the children of a hinted
+    // parent would skip the 1st pass and be matched file-wide in the 2nd.
+    for (const [entry, task] of hinted.pairs) {
+        scopes.push({
+            prev: prevChildren.get(entry.runtimeId) ?? [],
+            cur: childrenOf.get(task) ?? [],
+        });
+    }
+
     while (scopes.length > 0) {
         const scope = scopes.pop()!;
         const { pairs } = runLadder(
-            scope.prev.map(entry => ({ item: entry, fingerprint: entry.fingerprint })),
-            scope.cur.map(task => ({ item: task, fingerprint: fingerprints.get(task)! }))
+            scope.prev
+                .filter(entry => !matchedPrev.has(entry.runtimeId))
+                .map(entry => ({ item: entry, fingerprint: entry.fingerprint })),
+            scope.cur
+                .filter(task => !pairedWith.has(task) && !hinted.fresh.has(task))
+                .map(task => ({ item: task, fingerprint: fingerprints.get(task)! }))
         );
         for (const [entry, task] of pairs) {
             pairedWith.set(task, entry);
@@ -70,8 +107,10 @@ export function matchFile(
     }
 
     // --- 2nd pass: the leftovers of the whole file, no scoping ---
+    // A task a hint called new stays out of it: the write said it was just
+    // written, so there is no previous row for it to inherit from.
     const poolPrev = previous.filter(entry => !matchedPrev.has(entry.runtimeId));
-    const poolCur = ordered.filter(task => !pairedWith.has(task));
+    const poolCur = ordered.filter(task => !pairedWith.has(task) && !hinted.fresh.has(task));
     const rescued = runLadder(
         poolPrev.map(entry => ({ item: entry, fingerprint: entry.fingerprint })),
         poolCur.map(task => ({ item: task, fingerprint: fingerprints.get(task)! }))
@@ -114,8 +153,60 @@ export function matchFile(
         mapping,
         entries,
         minted,
-        retired: rescued.prevLeft.map(entry => entry.runtimeId),
+        retired: [...hinted.retired, ...rescued.prevLeft.map(entry => entry.runtimeId)],
+        consumedHints,
     };
+}
+
+interface HintOutcome {
+    pairs: Array<[LedgerEntry, Task]>;
+    /** Tasks a hint named as newly written. They inherit nothing. */
+    fresh: Set<Task>;
+    /** Rows a hint said are gone. */
+    retired: string[];
+}
+
+/**
+ * Read the believed claims off as pairs.
+ *
+ * `resolveHints` has already rebuilt the file from the previous rows and found
+ * it line for line identical to what was read, so there is nothing left to
+ * decide: line i is whatever the rebuild says line i is. A row the rebuild no
+ * longer holds is one a write removed.
+ */
+function settleHints(
+    resolution: HintResolution,
+    previous: LedgerEntry[],
+    ordered: Task[]
+): HintOutcome {
+    const pairs: Array<[LedgerEntry, Task]> = [];
+    const fresh = new Set<Task>();
+    const retired: string[] = [];
+
+    const rows = resolution.rows;
+    if (!rows) return { pairs, fresh, retired };
+
+    const byRuntimeId = new Map(previous.map(entry => [entry.runtimeId, entry]));
+    const survived = new Set<string>();
+
+    for (let i = 0; i < ordered.length; i++) {
+        const runtimeId = rows[i].runtimeId;
+        if (runtimeId === null) {
+            fresh.add(ordered[i]);
+            continue;
+        }
+        // Present by construction: the rebuild only carries rows that were in
+        // `previous`, and it was checked against these very tasks.
+        const entry = byRuntimeId.get(runtimeId)!;
+        survived.add(runtimeId);
+        pairs.push([entry, ordered[i]]);
+    }
+
+    for (const entry of previous) {
+        if (!survived.has(entry.runtimeId)) retired.push(entry.runtimeId);
+    }
+
+    return { pairs, fresh, retired };
 }
 
 interface Rung<T> {
