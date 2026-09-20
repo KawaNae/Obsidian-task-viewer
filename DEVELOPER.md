@@ -1255,7 +1255,7 @@ const api = app.plugins.plugins['obsidian-task-viewer'].api;
 | `delete({ id })` | async | `DeleteResult { deleted: string }` |
 | `duplicate({ id, ... })` | async | `DuplicateResult { duplicated: string }` |
 | `tasksForDateRange({ from, to, ... })` | async | `TaskListResult` |
-| `categorizedTasksForDateRange({ from, to, ... })` | sync | `CategorizedTasksForDateRangeResult` (`Record<date, { allDay, timed, dueOnly }>`) |
+| `categorizedTasksForDateRange({ from, to, ... })` | async | `CategorizedTasksForDateRangeResult` (`Record<date, { allDay, timed, dueOnly }>`) |
 | `insertChildTask({ parentId, content })` | async | `InsertChildTaskResult { parentId }` |
 | `getStartHour()` | sync | `StartHourResult { startHour }` |
 | `onChange(callback)` | sync | `() => void` (unsubscribe) |
