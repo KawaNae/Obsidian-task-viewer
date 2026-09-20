@@ -97,6 +97,10 @@ export class TaskIndex {
             app, this.store, this.validator,
             this.syncDetector, this.commandExecutor, settings
         );
+        // Connected here rather than built into the repository, because the
+        // scanner does not exist when the repository does — and cut on dispose,
+        // so a write that outlives this index files nothing (see WriteObserver).
+        this.repository.getWriteObserver().connect(path => this.scanner.writeSink(path));
     }
 
     getRepository(): TaskRepository {
@@ -310,6 +314,7 @@ export class TaskIndex {
         for (const { emitter, ref } of this.eventRefs) emitter.offref(ref);
         this.eventRefs = [];
         this.editorObserver.dispose();
+        this.repository.getWriteObserver().disconnect();
 
         this.notify.dispose();
         this.selfWrites.dispose();

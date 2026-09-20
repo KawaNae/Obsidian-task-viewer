@@ -1,5 +1,5 @@
 import type { App, TFile } from 'obsidian';
-import type { Hint } from '../services/core/identity/IdentityHints';
+import { logError } from '../log/log';
 
 /**
  * A file's line terminator. Obsidian writes LF, but notes arrive with CRLF
@@ -66,6 +66,122 @@ export function appendLines(lines: string[], body: string[]): number {
     return at;
 }
 
+/** One thing a write did to the file's lines, in the coordinates of the moment. */
+export type LineEdit =
+    | { kind: 'replaced'; at: number }
+    | { kind: 'inserted'; at: number; count: number }
+    | { kind: 'removed'; at: number; count: number };
+
+/**
+ * What a write tells the index it did, so the next scan can be told which line
+ * is which.
+ *
+ * Each call describes one operation in the line numbers as they stand *at that
+ * moment* — report right after doing it, and a run of edits reads back in the
+ * order it happened.
+ *
+ * `replaced` and a `removed` + `inserted` pair produce the same file, and the
+ * check below cannot tell them apart: the lines come out identical either way.
+ * Only the writer knows which it meant, and both mistakes cost something.
+ * Saying `replaced` where a line was really torn down and rebuilt hands a new
+ * task the old one's identity. Saying `removed` + `inserted` where a line was
+ * only rewritten calls a row that is still there new, and the hub or the
+ * selection holding it loses its task — the ladder would have kept it by
+ * matching the text. So `replaced` means: this line still belongs to the same
+ * task as before.
+ */
+export interface LineEdits {
+    /** The line at `at` reads something else now, and is the same task. */
+    replaced(at: number): void;
+    /** `count` lines starting at `at` are lines this write created. */
+    inserted(at: number, count: number): void;
+    /** `count` lines starting at `at` are gone. */
+    removed(at: number, count: number): void;
+}
+
+/**
+ * Where a write's report goes. Answers a handle that takes it back, for a
+ * write that reported and then failed.
+ */
+export type WriteSink = (
+    before: readonly string[],
+    after: readonly string[],
+    edits: readonly LineEdit[],
+) => () => void;
+
+/** Where each line of the file came from, once a write's report is replayed. */
+export interface LineOrigins {
+    /** For each line now, its index before the write, or null if it is new. */
+    origin: Array<number | null>;
+    /** For each line now, whether the write said it rewrote it. */
+    rewritten: boolean[];
+}
+
+/**
+ * Replay a write's report over a file of `beforeLength` lines.
+ *
+ * Answers null when the report does not describe anything a file could do —
+ * an index outside the file, a removal running past the end. Callers treat
+ * that the same as no report at all.
+ */
+export function replayEdits(beforeLength: number, edits: readonly LineEdit[]): LineOrigins | null {
+    const origin: Array<number | null> = [];
+    for (let i = 0; i < beforeLength; i++) origin.push(i);
+    const rewritten = new Array<boolean>(beforeLength).fill(false);
+
+    for (const edit of edits) {
+        if (!Number.isInteger(edit.at) || edit.at < 0) return null;
+        switch (edit.kind) {
+            case 'replaced':
+                if (edit.at >= origin.length) return null;
+                rewritten[edit.at] = true;
+                break;
+            case 'inserted': {
+                if (!Number.isInteger(edit.count) || edit.count < 0) return null;
+                if (edit.at > origin.length) return null;
+                const fresh = new Array<number | null>(edit.count).fill(null);
+                origin.splice(edit.at, 0, ...fresh);
+                rewritten.splice(edit.at, 0, ...new Array<boolean>(edit.count).fill(false));
+                break;
+            }
+            case 'removed':
+                if (!Number.isInteger(edit.count) || edit.count < 0) return null;
+                if (edit.at + edit.count > origin.length) return null;
+                origin.splice(edit.at, edit.count);
+                rewritten.splice(edit.at, edit.count);
+                break;
+        }
+    }
+
+    return { origin, rewritten };
+}
+
+/**
+ * Whether a write's report accounts for the file it produced.
+ *
+ * The report is replayed over the lines as they were, and every line that came
+ * through unreported has to still read what it read. That catches an edit the
+ * writer forgot to mention, an index off by one, and a report that leaves the
+ * file a different length than it is. What it cannot catch is `replaced`
+ * against tear-down-and-rebuild (see {@link LineEdits}).
+ */
+function explains(
+    before: readonly string[],
+    after: readonly string[],
+    edits: readonly LineEdit[],
+): boolean {
+    const replayed = replayEdits(before.length, edits);
+    if (!replayed || replayed.origin.length !== after.length) return false;
+
+    for (let i = 0; i < after.length; i++) {
+        const from = replayed.origin[i];
+        if (from === null || replayed.rewritten[i]) continue;
+        if (before[from] !== after[i]) return false;
+    }
+
+    return true;
+}
+
 /**
  * Read a file as lines, let `edit` rewrite them, and write it back with the
  * file's own terminator — one atomic `vault.process`.
@@ -76,16 +192,24 @@ export function appendLines(lines: string[], body: string[]): number {
  * it from the `false` returned here instead of from a no-op it cannot tell
  * apart from success.
  *
- * Anything a write owes the rest of the plugin — the self-write identity hints
- * of stage 2 among them — belongs on the written branch only. A hint left
- * behind by a write that never happened would be consumed by the next scan of
- * that file and hand some other line the wrong identity.
+ * `edit` may also report what it did to the lines, through the {@link
+ * LineEdits} it is handed, and that report is what lets the next scan know
+ * which line is which. Reporting is per write site and optional: a write that
+ * says nothing is a write the scan works out for itself, as every write did
+ * before stage 2. A write that says *something* has to say everything, and a
+ * report that does not account for the file it produced is logged and dropped.
+ * The write itself still lands — the report is bookkeeping, and losing a user's
+ * edit over bookkeeping would be the worse failure by far.
+ *
+ * Anything a write owes the rest of the plugin belongs on the written branch
+ * only. A claim left behind by a write that never happened would be weighed by
+ * the next scan of that file against something else entirely.
  */
 export async function processLines(
     app: App,
     file: TFile,
-    edit: (lines: string[], eol: Eol, hint: (claim: Hint) => void) => string[] | null,
-    sink?: (hints: readonly Hint[]) => () => void,
+    edit: (lines: string[], eol: Eol, edits: LineEdits) => string[] | null,
+    sink?: WriteSink,
 ): Promise<boolean> {
     let written = false;
     // A list rather than one slot: `vault.process` may run the callback again,
@@ -100,25 +224,34 @@ export async function processLines(
             for (const withdraw of withdrawals.splice(0)) withdraw();
 
             const { lines, eol } = splitLines(content);
-            const collected: Hint[] = [];
-            const next = edit(lines, eol, claim => collected.push(claim));
+            const before = [...lines];
+            const reported: LineEdit[] = [];
+            const next = edit(lines, eol, {
+                replaced: (at) => reported.push({ kind: 'replaced', at }),
+                inserted: (at, count) => reported.push({ kind: 'inserted', at, count }),
+                removed: (at, count) => reported.push({ kind: 'removed', at, count }),
+            });
             if (next === null) return content;
 
             written = true;
             const rebuilt = joinLines(next, eol);
 
             // A rewrite that produced the same bytes is not a write: Obsidian
-            // fires no `modify` for it, so no scan follows, and a hint filed
+            // fires no `modify` for it, so no scan follows, and a claim filed
             // here would wait for a scan that never comes. The caller still
             // hears `true` — the line was found, which is what it asked.
             //
-            // Hints are handed over here rather than after the `await` on
+            // Claims are handed over here rather than after the `await` on
             // purpose: the scan this write triggers starts reading before
-            // `vault.process` resolves, so a hint raised afterwards is too late
+            // `vault.process` resolves, so a claim raised afterwards is too late
             // for it. Filing early means filing before the write is known to
             // have succeeded, which is what the withdrawal below is for.
-            if (sink && collected.length > 0 && rebuilt !== content) {
-                withdrawals.push(sink(collected));
+            if (sink && reported.length > 0 && rebuilt !== content) {
+                if (explains(before, next, reported)) {
+                    withdrawals.push(sink(before, next, reported));
+                } else {
+                    logError(`[FileLines] ${file.path}: a write's report does not account for the lines it wrote; no claim filed`);
+                }
             }
 
             return rebuilt;

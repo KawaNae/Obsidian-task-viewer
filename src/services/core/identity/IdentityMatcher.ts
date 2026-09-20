@@ -144,6 +144,7 @@ export function matchFile(
             file: task.file,
             parent: parent ? runtimeIdOf.get(parent)! : null,
             ordinal: ordinals.get(task) ?? 0,
+            line: task.line,
             fingerprint: fingerprints.get(task)!,
         };
     });

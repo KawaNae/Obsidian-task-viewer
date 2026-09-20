@@ -18,6 +18,16 @@ export interface LedgerEntry {
     parent: string | null;
     /** 0-based position among siblings in the same scope, in file order. */
     ordinal: number;
+    /**
+     * The 0-based line the last scan read this row on.
+     *
+     * For the write layer, which needs somewhere to start from when it says
+     * what it did to a file's lines (see WriteClaims). Never an identity key:
+     * it is a guess about a file that may have changed since, and the only
+     * thing done with it is to check whether the line still reads what this
+     * row read. The matcher does not look at it at all.
+     */
+    line: number;
     fingerprint: Fingerprint;
 }
 
@@ -100,6 +110,7 @@ export class IdentityLedger {
             runtimeId: rewriteId(entry.runtimeId),
             file: newPath,
             parent: entry.parent === null ? null : rewriteId(entry.parent),
+            line: entry.line,
             ordinal: entry.ordinal,
             fingerprint: entry.fingerprint,
         }));

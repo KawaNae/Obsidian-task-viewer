@@ -13,13 +13,39 @@ function callShiftInlineDates(line: string, dayOffset: number): string {
 // spliceCopies only reads lines and fileOps; the vault is never touched.
 const fileOps = new FileOperations({} as App);
 
+/** Collects what the copy reported, the way `processLines` does. */
+function recorder() {
+    const reported: Array<{ at: number; count: number }> = [];
+    return {
+        edits: {
+            replaced: () => { throw new Error('a copy rewrites no line'); },
+            inserted: (at: number, count: number) => { reported.push({ at, count }); },
+            removed: () => { throw new Error('a copy removes no line'); },
+        },
+        reported,
+    };
+}
+
 function callSpliceCopies(
     lines: string[],
     taskLine: number,
     parentLines: string[],
     position: 'before' | 'after',
 ): string[] {
-    return proto.spliceCopies.call({ fileOps }, [...lines], taskLine, parentLines, position);
+    return proto.spliceCopies.call({ fileOps }, [...lines], taskLine, parentLines, position, recorder().edits);
+}
+
+/** The lines a copy produced, and what it said it did to them. */
+function spliceAndReport(
+    lines: string[],
+    taskLine: number,
+    parentLines: string[],
+    position: 'before' | 'after',
+) {
+    const record = recorder();
+    const out: string[] = proto.spliceCopies.call(
+        { fileOps }, [...lines], taskLine, parentLines, position, record.edits);
+    return { lines: out, reported: record.reported };
 }
 
 // ---------------------------------------------------------------------------
@@ -174,5 +200,36 @@ describe('TaskCloner', () => {
                 '\t- c2',
             ]);
         });
+    });
+});
+
+describe('what a copy reports', () => {
+    const file = [
+        '- [ ] parent @2026-03-11T10:00>11:00',
+        '\t- [ ] child ^abc',
+        '\tmemo',
+        '- [ ] next',
+    ];
+
+    it('names every line it inserted, and nothing else', () => {
+        // The report is lines, not rows: `memo` is no task and the copy does
+        // not pretend to know. What it is saying is "these are mine" — the
+        // index parses the result to see which of them are tasks.
+        const { lines, reported } = spliceAndReport(
+            file, 0, ['- [ ] copy @2026-03-11T11:00>12:00'], 'after');
+
+        expect(reported).toEqual([{ at: 3, count: 3 }]);
+        expect(lines.slice(3, 6)).toEqual([
+            '- [ ] copy @2026-03-11T11:00>12:00',
+            '\t- [ ] child',
+            '\tmemo',
+        ]);
+    });
+
+    it('counts every copy when several are written at once', () => {
+        const { reported } = spliceAndReport(
+            file, 0, ['- [ ] a', '- [ ] b'], 'before');
+
+        expect(reported).toEqual([{ at: 0, count: 6 }]);
     });
 });
