@@ -3,11 +3,13 @@ import type { PluginContext } from '../../PluginContext';
 import type { ExportHost } from '../../services/export/ExportService';
 import { cliOk, cliError } from '../CliOutputFormatter';
 import { resolveViewTypeFromShortName, schemaFor } from '../../services/viewConfig';
+import type { ConfigField } from '../../services/viewConfig/ViewConfigSchema';
 import { exportDescriptorFor } from '../../services/export/ExportRegistry';
 import { ViewTemplateLoader } from '../../services/template/ViewTemplateLoader';
 import { buildViewStateFromParams } from '../../services/viewConfig/ViewStateFactory';
 import type { ExportResult } from '../../services/export/ExportService';
 import { toCliName } from '../../api/OperationSchemas';
+import { MIN_DAYS_TO_SHOW, MAX_DAYS_TO_SHOW } from '../../views/timelineview/TimelineSchema';
 
 const EXPORT_SPECIFIC_KEYS = new Set([
     'view', 'template', 'name', 'output-folder', 'filename', 'wait', 'keep-open', 'width',
@@ -33,6 +35,12 @@ export function createExportImageHandler(plugin: PluginContext & ExportHost) {
             // 3. Validate flags: only EXPORT_SPECIFIC_KEYS + valid view-config keys allowed
             const validationErr = validateFlags(resolvedParams, viewType);
             if (validationErr) return validationErr;
+
+            // 3b. Validate days-to-show against the same schema field that both
+            // the range computation (below) and the actual view render read, so
+            // the two can't see different values for the same flag.
+            const daysToShowErr = validateDaysToShow(resolvedParams, viewType);
+            if (daysToShowErr) return daysToShowErr;
 
             // 4. Validate filename if user-specified
             const filenameErr = validateFilename(resolvedParams);
@@ -141,9 +149,12 @@ function computeRenderedRange(
 
     switch (shortName) {
         case 'timeline': {
-            const daysToShow = params['days-to-show']
-                ? parseInt(params['days-to-show'], 10)
-                : (schema?.defaults as Record<string, unknown>)?.daysToShow as number ?? 3;
+            // Same field.fromUriParam() the actual render goes through (via
+            // codec.fromUriParams in buildViewStateFromParams), so this can't
+            // see a different day count than what gets drawn. Already
+            // validated by validateDaysToShow before this runs.
+            const daysToShow = parseDaysToShow(schema, params['days-to-show'])
+                ?? (schema?.defaults as Record<string, unknown>)?.daysToShow as number ?? 3;
             const from = resolvedAnchor;
             const to = addDays(resolvedAnchor, daysToShow - 1);
             return { anchor: resolvedAnchor, from, to };
@@ -213,6 +224,29 @@ function validateFlags(params: CliData, viewType: string): string | null {
         if (validConfigKeys.has(key)) continue;
         const allValid = [...EXPORT_SPECIFIC_KEYS, ...validConfigKeys].sort();
         return cliError(`Unknown flag: '${key}'. Available flags: ${allValid.join(', ')}`);
+    }
+    return null;
+}
+
+/**
+ * Reads the `daysToShow` field's own `fromUriParam` off the resolved schema —
+ * the same parser `codec.fromUriParams` uses for the actual render — so
+ * validation and range computation can't drift onto separate parse paths.
+ */
+function parseDaysToShow(schema: ReturnType<typeof schemaFor>, raw: string | undefined): number | undefined {
+    if (raw === undefined) return undefined;
+    const field = (schema?.config as Record<string, ConfigField<unknown>> | undefined)?.daysToShow;
+    const parsed = field?.fromUriParam?.(raw);
+    return typeof parsed === 'number' ? parsed : undefined;
+}
+
+function validateDaysToShow(params: CliData, viewType: string): string | null {
+    const raw = params['days-to-show'];
+    if (raw === undefined) return null;
+    const schema = schemaFor(viewType);
+    if (schema?.shortName !== 'timeline') return null;
+    if (parseDaysToShow(schema, raw) === undefined) {
+        return cliError(`Invalid days-to-show: '${raw}'. Must be an integer between ${MIN_DAYS_TO_SHOW} and ${MAX_DAYS_TO_SHOW}`);
     }
     return null;
 }

@@ -250,7 +250,7 @@ export class TimelineView extends ItemView {
             astronomyDisplay: this.viewState.astronomyDisplay,
             showSidebar: this.viewState.showSidebar,
             pinnedLists: this.viewState.pinnedLists,
-            daysToShow: this.viewState.daysToShow as TimelineConfig['daysToShow'],
+            daysToShow: this.viewState.daysToShow,
             zoomLevel: this.viewState.zoomLevel,
             showAllDay: this.viewState.showAllDay,
             showTimeline: this.viewState.showTimeline,

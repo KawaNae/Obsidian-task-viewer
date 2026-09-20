@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
-    ViewModeSelector,
+    DaysToShowSelector,
+    stepDaysToShow,
     ZoomSelector,
     appendCompactFilterAndMask,
     type CompactMenuDeps,
@@ -17,6 +18,7 @@ interface RecordedItem {
     title: string;
     icon?: string;
     checked?: boolean;
+    disabled?: boolean;
     click?: () => void;
     submenu?: RecordedMenu;
 }
@@ -47,6 +49,11 @@ class RecordedMenu {
         return this.items.filter(i => i.checked).map(i => i.title);
     }
 
+    /** Titles that were rendered disabled. */
+    disabledTitles(): string[] {
+        return this.items.filter(i => i.disabled).map(i => i.title);
+    }
+
     click(title: string): void {
         const item = this.items.find(i => i.title === title);
         if (!item?.click) throw new Error(`no clickable item titled "${title}"`);
@@ -64,7 +71,7 @@ class RecordedMenuItem {
     setTitle(title: string): this { this.rec.title = title; return this; }
     setIcon(icon: string): this { this.rec.icon = icon; return this; }
     setChecked(checked: boolean): this { this.rec.checked = checked; return this; }
-    setDisabled(): this { return this; }
+    setDisabled(disabled: boolean): this { this.rec.disabled = disabled; return this; }
     onClick(cb: () => void): this { this.rec.click = cb; return this; }
     setSubmenu(): RecordedMenu {
         const sub = new RecordedMenu();
@@ -73,42 +80,92 @@ class RecordedMenuItem {
     }
 }
 
-describe('ViewModeSelector menu items', () => {
-    it('offers exactly the three day counts', () => {
-        const menu = new RecordedMenu();
-        ViewModeSelector.appendMenuItems(menu.asMenu(), () => 3, () => {});
-        expect(menu.titles()).toEqual(['1 Day', '3 Days', 'Week']);
+describe('DaysToShowSelector', () => {
+    const BOUNDS = { min: 1, max: 30 };
+
+    describe('preset items', () => {
+        it('offers exactly the three presets', () => {
+            const menu = new RecordedMenu();
+            DaysToShowSelector.appendPresetItems(menu.asMenu(), () => 3, () => {});
+            expect(menu.titles()).toEqual(['1 Day', '3 Days', '7 Days']);
+        });
+
+        it('checks the item matching the current value', () => {
+            const menu = new RecordedMenu();
+            DaysToShowSelector.appendPresetItems(menu.asMenu(), () => 7, () => {});
+            expect(menu.checkedTitles()).toEqual(['7 Days']);
+        });
+
+        it('checks no item when the current value is not a preset', () => {
+            const menu = new RecordedMenu();
+            DaysToShowSelector.appendPresetItems(menu.asMenu(), () => 10, () => {});
+            expect(menu.checkedTitles()).toEqual([]);
+        });
+
+        it('reports the picked value', () => {
+            const picked: number[] = [];
+            const menu = new RecordedMenu();
+            DaysToShowSelector.appendPresetItems(menu.asMenu(), () => 3, (v) => picked.push(v));
+            menu.click('1 Day');
+            menu.click('7 Days');
+            expect(picked).toEqual([1, 7]);
+        });
     });
 
-    it('checks the item matching the current value', () => {
-        const menu = new RecordedMenu();
-        ViewModeSelector.appendMenuItems(menu.asMenu(), () => 7, () => {});
-        expect(menu.checkedTitles()).toEqual(['Week']);
+    describe('compact submenu', () => {
+        it('nests the same presets as the dropdown, plus ±1-day steps', () => {
+            // The point of the shared list: the "⋮" submenu and the toolbar
+            // button cannot drift apart, in labels, order, or checked state.
+            const dropdown = new RecordedMenu();
+            DaysToShowSelector.appendPresetItems(dropdown.asMenu(), () => 3, () => {});
+
+            const compact = new RecordedMenu();
+            DaysToShowSelector.appendSubmenu(compact.asMenu(), () => 3, () => {}, BOUNDS);
+            const sub = compact.items[0].submenu!;
+
+            expect(compact.items).toHaveLength(1);
+            expect(compact.items[0].title).toBe('View mode: 3 Days');
+            expect(sub.titles().slice(0, 3)).toEqual(dropdown.titles());
+            expect(sub.checkedTitles()).toEqual(dropdown.checkedTitles());
+            expect(sub.titles().slice(3)).toEqual(['Increase days shown', 'Decrease days shown']);
+        });
+
+        it('disables +1 day at the max bound and -1 day at the min bound', () => {
+            const atMax = new RecordedMenu();
+            DaysToShowSelector.appendSubmenu(atMax.asMenu(), () => 30, () => {}, BOUNDS);
+            expect(atMax.items[0].submenu!.disabledTitles()).toEqual(['Increase days shown']);
+
+            const atMin = new RecordedMenu();
+            DaysToShowSelector.appendSubmenu(atMin.asMenu(), () => 1, () => {}, BOUNDS);
+            expect(atMin.items[0].submenu!.disabledTitles()).toEqual(['Decrease days shown']);
+        });
+
+        it('steps by exactly one day, clamped to bounds', () => {
+            const picked: number[] = [];
+            const menu = new RecordedMenu();
+            DaysToShowSelector.appendSubmenu(menu.asMenu(), () => 5, (v) => picked.push(v), BOUNDS);
+            const sub = menu.items[0].submenu!;
+            sub.click('Increase days shown');
+            sub.click('Decrease days shown');
+            expect(picked).toEqual([6, 4]);
+        });
+    });
+});
+
+describe('stepDaysToShow', () => {
+    const BOUNDS = { min: 1, max: 30 };
+
+    it('moves by one day in the requested direction', () => {
+        expect(stepDaysToShow(5, 1, BOUNDS)).toBe(6);
+        expect(stepDaysToShow(5, -1, BOUNDS)).toBe(4);
     });
 
-    it('reports the picked value', () => {
-        const picked: number[] = [];
-        const menu = new RecordedMenu();
-        ViewModeSelector.appendMenuItems(menu.asMenu(), () => 3, (v) => picked.push(v));
-        menu.click('1 Day');
-        menu.click('Week');
-        expect(picked).toEqual([1, 7]);
+    it('clamps at the upper bound', () => {
+        expect(stepDaysToShow(30, 1, BOUNDS)).toBe(30);
     });
 
-    it('offers the same choices from the compact submenu as from the dropdown', () => {
-        // The point of the shared list: the "⋮" submenu and the toolbar button
-        // cannot drift apart, in labels, order, or checked state.
-        const dropdown = new RecordedMenu();
-        ViewModeSelector.appendMenuItems(dropdown.asMenu(), () => 3, () => {});
-
-        const compact = new RecordedMenu();
-        ViewModeSelector.appendSubmenu(compact.asMenu(), () => 3, () => {});
-        const sub = compact.items[0].submenu;
-
-        expect(compact.items).toHaveLength(1);
-        expect(compact.items[0].title).toBe('View mode: 3 Days');
-        expect(sub?.titles()).toEqual(dropdown.titles());
-        expect(sub?.checkedTitles()).toEqual(dropdown.checkedTitles());
+    it('clamps at the lower bound', () => {
+        expect(stepDaysToShow(1, -1, BOUNDS)).toBe(1);
     });
 });
 

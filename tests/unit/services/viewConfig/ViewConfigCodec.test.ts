@@ -13,6 +13,7 @@ interface TestConfig {
     enabled?: boolean;
     count?: 1 | 3 | 7;
     rate?: number;
+    span?: number;
     filter?: FilterState;
     pins?: PinnedListDefinition[];
     grid?: PinnedListDefinition[][];
@@ -35,6 +36,7 @@ const SCHEMA: ViewSchema<TestConfig, TestTransient> = {
         enabled: F.boolean('enabled'),
         count: F.intEnum('count', [1, 3, 7], { legacyKeys: ['days'] }),
         rate: F.float('rate', { min: 0.25, max: 10, legacyKeys: ['zoom'] }),
+        span: F.int('span', { min: 1, max: 30, legacyKeys: ['spanLegacy'] }),
         filter: F.filter('filter', { legacyKeys: ['filterState'] }),
         pins: F.pinnedLists('pins'),
         grid: F.grid('grid'),
@@ -55,6 +57,7 @@ const fullFixture: TestConfig = {
     enabled: true,
     count: 7,
     rate: 1.5,
+    span: 10,
     filter: {
         filters: [{ property: 'tag', operator: 'includes', value: ['x'] }],
         logic: 'and',
@@ -145,6 +148,11 @@ describe('ViewConfigCodec', () => {
             expect(cfg.rate).toBe(2.5);
         });
 
+        it('parseConfig reads legacy "spanLegacy" into span', () => {
+            const cfg = codec.parseConfig({ spanLegacy: 10 });
+            expect(cfg.span).toBe(10);
+        });
+
         it('parseConfig reads legacy "filterState" into filter', () => {
             const cfg = codec.parseConfig({
                 filterState: { filters: [{ property: 'tag', operator: 'includes', value: ['x'] }], logic: 'and' },
@@ -188,6 +196,24 @@ describe('ViewConfigCodec', () => {
             expect(codec.parseConfig({ rate: 0.1 }).rate).toBeUndefined();
             expect(codec.parseConfig({ rate: 20 }).rate).toBeUndefined();
             expect(codec.parseConfig({ rate: 1 }).rate).toBe(1);
+        });
+
+        it('int rejects values outside min/max', () => {
+            expect(codec.parseConfig({ span: 0 }).span).toBeUndefined();
+            expect(codec.parseConfig({ span: 31 }).span).toBeUndefined();
+            expect(codec.parseConfig({ span: 1 }).span).toBe(1);
+            expect(codec.parseConfig({ span: 30 }).span).toBe(30);
+        });
+
+        it('int rejects non-integer values', () => {
+            expect(codec.parseConfig({ span: 5.5 }).span).toBeUndefined();
+            expect(codec.parseConfig({ span: 5 }).span).toBe(5);
+        });
+
+        it('int fromUriParam parses and rejects the same as parseConfig', () => {
+            expect(codec.fromUriParams({ span: '10' }).span).toBe(10);
+            expect(codec.fromUriParams({ span: '31' }).span).toBeUndefined();
+            expect(codec.fromUriParams({ span: 'abc' }).span).toBeUndefined();
         });
 
         it('dateString rejects malformed input', () => {

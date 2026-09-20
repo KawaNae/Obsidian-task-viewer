@@ -3,7 +3,7 @@ import { t } from '../../i18n';
 import type { AstronomyDisplay } from '../../types';
 import type { TaskReadService } from '../../services/data/TaskReadService';
 import type { PluginContext } from '../../PluginContext';
-import { DateNavigator, ViewModeSelector, ZoomSelector, ViewSettingsMenu, MaskToggleButton, ViewToolbarBase, appendCompactFilterAndMask, type ViewSettingsOptions, type CompactMenuDeps } from '../sharedUI/ViewToolbar';
+import { DateNavigator, DaysToShowSelector, ZoomSelector, ViewSettingsMenu, MaskToggleButton, ViewToolbarBase, appendCompactFilterAndMask, type ViewSettingsOptions, type CompactMenuDeps } from '../sharedUI/ViewToolbar';
 import { DateLabel } from '../sharedUI/DateLabel';
 import { appendAstronomyMenuSection } from '../sharedUI/AstronomyMenuSection';
 import type { FilterMenuComponent } from '../customMenus/FilterMenuComponent';
@@ -12,7 +12,7 @@ import { updateSidebarToggleButton } from '../sidebar/SidebarToggleButton';
 import type { TaskLinkInteractionManager } from '../taskcard/TaskLinkInteractionManager';
 import type { TaskViewHoverParent } from '../taskcard/TaskViewHoverParent';
 import { codecFor, type ViewConfigCodec } from '../../services/viewConfig';
-import { TimelineSchema, type TimelineConfig, type TimelineTransient } from './TimelineSchema';
+import { TimelineSchema, type TimelineConfig, type TimelineTransient, MIN_DAYS_TO_SHOW, MAX_DAYS_TO_SHOW } from './TimelineSchema';
 
 /**
  * Everything the toolbar needs from TimelineView, as a bundle of narrow
@@ -208,11 +208,12 @@ export class TimelineToolbar extends ViewToolbarBase {
     }
 
     private renderViewModeSwitch(toolbar: HTMLElement): void {
-        this.viewModeHandle = ViewModeSelector.render(
+        this.viewModeHandle = DaysToShowSelector.render(
             toolbar,
             () => this.deps.getDaysToShow(),
             (newValue) => this.deps.setDaysToShow(newValue),
-            this.deps.plugin.menuPresenter
+            this.deps.plugin.menuPresenter,
+            { min: MIN_DAYS_TO_SHOW, max: MAX_DAYS_TO_SHOW }
         );
     }
 
@@ -317,13 +318,14 @@ export class TimelineToolbar extends ViewToolbarBase {
     private appendCompactMenuItems(menu: Menu, moreBtn: HTMLElement): void {
         const { deps } = this;
 
-        ViewModeSelector.appendSubmenu(
+        DaysToShowSelector.appendSubmenu(
             menu,
             () => deps.getDaysToShow(),
             (value) => {
                 deps.setDaysToShow(value);
                 this.update();
             },
+            { min: MIN_DAYS_TO_SHOW, max: MAX_DAYS_TO_SHOW },
         );
         ZoomSelector.appendSubmenu(
             menu,
