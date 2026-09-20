@@ -20,6 +20,7 @@ import { setIcon } from 'obsidian';
 import type { PopoverAnchor } from './PopoverShell';
 import { positionElement, resolveHost } from './PopoverShell';
 import type { PopoverStack } from './PopoverStack';
+import { registerOverlay, unregisterOverlay } from './OverlayRegistry';
 import { KeyboardAwareContainer } from '../../utils/KeyboardAwareContainer';
 import { trackKeyboard } from '../../utils/KeyboardState';
 import { t } from '../../i18n';
@@ -153,11 +154,16 @@ export class OverlayShell {
         // Pagehide (popout window close)
         this.pageHideHandler = () => this.close();
         hostWin.addEventListener('pagehide', this.pageHideHandler);
+
+        // The DOM lives on hostDoc.body, which no plugin teardown reaches.
+        // Register so onunload can close what is still open (#165).
+        registerOverlay(this);
     }
 
     close(): void {
         if (!this.rootEl || this.closing) return;
         this.closing = true;
+        unregisterOverlay(this);
 
         // Logical teardown (immediate — overlay is inert from here)
         this.kbAware?.detach();
