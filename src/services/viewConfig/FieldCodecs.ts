@@ -138,7 +138,10 @@ export const F = {
             parse(raw) {
                 if (typeof raw === 'number') return check(raw);
                 if (typeof raw === 'string') {
-                    const n = parseInt(raw, 10);
+                    // Number(), not parseInt(): parseInt("5.5") truncates to 5
+                    // instead of failing, which would silently accept
+                    // fractional input as an integer.
+                    const n = Number(raw);
                     return Number.isFinite(n) ? check(n) : undefined;
                 }
                 return undefined;
@@ -148,7 +151,7 @@ export const F = {
             },
             toUriParam(value) { return String(value); },
             fromUriParam(raw) {
-                const n = parseInt(raw, 10);
+                const n = Number(raw);
                 return Number.isFinite(n) ? check(n) : undefined;
             },
         };

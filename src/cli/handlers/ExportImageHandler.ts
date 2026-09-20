@@ -129,7 +129,7 @@ interface RenderedRange {
     to: string;
 }
 
-function computeRenderedRange(
+export function computeRenderedRange(
     viewType: string,
     resolvedAnchor: string | undefined,
     params: CliData,
@@ -233,14 +233,14 @@ function validateFlags(params: CliData, viewType: string): string | null {
  * the same parser `codec.fromUriParams` uses for the actual render — so
  * validation and range computation can't drift onto separate parse paths.
  */
-function parseDaysToShow(schema: ReturnType<typeof schemaFor>, raw: string | undefined): number | undefined {
+export function parseDaysToShow(schema: ReturnType<typeof schemaFor>, raw: string | undefined): number | undefined {
     if (raw === undefined) return undefined;
     const field = (schema?.config as Record<string, ConfigField<unknown>> | undefined)?.daysToShow;
     const parsed = field?.fromUriParam?.(raw);
     return typeof parsed === 'number' ? parsed : undefined;
 }
 
-function validateDaysToShow(params: CliData, viewType: string): string | null {
+export function validateDaysToShow(params: CliData, viewType: string): string | null {
     const raw = params['days-to-show'];
     if (raw === undefined) return null;
     const schema = schemaFor(viewType);
