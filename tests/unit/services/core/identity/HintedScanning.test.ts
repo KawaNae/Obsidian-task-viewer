@@ -28,7 +28,12 @@ function makeFile(path: string): TFile {
 }
 
 const FILE = 'a.md';
-const TASK = '- [ ] ポモドーロ';
+/**
+ * The open row every test below is built from — the formatter's own output,
+ * not a guess at it, so a change to how a task is written reaches these tests
+ * instead of leaving them pinning a line the writer no longer produces.
+ */
+const TASK = TaskParser.format(makeTask({ content: 'ポモドーロ', statusChar: ' ' }));
 
 /** One write's claim: the file's rows, as `[runtimeId | null, text]` pairs. */
 let coined = 0;
@@ -171,7 +176,7 @@ describe('a line the write named, through the write layer', () => {
     // The whole chain, with nothing stood in for: the write reports its lines,
     // `WriteClaims` names what the write made, and two scans read it.
 
-    const DONE = '- [x] ポモドーロ';
+    const DONE = TaskParser.format(makeTask({ content: 'ポモドーロ', statusChar: 'x' }));
 
     it('names a created line once, whichever scan reads it', async () => {
         const harness = new Harness();
@@ -742,6 +747,43 @@ describe('an ordinary update, through the write layer', () => {
         vi.advanceTimersByTime(HINT_TTL_MS + 1);
         await harness.scan();
 
+        expect(harness.pendingCount()).toBe(0);
+    });
+});
+
+describe('a rewrite that moves the row to another parser', () => {
+    // The editor's menu writes through `updateLine` for plain checkboxes and
+    // for third-party notations alike (TaskMenuExtension.ts:122), and one of
+    // its items — convert to inline — rewrites a Tasks-plugin line into `@`
+    // notation. The row is the same row, and the write says so, but the
+    // parser that reads it changes.
+    //
+    // `reproduces` refuses a claim across parsers (IdentityHints.ts:361), so
+    // the claim is dropped and the ladder decides — which, following the same
+    // rule, mints a new name. That is a loss of identity, but it is the loss
+    // every notation switch had before stage 2, and it is the safe direction:
+    // a row is called new rather than handed a name that belonged to
+    // something the other parser read.
+    const TASKS_LINE = '- [ ] ポモドーロ 📅 2026-09-21';
+    const INLINE_LINE = '- [ ] ポモドーロ @2026-09-21';
+
+    afterEach(() => { TaskParser.rebuildChain(DEFAULT_SETTINGS); });
+
+    it('drops the claim rather than carrying the name across', async () => {
+        TaskParser.rebuildChain({ ...DEFAULT_SETTINGS, enableTasksPlugin: true });
+
+        const harness = new Harness();
+        await harness.write([TASKS_LINE, '']);
+        const before = harness.ids()[0];
+        // Not a fixture's word for it: the chain really reads this line with
+        // the other parser, which is what makes the rewrite below a crossing.
+        expect(harness.tasks()[0].parserId).toBe('tasks-plugin');
+
+        harness.report([INLINE_LINE, ''], [{ kind: 'replaced', at: 0 }]);
+        await harness.scan();
+
+        expect(harness.tasks()[0].parserId).toBe('tv-inline');
+        expect(harness.ids()[0]).not.toBe(before);
         expect(harness.pendingCount()).toBe(0);
     });
 });

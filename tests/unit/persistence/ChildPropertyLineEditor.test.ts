@@ -183,4 +183,85 @@ describe('ChildPropertyLineEditor', () => {
             ]);
         });
     });
+
+    describe('applyOps: 申告', () => {
+        // 行の結果だけでなく、書き込みが何をしたと言うかも固定する。申告を
+        // 1経路でも落とすと、その行は「報告されていないのに前後で文字列が
+        // 違う行」になり、explains が書き込み全体の主張を捨てる。落ちるのは
+        // その経路を踏んだ組み合わせのときだけなので、経路ごとに押さえる。
+        it('既存行の値の書き換えは rewrite として申告する', () => {
+            const lines = [
+                '- [ ] task',
+                '\t- 金額:: 100',
+            ];
+            const reported = apply(lines, 0, [{ key: '金額', op: 'set', value: '200' }]);
+            expect(reported).toEqual([{ kind: 'replaced', at: 1 }]);
+            expect(lines[1]).toBe('\t- 金額:: 200');
+        });
+
+        it('新規の宣言行は insert として申告する', () => {
+            const lines = [
+                '- [ ] task',
+                '',
+            ];
+            const reported = apply(lines, 0, [{ key: '金額', op: 'set', value: '200' }]);
+            expect(reported).toEqual([{ kind: 'inserted', at: 1, count: 1 }]);
+        });
+
+        it('削除した宣言行を remove として申告する', () => {
+            const lines = [
+                '- [ ] task',
+                '\t- 金額:: 100',
+                '\t- [ ] sub',
+            ];
+            const reported = apply(lines, 0, [{ key: '金額', op: 'delete' }]);
+            expect(reported).toEqual([{ kind: 'removed', at: 1, count: 1 }]);
+        });
+
+        it('同じキーの宣言行が複数あるとき、各行が立っていた座標で申告する', () => {
+            // 逆順に消すので、どの at もその行が在った位置のまま。上から
+            // 消すと残りがずれ、2件目の申告が1つ上の行を指してしまう。
+            const lines = [
+                '- [ ] task',
+                '\t- 金額:: 100',
+                '\t- 金額:: 300',
+            ];
+            const reported = apply(lines, 0, [{ key: '金額', op: 'delete' }]);
+            expect(reported).toEqual([
+                { kind: 'removed', at: 2, count: 1 },
+                { kind: 'removed', at: 1, count: 1 },
+            ]);
+            expect(lines).toEqual(['- [ ] task']);
+        });
+
+        it('op が続くとき、後の申告は前の op が動かしたあとの座標で出る', () => {
+            const lines = [
+                '- [ ] task',
+                '\t- a:: 1',
+                '\t- b:: 2',
+            ];
+            const reported = apply(lines, 0, [
+                { key: 'a', op: 'delete' },
+                { key: 'c', op: 'set', value: '3' },
+            ]);
+            expect(reported).toEqual([
+                { kind: 'removed', at: 1, count: 1 },
+                { kind: 'inserted', at: 2, count: 1 },
+            ]);
+            expect(lines).toEqual(['- [ ] task', '\t- b:: 2', '\t- c:: 3']);
+        });
+
+        it('フェンスの中の宣言行には触れず、申告にも出さない', () => {
+            const lines = [
+                '- [ ] task',
+                '\t- 金額:: 100',
+                '\t```',
+                '\t- 金額:: 999',
+                '\t```',
+            ];
+            const reported = apply(lines, 0, [{ key: '金額', op: 'set', value: '200' }]);
+            expect(reported).toEqual([{ kind: 'replaced', at: 1 }]);
+            expect(lines[3]).toBe('\t- 金額:: 999');
+        });
+    });
 });
