@@ -29,7 +29,6 @@ function row(runtimeId: string, text: string, line: number, extra: Partial<Task>
         file: FILE,
         parent: null,
         ordinal: line,
-        line,
         fingerprint: fingerprintOf(task(text, line, extra)),
     };
 }
