@@ -102,15 +102,24 @@ export class InlineTaskWriter {
         });
     }
 
+    /**
+     * Delete one line by its coordinate, whatever that line is.
+     *
+     * The claim says a line went away and nothing else. It cannot say more:
+     * this path is reached from the editor's context menu on a raw checkbox,
+     * so the line is not necessarily a task, and the lines under it are left
+     * where they are. A child that outlives its parent here keeps the identity
+     * it had — it is the same line, one row higher.
+     */
     async deleteLine(filePath: string, lineNumber: number): Promise<void> {
         const file = this.app.vault.getAbstractFileByPath(filePath);
         if (!(file instanceof TFile)) return;
 
-        await processLines(this.app, file, (lines) => {
+        await processLines(this.app, file, (lines, _eol, edits) => {
             if (lineNumber < 0 || lineNumber >= lines.length) return null;
-            lines.splice(lineNumber, 1);
+            edits.splice(lineNumber, 1);
             return lines;
-        });
+        }, this.writes?.for(filePath));
     }
 
     /**
@@ -156,17 +165,31 @@ export class InlineTaskWriter {
     }
 
     /**
+     * @param moved where the task's lines were written before this call, when
+     * this delete is the origin half of a move. The half that matters for
+     * identity is the destination, and it is a separate write — to another
+     * file, or to another place in this one. Naming the destination rather
+     * than passing a flag is what stage 4 needs to tie the two halves
+     * together; today it only says "stay quiet".
      * @returns whether the task's lines were found and removed. A `false` means
      * the file still holds them — the caller must not report the task gone.
      */
-    async deleteTaskFromFile(task: Task): Promise<boolean> {
+    async deleteTaskFromFile(task: Task, moved?: { to: string }): Promise<boolean> {
         const file = this.app.vault.getAbstractFileByPath(task.file);
         if (!(file instanceof TFile)) {
             logWarn(`[InlineTaskWriter] File not found: ${task.file}`);
             return false;
         }
 
-        return processLines(this.app, file, (lines) => {
+        // A move's origin does not claim. Within one file the move's rows are
+        // still alive further down, and `removed` would call a living row dead
+        // — the next scan would mint new IDs for rows the ladder could have
+        // carried. Across files the claim would be true, but telling the two
+        // apart is the same judgement stage 4 has to make for the destination
+        // hint, so both halves wait for it together.
+        const sink = moved ? undefined : this.writes?.for(task.file);
+
+        return processLines(this.app, file, (lines, _eol, edits) => {
             // Find current line using originalText
             const currentLine = this.fileOps.findTaskLineNumber(lines, task);
             if (currentLine < 0 || currentLine >= lines.length) {
@@ -176,11 +199,14 @@ export class InlineTaskWriter {
 
             const { childrenLines } = this.fileOps.collectChildrenFromLines(lines, currentLine);
 
-            // Delete task line + all children
-            lines.splice(currentLine, 1 + childrenLines.length);
+            // Delete task line + all children. What the claim carries is what
+            // this splice actually removed, not `1 + childrenLines.length`
+            // counted a second time: the two cannot disagree if only one of
+            // them exists.
+            edits.splice(currentLine, 1 + childrenLines.length);
 
             return lines;
-        });
+        }, sink);
     }
 
     /**

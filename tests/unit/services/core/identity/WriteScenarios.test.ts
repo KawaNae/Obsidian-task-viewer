@@ -238,3 +238,121 @@ describe('the duplicate the ladder gets wrong', () => {
         expect(tasks[1].id).toBe(original);
     });
 });
+
+/**
+ * What a delete tells the next scan.
+ *
+ * A removal is the one claim that cannot lie about its own file: it carries
+ * the splice that happened. What it buys is the rows it did *not* touch —
+ * twins below the hole, which the ladder pairs by nearest ordinal and
+ * therefore slides onto the wrong card.
+ */
+describe('IDs held across a delete', () => {
+    const TWINS = [
+        '# twins',
+        '- [ ] 同じ本文 @2026-09-21',
+        '- [ ] 同じ本文 @2026-09-21',
+        '- [ ] 下の行 @2026-09-21',
+        '',
+    ];
+
+    function idsInFileOrder(session: VaultSession): string[] {
+        return session.index.getTasks()
+            .filter(task => task.file === FILE)
+            .sort((a, b) => a.line - b.line)
+            .map(task => task.id);
+    }
+
+    /** The write layer under the index, for the paths the index does not offer. */
+    function repositoryOf(session: VaultSession) {
+        return (session.index as unknown as {
+            repository: { deleteTaskFromFile(task: unknown, moved?: { to: string }): Promise<boolean> };
+        }).repository;
+    }
+
+    it('the surviving twin keeps its own ID when the one above it goes', async () => {
+        const contents = new Map([[FILE, TWINS.join('\n')]]);
+        live = vaultSession(contents);
+        await live.scanAll();
+        const [first, second, below] = idsInFileOrder(live);
+
+        await live.index.deleteTask(first);
+        await live.settle(FILE);
+
+        expect(taskLines(contents)).toEqual([
+            '- [ ] 同じ本文 @2026-09-21',
+            '- [ ] 下の行 @2026-09-21',
+        ]);
+        expect(idsInFileOrder(live)).toEqual([second, below]);
+    });
+
+    it('what the ladder alone does with the same delete', async () => {
+        const contents = new Map([[FILE, TWINS.join('\n')]]);
+        live = vaultSession(contents);
+        await live.scanAll();
+        const [first, second, below] = idsInFileOrder(live);
+        const task = live.index.getTask(first)!;
+
+        // The move's origin half: the same splice, filing nothing. Standing
+        // against the test above, it is why the claim is worth filing — the
+        // verbatim rung pairs the two identical lines by nearest ordinal, so
+        // the survivor answers to the ID of the line that went, and the ID it
+        // held is gone. A timer or a selection pointing at the surviving line
+        // resolves to nothing.
+        await repositoryOf(live).deleteTaskFromFile(task, { to: 'archive.md' });
+        await live.settle(FILE);
+
+        expect(idsInFileOrder(live)).toEqual([first, below]);
+        expect(live.index.getTask(second)).toBeUndefined();
+    });
+
+    it('a deleted parent takes its children with it, and no one inherits them', async () => {
+        const contents = new Map([[FILE, [
+            '- [ ] 親 @2026-09-21',
+            '\t- [ ] 子 @2026-09-21',
+            '- [ ] 下の行 @2026-09-21',
+            '',
+        ].join('\n')]]);
+        live = vaultSession(contents);
+        await live.scanAll();
+        const [parent, child, below] = idsInFileOrder(live);
+
+        await live.index.deleteTask(parent);
+        await live.settle(FILE);
+
+        expect(taskLines(contents)).toEqual(['- [ ] 下の行 @2026-09-21']);
+        expect(live.index.getTask(parent)).toBeUndefined();
+        expect(live.index.getTask(child)).toBeUndefined();
+        expect(idsInFileOrder(live)).toEqual([below]);
+    });
+
+    it('a deletion fire writes the next instance and takes the fired line away', async () => {
+        // Two claims in a row on one file: the insert files first, the delete
+        // second, and the second is built on what the first left. The rows that
+        // only moved keep their IDs, and the instance that was written is a new
+        // task rather than the fired one wearing a new date.
+        const contents = new Map([[FILE, [
+            '- [ ] 前の行 @2026-09-21',
+            '- [ ] 週報 @2026-09-21 ==> every mon',
+            '- [ ] 後の行 @2026-09-21',
+            '',
+        ].join('\n')]]);
+        live = vaultSession(contents);
+        await live.scanAll();
+        const [above, fired, below] = idsInFileOrder(live);
+
+        await live.index.deleteTask(fired, { fireFlow: true });
+        await live.settle(FILE);
+
+        expect(taskLines(contents)).toEqual([
+            '- [ ] 週報 @2026-09-28 ==> every mon',
+            '- [ ] 前の行 @2026-09-21',
+            '- [ ] 後の行 @2026-09-21',
+        ]);
+
+        const [next, ...kept] = idsInFileOrder(live);
+        expect(kept).toEqual([above, below]);
+        expect(next).not.toBe(fired);
+        expect(live.index.getTask(fired)).toBeUndefined();
+    });
+});

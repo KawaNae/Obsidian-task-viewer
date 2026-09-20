@@ -310,3 +310,42 @@ describe('WriteClaims: the limit of a report', () => {
         expect(offByOne.hint!.rows.map(row => row.runtimeId)).toEqual(['w1', 'r1']);
     });
 });
+
+describe('WriteClaims: a delete in a chain', () => {
+    it('builds a delete on the insert that came just before it', () => {
+        // A deletion fire, as the claim layer sees it: the next instance is
+        // written above the fired line, then the fired line goes. No scan runs
+        // in between, so the delete is read against what the insert left.
+        const claims = claimsWith([known('r1', 0, '- [ ] 週報')]);
+
+        const first = claims.claim(FILE, ['- [ ] 週報'], ['- [ ] 次', '- [ ] 週報'], [inserted(0, 1)]);
+        expect(first.hint!.rows.map(row => row.runtimeId)).toEqual(['w1', 'r1']);
+
+        const second = claims.claim(FILE, ['- [ ] 次', '- [ ] 週報'], ['- [ ] 次'], [removed(1, 1)]);
+
+        // The written instance keeps the name the insert gave it and is still
+        // told as new; the fired row is simply not there any more.
+        expect(second.hint!.rows).toEqual([
+            { runtimeId: 'w1', created: true, text: '- [ ] 次' },
+        ]);
+    });
+
+    it('stays silent about a delete that followed a write it could not follow', () => {
+        // The same dependency the inserts have: once a write cannot be placed,
+        // nothing is claimed about that file until a scan commits — a delete
+        // included. Its own arithmetic being sound is not enough, because the
+        // base it would be read against is the one that was lost.
+        const claims = claimsWith([known('r1', 0, '- [ ] 甲'), known('r2', 1, '- [ ] 甲')]);
+        claims.claim(FILE, ['他人の編集'], ['他人の編集'], [replaced(0)]);
+
+        const next = claims.claim(FILE, ['- [ ] 甲', '- [ ] 甲'], ['- [ ] 甲'], [removed(0, 1)]);
+        expect(next.hint).toBeNull();
+
+        claims.forget(FILE);
+
+        // And what it was holding back: of two lines reading the same word, the
+        // one that survives is the one that survived.
+        const after = claims.claim(FILE, ['- [ ] 甲', '- [ ] 甲'], ['- [ ] 甲'], [removed(0, 1)]);
+        expect(after.hint!.rows).toEqual([{ runtimeId: 'r2', created: false, text: '- [ ] 甲' }]);
+    });
+});

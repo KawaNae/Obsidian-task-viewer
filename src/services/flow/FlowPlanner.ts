@@ -134,7 +134,7 @@ export function planFlow(task: Task, program: FlowProgram, deps: FlowPlanDeps): 
         const destPath = normalizeDestination(target);
         const archivedTask: Task = { ...task, flow: undefined, blockId: undefined, timerTargetId: undefined };
         effects.push({ kind: 'archive-to', destPath, archivedTask });
-        effects.push({ kind: 'delete-original' });
+        effects.push({ kind: 'delete-original', destPath });
     } else {
         effects.push({ kind: 'strip-flow' });
     }

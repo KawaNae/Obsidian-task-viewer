@@ -56,8 +56,8 @@ export class TaskRepository {
     }
 
     /** @returns whether the task's lines were removed (see InlineTaskWriter). */
-    async deleteTaskFromFile(task: Task): Promise<boolean> {
-        return this.inlineWriter.deleteTaskFromFile(task);
+    async deleteTaskFromFile(task: Task, moved?: { to: string }): Promise<boolean> {
+        return this.inlineWriter.deleteTaskFromFile(task, moved);
     }
 
     async stripFlow(task: Task): Promise<void> {
