@@ -163,7 +163,7 @@ export class TaskActionsMenuBuilder {
                 .setSubmenu();
 
             subMenu.addItem((sub) => {
-                sub.setTitle(t('menu.inPlace'))
+                sub.setTitle(t('menu.asNext'))
                     .setIcon('copy')
                     .onClick(async () => {
                         menu.close();

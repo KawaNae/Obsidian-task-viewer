@@ -139,15 +139,29 @@ obsidian obsidian-task-viewer:delete id=abc123
 
 ### duplicate — タスク複製
 
+`day-offset` が複写を並べる軸を決め、`count` が本数を決めます。
+
 ```bash
+# 元の続きに1つ。元が 10:00>11:30 なら複写は 11:30>13:00
 obsidian obsidian-task-viewer:duplicate id=abc123
+
+# 元の続きに3つ、時刻を連ねる
+obsidian obsidian-task-viewer:duplicate id=abc123 count=3
+
+# 日付を1日ずらして3つ（元の直前、新しい日付が上）
 obsidian obsidian-task-viewer:duplicate id=abc123 day-offset=1 count=3
 ```
+
+`day-offset` を指定しない複写は、元タスクの続きに置かれます。**実効 end から始まり、長さを保ちます**。end を書いていないタスクの実効 end は開始の1時間後です。複写は元タスクとその子行の後ろに入り、`count` が2以上ならその長さぶんずつ連なります。
+
+時刻を持たないタスク（終日、日数の範囲、日付なし）はずらす先が無いので、複写は同じ行がそのまま増えます。位置は同じく元タスクの続きです。
+
+子の行は日付や時刻を含めてそのまま写されます。due はどちらの軸でもずらしません。締め切りは予定の時刻とは別の属性だからです。
 
 | フラグ | 必須 | 説明 |
 |-------|------|------|
 | `id` | ○ | タスクID |
-| `day-offset` | | 日付をシフトする日数（デフォルト: 0） |
+| `day-offset` | | 日付をシフトする日数（デフォルト: 0。0 なら時刻の軸で連ねる） |
 | `count` | | コピー数（デフォルト: 1） |
 
 **戻り値:** `{ "duplicated": "abc123" }`

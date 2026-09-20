@@ -15,6 +15,8 @@ import { PathTtlWindow } from './PathTtlWindow';
 import { NotifyCoalescer } from './NotifyCoalescer';
 import { TaskIdGenerator } from '../display/TaskIdGenerator';
 import { TaskParser } from '../parsing/TaskParser';
+import { toDisplayTask } from '../display/DisplayTaskConverter';
+import { planInPlaceCopies } from '../persistence/DuplicateShift';
 import type { GenBlock } from '../parsing/gen/GenBlockCollector';
 import { FileOperations } from '../persistence/utils/FileOperations';
 import { logError, logInfo, logWarn } from '../../log/log';
@@ -548,7 +550,7 @@ export class TaskIndex {
 
             this.syncDetector.markLocalEdit(task.file);
 
-            const written = await this.repository.duplicateInlineTask(task, options);
+            const written = await this.writeDuplicate(task, options);
             if (!written) {
                 logWarn(`[TaskIndex] duplicate was not written: id=${taskId}`);
                 new Notice(t('notice.taskWriteFailed'));
@@ -557,6 +559,34 @@ export class TaskIndex {
             await this.scanner.waitForScan(task.file);
             return written;
         });
+    }
+
+    /**
+     * Route a duplicate to the axis its options ask for.
+     *
+     * `dayOffset` picks the axis and `count` says how many copies: without an
+     * offset the copies run along the clock, each starting where the one
+     * before it ends, and with one they run along the calendar as they always
+     * have. The in-place copies are composed here rather than in the writer,
+     * because deciding where they sit needs the effective dates — the hour a
+     * task was given implicitly is as much its end as a written one — and
+     * those are resolved at this layer. The writer is handed finished lines,
+     * the same division the recurrence path uses.
+     */
+    private async writeDuplicate(task: Task, options?: DuplicateOptions): Promise<boolean> {
+        const { dayOffset = 0, count = 1 } = options ?? {};
+        if (dayOffset !== 0) {
+            return this.repository.duplicateInlineTask(task, options);
+        }
+
+        const display = toDisplayTask(task, this.settings.startHour, (id) => this.store.getTask(id));
+        const copies = planInPlaceCopies(task, display, count);
+        return this.repository.duplicateInlineTaskInPlace(
+            task,
+            copies.kind === 'verbatim'
+                ? copies
+                : { kind: 'lines', lines: copies.tasks.map(copy => TaskParser.format(copy)) },
+        );
     }
 
     async createTask(filePath: string, taskLine: string, heading?: string): Promise<number> {

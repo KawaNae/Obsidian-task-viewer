@@ -563,7 +563,21 @@ export class TaskApi {
     }
 
     /**
-     * Duplicate a task with optional date shifting.
+     * Duplicate a task.
+     *
+     * `dayOffset` picks the axis the copies run along and `count` says how
+     * many there are. Without an offset they run along the clock, as next:
+     * the first starts where the task ends — an hour on when no end was
+     * written, at the written or inherited end when it has one — keeps its
+     * length, and each further copy starts where the one before it ends.
+     * They are written after the task and its children. With an offset they
+     * run along the calendar, one per day from `dayOffset`, written before
+     * the task with the latest first.
+     *
+     * A task that holds no time of day — a bare date, a span of whole days,
+     * a line with no dates — has no slot to move out of, so its copies are
+     * the line again, written out unchanged. Child lines travel verbatim on
+     * either axis, dates and times included, and a due date never shifts.
      */
     async duplicate(params: DuplicateParams): Promise<DuplicateResult> {
         assertParams(params, DUPLICATE_SCHEMA, 'duplicate');
@@ -575,6 +589,7 @@ export class TaskApi {
         }
         if (params.count !== undefined) {
             if (typeof params.count !== 'number' || isNaN(params.count)) throw new TaskApiError('count must be a number');
+            if (!Number.isInteger(params.count)) throw new TaskApiError('count must be a whole number');
             if (params.count < 1) throw new TaskApiError('count must be at least 1');
         }
         const written = await this.writeService.duplicateTask(params.id, {

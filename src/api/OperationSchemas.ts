@@ -93,7 +93,7 @@ export const DELETE_SCHEMA = {
 
 export const DUPLICATE_SCHEMA = {
     id:        { value: '<taskId>', description: 'Task ID', required: true },
-    dayOffset: { value: '<number>', description: 'Days to shift dates (default: 0)' },
+    dayOffset: { value: '<number>', description: 'Axis the copies run along: 0 (default) chains them on the clock from the task\'s end, above 0 shifts them that many days' },
     count:     { value: '<number>', description: 'Number of copies (default: 1)' },
 } as const satisfies ParamMap<DuplicateParams>;
 
