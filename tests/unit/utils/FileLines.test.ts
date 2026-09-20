@@ -119,6 +119,49 @@ describe('processLines', () => {
         expect(seen).toEqual(['- [ ] a', '']);
     });
 
+    it('hands over the hints a write raised', async () => {
+        const h = harness('- [ ] a\n');
+        const filed: unknown[] = [];
+
+        await processLines(h.app, h.file, (lines, _eol, hint) => {
+            lines[0] = '- [x] a';
+            hint({ kind: 'rewrite', runtimeId: 'r1', before: '- [ ] a', after: '- [x] a', line: 0 });
+            return lines;
+        }, hints => filed.push(...hints));
+
+        expect(filed).toEqual([
+            { kind: 'rewrite', runtimeId: 'r1', before: '- [ ] a', after: '- [x] a', line: 0 },
+        ]);
+    });
+
+    it('drops the hints of a write that changed nothing', async () => {
+        // Same bytes out as in: Obsidian fires no `modify`, so no scan follows,
+        // and a hint filed here would sit until it expired.
+        const h = harness('- [ ] a\n');
+        const filed: unknown[] = [];
+
+        const written = await processLines(h.app, h.file, (lines, _eol, hint) => {
+            hint({ kind: 'insert', text: '- [ ] a', line: 0 });
+            return lines;
+        }, hints => filed.push(...hints));
+
+        // The line was found, which is what the caller asked.
+        expect(written).toBe(true);
+        expect(filed).toEqual([]);
+    });
+
+    it('drops the hints of a write that declined', async () => {
+        const h = harness('- [ ] a\n');
+        const filed: unknown[] = [];
+
+        await processLines(h.app, h.file, (_lines, _eol, hint) => {
+            hint({ kind: 'insert', text: '- [ ] a', line: 0 });
+            return null;
+        }, hints => filed.push(...hints));
+
+        expect(filed).toEqual([]);
+    });
+
     it('leaves the file byte-identical when the edit declines', async () => {
         const original = '- [ ] a\r\n- [ ] b\n';
         const h = harness(original);

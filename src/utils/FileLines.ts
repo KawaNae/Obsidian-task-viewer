@@ -1,4 +1,5 @@
 import type { App, TFile } from 'obsidian';
+import type { Hint } from '../services/core/identity/IdentityHints';
 
 /**
  * A file's line terminator. Obsidian writes LF, but notes arrive with CRLF
@@ -83,16 +84,34 @@ export function appendLines(lines: string[], body: string[]): number {
 export async function processLines(
     app: App,
     file: TFile,
-    edit: (lines: string[], eol: Eol) => string[] | null,
+    edit: (lines: string[], eol: Eol, hint: (claim: Hint) => void) => string[] | null,
+    sink?: (hints: Hint[]) => void,
 ): Promise<boolean> {
     let written = false;
 
     await app.vault.process(file, (content) => {
         const { lines, eol } = splitLines(content);
-        const next = edit(lines, eol);
+        const collected: Hint[] = [];
+        const next = edit(lines, eol, claim => collected.push(claim));
         if (next === null) return content;
+
         written = true;
-        return joinLines(next, eol);
+        const rebuilt = joinLines(next, eol);
+
+        // A rewrite that produced the same bytes is not a write: Obsidian fires
+        // no `modify` for it, so no scan follows, and a hint filed here would
+        // wait for a scan that never comes. The caller still hears `true` —
+        // the line was found, which is the question it asked.
+        //
+        // Hints are handed over here rather than after the `await` on purpose.
+        // The scan that this write triggers starts reading before
+        // `vault.process` resolves, so a hint raised afterwards is too late for
+        // it. The cost is that a `process` which throws *after* this callback
+        // leaves its hints filed against a file that never changed; they fail
+        // verification against what the next scan reads and are dropped there.
+        if (sink && collected.length > 0 && rebuilt !== content) sink(collected);
+
+        return rebuilt;
     });
 
     return written;

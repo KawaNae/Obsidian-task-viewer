@@ -37,9 +37,15 @@ export function vaultSession(contents: Map<string, string>) {
             offref: () => { },
             read: async (file: TFile) => contents.get(file.path) ?? '',
             process: async (file: TFile, fn: (data: string) => string) => {
-                const next = fn(contents.get(file.path) ?? '');
+                const before = contents.get(file.path) ?? '';
+                const next = fn(before);
                 contents.set(file.path, next);
-                void scanner!.queueScan(file, true);
+                // Obsidian fires no `modify` for a write that produced the same
+                // bytes, so no scan follows one here either. Without that, a
+                // no-op write looks like a real one to everything downstream —
+                // identity hints included, which wait for a scan that the real
+                // vault would never send.
+                if (next !== before) void scanner!.queueScan(file, true);
                 return next;
             },
             getAbstractFileByPath: (path: string) => (contents.has(path) ? makeFile(path) : null),

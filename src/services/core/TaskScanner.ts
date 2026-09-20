@@ -8,6 +8,7 @@ import { CompletionDetector } from './CompletionDetector';
 import type { FlowExecutor } from '../flow/FlowExecutor';
 import { TaskIdGenerator } from '../display/TaskIdGenerator';
 import { IdentityLedger } from './identity/IdentityLedger';
+import { HintLog, type Hint } from './identity/IdentityHints';
 import { matchFile } from './identity/IdentityMatcher';
 import { applyIdentity, assertNoProvisionalIds, assertUniqueProvisionalIds } from './identity/IdentityApplier';
 import { splitLines } from '../../utils/FileLines';
@@ -37,6 +38,15 @@ export class TaskScanner {
      * IDs per millisecond on average; ~1.7e15 stays within safe integers.
      */
     private ledger = new IdentityLedger(Date.now() * 1000);
+
+    /**
+     * What the plugin's own writes left for the next scan of each file.
+     *
+     * Owned here for the same reason the ledger is: a scan is the only thing
+     * that consumes a hint, and the consuming and the ledger's commit have to
+     * happen in the same step or a hint could outlive the state it describes.
+     */
+    private hints = new HintLog();
 
     constructor(
         private app: App,
@@ -133,6 +143,11 @@ export class TaskScanner {
      */
     private async scanFile(file: TFile, isLocalChange: boolean = false): Promise<void> {
         this.validator.clearErrorsForFile(file.path);
+
+        // Taken before the read, and handed back at the commit: a hint raised
+        // before this read has had its one chance at this scan, and the ledger
+        // is about to move past whatever this read saw (see HintLog.tip).
+        const readTip = this.hints.tip(file.path);
         const content = await this.app.vault.read(file);
         const { lines } = splitLines(content);
 
@@ -149,6 +164,8 @@ export class TaskScanner {
             this.completionDetector.clearForFile(file.path);
             // Retired for good: lifting tv-ignore later mints fresh IDs.
             this.ledger.dropFile(file.path);
+            // With no rows to match against, a hint has nothing left to claim.
+            this.hints.dropFile(file.path);
             return;
         }
 
@@ -158,10 +175,12 @@ export class TaskScanner {
         if (__DEV__) {
             assertUniqueProvisionalIds(parsed.tasks);
         }
+        const now = Date.now();
         const identity = matchFile(
             this.ledger.snapshotFor(file.path),
             parsed.tasks,
-            task => TaskIdGenerator.mintRuntimeId(task, () => this.ledger.mint())
+            task => TaskIdGenerator.mintRuntimeId(task, () => this.ledger.mint()),
+            this.hints.pendingFor(file.path, now)
         );
         applyIdentity(parsed, identity.mapping);
 
@@ -220,6 +239,7 @@ export class TaskScanner {
             // Last, so a store write that throws leaves the ledger on the
             // previous generation too.
             this.ledger.replaceFile(file.path, identity.entries);
+            this.hints.settle(file.path, identity.consumedHints, readTip, now);
         } finally {
             this.store.endBatch();
         }
@@ -242,6 +262,9 @@ export class TaskScanner {
         this.scanQueue.delete(oldPath);
         this.completionDetector.forgetFile(oldPath);
         this.ledger.rekeyFile(oldPath, newPath, id => TaskIdGenerator.renameFile(id, oldPath, newPath));
+        // Hints name runtime IDs and line texts, neither of which a rename
+        // touches; they only have to follow the path they were filed under.
+        this.hints.rekeyFile(oldPath, newPath);
     }
 
     /**
@@ -252,6 +275,7 @@ export class TaskScanner {
         this.scanQueue.delete(path);
         this.completionDetector.forgetFile(path);
         this.ledger.dropFile(path);
+        this.hints.dropFile(path);
     }
 
     /**
@@ -260,6 +284,18 @@ export class TaskScanner {
      */
     getLedger(): IdentityLedger {
         return this.ledger;
+    }
+
+    /**
+     * File what a write just claimed about a file's lines.
+     *
+     * The write layer calls this from inside its `vault.process` callback (see
+     * `processLines`); the next scan of that file verifies the claims against
+     * what it reads and believes as many as hold up.
+     */
+    addHints(file: string, hints: Hint[]): void {
+        const now = Date.now();
+        for (const hint of hints) this.hints.add(file, hint, now);
     }
 
     /**
