@@ -3,6 +3,7 @@ import type { PluginContext } from '../../PluginContext';
 import type { ApiHost } from '../../api/TaskApi';
 import { formatOutput, resolveFields, cliOk, cliError, wrapCliResult, validateFormat, parseLimit, defaultLimitForFormat, type OutputFormat } from '../CliOutputFormatter';
 import { parseSortFlag } from '../CliFilterBuilder';
+import { cliDataToSimpleFilterFields } from './TaskQueryHandlers';
 
 export function createDuplicateHandler(plugin: PluginContext & ApiHost) {
     return async (params: CliData): Promise<string> => {
@@ -30,8 +31,14 @@ export function createCategorizedTasksForDateRangeHandler(plugin: PluginContext 
         if (!params.from) return cliError('Missing required flag: --from');
         if (!params.to) return cliError('Missing required flag: --to');
 
-        return wrapCliResult('categorize tasks', () => {
-            const result = plugin.api.categorizedTasksForDateRange({ from: params.from, to: params.to });
+        return wrapCliResult('categorize tasks', async () => {
+            const result = await plugin.api.categorizedTasksForDateRange({
+                from: params.from,
+                to: params.to,
+                ...cliDataToSimpleFilterFields(params),
+                filterFile: params['filter-file'] || undefined,
+                list: params.list || undefined,
+            });
             return cliOk(result);
         });
     };
@@ -75,6 +82,9 @@ export function createTasksForDateRangeHandler(plugin: PluginContext & ApiHost) 
             const result = await plugin.api.tasksForDateRange({
                 from: params.from,
                 to: params.to,
+                ...cliDataToSimpleFilterFields(params),
+                filterFile: params['filter-file'] || undefined,
+                list: params.list || undefined,
                 sort,
                 limit,
             });

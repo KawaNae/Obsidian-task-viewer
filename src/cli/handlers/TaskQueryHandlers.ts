@@ -2,6 +2,7 @@ import type { CliData } from 'obsidian';
 import type { PluginContext } from '../../PluginContext';
 import type { ApiHost } from '../../api/TaskApi';
 import type { FilterState } from '../../services/filter/FilterTypes';
+import type { SimpleFilterFields } from '../../api/FilterParamsBuilder';
 import { loadFilterFile } from '../../api/FilterFileLoader';
 import type { ListParams, TodayParams } from '../../api/TaskApiTypes';
 import { parseSortFlag } from '../CliFilterBuilder';
@@ -13,25 +14,38 @@ import {
 
 // ── CliData → typed params converters ──
 
+/**
+ * Maps the simple per-field filter flags shared by `list` and the
+ * date-range family. Deliberately excludes `date`/`from`/`to`/`filter`/
+ * `filter-file`/`list` — those have per-command handling (list's own query
+ * window vs. a range command's required window bound, and the filter/
+ * filter-file override order), so they're read by each caller directly.
+ */
+export function cliDataToSimpleFilterFields(params: CliData): SimpleFilterFields {
+    const result: SimpleFilterFields = {};
+    if (params.file) result.file = params.file;
+    if (params.status) result.status = params.status.split(',').map(s => s.trim()).filter(Boolean);
+    if (params.tag) result.tag = params.tag.split(',').map(s => s.trim().replace(/^#/, '')).filter(Boolean);
+    if (params.content) result.content = params.content;
+    if (params.due) result.due = params.due;
+    if (params.leaf === 'true') result.leaf = true;
+    if (params.property) result.property = params.property;
+    if (params.color) result.color = params.color;
+    if (params.type) result.type = params.type;
+    if (params.root === 'true') result.root = true;
+    return result;
+}
+
 function cliDataToListParams(params: CliData, format: OutputFormat, preloadedFilter?: FilterState): ListParams {
     const result: ListParams = {};
 
     if (preloadedFilter) {
         result.filter = preloadedFilter;
     } else {
-        if (params.file) result.file = params.file;
-        if (params.status) result.status = params.status.split(',').map(s => s.trim()).filter(Boolean);
-        if (params.tag) result.tag = params.tag.split(',').map(s => s.trim().replace(/^#/, '')).filter(Boolean);
-        if (params.content) result.content = params.content;
+        Object.assign(result, cliDataToSimpleFilterFields(params));
         if (params.date) result.date = params.date;
         if (params.from) result.from = params.from;
         if (params.to) result.to = params.to;
-        if (params.due) result.due = params.due;
-        if (params.leaf === 'true') result.leaf = true;
-        if (params.property) result.property = params.property;
-        if (params.color) result.color = params.color;
-        if (params.type) result.type = params.type;
-        if (params.root === 'true') result.root = true;
     }
 
     if (params.sort) result.sort = parseSortFlag(params.sort);

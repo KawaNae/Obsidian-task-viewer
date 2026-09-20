@@ -293,3 +293,47 @@ describe('assertValidFilterState（filter/filter-file 境界検証）', () => {
         expect(() => buildFilterFromParams({ filter: bad })).toThrow(/Unknown filter property/);
     });
 });
+
+// ── buildRangeFilterFromParams (tasksForDateRange / categorizedTasksForDateRange) ──
+
+import { buildRangeFilterFromParams } from '../../../src/api/FilterParamsBuilder';
+
+describe('buildRangeFilterFromParams', () => {
+    it('returns null when no simple fields are set', () => {
+        expect(buildRangeFilterFromParams({})).toBeNull();
+    });
+
+    it('builds the same simple-field conditions as buildFilterFromParams', () => {
+        const rangeState = buildRangeFilterFromParams({ status: 'x,-', tag: 'work' });
+        const listState = buildFilterFromParams({ status: 'x,-', tag: 'work' });
+        expect(rangeState).toEqual(listState);
+    });
+
+    it('params.filter overrides simple fields, same as list', () => {
+        const filter = { filters: [], logic: 'or' as const };
+        const result = buildRangeFilterFromParams({ status: 'x', filter });
+        expect(result).toBe(filter);
+    });
+
+    it(
+        'never produces a startDate/endDate condition, even if a caller passes ' +
+        'from/to on the object (SimpleFilterFields has no such field to read — ' +
+        'pins the property tasksForDateRange/categorizedTasksForDateRange rely on ' +
+        'to avoid double-applying a date judgment on top of their own window)',
+        () => {
+            // A range API method spreads its full params (which has its own
+            // required from/to) into this call at runtime; TypeScript allows
+            // excess properties on a variable, so this simulates that exact
+            // shape rather than the narrower object literal the type allows.
+            const withWindowFields = { status: 'x', from: '2026-03-01', to: '2026-03-31' } as unknown as Parameters<typeof buildRangeFilterFromParams>[0];
+            const state = buildRangeFilterFromParams(withWindowFields);
+            expect(state).not.toBeNull();
+            const properties = state!.filters
+                .filter((f): f is FilterCondition => isFilterCondition(f))
+                .map(f => f.property);
+            expect(properties).toEqual(['status']);
+            expect(properties).not.toContain('startDate');
+            expect(properties).not.toContain('endDate');
+        },
+    );
+});

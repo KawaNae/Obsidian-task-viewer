@@ -13,7 +13,8 @@ import { DateUtils } from '../utils/DateUtils';
 import { parseDateTimeFlag } from '../cli/CliFilterBuilder';
 import { parseDatePreset } from '../cli/CliDatePresetParser';
 import { DateResolver } from '../services/filter/DateResolver';
-import { buildFilterFromParams, assertValidFilterState } from './FilterParamsBuilder';
+import { buildFilterFromParams, buildRangeFilterFromParams, assertValidFilterState } from './FilterParamsBuilder';
+import type { FilterState } from '../services/filter/FilterTypes';
 import { loadFilterFile } from './FilterFileLoader';
 import {
     assertParams, renderParamTable,
@@ -605,10 +606,10 @@ export class TaskApi {
      */
     async tasksForDateRange(params: TasksForDateRangeParams): Promise<TaskListResult> {
         assertParams(params, TASKS_FOR_DATE_RANGE_SCHEMA, 'tasksForDateRange');
-        if (params.filter) assertValidFilterState(params.filter);
+        const filterState = await this.resolveRangeFilter(params);
         const from = this.resolveWindowBound(params.from, 'from');
         const to = this.resolveWindowBound(params.to, 'to');
-        let tasks = this.readService.getTasksForDateRange(from, to, params.filter, { includeInvalid: true });
+        let tasks = this.readService.getTasksForDateRange(from, to, filterState ?? undefined, { includeInvalid: true });
         const sortState = buildSortState(params.sort);
         tasks = [...tasks];
         TaskSorter.sort(tasks, sortState);
@@ -625,13 +626,13 @@ export class TaskApi {
     /**
      * Get tasks in a date range, categorized into allDay/timed/dueOnly per date.
      */
-    categorizedTasksForDateRange(params: CategorizedTasksForDateRangeParams): CategorizedTasksForDateRangeResult {
+    async categorizedTasksForDateRange(params: CategorizedTasksForDateRangeParams): Promise<CategorizedTasksForDateRangeResult> {
         assertParams(params, CATEGORIZED_TASKS_FOR_DATE_RANGE_SCHEMA, 'categorizedTasksForDateRange');
-        if (params.filter) assertValidFilterState(params.filter);
+        const filterState = await this.resolveRangeFilter(params);
         const startHour = this.plugin.settings.startHour;
         const from = this.resolveWindowBound(params.from, 'from');
         const to = this.resolveWindowBound(params.to, 'to');
-        const tasks = this.readService.getTasksForDateRange(from, to, params.filter, { includeInvalid: true });
+        const tasks = this.readService.getTasksForDateRange(from, to, filterState ?? undefined, { includeInvalid: true });
         const split = splitTasks(tasks, { type: 'visual-date', startHour });
         const dates = DateUtils.getDateRange(from, to);
         const map = categorizeTasksByDate(split, dates, startHour);
@@ -675,6 +676,30 @@ export class TaskApi {
         const { weekStartDay, startHour } = this.plugin.settings;
         const window = DateResolver.resolve(parsed, weekStartDay, startHour);
         return side === 'from' ? window.start : window.end;
+    }
+
+    /**
+     * Resolve filterFile/list → filter, then build a FilterState from the
+     * simple fields. Same override order as `list` (params.filter wins,
+     * then filterFile — `list` picks one pinned list out of a .md template —
+     * then the simple per-field flags), but never a date-window condition:
+     * from/to on these params is the range's own window bound, already
+     * applied separately via getTasksForDateRange, so buildRangeFilterFromParams
+     * has no date/from/to field to read in the first place.
+     */
+    private async resolveRangeFilter(
+        params: TasksForDateRangeParams | CategorizedTasksForDateRangeParams,
+    ): Promise<FilterState | null> {
+        const p = { ...params };
+        if (p.list && !p.filterFile) {
+            throw new TaskApiError("'list' requires 'filterFile' (a .md view template)");
+        }
+        if (p.filterFile) {
+            const result = await loadFilterFile(this.plugin.app, p.filterFile, p.list);
+            if (typeof result === 'string') throw new TaskApiError(result);
+            p.filter = result;
+        }
+        return buildRangeFilterFromParams(p);
     }
 
     /**
