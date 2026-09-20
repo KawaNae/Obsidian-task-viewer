@@ -91,6 +91,22 @@ export type LineEdit =
  * task as before.
  */
 export interface LineEdits {
+    /**
+     * Do a splice and report it, so the two cannot disagree.
+     *
+     * The check below compares text, and text is exactly what a duplicate does
+     * not vary: inserting a copy of a line next to that line reads the same
+     * whether it went above or below, so a position off by one passes every
+     * test that can be made from the file alone — and hands the copy the
+     * original's identity, which is the failure this whole mechanism exists to
+     * prevent. The remedy is not a better check. It is to take the number that
+     * moved the lines and the number that is reported from the same place.
+     *
+     * A splice that removes and inserts at once says both, in that order: the
+     * old lines are gone and the new ones are new. A line being *rewritten*
+     * while staying the same task is {@link replaced} instead.
+     */
+    splice(lines: string[], at: number, deleteCount: number, ...items: string[]): void;
     /** The line at `at` reads something else now, and is the same task. */
     replaced(at: number): void;
     /** `count` lines starting at `at` are lines this write created. */
@@ -227,6 +243,11 @@ export async function processLines(
             const before = [...lines];
             const reported: LineEdit[] = [];
             const next = edit(lines, eol, {
+                splice: (target, at, deleteCount, ...items) => {
+                    target.splice(at, deleteCount, ...items);
+                    if (deleteCount > 0) reported.push({ kind: 'removed', at, count: deleteCount });
+                    if (items.length > 0) reported.push({ kind: 'inserted', at, count: items.length });
+                },
                 replaced: (at) => reported.push({ kind: 'replaced', at }),
                 inserted: (at, count) => reported.push({ kind: 'inserted', at, count }),
                 removed: (at, count) => reported.push({ kind: 'removed', at, count }),

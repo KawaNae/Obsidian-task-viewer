@@ -173,3 +173,28 @@ describe('WriteClaims: what it builds on', () => {
         expect(claim!.rows).toEqual([{ runtimeId: null, text: '- [ ] 初めての行' }]);
     });
 });
+
+describe('WriteClaims: the limit of a report', () => {
+    it('cannot tell a copy above from a copy below', () => {
+        // Both reports produce the same file, so nothing downstream can choose
+        // between them: the check in `processLines` compares text, and the copy
+        // is worded exactly like the line it copies. They decide opposite
+        // things, and whichever is filed is the one believed.
+        //
+        // This is why a splice and its report come from one call
+        // (`LineEdits.splice`) rather than two statements a writer has to keep
+        // in step. What is pinned here is the shape of the mistake, so that a
+        // report built any other way is known to carry it.
+        const before = ['- [ ] 甲'];
+        const after = ['- [ ] 甲', '- [ ] 甲'];
+        const ledger = () => [known('r1', 0, '- [ ] 甲')];
+
+        const truthful = new WriteClaims(parseRows, ledger)
+            .claim(FILE, before, after, [inserted(1, 1)]);
+        const offByOne = new WriteClaims(parseRows, ledger)
+            .claim(FILE, before, after, [inserted(0, 1)]);
+
+        expect(truthful!.rows.map(row => row.runtimeId)).toEqual(['r1', null]);
+        expect(offByOne!.rows.map(row => row.runtimeId)).toEqual([null, 'r1']);
+    });
+});

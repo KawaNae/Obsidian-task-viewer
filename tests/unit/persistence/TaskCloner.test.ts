@@ -18,6 +18,11 @@ function recorder() {
     const reported: Array<{ at: number; count: number }> = [];
     return {
         edits: {
+            splice: (lines: string[], at: number, deleteCount: number, ...items: string[]) => {
+                lines.splice(at, deleteCount, ...items);
+                if (deleteCount > 0) throw new Error('a copy removes no line');
+                reported.push({ at, count: items.length });
+            },
             replaced: () => { throw new Error('a copy rewrites no line'); },
             inserted: (at: number, count: number) => { reported.push({ at, count }); },
             removed: () => { throw new Error('a copy removes no line'); },

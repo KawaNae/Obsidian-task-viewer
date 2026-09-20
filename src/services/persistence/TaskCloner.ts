@@ -250,12 +250,14 @@ export class TaskCloner {
         const insertIndex = position === 'before'
             ? taskLine
             : TaskCloner.indentedRegionEnd(lines, taskLine);
-        lines.splice(insertIndex, 0, ...linesToInsert);
-        // Every line here is one this write made. Which of them are tasks is
-        // not this layer's question — the copied children can hold anything,
-        // a fence among them — and the index answers it by parsing what was
-        // written. What it needs from here is only where the new lines are.
-        edits.inserted(insertIndex, linesToInsert.length);
+        // Through `edits` rather than beside it: the copy is worded exactly
+        // like the line it copies, so a position off by one would read the same
+        // and hand the original's identity to the copy. One number does both.
+        //
+        // Which of these lines are tasks is not this layer's question — the
+        // copied children can hold anything, a fence among them — and the index
+        // answers it by parsing what was written.
+        edits.splice(lines, insertIndex, 0, ...linesToInsert);
 
         return lines;
     }
