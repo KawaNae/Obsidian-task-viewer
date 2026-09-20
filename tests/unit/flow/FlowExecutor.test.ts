@@ -14,7 +14,7 @@ function makeRepository() {
         appendTaskWithChildren: vi.fn().mockResolvedValue(undefined),
         updateTaskInFile: vi.fn().mockResolvedValue(undefined),
         stripFlow: vi.fn().mockResolvedValue(undefined),
-        deleteTaskFromFile: vi.fn().mockResolvedValue(undefined),
+        deleteTaskFromFile: vi.fn().mockResolvedValue(true),
     };
 }
 
@@ -122,6 +122,21 @@ describe('FlowExecutor', () => {
         expect(repository.updateTaskInFile).not.toHaveBeenCalled();
         expect(repository.appendTaskWithChildren.mock.invocationCallOrder[0])
             .toBeLessThan(repository.deleteTaskFromFile.mock.invocationCallOrder[0]);
+    });
+
+    it('says so when the move wrote the copy but could not delete the original', async () => {
+        // 移送先には書かれたので、元が消せないとタスクが2か所に居る。move で
+        // これだけは画面に何も出ないまま起きるので、通知で伝える。
+        const repository = makeRepository();
+        repository.deleteTaskFromFile.mockResolvedValue(false);
+        const { executor } = makeExecutor(repository);
+        Notice.messages.length = 0;
+
+        await executor.handleTaskCompletion(flowTask('move([[Archive]])'));
+        await flush();
+
+        expect(repository.appendTaskWithChildren).toHaveBeenCalledTimes(1);
+        expect(Notice.messages).toHaveLength(1);
     });
 
     it('does not fire for non-complete statuses (Doing)', async () => {
@@ -373,6 +388,22 @@ describe('fireAndDelete', () => {
 
         expect(fired).toBe(true);
         expect(expired).toBe(true);
+    });
+
+    it('reports the task still there when the delete found no line', async () => {
+        // 発火は済んでいて次回分は書かれている。それでも消えていないので答えは
+        // no で、ユーザーには通知で伝える。呼んだ側が黙って再試行すると次回分が
+        // 二重に書かれるため、ここは静かに済ませられない。
+        const repository = makeRepository();
+        repository.deleteTaskFromFile.mockResolvedValue(false);
+        const { executor } = makeExecutor(repository);
+        Notice.messages.length = 0;
+
+        const removed = await executor.fireAndDelete(flowTask('every mon', { statusChar: ' ' }));
+
+        expect(removed).toBe(false);
+        expect(repository.insertRecurrenceForTask).toHaveBeenCalledTimes(1);
+        expect(Notice.messages).toHaveLength(1);
     });
 
     it('resolves only after the work is done, so the caller can rescan', async () => {

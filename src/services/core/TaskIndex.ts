@@ -340,7 +340,12 @@ export class TaskIndex {
         }
     }
 
-    async updateTask(taskId: string, updates: Partial<Task>): Promise<void> {
+    /**
+     * @returns whether the file was written. A `false` means the update was
+     * reverted (see {@link revertUnwrittenUpdate}) — the index and the file
+     * agree again, and nothing changed.
+     */
+    async updateTask(taskId: string, updates: Partial<Task>): Promise<boolean> {
         logInfo(`[updateTask] id=${taskId} fields=[${Object.keys(updates)}]`);
 
         // 合成セグメント ID (##seg:YYYY-MM-DD) は TaskWriteService が原タスクへ
@@ -356,9 +361,9 @@ export class TaskIndex {
         const task = this.store.getTask(taskId);
         if (!task) {
             logWarn(`[TaskIndex] Task ${taskId} not found`);
-            return;
+            return false;
         }
-        if (task.isReadOnly) return;
+        if (task.isReadOnly) return false;
 
         // 非時刻プロパティ（color/tags/custom 等）の書き込み操作を導出。
         // before スナップショット（Object.assign 前）との diff が必要なので
@@ -391,6 +396,7 @@ export class TaskIndex {
         if (!written) {
             this.revertUnwrittenUpdate(task, taskId, before, updates);
         }
+        return written;
     }
 
     /**
@@ -444,8 +450,8 @@ export class TaskIndex {
      * removing this one. A fire that cannot be planned stops the delete —
      * see {@link FlowExecutor.fireAndDelete} — so the task can survive this
      * call, with a notice saying why.
-     * @returns whether the task is gone. Only a stopped fire and a read-only
-     * task answer no; every other road here removes it.
+     * @returns whether the task is gone. A stopped fire, a read-only task and
+     * a delete whose lines could not be resolved in the file all answer no.
      */
     async deleteTask(taskId: string, options: { fireFlow?: boolean } = {}): Promise<boolean> {
         const task = this.store.getTask(taskId);
@@ -456,11 +462,18 @@ export class TaskIndex {
 
             this.syncDetector.markLocalEdit(task.file);
 
-            let removed = true;
+            let removed: boolean;
             if (options.fireFlow && isTvInline(task)) {
                 removed = await this.commandExecutor.fireAndDelete(task);
             } else {
-                await this.repository.deleteTaskFromFile(task);
+                removed = await this.repository.deleteTaskFromFile(task);
+                if (!removed) {
+                    // Nothing was written, so no rescan follows and the store
+                    // still holds a task the file also still holds. They agree,
+                    // and the caller must not report the task gone.
+                    logWarn(`[TaskIndex] delete was not written: id=${taskId}`);
+                    new Notice(t('notice.taskWriteFailed'));
+                }
             }
 
             await this.scanner.waitForScan(task.file);
@@ -468,17 +481,23 @@ export class TaskIndex {
         });
     }
 
-    async duplicateTask(taskId: string, options?: DuplicateOptions): Promise<void> {
+    /** @returns whether the copy was written. */
+    async duplicateTask(taskId: string, options?: DuplicateOptions): Promise<boolean> {
         const task = this.store.getTask(taskId);
-        if (!task) return;
+        if (!task) return false;
         return this.withNotify(task.file, async () => {
-            if (task.isReadOnly) return;
+            if (task.isReadOnly) return false;
 
             this.syncDetector.markLocalEdit(task.file);
 
-            await this.repository.duplicateInlineTask(task, options);
+            const written = await this.repository.duplicateInlineTask(task, options);
+            if (!written) {
+                logWarn(`[TaskIndex] duplicate was not written: id=${taskId}`);
+                new Notice(t('notice.taskWriteFailed'));
+            }
 
             await this.scanner.waitForScan(task.file);
+            return written;
         });
     }
 
@@ -500,13 +519,14 @@ export class TaskIndex {
         return insertedLine;
     }
 
-    async insertChildTask(parentTaskId: string, childLine: string): Promise<void> {
+    /** @returns whether the child line was written. */
+    async insertChildTask(parentTaskId: string, childLine: string): Promise<boolean> {
         const task = this.store.getTask(parentTaskId);
-        if (!task) return;
+        if (!task) return false;
         // Read-only parsers (Tasks / dayPlanner) must never be written to.
         // TaskApi guards this as well, but the menu path reaches the write
         // service directly and would otherwise bypass it.
-        if (task.isReadOnly) return;
+        if (task.isReadOnly) return false;
         return this.withNotify(task.file, async () => {
             logInfo(`[insertChildTask] parentId=${parentTaskId}`);
 
@@ -515,9 +535,14 @@ export class TaskIndex {
             // インデントは書き込み層が既存子行から決める（親行だけからは
             // トップレベルのとき 4 スペース固定になり、タブ書きのファイルに
             // スペースが混ざる）。
-            await this.repository.insertLineAsFirstChild(task, childLine);
+            const insertedLine = await this.repository.insertLineAsFirstChild(task, childLine);
+            if (insertedLine < 0) {
+                logWarn(`[TaskIndex] child insert was not written: parentId=${parentTaskId}`);
+                new Notice(t('notice.taskWriteFailed'));
+            }
 
             await this.scanner.waitForScan(task.file);
+            return insertedLine >= 0;
         });
     }
 

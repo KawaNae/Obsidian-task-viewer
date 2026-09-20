@@ -1,6 +1,19 @@
 import { describe, it, expect } from 'vitest';
 import { FrontmatterLineEditor } from '../../../src/services/persistence/utils/FrontmatterLineEditor';
 
+/**
+ * applyUpdates は行配列を返す（ファイルの改行は呼び口が持つ）。これらのケースが
+ * 見ているのは surgical edit の結果そのものなので、文字列で書いた元の期待値を
+ * 残し、境界だけここで合わせる。
+ */
+function applyUpdatesToText(
+    lines: string[],
+    fmEnd: number,
+    updates: Record<string, string | string[] | null>,
+): string {
+    return FrontmatterLineEditor.applyUpdates(lines, fmEnd, updates).join('\n');
+}
+
 describe('FrontmatterLineEditor', () => {
 
     // ── findEnd ──
@@ -66,37 +79,37 @@ describe('FrontmatterLineEditor', () => {
     describe('applyUpdates', () => {
         it('updates existing key', () => {
             const lines = ['---', 'title: foo', 'status: open', '---', 'body'];
-            const result = FrontmatterLineEditor.applyUpdates(lines, 3, { title: 'bar' });
+            const result = applyUpdatesToText(lines, 3, { title: 'bar' });
             expect(result).toBe('---\ntitle: bar\nstatus: open\n---\nbody');
         });
 
         it('deletes existing key (value: null)', () => {
             const lines = ['---', 'title: foo', 'status: open', '---', 'body'];
-            const result = FrontmatterLineEditor.applyUpdates(lines, 3, { title: null });
+            const result = applyUpdatesToText(lines, 3, { title: null });
             expect(result).toBe('---\nstatus: open\n---\nbody');
         });
 
         it('inserts new key before closing ---', () => {
             const lines = ['---', 'title: foo', '---', 'body'];
-            const result = FrontmatterLineEditor.applyUpdates(lines, 2, { status: 'done' });
+            const result = applyUpdatesToText(lines, 2, { status: 'done' });
             expect(result).toBe('---\ntitle: foo\nstatus: done\n---\nbody');
         });
 
         it('updates multi-line value to single line', () => {
             const lines = ['---', 'tags:', '  - a', '  - b', 'title: foo', '---'];
-            const result = FrontmatterLineEditor.applyUpdates(lines, 5, { tags: '[x, y]' });
+            const result = applyUpdatesToText(lines, 5, { tags: '[x, y]' });
             expect(result).toBe('---\ntags: [x, y]\ntitle: foo\n---');
         });
 
         it('deletes multi-line key', () => {
             const lines = ['---', 'tags:', '  - a', '  - b', 'title: foo', '---'];
-            const result = FrontmatterLineEditor.applyUpdates(lines, 5, { tags: null });
+            const result = applyUpdatesToText(lines, 5, { tags: null });
             expect(result).toBe('---\ntitle: foo\n---');
         });
 
         it('handles multiple updates at once', () => {
             const lines = ['---', 'title: old', 'status: open', '---'];
-            const result = FrontmatterLineEditor.applyUpdates(lines, 3, {
+            const result = applyUpdatesToText(lines, 3, {
                 title: 'new',
                 status: 'done',
             });
@@ -105,13 +118,13 @@ describe('FrontmatterLineEditor', () => {
 
         it('handles empty value as key-only format', () => {
             const lines = ['---', 'title: foo', '---'];
-            const result = FrontmatterLineEditor.applyUpdates(lines, 2, { empty: '' });
+            const result = applyUpdatesToText(lines, 2, { empty: '' });
             expect(result).toBe('---\ntitle: foo\nempty:\n---');
         });
 
         it('preserves unrelated keys exactly', () => {
             const lines = ['---', 'keep: this', 'update: old', 'also-keep: that', '---'];
-            const result = FrontmatterLineEditor.applyUpdates(lines, 4, { update: 'new' });
+            const result = applyUpdatesToText(lines, 4, { update: 'new' });
             const resultLines = result.split('\n');
             expect(resultLines[1]).toBe('keep: this');
             expect(resultLines[2]).toBe('update: new');
@@ -120,13 +133,13 @@ describe('FrontmatterLineEditor', () => {
 
         it('delete non-existent key is a no-op', () => {
             const lines = ['---', 'title: foo', '---'];
-            const result = FrontmatterLineEditor.applyUpdates(lines, 2, { ghost: null });
+            const result = applyUpdatesToText(lines, 2, { ghost: null });
             expect(result).toBe('---\ntitle: foo\n---');
         });
 
         it('handles update + insert + delete in one call', () => {
             const lines = ['---', 'title: old', 'remove: me', '---'];
-            const result = FrontmatterLineEditor.applyUpdates(lines, 3, {
+            const result = applyUpdatesToText(lines, 3, {
                 title: 'new',
                 remove: null,
                 added: 'value',
@@ -237,7 +250,7 @@ describe('FrontmatterLineEditor', () => {
 
         it('a key written into a created block lands inside it', () => {
             const { lines, fmEnd } = FrontmatterLineEditor.ensureBlock(['body']);
-            const out = FrontmatterLineEditor.applyUpdates(lines, fmEnd, { 'tv-color': 'ff0000' });
+            const out = applyUpdatesToText(lines, fmEnd, { 'tv-color': 'ff0000' });
             expect(out).toBe('---\ntv-color: ff0000\n---\nbody');
         });
     });
@@ -292,7 +305,7 @@ describe('FrontmatterLineEditor', () => {
 
         it('keeps comments, quotes, flow arrays and block scalars', () => {
             const fmEnd = FrontmatterLineEditor.findEnd(source);
-            const out = FrontmatterLineEditor.applyUpdates(source, fmEnd, {
+            const out = applyUpdatesToText(source, fmEnd, {
                 'tv-timer-target-id': 'tv-t-abc1234',
             });
             const lines = out.split('\n');
@@ -308,10 +321,10 @@ describe('FrontmatterLineEditor', () => {
 
         it('removing the key restores the original text', () => {
             const fmEnd = FrontmatterLineEditor.findEnd(source);
-            const added = FrontmatterLineEditor.applyUpdates(source, fmEnd, {
+            const added = applyUpdatesToText(source, fmEnd, {
                 'tv-timer-target-id': 'tv-t-abc1234',
             }).split('\n');
-            const back = FrontmatterLineEditor.applyUpdates(
+            const back = applyUpdatesToText(
                 added, FrontmatterLineEditor.findEnd(added), { 'tv-timer-target-id': null }
             );
             expect(back).toBe(source.join('\n'));

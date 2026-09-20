@@ -10,6 +10,7 @@ import { TaskIdGenerator } from '../display/TaskIdGenerator';
 import { IdentityLedger } from './identity/IdentityLedger';
 import { matchFile } from './identity/IdentityMatcher';
 import { applyIdentity, assertNoProvisionalIds, assertUniqueProvisionalIds } from './identity/IdentityApplier';
+import { splitLines } from '../../utils/FileLines';
 import { logDebug, logError, logInfo } from '../../log/log';
 
 /**
@@ -133,7 +134,7 @@ export class TaskScanner {
     private async scanFile(file: TFile, isLocalChange: boolean = false): Promise<void> {
         this.validator.clearErrorsForFile(file.path);
         const content = await this.app.vault.read(file);
-        const lines = content.split('\n').map(l => l.replace(/\r$/, ''));
+        const { lines } = splitLines(content);
 
         // --- parse ---
         const parsed = FileParsePipeline.parse(

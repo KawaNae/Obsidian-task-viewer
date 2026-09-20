@@ -44,7 +44,8 @@ export class TaskRepository {
         return this.inlineWriter.deleteLine(filePath, lineNumber);
     }
 
-    async deleteTaskFromFile(task: Task): Promise<void> {
+    /** @returns whether the task's lines were removed (see InlineTaskWriter). */
+    async deleteTaskFromFile(task: Task): Promise<boolean> {
         return this.inlineWriter.deleteTaskFromFile(task);
     }
 
@@ -93,7 +94,8 @@ export class TaskRepository {
 
     // --- Task Cloning Operations ---
 
-    async duplicateInlineTask(task: Task, options?: DuplicateOptions): Promise<void> {
+    /** @returns whether the copy was written (see TaskCloner). */
+    async duplicateInlineTask(task: Task, options?: DuplicateOptions): Promise<boolean> {
         return this.cloner.duplicateInlineTask(task, options);
     }
 

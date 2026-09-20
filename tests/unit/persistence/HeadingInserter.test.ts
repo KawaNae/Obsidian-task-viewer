@@ -21,6 +21,16 @@ function harness(initial: string) {
     return { app, text: () => content };
 }
 
+/**
+ * insertUnderHeading は行配列で読み書きする（ファイルの改行を呼び口が持つ）。
+ * これらのケースが見ているのは「どの行がどこに入るか」なので、文字列で書いた
+ * 元のままにしておき、境界だけここで合わせる。
+ */
+function insertFromText(content: string, line: string, header: string, headerLevel: number) {
+    const result = HeadingInserter.insertUnderHeading(content.split('\n'), line, header, headerLevel);
+    return { content: result.lines.join('\n'), insertedLine: result.insertedLine };
+}
+
 describe('HeadingInserter', () => {
     describe('writeUnderHeading', () => {
         it('writes the pure-function result back through vault.process and returns insertedLine', async () => {
@@ -75,7 +85,7 @@ describe('HeadingInserter', () => {
     describe('insertUnderHeading', () => {
         it('inserts under existing heading', () => {
             const content = 'some text\n## Tasks\nexisting line';
-            const result = HeadingInserter.insertUnderHeading(content, '- [ ] new task', 'Tasks', 2);
+            const result = insertFromText(content, '- [ ] new task', 'Tasks', 2);
             const lines = result.content.split('\n');
             expect(lines[0]).toBe('some text');
             expect(lines[1]).toBe('## Tasks');
@@ -86,7 +96,7 @@ describe('HeadingInserter', () => {
 
         it('creates heading at EOF when not found', () => {
             const content = 'some text';
-            const result = HeadingInserter.insertUnderHeading(content, '- [ ] new task', 'Tasks', 2);
+            const result = insertFromText(content, '- [ ] new task', 'Tasks', 2);
             const lines = result.content.split('\n');
             expect(lines).toContain('## Tasks');
             expect(lines).toContain('- [ ] new task');
@@ -94,7 +104,7 @@ describe('HeadingInserter', () => {
 
         it('adds empty line before new heading if content does not end with blank', () => {
             const content = 'some text';
-            const result = HeadingInserter.insertUnderHeading(content, '- [ ] task', 'Tasks', 2);
+            const result = insertFromText(content, '- [ ] task', 'Tasks', 2);
             const lines = result.content.split('\n');
             // Should have empty line between content and new heading
             expect(lines[1]).toBe('');
@@ -104,7 +114,7 @@ describe('HeadingInserter', () => {
 
         it('does not add extra blank line if content already ends with blank', () => {
             const content = 'some text\n';
-            const result = HeadingInserter.insertUnderHeading(content, '- [ ] task', 'Tasks', 2);
+            const result = insertFromText(content, '- [ ] task', 'Tasks', 2);
             const lines = result.content.split('\n');
             // Last line of original is empty, so no extra blank line
             expect(lines.filter(l => l === '## Tasks').length).toBe(1);
@@ -112,7 +122,7 @@ describe('HeadingInserter', () => {
 
         it('handles level 1 heading', () => {
             const content = '# MyHeader\ntext';
-            const result = HeadingInserter.insertUnderHeading(content, 'inserted', 'MyHeader', 1);
+            const result = insertFromText(content, 'inserted', 'MyHeader', 1);
             const lines = result.content.split('\n');
             expect(lines[1]).toBe('inserted');
             expect(result.insertedLine).toBe(1);
@@ -120,14 +130,14 @@ describe('HeadingInserter', () => {
 
         it('handles level 3 heading', () => {
             const content = '### Deep\ntext';
-            const result = HeadingInserter.insertUnderHeading(content, 'inserted', 'Deep', 3);
+            const result = insertFromText(content, 'inserted', 'Deep', 3);
             const lines = result.content.split('\n');
             expect(lines[1]).toBe('inserted');
             expect(result.insertedLine).toBe(1);
         });
 
         it('handles empty file', () => {
-            const result = HeadingInserter.insertUnderHeading('', '- [ ] task', 'Tasks', 2);
+            const result = insertFromText('', '- [ ] task', 'Tasks', 2);
             expect(result.content).toContain('## Tasks');
             expect(result.content).toContain('- [ ] task');
             expect(result.insertedLine).toBe(2);
@@ -135,7 +145,7 @@ describe('HeadingInserter', () => {
 
         it('matches heading exactly (not partial)', () => {
             const content = '## TasksExtra\n## Tasks\nunder';
-            const result = HeadingInserter.insertUnderHeading(content, 'new', 'Tasks', 2);
+            const result = insertFromText(content, 'new', 'Tasks', 2);
             const lines = result.content.split('\n');
             // Should insert under "## Tasks" not "## TasksExtra"
             expect(lines[2]).toBe('new');
@@ -144,7 +154,7 @@ describe('HeadingInserter', () => {
 
         it('inserts at first match when multiple same headings', () => {
             const content = '## Tasks\nfirst\n## Tasks\nsecond';
-            const result = HeadingInserter.insertUnderHeading(content, 'inserted', 'Tasks', 2);
+            const result = insertFromText(content, 'inserted', 'Tasks', 2);
             const lines = result.content.split('\n');
             expect(lines[0]).toBe('## Tasks');
             expect(lines[1]).toBe('inserted');
@@ -154,7 +164,7 @@ describe('HeadingInserter', () => {
 
         it('ignores heading inside code fence and matches real one after it', () => {
             const content = '```\n## Tasks\n```\n## Tasks\nunder';
-            const result = HeadingInserter.insertUnderHeading(content, 'inserted', 'Tasks', 2);
+            const result = insertFromText(content, 'inserted', 'Tasks', 2);
             const lines = result.content.split('\n');
             expect(lines[3]).toBe('## Tasks');
             expect(lines[4]).toBe('inserted');
@@ -164,7 +174,7 @@ describe('HeadingInserter', () => {
 
         it('creates heading at EOF when the only match is fenced', () => {
             const content = '```\n## Tasks\n```';
-            const result = HeadingInserter.insertUnderHeading(content, '- [ ] task', 'Tasks', 2);
+            const result = insertFromText(content, '- [ ] task', 'Tasks', 2);
             const lines = result.content.split('\n');
             // fenced occurrence untouched, new heading appended at end
             expect(lines[1]).toBe('## Tasks');
@@ -174,7 +184,7 @@ describe('HeadingInserter', () => {
 
         it('ignores heading inside tilde fence', () => {
             const content = '~~~\n## Tasks\n~~~\n## Tasks\nunder';
-            const result = HeadingInserter.insertUnderHeading(content, 'inserted', 'Tasks', 2);
+            const result = insertFromText(content, 'inserted', 'Tasks', 2);
             const lines = result.content.split('\n');
             expect(lines[4]).toBe('inserted');
             expect(result.insertedLine).toBe(4);
@@ -182,7 +192,7 @@ describe('HeadingInserter', () => {
 
         it('does not close a longer fence with a shorter delimiter', () => {
             const content = '````\n```\n## Tasks\n````\n## Tasks\nunder';
-            const result = HeadingInserter.insertUnderHeading(content, 'inserted', 'Tasks', 2);
+            const result = insertFromText(content, 'inserted', 'Tasks', 2);
             const lines = result.content.split('\n');
             expect(lines[4]).toBe('## Tasks');
             expect(lines[5]).toBe('inserted');
@@ -191,7 +201,7 @@ describe('HeadingInserter', () => {
 
         it('frontmatter のみのファイルで heading 作成時の行番号', () => {
             const content = '---\ntv-color: fff\n---';
-            const result = HeadingInserter.insertUnderHeading(content, '- [ ] task', 'Tasks', 2);
+            const result = insertFromText(content, '- [ ] task', 'Tasks', 2);
             const lines = result.content.split('\n');
             expect(lines[lines.length - 1]).toBe('- [ ] task');
             expect(lines[lines.length - 2]).toBe('## Tasks');

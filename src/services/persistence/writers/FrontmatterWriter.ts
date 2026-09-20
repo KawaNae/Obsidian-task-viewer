@@ -2,6 +2,7 @@ import { type App, TFile } from 'obsidian';
 import type { FileOperations } from '../utils/FileOperations';
 import { FrontmatterLineEditor } from '../utils/FrontmatterLineEditor';
 import { HeadingInserter } from '../../../utils/HeadingInserter';
+import { processLines } from '../../../utils/FileLines';
 
 /**
  * frontmatter と見出しへの書き込みを担当するクラス。frontmatter はノートの
@@ -48,9 +49,8 @@ export class FrontmatterWriter {
 
         const hasSet = Object.values(updates).some(v => v !== null);
 
-        await this.app.vault.process(file, (content) => {
-            const raw = content.split('\n');
-            if (FrontmatterLineEditor.findEnd(raw) < 0 && !hasSet) return content;
+        await processLines(this.app, file, (raw) => {
+            if (FrontmatterLineEditor.findEnd(raw) < 0 && !hasSet) return null;
 
             const { lines, fmEnd } = FrontmatterLineEditor.ensureBlock(raw);
             const escaped: Record<string, string | null> = {};

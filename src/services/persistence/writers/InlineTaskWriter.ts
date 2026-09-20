@@ -6,6 +6,7 @@ import { collectFlowLineIndicesInFile } from '../../flow/FlowLineScanner';
 import { FileOperations } from '../utils/FileOperations';
 import { ChildPropertyLineEditor } from '../utils/ChildPropertyLineEditor';
 import type { PropertyOp } from '../PropertyUpdatePlanner';
+import { appendLines, processLines, splitLines } from '../../../utils/FileLines';
 import { logWarn } from '../../../log/log';
 
 
@@ -33,18 +34,13 @@ export class InlineTaskWriter {
             return false;
         }
 
-        let written = false;
-
-        await this.app.vault.process(file, (content) => {
-            const lines = content.split('\n');
-
+        return processLines(this.app, file, (lines) => {
             // Find current line number using originalText (handles line shifts)
             const currentLine = this.fileOps.findTaskLineNumber(lines, task);
             if (currentLine < 0 || currentLine >= lines.length) {
                 logWarn(`[InlineTaskWriter] Task not found in file`);
-                return content;
+                return null;
             }
-            written = true;
 
             // Re-format line
             const newLine = TaskParser.format(updatedTask);
@@ -60,19 +56,16 @@ export class InlineTaskWriter {
                 ChildPropertyLineEditor.applyOps(lines, currentLine, childOps);
             }
 
-            return lines.join('\n');
+            return lines;
         });
-
-        return written;
     }
 
     async updateLine(filePath: string, lineNumber: number, newContent: string): Promise<void> {
         const file = this.app.vault.getAbstractFileByPath(filePath);
         if (!(file instanceof TFile)) return;
 
-        await this.app.vault.process(file, (content) => {
-            const lines = content.split('\n');
-            if (lines.length <= lineNumber) return content;
+        await processLines(this.app, file, (lines) => {
+            if (lines.length <= lineNumber) return null;
 
             // Preserve original indentation
             const originalLine = lines[lineNumber];
@@ -81,7 +74,7 @@ export class InlineTaskWriter {
 
             lines[lineNumber] = originalIndent + newContentTrimmed;
 
-            return lines.join('\n');
+            return lines;
         });
     }
 
@@ -89,11 +82,10 @@ export class InlineTaskWriter {
         const file = this.app.vault.getAbstractFileByPath(filePath);
         if (!(file instanceof TFile)) return;
 
-        await this.app.vault.process(file, (content) => {
-            const lines = content.split('\n');
-            if (lineNumber < 0 || lineNumber >= lines.length) return content;
+        await processLines(this.app, file, (lines) => {
+            if (lineNumber < 0 || lineNumber >= lines.length) return null;
             lines.splice(lineNumber + 1, 0, newContent);
-            return lines.join('\n');
+            return lines;
         });
     }
 
@@ -101,11 +93,10 @@ export class InlineTaskWriter {
         const file = this.app.vault.getAbstractFileByPath(filePath);
         if (!(file instanceof TFile)) return;
 
-        await this.app.vault.process(file, (content) => {
-            const lines = content.split('\n');
-            if (lineNumber < 0 || lineNumber >= lines.length) return content;
+        await processLines(this.app, file, (lines) => {
+            if (lineNumber < 0 || lineNumber >= lines.length) return null;
             lines.splice(lineNumber, 1);
-            return lines.join('\n');
+            return lines;
         });
     }
 
@@ -123,13 +114,11 @@ export class InlineTaskWriter {
             return;
         }
 
-        await this.app.vault.process(file, (content) => {
-            const lines = content.split('\n');
-
+        await processLines(this.app, file, (lines) => {
             const currentLine = this.fileOps.findTaskLineNumber(lines, task);
             if (currentLine < 0 || currentLine >= lines.length) {
                 logWarn(`[InlineTaskWriter] Task not found in file (stripFlow)`);
-                return content;
+                return null;
             }
 
             const flowIndices = collectFlowLineIndicesInFile(lines, currentLine);
@@ -141,27 +130,35 @@ export class InlineTaskWriter {
             const originalIndent = lines[currentLine].match(/^(\s*)/)?.[1] || '';
             lines[currentLine] = originalIndent + newLine.trim();
 
-            return lines.join('\n');
+            return lines;
         });
     }
 
-    async deleteTaskFromFile(task: Task): Promise<void> {
+    /**
+     * @returns whether the task's lines were found and removed. A `false` means
+     * the file still holds them — the caller must not report the task gone.
+     */
+    async deleteTaskFromFile(task: Task): Promise<boolean> {
         const file = this.app.vault.getAbstractFileByPath(task.file);
-        if (!(file instanceof TFile)) return;
+        if (!(file instanceof TFile)) {
+            logWarn(`[InlineTaskWriter] File not found: ${task.file}`);
+            return false;
+        }
 
-        await this.app.vault.process(file, (content) => {
-            const lines = content.split('\n');
-
+        return processLines(this.app, file, (lines) => {
             // Find current line using originalText
             const currentLine = this.fileOps.findTaskLineNumber(lines, task);
-            if (currentLine < 0 || currentLine >= lines.length) return content;
+            if (currentLine < 0 || currentLine >= lines.length) {
+                logWarn(`[InlineTaskWriter] Task not found in file (delete)`);
+                return null;
+            }
 
             const { childrenLines } = this.fileOps.collectChildrenFromLines(lines, currentLine);
 
             // Delete task line + all children
             lines.splice(currentLine, 1 + childrenLines.length);
 
-            return lines.join('\n');
+            return lines;
         });
     }
 
@@ -235,19 +232,17 @@ export class InlineTaskWriter {
 
         let insertedLineIndex = -1;
 
-        await this.app.vault.process(file, (content) => {
-            const lines = content.split('\n');
-
+        await processLines(this.app, file, (lines) => {
             // Find current line using originalText (handles line shifts)
             const currentLine = this.fileOps.findTaskLineNumber(lines, task);
-            if (currentLine < 0 || currentLine >= lines.length) return content;
+            if (currentLine < 0 || currentLine >= lines.length) return null;
 
             const indent = FileOperations.resolveChildIndent(lines, currentLine);
             const insertIndex = this.subtreeEnd(lines, currentLine);
             lines.splice(insertIndex, 0, indent + lineBody.trim());
             insertedLineIndex = insertIndex;
 
-            return lines.join('\n');
+            return lines;
         });
 
         return insertedLineIndex;
@@ -281,13 +276,11 @@ export class InlineTaskWriter {
 
         let insertedLineIndex = -1;
 
-        await this.app.vault.process(file, (content) => {
-            const lines = content.split('\n');
-
+        await processLines(this.app, file, (lines) => {
             const currentLine = this.fileOps.findTaskLineNumber(lines, task);
             if (currentLine < 0 || currentLine >= lines.length) {
                 logWarn(`[InlineTaskWriter] Task not found in file (insertSiblingAfterTask)`);
-                return content;
+                return null;
             }
 
             const indent = lines[currentLine].match(/^(\s*)/)?.[1] ?? '';
@@ -299,7 +292,7 @@ export class InlineTaskWriter {
             lines.splice(insertIndex, 0, indent + lineBody.trim());
             insertedLineIndex = insertIndex;
 
-            return lines.join('\n');
+            return lines;
         });
 
         return insertedLineIndex;
@@ -318,13 +311,14 @@ export class InlineTaskWriter {
 
         let insertedLineIndex = -1;
 
-        await this.app.vault.process(file, (content) => {
-            const lines = content.split('\n');
-
+        await processLines(this.app, file, (lines) => {
             // Find the current line number using multiple strategies
             const currentLine = this.fileOps.findTaskLineNumber(lines, task);
 
-            if (currentLine < 0 || currentLine >= lines.length) return content;
+            if (currentLine < 0 || currentLine >= lines.length) {
+                logWarn(`[InlineTaskWriter] Task not found in file (insertLineAsFirstChild)`);
+                return null;
+            }
 
             const indent = FileOperations.resolveChildIndent(lines, currentLine);
 
@@ -333,14 +327,15 @@ export class InlineTaskWriter {
             lines.splice(insertIndex, 0, indent + lineBody.trim());
             insertedLineIndex = insertIndex;
 
-            return lines.join('\n');
+            return lines;
         });
 
         return insertedLineIndex;
     }
 
+    /** @returns the 0-based line the task landed on, or -1 when nothing was written. */
     async appendTaskToFile(filePath: string, content: string): Promise<number> {
-        let file = this.app.vault.getAbstractFileByPath(filePath);
+        const file = this.app.vault.getAbstractFileByPath(filePath);
 
         if (!file) {
             await this.fileOps.ensureDirectoryExists(filePath);
@@ -348,16 +343,18 @@ export class InlineTaskWriter {
             return 0;
         }
 
-        let insertedLine = 0;
-        if (file instanceof TFile) {
-            await this.app.vault.process(file, (fileContent) => {
-                const prefix = fileContent.length > 0 && !fileContent.endsWith('\n') ? '\n' : '';
-                insertedLine = fileContent.length === 0
-                    ? 0
-                    : fileContent.split('\n').length + (prefix ? 0 : -1);
-                return fileContent + prefix + content;
-            });
+        if (!(file instanceof TFile)) {
+            logWarn(`[InlineTaskWriter] Not a file: ${filePath}`);
+            return -1;
         }
+
+        // The appended text is built with LF; splitting it here lets the file's
+        // own terminator go back between every line, its own included.
+        let insertedLine = -1;
+        await processLines(this.app, file, (lines) => {
+            insertedLine = appendLines(lines, splitLines(content).lines);
+            return lines;
+        });
         return insertedLine;
     }
 
@@ -403,12 +400,10 @@ export class InlineTaskWriter {
 
         // Same-file append: a single atomic process reads children and appends.
         if (sourceFile instanceof TFile && destPath === task.file) {
-            await this.app.vault.process(sourceFile, (fileContent) => {
-                const lines = fileContent.split('\n');
+            await processLines(this.app, sourceFile, (lines) => {
                 const adjustedChildren = this.buildAdjustedChildren(lines, task);
-                const fullContent = [content, ...adjustedChildren].join('\n');
-                const prefix = fileContent.length > 0 && !fileContent.endsWith('\n') ? '\n' : '';
-                return fileContent + prefix + fullContent;
+                appendLines(lines, [...splitLines(content).lines, ...adjustedChildren]);
+                return lines;
             });
             return;
         }
@@ -417,7 +412,7 @@ export class InlineTaskWriter {
         let adjustedChildren: string[] = [];
         if (sourceFile instanceof TFile) {
             const sourceContent = await this.app.vault.read(sourceFile);
-            adjustedChildren = this.buildAdjustedChildren(sourceContent.split('\n'), task);
+            adjustedChildren = this.buildAdjustedChildren(splitLines(sourceContent).lines, task);
         }
 
         const fullContent = [content, ...adjustedChildren].join('\n');
