@@ -6,6 +6,7 @@ import { TaskValidator } from '../../../../../src/services/core/TaskValidator';
 import { HINT_TTL_MS, type ClaimedRow, type Hint } from '../../../../../src/services/core/identity/IdentityHints';
 import { DEFAULT_SETTINGS } from '../../../../../src/types';
 import type { Task } from '../../../../../src/types';
+import type { LineEdit } from '../../../../../src/utils/FileLines';
 
 /**
  * Claims through the real scanner: raised by a write, weighed against what the
@@ -28,8 +29,22 @@ const FILE = 'a.md';
 const TASK = '- [ ] ポモドーロ';
 
 /** One write's claim: the file's rows, as `[runtimeId | null, text]` pairs. */
+let coined = 0;
+
+/**
+ * One write's claim. `[id, text]` is a row the write kept; a null id is a row
+ * the write made, and a made row carries a name of its own — coined by the
+ * write, at the moment the line came into being — with `created` saying that
+ * no scan has recorded it yet.
+ */
 const claim = (...rows: Array<[string | null, string]>): Hint => ({
-    rows: rows.map(([runtimeId, text]): ClaimedRow => ({ runtimeId, text })),
+    rows: rows.map(([runtimeId, text]): ClaimedRow => runtimeId === null
+        // The shape a scan would mint, because the scanner's guard against
+        // provisional IDs reaching the store does not care who minted one.
+        // The counter starts far below the ledger's (it seeds from the clock),
+        // so a coined name is never one a scan will hand out.
+        ? { runtimeId: `tv-inline:${FILE}:seq:${++coined}`, created: true, text }
+        : { runtimeId, created: false, text }),
 });
 
 class Harness {
@@ -62,6 +77,19 @@ class Harness {
         this.contents.set(FILE, lines.join('\n'));
         if (hints.length > 0) this.scanner.addHints(FILE, hints);
         await this.scanner.requestScan(makeFile(FILE));
+    }
+
+    /**
+     * A write that reports its lines, the way a writer with a sink does.
+     *
+     * Nothing is hand-built here: `WriteClaims` reads the file back, works out
+     * which lines are rows, and names the ones the write made. No scan
+     * follows, so the caller decides which state each scan reads.
+     */
+    report(lines: string[], edits: LineEdit[]): void {
+        const before = (this.contents.get(FILE) ?? '').split('\n');
+        this.contents.set(FILE, lines.join('\n'));
+        this.scanner.writeSink(FILE)(before, lines, edits);
     }
 
     /** Raise a claim without a scan following it — a write during a drag. */
@@ -134,6 +162,79 @@ describe('a claim through the scanner', () => {
         expect(harness.pendingCount()).toBe(0);
         expect(harness.ids()).toEqual(afterCopy);
         expect(harness.ids()[1]).toBe(original);
+    });
+});
+
+describe('a line the write named, through the write layer', () => {
+    // The whole chain, with nothing stood in for: the write reports its lines,
+    // `WriteClaims` names what the write made, and two scans read it.
+
+    const DONE = '- [x] ポモドーロ';
+
+    it('names a created line once, whichever scan reads it', async () => {
+        const harness = new Harness();
+        await harness.write([TASK, '']);
+        const original = harness.ids()[0];
+
+        const afterCopy = [TASK, TASK, ''];
+        const afterTick = [TASK, DONE, ''];
+
+        // W1 puts a copy above the original; W2 ticks the original off,
+        // building on what W1 left.
+        harness.report(afterCopy, [{ kind: 'inserted', at: 0, count: 1 }]);
+        harness.report(afterTick, [{ kind: 'replaced', at: 1 }]);
+
+        // S1's read started before W2 landed, so it reads the file W1 left,
+        // and commits it: the copy is now a row the ledger holds.
+        harness.contents.set(FILE, afterCopy.join('\n'));
+        await harness.scan();
+        const afterFirst = harness.ids();
+        expect(afterFirst[1]).toBe(original);
+        expect(afterFirst[0]).not.toBe(original);
+
+        // S2 reads what W2 actually left, with W2's claim still pending. The
+        // copy is the row it already was — the name came from the write, and
+        // the write gave it once.
+        harness.contents.set(FILE, afterTick.join('\n'));
+        await harness.scan();
+        expect(harness.ids()).toEqual(afterFirst);
+    });
+
+    it('keeps the first copy when a second duplicate follows it', async () => {
+        const harness = new Harness();
+        await harness.write([TASK, '']);
+        const original = harness.ids()[0];
+
+        harness.report([TASK, TASK, ''], [{ kind: 'inserted', at: 0, count: 1 }]);
+        await harness.scan();
+        const afterOnce = harness.ids();
+        expect(afterOnce[1]).toBe(original);
+
+        // A second copy, above the first: three lines that read alike, and
+        // only the writes know which is which.
+        harness.report([TASK, TASK, TASK, ''], [{ kind: 'inserted', at: 0, count: 1 }]);
+        await harness.scan();
+
+        expect(harness.ids().slice(1)).toEqual(afterOnce);
+    });
+
+    it('does not move the rows again once the ladder has answered', async () => {
+        const harness = new Harness();
+        await harness.write([TASK, '']);
+
+        // The write reports its copy, but a hand edit arrived in the same
+        // moment: the claim does not reproduce what the scan reads, so the
+        // ladder answers and the log goes.
+        harness.report([TASK, TASK, ''], [{ kind: 'inserted', at: 0, count: 1 }]);
+        harness.contents.set(FILE, [TASK, TASK, '- [ ] 手で書いた行', ''].join('\n'));
+        await harness.scan();
+        const afterLadder = harness.ids();
+        expect(harness.pendingCount()).toBe(0);
+
+        // Nothing has written since. A second read of the same file has to
+        // answer the same way: what the ladder handed out is the file's now.
+        await harness.scan();
+        expect(harness.ids()).toEqual(afterLadder);
     });
 });
 

@@ -30,8 +30,19 @@ import type { LedgerEntry } from './IdentityLedger';
 
 /** One task row of a file, as a write claims it reads. */
 export interface ClaimedRow {
-    /** The row that carries this line's identity, or null if the write made it. */
-    runtimeId: string | null;
+    /** The row that carries this line's identity. */
+    runtimeId: string;
+    /**
+     * Whether no scan has recorded this row yet — a write made the line, and
+     * named it on the spot.
+     *
+     * The name is the write's to give, so the ledger not holding it is the
+     * normal case rather than evidence against the claim. It is not a promise
+     * that the ledger has never held it: a scan can commit a created row and a
+     * second claim still be pending on top of it, which is the case this flag
+     * exists to survive.
+     */
+    created: boolean;
     text: string;
 }
 
@@ -260,6 +271,7 @@ export function resolveHints(
     // from rows it can match verbatim. Its part is to disagree.
     const unchanged: ClaimedRow[] = previous.map(entry => ({
         runtimeId: entry.runtimeId,
+        created: false,
         text: entry.fingerprint.originalText,
     }));
 
@@ -314,21 +326,32 @@ function reproduces(
         if (rows[i].text !== tasks[i].originalText) return false;
 
         const runtimeId = rows[i].runtimeId;
-        if (runtimeId === null) continue;
         // One row, one line. A claim that puts the same identity on two lines
         // is a claim no file can bear out, and believing it would leave two
         // tasks answering to one name — the ledger would hold the number twice
         // and every lookup by it would find whichever came first. The ladder
         // cannot produce this state (it takes each previous row once), so this
-        // is the only door it could come through.
+        // is the only door it could come through. It holds for a created row
+        // as much as a continued one: a write that gave one new name to two
+        // lines is as unbelievable as one that gave an old name twice.
         if (spoken.has(runtimeId)) return false;
         spoken.add(runtimeId);
+
+        const entry = byRuntimeId.get(runtimeId);
+        if (!entry) {
+            // A row the ledger no longer holds was built on a generation this
+            // scan has left behind — unless the write itself named it, in
+            // which case no scan has had the chance to record it yet and its
+            // absence says nothing at all.
+            if (!rows[i].created) return false;
+            continue;
+        }
         // Never across parsers, the rule every rung of the ladder follows.
         // Turning a third-party notation off can leave the text identical and
-        // the parser different. A row the ledger no longer holds fails here
-        // too: the claim was built on a generation this scan has left behind.
-        const entry = byRuntimeId.get(runtimeId);
-        if (!entry || entry.fingerprint.parserId !== tasks[i].parserId) return false;
+        // the parser different. A created row whose name the ledger does hold
+        // is one an earlier scan already committed, and it answers here on the
+        // same terms as any other.
+        if (entry.fingerprint.parserId !== tasks[i].parserId) return false;
     }
 
     return true;

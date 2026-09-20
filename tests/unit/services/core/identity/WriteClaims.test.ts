@@ -20,16 +20,32 @@ const FILE = 'note.md';
 const parseRows = (path: string, lines: readonly string[]) => {
     const parsed = FileParsePipeline.parse(path, [...lines], undefined, DEFAULT_SETTINGS);
     if (parsed.ignored) return null;
-    return parsed.tasks.map(task => ({ line: task.line, text: task.originalText }));
+    return parsed.tasks.map(task => ({
+        line: task.line,
+        text: task.originalText,
+        parserId: task.parserId,
+    }));
 };
 
+/**
+ * The write layer's own minter: a new name every call, and never one back.
+ *
+ * Per instance, so a test can say which name a write handed out by counting
+ * the writes it made — including the ones it withdrew, which spend a name all
+ * the same.
+ */
+function mint() {
+    let seq = 0;
+    return () => `w${++seq}`;
+}
+
 function claimsWith(ledger: ClaimBase[] = []): WriteClaims {
-    return new WriteClaims(parseRows, () => ledger);
+    return new WriteClaims(parseRows, () => ledger, mint());
 }
 
 /** A ledger row: the id it carries, the line it was read on, what it read. */
 const known = (runtimeId: string, line: number, text: string): ClaimBase =>
-    ({ runtimeId, line, text });
+    ({ runtimeId, created: false, line, text });
 
 const inserted = (at: number, count: number): LineEdit => ({ kind: 'inserted', at, count });
 const replaced = (at: number): LineEdit => ({ kind: 'replaced', at });
@@ -56,10 +72,10 @@ describe('WriteClaims: which lines are rows', () => {
 
         expect(claim.hint).not.toBeNull();
         expect(claim.hint!.rows).toEqual([
-            { runtimeId: 'r1', text: '- [ ] 親' },
-            { runtimeId: 'r2', text: '\t- [ ] 子' },
-            { runtimeId: null, text: '- [ ] 親' },
-            { runtimeId: null, text: '\t- [ ] 子' },
+            { runtimeId: 'r1', created: false, text: '- [ ] 親' },
+            { runtimeId: 'r2', created: false, text: '\t- [ ] 子' },
+            { runtimeId: 'w1', created: true, text: '- [ ] 親' },
+            { runtimeId: 'w2', created: true, text: '\t- [ ] 子' },
         ]);
     });
 
@@ -70,7 +86,7 @@ describe('WriteClaims: which lines are rows', () => {
 
         const claim = claims.claim(FILE, before, after, [replaced(0)]);
 
-        expect(claim.hint!.rows).toEqual([{ runtimeId: 'r1', text: '- [x] 報告 @2026-09-21' }]);
+        expect(claim.hint!.rows).toEqual([{ runtimeId: 'r1', created: false, text: '- [x] 報告 @2026-09-21' }]);
     });
 
     it('leaves a removed row out', () => {
@@ -80,7 +96,7 @@ describe('WriteClaims: which lines are rows', () => {
 
         const claim = claims.claim(FILE, before, after, [removed(0, 1)]);
 
-        expect(claim.hint!.rows).toEqual([{ runtimeId: 'r2', text: '- [ ] 乙' }]);
+        expect(claim.hint!.rows).toEqual([{ runtimeId: 'r2', created: false, text: '- [ ] 乙' }]);
     });
 
     it('says the rows are unchanged when a write touched no task line', () => {
@@ -92,7 +108,7 @@ describe('WriteClaims: which lines are rows', () => {
 
         const claim = claims.claim(FILE, before, after, [replaced(1)]);
 
-        expect(claim.hint!.rows).toEqual([{ runtimeId: 'r1', text: '- [ ] 甲' }]);
+        expect(claim.hint!.rows).toEqual([{ runtimeId: 'r1', created: false, text: '- [ ] 甲' }]);
     });
 });
 
@@ -108,7 +124,7 @@ describe('WriteClaims: what it builds on', () => {
         const claims = claimsWith([known('r1', 0, '- [ ] 甲')]);
 
         const first = claims.claim(FILE, ['- [ ] 甲'], ['- [ ] 甲', '- [ ] 甲'], [inserted(0, 1)]);
-        expect(first.hint!.rows.map(row => row.runtimeId)).toEqual([null, 'r1']);
+        expect(first.hint!.rows.map(row => row.runtimeId)).toEqual(['w1', 'r1']);
 
         const second = claims.claim(
             FILE,
@@ -117,10 +133,13 @@ describe('WriteClaims: what it builds on', () => {
             [inserted(2, 1)],
         );
 
+        // The copy keeps the name the first write gave it, and keeps being
+        // told as new: no scan has recorded it yet, however many writes have
+        // gone over the file since.
         expect(second.hint!.rows).toEqual([
-            { runtimeId: null, text: '- [ ] 甲' },
-            { runtimeId: 'r1', text: '- [ ] 甲' },
-            { runtimeId: null, text: '- [ ] 丙' },
+            { runtimeId: 'w1', created: true, text: '- [ ] 甲' },
+            { runtimeId: 'r1', created: false, text: '- [ ] 甲' },
+            { runtimeId: 'w2', created: true, text: '- [ ] 丙' },
         ]);
     });
 
@@ -133,7 +152,7 @@ describe('WriteClaims: what it builds on', () => {
         claims.forget(FILE);
 
         const next = claims.claim(FILE, ['- [ ] 甲'], ['- [x] 甲'], [replaced(0)]);
-        expect(next.hint!.rows).toEqual([{ runtimeId: 'r1', text: '- [x] 甲' }]);
+        expect(next.hint!.rows).toEqual([{ runtimeId: 'r1', created: false, text: '- [x] 甲' }]);
     });
 
     it('says nothing when the file is not what either base describes', () => {
@@ -166,7 +185,7 @@ describe('WriteClaims: what it builds on', () => {
         claims.forget(FILE);
 
         const after = claims.claim(FILE, ['- [ ] 甲'], ['- [x] 甲'], [replaced(0)]);
-        expect(after.hint!.rows).toEqual([{ runtimeId: 'r1', text: '- [x] 甲' }]);
+        expect(after.hint!.rows).toEqual([{ runtimeId: 'r1', created: false, text: '- [x] 甲' }]);
     });
 
     it('claims a file the ledger knows nothing about as all new', () => {
@@ -174,7 +193,7 @@ describe('WriteClaims: what it builds on', () => {
 
         const claim = claims.claim(FILE, [''], ['- [ ] 初めての行'], [replaced(0)]);
 
-        expect(claim.hint!.rows).toEqual([{ runtimeId: null, text: '- [ ] 初めての行' }]);
+        expect(claim.hint!.rows).toEqual([{ runtimeId: 'w1', created: true, text: '- [ ] 初めての行' }]);
     });
 });
 
@@ -194,7 +213,7 @@ describe('WriteClaims: a base that no longer fits', () => {
             ['- [ ] 甲', '- [ ] 甲', 'memo'],
             [inserted(0, 1)],
         );
-        expect(first.hint!.rows.map(row => row.runtimeId)).toEqual([null, 'r1']);
+        expect(first.hint!.rows.map(row => row.runtimeId)).toEqual(['w1', 'r1']);
 
         const between = ['- [ ] 甲', '- [ ] 甲', 'memo 書き足した'];
         const third = claims.claim(FILE, between, [...between, '- [ ] 丙'], [inserted(3, 1)]);
@@ -214,7 +233,7 @@ describe('WriteClaims: a base that no longer fits', () => {
     });
 
     it('says nothing about a file the parser refuses to read', () => {
-        const claims = new WriteClaims(() => null, () => [known('r1', 0, '- [ ] 甲')]);
+        const claims = new WriteClaims(() => null, () => [known('r1', 0, '- [ ] 甲')], mint());
 
         const claim = claims.claim(FILE, ['- [ ] 甲'], ['- [ ] 甲', '- [ ] 乙'], [inserted(1, 1)]);
 
@@ -234,8 +253,10 @@ describe('WriteClaims: a write that did not land', () => {
 
         const retry = claims.claim(FILE, ['- [ ] 甲'], ['- [ ] 甲', '- [ ] 丙'], [inserted(1, 1)]);
         expect(retry.hint!.rows).toEqual([
-            { runtimeId: 'r1', text: '- [ ] 甲' },
-            { runtimeId: null, text: '- [ ] 丙' },
+            { runtimeId: 'r1', created: false, text: '- [ ] 甲' },
+            // Its own name, not the one the withdrawn write handed out: a
+            // mint is spent whether or not the write it named landed.
+            { runtimeId: 'w2', created: true, text: '- [ ] 丙' },
         ]);
     });
 
@@ -243,7 +264,7 @@ describe('WriteClaims: a write that did not land', () => {
         const claims = claimsWith([known('r1', 0, '- [ ] 甲')]);
 
         const first = claims.claim(FILE, ['- [ ] 甲'], ['- [ ] 甲', '- [ ] 甲'], [inserted(0, 1)]);
-        expect(first.hint!.rows.map(row => row.runtimeId)).toEqual([null, 'r1']);
+        expect(first.hint!.rows.map(row => row.runtimeId)).toEqual(['w1', 'r1']);
 
         const second = claims.claim(
             FILE,
@@ -261,7 +282,7 @@ describe('WriteClaims: a write that did not land', () => {
             ['- [ ] 甲', '- [ ] 甲', '- [ ] 丙'],
             [inserted(2, 1)],
         );
-        expect(retry.hint!.rows.map(row => row.runtimeId)).toEqual([null, 'r1', null]);
+        expect(retry.hint!.rows.map(row => row.runtimeId)).toEqual(['w1', 'r1', 'w3']);
     });
 });
 
@@ -280,12 +301,12 @@ describe('WriteClaims: the limit of a report', () => {
         const after = ['- [ ] 甲', '- [ ] 甲'];
         const ledger = () => [known('r1', 0, '- [ ] 甲')];
 
-        const truthful = new WriteClaims(parseRows, ledger)
+        const truthful = new WriteClaims(parseRows, ledger, mint())
             .claim(FILE, before, after, [inserted(1, 1)]);
-        const offByOne = new WriteClaims(parseRows, ledger)
+        const offByOne = new WriteClaims(parseRows, ledger, mint())
             .claim(FILE, before, after, [inserted(0, 1)]);
 
-        expect(truthful.hint!.rows.map(row => row.runtimeId)).toEqual(['r1', null]);
-        expect(offByOne.hint!.rows.map(row => row.runtimeId)).toEqual([null, 'r1']);
+        expect(truthful.hint!.rows.map(row => row.runtimeId)).toEqual(['r1', 'w1']);
+        expect(offByOne.hint!.rows.map(row => row.runtimeId)).toEqual(['w1', 'r1']);
     });
 });

@@ -37,10 +37,24 @@ const A = '- [ ] alpha @2026-09-21';
 const B = '- [ ] beta @2026-09-21';
 const A_DONE = '- [x] alpha @2026-09-21';
 
-/** One write's claim: the file's rows, as `[runtimeId | null, text]` pairs. */
+/**
+ * One write's claim: the file's rows, as `[runtimeId | null, text]` pairs.
+ *
+ * A null id is a row the write made. Such a row still has a name — the write
+ * coins one when it makes the line — so what null says here is "any name, as
+ * long as it is this row's own". Where a test needs two claims to agree on
+ * that name, as two writes in one chain do, it says the name with {@link made}.
+ */
+let coined = 0;
+
 const claim = (...rows: Array<[string | null, string]>): Hint => ({
-    rows: rows.map(([runtimeId, text]): ClaimedRow => ({ runtimeId, text })),
+    rows: rows.map(([runtimeId, text]): ClaimedRow => runtimeId === null
+        ? { runtimeId: `w${++coined}`, created: true, text }
+        : { runtimeId, created: false, text }),
 });
+
+/** A row a write made, under the name it gave it. */
+const made = (runtimeId: string, text: string): ClaimedRow => ({ runtimeId, created: true, text });
 
 const pendingOf = (...hints: Hint[]) => hints.map((hint, i) => ({ seq: i + 1, at: 0, hint }));
 
@@ -113,7 +127,7 @@ describe('HintLog', () => {
 
         expect(seen).toHaveLength(1);
         expect(seen[0].file).toBe(FILE);
-        expect(seen[0].pending[0].hint.rows).toEqual([{ runtimeId: 'r1', text: A }]);
+        expect(seen[0].pending[0].hint.rows).toEqual([{ runtimeId: 'r1', created: false, text: A }]);
         expect(log.peek()[0].pending).toHaveLength(1);
     });
 });
@@ -218,14 +232,14 @@ describe('HintLog.settle', () => {
 describe('resolveHints: what the read bears out', () => {
     it('adopts the claim that is, line for line, what was read', () => {
         const previous = [row('r1', A, 0)];
-        const duplicated = pendingOf(claim(['r1', A], [null, A]));
+        const duplicated = pendingOf({ rows: [{ runtimeId: 'r1', created: false, text: A }, made('n1', A)] });
 
         const resolved = resolveHints(previous, [task(A, 0), task(A, 1)], duplicated);
 
         expect(resolved.consumed).toBe(1);
         expect(resolved.rows).toEqual([
-            { runtimeId: 'r1', text: A },
-            { runtimeId: null, text: A },
+            { runtimeId: 'r1', created: false, text: A },
+            { runtimeId: 'n1', created: true, text: A },
         ]);
     });
 
@@ -248,17 +262,19 @@ describe('resolveHints: what the read bears out', () => {
         // One scan read the file after two writes: the older claim describes a
         // state the file has already left.
         const previous = [row('r1', A, 0)];
+        // The copy keeps one name across both claims, as a second write
+        // building on the first one's base would leave it.
         const both = pendingOf(
-            claim(['r1', A], [null, A]),
-            claim(['r1', A_DONE], [null, A]),
+            { rows: [{ runtimeId: 'r1', created: false, text: A }, made('n1', A)] },
+            { rows: [{ runtimeId: 'r1', created: false, text: A_DONE }, made('n1', A)] },
         );
 
         const resolved = resolveHints(previous, [task(A_DONE, 0), task(A, 1)], both);
 
         expect(resolved.consumed).toBe(2);
         expect(resolved.rows).toEqual([
-            { runtimeId: 'r1', text: A_DONE },
-            { runtimeId: null, text: A },
+            { runtimeId: 'r1', created: false, text: A_DONE },
+            { runtimeId: 'n1', created: true, text: A },
         ]);
     });
 
@@ -280,6 +296,17 @@ describe('resolveHints: what the read bears out', () => {
 
         const read = [task(A_DONE, 0, { parserId: 'tasks-plugin' })];
         expect(resolveHints(previous, read, rewrite).consumed).toBe(0);
+    });
+
+    it('refuses a claim that gives one made row two lines', () => {
+        // A name the write coined is checked like any other. The ledger has
+        // never heard it, so nothing downstream would notice the collision —
+        // both lines would be committed under it, and every lookup by it would
+        // find whichever came first.
+        const previous = [row('r1', A, 0)];
+        const doubled = pendingOf({ rows: [made('n1', A), made('n1', A)] });
+
+        expect(resolveHints(previous, [task(A, 0), task(A, 1)], doubled).consumed).toBe(0);
     });
 
     it('refuses a claim that puts one row on two lines', () => {
@@ -321,8 +348,8 @@ describe('resolveHints: when more than one candidate fits', () => {
 
         expect(resolved.consumed).toBe(1);
         expect(resolved.rows).toEqual([
-            { runtimeId: 'r1', text: A },
-            { runtimeId: 'r2', text: B },
+            { runtimeId: 'r1', created: false, text: A },
+            { runtimeId: 'r2', created: false, text: B },
         ]);
     });
 
@@ -370,7 +397,7 @@ describe('resolveHints: when more than one candidate fits', () => {
         const resolved = resolveHints(previous, [task(A_DONE, 0), task(B, 1)], pending);
 
         expect(resolved.consumed).toBe(1);
-        expect(resolved.rows?.[0]).toEqual({ runtimeId: 'a', text: A_DONE });
+        expect(resolved.rows?.[0]).toEqual({ runtimeId: 'a', created: false, text: A_DONE });
     });
 });
 
@@ -396,8 +423,8 @@ describe('resolveHints: the shapes a position-based match got wrong', () => {
 
         expect(resolved.consumed).toBe(2);
         expect(resolved.rows).toEqual([
-            { runtimeId: 'a', text: '- [ ] foo @d3' },
-            { runtimeId: 'b', text: '- [ ] foo @d2' },
+            { runtimeId: 'a', created: false, text: '- [ ] foo @d3' },
+            { runtimeId: 'b', created: false, text: '- [ ] foo @d2' },
         ]);
     });
 
@@ -411,14 +438,14 @@ describe('resolveHints: the shapes a position-based match got wrong', () => {
         const resolved = resolveHints(previous, [task('- [ ] foo @d2', 0)], pending);
 
         expect(resolved.consumed).toBe(2);
-        expect(resolved.rows).toEqual([{ runtimeId: 'b', text: '- [ ] foo @d2' }]);
+        expect(resolved.rows).toEqual([{ runtimeId: 'b', created: false, text: '- [ ] foo @d2' }]);
     });
 
     it('is unmoved by a retire above the line it inserted', () => {
         const previous = [row('z', '- [ ] gone @d0', 0), row('a', '- [ ] T @d1', 5)];
         const pending = pendingOf(
-            claim(['z', '- [ ] gone @d0'], [null, '- [ ] T @d1'], ['a', '- [ ] T @d1']),
-            claim([null, '- [ ] T @d1'], ['a', '- [ ] T @d1']),
+            { rows: [{ runtimeId: 'z', created: false, text: '- [ ] gone @d0' }, made('n1', '- [ ] T @d1'), { runtimeId: 'a', created: false, text: '- [ ] T @d1' }] },
+            { rows: [made('n1', '- [ ] T @d1'), { runtimeId: 'a', created: false, text: '- [ ] T @d1' }] },
         );
 
         const resolved = resolveHints(
@@ -429,8 +456,8 @@ describe('resolveHints: the shapes a position-based match got wrong', () => {
 
         expect(resolved.consumed).toBe(2);
         expect(resolved.rows).toEqual([
-            { runtimeId: null, text: '- [ ] T @d1' },
-            { runtimeId: 'a', text: '- [ ] T @d1' },
+            { runtimeId: 'n1', created: true, text: '- [ ] T @d1' },
+            { runtimeId: 'a', created: false, text: '- [ ] T @d1' },
         ]);
     });
 
@@ -448,8 +475,11 @@ describe('resolveHints: the shapes a position-based match got wrong', () => {
         );
 
         expect(resolved.consumed).toBe(2);
-        expect(resolved.rows?.[0]).toEqual({ runtimeId: 'a', text: '- [ ] T @d1' });
-        expect(resolved.rows?.slice(1).every(claimed => claimed.runtimeId === null)).toBe(true);
+        expect(resolved.rows?.[0]).toEqual({ runtimeId: 'a', created: false, text: '- [ ] T @d1' });
+        // Two copies, two names: one name on two lines is a claim no file can
+        // bear out, and `reproduces` would refuse the whole thing.
+        expect(resolved.rows?.slice(1).every(claimed => claimed.created)).toBe(true);
+        expect(new Set(resolved.rows?.map(claimed => claimed.runtimeId)).size).toBe(3);
     });
 
     it('does not let a claim about one part of the file answer for another', () => {

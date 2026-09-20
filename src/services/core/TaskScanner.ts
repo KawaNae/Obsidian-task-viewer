@@ -75,13 +75,24 @@ export class TaskScanner {
             // `matchFile`, so a claim ordered some other way would pair its
             // rows with different rows than the scan read — invisibly, where
             // two swapped rows read the same.
-            return parsed.tasks.map(task => ({ line: task.line, text: task.originalText }));
+            return parsed.tasks.map(task => ({
+                line: task.line,
+                text: task.originalText,
+                parserId: task.parserId,
+            }));
         },
+        // Everything the ledger holds has been read by a scan, so nothing it
+        // hands back is a row still waiting to be recorded.
         (path) => this.ledger.snapshotFor(path).map(entry => ({
             runtimeId: entry.runtimeId,
+            created: false,
             text: entry.fingerprint.originalText,
             line: entry.line,
         })),
+        // The same counter a scan mints from, so a name issued by a write can
+        // never collide with one issued by a read.
+        (path, parserId) => TaskIdGenerator.mintRuntimeId(
+            { parserId, file: path }, () => this.ledger.mint()),
     );
 
     constructor(

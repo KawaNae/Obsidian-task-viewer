@@ -37,9 +37,26 @@ function link(parent: Task, ...children: Task[]): void {
 }
 
 /** One write's claim: the file's rows, as `[runtimeId | null, text]` pairs. */
+let coined = 0;
+
+/**
+ * One write's claim. `[id, text]` is a row the write kept; a null id is a row
+ * the write made, and a made row carries a name of its own — coined by the
+ * write, at the moment the line came into being — with `created` saying that
+ * no scan has recorded it yet.
+ */
 const claim = (...rows: Array<[string | null, string]>): Hint => ({
-    rows: rows.map(([runtimeId, text]): ClaimedRow => ({ runtimeId, text })),
+    rows: rows.map(([runtimeId, text]): ClaimedRow => runtimeId === null
+        ? { runtimeId: `w${++coined}`, created: true, text }
+        : { runtimeId, created: false, text }),
 });
+
+/** A row a write made, under the name it coined — said out loud, so two
+ * claims in one chain can agree on it the way two real writes do. */
+const made = (runtimeId: string, text: string): ClaimedRow => ({ runtimeId, created: true, text });
+
+/** A row a write kept. */
+const kept = (runtimeId: string, text: string): ClaimedRow => ({ runtimeId, created: false, text });
 
 function pendingOf(...hints: Hint[]): PendingHint[] {
     return hints.map((hint, i) => ({ seq: i + 1, at: 0, hint }));
@@ -103,6 +120,87 @@ describe('rung 0: the duplicate', () => {
         expect(second.consumedHints).toBe(0);
         expect(runtimeId(second, 'prov:0')).toBe(original);
         expect(second.minted).toEqual([]);
+    });
+});
+
+describe('rung 0: a line the write named', () => {
+    // A created line is named by the write that made it, not by the scan that
+    // first reads it — and two scans can read the same created line. The
+    // second one must find the row it already has, not a row it has to mint.
+
+    it('finds the row the write made, rather than minting a second one', () => {
+        const mint = makeMint();
+        const first = matchFile([], [t('prov:0', 0, POMODORO)], mint);
+        const original = runtimeId(first, 'prov:0');
+        const done = '- [x] ポモドーロ';
+        const copy = 'coined:1';
+
+        // W1 put a copy above the original and named it. W2 ticked the
+        // original off, building on W1's base, so the copy keeps that name.
+        const w1: Hint = { rows: [made(copy, POMODORO), kept(original, POMODORO)] };
+        const w2: Hint = { rows: [made(copy, POMODORO), kept(original, done)] };
+
+        // S1's read started before W2 landed, so it reads what W1 left.
+        const s1 = matchFile(
+            first.entries,
+            [t('prov:0', 0, POMODORO), t('prov:1', 1, POMODORO)],
+            mint,
+            pendingOf(w1, w2),
+        );
+        expect(s1.consumedHints).toBe(1);
+        expect(runtimeId(s1, 'prov:0')).toBe(copy);
+        expect(s1.minted).toEqual([copy]);
+
+        // S2 reads what W2 left, with W2's claim still pending. The copy is
+        // now a row the ledger holds, so this scan continues it.
+        const s2 = matchFile(
+            s1.entries,
+            [t('prov:0', 0, POMODORO), t('prov:1', 1, done)],
+            mint,
+            pendingOf(w2),
+        );
+        expect(s2.consumedHints).toBe(1);
+        expect(runtimeId(s2, 'prov:0')).toBe(copy);
+        expect(runtimeId(s2, 'prov:1')).toBe(original);
+        // Neither gone nor new: the line has not moved since S1 recorded it.
+        expect(s2.retired).toEqual([]);
+        expect(s2.minted).toEqual([]);
+    });
+
+    it('keeps the first copy\'s name when a second duplicate follows it', () => {
+        // The shape the duplicate-twice bug took: a scan between the two
+        // writes, and a claim describing both copies at once.
+        const mint = makeMint();
+        const first = matchFile([], [t('prov:0', 0, POMODORO)], mint);
+        const original = runtimeId(first, 'prov:0');
+        const copy = 'coined:1';
+        const copyAgain = 'coined:2';
+
+        const w1: Hint = { rows: [made(copy, POMODORO), kept(original, POMODORO)] };
+        const w2: Hint = {
+            rows: [made(copyAgain, POMODORO), made(copy, POMODORO), kept(original, POMODORO)],
+        };
+
+        const s1 = matchFile(
+            first.entries,
+            [t('prov:0', 0, POMODORO), t('prov:1', 1, POMODORO)],
+            mint,
+            pendingOf(w1),
+        );
+        expect(runtimeId(s1, 'prov:0')).toBe(copy);
+
+        const s2 = matchFile(
+            s1.entries,
+            [t('prov:0', 0, POMODORO), t('prov:1', 1, POMODORO), t('prov:2', 2, POMODORO)],
+            mint,
+            pendingOf(w2),
+        );
+        expect(s2.consumedHints).toBe(1);
+        expect(runtimeId(s2, 'prov:0')).toBe(copyAgain);
+        expect(runtimeId(s2, 'prov:1')).toBe(copy);
+        expect(runtimeId(s2, 'prov:2')).toBe(original);
+        expect(s2.minted).toEqual([copyAgain]);
+        expect(s2.retired).toEqual([]);
     });
 });
 
