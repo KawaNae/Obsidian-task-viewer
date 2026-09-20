@@ -697,6 +697,32 @@ describe('an ordinary update, through the write layer', () => {
         expect(harness.ids()).toEqual([open, done]);
     });
 
+    it('changes nothing when the write landed on the wrong twin', async () => {
+        // `findTaskLineNumber` falls back to the first row with the same text
+        // when the stored line has shifted (FileOperations.ts:317-321), so a
+        // write meant for the lower twin can land on the upper one. The claim
+        // then says, truthfully, that the upper row is the one that changed.
+        //
+        // That is not a swap and it does not become one without the claim:
+        // the ladder pairs what is left by nearest ordinal within the bucket
+        // (IdentityMatcher.ts:311-319), which holds the order too. Both sides
+        // are pinned because the interesting thing is that they agree — a
+        // change to the ladder that made them disagree would be a change to
+        // what a misplaced write looks like on screen.
+        const claimed = new Harness();
+        await claimed.write([TASK, TASK, '']);
+        const [c1, c2] = claimed.ids();
+        claimed.report([DONE, TASK, ''], [{ kind: 'replaced', at: 0 }]);
+        await claimed.scan();
+        expect(claimed.ids()).toEqual([c1, c2]);
+
+        const bare = new Harness();
+        await bare.write([TASK, TASK, '']);
+        const [b1, b2] = bare.ids();
+        await bare.write([DONE, TASK, '']);
+        expect(bare.ids()).toEqual([b1, b2]);
+    });
+
     it('adopts the claim when a quick check and uncheck put the text back', async () => {
         // Both the "nothing changed" candidate and the second claim reproduce
         // what was read, because the file came back to where it started. They
@@ -785,5 +811,21 @@ describe('a rewrite that moves the row to another parser', () => {
         expect(harness.tasks()[0].parserId).toBe('tv-inline');
         expect(harness.ids()[0]).not.toBe(before);
         expect(harness.pendingCount()).toBe(0);
+    });
+
+    it('is not what loses the name: the ladder does not cross either', async () => {
+        // The same rewrite with nothing filed behind it. The name is lost here
+        // too, so the claim is not what costs it — the rule against pairing
+        // across parsers is older than the claim and is what both obey.
+        TaskParser.rebuildChain({ ...DEFAULT_SETTINGS, enableTasksPlugin: true });
+
+        const harness = new Harness();
+        await harness.write([TASKS_LINE, '']);
+        const before = harness.ids()[0];
+
+        await harness.write([INLINE_LINE, '']);
+
+        expect(harness.tasks()[0].parserId).toBe('tv-inline');
+        expect(harness.ids()[0]).not.toBe(before);
     });
 });
