@@ -2,15 +2,26 @@
  * Shared constants and helpers for line style suggestions.
  */
 
+import { sortByMatchRank } from '../matchRank';
+
+/**
+ * Declared in a meaningful order (default first, then increasing visual
+ * complexity), not alphabetically — filterLineStyles must preserve that
+ * order among same-rank matches rather than re-sorting by name.
+ */
 export const LINE_STYLES = ['solid', 'dashed', 'dotted', 'double', 'dashdotted'] as const;
 
 /**
- * Filter line styles by query.
+ * Filter line styles by query. Matches are ranked exact > prefix >
+ * substring (see matchRank); same-rank matches keep LINE_STYLES' own
+ * order. An empty query ties every candidate at the same rank, so the
+ * declared order passes through unchanged.
  */
 export function filterLineStyles(query: string, limit?: number): string[] {
     const lowerQuery = query.toLowerCase().trim();
     const filtered = LINE_STYLES.filter((style) => style.includes(lowerQuery));
-    return limit ? filtered.slice(0, limit) : filtered;
+    const sorted = sortByMatchRank(filtered, lowerQuery);
+    return limit ? sorted.slice(0, limit) : sorted;
 }
 
 /**
