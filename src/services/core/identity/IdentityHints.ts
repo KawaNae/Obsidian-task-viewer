@@ -344,6 +344,13 @@ function reproduces(
             // which case no scan has had the chance to record it yet and its
             // absence says nothing at all.
             if (!rows[i].created) return false;
+            // No parser check for this one. The name carries a parserId, but
+            // the write burned it in from its own parse, which read the file
+            // through whatever frontmatter the cache held at the time —
+            // comparing it here would check the write against itself rather
+            // than against anything the file says. The row is checked on its
+            // text like every other, and the question disappears at stage 3,
+            // where names stop carrying a parserId at all.
             continue;
         }
         // Never across parsers, the rule every rung of the ladder follows.

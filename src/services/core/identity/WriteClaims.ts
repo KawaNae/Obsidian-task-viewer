@@ -237,6 +237,19 @@ export class WriteClaims {
      * it. That is why a refusal leaves {@link SILENT} behind instead of
      * removing the entry: the answer has to stay "nothing" for every write
      * until a scan commits, not just for the one that noticed.
+     *
+     * The converse does not hold, and this code does not claim it does: *no*
+     * entry is not a promise that the ledger is current. {@link forget} runs on
+     * every commit, whatever the scan read — so a scan that read the file as it
+     * was before our last write, and committed after that write filed, takes
+     * the base with it and leaves the next write a ledger one write old. `fits`
+     * does not catch it: a ledger is checked row by row and cannot tell that a
+     * row it has never heard of is missing. What lands then is a claim built on
+     * rows at the line numbers the file had before that write moved them —
+     * the same error the paragraph above refuses to make, reached through the
+     * commit rather than by falling through. The precision lost there is left
+     * to the ladder, which is where such a claim ends up as soon as the texts
+     * fail to line up.
      */
     private baseFor(path: string, before: readonly string[]): ClaimBase[] | null {
         const base = this.bases.get(path);

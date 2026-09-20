@@ -338,3 +338,243 @@ describe('a claim that found no scan of its own', () => {
         expect(harness.pendingCount()).toBe(1);
     });
 });
+
+describe('a flow firing, through the write layer', () => {
+    // A firing writes three times: the tick, the next instance above the fired
+    // line, and the `==>` coming off it. The tick files no claim until stage
+    // 2-4, so the chain starts at the second write — safely, because a firing
+    // runs inside the tail of the scan that committed the tick, so the ledger
+    // already holds it.
+    //
+    // What varies below is where the second scan falls against the third
+    // write. All three orders are here because all three are reachable: at
+    // 3000 lines the intermediate state is committed every time, at 4 lines it
+    // never is, and the third write's claim can be filed on either side of the
+    // commit in between.
+
+    // The next instance carries the occurrence it was computed for:
+    // `buildNextTask` puts one on a dateless task rather than leaving it bare
+    // (FlowPlanner.ts:358-362).
+    const LIVE = '- [ ] ポモドーロ @2026-09-21 ==> every 1d';
+    const FIRED = '- [x] ポモドーロ ==> every 1d';
+    const STRIPPED = '- [x] ポモドーロ';
+
+    /** The file after the tick, after the instance, after the strip. */
+    const ticked = [FIRED, ''];
+    const instanced = [LIVE, FIRED, ''];
+    const stripped = [LIVE, STRIPPED, ''];
+
+    /** What the two writers report, as the writer tests pin them. */
+    const INSTANCE: LineEdit[] = [{ kind: 'inserted', at: 0, count: 1 }];
+    const STRIP: LineEdit[] = [{ kind: 'replaced', at: 1 }];
+
+    /** Up to the point the flow fires: the tick is written and committed. */
+    async function fired(): Promise<{ harness: Harness; original: string }> {
+        const harness = new Harness();
+        await harness.write([TASK + ' ==> every 1d', '']);
+        const original = harness.ids()[0];
+
+        // The tick, with no claim of its own, and the scan that commits it —
+        // the one whose tail fires the flow.
+        await harness.write(ticked);
+        expect(harness.ids()).toEqual([original]);
+
+        return { harness, original };
+    }
+
+    it('keeps both rows when the strip lands before the next scan reads', async () => {
+        const { harness, original } = await fired();
+
+        harness.report(instanced, INSTANCE);
+        harness.report(stripped, STRIP);
+
+        await harness.scan();
+        const afterFirst = harness.ids();
+        // The fired line kept what it had; the instance above it is the new row.
+        expect(afterFirst[1]).toBe(original);
+        expect(afterFirst[0]).not.toBe(original);
+
+        await harness.scan();
+        expect(harness.ids()).toEqual(afterFirst);
+    });
+
+    it('keeps both rows when a scan reads between the two writes', async () => {
+        // The order the 3000-line measurement shows, with the third write's
+        // claim filed before that scan commits: the claim is raised after the
+        // read, which is exactly the case `pendingFor` refuses to cut off, and
+        // it has to survive the commit that follows.
+        const { harness, original } = await fired();
+
+        harness.report(instanced, INSTANCE);
+
+        const held = harness.holdRead();
+        harness.report(stripped, STRIP);
+        // The read in flight still sees the file as the second write left it.
+        harness.contents.set(FILE, instanced.join('\n'));
+        held.release();
+        await held.scanning;
+
+        const afterMiddle = harness.ids();
+        expect(afterMiddle[1]).toBe(original);
+        const instance = afterMiddle[0];
+        expect(instance).not.toBe(original);
+
+        // The strip's claim outlived that commit, so the scan that reads the
+        // stripped file is not left to the ladder.
+        expect(harness.pendingCount()).toBe(1);
+
+        harness.contents.set(FILE, stripped.join('\n'));
+        await harness.scan();
+        expect(harness.ids()).toEqual([instance, original]);
+    });
+
+    it('keeps both rows when that scan commits before the strip is written', async () => {
+        // The same read, committed before the third write files. `forget` takes
+        // the base with it, so the strip's claim is built on the ledger — which
+        // is current, and already holds the row the second write named.
+        const { harness, original } = await fired();
+
+        harness.report(instanced, INSTANCE);
+        await harness.scan();
+
+        const afterMiddle = harness.ids();
+        expect(afterMiddle[1]).toBe(original);
+        const instance = afterMiddle[0];
+        expect(harness.pendingCount()).toBe(0);
+
+        harness.report(stripped, STRIP);
+
+        // Built on the ledger: the instance is a row that has been recorded,
+        // not one this write made, and the claim says so.
+        const pending = harness.scanner.getHintLog().peek()
+            .find(entry => entry.file === FILE)?.pending ?? [];
+        expect(pending).toHaveLength(1);
+        expect(pending[0].hint.rows.map(row => row.created)).toEqual([false, false]);
+        expect(pending[0].hint.rows.map(row => row.runtimeId)).toEqual([instance, original]);
+
+        await harness.scan();
+        expect(harness.ids()).toEqual([instance, original]);
+    });
+
+    it('is not what keeps a recurrence right: the ladder holds there on its own', async () => {
+        // Both writes with no claim behind either. The date the next instance
+        // was computed for is what saves it: the two lines read alike otherwise,
+        // and the rung that survives a reformat keys on content *and* dates, so
+        // they fall in different buckets and the fired line keeps its row. A
+        // recurrence always has that date, which is why the field runs saw no
+        // ID move. What the claims buy here is not this answer but independence
+        // from it.
+        const { harness, original } = await fired();
+
+        harness.contents.set(FILE, stripped.join('\n'));
+        await harness.scan();
+
+        expect(harness.ids()[1]).toBe(original);
+        expect(harness.ids()[0]).not.toBe(original);
+    });
+
+    it('collapses into one claim when the flow is on a child line', async () => {
+        // Written as `- ==>` under the task, the strip removes a line no row
+        // stands on and rewrites the task line to the same text. Both claims
+        // then describe the same rows, so the scan in between adopts the newer
+        // one and there is nothing left for the scan after it — which costs
+        // nothing, because the ladder reads both lines verbatim.
+        const CHILD = '\t- ==> every 1d';
+        const harness = new Harness();
+        await harness.write([TASK, CHILD, '']);
+        const original = harness.ids()[0];
+        await harness.write(['- [x] ポモドーロ', CHILD, '']);
+
+        harness.report([LIVE, CHILD, '- [x] ポモドーロ', CHILD, ''],
+            [{ kind: 'inserted', at: 0, count: 2 }]);
+        harness.report([LIVE, CHILD, '- [x] ポモドーロ', ''],
+            [{ kind: 'removed', at: 3, count: 1 }, { kind: 'replaced', at: 2 }]);
+        harness.contents.set(FILE, [LIVE, CHILD, '- [x] ポモドーロ', CHILD, ''].join('\n'));
+
+        await harness.scan();
+        const afterMiddle = harness.ids();
+        expect(afterMiddle[1]).toBe(original);
+        expect(harness.pendingCount()).toBe(0);
+
+        harness.contents.set(FILE, [LIVE, CHILD, '- [x] ポモドーロ', ''].join('\n'));
+        await harness.scan();
+        expect(harness.ids()).toEqual(afterMiddle);
+    });
+});
+
+describe('a firing whose gen block writes a parent of its own', () => {
+    // `insertGeneratedInstance` does not go through the formatter: when the
+    // block renders a parent line, that line is written as the block wrote it,
+    // with only the flow clause appended (FlowPlanner.ts:297-305). A block that
+    // renders nothing but the task's own words gives the instance no date — and
+    // then the instance and the line it was generated from read alike in
+    // everything the ladder can key on.
+    const BARE = '- [ ] 掃除 ==> every 1d';
+    const GEN_FIRED = '- [x] 掃除 ==> every 1d';
+    const GEN_STRIPPED = '- [x] 掃除';
+
+    async function fired(): Promise<{ harness: Harness; original: string }> {
+        const harness = new Harness();
+        await harness.write([BARE, '']);
+        const original = harness.ids()[0];
+        await harness.write([GEN_FIRED, '']);
+        expect(harness.ids()).toEqual([original]);
+        return { harness, original };
+    }
+
+    it('hands the fired line its ID to the instance when nothing is claimed', async () => {
+        // The rung that survives a reformat keys on content and dates, which
+        // these two share, so both land in one bucket — and that rung pairs by
+        // ordinal rather than refusing, so the row goes to whichever line comes
+        // first. That is the instance, written above the line it came from.
+        const { harness, original } = await fired();
+
+        harness.contents.set(FILE, [BARE, GEN_STRIPPED, ''].join('\n'));
+        await harness.scan();
+
+        expect(harness.ids()[0]).toBe(original);
+        expect(harness.ids()[1]).not.toBe(original);
+    });
+
+    it('leaves it where it was once the writes say what they did', async () => {
+        const { harness, original } = await fired();
+
+        harness.report([BARE, GEN_FIRED, ''], [{ kind: 'inserted', at: 0, count: 1 }]);
+        harness.report([BARE, GEN_STRIPPED, ''], [{ kind: 'replaced', at: 1 }]);
+        await harness.scan();
+
+        expect(harness.ids()[1]).toBe(original);
+        expect(harness.ids()[0]).not.toBe(original);
+    });
+
+    it('loses the strip with the instance when a hand edit lands on both', async () => {
+        // What the second claim's correctness is worth to the third. A line
+        // typed into the file in the same moment leaves the scan reading
+        // something neither claim describes; it adopts nothing and the rows
+        // moved anyway, so the whole log goes — the strip's claim with it,
+        // though no scan ever read the state it describes. The firing then
+        // lands exactly where it would have with nothing claimed at all.
+        const { harness, original } = await fired();
+
+        harness.report([BARE, GEN_FIRED, ''], [{ kind: 'inserted', at: 0, count: 1 }]);
+        harness.report([BARE, GEN_STRIPPED, ''], [{ kind: 'replaced', at: 1 }]);
+
+        const TYPED = '- [ ] 手で書いた行';
+        harness.contents.set(FILE, [BARE, GEN_STRIPPED, TYPED, ''].join('\n'));
+        await harness.scan();
+
+        // Both claims are gone, not just the one that failed to match.
+        expect(harness.pendingCount()).toBe(0);
+        // And the ladder placed the row the way it places it with no claim:
+        // on the instance, above the line that fired.
+        expect(harness.ids()[0]).toBe(original);
+        expect(harness.ids()[1]).not.toBe(original);
+
+        // The typed line goes again. Nothing is left to say otherwise, so the
+        // answer the ladder already committed stands.
+        const placed = harness.ids().slice(0, 2);
+        harness.contents.set(FILE, [BARE, GEN_STRIPPED, ''].join('\n'));
+        await harness.scan();
+        expect(harness.ids()).toEqual(placed);
+    });
+});

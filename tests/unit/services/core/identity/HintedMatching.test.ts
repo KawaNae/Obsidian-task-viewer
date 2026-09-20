@@ -385,3 +385,68 @@ describe('rung 0: what it does not disturb', () => {
         expect(withStaleHint.retired).toEqual(withoutHints.retired);
     });
 });
+
+describe('rung 0: a flow firing', () => {
+    // Three writes, of which the middle and the last report. What the last one
+    // has to avoid saying is that anything was issued or lost: the file has the
+    // same two rows it had a moment earlier, one of them simply reads without
+    // its `==>` now.
+    const LIVE = '- [ ] ポモドーロ ==> every 1d';
+    const FIRED = '- [x] ポモドーロ ==> every 1d';
+    const STRIPPED = '- [x] ポモドーロ';
+
+    it('issues one name for the instance and none for the strip', () => {
+        const mint = makeMint();
+        const ticked = matchFile([], [t('prov:0', 0, FIRED)], mint);
+        const original = runtimeId(ticked, 'prov:0');
+
+        // The next instance goes in above the line that fired.
+        const afterInstance = matchFile(
+            ticked.entries,
+            [t('prov:0', 0, LIVE), t('prov:1', 1, FIRED)],
+            mint,
+            pendingOf(claim([null, LIVE], [original, FIRED])),
+        );
+        const instance = runtimeId(afterInstance, 'prov:0');
+        expect(runtimeId(afterInstance, 'prov:1')).toBe(original);
+        expect(afterInstance.minted).toEqual([instance]);
+        expect(afterInstance.retired).toEqual([]);
+
+        // The `==>` comes off the fired line. Both rows are the ledger's by
+        // now, so the claim carries them as kept — nothing is new here.
+        const afterStrip = matchFile(
+            afterInstance.entries,
+            [t('prov:0', 0, LIVE), t('prov:1', 1, STRIPPED)],
+            mint,
+            pendingOf({ rows: [kept(instance, LIVE), kept(original, STRIPPED)] }),
+        );
+        expect(runtimeId(afterStrip, 'prov:0')).toBe(instance);
+        expect(runtimeId(afterStrip, 'prov:1')).toBe(original);
+        expect(afterStrip.minted).toEqual([]);
+        expect(afterStrip.retired).toEqual([]);
+    });
+
+    it('carries the instance through the strip when no scan recorded it first', () => {
+        // The two writes with no scan in between: the strip's claim is built on
+        // what the instance's claim left, so it names the instance under the
+        // name that write coined — still created, since no scan has recorded it.
+        const mint = makeMint();
+        const ticked = matchFile([], [t('prov:0', 0, FIRED)], mint);
+        const original = runtimeId(ticked, 'prov:0');
+
+        const afterBoth = matchFile(
+            ticked.entries,
+            [t('prov:0', 0, LIVE), t('prov:1', 1, STRIPPED)],
+            mint,
+            pendingOf(
+                claim([null, LIVE], [original, FIRED]),
+                { rows: [made('w-instance', LIVE), kept(original, STRIPPED)] },
+            ),
+        );
+
+        expect(afterBoth.consumedHints).toBe(2);
+        expect(runtimeId(afterBoth, 'prov:0')).toBe('w-instance');
+        expect(runtimeId(afterBoth, 'prov:1')).toBe(original);
+        expect(afterBoth.retired).toEqual([]);
+    });
+});

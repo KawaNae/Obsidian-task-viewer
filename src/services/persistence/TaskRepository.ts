@@ -26,7 +26,7 @@ export class TaskRepository {
         private app: App,
     ) {
         this.fileOps = new FileOperations(app);
-        this.inlineWriter = new InlineTaskWriter(app, this.fileOps);
+        this.inlineWriter = new InlineTaskWriter(app, this.fileOps, this.writes);
         this.frontmatterWriter = new FrontmatterWriter(app, this.fileOps);
         this.cloner = new TaskCloner(app, this.fileOps, this.writes);
     }

@@ -134,14 +134,14 @@ export class TaskCloner {
         const file = this.app.vault.getAbstractFileByPath(task.file);
         if (!(file instanceof TFile)) return;
 
-        await processLines(this.app, file, (lines) => {
+        await processLines(this.app, file, (lines, _eol, edits) => {
             const currentLine = this.fileOps.findTaskLineNumber(lines, task);
             if (currentLine < 0 || currentLine >= lines.length) {
                 // Task not found: append to end
                 appendLines(lines, [
                     ...splitLines(content).lines,
                     ...flowLines.map(raw => formatFlowLine('\t', raw)),
-                ]);
+                ], edits);
                 return lines;
             }
 
@@ -163,10 +163,10 @@ export class TaskCloner {
             const newFlowLines = flowLines.map(raw => formatFlowLine(childIndent, raw));
 
             const insertAt = this.fileOps.findSiblingGroupStart(lines, currentLine);
-            lines.splice(insertAt, 0, newParentLine, ...newFlowLines);
+            edits.splice(insertAt, 0, newParentLine, ...newFlowLines);
 
             return lines;
-        });
+        }, this.writes?.for(task.file));
     }
 
     /**
@@ -196,7 +196,7 @@ export class TaskCloner {
         const file = this.app.vault.getAbstractFileByPath(task.file);
         if (!(file instanceof TFile)) return;
 
-        await processLines(this.app, file, (lines) => {
+        await processLines(this.app, file, (lines, _eol, edits) => {
             const currentLine = this.fileOps.findTaskLineNumber(lines, task);
             if (currentLine < 0 || currentLine >= lines.length) {
                 logWarn('[TaskCloner] Task not found in file (insertGeneratedInstance)');
@@ -214,10 +214,10 @@ export class TaskCloner {
             ];
 
             const insertAt = this.fileOps.findSiblingGroupStart(lines, currentLine);
-            lines.splice(insertAt, 0, ...rendered);
+            edits.splice(insertAt, 0, ...rendered);
 
             return lines;
-        });
+        }, this.writes?.for(task.file));
     }
 
     // --- Private helpers ---
