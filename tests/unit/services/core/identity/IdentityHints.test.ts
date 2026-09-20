@@ -108,7 +108,7 @@ describe('HintLog.settle', () => {
         log.add(FILE, [{ kind: 'retire', runtimeId: 'r1' }], 0);
         log.add(FILE, [{ kind: 'retire', runtimeId: 'r2' }], 0);
 
-        log.settle(FILE, 1, 0, 0);
+        log.settle(FILE, 1, 0, 0, true);
 
         expect(log.pendingFor(FILE, 0).map(entry => entry.seq)).toEqual([2]);
     });
@@ -118,7 +118,7 @@ describe('HintLog.settle', () => {
         log.add(FILE, [{ kind: 'retire', runtimeId: 'r1' }], 0);
         const readTip = log.tip(FILE);
 
-        log.settle(FILE, 0, readTip, 0);
+        log.settle(FILE, 0, readTip, 0, false);
 
         expect(log.pendingFor(FILE, 0)).toHaveLength(0);
     });
@@ -128,7 +128,7 @@ describe('HintLog.settle', () => {
         const readTip = log.tip(FILE);
         log.add(FILE, [{ kind: 'retire', runtimeId: 'r1' }], 0);
 
-        log.settle(FILE, 0, readTip, 0);
+        log.settle(FILE, 0, readTip, 0, false);
 
         expect(log.pendingFor(FILE, 0)).toHaveLength(1);
     });
@@ -138,13 +138,39 @@ describe('HintLog.settle', () => {
         const log = new HintLog();
         log.add(FILE, [{ kind: 'retire', runtimeId: 'r1' }], 0);
 
-        log.settle(FILE, 0, log.tip(FILE), 0);
+        log.settle(FILE, 0, log.tip(FILE), 0, false);
 
         log.add(FILE, [{ kind: 'retire', runtimeId: 'r2' }], 0);
         const pending = log.pendingFor(FILE, 0);
 
         expect(pending).toHaveLength(1);
         expect(pending[0].hint).toMatchObject({ runtimeId: 'r2' });
+    });
+
+    it('drops everything when a scan believed nothing and still moved the rows', () => {
+        // The hint was raised after this scan took its position, so the tip
+        // rule alone would keep it — but the scan's read already contained the
+        // write it describes, and the ladder placed that write its own way.
+        // Replaying the claim over the new rows would apply it twice.
+        const log = new HintLog();
+        const readTip = log.tip(FILE);
+        log.add(FILE, [{ kind: 'retire', runtimeId: 'r1' }], 0);
+
+        log.settle(FILE, 0, readTip, 0, true);
+
+        expect(log.pendingFor(FILE, 0)).toHaveLength(0);
+    });
+
+    it('keeps a hint when the scan believed nothing and changed nothing', () => {
+        // The window the design accepts: the scan read the file from before the
+        // write. Nothing moved, so the claim still has its own scan coming.
+        const log = new HintLog();
+        const readTip = log.tip(FILE);
+        log.add(FILE, [{ kind: 'retire', runtimeId: 'r1' }], 0);
+
+        log.settle(FILE, 0, readTip, 0, false);
+
+        expect(log.pendingFor(FILE, 0)).toHaveLength(1);
     });
 });
 

@@ -94,6 +94,11 @@ export async function processLines(
 
     try {
         await app.vault.process(file, (content) => {
+            // Obsidian may run the callback again (it retries on a conflicting
+            // write). The previous attempt's claims describe a file that never
+            // reached disk, so they go before this attempt files its own.
+            for (const withdraw of withdrawals.splice(0)) withdraw();
+
             const { lines, eol } = splitLines(content);
             const collected: Hint[] = [];
             const next = edit(lines, eol, claim => collected.push(claim));

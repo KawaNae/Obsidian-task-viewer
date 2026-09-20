@@ -7,7 +7,7 @@ import type { SyncDetector } from './SyncDetector';
 import { CompletionDetector } from './CompletionDetector';
 import type { FlowExecutor } from '../flow/FlowExecutor';
 import { TaskIdGenerator } from '../display/TaskIdGenerator';
-import { IdentityLedger } from './identity/IdentityLedger';
+import { IdentityLedger, type LedgerEntry } from './identity/IdentityLedger';
 import { HintLog, type Hint } from './identity/IdentityHints';
 import { matchFile } from './identity/IdentityMatcher';
 import { applyIdentity, assertNoProvisionalIds, assertUniqueProvisionalIds } from './identity/IdentityApplier';
@@ -176,8 +176,9 @@ export class TaskScanner {
             assertUniqueProvisionalIds(parsed.tasks);
         }
         const now = Date.now();
+        const previousRows = this.ledger.snapshotFor(file.path);
         const identity = matchFile(
-            this.ledger.snapshotFor(file.path),
+            previousRows,
             parsed.tasks,
             task => TaskIdGenerator.mintRuntimeId(task, () => this.ledger.mint()),
             this.hints.pendingFor(file.path, now)
@@ -239,7 +240,10 @@ export class TaskScanner {
             // Last, so a store write that throws leaves the ledger on the
             // previous generation too.
             this.ledger.replaceFile(file.path, identity.entries);
-            this.hints.settle(file.path, identity.consumedHints, readTip, now);
+            this.hints.settle(
+                file.path, identity.consumedHints, readTip, now,
+                ledgerMoved(previousRows, identity.entries),
+            );
         } finally {
             this.store.endBatch();
         }
@@ -315,4 +319,21 @@ export class TaskScanner {
     updateSettings(settings: TaskViewerSettings): void {
         this.settings = settings;
     }
+}
+
+/**
+ * Whether a scan changed the file's rows — which lines exist, in what order,
+ * carrying which identity.
+ *
+ * Used to decide what happens to hints this scan did not believe: if the rows
+ * moved anyway, something the hints could not account for reached the file, and
+ * the ladder has already placed it. See {@link HintLog.settle}.
+ */
+function ledgerMoved(before: LedgerEntry[], after: LedgerEntry[]): boolean {
+    if (before.length !== after.length) return true;
+    for (let i = 0; i < before.length; i++) {
+        if (before[i].runtimeId !== after[i].runtimeId) return true;
+        if (before[i].fingerprint.originalText !== after[i].fingerprint.originalText) return true;
+    }
+    return false;
 }

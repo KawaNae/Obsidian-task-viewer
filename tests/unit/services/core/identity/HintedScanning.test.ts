@@ -192,6 +192,37 @@ describe('a hint that found no scan of its own', () => {
         expect(harness.ids()[0]).not.toBe(original);
     });
 
+    it('is dropped when the ladder already absorbed the write it describes', async () => {
+        // The hint is raised after this scan took its position, so the position
+        // rule alone would keep it. But the scan's read already held the write,
+        // and an external edit in the same read stopped the claim from being
+        // believed — so the ladder placed that write its own way and the ledger
+        // moved. Replaying the claim later would apply it a second time: a row
+        // that is already there would be called new, and the row beside it
+        // would take an identity that belongs elsewhere.
+        const harness = new Harness();
+        await harness.write([TASK, '']);
+        const original = harness.ids()[0];
+
+        const held = harness.holdRead();
+        harness.hintOnly(
+            [TASK, TASK, '- [ ] 手で書いた行', ''],
+            { kind: 'insert', text: TASK, anchor: original, side: 'before' },
+        );
+        held.release();
+        await held.scanning;
+
+        // The ladder answered, and the hint is gone rather than pending.
+        const afterLadder = harness.ids();
+        expect(afterLadder).toHaveLength(3);
+
+        // A later write of its own must not have the stale claim applied on
+        // top of it.
+        const settled = harness.ids();
+        await harness.scan();
+        expect(harness.ids()).toEqual(settled);
+    });
+
     it('is dropped, not trusted, when the scan read the file before the write landed', async () => {
         // The window that stays open: a hint is raised inside the write
         // callback, a moment before the file reaches disk. A scan starting in

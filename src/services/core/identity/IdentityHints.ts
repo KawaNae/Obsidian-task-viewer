@@ -150,10 +150,21 @@ export class HintLog {
      * @param consumed how many hints from the head were believed.
      * @param readTip the log position taken before the scan's read; unconsumed
      *   hints at or below it are dropped (see {@link tip}).
+     * @param ledgerMoved whether this scan changed the file's rows. A scan that
+     *   believed nothing and still moved the ledger absorbed something it could
+     *   not account for — including, possibly, the very writes the pending
+     *   hints describe, which the ladder then placed its own way. Replaying
+     *   those claims over the new rows would be replaying them twice, so the
+     *   whole log goes. What that costs is precision on the next write.
      */
-    settle(file: string, consumed: number, readTip: number, now: number): void {
+    settle(file: string, consumed: number, readTip: number, now: number, ledgerMoved: boolean): void {
         const pending = this.files.get(file);
         if (!pending) return;
+
+        if (consumed === 0 && ledgerMoved) {
+            this.files.delete(file);
+            return;
+        }
 
         const kept = pending
             .slice(consumed)
