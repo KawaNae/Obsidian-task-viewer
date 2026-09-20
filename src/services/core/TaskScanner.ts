@@ -9,7 +9,7 @@ import type { FlowExecutor } from '../flow/FlowExecutor';
 import { TaskIdGenerator } from '../display/TaskIdGenerator';
 import { IdentityLedger, type LedgerEntry } from './identity/IdentityLedger';
 import { HintLog, type Hint } from './identity/IdentityHints';
-import { matchFile } from './identity/IdentityMatcher';
+import { matchFile, matchWithoutRepeatedIds } from './identity/IdentityMatcher';
 import { applyIdentity, assertDistinctRuntimeIds, assertNoProvisionalIds, assertUniqueProvisionalIds } from './identity/IdentityApplier';
 import { splitLines } from '../../utils/FileLines';
 import { logDebug, logError, logInfo } from '../../log/log';
@@ -181,12 +181,25 @@ export class TaskScanner {
         }
         const now = Date.now();
         const previousRows = this.ledger.snapshotFor(file.path);
-        const identity = matchFile(
-            previousRows,
-            parsed.tasks,
-            task => TaskIdGenerator.mintRuntimeId(task, () => this.ledger.mint()),
-            this.hints.pendingFor(file.path, now)
+        const guarded = matchWithoutRepeatedIds(
+            claims => matchFile(
+                previousRows,
+                parsed.tasks,
+                task => TaskIdGenerator.mintRuntimeId(task, () => this.ledger.mint()),
+                claims,
+            ),
+            this.hints.pendingFor(file.path, now),
         );
+        if (guarded.withoutClaims) {
+            // The log said something no file can be: one row on two lines. What
+            // it would cost to commit is a task the index cannot see again (see
+            // matchWithoutRepeatedIds), so the ladder answered instead and the
+            // file's claims go — a log that produced this is not one to weigh
+            // the next read against.
+            logError(`[TaskScanner] ${file.path}: a claim gave one runtime ID to two rows; matched without the log`);
+            this.hints.dropFile(file.path);
+        }
+        const identity = guarded.result;
         applyIdentity(parsed, identity.mapping);
 
         // --- validate ---

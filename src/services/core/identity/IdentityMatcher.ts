@@ -425,3 +425,49 @@ function buildOrdinals(roots: Task[], childrenOf: Map<Task, Task[]>): Map<Task, 
     }
     return ordinals;
 }
+
+export interface GuardedMatch {
+    result: MatchResult;
+    /** Whether the claims were thrown out and the file matched again without them. */
+    withoutClaims: boolean;
+}
+
+/**
+ * Match, and if the answer would give one runtime ID to two rows, match again
+ * with no claims at all.
+ *
+ * A duplicate is the one answer that does lasting damage. The store is keyed by
+ * ID, so the second row overwrites the first and the file comes out a task
+ * short of its lines; the ledger keeps both positions and one entry, and since
+ * that ledger is what the next scan compares against, the state is stable and
+ * wrong. The task whose ID went missing then refuses every write as "not
+ * found" while its line sits there in plain sight. Nothing recovers it.
+ *
+ * So the answer is checked before it is used, and the fallback is the ladder on
+ * its own: it takes each previous row at most once, which is the property that
+ * makes a duplicate impossible. What that costs is the precision of one scan.
+ *
+ * Only a claim can bring this about, which is why matching again without them
+ * is the whole remedy — and why the second run is not checked again here. A
+ * dev-build assertion at the store's threshold covers the case where the ladder
+ * itself learns to repeat an ID.
+ */
+export function matchWithoutRepeatedIds(
+    run: (pending: readonly PendingHint[]) => MatchResult,
+    pending: readonly PendingHint[],
+): GuardedMatch {
+    const result = run(pending);
+    if (pending.length === 0 || !repeatsAnId(result.entries)) {
+        return { result, withoutClaims: false };
+    }
+    return { result: run([]), withoutClaims: true };
+}
+
+function repeatsAnId(entries: readonly LedgerEntry[]): boolean {
+    const seen = new Set<string>();
+    for (const entry of entries) {
+        if (seen.has(entry.runtimeId)) return true;
+        seen.add(entry.runtimeId);
+    }
+    return false;
+}
