@@ -37,7 +37,7 @@ const FIXTURE_CONTENT = [
     '- [ ] flow-telomere-C @2026-04-01 ==> at(start + 3d) x1',
     '',
     '## until (expired)',
-    '- [ ] flow-until-D @2026-04-01 ==> every mon until 2026-04-30',
+    '- [ ] flow-until-D @2026-04-01 ==> every mon until(2026-04-30)',
     '',
     '## move',
     '- [ ] flow-move-E @2026-04-01 ==> move([[test-archive]])',
