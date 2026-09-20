@@ -209,7 +209,15 @@ function settleHints(
         const entry = byRuntimeId.get(runtimeId);
         if (!entry) {
             // Only a created row can name something `previous` does not hold:
-            // `reproduces` refused the claim otherwise.
+            // `reproduces` refused the claim otherwise. That refusal is the
+            // only thing standing between this branch and a name invented out
+            // of nowhere, so in development it is checked here as well — where
+            // the row is actually used, rather than where it was let through.
+            if (__DEV__ && !rows[i].created) {
+                throw new Error(
+                    `[identity] a claim named a row the ledger does not hold: ${runtimeId}`
+                );
+            }
             fresh.set(ordered[i], runtimeId);
             continue;
         }

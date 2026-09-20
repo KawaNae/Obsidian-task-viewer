@@ -7,6 +7,7 @@ import { FileOperations } from '../utils/FileOperations';
 import { ChildPropertyLineEditor } from '../utils/ChildPropertyLineEditor';
 import type { PropertyOp } from '../PropertyUpdatePlanner';
 import { appendLines, processLines, splitLines } from '../../../utils/FileLines';
+import type { WriteObserver } from '../WriteObserver';
 import { logWarn } from '../../../log/log';
 
 
@@ -17,7 +18,8 @@ import { logWarn } from '../../../log/log';
 export class InlineTaskWriter {
     constructor(
         private app: App,
-        private fileOps: FileOperations
+        private fileOps: FileOperations,
+        private writes?: WriteObserver
     ) { }
 
     /**
@@ -114,24 +116,32 @@ export class InlineTaskWriter {
             return;
         }
 
-        await processLines(this.app, file, (lines) => {
+        await processLines(this.app, file, (lines, _eol, edits) => {
             const currentLine = this.fileOps.findTaskLineNumber(lines, task);
             if (currentLine < 0 || currentLine >= lines.length) {
                 logWarn(`[InlineTaskWriter] Task not found in file (stripFlow)`);
                 return null;
             }
 
+            // Every index here is below `currentLine`: the scan starts at
+            // `taskLineIndex + 1` and stops at the first line that is not a
+            // descendant (FlowLineScanner.ts:82-86). So the deletions leave
+            // `currentLine` where it is, and the `replaced` below is filed at
+            // the same coordinate it was read at.
             const flowIndices = collectFlowLineIndicesInFile(lines, currentLine);
             for (let i = flowIndices.length - 1; i >= 0; i--) {
-                lines.splice(flowIndices[i], 1);
+                edits.splice(flowIndices[i], 1);
             }
 
             const newLine = TaskParser.format({ ...task, flow: undefined });
             const originalIndent = lines[currentLine].match(/^(\s*)/)?.[1] || '';
             lines[currentLine] = originalIndent + newLine.trim();
+            // The fired line keeps its identity: losing `==>` rewrites the text
+            // but does not make it another task.
+            edits.replaced(currentLine);
 
             return lines;
-        });
+        }, this.writes?.for(task.file));
     }
 
     /**
