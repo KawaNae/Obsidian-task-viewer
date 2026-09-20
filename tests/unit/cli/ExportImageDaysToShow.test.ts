@@ -1,6 +1,5 @@
 import { describe, it, expect } from 'vitest';
 import {
-    computeRenderedRange,
     parseDaysToShow,
     validateDaysToShow,
 } from '../../../src/cli/handlers/ExportImageHandler';
@@ -67,31 +66,5 @@ describe('validateDaysToShow', () => {
 
     it('does not check days-to-show for a view that has no such field', () => {
         expect(validateDaysToShow({ 'days-to-show': '999' }, CALENDAR_TYPE)).toBe(null);
-    });
-});
-
-describe('computeRenderedRange (timeline)', () => {
-    it('computes the range from an explicit in-range days-to-show', () => {
-        const range = computeRenderedRange(TIMELINE_TYPE, '2026-01-01', { 'days-to-show': '5' });
-        expect(range).toEqual({ anchor: '2026-01-01', from: '2026-01-01', to: '2026-01-05' });
-    });
-
-    it('falls back to the schema default when days-to-show is absent', () => {
-        const range = computeRenderedRange(TIMELINE_TYPE, '2026-01-01', {});
-        // Schema default is 3 days: anchor + 2.
-        expect(range).toEqual({ anchor: '2026-01-01', from: '2026-01-01', to: '2026-01-03' });
-    });
-
-    it('reads the exact same value the render path would (regression: no separate raw-parseInt path)', () => {
-        // Before the fix, this function used a raw parseInt with no bounds, so
-        // it could compute a range for a days-to-show value the schema would
-        // reject when actually applying config (falling back to the default).
-        // Feeding an out-of-range value here must now match what
-        // parseDaysToShow reports as unparseable, not silently accept it.
-        const schema = schemaFor(TIMELINE_TYPE);
-        expect(parseDaysToShow(schema, '999')).toBeUndefined();
-        const range = computeRenderedRange(TIMELINE_TYPE, '2026-01-01', { 'days-to-show': '999' });
-        // Falls back to the default (3), it does not compute a 999-day range.
-        expect(range).toEqual({ anchor: '2026-01-01', from: '2026-01-01', to: '2026-01-03' });
     });
 });

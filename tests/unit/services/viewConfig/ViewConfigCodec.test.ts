@@ -216,6 +216,17 @@ describe('ViewConfigCodec', () => {
             expect(codec.fromUriParams({ span: 'abc' }).span).toBeUndefined();
         });
 
+        it('int rejects string input that Number() would parse but is not a plain decimal integer', () => {
+            // Number() alone accepts hex, exponent notation, and padded
+            // whitespace as valid integers — this field should not.
+            expect(codec.fromUriParams({ span: '0x10' }).span).toBeUndefined();
+            expect(codec.fromUriParams({ span: '1e1' }).span).toBeUndefined();
+            expect(codec.fromUriParams({ span: ' 5 ' }).span).toBeUndefined();
+            expect(codec.parseConfig({ span: '0x10' }).span).toBeUndefined();
+            expect(codec.parseConfig({ span: '1e1' }).span).toBeUndefined();
+            expect(codec.parseConfig({ span: ' 5 ' }).span).toBeUndefined();
+        });
+
         it('dateString rejects malformed input', () => {
             expect(codec.parseConfig({ cursor: 'not-a-date' }).cursor).toBeUndefined();
             expect(codec.parseConfig({ cursor: '2026-05-22' }).cursor).toBe('2026-05-22');

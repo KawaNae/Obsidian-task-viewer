@@ -130,30 +130,29 @@ export const F = {
         opts: FieldOptions & { min?: number; max?: number } = {},
     ): ConfigField<number> {
         const { min = -Infinity, max = Infinity } = opts;
+        // Plain decimal digits only. Number() alone also accepts "0x10" (16),
+        // "1e1" (10), and whitespace-padded values ("  5  ") as valid
+        // integers — this CLI's fields reject malformed input rather than
+        // coerce it, so a value that isn't visibly a decimal integer doesn't
+        // get a second chance through Number()'s leniency.
+        const DECIMAL_INT = /^-?\d+$/;
         const check = (n: number): number | undefined =>
             (Number.isInteger(n) && n >= min && n <= max) ? n : undefined;
+        const parseString = (raw: string): number | undefined =>
+            DECIMAL_INT.test(raw) ? check(Number(raw)) : undefined;
         return {
             key,
             legacyKeys: opts.legacyKeys,
             parse(raw) {
                 if (typeof raw === 'number') return check(raw);
-                if (typeof raw === 'string') {
-                    // Number(), not parseInt(): parseInt("5.5") truncates to 5
-                    // instead of failing, which would silently accept
-                    // fractional input as an integer.
-                    const n = Number(raw);
-                    return Number.isFinite(n) ? check(n) : undefined;
-                }
+                if (typeof raw === 'string') return parseString(raw);
                 return undefined;
             },
             serialize(value) {
                 return typeof value === 'number' ? check(value) : undefined;
             },
             toUriParam(value) { return String(value); },
-            fromUriParam(raw) {
-                const n = Number(raw);
-                return Number.isFinite(n) ? check(n) : undefined;
-            },
+            fromUriParam(raw) { return parseString(raw); },
         };
     },
 

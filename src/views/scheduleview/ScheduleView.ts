@@ -211,6 +211,16 @@ export class ScheduleView extends ItemView {
         });
     }
 
+    /**
+     * The date currently drawn, for image export. Schedule renders exactly
+     * one day (`this.currentVisualDate`, the same field `renderDayTimeline`
+     * is called with), so anchor/from/to all coincide.
+     */
+    getExportedDateRange(): { anchor: string; from: string; to: string } | null {
+        if (!this.currentVisualDate) return null;
+        return { anchor: this.currentVisualDate, from: this.currentVisualDate, to: this.currentVisualDate };
+    }
+
     getViewType(): string {
         return VIEW_TYPE_SCHEDULE;
     }
