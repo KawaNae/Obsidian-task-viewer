@@ -563,7 +563,18 @@ export class TaskApi {
     }
 
     /**
-     * Duplicate a task with optional date shifting.
+     * Duplicate a task.
+     *
+     * `dayOffset` picks the axis the copies run along and `count` says how
+     * many there are. Without an offset they run along the clock: the first
+     * starts where the task ends — an hour on when no end was written, at
+     * the written end when one was — keeps its length, and each further copy
+     * starts where the one before it ends. They are written after the task
+     * and its children. With an offset they run along the calendar, one per
+     * day from `dayOffset`, written before the task with the latest first.
+     *
+     * A task with no dates and an all-day task have no slot to move out of,
+     * so their copies are the same line again.
      */
     async duplicate(params: DuplicateParams): Promise<DuplicateResult> {
         assertParams(params, DUPLICATE_SCHEMA, 'duplicate');

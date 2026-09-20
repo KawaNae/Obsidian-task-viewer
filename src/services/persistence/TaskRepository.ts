@@ -99,6 +99,11 @@ export class TaskRepository {
         return this.cloner.duplicateInlineTask(task, options);
     }
 
+    /** @returns whether the copies were written (see TaskCloner). */
+    async duplicateInlineTaskInPlace(task: Task, copyLines: string[]): Promise<boolean> {
+        return this.cloner.duplicateInlineTaskInPlace(task, copyLines);
+    }
+
     async insertRecurrenceForTask(task: Task, content: string, flowLines: string[] = []): Promise<void> {
         return this.cloner.insertRecurrenceForTask(task, content, flowLines);
     }

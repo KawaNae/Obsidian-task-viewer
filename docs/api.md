@@ -157,21 +157,30 @@ const result = await api.delete({ id: 'abc123' });
 
 ## duplicate
 
+`dayOffset` が複写を並べる軸を決め、`count` が本数を決めます。
+
 ```javascript
-// 1つコピー
+// 元の直後に1つ。元が 10:00>11:30 なら複写は 11:30>13:00
 const result = await api.duplicate({ id: 'abc123' });
 // => { duplicated: 'abc123' }
 
-// 日付を1日ずらして3つコピー
+// 元の直後に3つ、時刻を連ねる（11:30>13:00、13:00>14:30、14:30>16:00）
+const result = await api.duplicate({ id: 'abc123', count: 3 });
+
+// 日付を1日ずらして3つコピー（元の直前、新しい日付が上）
 const result = await api.duplicate({ id: 'abc123', dayOffset: 1, count: 3 });
 ```
+
+`dayOffset` を指定しない複写は、**元タスクの実効 end から始まり、長さを保ちます**。end を書いていないタスクの実効 end は開始の1時間後です。複写は元タスクとその子行の後ろに入り、`count` が2以上ならその長さぶんずつ連なります。
+
+終日のタスクと日付を持たないタスクはずらせないので、複写は同じ行がそのまま増えます。子行はどちらの軸でも日付を変えずに運ばれます。
 
 **DuplicateParams:**
 
 | パラメータ | 必須 | 型 | 説明 |
 |-----------|------|-----|------|
 | `id` | ○ | `string` | タスクID |
-| `dayOffset` | | `number` | 日付シフト日数（デフォルト: 0） |
+| `dayOffset` | | `number` | 日付シフト日数（デフォルト: 0。0 なら時刻の軸で連ねる） |
 | `count` | | `number` | コピー数（デフォルト: 1） |
 
 ## tasksForDateRange

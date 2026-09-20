@@ -30,12 +30,13 @@ export class TaskCloner {
     ) { }
 
     /**
-     * インラインタスクを複製する。
-     * - dayOffset=0, count=1: 同一ファイル内に複製（Block ID除去、元タスクの前に挿入）
-     * - dayOffset>0, count=1: 指定日数シフトして1件複製（元タスクの前に挿入）
-     * - count>1: dayOffset..dayOffset+count-1 の各日付で複製（future-first 挿入）
-     */
-    /**
+     * 日付をずらしてインラインタスクを複製する（`dayOffset` > 0）。
+     *
+     * 複写は元タスクの前に入り、`count` > 1 なら
+     * `dayOffset..dayOffset+count-1` の各日付ぶんを future-first（新しい日付
+     * ほど上）で並べる。日をまたがない複製は
+     * {@link duplicateInlineTaskInPlace} が扱う。
+     *
      * @returns whether the copy was written. A `false` means the original line
      * could not be resolved and the file is untouched.
      */
@@ -49,50 +50,54 @@ export class TaskCloner {
         }
 
         return processLines(this.app, file, (lines) => {
-            if (count > 1) {
-                // Multi-copy: future-first insertion (highest offset first)
-                const currentLine = this.fileOps.findTaskLineNumber(lines, task);
-                if (currentLine < 0 || currentLine >= lines.length) {
-                    logWarn('[TaskCloner] Task not found in file (duplicate)');
-                    return null;
-                }
-
-                const { childrenLines } = this.fileOps.collectChildrenFromLines(lines, currentLine);
-                const cleanParent = this.fileOps.stripBlockIds([lines[currentLine]])[0];
-                const cleanedChildren = this.fileOps.stripBlockIds(childrenLines);
-
-                const newLines: string[] = [];
-                // Future-first order: highest offset first so newer dates appear above older ones.
-                for (let offset = dayOffset + count - 1; offset >= dayOffset; offset--) {
-                    newLines.push(this.shiftInlineDates(cleanParent, offset));
-                    newLines.push(...cleanedChildren);
-                }
-
-                lines.splice(currentLine, 0, ...newLines);
-                return lines;
-            } else if (dayOffset === 0) {
-                // In-place copy: clean parent, insert before
-                const idx = this.fileOps.findTaskLineNumber(lines, task);
-                if (idx < 0 || idx >= lines.length) {
-                    logWarn('[TaskCloner] Task not found in file (duplicate)');
-                    return null;
-                }
-
-                const cleanParent = this.fileOps.stripBlockIds([lines[idx]])[0];
-                return this.duplicateInlineTaskLines(lines, task, cleanParent, 'before');
-            } else {
-                // Single copy with date shift
-                const idx = this.fileOps.findTaskLineNumber(lines, task);
-                if (idx < 0 || idx >= lines.length) {
-                    logWarn('[TaskCloner] Task not found in file (duplicate)');
-                    return null;
-                }
-
-                const shiftedParent = this.shiftInlineDates(
-                    this.fileOps.stripBlockIds([lines[idx]])[0], dayOffset
-                );
-                return this.duplicateInlineTaskLines(lines, task, shiftedParent, 'before');
+            const idx = this.fileOps.findTaskLineNumber(lines, task);
+            if (idx < 0 || idx >= lines.length) {
+                logWarn('[TaskCloner] Task not found in file (duplicate)');
+                return null;
             }
+
+            const cleanParent = this.fileOps.stripBlockIds([lines[idx]])[0];
+            const parents: string[] = [];
+            // Future-first order: highest offset first so newer dates appear above older ones.
+            for (let offset = dayOffset + count - 1; offset >= dayOffset; offset--) {
+                parents.push(this.shiftInlineDates(cleanParent, offset));
+            }
+
+            return this.spliceCopies(lines, idx, parents, 'before');
+        });
+    }
+
+    /**
+     * 同じ日の中で複製する（`dayOffset` なし）。
+     *
+     * 複写の行は呼び出し側が組んで渡す。どこへ置くかを決めるのがこの層で、
+     * 何を書くか（実効 end から始めて長さを保つ）を決めるのは日付を解決
+     * できる層である、という分担は {@link insertRecurrenceForTask} と同じ。
+     *
+     * 複写は元タスクとその子行の**後ろ**に入る。時刻の順に読めるためで、
+     * 同じ本文の 2 行が序数で振り分けられたときに、旧 ID が上の元の行に
+     * 残るためでもある。
+     *
+     * @returns whether the copies were written.
+     */
+    async duplicateInlineTaskInPlace(task: Task, copyLines: string[]): Promise<boolean> {
+        const file = this.app.vault.getAbstractFileByPath(task.file);
+        if (!(file instanceof TFile)) {
+            logWarn(`[TaskCloner] File not found: ${task.file}`);
+            return false;
+        }
+
+        return processLines(this.app, file, (lines) => {
+            const idx = this.fileOps.findTaskLineNumber(lines, task);
+            if (idx < 0 || idx >= lines.length) {
+                logWarn('[TaskCloner] Task not found in file (duplicate in place)');
+                return null;
+            }
+
+            const indent = lines[idx].match(/^(\s*)/)?.[1] ?? '';
+            return this.spliceCopies(
+                lines, idx, copyLines.map(l => indent + l.trim()), 'after',
+            );
         });
     }
 
@@ -200,31 +205,33 @@ export class TaskCloner {
     // --- Private helpers ---
 
     /**
-     * Inline task duplication core: collect parent+children, replace parent line,
-     * strip block IDs from children, insert at specified position.
-     * Children are copied as-is (no date shifting).
-     * @returns Modified lines array, or null if task not found.
+     * Put one copy per parent line into the file, each followed by the
+     * original's children with their block ids stripped.
+     *
+     * Children travel verbatim. A child's dates are its own, not an offset
+     * from its parent's, so nothing here rewrites them — the same rule in
+     * both duplication paths.
+     *
+     * @returns the modified lines array.
      */
-    private duplicateInlineTaskLines(
+    private spliceCopies(
         lines: string[],
-        task: Task,
-        newParentLine: string,
-        position: 'before' | 'after'
-    ): string[] | null {
-        const currentLine = this.fileOps.findTaskLineNumber(lines, task);
-        if (currentLine < 0 || currentLine >= lines.length) return null;
-
-        const { childrenLines } = this.fileOps.collectChildrenFromLines(lines, currentLine);
+        taskLine: number,
+        parentLines: string[],
+        position: 'before' | 'after',
+    ): string[] {
+        const { childrenLines } = this.fileOps.collectChildrenFromLines(lines, taskLine);
         const cleanedChildren = this.fileOps.stripBlockIds(childrenLines);
 
-        const linesToInsert = [newParentLine, ...cleanedChildren];
-
-        if (position === 'before') {
-            lines.splice(currentLine, 0, ...linesToInsert);
-        } else {
-            const insertIndex = currentLine + 1 + childrenLines.length;
-            lines.splice(insertIndex, 0, ...linesToInsert);
+        const linesToInsert: string[] = [];
+        for (const parent of parentLines) {
+            linesToInsert.push(parent, ...cleanedChildren);
         }
+
+        const insertIndex = position === 'before'
+            ? taskLine
+            : taskLine + 1 + childrenLines.length;
+        lines.splice(insertIndex, 0, ...linesToInsert);
 
         return lines;
     }
