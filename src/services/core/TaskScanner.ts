@@ -10,7 +10,7 @@ import { TaskIdGenerator } from '../display/TaskIdGenerator';
 import { IdentityLedger, type LedgerEntry } from './identity/IdentityLedger';
 import { HintLog, type Hint } from './identity/IdentityHints';
 import { matchFile, matchWithoutRepeatedIds } from './identity/IdentityMatcher';
-import { WriteClaims } from './identity/WriteClaims';
+import { WriteClaims, type ClaimResult } from './identity/WriteClaims';
 import { applyIdentity, assertDistinctRuntimeIds, assertNoProvisionalIds, assertUniqueProvisionalIds } from './identity/IdentityApplier';
 import { splitLines, type WriteSink } from '../../utils/FileLines';
 import { logDebug, logError, logInfo } from '../../log/log';
@@ -56,12 +56,27 @@ export class TaskScanner {
      * a scan — see `WriteClaims`.
      */
     private claims = new WriteClaims(
-        (path, lines) => FileParsePipeline
-            .parse(path, [...lines], this.app.metadataCache.getCache(path)?.frontmatter, this.settings)
-            .tasks
-            .slice()
-            .sort((a, b) => a.line - b.line)
-            .map(task => ({ line: task.line, text: task.originalText })),
+        (path, lines) => {
+            // The frontmatter is the cache's, which is the file as it was
+            // before the write asking this question — Obsidian updates the
+            // cache from the `modify` that has not fired yet. Nothing here can
+            // do better from inside `vault.process`. What it costs is a claim
+            // made under the old reading of a `tv-ignore` or a notation
+            // switch; the scan that follows reads the new one and refuses a
+            // claim that does not reproduce what it sees.
+            const parsed = FileParsePipeline.parse(
+                path, [...lines], this.app.metadataCache.getCache(path)?.frontmatter, this.settings);
+            // Not the same answer as a file with no tasks: an ignored file is
+            // one this pipeline declines to read, and "it has no rows" would
+            // be a claim about it.
+            if (parsed.ignored) return null;
+            // In the parser's own order, not sorted by line. A claim is
+            // weighed against `parsed.tasks` as a scan hands them to
+            // `matchFile`, so a claim ordered some other way would pair its
+            // rows with different rows than the scan read — invisibly, where
+            // two swapped rows read the same.
+            return parsed.tasks.map(task => ({ line: task.line, text: task.originalText }));
+        },
         (path) => this.ledger.snapshotFor(path).map(entry => ({
             runtimeId: entry.runtimeId,
             text: entry.fingerprint.originalText,
@@ -373,15 +388,23 @@ export class TaskScanner {
      */
     writeSink(file: string): WriteSink {
         return (before, after, edits) => {
-            let claim: Hint | null = null;
+            let result: ClaimResult;
             try {
-                claim = this.claims.claim(file, before, after, edits);
+                result = this.claims.claim(file, before, after, edits);
             } catch (error) {
                 logError(`[TaskScanner] could not read back ${file} after a write: ${(error as Error)?.message ?? error}`);
+                // Whatever base this file had is left alone. It describes the
+                // file as it was before this write, so it no longer fits, and
+                // a base that no longer fits is what stops the next write from
+                // building on a ledger that is older still.
                 return () => { };
             }
-            if (!claim) return () => { };
-            return this.hints.add(file, [claim], Date.now());
+            // Both halves of what a claim leaves behind come back together:
+            // the hint the next scan would weigh, and the base the next write
+            // to this file would build on.
+            if (!result.hint) return result.withdraw;
+            const drop = this.hints.add(file, [result.hint], Date.now());
+            return () => { drop(); result.withdraw(); };
         };
     }
 
