@@ -202,6 +202,45 @@ describe('a note whose terminators disagree', () => {
     });
 });
 
+describe('a note whose last line ends with a stray CR', () => {
+    // Found in Dev: the CR has no LF after it, so it terminates nothing, but it
+    // is still a CR on a task line — and the parser's line regex ends at `$`,
+    // which a CR is not. Leaving it on the text costs that task its card.
+    const STRAY = '# trailing\n- [ ] alpha @2026-09-21\n- [ ] beta @2026-09-21\r';
+
+    it('still indexes the task on that line', async () => {
+        const { session } = await openNote(STRAY);
+
+        expect(session.index.getTasks().map(task => task.content)).toEqual(['alpha', 'beta']);
+    });
+
+    it('takes a write to it, and the file stays LF', async () => {
+        const { contents, session } = await openNote(STRAY);
+        const beta = session.index.getTasks().find(task => task.content === 'beta')!;
+
+        const written = await session.index.updateTask(beta.id, { statusChar: 'x' });
+        await session.settle(FILE);
+
+        expect(written).toBe(true);
+        expect(contents.get(FILE)).toContain('- [x] beta @2026-09-21');
+        // The unfinished terminator goes with the write; nothing else changes.
+        expect(terminators(contents.get(FILE)!)).toEqual({ crlf: 0, lf: 2 });
+        expect(contents.get(FILE)!.endsWith('\r')).toBe(false);
+    });
+
+    it('is left alone when nothing is written', async () => {
+        const { contents, session } = await openNote(STRAY);
+        const beta = session.index.getTasks().find(task => task.content === 'beta')!;
+
+        // A write that cannot find its line must not rewrite the file just
+        // because the read normalised it.
+        contents.set(FILE, '# trailing\n');
+        await session.index.updateTask(beta.id, { statusChar: 'x' });
+
+        expect(contents.get(FILE)).toBe('# trailing\n');
+    });
+});
+
 describe('a note written in LF', () => {
     it('is left in LF', async () => {
         const { contents, session } = await openNote(

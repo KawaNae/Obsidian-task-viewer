@@ -37,14 +37,16 @@ describe('splitLines', () => {
         expect(splitLines('a\rb\n').lines).toEqual(['a\rb', '']);
     });
 
-    it('does not read the last line\'s trailing CR as evidence', () => {
-        // The file's one terminator is LF; the CR at the end has none after it
-        // and is part of the text. Counting it would rewrite the whole file to
-        // CRLF and eat that CR on the way.
+    it('does not let the last line\'s trailing CR vote, but still strips it', () => {
+        // The file's one terminator is LF, so counting the stray CR would
+        // rewrite the whole file to CRLF. Leaving it on the text is no better:
+        // the parser's line regex ends at `$`, so a task line carrying a CR is
+        // not read as a task — that CR costs the line its card (found in Dev).
         const split = splitLines('a\nb\r');
         expect(split.eol).toBe('\n');
-        expect(split.lines).toEqual(['a', 'b\r']);
-        expect(joinLines(split.lines, split.eol)).toBe('a\nb\r');
+        expect(split.lines).toEqual(['a', 'b']);
+        // The fragment of a terminator that was never finished goes with it.
+        expect(joinLines(split.lines, split.eol)).toBe('a\nb');
     });
 });
 
