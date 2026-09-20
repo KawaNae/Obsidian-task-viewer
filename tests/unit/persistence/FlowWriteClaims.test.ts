@@ -6,6 +6,8 @@ import { WriteObserver } from '../../../src/services/persistence/WriteObserver';
 import { TaskRepository } from '../../../src/services/persistence/TaskRepository';
 import { FileOperations } from '../../../src/services/persistence/utils/FileOperations';
 import { makeTask } from '../helpers/makeTask';
+import { TaskParser } from '../../../src/services/parsing/TaskParser';
+import type { Task } from '../../../src/types';
 import type { LineEdit } from '../../../src/utils/FileLines';
 
 /**
@@ -225,5 +227,182 @@ describe('the wiring', () => {
 
         expect(filed).toEqual([[{ kind: 'replaced', at: 0 }]]);
         expect(content.split('\n')).toEqual([DONE, '']);
+    });
+});
+
+describe('what an update reports', () => {
+    // Every fixture below is the writer's own output: `TaskParser.format` is
+    // what `updateTaskInFile` puts on the line, so a file built any other way
+    // would pin a shape the writer never produces (#202).
+    const bare = (statusChar: string) =>
+        TaskParser.format(makeTask({ content: 'ポモドーロ', statusChar }));
+
+    const task = (over: Partial<Task> = {}) => makeTask({
+        file: FILE,
+        line: 0,
+        content: 'ポモドーロ',
+        statusChar: ' ',
+        originalText: bare(' '),
+        ...over,
+    });
+
+    it('is the writer that decides what TASK and DONE read', () => {
+        // The constants the rest of this file and the scanner's tests are
+        // built from, tied to the formatter rather than to a guess at it.
+        expect(bare(' ')).toBe(TASK);
+        expect(bare('x')).toBe(DONE);
+    });
+
+    it('names the task line it rewrote, and nothing else', async () => {
+        const b = bench([TASK, ''].join('\n'));
+        await b.writer.updateTaskInFile(task(), task({ statusChar: 'x' }));
+
+        expect(only(b.filed).edits).toEqual([{ kind: 'replaced', at: 0 }]);
+        expect(b.lines()).toEqual([DONE, '']);
+    });
+
+    it('says nothing when the line could not be found', async () => {
+        // Nothing was written, so a claim here would be weighed against a file
+        // that never changed.
+        const b = bench(['- [ ] 別のタスク', ''].join('\n'));
+        await b.writer.updateTaskInFile(task(), task({ statusChar: 'x' }));
+
+        expect(b.filed).toEqual([]);
+        expect(b.lines()).toEqual(['- [ ] 別のタスク', '']);
+    });
+
+    describe('with child property ops', () => {
+        const CHILD = '\t- 金額:: 100';
+
+        it('names the child line it rewrote as a rewrite', async () => {
+            const b = bench([TASK, CHILD, ''].join('\n'));
+            await b.writer.updateTaskInFile(task(), task({ statusChar: 'x' }), [
+                { key: '金額', op: 'set', value: '200' },
+            ]);
+
+            // The task line first, then the child: `applyOps` only ever
+            // touches lines below the task line, so the first report's
+            // coordinate survives the second.
+            expect(only(b.filed).edits).toEqual([
+                { kind: 'replaced', at: 0 },
+                { kind: 'replaced', at: 1 },
+            ]);
+            expect(b.lines()).toEqual([DONE, '\t- 金額:: 200', '']);
+        });
+
+        it('names a child line it added as an insert', async () => {
+            const b = bench([TASK, ''].join('\n'));
+            await b.writer.updateTaskInFile(task(), task({ statusChar: 'x' }), [
+                { key: '金額', op: 'set', value: '200' },
+            ]);
+
+            expect(only(b.filed).edits).toEqual([
+                { kind: 'replaced', at: 0 },
+                { kind: 'inserted', at: 1, count: 1 },
+            ]);
+            expect(b.lines()).toEqual([DONE, '\t- 金額:: 200', '']);
+        });
+
+        it('names each removed declaration where it stood', async () => {
+            // Two declarations of one key, removed from the bottom up so each
+            // index is the one that line had — the same arithmetic stripFlow
+            // relies on.
+            const b = bench([TASK, CHILD, '\t- 金額:: 300', ''].join('\n'));
+            await b.writer.updateTaskInFile(task(), task({ statusChar: 'x' }), [
+                { key: '金額', op: 'delete' },
+            ]);
+
+            expect(only(b.filed).edits).toEqual([
+                { kind: 'replaced', at: 0 },
+                { kind: 'removed', at: 2, count: 1 },
+                { kind: 'removed', at: 1, count: 1 },
+            ]);
+            expect(b.lines()).toEqual([DONE, '']);
+        });
+
+        it('leaves a declaration inside a fence out of the report', async () => {
+            // A `- key:: value` in a code block is a sample, not a property.
+            // `findOwnPropertyLines` skips it, so the write must not claim it
+            // either — and must not touch it.
+            const fenced = [TASK, CHILD, '\t```', '\t- 金額:: 999', '\t```', ''];
+            const b = bench(fenced.join('\n'));
+            await b.writer.updateTaskInFile(task(), task({ statusChar: 'x' }), [
+                { key: '金額', op: 'set', value: '200' },
+            ]);
+
+            expect(only(b.filed).edits).toEqual([
+                { kind: 'replaced', at: 0 },
+                { kind: 'replaced', at: 1 },
+            ]);
+            expect(b.lines()[3]).toBe('\t- 金額:: 999');
+        });
+    });
+
+    describe('on twins', () => {
+        // Two rows reading exactly the same thing. This is the shape the whole
+        // mechanism exists for, and `updateTaskInFile` now runs into it on
+        // every ordinary edit rather than only on a firing.
+        it('names the stored line, not the first row that matches', async () => {
+            const b = bench([TASK, TASK, ''].join('\n'));
+            await b.writer.updateTaskInFile(
+                task({ line: 1 }),
+                task({ line: 1, statusChar: 'x' }),
+            );
+
+            // Strategy 0 (the stored line, verified against originalText) runs
+            // before the first-match scan for exactly this reason
+            // (FileOperations.ts:309-310).
+            expect(only(b.filed).edits).toEqual([{ kind: 'replaced', at: 1 }]);
+            expect(b.lines()).toEqual([TASK, DONE, '']);
+        });
+
+        it('reports the row it really wrote when the stored line has shifted', async () => {
+            // The one case that can land on the wrong twin: the stored line no
+            // longer holds the task, and the fallback takes the first row with
+            // the same text. That is a `findTaskLineNumber` limitation, not
+            // one this claim introduces — and the claim still describes what
+            // happened to the file, so the two rows keep their identities
+            // instead of the ladder swapping them on top of the misplaced
+            // write.
+            const b = bench([TASK, TASK, '- [ ] 別のタスク', ''].join('\n'));
+            await b.writer.updateTaskInFile(
+                task({ line: 2 }),
+                task({ line: 2, statusChar: 'x' }),
+            );
+
+            expect(only(b.filed).edits).toEqual([{ kind: 'replaced', at: 0 }]);
+            expect(b.lines()).toEqual([DONE, TASK, '- [ ] 別のタスク', '']);
+        });
+    });
+});
+
+describe('what the editor menu\'s line edit reports', () => {
+    // `updateLine` takes a path and a line number rather than a task: it is
+    // the editor's own right-click menu (TaskMenuExtension.ts:122), where a
+    // status change and the conversion of a bare checkbox both come through.
+    it('names the line it rewrote', async () => {
+        const b = bench([TASK, ''].join('\n'));
+        await b.writer.updateLine(FILE, 0, DONE);
+
+        expect(only(b.filed).edits).toEqual([{ kind: 'replaced', at: 0 }]);
+        expect(b.lines()).toEqual([DONE, '']);
+    });
+
+    it('names the twin the editor pointed at, not the first one', async () => {
+        // Here the line number is the editor's own, so there is no ambiguity
+        // to resolve — and the claim carries that certainty to the scan.
+        const b = bench([TASK, TASK, ''].join('\n'));
+        await b.writer.updateLine(FILE, 1, DONE);
+
+        expect(only(b.filed).edits).toEqual([{ kind: 'replaced', at: 1 }]);
+        expect(b.lines()).toEqual([TASK, DONE, '']);
+    });
+
+    it('says nothing when the line is past the end of the file', async () => {
+        const b = bench([TASK, ''].join('\n'));
+        await b.writer.updateLine(FILE, 9, DONE);
+
+        expect(b.filed).toEqual([]);
+        expect(b.lines()).toEqual([TASK, '']);
     });
 });

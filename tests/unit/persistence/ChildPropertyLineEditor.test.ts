@@ -1,5 +1,21 @@
 import { describe, it, expect } from 'vitest';
 import { ChildPropertyLineEditor } from '../../../src/services/persistence/utils/ChildPropertyLineEditor';
+import { recordEdits, type LineEdit } from '../../../src/utils/FileLines';
+import type { PropertyOp } from '../../../src/services/persistence/PropertyUpdatePlanner';
+
+/**
+ * `applyOps` over a recorder, the way `processLines` hands it one.
+ *
+ * Answers the report, so a test can pin what the edit said as well as what it
+ * left in the file. The two have to agree: a line these ops rewrite without
+ * saying so is a line `explains` refuses, and the whole write's claim is
+ * dropped.
+ */
+function apply(lines: string[], taskLineIdx: number, ops: PropertyOp[]): LineEdit[] {
+    const { edits, reported } = recordEdits(lines);
+    ChildPropertyLineEditor.applyOps(lines, taskLineIdx, ops, edits);
+    return reported;
+}
 
 describe('ChildPropertyLineEditor', () => {
     describe('findOwnPropertyLines', () => {
@@ -23,7 +39,7 @@ describe('ChildPropertyLineEditor', () => {
                 '- [ ] task @2026-07-18T10:00',
                 '    - key ::',
             ];
-            ChildPropertyLineEditor.applyOps(lines, 0, [{ key: 'key', op: 'set', value: 'v1' }]);
+            apply(lines, 0, [{ key: 'key', op: 'set', value: 'v1' }]);
             expect(lines[1]).toBe('    - key :: v1');
         });
 
@@ -32,7 +48,7 @@ describe('ChildPropertyLineEditor', () => {
                 '- [ ] task',
                 '\t- 金額:: 100',
             ];
-            ChildPropertyLineEditor.applyOps(lines, 0, [{ key: '金額', op: 'set', value: '200' }]);
+            apply(lines, 0, [{ key: '金額', op: 'set', value: '200' }]);
             expect(lines[1]).toBe('\t- 金額:: 200');
         });
 
@@ -41,7 +57,7 @@ describe('ChildPropertyLineEditor', () => {
                 '- [ ] task',
                 '    - key:: v1',
             ];
-            ChildPropertyLineEditor.applyOps(lines, 0, [{ key: 'key', op: 'set', value: '' }]);
+            apply(lines, 0, [{ key: 'key', op: 'set', value: '' }]);
             expect(lines[1]).toBe('    - key:: ');
         });
     });
@@ -52,7 +68,7 @@ describe('ChildPropertyLineEditor', () => {
                 '- [ ] task @2026-07-18T10:00',
                 '    - [ ] sub',
             ];
-            ChildPropertyLineEditor.applyOps(lines, 0, [{ key: 'key2', op: 'set', value: 'value2' }]);
+            apply(lines, 0, [{ key: 'key2', op: 'set', value: 'value2' }]);
             expect(lines).toEqual([
                 '- [ ] task @2026-07-18T10:00',
                 '    - key2:: value2',
@@ -65,7 +81,7 @@ describe('ChildPropertyLineEditor', () => {
                 '- [ ] task @2026-07-18T10:00',
                 '',
             ];
-            ChildPropertyLineEditor.applyOps(lines, 0, [{ key: 'key2', op: 'set', value: 'value2' }]);
+            apply(lines, 0, [{ key: 'key2', op: 'set', value: 'value2' }]);
             expect(lines[1]).toBe('\t- key2:: value2');
         });
 
@@ -75,7 +91,7 @@ describe('ChildPropertyLineEditor', () => {
                 '    - key ::',
                 '    - [ ] sub',
             ];
-            ChildPropertyLineEditor.applyOps(lines, 0, [{ key: 'key2', op: 'set', value: 'v2' }]);
+            apply(lines, 0, [{ key: 'key2', op: 'set', value: 'v2' }]);
             expect(lines).toEqual([
                 '- [ ] task',
                 '    - key ::',
@@ -92,7 +108,7 @@ describe('ChildPropertyLineEditor', () => {
                 '    - key ::',
                 '    - [ ] sub',
             ];
-            ChildPropertyLineEditor.applyOps(lines, 0, [{ key: 'key', op: 'delete' }]);
+            apply(lines, 0, [{ key: 'key', op: 'delete' }]);
             expect(lines).toEqual([
                 '- [ ] task',
                 '    - [ ] sub',
@@ -124,7 +140,7 @@ describe('ChildPropertyLineEditor', () => {
                 '    ```',
                 '    - key:: 本物',
             ];
-            ChildPropertyLineEditor.applyOps(lines, 0, [{ key: 'key', op: 'set', value: '新' }]);
+            apply(lines, 0, [{ key: 'key', op: 'set', value: '新' }]);
             expect(lines).toEqual([
                 '- [ ] task',
                 '    ```md',
@@ -142,7 +158,7 @@ describe('ChildPropertyLineEditor', () => {
                 '    ```',
                 '    - key:: 本物',
             ];
-            ChildPropertyLineEditor.applyOps(lines, 0, [{ key: 'key', op: 'delete' }]);
+            apply(lines, 0, [{ key: 'key', op: 'delete' }]);
             expect(lines).toEqual([
                 '- [ ] task',
                 '    ```md',
@@ -158,7 +174,7 @@ describe('ChildPropertyLineEditor', () => {
                 '    - key:: 例',
                 '    ```',
             ];
-            ChildPropertyLineEditor.applyOps(lines, 0, [{ key: 'key', op: 'set', value: '新' }]);
+            apply(lines, 0, [{ key: 'key', op: 'set', value: '新' }]);
             expect(lines[1]).toBe('    - key:: 新');
             expect(lines.slice(2)).toEqual([
                 '    ```md',
