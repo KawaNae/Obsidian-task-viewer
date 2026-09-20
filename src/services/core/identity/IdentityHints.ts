@@ -105,10 +105,15 @@ export class HintLog {
             pending.push({ seq, at: now, hint });
         }
 
-        // Oldest first, so what survives is what a coming scan is most likely
-        // to be able to verify.
+        // Past the limit the file's whole log goes, this write's claim with it.
+        // Dropping the oldest few would be worse than dropping all: a claim is
+        // adopted only when no other candidate decides differently, so the
+        // candidate that would have refused is exactly the one whose absence
+        // lets a wrong one through. Trimming a log turns a refusal into a
+        // decision, which is the one direction this mechanism may not move in.
         if (pending.length > MAX_HINTS_PER_FILE) {
-            pending.splice(0, pending.length - MAX_HINTS_PER_FILE);
+            this.files.delete(file);
+            return () => {};
         }
         this.files.set(file, pending);
 
@@ -136,9 +141,15 @@ export class HintLog {
         const pending = this.files.get(file);
         if (!pending) return [];
 
-        const alive = pending.filter(entry => now - entry.at < HINT_TTL_MS);
-        if (alive.length !== pending.length) this.store(file, alive);
-        return alive;
+        // One expired claim takes the file's log with it, for the reason the
+        // limit does (see `add`): the candidate that would have refused must
+        // not be the one that quietly disappears. Expiry is all here, so
+        // {@link settle} never has to think about it.
+        if (pending.some(entry => now - entry.at >= HINT_TTL_MS)) {
+            this.files.delete(file);
+            return [];
+        }
+        return pending;
     }
 
     /**
@@ -159,9 +170,11 @@ export class HintLog {
      * match is that its write has not reached this reader yet: a scan whose
      * read started before the write landed reads the file as it was, commits
      * that, and the write's own scan follows. Dropping it there would throw
-     * away a claim about the very next read.
+     * away a claim about the very next read. What that leaves open is a hand
+     * edit landing, in those milliseconds, on exactly the lines the pending
+     * claim describes — accepted, and narrow enough to say so in one line.
      */
-    settle(file: string, consumed: number, now: number, ledgerMoved: boolean): void {
+    settle(file: string, consumed: number, ledgerMoved: boolean): void {
         const pending = this.files.get(file);
         if (!pending) return;
 
@@ -170,10 +183,7 @@ export class HintLog {
             return;
         }
 
-        const kept = pending
-            .slice(consumed)
-            .filter(entry => now - entry.at < HINT_TTL_MS);
-        this.store(file, kept);
+        this.store(file, pending.slice(consumed));
     }
 
     /**
@@ -298,11 +308,21 @@ function reproduces(
 ): boolean {
     if (rows.length !== tasks.length) return false;
 
+    const spoken = new Set<string>();
+
     for (let i = 0; i < rows.length; i++) {
         if (rows[i].text !== tasks[i].originalText) return false;
 
         const runtimeId = rows[i].runtimeId;
         if (runtimeId === null) continue;
+        // One row, one line. A claim that puts the same identity on two lines
+        // is a claim no file can bear out, and believing it would leave two
+        // tasks answering to one name — the ledger would hold the number twice
+        // and every lookup by it would find whichever came first. The ladder
+        // cannot produce this state (it takes each previous row once), so this
+        // is the only door it could come through.
+        if (spoken.has(runtimeId)) return false;
+        spoken.add(runtimeId);
         // Never across parsers, the rule every rung of the ladder follows.
         // Turning a third-party notation off can leave the text identical and
         // the parser different. A row the ledger no longer holds fails here

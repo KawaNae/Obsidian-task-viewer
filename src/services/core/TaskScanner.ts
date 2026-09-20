@@ -245,7 +245,7 @@ export class TaskScanner {
             // previous generation too.
             this.ledger.replaceFile(file.path, identity.entries);
             this.hints.settle(
-                file.path, identity.consumedHints, now,
+                file.path, identity.consumedHints,
                 ledgerMoved(previousRows, identity.entries),
             );
         } finally {
