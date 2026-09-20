@@ -918,6 +918,21 @@ export class CalendarView extends ItemView {
         return getCalendarDateRange(this.windowStart, this.plugin.settings.weekStartDay);
     }
 
+    /**
+     * The date range currently drawn, for image export. Calls the same
+     * `getCalendarDateRange()` the grid renders from (line ~492) — the
+     * week-aligned 42-day window, not the calendar month — so this can't
+     * drift from what's actually on screen.
+     */
+    getExportedDateRange(): { anchor: string; from: string; to: string } | null {
+        const { startDate, endDate } = this.getCalendarDateRange();
+        return {
+            anchor: this.windowStart,
+            from: DateUtils.getLocalDateString(startDate),
+            to: DateUtils.getLocalDateString(endDate),
+        };
+    }
+
     private getWeekStart(date: Date, weekStartDay: 0 | 1): Date {
         return getWeekStart(date, weekStartDay);
     }

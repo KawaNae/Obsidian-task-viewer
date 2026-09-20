@@ -23,3 +23,20 @@ export interface ViewExportOptions {
     filename: string;
     folder: string;
 }
+
+/** The date range a view is currently drawing, as it itself reports it. */
+export interface RenderedDateRange {
+    anchor: string;
+    from: string;
+    to: string;
+}
+
+/**
+ * Views that can report their own currently-drawn date range implement this.
+ * Duck-typed (see `getExportedDateRange` in ExportService) rather than a
+ * shared base class, since Timeline/Calendar/Schedule/Kanban don't otherwise
+ * share one.
+ */
+export interface ExportableDateRangeView {
+    getExportedDateRange(): RenderedDateRange | null;
+}

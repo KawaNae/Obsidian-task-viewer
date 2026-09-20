@@ -194,6 +194,39 @@ obsidian obsidian-task-viewer:categorized-tasks-for-date-range from=2026-03-01 t
 
 **戻り値:** `{ "2026-03-01": { "allDay": [...], "timed": [...], "dueOnly": [...] }, ... }`
 
+### export-image — ビューを画像として保存
+
+Timeline / Calendar / Schedule / Kanban ビューを PNG として書き出します。`view=` は既に開いているビューをそのまま書き出し、`template=` またはビュー設定フラグ（`days-to-show` など）を1つでも渡すと一時的なビューを作って書き出します。
+
+```bash
+# 既に開いている timeline ビューをそのまま書き出す
+obsidian obsidian-task-viewer:export-image view=timeline
+
+# 一時ビューを作って書き出す（daysToShow=5、開始日=2026-03-01）
+obsidian obsidian-task-viewer:export-image view=timeline days-to-show=5 anchor-date=2026-03-01
+
+# 保存済みテンプレートから書き出す
+obsidian obsidian-task-viewer:export-image template="My Timeline"
+```
+
+| フラグ | 必須 | 説明 |
+|-------|------|------|
+| `view` | ※ | `timeline` \| `calendar` \| `schedule` \| `kanban`（`template=` 未指定なら必須） |
+| `template` | ※ | 保存済みビューテンプレート名（ビュー種別を推論。`view=` 未指定なら必須） |
+| `name` | | 書き出したビューの表示名 |
+| `anchor-date` | | 日付アンカー（`YYYY-MM-DD`）。「今日」ボタンと同じ役割を任意の日に対して行う。ビューごとのスキーマの日付フィールドに解決される |
+| `width` | | 描画幅（px、デフォルト: 1200） |
+| `output-folder` | | 出力先フォルダ（vault相対 or 絶対パス。デフォルト: `task-viewer-export`） |
+| `filename` | | 出力ファイル名（デフォルト: `{ビュー種別}_{日付}.png`） |
+| `wait` | | 描画後の待機時間（ms、デフォルト: 500） |
+| `keep-open` | | 書き出し後も一時ウィンドウを開いたままにする |
+
+対象ビュー自身の設定フラグもそのまま渡せます（例: timeline の `days-to-show`、1以上30以下の整数）。これを1つでも渡すと一時ビューでの書き出しになります。
+
+**戻り値:** `{ "path": "...", "width": 1200, "height": 2096, "captureDurationMs": 771, "totalDurationMs": 1527, "resolvedAnchor": "2026-03-01", "renderedRange": { "from": "2026-03-01", "to": "2026-03-05" } }`
+
+`resolvedAnchor`/`renderedRange` は、書き出したビューが自分で報告できる場合だけ含まれます（Timeline/Calendar/Schedule。Kanban には日付レンジの概念が無いため含まれません）。値は実際に描画された範囲そのものです。Calendar の `renderedRange` は暦月ではなく、実際のグリッドが描く週開始揃えの42日ぶんです。`anchor-date` 等を渡さず既に開いているビューをそのまま書き出す場合も、開いているビューが実際に表示している範囲がそのまま返ります。
+
 ### insert-child-task — 子タスク挿入
 
 親タスクの下に子タスクを挿入します。
