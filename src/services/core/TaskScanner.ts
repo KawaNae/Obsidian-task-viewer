@@ -10,7 +10,7 @@ import { TaskIdGenerator } from '../display/TaskIdGenerator';
 import { IdentityLedger, type LedgerEntry } from './identity/IdentityLedger';
 import { HintLog, type Hint } from './identity/IdentityHints';
 import { matchFile } from './identity/IdentityMatcher';
-import { applyIdentity, assertNoProvisionalIds, assertUniqueProvisionalIds } from './identity/IdentityApplier';
+import { applyIdentity, assertDistinctRuntimeIds, assertNoProvisionalIds, assertUniqueProvisionalIds } from './identity/IdentityApplier';
 import { splitLines } from '../../utils/FileLines';
 import { logDebug, logError, logInfo } from '../../log/log';
 
@@ -228,6 +228,7 @@ export class TaskScanner {
         // removed the file's tasks from the store.
         if (__DEV__) {
             assertNoProvisionalIds(parsed.tasks, id => !TaskIdGenerator.isRuntimeId(id));
+            assertDistinctRuntimeIds(identity.entries);
         }
         this.store.beginBatch();
         try {

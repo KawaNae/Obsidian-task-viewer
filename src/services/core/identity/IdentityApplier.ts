@@ -75,3 +75,32 @@ export function assertNoProvisionalIds(tasks: Task[], isProvisional: (id: string
         throw new Error(`Provisional task IDs reached the store: ${[...offenders].join(', ')}`);
     }
 }
+
+/**
+ * Throw if one runtime ID is about to be handed to two rows of a file.
+ *
+ * What the store does with it is lose a task: it is keyed by ID, so the second
+ * row overwrites the first and the file's tasks come out one short of the lines
+ * on disk. The ledger keeps both positions but one entry, and no later scan
+ * puts it back — the state is stable and wrong, and the task whose ID went
+ * missing refuses every write with "not found" while its line sits there in
+ * plain sight.
+ *
+ * The ladder cannot produce this (it takes each previous row at most once), and
+ * rung 0 refuses a claim that names a row twice. This is the door being locked
+ * from the inside as well: the cost of a duplicate is high and permanent, and
+ * whatever new way of deciding identity comes next should have to get past
+ * something.
+ */
+export function assertDistinctRuntimeIds(entries: Array<{ runtimeId: string }>): void {
+    const seen = new Set<string>();
+    const shared = new Set<string>();
+    for (const entry of entries) {
+        if (seen.has(entry.runtimeId)) shared.add(entry.runtimeId);
+        seen.add(entry.runtimeId);
+    }
+
+    if (shared.size > 0) {
+        throw new Error(`Runtime IDs shared by more than one row: ${[...shared].join(', ')}`);
+    }
+}
