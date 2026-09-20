@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { TaskCloner } from '../../../src/services/persistence/TaskCloner';
+import { recordEdits } from '../../../src/utils/FileLines';
 import { FileOperations } from '../../../src/services/persistence/utils/FileOperations';
 import type { App } from 'obsidian';
 
@@ -13,44 +14,33 @@ function callShiftInlineDates(line: string, dayOffset: number): string {
 // spliceCopies only reads lines and fileOps; the vault is never touched.
 const fileOps = new FileOperations({} as App);
 
-/** Collects what the copy reported, the way `processLines` does. */
-function recorder() {
-    const reported: Array<{ at: number; count: number }> = [];
-    return {
-        edits: {
-            splice: (lines: string[], at: number, deleteCount: number, ...items: string[]) => {
-                lines.splice(at, deleteCount, ...items);
-                if (deleteCount > 0) throw new Error('a copy removes no line');
-                reported.push({ at, count: items.length });
-            },
-            replaced: () => { throw new Error('a copy rewrites no line'); },
-            inserted: (at: number, count: number) => { reported.push({ at, count }); },
-            removed: () => { throw new Error('a copy removes no line'); },
-        },
-        reported,
-    };
-}
-
 function callSpliceCopies(
     lines: string[],
     taskLine: number,
     parentLines: string[],
     position: 'before' | 'after',
 ): string[] {
-    return proto.spliceCopies.call({ fileOps }, [...lines], taskLine, parentLines, position, recorder().edits);
+    return spliceAndReport(lines, taskLine, parentLines, position).lines;
 }
 
-/** The lines a copy produced, and what it said it did to them. */
+/**
+ * The lines a copy produced, and what it said it did to them.
+ *
+ * Through the real {@link recordEdits}, over the array the copy is about to
+ * splice — the same object `processLines` hands a write. A stand-in here would
+ * be a second implementation of the arithmetic this file exists to check.
+ */
 function spliceAndReport(
     lines: string[],
     taskLine: number,
     parentLines: string[],
     position: 'before' | 'after',
 ) {
-    const record = recorder();
+    const target = [...lines];
+    const { edits, reported } = recordEdits(target);
     const out: string[] = proto.spliceCopies.call(
-        { fileOps }, [...lines], taskLine, parentLines, position, record.edits);
-    return { lines: out, reported: record.reported };
+        { fileOps }, target, taskLine, parentLines, position, edits);
+    return { lines: out, reported };
 }
 
 // ---------------------------------------------------------------------------
@@ -223,7 +213,7 @@ describe('what a copy reports', () => {
         const { lines, reported } = spliceAndReport(
             file, 0, ['- [ ] copy @2026-03-11T11:00>12:00'], 'after');
 
-        expect(reported).toEqual([{ at: 3, count: 3 }]);
+        expect(reported).toEqual([{ kind: 'inserted', at: 3, count: 3 }]);
         expect(lines.slice(3, 6)).toEqual([
             '- [ ] copy @2026-03-11T11:00>12:00',
             '\t- [ ] child',
@@ -235,6 +225,6 @@ describe('what a copy reports', () => {
         const { reported } = spliceAndReport(
             file, 0, ['- [ ] a', '- [ ] b'], 'before');
 
-        expect(reported).toEqual([{ at: 0, count: 6 }]);
+        expect(reported).toEqual([{ kind: 'inserted', at: 0, count: 6 }]);
     });
 });

@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { TFile } from 'obsidian';
-import { appendLines, joinLines, processLines, splitLines } from '../../../src/utils/FileLines';
+import { appendLines, joinLines, processLines, recordEdits, splitLines } from '../../../src/utils/FileLines';
 import type { LineEdit } from '../../../src/utils/FileLines';
 
 /**
@@ -208,7 +208,7 @@ describe('processLines', () => {
         await processLines(h.app, h.file, (lines, _eol, edits) => {
             lines[0] = '- [x] a';
             edits.replaced(0);
-            edits.removed(9, 1);
+            edits.replaced(9);
             return lines;
         }, log.sink);
 
@@ -222,8 +222,7 @@ describe('processLines', () => {
         const log = writeSink();
 
         await processLines(h.app, h.file, (lines, _eol, edits) => {
-            lines.splice(0, 0, 'new');
-            edits.inserted(0, 1);
+            edits.splice(0, 0, 'new');
             lines[1] = 'X';
             edits.replaced(1);
             return lines;
@@ -309,5 +308,87 @@ describe('processLines', () => {
         // placed must leave no trace, or Obsidian fires a modify for it and a
         // rescan follows a change nobody made.
         expect(h.text()).toBe(original);
+    });
+});
+
+describe('LineEdits.splice', () => {
+    // `Array.prototype.splice` normalizes what it is handed: a negative index
+    // counts back from the end, an index past the end is clamped to it, a
+    // count past the end takes what is there, and a count that is not a
+    // number takes nothing. A report of the *arguments* would describe a file
+    // that was never written, so what is reported is what happened.
+    const cases: Array<{ name: string; at: number; del: number; items: string[] }> = [
+        { name: 'an ordinary insert', at: 1, del: 0, items: ['new'] },
+        { name: 'an index past the end', at: 9, del: 0, items: ['new'] },
+        { name: 'an index counted from the end', at: -1, del: 0, items: ['new'] },
+        { name: 'an index before the start', at: -9, del: 0, items: ['new'] },
+        { name: 'an index of Infinity', at: Infinity, del: 0, items: ['new'] },
+        { name: 'a removal', at: 1, del: 2, items: [] },
+        { name: 'a removal past the end', at: 1, del: 99, items: [] },
+        { name: 'a negative count', at: 1, del: -3, items: ['new'] },
+        { name: 'a count that is not a number', at: 1, del: NaN, items: ['new'] },
+        { name: 'a removal and an insert at once', at: 0, del: 1, items: ['x', 'y'] },
+    ];
+
+    for (const { name, at, del, items } of cases) {
+        it(`accounts for the file it wrote: ${name}`, async () => {
+            const h = harness('a\nb\nc\nd\n');
+            const log = writeSink();
+            const expected = ['a', 'b', 'c', 'd', ''];
+            expected.splice(at, del, ...items);
+
+            await processLines(h.app, h.file, (lines, _eol, edits) => {
+                edits.splice(at, del, ...items);
+                return lines;
+            }, log.sink);
+
+            expect(h.text()).toBe(expected.join('\n'));
+            // A report that does not account for the file it produced is
+            // dropped, so a report still standing is a report that was right.
+            expect(log.standing()).toHaveLength(1);
+        });
+    }
+
+    it('says where the lines landed, not where it was asked to put them', () => {
+        const lines = ['a', 'b'];
+        const { edits, reported } = recordEdits(lines);
+
+        edits.splice(9, 0, 'new');
+        edits.splice(-1, 1);
+
+        expect(lines).toEqual(['a', 'b']);
+        expect(reported).toEqual([
+            { kind: 'inserted', at: 2, count: 1 },
+            { kind: 'removed', at: 2, count: 1 },
+        ]);
+    });
+
+    it('splices the lines the write was handed', () => {
+        // Not an argument: the array is the one `processLines` is about to
+        // write, so a report cannot end up describing some other array.
+        const lines = ['a'];
+        const { edits } = recordEdits(lines);
+
+        edits.splice(1, 0, 'b');
+
+        expect(lines).toEqual(['a', 'b']);
+    });
+
+    it('reports the empty last element an append replaced', async () => {
+        // A terminated file ends in an empty element and the body takes its
+        // place, so an append is a removal and an insert — not an insert.
+        const h = harness('a\n');
+        const log = writeSink();
+
+        await processLines(h.app, h.file, (lines, _eol, edits) => {
+            appendLines(lines, ['b'], edits);
+            return lines;
+        }, log.sink);
+
+        expect(h.text()).toBe('a\nb');
+        expect(log.standing()[0].edits).toEqual([
+            { kind: 'removed', at: 1, count: 1 },
+            { kind: 'inserted', at: 1, count: 1 },
+        ]);
     });
 });

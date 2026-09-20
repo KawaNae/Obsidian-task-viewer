@@ -257,7 +257,7 @@ export class TaskCloner {
         // Which of these lines are tasks is not this layer's question — the
         // copied children can hold anything, a fence among them — and the index
         // answers it by parsing what was written.
-        edits.splice(lines, insertIndex, 0, ...linesToInsert);
+        edits.splice(insertIndex, 0, ...linesToInsert);
 
         return lines;
     }

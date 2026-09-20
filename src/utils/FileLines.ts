@@ -58,15 +58,28 @@ export function joinLines(lines: string[], eol: Eol): string {
  *
  * A file that ends with a terminator has an empty last element, and the body
  * replaces it instead of following it — otherwise every append to a normally
- * terminated note would open with a blank line.
+ * terminated note would open with a blank line. That replacement is why an
+ * append reports through {@link LineEdits} rather than as a plain insert: the
+ * empty element is a line of the array like any other, and a report that left
+ * it out would not account for the file.
+ *
+ * `edits` has to be the one built over *this* array (see {@link recordEdits}).
  */
-export function appendLines(lines: string[], body: string[]): number {
+export function appendLines(lines: string[], body: string[], edits?: LineEdits): number {
     const at = lines[lines.length - 1] === '' ? lines.length - 1 : lines.length;
-    lines.splice(at, lines.length - at, ...body);
+    if (edits) edits.splice(at, lines.length - at, ...body);
+    else lines.splice(at, lines.length - at, ...body);
     return at;
 }
 
-/** One thing a write did to the file's lines, in the coordinates of the moment. */
+/**
+ * One thing a write did to the file's lines, in the coordinates of the moment.
+ *
+ * Internal to this module and the replay: a writer never builds one. It says
+ * what it did through {@link LineEdits}, which is the only thing that produces
+ * these, so the numbers in a report always come from the splice that moved the
+ * lines rather than from a second reading of the same intention.
+ */
 export type LineEdit =
     | { kind: 'replaced'; at: number }
     | { kind: 'inserted'; at: number; count: number }
@@ -80,15 +93,20 @@ export type LineEdit =
  * moment* — report right after doing it, and a run of edits reads back in the
  * order it happened.
  *
- * `replaced` and a `removed` + `inserted` pair produce the same file, and the
- * check below cannot tell them apart: the lines come out identical either way.
+ * A rewrite and a tear-down-and-rebuild produce the same file, and the check
+ * below cannot tell them apart: the lines come out identical either way.
  * Only the writer knows which it meant, and both mistakes cost something.
- * Saying `replaced` where a line was really torn down and rebuilt hands a new
- * task the old one's identity. Saying `removed` + `inserted` where a line was
- * only rewritten calls a row that is still there new, and the hub or the
+ * Saying {@link replaced} where a line was really torn down and rebuilt hands a
+ * new task the old one's identity. Splicing a line away and a new one in where
+ * it was only rewritten calls a row that is still there new, and the hub or the
  * selection holding it loses its task — the ladder would have kept it by
  * matching the text. So `replaced` means: this line still belongs to the same
  * task as before.
+ *
+ * There are only these two, and a splice is the only way to add or remove a
+ * line. A writer that could say "three lines went in at 7" beside a splice that
+ * put them at 6 is a writer that can be wrong about the one thing this
+ * mechanism exists to get right.
  */
 export interface LineEdits {
     /**
@@ -102,17 +120,52 @@ export interface LineEdits {
      * prevent. The remedy is not a better check. It is to take the number that
      * moved the lines and the number that is reported from the same place.
      *
+     * Which lines, too: the array spliced is the one the write was handed, held
+     * here rather than passed in, so a report cannot end up describing some
+     * other array.
+     *
      * A splice that removes and inserts at once says both, in that order: the
      * old lines are gone and the new ones are new. A line being *rewritten*
      * while staying the same task is {@link replaced} instead.
      */
-    splice(lines: string[], at: number, deleteCount: number, ...items: string[]): void;
+    splice(at: number, deleteCount: number, ...items: string[]): void;
     /** The line at `at` reads something else now, and is the same task. */
     replaced(at: number): void;
-    /** `count` lines starting at `at` are lines this write created. */
-    inserted(at: number, count: number): void;
-    /** `count` lines starting at `at` are gone. */
-    removed(at: number, count: number): void;
+}
+
+/**
+ * A {@link LineEdits} over one array of lines, and the report it fills in.
+ *
+ * `processLines` builds this over the lines it is about to hand a write, and a
+ * test builds it over the lines it passes in, so both run the same arithmetic
+ * instead of a copy of it.
+ */
+export function recordEdits(lines: string[]): { edits: LineEdits; reported: LineEdit[] } {
+    const reported: LineEdit[] = [];
+    const edits: LineEdits = {
+        splice: (at, deleteCount, ...items) => {
+            // What the splice did, not what it was asked to do. `splice`
+            // counts a negative index from the end and clamps one past the
+            // end, and it removes only as many lines as are there; a report of
+            // the arguments would describe a file that was never written.
+            const start = spliceStart(lines.length, at);
+            const removed = lines.splice(at, deleteCount, ...items);
+            if (removed.length > 0) {
+                reported.push({ kind: 'removed', at: start, count: removed.length });
+            }
+            if (items.length > 0) {
+                reported.push({ kind: 'inserted', at: start, count: items.length });
+            }
+        },
+        replaced: (at) => { reported.push({ kind: 'replaced', at }); },
+    };
+    return { edits, reported };
+}
+
+/** Where `Array.prototype.splice` starts, given what it was passed. */
+function spliceStart(length: number, at: number): number {
+    const n = Number.isNaN(at) ? 0 : Math.trunc(at);
+    return n < 0 ? Math.max(length + n, 0) : Math.min(n, length);
 }
 
 /**
@@ -241,17 +294,11 @@ export async function processLines(
 
             const { lines, eol } = splitLines(content);
             const before = [...lines];
-            const reported: LineEdit[] = [];
-            const next = edit(lines, eol, {
-                splice: (target, at, deleteCount, ...items) => {
-                    target.splice(at, deleteCount, ...items);
-                    if (deleteCount > 0) reported.push({ kind: 'removed', at, count: deleteCount });
-                    if (items.length > 0) reported.push({ kind: 'inserted', at, count: items.length });
-                },
-                replaced: (at) => reported.push({ kind: 'replaced', at }),
-                inserted: (at, count) => reported.push({ kind: 'inserted', at, count }),
-                removed: (at, count) => reported.push({ kind: 'removed', at, count }),
-            });
+            // Over `lines` itself: a report describes the array the write was
+            // handed. A write that returns some other array is not reporting
+            // about the file it wrote, and the check below refuses it.
+            const { edits, reported } = recordEdits(lines);
+            const next = edit(lines, eol, edits);
             if (next === null) return content;
 
             written = true;
