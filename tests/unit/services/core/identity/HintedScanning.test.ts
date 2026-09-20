@@ -546,4 +546,35 @@ describe('a firing whose gen block writes a parent of its own', () => {
         expect(harness.ids()[1]).toBe(original);
         expect(harness.ids()[0]).not.toBe(original);
     });
+
+    it('loses the strip with the instance when a hand edit lands on both', async () => {
+        // What the second claim's correctness is worth to the third. A line
+        // typed into the file in the same moment leaves the scan reading
+        // something neither claim describes; it adopts nothing and the rows
+        // moved anyway, so the whole log goes — the strip's claim with it,
+        // though no scan ever read the state it describes. The firing then
+        // lands exactly where it would have with nothing claimed at all.
+        const { harness, original } = await fired();
+
+        harness.report([BARE, GEN_FIRED, ''], [{ kind: 'inserted', at: 0, count: 1 }]);
+        harness.report([BARE, GEN_STRIPPED, ''], [{ kind: 'replaced', at: 1 }]);
+
+        const TYPED = '- [ ] 手で書いた行';
+        harness.contents.set(FILE, [BARE, GEN_STRIPPED, TYPED, ''].join('\n'));
+        await harness.scan();
+
+        // Both claims are gone, not just the one that failed to match.
+        expect(harness.pendingCount()).toBe(0);
+        // And the ladder placed the row the way it places it with no claim:
+        // on the instance, above the line that fired.
+        expect(harness.ids()[0]).toBe(original);
+        expect(harness.ids()[1]).not.toBe(original);
+
+        // The typed line goes again. Nothing is left to say otherwise, so the
+        // answer the ladder already committed stands.
+        const placed = harness.ids().slice(0, 2);
+        harness.contents.set(FILE, [BARE, GEN_STRIPPED, ''].join('\n'));
+        await harness.scan();
+        expect(harness.ids()).toEqual(placed);
+    });
 });
