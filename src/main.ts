@@ -39,6 +39,7 @@ import { MenuPresenter } from './interaction/menu/MenuPresenter';
 import { MenuHandler } from './interaction/menu/MenuHandler';
 import { TaskCardRenderer } from './views/taskcard/TaskCardRenderer';
 import { TaskViewHoverParent } from './views/taskcard/TaskViewHoverParent';
+import { closeAllOverlays } from './views/sharedUI/OverlayRegistry';
 import { TaskHubPanel, type TaskHubPanelOptions } from './modals/hub/TaskHubPanel';
 import { createTaskMenuExtension } from './editor/TaskMenuExtension';
 import { createDiagnosticsExtension } from './editor/DiagnosticsExtension';
@@ -515,6 +516,9 @@ export default class TaskViewerPlugin extends Plugin {
     }
 
     onunload() {
+        // Root-level overlays sit on document.body and outlive the plugin.
+        // Close them before the services they hold go away (#165).
+        closeAllOverlays();
         this.logManager?.stop();
         this.logStorage?.close();
         this.taskMenuCleanup?.();
