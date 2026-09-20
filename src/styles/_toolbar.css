@@ -161,6 +161,19 @@
     cursor: pointer;
 }
 
+/*
+ * The days-count stepper's own +/- buttons only: shrink just their icon
+ * glyph (18px -> 14px), not the 28x28 button box shared with every other
+ * .view-toolbar__btn--icon. A plain "minus" glyph is a flat horizontal
+ * line with no vertical ink, so at the default icon size it reads as
+ * heavier/wider than the "+" and the neighboring chevrons (user-reported;
+ * confirmed with getBBox measurements on Dev2) — 14px brings its ink
+ * width down near the chevrons' ink height.
+ */
+.view-toolbar__days-group .view-toolbar__btn--icon {
+    --icon-size: 14px;
+}
+
 .view-toolbar__btn-icon {
     display: inline-flex;
     align-items: center;
