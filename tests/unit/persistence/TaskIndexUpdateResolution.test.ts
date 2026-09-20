@@ -31,6 +31,9 @@ function buildHost(task: Task, written = true) {
         draggingFilePath: null,
         // The revert lives on the prototype; the host stands in for `this`.
         revertUnwrittenUpdate: proto.revertUnwrittenUpdate,
+        // The dispose guard every write goes through; this index is open.
+        disposed: false,
+        refuseAfterDispose: proto.refuseAfterDispose,
     };
 }
 
