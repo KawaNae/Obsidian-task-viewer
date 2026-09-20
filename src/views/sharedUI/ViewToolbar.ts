@@ -243,9 +243,7 @@ export class DaysToShowSelector {
         setIcon(minusBtn, 'minus');
 
         const labelBtn = group.createEl('button', { cls: 'view-toolbar__btn--range view-toolbar__btn--days' });
-        const iconEl = labelBtn.createSpan('view-toolbar__btn-icon');
         const labelEl = labelBtn.createSpan({ cls: 'view-toolbar__btn-label' });
-        if (DAYS_TO_SHOW_PRESETS.length > 0) setIcon(iconEl, 'chevrons-up-down');
 
         const plusBtn = group.createEl('button', { cls: 'view-toolbar__btn--icon' });
         setIcon(plusBtn, 'plus');
