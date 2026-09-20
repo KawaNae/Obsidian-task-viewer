@@ -4,22 +4,30 @@ import type { LedgerEntry } from './IdentityLedger';
 /**
  * What the plugin's own writes tell the next scan about which line is which.
  *
- * A hint is a claim, not an instruction: "after this write, the file holds one
- * more line reading T" — checked against what the scan actually read before it
- * is believed. A missing hint costs precision and nothing else, because the
- * ladder in IdentityMatcher exists for external edits anyway. A *wrong* hint
- * would be worse than none, so every one of them is verified first.
+ * A hint is a claim, not an instruction: "after this write, the file reads like
+ * this" — checked against what the scan actually read before it is believed. A
+ * missing hint costs precision and nothing else, because the ladder in
+ * IdentityMatcher exists for external edits anyway. A *wrong* hint would be
+ * worse than none, so belief is all-or-nothing: either the claims reproduce the
+ * file exactly, or none of them count and the ladder answers.
+ *
+ * Positions are given relative to a row the writer already knows by runtime ID,
+ * never as line numbers. A line number is stale the moment another write in the
+ * same batch shifts it, and a hint that points a line off by one is exactly the
+ * kind of confident wrong answer this mechanism must not produce.
  *
  * Hints are raised inside the `vault.process` callback, which is the only place
- * where the line positions and the written text are both settled and where the
- * `modify` event has not fired yet — a hint raised after the `await` is too late
- * for the scan that write triggers (measured: the scan's read starts before
- * `vault.process` resolves).
+ * where the written text is settled and the `modify` event has not fired yet —
+ * a hint raised after the `await` is too late for the scan that write triggers
+ * (measured: the scan's read starts before `vault.process` resolves).
  */
 export type Hint =
-    | { kind: 'rewrite'; runtimeId: string; before: string; after: string; line: number }
-    | { kind: 'insert'; text: string; line: number }
-    | { kind: 'retire'; runtimeId: string; text: string };
+    /** The row `runtimeId` read `before` and now reads `after`. */
+    | { kind: 'rewrite'; runtimeId: string; before: string; after: string }
+    /** A line the write created, placed next to a row it already knew. */
+    | { kind: 'insert'; text: string; anchor: string; side: 'before' | 'after' }
+    /** The row `runtimeId` is gone from the file. */
+    | { kind: 'retire'; runtimeId: string };
 
 export interface PendingHint {
     /** Monotonic across the whole log. Also orders one file's hints. */
@@ -29,10 +37,24 @@ export interface PendingHint {
     hint: Hint;
 }
 
+/** One line of the file as the pending hints describe it. */
+export interface ClaimedRow {
+    /** The row that carries this line's identity, or null if a write made it. */
+    runtimeId: string | null;
+    text: string;
+}
+
+export interface HintResolution {
+    /** How many hints, counted from the head, the file bore out. */
+    consumed: number;
+    /** The believed claims, one per line read, or null when nothing is believed. */
+    rows: ClaimedRow[] | null;
+}
+
 /**
  * How many hints one file may hold. A single flow fire raises a handful; this
- * is three orders above that, and exists so a file nobody scans again cannot
- * grow without bound.
+ * is well above that, and exists so a file nobody scans again cannot grow
+ * without bound.
  */
 export const MAX_HINTS_PER_FILE = 64;
 
@@ -54,9 +76,24 @@ export class HintLog {
     private readonly files = new Map<string, PendingHint[]>();
     private seq = 0;
 
-    add(file: string, hint: Hint, now: number): void {
+    /**
+     * File a write's claims, and answer a handle that takes them back.
+     *
+     * The handle is for a write that raised its claims and then failed — a
+     * `vault.process` that throws after the callback returns leaves the file
+     * as it was, and claims about a write that never happened must not sit in
+     * the log waiting to be matched against something else.
+     */
+    add(file: string, hints: readonly Hint[], now: number): () => void {
+        if (hints.length === 0) return () => {};
+
         const pending = this.files.get(file) ?? [];
-        pending.push({ seq: ++this.seq, at: now, hint });
+        const filed: number[] = [];
+        for (const hint of hints) {
+            const seq = ++this.seq;
+            filed.push(seq);
+            pending.push({ seq, at: now, hint });
+        }
 
         // Oldest first, so what survives is what a coming scan is most likely
         // to be able to verify.
@@ -64,6 +101,13 @@ export class HintLog {
             pending.splice(0, pending.length - MAX_HINTS_PER_FILE);
         }
         this.files.set(file, pending);
+
+        const withdrawn = new Set(filed);
+        return () => {
+            const current = this.files.get(file);
+            if (!current) return;
+            this.store(file, current.filter(entry => !withdrawn.has(entry.seq)));
+        };
     }
 
     /**
@@ -74,8 +118,8 @@ export class HintLog {
      * whatever the read saw is now in the ledger and those hints have had their
      * one chance. Without that line, a hint that failed verification once (an
      * external edit landing in the same scan, say) would keep failing forever:
-     * the ledger has moved on, so the expected state it is built from no longer
-     * matches, and it would block every hint behind it until it aged out.
+     * the ledger has moved on, so the state it is built from no longer matches,
+     * and it would block every hint behind it until it aged out.
      *
      * One window stays open. A hint is raised inside the write callback, a
      * millisecond or two before the file reaches disk, so a scan that starts in
@@ -117,17 +161,17 @@ export class HintLog {
         this.store(file, kept);
     }
 
-    /** Forget a file's hints (deleted, renamed away, or newly `tv-ignore`d). */
+    /**
+     * Forget a file's hints.
+     *
+     * Also what a rename does. A hint names runtime IDs, and a rename rewrites
+     * them (the ID still carries the path until stage 3), so carrying the log
+     * across would leave claims about rows that no longer answer to those
+     * names: they would fail to apply and cost the file its next hint anyway.
+     * Dropping them says the same thing in one line.
+     */
     dropFile(file: string): void {
         this.files.delete(file);
-    }
-
-    /** Move a file's hints to its new path, so a rename does not strand them. */
-    rekeyFile(oldPath: string, newPath: string): void {
-        const pending = this.files.get(oldPath);
-        this.files.delete(oldPath);
-        this.files.delete(newPath);
-        if (pending && pending.length > 0) this.files.set(newPath, pending);
     }
 
     clear(): void {
@@ -140,82 +184,99 @@ export class HintLog {
     }
 }
 
-/** A multiset of line texts: what the file says, with positions thrown away. */
-export type TextBag = Map<string, number>;
-
-function shift(bag: TextBag, text: string, by: number): void {
-    const next = (bag.get(text) ?? 0) + by;
-    if (next === 0) bag.delete(text);
-    else bag.set(text, next);
-}
-
-export function bagOfEntries(entries: LedgerEntry[]): TextBag {
-    const bag: TextBag = new Map();
-    for (const entry of entries) shift(bag, entry.fingerprint.originalText, 1);
-    return bag;
-}
-
-export function bagOfTasks(tasks: Task[]): TextBag {
-    const bag: TextBag = new Map();
-    for (const task of tasks) shift(bag, task.originalText, 1);
-    return bag;
-}
-
-/** Apply one hint's claim to the expected bag, in place. */
-export function applyHintToBag(bag: TextBag, hint: Hint): void {
-    switch (hint.kind) {
-        case 'rewrite':
-            shift(bag, hint.before, -1);
-            shift(bag, hint.after, 1);
-            return;
-        case 'insert':
-            shift(bag, hint.text, 1);
-            return;
-        case 'retire':
-            shift(bag, hint.text, -1);
-            return;
-    }
-}
-
-function bagsEqual(a: TextBag, b: TextBag): boolean {
-    if (a.size !== b.size) return false;
-    for (const [text, count] of a) {
-        if (b.get(text) !== count) return false;
-    }
-    return true;
-}
-
 /**
- * How many hints from the head of the log this scan may believe.
+ * Replay the pending hints over the previous scan's rows and answer how far the
+ * file bears them out.
  *
- * The test is a count, not a lookup. "Is there a line reading T?" cannot verify
- * an insert, because duplication — the write these hints exist for — inserts a
- * line reading exactly what the line beside it already reads, so the answer is
- * yes before the write as well as after. What separates the two is *how many*
- * such lines there are.
+ * The replay is what makes the answer unambiguous. An earlier design tested the
+ * *count* of each line's text and then matched claims to lines by the line
+ * number each write recorded; that reads the file correctly and still pairs the
+ * wrong rows, because two writes to the same row leave an intermediate text
+ * that a different row may also carry, and because an insert or a retire moves
+ * every line the later hints recorded. Rebuilding the whole file instead
+ * removes the question: if the rebuilt lines are exactly the lines read, in
+ * order, then each line's identity is whatever the rebuild put there.
  *
- * So: start from the previous scan's texts, apply the pending hints one at a
- * time, and answer with the largest k whose expected bag equals what was
- * actually read. k = 0 means the read predates every pending hint (or an
- * external edit arrived in the same scan) and nothing is believed. A scan that
- * read two writes' worth of changes verifies both, which is why this walks the
- * whole log rather than stopping at the first mismatch: the two are the same
- * question asked of a different number of hints.
+ * A hint that cannot be applied — its row is gone, or it claims the row read
+ * something it did not — stops the replay. Everything after it describes a file
+ * this one never produced.
  */
-export function consumableHintCount(
+export function resolveHints(
     previous: LedgerEntry[],
     tasks: Task[],
     pending: readonly PendingHint[],
-): number {
-    if (pending.length === 0) return 0;
+): HintResolution {
+    if (pending.length === 0) return { consumed: 0, rows: null };
 
-    const actual = bagOfTasks(tasks);
-    const expected = bagOfEntries(previous);
+    const byRuntimeId = new Map(previous.map(entry => [entry.runtimeId, entry]));
+    let rows: ClaimedRow[] = previous.map(entry => ({
+        runtimeId: entry.runtimeId,
+        text: entry.fingerprint.originalText,
+    }));
 
-    let believed = 0;
+    let consumed = 0;
+    let believed: ClaimedRow[] | null = null;
+
     for (let k = 1; k <= pending.length; k++) {
-        applyHintToBag(expected, pending[k - 1].hint);
-        if (bagsEqual(expected, actual)) believed = k;
+        const next = applyHint(rows, pending[k - 1].hint);
+        if (next === null) break;
+        rows = next;
+        if (reproduces(rows, tasks, byRuntimeId)) {
+            consumed = k;
+            believed = rows;
+        }
     }
-    return believed;
+
+    return { consumed, rows: believed };
+}
+
+/** Apply one claim, or answer null when the file it describes cannot exist. */
+function applyHint(rows: ClaimedRow[], hint: Hint): ClaimedRow[] | null {
+    switch (hint.kind) {
+        case 'rewrite': {
+            const at = rows.findIndex(row => row.runtimeId === hint.runtimeId);
+            // The `before` check keeps a hint honest about the row it names: a
+            // claim whose starting text is not what that row holds is about
+            // some other state of the file.
+            if (at < 0 || rows[at].text !== hint.before) return null;
+            const next = [...rows];
+            next[at] = { runtimeId: hint.runtimeId, text: hint.after };
+            return next;
+        }
+        case 'insert': {
+            const at = rows.findIndex(row => row.runtimeId === hint.anchor);
+            if (at < 0) return null;
+            const next = [...rows];
+            next.splice(hint.side === 'before' ? at : at + 1, 0, { runtimeId: null, text: hint.text });
+            return next;
+        }
+        case 'retire': {
+            const at = rows.findIndex(row => row.runtimeId === hint.runtimeId);
+            if (at < 0) return null;
+            return rows.filter((_, index) => index !== at);
+        }
+    }
+}
+
+/** True when the rebuilt file is, line for line, the file that was read. */
+function reproduces(
+    rows: ClaimedRow[],
+    tasks: Task[],
+    byRuntimeId: Map<string, LedgerEntry>,
+): boolean {
+    if (rows.length !== tasks.length) return false;
+
+    for (let i = 0; i < rows.length; i++) {
+        if (rows[i].text !== tasks[i].originalText) return false;
+
+        const runtimeId = rows[i].runtimeId;
+        if (runtimeId === null) continue;
+        // Never across parsers, the rule every rung of the ladder follows.
+        // Turning a third-party notation off can leave the text identical and
+        // the parser different.
+        const entry = byRuntimeId.get(runtimeId);
+        if (!entry || entry.fingerprint.parserId !== tasks[i].parserId) return false;
+    }
+
+    return true;
 }

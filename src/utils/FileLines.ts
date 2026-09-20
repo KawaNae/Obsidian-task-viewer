@@ -85,34 +85,46 @@ export async function processLines(
     app: App,
     file: TFile,
     edit: (lines: string[], eol: Eol, hint: (claim: Hint) => void) => string[] | null,
-    sink?: (hints: Hint[]) => void,
+    sink?: (hints: readonly Hint[]) => () => void,
 ): Promise<boolean> {
     let written = false;
+    // A list rather than one slot: `vault.process` may run the callback again,
+    // and everything filed has to be withdrawable.
+    const withdrawals: Array<() => void> = [];
 
-    await app.vault.process(file, (content) => {
-        const { lines, eol } = splitLines(content);
-        const collected: Hint[] = [];
-        const next = edit(lines, eol, claim => collected.push(claim));
-        if (next === null) return content;
+    try {
+        await app.vault.process(file, (content) => {
+            const { lines, eol } = splitLines(content);
+            const collected: Hint[] = [];
+            const next = edit(lines, eol, claim => collected.push(claim));
+            if (next === null) return content;
 
-        written = true;
-        const rebuilt = joinLines(next, eol);
+            written = true;
+            const rebuilt = joinLines(next, eol);
 
-        // A rewrite that produced the same bytes is not a write: Obsidian fires
-        // no `modify` for it, so no scan follows, and a hint filed here would
-        // wait for a scan that never comes. The caller still hears `true` —
-        // the line was found, which is the question it asked.
-        //
-        // Hints are handed over here rather than after the `await` on purpose.
-        // The scan that this write triggers starts reading before
-        // `vault.process` resolves, so a hint raised afterwards is too late for
-        // it. The cost is that a `process` which throws *after* this callback
-        // leaves its hints filed against a file that never changed; they fail
-        // verification against what the next scan reads and are dropped there.
-        if (sink && collected.length > 0 && rebuilt !== content) sink(collected);
+            // A rewrite that produced the same bytes is not a write: Obsidian
+            // fires no `modify` for it, so no scan follows, and a hint filed
+            // here would wait for a scan that never comes. The caller still
+            // hears `true` — the line was found, which is what it asked.
+            //
+            // Hints are handed over here rather than after the `await` on
+            // purpose: the scan this write triggers starts reading before
+            // `vault.process` resolves, so a hint raised afterwards is too late
+            // for it. Filing early means filing before the write is known to
+            // have succeeded, which is what the withdrawal below is for.
+            if (sink && collected.length > 0 && rebuilt !== content) {
+                withdrawals.push(sink(collected));
+            }
 
-        return rebuilt;
-    });
+            return rebuilt;
+        });
+    } catch (error) {
+        // The file never changed, so claims about it describe a state that
+        // never existed. Left in the log they would be matched against whatever
+        // the next scan happens to read.
+        for (const withdraw of withdrawals) withdraw();
+        throw error;
+    }
 
     return written;
 }

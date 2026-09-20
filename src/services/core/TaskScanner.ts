@@ -262,9 +262,11 @@ export class TaskScanner {
         this.scanQueue.delete(oldPath);
         this.completionDetector.forgetFile(oldPath);
         this.ledger.rekeyFile(oldPath, newPath, id => TaskIdGenerator.renameFile(id, oldPath, newPath));
-        // Hints name runtime IDs and line texts, neither of which a rename
-        // touches; they only have to follow the path they were filed under.
-        this.hints.rekeyFile(oldPath, newPath);
+        // Hints name runtime IDs, and a rename rewrites those, so carrying the
+        // log across would leave claims about rows nothing answers to. They
+        // would fail to apply and cost the file its next hint anyway.
+        this.hints.dropFile(oldPath);
+        this.hints.dropFile(newPath);
     }
 
     /**
@@ -292,10 +294,12 @@ export class TaskScanner {
      * The write layer calls this from inside its `vault.process` callback (see
      * `processLines`); the next scan of that file verifies the claims against
      * what it reads and believes as many as hold up.
+     *
+     * @returns a handle that takes the claims back, for a write that raised
+     *   them and then failed.
      */
-    addHints(file: string, hints: Hint[]): void {
-        const now = Date.now();
-        for (const hint of hints) this.hints.add(file, hint, now);
+    addHints(file: string, hints: readonly Hint[]): () => void {
+        return this.hints.add(file, hints, Date.now());
     }
 
     /**

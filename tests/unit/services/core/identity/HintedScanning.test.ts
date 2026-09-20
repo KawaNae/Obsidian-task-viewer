@@ -105,7 +105,7 @@ describe('a hint through the scanner', () => {
 
         await harness.write(
             [TASK, TASK, ''],
-            { kind: 'insert', text: TASK, line: 0 },
+            { kind: 'insert', text: TASK, anchor: original, side: 'before' },
         );
 
         // The copy is the new line; the original kept what it had.
@@ -118,7 +118,7 @@ describe('a hint through the scanner', () => {
         await harness.write([TASK, '']);
         const original = harness.ids()[0];
 
-        await harness.write([TASK, TASK, ''], { kind: 'insert', text: TASK, line: 0 });
+        await harness.write([TASK, TASK, ''], { kind: 'insert', text: TASK, anchor: original, side: 'before' });
         const afterCopy = harness.ids();
 
         // An unrelated scan of the same file: the hint is spent, so nothing
@@ -137,19 +137,22 @@ describe('a hint that found no scan of its own', () => {
         // that hint is already folded into.
         const harness = new Harness();
         await harness.write([TASK, '']);
+        const original = harness.ids()[0];
 
         // A write whose hint cannot verify, because a hand edit came with it.
         await harness.write(
             [TASK, TASK, '- [ ] 手で書いた行', ''],
-            { kind: 'insert', text: TASK, line: 0 },
+            { kind: 'insert', text: TASK, anchor: original, side: 'before' },
         );
         const stranded = harness.ids();
 
         // The next write's hint has to work regardless.
-        const secondCopy = [TASK, TASK, TASK, '- [ ] 手で書いた行', ''];
-        await harness.write(secondCopy, { kind: 'insert', text: TASK, line: 0 });
+        await harness.write(
+            [TASK, TASK, TASK, '- [ ] 手で書いた行', ''],
+            { kind: 'insert', text: TASK, anchor: stranded[0], side: 'before' },
+        );
 
-        // Two of the three previous IDs survive in the lines below the new one.
+        // The copy is the new line; the two rows below it kept their IDs.
         expect(harness.ids().slice(1, 3)).toEqual(stranded.slice(0, 2));
         expect(harness.ids()[0]).not.toBe(stranded[0]);
     });
@@ -162,7 +165,7 @@ describe('a hint that found no scan of its own', () => {
 
         // A write made while scans are suppressed (a drag): the hint is filed,
         // but no scan follows it.
-        harness.hintOnly([TASK, TASK, ''], { kind: 'insert', text: TASK, line: 0 });
+        harness.hintOnly([TASK, TASK, ''], { kind: 'insert', text: TASK, anchor: original, side: 'before' });
         vi.advanceTimersByTime(HINT_TTL_MS);
 
         // Whatever finally scans this file gets no help from it.
@@ -181,7 +184,7 @@ describe('a hint that found no scan of its own', () => {
         const original = harness.ids()[0];
 
         const held = harness.holdRead();
-        harness.hintOnly([TASK, TASK, ''], { kind: 'insert', text: TASK, line: 0 });
+        harness.hintOnly([TASK, TASK, ''], { kind: 'insert', text: TASK, anchor: original, side: 'before' });
         held.release();
         await held.scanning;
 
@@ -201,7 +204,7 @@ describe('a hint that found no scan of its own', () => {
         const original = harness.ids()[0];
 
         // Raised, but the file still reads as it did.
-        harness.scanner.addHints(FILE, [{ kind: 'insert', text: TASK, line: 0 }]);
+        harness.scanner.addHints(FILE, [{ kind: 'insert', text: TASK, anchor: original, side: 'before' }]);
         await harness.scan();
         expect(harness.ids()).toEqual([original]);
 

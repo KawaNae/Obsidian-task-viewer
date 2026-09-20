@@ -1,8 +1,8 @@
 import type { Task } from '../../../types';
 import type { Fingerprint } from './IdentityFingerprint';
 import { fingerprintOf } from './IdentityFingerprint';
-import type { Hint, PendingHint } from './IdentityHints';
-import { consumableHintCount } from './IdentityHints';
+import type { HintResolution, PendingHint } from './IdentityHints';
+import { resolveHints } from './IdentityHints';
 import type { LedgerEntry } from './IdentityLedger';
 
 export interface MatchResult {
@@ -60,8 +60,9 @@ export function matchFile(
     const matchedPrev = new Set<string>();
 
     // --- rung 0: what our own writes said, as far as the file bears it out ---
-    const consumedHints = consumableHintCount(previous, tasks, pending);
-    const hinted = settleHints(pending.slice(0, consumedHints).map(entry => entry.hint), previous, ordered);
+    const resolution = resolveHints(previous, ordered, pending);
+    const consumedHints = resolution.consumed;
+    const hinted = settleHints(resolution, previous, ordered);
     for (const [entry, task] of hinted.pairs) {
         pairedWith.set(task, entry);
         matchedPrev.add(entry.runtimeId);
@@ -166,75 +167,43 @@ interface HintOutcome {
 }
 
 /**
- * Turn believed hints into pairs, using the line each write recorded.
+ * Read the believed claims off as pairs.
  *
- * The count test in `consumableHintCount` has already decided *that* the file
- * bears these hints out; what is left is *which* row each one means, and for
- * that the recorded line is the evidence — after a duplicate there are two
- * lines reading the same text, and only their positions tell them apart. The
- * nearest unclaimed line wins, because a hint raised before a later write in
- * the same batch records a position that write has since shifted.
+ * `resolveHints` has already rebuilt the file from the previous rows and found
+ * it line for line identical to what was read, so there is nothing left to
+ * decide: line i is whatever the rebuild says line i is. A row the rebuild no
+ * longer holds is one a write removed.
  */
 function settleHints(
-    hints: readonly Hint[],
+    resolution: HintResolution,
     previous: LedgerEntry[],
     ordered: Task[]
 ): HintOutcome {
-    const byRuntimeId = new Map(previous.map(entry => [entry.runtimeId, entry]));
-    const spokenFor = new Set<string>();
-    const claimed = new Set<Task>();
-
     const pairs: Array<[LedgerEntry, Task]> = [];
     const fresh = new Set<Task>();
     const retired: string[] = [];
 
-    const claimNearest = (text: string, line: number, parserId?: string): Task | undefined => {
-        let best: Task | undefined;
-        let bestDistance = Infinity;
-        for (const task of ordered) {
-            if (claimed.has(task) || task.originalText !== text) continue;
-            // Never across parsers, the same rule every rung follows.
-            if (parserId !== undefined && task.parserId !== parserId) continue;
-            const distance = Math.abs(task.line - line);
-            if (distance < bestDistance) {
-                best = task;
-                bestDistance = distance;
-            }
-        }
-        if (best) claimed.add(best);
-        return best;
-    };
+    const rows = resolution.rows;
+    if (!rows) return { pairs, fresh, retired };
 
-    const takeRow = (runtimeId: string): LedgerEntry | undefined => {
-        const entry = byRuntimeId.get(runtimeId);
-        if (!entry || spokenFor.has(runtimeId)) return undefined;
-        return entry;
-    };
+    const byRuntimeId = new Map(previous.map(entry => [entry.runtimeId, entry]));
+    const survived = new Set<string>();
 
-    for (const hint of hints) {
-        switch (hint.kind) {
-            case 'rewrite': {
-                const entry = takeRow(hint.runtimeId);
-                if (!entry) break;
-                const task = claimNearest(hint.after, hint.line, entry.fingerprint.parserId);
-                if (!task) break;
-                spokenFor.add(entry.runtimeId);
-                pairs.push([entry, task]);
-                break;
-            }
-            case 'insert': {
-                const task = claimNearest(hint.text, hint.line);
-                if (task) fresh.add(task);
-                break;
-            }
-            case 'retire': {
-                const entry = takeRow(hint.runtimeId);
-                if (!entry) break;
-                spokenFor.add(entry.runtimeId);
-                retired.push(entry.runtimeId);
-                break;
-            }
+    for (let i = 0; i < ordered.length; i++) {
+        const runtimeId = rows[i].runtimeId;
+        if (runtimeId === null) {
+            fresh.add(ordered[i]);
+            continue;
         }
+        // Present by construction: the rebuild only carries rows that were in
+        // `previous`, and it was checked against these very tasks.
+        const entry = byRuntimeId.get(runtimeId)!;
+        survived.add(runtimeId);
+        pairs.push([entry, ordered[i]]);
+    }
+
+    for (const entry of previous) {
+        if (!survived.has(entry.runtimeId)) retired.push(entry.runtimeId);
     }
 
     return { pairs, fresh, retired };
