@@ -29,8 +29,18 @@ function makeTask(overrides: Partial<Task> = {}): Task {
  * assertions read.
  */
 function copyLines(task: Task, count = 1): string[] {
-    const display = toDisplayTask(task, START_HOUR, () => undefined);
-    return planInPlaceCopies(task, display, count).map(copy => TaskParser.format(copy));
+    const plan = planInPlaceCopies(task, toDisplayTask(task, START_HOUR, () => undefined), count);
+    if (plan.kind === 'verbatim') {
+        // The writer repeats the file's own line; the test stands in for it
+        // with the line the task was parsed from.
+        return Array.from({ length: plan.count }, () => task.originalText);
+    }
+    return plan.tasks.map(copy => TaskParser.format(copy));
+}
+
+/** Whether the plan moves the task at all, as opposed to repeating its line. */
+function isShifted(task: Task): boolean {
+    return planInPlaceCopies(task, toDisplayTask(task, START_HOUR, () => undefined), 1).kind === 'shifted';
 }
 
 describe('planInPlaceCopies', () => {
@@ -155,5 +165,66 @@ describe('planInPlaceCopies', () => {
             '- [ ] task @2026-03-11',
             '- [ ] task @2026-03-11',
         ]);
+    });
+
+    it('repeats the line as written when there is nothing to move', () => {
+        // Not reformatted: a task standing still should not be reworded.
+        const task = makeTask({
+            startDate: '2026-03-11',
+            originalText: '+  [ ] @2026-03-11  odd   spacing',
+        });
+
+        expect(copyLines(task)).toEqual(['+  [ ] @2026-03-11  odd   spacing']);
+        expect(isShifted(task)).toBe(false);
+    });
+
+    it('writes out an end the task only inherited, so the copy keeps its length', () => {
+        // The inherited end stays where it is while the copy moves, so a copy
+        // that did not write its own end would come out a different length.
+        const task = makeTask({
+            startDate: '2026-03-11', startTime: '10:00',
+            cascadeContext: { endTime: '12:00' },
+            originalText: '- [ ] task @2026-03-11T10:00',
+        } as Partial<Task>);
+
+        expect(copyLines(task, 2)).toEqual([
+            '- [ ] task @2026-03-11T12:00>14:00',
+            '- [ ] task @2026-03-11T14:00>16:00',
+        ]);
+    });
+
+    it('writes out an end date the task only inherited', () => {
+        const task = makeTask({
+            startDate: '2026-03-11', startTime: '23:00',
+            cascadeContext: { endDate: '2026-03-12', endTime: '01:00' },
+            originalText: '- [ ] task @2026-03-11T23:00',
+        } as Partial<Task>);
+
+        expect(copyLines(task)).toEqual(['- [ ] task @2026-03-12T01:00>03:00']);
+    });
+
+    it('shifts a task whose start time comes from scope', () => {
+        // Effective, not written, is what decides: this one holds a time.
+        const task = makeTask({
+            startDate: '2026-03-11',
+            cascadeContext: { startTime: '10:00', endTime: '11:00' },
+            originalText: '- [ ] task @2026-03-11',
+        } as Partial<Task>);
+
+        expect(copyLines(task)).toEqual(['- [ ] task @2026-03-11T11:00>12:00']);
+    });
+
+    it('leaves a span of whole days alone', () => {
+        // An end date with no time means "to the end of that day". The last
+        // minute before the day rolls over is a setting, not a time the task
+        // gave, and writing it out would leak startHour into the line.
+        const task = makeTask({
+            startDate: '2026-03-11', startTime: '10:00',
+            endDate: '2026-03-13',
+            originalText: '- [ ] task @2026-03-11T10:00>2026-03-13',
+        });
+
+        expect(isShifted(task)).toBe(false);
+        expect(copyLines(task)).toEqual(['- [ ] task @2026-03-11T10:00>2026-03-13']);
     });
 });

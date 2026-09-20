@@ -18,6 +18,17 @@ export interface GeneratedChild {
     body: string;
 }
 
+/**
+ * What a duplicate-as-next writes for each copy.
+ *
+ * `verbatim` repeats the file's own line, so a task that is not being moved
+ * is not reworded: it never reaches the formatter. `lines` carries copies
+ * the caller has composed, which only a task being moved needs.
+ */
+export type InPlaceCopyLines =
+    | { kind: 'verbatim'; count: number }
+    | { kind: 'lines'; lines: string[] };
+
 
 /**
  * タスク複製ロジックを担当するクラス
@@ -68,11 +79,13 @@ export class TaskCloner {
     }
 
     /**
-     * 同じ日の中で複製する（`dayOffset` なし）。
+     * 続きに複製する（`dayOffset` なし）。
      *
      * 複写の行は呼び出し側が組んで渡す。どこへ置くかを決めるのがこの層で、
      * 何を書くか（実効 end から始めて長さを保つ）を決めるのは日付を解決
      * できる層である、という分担は {@link insertRecurrenceForTask} と同じ。
+     * 時刻を持たないタスクはずらす先が無いので、呼び出し側は `verbatim` を
+     * 渡す。その複写はファイルの行をそのまま写し、formatter を通らない。
      *
      * 複写は元タスクとその子行の**後ろ**に入る。時刻の順に読めるためで、
      * 同じ本文の 2 行が序数で振り分けられたときに、旧 ID が上の元の行に
@@ -80,7 +93,7 @@ export class TaskCloner {
      *
      * @returns whether the copies were written.
      */
-    async duplicateInlineTaskInPlace(task: Task, copyLines: string[]): Promise<boolean> {
+    async duplicateInlineTaskInPlace(task: Task, copies: InPlaceCopyLines): Promise<boolean> {
         const file = this.app.vault.getAbstractFileByPath(task.file);
         if (!(file instanceof TFile)) {
             logWarn(`[TaskCloner] File not found: ${task.file}`);
@@ -90,14 +103,17 @@ export class TaskCloner {
         return processLines(this.app, file, (lines) => {
             const idx = this.fileOps.findTaskLineNumber(lines, task);
             if (idx < 0 || idx >= lines.length) {
-                logWarn('[TaskCloner] Task not found in file (duplicate in place)');
+                logWarn('[TaskCloner] Task not found in file (duplicate as next)');
                 return null;
             }
 
             const indent = lines[idx].match(/^(\s*)/)?.[1] ?? '';
-            return this.spliceCopies(
-                lines, idx, copyLines.map(l => indent + l.trim()), 'after',
-            );
+            const parents = copies.kind === 'verbatim'
+                ? Array.from({ length: copies.count },
+                    () => this.fileOps.stripBlockIds([lines[idx]])[0])
+                : copies.lines.map(l => indent + l.trim());
+
+            return this.spliceCopies(lines, idx, parents, 'after');
         });
     }
 
@@ -230,10 +246,39 @@ export class TaskCloner {
 
         const insertIndex = position === 'before'
             ? taskLine
-            : taskLine + 1 + childrenLines.length;
+            : TaskCloner.indentedRegionEnd(lines, taskLine);
         lines.splice(insertIndex, 0, ...linesToInsert);
 
         return lines;
+    }
+
+    /**
+     * The index just past everything indented under the task line.
+     *
+     * The parser ends a task's children at the first blank line, and the
+     * lines after that blank still read as the task's — a second group of
+     * notes, a fenced block with a blank line in it. A copy dropped at the
+     * end of the parsed children would land in the middle of them, and the
+     * fence would be cut in half. So the region runs to the last line deeper
+     * than the task, and the copy goes after that.
+     *
+     * Only the insertion point is measured this way. What a copy carries is
+     * still the children the parser sees, so the copy and the index agree on
+     * what its subtree is.
+     */
+    private static indentedRegionEnd(lines: string[], taskLine: number): number {
+        const taskIndent = lines[taskLine].search(/\S|$/);
+        let last = taskLine;
+
+        for (let j = taskLine + 1; j < lines.length; j++) {
+            const line = lines[j];
+            // A blank line decides nothing on its own — what follows it does.
+            if (line.trim() === '') continue;
+            if (line.search(/\S|$/) <= taskIndent) break;
+            last = j;
+        }
+
+        return last + 1;
     }
 
     /**

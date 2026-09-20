@@ -70,7 +70,10 @@ describe('a note written in CRLF', () => {
     });
 
     it('takes a duplicate', async () => {
-        const { contents, session } = await openNote(CRLF_NOTE);
+        // Timed, so the copy moves and can be told from the original — an
+        // all-day pair would read the same whichever side the copy went.
+        const TIMED = ['# crlf', '', '- [ ] タスクA @2026-09-21T10:00>11:00', '- [ ] タスクB @2026-09-21', ''].join('\r\n');
+        const { contents, session } = await openNote(TIMED);
         const a = session.index.getTasks().find(task => task.content === 'タスクA')!;
 
         const written = await session.index.duplicateTask(a.id);
@@ -78,8 +81,8 @@ describe('a note written in CRLF', () => {
 
         expect(written).toBe(true);
         expect(taskLines(contents)).toEqual([
-            '- [ ] タスクA @2026-09-21',
-            '- [ ] タスクA @2026-09-21',
+            '- [ ] タスクA @2026-09-21T10:00>11:00',
+            '- [ ] タスクA @2026-09-21T11:00>12:00',
             '- [ ] タスクB @2026-09-21',
         ]);
         expect(terminators(contents.get(FILE)!).lf).toBe(0);

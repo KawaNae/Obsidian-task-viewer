@@ -2,25 +2,37 @@ import type { DisplayTask, Task } from '../../types';
 import { DateUtils } from '../../utils/DateUtils';
 
 /**
- * Where the copies of a "duplicate in place" go on the clock.
+ * Where the copies of a "duplicate as next" go on the clock.
  *
  * A copy that lands on the original's own slot is two cards in the same
  * place with the same words: the view stacks them, and the matcher that
  * hands runtime ids to lines has nothing to tell them apart by. So a copy
  * starts where the original ends — implicitly an hour later when the task
- * never wrote an end, at the written end when it did — and keeps its
- * length. Asking for several chains them, each starting where the one
- * before it ends.
+ * never wrote an end, at the written or inherited end when it has one — and
+ * keeps its length. Asking for several chains them, each starting where the
+ * one before it ends.
  *
- * A task with no dates has no slot to move out of, and an all-day task
- * fills its day already, so neither is shifted; copies of those are the
- * original again, and only their position in the file separates them.
+ * A task that holds no time has no slot to move out of. A bare date, a
+ * span of whole days, a line with no dates at all: each one already fills
+ * whatever it covers, and its copies are the line again, written out
+ * unchanged.
  */
 
 interface Instant {
     date: string;
     minutes: number;
 }
+
+/**
+ * What to write for a duplicate with no day offset.
+ *
+ * `verbatim` copies the line as it stands in the file, so a task that is not
+ * being moved is not reworded either: it never passes through the formatter
+ * and keeps its own spelling.
+ */
+export type InPlaceCopies =
+    | { kind: 'verbatim'; count: number }
+    | { kind: 'shifted'; tasks: Task[] };
 
 function advance(from: Instant, minutes: number): Instant {
     const total = from.minutes + minutes;
@@ -30,6 +42,23 @@ function advance(from: Instant, minutes: number): Instant {
 
 function span(from: Instant, to: Instant): number {
     return DateUtils.getDiffDays(from.date, to.date) * 1440 + (to.minutes - from.minutes);
+}
+
+/**
+ * Whether the task holds a time of day that a copy can be moved past.
+ *
+ * Both ends have to be real. A start is real when the line or its scope
+ * wrote one; an end is real when the line or its scope wrote one, or when
+ * there is no end date at all and the default hour applies. An end date
+ * with no time is not a time: it means "to the end of that day", and the
+ * clock reading it gets (the last minute before the day rolls over) is a
+ * setting, not something the task said.
+ */
+function holdsTimeOfDay(task: Task): boolean {
+    const startTime = task.startTime ?? task.cascadeContext?.startTime;
+    const endTime = task.endTime ?? task.cascadeContext?.endTime;
+    const endDate = task.endDate ?? task.cascadeContext?.endDate;
+    return !!startTime && (!!endTime || !endDate);
 }
 
 /**
@@ -43,22 +72,18 @@ function span(from: Instant, to: Instant): number {
  * wrote a time and took its day from the note's scope keeps that shape
  * while the shift stays inside the day, so it goes on following the scope;
  * once the shift leaves the day, scope can no longer say where the copy is
- * and the date is spelled out. A task that wrote no end keeps writing none:
- * the hour it was given implicitly is its length, and the copy is given the
- * same hour the same way.
+ * and the date is spelled out. An end the task never wrote and never
+ * inherited stays unwritten: the hour it was given implicitly is its
+ * length, and the copy is given the same hour the same way. An end it did
+ * inherit is written out, because the inherited value does not move with
+ * the copy and would otherwise cut its length.
  */
-export function planInPlaceCopies(task: Task, display: DisplayTask, count: number): Task[] {
-    const copies: Task[] = [];
-    const base: Task = { ...task, blockId: undefined };
-
-    const shiftable = !display.startTimeImplicit
+export function planInPlaceCopies(task: Task, display: DisplayTask, count: number): InPlaceCopies {
+    const shiftable = holdsTimeOfDay(task)
         && !!display.effectiveStartDate && !!display.effectiveStartTime
         && !!display.effectiveEndDate && !!display.effectiveEndTime;
 
-    if (!shiftable) {
-        for (let i = 0; i < count; i++) copies.push({ ...base });
-        return copies;
-    }
+    if (!shiftable) return { kind: 'verbatim', count };
 
     const start: Instant = {
         date: display.effectiveStartDate,
@@ -74,10 +99,17 @@ export function planInPlaceCopies(task: Task, display: DisplayTask, count: numbe
     // which is the one place a copy must not go. Give it the default hour.
     const step = length > 0 ? length : DateUtils.DEFAULT_TIMED_DURATION_MINUTES;
 
-    // A start written as a time alone belongs to the day its scope names, so
-    // the copy can stay that shape only while it stays in that day.
+    // An end that came from scope has to be written out: it stays where it
+    // is while the copy moves, so leaving it would give the copy a different
+    // length from the one it is copying.
+    const endIsWritten = !!(task.endTime ?? task.cascadeContext?.endTime);
+    // A start or end written as a time alone belongs to the day its scope
+    // names, so the copy can stay that shape only while it stays in that day.
     const startIsScopeDated = !task.startDate && !!task.startTime;
     const endIsScopeDated = !task.endDate && !!task.endTime;
+
+    const base: Task = { ...task, blockId: undefined };
+    const tasks: Task[] = [];
 
     for (let i = 1; i <= count; i++) {
         const copyStart = advance(start, step * i);
@@ -88,9 +120,7 @@ export function planInPlaceCopies(task: Task, display: DisplayTask, count: numbe
             copy.startDate = copyStart.date;
         }
 
-        // No written end means the length was the implicit hour; leaving the
-        // end unwritten gives the copy that same hour.
-        if (task.endDate || task.endTime) {
+        if (endIsWritten) {
             const copyEnd = advance(end, step * i);
             copy.endTime = DateUtils.minutesToTime(copyEnd.minutes);
             // An end written as a time alone and falling before its start is
@@ -103,8 +133,8 @@ export function planInPlaceCopies(task: Task, display: DisplayTask, count: numbe
             }
         }
 
-        copies.push(copy);
+        tasks.push(copy);
     }
 
-    return copies;
+    return { kind: 'shifted', tasks };
 }

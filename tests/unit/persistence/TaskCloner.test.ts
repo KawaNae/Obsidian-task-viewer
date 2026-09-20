@@ -118,5 +118,61 @@ describe('TaskCloner', () => {
             expect(out[3]).toBe('\t- [ ] child ^abc');
             expect(out.filter(l => l.includes('^abc'))).toHaveLength(1);
         });
+
+        it('clears the whole indented region, not just the parsed children', () => {
+            // The parser ends the children at the blank line, but what follows
+            // it still reads as the task's. A copy dropped at the end of the
+            // parsed children would land in the middle of them.
+            const withGap = [
+                '- [ ] p @2026-03-11T10:00>11:00',
+                '\t- c1',
+                '',
+                '\t- c2',
+                '- [ ] n',
+            ];
+
+            expect(callSpliceCopies(withGap, 0, ['- [ ] copy'], 'after')).toEqual([
+                '- [ ] p @2026-03-11T10:00>11:00',
+                '\t- c1',
+                '',
+                '\t- c2',
+                '- [ ] copy',
+                '\t- c1',
+                '- [ ] n',
+            ]);
+        });
+
+        it('does not cut a child code fence that has a blank line in it', () => {
+            const withFence = [
+                '- [ ] p @2026-03-11T10:00>11:00',
+                '\t```js',
+                '\tconst a = 1;',
+                '',
+                '\tconst b = 2;',
+                '\t```',
+                '- [ ] n',
+            ];
+
+            const out = callSpliceCopies(withFence, 0, ['- [ ] copy'], 'after');
+
+            // The fence closes before the copy begins.
+            expect(out.indexOf('- [ ] copy')).toBeGreaterThan(out.lastIndexOf('\t```'));
+        });
+
+        it('leaves everything below the task alone when copying before it', () => {
+            const withGap = [
+                '- [ ] p @2026-03-11T10:00>11:00',
+                '\t- c1',
+                '',
+                '\t- c2',
+            ];
+
+            expect(callSpliceCopies(withGap, 0, ['- [ ] copy'], 'before').slice(2)).toEqual([
+                '- [ ] p @2026-03-11T10:00>11:00',
+                '\t- c1',
+                '',
+                '\t- c2',
+            ]);
+        });
     });
 });

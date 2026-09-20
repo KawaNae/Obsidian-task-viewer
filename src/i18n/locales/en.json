@@ -533,7 +533,7 @@
     "maskLabel": "Mask: {{value}}",
     "openInEditor": "Open in Editor",
     "duplicate": "Duplicate",
-    "inPlace": "In Place",
+    "asNext": "As Next",
     "forTomorrow": "For Tomorrow",
     "forWeek": "For Week (7 days)",
     "convertToInline": "Convert to Inline",

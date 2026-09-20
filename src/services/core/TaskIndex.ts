@@ -582,7 +582,10 @@ export class TaskIndex {
         const display = toDisplayTask(task, this.settings.startHour, (id) => this.store.getTask(id));
         const copies = planInPlaceCopies(task, display, count);
         return this.repository.duplicateInlineTaskInPlace(
-            task, copies.map(copy => TaskParser.format(copy)),
+            task,
+            copies.kind === 'verbatim'
+                ? copies
+                : { kind: 'lines', lines: copies.tasks.map(copy => TaskParser.format(copy)) },
         );
     }
 

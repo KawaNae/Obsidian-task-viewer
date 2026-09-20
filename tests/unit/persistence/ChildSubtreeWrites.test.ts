@@ -210,7 +210,11 @@ describe('insertSiblingAfterTask walks whole subtrees', () => {
 
 // ── duplicate: the extent decides what gets copied ──
 
-describe('duplicateInlineTask copies the subtree', () => {
+describe('duplicateInlineTaskInPlace copies the subtree', () => {
+    // The entry production uses for a duplicate with no day offset. An
+    // all-day task holds no time to move past, so its copy is the line again.
+    const verbatimOnce = { kind: 'verbatim', count: 1 } as const;
+
     it('copies descendants and strips their block ids', async () => {
         const h = harness([
             '- [ ] parent @2026-08-15',
@@ -218,14 +222,14 @@ describe('duplicateInlineTask copies the subtree', () => {
             '\t\t- [ ] grandchild',
         ].join('\n'));
 
-        await h.cloner.duplicateInlineTask(parent());
+        await h.cloner.duplicateInlineTaskInPlace(parent(), verbatimOnce);
 
         expect(h.lines()).toEqual([
             '- [ ] parent @2026-08-15',
-            '\t- [ ] child',
+            '\t- [ ] child ^abc123',
             '\t\t- [ ] grandchild',
             '- [ ] parent @2026-08-15',
-            '\t- [ ] child ^abc123',
+            '\t- [ ] child',
             '\t\t- [ ] grandchild',
         ]);
     });
@@ -238,7 +242,7 @@ describe('duplicateInlineTask copies the subtree', () => {
             '\t```',
         ].join('\n'));
 
-        await h.cloner.duplicateInlineTask(parent());
+        await h.cloner.duplicateInlineTaskInPlace(parent(), verbatimOnce);
 
         expect(h.lines().slice(0, 4)).toEqual([
             '- [ ] parent @2026-08-15',
@@ -247,6 +251,72 @@ describe('duplicateInlineTask copies the subtree', () => {
             '\t```',
         ]);
         expect(h.lines()).toHaveLength(8);
+    });
+});
+
+// ── duplicate with a day offset: the calendar axis, unchanged ──
+
+describe('duplicateInlineTask shifts along the calendar', () => {
+    const subtree = [
+        '- [ ] parent @2026-08-15 ^abc123',
+        '\t- [ ] child',
+        '- [ ] other @2026-08-15',
+    ].join('\n');
+
+    it('puts the copy before the task and drops its block id', async () => {
+        const h = harness(subtree);
+
+        await h.cloner.duplicateInlineTask(parent(), { dayOffset: 1 });
+
+        expect(h.lines()).toEqual([
+            '- [ ] parent @2026-08-16',
+            '\t- [ ] child',
+            '- [ ] parent @2026-08-15 ^abc123',
+            '\t- [ ] child',
+            '- [ ] other @2026-08-15',
+        ]);
+    });
+
+    it('writes count copies, latest first', async () => {
+        const h = harness(subtree);
+
+        await h.cloner.duplicateInlineTask(parent(), { dayOffset: 1, count: 3 });
+
+        // Future-first, so scrolling down walks back towards the original.
+        expect(h.lines().filter(l => l.startsWith('- [ ] parent'))).toEqual([
+            '- [ ] parent @2026-08-18',
+            '- [ ] parent @2026-08-17',
+            '- [ ] parent @2026-08-16',
+            '- [ ] parent @2026-08-15 ^abc123',
+        ]);
+    });
+
+    it('gives every copy its own children', async () => {
+        const h = harness(subtree);
+
+        await h.cloner.duplicateInlineTask(parent(), { dayOffset: 2, count: 2 });
+
+        expect(h.lines()).toEqual([
+            '- [ ] parent @2026-08-18',
+            '\t- [ ] child',
+            '- [ ] parent @2026-08-17',
+            '\t- [ ] child',
+            '- [ ] parent @2026-08-15 ^abc123',
+            '\t- [ ] child',
+            '- [ ] other @2026-08-15',
+        ]);
+    });
+
+    it('leaves the children on their own dates', async () => {
+        const h = harness([
+            '- [ ] parent @2026-08-15T10:00>11:00',
+            '\t- [ ] child @2026-08-15T13:00>13:30',
+        ].join('\n'));
+
+        await h.cloner.duplicateInlineTask(parent(), { dayOffset: 1 });
+
+        // A child's dates are its own, not an offset from its parent's.
+        expect(h.lines()[1]).toBe('\t- [ ] child @2026-08-15T13:00>13:30');
     });
 });
 

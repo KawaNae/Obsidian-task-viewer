@@ -533,7 +533,7 @@
     "maskLabel": "マスク: {{value}}",
     "openInEditor": "エディターで開く",
     "duplicate": "複製",
-    "inPlace": "その場で",
+    "asNext": "続きで",
     "forTomorrow": "明日用",
     "forWeek": "1週間用（7日間）",
     "convertToInline": "インラインに変換",

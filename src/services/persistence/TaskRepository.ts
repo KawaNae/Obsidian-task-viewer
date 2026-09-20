@@ -3,7 +3,7 @@ import type { DuplicateOptions, Task } from '../../types';
 import { FileOperations } from './utils/FileOperations';
 import { InlineTaskWriter } from './writers/InlineTaskWriter';
 import { FrontmatterWriter } from './writers/FrontmatterWriter';
-import { TaskCloner, type GeneratedChild } from './TaskCloner';
+import { TaskCloner, type GeneratedChild, type InPlaceCopyLines } from './TaskCloner';
 import type { PropertyOp } from './PropertyUpdatePlanner';
 
 /**
@@ -100,8 +100,8 @@ export class TaskRepository {
     }
 
     /** @returns whether the copies were written (see TaskCloner). */
-    async duplicateInlineTaskInPlace(task: Task, copyLines: string[]): Promise<boolean> {
-        return this.cloner.duplicateInlineTaskInPlace(task, copyLines);
+    async duplicateInlineTaskInPlace(task: Task, copies: InPlaceCopyLines): Promise<boolean> {
+        return this.cloner.duplicateInlineTaskInPlace(task, copies);
     }
 
     async insertRecurrenceForTask(task: Task, content: string, flowLines: string[] = []): Promise<void> {
