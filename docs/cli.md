@@ -168,29 +168,58 @@ obsidian obsidian-task-viewer:duplicate id=abc123 day-offset=1 count=3
 
 ### tasks-for-date-range — 日付範囲のタスク取得
 
+期間の判定は from/to そのもの（visual な日付、下の list との違いを参照）で行われます。単純フィルタフラグは、その結果にさらに絞り込みをかけるだけで、期間の判定には関与しません。
+
 ```bash
 obsidian obsidian-task-viewer:tasks-for-date-range from=2026-03-01 to=2026-03-31 output-fields=content,startDate
+
+# 単純フィルタを重ねる（期間は from/to のまま、status で絞り込むだけ）
+obsidian obsidian-task-viewer:tasks-for-date-range from=2026-03-01 to=2026-03-31 status=x tag=work
 ```
 
 | フラグ | 必須 | 説明 |
 |-------|------|------|
 | `from` | ○ | クエリ窓の開始（YYYY-MM-DD またはプリセット、inclusive） |
 | `to` | ○ | クエリ窓の終了（YYYY-MM-DD またはプリセット、inclusive） |
+| `file` | | ファイルパスで絞り込み（`.md` は自動補完） |
+| `status` | | ステータス文字（カンマ区切り） |
+| `tag` | | タグ名（カンマ区切り、`#` は自動除去） |
+| `content` | | コンテンツの部分一致 |
+| `due` | | 締切日 = 指定値 |
+| `leaf` | | 子タスクを持たないタスクのみ |
+| `property` | | カスタムプロパティ（`key:value` 形式） |
+| `color` | | カード色で絞り込み（カンマ区切り） |
+| `type` | | タスク notation で絞り込み |
+| `root` | | 親タスクを持たないタスクのみ |
+| `filter-file` | | FilterState JSON (.json) またはビューテンプレート (.md)。単純フィルタフラグより優先（list と同じ挙動） |
+| `list` | | ピン留めリスト名（`.md` テンプレート用） |
 | `sort` | | ソートルール |
 | `limit` | | 最大件数（デフォルト: 100, 0=件数のみ, all=無制限） |
 
 ### categorized-tasks-for-date-range — 日付範囲のタスク（分類済み）
 
-日付範囲のタスクを日付ごとに allDay / timed / dueOnly に分類して返します。日付への所属は、allDay と timed が startHour を考慮した visual な日付（タイムラインの表示と同じ基準）、dueOnly が締切のカレンダー日付で判定されます。
+日付範囲のタスクを日付ごとに allDay / timed / dueOnly に分類して返します。日付への所属は、allDay と timed が startHour を考慮した visual な日付（タイムラインの表示と同じ基準）、dueOnly が締切のカレンダー日付で判定されます。単純フィルタフラグはこの分類の後に絞り込みをかけるだけで、期間・分類の判定には関与しません。
 
 ```bash
-obsidian obsidian-task-viewer:categorized-tasks-for-date-range from=2026-03-01 to=2026-03-31
+obsidian obsidian-task-viewer:categorized-tasks-for-date-range from=2026-03-01 to=2026-03-31 status=x
 ```
 
 | フラグ | 必須 | 説明 |
 |-------|------|------|
 | `from` | ○ | クエリ窓の開始（YYYY-MM-DD またはプリセット、inclusive） |
 | `to` | ○ | クエリ窓の終了（YYYY-MM-DD またはプリセット、inclusive） |
+| `file` | | ファイルパスで絞り込み（`.md` は自動補完） |
+| `status` | | ステータス文字（カンマ区切り） |
+| `tag` | | タグ名（カンマ区切り、`#` は自動除去） |
+| `content` | | コンテンツの部分一致 |
+| `due` | | 締切日 = 指定値 |
+| `leaf` | | 子タスクを持たないタスクのみ |
+| `property` | | カスタムプロパティ（`key:value` 形式） |
+| `color` | | カード色で絞り込み（カンマ区切り） |
+| `type` | | タスク notation で絞り込み |
+| `root` | | 親タスクを持たないタスクのみ |
+| `filter-file` | | FilterState JSON (.json) またはビューテンプレート (.md)。単純フィルタフラグより優先（list と同じ挙動） |
+| `list` | | ピン留めリスト名（`.md` テンプレート用） |
 
 **戻り値:** `{ "2026-03-01": { "allDay": [...], "timed": [...], "dueOnly": [...] }, ... }`
 

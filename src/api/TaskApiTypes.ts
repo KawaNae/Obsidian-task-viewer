@@ -158,7 +158,20 @@ export interface TasksForDateRangeParams extends PaginationParams {
     from: string;
     /** Query window end (inclusive). YYYY-MM-DD or a date preset. */
     to: string;
-    filter?: FilterState;
+    /** Simple filters, same format as `list` (no date/from/to — the window above is the only date judgment). */
+    file?: string;
+    status?: string | string[];
+    tag?: string | string[];
+    content?: string;
+    due?: string;
+    leaf?: boolean;
+    property?: string;        // "key:value" — filter by custom property
+    color?: string | string[];   // card color filter
+    type?: string | string[];    // task notation (taskviewer, tasks, dayplanner)
+    root?: boolean;              // root tasks only (no parent)
+    filter?: FilterState;     // overrides simple filter fields above
+    filterFile?: string;      // vault file path (.json FilterState or .md view template)
+    list?: string;            // pinned list name (when filterFile is a .md template)
     sort?: ApiSortRule[];
 }
 
@@ -169,7 +182,20 @@ export interface CategorizedTasksForDateRangeParams {
     from: string;
     /** Query window end (inclusive). YYYY-MM-DD or a date preset. */
     to: string;
+    /** Simple filters, same format as `list` (no date/from/to — the window above is the only date judgment). */
+    file?: string;
+    status?: string | string[];
+    tag?: string | string[];
+    content?: string;
+    due?: string;
+    leaf?: boolean;
+    property?: string;
+    color?: string | string[];
+    type?: string | string[];
+    root?: boolean;
     filter?: FilterState;
+    filterFile?: string;
+    list?: string;
 }
 
 export interface CategorizedTasksResult {
