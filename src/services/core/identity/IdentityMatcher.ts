@@ -126,7 +126,10 @@ export function matchFile(
             runtimeIdOf.set(task, entry.runtimeId);
             continue;
         }
-        const fresh = mintRuntimeId(task);
+        // A row the write named keeps that name. Minting one here would issue
+        // a second name for a line that already has one, and a scan that ran
+        // earlier over the same line would have issued a different one.
+        const fresh = hinted.fresh.get(task) ?? mintRuntimeId(task);
         runtimeIdOf.set(task, fresh);
         minted.push(fresh);
     }
@@ -160,8 +163,12 @@ export function matchFile(
 
 interface HintOutcome {
     pairs: Array<[LedgerEntry, Task]>;
-    /** Tasks a hint named as newly written. They inherit nothing. */
-    fresh: Set<Task>;
+    /**
+     * Tasks a hint named as newly written, each with the name the write gave
+     * it. They inherit nothing, and they are not renamed either: the write
+     * already said what this row is called.
+     */
+    fresh: Map<Task, string>;
     /** Rows a hint said are gone. */
     retired: string[];
 }
@@ -173,6 +180,14 @@ interface HintOutcome {
  * was read, and found no other candidate that would decide differently, so
  * there is nothing left to decide: line i is whatever the claim says line i is.
  * A row the claim no longer holds is one a write removed.
+ *
+ * What settles a row is whether the ledger holds its name, not whether the
+ * write called it new. A created row read for the first time has no entry and
+ * keeps the name the write gave it; the same row read again, after a scan has
+ * committed it and while a later claim still carries it, does have one — and
+ * has to be paired, not waved through. Waved through, it would land in
+ * `retired` as a row that vanished and in `minted` as one just issued, both
+ * of them false of a line that has not moved.
  */
 function settleHints(
     resolution: HintResolution,
@@ -180,7 +195,7 @@ function settleHints(
     ordered: Task[]
 ): HintOutcome {
     const pairs: Array<[LedgerEntry, Task]> = [];
-    const fresh = new Set<Task>();
+    const fresh = new Map<Task, string>();
     const retired: string[] = [];
 
     const rows = resolution.rows;
@@ -191,13 +206,13 @@ function settleHints(
 
     for (let i = 0; i < ordered.length; i++) {
         const runtimeId = rows[i].runtimeId;
-        if (runtimeId === null) {
-            fresh.add(ordered[i]);
+        const entry = byRuntimeId.get(runtimeId);
+        if (!entry) {
+            // Only a created row can name something `previous` does not hold:
+            // `reproduces` refused the claim otherwise.
+            fresh.set(ordered[i], runtimeId);
             continue;
         }
-        // Present by construction: the rebuild only carries rows that were in
-        // `previous`, and it was checked against these very tasks.
-        const entry = byRuntimeId.get(runtimeId)!;
         survived.add(runtimeId);
         pairs.push([entry, ordered[i]]);
     }

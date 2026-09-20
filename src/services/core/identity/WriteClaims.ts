@@ -1,12 +1,19 @@
+import type { ParserId } from '../../../types';
 import type { Hint } from './IdentityHints';
 import { replayEdits, type LineEdit } from '../../../utils/FileLines';
 
 /**
  * A row of a file as a write left it: which line, what it reads, and whose
- * identity it carries (null for a line the write created).
+ * identity it carries.
+ *
+ * Every row has a name. A line a write created is named on the spot, by the
+ * write, and `created` is what says so: the ledger has not heard that name
+ * yet, so a scan must not refuse the row for being absent from it, and must
+ * not mint a second name for the same line when it commits.
  */
 export interface ClaimBase {
-    runtimeId: string | null;
+    runtimeId: string;
+    created: boolean;
     text: string;
     line: number;
 }
@@ -15,6 +22,7 @@ export interface ClaimBase {
 export interface ParsedRow {
     line: number;
     text: string;
+    parserId: ParserId;
 }
 
 /** What a write claims, and a handle that takes the whole call back. */
@@ -92,10 +100,16 @@ export class WriteClaims {
      *   read the file as tasks at all (`tv-ignore`), which is not the same
      *   answer as a file with no rows in it.
      * @param ledgerRows what the last scan of this file recorded.
+     * @param mintRuntimeId a name for a row this write made. Issued here, at
+     *   the moment the line comes into being, rather than by the scan that
+     *   reads it: two scans can read the same created line — one committing a
+     *   claim while a second write is already filed on top of it — and a name
+     *   issued by the reader would be a different name each time.
      */
     constructor(
         private readonly parseRows: (path: string, lines: readonly string[]) => ParsedRow[] | null,
         private readonly ledgerRows: (path: string) => ClaimBase[],
+        private readonly mintRuntimeId: (path: string, parserId: ParserId) => string,
     ) { }
 
     /**
@@ -132,21 +146,29 @@ export class WriteClaims {
         const parsed = this.parseRows(path, after);
         if (parsed === null) return nothing();
 
-        // Which identity, if any, each line of the file now carries: the one
-        // its line carried before the write, unless the write made the line.
-        const identityOf = new Map<number, string | null>();
-        for (const row of base) identityOf.set(row.line, row.runtimeId);
+        // Which identity each line of the file now carries: the one its line
+        // carried before the write, unless the write made the line.
+        const identityOf = new Map<number, ClaimBase>();
+        for (const row of base) identityOf.set(row.line, row);
 
         const rows: ClaimBase[] = [];
         for (const row of parsed) {
             const from = replayed.origin[row.line];
-            const carried = from === null ? null : identityOf.get(from) ?? null;
-            rows.push({ runtimeId: carried, text: row.text, line: row.line });
+            // `created` travels with the identity, not with this write: a row
+            // the *previous* write made is still one the ledger has never
+            // heard of, and the scan that finally reads it has to be told so
+            // however many writes it has sat through since.
+            const carried = from === null ? undefined : identityOf.get(from);
+            rows.push(carried
+                ? { runtimeId: carried.runtimeId, created: carried.created, text: row.text, line: row.line }
+                // Either the write made this line, or it made a task of a line
+                // that was not one — a row with no past either way.
+                : { runtimeId: this.mintRuntimeId(path, row.parserId), created: true, text: row.text, line: row.line });
         }
 
         this.bases.set(path, { lines: [...after], rows });
         return {
-            hint: { rows: rows.map(row => ({ runtimeId: row.runtimeId, text: row.text })) },
+            hint: { rows: rows.map(row => ({ runtimeId: row.runtimeId, created: row.created, text: row.text })) },
             withdraw,
         };
     }

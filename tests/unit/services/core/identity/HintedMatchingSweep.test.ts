@@ -31,8 +31,10 @@ const FILE = 'sweep.md';
 
 /** A line of the modelled file, with the row it belongs to. */
 interface ModelLine {
-    /** The runtime ID this line carries, or null once a write created it. */
-    owner: string | null;
+    /** The runtime ID this line carries. */
+    owner: string;
+    /** Whether a write of this sequence made it, and named it on the spot. */
+    created: boolean;
     text: string;
 }
 
@@ -50,21 +52,28 @@ function rewriteTo(index: number, text: string): Operation {
         name: `rewrite#${index}→${text}`,
         apply: (lines) => {
             const row = lines[index];
-            if (!row || row.owner === null || row.text === text) return false;
+            if (!row || row.created || row.text === text) return false;
             row.text = text;
             return true;
         },
     };
 }
 
-/** Duplicate row `index`, placing the copy on `side` of it. */
-function duplicate(index: number, side: 'before' | 'after'): Operation {
+/**
+ * Duplicate row `index`, placing the copy on `side` of it.
+ *
+ * The copy is named here, by the model's write layer, because that is where
+ * the real one names it: the line comes into being inside `vault.process`, and
+ * the name it is given there is the one every later claim about it carries.
+ */
+function duplicate(index: number, side: 'before' | 'after', coin: () => string): Operation {
     return {
         name: `duplicate#${index}/${side}`,
         apply: (lines) => {
             const row = lines[index];
-            if (!row || row.owner === null) return false;
-            lines.splice(side === 'before' ? index : index + 1, 0, { owner: null, text: row.text });
+            if (!row || row.created) return false;
+            lines.splice(side === 'before' ? index : index + 1, 0,
+                { owner: coin(), created: true, text: row.text });
             return true;
         },
     };
@@ -76,23 +85,39 @@ function remove(index: number): Operation {
         name: `delete#${index}`,
         apply: (lines) => {
             const row = lines[index];
-            if (!row || row.owner === null) return false;
+            if (!row || row.created) return false;
             lines.splice(index, 1);
             return true;
         },
     };
 }
 
-const OPERATIONS: Operation[] = [
-    rewriteTo(0, TEXTS[1]),
-    rewriteTo(1, TEXTS[0]),
-    rewriteTo(0, TEXTS[2]),
-    duplicate(0, 'before'),
-    duplicate(0, 'after'),
-    duplicate(1, 'before'),
-    remove(0),
-    remove(1),
-];
+/**
+ * The operations of one run, with that run's own coiner for the lines its
+ * writes make. Per run, so the names a sequence hands out do not depend on
+ * which sequences ran before it.
+ */
+function operations(coin: () => string): Operation[] {
+    return [
+        rewriteTo(0, TEXTS[1]),
+        rewriteTo(1, TEXTS[0]),
+        rewriteTo(0, TEXTS[2]),
+        duplicate(0, 'before', coin),
+        duplicate(0, 'after', coin),
+        duplicate(1, 'before', coin),
+        remove(0),
+        remove(1),
+    ];
+}
+
+/** Named the way a scan's mint names, so a coined ID is a usable one. */
+function makeCoiner() {
+    let seq = 0;
+    return () => `tv-inline:${FILE}:seq:w${++seq}`;
+}
+
+/** The operation *names*, which is all the sequences need to be built from. */
+const OPERATION_NAMES = operations(() => '').map(operation => operation.name);
 
 function makeMint() {
     let seq = 0;
@@ -111,7 +136,13 @@ function toTasks(lines: ModelLine[]): Task[] {
 
 /** What a write layer that knows the truth would claim: the file's rows. */
 function claimOf(lines: ModelLine[]): Hint {
-    return { rows: lines.map(line => ({ runtimeId: line.owner, text: line.text })) };
+    return {
+        rows: lines.map(line => ({
+            runtimeId: line.owner,
+            created: line.created,
+            text: line.text,
+        })),
+    };
 }
 
 interface Run {
@@ -124,14 +155,17 @@ interface Run {
 }
 
 /** Apply one sequence, keeping every state it passed through. */
-function run(sequence: Operation[]): Run | null {
+function run(names: string[]): Run | null {
     const mint = makeMint();
+    const sequence = byName(operations(makeCoiner()), names);
     const startTexts = [TEXTS[0], TEXTS[0], TEXTS[1]];
-    const before = matchFile([], toTasks(startTexts.map(text => ({ owner: null, text }))), mint);
+    const before = matchFile(
+        [], toTasks(startTexts.map(text => ({ owner: '', created: false, text }))), mint);
 
     // The truth: every starting line owned by the row the first scan gave it.
     const model: ModelLine[] = before.entries.map(entry => ({
         owner: entry.runtimeId,
+        created: false,
         text: entry.fingerprint.originalText,
     }));
 
@@ -146,17 +180,21 @@ function run(sequence: Operation[]): Run | null {
     return { states, hints, before, mint };
 }
 
-function label(sequence: Operation[]): string {
-    return sequence.map(operation => operation.name).join(' → ');
+function byName(available: Operation[], names: string[]): Operation[] {
+    return names.map(name => available.find(operation => operation.name === name)!);
+}
+
+function label(names: string[]): string {
+    return names.join(' → ');
 }
 
 describe('every short write sequence, read back at every point', () => {
-    const sequences: Operation[][] = [];
-    for (const a of OPERATIONS) {
+    const sequences: string[][] = [];
+    for (const a of OPERATION_NAMES) {
         sequences.push([a]);
-        for (const b of OPERATIONS) {
+        for (const b of OPERATION_NAMES) {
             sequences.push([a, b]);
-            for (const c of OPERATIONS) sequences.push([a, b, c]);
+            for (const c of OPERATION_NAMES) sequences.push([a, b, c]);
         }
     }
 
@@ -199,7 +237,11 @@ describe('every short write sequence, read back at every point', () => {
                     const decided = result.mapping.get(tasks[i].id)!;
                     const owner = truth[i].owner;
 
-                    if (owner === null) {
+                    if (truth[i].created) {
+                        // The name the write coined for it, and no other. A
+                        // scan minting a second name for a line that already
+                        // has one is the whole of what this change fixes.
+                        expect(decided, `${where} line ${i} was renamed`).toBe(owner);
                         // A line the writes created must never take a row that
                         // existed before them.
                         expect(previousIds.has(decided), `${where} line ${i} took an old ID`).toBe(false);
@@ -215,7 +257,7 @@ describe('every short write sequence, read back at every point', () => {
                 }
 
                 // A row the writes deleted must not resurface on any line.
-                const alive = new Set(truth.map(line => line.owner).filter(Boolean));
+                const alive = new Set(truth.map(line => line.owner));
                 for (const entry of before.entries) {
                     if (alive.has(entry.runtimeId)) continue;
                     expect([...result.mapping.values()].includes(entry.runtimeId),
