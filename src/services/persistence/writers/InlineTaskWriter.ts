@@ -36,7 +36,7 @@ export class InlineTaskWriter {
             return false;
         }
 
-        return processLines(this.app, file, (lines) => {
+        return processLines(this.app, file, (lines, _eol, edits) => {
             // Find current line number using originalText (handles line shifts)
             const currentLine = this.fileOps.findTaskLineNumber(lines, task);
             if (currentLine < 0 || currentLine >= lines.length) {
@@ -50,23 +50,30 @@ export class InlineTaskWriter {
             // Preserve indentation if possible
             const originalIndent = lines[currentLine].match(/^(\s*)/)?.[1] || '';
             lines[currentLine] = originalIndent + newLine.trim();
+            // An update rewrites the line and leaves it the same task — the
+            // whole point of the call is that this row is the one being
+            // changed. Filed before the child ops because `applyOps` only ever
+            // touches lines below `currentLine` (its scan starts at
+            // `taskLineIdx + 1` and stops at the first line that is not a
+            // descendant), so this coordinate is still this line afterwards.
+            edits.replaced(currentLine);
 
             // 子プロパティ行（- key:: value）の更新は同一 process 内で
             // 連続適用する（別 process だと originalText 失効と行番号
             // シフトが競合するため、タスク行と子行は1原子書き込み）。
             if (childOps.length > 0) {
-                ChildPropertyLineEditor.applyOps(lines, currentLine, childOps);
+                ChildPropertyLineEditor.applyOps(lines, currentLine, childOps, edits);
             }
 
             return lines;
-        });
+        }, this.writes?.for(task.file));
     }
 
     async updateLine(filePath: string, lineNumber: number, newContent: string): Promise<void> {
         const file = this.app.vault.getAbstractFileByPath(filePath);
         if (!(file instanceof TFile)) return;
 
-        await processLines(this.app, file, (lines) => {
+        await processLines(this.app, file, (lines, _eol, edits) => {
             if (lines.length <= lineNumber) return null;
 
             // Preserve original indentation
@@ -75,9 +82,13 @@ export class InlineTaskWriter {
             const newContentTrimmed = newContent.trimStart();
 
             lines[lineNumber] = originalIndent + newContentTrimmed;
+            // The editor's own menu comes through here: a status change, and
+            // the conversion of a bare checkbox into an inline task. Both
+            // rewrite the row in place and leave it the row it was.
+            edits.replaced(lineNumber);
 
             return lines;
-        });
+        }, this.writes?.for(filePath));
     }
 
     async insertLineAfterLine(filePath: string, lineNumber: number, newContent: string): Promise<void> {
