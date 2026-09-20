@@ -358,7 +358,9 @@ export class TaskHubForm {
         this.task = { ...this.task, ...updates };
         const id = this.task.id;
         this.commitChain = this.commitChain
-            .then(() => this.deps.writeService.updateTask(id, updates))
+            // 書けたかどうかはここでは見ない。失敗の通知と巻き戻しは
+            // TaskIndex が行い、ハブは refresh でその結果を受ける。
+            .then(async () => { await this.deps.writeService.updateTask(id, updates); })
             .catch((e) => logError(`[TaskHubForm] commit failed: ${e instanceof Error ? e.message : String(e)}`));
     }
 

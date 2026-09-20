@@ -473,6 +473,7 @@ export class TaskApi {
         }
 
         const insertedLine = await this.writeService.createTask(params.file, line, params.heading);
+        if (insertedLine < 0) throw new TaskApiError(`Task could not be written to: ${params.file}`);
 
         const created = this.readService.getTaskByFileLine(params.file, insertedLine);
         if (!created) throw new TaskApiError('Task was created but could not be found after scan');
@@ -534,7 +535,11 @@ export class TaskApi {
             }
         }
 
-        await this.writeService.updateTask(params.id, updates);
+        // A write that could not be placed leaves the index reverted to the
+        // former values, so reading the task back would describe a change that
+        // never reached the file and report it as a success.
+        const written = await this.writeService.updateTask(params.id, updates);
+        if (!written) throw new TaskApiError(`Task could not be written: ${params.id}`);
 
         const updated = this.readService.getTask(params.id);
         if (!updated) throw new TaskApiError(`Task not found after update: ${params.id}`);
@@ -552,7 +557,8 @@ export class TaskApi {
         if (!task) throw new TaskApiError(`Task not found: ${params.id}`);
         if (task.isReadOnly) throw new TaskApiError(`Task ${params.id} is read-only (parserId=${task.parserId})`);
 
-        await this.writeService.deleteTask(params.id);
+        const removed = await this.writeService.deleteTask(params.id);
+        if (!removed) throw new TaskApiError(`Task could not be deleted: ${params.id}`);
         return { deleted: params.id };
     }
 
@@ -571,10 +577,11 @@ export class TaskApi {
             if (typeof params.count !== 'number' || isNaN(params.count)) throw new TaskApiError('count must be a number');
             if (params.count < 1) throw new TaskApiError('count must be at least 1');
         }
-        await this.writeService.duplicateTask(params.id, {
+        const written = await this.writeService.duplicateTask(params.id, {
             dayOffset: params.dayOffset,
             count: params.count,
         });
+        if (!written) throw new TaskApiError(`Task could not be duplicated: ${params.id}`);
         return { duplicated: params.id };
     }
 
@@ -633,7 +640,8 @@ export class TaskApi {
         const task = this.readService.getTask(params.parentId);
         if (!task) throw new TaskApiError(`Task not found: ${params.parentId}`);
         if (task.isReadOnly) throw new TaskApiError(`Task ${params.parentId} is read-only (parserId=${task.parserId})`);
-        await this.writeService.insertChildTask(params.parentId, `- [ ] ${params.content}`);
+        const written = await this.writeService.insertChildTask(params.parentId, `- [ ] ${params.content}`);
+        if (!written) throw new TaskApiError(`Child task could not be written under: ${params.parentId}`);
         return { parentId: params.parentId };
     }
 

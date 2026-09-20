@@ -4,6 +4,7 @@ import { collectFlowLineIndicesInFile, formatFlowLine } from '../flow/FlowLineSc
 import { DateUtils } from '../../utils/DateUtils';
 import { logWarn } from '../../log/log';
 import { FileOperations } from './utils/FileOperations';
+import { appendLines, processLines, splitLines } from '../../utils/FileLines';
 
 /**
  * One generated child line, as the block described it.
@@ -34,19 +35,27 @@ export class TaskCloner {
      * - dayOffset>0, count=1: 指定日数シフトして1件複製（元タスクの前に挿入）
      * - count>1: dayOffset..dayOffset+count-1 の各日付で複製（future-first 挿入）
      */
-    async duplicateInlineTask(task: Task, options?: DuplicateOptions): Promise<void> {
+    /**
+     * @returns whether the copy was written. A `false` means the original line
+     * could not be resolved and the file is untouched.
+     */
+    async duplicateInlineTask(task: Task, options?: DuplicateOptions): Promise<boolean> {
         const { dayOffset = 0, count = 1 } = options ?? {};
 
         const file = this.app.vault.getAbstractFileByPath(task.file);
-        if (!(file instanceof TFile)) return;
+        if (!(file instanceof TFile)) {
+            logWarn(`[TaskCloner] File not found: ${task.file}`);
+            return false;
+        }
 
-        await this.app.vault.process(file, (content) => {
-            const lines = content.split('\n');
-
+        return processLines(this.app, file, (lines) => {
             if (count > 1) {
                 // Multi-copy: future-first insertion (highest offset first)
                 const currentLine = this.fileOps.findTaskLineNumber(lines, task);
-                if (currentLine < 0 || currentLine >= lines.length) return content;
+                if (currentLine < 0 || currentLine >= lines.length) {
+                    logWarn('[TaskCloner] Task not found in file (duplicate)');
+                    return null;
+                }
 
                 const { childrenLines } = this.fileOps.collectChildrenFromLines(lines, currentLine);
                 const cleanParent = this.fileOps.stripBlockIds([lines[currentLine]])[0];
@@ -60,25 +69,29 @@ export class TaskCloner {
                 }
 
                 lines.splice(currentLine, 0, ...newLines);
-                return lines.join('\n');
+                return lines;
             } else if (dayOffset === 0) {
                 // In-place copy: clean parent, insert before
                 const idx = this.fileOps.findTaskLineNumber(lines, task);
-                if (idx < 0 || idx >= lines.length) return content;
+                if (idx < 0 || idx >= lines.length) {
+                    logWarn('[TaskCloner] Task not found in file (duplicate)');
+                    return null;
+                }
 
                 const cleanParent = this.fileOps.stripBlockIds([lines[idx]])[0];
-                const result = this.duplicateInlineTaskLines(lines, task, cleanParent, 'before');
-                return result ? result.join('\n') : content;
+                return this.duplicateInlineTaskLines(lines, task, cleanParent, 'before');
             } else {
                 // Single copy with date shift
                 const idx = this.fileOps.findTaskLineNumber(lines, task);
-                if (idx < 0 || idx >= lines.length) return content;
+                if (idx < 0 || idx >= lines.length) {
+                    logWarn('[TaskCloner] Task not found in file (duplicate)');
+                    return null;
+                }
 
                 const shiftedParent = this.shiftInlineDates(
                     this.fileOps.stripBlockIds([lines[idx]])[0], dayOffset
                 );
-                const result = this.duplicateInlineTaskLines(lines, task, shiftedParent, 'before');
-                return result ? result.join('\n') : content;
+                return this.duplicateInlineTaskLines(lines, task, shiftedParent, 'before');
             }
         });
     }
@@ -98,15 +111,15 @@ export class TaskCloner {
         const file = this.app.vault.getAbstractFileByPath(task.file);
         if (!(file instanceof TFile)) return;
 
-        await this.app.vault.process(file, (fileContent) => {
-            const lines = fileContent.split('\n');
-
+        await processLines(this.app, file, (lines) => {
             const currentLine = this.fileOps.findTaskLineNumber(lines, task);
             if (currentLine < 0 || currentLine >= lines.length) {
                 // Task not found: append to end
-                const prefix = fileContent.length > 0 && !fileContent.endsWith('\n') ? '\n' : '';
-                const appended = [content, ...flowLines.map(raw => formatFlowLine('\t', raw))].join('\n');
-                return fileContent + prefix + appended;
+                appendLines(lines, [
+                    ...splitLines(content).lines,
+                    ...flowLines.map(raw => formatFlowLine('\t', raw)),
+                ]);
+                return lines;
             }
 
             // Re-indent the formatted line to match the original task line
@@ -129,7 +142,7 @@ export class TaskCloner {
             const insertAt = this.fileOps.findSiblingGroupStart(lines, currentLine);
             lines.splice(insertAt, 0, newParentLine, ...newFlowLines);
 
-            return lines.join('\n');
+            return lines;
         });
     }
 
@@ -160,13 +173,11 @@ export class TaskCloner {
         const file = this.app.vault.getAbstractFileByPath(task.file);
         if (!(file instanceof TFile)) return;
 
-        await this.app.vault.process(file, (fileContent) => {
-            const lines = fileContent.split('\n');
-
+        await processLines(this.app, file, (lines) => {
             const currentLine = this.fileOps.findTaskLineNumber(lines, task);
             if (currentLine < 0 || currentLine >= lines.length) {
                 logWarn('[TaskCloner] Task not found in file (insertGeneratedInstance)');
-                return fileContent;
+                return null;
             }
 
             const parentIndent = lines[currentLine].match(/^(\s*)/)?.[1] ?? '';
@@ -182,7 +193,7 @@ export class TaskCloner {
             const insertAt = this.fileOps.findSiblingGroupStart(lines, currentLine);
             lines.splice(insertAt, 0, ...rendered);
 
-            return lines.join('\n');
+            return lines;
         });
     }
 

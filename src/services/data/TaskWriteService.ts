@@ -29,7 +29,12 @@ export class TaskWriteService {
 
     // ===== Task CRUD =====
 
-    async updateTask(taskId: string, updates: Partial<Task>): Promise<void> {
+    /**
+     * @returns whether the file was written. A `false` means the update was
+     * reverted: the task still holds its former values, and a caller that
+     * reports the new ones would be reporting a change that never happened.
+     */
+    async updateTask(taskId: string, updates: Partial<Task>): Promise<boolean> {
         return this.taskIndex.updateTask(this.resolveTaskId(taskId), updates);
     }
 
@@ -75,7 +80,8 @@ export class TaskWriteService {
         };
     }
 
-    async duplicateTask(taskId: string, options?: DuplicateOptions): Promise<void> {
+    /** @returns whether the copy was written. */
+    async duplicateTask(taskId: string, options?: DuplicateOptions): Promise<boolean> {
         return this.taskIndex.duplicateTask(this.resolveTaskId(taskId), options);
     }
 
@@ -85,7 +91,8 @@ export class TaskWriteService {
         return this.taskIndex.createTask(filePath, taskLine, heading);
     }
 
-    async insertChildTask(parentTaskId: string, childLine: string): Promise<void> {
+    /** @returns whether the child line was written. */
+    async insertChildTask(parentTaskId: string, childLine: string): Promise<boolean> {
         return this.taskIndex.insertChildTask(this.resolveTaskId(parentTaskId), childLine);
     }
 

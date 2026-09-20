@@ -18,7 +18,8 @@ function makeTask(overrides: Partial<Task> = {}): Task {
     } as Task;
 }
 
-function createMockApi(task: Task | undefined): TaskApi {
+function createMockApi(task: Task | undefined, opts: { writesLand?: boolean } = {}): TaskApi {
+    const lands = opts.writesLand !== false;
     const mockReadService = {
         getTask: vi.fn().mockReturnValue(task),
         getTasks: vi.fn().mockReturnValue(task ? [task] : []),
@@ -26,12 +27,14 @@ function createMockApi(task: Task | undefined): TaskApi {
         getFilteredTasks: vi.fn().mockReturnValue([]),
         getTasksForDateRange: vi.fn().mockReturnValue([]),
     };
+    // 変更系は「書けた」を返す。API は書けなかった write をエラーにするので、
+    // 既定の undefined のままだとパラメータ検証のケースが書き込み失敗で落ちる。
     const mockWriteService = {
-        updateTask: vi.fn(),
-        deleteTask: vi.fn(),
-        duplicateTask: vi.fn(),
-        insertChildTask: vi.fn(),
-        createTask: vi.fn(),
+        updateTask: vi.fn().mockResolvedValue(lands),
+        deleteTask: vi.fn().mockResolvedValue(lands),
+        duplicateTask: vi.fn().mockResolvedValue(lands),
+        insertChildTask: vi.fn().mockResolvedValue(lands),
+        createTask: vi.fn().mockResolvedValue(lands ? 0 : -1),
     };
     const mockPlugin = {
         app: { vault: { getAbstractFileByPath: vi.fn() } },
@@ -271,5 +274,38 @@ describe('C17: content の改行注入拒否', () => {
         } catch (e) {
             expect((e as Error).message).not.toMatch(/newline/);
         }
+    });
+});
+
+/**
+ * A write the plugin could not place — a line it can no longer resolve, a note
+ * whose terminators it once could not read (#176) — used to come back as a
+ * success: update returned the task read straight back out of the index, which
+ * had already been reverted, and delete and duplicate returned nothing at all
+ * to check. The API is the CLI's only story about what happened, so it says so.
+ */
+describe('C18: 書けなかった変更系はエラーになる', () => {
+    it('update: 書けなかったら失敗を返す', async () => {
+        const api = createMockApi(makeTask(), { writesLand: false });
+        await expect(api.update({ id: 'test-1', status: 'x' }))
+            .rejects.toThrow(/could not be written/);
+    });
+
+    it('delete: 消せなかったら失敗を返す', async () => {
+        const api = createMockApi(makeTask(), { writesLand: false });
+        await expect(api.delete({ id: 'test-1' }))
+            .rejects.toThrow(/could not be deleted/);
+    });
+
+    it('duplicate: 複製できなかったら失敗を返す', async () => {
+        const api = createMockApi(makeTask(), { writesLand: false });
+        await expect(api.duplicate({ id: 'test-1' }))
+            .rejects.toThrow(/could not be duplicated/);
+    });
+
+    it('insertChildTask: 子を書けなかったら失敗を返す', async () => {
+        const api = createMockApi(makeTask(), { writesLand: false });
+        await expect(api.insertChildTask({ parentId: 'test-1', content: 'child' }))
+            .rejects.toThrow(/could not be written/);
     });
 });
