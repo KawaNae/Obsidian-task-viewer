@@ -123,8 +123,10 @@ function hintLog() {
     };
 }
 
-const TICKED: Hint = { kind: 'rewrite', runtimeId: 'r1', before: '- [ ] a', after: '- [x] a' };
-const COPY: Hint = { kind: 'insert', text: '- [ ] a', anchor: 'r1', side: 'before' };
+const TICKED: Hint = { rows: [{ runtimeId: 'r1', text: '- [x] a' }] };
+const COPY: Hint = {
+    rows: [{ runtimeId: null, text: '- [ ] a' }, { runtimeId: 'r1', text: '- [ ] a' }],
+};
 
 describe('processLines', () => {
     it('writes the edited lines back with the file\'s own terminator', async () => {
@@ -213,12 +215,12 @@ describe('processLines', () => {
         await processLines(h.app, h.file, (lines, _eol, hint) => {
             run++;
             lines[0] = `- [x] a (${run})`;
-            hint({ kind: 'rewrite', runtimeId: 'r1', before: '- [ ] a', after: `- [x] a (${run})` });
+            hint({ rows: [{ runtimeId: 'r1', text: `- [x] a (${run})` }] });
             return lines;
         }, log.sink);
 
         expect(log.standing()).toEqual([
-            { kind: 'rewrite', runtimeId: 'r1', before: '- [ ] a', after: '- [x] a (2)' },
+            { rows: [{ runtimeId: 'r1', text: '- [x] a (2)' }] },
         ]);
     });
 

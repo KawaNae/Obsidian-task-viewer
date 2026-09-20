@@ -14,7 +14,10 @@ export interface MatchResult {
     minted: string[];
     /** Previous runtime IDs nothing matched. They are gone for good. */
     retired: string[];
-    /** How many pending hints this scan believed, counted from the head. */
+    /**
+     * How many pending claims this scan is done with, counted from the head —
+     * the one it adopted and everything older. 0 when it adopted none.
+     */
     consumedHints: number;
 }
 
@@ -30,10 +33,11 @@ export interface MatchResult {
  * ladder once over whatever is left, which is how a task whose parent changed (or
  * whose parent's text was merely edited) is rescued instead of being renumbered.
  *
- * Ahead of both passes is rung 0: the hints the plugin's own writes left behind,
- * as many of them as the file actually bears out (see IdentityHints). They are
- * settled file-wide rather than inside the ladder because a hint names a runtime
- * ID outright — there is no bucket for it to be ambiguous in.
+ * Ahead of both passes is rung 0: the claims the plugin's own writes left
+ * behind, when one of them and only one describes the rows that were read (see
+ * IdentityHints). They are settled file-wide rather than inside the ladder
+ * because a claim names a runtime ID outright — there is no bucket for it to be
+ * ambiguous in.
  *
  * Pure and deterministic: no clock, no randomness, no I/O. Minting is the caller's,
  * through `mintRuntimeId`.
@@ -59,7 +63,7 @@ export function matchFile(
     const pairedWith = new Map<Task, LedgerEntry>();
     const matchedPrev = new Set<string>();
 
-    // --- rung 0: what our own writes said, as far as the file bears it out ---
+    // --- rung 0: what our own writes said, when the file bears exactly one of them out ---
     const resolution = resolveHints(previous, ordered, pending);
     const consumedHints = resolution.consumed;
     const hinted = settleHints(resolution, previous, ordered);
@@ -73,16 +77,11 @@ export function matchFile(
     for (const runtimeId of hinted.retired) matchedPrev.add(runtimeId);
 
     // --- 1st pass: scope by scope, from the roots down ---
+    // An adopted claim leaves nothing for the two passes below: it answers for
+    // every row of the file, children included, so each task is either paired
+    // or newly written and both pools come out empty. They run all the same,
+    // because rung 0 usually has nothing to say.
     const scopes: Array<{ prev: LedgerEntry[]; cur: Task[] }> = [{ prev: prevRoots, cur: roots }];
-    // A pair settled by a hint opens its children's scope too. Only a parent the
-    // ladder matched does so below, so without this the children of a hinted
-    // parent would skip the 1st pass and be matched file-wide in the 2nd.
-    for (const [entry, task] of hinted.pairs) {
-        scopes.push({
-            prev: prevChildren.get(entry.runtimeId) ?? [],
-            cur: childrenOf.get(task) ?? [],
-        });
-    }
 
     while (scopes.length > 0) {
         const scope = scopes.pop()!;
@@ -167,12 +166,12 @@ interface HintOutcome {
 }
 
 /**
- * Read the believed claims off as pairs.
+ * Read the adopted claim off as pairs.
  *
- * `resolveHints` has already rebuilt the file from the previous rows and found
- * it line for line identical to what was read, so there is nothing left to
- * decide: line i is whatever the rebuild says line i is. A row the rebuild no
- * longer holds is one a write removed.
+ * `resolveHints` has already found the claim line for line identical to what
+ * was read, and found no other candidate that would decide differently, so
+ * there is nothing left to decide: line i is whatever the claim says line i is.
+ * A row the claim no longer holds is one a write removed.
  */
 function settleHints(
     resolution: HintResolution,

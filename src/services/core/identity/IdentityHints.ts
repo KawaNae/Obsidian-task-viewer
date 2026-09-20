@@ -4,30 +4,41 @@ import type { LedgerEntry } from './IdentityLedger';
 /**
  * What the plugin's own writes tell the next scan about which line is which.
  *
- * A hint is a claim, not an instruction: "after this write, the file reads like
- * this" — checked against what the scan actually read before it is believed. A
- * missing hint costs precision and nothing else, because the ladder in
- * IdentityMatcher exists for external edits anyway. A *wrong* hint would be
- * worse than none, so belief is all-or-nothing: either the claims reproduce the
- * file exactly, or none of them count and the ladder answers.
+ * A hint is a claim, not an instruction: "after this write, the file's task
+ * rows read like this" — checked against what the scan actually read before it
+ * is believed. A missing hint costs precision and nothing else, because the
+ * ladder in IdentityMatcher exists for external edits anyway. A *wrong* hint
+ * would be worse than none, so belief is all-or-nothing: either a claim
+ * reproduces the rows that were read, or it does not count.
  *
- * Positions are given relative to a row the writer already knows by runtime ID,
- * never as line numbers. A line number is stale the moment another write in the
- * same batch shifts it, and a hint that points a line off by one is exactly the
- * kind of confident wrong answer this mechanism must not produce.
+ * A claim is absolute — the whole row list, not an edit to be applied to
+ * something. Two earlier designs said it the other way round: first as a
+ * multiset of line texts matched up by the line number each write recorded,
+ * then as an ordered list of per-line edits (rewrite/insert/retire) replayed
+ * over the previous rows. Both made the *reader* reconstruct a state the
+ * *writer* already knew, and both paid for it — the first with a position that
+ * a later write in the same batch made stale, the second with anchors, with
+ * replay order, and with a prefix of one write's edits describing a file that
+ * never existed. The writer knows the answer; letting it say the answer is
+ * shorter than any scheme for re-deriving it.
  *
  * Hints are raised inside the `vault.process` callback, which is the only place
  * where the written text is settled and the `modify` event has not fired yet —
  * a hint raised after the `await` is too late for the scan that write triggers
  * (measured: the scan's read starts before `vault.process` resolves).
  */
-export type Hint =
-    /** The row `runtimeId` read `before` and now reads `after`. */
-    | { kind: 'rewrite'; runtimeId: string; before: string; after: string }
-    /** A line the write created, placed next to a row it already knew. */
-    | { kind: 'insert'; text: string; anchor: string; side: 'before' | 'after' }
-    /** The row `runtimeId` is gone from the file. */
-    | { kind: 'retire'; runtimeId: string };
+
+/** One task row of a file, as a write claims it reads. */
+export interface ClaimedRow {
+    /** The row that carries this line's identity, or null if the write made it. */
+    runtimeId: string | null;
+    text: string;
+}
+
+/** What one write claims the file's task rows are, once it has landed. */
+export interface Hint {
+    rows: ClaimedRow[];
+}
 
 export interface PendingHint {
     /** Monotonic across the whole log. Also orders one file's hints. */
@@ -37,37 +48,36 @@ export interface PendingHint {
     hint: Hint;
 }
 
-/** One line of the file as the pending hints describe it. */
-export interface ClaimedRow {
-    /** The row that carries this line's identity, or null if a write made it. */
-    runtimeId: string | null;
-    text: string;
-}
-
 export interface HintResolution {
-    /** How many hints, counted from the head, the file bore out. */
+    /**
+     * How many hints, counted from the head, this scan has finished with — the
+     * adopted claim and everything older. 0 when nothing was adopted.
+     */
     consumed: number;
-    /** The believed claims, one per line read, or null when nothing is believed. */
+    /** The adopted claim's rows, one per line read, or null when none was. */
     rows: ClaimedRow[] | null;
 }
 
 /**
- * How many hints one file may hold. A single flow fire raises a handful; this
- * is well above that, and exists so a file nobody scans again cannot grow
- * without bound.
+ * How many claims one file may hold.
+ *
+ * Lower than the per-line vocabulary's limit, because an entry is now a whole
+ * file's rows rather than one line's claim. A read lagging eight writes behind
+ * is past anything measured; what this exists for is a file nobody scans again,
+ * which must not grow without bound.
  */
-export const MAX_HINTS_PER_FILE = 64;
+export const MAX_HINTS_PER_FILE = 16;
 
 /**
- * How long an unconsumed hint may wait. Also far above anything normal — a
- * write's own scan reads within milliseconds. What this catches is the case
- * where no scan is coming at all (a write made while a drag suppresses scans
- * for that file). An expired hint costs precision, never correctness.
+ * How long an unadopted claim may wait. Far above anything normal — a write's
+ * own scan reads within milliseconds. What this catches is the case where no
+ * scan is coming at all (a write made while a drag suppresses scans for that
+ * file). An expired claim costs precision, never correctness.
  */
 export const HINT_TTL_MS = 30_000;
 
 /**
- * Per-file ordered log of pending hints.
+ * Per-file ordered log of pending claims.
  *
  * The clock is the caller's: `now` comes in as a parameter so the log stays
  * testable and pure. So is the scan's reading position — see `tip`.
@@ -111,30 +121,17 @@ export class HintLog {
     }
 
     /**
-     * The highest seq this file holds right now.
+     * This file's claims in the order they were raised, minus anything expired.
      *
-     * A scan takes this immediately before its `vault.read` and hands it back
-     * when it commits. Everything at or below it was raised before the read, so
-     * whatever the read saw is now in the ledger and those hints have had their
-     * one chance. Without that line, a hint that failed verification once (an
-     * external edit landing in the same scan, say) would keep failing forever:
-     * the ledger has moved on, so the state it is built from no longer matches,
-     * and it would block every hint behind it until it aged out.
-     *
-     * One window stays open. A hint is raised inside the write callback, a
-     * millisecond or two before the file reaches disk, so a scan that starts in
-     * between takes a tip *above* that hint while reading text from *before*
-     * it. The hint then verifies against nothing, and the commit drops it; the
-     * write's own scan, arriving next, finds no hint and falls to the ladder.
-     * That is the behaviour without hints at all — the mechanism loses, it does
-     * not lie.
+     * All of them, with no cut for where the scan's read fell. A cut was tried:
+     * the log position taken around the read, so that a claim filed afterwards
+     * could not be weighed. It draws no line that holds. A scan is synchronous
+     * from its read to its match, so nothing is filed in between; and a write
+     * whose callback runs in the gap before the scan resumes lands on either
+     * side of such a mark depending on where it is taken. Position cannot say
+     * which state was read — only the rows can, which is what
+     * {@link resolveHints} asks them.
      */
-    tip(file: string): number {
-        const pending = this.files.get(file);
-        return pending && pending.length > 0 ? pending[pending.length - 1].seq : this.seq;
-    }
-
-    /** This file's hints in the order they were raised, minus anything expired. */
     pendingFor(file: string, now: number): PendingHint[] {
         const pending = this.files.get(file);
         if (!pending) return [];
@@ -145,19 +142,26 @@ export class HintLog {
     }
 
     /**
-     * Retire what this scan used up, and what it has now made unusable.
+     * Retire what this scan finished with, and what it has now made unusable.
      *
-     * @param consumed how many hints from the head were believed.
-     * @param readTip the log position taken before the scan's read; unconsumed
-     *   hints at or below it are dropped (see {@link tip}).
+     * @param consumed how many claims from the head are done with — the adopted
+     *   one and everything older, which describe states the file has moved past.
      * @param ledgerMoved whether this scan changed the file's rows. A scan that
-     *   believed nothing and still moved the ledger absorbed something it could
+     *   adopted nothing and still moved the ledger absorbed something it could
      *   not account for — including, possibly, the very writes the pending
-     *   hints describe, which the ladder then placed its own way. Replaying
-     *   those claims over the new rows would be replaying them twice, so the
-     *   whole log goes. What that costs is precision on the next write.
+     *   claims describe, which the ladder then placed its own way. Believing
+     *   those claims later would be believing them about a file that has
+     *   already been read some other way, so the whole log goes. What that
+     *   costs is precision on the next write.
+     *
+     * A claim that simply did not match is kept. Claims do not chain, so a
+     * pending one blocks nothing behind it, and the usual reason it did not
+     * match is that its write has not reached this reader yet: a scan whose
+     * read started before the write landed reads the file as it was, commits
+     * that, and the write's own scan follows. Dropping it there would throw
+     * away a claim about the very next read.
      */
-    settle(file: string, consumed: number, readTip: number, now: number, ledgerMoved: boolean): void {
+    settle(file: string, consumed: number, now: number, ledgerMoved: boolean): void {
         const pending = this.files.get(file);
         if (!pending) return;
 
@@ -168,17 +172,17 @@ export class HintLog {
 
         const kept = pending
             .slice(consumed)
-            .filter(entry => entry.seq > readTip && now - entry.at < HINT_TTL_MS);
+            .filter(entry => now - entry.at < HINT_TTL_MS);
         this.store(file, kept);
     }
 
     /**
-     * Forget a file's hints.
+     * Forget a file's claims.
      *
-     * Also what a rename does. A hint names runtime IDs, and a rename rewrites
+     * Also what a rename does. A claim names runtime IDs, and a rename rewrites
      * them (the ID still carries the path until stage 3), so carrying the log
      * across would leave claims about rows that no longer answer to those
-     * names: they would fail to apply and cost the file its next hint anyway.
+     * names: they would fail to match and cost the file its next claim anyway.
      * Dropping them says the same thing in one line.
      */
     dropFile(file: string): void {
@@ -189,6 +193,20 @@ export class HintLog {
         this.files.clear();
     }
 
+    /**
+     * Every file's pending claims, for a console or a check that needs to see
+     * what the write layer said.
+     *
+     * Does not prune: a caller looking at the log has to see it as it is,
+     * expired entries included, or it cannot tell "the write claimed nothing"
+     * from "the claim aged out before a scan came".
+     *
+     * @internal Read-only use.
+     */
+    peek(): Array<{ file: string; pending: readonly PendingHint[] }> {
+        return [...this.files].map(([file, pending]) => ({ file, pending: [...pending] }));
+    }
+
     private store(file: string, pending: PendingHint[]): void {
         if (pending.length === 0) this.files.delete(file);
         else this.files.set(file, pending);
@@ -196,21 +214,27 @@ export class HintLog {
 }
 
 /**
- * Replay the pending hints over the previous scan's rows and answer how far the
- * file bears them out.
+ * Pick the claim that describes what this scan read, if exactly one answer is
+ * on offer.
  *
- * The replay is what makes the answer unambiguous. An earlier design tested the
- * *count* of each line's text and then matched claims to lines by the line
- * number each write recorded; that reads the file correctly and still pairs the
- * wrong rows, because two writes to the same row leave an intermediate text
- * that a different row may also carry, and because an insert or a retire moves
- * every line the later hints recorded. Rebuilding the whole file instead
- * removes the question: if the rebuilt lines are exactly the lines read, in
- * order, then each line's identity is whatever the rebuild put there.
+ * Every pending claim is a candidate, and so is the previous scan's own rows —
+ * the file may simply not have changed yet, which is what a read that started
+ * before a write landed sees. A candidate is in the running when its rows are,
+ * line for line and in order, the rows that were read.
  *
- * A hint that cannot be applied — its row is gone, or it claims the row read
- * something it did not — stops the replay. Everything after it describes a file
- * this one never produced.
+ * Two candidates can be in the running at once, because a file that comes back
+ * to a text it already had reads the same both times. Text does not settle it,
+ * and nothing else here can: which of them is true is a question about when the
+ * read happened, which the reader cannot answer. So the claims are compared by
+ * what they would actually decide — the runtime ID of each row. Candidates that
+ * decide the same thing are not in conflict whatever their texts did on the way
+ * (a write that only touched lines between the tasks leaves the rows exactly as
+ * they were, and matching both itself and the state before it changes nothing).
+ * Candidates that decide differently are a coin toss, and a coin toss is the one
+ * thing this mechanism must never do: the ladder takes it from there.
+ *
+ * The newest surviving candidate is the one adopted, so the log can drop what
+ * the file has moved past.
  */
 export function resolveHints(
     previous: LedgerEntry[],
@@ -220,56 +244,53 @@ export function resolveHints(
     if (pending.length === 0) return { consumed: 0, rows: null };
 
     const byRuntimeId = new Map(previous.map(entry => [entry.runtimeId, entry]));
-    let rows: ClaimedRow[] = previous.map(entry => ({
+
+    // The state before any of these writes. In the running like the rest, but
+    // never adopted: it claims nothing the ladder does not already work out
+    // from rows it can match verbatim. Its part is to disagree.
+    const unchanged: ClaimedRow[] = previous.map(entry => ({
         runtimeId: entry.runtimeId,
         text: entry.fingerprint.originalText,
     }));
 
+    // Index 0 is the state before the writes; index i + 1 is the file as the
+    // i-th pending claim describes it. The index doubles as how much of the log
+    // the file has moved past once that candidate is adopted.
+    const candidates: ClaimedRow[][] = [unchanged, ...pending.map(entry => entry.hint.rows)];
+
+    let decision: string | null = null;
     let consumed = 0;
-    let believed: ClaimedRow[] | null = null;
+    let rows: ClaimedRow[] | null = null;
 
-    for (let k = 1; k <= pending.length; k++) {
-        const next = applyHint(rows, pending[k - 1].hint);
-        if (next === null) break;
-        rows = next;
-        if (reproduces(rows, tasks, byRuntimeId)) {
-            consumed = k;
-            believed = rows;
+    for (let index = 0; index < candidates.length; index++) {
+        const candidate = candidates[index];
+        if (!reproduces(candidate, tasks, byRuntimeId)) continue;
+
+        const verdict = decisionOf(candidate);
+        if (decision === null) decision = verdict;
+        else if (decision !== verdict) return { consumed: 0, rows: null };
+
+        // The newest that fits. Every candidate still standing at this point
+        // decides the same thing, so which one is adopted changes no identity —
+        // only how much of the log this scan is done with. A claim that fits
+        // the current read while describing a write still to come describes one
+        // that leaves the rows exactly as they are, which the next scan does
+        // not need told.
+        if (index > 0) {
+            consumed = index;
+            rows = candidate;
         }
     }
 
-    return { consumed, rows: believed };
+    return { consumed, rows };
 }
 
-/** Apply one claim, or answer null when the file it describes cannot exist. */
-function applyHint(rows: ClaimedRow[], hint: Hint): ClaimedRow[] | null {
-    switch (hint.kind) {
-        case 'rewrite': {
-            const at = rows.findIndex(row => row.runtimeId === hint.runtimeId);
-            // The `before` check keeps a hint honest about the row it names: a
-            // claim whose starting text is not what that row holds is about
-            // some other state of the file.
-            if (at < 0 || rows[at].text !== hint.before) return null;
-            const next = [...rows];
-            next[at] = { runtimeId: hint.runtimeId, text: hint.after };
-            return next;
-        }
-        case 'insert': {
-            const at = rows.findIndex(row => row.runtimeId === hint.anchor);
-            if (at < 0) return null;
-            const next = [...rows];
-            next.splice(hint.side === 'before' ? at : at + 1, 0, { runtimeId: null, text: hint.text });
-            return next;
-        }
-        case 'retire': {
-            const at = rows.findIndex(row => row.runtimeId === hint.runtimeId);
-            if (at < 0) return null;
-            return rows.filter((_, index) => index !== at);
-        }
-    }
+/** What a candidate would decide: the identity of each row, in order. */
+function decisionOf(rows: ClaimedRow[]): string {
+    return JSON.stringify(rows.map(row => row.runtimeId));
 }
 
-/** True when the rebuilt file is, line for line, the file that was read. */
+/** True when the candidate is, line for line, the rows that were read. */
 function reproduces(
     rows: ClaimedRow[],
     tasks: Task[],
@@ -284,7 +305,8 @@ function reproduces(
         if (runtimeId === null) continue;
         // Never across parsers, the rule every rung of the ladder follows.
         // Turning a third-party notation off can leave the text identical and
-        // the parser different.
+        // the parser different. A row the ledger no longer holds fails here
+        // too: the claim was built on a generation this scan has left behind.
         const entry = byRuntimeId.get(runtimeId);
         if (!entry || entry.fingerprint.parserId !== tasks[i].parserId) return false;
     }

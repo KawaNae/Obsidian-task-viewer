@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
     HintLog, MAX_HINTS_PER_FILE, HINT_TTL_MS,
-    resolveHints, type Hint,
+    resolveHints, type ClaimedRow, type Hint,
 } from '../../../../../src/services/core/identity/IdentityHints';
 import type { LedgerEntry } from '../../../../../src/services/core/identity/IdentityLedger';
 import { fingerprintOf } from '../../../../../src/services/core/identity/IdentityFingerprint';
@@ -9,8 +9,8 @@ import { makeTask } from '../../../helpers/makeTask';
 import type { Task } from '../../../../../src/types';
 
 /**
- * The log the plugin's own writes leave behind, and the replay that decides how
- * much of it a scan may believe.
+ * The log the plugin's own writes leave behind, and the rule that decides
+ * whether a scan may believe any of it.
  */
 
 const FILE = 'note.md';
@@ -37,21 +37,26 @@ const A = '- [ ] alpha @2026-09-21';
 const B = '- [ ] beta @2026-09-21';
 const A_DONE = '- [x] alpha @2026-09-21';
 
+/** One write's claim: the file's rows, as `[runtimeId | null, text]` pairs. */
+const claim = (...rows: Array<[string | null, string]>): Hint => ({
+    rows: rows.map(([runtimeId, text]): ClaimedRow => ({ runtimeId, text })),
+});
+
 const pendingOf = (...hints: Hint[]) => hints.map((hint, i) => ({ seq: i + 1, at: 0, hint }));
 
 describe('HintLog', () => {
-    it('keeps one file\'s hints in the order they were raised', () => {
+    it('keeps one file\'s claims in the order they were raised', () => {
         const log = new HintLog();
-        log.add(FILE, [{ kind: 'retire', runtimeId: 'r1' }], 0);
-        log.add(FILE, [{ kind: 'retire', runtimeId: 'r2' }], 0);
+        log.add(FILE, [claim(['r1', A])], 0);
+        log.add(FILE, [claim(['r2', B])], 0);
 
         expect(log.pendingFor(FILE, 0).map(entry => entry.seq)).toEqual([1, 2]);
     });
 
     it('files each path separately', () => {
         const log = new HintLog();
-        log.add(FILE, [{ kind: 'retire', runtimeId: 'r1' }], 0);
-        log.add('other.md', [{ kind: 'retire', runtimeId: 'r2' }], 0);
+        log.add(FILE, [claim(['r1', A])], 0);
+        log.add('other.md', [claim(['r2', B])], 0);
 
         expect(log.pendingFor(FILE, 0)).toHaveLength(1);
         expect(log.pendingFor('other.md', 0)).toHaveLength(1);
@@ -60,7 +65,7 @@ describe('HintLog', () => {
     it('drops the oldest past the per-file limit', () => {
         const log = new HintLog();
         for (let i = 0; i <= MAX_HINTS_PER_FILE; i++) {
-            log.add(FILE, [{ kind: 'retire', runtimeId: `r${i}` }], 0);
+            log.add(FILE, [claim([`r${i}`, A])], 0);
         }
 
         const pending = log.pendingFor(FILE, 0);
@@ -68,9 +73,9 @@ describe('HintLog', () => {
         expect(pending[0].seq).toBe(2);
     });
 
-    it('lets a hint expire', () => {
+    it('lets a claim expire', () => {
         const log = new HintLog();
-        log.add(FILE, [{ kind: 'retire', runtimeId: 'r1' }], 1_000);
+        log.add(FILE, [claim(['r1', A])], 1_000);
 
         expect(log.pendingFor(FILE, 1_000 + HINT_TTL_MS - 1)).toHaveLength(1);
         expect(log.pendingFor(FILE, 1_000 + HINT_TTL_MS)).toHaveLength(0);
@@ -78,223 +83,255 @@ describe('HintLog', () => {
 
     it('forgets a file on request', () => {
         const log = new HintLog();
-        log.add(FILE, [{ kind: 'retire', runtimeId: 'r1' }], 0);
+        log.add(FILE, [claim(['r1', A])], 0);
 
         log.dropFile(FILE);
 
         expect(log.pendingFor(FILE, 0)).toHaveLength(0);
     });
 
-    it('takes a write\'s claims back when the write failed', () => {
+    it('takes a write\'s claim back when the write failed', () => {
         // A `vault.process` that throws after the callback leaves the file as
-        // it was; claims about it describe a state that never existed.
+        // it was; a claim about it describes a state that never existed.
         const log = new HintLog();
-        log.add(FILE, [{ kind: 'retire', runtimeId: 'kept' }], 0);
-        const withdraw = log.add(FILE, [
-            { kind: 'retire', runtimeId: 'gone1' },
-            { kind: 'retire', runtimeId: 'gone2' },
-        ], 0);
+        log.add(FILE, [claim(['kept', A])], 0);
+        const withdraw = log.add(FILE, [claim(['gone', B])], 0);
 
         withdraw();
 
-        expect(log.pendingFor(FILE, 0).map(entry => (entry.hint as { runtimeId: string }).runtimeId))
-            .toEqual(['kept']);
+        expect(log.pendingFor(FILE, 0).map(entry => entry.hint.rows[0].runtimeId)).toEqual(['kept']);
+    });
+
+    it('shows the log as it stands, expired entries included', () => {
+        // What a console sees has to tell "the write claimed nothing" apart
+        // from "the claim aged out before a scan came".
+        const log = new HintLog();
+        log.add(FILE, [claim(['r1', A])], 0);
+
+        const seen = log.peek();
+
+        expect(seen).toHaveLength(1);
+        expect(seen[0].file).toBe(FILE);
+        expect(seen[0].pending[0].hint.rows).toEqual([{ runtimeId: 'r1', text: A }]);
+        expect(log.peek()[0].pending).toHaveLength(1);
     });
 });
 
 describe('HintLog.settle', () => {
-    it('retires what the scan believed', () => {
+    it('retires the claim the scan adopted, and everything older', () => {
         const log = new HintLog();
-        log.add(FILE, [{ kind: 'retire', runtimeId: 'r1' }], 0);
-        log.add(FILE, [{ kind: 'retire', runtimeId: 'r2' }], 0);
+        log.add(FILE, [claim(['r1', A])], 0);
+        log.add(FILE, [claim(['r1', A_DONE])], 0);
+        log.add(FILE, [claim(['r1', B])], 0);
 
-        log.settle(FILE, 1, 0, 0, true);
+        log.settle(FILE, 2, 0, true);
 
-        expect(log.pendingFor(FILE, 0).map(entry => entry.seq)).toEqual([2]);
+        expect(log.pendingFor(FILE, 0).map(entry => entry.seq)).toEqual([3]);
     });
 
-    it('retires an unbelieved hint the scan has now read past', () => {
+    it('keeps a claim the scan did not adopt', () => {
+        // The window the design accepts, and now survives: the scan read the
+        // file from before the write. Claims do not chain, so this one blocks
+        // nothing, and its own scan is still coming.
         const log = new HintLog();
-        log.add(FILE, [{ kind: 'retire', runtimeId: 'r1' }], 0);
-        const readTip = log.tip(FILE);
+        log.add(FILE, [claim(['r1', A])], 0);
 
-        log.settle(FILE, 0, readTip, 0, false);
-
-        expect(log.pendingFor(FILE, 0)).toHaveLength(0);
-    });
-
-    it('keeps a hint raised after the scan started reading', () => {
-        const log = new HintLog();
-        const readTip = log.tip(FILE);
-        log.add(FILE, [{ kind: 'retire', runtimeId: 'r1' }], 0);
-
-        log.settle(FILE, 0, readTip, 0, false);
+        log.settle(FILE, 0, 0, false);
 
         expect(log.pendingFor(FILE, 0)).toHaveLength(1);
     });
 
-    it('lets the next write\'s hint work after one went unbelieved', () => {
-        // The shape that would otherwise deadlock a file for the whole TTL.
+    it('drops everything when a scan adopted nothing and still moved the rows', () => {
+        // The scan's read already contained the write the claim describes, and
+        // the ladder placed it some other way. Believing the claim afterwards
+        // would be deciding a file that has already been read.
         const log = new HintLog();
-        log.add(FILE, [{ kind: 'retire', runtimeId: 'r1' }], 0);
+        log.add(FILE, [claim(['r1', A])], 0);
 
-        log.settle(FILE, 0, log.tip(FILE), 0, false);
+        log.settle(FILE, 0, 0, true);
 
-        log.add(FILE, [{ kind: 'retire', runtimeId: 'r2' }], 0);
+        expect(log.pendingFor(FILE, 0)).toHaveLength(0);
+    });
+
+    it('lets the next write\'s claim work after one went unadopted', () => {
+        const log = new HintLog();
+        log.add(FILE, [claim(['r1', A])], 0);
+
+        log.settle(FILE, 0, 0, false);
+        log.add(FILE, [claim(['r2', B])], 0);
+
         const pending = log.pendingFor(FILE, 0);
-
-        expect(pending).toHaveLength(1);
-        expect(pending[0].hint).toMatchObject({ runtimeId: 'r2' });
+        expect(pending).toHaveLength(2);
+        expect(pending[1].hint.rows[0].runtimeId).toBe('r2');
     });
 
-    it('drops everything when a scan believed nothing and still moved the rows', () => {
-        // The hint was raised after this scan took its position, so the tip
-        // rule alone would keep it — but the scan's read already contained the
-        // write it describes, and the ladder placed that write its own way.
-        // Replaying the claim over the new rows would apply it twice.
+    it('retires what has aged out on the way past', () => {
         const log = new HintLog();
-        const readTip = log.tip(FILE);
-        log.add(FILE, [{ kind: 'retire', runtimeId: 'r1' }], 0);
+        log.add(FILE, [claim(['r1', A])], 0);
 
-        log.settle(FILE, 0, readTip, 0, true);
+        log.settle(FILE, 0, HINT_TTL_MS, false);
 
-        expect(log.pendingFor(FILE, 0)).toHaveLength(0);
-    });
-
-    it('keeps a hint when the scan believed nothing and changed nothing', () => {
-        // The window the design accepts: the scan read the file from before the
-        // write. Nothing moved, so the claim still has its own scan coming.
-        const log = new HintLog();
-        const readTip = log.tip(FILE);
-        log.add(FILE, [{ kind: 'retire', runtimeId: 'r1' }], 0);
-
-        log.settle(FILE, 0, readTip, 0, false);
-
-        expect(log.pendingFor(FILE, 0)).toHaveLength(1);
+        expect(log.pendingFor(FILE, HINT_TTL_MS)).toHaveLength(0);
     });
 });
 
-describe('resolveHints: what the file bears out', () => {
-    it('believes an insert once the file holds the extra line', () => {
+describe('resolveHints: what the read bears out', () => {
+    it('adopts the claim that is, line for line, what was read', () => {
         const previous = [row('r1', A, 0)];
-        const insert = pendingOf({ kind: 'insert', text: A, anchor: 'r1', side: 'before' });
+        const duplicated = pendingOf(claim(['r1', A], [null, A]));
 
-        // Before the write lands, the rebuilt file has two lines and the read
-        // has one.
-        expect(resolveHints(previous, [task(A, 0)], insert).consumed).toBe(0);
+        const resolved = resolveHints(previous, [task(A, 0), task(A, 1)], duplicated);
 
-        const after = resolveHints(previous, [task(A, 0), task(A, 1)], insert);
-        expect(after.consumed).toBe(1);
-        expect(after.rows).toEqual([
-            { runtimeId: null, text: A },
-            { runtimeId: 'r1', text: A },
-        ]);
-    });
-
-    it('believes a rewrite that starts from the text the row holds', () => {
-        const previous = [row('r1', A, 0), row('r2', B, 1)];
-        const rewrite = pendingOf({ kind: 'rewrite', runtimeId: 'r1', before: A, after: A_DONE });
-
-        expect(resolveHints(previous, [task(A, 0), task(B, 1)], rewrite).consumed).toBe(0);
-        expect(resolveHints(previous, [task(A_DONE, 0), task(B, 1)], rewrite).consumed).toBe(1);
-    });
-
-    it('refuses a rewrite whose starting text is not what the row holds', () => {
-        // The claim is about some other state of the file. Another row reading
-        // `before` does not make it true.
-        const previous = [row('r1', A, 0), row('r2', B, 1)];
-        const wrong = pendingOf({ kind: 'rewrite', runtimeId: 'r1', before: B, after: A_DONE });
-
-        expect(resolveHints(previous, [task(A_DONE, 0), task(B, 1)], wrong).consumed).toBe(0);
-    });
-
-    it('believes a retire', () => {
-        const previous = [row('r1', A, 0), row('r2', B, 1)];
-        const retire = pendingOf({ kind: 'retire', runtimeId: 'r1' });
-
-        const resolved = resolveHints(previous, [task(B, 0)], retire);
         expect(resolved.consumed).toBe(1);
-        expect(resolved.rows).toEqual([{ runtimeId: 'r2', text: B }]);
-    });
-
-    it('believes two writes at once when one scan read both', () => {
-        const previous = [row('r1', A, 0)];
-        const both = pendingOf(
-            { kind: 'insert', text: A, anchor: 'r1', side: 'before' },
-            { kind: 'rewrite', runtimeId: 'r1', before: A, after: A_DONE },
-        );
-
-        const resolved = resolveHints(previous, [task(A, 0), task(A_DONE, 1)], both);
-        expect(resolved.consumed).toBe(2);
         expect(resolved.rows).toEqual([
+            { runtimeId: 'r1', text: A },
             { runtimeId: null, text: A },
-            { runtimeId: 'r1', text: A_DONE },
         ]);
     });
 
-    it('believes nothing when the read predates every hint', () => {
+    it('adopts nothing while the write has not reached the reader', () => {
         const previous = [row('r1', A, 0)];
-        const pending = pendingOf(
-            { kind: 'insert', text: A, anchor: 'r1', side: 'before' },
-            { kind: 'rewrite', runtimeId: 'r1', before: A, after: A_DONE },
-        );
+        const duplicated = pendingOf(claim(['r1', A], [null, A]));
 
-        expect(resolveHints(previous, [task(A, 0)], pending).consumed).toBe(0);
+        expect(resolveHints(previous, [task(A, 0)], duplicated).consumed).toBe(0);
     });
 
-    it('believes nothing when an external edit arrived in the same scan', () => {
+    it('adopts nothing when an external edit arrived in the same scan', () => {
         const previous = [row('r1', A, 0)];
-        const insert = pendingOf({ kind: 'insert', text: A, anchor: 'r1', side: 'before' });
+        const duplicated = pendingOf(claim(['r1', A], [null, A]));
 
         const read = [task(A, 0), task(A, 1), task('- [ ] typed by hand', 2)];
-        expect(resolveHints(previous, read, insert).consumed).toBe(0);
+        expect(resolveHints(previous, read, duplicated).consumed).toBe(0);
     });
 
-    it('stops at the write the read reached', () => {
+    it('adopts the newest claim the read bears out', () => {
+        // One scan read the file after two writes: the older claim describes a
+        // state the file has already left.
         const previous = [row('r1', A, 0)];
-        const pending = pendingOf(
-            { kind: 'insert', text: A, anchor: 'r1', side: 'before' },
-            { kind: 'insert', text: B, anchor: 'r1', side: 'after' },
+        const both = pendingOf(
+            claim(['r1', A], [null, A]),
+            claim(['r1', A_DONE], [null, A]),
         );
 
-        expect(resolveHints(previous, [task(A, 0), task(A, 1)], pending).consumed).toBe(1);
+        const resolved = resolveHints(previous, [task(A_DONE, 0), task(A, 1)], both);
+
+        expect(resolved.consumed).toBe(2);
+        expect(resolved.rows).toEqual([
+            { runtimeId: 'r1', text: A_DONE },
+            { runtimeId: null, text: A },
+        ]);
     });
 
-    it('stops at a hint it cannot apply', () => {
-        // The anchor is not in the file any more, so nothing after this claim
-        // describes a state this file passed through.
+    it('adopts the older claim when the read stopped there', () => {
         const previous = [row('r1', A, 0)];
-        const pending = pendingOf(
-            { kind: 'insert', text: B, anchor: 'missing', side: 'after' },
-            { kind: 'rewrite', runtimeId: 'r1', before: A, after: A_DONE },
+        const both = pendingOf(
+            claim(['r1', A], [null, A]),
+            claim(['r1', A_DONE], [null, A]),
         );
 
-        expect(resolveHints(previous, [task(A_DONE, 0)], pending).consumed).toBe(0);
+        expect(resolveHints(previous, [task(A, 0), task(A, 1)], both).consumed).toBe(1);
     });
 
     it('refuses to hand a row to a line another parser now owns', () => {
         // Turning a third-party notation off leaves the text alone and changes
         // the parser. The ladder never pairs across parsers; neither does this.
         const previous = [row('r1', A, 0)];
-        const rewrite = pendingOf({ kind: 'rewrite', runtimeId: 'r1', before: A, after: A_DONE });
+        const rewrite = pendingOf(claim(['r1', A_DONE]));
 
         const read = [task(A_DONE, 0, { parserId: 'tasks-plugin' })];
         expect(resolveHints(previous, read, rewrite).consumed).toBe(0);
+    });
+
+    it('refuses a claim built on a generation the ledger has left behind', () => {
+        // The row it names is not in `previous` any more, so the claim cannot
+        // say whose identity this line carries.
+        const previous = [row('r2', A, 0)];
+        const stale = pendingOf(claim(['r1', A]));
+
+        expect(resolveHints(previous, [task(A, 0)], stale).consumed).toBe(0);
+    });
+});
+
+describe('resolveHints: when more than one candidate fits', () => {
+    // A file that comes back to a text it already had reads the same both
+    // times, so the text cannot say which state was read. What settles it is
+    // whether the candidates would decide differently.
+
+    it('adopts a claim that agrees with the state before it', () => {
+        // A write that only touched the lines between the tasks: the rows are
+        // exactly what they were, so both candidates decide the same thing.
+        const previous = [row('r1', A, 0), row('r2', B, 1)];
+        const untouchedRows = pendingOf(claim(['r1', A], ['r2', B]));
+
+        const resolved = resolveHints(previous, [task(A, 0), task(B, 1)], untouchedRows);
+
+        expect(resolved.consumed).toBe(1);
+        expect(resolved.rows).toEqual([
+            { runtimeId: 'r1', text: A },
+            { runtimeId: 'r2', text: B },
+        ]);
+    });
+
+    it('is done with the log up to the newest claim that fits', () => {
+        // Two writes that left the rows alone — both claims fit, and so does
+        // the state before them. They decide the same thing, so which one is
+        // adopted settles nothing about identity; what it settles is how much
+        // of the log this scan has finished with.
+        const previous = [row('r1', A, 0)];
+        const both = pendingOf(claim(['r1', A]), claim(['r1', A]));
+
+        expect(resolveHints(previous, [task(A, 0)], both).consumed).toBe(2);
+    });
+
+    it('refuses when a round trip leaves two candidates deciding differently', () => {
+        // The write deleted the row and wrote its text again, so the file reads
+        // as it did before while the line is a different task. Whether this
+        // read is the old file or the new one is a question about *when*, which
+        // the reader cannot answer — so the ladder takes it.
+        const previous = [row('r1', A, 0)];
+        const rewritten = pendingOf(claim([null, A]));
+
+        expect(resolveHints(previous, [task(A, 0)], rewritten).consumed).toBe(0);
+    });
+
+    it('refuses when two claims reproduce the read and disagree', () => {
+        const previous = [row('r1', A, 0)];
+        const pending = pendingOf(
+            claim(['r1', A], [null, B]),
+            claim([null, A], ['r1', B]),
+        );
+
+        expect(resolveHints(previous, [task(A, 0), task(B, 1)], pending).consumed).toBe(0);
+    });
+
+    it('is not confused by a claim from a write that landed elsewhere', () => {
+        // Two writes to one file, the second describing rows the first never
+        // produced: only one of them can be what was read.
+        const previous = [row('a', A, 0), row('b', B, 1)];
+        const pending = pendingOf(
+            claim(['a', A_DONE], ['b', B]),
+            claim(['a', A], ['b', B], [null, B]),
+        );
+
+        const resolved = resolveHints(previous, [task(A_DONE, 0), task(B, 1)], pending);
+
+        expect(resolved.consumed).toBe(1);
+        expect(resolved.rows?.[0]).toEqual({ runtimeId: 'a', text: A_DONE });
     });
 });
 
 describe('resolveHints: the shapes a position-based match got wrong', () => {
     // Each of these was answered incorrectly when claims were matched to lines
-    // by the line number the write recorded. Replaying the file removes the
-    // question.
+    // by the line number the write recorded, and again when they were replayed
+    // as per-line edits. A claim that carries the whole row list has no
+    // position to be wrong about.
 
     it('follows two rewrites of one row through a text a sibling also has', () => {
-        // A goes d1 → d2 → d3 while B sits at d2 the whole time. Matching the
-        // first claim by text would hand A's identity to B's line.
+        // A goes d1 → d2 → d3 while B sits at d2 the whole time.
         const previous = [row('a', '- [ ] foo @d1', 0), row('b', '- [ ] foo @d2', 1)];
         const chained = pendingOf(
-            { kind: 'rewrite', runtimeId: 'a', before: '- [ ] foo @d1', after: '- [ ] foo @d2' },
-            { kind: 'rewrite', runtimeId: 'a', before: '- [ ] foo @d2', after: '- [ ] foo @d3' },
+            claim(['a', '- [ ] foo @d2'], ['b', '- [ ] foo @d2']),
+            claim(['a', '- [ ] foo @d3'], ['b', '- [ ] foo @d2']),
         );
 
         const resolved = resolveHints(
@@ -313,8 +350,8 @@ describe('resolveHints: the shapes a position-based match got wrong', () => {
     it('retires the row the write retired, not its twin', () => {
         const previous = [row('a', '- [ ] foo @d1', 0), row('b', '- [ ] foo @d2', 1)];
         const pending = pendingOf(
-            { kind: 'rewrite', runtimeId: 'a', before: '- [ ] foo @d1', after: '- [ ] foo @d2' },
-            { kind: 'retire', runtimeId: 'a' },
+            claim(['a', '- [ ] foo @d2'], ['b', '- [ ] foo @d2']),
+            claim(['b', '- [ ] foo @d2']),
         );
 
         const resolved = resolveHints(previous, [task('- [ ] foo @d2', 0)], pending);
@@ -326,8 +363,8 @@ describe('resolveHints: the shapes a position-based match got wrong', () => {
     it('is unmoved by a retire above the line it inserted', () => {
         const previous = [row('z', '- [ ] gone @d0', 0), row('a', '- [ ] T @d1', 5)];
         const pending = pendingOf(
-            { kind: 'insert', text: '- [ ] T @d1', anchor: 'a', side: 'before' },
-            { kind: 'retire', runtimeId: 'z' },
+            claim(['z', '- [ ] gone @d0'], [null, '- [ ] T @d1'], ['a', '- [ ] T @d1']),
+            claim([null, '- [ ] T @d1'], ['a', '- [ ] T @d1']),
         );
 
         const resolved = resolveHints(
@@ -344,12 +381,10 @@ describe('resolveHints: the shapes a position-based match got wrong', () => {
     });
 
     it('keeps the original\'s identity when the same task is duplicated twice', () => {
-        // Both copies go below the original, the second pushing the first down.
-        // By position the second claim is a tie between two identical lines.
         const previous = [row('a', '- [ ] T @d1', 0)];
         const twice = pendingOf(
-            { kind: 'insert', text: '- [ ] T @d1', anchor: 'a', side: 'after' },
-            { kind: 'insert', text: '- [ ] T @d1', anchor: 'a', side: 'after' },
+            claim(['a', '- [ ] T @d1'], [null, '- [ ] T @d1']),
+            claim(['a', '- [ ] T @d1'], [null, '- [ ] T @d1'], [null, '- [ ] T @d1']),
         );
 
         const resolved = resolveHints(
@@ -360,16 +395,17 @@ describe('resolveHints: the shapes a position-based match got wrong', () => {
 
         expect(resolved.consumed).toBe(2);
         expect(resolved.rows?.[0]).toEqual({ runtimeId: 'a', text: '- [ ] T @d1' });
-        expect(resolved.rows?.slice(1).every(claim => claim.runtimeId === null)).toBe(true);
+        expect(resolved.rows?.slice(1).every(claimed => claimed.runtimeId === null)).toBe(true);
     });
 
-    it('does not let a stale claim stand in for a real one elsewhere', () => {
+    it('does not let a claim about one part of the file answer for another', () => {
         // The first write never landed; the second duplicated B, far away. The
-        // rebuilt file puts the new line next to B, not next to A.
+        // stale claim puts the new line next to A, which is not the file that
+        // was read — and it does not reproduce it, so it is not in the running.
         const previous = [row('a', '- [ ] T @d1', 0), row('b', '- [ ] T @d1', 19)];
         const pending = pendingOf(
-            { kind: 'insert', text: '- [ ] T @d1', anchor: 'a', side: 'after' },
-            { kind: 'insert', text: '- [ ] T @d1', anchor: 'b', side: 'before' },
+            claim(['a', '- [ ] T @d1'], [null, '- [ ] T @d1'], ['b', '- [ ] T @d1']),
+            claim(['a', '- [ ] T @d1'], ['b', '- [ ] T @d1'], [null, '- [ ] T @d1']),
         );
 
         const resolved = resolveHints(
@@ -378,11 +414,9 @@ describe('resolveHints: the shapes a position-based match got wrong', () => {
             pending,
         );
 
-        // Believing only the stale claim would put the new line at index 1 and
-        // hand B's identity to the last line. It reproduces the read by
-        // accident — which is why the claims carry an anchor, not a position.
-        expect(resolved.rows?.[0]).toEqual({ runtimeId: 'a', text: '- [ ] T @d1' });
-        expect(resolved.rows?.[1]).toEqual({ runtimeId: null, text: '- [ ] T @d1' });
-        expect(resolved.rows?.[2]).toEqual({ runtimeId: 'b', text: '- [ ] T @d1' });
+        // Both claims have three identically worded lines, so both reproduce
+        // the read — and they disagree about which line is B's. Neither counts.
+        expect(resolved.consumed).toBe(0);
+        expect(resolved.rows).toBeNull();
     });
 });

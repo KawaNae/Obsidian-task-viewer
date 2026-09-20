@@ -144,10 +144,14 @@ export class TaskScanner {
     private async scanFile(file: TFile, isLocalChange: boolean = false): Promise<void> {
         this.validator.clearErrorsForFile(file.path);
 
-        // Taken before the read, and handed back at the commit: a hint raised
-        // before this read has had its one chance at this scan, and the ledger
-        // is about to move past whatever this read saw (see HintLog.tip).
-        const readTip = this.hints.tip(file.path);
+        // Everything from here to the match below is synchronous, so the claims
+        // this scan weighs are, near enough, the ones filed by the time the read
+        // resolved. Near enough rather than exactly: another write's callback
+        // can slip in between the read settling and this line running, and its
+        // claim describes a file this read never saw. Nothing here tries to
+        // fence that off, because a position cannot — what keeps such a claim
+        // from deciding anything is that it has to be the only one that fits
+        // (see resolveHints).
         const content = await this.app.vault.read(file);
         const { lines } = splitLines(content);
 
@@ -241,7 +245,7 @@ export class TaskScanner {
             // previous generation too.
             this.ledger.replaceFile(file.path, identity.entries);
             this.hints.settle(
-                file.path, identity.consumedHints, readTip, now,
+                file.path, identity.consumedHints, now,
                 ledgerMoved(previousRows, identity.entries),
             );
         } finally {
@@ -290,6 +294,14 @@ export class TaskScanner {
      */
     getLedger(): IdentityLedger {
         return this.ledger;
+    }
+
+    /**
+     * The hint log, for seeing from the console what the write layer claimed.
+     * @internal Read-only use: only scanFile and `addHints` change it.
+     */
+    getHintLog(): HintLog {
+        return this.hints;
     }
 
     /**

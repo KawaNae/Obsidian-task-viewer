@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { matchFile } from '../../../../../src/services/core/identity/IdentityMatcher';
 import type { MatchResult } from '../../../../../src/services/core/identity/IdentityMatcher';
-import type { Hint, PendingHint } from '../../../../../src/services/core/identity/IdentityHints';
+import type { ClaimedRow, Hint, PendingHint } from '../../../../../src/services/core/identity/IdentityHints';
 import { makeTask } from '../../../helpers/makeTask';
 import type { Task } from '../../../../../src/types';
 
@@ -9,11 +9,11 @@ import type { Task } from '../../../../../src/types';
  * Rung 0: what the plugin's own writes tell the matcher, and what the matcher
  * does with it.
  *
- * The case rung 0 exists for is the in-place duplicate. The copy carries the
- * same text as the original, so the ladder sees one row against two identical
- * lines and hands the old ID to whichever comes first — the copy. The hub that
- * was open on the original then follows the copy. Nothing in the file can tell
- * the two apart; only the write that made them knows.
+ * The case rung 0 exists for is the duplicate. The copy carries the same text
+ * as the original, so the ladder sees one row against two identical lines and
+ * hands the old ID to whichever comes first. The hub that was open on the
+ * original then follows the copy. Nothing in the file can tell the two apart;
+ * only the write that made them knows.
  */
 
 function makeMint() {
@@ -36,6 +36,11 @@ function link(parent: Task, ...children: Task[]): void {
     }
 }
 
+/** One write's claim: the file's rows, as `[runtimeId | null, text]` pairs. */
+const claim = (...rows: Array<[string | null, string]>): Hint => ({
+    rows: rows.map(([runtimeId, text]): ClaimedRow => ({ runtimeId, text })),
+});
+
 function pendingOf(...hints: Hint[]): PendingHint[] {
     return hints.map((hint, i) => ({ seq: i + 1, at: 0, hint }));
 }
@@ -48,7 +53,7 @@ function runtimeId(result: MatchResult, provisionalId: string): string {
 
 const POMODORO = '- [ ] ポモドーロ';
 
-describe('rung 0: the in-place duplicate', () => {
+describe('rung 0: the duplicate', () => {
     it('leaves the original its ID and mints for the copy', () => {
         const mint = makeMint();
         const first = matchFile([], [t('prov:0', 0, POMODORO)], mint);
@@ -59,7 +64,7 @@ describe('rung 0: the in-place duplicate', () => {
             first.entries,
             [t('prov:0', 0, POMODORO), t('prov:1', 1, POMODORO)],
             mint,
-            pendingOf({ kind: 'insert', text: POMODORO, anchor: original, side: 'before' }),
+            pendingOf(claim([null, POMODORO], [original, POMODORO])),
         );
 
         expect(second.consumedHints).toBe(1);
@@ -67,7 +72,7 @@ describe('rung 0: the in-place duplicate', () => {
         expect(second.minted).toEqual([runtimeId(second, 'prov:0')]);
     });
 
-    it('without the hint, the old ID slides onto the copy', () => {
+    it('without the claim, the old ID slides onto the copy', () => {
         // The behaviour rung 0 is there to correct, pinned so the difference
         // stays visible.
         const mint = makeMint();
@@ -83,7 +88,7 @@ describe('rung 0: the in-place duplicate', () => {
         expect(runtimeId(second, 'prov:0')).toBe(original);
     });
 
-    it('believes nothing when the scan read the file before the write', () => {
+    it('adopts nothing when the scan read the file before the write', () => {
         const mint = makeMint();
         const first = matchFile([], [t('prov:0', 0, POMODORO)], mint);
         const original = runtimeId(first, 'prov:0');
@@ -92,7 +97,7 @@ describe('rung 0: the in-place duplicate', () => {
             first.entries,
             [t('prov:0', 0, POMODORO)],
             mint,
-            pendingOf({ kind: 'insert', text: POMODORO, anchor: original, side: 'before' }),
+            pendingOf(claim([null, POMODORO], [original, POMODORO])),
         );
 
         expect(second.consumedHints).toBe(0);
@@ -113,7 +118,7 @@ describe('rung 0: rewrite and retire', () => {
             first.entries,
             [t('prov:0', 0, after)],
             mint,
-            pendingOf({ kind: 'rewrite', runtimeId: held, before, after }),
+            pendingOf(claim([held, after])),
         );
 
         // Text and dates both changed, which is a new task to the ladder — the
@@ -137,7 +142,7 @@ describe('rung 0: rewrite and retire', () => {
             first.entries,
             [t('prov:1', 0, POMODORO)],
             mint,
-            pendingOf({ kind: 'retire', runtimeId: gone }),
+            pendingOf(claim([survivor, POMODORO])),
         );
 
         expect(second.consumedHints).toBe(1);
@@ -162,8 +167,8 @@ describe('rung 0: rewrite and retire', () => {
             [t('prov:a', 0, '- [ ] foo @2026-09-23'), t('prov:b', 1, '- [ ] foo @2026-09-22')],
             mint,
             pendingOf(
-                { kind: 'rewrite', runtimeId: a, before: '- [ ] foo @2026-09-21', after: '- [ ] foo @2026-09-22' },
-                { kind: 'rewrite', runtimeId: a, before: '- [ ] foo @2026-09-22', after: '- [ ] foo @2026-09-23' },
+                claim([a, '- [ ] foo @2026-09-22'], [b, '- [ ] foo @2026-09-22']),
+                claim([a, '- [ ] foo @2026-09-23'], [b, '- [ ] foo @2026-09-22']),
             ),
         );
 
@@ -174,19 +179,56 @@ describe('rung 0: rewrite and retire', () => {
     });
 });
 
-describe('rung 0: the scopes it opens', () => {
+describe('rung 0: children', () => {
     const CHILD = '\t- [ ] 共通の子';
 
-    it('matches the children of a hinted parent within its own scope', () => {
-        // Two parents whose children are worded identically, and the user has
-        // swapped the two blocks since the last scan — while the plugin ticked
-        // the checkbox on both parents.
-        //
-        // A hinted parent has to open its children's scope the way a laddered
-        // one does. Without it the children fall to the 2nd pass, where the
-        // previous rows come in the old file order and the current tasks in the
-        // new one: the two identical children pair across the swap, and each
-        // child takes its counterpart's ID.
+    it('settles the children of the file it answers for', () => {
+        // Two parents whose children are worded identically, and the plugin
+        // ticked one of the parents. A claim covers every row of the file, so
+        // the children are settled by name rather than left to the ladder,
+        // where two identical children can only be told apart by their scope.
+        const mint = makeMint();
+        const parentA = t('prov:a', 0, '- [ ] 親A');
+        const childA = t('prov:a1', 1, CHILD);
+        const parentB = t('prov:b', 2, '- [ ] 親B');
+        const childB = t('prov:b1', 3, CHILD);
+        link(parentA, childA);
+        link(parentB, childB);
+        const first = matchFile([], [parentA, childA, parentB, childB], mint);
+        const heldA = runtimeId(first, 'prov:a');
+        const heldB = runtimeId(first, 'prov:b');
+        const heldChildA = runtimeId(first, 'prov:a1');
+        const heldChildB = runtimeId(first, 'prov:b1');
+
+        const parentA2 = t('prov:a', 0, '- [x] 親A');
+        const childA2 = t('prov:a1', 1, CHILD);
+        const parentB2 = t('prov:b', 2, '- [ ] 親B');
+        const childB2 = t('prov:b1', 3, CHILD);
+        link(parentA2, childA2);
+        link(parentB2, childB2);
+
+        const second = matchFile(
+            first.entries,
+            [parentA2, childA2, parentB2, childB2],
+            mint,
+            pendingOf(claim(
+                [heldA, '- [x] 親A'], [heldChildA, CHILD],
+                [heldB, '- [ ] 親B'], [heldChildB, CHILD],
+            )),
+        );
+
+        expect(second.consumedHints).toBe(1);
+        expect(runtimeId(second, 'prov:a')).toBe(heldA);
+        expect(runtimeId(second, 'prov:a1')).toBe(heldChildA);
+        expect(runtimeId(second, 'prov:b1')).toBe(heldChildB);
+        expect(second.minted).toEqual([]);
+    });
+
+    it('hands the whole file to the ladder when an external edit came with it', () => {
+        // The user swapped the two blocks since the last scan while the plugin
+        // ticked both parents. The claims describe the file in its old order,
+        // so none of them is what was read, and the scoped ladder — not rung 0
+        // — is what keeps each child with its own parent.
         const mint = makeMint();
         const parentA = t('prov:a', 0, '- [ ] 親A');
         const childA = t('prov:a1', 1, CHILD);
@@ -211,59 +253,20 @@ describe('rung 0: the scopes it opens', () => {
             first.entries,
             [parentB2, childB2, parentA2, childA2],
             mint,
-            pendingOf(
-                { kind: 'rewrite', runtimeId: heldA, before: '- [ ] 親A', after: '- [x] 親A' },
-                { kind: 'rewrite', runtimeId: heldB, before: '- [ ] 親B', after: '- [x] 親B' },
-            ),
+            pendingOf(claim(
+                [heldA, '- [x] 親A'], [heldChildA, CHILD],
+                [heldB, '- [x] 親B'], [heldChildB, CHILD],
+            )),
         );
 
-        // The rebuild does not reorder rows, so the swap itself is an external
-        // edit and the claims cannot reproduce the read.
         expect(second.consumedHints).toBe(0);
         expect(runtimeId(second, 'prov:a1')).toBe(heldChildA);
         expect(runtimeId(second, 'prov:b1')).toBe(heldChildB);
     });
-
-    it('keeps a hinted parent\'s children in their own scope', () => {
-        // Same two parents, no swap: the plugin ticked one of them. The
-        // hinted parent must open its children's scope, or its child goes to
-        // the 2nd pass and can pair with the other parent's identical child.
-        const mint = makeMint();
-        const parentA = t('prov:a', 0, '- [ ] 親A');
-        const childA = t('prov:a1', 1, CHILD);
-        const parentB = t('prov:b', 2, '- [ ] 親B');
-        const childB = t('prov:b1', 3, CHILD);
-        link(parentA, childA);
-        link(parentB, childB);
-        const first = matchFile([], [parentA, childA, parentB, childB], mint);
-        const heldA = runtimeId(first, 'prov:a');
-        const heldChildA = runtimeId(first, 'prov:a1');
-        const heldChildB = runtimeId(first, 'prov:b1');
-
-        const parentA2 = t('prov:a', 0, '- [x] 親A');
-        const childA2 = t('prov:a1', 1, CHILD);
-        const parentB2 = t('prov:b', 2, '- [ ] 親B');
-        const childB2 = t('prov:b1', 3, CHILD);
-        link(parentA2, childA2);
-        link(parentB2, childB2);
-
-        const second = matchFile(
-            first.entries,
-            [parentA2, childA2, parentB2, childB2],
-            mint,
-            pendingOf({ kind: 'rewrite', runtimeId: heldA, before: '- [ ] 親A', after: '- [x] 親A' }),
-        );
-
-        expect(second.consumedHints).toBe(1);
-        expect(runtimeId(second, 'prov:a')).toBe(heldA);
-        expect(runtimeId(second, 'prov:a1')).toBe(heldChildA);
-        expect(runtimeId(second, 'prov:b1')).toBe(heldChildB);
-        expect(second.minted).toEqual([]);
-    });
 });
 
 describe('rung 0: what it does not disturb', () => {
-    it('gives exactly the ladder\'s answer when no hint is believed', () => {
+    it('gives exactly the ladder\'s answer when no claim is adopted', () => {
         const before = [t('prov:0', 0, '- [ ] 一つ目'), t('prov:1', 1, '- [ ] 二つ目')];
         const after = () => [t('prov:0', 0, '- [ ] 一つ目'), t('prov:1', 1, '- [x] 二つ目')];
 
@@ -273,8 +276,8 @@ describe('rung 0: what it does not disturb', () => {
         const firstB = matchFile([], before, makeMint());
         const withStaleHint = matchFile(
             firstB.entries, after(), makeMint(),
-            // A claim about a row this file does not have.
-            pendingOf({ kind: 'retire', runtimeId: 'nobody' }),
+            // A claim about rows this file does not have.
+            pendingOf(claim(['nobody', '- [ ] どこかの行'])),
         );
 
         expect(withStaleHint.consumedHints).toBe(0);
