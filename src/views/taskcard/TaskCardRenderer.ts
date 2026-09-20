@@ -1,6 +1,6 @@
 import { type App, MarkdownRenderer, Component } from 'obsidian';
 import { type Task, type DisplayTask, type TaskViewerSettings, type DoubleTapAction, isCompleteStatusChar, type TopRightConfig } from '../../types';
-import { getOverdueLevel } from '../../services/display/TaskStatusQuery';
+import { getOverdueLevel, type OverdueLevel } from '../../services/display/TaskStatusQuery';
 import { resolveTopRightField } from './TopRightFieldResolver';
 
 export type TopRightSpec =
@@ -50,6 +50,7 @@ export function computeContentSignature(
     settings: TaskViewerSettings,
     options: RenderOptions,
     topRightResolved: string,
+    overdueLevel: OverdueLevel,
     maskMode: boolean,
     isExpanded: boolean,
     readService: TaskReadService,
@@ -81,6 +82,11 @@ export function computeContentSignature(
         task.effectiveDue ?? '',
         task.isReadOnly ? '1' : '0',
         topRightResolved,
+        // Overdue is judged against the clock, not against task fields, so
+        // nothing else here moves when a card crosses its end or due. Without
+        // it the signature matches and the card keeps its pre-overdue content
+        // for as long as the task is not edited.
+        overdueLevel,
         options.compact ? '1' : '0',
         maskMode ? '1' : '0',
         isExpanded ? '1' : '0',
@@ -192,8 +198,12 @@ export class TaskCardRenderer extends Component {
         // Compute content signature for render skip
         const topRightResolved = this.resolveTopRightString(task, settings, topRight);
         const isExpanded = this.expandedTaskIds.has(cardInstanceId);
+        const overdueLevel = getOverdueLevel(
+            task, settings.startHour, settings.statusDefinitions,
+            this.childItemBuilder.getReadService(),
+        );
         const sig = computeContentSignature(
-            task, settings, options, topRightResolved,
+            task, settings, options, topRightResolved, overdueLevel,
             this.getMaskMode(), isExpanded,
             this.childItemBuilder.getReadService(),
         );
@@ -202,6 +212,7 @@ export class TaskCardRenderer extends Component {
             return;
         }
         container.dataset.contentSig = sig;
+        this.applyOverdueAttributes(container, task, settings, overdueLevel);
 
         const ownedSelector = RENDERER_OWNED_CHILD_CLASSES
             .map(c => `:scope > .${c}`).join(', ');
@@ -299,6 +310,36 @@ export class TaskCardRenderer extends Component {
     disposeInside(root: HTMLElement): void {
         const cards = root.querySelectorAll<HTMLElement>('.task-card');
         cards.forEach(card => this.dispose(card));
+    }
+
+    /**
+     * Publish the card's overdue state as attributes, so styling can reach it
+     * without re-deriving the judgement.
+     *
+     * `data-overdue` carries the level and is absent when the card is not
+     * overdue. `data-overdue-cause` says where the overdue comes from:
+     * `child` when the task's own status is complete and an unchecked child
+     * is what keeps it open, `self` otherwise. The inline-expanded card has
+     * no n/m counter and so shows no child-caused icon today; the attribute
+     * is there either way.
+     *
+     * No CSS here on purpose — how overdue asserts itself is a design
+     * decision, and this is only the ground it stands on.
+     */
+    private applyOverdueAttributes(
+        container: HTMLElement,
+        task: DisplayTask,
+        settings: TaskViewerSettings,
+        level: OverdueLevel,
+    ): void {
+        if (level === 'none') {
+            delete container.dataset.overdue;
+            delete container.dataset.overdueCause;
+            return;
+        }
+        container.dataset.overdue = level;
+        container.dataset.overdueCause =
+            isCompleteStatusChar(task.statusChar, settings.statusDefinitions) ? 'child' : 'self';
     }
 
     private getOverdueIcon(task: DisplayTask, settings: TaskViewerSettings): string {
