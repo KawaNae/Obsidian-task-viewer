@@ -291,8 +291,11 @@
     "noTemplatesFound": "テンプレートなし",
     "viewMode1Day": "1日",
     "viewMode3Days": "3日",
-    "viewModeWeek": "週",
+    "viewModeWeek": "7日",
     "viewModeLabel": "表示モード: {{label}}",
+    "daysCount": "{{n}}日",
+    "increaseDays": "表示日数を増やす",
+    "decreaseDays": "表示日数を減らす",
     "zoomLabel": "ズーム: {{pct}}"
   },
   "position": {

@@ -143,8 +143,8 @@
 }
 
 /* -----------------------------------------------------------------------------
-   Labelled dropdown buttons (view mode / zoom)
-   Rendered by ViewModeSelector and ZoomSelector in sharedUI/ViewToolbar.
+   Labelled dropdown buttons (days-to-show / zoom)
+   Rendered by DaysToShowSelector and ZoomSelector in sharedUI/ViewToolbar.
    Only Timeline uses them today, but nothing about them is timeline-specific.
 ----------------------------------------------------------------------------- */
 

@@ -120,6 +120,43 @@ export const F = {
         };
     },
 
+    /**
+     * Bounded integer. Out-of-range and non-integer values are rejected
+     * (return undefined, falling back to the field's default), matching
+     * `float`'s reject-don't-clamp policy rather than silently coercing.
+     */
+    int(
+        key: string,
+        opts: FieldOptions & { min?: number; max?: number } = {},
+    ): ConfigField<number> {
+        const { min = -Infinity, max = Infinity } = opts;
+        const check = (n: number): number | undefined =>
+            (Number.isInteger(n) && n >= min && n <= max) ? n : undefined;
+        return {
+            key,
+            legacyKeys: opts.legacyKeys,
+            parse(raw) {
+                if (typeof raw === 'number') return check(raw);
+                if (typeof raw === 'string') {
+                    // Number(), not parseInt(): parseInt("5.5") truncates to 5
+                    // instead of failing, which would silently accept
+                    // fractional input as an integer.
+                    const n = Number(raw);
+                    return Number.isFinite(n) ? check(n) : undefined;
+                }
+                return undefined;
+            },
+            serialize(value) {
+                return typeof value === 'number' ? check(value) : undefined;
+            },
+            toUriParam(value) { return String(value); },
+            fromUriParam(raw) {
+                const n = Number(raw);
+                return Number.isFinite(n) ? check(n) : undefined;
+            },
+        };
+    },
+
     stringEnum<const S extends string>(
         key: string,
         allowed: readonly S[],

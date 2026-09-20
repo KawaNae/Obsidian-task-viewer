@@ -291,8 +291,11 @@
     "noTemplatesFound": "No templates found",
     "viewMode1Day": "1 Day",
     "viewMode3Days": "3 Days",
-    "viewModeWeek": "Week",
+    "viewModeWeek": "7 Days",
     "viewModeLabel": "View mode: {{label}}",
+    "daysCount": "{{n}} Days",
+    "increaseDays": "Increase days shown",
+    "decreaseDays": "Decrease days shown",
     "zoomLabel": "Zoom: {{pct}}"
   },
   "position": {
