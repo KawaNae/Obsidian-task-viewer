@@ -328,7 +328,7 @@ export class FlowExecutor {
                 // original cannot be resolved now, it stays where it is and the
                 // task exists in two places — the one outcome of a move the user
                 // must be told about, since nothing on screen shows it.
-                const removed = await this.repository.deleteTaskFromFile(task);
+                const removed = await this.repository.deleteTaskFromFile(task, { to: effect.destPath });
                 if (!removed) {
                     logWarn(`[FlowExecutor] Moved but the original could not be deleted: ${task.id}`);
                     new Notice(t('notice.taskWriteFailed'));

@@ -41,4 +41,8 @@ export type FlowEffect =
     }
     | { kind: 'archive-to'; destPath: string; archivedTask: Task }
     | { kind: 'strip-flow' }
-    | { kind: 'delete-original' };
+    /**
+     * `destPath` is where `archive-to` just put the task. The delete carries it
+     * so the write layer can see that this removal is one half of a move.
+     */
+    | { kind: 'delete-original'; destPath: string };
