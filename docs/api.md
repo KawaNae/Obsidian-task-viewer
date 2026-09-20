@@ -29,7 +29,7 @@ const api = app.plugins.plugins['obsidian-task-viewer'].api;
 | `api.delete({ id })` | タスク削除 | async |
 | `api.duplicate({ id, ... })` | タスク複製 | async |
 | `api.tasksForDateRange({ from, to, ... })` | 日付範囲のタスク取得 | async |
-| `api.categorizedTasksForDateRange({ from, to, ... })` | 日付範囲のタスク（分類済み） | sync |
+| `api.categorizedTasksForDateRange({ from, to, ... })` | 日付範囲のタスク（分類済み） | async |
 | `api.insertChildTask({ parentId, content })` | 子タスク挿入 | async |
 | `api.getStartHour()` | startHour設定値取得 | sync |
 | `api.onChange(callback)` | タスク変更の購読 | sync |
@@ -209,7 +209,7 @@ const result = await api.tasksForDateRange({
 ## categorizedTasksForDateRange
 
 ```javascript
-const result = api.categorizedTasksForDateRange({
+const result = await api.categorizedTasksForDateRange({
   from: '2026-03-01',
   to: '2026-03-31',
 });

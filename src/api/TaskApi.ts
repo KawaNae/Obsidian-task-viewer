@@ -122,7 +122,7 @@ ${renderParamTable(DUPLICATE_SCHEMA).replace(/^/gm, '    ')}
     TasksForDateRangeParams:
 ${renderParamTable(TASKS_FOR_DATE_RANGE_SCHEMA).replace(/^/gm, '    ')}
 
-  categorizedTasksForDateRange(params: CategorizedTasksForDateRangeParams): CategorizedTasksForDateRangeResult
+  categorizedTasksForDateRange(params: CategorizedTasksForDateRangeParams): Promise<CategorizedTasksForDateRangeResult>
     Get tasks in a date range, categorized into allDay/timed/dueOnly per date.
     allDay/timed membership follows the visual span; dueOnly the calendar due.
 
@@ -245,7 +245,7 @@ Examples
   });
 
   // Get categorized tasks for a date range (or single date)
-  api.categorizedTasksForDateRange({ from: '2026-03-23', to: '2026-03-29' });
+  await api.categorizedTasksForDateRange({ from: '2026-03-23', to: '2026-03-29' });
 
   // Insert a child task
   await api.insertChildTask({ parentId: 'tv-inline:daily/2026-03-15.md:seq:5', content: 'Sub-task' });
