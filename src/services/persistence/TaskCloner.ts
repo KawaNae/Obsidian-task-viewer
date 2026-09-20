@@ -4,7 +4,8 @@ import { collectFlowLineIndicesInFile, formatFlowLine } from '../flow/FlowLineSc
 import { DateUtils } from '../../utils/DateUtils';
 import { logWarn } from '../../log/log';
 import { FileOperations } from './utils/FileOperations';
-import { appendLines, processLines, splitLines } from '../../utils/FileLines';
+import { appendLines, processLines, splitLines, type LineEdits } from '../../utils/FileLines';
+import type { WriteObserver } from './WriteObserver';
 
 /**
  * One generated child line, as the block described it.
@@ -37,7 +38,8 @@ export type InPlaceCopyLines =
 export class TaskCloner {
     constructor(
         private app: App,
-        private fileOps: FileOperations
+        private fileOps: FileOperations,
+        private writes?: WriteObserver,
     ) { }
 
     /**
@@ -60,7 +62,7 @@ export class TaskCloner {
             return false;
         }
 
-        return processLines(this.app, file, (lines) => {
+        return processLines(this.app, file, (lines, _eol, edits) => {
             const idx = this.fileOps.findTaskLineNumber(lines, task);
             if (idx < 0 || idx >= lines.length) {
                 logWarn('[TaskCloner] Task not found in file (duplicate)');
@@ -74,8 +76,8 @@ export class TaskCloner {
                 parents.push(this.shiftInlineDates(cleanParent, offset));
             }
 
-            return this.spliceCopies(lines, idx, parents, 'before');
-        });
+            return this.spliceCopies(lines, idx, parents, 'before', edits);
+        }, this.writes?.for(task.file));
     }
 
     /**
@@ -100,7 +102,7 @@ export class TaskCloner {
             return false;
         }
 
-        return processLines(this.app, file, (lines) => {
+        return processLines(this.app, file, (lines, _eol, edits) => {
             const idx = this.fileOps.findTaskLineNumber(lines, task);
             if (idx < 0 || idx >= lines.length) {
                 logWarn('[TaskCloner] Task not found in file (duplicate as next)');
@@ -113,8 +115,8 @@ export class TaskCloner {
                     () => this.fileOps.stripBlockIds([lines[idx]])[0])
                 : copies.lines.map(l => indent + l.trim());
 
-            return this.spliceCopies(lines, idx, parents, 'after');
-        });
+            return this.spliceCopies(lines, idx, parents, 'after', edits);
+        }, this.writes?.for(task.file));
     }
 
     /**
@@ -235,6 +237,7 @@ export class TaskCloner {
         taskLine: number,
         parentLines: string[],
         position: 'before' | 'after',
+        edits: LineEdits,
     ): string[] {
         const { childrenLines } = this.fileOps.collectChildrenFromLines(lines, taskLine);
         const cleanedChildren = this.fileOps.stripBlockIds(childrenLines);
@@ -247,7 +250,14 @@ export class TaskCloner {
         const insertIndex = position === 'before'
             ? taskLine
             : TaskCloner.indentedRegionEnd(lines, taskLine);
-        lines.splice(insertIndex, 0, ...linesToInsert);
+        // Through `edits` rather than beside it: the copy is worded exactly
+        // like the line it copies, so a position off by one would read the same
+        // and hand the original's identity to the copy. One number does both.
+        //
+        // Which of these lines are tasks is not this layer's question — the
+        // copied children can hold anything, a fence among them — and the index
+        // answers it by parsing what was written.
+        edits.splice(insertIndex, 0, ...linesToInsert);
 
         return lines;
     }

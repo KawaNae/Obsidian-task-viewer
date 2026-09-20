@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { TFile } from 'obsidian';
-import { appendLines, joinLines, processLines, splitLines } from '../../../src/utils/FileLines';
-import type { Hint } from '../../../src/services/core/identity/IdentityHints';
+import { appendLines, joinLines, processLines, recordEdits, splitLines } from '../../../src/utils/FileLines';
+import type { LineEdit } from '../../../src/utils/FileLines';
 
 /**
  * The one place that decides what a line is and how the file gets put back
@@ -105,28 +105,30 @@ function harness(initial: string, opts: { throwAfterCallback?: boolean; callback
     return { app, file, text: () => content, calls: () => calls };
 }
 
+/** One report that reached the sink. */
+interface Reported {
+    before: readonly string[];
+    after: readonly string[];
+    edits: readonly LineEdit[];
+}
+
 /**
- * Stands in for HintLog: every batch handed over can be taken back, and
- * `standing` is what would still be waiting for the next scan.
+ * Stands in for the index's side of a write: every report handed over can be
+ * taken back, and `standing` is what would still be waiting for the next scan.
  */
-function hintLog() {
-    const batches: Hint[][] = [];
+function writeSink() {
+    const reports: Reported[] = [];
     const live = new Set<number>();
     return {
-        sink: (hints: readonly Hint[]) => {
-            const at = batches.length;
-            batches.push([...hints]);
+        sink: (before: readonly string[], after: readonly string[], edits: readonly LineEdit[]) => {
+            const at = reports.length;
+            reports.push({ before: [...before], after: [...after], edits: [...edits] });
             live.add(at);
             return () => { live.delete(at); };
         },
-        standing: () => [...live].flatMap(at => batches[at]),
+        standing: (): Reported[] => [...live].map(at => reports[at]),
     };
 }
-
-const TICKED: Hint = { rows: [{ runtimeId: 'r1', text: '- [x] a' }] };
-const COPY: Hint = {
-    rows: [{ runtimeId: null, text: '- [ ] a' }, { runtimeId: 'r1', text: '- [ ] a' }],
-};
 
 describe('processLines', () => {
     it('writes the edited lines back with the file\'s own terminator', async () => {
@@ -148,27 +150,99 @@ describe('processLines', () => {
         expect(seen).toEqual(['- [ ] a', '']);
     });
 
-    it('hands over the hints a write raised', async () => {
+    it('hands over what a write reported, with the lines either side of it', async () => {
         const h = harness('- [ ] a\n');
-        const log = hintLog();
+        const log = writeSink();
 
-        await processLines(h.app, h.file, (lines, _eol, hint) => {
+        await processLines(h.app, h.file, (lines, _eol, edits) => {
             lines[0] = '- [x] a';
-            hint(TICKED);
+            edits.replaced(0);
             return lines;
         }, log.sink);
 
-        expect(log.standing()).toEqual([TICKED]);
+        expect(log.standing()).toEqual([{
+            before: ['- [ ] a', ''],
+            after: ['- [x] a', ''],
+            edits: [{ kind: 'replaced', at: 0 }],
+        }]);
     });
 
-    it('drops the hints of a write that changed nothing', async () => {
-        // Same bytes out as in: Obsidian fires no `modify`, so no scan follows,
-        // and a hint filed here would sit until it expired.
+    it('says nothing about a write that reported nothing', async () => {
+        // Reporting is per write site. A write that does not report is a write
+        // the scan works out for itself, which is every write before stage 2.
         const h = harness('- [ ] a\n');
-        const log = hintLog();
+        const log = writeSink();
 
-        const written = await processLines(h.app, h.file, (lines, _eol, hint) => {
-            hint(COPY);
+        const written = await processLines(h.app, h.file, (lines) => {
+            lines[0] = '- [x] a';
+            return lines;
+        }, log.sink);
+
+        expect(written).toBe(true);
+        expect(h.text()).toBe('- [x] a\n');
+        expect(log.standing()).toEqual([]);
+    });
+
+    it('drops a report that does not account for the lines it wrote', async () => {
+        // The write moved a line it never mentioned. The report is bookkeeping
+        // and the write is the user's, so the write lands and the report goes.
+        const h = harness('- [ ] a\n- [ ] b\n');
+        const log = writeSink();
+
+        const written = await processLines(h.app, h.file, (lines, _eol, edits) => {
+            lines[0] = '- [x] a';
+            lines[1] = '- [x] b';
+            edits.replaced(0);
+            return lines;
+        }, log.sink);
+
+        expect(written).toBe(true);
+        expect(h.text()).toBe('- [x] a\n- [x] b\n');
+        expect(log.standing()).toEqual([]);
+    });
+
+    it('drops a report whose indexes are not in the file', async () => {
+        const h = harness('- [ ] a\n');
+        const log = writeSink();
+
+        await processLines(h.app, h.file, (lines, _eol, edits) => {
+            lines[0] = '- [x] a';
+            edits.replaced(0);
+            edits.replaced(9);
+            return lines;
+        }, log.sink);
+
+        expect(log.standing()).toEqual([]);
+    });
+
+    it('reads a run of reports in the order they were made', async () => {
+        // Each one is in the line numbers of its own moment, so an insert
+        // shifts what the next one is talking about.
+        const h = harness('x\ny\n');
+        const log = writeSink();
+
+        await processLines(h.app, h.file, (lines, _eol, edits) => {
+            edits.splice(0, 0, 'new');
+            lines[1] = 'X';
+            edits.replaced(1);
+            return lines;
+        }, log.sink);
+
+        expect(h.text()).toBe('new\nX\ny\n');
+        expect(log.standing()[0].edits).toEqual([
+            { kind: 'inserted', at: 0, count: 1 },
+            { kind: 'replaced', at: 1 },
+        ]);
+    });
+
+    it('drops the report of a write that changed nothing', async () => {
+        // Same bytes out as in: Obsidian fires no `modify`, so no scan follows,
+        // and a claim filed here would sit until it expired.
+        const h = harness('- [ ] a\n');
+        const log = writeSink();
+
+        const written = await processLines(h.app, h.file, (lines, _eol, edits) => {
+            edits.replaced(0);
             return lines;
         }, log.sink);
 
@@ -177,51 +251,51 @@ describe('processLines', () => {
         expect(log.standing()).toEqual([]);
     });
 
-    it('drops the hints of a write that declined', async () => {
+    it('drops the report of a write that declined', async () => {
         const h = harness('- [ ] a\n');
-        const log = hintLog();
+        const log = writeSink();
 
-        await processLines(h.app, h.file, (_lines, _eol, hint) => {
-            hint(COPY);
+        await processLines(h.app, h.file, (_lines, _eol, edits) => {
+            edits.replaced(0);
             return null;
         }, log.sink);
 
         expect(log.standing()).toEqual([]);
     });
 
-    it('takes the hints back when the write throws after the callback', async () => {
-        // The file never changed, so the claims describe a state that never
-        // existed. Left standing, they would be matched against whatever the
+    it('takes the report back when the write throws after the callback', async () => {
+        // The file never changed, so the claim describes a state that never
+        // existed. Left standing, it would be weighed against whatever the
         // next scan happens to read.
         const h = harness('- [ ] a\n', { throwAfterCallback: true });
-        const log = hintLog();
+        const log = writeSink();
 
-        await expect(processLines(h.app, h.file, (lines, _eol, hint) => {
+        await expect(processLines(h.app, h.file, (lines, _eol, edits) => {
             lines[0] = '- [x] a';
-            hint(TICKED);
+            edits.replaced(0);
             return lines;
         }, log.sink)).rejects.toThrow('write failed');
 
         expect(log.standing()).toEqual([]);
     });
 
-    it('takes back the first attempt\'s hints when the callback runs again', async () => {
+    it('takes back the first attempt\'s report when the callback runs again', async () => {
         // Obsidian retries the callback on a conflicting write. Only the
-        // attempt that actually reached disk may leave claims behind.
+        // attempt that actually reached disk may leave a claim behind.
         const h = harness('- [ ] a\n', { callbackRuns: 2 });
-        const log = hintLog();
+        const log = writeSink();
         let run = 0;
 
-        await processLines(h.app, h.file, (lines, _eol, hint) => {
+        await processLines(h.app, h.file, (lines, _eol, edits) => {
             run++;
             lines[0] = `- [x] a (${run})`;
-            hint({ rows: [{ runtimeId: 'r1', text: `- [x] a (${run})` }] });
+            edits.replaced(0);
             return lines;
         }, log.sink);
 
-        expect(log.standing()).toEqual([
-            { rows: [{ runtimeId: 'r1', text: '- [x] a (2)' }] },
-        ]);
+        const standing = log.standing();
+        expect(standing).toHaveLength(1);
+        expect(standing[0].after).toEqual(['- [x] a (2)', '']);
     });
 
     it('leaves the file byte-identical when the edit declines', async () => {
@@ -234,5 +308,87 @@ describe('processLines', () => {
         // placed must leave no trace, or Obsidian fires a modify for it and a
         // rescan follows a change nobody made.
         expect(h.text()).toBe(original);
+    });
+});
+
+describe('LineEdits.splice', () => {
+    // `Array.prototype.splice` normalizes what it is handed: a negative index
+    // counts back from the end, an index past the end is clamped to it, a
+    // count past the end takes what is there, and a count that is not a
+    // number takes nothing. A report of the *arguments* would describe a file
+    // that was never written, so what is reported is what happened.
+    const cases: Array<{ name: string; at: number; del: number; items: string[] }> = [
+        { name: 'an ordinary insert', at: 1, del: 0, items: ['new'] },
+        { name: 'an index past the end', at: 9, del: 0, items: ['new'] },
+        { name: 'an index counted from the end', at: -1, del: 0, items: ['new'] },
+        { name: 'an index before the start', at: -9, del: 0, items: ['new'] },
+        { name: 'an index of Infinity', at: Infinity, del: 0, items: ['new'] },
+        { name: 'a removal', at: 1, del: 2, items: [] },
+        { name: 'a removal past the end', at: 1, del: 99, items: [] },
+        { name: 'a negative count', at: 1, del: -3, items: ['new'] },
+        { name: 'a count that is not a number', at: 1, del: NaN, items: ['new'] },
+        { name: 'a removal and an insert at once', at: 0, del: 1, items: ['x', 'y'] },
+    ];
+
+    for (const { name, at, del, items } of cases) {
+        it(`accounts for the file it wrote: ${name}`, async () => {
+            const h = harness('a\nb\nc\nd\n');
+            const log = writeSink();
+            const expected = ['a', 'b', 'c', 'd', ''];
+            expected.splice(at, del, ...items);
+
+            await processLines(h.app, h.file, (lines, _eol, edits) => {
+                edits.splice(at, del, ...items);
+                return lines;
+            }, log.sink);
+
+            expect(h.text()).toBe(expected.join('\n'));
+            // A report that does not account for the file it produced is
+            // dropped, so a report still standing is a report that was right.
+            expect(log.standing()).toHaveLength(1);
+        });
+    }
+
+    it('says where the lines landed, not where it was asked to put them', () => {
+        const lines = ['a', 'b'];
+        const { edits, reported } = recordEdits(lines);
+
+        edits.splice(9, 0, 'new');
+        edits.splice(-1, 1);
+
+        expect(lines).toEqual(['a', 'b']);
+        expect(reported).toEqual([
+            { kind: 'inserted', at: 2, count: 1 },
+            { kind: 'removed', at: 2, count: 1 },
+        ]);
+    });
+
+    it('splices the lines the write was handed', () => {
+        // Not an argument: the array is the one `processLines` is about to
+        // write, so a report cannot end up describing some other array.
+        const lines = ['a'];
+        const { edits } = recordEdits(lines);
+
+        edits.splice(1, 0, 'b');
+
+        expect(lines).toEqual(['a', 'b']);
+    });
+
+    it('reports the empty last element an append replaced', async () => {
+        // A terminated file ends in an empty element and the body takes its
+        // place, so an append is a removal and an insert — not an insert.
+        const h = harness('a\n');
+        const log = writeSink();
+
+        await processLines(h.app, h.file, (lines, _eol, edits) => {
+            appendLines(lines, ['b'], edits);
+            return lines;
+        }, log.sink);
+
+        expect(h.text()).toBe('a\nb');
+        expect(log.standing()[0].edits).toEqual([
+            { kind: 'removed', at: 1, count: 1 },
+            { kind: 'inserted', at: 1, count: 1 },
+        ]);
     });
 });

@@ -144,3 +144,97 @@ describe('identical siblings under a check', () => {
         expect(taskLines(contents).map(line => line.slice(0, 5))).toEqual(['- [x]', '- [ ]', '- [x]', '- [ ]']);
     });
 });
+
+describe('IDs held across a duplicate', () => {
+    it('the original keeps its ID and the copy is a new task', async () => {
+        const contents = new Map([[FILE, [
+            '- [ ] ポモドーロ @2026-09-21T10:00>11:00',
+            '',
+        ].join('\n')]]);
+        live = vaultSession(contents);
+        await live.scanAll();
+        const original = live.index.getTasks()[0].id;
+
+        await live.index.duplicateTask(original);
+        await live.settle(FILE);
+
+        // Two lines the ladder cannot tell apart — it would hand the old ID to
+        // whichever came first. The write knew which one it had just made.
+        const tasks = live.index.getTasks().sort((a, b) => a.line - b.line);
+        expect(tasks).toHaveLength(2);
+        expect(tasks[0].id).toBe(original);
+        expect(tasks[1].id).not.toBe(original);
+    });
+
+    it('keeps the ID of a child whose block the copy carried', async () => {
+        // The copied block holds a task child, a note, and a fence with a
+        // task-shaped line in it. Which of those are rows is the parser's
+        // answer, not the writer's — the claim is built from what was written.
+        const contents = new Map([[FILE, [
+            '- [ ] 親 @2026-09-21T10:00>11:00',
+            '\t- [ ] 子 @2026-09-21',
+            '\tmemo',
+            '\t```js',
+            '\t- [ ] これはコード',
+            '\t```',
+            '',
+        ].join('\n')]]);
+        live = vaultSession(contents);
+        await live.scanAll();
+        const before = live.index.getTasks().sort((a, b) => a.line - b.line);
+        expect(before).toHaveLength(2);
+        const held = { parent: before[0].id, child: before[1].id };
+
+        await live.index.duplicateTask(held.parent);
+        await live.settle(FILE);
+
+        const after = live.index.getTasks().sort((a, b) => a.line - b.line);
+        expect(after).toHaveLength(4);
+        expect(after[0].id).toBe(held.parent);
+        expect(after[1].id).toBe(held.child);
+        expect(after[2].id).not.toBe(held.parent);
+        expect(after[3].id).not.toBe(held.child);
+        // The fenced line is nobody's row, before or after.
+        expect(after.map(task => task.content)).toEqual(['親', '子', '親', '子']);
+    });
+
+    it('a second copy with no scan in between still knows what is new', async () => {
+        const contents = new Map([[FILE, ['- [ ] 甲 @2026-09-21T10:00>11:00', ''].join('\n')]]);
+        live = vaultSession(contents);
+        await live.scanAll();
+        const original = live.index.getTasks()[0].id;
+
+        await live.index.duplicateTask(original);
+        await live.index.duplicateTask(original);
+        await live.settle(FILE);
+
+        const tasks = live.index.getTasks().sort((a, b) => a.line - b.line);
+        expect(tasks).toHaveLength(3);
+        expect(tasks[0].id).toBe(original);
+        expect(tasks.filter(task => task.id === original)).toHaveLength(1);
+    });
+});
+
+describe('the duplicate the ladder gets wrong', () => {
+    it('a dateless copy above the original leaves the original its ID', async () => {
+        // `dayOffset` puts the copy above, and a task with no date has nothing
+        // to shift, so the two lines come out identical. By text the ladder
+        // cannot choose, and by ordinal it picks the upper one — handing the
+        // hub's task to the line that was just written. This is the case stage
+        // 2 exists for, and the measurement on a real vault agrees: without a
+        // claim, "the old ID goes to the copy and the original is renumbered".
+        const contents = new Map([[FILE, ['- [ ] 日付のないタスク', ''].join('\n')]]);
+        live = vaultSession(contents);
+        await live.scanAll();
+        const original = live.index.getTasks()[0].id;
+
+        await live.index.duplicateTask(original, { dayOffset: 1 });
+        await live.settle(FILE);
+
+        const tasks = live.index.getTasks().sort((a, b) => a.line - b.line);
+        expect(tasks).toHaveLength(2);
+        // The copy is the upper line, and it is the new task.
+        expect(tasks[0].id).not.toBe(original);
+        expect(tasks[1].id).toBe(original);
+    });
+});

@@ -5,6 +5,7 @@ import { InlineTaskWriter } from './writers/InlineTaskWriter';
 import { FrontmatterWriter } from './writers/FrontmatterWriter';
 import { TaskCloner, type GeneratedChild, type InPlaceCopyLines } from './TaskCloner';
 import type { PropertyOp } from './PropertyUpdatePlanner';
+import { WriteObserver } from './WriteObserver';
 
 /**
  * TaskRepository - タスクのファイル操作を統括するファサードクラス
@@ -15,6 +16,11 @@ export class TaskRepository {
     private inlineWriter: InlineTaskWriter;
     private frontmatterWriter: FrontmatterWriter;
     private cloner: TaskCloner;
+    /**
+     * Where the writers say what they did to a file's lines. Handed out here
+     * and connected by the index once its scanner exists (see WriteObserver).
+     */
+    private readonly writes = new WriteObserver();
 
     constructor(
         private app: App,
@@ -22,7 +28,12 @@ export class TaskRepository {
         this.fileOps = new FileOperations(app);
         this.inlineWriter = new InlineTaskWriter(app, this.fileOps);
         this.frontmatterWriter = new FrontmatterWriter(app, this.fileOps);
-        this.cloner = new TaskCloner(app, this.fileOps);
+        this.cloner = new TaskCloner(app, this.fileOps, this.writes);
+    }
+
+    /** @internal For the index to connect and, on dispose, to cut. */
+    getWriteObserver(): WriteObserver {
+        return this.writes;
     }
 
     // --- Inline Task Operations ---

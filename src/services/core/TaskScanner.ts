@@ -10,8 +10,9 @@ import { TaskIdGenerator } from '../display/TaskIdGenerator';
 import { IdentityLedger, type LedgerEntry } from './identity/IdentityLedger';
 import { HintLog, type Hint } from './identity/IdentityHints';
 import { matchFile, matchWithoutRepeatedIds } from './identity/IdentityMatcher';
+import { WriteClaims, type ClaimResult } from './identity/WriteClaims';
 import { applyIdentity, assertDistinctRuntimeIds, assertNoProvisionalIds, assertUniqueProvisionalIds } from './identity/IdentityApplier';
-import { splitLines } from '../../utils/FileLines';
+import { splitLines, type WriteSink } from '../../utils/FileLines';
 import { logDebug, logError, logInfo } from '../../log/log';
 
 /**
@@ -47,6 +48,41 @@ export class TaskScanner {
      * happen in the same step or a hint could outlive the state it describes.
      */
     private hints = new HintLog();
+
+    /**
+     * Turns what a write reports about a file's lines into a claim about its
+     * rows. Owned here because it needs both the parser and the ledger, and
+     * because its bookkeeping has to be dropped in the same step that commits
+     * a scan — see `WriteClaims`.
+     */
+    private claims = new WriteClaims(
+        (path, lines) => {
+            // The frontmatter is the cache's, which is the file as it was
+            // before the write asking this question — Obsidian updates the
+            // cache from the `modify` that has not fired yet. Nothing here can
+            // do better from inside `vault.process`. What it costs is a claim
+            // made under the old reading of a `tv-ignore` or a notation
+            // switch; the scan that follows reads the new one and refuses a
+            // claim that does not reproduce what it sees.
+            const parsed = FileParsePipeline.parse(
+                path, [...lines], this.app.metadataCache.getCache(path)?.frontmatter, this.settings);
+            // Not the same answer as a file with no tasks: an ignored file is
+            // one this pipeline declines to read, and "it has no rows" would
+            // be a claim about it.
+            if (parsed.ignored) return null;
+            // In the parser's own order, not sorted by line. A claim is
+            // weighed against `parsed.tasks` as a scan hands them to
+            // `matchFile`, so a claim ordered some other way would pair its
+            // rows with different rows than the scan read — invisibly, where
+            // two swapped rows read the same.
+            return parsed.tasks.map(task => ({ line: task.line, text: task.originalText }));
+        },
+        (path) => this.ledger.snapshotFor(path).map(entry => ({
+            runtimeId: entry.runtimeId,
+            text: entry.fingerprint.originalText,
+            line: entry.line,
+        })),
+    );
 
     constructor(
         private app: App,
@@ -170,6 +206,7 @@ export class TaskScanner {
             this.ledger.dropFile(file.path);
             // With no rows to match against, a hint has nothing left to claim.
             this.hints.dropFile(file.path);
+            this.claims.forget(file.path);
             return;
         }
 
@@ -262,6 +299,12 @@ export class TaskScanner {
                 file.path, identity.consumedHints,
                 ledgerMoved(previousRows, identity.entries),
             );
+            // Whatever this scan decided, it decided: the next write builds on
+            // the ledger rather than on what the last write thought it left. A
+            // base carried across a scan that answered its own way would hand
+            // the next claim identities the ledger does not agree with, and the
+            // texts would line up well enough that nothing later would notice.
+            this.claims.forget(file.path);
         } finally {
             this.store.endBatch();
         }
@@ -289,6 +332,8 @@ export class TaskScanner {
         // would fail to apply and cost the file its next hint anyway.
         this.hints.dropFile(oldPath);
         this.hints.dropFile(newPath);
+        this.claims.forget(oldPath);
+        this.claims.forget(newPath);
     }
 
     /**
@@ -300,6 +345,7 @@ export class TaskScanner {
         this.completionDetector.forgetFile(path);
         this.ledger.dropFile(path);
         this.hints.dropFile(path);
+        this.claims.forget(path);
     }
 
     /**
@@ -319,17 +365,47 @@ export class TaskScanner {
     }
 
     /**
-     * File what a write just claimed about a file's lines.
+     * File what a write just claimed about a file's rows.
      *
      * The write layer calls this from inside its `vault.process` callback (see
-     * `processLines`); the next scan of that file verifies the claims against
-     * what it reads and believes as many as hold up.
+     * `processLines`); the next scan of that file weighs the claim against what
+     * it reads.
      *
-     * @returns a handle that takes the claims back, for a write that raised
-     *   them and then failed.
+     * @returns a handle that takes the claim back, for a write that raised it
+     *   and then failed.
      */
     addHints(file: string, hints: readonly Hint[]): () => void {
         return this.hints.add(file, hints, Date.now());
+    }
+
+    /**
+     * Where a write reports what it did to one file's lines.
+     *
+     * Everything here is inside the writer's `vault.process` callback, so
+     * nothing may throw: a report that cannot be turned into a claim is worth
+     * a log line, never a lost write. The parse this runs is the one place a
+     * write pays for stage 2 — one pass over the file it just wrote.
+     */
+    writeSink(file: string): WriteSink {
+        return (before, after, edits) => {
+            let result: ClaimResult;
+            try {
+                result = this.claims.claim(file, before, after, edits);
+            } catch (error) {
+                logError(`[TaskScanner] could not read back ${file} after a write: ${(error as Error)?.message ?? error}`);
+                // Whatever base this file had is left alone. It describes the
+                // file as it was before this write, so it no longer fits, and
+                // a base that no longer fits is what stops the next write from
+                // building on a ledger that is older still.
+                return () => { };
+            }
+            // Both halves of what a claim leaves behind come back together:
+            // the hint the next scan would weigh, and the base the next write
+            // to this file would build on.
+            if (!result.hint) return result.withdraw;
+            const drop = this.hints.add(file, [result.hint], Date.now());
+            return () => { drop(); result.withdraw(); };
+        };
     }
 
     /**
