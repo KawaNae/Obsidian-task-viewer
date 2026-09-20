@@ -40,6 +40,7 @@ import { MenuHandler } from './interaction/menu/MenuHandler';
 import { TaskCardRenderer } from './views/taskcard/TaskCardRenderer';
 import { TaskViewHoverParent } from './views/taskcard/TaskViewHoverParent';
 import { closeAllOverlays } from './views/sharedUI/OverlayRegistry';
+import { OverdueWatcher } from './services/display/OverdueWatcher';
 import { TaskHubPanel, type TaskHubPanelOptions } from './modals/hub/TaskHubPanel';
 import { createTaskMenuExtension } from './editor/TaskMenuExtension';
 import { createDiagnosticsExtension } from './editor/DiagnosticsExtension';
@@ -75,6 +76,11 @@ export default class TaskViewerPlugin extends Plugin {
     // Day boundary check
     private lastVisualDate: string = '';
     private dateCheckInterval: ReturnType<typeof setInterval> | null = null;
+
+    // Overdue watch (clock-driven, see startOverdueWatch)
+    private overdueWatcher = new OverdueWatcher();
+    private overdueAlignTimeout: ReturnType<typeof setTimeout> | null = null;
+    private overdueInterval: ReturnType<typeof setInterval> | null = null;
 
     // Properties View color/linestyle suggest observer
     private propertySuggestObserver: PropertySuggestObserver | null = null;
@@ -354,6 +360,7 @@ export default class TaskViewerPlugin extends Plugin {
 
         // Start day boundary check (every 5 minutes)
         this.startDateBoundaryCheck();
+        this.startOverdueWatch();
 
         // Start Properties View color suggest observer
         this.propertySuggestObserver = new PropertySuggestObserver(
@@ -485,6 +492,43 @@ export default class TaskViewerPlugin extends Plugin {
     /**
      * Start checking for day boundary changes every 5 minutes
      */
+    /**
+     * Turn the passage of time into a render, but only when it changed
+     * something.
+     *
+     * A card that crosses its end or due moves no task field, so no vault
+     * event fires and its content signature still matches — the overdue icon
+     * would not appear until the task was edited. The sweep re-judges every
+     * task and notifies once when any of them moved; the signature then
+     * redraws exactly the cards whose judgement changed.
+     *
+     * The notification is a full invalidation on purpose: a span names one
+     * task, and a tick can move several. It carries no field list because
+     * NotifyCoalescer drops one without a task id anyway.
+     *
+     * The first tick lands on the next minute boundary so a card turns
+     * overdue within a second of the minute it belongs to, not up to a
+     * minute later.
+     */
+    private startOverdueWatch(): void {
+        const sweep = () => {
+            const changed = this.overdueWatcher.sweep(
+                this.readService.getAllDisplayTasks(),
+                this.settings.startHour,
+                this.settings.statusDefinitions,
+                this.readService,
+            );
+            if (changed) this.taskIndex.notifyImmediate();
+        };
+
+        const msToNextMinute = 60000 - (Date.now() % 60000);
+        this.overdueAlignTimeout = setTimeout(() => {
+            this.overdueAlignTimeout = null;
+            sweep();
+            this.overdueInterval = setInterval(sweep, 60000);
+        }, msToNextMinute);
+    }
+
     private startDateBoundaryCheck(): void {
         // Record current visual date
         this.lastVisualDate = DateUtils.getVisualDateOfNow(this.settings.startHour);
@@ -532,6 +576,16 @@ export default class TaskViewerPlugin extends Plugin {
         if (this.dateCheckInterval) {
             clearInterval(this.dateCheckInterval);
             this.dateCheckInterval = null;
+        }
+
+        // Clear the overdue watch (alignment timeout may still be pending)
+        if (this.overdueAlignTimeout) {
+            clearTimeout(this.overdueAlignTimeout);
+            this.overdueAlignTimeout = null;
+        }
+        if (this.overdueInterval) {
+            clearInterval(this.overdueInterval);
+            this.overdueInterval = null;
         }
 
         // Disconnect Properties color suggest observer

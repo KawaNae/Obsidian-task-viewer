@@ -73,11 +73,11 @@ describe('computeContentSignature', () => {
         const options = makeOptions();
 
         const sig1 = computeContentSignature(
-            task, settings, options, '', false, false,
+            task, settings, options, '', 'none', false, false,
             makeReadService({ 'child-1': { content: 'original' } }),
         );
         const sig2 = computeContentSignature(
-            task, settings, options, '', false, false,
+            task, settings, options, '', 'none', false, false,
             makeReadService({ 'child-1': { content: 'changed' } }),
         );
 
@@ -91,11 +91,11 @@ describe('computeContentSignature', () => {
         const options = makeOptions();
 
         const sig1 = computeContentSignature(
-            task, settings, options, '', false, false,
+            task, settings, options, '', 'none', false, false,
             makeReadService({ 'child-1': { statusChar: ' ' } }),
         );
         const sig2 = computeContentSignature(
-            task, settings, options, '', false, false,
+            task, settings, options, '', 'none', false, false,
             makeReadService({ 'child-1': { statusChar: 'x' } }),
         );
 
@@ -108,11 +108,11 @@ describe('computeContentSignature', () => {
         const options = makeOptions();
 
         const sig1 = computeContentSignature(
-            task, settings, options, '09:00>10:00', false, false,
+            task, settings, options, '09:00>10:00', 'none', false, false,
             makeReadService(),
         );
         const sig2 = computeContentSignature(
-            task, settings, options, '09:00>11:00', false, false,
+            task, settings, options, '09:00>11:00', 'none', false, false,
             makeReadService(),
         );
 
@@ -125,8 +125,8 @@ describe('computeContentSignature', () => {
         const options = makeOptions();
         const rs = makeReadService();
 
-        const sig1 = computeContentSignature(task, settings, options, '09:00', false, false, rs);
-        const sig2 = computeContentSignature(task, settings, options, '09:00', false, false, rs);
+        const sig1 = computeContentSignature(task, settings, options, '09:00', 'none', false, false, rs);
+        const sig2 = computeContentSignature(task, settings, options, '09:00', 'none', false, false, rs);
 
         expect(sig1).toBe(sig2);
     });
@@ -144,8 +144,8 @@ describe('computeContentSignature', () => {
         const options = makeOptions();
         const rs = makeReadService();
 
-        const sig1 = computeContentSignature(makeDisplayTask({ childEntries: [entry1] }), settings, options, '', false, false, rs);
-        const sig2 = computeContentSignature(makeDisplayTask({ childEntries: [entry2] }), settings, options, '', false, false, rs);
+        const sig1 = computeContentSignature(makeDisplayTask({ childEntries: [entry1] }), settings, options, '', 'none', false, false, rs);
+        const sig2 = computeContentSignature(makeDisplayTask({ childEntries: [entry2] }), settings, options, '', 'none', false, false, rs);
 
         expect(sig1).not.toBe(sig2);
     });
@@ -156,7 +156,7 @@ describe('computeContentSignature', () => {
         const options = makeOptions();
         const rs = makeReadService();
 
-        const sig = computeContentSignature(task, settings, options, '', false, false, rs);
+        const sig = computeContentSignature(task, settings, options, '', 'none', false, false, rs);
 
         expect(sig).not.toMatch(/[\x00-\x1f]/);
     });
@@ -169,8 +169,8 @@ describe('computeContentSignature', () => {
         const task1 = makeDisplayTask({ content: 'a', file: '|b.md' });
         const task2 = makeDisplayTask({ content: 'a|', file: 'b.md' });
 
-        const sig1 = computeContentSignature(task1, settings, options, '', false, false, rs);
-        const sig2 = computeContentSignature(task2, settings, options, '', false, false, rs);
+        const sig1 = computeContentSignature(task1, settings, options, '', 'none', false, false, rs);
+        const sig2 = computeContentSignature(task2, settings, options, '', 'none', false, false, rs);
 
         expect(sig1).not.toBe(sig2);
     });
@@ -200,9 +200,36 @@ describe('computeContentSignature', () => {
         const taskB = makeDisplayTask({ childEntries: [entryX, entryY] });
 
         const rs = makeReadService();
-        const sigA = computeContentSignature(taskA, settings, options, '', false, false, rs);
-        const sigB = computeContentSignature(taskB, settings, options, '', false, false, rs);
+        const sigA = computeContentSignature(taskA, settings, options, '', 'none', false, false, rs);
+        const sigB = computeContentSignature(taskB, settings, options, '', 'none', false, false, rs);
 
         expect(sigA).not.toBe(sigB);
+    });
+
+    it('overdue レベルが変わると sig が変わる', () => {
+        const task = makeDisplayTask();
+        const settings = makeSettings();
+        const options = makeOptions();
+        const rs = makeReadService();
+
+        const none = computeContentSignature(task, settings, options, '', 'none', false, false, rs);
+        const pastEnd = computeContentSignature(task, settings, options, '', 'past-end', false, false, rs);
+        const pastDue = computeContentSignature(task, settings, options, '', 'past-due', false, false, rs);
+
+        expect(none).not.toBe(pastEnd);
+        expect(pastEnd).not.toBe(pastDue);
+        expect(none).not.toBe(pastDue);
+    });
+
+    it('overdue レベルが同じなら sig は変わらない', () => {
+        const task = makeDisplayTask();
+        const settings = makeSettings();
+        const options = makeOptions();
+        const rs = makeReadService();
+
+        const sig1 = computeContentSignature(task, settings, options, '', 'past-end', false, false, rs);
+        const sig2 = computeContentSignature(task, settings, options, '', 'past-end', false, false, rs);
+
+        expect(sig1).toBe(sig2);
     });
 });
