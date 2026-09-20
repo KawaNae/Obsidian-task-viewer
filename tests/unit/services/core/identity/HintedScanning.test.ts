@@ -674,6 +674,24 @@ describe('an ordinary update, through the write layer', () => {
         expect(harness.ids()).toEqual([done, open]);
     });
 
+    it('is a swap only while no scan reads between the two writes', async () => {
+        // The same two unclaimed writes with one scan in between. That scan
+        // reads the halfway state — both rows done — and holds the two rows
+        // where they are, so the scan after the second write has no swap to
+        // read. The missing scan is the whole condition, and what the test
+        // above shows is that *that* order goes wrong, not how often it comes
+        // up.
+        const harness = new Harness();
+        await harness.write([TASK, DONE, '']);
+        const [open, done] = harness.ids();
+
+        await harness.write([DONE, DONE, '']);
+        expect(harness.ids()).toEqual([open, done]);
+
+        await harness.write([DONE, TASK, '']);
+        expect(harness.ids()).toEqual([open, done]);
+    });
+
     it('adopts the claim when a quick check and uncheck put the text back', async () => {
         // Both the "nothing changed" candidate and the second claim reproduce
         // what was read, because the file came back to where it started. They

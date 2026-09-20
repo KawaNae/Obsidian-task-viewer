@@ -406,3 +406,34 @@ describe('what the editor menu\'s line edit reports', () => {
         expect(b.lines()).toEqual([TASK, '']);
     });
 });
+
+describe('the two writes that make twins trade texts', () => {
+    // The sequence the scanner's tests are built on, driven through the real
+    // writer so that the lines and the reports both come from the thing that
+    // writes them. Hand-built rows are how #202 nearly pinned a shape the
+    // writer never produces.
+    const task = (line: number, statusChar: string) => makeTask({
+        file: FILE,
+        line,
+        content: 'ポモドーロ',
+        statusChar,
+        originalText: statusChar === 'x' ? DONE : TASK,
+    });
+
+    it('writes and reports exactly what the scanner tests replay', async () => {
+        const b = bench([TASK, DONE, ''].join('\n'));
+
+        // W1 checks the open row. The stored line still holds it, so the
+        // write lands on the upper twin rather than on the first text match.
+        await b.writer.updateTaskInFile(task(0, ' '), task(0, 'x'));
+        expect(b.lines()).toEqual([DONE, DONE, '']);
+        expect(only(b.filed).edits).toEqual([{ kind: 'replaced', at: 0 }]);
+        b.filed.pop();
+
+        // W2 unchecks the done row, and the file comes back to the two texts
+        // it started with — in the other order.
+        await b.writer.updateTaskInFile(task(1, 'x'), task(1, ' '));
+        expect(b.lines()).toEqual([DONE, TASK, '']);
+        expect(only(b.filed).edits).toEqual([{ kind: 'replaced', at: 1 }]);
+    });
+});
