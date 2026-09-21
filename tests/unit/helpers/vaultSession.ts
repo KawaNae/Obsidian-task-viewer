@@ -79,10 +79,16 @@ function computeCache(content: string): VaultCache {
  * session needs no separate opt-in): `isLocal` comes from `SyncDetector`,
  * exactly as it would from Obsidian's own `modify` event, rather than being
  * forced true. A write that changed bytes is followed by the `metadataCache`
- * `changed` event real Obsidian sends after `modify` — `TaskIndex` drops it
- * for a local write via `selfWrites` (`TaskIndex.ts:179-181`) and otherwise
- * runs the second, `isLocal=false` scan it always runs (`:182`, `:234-235`),
- * which is what a flow's own write gets every time.
+ * `changed` event real Obsidian sends after `modify`.
+ *
+ * `TaskIndex` drops that `changed` for a local write via `selfWrites`
+ * (`TaskIndex.ts:179-181`), but `selfWrites` is a 1000ms window keyed by path
+ * alone, not by which write set it (`PathTtlWindow`) — so a flow's own writes,
+ * landing within milliseconds of the local write that triggered them, have
+ * their `changed` swallowed by that same mark too. Measured (report.md):
+ * a normal firing's `changed` never reaches the second scan
+ * (`TaskIndex.ts:182`, `:234-235`) at ordinary speed; it takes the window
+ * actually expiring, or a manual `fireVault('changed', ...)`, to see it run.
  *
  * A second `vaultSession` over the same `contents` is a reload: a new index,
  * a new ledger, new runtime IDs.
