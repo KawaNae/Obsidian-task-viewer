@@ -19,6 +19,7 @@ import {
 import { childCopyMigrationWarning } from '../services/flow/ChildCopyMigration';
 import { FLOW_MARKER, collectFlowLineIndices, isFlowLine, matchFlowLine } from '../services/flow/FlowLineScanner';
 import { diagnosticText } from '../services/flow/diagnosticText';
+import { staticGeneratedLineWarnings } from '../services/flow/GeneratedLineCheck';
 import { TaskLineClassifier } from '../services/parsing/utils/TaskLineClassifier';
 import { TaskParser } from '../services/parsing/TaskParser';
 import { dateBlockDiagnostics } from '../services/parsing/tv-inline/DateBlockDiagnostics';
@@ -158,6 +159,12 @@ export function createDiagnosticsExtension(): Extension {
         for (const block of blocks.values()) {
             const body = parseGenBody(block.body, block.openLine + 1, cells);
             body.diagnostics.forEach(bucket);
+            // The two GeneratedLineCheck warnings a block can already earn at
+            // fire time (a completed parent, a checked child with its own
+            // command) — read here off the same literal lines, so a
+            // mistyped status shows before the block ever fires. See
+            // staticGeneratedLineWarnings for what it deliberately misses.
+            staticGeneratedLineWarnings(body).forEach(bucket);
             for (const mark of highlightGenBody(body)) {
                 const at = tokens.get(mark.line);
                 if (at) at.push(mark);
