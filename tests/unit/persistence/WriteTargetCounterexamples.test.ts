@@ -565,3 +565,56 @@ describe('F2-counter3: availability', () => {
         expect(bench.refused.map(r => r.reason.kind)).toEqual(['changed']);
     });
 });
+
+// Fourth run, on d59702bd. With the base kept past the racing scan, the file
+// could still come back to the exact content the ledger recorded, names moved
+// between its lines, and the ledger answered as a state on record. While a
+// write the ledger has not read is kept, it is not answered with at all
+// (`WriteClaims.stateFor`).
+describe('F2-counter4: the file back at the content the ledger recorded, names moved', () => {
+    it('P1: our own writes bring it back (delete X, append B, rename Y to A): the delete of X does not take Y', async () => {
+        const bench = await writeBench(['- [ ] A', '- [ ] B']);
+        const x = bench.taskAt(0);
+        const y = bench.taskAt(1);
+        const scan = await gatedScan(bench);
+        expect(await bench.writer.deleteTaskFromFile(x)).toBe(true);
+        await bench.writer.appendTaskToFile(FILE, '- [ ] B');
+        expect(await bench.writer.updateTaskInFile(y, { ...y, content: 'A', originalText: '- [ ] A' })).toBe(true);
+        scan.release();
+        await scan.done;
+        expect(bench.lines()).toEqual(['- [ ] A', '- [ ] B']);
+        expect(await bench.writer.deleteTaskFromFile(x)).toBe(false);
+        expect(bench.lines()).toEqual(['- [ ] A', '- [ ] B']);
+        expect(bench.refused.map(r => r.reason.kind)).toEqual(['changed']);
+    });
+
+    it('P2: an outside append brings it back after X1 through the race: the check of X does not land on Y', async () => {
+        const bench = await writeBench(['- [ ] A', '- [ ] B']);
+        const x = bench.taskAt(0);
+        const y = bench.taskAt(1);
+        const scan = await gatedScan(bench);
+        expect(await bench.writer.updateTaskInFile(y, { ...y, content: 'A', originalText: '- [ ] A' })).toBe(true);
+        expect(await bench.writer.deleteTaskFromFile(x)).toBe(true);
+        scan.release();
+        await scan.done;
+        bench.edit(['- [ ] A', '- [ ] B']);
+        expect(await bench.writer.updateTaskInFile(x, checked(x))).toBe(false);
+        expect(bench.lines()).toEqual(['- [ ] A', '- [ ] B']);
+        expect(bench.refused.map(r => r.reason.kind)).toEqual(['changed']);
+    });
+
+    it('V1: a silent write filed while an outside edit\'s scan read: the next write is refused until a later scan (availability)', async () => {
+        const bench = await writeBench(['- [ ] A', '- [ ] B']);
+        const a = bench.taskAt(0);
+        bench.edit(['メモ', '- [ ] A', '- [ ] B']);
+        const scan = await gatedScan(bench);
+        expect(await bench.writer.updateTaskInFile(a, checked(a))).toBe(true);
+        scan.release();
+        await scan.done;
+        expect(await bench.writer.updateTaskInFile(bench.taskAt(2), checked(bench.taskAt(2)))).toBe(false);
+        expect(bench.refused.map(r => r.reason.kind)).toEqual(['changed']);
+        await bench.scan();
+        expect(await bench.writer.updateTaskInFile(bench.taskAt(2), checked(bench.taskAt(2)))).toBe(true);
+        expect(bench.lines()).toEqual(['メモ', '- [x] A', '- [x] B']);
+    });
+});
