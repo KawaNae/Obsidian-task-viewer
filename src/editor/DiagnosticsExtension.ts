@@ -1,6 +1,6 @@
 import { Decoration, type DecorationSet, type EditorView, ViewPlugin, type ViewUpdate } from '@codemirror/view';
 import { RangeSet, type Extension, type Text } from '@codemirror/state';
-import { CodeFenceTracker } from '../utils/CodeFenceTracker';
+import { fenceMaskFor, fenceScanFor } from './EditorFenceCache';
 import {
     collectGenBlocks,
     type LocatedDiagnostic,
@@ -101,28 +101,21 @@ export function createDiagnosticsExtension(): Extension {
         memoize(inertCache, CACHE_CAP, lineText, () => inertNotationOf(lineText));
 
     /**
-     * Per-line code-fence membership, 0-indexed by (line number - 1).
-     *
-     * The scanner never turns a fenced line into a task or a flow segment
+     * Fence membership itself (and its per-doc cache) lives in
+     * EditorFenceCache, shared with every extension that must not decorate
+     * inside a fence — see that module for the OR-formula rationale. The
+     * scanner never turns a fenced line into a task or a flow segment
      * (DocumentTreeBuilder feeds the same judgment into TaskBlock), so
      * decorating one here would make the editor claim a command the file
      * does not have.
      *
-     * Two readings are OR'd, mirroring DocumentTreeBuilder: the plain one
-     * (CommonMark measures the ≤3-space allowance from column 0) and the
-     * dedented one (a fence nested under a task carries the list item's
-     * indentation). The extractor scopes its dedented reading to one
-     * subtree while this runs over the whole document; the two diverge only
-     * for a fence that is never closed, and there Obsidian's own renderer
-     * also treats the remainder as code.
-     *
-     * Computed lazily — a viewport with no task, flow or fence line never
-     * pays for it — and cached on the doc, which CodeMirror replaces on
-     * every change. The `tv-gen` diagnostics ride along: they need the same
-     * walk of the same lines, so one pass answers both.
+     * DocAnalysis itself is computed lazily — a viewport with no task, flow
+     * or fence line never pays for it — and cached on the doc, which
+     * CodeMirror replaces on every change. The `tv-gen` diagnostics ride
+     * along: they need the same walk of the same lines, so one pass answers
+     * both.
      */
     interface DocAnalysis {
-        fenced: boolean[];
         /** `tv-gen` diagnostics bucketed by 0-indexed line. */
         gen: Map<number, LocatedDiagnostic[]>;
         /**
@@ -139,8 +132,11 @@ export function createDiagnosticsExtension(): Extension {
         if (docCache?.doc === doc) return docCache.analysis;
         const lines: string[] = [];
         for (let n = 1; n <= doc.lines; n++) lines.push(doc.line(n).text);
-        const scan = CodeFenceTracker.scan(lines);
-        const dedented = CodeFenceTracker.subtreeMask(lines);
+        // Fence membership itself is computed once and shared across every
+        // editor extension via EditorFenceCache — reading it here rather
+        // than rescanning keeps this analysis and TaskMenuExtension's from
+        // ever answering "is this line fenced" differently.
+        const scan = fenceScanFor(doc);
 
         const { blocks, diagnostics } = collectGenBlocks(lines, scan);
         const gen = new Map<number, LocatedDiagnostic[]>();
@@ -156,7 +152,7 @@ export function createDiagnosticsExtension(): Extension {
         };
         diagnostics.forEach(bucket);
         const cells = blocks.size > 0
-            ? declaredCells(lines, lines.map((_, i) => scan.fenced[i] || dedented[i]))
+            ? declaredCells(lines, fenceMaskFor(doc))
             : undefined;
         const tokens = new Map<number, HighlightMark[]>();
         for (const block of blocks.values()) {
@@ -169,15 +165,10 @@ export function createDiagnosticsExtension(): Extension {
             }
         }
 
-        const analysis: DocAnalysis = {
-            fenced: lines.map((_, i) => scan.fenced[i] || dedented[i]),
-            gen,
-            tokens,
-        };
+        const analysis: DocAnalysis = { gen, tokens };
         docCache = { doc, analysis };
         return analysis;
     };
-    const fenceMaskFor = (doc: Text): boolean[] => analyze(doc).fenced;
 
     /**
      * Owner task line of a flow child line: its structural parent (nearest

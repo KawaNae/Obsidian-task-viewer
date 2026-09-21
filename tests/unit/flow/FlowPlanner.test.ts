@@ -409,6 +409,33 @@ describe('FlowPlanner', () => {
 
             expect(effect.warnings).toEqual([]);
         });
+
+        it('G1: warns, without touching the line, for a generated child that is checked and carries its own command', () => {
+            // The child is written byte-for-byte as the block wrote it —
+            // only the parent's own status is normalized — but a checked
+            // child with a `==>` of its own will not fire until it is
+            // unchecked and rechecked by hand, so it is worth flagging.
+            const effect = planGenerated(
+                'every mon use("週報")',
+                ['- [ ] 週報', '    - [x] 経費確認 ==> every 1mo'],
+                { startDate: '2026-06-29' },
+            );
+
+            expect(effect.children).toEqual([{ depth: 1, body: '- [x] 経費確認 ==> every 1mo' }]);
+            expect(effect.warnings.map(w => w.code)).toEqual(['gen.generated-child-status']);
+            expect(effect.warnings[0].params).toEqual({ status: 'x' });
+        });
+
+        it('does not warn for a generated child that is checked but carries no command of its own', () => {
+            const effect = planGenerated(
+                'every mon use("週報")',
+                ['- [ ] 週報', '    - [x] 定型の確認'],
+                { startDate: '2026-06-29' },
+            );
+
+            expect(effect.children).toEqual([{ depth: 1, body: '- [x] 定型の確認' }]);
+            expect(effect.warnings).toEqual([]);
+        });
     });
 
     describe('dates: the whole date block, for the block that has to write one', () => {
@@ -466,5 +493,34 @@ describe('FlowPlanner', () => {
 
             expect(effect.newTask.content).toBe('@2026-07-06>2026-07-10>2026-07-12');
         });
+    });
+});
+
+/**
+ * What holds the other fires together.
+ *
+ * An ordinary fire and a same-file move write their instance and then rewrite
+ * or remove the original, and the second write finds the original by its text
+ * (`findTaskLineNumber`). That search can only tell the original from the line
+ * just written while the two read differently — and for a task whose instance
+ * repeats its wording, the whole of the difference is the status character.
+ * A deletion fire is where the difference vanished, because the line it
+ * removes never fired; that one stopped resolving twice and became one write.
+ * These two hold the value the rest still leans on.
+ */
+describe('an instance always starts unchecked', () => {
+    it('a recurrence starts unchecked, whatever status fired it', () => {
+        const next = createNextOf(plan('every mon', { startDate: '2026-06-29', statusChar: 'x' }));
+
+        expect(next.newTask.statusChar).toBe(' ');
+    });
+
+    it('a generated parent starts unchecked even when the block wrote it checked', () => {
+        const effect = planGenerated('every mon use("週報")', ['- [x] 週報'], { startDate: '2026-06-29' });
+
+        expect(effect.parentLine.startsWith('- [ ] 週報')).toBe(true);
+        // Dropped, not refused — and said out loud, because the line written
+        // is not the line the block describes.
+        expect(effect.warnings.map(w => w.code)).toContain('gen.generated-status');
     });
 });

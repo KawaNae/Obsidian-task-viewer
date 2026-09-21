@@ -139,46 +139,122 @@ obsidian obsidian-task-viewer:delete id=abc123
 
 ### duplicate — タスク複製
 
+`day-offset` が複写を並べる軸を決め、`count` が本数を決めます。
+
 ```bash
+# 元の続きに1つ。元が 10:00>11:30 なら複写は 11:30>13:00
 obsidian obsidian-task-viewer:duplicate id=abc123
+
+# 元の続きに3つ、時刻を連ねる
+obsidian obsidian-task-viewer:duplicate id=abc123 count=3
+
+# 日付を1日ずらして3つ（元の直前、新しい日付が上）
 obsidian obsidian-task-viewer:duplicate id=abc123 day-offset=1 count=3
 ```
+
+`day-offset` を指定しない複写は、元タスクの続きに置かれます。**実効 end から始まり、長さを保ちます**。end を書いていないタスクの実効 end は開始の1時間後です。複写は元タスクとその子行の後ろに入り、`count` が2以上ならその長さぶんずつ連なります。
+
+時刻を持たないタスク（終日、日数の範囲、日付なし）はずらす先が無いので、複写は同じ行がそのまま増えます。位置は同じく元タスクの続きです。
+
+子の行は日付や時刻を含めてそのまま写されます。due はどちらの軸でもずらしません。締め切りは予定の時刻とは別の属性だからです。
 
 | フラグ | 必須 | 説明 |
 |-------|------|------|
 | `id` | ○ | タスクID |
-| `day-offset` | | 日付をシフトする日数（デフォルト: 0） |
+| `day-offset` | | 日付をシフトする日数（デフォルト: 0。0 なら時刻の軸で連ねる） |
 | `count` | | コピー数（デフォルト: 1） |
 
 **戻り値:** `{ "duplicated": "abc123" }`
 
 ### tasks-for-date-range — 日付範囲のタスク取得
 
+期間の判定は from/to そのもの（visual な日付、下の list との違いを参照）で行われます。単純フィルタフラグは、その結果にさらに絞り込みをかけるだけで、期間の判定には関与しません。
+
 ```bash
 obsidian obsidian-task-viewer:tasks-for-date-range from=2026-03-01 to=2026-03-31 output-fields=content,startDate
+
+# 単純フィルタを重ねる（期間は from/to のまま、status で絞り込むだけ）
+obsidian obsidian-task-viewer:tasks-for-date-range from=2026-03-01 to=2026-03-31 status=x tag=work
 ```
 
 | フラグ | 必須 | 説明 |
 |-------|------|------|
 | `from` | ○ | クエリ窓の開始（YYYY-MM-DD またはプリセット、inclusive） |
 | `to` | ○ | クエリ窓の終了（YYYY-MM-DD またはプリセット、inclusive） |
+| `file` | | ファイルパスで絞り込み（`.md` は自動補完） |
+| `status` | | ステータス文字（カンマ区切り） |
+| `tag` | | タグ名（カンマ区切り、`#` は自動除去） |
+| `content` | | コンテンツの部分一致 |
+| `due` | | 締切日 = 指定値 |
+| `leaf` | | 子タスクを持たないタスクのみ |
+| `property` | | カスタムプロパティ（`key:value` 形式） |
+| `color` | | カード色で絞り込み（カンマ区切り） |
+| `type` | | タスク notation で絞り込み |
+| `root` | | 親タスクを持たないタスクのみ |
+| `filter-file` | | FilterState JSON (.json) またはビューテンプレート (.md)。単純フィルタフラグより優先（list と同じ挙動） |
+| `list` | | ピン留めリスト名（`.md` テンプレート用） |
 | `sort` | | ソートルール |
 | `limit` | | 最大件数（デフォルト: 100, 0=件数のみ, all=無制限） |
 
 ### categorized-tasks-for-date-range — 日付範囲のタスク（分類済み）
 
-日付範囲のタスクを日付ごとに allDay / timed / dueOnly に分類して返します。日付への所属は、allDay と timed が startHour を考慮した visual な日付（タイムラインの表示と同じ基準）、dueOnly が締切のカレンダー日付で判定されます。
+日付範囲のタスクを日付ごとに allDay / timed / dueOnly に分類して返します。日付への所属は、allDay と timed が startHour を考慮した visual な日付（タイムラインの表示と同じ基準）、dueOnly が締切のカレンダー日付で判定されます。単純フィルタフラグはこの分類の後に絞り込みをかけるだけで、期間・分類の判定には関与しません。
 
 ```bash
-obsidian obsidian-task-viewer:categorized-tasks-for-date-range from=2026-03-01 to=2026-03-31
+obsidian obsidian-task-viewer:categorized-tasks-for-date-range from=2026-03-01 to=2026-03-31 status=x
 ```
 
 | フラグ | 必須 | 説明 |
 |-------|------|------|
 | `from` | ○ | クエリ窓の開始（YYYY-MM-DD またはプリセット、inclusive） |
 | `to` | ○ | クエリ窓の終了（YYYY-MM-DD またはプリセット、inclusive） |
+| `file` | | ファイルパスで絞り込み（`.md` は自動補完） |
+| `status` | | ステータス文字（カンマ区切り） |
+| `tag` | | タグ名（カンマ区切り、`#` は自動除去） |
+| `content` | | コンテンツの部分一致 |
+| `due` | | 締切日 = 指定値 |
+| `leaf` | | 子タスクを持たないタスクのみ |
+| `property` | | カスタムプロパティ（`key:value` 形式） |
+| `color` | | カード色で絞り込み（カンマ区切り） |
+| `type` | | タスク notation で絞り込み |
+| `root` | | 親タスクを持たないタスクのみ |
+| `filter-file` | | FilterState JSON (.json) またはビューテンプレート (.md)。単純フィルタフラグより優先（list と同じ挙動） |
+| `list` | | ピン留めリスト名（`.md` テンプレート用） |
 
 **戻り値:** `{ "2026-03-01": { "allDay": [...], "timed": [...], "dueOnly": [...] }, ... }`
+
+### export-image — ビューを画像として保存
+
+Timeline / Calendar / Schedule / Kanban ビューを PNG として書き出します。`view=` は既に開いているビューをそのまま書き出し、`template=` またはビュー設定フラグ（`days-to-show` など）を1つでも渡すと一時的なビューを作って書き出します。
+
+```bash
+# 既に開いている timeline ビューをそのまま書き出す
+obsidian obsidian-task-viewer:export-image view=timeline
+
+# 一時ビューを作って書き出す（daysToShow=5、開始日=2026-03-01）
+obsidian obsidian-task-viewer:export-image view=timeline days-to-show=5 anchor-date=2026-03-01
+
+# 保存済みテンプレートから書き出す
+obsidian obsidian-task-viewer:export-image template="My Timeline"
+```
+
+| フラグ | 必須 | 説明 |
+|-------|------|------|
+| `view` | ※ | `timeline` \| `calendar` \| `schedule` \| `kanban`（`template=` 未指定なら必須） |
+| `template` | ※ | 保存済みビューテンプレート名（ビュー種別を推論。`view=` 未指定なら必須） |
+| `name` | | 書き出したビューの表示名 |
+| `anchor-date` | | 日付アンカー（`YYYY-MM-DD`）。「今日」ボタンと同じ役割を任意の日に対して行う。ビューごとのスキーマの日付フィールドに解決される |
+| `width` | | 描画幅（px、デフォルト: 1200） |
+| `output-folder` | | 出力先フォルダ（vault相対 or 絶対パス。デフォルト: `task-viewer-export`） |
+| `filename` | | 出力ファイル名（デフォルト: `{ビュー種別}_{日付}.png`） |
+| `wait` | | 描画後の待機時間（ms、デフォルト: 500） |
+| `keep-open` | | 書き出し後も一時ウィンドウを開いたままにする |
+
+対象ビュー自身の設定フラグもそのまま渡せます（例: timeline の `days-to-show`、1以上30以下の整数）。これを1つでも渡すと一時ビューでの書き出しになります。
+
+**戻り値:** `{ "path": "...", "width": 1200, "height": 2096, "captureDurationMs": 771, "totalDurationMs": 1527, "resolvedAnchor": "2026-03-01", "renderedRange": { "from": "2026-03-01", "to": "2026-03-05" } }`
+
+`resolvedAnchor`/`renderedRange` は、書き出したビューが自分で報告できる場合だけ含まれます（Timeline/Calendar/Schedule。Kanban には日付レンジの概念が無いため含まれません）。値は実際に描画された範囲そのものです。Calendar の `renderedRange` は暦月ではなく、実際のグリッドが描く週開始揃えの42日ぶんです。`anchor-date` 等を渡さず既に開いているビューをそのまま書き出す場合も、開いているビューが実際に表示している範囲がそのまま返ります。
 
 ### insert-child-task — 子タスク挿入
 

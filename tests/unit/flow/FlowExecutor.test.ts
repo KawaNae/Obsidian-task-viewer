@@ -14,7 +14,8 @@ function makeRepository() {
         appendTaskWithChildren: vi.fn().mockResolvedValue(undefined),
         updateTaskInFile: vi.fn().mockResolvedValue(undefined),
         stripFlow: vi.fn().mockResolvedValue(undefined),
-        deleteTaskFromFile: vi.fn().mockResolvedValue(undefined),
+        deleteTaskFromFile: vi.fn().mockResolvedValue(true),
+        replaceTaskWithInstances: vi.fn().mockResolvedValue(true),
     };
 }
 
@@ -122,6 +123,21 @@ describe('FlowExecutor', () => {
         expect(repository.updateTaskInFile).not.toHaveBeenCalled();
         expect(repository.appendTaskWithChildren.mock.invocationCallOrder[0])
             .toBeLessThan(repository.deleteTaskFromFile.mock.invocationCallOrder[0]);
+    });
+
+    it('says so when the move wrote the copy but could not delete the original', async () => {
+        // 移送先には書かれたので、元が消せないとタスクが2か所に居る。move で
+        // これだけは画面に何も出ないまま起きるので、通知で伝える。
+        const repository = makeRepository();
+        repository.deleteTaskFromFile.mockResolvedValue(false);
+        const { executor } = makeExecutor(repository);
+        Notice.messages.length = 0;
+
+        await executor.handleTaskCompletion(flowTask('move([[Archive]])'));
+        await flush();
+
+        expect(repository.appendTaskWithChildren).toHaveBeenCalledTimes(1);
+        expect(Notice.messages).toHaveLength(1);
     });
 
     it('does not fire for non-complete statuses (Doing)', async () => {
@@ -298,18 +314,20 @@ describe('fireAndDelete', () => {
         Notice.messages.length = 0;
     });
 
-    it('writes the next instance, then deletes the original', async () => {
+    it('writes the next instance and takes the original away in one write', async () => {
         const repository = makeRepository();
         const { executor } = makeExecutor(repository);
         const task = flowTask('every mon', { statusChar: ' ' });
 
         await executor.fireAndDelete(task);
 
-        expect(repository.insertRecurrenceForTask).toHaveBeenCalledTimes(1);
-        expect(repository.deleteTaskFromFile).toHaveBeenCalledWith(task);
-        // 行の特定は originalText 照合なので、読む側が済むまで元行は動かせない。
-        expect(repository.insertRecurrenceForTask.mock.invocationCallOrder[0])
-            .toBeLessThan(repository.deleteTaskFromFile.mock.invocationCallOrder[0]);
+        // 挿入と削除を分けると、2本目が originalText で行を探し直すことになる。
+        // 次回分は元の行と同じ本文になりうるので、その探索は当てにできない。
+        expect(repository.replaceTaskWithInstances).toHaveBeenCalledTimes(1);
+        expect(repository.replaceTaskWithInstances)
+            .toHaveBeenCalledWith(task, [expect.objectContaining({ kind: 'recurrence' })]);
+        expect(repository.insertRecurrenceForTask).not.toHaveBeenCalled();
+        expect(repository.deleteTaskFromFile).not.toHaveBeenCalled();
         // 行ごと消えるのだから、コマンドを剥がす書き込みは無駄でしかない。
         expect(repository.stripFlow).not.toHaveBeenCalled();
     });
@@ -321,7 +339,8 @@ describe('fireAndDelete', () => {
 
         await executor.fireAndDelete(flowTask('every mon', { statusChar: ' ' }));
 
-        expect(repository.insertRecurrenceForTask).toHaveBeenCalledTimes(1);
+        expect(repository.replaceTaskWithInstances)
+            .toHaveBeenCalledWith(expect.anything(), [expect.objectContaining({ kind: 'recurrence' })]);
     });
 
     it('does not archive a move: a delete was not a request to keep a copy', async () => {
@@ -331,8 +350,8 @@ describe('fireAndDelete', () => {
         await executor.fireAndDelete(flowTask('every mon move([[Archive]])', { statusChar: ' ' }));
 
         expect(repository.appendTaskWithChildren).not.toHaveBeenCalled();
-        expect(repository.insertRecurrenceForTask).toHaveBeenCalledTimes(1);
-        expect(repository.deleteTaskFromFile).toHaveBeenCalledTimes(1);
+        expect(repository.replaceTaskWithInstances)
+            .toHaveBeenCalledWith(expect.anything(), [expect.objectContaining({ kind: 'recurrence' })]);
     });
 
     it('deletes without generating when until has expired', async () => {
@@ -341,8 +360,8 @@ describe('fireAndDelete', () => {
 
         await executor.fireAndDelete(flowTask('every mon until(2026-06-30)', { statusChar: ' ' }));
 
-        expect(repository.insertRecurrenceForTask).not.toHaveBeenCalled();
-        expect(repository.deleteTaskFromFile).toHaveBeenCalledTimes(1);
+        // 書くものが無いだけで、消す1本は同じ呼び出しで出る。
+        expect(repository.replaceTaskWithInstances).toHaveBeenCalledWith(expect.anything(), []);
     });
 
     it('keeps the task when the fire fails, and says why', async () => {
@@ -355,8 +374,7 @@ describe('fireAndDelete', () => {
             flowTask('every mon setDue(end + 1d)', { statusChar: ' ' }));
 
         expect(removed).toBe(false);
-        expect(repository.insertRecurrenceForTask).not.toHaveBeenCalled();
-        expect(repository.deleteTaskFromFile).not.toHaveBeenCalled();
+        expect(repository.replaceTaskWithInstances).not.toHaveBeenCalled();
         expect(Notice.messages).toHaveLength(1);
         expect(Notice.messages[0]).toContain('the task was not deleted');
     });
@@ -375,6 +393,21 @@ describe('fireAndDelete', () => {
         expect(expired).toBe(true);
     });
 
+    it('reports the task still there when the write found no line', async () => {
+        // 行が解決できなければ次回分も書かれていない。タスクは消えていないので
+        // 答えは no で、ユーザーには通知で伝える。呼んだ側が黙って再試行しても
+        // 二重には書かれないが、消えたと思わせるわけにはいかない。
+        const repository = makeRepository();
+        repository.replaceTaskWithInstances.mockResolvedValue(false);
+        const { executor } = makeExecutor(repository);
+        Notice.messages.length = 0;
+
+        const removed = await executor.fireAndDelete(flowTask('every mon', { statusChar: ' ' }));
+
+        expect(removed).toBe(false);
+        expect(Notice.messages).toHaveLength(1);
+    });
+
     it('resolves only after the work is done, so the caller can rescan', async () => {
         const repository = makeRepository();
         const { executor, taskIndex } = makeExecutor(repository);
@@ -382,7 +415,7 @@ describe('fireAndDelete', () => {
         await executor.fireAndDelete(flowTask('every mon', { statusChar: ' ' }));
 
         // await が返った時点で書き込みも再スキャン要求も済んでいる。
-        expect(repository.deleteTaskFromFile).toHaveBeenCalledTimes(1);
+        expect(repository.replaceTaskWithInstances).toHaveBeenCalledTimes(1);
         expect(taskIndex.waitForScan).toHaveBeenCalledTimes(1);
     });
 
@@ -395,18 +428,17 @@ describe('fireAndDelete', () => {
 
         // 解決できない行は既に無い行で、それは呼んだ側が求めていた状態そのもの。
         expect(removed).toBe(true);
-        expect(repository.deleteTaskFromFile).not.toHaveBeenCalled();
+        expect(repository.replaceTaskWithInstances).not.toHaveBeenCalled();
     });
 
     it('resolves even when a write throws', async () => {
         const repository = makeRepository();
-        repository.insertRecurrenceForTask.mockRejectedValueOnce(new Error('disk on fire'));
+        repository.replaceTaskWithInstances.mockRejectedValueOnce(new Error('disk on fire'));
         const { executor } = makeExecutor(repository);
 
         const removed = await executor.fireAndDelete(flowTask('every mon', { statusChar: ' ' }));
 
         expect(removed).toBe(false);
-        expect(repository.deleteTaskFromFile).not.toHaveBeenCalled();
     });
 
     it('runs behind a completion already in the queue', async () => {
@@ -422,6 +454,6 @@ describe('fireAndDelete', () => {
         await Promise.all([completion, deletion]);
 
         expect(repository.stripFlow.mock.invocationCallOrder[0])
-            .toBeLessThan(repository.deleteTaskFromFile.mock.invocationCallOrder[0]);
+            .toBeLessThan(repository.replaceTaskWithInstances.mock.invocationCallOrder[0]);
     });
 });

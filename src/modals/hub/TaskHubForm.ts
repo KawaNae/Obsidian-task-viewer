@@ -276,6 +276,16 @@ export class TaskHubForm {
         input.addEventListener('input', (e: Event) => {
             if (!(e as InputEvent).isComposing && !this.refreshing) show(false);
         });
+        // IME 確定後に候補を絞り直す唯一の契機。Chromium では確定の 'input'
+        // が isComposing=true で飛ぶので（bracketPairing.ts の同じ箇所を
+        // 参照）、上の listener はそれを捨てて何も更新しない。WebKit は
+        // 'compositionend' が先で確定の 'input' が後に isComposing=false で
+        // 来るため、そちらではこの listener が確定前の値で走り、後続の
+        // 'input' が確定後の値で絞り直す。どちらの順序でも 1 回は確定後の
+        // 値で走り、二重に走っても候補の再描画が 1 回増えるだけである。
+        input.addEventListener('compositionend', () => {
+            if (!this.refreshing) show(false);
+        });
         input.addEventListener('focus', () => show(!input.value));
         input.addEventListener('blur', () => suggest.close());
         input.addEventListener('keydown', (e: KeyboardEvent) => {
@@ -348,7 +358,9 @@ export class TaskHubForm {
         this.task = { ...this.task, ...updates };
         const id = this.task.id;
         this.commitChain = this.commitChain
-            .then(() => this.deps.writeService.updateTask(id, updates))
+            // 書けたかどうかはここでは見ない。失敗の通知と巻き戻しは
+            // TaskIndex が行い、ハブは refresh でその結果を受ける。
+            .then(async () => { await this.deps.writeService.updateTask(id, updates); })
             .catch((e) => logError(`[TaskHubForm] commit failed: ${e instanceof Error ? e.message : String(e)}`));
     }
 

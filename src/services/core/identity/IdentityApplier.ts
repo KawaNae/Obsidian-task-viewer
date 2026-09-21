@@ -75,3 +75,33 @@ export function assertNoProvisionalIds(tasks: Task[], isProvisional: (id: string
         throw new Error(`Provisional task IDs reached the store: ${[...offenders].join(', ')}`);
     }
 }
+
+/**
+ * Throw if one runtime ID is about to be handed to two rows of a file.
+ *
+ * What the store does with it is lose a task: it is keyed by ID, so the second
+ * row overwrites the first and the file's tasks come out one short of the lines
+ * on disk. The ledger keeps both positions but one entry, and no later scan
+ * puts it back — the state is stable and wrong, and the task whose ID went
+ * missing refuses every write with "not found" while its line sits there in
+ * plain sight.
+ *
+ * Three things would have to fail for this to fire. Rung 0 refuses a claim that
+ * names a row twice; a result that repeats an ID anyway is thrown out and the
+ * file matched again with no claims at all (`matchWithoutRepeatedIds`); and the
+ * ladder that then answers takes each previous row at most once. What is left
+ * for this to catch is the ladder itself learning to repeat a row — which is
+ * why it is an assertion and not a recovery. The recovery is upstream.
+ */
+export function assertDistinctRuntimeIds(entries: Array<{ runtimeId: string }>): void {
+    const seen = new Set<string>();
+    const shared = new Set<string>();
+    for (const entry of entries) {
+        if (seen.has(entry.runtimeId)) shared.add(entry.runtimeId);
+        seen.add(entry.runtimeId);
+    }
+
+    if (shared.size > 0) {
+        throw new Error(`Runtime IDs shared by more than one row: ${[...shared].join(', ')}`);
+    }
+}

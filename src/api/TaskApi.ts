@@ -13,7 +13,8 @@ import { DateUtils } from '../utils/DateUtils';
 import { parseDateTimeFlag } from '../cli/CliFilterBuilder';
 import { parseDatePreset } from '../cli/CliDatePresetParser';
 import { DateResolver } from '../services/filter/DateResolver';
-import { buildFilterFromParams, assertValidFilterState } from './FilterParamsBuilder';
+import { buildFilterFromParams, buildRangeFilterFromParams, assertValidFilterState } from './FilterParamsBuilder';
+import type { FilterState } from '../services/filter/FilterTypes';
 import { loadFilterFile } from './FilterFileLoader';
 import {
     assertParams, renderParamTable,
@@ -121,7 +122,7 @@ ${renderParamTable(DUPLICATE_SCHEMA).replace(/^/gm, '    ')}
     TasksForDateRangeParams:
 ${renderParamTable(TASKS_FOR_DATE_RANGE_SCHEMA).replace(/^/gm, '    ')}
 
-  categorizedTasksForDateRange(params: CategorizedTasksForDateRangeParams): CategorizedTasksForDateRangeResult
+  categorizedTasksForDateRange(params: CategorizedTasksForDateRangeParams): Promise<CategorizedTasksForDateRangeResult>
     Get tasks in a date range, categorized into allDay/timed/dueOnly per date.
     allDay/timed membership follows the visual span; dueOnly the calendar due.
 
@@ -244,7 +245,7 @@ Examples
   });
 
   // Get categorized tasks for a date range (or single date)
-  api.categorizedTasksForDateRange({ from: '2026-03-23', to: '2026-03-29' });
+  await api.categorizedTasksForDateRange({ from: '2026-03-23', to: '2026-03-29' });
 
   // Insert a child task
   await api.insertChildTask({ parentId: 'tv-inline:daily/2026-03-15.md:seq:5', content: 'Sub-task' });
@@ -473,6 +474,7 @@ export class TaskApi {
         }
 
         const insertedLine = await this.writeService.createTask(params.file, line, params.heading);
+        if (insertedLine < 0) throw new TaskApiError(`Task could not be written to: ${params.file}`);
 
         const created = this.readService.getTaskByFileLine(params.file, insertedLine);
         if (!created) throw new TaskApiError('Task was created but could not be found after scan');
@@ -534,7 +536,11 @@ export class TaskApi {
             }
         }
 
-        await this.writeService.updateTask(params.id, updates);
+        // A write that could not be placed leaves the index reverted to the
+        // former values, so reading the task back would describe a change that
+        // never reached the file and report it as a success.
+        const written = await this.writeService.updateTask(params.id, updates);
+        if (!written) throw new TaskApiError(`Task could not be written: ${params.id}`);
 
         const updated = this.readService.getTask(params.id);
         if (!updated) throw new TaskApiError(`Task not found after update: ${params.id}`);
@@ -552,12 +558,27 @@ export class TaskApi {
         if (!task) throw new TaskApiError(`Task not found: ${params.id}`);
         if (task.isReadOnly) throw new TaskApiError(`Task ${params.id} is read-only (parserId=${task.parserId})`);
 
-        await this.writeService.deleteTask(params.id);
+        const removed = await this.writeService.deleteTask(params.id);
+        if (!removed) throw new TaskApiError(`Task could not be deleted: ${params.id}`);
         return { deleted: params.id };
     }
 
     /**
-     * Duplicate a task with optional date shifting.
+     * Duplicate a task.
+     *
+     * `dayOffset` picks the axis the copies run along and `count` says how
+     * many there are. Without an offset they run along the clock, as next:
+     * the first starts where the task ends — an hour on when no end was
+     * written, at the written or inherited end when it has one — keeps its
+     * length, and each further copy starts where the one before it ends.
+     * They are written after the task and its children. With an offset they
+     * run along the calendar, one per day from `dayOffset`, written before
+     * the task with the latest first.
+     *
+     * A task that holds no time of day — a bare date, a span of whole days,
+     * a line with no dates — has no slot to move out of, so its copies are
+     * the line again, written out unchanged. Child lines travel verbatim on
+     * either axis, dates and times included, and a due date never shifts.
      */
     async duplicate(params: DuplicateParams): Promise<DuplicateResult> {
         assertParams(params, DUPLICATE_SCHEMA, 'duplicate');
@@ -569,12 +590,14 @@ export class TaskApi {
         }
         if (params.count !== undefined) {
             if (typeof params.count !== 'number' || isNaN(params.count)) throw new TaskApiError('count must be a number');
+            if (!Number.isInteger(params.count)) throw new TaskApiError('count must be a whole number');
             if (params.count < 1) throw new TaskApiError('count must be at least 1');
         }
-        await this.writeService.duplicateTask(params.id, {
+        const written = await this.writeService.duplicateTask(params.id, {
             dayOffset: params.dayOffset,
             count: params.count,
         });
+        if (!written) throw new TaskApiError(`Task could not be duplicated: ${params.id}`);
         return { duplicated: params.id };
     }
 
@@ -583,10 +606,10 @@ export class TaskApi {
      */
     async tasksForDateRange(params: TasksForDateRangeParams): Promise<TaskListResult> {
         assertParams(params, TASKS_FOR_DATE_RANGE_SCHEMA, 'tasksForDateRange');
-        if (params.filter) assertValidFilterState(params.filter);
+        const filterState = await this.resolveRangeFilter(params);
         const from = this.resolveWindowBound(params.from, 'from');
         const to = this.resolveWindowBound(params.to, 'to');
-        let tasks = this.readService.getTasksForDateRange(from, to, params.filter, { includeInvalid: true });
+        let tasks = this.readService.getTasksForDateRange(from, to, filterState ?? undefined, { includeInvalid: true });
         const sortState = buildSortState(params.sort);
         tasks = [...tasks];
         TaskSorter.sort(tasks, sortState);
@@ -603,13 +626,13 @@ export class TaskApi {
     /**
      * Get tasks in a date range, categorized into allDay/timed/dueOnly per date.
      */
-    categorizedTasksForDateRange(params: CategorizedTasksForDateRangeParams): CategorizedTasksForDateRangeResult {
+    async categorizedTasksForDateRange(params: CategorizedTasksForDateRangeParams): Promise<CategorizedTasksForDateRangeResult> {
         assertParams(params, CATEGORIZED_TASKS_FOR_DATE_RANGE_SCHEMA, 'categorizedTasksForDateRange');
-        if (params.filter) assertValidFilterState(params.filter);
+        const filterState = await this.resolveRangeFilter(params);
         const startHour = this.plugin.settings.startHour;
         const from = this.resolveWindowBound(params.from, 'from');
         const to = this.resolveWindowBound(params.to, 'to');
-        const tasks = this.readService.getTasksForDateRange(from, to, params.filter, { includeInvalid: true });
+        const tasks = this.readService.getTasksForDateRange(from, to, filterState ?? undefined, { includeInvalid: true });
         const split = splitTasks(tasks, { type: 'visual-date', startHour });
         const dates = DateUtils.getDateRange(from, to);
         const map = categorizeTasksByDate(split, dates, startHour);
@@ -633,7 +656,8 @@ export class TaskApi {
         const task = this.readService.getTask(params.parentId);
         if (!task) throw new TaskApiError(`Task not found: ${params.parentId}`);
         if (task.isReadOnly) throw new TaskApiError(`Task ${params.parentId} is read-only (parserId=${task.parserId})`);
-        await this.writeService.insertChildTask(params.parentId, `- [ ] ${params.content}`);
+        const written = await this.writeService.insertChildTask(params.parentId, `- [ ] ${params.content}`);
+        if (!written) throw new TaskApiError(`Child task could not be written under: ${params.parentId}`);
         return { parentId: params.parentId };
     }
 
@@ -652,6 +676,30 @@ export class TaskApi {
         const { weekStartDay, startHour } = this.plugin.settings;
         const window = DateResolver.resolve(parsed, weekStartDay, startHour);
         return side === 'from' ? window.start : window.end;
+    }
+
+    /**
+     * Resolve filterFile/list → filter, then build a FilterState from the
+     * simple fields. Same override order as `list` (params.filter wins,
+     * then filterFile — `list` picks one pinned list out of a .md template —
+     * then the simple per-field flags), but never a date-window condition:
+     * from/to on these params is the range's own window bound, already
+     * applied separately via getTasksForDateRange, so buildRangeFilterFromParams
+     * has no date/from/to field to read in the first place.
+     */
+    private async resolveRangeFilter(
+        params: TasksForDateRangeParams | CategorizedTasksForDateRangeParams,
+    ): Promise<FilterState | null> {
+        const p = { ...params };
+        if (p.list && !p.filterFile) {
+            throw new TaskApiError("'list' requires 'filterFile' (a .md view template)");
+        }
+        if (p.filterFile) {
+            const result = await loadFilterFile(this.plugin.app, p.filterFile, p.list);
+            if (typeof result === 'string') throw new TaskApiError(result);
+            p.filter = result;
+        }
+        return buildRangeFilterFromParams(p);
     }
 
     /**

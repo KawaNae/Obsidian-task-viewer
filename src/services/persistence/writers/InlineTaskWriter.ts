@@ -6,6 +6,9 @@ import { collectFlowLineIndicesInFile } from '../../flow/FlowLineScanner';
 import { FileOperations } from '../utils/FileOperations';
 import { ChildPropertyLineEditor } from '../utils/ChildPropertyLineEditor';
 import type { PropertyOp } from '../PropertyUpdatePlanner';
+import { type FlowInstanceInsert, renderFlowInstance } from '../FlowInstanceLines';
+import { appendLines, processLines, splitLines } from '../../../utils/FileLines';
+import type { WriteObserver } from '../WriteObserver';
 import { logWarn } from '../../../log/log';
 
 
@@ -16,7 +19,8 @@ import { logWarn } from '../../../log/log';
 export class InlineTaskWriter {
     constructor(
         private app: App,
-        private fileOps: FileOperations
+        private fileOps: FileOperations,
+        private writes?: WriteObserver
     ) { }
 
     /**
@@ -33,18 +37,13 @@ export class InlineTaskWriter {
             return false;
         }
 
-        let written = false;
-
-        await this.app.vault.process(file, (content) => {
-            const lines = content.split('\n');
-
+        return processLines(this.app, file, (lines, _eol, edits) => {
             // Find current line number using originalText (handles line shifts)
             const currentLine = this.fileOps.findTaskLineNumber(lines, task);
             if (currentLine < 0 || currentLine >= lines.length) {
                 logWarn(`[InlineTaskWriter] Task not found in file`);
-                return content;
+                return null;
             }
-            written = true;
 
             // Re-format line
             const newLine = TaskParser.format(updatedTask);
@@ -52,27 +51,31 @@ export class InlineTaskWriter {
             // Preserve indentation if possible
             const originalIndent = lines[currentLine].match(/^(\s*)/)?.[1] || '';
             lines[currentLine] = originalIndent + newLine.trim();
+            // An update rewrites the line and leaves it the same task — the
+            // whole point of the call is that this row is the one being
+            // changed. Filed before the child ops because `applyOps` only ever
+            // touches lines below `currentLine` (its scan starts at
+            // `taskLineIdx + 1` and stops at the first line that is not a
+            // descendant), so this coordinate is still this line afterwards.
+            edits.replaced(currentLine);
 
             // 子プロパティ行（- key:: value）の更新は同一 process 内で
             // 連続適用する（別 process だと originalText 失効と行番号
             // シフトが競合するため、タスク行と子行は1原子書き込み）。
             if (childOps.length > 0) {
-                ChildPropertyLineEditor.applyOps(lines, currentLine, childOps);
+                ChildPropertyLineEditor.applyOps(lines, currentLine, childOps, edits);
             }
 
-            return lines.join('\n');
-        });
-
-        return written;
+            return lines;
+        }, this.writes?.for(task.file));
     }
 
     async updateLine(filePath: string, lineNumber: number, newContent: string): Promise<void> {
         const file = this.app.vault.getAbstractFileByPath(filePath);
         if (!(file instanceof TFile)) return;
 
-        await this.app.vault.process(file, (content) => {
-            const lines = content.split('\n');
-            if (lines.length <= lineNumber) return content;
+        await processLines(this.app, file, (lines, _eol, edits) => {
+            if (lines.length <= lineNumber) return null;
 
             // Preserve original indentation
             const originalLine = lines[lineNumber];
@@ -80,33 +83,53 @@ export class InlineTaskWriter {
             const newContentTrimmed = newContent.trimStart();
 
             lines[lineNumber] = originalIndent + newContentTrimmed;
+            // The editor's own menu comes through here: a status change, and
+            // the conversion of a bare checkbox into an inline task. Both
+            // rewrite the row in place and leave it the row it was.
+            edits.replaced(lineNumber);
 
-            return lines.join('\n');
-        });
+            return lines;
+        }, this.writes?.for(filePath));
     }
 
+    /**
+     * Insert one line below a coordinate, whatever that line is.
+     *
+     * The editor's menu duplicates a task through here, so the line written is
+     * usually a copy of the line above it, word for word. Two rows a file
+     * cannot tell apart is the shape the claim exists for: the write knows
+     * which of them it made, and says so, where a reader comparing text has
+     * nothing to go on but the order they appear in.
+     */
     async insertLineAfterLine(filePath: string, lineNumber: number, newContent: string): Promise<void> {
         const file = this.app.vault.getAbstractFileByPath(filePath);
         if (!(file instanceof TFile)) return;
 
-        await this.app.vault.process(file, (content) => {
-            const lines = content.split('\n');
-            if (lineNumber < 0 || lineNumber >= lines.length) return content;
-            lines.splice(lineNumber + 1, 0, newContent);
-            return lines.join('\n');
-        });
+        await processLines(this.app, file, (lines, _eol, edits) => {
+            if (lineNumber < 0 || lineNumber >= lines.length) return null;
+            edits.splice(lineNumber + 1, 0, newContent);
+            return lines;
+        }, this.writes?.for(filePath));
     }
 
+    /**
+     * Delete one line by its coordinate, whatever that line is.
+     *
+     * The claim says a line went away and nothing else. It cannot say more:
+     * this path is reached from the editor's context menu on a raw checkbox,
+     * so the line is not necessarily a task, and the lines under it are left
+     * where they are. A child that outlives its parent here keeps the identity
+     * it had — it is the same line, one row higher.
+     */
     async deleteLine(filePath: string, lineNumber: number): Promise<void> {
         const file = this.app.vault.getAbstractFileByPath(filePath);
         if (!(file instanceof TFile)) return;
 
-        await this.app.vault.process(file, (content) => {
-            const lines = content.split('\n');
-            if (lineNumber < 0 || lineNumber >= lines.length) return content;
-            lines.splice(lineNumber, 1);
-            return lines.join('\n');
-        });
+        await processLines(this.app, file, (lines, _eol, edits) => {
+            if (lineNumber < 0 || lineNumber >= lines.length) return null;
+            edits.splice(lineNumber, 1);
+            return lines;
+        }, this.writes?.for(filePath));
     }
 
     /**
@@ -123,46 +146,143 @@ export class InlineTaskWriter {
             return;
         }
 
-        await this.app.vault.process(file, (content) => {
-            const lines = content.split('\n');
-
+        await processLines(this.app, file, (lines, _eol, edits) => {
             const currentLine = this.fileOps.findTaskLineNumber(lines, task);
             if (currentLine < 0 || currentLine >= lines.length) {
                 logWarn(`[InlineTaskWriter] Task not found in file (stripFlow)`);
-                return content;
+                return null;
             }
 
+            // Every index here is below `currentLine`: the scan starts at
+            // `taskLineIndex + 1` and stops at the first line that is not a
+            // descendant (FlowLineScanner.ts:82-86). So the deletions leave
+            // `currentLine` where it is, and the `replaced` below is filed at
+            // the same coordinate it was read at.
             const flowIndices = collectFlowLineIndicesInFile(lines, currentLine);
             for (let i = flowIndices.length - 1; i >= 0; i--) {
-                lines.splice(flowIndices[i], 1);
+                edits.splice(flowIndices[i], 1);
             }
 
             const newLine = TaskParser.format({ ...task, flow: undefined });
             const originalIndent = lines[currentLine].match(/^(\s*)/)?.[1] || '';
             lines[currentLine] = originalIndent + newLine.trim();
+            // The fired line keeps its identity: losing `==>` rewrites the text
+            // but does not make it another task.
+            edits.replaced(currentLine);
 
-            return lines.join('\n');
-        });
+            return lines;
+        }, this.writes?.for(task.file));
     }
 
-    async deleteTaskFromFile(task: Task): Promise<void> {
+    /**
+     * @param moved where the task's lines were written before this call, when
+     * this delete is the origin half of a move. The half that matters for
+     * identity is the destination, and it is a separate write — to another
+     * file, or to another place in this one. Naming the destination rather
+     * than passing a flag is what stage 4 needs to tie the two halves
+     * together; today it only says "stay quiet".
+     * @returns whether the task's lines were found and removed. A `false` means
+     * the file still holds them — the caller must not report the task gone.
+     */
+    async deleteTaskFromFile(task: Task, moved?: { to: string }): Promise<boolean> {
         const file = this.app.vault.getAbstractFileByPath(task.file);
-        if (!(file instanceof TFile)) return;
+        if (!(file instanceof TFile)) {
+            logWarn(`[InlineTaskWriter] File not found: ${task.file}`);
+            return false;
+        }
 
-        await this.app.vault.process(file, (content) => {
-            const lines = content.split('\n');
+        // A move's origin does not claim. Within one file the move's rows are
+        // still alive further down, and `removed` would call a living row dead
+        // — the next scan would mint new IDs for rows the ladder could have
+        // carried. Across files the claim would be true, but telling the two
+        // apart is the same judgement stage 4 has to make for the destination
+        // hint, so both halves wait for it together.
+        const sink = moved ? undefined : this.writes?.for(task.file);
 
+        return processLines(this.app, file, (lines, _eol, edits) => {
             // Find current line using originalText
             const currentLine = this.fileOps.findTaskLineNumber(lines, task);
-            if (currentLine < 0 || currentLine >= lines.length) return content;
+            if (currentLine < 0 || currentLine >= lines.length) {
+                logWarn(`[InlineTaskWriter] Task not found in file (delete)`);
+                return null;
+            }
 
             const { childrenLines } = this.fileOps.collectChildrenFromLines(lines, currentLine);
 
-            // Delete task line + all children
-            lines.splice(currentLine, 1 + childrenLines.length);
+            // Delete task line + all children. What the claim carries is what
+            // this splice actually removed, not `1 + childrenLines.length`
+            // counted a second time: the two cannot disagree if only one of
+            // them exists.
+            edits.splice(currentLine, 1 + childrenLines.length);
 
-            return lines.join('\n');
-        });
+            return lines;
+        }, sink);
+    }
+
+    /**
+     * Take the task's lines away and put what its firing wrote in their place,
+     * as one write.
+     *
+     * This is a deletion fire: the user asked for the line to go, and the
+     * command on it gets to write its next instance before it does. Both
+     * halves used to be writes of their own, each resolving the original by
+     * `findTaskLineNumber` — and the second search is what could not be made
+     * right. The next instance is worded exactly like the line it comes from
+     * whenever the original carries no date and no block id (the command
+     * living in a child line), so the search that ran after it was written
+     * could not tell the two apart, and the delete took the instance that had
+     * just been created. The file came back to exactly what it started as and
+     * the task the user deleted was still there.
+     *
+     * The fix is not a better search. It is to resolve the line once, while
+     * nothing has moved, and to take every number from the array being
+     * written. Nothing here looks for the task a second time, so there is no
+     * second answer to be wrong.
+     *
+     * The order invariant the interpreter follows (see `FlowEffects`) — write
+     * the instance first, remove the original last, because line resolution
+     * matches on `originalText` — has nothing left to protect here and is not
+     * what this does. The removal goes first, and that is only so the two
+     * numbers stay independent: the insert lands at the head of the sibling
+     * group, at or above the task's own line, so removing the task's lines
+     * cannot move it. What the original's lines say is read before either
+     * splice, since the instance is rendered against them.
+     *
+     * A task that cannot be resolved is not written around: nothing goes in,
+     * nothing comes out, and the file is left byte-identical. The insert has
+     * no "append it at the end instead" of its own to fall back on — an
+     * instance appended to a file whose original could not be removed is the
+     * one outcome this call exists to make impossible.
+     *
+     * @returns whether the task's lines were found and replaced. `false` means
+     * the file is untouched, in full.
+     */
+    async replaceTaskWithInstances(task: Task, inserts: FlowInstanceInsert[]): Promise<boolean> {
+        const file = this.app.vault.getAbstractFileByPath(task.file);
+        if (!(file instanceof TFile)) {
+            logWarn(`[InlineTaskWriter] File not found: ${task.file}`);
+            return false;
+        }
+
+        return processLines(this.app, file, (lines, _eol, edits) => {
+            const currentLine = this.fileOps.findTaskLineNumber(lines, task);
+            if (currentLine < 0 || currentLine >= lines.length) {
+                logWarn('[InlineTaskWriter] Task not found in file (replace with instances)');
+                return null;
+            }
+
+            // Everything that reads the original reads it here, before a
+            // single line has moved.
+            const rendered = inserts.flatMap(
+                insert => renderFlowInstance(this.fileOps, lines, currentLine, insert));
+            const insertAt = this.fileOps.findSiblingGroupStart(lines, currentLine);
+            const { childrenLines } = this.fileOps.collectChildrenFromLines(lines, currentLine);
+
+            edits.splice(currentLine, 1 + childrenLines.length);
+            edits.splice(insertAt, 0, ...rendered);
+
+            return lines;
+        }, this.writes?.for(task.file));
     }
 
     /**
@@ -235,20 +355,18 @@ export class InlineTaskWriter {
 
         let insertedLineIndex = -1;
 
-        await this.app.vault.process(file, (content) => {
-            const lines = content.split('\n');
-
+        await processLines(this.app, file, (lines, _eol, edits) => {
             // Find current line using originalText (handles line shifts)
             const currentLine = this.fileOps.findTaskLineNumber(lines, task);
-            if (currentLine < 0 || currentLine >= lines.length) return content;
+            if (currentLine < 0 || currentLine >= lines.length) return null;
 
             const indent = FileOperations.resolveChildIndent(lines, currentLine);
             const insertIndex = this.subtreeEnd(lines, currentLine);
-            lines.splice(insertIndex, 0, indent + lineBody.trim());
+            edits.splice(insertIndex, 0, indent + lineBody.trim());
             insertedLineIndex = insertIndex;
 
-            return lines.join('\n');
-        });
+            return lines;
+        }, this.writes?.for(task.file));
 
         return insertedLineIndex;
     }
@@ -281,13 +399,11 @@ export class InlineTaskWriter {
 
         let insertedLineIndex = -1;
 
-        await this.app.vault.process(file, (content) => {
-            const lines = content.split('\n');
-
+        await processLines(this.app, file, (lines, _eol, edits) => {
             const currentLine = this.fileOps.findTaskLineNumber(lines, task);
             if (currentLine < 0 || currentLine >= lines.length) {
                 logWarn(`[InlineTaskWriter] Task not found in file (insertSiblingAfterTask)`);
-                return content;
+                return null;
             }
 
             const indent = lines[currentLine].match(/^(\s*)/)?.[1] ?? '';
@@ -296,11 +412,11 @@ export class InlineTaskWriter {
                 : currentLine;
 
             const insertIndex = this.subtreeEnd(lines, anchor);
-            lines.splice(insertIndex, 0, indent + lineBody.trim());
+            edits.splice(insertIndex, 0, indent + lineBody.trim());
             insertedLineIndex = insertIndex;
 
-            return lines.join('\n');
-        });
+            return lines;
+        }, this.writes?.for(task.file));
 
         return insertedLineIndex;
     }
@@ -318,29 +434,38 @@ export class InlineTaskWriter {
 
         let insertedLineIndex = -1;
 
-        await this.app.vault.process(file, (content) => {
-            const lines = content.split('\n');
-
+        await processLines(this.app, file, (lines, _eol, edits) => {
             // Find the current line number using multiple strategies
             const currentLine = this.fileOps.findTaskLineNumber(lines, task);
 
-            if (currentLine < 0 || currentLine >= lines.length) return content;
+            if (currentLine < 0 || currentLine >= lines.length) {
+                logWarn(`[InlineTaskWriter] Task not found in file (insertLineAsFirstChild)`);
+                return null;
+            }
 
             const indent = FileOperations.resolveChildIndent(lines, currentLine);
 
             // Insert directly after the task line (as first child)
             const insertIndex = currentLine + 1;
-            lines.splice(insertIndex, 0, indent + lineBody.trim());
+            edits.splice(insertIndex, 0, indent + lineBody.trim());
             insertedLineIndex = insertIndex;
 
-            return lines.join('\n');
-        });
+            return lines;
+        }, this.writes?.for(task.file));
 
         return insertedLineIndex;
     }
 
+    /**
+     * @returns the 0-based line the task landed on, or -1 when nothing was written.
+     *
+     * The file that does not exist yet is the one write here with nothing to
+     * claim: `vault.create` writes the whole file, so every row in it is new
+     * and the scan that reads it has no previous generation to confuse them
+     * with. A claim would say what the ledger's silence already says.
+     */
     async appendTaskToFile(filePath: string, content: string): Promise<number> {
-        let file = this.app.vault.getAbstractFileByPath(filePath);
+        const file = this.app.vault.getAbstractFileByPath(filePath);
 
         if (!file) {
             await this.fileOps.ensureDirectoryExists(filePath);
@@ -348,16 +473,18 @@ export class InlineTaskWriter {
             return 0;
         }
 
-        let insertedLine = 0;
-        if (file instanceof TFile) {
-            await this.app.vault.process(file, (fileContent) => {
-                const prefix = fileContent.length > 0 && !fileContent.endsWith('\n') ? '\n' : '';
-                insertedLine = fileContent.length === 0
-                    ? 0
-                    : fileContent.split('\n').length + (prefix ? 0 : -1);
-                return fileContent + prefix + content;
-            });
+        if (!(file instanceof TFile)) {
+            logWarn(`[InlineTaskWriter] Not a file: ${filePath}`);
+            return -1;
         }
+
+        // The appended text is built with LF; splitting it here lets the file's
+        // own terminator go back between every line, its own included.
+        let insertedLine = -1;
+        await processLines(this.app, file, (lines, _eol, edits) => {
+            insertedLine = appendLines(lines, splitLines(content).lines, edits);
+            return lines;
+        }, this.writes?.for(filePath));
         return insertedLine;
     }
 
@@ -397,19 +524,24 @@ export class InlineTaskWriter {
      * write, and the subsequent deletion of the original re-locates the task by
      * line number, so it tracks any shift. Do not "fix" this by serializing the
      * two files — the window has no observable effect.
+     *
+     * What the claim says here is what the file says today: the lines appended
+     * are new rows, because the move drops the task's `^id` on the way (see
+     * `FlowPlanner`'s archived copy). The other half of a move — the deletion
+     * of the original — stays silent, so the two halves are not claimed as one
+     * movement of identity. Stage 4 is where that changes, and it changes this
+     * claim with it.
      */
     async appendTaskWithChildren(destPath: string, content: string, task: Task): Promise<void> {
         const sourceFile = this.app.vault.getAbstractFileByPath(task.file);
 
         // Same-file append: a single atomic process reads children and appends.
         if (sourceFile instanceof TFile && destPath === task.file) {
-            await this.app.vault.process(sourceFile, (fileContent) => {
-                const lines = fileContent.split('\n');
+            await processLines(this.app, sourceFile, (lines, _eol, edits) => {
                 const adjustedChildren = this.buildAdjustedChildren(lines, task);
-                const fullContent = [content, ...adjustedChildren].join('\n');
-                const prefix = fileContent.length > 0 && !fileContent.endsWith('\n') ? '\n' : '';
-                return fileContent + prefix + fullContent;
-            });
+                appendLines(lines, [...splitLines(content).lines, ...adjustedChildren], edits);
+                return lines;
+            }, this.writes?.for(task.file));
             return;
         }
 
@@ -417,7 +549,7 @@ export class InlineTaskWriter {
         let adjustedChildren: string[] = [];
         if (sourceFile instanceof TFile) {
             const sourceContent = await this.app.vault.read(sourceFile);
-            adjustedChildren = this.buildAdjustedChildren(sourceContent.split('\n'), task);
+            adjustedChildren = this.buildAdjustedChildren(splitLines(sourceContent).lines, task);
         }
 
         const fullContent = [content, ...adjustedChildren].join('\n');

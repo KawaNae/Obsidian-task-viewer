@@ -136,54 +136,97 @@ export class DateNavigator {
 }
 
 /**
- * Days-per-screen choices. Declared once so the button's dropdown and the
- * compact "⋮" submenu cannot drift apart.
+ * Days-per-screen quick picks, shown in the label's dropdown and the compact
+ * "⋮" submenu. Declared once so the two surfaces cannot drift apart.
+ *
+ * Empty this array to drop the preset menu entirely — the one place to turn
+ * it off. `DaysToShowSelector.render` and `appendSubmenu` both already
+ * degrade cleanly (no dropdown / no preset section) when it's empty; the
+ * +/- stepper and ±1-day submenu items are unaffected either way.
  */
-const VIEW_MODE_VALUES: readonly number[] = [1, 3, 7];
+const DAYS_TO_SHOW_PRESETS: readonly number[] = [1, 3, 7];
 
 /** Label for a days-per-screen value. */
-function viewModeLabel(value: number): string {
+function daysToShowLabel(value: number): string {
     if (value === 1) return t('toolbar.viewMode1Day');
     if (value === 3) return t('toolbar.viewMode3Days');
-    return t('toolbar.viewModeWeek');
+    if (value === 7) return t('toolbar.viewModeWeek');
+    return t('toolbar.daysCount', { n: value });
+}
+
+export interface DaysToShowBounds {
+    min: number;
+    max: number;
 }
 
 /**
- * View mode selector (1 Day / 3 Days / Week).
+ * Clamp a one-day step. Shared by the toolbar's +/- buttons and the compact
+ * submenu's ±1-day items so the two can't drift apart.
+ */
+export function stepDaysToShow(current: number, delta: 1 | -1, bounds: DaysToShowBounds): number {
+    return Math.min(bounds.max, Math.max(bounds.min, current + delta));
+}
+
+/**
+ * Days-per-screen control: a [-][label][+] stepper group. +/- change the
+ * value by one day directly (clamped to bounds, no menu in the way); the
+ * label opens a dropdown with the quick picks from {@link DAYS_TO_SHOW_PRESETS}.
  *
  * Returns an `update()` handle so external state changes (layout restore, URI
- * params, template apply) can refresh the label. Reads `getValue()` lazily on
- * every menu open so the checked item always reflects current state.
+ * params, template apply) can refresh the label and the +/- disabled state.
+ * Reads `getValue()` lazily on every interaction so it always reflects
+ * current state.
  */
-export class ViewModeSelector {
+export class DaysToShowSelector {
     /**
-     * Add one checkable item per view mode. Shared by the button's dropdown
-     * and by {@link appendSubmenu}, so the option list has a single home.
+     * Add one checkable item per preset. Shared by the label's dropdown and
+     * by {@link appendSubmenu}, so the option list has a single home. No-op
+     * when {@link DAYS_TO_SHOW_PRESETS} is empty.
      */
-    static appendMenuItems(
+    static appendPresetItems(
         menu: Menu,
         getValue: () => number,
         onChange: (newValue: number) => void
     ): void {
         const current = getValue();
-        for (const value of VIEW_MODE_VALUES) {
+        for (const value of DAYS_TO_SHOW_PRESETS) {
             menu.addItem((item: MenuItem) => {
-                item.setTitle(viewModeLabel(value))
+                item.setTitle(daysToShowLabel(value))
                     .setChecked(current === value)
                     .onClick(() => onChange(value));
             });
         }
     }
 
-    /** Add the same choices as a labelled submenu (compact toolbar mode). */
+    /**
+     * Add the same choices as a labelled submenu (compact toolbar mode),
+     * plus ±1-day step items. Obsidian's Menu can't host a live stepper, so
+     * narrow panes get discrete steps here instead of the toolbar's +/-
+     * buttons.
+     */
     static appendSubmenu(
         menu: Menu,
         getValue: () => number,
-        onChange: (newValue: number) => void
+        onChange: (newValue: number) => void,
+        bounds: DaysToShowBounds
     ): void {
         menu.addItem((item: MenuItem) => {
-            item.setTitle(t('toolbar.viewModeLabel', { label: viewModeLabel(getValue()) }));
-            ViewModeSelector.appendMenuItems(item.setSubmenu(), getValue, onChange);
+            item.setTitle(t('toolbar.viewModeLabel', { label: daysToShowLabel(getValue()) }));
+            const sub = item.setSubmenu();
+            if (DAYS_TO_SHOW_PRESETS.length > 0) {
+                DaysToShowSelector.appendPresetItems(sub, getValue, onChange);
+                sub.addSeparator();
+            }
+            sub.addItem((stepItem: MenuItem) => {
+                stepItem.setTitle(t('toolbar.increaseDays'))
+                    .setDisabled(getValue() >= bounds.max)
+                    .onClick(() => onChange(stepDaysToShow(getValue(), 1, bounds)));
+            });
+            sub.addItem((stepItem: MenuItem) => {
+                stepItem.setTitle(t('toolbar.decreaseDays'))
+                    .setDisabled(getValue() <= bounds.min)
+                    .onClick(() => onChange(stepDaysToShow(getValue(), -1, bounds)));
+            });
         });
     }
 
@@ -191,28 +234,53 @@ export class ViewModeSelector {
         toolbar: HTMLElement,
         getValue: () => number,
         onChange: (newValue: number) => void,
-        menuPresenter: MenuPresenter
+        menuPresenter: MenuPresenter,
+        bounds: DaysToShowBounds
     ): { update: () => void } {
-        const button = toolbar.createEl('button', { cls: 'view-toolbar__btn--range view-toolbar__btn--view-mode' });
-        const iconEl = button.createSpan('view-toolbar__btn-icon');
-        const labelEl = button.createSpan({ cls: 'view-toolbar__btn-label' });
-        setIcon(iconEl, 'chevrons-up-down');
+        const group = toolbar.createDiv('view-toolbar__nav-group view-toolbar__days-group');
+
+        const minusBtn = group.createEl('button', { cls: 'view-toolbar__btn--icon' });
+        setIcon(minusBtn, 'minus');
+
+        const labelBtn = group.createEl('button', { cls: 'view-toolbar__btn--range view-toolbar__btn--days' });
+        const labelEl = labelBtn.createSpan({ cls: 'view-toolbar__btn-label' });
+
+        const plusBtn = group.createEl('button', { cls: 'view-toolbar__btn--icon' });
+        setIcon(plusBtn, 'plus');
 
         const update = () => {
-            const label = viewModeLabel(getValue());
+            const value = getValue();
+            const label = daysToShowLabel(value);
             labelEl.setText(label);
-            button.setAttribute('aria-label', t('toolbar.viewModeLabel', { label }));
+            labelBtn.setAttribute('aria-label', t('toolbar.viewModeLabel', { label }));
+            minusBtn.disabled = value <= bounds.min;
+            minusBtn.setAttribute('aria-label', t('toolbar.decreaseDays'));
+            plusBtn.disabled = value >= bounds.max;
+            plusBtn.setAttribute('aria-label', t('toolbar.increaseDays'));
         };
         update();
 
-        button.onclick = (e) => {
-            menuPresenter.present((menu) => {
-                ViewModeSelector.appendMenuItems(menu, getValue, (value) => {
-                    onChange(value);
-                    update();
-                });
-            }, { kind: 'position', x: e.pageX, y: e.pageY });
+        minusBtn.onclick = () => {
+            onChange(stepDaysToShow(getValue(), -1, bounds));
+            update();
         };
+        plusBtn.onclick = () => {
+            onChange(stepDaysToShow(getValue(), 1, bounds));
+            update();
+        };
+
+        if (DAYS_TO_SHOW_PRESETS.length > 0) {
+            labelBtn.onclick = (e) => {
+                menuPresenter.present((menu) => {
+                    DaysToShowSelector.appendPresetItems(menu, getValue, (value) => {
+                        onChange(value);
+                        update();
+                    });
+                }, { kind: 'position', x: e.pageX, y: e.pageY });
+            };
+        } else {
+            labelBtn.disabled = true;
+        }
 
         return { update };
     }

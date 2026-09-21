@@ -79,9 +79,10 @@ export class FrontmatterLineEditor {
      * - value: string[] → キー行 + 継続行の完全な生行列（マルチライン値。
      *   先頭要素が `key:` 行であること）。既存範囲を丸ごと差し替え / 挿入
      *
-     * @returns 編集後のコンテンツ文字列
+     * @returns 編集後の行配列。文字列への復元は呼び口が行う（ファイルの
+     *          改行はファイルごとに違うので、{@link joinLines} の仕事である）
      */
-    static applyUpdates(lines: string[], fmEnd: number, updates: Record<string, string | string[] | null>): string {
+    static applyUpdates(lines: string[], fmEnd: number, updates: Record<string, string | string[] | null>): string[] {
         const result = [...lines];
         let currentFmEnd = fmEnd;
 
@@ -112,7 +113,7 @@ export class FrontmatterLineEditor {
             }
         }
 
-        return result.join('\n');
+        return result;
     }
 
     /**

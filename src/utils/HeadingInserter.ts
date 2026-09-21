@@ -1,19 +1,20 @@
 import { type App, TFile } from 'obsidian';
 import { CodeFenceTracker } from './CodeFenceTracker';
+import { processLines } from './FileLines';
 
 export interface InsertResult {
-    content: string;
+    lines: string[];
     insertedLine: number;
 }
 
 /**
  * Heading-based line insertion utility.
  *
- * `insertUnderHeading` is a pure function: content string in, modified
- * content string out — this is the part every write site should test
- * against directly. `writeUnderHeading` is a thin non-pure wrapper around
- * it (vault.process) shared by every write site so the read-modify-write
- * itself isn't reimplemented per caller.
+ * `insertUnderHeading` is a pure function: lines in, modified lines out —
+ * this is the part every write site should test against directly.
+ * `writeUnderHeading` is a thin non-pure wrapper around it (processLines)
+ * shared by every write site so the read-modify-write itself isn't
+ * reimplemented per caller, and so the file keeps its own line terminator.
  */
 export class HeadingInserter {
     /**
@@ -21,28 +22,28 @@ export class HeadingInserter {
      * If the heading exists, inserts directly under the heading (headerIndex + 1).
      * If the heading does not exist, creates it at the end of the file.
      *
-     * @param content Full file content
+     * @param lines   File content, already split into lines
      * @param line    Line to insert
      * @param header  Heading text (without # prefix)
      * @param headerLevel Number of # (e.g. 2 for ##)
-     * @returns Modified file content and the 0-based line number of the inserted line
+     * @returns Modified lines and the 0-based line number of the inserted line
      */
     static insertUnderHeading(
-        content: string,
+        lines: string[],
         line: string,
         header: string,
         headerLevel: number
     ): InsertResult {
-        const lines = content.split('\n');
+        const out = [...lines];
         const headerPrefix = '#'.repeat(headerLevel) + ' ';
         const fullHeader = headerPrefix + header;
 
         const fenceTracker = new CodeFenceTracker();
         let headerIndex = -1;
-        for (let i = 0; i < lines.length; i++) {
-            const fenced = fenceTracker.feed(lines[i]);
+        for (let i = 0; i < out.length; i++) {
+            const fenced = fenceTracker.feed(out[i]);
             if (fenced) continue;
-            if (lines[i].trim() === fullHeader) {
+            if (out[i].trim() === fullHeader) {
                 headerIndex = i;
                 break;
             }
@@ -51,17 +52,17 @@ export class HeadingInserter {
         let insertedLine: number;
         if (headerIndex !== -1) {
             insertedLine = headerIndex + 1;
-            lines.splice(insertedLine, 0, line);
+            out.splice(insertedLine, 0, line);
         } else {
-            if (lines.length > 0 && lines[lines.length - 1].trim() !== '') {
-                lines.push('');
+            if (out.length > 0 && out[out.length - 1].trim() !== '') {
+                out.push('');
             }
-            lines.push(fullHeader);
-            insertedLine = lines.length;
-            lines.push(line);
+            out.push(fullHeader);
+            insertedLine = out.length;
+            out.push(line);
         }
 
-        return { content: lines.join('\n'), insertedLine };
+        return { lines: out, insertedLine };
     }
 
     /**
@@ -87,10 +88,10 @@ export class HeadingInserter {
         if (!(file instanceof TFile)) return -1;
 
         let insertedLine = -1;
-        await app.vault.process(file, (content) => {
-            const result = HeadingInserter.insertUnderHeading(content, line, header, headerLevel);
+        await processLines(app, file, (lines) => {
+            const result = HeadingInserter.insertUnderHeading(lines, line, header, headerLevel);
             insertedLine = result.insertedLine;
-            return result.content;
+            return result.lines;
         });
         return insertedLine;
     }

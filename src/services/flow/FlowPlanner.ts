@@ -134,7 +134,7 @@ export function planFlow(task: Task, program: FlowProgram, deps: FlowPlanDeps): 
         const destPath = normalizeDestination(target);
         const archivedTask: Task = { ...task, flow: undefined, blockId: undefined, timerTargetId: undefined };
         effects.push({ kind: 'archive-to', destPath, archivedTask });
-        effects.push({ kind: 'delete-original' });
+        effects.push({ kind: 'delete-original', destPath });
     } else {
         effects.push({ kind: 'strip-flow' });
     }
@@ -229,7 +229,7 @@ function planGenerated(
         kind: 'create-generated',
         parentLine: composeParentLine(rendered.parentText, newTask, warnings),
         flowLines: (newTask.flow?.childSegments ?? []).map(s => s.raw),
-        children: rendered.children.map(child => checkedChild(child)),
+        children: rendered.children.map(child => checkedChild(child, warnings)),
         warnings,
     };
 }
@@ -305,7 +305,7 @@ function composeParentLine(
     return checked.line + (newTask.flow?.raw ? ` ==> ${newTask.flow.raw}` : '');
 }
 
-function checkedChild(child: { depth: number; body: string }): GeneratedChild {
+function checkedChild(child: { depth: number; body: string }, warnings: Diagnostic[]): GeneratedChild {
     const checked = checkGeneratedChildLine(child.body);
     if (!checked.ok) throw new GenerationError(checked.error.code, checked.error.message, checked.error.params);
     // A net, not a rule: the renderer splits multi-line values into lines of
@@ -317,6 +317,9 @@ function checkedChild(child: { depth: number; body: string }): GeneratedChild {
         throw new GenerationError('eval.gen-child-line-break',
             'A generated line cannot contain a line break');
     }
+    // Same array as the parent's own warnings — one effect, one list, the
+    // route FlowExecutor already logs (see composeParentLine above).
+    warnings.push(...checked.warnings);
     return { depth: child.depth, body: checked.line };
 }
 

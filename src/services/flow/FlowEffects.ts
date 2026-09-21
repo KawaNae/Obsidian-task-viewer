@@ -11,6 +11,18 @@ import type { GeneratedChild } from '../persistence/TaskCloner';
  * and the interpreter applies them sequentially without reordering.
  * Effects that rewrite or remove the original line must run last, because
  * line resolution (findTaskLineNumber) matches on originalText.
+ *
+ * What the ordering buys is narrower than it looks: it keeps the original
+ * findable only for as long as the line just written reads differently from
+ * it, and that holds by value rather than by construction. A written instance
+ * always starts unchecked (`buildNextTask` in FlowPlanner, and the status
+ * normalization in GeneratedLineCheck) so it cannot read like the line that
+ * fired, and an archived copy drops its `==>` and its block id. Where the
+ * value stopped differing, the ordering stopped protecting anything: a
+ * deletion fire removes a line that never fired and is worded exactly like the
+ * instance it writes. Those two effects are not applied in order at all — they
+ * are one write, which resolves the line once and takes every number from the
+ * array it is writing (see InlineTaskWriter.replaceTaskWithInstances).
  */
 export type FlowEffect =
     | { kind: 'create-next'; newTask: Task }
@@ -41,4 +53,8 @@ export type FlowEffect =
     }
     | { kind: 'archive-to'; destPath: string; archivedTask: Task }
     | { kind: 'strip-flow' }
-    | { kind: 'delete-original' };
+    /**
+     * `destPath` is where `archive-to` just put the task. The delete carries it
+     * so the write layer can see that this removal is one half of a move.
+     */
+    | { kind: 'delete-original'; destPath: string };

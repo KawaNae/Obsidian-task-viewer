@@ -13,6 +13,13 @@ import type { FilterState } from '../../services/filter/FilterTypes';
 import type { PinnedListDefinition, AstronomyDisplay } from '../../types';
 import { VIEW_META_TIMELINE } from '../../constants/viewRegistry';
 
+/** Timeline days-per-screen bounds. Single constant closes the upper limit
+ *  everywhere it's checked (schema, toolbar stepper, CLI export-image). At
+ *  495px pane width, 31 days measured at 15px/column — too narrow for a
+ *  readable date label. */
+export const MIN_DAYS_TO_SHOW = 1;
+export const MAX_DAYS_TO_SHOW = 30;
+
 export interface TimelineConfig {
     customName?: string;
     filterState?: FilterState;
@@ -20,7 +27,7 @@ export interface TimelineConfig {
     astronomyDisplay?: Partial<AstronomyDisplay>;
     showSidebar?: boolean;
     pinnedLists?: PinnedListDefinition[];
-    daysToShow?: 1 | 3 | 7;
+    daysToShow?: number;
     zoomLevel?: number;
     /** Per-view override of all-day section visibility. undefined = follow global. */
     showAllDay?: boolean;
@@ -51,7 +58,7 @@ export const TimelineSchema: ViewSchema<TimelineConfig, TimelineTransient> = {
         astronomyDisplay: F.astronomyDisplay('astronomyDisplay'),
         showSidebar:      F.boolean('showSidebar'),
         pinnedLists:      F.pinnedLists('pinnedLists'),
-        daysToShow:       F.intEnum('daysToShow', [1, 3, 7], { legacyKeys: ['days'] }),
+        daysToShow:       F.int('daysToShow', { min: MIN_DAYS_TO_SHOW, max: MAX_DAYS_TO_SHOW, legacyKeys: ['days'] }),
         zoomLevel:        F.float('zoomLevel', { min: 0.25, max: 10, legacyKeys: ['zoom'] }),
         showAllDay:       F.boolean('showAllDay'),
         showTimeline:     F.boolean('showTimeline'),

@@ -1,4 +1,5 @@
 import { FileSystemAdapter } from 'obsidian';
+import type { View } from 'obsidian';
 import * as fsNode from 'fs';
 import * as pathNode from 'path';
 import type { PluginContext } from '../../PluginContext';
@@ -7,6 +8,21 @@ import { exportDescriptorFor, resolveExportContainer } from './ExportRegistry';
 import { buildExportFilename } from './ExportFilename';
 import { viewContentEl } from '../../utils/ObsidianView';
 import { currentBrowserWindow, type BrowserWindowLike } from '../../utils/hostEnv';
+import type { RenderedDateRange, ExportableDateRangeView } from './ExportTypes';
+
+/**
+ * Duck-types the view for an optional `getExportedDateRange()` — implemented
+ * by Timeline/Calendar/Schedule, absent on Kanban and any future view type
+ * that has no date-window concept. No shared base class or registry: the
+ * view instance is already in hand at capture time (`exportOpenView` and
+ * `exportTempView` both hold the leaf), so duck-typing it directly here is
+ * simpler than routing through ExportRegistry.
+ */
+export function getExportedDateRange(view: View): RenderedDateRange | null {
+    const getter = (view as unknown as Partial<ExportableDateRangeView>).getExportedDateRange;
+    if (typeof getter !== 'function') return null;
+    return getter.call(view);
+}
 
 export interface ExportOptions {
     filename?: string;
@@ -26,6 +42,8 @@ export interface ExportResult {
     clamped?: boolean;
     actualWidth?: number;
     actualHeight?: number;
+    /** The date range the view actually drew, if it can report one. */
+    renderedRange?: RenderedDateRange;
 }
 
 function sleep(ms: number): Promise<void> {
@@ -89,7 +107,7 @@ export class ExportService {
         const container = resolveExportContainer(contentEl, descriptor);
         if (!container) throw new Error('Export container not found in the open view');
 
-        return this.capture(container, descriptor.spec, viewType, totalStart, opts);
+        return this.capture(container, descriptor.spec, viewType, totalStart, visibleLeaf.view, opts);
     }
 
     async exportTempView(
@@ -125,7 +143,7 @@ export class ExportService {
             const container = resolveExportContainer(contentEl, descriptor);
             if (!container) throw new Error('Export container not found after rendering. The view may not have finished initialization.');
 
-            return await this.capture(container, descriptor.spec, viewType, totalStart, opts);
+            return await this.capture(container, descriptor.spec, viewType, totalStart, leaf.view, opts);
         } finally {
             if (opts?.keepOpen) {
                 this.plugin.app.workspace.requestSaveLayout();
@@ -140,6 +158,7 @@ export class ExportService {
         spec: import('./ExportTypes').ExportTargetSpec,
         viewType: string,
         totalStart: number,
+        view: View,
         opts?: ExportOptions,
     ): Promise<ExportResult> {
         const captureStart = performance.now();
@@ -162,6 +181,8 @@ export class ExportService {
             out.actualWidth = result.actualWidth;
             out.actualHeight = result.actualHeight;
         }
+        const renderedRange = getExportedDateRange(view);
+        if (renderedRange) out.renderedRange = renderedRange;
         return out;
     }
 

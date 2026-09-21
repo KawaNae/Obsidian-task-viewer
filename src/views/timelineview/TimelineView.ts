@@ -250,7 +250,7 @@ export class TimelineView extends ItemView {
             astronomyDisplay: this.viewState.astronomyDisplay,
             showSidebar: this.viewState.showSidebar,
             pinnedLists: this.viewState.pinnedLists,
-            daysToShow: this.viewState.daysToShow as TimelineConfig['daysToShow'],
+            daysToShow: this.viewState.daysToShow,
             zoomLevel: this.viewState.zoomLevel,
             showAllDay: this.viewState.showAllDay,
             showTimeline: this.viewState.showTimeline,
@@ -1149,6 +1149,19 @@ export class TimelineView extends ItemView {
             dates.push(DateUtils.addDays(this.viewState.startDate, i));
         }
         return dates;
+    }
+
+    /**
+     * The date range currently drawn, for image export. Reads the same
+     * `getDatesToShow()` the grid renders from rather than recomputing from
+     * `startDate`/`daysToShow` separately, so this can't drift from what's
+     * actually on screen if the day-list logic ever changes (e.g. an
+     * oldest-overdue start date).
+     */
+    getExportedDateRange(): { anchor: string; from: string; to: string } | null {
+        const dates = this.getDatesToShow();
+        if (dates.length === 0) return null;
+        return { anchor: dates[0], from: dates[0], to: dates[dates.length - 1] };
     }
 
 

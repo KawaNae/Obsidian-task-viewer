@@ -291,8 +291,11 @@
     "noTemplatesFound": "No templates found",
     "viewMode1Day": "1 Day",
     "viewMode3Days": "3 Days",
-    "viewModeWeek": "Week",
+    "viewModeWeek": "7 Days",
     "viewModeLabel": "View mode: {{label}}",
+    "daysCount": "{{n}} Days",
+    "increaseDays": "Increase days shown",
+    "decreaseDays": "Decrease days shown",
     "zoomLabel": "Zoom: {{pct}}"
   },
   "position": {
@@ -533,7 +536,7 @@
     "maskLabel": "Mask: {{value}}",
     "openInEditor": "Open in Editor",
     "duplicate": "Duplicate",
-    "inPlace": "In Place",
+    "asNext": "As Next",
     "forTomorrow": "For Tomorrow",
     "forWeek": "For Week (7 days)",
     "convertToInline": "Convert to Inline",

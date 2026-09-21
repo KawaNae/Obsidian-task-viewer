@@ -97,9 +97,15 @@ export function checkGeneratedParentLine(raw: string): GeneratedLineCheck {
  * its own flow command, which is how a template item that fires on its own
  * is written, and a child need not be a checkbox at all — a note bullet
  * under a task is an ordinary thing to generate. The status is left as
- * written for the same reason: a child that starts checked generates
- * nothing, so there is no runaway to prevent, and correcting it would edit
- * a block body the engine promises not to normalize.
+ * written, not normalized: correcting it would edit a block body the engine
+ * promises not to touch, and the parent-line reasoning about a runaway does
+ * not transfer here as an argument for silence — a checked child is indexed
+ * as a task of its own (it is not consumed the way the parent's completion
+ * is), and the only reason it does not immediately fire its own command is
+ * that the write which created it never marks itself as a local edit, which
+ * is what firing reads to decide a completion is new. A child that
+ * carries both a completed status and its own `==>` is not a shape anyone
+ * means to write, so it earns a warning without being refused or rewritten.
  *
  * The id is the one shape that fails the same way it does on the parent.
  * Every fire writes the same anchor again, and the index keeps one of the
@@ -118,5 +124,26 @@ export function checkGeneratedChildLine(raw: string): GeneratedLineCheck {
                 { start: 0, end: line.length }, { blockId }),
         };
     }
+
+    // Same rule as the parent's completed-status check, and the same reason
+    // it does not read settings: which characters count as complete is a
+    // user setting, and a check that answered from it would warn in one
+    // vault and stay silent in another for the identical line. Only a
+    // checkbox can carry this shape, and only when it also carries a
+    // command of its own — a checked child with no command fires nothing,
+    // so there is nothing to mistype.
+    const classified = TaskLineClassifier.classify(line);
+    if (classified && classified.statusChar !== ' ' && line.includes(FLOW_MARKER)) {
+        return {
+            ok: true,
+            line,
+            warnings: [
+                warning('gen.generated-child-status',
+                    `A generated child with its own ${FLOW_MARKER} command is written as '${classified.statusChar}', so its command will not fire until it is unchecked and rechecked by hand — this is unlikely to be what was meant`,
+                    { start: 0, end: line.length }, { status: classified.statusChar }),
+            ],
+        };
+    }
+
     return { ok: true, line, warnings: [] };
 }

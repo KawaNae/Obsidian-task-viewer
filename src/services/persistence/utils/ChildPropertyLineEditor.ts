@@ -2,6 +2,7 @@ import { ChildLineClassifier } from '../../parsing/utils/ChildLineClassifier';
 import { CodeFenceTracker } from '../../../utils/CodeFenceTracker';
 import { FileOperations } from './FileOperations';
 import type { PropertyOp } from '../PropertyUpdatePlanner';
+import type { LineEdits } from '../../../utils/FileLines';
 
 interface OwnPropertyLine {
     lineIdx: number;
@@ -76,15 +77,23 @@ export class ChildPropertyLineEditor {
      * ops を lines に適用する（in-place mutate）。
      * 各 op の前に own プロパティ行を再走査するので、op 間の行シフトに
      * 対して常に正しい行を対象にする。
+     *
+     * `edits` は必須である。ここが触る行はどれもタスク行より下なので、
+     * 呼び口が先に出した `replaced(taskLineIdx)` の座標は動かない。一方、
+     * 申告を1経路でも落とすと、その行は「報告されていないのに前後で
+     * 文字列が違う行」になり、`explains` が書き込み全体の主張を捨てる
+     * （{@link processLines}）。3経路とも申告する必要があるのはそのためで、
+     * 渡し忘れを型で止めるために省略可にしていない。
      */
-    static applyOps(lines: string[], taskLineIdx: number, ops: PropertyOp[]): void {
+    static applyOps(lines: string[], taskLineIdx: number, ops: PropertyOp[], edits: LineEdits): void {
         for (const op of ops) {
             const ownLines = this.findOwnPropertyLines(lines, taskLineIdx);
             const matching = ownLines.filter(l => l.key === op.key);
 
             if (op.op === 'delete') {
+                // 逆順に消すので、各 lineIdx はその行が立っていた座標のまま。
                 for (let i = matching.length - 1; i >= 0; i--) {
-                    lines.splice(matching[i].lineIdx, 1);
+                    edits.splice(matching[i].lineIdx, 1);
                 }
                 continue;
             }
@@ -99,11 +108,14 @@ export class ChildPropertyLineEditor {
                     // 値を書き込むときはセパレータの空白を補う
                     const sep = value !== '' && !/\s$/.test(prefix) ? ' ' : '';
                     lines[target.lineIdx] = prefix + sep + value;
+                    // 値が変わっただけで、行の素性は変わらない。
+                    edits.replaced(target.lineIdx);
                     continue;
                 }
                 // プレフィックスが取れない（理論上到達しない）場合は行ごと再構築
                 const indent = lines[target.lineIdx].match(/^(\s*)/)?.[1] ?? '';
                 lines[target.lineIdx] = `${indent}- ${op.key}:: ${this.formatValue(op.value, target.value)}`;
+                edits.replaced(target.lineIdx);
                 continue;
             }
 
@@ -122,7 +134,7 @@ export class ChildPropertyLineEditor {
                 insertIdx = taskLineIdx + 1;
                 indent = FileOperations.resolveChildIndent(lines, taskLineIdx);
             }
-            lines.splice(insertIdx, 0, `${indent}- ${op.key}:: ${this.formatValue(op.value, null)}`);
+            edits.splice(insertIdx, 0, `${indent}- ${op.key}:: ${this.formatValue(op.value, null)}`);
         }
     }
 

@@ -15,6 +15,8 @@ import { PathTtlWindow } from './PathTtlWindow';
 import { NotifyCoalescer } from './NotifyCoalescer';
 import { TaskIdGenerator } from '../display/TaskIdGenerator';
 import { TaskParser } from '../parsing/TaskParser';
+import { toDisplayTask } from '../display/DisplayTaskConverter';
+import { planInPlaceCopies } from '../persistence/DuplicateShift';
 import type { GenBlock } from '../parsing/gen/GenBlockCollector';
 import { FileOperations } from '../persistence/utils/FileOperations';
 import { logError, logInfo, logWarn } from '../../log/log';
@@ -34,6 +36,21 @@ export class TaskIndex {
     private settings: TaskViewerSettings;
     private parseFingerprint: string;
     private draggingFilePath: string | null = null;  // ドラッグ中のファイルパス
+
+    /**
+     * ドラッグ中に読み飛ばした変更。終了時に読み直すために覚えておく。
+     * パスは常に `draggingFilePath` と同じで、`isLocal` は飛ばした変更の論理和。
+     */
+    private skippedDuringDrag: { path: string; isLocal: boolean } | null = null;
+
+    /**
+     * `dispose` 済みか。閉じたあとの書き込みは行わず、できなかったと答える。
+     *
+     * reload 後も開いたままのハブが旧インスタンスの書き込み経路を握っていて、
+     * 古い内容で行を上書きしていた（#165）。購読を切るだけでは、既に参照を
+     * 持っている相手からの呼び出しは止まらない。
+     */
+    private disposed = false;
 
     // 1 フレーム（16ms）分の通知を 1 回にまとめる。合流規則は NotifyCoalescer 側。
     private readonly notify = new NotifyCoalescer(
@@ -80,6 +97,10 @@ export class TaskIndex {
             app, this.store, this.validator,
             this.syncDetector, this.commandExecutor, settings
         );
+        // Connected here rather than built into the repository, because the
+        // scanner does not exist when the repository does — and cut on dispose,
+        // so a write that outlives this index files nothing (see WriteObserver).
+        this.repository.getWriteObserver().connect(path => this.scanner.writeSink(path));
     }
 
     getRepository(): TaskRepository {
@@ -107,8 +128,16 @@ export class TaskIndex {
                     this.selfWrites.mark(file.path);
                 }
 
-                // ドラッグ中のファイルはスキャンをスキップ（古い値でストアが上書きされるのを防止）
+                // ドラッグ中のファイルはスキャンをスキップ（古い値でストアが上書きされるのを防止）。
+                // 飛ばしたことは覚えておき、ドラッグの終了時に読み直す。忘れると、
+                // その間に届いた変更を読む契機がどこにも無くなる。
                 if (this.draggingFilePath === file.path) {
+                    this.skippedDuringDrag = {
+                        path: file.path,
+                        // 1つでも自己書き込みがあれば自己書き込みとして読み直す。
+                        // ドラッグ確定の書き込み自体がこれに当たる。
+                        isLocal: (this.skippedDuringDrag?.isLocal ?? false) || isLocal,
+                    };
                     return;
                 }
 
@@ -188,6 +217,19 @@ export class TaskIndex {
         this.eventRefs.push({ emitter, ref });
     }
 
+    /**
+     * 閉じたあとの書き込みを断る。
+     *
+     * 購読を切っても、既にこの index の参照を持っている相手（reload 前から
+     * 開いているハブ、走行中のタイマー）からの呼び出しは止まらない。断った
+     * ことはログに残す — 黙って捨てると、書いたつもりの側が気づけない。
+     */
+    private refuseAfterDispose(operation: string): boolean {
+        if (!this.disposed) return false;
+        logWarn(`[TaskIndex] refused after dispose: ${operation}`);
+        return true;
+    }
+
     /** Read the file back into the store, then notify. */
     private async rescanAndNotify(file: TFile, isLocal?: boolean): Promise<void> {
         await this.scanner.queueScan(file, isLocal);
@@ -212,9 +254,26 @@ export class TaskIndex {
      * ドラッグ中のファイルパスを設定する。
      * 指定されたファイルのスキャンをスキップし、ストアの上書きを防止。
      * 通知は呼び出し元（DragHandler）が notifyImmediate で明示的に行う。
+     *
+     * 終了時（null）には、その間に飛ばした変更を読み直す。ドラッグ確定の
+     * 書き込みもここに含まれる: `DragSession.handleUp` は commit を待ってから
+     * rAF でこのフラグを下ろすので、確定の modify は必ず飛ばされる側に入る。
+     * 読み直さないと ledger が前回のまま残り、そのタスクを握っていたハブや
+     * 選択が、後の無関係な再スキャンで外れる。外から書き換えられた場合は
+     * ストアの値自体が古いまま残る。
      */
     setDraggingFile(filePath: string | null): void {
         this.draggingFilePath = filePath;
+        if (filePath !== null) return;
+
+        const skipped = this.skippedDuringDrag;
+        this.skippedDuringDrag = null;
+        if (!skipped) return;
+
+        const file = this.app.vault.getAbstractFileByPath(skipped.path);
+        if (file instanceof TFile) {
+            void this.rescanAndNotify(file, skipped.isLocal);
+        }
     }
 
     // ===== 設定 =====
@@ -250,9 +309,12 @@ export class TaskIndex {
      * against the vault the next load is already working on.
      */
     dispose(): void {
+        this.disposed = true;
+        this.skippedDuringDrag = null;
         for (const { emitter, ref } of this.eventRefs) emitter.offref(ref);
         this.eventRefs = [];
         this.editorObserver.dispose();
+        this.repository.getWriteObserver().disconnect();
 
         this.notify.dispose();
         this.selfWrites.dispose();
@@ -340,7 +402,13 @@ export class TaskIndex {
         }
     }
 
-    async updateTask(taskId: string, updates: Partial<Task>): Promise<void> {
+    /**
+     * @returns whether the file was written. A `false` means the update was
+     * reverted (see {@link revertUnwrittenUpdate}) — the index and the file
+     * agree again, and nothing changed.
+     */
+    async updateTask(taskId: string, updates: Partial<Task>): Promise<boolean> {
+        if (this.refuseAfterDispose('updateTask')) return false;
         logInfo(`[updateTask] id=${taskId} fields=[${Object.keys(updates)}]`);
 
         // 合成セグメント ID (##seg:YYYY-MM-DD) は TaskWriteService が原タスクへ
@@ -356,9 +424,9 @@ export class TaskIndex {
         const task = this.store.getTask(taskId);
         if (!task) {
             logWarn(`[TaskIndex] Task ${taskId} not found`);
-            return;
+            return false;
         }
-        if (task.isReadOnly) return;
+        if (task.isReadOnly) return false;
 
         // 非時刻プロパティ（color/tags/custom 等）の書き込み操作を導出。
         // before スナップショット（Object.assign 前）との diff が必要なので
@@ -391,6 +459,7 @@ export class TaskIndex {
         if (!written) {
             this.revertUnwrittenUpdate(task, taskId, before, updates);
         }
+        return written;
     }
 
     /**
@@ -444,10 +513,11 @@ export class TaskIndex {
      * removing this one. A fire that cannot be planned stops the delete —
      * see {@link FlowExecutor.fireAndDelete} — so the task can survive this
      * call, with a notice saying why.
-     * @returns whether the task is gone. Only a stopped fire and a read-only
-     * task answer no; every other road here removes it.
+     * @returns whether the task is gone. A stopped fire, a read-only task and
+     * a delete whose lines could not be resolved in the file all answer no.
      */
     async deleteTask(taskId: string, options: { fireFlow?: boolean } = {}): Promise<boolean> {
+        if (this.refuseAfterDispose('deleteTask')) return false;
         const task = this.store.getTask(taskId);
         if (!task) return false;
         return this.withNotify(task.file, async () => {
@@ -456,11 +526,18 @@ export class TaskIndex {
 
             this.syncDetector.markLocalEdit(task.file);
 
-            let removed = true;
+            let removed: boolean;
             if (options.fireFlow && isTvInline(task)) {
                 removed = await this.commandExecutor.fireAndDelete(task);
             } else {
-                await this.repository.deleteTaskFromFile(task);
+                removed = await this.repository.deleteTaskFromFile(task);
+                if (!removed) {
+                    // Nothing was written, so no rescan follows and the store
+                    // still holds a task the file also still holds. They agree,
+                    // and the caller must not report the task gone.
+                    logWarn(`[TaskIndex] delete was not written: id=${taskId}`);
+                    new Notice(t('notice.taskWriteFailed'));
+                }
             }
 
             await this.scanner.waitForScan(task.file);
@@ -468,21 +545,57 @@ export class TaskIndex {
         });
     }
 
-    async duplicateTask(taskId: string, options?: DuplicateOptions): Promise<void> {
+    /** @returns whether the copy was written. */
+    async duplicateTask(taskId: string, options?: DuplicateOptions): Promise<boolean> {
+        if (this.refuseAfterDispose('duplicateTask')) return false;
         const task = this.store.getTask(taskId);
-        if (!task) return;
+        if (!task) return false;
         return this.withNotify(task.file, async () => {
-            if (task.isReadOnly) return;
+            if (task.isReadOnly) return false;
 
             this.syncDetector.markLocalEdit(task.file);
 
-            await this.repository.duplicateInlineTask(task, options);
+            const written = await this.writeDuplicate(task, options);
+            if (!written) {
+                logWarn(`[TaskIndex] duplicate was not written: id=${taskId}`);
+                new Notice(t('notice.taskWriteFailed'));
+            }
 
             await this.scanner.waitForScan(task.file);
+            return written;
         });
     }
 
+    /**
+     * Route a duplicate to the axis its options ask for.
+     *
+     * `dayOffset` picks the axis and `count` says how many copies: without an
+     * offset the copies run along the clock, each starting where the one
+     * before it ends, and with one they run along the calendar as they always
+     * have. The in-place copies are composed here rather than in the writer,
+     * because deciding where they sit needs the effective dates — the hour a
+     * task was given implicitly is as much its end as a written one — and
+     * those are resolved at this layer. The writer is handed finished lines,
+     * the same division the recurrence path uses.
+     */
+    private async writeDuplicate(task: Task, options?: DuplicateOptions): Promise<boolean> {
+        const { dayOffset = 0, count = 1 } = options ?? {};
+        if (dayOffset !== 0) {
+            return this.repository.duplicateInlineTask(task, options);
+        }
+
+        const display = toDisplayTask(task, this.settings.startHour, (id) => this.store.getTask(id));
+        const copies = planInPlaceCopies(task, display, count);
+        return this.repository.duplicateInlineTaskInPlace(
+            task,
+            copies.kind === 'verbatim'
+                ? copies
+                : { kind: 'lines', lines: copies.tasks.map(copy => TaskParser.format(copy)) },
+        );
+    }
+
     async createTask(filePath: string, taskLine: string, heading?: string): Promise<number> {
+        if (this.refuseAfterDispose('createTask')) return -1;
         let insertedLine = -1;
         await this.withNotify(filePath, async () => {
             logInfo(`[createTask] path=${filePath} heading=${heading ?? '(none)'}`);
@@ -500,13 +613,15 @@ export class TaskIndex {
         return insertedLine;
     }
 
-    async insertChildTask(parentTaskId: string, childLine: string): Promise<void> {
+    /** @returns whether the child line was written. */
+    async insertChildTask(parentTaskId: string, childLine: string): Promise<boolean> {
+        if (this.refuseAfterDispose('insertChildTask')) return false;
         const task = this.store.getTask(parentTaskId);
-        if (!task) return;
+        if (!task) return false;
         // Read-only parsers (Tasks / dayPlanner) must never be written to.
         // TaskApi guards this as well, but the menu path reaches the write
         // service directly and would otherwise bypass it.
-        if (task.isReadOnly) return;
+        if (task.isReadOnly) return false;
         return this.withNotify(task.file, async () => {
             logInfo(`[insertChildTask] parentId=${parentTaskId}`);
 
@@ -515,9 +630,14 @@ export class TaskIndex {
             // インデントは書き込み層が既存子行から決める（親行だけからは
             // トップレベルのとき 4 スペース固定になり、タブ書きのファイルに
             // スペースが混ざる）。
-            await this.repository.insertLineAsFirstChild(task, childLine);
+            const insertedLine = await this.repository.insertLineAsFirstChild(task, childLine);
+            if (insertedLine < 0) {
+                logWarn(`[TaskIndex] child insert was not written: parentId=${parentTaskId}`);
+                new Notice(t('notice.taskWriteFailed'));
+            }
 
             await this.scanner.waitForScan(task.file);
+            return insertedLine >= 0;
         });
     }
 
@@ -527,6 +647,7 @@ export class TaskIndex {
      * so head insertion would print the log backwards.
      */
     async appendChildTask(parentTaskId: string, childLine: string): Promise<void> {
+        if (this.refuseAfterDispose('appendChildTask')) return;
         const task = this.store.getTask(parentTaskId);
         if (!task) return;
         if (task.isReadOnly) return;
@@ -551,6 +672,7 @@ export class TaskIndex {
         siblingLine: string,
         opts: { afterCompletedRun?: boolean } = {}
     ): Promise<number> {
+        if (this.refuseAfterDispose('insertSiblingAfterTask')) return -1;
         const task = this.store.getTask(taskId);
         if (!task) return -1;
         if (task.isReadOnly) return -1;
@@ -566,6 +688,7 @@ export class TaskIndex {
     }
 
     async updateLine(filePath: string, lineNumber: number, newContent: string): Promise<void> {
+        if (this.refuseAfterDispose('updateLine')) return;
         return this.withNotify(filePath, async () => {
             this.syncDetector.markLocalEdit(filePath);
             await this.repository.updateLine(filePath, lineNumber, newContent);
@@ -578,6 +701,7 @@ export class TaskIndex {
     }
 
     async insertLineAfterLine(filePath: string, lineNumber: number, newContent: string): Promise<void> {
+        if (this.refuseAfterDispose('insertLineAfterLine')) return;
         return this.withNotify(filePath, async () => {
             this.syncDetector.markLocalEdit(filePath);
             await this.repository.insertLineAfterLine(filePath, lineNumber, newContent);
@@ -590,6 +714,7 @@ export class TaskIndex {
     }
 
     async deleteLine(filePath: string, lineNumber: number): Promise<void> {
+        if (this.refuseAfterDispose('deleteLine')) return;
         return this.withNotify(filePath, async () => {
             this.syncDetector.markLocalEdit(filePath);
             await this.repository.deleteLine(filePath, lineNumber);

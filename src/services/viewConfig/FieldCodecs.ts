@@ -120,6 +120,42 @@ export const F = {
         };
     },
 
+    /**
+     * Bounded integer. Out-of-range and non-integer values are rejected
+     * (return undefined, falling back to the field's default), matching
+     * `float`'s reject-don't-clamp policy rather than silently coercing.
+     */
+    int(
+        key: string,
+        opts: FieldOptions & { min?: number; max?: number } = {},
+    ): ConfigField<number> {
+        const { min = -Infinity, max = Infinity } = opts;
+        // Plain decimal digits only. Number() alone also accepts "0x10" (16),
+        // "1e1" (10), and whitespace-padded values ("  5  ") as valid
+        // integers — this CLI's fields reject malformed input rather than
+        // coerce it, so a value that isn't visibly a decimal integer doesn't
+        // get a second chance through Number()'s leniency.
+        const DECIMAL_INT = /^-?\d+$/;
+        const check = (n: number): number | undefined =>
+            (Number.isInteger(n) && n >= min && n <= max) ? n : undefined;
+        const parseString = (raw: string): number | undefined =>
+            DECIMAL_INT.test(raw) ? check(Number(raw)) : undefined;
+        return {
+            key,
+            legacyKeys: opts.legacyKeys,
+            parse(raw) {
+                if (typeof raw === 'number') return check(raw);
+                if (typeof raw === 'string') return parseString(raw);
+                return undefined;
+            },
+            serialize(value) {
+                return typeof value === 'number' ? check(value) : undefined;
+            },
+            toUriParam(value) { return String(value); },
+            fromUriParam(raw) { return parseString(raw); },
+        };
+    },
+
     stringEnum<const S extends string>(
         key: string,
         allowed: readonly S[],

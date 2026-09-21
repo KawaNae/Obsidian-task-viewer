@@ -3,11 +3,13 @@ import type { PluginContext } from '../../PluginContext';
 import type { ExportHost } from '../../services/export/ExportService';
 import { cliOk, cliError } from '../CliOutputFormatter';
 import { resolveViewTypeFromShortName, schemaFor } from '../../services/viewConfig';
+import type { ConfigField } from '../../services/viewConfig/ViewConfigSchema';
 import { exportDescriptorFor } from '../../services/export/ExportRegistry';
 import { ViewTemplateLoader } from '../../services/template/ViewTemplateLoader';
 import { buildViewStateFromParams } from '../../services/viewConfig/ViewStateFactory';
 import type { ExportResult } from '../../services/export/ExportService';
 import { toCliName } from '../../api/OperationSchemas';
+import { MIN_DAYS_TO_SHOW, MAX_DAYS_TO_SHOW } from '../../views/timelineview/TimelineSchema';
 
 const EXPORT_SPECIFIC_KEYS = new Set([
     'view', 'template', 'name', 'output-folder', 'filename', 'wait', 'keep-open', 'width',
@@ -33,6 +35,12 @@ export function createExportImageHandler(plugin: PluginContext & ExportHost) {
             // 3. Validate flags: only EXPORT_SPECIFIC_KEYS + valid view-config keys allowed
             const validationErr = validateFlags(resolvedParams, viewType);
             if (validationErr) return validationErr;
+
+            // 3b. Validate days-to-show against the same schema field the
+            // actual render reads, so an out-of-range flag fails fast instead
+            // of silently falling back to the default.
+            const daysToShowErr = validateDaysToShow(resolvedParams, viewType);
+            if (daysToShowErr) return daysToShowErr;
 
             // 4. Validate filename if user-specified
             const filenameErr = validateFilename(resolvedParams);
@@ -63,12 +71,12 @@ export function createExportImageHandler(plugin: PluginContext & ExportHost) {
                 result = await plugin.exportService.exportTempView(viewType, buildResult.state, buildOpts(resolvedParams));
             }
 
-            const rangeInfo = computeRenderedRange(viewType, anchorResult.resolvedAnchor, resolvedParams);
+            const { renderedRange, ...rest } = result;
             return cliOk({
-                ...result,
-                ...(rangeInfo ? {
-                    resolvedAnchor: rangeInfo.anchor,
-                    renderedRange: { from: rangeInfo.from, to: rangeInfo.to },
+                ...rest,
+                ...(renderedRange ? {
+                    resolvedAnchor: renderedRange.anchor,
+                    renderedRange: { from: renderedRange.from, to: renderedRange.to },
                 } : {}),
             });
         } catch (e) {
@@ -81,20 +89,18 @@ export function createExportImageHandler(plugin: PluginContext & ExportHost) {
 
 interface AnchorResult {
     params: CliData;
-    resolvedAnchor: string | undefined;
     error: string | null;
 }
 
 function resolveAnchorDate(params: CliData, viewType: string): AnchorResult {
     const anchorValue = params['anchor-date'];
-    if (!anchorValue) return { params, resolvedAnchor: undefined, error: null };
+    if (!anchorValue) return { params, error: null };
 
     const schema = schemaFor(viewType);
     const anchorKey = schema?.anchorKey;
     if (!anchorKey) {
         return {
             params,
-            resolvedAnchor: undefined,
             error: cliError(`View '${viewType}' has no date anchor. anchor-date= is not supported for this view type`),
         };
     }
@@ -103,70 +109,13 @@ function resolveAnchorDate(params: CliData, viewType: string): AnchorResult {
     if (params[cliKey] && params[cliKey] !== anchorValue) {
         return {
             params,
-            resolvedAnchor: undefined,
             error: cliError(`Conflicting date flags: anchor-date=${anchorValue} and ${cliKey}=${params[cliKey]}. Use one or the other`),
         };
     }
 
     const copy = { ...params, [cliKey]: anchorValue };
     delete copy['anchor-date'];
-    return { params: copy, resolvedAnchor: anchorValue, error: null };
-}
-
-// ── Rendered range computation ──
-
-interface RenderedRange {
-    anchor: string;
-    from: string;
-    to: string;
-}
-
-function computeRenderedRange(
-    viewType: string,
-    resolvedAnchor: string | undefined,
-    params: CliData,
-): RenderedRange | null {
-    if (!resolvedAnchor) {
-        const schema = schemaFor(viewType);
-        const anchorKey = schema?.anchorKey;
-        if (!anchorKey) return null;
-        const cliKey = toCliName(anchorKey);
-        const dateFromParams = params[cliKey];
-        if (!dateFromParams) return null;
-        resolvedAnchor = dateFromParams;
-    }
-
-    const schema = schemaFor(viewType);
-    const shortName = schema?.shortName;
-
-    switch (shortName) {
-        case 'timeline': {
-            const daysToShow = params['days-to-show']
-                ? parseInt(params['days-to-show'], 10)
-                : (schema?.defaults as Record<string, unknown>)?.daysToShow as number ?? 3;
-            const from = resolvedAnchor;
-            const to = addDays(resolvedAnchor, daysToShow - 1);
-            return { anchor: resolvedAnchor, from, to };
-        }
-        case 'calendar':
-        case 'mini-calendar': {
-            const [year, month] = resolvedAnchor.split('-').map(Number);
-            const monthStart = `${year}-${String(month).padStart(2, '0')}-01`;
-            const lastDay = new Date(year, month, 0).getDate();
-            const monthEnd = `${year}-${String(month).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
-            return { anchor: resolvedAnchor, from: monthStart, to: monthEnd };
-        }
-        case 'schedule':
-            return { anchor: resolvedAnchor, from: resolvedAnchor, to: resolvedAnchor };
-        default:
-            return null;
-    }
-}
-
-function addDays(dateStr: string, days: number): string {
-    const [y, m, d] = dateStr.split('-').map(Number);
-    const dt = new Date(y, m - 1, d + days);
-    return `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}-${String(dt.getDate()).padStart(2, '0')}`;
+    return { params: copy, error: null };
 }
 
 // ── Existing helpers ──
@@ -213,6 +162,29 @@ function validateFlags(params: CliData, viewType: string): string | null {
         if (validConfigKeys.has(key)) continue;
         const allValid = [...EXPORT_SPECIFIC_KEYS, ...validConfigKeys].sort();
         return cliError(`Unknown flag: '${key}'. Available flags: ${allValid.join(', ')}`);
+    }
+    return null;
+}
+
+/**
+ * Reads the `daysToShow` field's own `fromUriParam` off the resolved schema —
+ * the same parser `codec.fromUriParams` uses for the actual render — so
+ * upfront validation can't drift from what the render itself would accept.
+ */
+export function parseDaysToShow(schema: ReturnType<typeof schemaFor>, raw: string | undefined): number | undefined {
+    if (raw === undefined) return undefined;
+    const field = (schema?.config as Record<string, ConfigField<unknown>> | undefined)?.daysToShow;
+    const parsed = field?.fromUriParam?.(raw);
+    return typeof parsed === 'number' ? parsed : undefined;
+}
+
+export function validateDaysToShow(params: CliData, viewType: string): string | null {
+    const raw = params['days-to-show'];
+    if (raw === undefined) return null;
+    const schema = schemaFor(viewType);
+    if (schema?.shortName !== 'timeline') return null;
+    if (parseDaysToShow(schema, raw) === undefined) {
+        return cliError(`Invalid days-to-show: '${raw}'. Must be an integer between ${MIN_DAYS_TO_SHOW} and ${MAX_DAYS_TO_SHOW}`);
     }
     return null;
 }

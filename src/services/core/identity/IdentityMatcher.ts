@@ -1,6 +1,8 @@
 import type { Task } from '../../../types';
 import type { Fingerprint } from './IdentityFingerprint';
 import { fingerprintOf } from './IdentityFingerprint';
+import type { HintResolution, PendingHint } from './IdentityHints';
+import { resolveHints } from './IdentityHints';
 import type { LedgerEntry } from './IdentityLedger';
 
 export interface MatchResult {
@@ -12,6 +14,11 @@ export interface MatchResult {
     minted: string[];
     /** Previous runtime IDs nothing matched. They are gone for good. */
     retired: string[];
+    /**
+     * How many pending claims this scan is done with, counted from the head —
+     * the one it adopted and everything older. 0 when it adopted none.
+     */
+    consumedHints: number;
 }
 
 /**
@@ -26,13 +33,20 @@ export interface MatchResult {
  * ladder once over whatever is left, which is how a task whose parent changed (or
  * whose parent's text was merely edited) is rescued instead of being renumbered.
  *
+ * Ahead of both passes is rung 0: the claims the plugin's own writes left
+ * behind, when one of them and only one describes the rows that were read (see
+ * IdentityHints). They are settled file-wide rather than inside the ladder
+ * because a claim names a runtime ID outright — there is no bucket for it to be
+ * ambiguous in.
+ *
  * Pure and deterministic: no clock, no randomness, no I/O. Minting is the caller's,
  * through `mintRuntimeId`.
  */
 export function matchFile(
     previous: LedgerEntry[],
     tasks: Task[],
-    mintRuntimeId: (task: Task) => string
+    mintRuntimeId: (task: Task) => string,
+    pending: readonly PendingHint[] = []
 ): MatchResult {
     const fingerprints = new Map<Task, Fingerprint>();
     for (const task of tasks) {
@@ -49,13 +63,35 @@ export function matchFile(
     const pairedWith = new Map<Task, LedgerEntry>();
     const matchedPrev = new Set<string>();
 
+    // --- rung 0: what our own writes said, when the file bears exactly one of them out ---
+    const resolution = resolveHints(previous, ordered, pending);
+    const consumedHints = resolution.consumed;
+    const hinted = settleHints(resolution, previous, ordered);
+    for (const [entry, task] of hinted.pairs) {
+        pairedWith.set(task, entry);
+        matchedPrev.add(entry.runtimeId);
+    }
+    // A retired row is spoken for: the write said its line is gone, so it must
+    // not be offered to the ladder, where an identically worded sibling would
+    // hand it on.
+    for (const runtimeId of hinted.retired) matchedPrev.add(runtimeId);
+
     // --- 1st pass: scope by scope, from the roots down ---
+    // An adopted claim leaves nothing for the two passes below: it answers for
+    // every row of the file, children included, so each task is either paired
+    // or newly written and both pools come out empty. They run all the same,
+    // because rung 0 usually has nothing to say.
     const scopes: Array<{ prev: LedgerEntry[]; cur: Task[] }> = [{ prev: prevRoots, cur: roots }];
+
     while (scopes.length > 0) {
         const scope = scopes.pop()!;
         const { pairs } = runLadder(
-            scope.prev.map(entry => ({ item: entry, fingerprint: entry.fingerprint })),
-            scope.cur.map(task => ({ item: task, fingerprint: fingerprints.get(task)! }))
+            scope.prev
+                .filter(entry => !matchedPrev.has(entry.runtimeId))
+                .map(entry => ({ item: entry, fingerprint: entry.fingerprint })),
+            scope.cur
+                .filter(task => !pairedWith.has(task) && !hinted.fresh.has(task))
+                .map(task => ({ item: task, fingerprint: fingerprints.get(task)! }))
         );
         for (const [entry, task] of pairs) {
             pairedWith.set(task, entry);
@@ -70,8 +106,10 @@ export function matchFile(
     }
 
     // --- 2nd pass: the leftovers of the whole file, no scoping ---
+    // A task a hint called new stays out of it: the write said it was just
+    // written, so there is no previous row for it to inherit from.
     const poolPrev = previous.filter(entry => !matchedPrev.has(entry.runtimeId));
-    const poolCur = ordered.filter(task => !pairedWith.has(task));
+    const poolCur = ordered.filter(task => !pairedWith.has(task) && !hinted.fresh.has(task));
     const rescued = runLadder(
         poolPrev.map(entry => ({ item: entry, fingerprint: entry.fingerprint })),
         poolCur.map(task => ({ item: task, fingerprint: fingerprints.get(task)! }))
@@ -88,7 +126,10 @@ export function matchFile(
             runtimeIdOf.set(task, entry.runtimeId);
             continue;
         }
-        const fresh = mintRuntimeId(task);
+        // A row the write named keeps that name. Minting one here would issue
+        // a second name for a line that already has one, and a scan that ran
+        // earlier over the same line would have issued a different one.
+        const fresh = hinted.fresh.get(task) ?? mintRuntimeId(task);
         runtimeIdOf.set(task, fresh);
         minted.push(fresh);
     }
@@ -106,6 +147,7 @@ export function matchFile(
             file: task.file,
             parent: parent ? runtimeIdOf.get(parent)! : null,
             ordinal: ordinals.get(task) ?? 0,
+            line: task.line,
             fingerprint: fingerprints.get(task)!,
         };
     });
@@ -114,8 +156,80 @@ export function matchFile(
         mapping,
         entries,
         minted,
-        retired: rescued.prevLeft.map(entry => entry.runtimeId),
+        retired: [...hinted.retired, ...rescued.prevLeft.map(entry => entry.runtimeId)],
+        consumedHints,
     };
+}
+
+interface HintOutcome {
+    pairs: Array<[LedgerEntry, Task]>;
+    /**
+     * Tasks a hint named as newly written, each with the name the write gave
+     * it. They inherit nothing, and they are not renamed either: the write
+     * already said what this row is called.
+     */
+    fresh: Map<Task, string>;
+    /** Rows a hint said are gone. */
+    retired: string[];
+}
+
+/**
+ * Read the adopted claim off as pairs.
+ *
+ * `resolveHints` has already found the claim line for line identical to what
+ * was read, and found no other candidate that would decide differently, so
+ * there is nothing left to decide: line i is whatever the claim says line i is.
+ * A row the claim no longer holds is one a write removed.
+ *
+ * What settles a row is whether the ledger holds its name, not whether the
+ * write called it new. A created row read for the first time has no entry and
+ * keeps the name the write gave it; the same row read again, after a scan has
+ * committed it and while a later claim still carries it, does have one — and
+ * has to be paired, not waved through. Waved through, it would land in
+ * `retired` as a row that vanished and in `minted` as one just issued, both
+ * of them false of a line that has not moved.
+ */
+function settleHints(
+    resolution: HintResolution,
+    previous: LedgerEntry[],
+    ordered: Task[]
+): HintOutcome {
+    const pairs: Array<[LedgerEntry, Task]> = [];
+    const fresh = new Map<Task, string>();
+    const retired: string[] = [];
+
+    const rows = resolution.rows;
+    if (!rows) return { pairs, fresh, retired };
+
+    const byRuntimeId = new Map(previous.map(entry => [entry.runtimeId, entry]));
+    const survived = new Set<string>();
+
+    for (let i = 0; i < ordered.length; i++) {
+        const runtimeId = rows[i].runtimeId;
+        const entry = byRuntimeId.get(runtimeId);
+        if (!entry) {
+            // Only a created row can name something `previous` does not hold:
+            // `reproduces` refused the claim otherwise. That refusal is the
+            // only thing standing between this branch and a name invented out
+            // of nowhere, so in development it is checked here as well — where
+            // the row is actually used, rather than where it was let through.
+            if (__DEV__ && !rows[i].created) {
+                throw new Error(
+                    `[identity] a claim named a row the ledger does not hold: ${runtimeId}`
+                );
+            }
+            fresh.set(ordered[i], runtimeId);
+            continue;
+        }
+        survived.add(runtimeId);
+        pairs.push([entry, ordered[i]]);
+    }
+
+    for (const entry of previous) {
+        if (!survived.has(entry.runtimeId)) retired.push(entry.runtimeId);
+    }
+
+    return { pairs, fresh, retired };
 }
 
 interface Rung<T> {
@@ -334,4 +448,50 @@ function buildOrdinals(roots: Task[], childrenOf: Map<Task, Task[]>): Map<Task, 
         siblings.forEach((task, index) => ordinals.set(task, index));
     }
     return ordinals;
+}
+
+export interface GuardedMatch {
+    result: MatchResult;
+    /** Whether the claims were thrown out and the file matched again without them. */
+    withoutClaims: boolean;
+}
+
+/**
+ * Match, and if the answer would give one runtime ID to two rows, match again
+ * with no claims at all.
+ *
+ * A duplicate is the one answer that does lasting damage. The store is keyed by
+ * ID, so the second row overwrites the first and the file comes out a task
+ * short of its lines; the ledger keeps both positions and one entry, and since
+ * that ledger is what the next scan compares against, the state is stable and
+ * wrong. The task whose ID went missing then refuses every write as "not
+ * found" while its line sits there in plain sight. Nothing recovers it.
+ *
+ * So the answer is checked before it is used, and the fallback is the ladder on
+ * its own: it takes each previous row at most once, which is the property that
+ * makes a duplicate impossible. What that costs is the precision of one scan.
+ *
+ * Only a claim can bring this about, which is why matching again without them
+ * is the whole remedy — and why the second run is not checked again here. A
+ * dev-build assertion at the store's threshold covers the case where the ladder
+ * itself learns to repeat an ID.
+ */
+export function matchWithoutRepeatedIds(
+    run: (pending: readonly PendingHint[]) => MatchResult,
+    pending: readonly PendingHint[],
+): GuardedMatch {
+    const result = run(pending);
+    if (pending.length === 0 || !repeatsAnId(result.entries)) {
+        return { result, withoutClaims: false };
+    }
+    return { result: run([]), withoutClaims: true };
+}
+
+function repeatsAnId(entries: readonly LedgerEntry[]): boolean {
+    const seen = new Set<string>();
+    for (const entry of entries) {
+        if (seen.has(entry.runtimeId)) return true;
+        seen.add(entry.runtimeId);
+    }
+    return false;
 }

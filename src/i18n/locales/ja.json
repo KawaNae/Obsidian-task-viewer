@@ -291,8 +291,11 @@
     "noTemplatesFound": "テンプレートなし",
     "viewMode1Day": "1日",
     "viewMode3Days": "3日",
-    "viewModeWeek": "週",
+    "viewModeWeek": "7日",
     "viewModeLabel": "表示モード: {{label}}",
+    "daysCount": "{{n}}日",
+    "increaseDays": "表示日数を増やす",
+    "decreaseDays": "表示日数を減らす",
     "zoomLabel": "ズーム: {{pct}}"
   },
   "position": {
@@ -533,7 +536,7 @@
     "maskLabel": "マスク: {{value}}",
     "openInEditor": "エディターで開く",
     "duplicate": "複製",
-    "inPlace": "その場で",
+    "asNext": "続きで",
     "forTomorrow": "明日用",
     "forWeek": "1週間用（7日間）",
     "convertToInline": "インラインに変換",
@@ -906,7 +909,8 @@
       "generated-command": "生成される行に ==> コマンドは書けません。次インスタンスのコマンドはエンジンが付けます",
       "generated-block-id": "生成される行にブロック ID は書けません。発火のたびに '^{{blockId}}' を持つ行が増えます",
       "generated-not-a-task": "生成されるタスクはチェックボックスの行である必要があります。そうでないと次の発火が起きません",
-      "generated-status": "生成されるタスクは未完了で始まります。ここに書かれた '{{status}}' は無視されます"
+      "generated-status": "生成されるタスクは未完了で始まります。ここに書かれた '{{status}}' は無視されます",
+      "generated-child-status": "自分の ==> コマンドを持つ生成された子が '{{status}}' で書かれています。チェックを外して付け直すまでコマンドは発火しません。書き間違いの可能性があります"
     }
   },
   "flowEval": {

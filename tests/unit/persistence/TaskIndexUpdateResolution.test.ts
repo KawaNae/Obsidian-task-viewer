@@ -1,4 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
+import { Notice } from 'obsidian';
 import { TaskIndex } from '../../../src/services/core/TaskIndex';
 import { makeTask } from '../helpers/makeTask';
 import type { Task } from '../../../src/types';
@@ -30,6 +31,9 @@ function buildHost(task: Task, written = true) {
         draggingFilePath: null,
         // The revert lives on the prototype; the host stands in for `this`.
         revertUnwrittenUpdate: proto.revertUnwrittenUpdate,
+        // The dispose guard every write goes through; this index is open.
+        disposed: false,
+        refuseAfterDispose: proto.refuseAfterDispose,
     };
 }
 
@@ -113,5 +117,45 @@ describe('updateTask: when the write lands nowhere', () => {
 
         expect(task.startTime).toBe('11:00');
         expect(host.store.notifyListeners).toHaveBeenCalledTimes(1);
+    });
+});
+
+/**
+ * The answer updateTask gives its caller. The UI ignores it and keeps relying
+ * on the revert and the notice below; the API turns a `false` into an error,
+ * because a CLI that prints the new values after a write that never happened
+ * is the only consumer that cannot see the notice.
+ */
+describe('updateTask: the answer', () => {
+    it('answers no and raises one notice when the write landed nowhere', async () => {
+        const task = makeTask({ content: 'x', startTime: '10:00' });
+        const host = buildHost(task, false);
+        Notice.messages.length = 0;
+
+        const written = await proto.updateTask.call(host, task.id, { startTime: '11:00' });
+
+        expect(written).toBe(false);
+        expect(Notice.messages).toHaveLength(1);
+    });
+
+    it('answers yes and stays quiet when the write landed', async () => {
+        const task = makeTask({ content: 'x', startTime: '10:00' });
+        const host = buildHost(task, true);
+        Notice.messages.length = 0;
+
+        const written = await proto.updateTask.call(host, task.id, { startTime: '11:00' });
+
+        expect(written).toBe(true);
+        expect(Notice.messages).toHaveLength(0);
+    });
+
+    it('answers no for a read-only task, without touching the repository', async () => {
+        const task = makeTask({ content: 'x', isReadOnly: true });
+        const host = buildHost(task, true);
+
+        const written = await proto.updateTask.call(host, task.id, { startTime: '11:00' });
+
+        expect(written).toBe(false);
+        expect(host.repository.updateTaskInFile).not.toHaveBeenCalled();
     });
 });

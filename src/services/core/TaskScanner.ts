@@ -7,9 +7,12 @@ import type { SyncDetector } from './SyncDetector';
 import { CompletionDetector } from './CompletionDetector';
 import type { FlowExecutor } from '../flow/FlowExecutor';
 import { TaskIdGenerator } from '../display/TaskIdGenerator';
-import { IdentityLedger } from './identity/IdentityLedger';
-import { matchFile } from './identity/IdentityMatcher';
-import { applyIdentity, assertNoProvisionalIds, assertUniqueProvisionalIds } from './identity/IdentityApplier';
+import { IdentityLedger, type LedgerEntry } from './identity/IdentityLedger';
+import { HintLog } from './identity/IdentityHints';
+import { matchFile, matchWithoutRepeatedIds } from './identity/IdentityMatcher';
+import { WriteClaims, type ClaimResult } from './identity/WriteClaims';
+import { applyIdentity, assertDistinctRuntimeIds, assertNoProvisionalIds, assertUniqueProvisionalIds } from './identity/IdentityApplier';
+import { splitLines, type WriteSink } from '../../utils/FileLines';
 import { logDebug, logError, logInfo } from '../../log/log';
 
 /**
@@ -36,6 +39,61 @@ export class TaskScanner {
      * IDs per millisecond on average; ~1.7e15 stays within safe integers.
      */
     private ledger = new IdentityLedger(Date.now() * 1000);
+
+    /**
+     * What the plugin's own writes left for the next scan of each file.
+     *
+     * Owned here for the same reason the ledger is: a scan is the only thing
+     * that consumes a hint, and the consuming and the ledger's commit have to
+     * happen in the same step or a hint could outlive the state it describes.
+     */
+    private hints = new HintLog();
+
+    /**
+     * Turns what a write reports about a file's lines into a claim about its
+     * rows. Owned here because it needs both the parser and the ledger, and
+     * because its bookkeeping has to be dropped in the same step that commits
+     * a scan — see `WriteClaims`.
+     */
+    private claims = new WriteClaims(
+        (path, lines) => {
+            // The frontmatter is the cache's, which is the file as it was
+            // before the write asking this question — Obsidian updates the
+            // cache from the `modify` that has not fired yet. Nothing here can
+            // do better from inside `vault.process`. What it costs is a claim
+            // made under the old reading of a `tv-ignore` or a notation
+            // switch; the scan that follows reads the new one and refuses a
+            // claim that does not reproduce what it sees.
+            const parsed = FileParsePipeline.parse(
+                path, [...lines], this.app.metadataCache.getCache(path)?.frontmatter, this.settings);
+            // Not the same answer as a file with no tasks: an ignored file is
+            // one this pipeline declines to read, and "it has no rows" would
+            // be a claim about it.
+            if (parsed.ignored) return null;
+            // In the parser's own order, not sorted by line. A claim is
+            // weighed against `parsed.tasks` as a scan hands them to
+            // `matchFile`, so a claim ordered some other way would pair its
+            // rows with different rows than the scan read — invisibly, where
+            // two swapped rows read the same.
+            return parsed.tasks.map(task => ({
+                line: task.line,
+                text: task.originalText,
+                parserId: task.parserId,
+            }));
+        },
+        // Everything the ledger holds has been read by a scan, so nothing it
+        // hands back is a row still waiting to be recorded.
+        (path) => this.ledger.snapshotFor(path).map(entry => ({
+            runtimeId: entry.runtimeId,
+            created: false,
+            text: entry.fingerprint.originalText,
+            line: entry.line,
+        })),
+        // The same counter a scan mints from, so a name issued by a write can
+        // never collide with one issued by a read.
+        (path, parserId) => TaskIdGenerator.mintRuntimeId(
+            { parserId, file: path }, () => this.ledger.mint()),
+    );
 
     constructor(
         private app: App,
@@ -132,8 +190,17 @@ export class TaskScanner {
      */
     private async scanFile(file: TFile, isLocalChange: boolean = false): Promise<void> {
         this.validator.clearErrorsForFile(file.path);
+
+        // Everything from here to the match below is synchronous, so the claims
+        // this scan weighs are, near enough, the ones filed by the time the read
+        // resolved. Near enough rather than exactly: another write's callback
+        // can slip in between the read settling and this line running, and its
+        // claim describes a file this read never saw. Nothing here tries to
+        // fence that off, because a position cannot — what keeps such a claim
+        // from deciding anything is that it has to be the only one that fits
+        // (see resolveHints).
         const content = await this.app.vault.read(file);
-        const lines = content.split('\n').map(l => l.replace(/\r$/, ''));
+        const { lines } = splitLines(content);
 
         // --- parse ---
         const parsed = FileParsePipeline.parse(
@@ -148,6 +215,9 @@ export class TaskScanner {
             this.completionDetector.clearForFile(file.path);
             // Retired for good: lifting tv-ignore later mints fresh IDs.
             this.ledger.dropFile(file.path);
+            // With no rows to match against, a hint has nothing left to claim.
+            this.hints.dropFile(file.path);
+            this.claims.forget(file.path);
             return;
         }
 
@@ -157,11 +227,27 @@ export class TaskScanner {
         if (__DEV__) {
             assertUniqueProvisionalIds(parsed.tasks);
         }
-        const identity = matchFile(
-            this.ledger.snapshotFor(file.path),
-            parsed.tasks,
-            task => TaskIdGenerator.mintRuntimeId(task, () => this.ledger.mint())
+        const now = Date.now();
+        const previousRows = this.ledger.snapshotFor(file.path);
+        const guarded = matchWithoutRepeatedIds(
+            claims => matchFile(
+                previousRows,
+                parsed.tasks,
+                task => TaskIdGenerator.mintRuntimeId(task, () => this.ledger.mint()),
+                claims,
+            ),
+            this.hints.pendingFor(file.path, now),
         );
+        if (guarded.withoutClaims) {
+            // The log said something no file can be: one row on two lines. What
+            // it would cost to commit is a task the index cannot see again (see
+            // matchWithoutRepeatedIds), so the ladder answered instead and the
+            // file's claims go — a log that produced this is not one to weigh
+            // the next read against.
+            logError(`[TaskScanner] ${file.path}: a claim gave one runtime ID to two rows; matched without the log`);
+            this.hints.dropFile(file.path);
+        }
+        const identity = guarded.result;
         applyIdentity(parsed, identity.mapping);
 
         // --- validate ---
@@ -203,6 +289,7 @@ export class TaskScanner {
         // removed the file's tasks from the store.
         if (__DEV__) {
             assertNoProvisionalIds(parsed.tasks, id => !TaskIdGenerator.isRuntimeId(id));
+            assertDistinctRuntimeIds(identity.entries);
         }
         this.store.beginBatch();
         try {
@@ -219,6 +306,16 @@ export class TaskScanner {
             // Last, so a store write that throws leaves the ledger on the
             // previous generation too.
             this.ledger.replaceFile(file.path, identity.entries);
+            this.hints.settle(
+                file.path, identity.consumedHints,
+                ledgerMoved(previousRows, identity.entries),
+            );
+            // Whatever this scan decided, it decided: the next write builds on
+            // the ledger rather than on what the last write thought it left. A
+            // base carried across a scan that answered its own way would hand
+            // the next claim identities the ledger does not agree with, and the
+            // texts would line up well enough that nothing later would notice.
+            this.claims.forget(file.path);
         } finally {
             this.store.endBatch();
         }
@@ -241,6 +338,13 @@ export class TaskScanner {
         this.scanQueue.delete(oldPath);
         this.completionDetector.forgetFile(oldPath);
         this.ledger.rekeyFile(oldPath, newPath, id => TaskIdGenerator.renameFile(id, oldPath, newPath));
+        // Hints name runtime IDs, and a rename rewrites those, so carrying the
+        // log across would leave claims about rows nothing answers to. They
+        // would fail to apply and cost the file its next hint anyway.
+        this.hints.dropFile(oldPath);
+        this.hints.dropFile(newPath);
+        this.claims.forget(oldPath);
+        this.claims.forget(newPath);
     }
 
     /**
@@ -251,6 +355,8 @@ export class TaskScanner {
         this.scanQueue.delete(path);
         this.completionDetector.forgetFile(path);
         this.ledger.dropFile(path);
+        this.hints.dropFile(path);
+        this.claims.forget(path);
     }
 
     /**
@@ -259,6 +365,44 @@ export class TaskScanner {
      */
     getLedger(): IdentityLedger {
         return this.ledger;
+    }
+
+    /**
+     * The hint log, for seeing from the console what the write layer claimed.
+     * @internal Read-only use: only scanFile changes it.
+     */
+    getHintLog(): HintLog {
+        return this.hints;
+    }
+
+    /**
+     * Where a write reports what it did to one file's lines.
+     *
+     * Everything here is inside the writer's `vault.process` callback, so
+     * nothing may throw: a report that cannot be turned into a claim is worth
+     * a log line, never a lost write. The parse this runs is the one place a
+     * write pays for stage 2 — one pass over the file it just wrote.
+     */
+    writeSink(file: string): WriteSink {
+        return (before, after, edits) => {
+            let result: ClaimResult;
+            try {
+                result = this.claims.claim(file, before, after, edits);
+            } catch (error) {
+                logError(`[TaskScanner] could not read back ${file} after a write: ${(error as Error)?.message ?? error}`);
+                // Whatever base this file had is left alone. It describes the
+                // file as it was before this write, so it no longer fits, and
+                // a base that no longer fits is what stops the next write from
+                // building on a ledger that is older still.
+                return () => { };
+            }
+            // Both halves of what a claim leaves behind come back together:
+            // the hint the next scan would weigh, and the base the next write
+            // to this file would build on.
+            if (!result.hint) return result.withdraw;
+            const drop = this.hints.add(file, [result.hint], Date.now());
+            return () => { drop(); result.withdraw(); };
+        };
     }
 
     /**
@@ -274,4 +418,21 @@ export class TaskScanner {
     updateSettings(settings: TaskViewerSettings): void {
         this.settings = settings;
     }
+}
+
+/**
+ * Whether a scan changed the file's rows — which lines exist, in what order,
+ * carrying which identity.
+ *
+ * Used to decide what happens to hints this scan did not believe: if the rows
+ * moved anyway, something the hints could not account for reached the file, and
+ * the ladder has already placed it. See {@link HintLog.settle}.
+ */
+function ledgerMoved(before: LedgerEntry[], after: LedgerEntry[]): boolean {
+    if (before.length !== after.length) return true;
+    for (let i = 0; i < before.length; i++) {
+        if (before[i].runtimeId !== after[i].runtimeId) return true;
+        if (before[i].fingerprint.originalText !== after[i].fingerprint.originalText) return true;
+    }
+    return false;
 }

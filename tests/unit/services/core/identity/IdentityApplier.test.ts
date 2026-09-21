@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
     applyIdentity,
+    assertDistinctRuntimeIds,
     assertNoProvisionalIds,
 } from '../../../../../src/services/core/identity/IdentityApplier';
 import type { FileParseResult } from '../../../../../src/services/parsing/FileParsePipeline';
@@ -68,5 +69,23 @@ describe('assertNoProvisionalIds', () => {
         ];
 
         expect(() => assertNoProvisionalIds(tasks, isProvisional)).toThrow(/prov:a, prov:p, prov:c/);
+    });
+});
+
+describe('assertDistinctRuntimeIds', () => {
+    it('lets a file whose rows each have their own ID through', () => {
+        expect(() => assertDistinctRuntimeIds([
+            { runtimeId: 'r1' }, { runtimeId: 'r2' },
+        ])).not.toThrow();
+    });
+
+    it('stops one ID being handed to two rows', () => {
+        // Observed on a build without the check, from a claim that named one
+        // row twice: the store lost a task (it is keyed by ID), the ledger kept
+        // two positions and one entry, and no later scan put it back. The task
+        // whose ID went missing then refused every write as "not found".
+        expect(() => assertDistinctRuntimeIds([
+            { runtimeId: 'r1' }, { runtimeId: 'r1' }, { runtimeId: 'r2' },
+        ])).toThrow(/r1/);
     });
 });
