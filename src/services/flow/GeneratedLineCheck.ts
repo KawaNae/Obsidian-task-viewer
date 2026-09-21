@@ -1,4 +1,5 @@
-import { type Diagnostic, error, warning } from '../lang/Diagnostic';
+import { type Diagnostic, error } from '../lang/Diagnostic';
+import { childStatusWarning, parentStatusWarning } from '../parsing/gen/GenGeneratedStatusCheck';
 import { TaskLineClassifier } from '../parsing/utils/TaskLineClassifier';
 import { FLOW_MARKER } from './FlowLineScanner';
 
@@ -70,23 +71,21 @@ export function checkGeneratedParentLine(raw: string): GeneratedLineCheck {
         };
     }
 
-    if (classified.statusChar === ' ') {
-        return { ok: true, line, warnings: [] };
-    }
-
     // Normalized rather than refused: the shape is recoverable, and the line
     // is worth writing. Any status other than a space is dropped, not just
     // the completed ones — which statuses count as complete is a user
     // setting, and a pure check that reads settings would answer differently
-    // in two vaults for the same block.
+    // in two vaults for the same block. The warning itself is shared with
+    // GenBodyParser's classify, which asks the same question of a block's
+    // literal source — see GenGeneratedStatusCheck.
+    const statusWarning = parentStatusWarning(classified, whole);
+    if (!statusWarning) {
+        return { ok: true, line, warnings: [] };
+    }
     return {
         ok: true,
         line: classified.prefix + ' ' + classified.suffix,
-        warnings: [
-            warning('gen.generated-status',
-                `A generated task starts unchecked; the '${classified.statusChar}' written here is dropped`,
-                whole, { status: classified.statusChar }),
-        ],
+        warnings: [statusWarning],
     };
 }
 
@@ -131,18 +130,12 @@ export function checkGeneratedChildLine(raw: string): GeneratedLineCheck {
     // vault and stay silent in another for the identical line. Only a
     // checkbox can carry this shape, and only when it also carries a
     // command of its own — a checked child with no command fires nothing,
-    // so there is nothing to mistype.
+    // so there is nothing to mistype. The warning itself is shared with
+    // GenBodyParser's classify — see GenGeneratedStatusCheck.
     const classified = TaskLineClassifier.classify(line);
-    if (classified && classified.statusChar !== ' ' && line.includes(FLOW_MARKER)) {
-        return {
-            ok: true,
-            line,
-            warnings: [
-                warning('gen.generated-child-status',
-                    `A generated child with its own ${FLOW_MARKER} command is written as '${classified.statusChar}', so its command will not fire until it is unchecked and rechecked by hand — this is unlikely to be what was meant`,
-                    { start: 0, end: line.length }, { status: classified.statusChar }),
-            ],
-        };
+    const statusWarning = childStatusWarning(classified, line, { start: 0, end: line.length });
+    if (statusWarning) {
+        return { ok: true, line, warnings: [statusWarning] };
     }
 
     return { ok: true, line, warnings: [] };

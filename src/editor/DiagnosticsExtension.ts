@@ -157,6 +157,11 @@ export function createDiagnosticsExtension(): Extension {
         const tokens = new Map<number, HighlightMark[]>();
         for (const block of blocks.values()) {
             const body = parseGenBody(block.body, block.openLine + 1, cells);
+            // Includes the two GeneratedLineCheck warnings a block can
+            // already earn at fire time (a completed parent, a checked
+            // child with its own command) — parseGenBody's classify reads
+            // them off these same literal lines, so a mistyped status shows
+            // before the block ever fires.
             body.diagnostics.forEach(bucket);
             for (const mark of highlightGenBody(body)) {
                 const at = tokens.get(mark.line);
