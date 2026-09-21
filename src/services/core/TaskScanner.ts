@@ -84,12 +84,15 @@ export class TaskScanner {
         },
         // Everything the ledger holds has been read by a scan, so nothing it
         // hands back is a row still waiting to be recorded.
-        (path) => this.ledger.snapshotFor(path).map(entry => ({
-            runtimeId: entry.runtimeId,
-            created: false,
-            text: entry.fingerprint.originalText,
-            line: entry.line,
-        })),
+        (path) => ({
+            rows: this.ledger.snapshotFor(path).map(entry => ({
+                runtimeId: entry.runtimeId,
+                created: false,
+                text: entry.fingerprint.originalText,
+                line: entry.line,
+            })),
+            content: this.ledger.contentFor(path),
+        }),
         // The same counter a scan mints from, so a name issued by a write can
         // never collide with one issued by a read.
         (path, parserId) => TaskIdGenerator.mintRuntimeId(
