@@ -1,4 +1,4 @@
-import { parseYaml, TFile } from 'obsidian';
+import { type App, parseYaml, TFile } from 'obsidian';
 import { TaskIndex } from '../../../src/services/core/TaskIndex';
 import type { TaskScanner } from '../../../src/services/core/TaskScanner';
 import { TaskWriteService } from '../../../src/services/data/TaskWriteService';
@@ -160,6 +160,8 @@ export function vaultSession(contents: Map<string, string>) {
     };
 
     return {
+        /** For a test that writes through `processLines` itself. */
+        app: app as unknown as App,
         index,
         scanner,
         recorder: new TimerRecorder(app as never, plugin as never, storageUtils),

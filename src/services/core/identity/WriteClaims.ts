@@ -49,6 +49,12 @@ export interface ClaimResult {
      * Obsidian ran again, must leave neither.
      */
     withdraw: () => void;
+    /**
+     * The rows this write named on the spot, where they stand in the lines it
+     * wrote. Empty when it claimed nothing: a name is worth handing out only
+     * if the scan that adopts the claim gives the row that same name.
+     */
+    made: Array<{ line: number; runtimeId: string }>;
 }
 
 /**
@@ -157,7 +163,7 @@ export class WriteClaims {
         // stays silent until a scan of it commits.
         const nothing = (): ClaimResult => {
             this.bases.set(path, SILENT(++this.filed));
-            return { hint: null, withdraw };
+            return { hint: null, withdraw, made: [] };
         };
 
         const base = this.stateFor(path, before);
@@ -177,6 +183,7 @@ export class WriteClaims {
         for (const row of base) identityOf.set(row.line, row);
 
         const rows: ClaimBase[] = [];
+        const made: ClaimResult['made'] = [];
         for (const row of parsed) {
             const from = replayed.origin[row.line];
             // `created` travels with the identity, not with this write: a row
@@ -184,11 +191,15 @@ export class WriteClaims {
             // heard of, and the scan that finally reads it has to be told so
             // however many writes it has sat through since.
             const carried = from === null ? undefined : identityOf.get(from);
-            rows.push(carried
-                ? { runtimeId: carried.runtimeId, created: carried.created, text: row.text, line: row.line }
-                // Either the write made this line, or it made a task of a line
-                // that was not one — a row with no past either way.
-                : { runtimeId: this.mintRuntimeId(path, row.parserId), created: true, text: row.text, line: row.line });
+            if (carried) {
+                rows.push({ runtimeId: carried.runtimeId, created: carried.created, text: row.text, line: row.line });
+                continue;
+            }
+            // Either the write made this line, or it made a task of a line
+            // that was not one — a row with no past either way.
+            const runtimeId = this.mintRuntimeId(path, row.parserId);
+            rows.push({ runtimeId, created: true, text: row.text, line: row.line });
+            made.push({ line: row.line, runtimeId });
         }
 
         const content = contentKeyOf(after);
@@ -196,6 +207,7 @@ export class WriteClaims {
         return {
             hint: { content, rows: rows.map(row => ({ runtimeId: row.runtimeId, created: row.created, text: row.text })) },
             withdraw,
+            made,
         };
     }
 

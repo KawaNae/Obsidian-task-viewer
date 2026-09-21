@@ -129,7 +129,7 @@ function writeSink(answer: (lines: readonly string[], ref: TaskRef) => Located =
             const at = reports.length;
             reports.push({ before: [...before], after: [...after], edits: [...edits] });
             live.add(at);
-            return () => { live.delete(at); };
+            return { withdraw: () => { live.delete(at); }, made: [] };
         },
         locate: (lines, ref) => {
             asked.push({ lines: [...lines], ref });
@@ -313,13 +313,41 @@ describe('processLines', () => {
         expect(standing[0].after).toEqual(['- [x] a (2)', '']);
     });
 
+    it('answers the rows the last attempt made, and none when that attempt claimed nothing', async () => {
+        const h = harness('- [ ] a\n', { callbackRuns: 2 });
+        let filed = 0;
+        const channel: WriteChannel = {
+            sink: () => ({ withdraw: () => { }, made: [{ line: 1, runtimeId: `made-${++filed}` }] }),
+            locate: () => ({ kind: 'gone' }),
+            refused: () => { },
+        };
+        let run = 0;
+
+        const outcome = await processLines(h.app, h.file, (lines, _eol, { edits }) => {
+            run++;
+            edits.splice(1, 0, `- [ ] b (${run})`);
+            return lines;
+        }, channel);
+        expect(outcome.made).toEqual([{ line: 1, runtimeId: 'made-2' }]);
+
+        // The second attempt changes nothing, so it files nothing and names nothing.
+        const same = harness('- [ ] a\n', { callbackRuns: 2 });
+        run = 0;
+        const unchanged = await processLines(same.app, same.file, (lines, _eol, { edits }) => {
+            run++;
+            if (run === 1) edits.splice(1, 0, '- [ ] b');
+            return lines;
+        }, channel);
+        expect(unchanged.made).toEqual([]);
+    });
+
     it('leaves the file byte-identical when the edit declines', async () => {
         const original = '- [ ] a\r\n- [ ] b\n';
         const h = harness(original);
         const outcome = await processLines(h.app, h.file, () => null);
 
         // Declining without a reason is not a refusal: nobody is told.
-        expect(outcome).toEqual({ written: false, refused: null });
+        expect(outcome).toEqual({ written: false, refused: null, made: [] });
         // Not even the mixed terminators are unified: a write that could not be
         // placed must leave no trace, or Obsidian fires a modify for it and a
         // rescan follows a change nobody made.
@@ -342,7 +370,7 @@ describe('processLines: asking where a row stands, and giving up', () => {
         }, log.channel);
 
         expect(log.asked).toEqual([{ lines: ['- [ ] a', '- [ ] b', ''], ref: REF }]);
-        expect(outcome).toEqual({ written: true, refused: null });
+        expect(outcome).toEqual({ written: true, refused: null, made: [] });
         expect(h.text()).toBe('- [ ] a\r\n- [x] b\r\n');
         expect(log.refusals).toEqual([]);
     });
@@ -359,7 +387,7 @@ describe('processLines: asking where a row stands, and giving up', () => {
         }, log.channel);
 
         const refusal = { file: 'note.md', reason: { kind: 'ambiguous', count: 2 }, subject: 'a' };
-        expect(outcome).toEqual({ written: false, refused: refusal });
+        expect(outcome).toEqual({ written: false, refused: refusal, made: [] });
         expect(log.refusals).toEqual([refusal]);
         expect(h.text()).toBe('- [ ] a\n');
     });
@@ -375,6 +403,7 @@ describe('processLines: asking where a row stands, and giving up', () => {
         expect(outcome).toEqual({
             written: false,
             refused: { file: 'note.md', reason: { kind: 'gone' }, subject: 'a' },
+            made: [],
         });
         expect(h.text()).toBe('- [ ] a\n');
     });
@@ -387,7 +416,7 @@ describe('processLines: asking where a row stands, and giving up', () => {
             session.refuse({ kind: 'changed' }, '- [ ] a'), log.channel);
 
         const refusal = { file: 'note.md', reason: { kind: 'changed' }, subject: '- [ ] a' };
-        expect(outcome).toEqual({ written: false, refused: refusal });
+        expect(outcome).toEqual({ written: false, refused: refusal, made: [] });
         expect(log.refusals).toEqual([refusal]);
         expect(h.text()).toBe('- [ ] a\n');
     });
@@ -420,7 +449,7 @@ describe('processLines: asking where a row stands, and giving up', () => {
             return lines;
         }, log.channel);
 
-        expect(outcome).toEqual({ written: true, refused: null });
+        expect(outcome).toEqual({ written: true, refused: null, made: [] });
         expect(log.refusals).toEqual([]);
         expect(h.text()).toBe('- [x] a\n');
     });
