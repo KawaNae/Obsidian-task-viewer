@@ -5,6 +5,8 @@ import { TaskParser } from '../../../src/services/parsing/TaskParser';
 import type { GenBlock } from '../../../src/services/parsing/gen/GenBlockCollector';
 import { TaskIndex } from '../../../src/services/core/TaskIndex';
 import { TaskRepository } from '../../../src/services/persistence/TaskRepository';
+import type { TaskOp } from '../../../src/services/persistence/TaskOps';
+import type { FlowInstanceInsert } from '../../../src/services/persistence/FlowInstanceLines';
 import { DEFAULT_SETTINGS, type Task } from '../../../src/types';
 import { heldTasks } from '../helpers/heldTasks';
 
@@ -33,6 +35,7 @@ const FILE = 'note.md';
 
 function makeRepository() {
     return {
+        applyToTask: vi.fn().mockResolvedValue({ written: true, refused: null, made: [] }),
         insertRecurrenceForTask: vi.fn().mockResolvedValue(undefined),
         insertGeneratedInstance: vi.fn().mockResolvedValue(undefined),
         appendTaskWithChildren: vi.fn().mockResolvedValue(undefined),
@@ -40,6 +43,26 @@ function makeRepository() {
         stripFlow: vi.fn().mockResolvedValue(undefined),
         deleteTaskFromFile: vi.fn().mockResolvedValue(undefined),
     };
+}
+
+/** What the fire's one write inserts, if it inserts anything. */
+function insertOf(repository: ReturnType<typeof makeRepository>): FlowInstanceInsert | undefined {
+    const ops = repository.applyToTask.mock.calls[0]?.[1] as TaskOp[] | undefined;
+    const op = ops?.find(o => o.kind === 'insert-instance');
+    return op?.kind === 'insert-instance' ? op.insert : undefined;
+}
+
+/** The generated instance the fire's one write inserts (fails if there is none). */
+function generatedOf(repository: ReturnType<typeof makeRepository>): Extract<FlowInstanceInsert, { kind: 'generated' }> {
+    const insert = insertOf(repository);
+    if (insert?.kind !== 'generated') throw new Error('the fire inserts no generated instance');
+    return insert;
+}
+
+/** How many strip-flow ops the fires wrote. */
+function stripsOf(repository: ReturnType<typeof makeRepository>): number {
+    return repository.applyToTask.mock.calls
+        .flatMap(c => c[1] as TaskOp[]).filter(o => o.kind === 'strip-flow').length;
 }
 
 const app = { vault: { getAbstractFileByPath: () => null } };
@@ -91,9 +114,10 @@ async function fire(line: string, blocks: Record<string, GenBlock>): Promise<Wri
     await makeExecutor(repository, blocks).handleTaskCompletion({ ...task!, statusChar: 'x' });
     await flush();
 
-    const call = repository.insertGeneratedInstance.mock.calls[0];
-    return call
-        ? { parentLine: call[1], flowLines: call[2], children: call[3], fired: true }
+    const insert = insertOf(repository);
+    if (insert !== undefined && insert.kind !== 'generated') throw new Error('the fire inserts no generated instance');
+    return insert
+        ? { parentLine: insert.parentLine, flowLines: insert.flowLines, children: insert.children, fired: true }
         : { parentLine: '', flowLines: [], children: [], fired: false };
 }
 
@@ -175,8 +199,9 @@ describe('a cell travels from one generation to the next', () => {
         await makeExecutor(repository, {}).handleTaskCompletion({ ...task, statusChar: 'x' });
         await flush();
 
-        const [newTask] = repository.insertRecurrenceForTask.mock.calls[0];
-        expect(newTask.flow.raw).toBe('every mon state(n: 3)');
+        const insert = insertOf(repository);
+        expect(insert?.kind).toBe('recurrence');
+        expect(insert?.kind === 'recurrence' && insert.content).toMatch(/==> every mon state\(n: 3\)$/);
     });
 
     it('keeps a cell on the line it was written on', async () => {
@@ -199,7 +224,7 @@ describe('a cell travels from one generation to the next', () => {
         });
         await flush();
 
-        const [, parentLine, flowLines] = repository.insertGeneratedInstance.mock.calls[0];
+        const { parentLine, flowLines } = generatedOf(repository);
         expect(parentLine).toContain('==> every mon');
         expect(parentLine).not.toContain('state(');
         expect(flowLines).toEqual(['state(n: 4) use("週報")']);
@@ -227,6 +252,7 @@ describe('a value that cannot be written back stops the fire', () => {
         await flush();
 
         // 2 相のまま: 何も書かれず、コマンドも消費されない。
+        expect(repository.applyToTask).not.toHaveBeenCalled();
         expect(repository.insertGeneratedInstance).not.toHaveBeenCalled();
         expect(repository.stripFlow).not.toHaveBeenCalled();
     };

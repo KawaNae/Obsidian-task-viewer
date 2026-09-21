@@ -6,6 +6,8 @@ import { FlowExecutor } from '../../../src/services/flow/FlowExecutor';
 import { TaskParser } from '../../../src/services/parsing/TaskParser';
 import { TaskIndex } from '../../../src/services/core/TaskIndex';
 import { TaskRepository } from '../../../src/services/persistence/TaskRepository';
+import type { TaskOp } from '../../../src/services/persistence/TaskOps';
+import type { FlowInstanceInsert } from '../../../src/services/persistence/FlowInstanceLines';
 import { DEFAULT_SETTINGS, type Task } from '../../../src/types';
 import { heldTasks } from '../helpers/heldTasks';
 
@@ -136,6 +138,7 @@ const FILE = 'note.md';
 
 function makeRepository() {
     return {
+        applyToTask: vi.fn().mockResolvedValue({ written: true, refused: null, made: [] }),
         insertRecurrenceForTask: vi.fn().mockResolvedValue(undefined),
         insertGeneratedInstance: vi.fn().mockResolvedValue(undefined),
         appendTaskWithChildren: vi.fn().mockResolvedValue(undefined),
@@ -143,6 +146,13 @@ function makeRepository() {
         stripFlow: vi.fn().mockResolvedValue(undefined),
         deleteTaskFromFile: vi.fn().mockResolvedValue(undefined),
     };
+}
+
+/** What the fire's one write inserts, if it inserts anything. */
+function insertOf(repository: ReturnType<typeof makeRepository>): FlowInstanceInsert | undefined {
+    const ops = repository.applyToTask.mock.calls[0]?.[1] as TaskOp[] | undefined;
+    const op = ops?.find(o => o.kind === 'insert-instance');
+    return op?.kind === 'insert-instance' ? op.insert : undefined;
 }
 
 function makeExecutor(repository: ReturnType<typeof makeRepository>) {
@@ -171,7 +181,9 @@ async function fire(line: string): Promise<string | null> {
     const task = TaskParser.parse(line, FILE, 0);
     await makeExecutor(repository).handleTaskCompletion({ ...task!, statusChar: 'x' });
     await flush();
-    return (repository.insertRecurrenceForTask.mock.calls[0]?.[1] as string) ?? null;
+    const insert = insertOf(repository);
+    if (insert !== undefined && insert.kind !== 'recurrence') throw new Error('the fire inserts no recurrence');
+    return insert?.content ?? null;
 }
 
 describe('a plain repeating task cannot write a date either', () => {

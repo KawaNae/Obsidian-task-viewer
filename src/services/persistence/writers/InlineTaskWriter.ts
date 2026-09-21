@@ -7,9 +7,13 @@ import { FileOperations } from '../utils/FileOperations';
 import { ChildPropertyLineEditor } from '../utils/ChildPropertyLineEditor';
 import type { PropertyOp } from '../PropertyUpdatePlanner';
 import { type FlowInstanceInsert, renderFlowInstance } from '../FlowInstanceLines';
-import { appendLines, processLines, splitLines, type EditorLine } from '../../../utils/FileLines';
+import {
+    appendLines, processLines, splitLines,
+    type EditorLine, type LineEdits, type Refusal, type WriteOutcome,
+} from '../../../utils/FileLines';
 import type { WriteObserver } from '../WriteObserver';
-import { refOf, subjectOf } from '../TaskRefs';
+import { refOf, subjectOf, type WriteTarget } from '../TaskRefs';
+import type { TaskOp } from '../TaskOps';
 import { logWarn } from '../../../log/log';
 
 
@@ -274,6 +278,76 @@ export class InlineTaskWriter {
 
             return lines;
         }, this.writes?.for(task.file)).then(outcome => outcome.written);
+    }
+
+    /**
+     * Do everything one operation does to one row of one file, as one write.
+     *
+     * A fire used to write each of its effects on its own — the next
+     * instance, then the consumed command — and each write asked where the
+     * row stood. The second asked after the first had moved it, and found it
+     * only because the line just written read differently from the one that
+     * fired: held by value, not by construction. Here the row is located once,
+     * every effect after the first takes its line from that answer carried
+     * across the splices before it (see `WriteSession.locate`), and nothing
+     * searches the file a second time.
+     *
+     * One write also settles what the separate ones could not: either every
+     * effect lands, or none does. A row that cannot be placed leaves the file
+     * byte-identical — no next instance beside a command that was not
+     * consumed, which would fire again.
+     *
+     * Where each line goes is read off the lines as they stand when the
+     * effect is applied: the sibling group, the subtree, the indentation. The
+     * separate writes did the same, each against the file the previous one
+     * left, so the lines written are the same.
+     */
+    async applyToTask(target: WriteTarget, ops: readonly TaskOp[]): Promise<WriteOutcome> {
+        const file = this.app.vault.getAbstractFileByPath(target.file);
+        const channel = this.writes?.for(target.file);
+        if (!(file instanceof TFile)) {
+            const refused: Refusal = { file: target.file, reason: { kind: 'gone' }, subject: target.subject };
+            channel?.refused(refused);
+            return { written: false, refused, made: [] };
+        }
+
+        return processLines(this.app, file, (lines, _eol, { edits, lineOf }) => {
+            for (const op of ops) {
+                const line = lineOf(target.ref, target.subject);
+                if (line === null) return null;
+                this.applyOp(lines, line, op, edits);
+            }
+            return lines;
+        }, channel);
+    }
+
+    private applyOp(lines: string[], line: number, op: TaskOp, edits: LineEdits): void {
+        switch (op.kind) {
+            case 'insert-instance': {
+                const rendered = renderFlowInstance(this.fileOps, lines, line, op.insert);
+                edits.splice(this.fileOps.findSiblingGroupStart(lines, line), 0, ...rendered);
+                return;
+            }
+            case 'strip-flow': {
+                // Every flow line is below the row (the scan starts past it
+                // and stops at the first line that is not a descendant), so
+                // taking them out leaves the row where it is.
+                const flowIndices = collectFlowLineIndicesInFile(lines, line);
+                for (let i = flowIndices.length - 1; i >= 0; i--) {
+                    edits.splice(flowIndices[i], 1);
+                }
+                const indent = lines[line].match(/^(\s*)/)?.[1] || '';
+                lines[line] = indent + op.text.trim();
+                // Losing `==>` rewrites the text; the row is the one that fired.
+                edits.replaced(line);
+                return;
+            }
+            case 'remove': {
+                const { childrenLines } = this.fileOps.collectChildrenFromLines(lines, line);
+                edits.splice(line, 1 + childrenLines.length);
+                return;
+            }
+        }
     }
 
     /**
