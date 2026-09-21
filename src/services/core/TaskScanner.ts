@@ -204,6 +204,7 @@ export class TaskScanner {
         // fence that off, because a position cannot — what keeps such a claim
         // from deciding anything is that it has to be the only one that fits
         // (see resolveHints).
+        const readMark = this.claims.readMark();
         const content = await this.app.vault.read(file);
         const { lines } = splitLines(content);
         const readKey = contentKeyOf(lines);
@@ -322,7 +323,9 @@ export class TaskScanner {
             // base carried across a scan that answered its own way would hand
             // the next claim identities the ledger does not agree with, and the
             // texts would line up well enough that nothing later would notice.
-            this.claims.forget(file.path);
+            // A write this read may not have seen is still kept, for `locate` to
+            // know the ledger is older than it (`WriteClaims.lastWrite`).
+            this.claims.forget(file.path, readMark);
         } finally {
             this.store.endBatch();
         }
@@ -485,8 +488,10 @@ export class TaskScanner {
     }
 
     /**
-     * A match made while a write of ours has landed since the last scan,
-     * checked against what that write left.
+     * A match made while a write of ours has landed that no committed scan
+     * has read, checked against what that write left. A scan that read the
+     * file before the write and committed after it does not count: its ledger
+     * is older than the write all the same (`WriteClaims.lastWrite`).
      *
      * The ladder pairs by the texts the ledger holds, and the ledger is known
      * to be older than our last write (see `WriteClaims.stateFor`). A row that
@@ -500,10 +505,10 @@ export class TaskScanner {
      * Null when there is nothing to object to.
      */
     private againstLastWrite(path: string, lines: readonly string[], line: number, ref: TaskRef): Located | null {
-        if (!this.claims.writtenSinceScan(path)) return null;
-        const left = this.claims.rowsLeft(path);
+        const last = this.claims.lastWrite(path);
+        if (last === undefined) return null;
         const text = lines[line].trimStart();
-        const holders = left?.filter(row => row.text.trimStart() === text) ?? [];
+        const holders = last.rows?.filter(row => row.text.trimStart() === text) ?? [];
         if (!holders.some(row => row.runtimeId === ref.runtimeId)) return { kind: 'at', line, edited: true };
         if (holders.length > 1) return { kind: 'ambiguous', count: holders.length };
         return null;
@@ -520,7 +525,7 @@ export class TaskScanner {
         const texts = new Set<string>();
         const entry = this.ledger.get(runtimeId);
         if (entry && entry.file === path) texts.add(entry.fingerprint.originalText.trimStart());
-        for (const row of this.claims.rowsLeft(path) ?? []) {
+        for (const row of this.claims.lastWrite(path)?.rows ?? []) {
             if (row.runtimeId === runtimeId) texts.add(row.text.trimStart());
         }
         for (const pending of this.hints.peekFor(path, Date.now())) {

@@ -470,3 +470,98 @@ describe('F2-counter2: two own writes trade the texts of two rows, then an unrep
         expect(bench.taskAt(0).id).toBe(x.id);
     });
 });
+
+/** Start a scan that reads now and commits only when `release` is called. */
+async function gatedScan(bench: WriteBench): Promise<{ release: () => void; done: Promise<void> }> {
+    let reading!: () => void;
+    const called = new Promise<void>(resolve => { reading = resolve; });
+    const read = bench.app.vault.read;
+    let open!: () => void;
+    const gate = new Promise<void>(resolve => { open = resolve; });
+    bench.app.vault.read = async (file: { path: string }) => {
+        const snapshot = bench.contents.get(file.path) ?? '';
+        reading();
+        await gate;
+        return snapshot;
+    };
+    const done = bench.scan();
+    await called;
+    return {
+        release: () => { open(); bench.app.vault.read = read; },
+        done,
+    };
+}
+
+// Third run, on ea8aa26a. X1 and S2 were still open through a scan that read
+// the file before our write and committed after it: the commit dropped what the
+// write left, and nothing said the ledger it committed was older than the
+// write. The scan now hands over the mark it took before reading, and a write
+// filed after it is kept for `locate` (`WriteClaims.lastWrite`), though claims
+// never build on it again.
+describe('F2-counter3: a scan that read before our write, committed after it', () => {
+    it('C1 (X1 through the race): the write on Y, deleted from outside, is refused', async () => {
+        const bench = await writeBench(['- [ ] A', '- [ ] B', '- [ ] C']);
+        const x = bench.taskAt(0);
+        const y = bench.taskAt(1);
+        const scan = await gatedScan(bench);
+        await bench.writer.updateTaskInFile(x, { ...x, content: 'B', originalText: '- [ ] B' });
+        scan.release();
+        await scan.done;
+        expect(bench.lines()).toEqual(['- [ ] B', '- [ ] B', '- [ ] C']);
+        bench.edit(['- [ ] B', '- [ ] C']);
+        expect(await bench.writer.updateTaskInFile(y, checked(y))).toBe(false);
+        expect(bench.lines()).toEqual(['- [ ] B', '- [ ] C']);
+        expect(bench.refused.map(r => r.reason.kind)).toEqual(['ambiguous']);
+    });
+
+    it('C2 (S2 through the race): the delete of X is refused, not taken from Y', async () => {
+        const bench = await writeBench(['- [ ] A', '- [x] A']);
+        const x = bench.taskAt(0);
+        const y = bench.taskAt(1);
+        const scan = await gatedScan(bench);
+        expect(await bench.writer.updateTaskInFile(x, checked(x))).toBe(true);
+        expect(await bench.writer.updateTaskInFile(y, { ...y, statusChar: ' ' })).toBe(true);
+        scan.release();
+        await scan.done;
+        await bench.repo.setFrontmatterKeys(FILE, { color: 'red' });
+        const after = bench.lines();
+        expect(await bench.writer.deleteTaskFromFile(x)).toBe(false);
+        expect(bench.lines()).toEqual(after);
+        expect(bench.refused.map(r => r.reason.kind)).toEqual(['changed']);
+    });
+
+    it('a scan that read after the write drops it: the next write goes through the ladder as before', async () => {
+        // The first write goes through the ladder and leaves nothing it can
+        // describe (silent). Kept past a scan that read it, it would refuse
+        // every later ladder answer.
+        const bench = await writeBench(['- [ ] A', '- [ ] B']);
+        const a = bench.taskAt(0);
+        bench.edit(['メモ', '- [ ] A', '- [ ] B']);
+        expect(await bench.writer.updateTaskInFile(a, checked(a))).toBe(true);
+        await bench.scan();
+        const b = bench.taskAt(2);
+        bench.edit(['メモ', 'メモ2', '- [x] A', '- [ ] B']);
+        expect(await bench.writer.updateTaskInFile(b, checked(b))).toBe(true);
+        expect(bench.lines()).toEqual(['メモ', 'メモ2', '- [x] A', '- [x] B']);
+        expect(bench.refused).toEqual([]);
+    });
+});
+
+describe('F2-counter3: availability', () => {
+    it('A2: create-next through the ladder, then strip-flow: the second effect is refused (half applied until F3)', async () => {
+        // An outside line lands between the scan the fire waited for and its
+        // effects. The insert goes through the ladder and lands, but has no
+        // base to claim on (silent); the strip has nothing newer to check
+        // against. Two writes for one operation is F3's to fold into one.
+        const DONE = '- [x] 🍅 記録';
+        const TODO = '- [ ] 🍅 記録';
+        const FLOW = '\t- ==> every 1d';
+        const bench = await writeBench([DONE, FLOW, '']);
+        const rec = bench.taskAt(0);
+        bench.edit(['メモ', DONE, FLOW, '']);
+        await bench.cloner.insertRecurrenceForTask(rec, TODO, ['every 1d']);
+        await bench.writer.stripFlow(rec);
+        expect(bench.lines()).toEqual([TODO, FLOW, 'メモ', DONE, FLOW, '']);
+        expect(bench.refused.map(r => r.reason.kind)).toEqual(['changed']);
+    });
+});
