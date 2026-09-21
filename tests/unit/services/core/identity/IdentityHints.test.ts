@@ -183,54 +183,34 @@ describe('HintLog.settle', () => {
         log.add(FILE, [claim(['r1', A_DONE])], 0);
         log.add(FILE, [claim(['r1', B])], 0);
 
-        log.settle(FILE, 2, true);
+        log.settle(FILE, 2);
 
         expect(log.pendingFor(FILE, 0).map(entry => entry.seq)).toEqual([3]);
     });
 
-    it('keeps a claim the scan did not adopt', () => {
-        // The window the design accepts, and now survives: the scan read the
-        // file from before the write. Claims do not chain, so this one blocks
-        // nothing, and its own scan is still coming.
+    it('drops everything when a scan adopted nothing', () => {
+        // A claim kept past a scan that read some other content waits for a
+        // content the file may later reach by another path, and would then be
+        // the only candidate that fits. See settle.
         const log = new HintLog();
         log.add(FILE, [claim(['r1', A])], 0);
+        log.add(FILE, [claim(['r1', A_DONE])], 0);
 
-        log.settle(FILE, 0, false);
-
-        expect(log.pendingFor(FILE, 0)).toHaveLength(1);
-    });
-
-    it('drops everything when a scan adopted nothing and still moved the rows', () => {
-        // The scan's read already contained the write the claim describes, and
-        // the ladder placed it some other way. Believing the claim afterwards
-        // would be deciding a file that has already been read.
-        const log = new HintLog();
-        log.add(FILE, [claim(['r1', A])], 0);
-
-        log.settle(FILE, 0, true);
+        log.settle(FILE, 0);
 
         expect(log.pendingFor(FILE, 0)).toHaveLength(0);
     });
 
-    it('lets the next write\'s claim work after one went unadopted', () => {
+    it('lets the next write\'s claim work after the log went', () => {
         const log = new HintLog();
         log.add(FILE, [claim(['r1', A])], 0);
 
-        log.settle(FILE, 0, false);
+        log.settle(FILE, 0);
         log.add(FILE, [claim(['r2', B])], 0);
 
         const pending = log.pendingFor(FILE, 0);
-        expect(pending).toHaveLength(2);
-        expect(pending[1].hint.rows[0].runtimeId).toBe('r2');
-    });
-
-    it('retires what has aged out on the way past', () => {
-        const log = new HintLog();
-        log.add(FILE, [claim(['r1', A])], 0);
-
-        log.settle(FILE, 0, false);
-
-        expect(log.pendingFor(FILE, HINT_TTL_MS)).toHaveLength(0);
+        expect(pending).toHaveLength(1);
+        expect(pending[0].hint.rows[0].runtimeId).toBe('r2');
     });
 });
 

@@ -53,7 +53,8 @@ function ledgerOf(rows: ClaimBase[], read: readonly string[] | null = linesOf(ro
 function linesOf(rows: readonly ClaimBase[]): string[] {
     const lines: string[] = [];
     for (const row of rows) lines[row.line] = row.text;
-    return Array.from(lines, line => line ?? '');
+    // A file always has a line, if an empty one: that is what splitting it gives.
+    return lines.length === 0 ? [''] : Array.from(lines, line => line ?? '');
 }
 
 function claimsWith(ledger: ClaimBase[] = [], read?: readonly string[] | null): WriteClaims {

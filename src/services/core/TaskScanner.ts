@@ -315,10 +315,7 @@ export class TaskScanner {
             // Last, so a store write that throws leaves the ledger on the
             // previous generation too.
             this.ledger.replaceFile(file.path, identity.entries, readKey);
-            this.hints.settle(
-                file.path, identity.consumedHints,
-                ledgerMoved(previousRows, identity.entries),
-            );
+            this.hints.settle(file.path, identity.consumedHints);
             // Whatever this scan decided, it decided: the next write builds on
             // the ledger rather than on what the last write thought it left. A
             // base carried across a scan that answered its own way would hand
@@ -429,19 +426,3 @@ export class TaskScanner {
     }
 }
 
-/**
- * Whether a scan changed the file's rows — which lines exist, in what order,
- * carrying which identity.
- *
- * Used to decide what happens to hints this scan did not believe: if the rows
- * moved anyway, something the hints could not account for reached the file, and
- * the ladder has already placed it. See {@link HintLog.settle}.
- */
-function ledgerMoved(before: LedgerEntry[], after: LedgerEntry[]): boolean {
-    if (before.length !== after.length) return true;
-    for (let i = 0; i < before.length; i++) {
-        if (before[i].runtimeId !== after[i].runtimeId) return true;
-        if (before[i].fingerprint.originalText !== after[i].fingerprint.originalText) return true;
-    }
-    return false;
-}
