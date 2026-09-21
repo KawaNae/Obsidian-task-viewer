@@ -131,13 +131,14 @@ export function setIcon(_el: HTMLElement, _icon: string) {}
 export function normalizePath(path: string) { return path; }
 
 /**
- * Real Obsidian parses frontmatter with js-yaml (default schema), which is
- * why a bare `2026-09-21` in a note comes back as a `Date`
- * (`DateTimeFieldParser.normalizeYamlDate` exists to undo that). This stub
- * used to be missing entirely, so every call from `FileParsePipeline`'s
- * raw-block fallback (`FileParsePipeline.ts:54`) threw `TypeError: parseYaml
- * is not a function`, caught and swallowed by the `catch {}` right after it.
- * Every frontmatter read through that fallback silently produced nothing.
+ * A bare `2026-09-21` in frontmatter comes back as a `Date`, not a string —
+ * `DateTimeFieldParser.normalizeYamlDate` exists specifically to turn that
+ * back into text, and js-yaml's default schema does the same implicit-typing
+ * for a plain date-like scalar. This stub used to be missing entirely, so
+ * every call from `FileParsePipeline`'s raw-block fallback
+ * (`FileParsePipeline.ts:54`) threw `TypeError: parseYaml is not a
+ * function`, caught and swallowed by the `catch {}` right after it. Every
+ * frontmatter read through that fallback silently produced nothing.
  */
 export function parseYaml(yaml: string): any {
     return loadYaml(yaml);
