@@ -313,9 +313,10 @@ describe('WriteClaims: the limit of a report', () => {
 
 describe('WriteClaims: a delete in a chain', () => {
     it('builds a delete on the insert that came just before it', () => {
-        // A deletion fire, as the claim layer sees it: the next instance is
-        // written above the fired line, then the fired line goes. No scan runs
-        // in between, so the delete is read against what the insert left.
+        // Two writes to one file with no scan in between: the second is read
+        // against what the first left. (A deletion fire used to be shaped like
+        // this and is now a single write — see the report below that removes
+        // and inserts at once.)
         const claims = claimsWith([known('r1', 0, '- [ ] 週報')]);
 
         const first = claims.claim(FILE, ['- [ ] 週報'], ['- [ ] 次', '- [ ] 週報'], [inserted(0, 1)]);
@@ -327,6 +328,46 @@ describe('WriteClaims: a delete in a chain', () => {
         // told as new; the fired row is simply not there any more.
         expect(second.hint!.rows).toEqual([
             { runtimeId: 'w1', created: true, text: '- [ ] 次' },
+        ]);
+    });
+
+    it('reads one report that removes and inserts, in the order it happened', () => {
+        // A deletion fire is one write, so its report carries both edits. Each
+        // one speaks in the line numbers as they stand at that moment: the
+        // insert's `at` is read against the file the removal left, not against
+        // the file as it was. `- [ ] 週報` is written where the fired
+        // `- [ ] 週報` stood, so nothing but the report can tell the layer that
+        // the surviving row is 兄弟 and the one reading 週報 is new.
+        const claims = claimsWith([known('r1', 0, '- [ ] 兄弟'), known('r2', 1, '- [ ] 週報')]);
+
+        const one = claims.claim(FILE,
+            ['- [ ] 兄弟', '- [ ] 週報'],
+            ['- [ ] 週報', '- [ ] 兄弟'],
+            [removed(1, 1), inserted(0, 1)]);
+
+        expect(one.hint!.rows).toEqual([
+            { runtimeId: 'w1', created: true, text: '- [ ] 週報' },
+            { runtimeId: 'r1', created: false, text: '- [ ] 兄弟' },
+        ]);
+    });
+
+    it('reads the second edit in the wrong frame as a different file', () => {
+        // What the frame is worth: the same two edits with the insert's `at`
+        // counted against the file before the removal put the instance below
+        // the survivor. Every row then comes out as the other one — the
+        // instance wearing 兄弟's name, and a row that never moved called new.
+        // `processLines` refuses such a report (it does not account for the
+        // lines that were written), which is the guard this frame relies on.
+        const claims = claimsWith([known('r1', 0, '- [ ] 兄弟'), known('r2', 1, '- [ ] 週報')]);
+
+        const wrongFrame = claims.claim(FILE,
+            ['- [ ] 兄弟', '- [ ] 週報'],
+            ['- [ ] 週報', '- [ ] 兄弟'],
+            [removed(1, 1), inserted(1, 1)]);
+
+        expect(wrongFrame.hint!.rows).toEqual([
+            { runtimeId: 'r1', created: false, text: '- [ ] 週報' },
+            { runtimeId: 'w1', created: true, text: '- [ ] 兄弟' },
         ]);
     });
 
