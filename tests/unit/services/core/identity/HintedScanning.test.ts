@@ -892,3 +892,43 @@ describe('the whole content decides which state was read', () => {
         expect(harness.pendingCount()).toBe(0);
     });
 });
+
+describe('a later claim left pending (E1, a known limit)', () => {
+    // Pinned as it stands, not as it should be. structure.md names this shape
+    // E1 in 「下流で読んだ内容がどの状態かを決める」 and leaves it open: the
+    // whole content, the write's own record and `^id` cannot tell it from the
+    // second write landing, and what could (the `modify` count, the landing
+    // mtime) is to be observed in the self-write stage (F6) before anything is
+    // decided. When that stage closes it, this test fails and is turned round.
+
+    it('adopts the second claim when another route reaches the content it describes', async () => {
+        const harness = new Harness();
+        await harness.write([TASK, '']);
+        const original = harness.ids()[0];
+
+        // W1 puts a copy below the original; W2, built on W1, takes the
+        // original (the upper line) away.
+        harness.report([TASK, TASK, ''], [{ kind: 'inserted', at: 1, count: 1 }]);
+        harness.report([TASK, ''], [{ kind: 'removed', at: 0, count: 1 }]);
+
+        // W2 is taken back from outside (a sync, an undo) before any scan
+        // reads it. The scan reads W1's file, adopts W1, and leaves W2 in the
+        // log: a claim later than the one adopted may still be on its way.
+        harness.contents.set(FILE, [TASK, TASK, ''].join('\n'));
+        await harness.scan();
+        const [kept, copy] = harness.ids();
+        expect(kept).toBe(original);
+        expect(harness.pendingCount()).toBe(1);
+
+        // A hand edit deletes the lower line, the copy. The file now reads
+        // exactly as W2 said it would, by the other route.
+        harness.contents.set(FILE, [TASK, ''].join('\n'));
+        await harness.scan();
+
+        // The original is what stands on the line. W2 is the only candidate
+        // that fits, and it names the copy. The ladder alone would pair the
+        // one line with the nearer previous row, the original.
+        expect(harness.ids()).toEqual([copy]);
+        expect(harness.pendingCount()).toBe(0);
+    });
+});
