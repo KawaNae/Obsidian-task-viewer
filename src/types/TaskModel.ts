@@ -28,8 +28,19 @@ export const DEFAULT_STATUS_DEFINITIONS: StatusDefinition[] = [
 
 /**
  * Returns true when statusChar is considered completed by settings.
+ *
+ * A blank status is fixed to incomplete, regardless of what `defs` says —
+ * not read from settings at all. This is the single choke point every
+ * completion check (flow firing, card display, child-completion counts)
+ * calls through, so fixing it here closes both the settings-screen toggle
+ * and a pre-existing `data.json` value at once. The reason it matters: a
+ * flow's next instance is always written as `[ ]` (`FlowEffects.ts`), and
+ * if blank could read as complete, that instance would complete itself the
+ * moment it lands, with only `isLocalChange` standing between that and a
+ * fire loop (see `.plan/structure.md`, "自己書き込みの判定と発火の可否").
  */
 export function isCompleteStatusChar(statusChar: string, defs: StatusDefinition[]): boolean {
+    if (statusChar === ' ') return false;
     return defs.some(d => d.char === statusChar && d.isComplete);
 }
 
