@@ -1,4 +1,5 @@
 import type { Fingerprint } from './IdentityFingerprint';
+import type { ContentKey } from './ContentKey';
 
 /**
  * What the ledger remembers about one task from the previous scan.
@@ -43,6 +44,15 @@ export interface LedgerEntry {
 export class IdentityLedger {
     private readonly entries = new Map<string, LedgerEntry>();
     private readonly files = new Map<string, string[]>();
+    /**
+     * Per file, the key of the content the last scan read.
+     *
+     * Kept for every file a scan committed, rows or none, so that "the ledger
+     * has no record" means only one thing: no scan has read this file yet. A
+     * file with no rows is a state like any other, and the first task a write
+     * adds to it is built on that state.
+     */
+    private readonly contents = new Map<string, ContentKey>();
     private counter: number;
 
     /**
@@ -66,9 +76,21 @@ export class IdentityLedger {
         return result;
     }
 
-    /** Swap a file's rows wholesale. Pass the new rows in file order. */
-    replaceFile(file: string, entries: LedgerEntry[]): void {
+    /**
+     * The key of the content the last scan of this file read, or null when no
+     * scan has committed it (never read, dropped, or `tv-ignore`d).
+     */
+    contentFor(file: string): ContentKey | null {
+        return this.contents.get(file) ?? null;
+    }
+
+    /**
+     * Swap a file's rows wholesale, and record which content they were read
+     * from. Pass the new rows in file order.
+     */
+    replaceFile(file: string, entries: LedgerEntry[], content: ContentKey): void {
         this.dropFile(file);
+        this.contents.set(file, content);
         if (entries.length === 0) return;
 
         const ids: string[] = [];
@@ -81,6 +103,7 @@ export class IdentityLedger {
 
     /** Forget a file entirely (deleted, or newly `tv-ignore`d). */
     dropFile(file: string): void {
+        this.contents.delete(file);
         const ids = this.files.get(file);
         if (!ids) return;
 
@@ -100,7 +123,10 @@ export class IdentityLedger {
      */
     rekeyFile(oldPath: string, newPath: string, rewriteId: (id: string) => string): void {
         const previous = this.snapshotFor(oldPath);
-        if (previous.length === 0) return;
+        // The content travels even without rows: a rename does not change
+        // what the file reads.
+        const content = this.contentFor(oldPath);
+        if (content === null) return;
 
         this.dropFile(oldPath);
         // A rename onto an occupied path makes the rows already there stale.
@@ -114,7 +140,7 @@ export class IdentityLedger {
             ordinal: entry.ordinal,
             fingerprint: entry.fingerprint,
         }));
-        this.replaceFile(newPath, rekeyed);
+        this.replaceFile(newPath, rekeyed, content);
     }
 
     get(runtimeId: string): LedgerEntry | undefined {
@@ -133,5 +159,6 @@ export class IdentityLedger {
     clear(): void {
         this.entries.clear();
         this.files.clear();
+        this.contents.clear();
     }
 }
