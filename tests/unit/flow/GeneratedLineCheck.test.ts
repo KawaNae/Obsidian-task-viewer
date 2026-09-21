@@ -2,7 +2,9 @@ import { describe, it, expect } from 'vitest';
 import {
     checkGeneratedChildLine,
     checkGeneratedParentLine,
+    staticGeneratedLineWarnings,
 } from '../../../src/services/flow/GeneratedLineCheck';
+import { parseGenBody } from '../../../src/services/parsing/gen/GenBodyParser';
 
 /**
  * What a generation block may not write on the line that becomes the next
@@ -165,5 +167,83 @@ describe('a generated child line', () => {
 
     it('drops indentation the caller left on the value', () => {
         expect(childOk('\t- [ ] 資料集め ').line).toBe('- [ ] 資料集め');
+    });
+});
+
+/**
+ * The same two warnings, read off a block's literal source through
+ * `parseGenBody` instead of a rendered instance. These exercise the editor
+ * path: no fire, no evaluated `${...}`, just the text as written in the
+ * block.
+ */
+describe('staticGeneratedLineWarnings', () => {
+    const parse = (body: string[]) => parseGenBody(body, 1);
+
+    it('warns on a parent line written with a non-blank status', () => {
+        const ds = staticGeneratedLineWarnings(parse(['- [x] 週報 第4回']));
+
+        expect(ds.map(d => d.code)).toEqual(['gen.generated-status']);
+        expect(ds[0]).toMatchObject({ line: 1, params: { status: 'x' } });
+    });
+
+    it('stays quiet on a blank parent', () => {
+        expect(staticGeneratedLineWarnings(parse(['- [ ] 週報 第4回']))).toEqual([]);
+    });
+
+    it('warns on a checked child that carries its own command', () => {
+        const ds = staticGeneratedLineWarnings(parse([
+            '- [ ] 週報',
+            '    - [x] 経費 ==> every 1mo',
+        ]));
+
+        expect(ds.map(d => d.code)).toEqual(['gen.generated-child-status']);
+        expect(ds[0]).toMatchObject({ line: 2, params: { status: 'x' } });
+    });
+
+    it('stays quiet on a checked child with no command of its own', () => {
+        expect(staticGeneratedLineWarnings(parse([
+            '- [ ] 週報',
+            '    - [x] 定型の確認',
+        ]))).toEqual([]);
+    });
+
+    it('stays quiet on a blank child that carries a command', () => {
+        expect(staticGeneratedLineWarnings(parse([
+            '- [ ] 週報',
+            '    - [ ] 経費 ==> every 1mo',
+        ]))).toEqual([]);
+    });
+
+    it('stays quiet on a child that is not a checkbox at all', () => {
+        expect(staticGeneratedLineWarnings(parse([
+            '- [ ] 週報',
+            '    - 参考: ==> は矢印であってコマンドではない',
+        ]))).toEqual([]);
+    });
+
+    it('stays quiet when the status arrives from a value, not literal text', () => {
+        // The checkbox pattern needs exactly one character between the
+        // brackets; `${status}` is several, so this line does not classify
+        // as a task at all and there is nothing to warn about statically.
+        expect(staticGeneratedLineWarnings(parse(['- [${status}] 週報']))).toEqual([]);
+    });
+
+    it('stays quiet when the ==> arrives from a value, not literal text', () => {
+        // Nothing named "==>" is written on the line; it is what `${cmd}`
+        // happens to evaluate to at fire time.
+        expect(staticGeneratedLineWarnings(parse([
+            '- [ ] 週報',
+            '    - [x] 経費 ${cmd}',
+        ]))).toEqual([]);
+    });
+
+    it('anchors the span past the line\'s own indentation', () => {
+        const [d] = staticGeneratedLineWarnings(parse([
+            '- [ ] 週報',
+            '    - [x] 経費 ==> every 1mo',
+        ]));
+        const line = '- [x] 経費 ==> every 1mo';
+
+        expect(d.span).toEqual({ start: 4, end: 4 + line.length });
     });
 });
