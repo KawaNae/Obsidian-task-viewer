@@ -1,7 +1,6 @@
-import { type Diagnostic, error, warning } from '../lang/Diagnostic';
-import type { LocatedDiagnostic } from '../parsing/gen/GenBlockCollector';
-import type { GenBody, GenLine } from '../parsing/gen/GenBodyParser';
-import { TaskLineClassifier, type TaskLineMatch } from '../parsing/utils/TaskLineClassifier';
+import { type Diagnostic, error } from '../lang/Diagnostic';
+import { childStatusWarning, parentStatusWarning } from '../parsing/gen/GenGeneratedStatusCheck';
+import { TaskLineClassifier } from '../parsing/utils/TaskLineClassifier';
 import { FLOW_MARKER } from './FlowLineScanner';
 
 /**
@@ -76,7 +75,9 @@ export function checkGeneratedParentLine(raw: string): GeneratedLineCheck {
     // is worth writing. Any status other than a space is dropped, not just
     // the completed ones — which statuses count as complete is a user
     // setting, and a pure check that reads settings would answer differently
-    // in two vaults for the same block.
+    // in two vaults for the same block. The warning itself is shared with
+    // GenBodyParser's classify, which asks the same question of a block's
+    // literal source — see GenGeneratedStatusCheck.
     const statusWarning = parentStatusWarning(classified, whole);
     if (!statusWarning) {
         return { ok: true, line, warnings: [] };
@@ -86,23 +87,6 @@ export function checkGeneratedParentLine(raw: string): GeneratedLineCheck {
         line: classified.prefix + ' ' + classified.suffix,
         warnings: [statusWarning],
     };
-}
-
-/**
- * The `gen.generated-status` warning for an already-classified line, or null
- * when the status is blank.
- *
- * Split out of `checkGeneratedParentLine` so the editor's static diagnostics
- * (`staticGeneratedLineWarnings` below) can ask the identical question of a
- * block's literal source, without also running the block-id and command
- * checks around it — those stay errors reserved for the fire-time check,
- * which this stage does not bring into the editor.
- */
-function parentStatusWarning(classified: TaskLineMatch, whole: { start: number; end: number }): Diagnostic | null {
-    if (classified.statusChar === ' ') return null;
-    return warning('gen.generated-status',
-        `A generated task starts unchecked; the '${classified.statusChar}' written here is dropped`,
-        whole, { status: classified.statusChar });
 }
 
 /**
@@ -146,7 +130,8 @@ export function checkGeneratedChildLine(raw: string): GeneratedLineCheck {
     // vault and stay silent in another for the identical line. Only a
     // checkbox can carry this shape, and only when it also carries a
     // command of its own — a checked child with no command fires nothing,
-    // so there is nothing to mistype.
+    // so there is nothing to mistype. The warning itself is shared with
+    // GenBodyParser's classify — see GenGeneratedStatusCheck.
     const classified = TaskLineClassifier.classify(line);
     const statusWarning = childStatusWarning(classified, line, { start: 0, end: line.length });
     if (statusWarning) {
@@ -154,67 +139,4 @@ export function checkGeneratedChildLine(raw: string): GeneratedLineCheck {
     }
 
     return { ok: true, line, warnings: [] };
-}
-
-/**
- * The `gen.generated-child-status` warning for an already-classified child
- * line, or null when it does not apply — see `parentStatusWarning` above for
- * why this is split out rather than shared by calling the whole check.
- */
-function childStatusWarning(
-    classified: TaskLineMatch | null,
-    line: string,
-    whole: { start: number; end: number },
-): Diagnostic | null {
-    if (!classified || classified.statusChar === ' ' || !line.includes(FLOW_MARKER)) return null;
-    return warning('gen.generated-child-status',
-        `A generated child with its own ${FLOW_MARKER} command is written as '${classified.statusChar}', so its command will not fire until it is unchecked and rechecked by hand — this is unlikely to be what was meant`,
-        whole, { status: classified.statusChar });
-}
-
-/**
- * The same two warnings, read off a block's literal source instead of a
- * rendered instance.
- *
- * A generation block cannot be evaluated in the editor — there is no fire
- * context to run `${...}` against — so this only ever sees the text as
- * written. That is what keeps it silent on a line whose status or `==>`
- * arrives from a value: `TaskLineClassifier`'s checkbox pattern requires the
- * status to be exactly one character, so `[${x}]` does not classify as a
- * task at all, and an `==>` produced by an interpolation's result is not
- * literal text on the line, so `line.includes(FLOW_MARKER)` is false for it.
- * Neither exclusion is special-cased here — both fall out of asking the same
- * question the fire-time check asks, of the unrendered line.
- *
- * Deliberately narrower than `checkGeneratedParentLine`/`checkGeneratedChildLine`:
- * those also refuse a block id, a stray `==>` on the parent, and a
- * non-checkbox parent. Reusing them wholesale would surface those errors
- * here too, which is a bigger claim than "this status is dropped" or "this
- * command will not fire" — calling the two warning functions directly, and
- * nothing else in either check, keeps the editor to the same two questions.
- */
-export function staticGeneratedLineWarnings(body: GenBody): LocatedDiagnostic[] {
-    // Same coordinate system as the rest of a block's diagnostics — column 0
-    // is the start of the raw line, indentation included (GenBodyParser
-    // passes the same offset into its own interpolation spans).
-    const wholeOf = (genLine: GenLine, line: string) =>
-        ({ start: genLine.indent, end: genLine.indent + line.length });
-
-    const out: LocatedDiagnostic[] = [];
-
-    if (body.parent) {
-        const line = body.parent.text.trimEnd();
-        const classified = TaskLineClassifier.classify(line);
-        const d = classified && parentStatusWarning(classified, wholeOf(body.parent, line));
-        if (d) out.push({ ...d, line: body.parent.line });
-    }
-
-    for (const child of body.children) {
-        const line = child.text.trimEnd();
-        const classified = TaskLineClassifier.classify(line);
-        const d = childStatusWarning(classified, line, wholeOf(child, line));
-        if (d) out.push({ ...d, line: child.line });
-    }
-
-    return out;
 }

@@ -11,6 +11,7 @@ import { checkProgram } from '../../lang/StmtChecker';
 import { parseProgram } from '../../lang/StmtParser';
 import { TaskLineClassifier } from '../utils/TaskLineClassifier';
 import type { LocatedDiagnostic } from './GenBlockCollector';
+import { childStatusWarning, parentStatusWarning } from './GenGeneratedStatusCheck';
 
 /** One literal line of a block body, with its indentation read as a depth. */
 export interface GenLine {
@@ -480,10 +481,35 @@ function classify(
         });
     }
 
+    const children = lines.filter(l => l !== parent && (l.depth > 0 || isSpliceLine(l)));
+
+    // The two warnings GeneratedLineCheck raises at fire time, read here off
+    // the block's own literal lines instead of a rendered instance — this is
+    // what lets them reach a reader before anything fires: DiagnosticsExtension
+    // and GenBlockPreview both read them straight off this GenBody, and
+    // GenBlockPreview is the one that actually renders while a closed block's
+    // fence is replaced by its Live Preview widget (see that module). A line
+    // whose status or `==>` arrives from a value stays quiet, not by a special
+    // case here but because TaskLineClassifier.classify() cannot read a
+    // status through `${...}`, and an interpolated `==>` is not literal text
+    // on the line — see GenGeneratedStatusCheck for both.
+    if (parent) {
+        const text = parent.text.trimEnd();
+        const classified = TaskLineClassifier.classify(text);
+        const w = classified && parentStatusWarning(classified, { start: parent.indent, end: parent.indent + text.length });
+        if (w) diagnostics.push({ ...w, line: parent.line });
+    }
+    for (const child of children) {
+        const text = child.text.trimEnd();
+        const classified = TaskLineClassifier.classify(text);
+        const w = childStatusWarning(classified, text, { start: child.indent, end: child.indent + text.length });
+        if (w) diagnostics.push({ ...w, line: child.line });
+    }
+
     diagnostics.sort((a, b) => a.line - b.line);
     return {
         parent,
-        children: lines.filter(l => l !== parent && (l.depth > 0 || isSpliceLine(l))),
+        children,
         js,
         bindings,
         diagnostics,
