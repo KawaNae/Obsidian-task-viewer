@@ -1,15 +1,15 @@
 import { describe, it, expect, vi, beforeAll, afterAll } from 'vitest';
-import { TFile } from 'obsidian';
 import { FlowExecutor } from '../../../src/services/flow/FlowExecutor';
 import { parseFlowSegments, singleLineFlow } from '../../../src/services/flow/FlowSegments';
 import { collectGenBlocks, type GenBlock } from '../../../src/services/parsing/gen/GenBlockCollector';
 import { parseGenBody } from '../../../src/services/parsing/gen/GenBodyParser';
-import { TaskCloner, type GeneratedChild } from '../../../src/services/persistence/TaskCloner';
-import { FileOperations } from '../../../src/services/persistence/utils/FileOperations';
+import type { GeneratedChild } from '../../../src/services/persistence/TaskCloner';
 import { TaskIndex } from '../../../src/services/core/TaskIndex';
 import { TaskRepository } from '../../../src/services/persistence/TaskRepository';
 import { DEFAULT_SETTINGS, type Task } from '../../../src/types';
+import { heldTasks } from '../helpers/heldTasks';
 import { makeTask } from '../helpers/makeTask';
+import { writeBench } from '../helpers/writeBench';
 
 // `every` lands on the first grid point after the later of today and the
 // instance's own date, so the fixtures below (anchored on 2026-08-17) only
@@ -65,19 +65,20 @@ function makeExecutor(
     repository: ReturnType<typeof makeRepository>,
     blocks: Record<string, GenBlock> = {},
 ) {
+    const tasks = heldTasks();
     const taskIndex = {
         waitForScan: vi.fn().mockResolvedValue(undefined),
-        resolveTask: vi.fn((t: Task) => t),
+        getTask: tasks.getTask,
         requestScan: vi.fn().mockResolvedValue(undefined),
         notifyImmediate: vi.fn(),
         getGenBlock: vi.fn((_file: string, name: string) => blocks[name]),
     };
-    const executor = new FlowExecutor(
+    const executor = tasks.hold(new FlowExecutor(
         repository as unknown as TaskRepository,
         taskIndex as unknown as TaskIndex,
         app as never,
         () => DEFAULT_SETTINGS
-    );
+    ));
     return { executor, taskIndex };
 }
 
@@ -339,23 +340,6 @@ describe('a fire that generates nothing still consumes its command', () => {
  * transformation in between that either side could disagree about.
  */
 
-const FILE = 'note.md';
-
-function harness(initial: string) {
-    let content = initial;
-    const file = new TFile();
-    const vaultApp = {
-        vault: {
-            getAbstractFileByPath: () => file,
-            process: async (_f: TFile, fn: (data: string) => string) => { content = fn(content); },
-        },
-    } as any;
-    return {
-        cloner: new TaskCloner(vaultApp, new FileOperations(vaultApp)),
-        lines: () => content.split('\n'),
-    };
-}
-
 /** Read one named block of `lines` as a parent line and children. */
 function shapeOf(lines: string[], name: string) {
     const block = collectGenBlocks(lines).blocks.get(name)!;
@@ -376,22 +360,13 @@ const document = [
     '```',
 ];
 
-const firedInFile = () => makeTask({
-    file: FILE,
-    line: 0,
-    content: '週報 第3回',
-    statusChar: 'x',
-    startDate: '2026-08-17',
-    originalText: document[0],
-});
-
 describe('a block body reaches the file unchanged', () => {
     it('places the block\'s shape above the task that fired', async () => {
-        const h = harness(document.join('\n'));
+        const h = await writeBench(document.join('\n'));
         const { parentLine, children } = shapeOf(document, '週報');
 
         await h.cloner.insertGeneratedInstance(
-            firedInFile(), parentLine!, ['every mon', 'use("週報")'], children
+            h.taskAt(0), parentLine!, ['every mon', 'use("週報")'], children
         );
 
         expect(h.lines().slice(0, 7)).toEqual([
@@ -409,10 +384,10 @@ describe('a block body reaches the file unchanged', () => {
         // The live child lines are that instance's own history. Nothing in
         // this path touches them — the block decides what the next instance
         // holds, which is the whole point of the redesign.
-        const h = harness(document.join('\n'));
+        const h = await writeBench(document.join('\n'));
         const { parentLine, children } = shapeOf(document, '週報');
 
-        await h.cloner.insertGeneratedInstance(firedInFile(), parentLine!, [], children);
+        await h.cloner.insertGeneratedInstance(h.taskAt(0), parentLine!, [], children);
 
         const written = h.lines();
         expect(written[written.indexOf(document[0]) + 1]).toBe('\t- [x] ⏱️ 09:00-10:00');
@@ -445,14 +420,11 @@ describe('a block body reaches the file unchanged', () => {
             '\t- [ ] 資料集め',
             '```',
         ];
-        const h = harness(spaced.join('\n'));
+        const h = await writeBench(spaced.join('\n'));
         const { parentLine, children } = shapeOf(spaced, '週報');
 
         await h.cloner.insertGeneratedInstance(
-            makeTask({
-                file: FILE, line: 0, content: '週報 第3回', statusChar: 'x',
-                startDate: '2026-08-17', originalText: spaced[0],
-            }),
+            h.taskAt(0),
             parentLine!, [], children
         );
 

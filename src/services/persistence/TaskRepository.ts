@@ -7,6 +7,7 @@ import { TaskCloner, type GeneratedChild, type InPlaceCopyLines } from './TaskCl
 import type { PropertyOp } from './PropertyUpdatePlanner';
 import type { FlowInstanceInsert } from './FlowInstanceLines';
 import { WriteObserver } from './WriteObserver';
+import type { EditorLine } from '../../utils/FileLines';
 
 /**
  * TaskRepository - タスクのファイル操作を統括するファサードクラス
@@ -44,16 +45,16 @@ export class TaskRepository {
         return this.inlineWriter.updateTaskInFile(task, updatedTask, childOps);
     }
 
-    async updateLine(filePath: string, lineNumber: number, newContent: string): Promise<void> {
-        return this.inlineWriter.updateLine(filePath, lineNumber, newContent);
+    async updateLine(filePath: string, at: EditorLine, newContent: string): Promise<void> {
+        return this.inlineWriter.updateLine(filePath, at, newContent);
     }
 
-    async insertLineAfterLine(filePath: string, lineNumber: number, newContent: string): Promise<void> {
-        return this.inlineWriter.insertLineAfterLine(filePath, lineNumber, newContent);
+    async insertLineAfterLine(filePath: string, at: EditorLine, newContent: string): Promise<void> {
+        return this.inlineWriter.insertLineAfterLine(filePath, at, newContent);
     }
 
-    async deleteLine(filePath: string, lineNumber: number): Promise<void> {
-        return this.inlineWriter.deleteLine(filePath, lineNumber);
+    async deleteLine(filePath: string, at: EditorLine): Promise<void> {
+        return this.inlineWriter.deleteLine(filePath, at);
     }
 
     /** @returns whether the task's lines were removed (see InlineTaskWriter). */

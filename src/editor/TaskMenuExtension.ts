@@ -118,10 +118,11 @@ export function createTaskMenuExtension(
                 // status + basic actions, writing through CheckboxLineOps preserves the original notation.
                 const lineText = view.state.doc.line(lineNumber + 1).text; // CM6 lines are 1-based
 
+                const at = { line: lineNumber, text: lineText };
                 const ops: CheckboxLineOps = {
-                    updateLine: (content) => writeService.updateLine(filePath, lineNumber, content),
-                    insertLineAfter: (content) => writeService.insertLineAfterLine(filePath, lineNumber, content),
-                    deleteLine: () => writeService.deleteLine(filePath, lineNumber),
+                    updateLine: (content) => writeService.updateLine(filePath, at, content),
+                    insertLineAfter: (content) => writeService.insertLineAfterLine(filePath, at, content),
+                    deleteLine: () => writeService.deleteLine(filePath, at),
                 };
 
                 checkboxBuilder.addFullMenu(menu, lineText, getSettings(), ops, filePath);

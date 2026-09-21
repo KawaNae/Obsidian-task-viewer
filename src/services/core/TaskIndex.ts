@@ -20,6 +20,7 @@ import { planInPlaceCopies } from '../persistence/DuplicateShift';
 import type { GenBlock } from '../parsing/gen/GenBlockCollector';
 import { FileOperations } from '../persistence/utils/FileOperations';
 import { logError, logInfo, logWarn } from '../../log/log';
+import type { EditorLine, Refusal } from '../../utils/FileLines';
 
 /**
  * TaskIndex - タスク管理の統括ファサードクラス
@@ -100,7 +101,11 @@ export class TaskIndex {
         // Connected here rather than built into the repository, because the
         // scanner does not exist when the repository does — and cut on dispose,
         // so a write that outlives this index files nothing (see WriteObserver).
-        this.repository.getWriteObserver().connect(path => this.scanner.writeSink(path));
+        this.repository.getWriteObserver().connect(path => ({
+            sink: this.scanner.writeSink(path),
+            locate: (lines, ref) => this.scanner.locate(path, lines, ref),
+            refused: refusal => this.reportRefusal(refusal),
+        }));
     }
 
     getRepository(): TaskRepository {
@@ -489,8 +494,8 @@ export class TaskIndex {
             this.store.notifyListeners(taskId, Object.keys(updates));
         }
 
+        // The write layer has told the user why (see reportRefusal).
         logWarn(`[TaskIndex] update was not written, reverted: id=${taskId} fields=[${Object.keys(updates)}]`);
-        new Notice(t('notice.taskWriteFailed'));
 
         const file = this.app.vault.getAbstractFileByPath(task.file);
         if (file instanceof TFile) {
@@ -536,7 +541,6 @@ export class TaskIndex {
                     // still holds a task the file also still holds. They agree,
                     // and the caller must not report the task gone.
                     logWarn(`[TaskIndex] delete was not written: id=${taskId}`);
-                    new Notice(t('notice.taskWriteFailed'));
                 }
             }
 
@@ -558,7 +562,6 @@ export class TaskIndex {
             const written = await this.writeDuplicate(task, options);
             if (!written) {
                 logWarn(`[TaskIndex] duplicate was not written: id=${taskId}`);
-                new Notice(t('notice.taskWriteFailed'));
             }
 
             await this.scanner.waitForScan(task.file);
@@ -633,7 +636,6 @@ export class TaskIndex {
             const insertedLine = await this.repository.insertLineAsFirstChild(task, childLine);
             if (insertedLine < 0) {
                 logWarn(`[TaskIndex] child insert was not written: parentId=${parentTaskId}`);
-                new Notice(t('notice.taskWriteFailed'));
             }
 
             await this.scanner.waitForScan(task.file);
@@ -687,11 +689,11 @@ export class TaskIndex {
         });
     }
 
-    async updateLine(filePath: string, lineNumber: number, newContent: string): Promise<void> {
+    async updateLine(filePath: string, at: EditorLine, newContent: string): Promise<void> {
         if (this.refuseAfterDispose('updateLine')) return;
         return this.withNotify(filePath, async () => {
             this.syncDetector.markLocalEdit(filePath);
-            await this.repository.updateLine(filePath, lineNumber, newContent);
+            await this.repository.updateLine(filePath, at, newContent);
 
             const file = this.app.vault.getAbstractFileByPath(filePath);
             if (file instanceof TFile) {
@@ -700,11 +702,11 @@ export class TaskIndex {
         });
     }
 
-    async insertLineAfterLine(filePath: string, lineNumber: number, newContent: string): Promise<void> {
+    async insertLineAfterLine(filePath: string, at: EditorLine, newContent: string): Promise<void> {
         if (this.refuseAfterDispose('insertLineAfterLine')) return;
         return this.withNotify(filePath, async () => {
             this.syncDetector.markLocalEdit(filePath);
-            await this.repository.insertLineAfterLine(filePath, lineNumber, newContent);
+            await this.repository.insertLineAfterLine(filePath, at, newContent);
 
             const file = this.app.vault.getAbstractFileByPath(filePath);
             if (file instanceof TFile) {
@@ -713,11 +715,11 @@ export class TaskIndex {
         });
     }
 
-    async deleteLine(filePath: string, lineNumber: number): Promise<void> {
+    async deleteLine(filePath: string, at: EditorLine): Promise<void> {
         if (this.refuseAfterDispose('deleteLine')) return;
         return this.withNotify(filePath, async () => {
             this.syncDetector.markLocalEdit(filePath);
-            await this.repository.deleteLine(filePath, lineNumber);
+            await this.repository.deleteLine(filePath, at);
 
             const file = this.app.vault.getAbstractFileByPath(filePath);
             if (file instanceof TFile) {
@@ -728,28 +730,28 @@ export class TaskIndex {
 
     // ===== ヘルパー =====
 
-    resolveTask(originalTask: Task): Task | undefined {
-        // 1. IDで検索
-        let found = this.store.getTask(originalTask.id);
-        if (found &&
-            found.content === originalTask.content &&
-            found.file === originalTask.file &&
-            found.line === originalTask.line &&
-            found.startDate === originalTask.startDate) {
-            return found;
+    /**
+     * Tell the user a write was not made, and why. Every write that gives up
+     * for want of a target comes through here — once per write, from the
+     * write layer — so the callers that learn of it from a `false` do not
+     * say it again.
+     */
+    private reportRefusal(refusal: Refusal): void {
+        const { reason, subject, file } = refusal;
+        logWarn(`[TaskIndex] write refused: file=${file} reason=${reason.kind}${reason.kind === 'ambiguous' ? ` count=${reason.count}` : ''} subject=${subject}`);
+        switch (reason.kind) {
+            case 'ambiguous':
+                new Notice(t('notice.writeTargetAmbiguous', { count: String(reason.count), subject }));
+                return;
+            case 'gone':
+                new Notice(t('notice.writeTargetGone', { subject }));
+                return;
+            case 'changed':
+                new Notice(t('notice.writeTargetChanged', { subject }));
+                return;
         }
-
-        // 2. シグネチャで検索（File + Content）
-        for (const t of this.store.getTasks()) {
-            if (t.file === originalTask.file && t.content === originalTask.content) {
-                if (t.startDate === originalTask.startDate) {
-                    return t;
-                }
-            }
-        }
-
-        return undefined;
     }
+
 }
 
 // ── Parse-affecting settings fingerprint ──

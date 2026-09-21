@@ -9,12 +9,15 @@ import type { GeneratedChild } from '../persistence/TaskCloner';
  * ORDER INVARIANT: the planner emits effects in the order
  *   create-next / create-generated → archive-to → strip-flow / delete-original
  * and the interpreter applies them sequentially without reordering.
- * Effects that rewrite or remove the original line must run last, because
- * line resolution (findTaskLineNumber) matches on originalText.
+ * Effects that rewrite or remove the original line run last. The order dates
+ * from when a write found its line by the line's text; a write now names its
+ * target and asks where it stands (TaskScanner.locate), and the effect before
+ * it left a record of where the original went, so the order is kept rather
+ * than relied on.
  *
- * What the ordering buys is narrower than it looks: it keeps the original
- * findable only for as long as the line just written reads differently from
- * it, and that holds by value rather than by construction. A written instance
+ * What the ordering bought was narrower than it looked: it kept the original
+ * findable only for as long as the line just written read differently from
+ * it, and that held by value rather than by construction. A written instance
  * always starts unchecked (`buildNextTask` in FlowPlanner, and the status
  * normalization in GeneratedLineCheck) so it cannot read like the line that
  * fired, and an archived copy drops its `==>` and its block id. Where the

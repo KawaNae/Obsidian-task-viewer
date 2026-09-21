@@ -7,8 +7,9 @@ import { FileOperations } from '../utils/FileOperations';
 import { ChildPropertyLineEditor } from '../utils/ChildPropertyLineEditor';
 import type { PropertyOp } from '../PropertyUpdatePlanner';
 import { type FlowInstanceInsert, renderFlowInstance } from '../FlowInstanceLines';
-import { appendLines, processLines, splitLines } from '../../../utils/FileLines';
+import { appendLines, processLines, splitLines, type EditorLine } from '../../../utils/FileLines';
 import type { WriteObserver } from '../WriteObserver';
+import { refOf, subjectOf } from '../TaskRefs';
 import { logWarn } from '../../../log/log';
 
 
@@ -33,17 +34,13 @@ export class InlineTaskWriter {
     async updateTaskInFile(task: Task, updatedTask: Task, childOps: PropertyOp[] = []): Promise<boolean> {
         const file = this.app.vault.getAbstractFileByPath(task.file);
         if (!(file instanceof TFile)) {
-            logWarn(`[InlineTaskWriter] File not found: ${task.file}`);
+            this.writes?.for(task.file)?.refused({ file: task.file, reason: { kind: 'gone' }, subject: subjectOf(task) });
             return false;
         }
 
-        return processLines(this.app, file, (lines, _eol, edits) => {
-            // Find current line number using originalText (handles line shifts)
-            const currentLine = this.fileOps.findTaskLineNumber(lines, task);
-            if (currentLine < 0 || currentLine >= lines.length) {
-                logWarn(`[InlineTaskWriter] Task not found in file`);
-                return null;
-            }
+        return processLines(this.app, file, (lines, _eol, { edits, lineOf }) => {
+            const currentLine = lineOf(refOf(task), subjectOf(task));
+            if (currentLine === null) return null;
 
             // Re-format line
             const newLine = TaskParser.format(updatedTask);
@@ -67,15 +64,16 @@ export class InlineTaskWriter {
             }
 
             return lines;
-        }, this.writes?.for(task.file));
+        }, this.writes?.for(task.file)).then(outcome => outcome.written);
     }
 
-    async updateLine(filePath: string, lineNumber: number, newContent: string): Promise<void> {
+    async updateLine(filePath: string, at: EditorLine, newContent: string): Promise<void> {
         const file = this.app.vault.getAbstractFileByPath(filePath);
         if (!(file instanceof TFile)) return;
+        const lineNumber = at.line;
 
-        await processLines(this.app, file, (lines, _eol, edits) => {
-            if (lines.length <= lineNumber) return null;
+        await processLines(this.app, file, (lines, _eol, { edits, refuse }) => {
+            if (lines[lineNumber] !== at.text) return refuse({ kind: 'changed' }, at.text.trim());
 
             // Preserve original indentation
             const originalLine = lines[lineNumber];
@@ -101,12 +99,13 @@ export class InlineTaskWriter {
      * which of them it made, and says so, where a reader comparing text has
      * nothing to go on but the order they appear in.
      */
-    async insertLineAfterLine(filePath: string, lineNumber: number, newContent: string): Promise<void> {
+    async insertLineAfterLine(filePath: string, at: EditorLine, newContent: string): Promise<void> {
         const file = this.app.vault.getAbstractFileByPath(filePath);
         if (!(file instanceof TFile)) return;
+        const lineNumber = at.line;
 
-        await processLines(this.app, file, (lines, _eol, edits) => {
-            if (lineNumber < 0 || lineNumber >= lines.length) return null;
+        await processLines(this.app, file, (lines, _eol, { edits, refuse }) => {
+            if (lines[lineNumber] !== at.text) return refuse({ kind: 'changed' }, at.text.trim());
             edits.splice(lineNumber + 1, 0, newContent);
             return lines;
         }, this.writes?.for(filePath));
@@ -121,12 +120,13 @@ export class InlineTaskWriter {
      * where they are. A child that outlives its parent here keeps the identity
      * it had — it is the same line, one row higher.
      */
-    async deleteLine(filePath: string, lineNumber: number): Promise<void> {
+    async deleteLine(filePath: string, at: EditorLine): Promise<void> {
         const file = this.app.vault.getAbstractFileByPath(filePath);
         if (!(file instanceof TFile)) return;
+        const lineNumber = at.line;
 
-        await processLines(this.app, file, (lines, _eol, edits) => {
-            if (lineNumber < 0 || lineNumber >= lines.length) return null;
+        await processLines(this.app, file, (lines, _eol, { edits, refuse }) => {
+            if (lines[lineNumber] !== at.text) return refuse({ kind: 'changed' }, at.text.trim());
             edits.splice(lineNumber, 1);
             return lines;
         }, this.writes?.for(filePath));
@@ -142,16 +142,13 @@ export class InlineTaskWriter {
     async stripFlow(task: Task): Promise<void> {
         const file = this.app.vault.getAbstractFileByPath(task.file);
         if (!(file instanceof TFile)) {
-            logWarn(`[InlineTaskWriter] File not found: ${task.file}`);
+            this.writes?.for(task.file)?.refused({ file: task.file, reason: { kind: 'gone' }, subject: subjectOf(task) });
             return;
         }
 
-        await processLines(this.app, file, (lines, _eol, edits) => {
-            const currentLine = this.fileOps.findTaskLineNumber(lines, task);
-            if (currentLine < 0 || currentLine >= lines.length) {
-                logWarn(`[InlineTaskWriter] Task not found in file (stripFlow)`);
-                return null;
-            }
+        await processLines(this.app, file, (lines, _eol, { edits, lineOf }) => {
+            const currentLine = lineOf(refOf(task), subjectOf(task));
+            if (currentLine === null) return null;
 
             // Every index here is below `currentLine`: the scan starts at
             // `taskLineIndex + 1` and stops at the first line that is not a
@@ -187,7 +184,7 @@ export class InlineTaskWriter {
     async deleteTaskFromFile(task: Task, moved?: { to: string }): Promise<boolean> {
         const file = this.app.vault.getAbstractFileByPath(task.file);
         if (!(file instanceof TFile)) {
-            logWarn(`[InlineTaskWriter] File not found: ${task.file}`);
+            this.writes?.for(task.file)?.refused({ file: task.file, reason: { kind: 'gone' }, subject: subjectOf(task) });
             return false;
         }
 
@@ -197,15 +194,12 @@ export class InlineTaskWriter {
         // carried. Across files the claim would be true, but telling the two
         // apart is the same judgement stage 4 has to make for the destination
         // hint, so both halves wait for it together.
-        const sink = moved ? undefined : this.writes?.for(task.file);
+        const channel = this.writes?.for(task.file);
+        const quiet = moved && channel ? { ...channel, sink: undefined } : channel;
 
-        return processLines(this.app, file, (lines, _eol, edits) => {
-            // Find current line using originalText
-            const currentLine = this.fileOps.findTaskLineNumber(lines, task);
-            if (currentLine < 0 || currentLine >= lines.length) {
-                logWarn(`[InlineTaskWriter] Task not found in file (delete)`);
-                return null;
-            }
+        return processLines(this.app, file, (lines, _eol, { edits, lineOf }) => {
+            const currentLine = lineOf(refOf(task), subjectOf(task));
+            if (currentLine === null) return null;
 
             const { childrenLines } = this.fileOps.collectChildrenFromLines(lines, currentLine);
 
@@ -216,7 +210,7 @@ export class InlineTaskWriter {
             edits.splice(currentLine, 1 + childrenLines.length);
 
             return lines;
-        }, sink);
+        }, quiet).then(outcome => outcome.written);
     }
 
     /**
@@ -260,16 +254,13 @@ export class InlineTaskWriter {
     async replaceTaskWithInstances(task: Task, inserts: FlowInstanceInsert[]): Promise<boolean> {
         const file = this.app.vault.getAbstractFileByPath(task.file);
         if (!(file instanceof TFile)) {
-            logWarn(`[InlineTaskWriter] File not found: ${task.file}`);
+            this.writes?.for(task.file)?.refused({ file: task.file, reason: { kind: 'gone' }, subject: subjectOf(task) });
             return false;
         }
 
-        return processLines(this.app, file, (lines, _eol, edits) => {
-            const currentLine = this.fileOps.findTaskLineNumber(lines, task);
-            if (currentLine < 0 || currentLine >= lines.length) {
-                logWarn('[InlineTaskWriter] Task not found in file (replace with instances)');
-                return null;
-            }
+        return processLines(this.app, file, (lines, _eol, { edits, lineOf }) => {
+            const currentLine = lineOf(refOf(task), subjectOf(task));
+            if (currentLine === null) return null;
 
             // Everything that reads the original reads it here, before a
             // single line has moved.
@@ -282,7 +273,7 @@ export class InlineTaskWriter {
             edits.splice(insertAt, 0, ...rendered);
 
             return lines;
-        }, this.writes?.for(task.file));
+        }, this.writes?.for(task.file)).then(outcome => outcome.written);
     }
 
     /**
@@ -351,14 +342,16 @@ export class InlineTaskWriter {
      */
     async insertLineAfterTask(task: Task, lineBody: string): Promise<number> {
         const file = this.app.vault.getAbstractFileByPath(task.file);
-        if (!(file instanceof TFile)) return -1;
+        if (!(file instanceof TFile)) {
+            this.writes?.for(task.file)?.refused({ file: task.file, reason: { kind: 'gone' }, subject: subjectOf(task) });
+            return -1;
+        }
 
         let insertedLineIndex = -1;
 
-        await processLines(this.app, file, (lines, _eol, edits) => {
-            // Find current line using originalText (handles line shifts)
-            const currentLine = this.fileOps.findTaskLineNumber(lines, task);
-            if (currentLine < 0 || currentLine >= lines.length) return null;
+        await processLines(this.app, file, (lines, _eol, { edits, lineOf }) => {
+            const currentLine = lineOf(refOf(task), subjectOf(task));
+            if (currentLine === null) return null;
 
             const indent = FileOperations.resolveChildIndent(lines, currentLine);
             const insertIndex = this.subtreeEnd(lines, currentLine);
@@ -395,16 +388,16 @@ export class InlineTaskWriter {
         opts: { afterCompletedRun?: boolean } = {}
     ): Promise<number> {
         const file = this.app.vault.getAbstractFileByPath(task.file);
-        if (!(file instanceof TFile)) return -1;
+        if (!(file instanceof TFile)) {
+            this.writes?.for(task.file)?.refused({ file: task.file, reason: { kind: 'gone' }, subject: subjectOf(task) });
+            return -1;
+        }
 
         let insertedLineIndex = -1;
 
-        await processLines(this.app, file, (lines, _eol, edits) => {
-            const currentLine = this.fileOps.findTaskLineNumber(lines, task);
-            if (currentLine < 0 || currentLine >= lines.length) {
-                logWarn(`[InlineTaskWriter] Task not found in file (insertSiblingAfterTask)`);
-                return null;
-            }
+        await processLines(this.app, file, (lines, _eol, { edits, lineOf }) => {
+            const currentLine = lineOf(refOf(task), subjectOf(task));
+            if (currentLine === null) return null;
 
             const indent = lines[currentLine].match(/^(\s*)/)?.[1] ?? '';
             const anchor = opts.afterCompletedRun
@@ -430,18 +423,16 @@ export class InlineTaskWriter {
      */
     async insertLineAsFirstChild(task: Task, lineBody: string): Promise<number> {
         const file = this.app.vault.getAbstractFileByPath(task.file);
-        if (!(file instanceof TFile)) return -1;
+        if (!(file instanceof TFile)) {
+            this.writes?.for(task.file)?.refused({ file: task.file, reason: { kind: 'gone' }, subject: subjectOf(task) });
+            return -1;
+        }
 
         let insertedLineIndex = -1;
 
-        await processLines(this.app, file, (lines, _eol, edits) => {
-            // Find the current line number using multiple strategies
-            const currentLine = this.fileOps.findTaskLineNumber(lines, task);
-
-            if (currentLine < 0 || currentLine >= lines.length) {
-                logWarn(`[InlineTaskWriter] Task not found in file (insertLineAsFirstChild)`);
-                return null;
-            }
+        await processLines(this.app, file, (lines, _eol, { edits, lineOf }) => {
+            const currentLine = lineOf(refOf(task), subjectOf(task));
+            if (currentLine === null) return null;
 
             const indent = FileOperations.resolveChildIndent(lines, currentLine);
 
@@ -481,7 +472,7 @@ export class InlineTaskWriter {
         // The appended text is built with LF; splitting it here lets the file's
         // own terminator go back between every line, its own included.
         let insertedLine = -1;
-        await processLines(this.app, file, (lines, _eol, edits) => {
+        await processLines(this.app, file, (lines, _eol, { edits }) => {
             insertedLine = appendLines(lines, splitLines(content).lines, edits);
             return lines;
         }, this.writes?.for(filePath));
@@ -494,9 +485,7 @@ export class InlineTaskWriter {
      * Shared by both the same-file (atomic) and cross-file paths of
      * `appendTaskWithChildren` so the collection logic lives in one place.
      */
-    private buildAdjustedChildren(lines: string[], task: Task): string[] {
-        const currentLine = this.fileOps.findTaskLineNumber(lines, task);
-        if (currentLine < 0 || currentLine >= lines.length) return [];
+    private buildAdjustedChildren(lines: string[], currentLine: number): string[] {
 
         // Parent's original indentation prefix (preserves tabs/spaces)
         const parentIndent = lines[currentLine].match(/^\s*/)?.[0] ?? '';
@@ -537,8 +526,10 @@ export class InlineTaskWriter {
 
         // Same-file append: a single atomic process reads children and appends.
         if (sourceFile instanceof TFile && destPath === task.file) {
-            await processLines(this.app, sourceFile, (lines, _eol, edits) => {
-                const adjustedChildren = this.buildAdjustedChildren(lines, task);
+            await processLines(this.app, sourceFile, (lines, _eol, { edits, lineOf }) => {
+                const currentLine = lineOf(refOf(task), subjectOf(task));
+                if (currentLine === null) return null;
+                const adjustedChildren = this.buildAdjustedChildren(lines, currentLine);
                 appendLines(lines, [...splitLines(content).lines, ...adjustedChildren], edits);
                 return lines;
             }, this.writes?.for(task.file));
@@ -546,10 +537,22 @@ export class InlineTaskWriter {
         }
 
         // Cross-file: collect children from source, then append to dest (see note).
+        //
+        // The source is only read, so its target is asked of the channel
+        // directly rather than through a write. A source row that cannot be
+        // placed is not archived at all: an archive of the parent alone would
+        // lose the children once the original goes.
         let adjustedChildren: string[] = [];
         if (sourceFile instanceof TFile) {
-            const sourceContent = await this.app.vault.read(sourceFile);
-            adjustedChildren = this.buildAdjustedChildren(splitLines(sourceContent).lines, task);
+            const sourceLines = splitLines(await this.app.vault.read(sourceFile)).lines;
+            const channel = this.writes?.for(task.file);
+            const located = channel ? channel.locate(sourceLines, refOf(task)) : { kind: 'gone' as const };
+            if (located.kind !== 'at') {
+                logWarn(`[InlineTaskWriter] move source not placed: ${task.file} ${located.kind}`);
+                channel?.refused({ file: task.file, reason: located, subject: subjectOf(task) });
+                return;
+            }
+            adjustedChildren = this.buildAdjustedChildren(sourceLines, located.line);
         }
 
         const fullContent = [content, ...adjustedChildren].join('\n');

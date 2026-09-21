@@ -6,6 +6,7 @@ import type { GenBlock } from '../../../src/services/parsing/gen/GenBlockCollect
 import { TaskIndex } from '../../../src/services/core/TaskIndex';
 import { TaskRepository } from '../../../src/services/persistence/TaskRepository';
 import { DEFAULT_SETTINGS, type Task } from '../../../src/types';
+import { heldTasks } from '../helpers/heldTasks';
 
 // `every` lands on the first grid point after the later of today and the
 // instance's own date, so the fixtures below (anchored on 2026-08-17) only
@@ -48,19 +49,20 @@ function block(name: string, body: string[]): GenBlock {
 }
 
 function makeExecutor(repository: ReturnType<typeof makeRepository>, blocks: Record<string, GenBlock>) {
+    const tasks = heldTasks();
     const taskIndex = {
         waitForScan: vi.fn().mockResolvedValue(undefined),
-        resolveTask: vi.fn((t: Task) => t),
+        getTask: tasks.getTask,
         requestScan: vi.fn().mockResolvedValue(undefined),
         notifyImmediate: vi.fn(),
         getGenBlock: vi.fn((_file: string, name: string) => blocks[name]),
     };
-    return new FlowExecutor(
+    return tasks.hold(new FlowExecutor(
         repository as unknown as TaskRepository,
         taskIndex as unknown as TaskIndex,
         app as never,
         () => DEFAULT_SETTINGS
-    );
+    ));
 }
 
 async function flush() {

@@ -415,7 +415,7 @@ describe('IDs held across a delete', () => {
         await live.scanAll();
         const [parent, child, below] = idsInFileOrder(live);
 
-        await live.index.deleteLine(FILE, 0);
+        await live.index.deleteLine(FILE, { line: 0, text: '- [ ] 親 @2026-09-21' });
         await live.settle(FILE);
 
         // `taskLines` only reads flush-left rows, so the orphan is checked here

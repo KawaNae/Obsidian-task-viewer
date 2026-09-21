@@ -7,6 +7,7 @@ import { TaskParser } from '../../../src/services/parsing/TaskParser';
 import { TaskIndex } from '../../../src/services/core/TaskIndex';
 import { TaskRepository } from '../../../src/services/persistence/TaskRepository';
 import { DEFAULT_SETTINGS, type Task } from '../../../src/types';
+import { heldTasks } from '../helpers/heldTasks';
 
 /**
  * The ceilings an evaluation stops at.
@@ -145,19 +146,20 @@ function makeRepository() {
 }
 
 function makeExecutor(repository: ReturnType<typeof makeRepository>) {
+    const tasks = heldTasks();
     const taskIndex = {
         waitForScan: vi.fn().mockResolvedValue(undefined),
-        resolveTask: vi.fn((t: Task) => t),
+        getTask: tasks.getTask,
         requestScan: vi.fn().mockResolvedValue(undefined),
         notifyImmediate: vi.fn(),
         getGenBlock: vi.fn(() => undefined),
     };
-    return new FlowExecutor(
+    return tasks.hold(new FlowExecutor(
         repository as unknown as TaskRepository,
         taskIndex as unknown as TaskIndex,
         app as never,
         () => DEFAULT_SETTINGS
-    );
+    ));
 }
 
 const app = { vault: { getAbstractFileByPath: () => null } };

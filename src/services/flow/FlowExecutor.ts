@@ -142,8 +142,12 @@ export class FlowExecutor {
         // 1. Wait for any pending file scans (file state re-acquisition)
         await this.taskIndex.waitForScan(entry.task.file);
 
-        // 2. Resolve the task to its latest line/state
-        const currentTask = this.taskIndex.resolveTask(entry.task);
+        // 2. The task as the index holds it now, by name. Not by its text or
+        //    its line: a row worded like it is not it, and the name is what
+        //    every write below asks after (see TaskScanner.locate). A row
+        //    edited since the completion was seen is still this row, and the
+        //    check below decides whether it still fires.
+        const currentTask = this.taskIndex.getTask(entry.task.id);
         if (!currentTask) {
             // Nothing to resolve is nothing to delete: the line is already
             // gone, which is the state the caller was asking for.
@@ -219,8 +223,8 @@ export class FlowExecutor {
 
         const removed = await this.repository.replaceTaskWithInstances(task, inserts);
         if (!removed) {
+            // Told to the user by the write layer, which refused it.
             logWarn(`[FlowExecutor] Flow fired but the original could not be deleted: ${task.id}`);
-            new Notice(t('notice.taskWriteFailed'));
         }
         return removed;
     }

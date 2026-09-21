@@ -1,5 +1,7 @@
 import { describe, it, expect, afterEach } from 'vitest';
 import { vaultSession, type VaultSession } from '../../../helpers/vaultSession';
+import type { WriteObserver } from '../../../../../src/services/persistence/WriteObserver';
+import type { Refusal } from '../../../../../src/utils/FileLines';
 
 /**
  * What the writes that *add* a line tell the next scan.
@@ -73,11 +75,22 @@ function repositoryOf(session: VaultSession) {
     }).repository;
 }
 
-/** Run without the write layer reporting anything — the ladder alone. */
+/**
+ * Run without the write layer reporting anything — the ladder alone.
+ *
+ * The channel stays connected for everything but the report: a write still
+ * asks where its target stands and still says when it gives up. Cutting the
+ * channel whole would leave every target `gone` and every write refused.
+ */
 function silenceWrites(session: VaultSession): void {
-    (session.index as unknown as {
-        repository: { getWriteObserver: () => { disconnect: () => void } };
-    }).repository.getWriteObserver().disconnect();
+    const index = session.index as unknown as {
+        repository: { getWriteObserver: () => WriteObserver };
+        reportRefusal: (refusal: Refusal) => void;
+    };
+    index.repository.getWriteObserver().connect(path => ({
+        locate: (lines, ref) => session.scanner.locate(path, lines, ref),
+        refused: refusal => index.reportRefusal(refusal),
+    }));
 }
 
 describe('the line the editor writes below another', () => {
@@ -92,7 +105,7 @@ describe('the line the editor writes below another', () => {
         const [first, second] = idsOf(live);
         const claims = watchClaims(live);
 
-        await live.index.insertLineAfterLine(FILE, 0, '- [ ] 同じ行');
+        await live.index.insertLineAfterLine(FILE, { line: 0, text: '- [ ] 同じ行' }, '- [ ] 同じ行');
         await live.settle(FILE);
 
         expect(contents.get(FILE)!.split('\n')).toEqual([
@@ -116,9 +129,10 @@ describe('the line the editor writes below another', () => {
         const [first, second] = idsOf(live);
         silenceWrites(live);
 
-        await live.index.insertLineAfterLine(FILE, 0, '- [ ] 同じ行');
+        await live.index.insertLineAfterLine(FILE, { line: 0, text: '- [ ] 同じ行' }, '- [ ] 同じ行');
         await live.settle(FILE);
 
+        expect(contents.get(FILE)!.split('\n')).toHaveLength(4);
         const after = idsOf(live);
         expect(after[0]).toBe(first);
         expect(after[1]).toBe(second);
@@ -167,6 +181,7 @@ describe('the child written at the head of a subtree', () => {
         await live.index.insertChildTask(parent, '- [ ] 子');
         await live.settle(FILE);
 
+        expect(contents.get(FILE)!.split('\n')).toHaveLength(5);
         const after = idsOf(live);
         expect(after[1]).toBe(child);
         expect(after[2]).not.toBe(child);
