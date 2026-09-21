@@ -286,10 +286,22 @@ describe('WriteClaims: a base that no longer fits', () => {
         expect(claim.hint).toBeNull();
     });
 
-    it('says nothing about a file no scan has read', () => {
+    it('claims every row of a file no scan has read as new', () => {
+        // The start-up scan skips a note with no list items. No row there has
+        // a name anyone holds, so nothing can be handed to the wrong line.
         const claims = claimsWith([], null);
 
-        const claim = claims.claim(FILE, [''], ['- [ ] 初めての行'], [replaced(0)]);
+        const claim = claims.claim(FILE, ['prose'], ['prose', '- [ ] 初めての行'], [inserted(1, 1)]);
+
+        expect(claim.hint!.rows).toEqual([{ runtimeId: 'w1', created: true, text: '- [ ] 初めての行' }]);
+    });
+
+    it('says nothing about a file with rows but no content on record', () => {
+        // Not a state the ledger produces — it records both or neither — but
+        // rows with no content cannot be checked, so they are not built on.
+        const claims = claimsWith([known('r1', 0, '- [ ] 甲')], null);
+
+        const claim = claims.claim(FILE, ['- [ ] 甲'], ['- [x] 甲'], [replaced(0)]);
 
         expect(claim.hint).toBeNull();
     });

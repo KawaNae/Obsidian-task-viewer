@@ -9,6 +9,7 @@ import { DEFAULT_SETTINGS } from '../../../../../src/types';
 import type { Task } from '../../../../../src/types';
 import type { LineEdit } from '../../../../../src/utils/FileLines';
 import { makeTask } from '../../../helpers/makeTask';
+import { contentKeyOf } from '../../../../../src/services/core/identity/ContentKey';
 
 /**
  * Claims through the real scanner: raised by a write, weighed against what the
@@ -54,6 +55,12 @@ const claim = (...rows: Array<[string | null, string]>): Hint => ({
         : { runtimeId, created: false, text }),
 });
 
+/**
+ * A hand-built claim about the file these lines make. A write that reports
+ * gets this from `WriteClaims`; the claims built by hand here say it outright.
+ */
+const about = (lines: string[], hint: Hint): Hint => ({ ...hint, content: contentKeyOf(lines) });
+
 class Harness {
     readonly contents = new Map<string, string>();
     readonly store = new TaskStore(DEFAULT_SETTINGS);
@@ -82,7 +89,9 @@ class Harness {
     /** A write: the claim goes in from inside the callback, as the writer does. */
     async write(lines: string[], ...hints: Hint[]): Promise<void> {
         this.contents.set(FILE, lines.join('\n'));
-        if (hints.length > 0) this.scanner.getHintLog().add(FILE, hints, Date.now());
+        if (hints.length > 0) {
+            this.scanner.getHintLog().add(FILE, hints.map(hint => hint.content ? hint : about(lines, hint)), Date.now());
+        }
         await this.scanner.requestScan(makeFile(FILE));
     }
 
@@ -102,7 +111,7 @@ class Harness {
     /** Raise a claim without a scan following it — a write during a drag. */
     hintOnly(lines: string[], ...hints: Hint[]): void {
         this.contents.set(FILE, lines.join('\n'));
-        this.scanner.getHintLog().add(FILE, hints, Date.now());
+        this.scanner.getHintLog().add(FILE, hints.map(hint => hint.content ? hint : about(lines, hint)), Date.now());
     }
 
     async scan(): Promise<void> {
@@ -316,7 +325,7 @@ describe('a claim that found no scan of its own', () => {
         const original = harness.ids()[0];
 
         // Raised, but the file still reads as it did.
-        harness.scanner.getHintLog().add(FILE, [claim([null, TASK], [original, TASK])], Date.now());
+        harness.scanner.getHintLog().add(FILE, [about([TASK, TASK, ''], claim([null, TASK], [original, TASK]))], Date.now());
         await harness.scan();
         expect(harness.ids()).toEqual([original]);
         expect(harness.pendingCount()).toBe(1);
@@ -338,7 +347,7 @@ describe('a claim that found no scan of its own', () => {
         await harness.write([TASK, '']);
         const original = harness.ids()[0];
 
-        harness.scanner.getHintLog().add(FILE, [claim([null, TASK])], Date.now());
+        harness.scanner.getHintLog().add(FILE, [about([TASK, ''], claim([null, TASK]))], Date.now());
         await harness.scan();
 
         expect(harness.ids()).toEqual([original]);
@@ -518,12 +527,12 @@ describe('a flow firing, through the write layer', () => {
         expect(harness.ids()[0]).not.toBe(original);
     });
 
-    it('collapses into one claim when the flow is on a child line', async () => {
+    it('keeps each claim for its own read when the flow is on a child line', async () => {
         // Written as `- ==>` under the task, the strip removes a line no row
         // stands on and rewrites the task line to the same text. Both claims
-        // then describe the same rows, so the scan in between adopts the newer
-        // one and there is nothing left for the scan after it — which costs
-        // nothing, because the ladder reads both lines verbatim.
+        // then describe the same rows, but not the same file: the scan in
+        // between read the file before the strip, so it adopts the insert's
+        // claim and leaves the strip's for the scan that reads the strip.
         const CHILD = '\t- ==> every 1d';
         const harness = new Harness();
         await harness.write([TASK, CHILD, '']);
@@ -539,11 +548,12 @@ describe('a flow firing, through the write layer', () => {
         await harness.scan();
         const afterMiddle = harness.ids();
         expect(afterMiddle[1]).toBe(original);
-        expect(harness.pendingCount()).toBe(0);
+        expect(harness.pendingCount()).toBe(1);
 
         harness.contents.set(FILE, [LIVE, CHILD, '- [x] ポモドーロ', ''].join('\n'));
         await harness.scan();
         expect(harness.ids()).toEqual(afterMiddle);
+        expect(harness.pendingCount()).toBe(0);
     });
 });
 

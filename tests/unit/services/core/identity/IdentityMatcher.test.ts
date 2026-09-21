@@ -454,12 +454,12 @@ describe('matchWithoutRepeatedIds', () => {
         retired: [],
         consumedHints: runtimeIds.length,
     });
-    const claims = [{ seq: 1, at: 0, hint: { rows: [] } }];
+    const claims = { pending: [{ seq: 1, at: 0, hint: { content: 'k', rows: [] } }], before: null, read: 'k' };
 
     it('keeps an answer that gives each row its own ID', () => {
         const runs: Array<readonly unknown[]> = [];
-        const guarded = matchWithoutRepeatedIds(pending => {
-            runs.push(pending);
+        const guarded = matchWithoutRepeatedIds(hints => {
+            runs.push(hints.pending);
             return answer('r1', 'r2');
         }, claims);
 
@@ -470,9 +470,9 @@ describe('matchWithoutRepeatedIds', () => {
 
     it('matches again with no claims when one ID landed on two rows', () => {
         const seen: number[] = [];
-        const guarded = matchWithoutRepeatedIds(pending => {
-            seen.push(pending.length);
-            return pending.length > 0 ? answer('r1', 'r1', 'r2') : answer('r1', 'r3', 'r2');
+        const guarded = matchWithoutRepeatedIds(hints => {
+            seen.push(hints.pending.length);
+            return hints.pending.length > 0 ? answer('r1', 'r1', 'r2') : answer('r1', 'r3', 'r2');
         }, claims);
 
         expect(seen).toEqual([1, 0]);
@@ -485,7 +485,7 @@ describe('matchWithoutRepeatedIds', () => {
         const guarded = matchWithoutRepeatedIds(() => {
             runs++;
             return answer('r1', 'r1');
-        }, []);
+        }, { pending: [], before: null, read: 'k' });
 
         expect(runs).toBe(1);
         expect(guarded.withoutClaims).toBe(false);

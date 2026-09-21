@@ -1,8 +1,21 @@
 import { describe, it, expect } from 'vitest';
-import { matchFile } from '../../../../../src/services/core/identity/IdentityMatcher';
+import { matchFile as matchWithEvidence } from '../../../../../src/services/core/identity/IdentityMatcher';
+import type { LedgerEntry } from '../../../../../src/services/core/identity/IdentityLedger';
+import { rowsOnlyEvidence } from '../../../helpers/rowsOnlyEvidence';
 import type { MatchResult } from '../../../../../src/services/core/identity/IdentityMatcher';
 import type { ClaimedRow, Hint, PendingHint } from '../../../../../src/services/core/identity/IdentityHints';
 import { makeTask } from '../../../helpers/makeTask';
+
+/** The matcher, weighing claims about a file made only of its rows (see rowsOnlyEvidence). */
+function matchFile(
+    previous: LedgerEntry[],
+    tasks: Task[],
+    mint: (task: Task) => string,
+    pending?: readonly PendingHint[],
+) {
+    return matchWithEvidence(previous, tasks, mint,
+        pending ? rowsOnlyEvidence(previous, tasks, pending) : undefined);
+}
 import type { Task } from '../../../../../src/types';
 
 /**

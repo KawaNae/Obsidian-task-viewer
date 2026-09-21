@@ -1,8 +1,9 @@
 import { describe, it, expect } from 'vitest';
 import {
     HintLog, MAX_HINTS_PER_FILE, HINT_TTL_MS,
-    resolveHints, type ClaimedRow, type Hint,
+    resolveHints as resolveWithEvidence, type ClaimedRow, type Hint, type PendingHint,
 } from '../../../../../src/services/core/identity/IdentityHints';
+import { rowsOnlyEvidence } from '../../../helpers/rowsOnlyEvidence';
 import type { LedgerEntry } from '../../../../../src/services/core/identity/IdentityLedger';
 import { fingerprintOf } from '../../../../../src/services/core/identity/IdentityFingerprint';
 import { makeTask } from '../../../helpers/makeTask';
@@ -55,6 +56,10 @@ const claim = (...rows: Array<[string | null, string]>): Hint => ({
 
 /** A row a write made, under the name it gave it. */
 const made = (runtimeId: string, text: string): ClaimedRow => ({ runtimeId, created: true, text });
+
+/** The resolver, weighing claims about a file made only of its rows (see rowsOnlyEvidence). */
+const resolveHints = (previous: LedgerEntry[], tasks: Task[], pending: readonly PendingHint[]) =>
+    resolveWithEvidence(previous, tasks, rowsOnlyEvidence(previous, tasks, pending));
 
 const pendingOf = (...hints: Hint[]) => hints.map((hint, i) => ({ seq: i + 1, at: 0, hint }));
 

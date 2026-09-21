@@ -1,5 +1,6 @@
 import type { Task } from '../../../types';
 import type { LedgerEntry } from './IdentityLedger';
+import type { ContentKey } from './ContentKey';
 
 /**
  * What the plugin's own writes tell the next scan about which line is which.
@@ -9,7 +10,7 @@ import type { LedgerEntry } from './IdentityLedger';
  * is believed. A missing hint costs precision and nothing else, because the
  * ladder in IdentityMatcher exists for external edits anyway. A *wrong* hint
  * would be worse than none, so belief is all-or-nothing: either a claim
- * reproduces the rows that were read, or it does not count.
+ * reproduces what was read, or it does not count.
  *
  * A claim is absolute — the whole row list, not an edit to be applied to
  * something. Two earlier designs said it the other way round: first as a
@@ -46,9 +47,27 @@ export interface ClaimedRow {
     text: string;
 }
 
-/** What one write claims the file's task rows are, once it has landed. */
+/** What one write claims the file is, once it has landed. */
 export interface Hint {
+    /** The key of the whole content the write left. */
+    content: ContentKey;
+    /** The task rows in that content, in the order a scan matches them. */
     rows: ClaimedRow[];
+}
+
+/**
+ * Everything a scan weighs the pending claims with: the claims, the content
+ * the previous scan read, and the content this one read.
+ *
+ * One argument rather than three, so that a caller cannot hand over claims
+ * without the contents they are to be compared against.
+ */
+export interface HintEvidence {
+    pending: readonly PendingHint[];
+    /** The key of what the previous scan read, or null when none committed. */
+    before: ContentKey | null;
+    /** The key of what this scan read. */
+    read: ContentKey;
 }
 
 export interface PendingHint {
@@ -145,8 +164,8 @@ export class HintLog {
      * from its read to its match, so nothing is filed in between; and a write
      * whose callback runs in the gap before the scan resumes lands on either
      * side of such a mark depending on where it is taken. Position cannot say
-     * which state was read — only the rows can, which is what
-     * {@link resolveHints} asks them.
+     * which state was read — only the content can, which is what
+     * {@link resolveHints} asks.
      */
     pendingFor(file: string, now: number): PendingHint[] {
         const pending = this.files.get(file);
@@ -238,21 +257,31 @@ export class HintLog {
  * Pick the claim that describes what this scan read, if exactly one answer is
  * on offer.
  *
- * Every pending claim is a candidate, and so is the previous scan's own rows —
+ * Every pending claim is a candidate, and so is the previous scan's own state —
  * the file may simply not have changed yet, which is what a read that started
- * before a write landed sees. A candidate is in the running when its rows are,
- * line for line and in order, the rows that were read.
+ * before a write landed sees. A candidate is in the running when the whole
+ * content it describes is the content that was read, and its rows, line for
+ * line and in order, are the rows that were read.
  *
- * Two candidates can be in the running at once, because a file that comes back
- * to a text it already had reads the same both times. Text does not settle it,
- * and nothing else here can: which of them is true is a question about when the
- * read happened, which the reader cannot answer. So the claims are compared by
- * what they would actually decide — the runtime ID of each row. Candidates that
- * decide the same thing are not in conflict whatever their texts did on the way
- * (a write that only touched lines between the tasks leaves the rows exactly as
- * they were, and matching both itself and the state before it changes nothing).
- * Candidates that decide differently are a coin toss, and a coin toss is the one
- * thing this mechanism must never do: the ladder takes it from there.
+ * The content decides; the rows guard it. Rows alone cannot tell two states
+ * apart when only the lines between them differ, which is how a deletion fire
+ * went unadopted: the file as the fire left it and the file before the user
+ * ticked the box read the same task rows, the two candidates named different
+ * rows, and the scan refused. The content says which of them was read. The
+ * rows are checked as well because the content is compared by key (see
+ * `ContentKey`), and a key two contents shared would still have to reproduce
+ * every row's text before it decided anything.
+ *
+ * Two candidates can still be in the running at once, because a file that
+ * comes back to a content it already had reads the same both times — a copy
+ * made by one write and its original removed by the next leaves the file as
+ * it was before the copy. Nothing here can settle that: which of them is true
+ * is a question about when the read happened, which the reader cannot answer.
+ * So the candidates are compared by what they would actually decide — the
+ * runtime ID of each row. Candidates that decide the same thing are not in
+ * conflict. Candidates that decide differently are a coin toss, and a coin
+ * toss is the one thing this mechanism must never do: the ladder takes it from
+ * there.
  *
  * The newest surviving candidate is the one adopted, so the log can drop what
  * the file has moved past.
@@ -260,25 +289,31 @@ export class HintLog {
 export function resolveHints(
     previous: LedgerEntry[],
     tasks: Task[],
-    pending: readonly PendingHint[],
+    evidence: HintEvidence,
 ): HintResolution {
+    const { pending, before, read } = evidence;
     if (pending.length === 0) return { consumed: 0, rows: null };
 
     const byRuntimeId = new Map(previous.map(entry => [entry.runtimeId, entry]));
 
     // The state before any of these writes. In the running like the rest, but
     // never adopted: it claims nothing the ladder does not already work out
-    // from rows it can match verbatim. Its part is to disagree.
-    const unchanged: ClaimedRow[] = previous.map(entry => ({
-        runtimeId: entry.runtimeId,
-        created: false,
-        text: entry.fingerprint.originalText,
-    }));
+    // from rows it can match verbatim. Its part is to disagree. With no
+    // content on record it cannot be shown to be what was read, so it is not
+    // in the running at all.
+    const unchanged: Hint | null = before === null ? null : {
+        content: before,
+        rows: previous.map(entry => ({
+            runtimeId: entry.runtimeId,
+            created: false,
+            text: entry.fingerprint.originalText,
+        })),
+    };
 
     // Index 0 is the state before the writes; index i + 1 is the file as the
     // i-th pending claim describes it. The index doubles as how much of the log
     // the file has moved past once that candidate is adopted.
-    const candidates: ClaimedRow[][] = [unchanged, ...pending.map(entry => entry.hint.rows)];
+    const candidates: Array<Hint | null> = [unchanged, ...pending.map(entry => entry.hint)];
 
     let decision: string | null = null;
     let consumed = 0;
@@ -286,21 +321,18 @@ export function resolveHints(
 
     for (let index = 0; index < candidates.length; index++) {
         const candidate = candidates[index];
-        if (!reproduces(candidate, tasks, byRuntimeId)) continue;
+        if (candidate === null || !reproduces(candidate, read, tasks, byRuntimeId)) continue;
 
-        const verdict = decisionOf(candidate);
+        const verdict = decisionOf(candidate.rows);
         if (decision === null) decision = verdict;
         else if (decision !== verdict) return { consumed: 0, rows: null };
 
         // The newest that fits. Every candidate still standing at this point
         // decides the same thing, so which one is adopted changes no identity —
-        // only how much of the log this scan is done with. A claim that fits
-        // the current read while describing a write still to come describes one
-        // that leaves the rows exactly as they are, which the next scan does
-        // not need told.
+        // only how much of the log this scan is done with.
         if (index > 0) {
             consumed = index;
-            rows = candidate;
+            rows = candidate.rows;
         }
     }
 
@@ -312,12 +344,19 @@ function decisionOf(rows: ClaimedRow[]): string {
     return JSON.stringify(rows.map(row => row.runtimeId));
 }
 
-/** True when the candidate is, line for line, the rows that were read. */
+/**
+ * True when the candidate is what was read: the same content, and, line for
+ * line, the same rows.
+ */
 function reproduces(
-    rows: ClaimedRow[],
+    candidate: Hint,
+    read: ContentKey,
     tasks: Task[],
     byRuntimeId: Map<string, LedgerEntry>,
 ): boolean {
+    if (candidate.content !== read) return false;
+
+    const rows = candidate.rows;
     if (rows.length !== tasks.length) return false;
 
     const spoken = new Set<string>();
