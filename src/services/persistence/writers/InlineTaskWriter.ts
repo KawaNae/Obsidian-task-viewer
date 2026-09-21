@@ -7,6 +7,7 @@ import { FileOperations } from '../utils/FileOperations';
 import { ChildPropertyLineEditor } from '../utils/ChildPropertyLineEditor';
 import type { PropertyOp } from '../PropertyUpdatePlanner';
 import { renderFlowInstance } from '../FlowInstanceLines';
+import { collectGenBlocks } from '../../parsing/gen/GenBlockCollector';
 import {
     appendLines, processLines, splitLines,
     type EditorLine, type LineEdits, type Refusal, type WriteOutcome,
@@ -218,8 +219,9 @@ export class InlineTaskWriter {
 
     /**
      * Whether the row at `line` still reads as the operation's plan read it:
-     * the row itself, its own command lines, and — for the source of a move
-     * away — its whole subtree as it was written to the destination.
+     * the row itself, its own command lines, the generation blocks the plan
+     * read, and — for the source of a move away — its whole subtree as it was
+     * written to the destination.
      *
      * A plan made from a copy the file has moved on from would otherwise be
      * written over what moved it: a strip putting the row back to an older
@@ -236,6 +238,14 @@ export class InlineTaskWriter {
             const subtree = lines.slice(line, line + 1 + childrenLines.length);
             if (subtree.length !== basis.subtree.length) return false;
             if (subtree.some((text, i) => text !== basis.subtree![i])) return false;
+        }
+        if (basis.blocks) {
+            const current = collectGenBlocks([...lines]).blocks;
+            for (const block of basis.blocks) {
+                const body = current.get(block.name)?.body;
+                if (!body || body.length !== block.body.length) return false;
+                if (body.some((text, i) => text !== block.body[i])) return false;
+            }
         }
         return true;
     }
