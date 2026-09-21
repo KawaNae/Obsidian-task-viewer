@@ -201,13 +201,13 @@ export class FlowExecutor {
      * goes ahead.
      *
      * What the fire writes and what the delete takes away are one write (see
-     * {@link InlineTaskWriter.replaceTaskWithInstances}). They used to be two,
-     * and the second one resolved the original by its text after the first had
-     * written a line worded exactly like it — which is how a delete came to
-     * take the instance it had just created, leaving the file as it started
-     * and the task still on the page. One write also settles the outcome the
-     * two of them could not: an instance can no longer be left standing beside
-     * an original that would not go.
+     * {@link TaskRepository.applyToTask}). They used to be two, and the second
+     * one resolved the original by its text after the first had written a line
+     * worded exactly like it — which is how a delete came to take the instance
+     * it had just created, leaving the file as it started and the task still
+     * on the page. One write also settles the outcome the two of them could
+     * not: an instance can no longer be left standing beside an original that
+     * would not go.
      *
      * @returns whether the task is gone. A fire that could not be planned
      * answers no and writes nothing. A line that could not be resolved answers
@@ -223,14 +223,17 @@ export class FlowExecutor {
             return false;
         }
 
-        const inserts = outlook.kind === 'creates'
+        const inserts: TaskOp[] = outlook.kind === 'creates'
             ? outlook.effects.map(effect => {
                 logInfo(`[Flow:effect] ${effect.kind} taskId=${task.id} (with the delete)`);
-                return this.instanceInsertFor(task, effect);
+                return { kind: 'insert-instance', insert: this.instanceInsertFor(task, effect) };
             })
             : [];
 
-        const removed = await this.repository.replaceTaskWithInstances(task, inserts);
+        // The instance goes in first, at the head of the sibling group, and
+        // the removal follows at the row's line carried across that insert.
+        const { written: removed } = await this.repository.applyToTask(
+            targetOf(task), [...inserts, { kind: 'remove' }]);
         if (!removed) {
             // Told to the user by the write layer, which refused it.
             logWarn(`[FlowExecutor] Flow fired but the original could not be deleted: ${task.id}`);

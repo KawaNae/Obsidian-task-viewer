@@ -294,9 +294,9 @@ describe('3. deleteTaskFromFile', () => {
     });
 });
 
-// ─── 4. replaceTaskWithInstances ─────────────────────────────────────
+// ─── 4. a deletion fire (applyToTask) ────────────────────────────────
 
-describe('4. replaceTaskWithInstances (a deletion fire)', () => {
+describe('4. a deletion fire (the instance and the removal, one applyToTask)', () => {
     it('A: the next instance goes in, the fired row goes, the rows around keep their IDs', async () => {
         const { contents, session } = await open({ [FILE]: NOTE('- [ ] 対象 @2026-09-21 ==> every mon') });
         const held = { above: idOf(session, '上'), target: idOf(session, '対象'), below: idOf(session, '下') };

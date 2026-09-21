@@ -1,5 +1,8 @@
 import { describe, it, expect } from 'vitest';
-import { writeBench, FILE } from '../helpers/writeBench';
+import { writeBench, FILE, type WriteBench } from '../helpers/writeBench';
+import type { Task } from '../../../src/types';
+import type { FlowInstanceInsert } from '../../../src/services/persistence/FlowInstanceLines';
+import { targetOf } from '../../../src/services/persistence/TaskRefs';
 
 /**
  * A deletion fire takes the line the user deleted, never the one it just
@@ -26,6 +29,15 @@ const GENERATED = {
     children: [],
 };
 
+/** A deletion fire as the executor writes it: the instances, then the removal, as one write. */
+async function deletionFire(h: WriteBench, task: Task, inserts: FlowInstanceInsert[]): Promise<boolean> {
+    const outcome = await h.writer.applyToTask(targetOf(task), [
+        ...inserts.map(insert => ({ kind: 'insert-instance' as const, insert })),
+        { kind: 'remove' as const },
+    ]);
+    return outcome.written;
+}
+
 describe('deletion fire: which line the delete takes', () => {
     it('takes the original when the instance is worded exactly like it', async () => {
         const h = await writeBench([
@@ -36,7 +48,7 @@ describe('deletion fire: which line the delete takes', () => {
 
         const task = h.taskAt(0);
 
-        const removed = await h.writer.replaceTaskWithInstances(task, [GENERATED]);
+        const removed = await deletionFire(h, task, [GENERATED]);
 
         expect(removed).toBe(true);
         expect(h.lines()).toEqual([
@@ -58,7 +70,7 @@ describe('deletion fire: which line the delete takes', () => {
 
         const task = h.taskAt(1);
 
-        const removed = await h.writer.replaceTaskWithInstances(task, [GENERATED]);
+        const removed = await deletionFire(h, task, [GENERATED]);
 
         expect(removed).toBe(true);
         expect(h.lines()).toEqual([
@@ -81,7 +93,7 @@ describe('deletion fire: which line the delete takes', () => {
 
         const task = h.taskAt(0);
 
-        const removed = await h.writer.replaceTaskWithInstances(task, [GENERATED]);
+        const removed = await deletionFire(h, task, [GENERATED]);
 
         expect(removed).toBe(true);
         expect(h.lines()).toEqual([
@@ -102,7 +114,7 @@ describe('deletion fire: which line the delete takes', () => {
 
         const task = h.taskAt(1);
 
-        const removed = await h.writer.replaceTaskWithInstances(task, [
+        const removed = await deletionFire(h, task, [
             { kind: 'recurrence', content: '- [ ] 週報 @2026-09-28 ==> every mon', flowLines: [] },
         ]);
 
@@ -126,7 +138,7 @@ describe('deletion fire: which line the delete takes', () => {
         const task = h.taskAt(0);
         h.edit(before);
 
-        const removed = await h.writer.replaceTaskWithInstances(task, [GENERATED]);
+        const removed = await deletionFire(h, task, [GENERATED]);
 
         expect(removed).toBe(false);
         expect(h.lines().join('\n')).toBe(before);
