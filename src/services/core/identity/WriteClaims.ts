@@ -307,6 +307,13 @@ export class WriteClaims {
      * copy would be claimed as the original with every text lining up, and a
      * scan comparing whole contents would adopt it.
      *
+     * The content does not refuse everything, though: our writes, and what
+     * came after them, can bring the file back to the very content that ledger
+     * recorded, with the names moved between its lines (delete X, append a
+     * row, rename Y to X's text). So a commit hands {@link forget} the mark
+     * the scan took before reading, and while a write filed after it is kept
+     * (`outrun`), the ledger is not answered with at all.
+     *
      * A file no scan has committed has no ledger content, and no rows either —
      * the start-up scan skips a note with no list items, so this is every such
      * note until something writes to it. Nothing there has a name anyone holds,
@@ -320,6 +327,12 @@ export class WriteClaims {
         if (base) {
             return base.content === current && fits(base.rows, before) ? base.rows : null;
         }
+
+        // A scan committed without having read a write of ours: its ledger is
+        // older than that write however well the content fits. The write and
+        // what came after it can bring the file back to the very content the
+        // ledger recorded, with the names moved between its lines.
+        if (this.outrun.has(path)) return null;
 
         const ledger = this.ledgerState(path);
         if (ledger.content === null) return ledger.rows.length === 0 ? [] : null;
