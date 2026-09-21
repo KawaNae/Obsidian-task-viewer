@@ -59,17 +59,20 @@ export interface ClaimResult {
  * all (see {@link WriteClaims.stateFor}) — or a refusal: a write landed that
  * this class could not describe, so nothing it holds is true of the file any
  * more, and nothing older is either.
+ *
+ * `filed` numbers the writes in the order they landed (see
+ * {@link WriteClaims.readMark}).
  */
 type Base =
-    | { content: ContentKey; rows: ClaimBase[] }
-    | { content: null; rows: null };
+    | { content: ContentKey; rows: ClaimBase[]; filed: number }
+    | { content: null; rows: null; filed: number };
 
 /**
  * A write changed the file and could not say how.
  *
- * Shared, and never mutated: what matters is that the entry is there.
+ * What matters is that the entry is there.
  */
-const SILENT: Base = { content: null, rows: null };
+const SILENT = (filed: number): Base => ({ content: null, rows: null, filed });
 
 /**
  * Turns a write's report of what it did to the lines into a claim about what
@@ -103,6 +106,18 @@ export class WriteClaims {
      * it.
      */
     private readonly bases = new Map<string, Base>();
+
+    /**
+     * What the last write left, for a file whose last scan committed without
+     * having read it: the scan read the file before the write landed, and
+     * committed after. {@link stateFor} does not build on it, for the reason
+     * above. It is kept for one thing only: to say that the ledger is older
+     * than a write of ours, and what that write left (see {@link lastWrite}).
+     */
+    private readonly outrun = new Map<string, Base>();
+
+    /** How many writes have filed here, described or not. */
+    private filed = 0;
 
     /**
      * @param parseRows the file's task rows, in the order a scan matches them,
@@ -141,7 +156,7 @@ export class WriteClaims {
         // the ledger is older still. So the file is marked silent instead, and
         // stays silent until a scan of it commits.
         const nothing = (): ClaimResult => {
-            this.bases.set(path, SILENT);
+            this.bases.set(path, SILENT(++this.filed));
             return { hint: null, withdraw };
         };
 
@@ -177,7 +192,7 @@ export class WriteClaims {
         }
 
         const content = contentKeyOf(after);
-        this.bases.set(path, { content, rows });
+        this.bases.set(path, { content, rows, filed: ++this.filed });
         return {
             hint: { content, rows: rows.map(row => ({ runtimeId: row.runtimeId, created: row.created, text: row.text })) },
             withdraw,
@@ -205,31 +220,42 @@ export class WriteClaims {
     }
 
     /**
-     * The rows this file's last write left, whether or not the file still
-     * reads as it left them; null when no write has left any since the last
-     * scan, or the last write could not say.
+     * What the last write of ours that no committed scan has read left in this
+     * file: its rows, or null when it could not say. Undefined when every write
+     * of ours to the file has been read by a scan that committed — the only
+     * case where the ledger is not known to be older than one of them.
+     *
+     * Not the same as the base {@link stateFor} builds on: that one is dropped
+     * by any scan that commits, this one only by a scan that read the file
+     * after the write (see {@link forget}).
      */
-    rowsLeft(path: string): readonly ClaimBase[] | null {
-        return this.bases.get(path)?.rows ?? null;
+    lastWrite(path: string): { rows: readonly ClaimBase[] | null } | undefined {
+        const base = this.bases.get(path) ?? this.outrun.get(path);
+        return base && { rows: base.rows };
     }
 
     /**
-     * Whether a write of ours has landed on this file since its last scan
-     * committed — described or not. While one has, the ledger is known to be
-     * at least one write old (see {@link stateFor}).
+     * A mark for a scan to take before it reads a file: a write filed after
+     * it may be one the read did not see.
      */
-    writtenSinceScan(path: string): boolean {
-        return this.bases.has(path);
+    readMark(): number {
+        return this.filed;
     }
 
     /**
      * Forget what this file's last write left.
      *
      * Called when a scan of the file commits, whatever it decided, and when the
-     * file's claims are dropped for good (a rename, a delete, `tv-ignore`).
+     * file's claims are dropped for good (a rename, a delete, `tv-ignore`). A
+     * committing scan passes the mark it took before reading: a write filed
+     * after that mark is one the ledger it commits may not have seen, and is
+     * kept for {@link lastWrite} though never built on again.
      */
-    forget(path: string): void {
+    forget(path: string, readMark?: number): void {
+        const newest = this.bases.get(path) ?? this.outrun.get(path);
         this.bases.delete(path);
+        if (readMark !== undefined && newest && newest.filed > readMark) this.outrun.set(path, newest);
+        else this.outrun.delete(path);
     }
 
     /**
