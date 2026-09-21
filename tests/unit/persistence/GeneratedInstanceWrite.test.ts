@@ -1,6 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import type { GeneratedChild } from '../../../src/services/persistence/TaskCloner';
-import { writeBench, FILE } from '../helpers/writeBench';
+import { targetOf } from '../../../src/services/persistence/TaskRefs';
+import type { Task } from '../../../src/types';
+import { writeBench, FILE, type WriteBench } from '../helpers/writeBench';
 
 /**
  * Writing the next instance from what a gen block produced.
@@ -16,11 +18,20 @@ const FLOW = ['every mon', 'use("週報")'];
 
 const child = (depth: number, body: string): GeneratedChild => ({ depth, body });
 
-describe('insertGeneratedInstance places the generated lines', () => {
+/** `applyToTask` with a single `insert-instance` op of kind `generated`. */
+function insertGenerated(
+    h: WriteBench, task: Task, parentLine: string, flowLines: string[], children: GeneratedChild[],
+) {
+    return h.writer.applyToTask(targetOf(task), [
+        { kind: 'insert-instance', insert: { kind: 'generated', parentLine, flowLines, children } },
+    ]);
+}
+
+describe('a generated-instance insert places the generated lines', () => {
     it('writes parent, flow lines and children in that order', async () => {
         const h = await writeBench('- [ ] 週報 第3回 @2026-08-17');
 
-        await h.cloner.insertGeneratedInstance(h.taskAt(0), PARENT, FLOW, [
+        await insertGenerated(h, h.taskAt(0), PARENT, FLOW, [
             child(1, '- [ ] 資料集め'),
             child(1, '- [ ] 下書き'),
         ]);
@@ -41,8 +52,8 @@ describe('insertGeneratedInstance places the generated lines', () => {
             '\t- [ ] 週報 第3回 @2026-08-17',
         ].join('\n'));
 
-        await h.cloner.insertGeneratedInstance(
-            h.taskAt(1),
+        await insertGenerated(
+            h, h.taskAt(1),
             PARENT, [], [child(1, '- [ ] 資料集め')]
         );
 
@@ -53,7 +64,7 @@ describe('insertGeneratedInstance places the generated lines', () => {
     it('nests deeper children one unit per level', async () => {
         const h = await writeBench('- [ ] 週報 第3回 @2026-08-17');
 
-        await h.cloner.insertGeneratedInstance(h.taskAt(0), PARENT, [], [
+        await insertGenerated(h, h.taskAt(0), PARENT, [], [
             child(1, '- [ ] 章立て'),
             child(2, '- [ ] 序'),
             child(3, '- [ ] 注記'),
@@ -74,22 +85,22 @@ describe('insertGeneratedInstance places the generated lines', () => {
             '- [ ] 週報 第3回 @2026-08-17',
         ].join('\n'));
 
-        await h.cloner.insertGeneratedInstance(
-            h.taskAt(1), PARENT, [], []
+        await insertGenerated(
+            h, h.taskAt(1), PARENT, [], []
         );
 
         expect(h.lines()[0]).toBe(PARENT);
     });
 });
 
-describe('insertGeneratedInstance resolves the indent unit from the file', () => {
+describe('a generated-instance insert resolves the indent unit from the file', () => {
     it('follows the fired task\'s existing children', async () => {
         const h = await writeBench([
             '- [ ] 週報 第3回 @2026-08-17',
             '    - [x] ⏱️ 記録',
         ].join('\n'));
 
-        await h.cloner.insertGeneratedInstance(h.taskAt(0), PARENT, ['every mon'], [
+        await insertGenerated(h, h.taskAt(0), PARENT, ['every mon'], [
             child(1, '- [ ] 資料集め'),
         ]);
 
@@ -107,7 +118,7 @@ describe('insertGeneratedInstance resolves the indent unit from the file', () =>
             '    - [ ] その子',
         ].join('\n'));
 
-        await h.cloner.insertGeneratedInstance(h.taskAt(0), PARENT, [], [
+        await insertGenerated(h, h.taskAt(0), PARENT, [], [
             child(1, '- [ ] 資料集め'),
         ]);
 
@@ -117,7 +128,7 @@ describe('insertGeneratedInstance resolves the indent unit from the file', () =>
     it('uses a tab when the file has no indentation to read', async () => {
         const h = await writeBench('- [ ] 週報 第3回 @2026-08-17');
 
-        await h.cloner.insertGeneratedInstance(h.taskAt(0), PARENT, [], [
+        await insertGenerated(h, h.taskAt(0), PARENT, [], [
             child(1, '- [ ] 資料集め'),
         ]);
 
@@ -127,8 +138,8 @@ describe('insertGeneratedInstance resolves the indent unit from the file', () =>
     it('ignores indentation the caller put on the values', async () => {
         const h = await writeBench('- [ ] 週報 第3回 @2026-08-17');
 
-        await h.cloner.insertGeneratedInstance(
-            h.taskAt(0), '        ' + PARENT, [], [child(1, '        - [ ] 資料集め')]
+        await insertGenerated(
+            h, h.taskAt(0), '        ' + PARENT, [], [child(1, '        - [ ] 資料集め')]
         );
 
         expect(h.lines()[0]).toBe(PARENT);
@@ -140,13 +151,13 @@ describe('insertGeneratedInstance resolves the indent unit from the file', () =>
         // that hands over 0 must not produce a second line at parent depth.
         const h = await writeBench('- [ ] 週報 第3回 @2026-08-17');
 
-        await h.cloner.insertGeneratedInstance(h.taskAt(0), PARENT, [], [child(0, '- [ ] 資料集め')]);
+        await insertGenerated(h, h.taskAt(0), PARENT, [], [child(0, '- [ ] 資料集め')]);
 
         expect(h.lines()[1]).toBe('\t- [ ] 資料集め');
     });
 });
 
-describe('insertGeneratedInstance writes nothing it cannot place', () => {
+describe('a generated-instance insert writes nothing it cannot place', () => {
     it('leaves the file alone when the fired task cannot be resolved', async () => {
         // The fired task was read, then taken out of the file by something else.
         const before = '- [ ] 別のタスク @2026-08-17';
@@ -154,8 +165,8 @@ describe('insertGeneratedInstance writes nothing it cannot place', () => {
         const fired = h.taskAt(0);
         h.edit(before);
 
-        await h.cloner.insertGeneratedInstance(
-            fired, PARENT, FLOW, [child(1, '- [ ] 資料集め')]
+        await insertGenerated(
+            h, fired, PARENT, FLOW, [child(1, '- [ ] 資料集め')]
         );
 
         expect(h.lines()).toEqual([before]);
@@ -165,7 +176,7 @@ describe('insertGeneratedInstance writes nothing it cannot place', () => {
     it('writes only the parent when there is nothing else', async () => {
         const h = await writeBench('- [ ] 週報 第3回 @2026-08-17');
 
-        await h.cloner.insertGeneratedInstance(h.taskAt(0), PARENT, [], []);
+        await insertGenerated(h, h.taskAt(0), PARENT, [], []);
 
         expect(h.lines()).toEqual([PARENT, '- [ ] 週報 第3回 @2026-08-17']);
     });

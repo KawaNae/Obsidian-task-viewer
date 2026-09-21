@@ -1,6 +1,9 @@
 import { describe, it, expect } from 'vitest';
-import { writeBench, FILE, type WriteBench } from '../helpers/writeBench';
+import { writeBench, FILE, type Filed, type WriteBench } from '../helpers/writeBench';
 import type { Task } from '../../../src/types';
+import { TaskParser } from '../../../src/services/parsing/TaskParser';
+import type { TaskOp } from '../../../src/services/persistence/TaskOps';
+import { targetOf } from '../../../src/services/persistence/TaskRefs';
 
 /**
  * Counterexamples run against F2 (a write names its target and asks
@@ -14,6 +17,18 @@ import type { Task } from '../../../src/types';
  */
 
 const checked = (task: Task): Task => ({ ...task, statusChar: 'x' });
+
+/** A recurrence's fire as the executor writes it: the next instance, then the strip, one write. */
+const fire = (task: Task, next: string): TaskOp[] => [
+    { kind: 'insert-instance', insert: { kind: 'recurrence', content: next, flowLines: ['every 1d'] } },
+    { kind: 'strip-flow', text: TaskParser.format({ ...task, flow: undefined }).trim() },
+];
+
+/** The one claim a write filed. */
+function only(filed: Filed[]): Filed {
+    expect(filed).toHaveLength(1);
+    return filed[0];
+}
 
 describe('F2-counter: nested rows that read the same', () => {
     // c1 and c2 read the same, under different parents, each with its own child.
@@ -270,21 +285,25 @@ describe('F2-counter: flow effects', () => {
         // The next instance goes to the head of the sibling group (line 0).
         // Before F2 (inferred): stored line 2 then reads the upper DONE, which
         // equals the fired line's text -> the upper record is stripped (wrong).
+        // Since F3 the two are one write, and the strip takes its line from
+        // the insert's report rather than from a second search.
         const bench = await writeBench([DONE, FLOW, DONE, FLOW, '']);
         const second = bench.taskAt(2);
-        await bench.cloner.insertRecurrenceForTask(second, TODO, ['every 1d']);
-        await bench.writer.stripFlow(second);
+        await bench.writer.applyToTask(targetOf(second), fire(second, TODO));
         expect(bench.lines()).toEqual([TODO, FLOW, DONE, FLOW, DONE, '']);
         expect(bench.refused).toEqual([]);
     });
 
-    it('same-file archive with an identical text, then delete-original: deletes the original, not the archive', async () => {
+    it('same-file move with an identical text: the original goes, not the row carried to the end', async () => {
+        // Two writes until F3, the delete searching after the archive had
+        // written a line worded exactly like the original. One write now: the
+        // removal takes the line the row was located at, before the carry.
         const bench = await writeBench(['- [x] A', '- [ ] B']);
         const a = bench.taskAt(0);
-        await bench.writer.appendTaskWithChildren(FILE, '- [x] A', a);
-        expect(bench.lines()).toEqual(['- [x] A', '- [ ] B', '- [x] A']);
-        expect(await bench.writer.deleteTaskFromFile(a)).toBe(true);
+        const outcome = await bench.writer.applyToTask(targetOf(a), [{ kind: 'move-to-end', text: '- [x] A' }]);
+        expect(outcome.written).toBe(true);
         expect(bench.lines()).toEqual(['- [ ] B', '- [x] A']);
+        expect(only(bench.filed).edits.some(edit => edit.kind === 'carried')).toBe(true);
     });
 
     it('cross-file archive of a row replaced from outside (R4 shape): nothing archived, refused as changed', async () => {
@@ -293,20 +312,23 @@ describe('F2-counter: flow effects', () => {
         const bench = await writeBench({ [FILE]: '- [ ] alpha\n- [ ] buy milk\n- [ ] omega', 'archive.md': '' });
         const milk = bench.taskAt(1);
         bench.edit(['- [ ] alpha', '- [ ] omega', '- [ ] call mom']);
-        await bench.writer.appendTaskWithChildren('archive.md', '- [x] buy milk', milk);
+        expect(await bench.writer.appendTaskWithChildren('archive.md', '- [x] buy milk', targetOf(milk))).toBe(false);
         expect(bench.text('archive.md')).toBe('');
         expect(bench.refused.map(r => r.reason.kind)).toEqual(['changed']);
     });
 
-    it('same-file archive, a frontmatter write, then delete-original: refused, leaving both (availability)', async () => {
-        // Before F2 (inferred): the stored line is shifted, the first exact
-        // match is the original (above the archive) -> right by position.
+    it('a frontmatter write, then a same-file move: it lands, the shape F2 refused as ambiguous being gone', async () => {
+        // Under F2 the archive landed first and the frontmatter write came
+        // between it and the delete, which then saw two rows reading `- [x] A`
+        // and refused, leaving both. The move is one write now: nothing of
+        // ours stands between the archive and the removal.
         const bench = await writeBench(['- [x] A', '- [ ] B']);
         const a = bench.taskAt(0);
-        await bench.writer.appendTaskWithChildren(FILE, '- [x] A', a);
         await bench.repo.setFrontmatterKeys(FILE, { color: 'red' });
-        expect(await bench.writer.deleteTaskFromFile(a)).toBe(false);
-        expect(bench.refused.map(r => r.reason.kind)).toEqual(['ambiguous']);
+        const outcome = await bench.writer.applyToTask(targetOf(a), [{ kind: 'move-to-end', text: '- [x] A' }]);
+        expect(outcome.written).toBe(true);
+        expect(bench.lines().filter(line => line.startsWith('- ['))).toEqual(['- [ ] B', '- [x] A']);
+        expect(bench.refused).toEqual([]);
     });
 });
 
@@ -548,21 +570,49 @@ describe('F2-counter3: a scan that read before our write, committed after it', (
 });
 
 describe('F2-counter3: availability', () => {
-    it('A2: create-next through the ladder, then strip-flow: the second effect is refused (half applied until F3)', async () => {
-        // An outside line lands between the scan the fire waited for and its
-        // effects. The insert goes through the ladder and lands, but has no
-        // base to claim on (silent); the strip has nothing newer to check
-        // against. Two writes for one operation is F3's to fold into one.
-        const DONE = '- [x] 🍅 記録';
-        const TODO = '- [ ] 🍅 記録';
-        const FLOW = '\t- ==> every 1d';
+    // Until F3 a fire was two writes here: the insert went through the ladder
+    // and landed with no base to claim on, and the strip, with nothing newer
+    // to check against, was refused — the next instance written, the command
+    // left to fire again. One write lands both or neither.
+    const DONE = '- [x] 🍅 記録';
+    const TODO = '- [ ] 🍅 記録';
+    const FLOW = '\t- ==> every 1d';
+
+    it('A2: an outside line before the fire: the instance and the strip land together', async () => {
         const bench = await writeBench([DONE, FLOW, '']);
         const rec = bench.taskAt(0);
         bench.edit(['メモ', DONE, FLOW, '']);
-        await bench.cloner.insertRecurrenceForTask(rec, TODO, ['every 1d']);
-        await bench.writer.stripFlow(rec);
-        expect(bench.lines()).toEqual([TODO, FLOW, 'メモ', DONE, FLOW, '']);
+        const outcome = await bench.writer.applyToTask(targetOf(rec), fire(rec, TODO));
+        expect(outcome.written).toBe(true);
+        expect(bench.lines()).toEqual([TODO, FLOW, 'メモ', DONE, '']);
+        expect(bench.refused).toEqual([]);
+    });
+
+    it('A2: the fired row rewritten from outside before the fire: nothing lands, the command stays', async () => {
+        const bench = await writeBench([DONE, FLOW, '']);
+        const rec = bench.taskAt(0);
+        const edited = ['- [x] 🍅 記録 書き足し', FLOW, ''];
+        bench.edit(edited);
+        const outcome = await bench.writer.applyToTask(targetOf(rec), fire(rec, TODO));
+        expect(outcome.written).toBe(false);
+        expect(bench.lines()).toEqual(edited);
         expect(bench.refused.map(r => r.reason.kind)).toEqual(['changed']);
+    });
+
+    it('an effect whose row an earlier effect took away: none of them lands, and it is told once', async () => {
+        // The first op resolves; the second finds the row gone, carried across
+        // the first's splice. The instance the first wrote does not stay.
+        const bench = await writeBench([DONE, FLOW, '']);
+        const rec = bench.taskAt(0);
+        const outcome = await bench.writer.applyToTask(targetOf(rec), [
+            { kind: 'insert-instance', insert: { kind: 'recurrence', content: TODO, flowLines: ['every 1d'] } },
+            { kind: 'remove' },
+            { kind: 'strip-flow', text: DONE },
+        ]);
+        expect(outcome.written).toBe(false);
+        expect(bench.lines()).toEqual([DONE, FLOW, '']);
+        expect(bench.filed).toEqual([]);
+        expect(bench.refused.map(r => r.reason.kind)).toEqual(['gone']);
     });
 });
 

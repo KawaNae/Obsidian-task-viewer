@@ -7,8 +7,6 @@ import { processLines, type LineEdits } from '../../utils/FileLines';
 import { refOf, subjectOf } from './TaskRefs';
 import type { WriteObserver } from './WriteObserver';
 
-import { type GeneratedChild, renderFlowInstance } from './FlowInstanceLines';
-
 export type { GeneratedChild } from './FlowInstanceLines';
 
 /**
@@ -74,7 +72,8 @@ export class TaskCloner {
      *
      * 複写の行は呼び出し側が組んで渡す。どこへ置くかを決めるのがこの層で、
      * 何を書くか（実効 end から始めて長さを保つ）を決めるのは日付を解決
-     * できる層である、という分担は {@link insertRecurrenceForTask} と同じ。
+     * できる層である、という分担はフローの次回分（`InlineTaskWriter.applyToTask`
+     * の `insert-instance`）と同じ。
      * 時刻を持たないタスクはずらす先が無いので、呼び出し側は `verbatim` を
      * 渡す。その複写はファイルの行をそのまま写し、formatter を通らない。
      *
@@ -103,87 +102,6 @@ export class TaskCloner {
 
             return this.spliceCopies(lines, idx, parents, 'after', edits);
         }, this.writes?.for(task.file)).then(outcome => outcome.written);
-    }
-
-    /**
-     * タスクの再発処理：元タスクの兄弟位置に新しいタスク行を挿入する。
-     * `content` は呼び出し側（FlowExecutor interpreter）が format 済みの行文字列。
-     * `flowLines` は新インスタンスの `- ==>` フロー子行の raw 列（行単位
-     * canonical、FlowPlanner 産）。タスク行直後に正規化位置で挿入する。
-     *
-     * 子行は運ばない。発火したインスタンスの下にある行はそのインスタンスが
-     * 何をしたかの記録で、次インスタンスに何を持たせるかは生成ブロックが
-     * 記述する（gen v3）。既存子行はここでも読むが、用途はフロー子行の
-     * インデントをファイルの綴りに揃えることだけである。
-     */
-    async insertRecurrenceForTask(task: Task, content: string, flowLines: string[] = []): Promise<void> {
-        const file = this.app.vault.getAbstractFileByPath(task.file);
-        if (!(file instanceof TFile)) {
-            this.writes?.for(task.file)?.refused({ file: task.file, reason: { kind: 'gone' }, subject: subjectOf(task) });
-            return;
-        }
-
-        await processLines(this.app, file, (lines, _eol, { edits, lineOf }) => {
-            // A task that cannot be placed is not written around. The next
-            // instance used to go to the end of the file when the search found
-            // nothing; with the target named rather than searched for, nothing
-            // means the row is gone or cannot be told from its twins, and
-            // neither is a reason to write a new one somewhere else.
-            const currentLine = lineOf(refOf(task), subjectOf(task));
-            if (currentLine === null) return null;
-
-            const rendered = renderFlowInstance(this.fileOps, lines, currentLine,
-                { kind: 'recurrence', content, flowLines });
-
-            const insertAt = this.fileOps.findSiblingGroupStart(lines, currentLine);
-            edits.splice(insertAt, 0, ...rendered);
-
-            return lines;
-        }, this.writes?.for(task.file));
-    }
-
-    /**
-     * Write the next instance from what a gen block described.
-     *
-     * The caller hands over finished values: the parent line with its flow
-     * clause already composed, the flow child lines in canonical form, and the
-     * children as depth and body. Nothing here reads the block or evaluates
-     * anything — this layer only decides where the lines go and how deep they
-     * sit, which is the same division of labour the recurrence path has always
-     * had.
-     *
-     * Indentation is resolved from the file, not from the caller. The parent is
-     * a sibling of the task that fired, so it takes that task's own indent; the
-     * children take one unit per level of `depth`, where a depth of 1 means the
-     * first level below the parent. The unit follows the task's existing
-     * children, falling back to however the rest of the file is written — the
-     * same rule the child-insert primitives use, so a subtree keeps one
-     * spelling.
-     */
-    async insertGeneratedInstance(
-        task: Task,
-        parentLine: string,
-        flowLines: string[],
-        children: GeneratedChild[],
-    ): Promise<void> {
-        const file = this.app.vault.getAbstractFileByPath(task.file);
-        if (!(file instanceof TFile)) {
-            this.writes?.for(task.file)?.refused({ file: task.file, reason: { kind: 'gone' }, subject: subjectOf(task) });
-            return;
-        }
-
-        await processLines(this.app, file, (lines, _eol, { edits, lineOf }) => {
-            const currentLine = lineOf(refOf(task), subjectOf(task));
-            if (currentLine === null) return null;
-
-            const rendered = renderFlowInstance(this.fileOps, lines, currentLine,
-                { kind: 'generated', parentLine, flowLines, children });
-
-            const insertAt = this.fileOps.findSiblingGroupStart(lines, currentLine);
-            edits.splice(insertAt, 0, ...rendered);
-
-            return lines;
-        }, this.writes?.for(task.file));
     }
 
     // --- Private helpers ---

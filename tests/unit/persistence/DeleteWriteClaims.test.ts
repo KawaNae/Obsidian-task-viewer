@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { writeBench, FILE, type Filed } from '../helpers/writeBench';
+import { targetOf } from '../../../src/services/persistence/TaskRefs';
 
 /**
  * What the two deleting writes report about the lines they removed.
@@ -7,8 +8,8 @@ import { writeBench, FILE, type Filed } from '../helpers/writeBench';
  * A delete is the one write that cannot describe itself wrongly by accident:
  * it files what the splice actually took out, and `processLines` refuses a
  * report that does not account for the file it produced. So these tests are
- * about the two things the arithmetic cannot settle — how far a subtree
- * reaches, and which deletes are supposed to stay quiet.
+ * about the one thing the arithmetic cannot settle — how far a subtree
+ * reaches — and about a move's origin, which says what it did like any other.
  */
 
 /** The one claim a write filed. Fails loudly when a write filed none. */
@@ -69,29 +70,30 @@ describe('what deleteTaskFromFile reports', () => {
     });
 });
 
-describe('the origin half of a move stays quiet', () => {
+describe('the origin half of a move says what it did', () => {
     const moving = '- [ ] 移動する @2026-09-21';
 
-    it('files nothing when the lines were written to another file', async () => {
+    it('says the lines went, when they were written to another file', async () => {
+        // Before F3 this half stayed quiet, so that a move within one file
+        // would not call its living rows dead. That move is now one write that
+        // carries them, and across files "gone" is true: the row in the other
+        // file is another row, as the ladder would also say.
         const b = await writeBench(['# note', moving, '\t- [ ] 子']);
 
-        const removed = await b.writer.deleteTaskFromFile(b.taskAt(1), { to: 'archive/2026-09.md' });
+        const outcome = await b.writer.applyToTask(targetOf(b.taskAt(1)), [{ kind: 'remove' }]);
 
-        expect(removed).toBe(true);
+        expect(outcome.written).toBe(true);
         expect(b.lines()).toEqual(['# note']);
-        expect(b.filed).toEqual([]);
+        expect(only(b.filed).edits).toEqual([{ kind: 'removed', at: 1, count: 2 }]);
     });
 
-    it('files nothing when the destination is this same file', async () => {
-        // The reason the whole half is silent. `archive-to` has already written
-        // the task further down this file, so those rows are alive; a `removed`
-        // here would be a claim that they are not, and the next scan would mint
-        // a new ID for a row the ladder could have carried.
-        const b = await writeBench(['# note', moving, '## archive', moving]);
+    it('says the lines were carried, when the destination is this same file', async () => {
+        const b = await writeBench(['# note', moving, '## archive', '']);
 
-        await b.writer.deleteTaskFromFile(b.taskAt(1), { to: FILE });
+        await b.writer.applyToTask(targetOf(b.taskAt(1)), [{ kind: 'move-to-end', text: '- [x] 移動する @2026-09-21' }]);
 
-        expect(b.filed).toEqual([]);
+        expect(b.lines()).toEqual(['# note', '## archive', '- [x] 移動する @2026-09-21']);
+        expect(only(b.filed).edits.map(edit => edit.kind)).toEqual(['removed', 'carried', 'replaced', 'removed']);
     });
 });
 

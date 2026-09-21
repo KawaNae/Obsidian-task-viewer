@@ -2,7 +2,13 @@ import { describe, it, expect } from 'vitest';
 import { makeTask } from '../helpers/makeTask';
 import { writeBench, FILE, type Filed } from '../helpers/writeBench';
 import { TaskParser } from '../../../src/services/parsing/TaskParser';
+import { targetOf } from '../../../src/services/persistence/TaskRefs';
 import type { Task } from '../../../src/types';
+
+/** `applyToTask` with the one op a strip-flow write makes. */
+function stripFlow(task: Task) {
+    return { kind: 'strip-flow' as const, text: TaskParser.format({ ...task, flow: undefined }).trim() };
+}
 
 /**
  * What the three writes a firing makes report about the lines they wrote.
@@ -24,14 +30,15 @@ function only(filed: Filed[]): Filed {
     return filed[0];
 }
 
-describe('what stripFlow reports', () => {
+describe('what a strip-flow write reports', () => {
     // The state a firing leaves behind before the third write: the next
     // instance sits above the fired line, both carrying their `==>` child.
     const fired = [TASK, FLOW, DONE, FLOW, ''];
 
     it('names the flow child it removed and the line it rewrote', async () => {
         const b = await writeBench(fired.join('\n'));
-        await b.writer.stripFlow(b.taskAt(2));
+        const task = b.taskAt(2);
+        await b.writer.applyToTask(targetOf(task), [stripFlow(task)]);
 
         const claim = only(b.filed);
         expect(claim.edits).toEqual([
@@ -53,7 +60,8 @@ describe('what stripFlow reports', () => {
         // second report would name a line one above the one that went.
         const two = [TASK, FLOW, DONE, FLOW, '\t- ==> until 2026-12-31', ''];
         const b = await writeBench(two.join('\n'));
-        await b.writer.stripFlow(b.taskAt(2));
+        const task = b.taskAt(2);
+        await b.writer.applyToTask(targetOf(task), [stripFlow(task)]);
 
         const claim = only(b.filed);
         expect(claim.edits).toEqual([
@@ -70,7 +78,10 @@ describe('what stripFlow reports', () => {
 describe('what the next instance reports', () => {
     it('names the lines it inserted above the fired one', async () => {
         const b = await writeBench([DONE, FLOW, ''].join('\n'));
-        await b.cloner.insertRecurrenceForTask(b.taskAt(0), TASK, ['every 1d']);
+        const task = b.taskAt(0);
+        await b.writer.applyToTask(targetOf(task), [
+            { kind: 'insert-instance', insert: { kind: 'recurrence', content: TASK, flowLines: ['every 1d'] } },
+        ]);
 
         const claim = only(b.filed);
         expect(claim.edits).toEqual([{ kind: 'inserted', at: 0, count: 2 }]);
@@ -83,7 +94,9 @@ describe('what the next instance reports', () => {
         const b = await writeBench([DONE, FLOW, '- [ ] 別のタスク', ''].join('\n'));
         const fired = b.taskAt(0);
         b.edit(['- [ ] 別のタスク', ''].join('\n'));
-        await b.cloner.insertRecurrenceForTask(fired, TASK, ['every 1d']);
+        await b.writer.applyToTask(targetOf(fired), [
+            { kind: 'insert-instance', insert: { kind: 'recurrence', content: TASK, flowLines: ['every 1d'] } },
+        ]);
 
         expect(b.filed).toEqual([]);
         expect(b.lines()).toEqual(['- [ ] 別のタスク', '']);
@@ -94,12 +107,18 @@ describe('what the next instance reports', () => {
 describe('what a generated instance reports', () => {
     it('names the parent, its flow line and its children as one insert', async () => {
         const b = await writeBench([DONE, FLOW, ''].join('\n'));
-        await b.cloner.insertGeneratedInstance(
-            b.taskAt(0),
-            TASK,
-            ['every 1d'],
-            [{ depth: 1, body: '- [ ] 子' }],
-        );
+        const task = b.taskAt(0);
+        await b.writer.applyToTask(targetOf(task), [
+            {
+                kind: 'insert-instance',
+                insert: {
+                    kind: 'generated',
+                    parentLine: TASK,
+                    flowLines: ['every 1d'],
+                    children: [{ depth: 1, body: '- [ ] 子' }],
+                },
+            },
+        ]);
 
         const claim = only(b.filed);
         expect(claim.edits).toEqual([{ kind: 'inserted', at: 0, count: 3 }]);
@@ -116,7 +135,8 @@ describe('when the flow is written on the task line itself', () => {
 
     it('reports the strip as a rewrite of that one line', async () => {
         const b = await writeBench([LIVE, FIRED, ''].join('\n'));
-        await b.writer.stripFlow(b.taskAt(1));
+        const task = b.taskAt(1);
+        await b.writer.applyToTask(targetOf(task), [stripFlow(task)]);
 
         expect(only(b.filed).edits).toEqual([{ kind: 'replaced', at: 1 }]);
         expect(b.lines()).toEqual([LIVE, DONE, '']);
@@ -124,7 +144,10 @@ describe('when the flow is written on the task line itself', () => {
 
     it('reports the next instance as one inserted line', async () => {
         const b = await writeBench([FIRED, ''].join('\n'));
-        await b.cloner.insertRecurrenceForTask(b.taskAt(0), LIVE, []);
+        const task = b.taskAt(0);
+        await b.writer.applyToTask(targetOf(task), [
+            { kind: 'insert-instance', insert: { kind: 'recurrence', content: LIVE, flowLines: [] } },
+        ]);
 
         expect(only(b.filed).edits).toEqual([{ kind: 'inserted', at: 0, count: 1 }]);
         expect(b.lines()).toEqual([LIVE, FIRED, '']);
@@ -139,8 +162,9 @@ describe('the wiring', () => {
         // The bench connects the repository's own observer, not the one its
         // `writer` and `cloner` are built with.
         const b = await writeBench(['- [x] ポモドーロ ==> every 1d', ''].join('\n'));
+        const task = b.taskAt(0);
 
-        await b.repo.stripFlow(b.taskAt(0));
+        await b.repo.applyToTask(targetOf(task), [stripFlow(task)]);
 
         expect(b.filed.map(claim => claim.edits)).toEqual([[{ kind: 'replaced', at: 0 }]]);
         expect(b.lines()).toEqual([DONE, '']);

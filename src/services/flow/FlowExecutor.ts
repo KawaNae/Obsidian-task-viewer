@@ -12,6 +12,7 @@ import { type CreatingEffect, type FlowDeleteAssessment, assessFlowDelete, planF
 import type { FlowInstanceInsert } from '../persistence/FlowInstanceLines';
 import type { TaskOp } from '../persistence/TaskOps';
 import { targetOf } from '../persistence/TaskRefs';
+import type { Refusal } from '../../utils/FileLines';
 import { flowSource } from './FlowSegments';
 import { type FlowPlanDeps, GenerationError, planFlow } from './FlowPlanner';
 import { canTriggerFlow } from './FlowTrigger';
@@ -286,21 +287,36 @@ export class FlowExecutor {
             throw err;
         }
 
-        if (effects.some(effect => effect.kind === 'archive-to' && effect.destPath !== task.file)) {
-            for (const effect of effects) {
-                logInfo(`[Flow:effect] ${effect.kind} taskId=${task.id}`);
-                await this.applyEffect(task, effect);
-            }
-            return effects.length > 0;
-        }
-
-        // Every effect here is on the row that fired, in its own file, so they
-        // are one write: all of them land or none does, and a command is never
-        // consumed without its next instance, nor the other way round.
+        // Everything the fire does in the row's own file is one write: all of
+        // it lands or none does, and a command is never consumed without its
+        // next instance, nor the other way round.
         const ops = effects.flatMap(effect => {
             logInfo(`[Flow:effect] ${effect.kind} taskId=${task.id}`);
             return this.opsFor(task, effect);
         });
+
+        // A move to another file is the one fire that writes two files, and
+        // two files cannot be one write. The destination goes first: until it
+        // has landed nothing in the source is touched, so a move whose row
+        // cannot be placed writes nothing anywhere. Once it has, the source's
+        // write can still be refused, and then the task is in both files —
+        // handing a move from one file to the other is F8's.
+        const away = effects.find(
+            (effect): effect is Extract<FlowEffect, { kind: 'archive-to' }> =>
+                effect.kind === 'archive-to' && effect.destPath !== task.file);
+        if (away) {
+            const archived = await this.repository.appendTaskWithChildren(
+                away.destPath, TaskParser.format(away.archivedTask), targetOf(task));
+            if (!archived) {
+                // Told to the user by the write layer, which refused it.
+                logWarn(`[FlowExecutor] Flow did not fire, nothing written: ${task.id}`);
+                return false;
+            }
+            const outcome = await this.repository.applyToTask(targetOf(task), ops, { tellRefusal: false });
+            if (outcome.refused) this.reportMoveLeftCopy(task, away.destPath, outcome.refused);
+            return true;
+        }
+
         const outcome = await this.repository.applyToTask(targetOf(task), ops);
         if (!outcome.written) {
             // Told to the user by the write layer, which refused it.
@@ -310,9 +326,22 @@ export class FlowExecutor {
     }
 
     /**
-     * What one effect does to the row that fired, as the write applies it —
-     * for a fire whose every effect is in the row's own file.
+     * Tell the user that a move reached its destination and left the original
+     * where it was: the task is in two places now, and nothing on screen says
+     * so. One notice, saying both — the refusal of the source's write would
+     * otherwise be a second one, telling half of it.
      */
+    private reportMoveLeftCopy(task: Task, destPath: string, refused: Refusal): void {
+        logWarn(`[FlowExecutor] Moved but the original could not be removed: ${task.id} (${refused.reason.kind})`);
+        const reason = refused.reason.kind === 'ambiguous'
+            ? t('notice.moveOriginAmbiguous', { count: refused.reason.count })
+            : refused.reason.kind === 'gone'
+                ? t('notice.moveOriginGone')
+                : t('notice.moveOriginChanged');
+        new Notice(t('notice.moveOriginKept', { dest: fileName(destPath), reason, subject: refused.subject }));
+    }
+
+    /** What one effect does in the row's own file, as the write applies it. */
     private opsFor(task: Task, effect: FlowEffect): TaskOp[] {
         switch (effect.kind) {
             case 'create-next':
@@ -324,14 +353,18 @@ export class FlowExecutor {
                 // is not a stale copy written over someone else's edit.
                 return [{ kind: 'strip-flow', text: TaskParser.format({ ...task, flow: undefined }).trim() }];
             case 'archive-to':
-                // A move within the file is one op: the row is carried to the
-                // end, so the moved row is the row that fired, and the removal
-                // of where it stood is part of the same carrying. Its text is
-                // made from the index's copy on the same terms as the strip.
-                return [{ kind: 'move-to-end', text: TaskParser.format(effect.archivedTask) }];
+                // To another file it is written before this write (see
+                // executeFlow). Within the file it is one op: the row is
+                // carried to the end, so the moved row is the row that fired,
+                // and taking it from where it stood is part of the carrying.
+                // Its text is made from the index's copy on the same terms as
+                // the strip.
+                return effect.destPath === task.file
+                    ? [{ kind: 'move-to-end', text: TaskParser.format(effect.archivedTask) }]
+                    : [];
             case 'delete-original':
-                // Done by `move-to-end`, above.
-                return [];
+                // Within the file, done by `move-to-end` above.
+                return effect.destPath === task.file ? [] : [{ kind: 'remove' }];
         }
     }
 
@@ -371,54 +404,6 @@ export class FlowExecutor {
         if (this.recentFailures.has(key)) return;
         this.recentFailures.set(key, now);
         new Notice(t(messageKey, { reason: runtimeText(err), file: fileName(task.file) }));
-    }
-
-    private async applyEffect(task: Task, effect: FlowEffect): Promise<void> {
-        switch (effect.kind) {
-            case 'create-next': {
-                const line = TaskParser.format(effect.newTask).trim();
-                // Multi-line flows: the new instance's `- ==>` child lines
-                // (line-level canonical, from FlowPlanner) are emitted right
-                // after the task line.
-                const flowLines = (effect.newTask.flow?.childSegments ?? []).map(s => s.raw);
-                await this.repository.insertRecurrenceForTask(task, line, flowLines);
-                return;
-            }
-            case 'create-generated':
-                // Finished lines: the planner composed the parent, checked
-                // it and normalized its status, so there is nothing to
-                // format here. What it corrected on the way is reported
-                // rather than dropped — the written line differs from the
-                // one the block describes, and nothing else will say so.
-                for (const w of effect.warnings) {
-                    logWarn(`[Flow:generated] ${task.id}: ${w.message}`);
-                }
-                await this.repository.insertGeneratedInstance(
-                    task, effect.parentLine, effect.flowLines, effect.children);
-                return;
-            case 'archive-to': {
-                const line = TaskParser.format(effect.archivedTask);
-                await this.repository.appendTaskWithChildren(effect.destPath, line, task);
-                return;
-            }
-            case 'strip-flow':
-                // Dedicated writer: rewrites the task line AND deletes the
-                // task's direct flow child lines in one atomic process.
-                await this.repository.stripFlow(task);
-                return;
-            case 'delete-original': {
-                // The move already wrote the task into the destination. If the
-                // original cannot be resolved now, it stays where it is and the
-                // task exists in two places — the one outcome of a move the user
-                // must be told about, since nothing on screen shows it.
-                const removed = await this.repository.deleteTaskFromFile(task, { to: effect.destPath });
-                if (!removed) {
-                    logWarn(`[FlowExecutor] Moved but the original could not be deleted: ${task.id}`);
-                    new Notice(t('notice.taskWriteFailed'));
-                }
-                return;
-            }
-        }
     }
 
     private buildDeps(): FlowPlanDeps {

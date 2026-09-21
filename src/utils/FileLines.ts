@@ -298,7 +298,7 @@ export interface Refusal {
  * identity (see `WriteObserver`).
  */
 export interface WriteChannel {
-    /** Absent for a write that must not claim anything (see `deleteTaskFromFile`). */
+    /** Absent where nobody takes a report: no write of the plugin's leaves it out. */
     sink?: WriteSink;
     locate(lines: readonly string[], ref: TaskRef): Located;
     refused(refusal: Refusal): void;

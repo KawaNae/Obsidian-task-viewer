@@ -6,26 +6,25 @@ import type { GeneratedChild } from '../persistence/TaskCloner';
  * Effect descriptors produced by the pure planner and applied by the
  * FlowExecutor's interpreter against TaskRepository.
  *
- * ORDER INVARIANT: the planner emits effects in the order
+ * ORDER: the planner emits effects in the order
  *   create-next / create-generated → archive-to → strip-flow / delete-original
- * and the interpreter applies them sequentially without reordering.
- * Effects that rewrite or remove the original line run last. The order dates
- * from when a write found its line by the line's text; a write now names its
- * target and asks where it stands (TaskScanner.locate), and the effect before
- * it left a record of where the original went, so the order is kept rather
- * than relied on.
+ * and the interpreter keeps it, as the order of the ops of one write (see
+ * FlowExecutor.executeFlow and InlineTaskWriter.applyToTask). Everything a
+ * fire does in the row's own file is that one write: the row is located once,
+ * and each op after the first takes its line from that answer carried across
+ * the splices before it. The next instance goes in at the head of the sibling
+ * group, so the row it came from moves down under it and is still the row the
+ * later ops are about; nothing searches the file for the row a second time.
+ * The one exception is a move to another file, which cannot be one write: the
+ * archive is written to the destination first, and only once it has landed is
+ * the source's one write made.
  *
- * What the ordering bought was narrower than it looked: it kept the original
- * findable only for as long as the line just written read differently from
- * it, and that held by value rather than by construction. A written instance
- * always starts unchecked (`buildNextTask` in FlowPlanner, and the status
- * normalization in GeneratedLineCheck) so it cannot read like the line that
- * fired, and an archived copy drops its `==>` and its block id. Where the
- * value stopped differing, the ordering stopped protecting anything: a
- * deletion fire removes a line that never fired and is worded exactly like the
- * instance it writes. Those two effects are not applied in order at all — they
- * are one write, which resolves the line once and takes every number from the
- * array it is writing (see InlineTaskWriter.applyToTask).
+ * The order used to protect more than it does. When each effect was a write
+ * of its own that found the row by its text, the row stayed findable only for
+ * as long as the line just written read differently from it — held by value
+ * (a written instance always starts unchecked, an archived copy drops its
+ * `==>` and its block id), not by construction. A deletion fire removes a line
+ * worded exactly like the instance it writes, and that is where it broke.
  */
 export type FlowEffect =
     | { kind: 'create-next'; newTask: Task }
@@ -57,7 +56,8 @@ export type FlowEffect =
     | { kind: 'archive-to'; destPath: string; archivedTask: Task }
     | { kind: 'strip-flow' }
     /**
-     * `destPath` is where `archive-to` just put the task. The delete carries it
-     * so the write layer can see that this removal is one half of a move.
+     * `destPath` is where `archive-to` put the task. Within the row's own
+     * file the two are one op, the row carried to the end; to another file
+     * this is the removal the source's write makes once the archive landed.
      */
     | { kind: 'delete-original'; destPath: string };

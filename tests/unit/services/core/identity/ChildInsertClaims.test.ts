@@ -2,6 +2,7 @@ import { describe, it, expect, afterEach } from 'vitest';
 import { vaultSession, type VaultSession } from '../../../helpers/vaultSession';
 import type { WriteObserver } from '../../../../../src/services/persistence/WriteObserver';
 import type { Refusal } from '../../../../../src/utils/FileLines';
+import { targetOf } from '../../../../../src/services/persistence/TaskRefs';
 
 /**
  * What the writes that *add* a line tell the next scan.
@@ -65,14 +66,9 @@ function watchClaims(session: VaultSession) {
     return { filed, adopted };
 }
 
-/** The repository, for the two halves of a move in an order of our choosing. */
+/** The repository, for the writes of a move made one by one. */
 function repositoryOf(session: VaultSession) {
-    return (session.index as unknown as {
-        repository: {
-            appendTaskWithChildren: (destPath: string, content: string, task: never) => Promise<void>;
-            deleteTaskFromFile: (task: never, moved?: { to: string }) => Promise<boolean>;
-        };
-    }).repository;
+    return session.index.getRepository();
 }
 
 /**
@@ -283,75 +279,34 @@ describe('the task appended at the end of a file', () => {
 
 describe('the half of a move that writes the destination', () => {
     /**
-     * A move is two writes and only the first of them speaks: the deletion of
-     * the original is silent, because within one file the row is not gone, it
-     * is somewhere else (stage 4 decides how to say that). So the claim here
-     * says what today's file says — the appended lines are new rows, the move
-     * having dropped the task's `^id` on the way.
+     * Within one file a move is one write that carries the row to the end
+     * (F3). It used to be two — the append, then a silent delete — and the
+     * moved row's name then turned on whether a scan fell between them and on
+     * how near the ladder found the rows. Now the claim says the moved line is
+     * the row that was moved. To another file it is still two writes, and the
+     * appended lines are new rows there: the move drops the task's `^id`, and
+     * a row in another file is another row.
      */
     const MOVED = ['- [ ] 見張り @2026-09-21', '- [ ] 移す', '\t- ==> move([[verify]])', ''];
 
-    it('with a scan between the two writes, the destination row is the new one', async () => {
+    it('within the file, the moved row keeps its name, and the claim is adopted', async () => {
         const contents = new Map([[FILE, MOVED.join('\n')]]);
         live = vaultSession(contents);
         await live.scanAll();
         const [watcher, moving] = rowsOf(live);
         const task = live.index.getTask(moving.id)!;
         const claims = watchClaims(live);
-        const repository = repositoryOf(live);
 
-        await repository.appendTaskWithChildren(FILE, '- [x] 移す', task as never);
+        const outcome = await repositoryOf(live).applyToTask(targetOf(task), [{ kind: 'move-to-end', text: '- [x] 移す' }]);
         await live.settle(FILE);
 
-        const midway = idsOf(live);
-        expect(midway).toHaveLength(3);
-        expect([midway[0], midway[1]]).toEqual([watcher.id, moving.id]);
-        expect(midway[2]).not.toBe(moving.id);
-
-        await repository.deleteTaskFromFile(task as never, { to: FILE });
-        await live.settle(FILE);
-
+        expect(outcome.written).toBe(true);
+        expect(outcome.made).toEqual([]);
         expect(contents.get(FILE)!.split('\n')).toEqual([
             '- [ ] 見張り @2026-09-21', '- [x] 移す',
         ]);
-        expect(idsOf(live)).toEqual([watcher.id, midway[2]]);
+        expect(idsOf(live)).toEqual([watcher.id, moving.id]);
         expect(claims.adopted).toEqual([FILE]);
-    });
-
-    it('with no scan between them, the result is the ladder\'s and no row is named twice', async () => {
-        // Both writes land before anything reads: the file comes back to a
-        // list of rows worded exactly as it began, so the read cannot tell the
-        // state before the move from the state after it. Two candidates that
-        // disagree is the one thing rung 0 refuses to decide, and the ladder
-        // takes it from there — which is what the same file does today with no
-        // claim at all. The test holds the two side by side.
-        const outcome = async (silent: boolean): Promise<string[]> => {
-            const contents = new Map([[FILE, MOVED.join('\n')]]);
-            const session = vaultSession(contents);
-            try {
-                await session.scanAll();
-                const [watcher, moving] = rowsOf(session);
-                const task = session.index.getTask(moving.id)!;
-                if (silent) silenceWrites(session);
-                const repository = repositoryOf(session);
-
-                await repository.appendTaskWithChildren(FILE, '- [x] 移す', task as never);
-                await repository.deleteTaskFromFile(task as never, { to: FILE });
-                await session.settle(FILE);
-
-                expect(contents.get(FILE)!.split('\n')).toEqual([
-                    '- [ ] 見張り @2026-09-21', '- [x] 移す',
-                ]);
-                const after = idsOf(session);
-                expect(new Set(after).size).toBe(after.length);
-                expect(after[0]).toBe(watcher.id);
-                return after.map(id => (id === moving.id ? 'moved' : id === watcher.id ? 'watcher' : 'new'));
-            } finally {
-                session.dispose();
-            }
-        };
-
-        expect(await outcome(false)).toEqual(await outcome(true));
     });
 
     it('a move to another file leaves the destination\'s own rows alone', async () => {
@@ -366,7 +321,7 @@ describe('the half of a move that writes the destination', () => {
         const claims = watchClaims(live);
 
         await repositoryOf(live).appendTaskWithChildren(
-            'archive.md', '- [x] 移す @2026-09-21', live.index.getTask(moving.id)! as never);
+            'archive.md', '- [x] 移す @2026-09-21', targetOf(live.index.getTask(moving.id)!));
         await live.settle('archive.md');
 
         const after = rowsOf(live, 'archive.md');
