@@ -92,15 +92,24 @@ export class InlineTaskWriter {
         }, this.writes?.for(filePath));
     }
 
+    /**
+     * Insert one line below a coordinate, whatever that line is.
+     *
+     * The editor's menu duplicates a task through here, so the line written is
+     * usually a copy of the line above it, word for word. Two rows a file
+     * cannot tell apart is the shape the claim exists for: the write knows
+     * which of them it made, and says so, where a reader comparing text has
+     * nothing to go on but the order they appear in.
+     */
     async insertLineAfterLine(filePath: string, lineNumber: number, newContent: string): Promise<void> {
         const file = this.app.vault.getAbstractFileByPath(filePath);
         if (!(file instanceof TFile)) return;
 
-        await processLines(this.app, file, (lines) => {
+        await processLines(this.app, file, (lines, _eol, edits) => {
             if (lineNumber < 0 || lineNumber >= lines.length) return null;
-            lines.splice(lineNumber + 1, 0, newContent);
+            edits.splice(lineNumber + 1, 0, newContent);
             return lines;
-        });
+        }, this.writes?.for(filePath));
     }
 
     /**
@@ -346,18 +355,18 @@ export class InlineTaskWriter {
 
         let insertedLineIndex = -1;
 
-        await processLines(this.app, file, (lines) => {
+        await processLines(this.app, file, (lines, _eol, edits) => {
             // Find current line using originalText (handles line shifts)
             const currentLine = this.fileOps.findTaskLineNumber(lines, task);
             if (currentLine < 0 || currentLine >= lines.length) return null;
 
             const indent = FileOperations.resolveChildIndent(lines, currentLine);
             const insertIndex = this.subtreeEnd(lines, currentLine);
-            lines.splice(insertIndex, 0, indent + lineBody.trim());
+            edits.splice(insertIndex, 0, indent + lineBody.trim());
             insertedLineIndex = insertIndex;
 
             return lines;
-        });
+        }, this.writes?.for(task.file));
 
         return insertedLineIndex;
     }
@@ -390,7 +399,7 @@ export class InlineTaskWriter {
 
         let insertedLineIndex = -1;
 
-        await processLines(this.app, file, (lines) => {
+        await processLines(this.app, file, (lines, _eol, edits) => {
             const currentLine = this.fileOps.findTaskLineNumber(lines, task);
             if (currentLine < 0 || currentLine >= lines.length) {
                 logWarn(`[InlineTaskWriter] Task not found in file (insertSiblingAfterTask)`);
@@ -403,11 +412,11 @@ export class InlineTaskWriter {
                 : currentLine;
 
             const insertIndex = this.subtreeEnd(lines, anchor);
-            lines.splice(insertIndex, 0, indent + lineBody.trim());
+            edits.splice(insertIndex, 0, indent + lineBody.trim());
             insertedLineIndex = insertIndex;
 
             return lines;
-        });
+        }, this.writes?.for(task.file));
 
         return insertedLineIndex;
     }
@@ -425,7 +434,7 @@ export class InlineTaskWriter {
 
         let insertedLineIndex = -1;
 
-        await processLines(this.app, file, (lines) => {
+        await processLines(this.app, file, (lines, _eol, edits) => {
             // Find the current line number using multiple strategies
             const currentLine = this.fileOps.findTaskLineNumber(lines, task);
 
@@ -438,16 +447,23 @@ export class InlineTaskWriter {
 
             // Insert directly after the task line (as first child)
             const insertIndex = currentLine + 1;
-            lines.splice(insertIndex, 0, indent + lineBody.trim());
+            edits.splice(insertIndex, 0, indent + lineBody.trim());
             insertedLineIndex = insertIndex;
 
             return lines;
-        });
+        }, this.writes?.for(task.file));
 
         return insertedLineIndex;
     }
 
-    /** @returns the 0-based line the task landed on, or -1 when nothing was written. */
+    /**
+     * @returns the 0-based line the task landed on, or -1 when nothing was written.
+     *
+     * The file that does not exist yet is the one write here with nothing to
+     * claim: `vault.create` writes the whole file, so every row in it is new
+     * and the scan that reads it has no previous generation to confuse them
+     * with. A claim would say what the ledger's silence already says.
+     */
     async appendTaskToFile(filePath: string, content: string): Promise<number> {
         const file = this.app.vault.getAbstractFileByPath(filePath);
 
@@ -465,10 +481,10 @@ export class InlineTaskWriter {
         // The appended text is built with LF; splitting it here lets the file's
         // own terminator go back between every line, its own included.
         let insertedLine = -1;
-        await processLines(this.app, file, (lines) => {
-            insertedLine = appendLines(lines, splitLines(content).lines);
+        await processLines(this.app, file, (lines, _eol, edits) => {
+            insertedLine = appendLines(lines, splitLines(content).lines, edits);
             return lines;
-        });
+        }, this.writes?.for(filePath));
         return insertedLine;
     }
 
@@ -508,17 +524,24 @@ export class InlineTaskWriter {
      * write, and the subsequent deletion of the original re-locates the task by
      * line number, so it tracks any shift. Do not "fix" this by serializing the
      * two files — the window has no observable effect.
+     *
+     * What the claim says here is what the file says today: the lines appended
+     * are new rows, because the move drops the task's `^id` on the way (see
+     * `FlowPlanner`'s archived copy). The other half of a move — the deletion
+     * of the original — stays silent, so the two halves are not claimed as one
+     * movement of identity. Stage 4 is where that changes, and it changes this
+     * claim with it.
      */
     async appendTaskWithChildren(destPath: string, content: string, task: Task): Promise<void> {
         const sourceFile = this.app.vault.getAbstractFileByPath(task.file);
 
         // Same-file append: a single atomic process reads children and appends.
         if (sourceFile instanceof TFile && destPath === task.file) {
-            await processLines(this.app, sourceFile, (lines) => {
+            await processLines(this.app, sourceFile, (lines, _eol, edits) => {
                 const adjustedChildren = this.buildAdjustedChildren(lines, task);
-                appendLines(lines, [...splitLines(content).lines, ...adjustedChildren]);
+                appendLines(lines, [...splitLines(content).lines, ...adjustedChildren], edits);
                 return lines;
-            });
+            }, this.writes?.for(task.file));
             return;
         }
 
