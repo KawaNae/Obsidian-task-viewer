@@ -1,5 +1,7 @@
 import { describe, it, expect } from 'vitest';
-import { matchFile, matchWithoutRepeatedIds } from '../../../../../src/services/core/identity/IdentityMatcher';
+import { matchFile as matchWithEvidence, matchWithoutRepeatedIds } from '../../../../../src/services/core/identity/IdentityMatcher';
+import type { LedgerEntry } from '../../../../../src/services/core/identity/IdentityLedger';
+import { rowsOnlyEvidence } from '../../../helpers/rowsOnlyEvidence';
 import type { MatchResult } from '../../../../../src/services/core/identity/IdentityMatcher';
 import { makeTask } from '../../../helpers/makeTask';
 import type { Task } from '../../../../../src/types';
@@ -12,6 +14,11 @@ import type { Task } from '../../../../../src/types';
  * spelled `prov:*` so that the assertions can only talk about runtime IDs, which
  * is the thing consumers hold.
  */
+
+/** The matcher with no claims to weigh: the ladder on its own. */
+function matchFile(previous: LedgerEntry[], tasks: Task[], mint: (task: Task) => string) {
+    return matchWithEvidence(previous, tasks, mint, rowsOnlyEvidence(previous, tasks, []));
+}
 
 /** Runtime IDs in the transitional `parserId:file:seq:n` shape of stage 1. */
 function makeMint() {

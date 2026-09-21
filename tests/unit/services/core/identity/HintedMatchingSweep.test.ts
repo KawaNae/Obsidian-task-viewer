@@ -13,7 +13,7 @@ function matchFile(
     pending?: readonly PendingHint[],
 ) {
     return matchWithEvidence(previous, tasks, mint,
-        pending ? rowsOnlyEvidence(previous, tasks, pending) : undefined);
+        rowsOnlyEvidence(previous, tasks, pending ?? []));
 }
 import type { Task } from '../../../../../src/types';
 
