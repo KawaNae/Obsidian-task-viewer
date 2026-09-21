@@ -15,6 +15,8 @@ vi.mock('../../../../../src/services/core/identity/ContentKey', () => ({
 import { WriteClaims, type ClaimBase } from '../../../../../src/services/core/identity/WriteClaims';
 import { FileParsePipeline } from '../../../../../src/services/parsing/FileParsePipeline';
 import { DEFAULT_SETTINGS } from '../../../../../src/types';
+import { resolveHints } from '../../../../../src/services/core/identity/IdentityHints';
+import { makeTask } from '../../../helpers/makeTask';
 
 const FILE = 'note.md';
 
@@ -50,5 +52,20 @@ describe('a content key that collides', () => {
         const claim = claims.claim(FILE, ['- [ ] 乙', '- [ ] 甲'], ['- [x] 乙', '- [ ] 甲'], [{ kind: 'replaced', at: 0 }]);
 
         expect(claim.hint).toBeNull();
+    });
+});
+
+describe('a content key that collides, downstream', () => {
+    it('does not let a scan adopt a claim whose rows are not the rows it read', () => {
+        const read = [makeTask({ id: 'prov:0', line: 0, originalText: '- [ ] 甲', content: '甲' })];
+        const pending = [{
+            seq: 1, at: 0,
+            hint: { content: 'collides', rows: [{ runtimeId: 'w1', created: true, text: '- [ ] 乙' }] },
+        }];
+
+        const resolved = resolveHints([], read, { pending, before: null, read: 'collides' });
+
+        expect(resolved.consumed).toBe(0);
+        expect(resolved.rows).toBeNull();
     });
 });
