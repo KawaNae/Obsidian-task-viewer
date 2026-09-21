@@ -178,6 +178,31 @@ export type WriteSink = (
     edits: readonly LineEdit[],
 ) => () => void;
 
+/**
+ * What a write names its target by: the row's runtime ID, and the `^id` the
+ * row carries when the user wrote one. Not a line number — a line number is a
+ * coordinate in some content, and the write does not know which content that
+ * was.
+ */
+export interface TaskRef {
+    runtimeId: string;
+    blockId?: string;
+}
+
+/**
+ * Where a named row stands in the lines a write was handed.
+ *
+ * `at` only when the line is known: the row's `^id` names exactly one line,
+ * the lines are a content the plugin has on record, or matching them against
+ * the last scan paired the name with one line on evidence rather than on
+ * position. `ambiguous` when the name went to one of `count` rows no evidence
+ * tells apart. `gone` when the name stands on no line of these.
+ */
+export type Located =
+    | { kind: 'at'; line: number }
+    | { kind: 'ambiguous'; count: number }
+    | { kind: 'gone' };
+
 /** Where each line of the file came from, once a write's report is replayed. */
 export interface LineOrigins {
     /** For each line now, its index before the write, or null if it is new. */
