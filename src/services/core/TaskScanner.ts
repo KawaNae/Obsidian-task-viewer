@@ -404,14 +404,14 @@ export class TaskScanner {
                 // file as it was before this write, so it no longer fits, and
                 // a base that no longer fits is what stops the next write from
                 // building on a ledger that is older still.
-                return () => { };
+                return { withdraw: () => { }, made: [] };
             }
             // Both halves of what a claim leaves behind come back together:
             // the hint the next scan would weigh, and the base the next write
             // to this file would build on.
-            if (!result.hint) return result.withdraw;
+            if (!result.hint) return { withdraw: result.withdraw, made: [] };
             const drop = this.hints.add(file, [result.hint], Date.now());
-            return () => { drop(); result.withdraw(); };
+            return { withdraw: () => { drop(); result.withdraw(); }, made: result.made };
         };
     }
 

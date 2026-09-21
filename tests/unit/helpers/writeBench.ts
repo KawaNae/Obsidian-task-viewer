@@ -118,11 +118,14 @@ export async function writeBench(files: string | string[] | Record<string, strin
             sink: (before, after, edits) => {
                 const entry: Filed = { file: path, before: [...before], after: [...after], edits: [...edits] };
                 filed.push(entry);
-                const withdraw = sink(before, after, edits);
-                return () => {
-                    const at = filed.indexOf(entry);
-                    if (at >= 0) filed.splice(at, 1);
-                    withdraw();
+                const receipt = sink(before, after, edits);
+                return {
+                    withdraw: () => {
+                        const at = filed.indexOf(entry);
+                        if (at >= 0) filed.splice(at, 1);
+                        receipt.withdraw();
+                    },
+                    made: receipt.made,
                 };
             },
             locate: (lines, ref) => scanner.locate(path, lines, ref),

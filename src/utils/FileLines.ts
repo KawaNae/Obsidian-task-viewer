@@ -168,15 +168,31 @@ function spliceStart(length: number, at: number): number {
     return n < 0 ? Math.max(length + n, 0) : Math.min(n, length);
 }
 
-/**
- * Where a write's report goes. Answers a handle that takes it back, for a
- * write that reported and then failed.
- */
+/** A row a write brought into being, and the name it was given there. */
+export interface MadeRow {
+    /** Where it stands in the lines the write left. */
+    line: number;
+    runtimeId: string;
+}
+
+/** What filing a report left: a handle that takes it back, and the rows it named. */
+export interface WriteReceipt {
+    /** For a write that reported and then failed, or whose callback ran again. */
+    withdraw: () => void;
+    /**
+     * The rows the report named on the spot. Empty when nothing was claimed —
+     * a name is only worth handing out when the scan that adopts the claim
+     * gives the row that same one.
+     */
+    made: readonly MadeRow[];
+}
+
+/** Where a write's report goes. */
 export type WriteSink = (
     before: readonly string[],
     after: readonly string[],
     edits: readonly LineEdit[],
-) => () => void;
+) => WriteReceipt;
 
 /**
  * What a write names its target by: the row's runtime ID, and the `^id` the
@@ -286,6 +302,13 @@ export interface WriteOutcome {
     written: boolean;
     /** Why it did not, when it gave the write up. */
     refused: Refusal | null;
+    /**
+     * The rows the write made, by the names the next scan gives them if it
+     * adopts this write's claim. Empty when the write claimed nothing (see
+     * {@link WriteReceipt.made}); the names of a claim no scan adopts go
+     * with it, and are never given to any line.
+     */
+    made: readonly MadeRow[];
 }
 
 /** Where each line of the file came from, once a write's report is replayed. */
@@ -400,6 +423,7 @@ export async function processLines(
 ): Promise<WriteOutcome> {
     let written = false;
     let refused: Refusal | null = null;
+    let made: readonly MadeRow[] = [];
     const sink = channel?.sink;
     // A list rather than one slot: `vault.process` may run the callback again,
     // and everything filed has to be withdrawable.
@@ -412,6 +436,7 @@ export async function processLines(
             // reached disk, so they go before this attempt files its own.
             for (const withdraw of withdrawals.splice(0)) withdraw();
             refused = null;
+            made = [];
 
             const { lines, eol } = splitLines(content);
             const before = [...lines];
@@ -459,7 +484,9 @@ export async function processLines(
             // have succeeded, which is what the withdrawal below is for.
             if (sink && reported.length > 0 && rebuilt !== content) {
                 if (explains(before, next, reported)) {
-                    withdrawals.push(sink(before, next, reported));
+                    const receipt = sink(before, next, reported);
+                    withdrawals.push(receipt.withdraw);
+                    made = receipt.made;
                 } else {
                     logError(`[FileLines] ${file.path}: a write's report does not account for the lines it wrote; no claim filed`);
                 }
@@ -478,5 +505,5 @@ export async function processLines(
     // Set inside the callback, which the compiler does not follow.
     const outcome = refused as Refusal | null;
     if (outcome !== null) channel?.refused(outcome);
-    return { written, refused: outcome };
+    return { written, refused: outcome, made };
 }
