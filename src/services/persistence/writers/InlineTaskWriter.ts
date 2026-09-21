@@ -218,69 +218,6 @@ export class InlineTaskWriter {
     }
 
     /**
-     * Take the task's lines away and put what its firing wrote in their place,
-     * as one write.
-     *
-     * This is a deletion fire: the user asked for the line to go, and the
-     * command on it gets to write its next instance before it does. Both
-     * halves used to be writes of their own, each resolving the original by
-     * `findTaskLineNumber` — and the second search is what could not be made
-     * right. The next instance is worded exactly like the line it comes from
-     * whenever the original carries no date and no block id (the command
-     * living in a child line), so the search that ran after it was written
-     * could not tell the two apart, and the delete took the instance that had
-     * just been created. The file came back to exactly what it started as and
-     * the task the user deleted was still there.
-     *
-     * The fix is not a better search. It is to resolve the line once, while
-     * nothing has moved, and to take every number from the array being
-     * written. Nothing here looks for the task a second time, so there is no
-     * second answer to be wrong.
-     *
-     * The order invariant the interpreter follows (see `FlowEffects`) — write
-     * the instance first, remove the original last, because line resolution
-     * matches on `originalText` — has nothing left to protect here and is not
-     * what this does. The removal goes first, and that is only so the two
-     * numbers stay independent: the insert lands at the head of the sibling
-     * group, at or above the task's own line, so removing the task's lines
-     * cannot move it. What the original's lines say is read before either
-     * splice, since the instance is rendered against them.
-     *
-     * A task that cannot be resolved is not written around: nothing goes in,
-     * nothing comes out, and the file is left byte-identical. The insert has
-     * no "append it at the end instead" of its own to fall back on — an
-     * instance appended to a file whose original could not be removed is the
-     * one outcome this call exists to make impossible.
-     *
-     * @returns whether the task's lines were found and replaced. `false` means
-     * the file is untouched, in full.
-     */
-    async replaceTaskWithInstances(task: Task, inserts: FlowInstanceInsert[]): Promise<boolean> {
-        const file = this.app.vault.getAbstractFileByPath(task.file);
-        if (!(file instanceof TFile)) {
-            this.writes?.for(task.file)?.refused({ file: task.file, reason: { kind: 'gone' }, subject: subjectOf(task) });
-            return false;
-        }
-
-        return processLines(this.app, file, (lines, _eol, { edits, lineOf }) => {
-            const currentLine = lineOf(refOf(task), subjectOf(task));
-            if (currentLine === null) return null;
-
-            // Everything that reads the original reads it here, before a
-            // single line has moved.
-            const rendered = inserts.flatMap(
-                insert => renderFlowInstance(this.fileOps, lines, currentLine, insert));
-            const insertAt = this.fileOps.findSiblingGroupStart(lines, currentLine);
-            const { childrenLines } = this.fileOps.collectChildrenFromLines(lines, currentLine);
-
-            edits.splice(currentLine, 1 + childrenLines.length);
-            edits.splice(insertAt, 0, ...rendered);
-
-            return lines;
-        }, this.writes?.for(task.file)).then(outcome => outcome.written);
-    }
-
-    /**
      * Do everything one operation does to one row of one file, as one write.
      *
      * A fire used to write each of its effects on its own — the next

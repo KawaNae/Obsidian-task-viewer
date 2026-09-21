@@ -25,7 +25,7 @@ import type { GeneratedChild } from '../persistence/TaskCloner';
  * deletion fire removes a line that never fired and is worded exactly like the
  * instance it writes. Those two effects are not applied in order at all — they
  * are one write, which resolves the line once and takes every number from the
- * array it is writing (see InlineTaskWriter.replaceTaskWithInstances).
+ * array it is writing (see InlineTaskWriter.applyToTask).
  */
 export type FlowEffect =
     | { kind: 'create-next'; newTask: Task }

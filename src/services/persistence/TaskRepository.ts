@@ -65,14 +65,6 @@ export class TaskRepository {
     }
 
     /**
-     * @returns whether the task was replaced by what its firing wrote
-     * (see {@link InlineTaskWriter.replaceTaskWithInstances}).
-     */
-    async replaceTaskWithInstances(task: Task, inserts: FlowInstanceInsert[]): Promise<boolean> {
-        return this.inlineWriter.replaceTaskWithInstances(task, inserts);
-    }
-
-    /**
      * Everything one operation does to one row, as one write
      * (see {@link InlineTaskWriter.applyToTask}).
      */
