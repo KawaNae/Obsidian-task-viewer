@@ -25,11 +25,14 @@ describe('contentKeyOf', () => {
         expect(contentKeyOf(read)).toBe(contentKeyOf(written));
     });
 
-    it('agrees when a written element holds a line break the scan will split', () => {
-        const written = ['- [ ] a\n    - [ ] child', 'b'];
+    it('does not agree when a written element holds a line break the scan will split', () => {
+        // Rows are placed by element, so on the split file every row below
+        // that element sits a line lower than the array says. The joined text
+        // is the same; the key must not be.
+        const written = ['note\n- [ ] pasted', '- [ ] a'];
         const read = splitLines(joinLines(written, '\n')).lines;
         expect(read).toHaveLength(3);
-        expect(contentKeyOf(read)).toBe(contentKeyOf(written));
+        expect(contentKeyOf(read)).not.toBe(contentKeyOf(written));
     });
 
     it('carries the line count and the length next to the hash', () => {
