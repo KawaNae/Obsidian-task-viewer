@@ -8,7 +8,8 @@ import { TaskParser } from '../parsing/TaskParser';
 import type { TaskRepository } from '../persistence/TaskRepository';
 import { EvalError } from '../lang/ExprEvaluator';
 import type { FlowEffect } from './FlowEffects';
-import { type FlowDeleteAssessment, assessFlowDelete, planFlowForDeletion } from './FlowDeletion';
+import { type CreatingEffect, type FlowDeleteAssessment, assessFlowDelete, planFlowForDeletion } from './FlowDeletion';
+import type { FlowInstanceInsert } from '../persistence/FlowInstanceLines';
 import { flowSource } from './FlowSegments';
 import { type FlowPlanDeps, GenerationError, planFlow } from './FlowPlanner';
 import { canTriggerFlow } from './FlowTrigger';
@@ -186,13 +187,19 @@ export class FlowExecutor {
      * answer: an expired command has nothing left to lose, and the delete
      * goes ahead.
      *
+     * What the fire writes and what the delete takes away are one write (see
+     * {@link InlineTaskWriter.replaceTaskWithInstances}). They used to be two,
+     * and the second one resolved the original by its text after the first had
+     * written a line worded exactly like it — which is how a delete came to
+     * take the instance it had just created, leaving the file as it started
+     * and the task still on the page. One write also settles the outcome the
+     * two of them could not: an instance can no longer be left standing beside
+     * an original that would not go.
+     *
      * @returns whether the task is gone. A fire that could not be planned
-     * answers no and writes nothing. A fire that ran but could not delete the
-     * original also answers no — the next instance is on the page and the
-     * original is still there beside it, which is not the delete the user
-     * asked for, and saying yes would drop the selection off a task they can
-     * still see. Re-running the delete would write the next instance twice, so
-     * the notice has to reach them rather than a silent retry.
+     * answers no and writes nothing. A line that could not be resolved answers
+     * no and writes nothing either — nothing is written that the user would
+     * then have to clear away by hand.
      */
     private async executeDeletionFire(task: Task): Promise<boolean> {
         const outlook = planFlowForDeletion(task, this.buildDeps());
@@ -203,22 +210,50 @@ export class FlowExecutor {
             return false;
         }
 
-        if (outlook.kind === 'creates') {
-            for (const effect of outlook.effects) {
-                logInfo(`[Flow:effect] ${effect.kind} taskId=${task.id} (before delete)`);
-                await this.applyEffect(task, effect);
-            }
-        }
+        const inserts = outlook.kind === 'creates'
+            ? outlook.effects.map(effect => {
+                logInfo(`[Flow:effect] ${effect.kind} taskId=${task.id} (with the delete)`);
+                return this.instanceInsertFor(task, effect);
+            })
+            : [];
 
-        // Last, by the same rule the effects follow: line resolution matches
-        // on originalText, so the line that is being read must stay put until
-        // everything that reads it is done.
-        const removed = await this.repository.deleteTaskFromFile(task);
+        const removed = await this.repository.replaceTaskWithInstances(task, inserts);
         if (!removed) {
             logWarn(`[FlowExecutor] Flow fired but the original could not be deleted: ${task.id}`);
             new Notice(t('notice.taskWriteFailed'));
         }
         return removed;
+    }
+
+    /**
+     * The same next instance {@link applyEffect} would write, handed over as
+     * lines-to-be rather than written on the spot.
+     *
+     * The two paths read one effect the same way — a recurrence is formatted
+     * here and a generated instance arrives finished — and they render it with
+     * the same function, so a deletion fire and an ordinary one cannot come to
+     * write different lines for the same command.
+     */
+    private instanceInsertFor(task: Task, effect: CreatingEffect): FlowInstanceInsert {
+        if (effect.kind === 'create-next') {
+            return {
+                kind: 'recurrence',
+                content: TaskParser.format(effect.newTask).trim(),
+                flowLines: (effect.newTask.flow?.childSegments ?? []).map(s => s.raw),
+            };
+        }
+        // Reported rather than dropped, on this path as on the other: the
+        // written line differs from the one the block describes, and nothing
+        // else will say so.
+        for (const w of effect.warnings) {
+            logWarn(`[Flow:generated] ${task.id}: ${w.message}`);
+        }
+        return {
+            kind: 'generated',
+            parentLine: effect.parentLine,
+            flowLines: effect.flowLines,
+            children: effect.children,
+        };
     }
 
     /** @returns true when effects were applied (false = did not fire). */

@@ -356,6 +356,51 @@ describe('IDs held across a delete', () => {
         expect(live.index.getTask(fired)).toBeUndefined();
     });
 
+    it('a deletion fire takes the line the user deleted, not the twin it wrote', async () => {
+        // The shape where the instance is worded exactly like the line that
+        // fired it: the command lives in a child line, so neither carries a
+        // date, and the block writes the parent without one either. The two
+        // subtrees are identical, so the file cannot say which of them went —
+        // except that the original has a child the instance does not. If
+        // `元の子` is still here, the delete took the instance it had just
+        // written, and the task the user deleted is the one on the page.
+        const contents = new Map([[FILE, [
+            '- [ ] 兄弟 @2026-09-21',
+            '- [ ] 週報',
+            '\t- ==> every mon use("週報")',
+            '\t- [ ] 元の子',
+            '',
+            '```tv-gen 週報',
+            '- [ ] 週報',
+            '```',
+            '',
+        ].join('\n')]]);
+        live = vaultSession(contents);
+        await live.scanAll();
+        const [above, fired] = idsInFileOrder(live);
+
+        await live.index.deleteTask(fired, { fireFlow: true });
+        await live.settle(FILE);
+
+        expect(contents.get(FILE)!.split('\n')).toEqual([
+            '- [ ] 週報',
+            '\t- ==> every mon use("週報")',
+            '- [ ] 兄弟 @2026-09-21',
+            '',
+            '```tv-gen 週報',
+            '- [ ] 週報',
+            '```',
+            '',
+        ]);
+        expect(live.index.getTask(fired)).toBeUndefined();
+
+        // The row that only moved is the same row; the instance is a task of
+        // its own rather than the fired one wearing the same words.
+        const [next, kept] = idsInFileOrder(live);
+        expect(kept).toBe(above);
+        expect(next).not.toBe(fired);
+    });
+
     it('a child that outlives its parent keeps the identity it had', async () => {
         // The editor's menu deletes one line by its coordinate, so a parent can
         // go while its child stays. The child is the same row it was, one line

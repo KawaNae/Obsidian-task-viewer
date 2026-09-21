@@ -1,23 +1,15 @@
 import { type App, TFile } from 'obsidian';
 import type { DuplicateOptions, Task } from '../../types';
-import { collectFlowLineIndicesInFile, formatFlowLine } from '../flow/FlowLineScanner';
+import { formatFlowLine } from '../flow/FlowLineScanner';
 import { DateUtils } from '../../utils/DateUtils';
 import { logWarn } from '../../log/log';
 import { FileOperations } from './utils/FileOperations';
 import { appendLines, processLines, splitLines, type LineEdits } from '../../utils/FileLines';
 import type { WriteObserver } from './WriteObserver';
 
-/**
- * One generated child line, as the block described it.
- *
- * `depth` counts levels below the generated parent, so 1 is its direct child.
- * `body` carries no indentation — this layer decides what one level looks like
- * in the file being written.
- */
-export interface GeneratedChild {
-    depth: number;
-    body: string;
-}
+import { type GeneratedChild, renderFlowInstance } from './FlowInstanceLines';
+
+export type { GeneratedChild } from './FlowInstanceLines';
 
 /**
  * What a duplicate-as-next writes for each copy.
@@ -145,25 +137,11 @@ export class TaskCloner {
                 return lines;
             }
 
-            // Re-indent the formatted line to match the original task line
-            const originalLine = lines[currentLine];
-            const originalIndent = originalLine.match(/^(\s*)/)?.[1] || '';
-            const newParentLine = originalIndent + content.trim();
-
-            // 新インスタンスの flow 行インデント: 既存子行の綴りに揃え、
-            // なければタブ。直下の flow 行は発火で消費される側なので、綴りの
-            // 見本としては後回しにする（それしか無ければ使う）。
-            const flowAbs = new Set(collectFlowLineIndicesInFile(lines, currentLine));
-            const { childrenLines } = this.fileOps.collectChildrenFromLines(lines, currentLine);
-            const ordinaryChildren = childrenLines.filter((_, i) => !flowAbs.has(currentLine + 1 + i));
-
-            const childIndent = ordinaryChildren.find(l => l.trim() !== '')?.match(/^\s*/)?.[0]
-                ?? childrenLines.find(l => l.trim() !== '')?.match(/^\s*/)?.[0]
-                ?? originalIndent + '\t';
-            const newFlowLines = flowLines.map(raw => formatFlowLine(childIndent, raw));
+            const rendered = renderFlowInstance(this.fileOps, lines, currentLine,
+                { kind: 'recurrence', content, flowLines });
 
             const insertAt = this.fileOps.findSiblingGroupStart(lines, currentLine);
-            edits.splice(insertAt, 0, newParentLine, ...newFlowLines);
+            edits.splice(insertAt, 0, ...rendered);
 
             return lines;
         }, this.writes?.for(task.file));
@@ -203,15 +181,8 @@ export class TaskCloner {
                 return null;
             }
 
-            const parentIndent = lines[currentLine].match(/^(\s*)/)?.[1] ?? '';
-            const unit = FileOperations.resolveChildIndent(lines, currentLine)
-                .slice(parentIndent.length) || FileOperations.detectIndentUnit(lines);
-
-            const rendered = [
-                parentIndent + parentLine.trim(),
-                ...flowLines.map(raw => formatFlowLine(parentIndent + unit, raw)),
-                ...children.map(c => parentIndent + unit.repeat(Math.max(1, c.depth)) + c.body.trim()),
-            ];
+            const rendered = renderFlowInstance(this.fileOps, lines, currentLine,
+                { kind: 'generated', parentLine, flowLines, children });
 
             const insertAt = this.fileOps.findSiblingGroupStart(lines, currentLine);
             edits.splice(insertAt, 0, ...rendered);

@@ -15,8 +15,15 @@ import { type FlowPlanDeps, GenerationError, planFlow } from './FlowPlanner';
  * - `failed`: the command is there and could not be planned. The command
  *   would go with the line, and firing cannot save it.
  */
+/**
+ * An effect that writes the next instance — the only kind a deletion fire
+ * keeps. Named so the executor can hand them all to one write without a
+ * defensive branch for kinds that {@link planFlowForDeletion} already dropped.
+ */
+export type CreatingEffect = Extract<FlowEffect, { kind: 'create-next' | 'create-generated' }>;
+
 export type FlowDeleteOutlook =
-    | { kind: 'creates'; effects: FlowEffect[]; previewLine: string }
+    | { kind: 'creates'; effects: CreatingEffect[]; previewLine: string }
     | { kind: 'nothing' }
     | { kind: 'failed'; error: EvalError | GenerationError };
 
@@ -63,7 +70,8 @@ export function planFlowForDeletion(task: Task, deps: FlowPlanDeps): FlowDeleteO
         throw err;
     }
 
-    const creating = effects.filter(e => e.kind === 'create-next' || e.kind === 'create-generated');
+    const creating = effects.filter(
+        (e): e is CreatingEffect => e.kind === 'create-next' || e.kind === 'create-generated');
     if (creating.length === 0) return { kind: 'nothing' };
 
     return { kind: 'creates', effects: creating, previewLine: previewOf(creating[0]) };

@@ -5,6 +5,7 @@ import { InlineTaskWriter } from './writers/InlineTaskWriter';
 import { FrontmatterWriter } from './writers/FrontmatterWriter';
 import { TaskCloner, type GeneratedChild, type InPlaceCopyLines } from './TaskCloner';
 import type { PropertyOp } from './PropertyUpdatePlanner';
+import type { FlowInstanceInsert } from './FlowInstanceLines';
 import { WriteObserver } from './WriteObserver';
 
 /**
@@ -58,6 +59,14 @@ export class TaskRepository {
     /** @returns whether the task's lines were removed (see InlineTaskWriter). */
     async deleteTaskFromFile(task: Task, moved?: { to: string }): Promise<boolean> {
         return this.inlineWriter.deleteTaskFromFile(task, moved);
+    }
+
+    /**
+     * @returns whether the task was replaced by what its firing wrote
+     * (see {@link InlineTaskWriter.replaceTaskWithInstances}).
+     */
+    async replaceTaskWithInstances(task: Task, inserts: FlowInstanceInsert[]): Promise<boolean> {
+        return this.inlineWriter.replaceTaskWithInstances(task, inserts);
     }
 
     async stripFlow(task: Task): Promise<void> {
