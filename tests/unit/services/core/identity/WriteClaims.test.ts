@@ -3,6 +3,7 @@ import { WriteClaims, type ClaimBase } from '../../../../../src/services/core/id
 import { FileParsePipeline } from '../../../../../src/services/parsing/FileParsePipeline';
 import { DEFAULT_SETTINGS } from '../../../../../src/types';
 import type { LineEdit } from '../../../../../src/utils/FileLines';
+import { contentKeyOf } from '../../../../../src/services/core/identity/ContentKey';
 
 /**
  * What a write reports about lines, turned into what the next scan is told
@@ -39,8 +40,24 @@ function mint() {
     return () => `w${++seq}`;
 }
 
-function claimsWith(ledger: ClaimBase[] = []): WriteClaims {
-    return new WriteClaims(parseRows, () => ledger, mint());
+/**
+ * What the last scan recorded: its rows, and the key of the lines it read them
+ * from — null for a file no scan has committed. The lines default to the rows'
+ * own, each on its line, which is the whole file whenever nothing but rows is
+ * in it.
+ */
+function ledgerOf(rows: ClaimBase[], read: readonly string[] | null = linesOf(rows)) {
+    return () => ({ rows, content: read === null ? null : contentKeyOf(read) });
+}
+
+function linesOf(rows: readonly ClaimBase[]): string[] {
+    const lines: string[] = [];
+    for (const row of rows) lines[row.line] = row.text;
+    return Array.from(lines, line => line ?? '');
+}
+
+function claimsWith(ledger: ClaimBase[] = [], read?: readonly string[] | null): WriteClaims {
+    return new WriteClaims(parseRows, ledgerOf(ledger, read), mint());
 }
 
 /** A ledger row: the id it carries, the line it was read on, what it read. */
@@ -66,7 +83,7 @@ describe('WriteClaims: which lines are rows', () => {
             '\t```',
         ];
         const after = [...before, ...before];
-        const claims = claimsWith([known('r1', 0, '- [ ] 親'), known('r2', 1, '\t- [ ] 子')]);
+        const claims = claimsWith([known('r1', 0, '- [ ] 親'), known('r2', 1, '\t- [ ] 子')], before);
 
         const claim = claims.claim(FILE, before, after, [inserted(6, 6)]);
 
@@ -104,7 +121,7 @@ describe('WriteClaims: which lines are rows', () => {
         // reads either can adopt it (see resolveHints).
         const before = ['- [ ] 甲', '\tmemo'];
         const after = ['- [ ] 甲', '\tmemo 書き足した'];
-        const claims = claimsWith([known('r1', 0, '- [ ] 甲')]);
+        const claims = claimsWith([known('r1', 0, '- [ ] 甲')], before);
 
         const claim = claims.claim(FILE, before, after, [replaced(1)]);
 
@@ -205,7 +222,7 @@ describe('WriteClaims: a base that no longer fits', () => {
         // at all. None of them can be delivered here, so the base is checked
         // line for line instead — a row-by-row check would pass this, since
         // what changed is not a row.
-        const claims = claimsWith([known('r1', 0, '- [ ] 甲')]);
+        const claims = claimsWith([known('r1', 0, '- [ ] 甲')], ['- [ ] 甲', 'memo']);
 
         const first = claims.claim(
             FILE,
@@ -232,8 +249,61 @@ describe('WriteClaims: a base that no longer fits', () => {
         expect(fourth.hint).toBeNull();
     });
 
+    it('says nothing when a scan that read an older file has taken the base with it', () => {
+        // A scan read the file before the first write landed, and committed
+        // after that write filed its claim: the commit forgets the base
+        // whatever the scan read, so the next write falls back to a ledger one
+        // write old. Its row still fits — line 0 reads the same word — but
+        // line 0 is now the copy. Built on that, the copy would be claimed as
+        // the original, every text lining up; a scan comparing whole contents
+        // would find this the only claim that fits and adopt it. The ledger's
+        // content is the file before the copy, which is what refuses it.
+        const claims = claimsWith([known('r1', 0, '- [ ] 甲')]);
+
+        const first = claims.claim(FILE, ['- [ ] 甲'], ['- [ ] 甲', '- [ ] 甲'], [inserted(0, 1)]);
+        expect(first.hint!.rows.map(row => row.runtimeId)).toEqual(['w1', 'r1']);
+
+        claims.forget(FILE);
+
+        const second = claims.claim(
+            FILE,
+            ['- [ ] 甲', '- [ ] 甲'],
+            ['- [ ] 甲', '- [ ] 甲', 'memo'],
+            [inserted(2, 1)],
+        );
+        expect(second.hint).toBeNull();
+    });
+
+    it('says nothing when the content fits and a row does not', () => {
+        // The content is compared by key, so the rows are checked as well: a
+        // key two contents shared would still have to put every row's text on
+        // its line. A ledger whose row sits off its own content stands in for
+        // that here.
+        const claims = claimsWith([known('r1', 1, '- [ ] 甲')], ['- [ ] 甲']);
+
+        const claim = claims.claim(FILE, ['- [ ] 甲'], ['- [x] 甲'], [replaced(0)]);
+
+        expect(claim.hint).toBeNull();
+    });
+
+    it('says nothing about a file no scan has read', () => {
+        const claims = claimsWith([], null);
+
+        const claim = claims.claim(FILE, [''], ['- [ ] 初めての行'], [replaced(0)]);
+
+        expect(claim.hint).toBeNull();
+    });
+
+    it('builds the first task of a file with no rows on what the scan read', () => {
+        const claims = claimsWith([], ['# 見出し', 'memo']);
+
+        const claim = claims.claim(FILE, ['# 見出し', 'memo'], ['# 見出し', 'memo', '- [ ] 初'], [inserted(2, 1)]);
+
+        expect(claim.hint!.rows).toEqual([{ runtimeId: 'w1', created: true, text: '- [ ] 初' }]);
+    });
+
     it('says nothing about a file the parser refuses to read', () => {
-        const claims = new WriteClaims(() => null, () => [known('r1', 0, '- [ ] 甲')], mint());
+        const claims = new WriteClaims(() => null, ledgerOf([known('r1', 0, '- [ ] 甲')]), mint());
 
         const claim = claims.claim(FILE, ['- [ ] 甲'], ['- [ ] 甲', '- [ ] 乙'], [inserted(1, 1)]);
 
@@ -299,7 +369,7 @@ describe('WriteClaims: the limit of a report', () => {
         // report built any other way is known to carry it.
         const before = ['- [ ] 甲'];
         const after = ['- [ ] 甲', '- [ ] 甲'];
-        const ledger = () => [known('r1', 0, '- [ ] 甲')];
+        const ledger = ledgerOf([known('r1', 0, '- [ ] 甲')]);
 
         const truthful = new WriteClaims(parseRows, ledger, mint())
             .claim(FILE, before, after, [inserted(1, 1)]);

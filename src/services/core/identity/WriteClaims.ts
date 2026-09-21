@@ -1,6 +1,7 @@
 import type { ParserId } from '../../../types';
 import type { Hint } from './IdentityHints';
 import { replayEdits, type LineEdit } from '../../../utils/FileLines';
+import { contentKeyOf, type ContentKey } from './ContentKey';
 
 /**
  * A row of a file as a write left it: which line, what it reads, and whose
@@ -25,6 +26,15 @@ export interface ParsedRow {
     parserId: ParserId;
 }
 
+/**
+ * What the last scan of a file recorded: the rows it read, and the key of the
+ * content it read them from — null when no scan has committed the file.
+ */
+export interface LedgerState {
+    rows: ClaimBase[];
+    content: ContentKey | null;
+}
+
 /** What a write claims, and a handle that takes the whole call back. */
 export interface ClaimResult {
     /** What the file now reads, or null when this write cannot say. */
@@ -44,22 +54,22 @@ export interface ClaimResult {
 /**
  * What this file's last write left for the next one.
  *
- * Either the file as that write left it — every line, and the rows among them,
- * kept whole because the lines are what decides whether the rows may be used
- * at all (see {@link WriteClaims.baseFor}) — or a refusal: a write landed that
+ * Either the file as that write left it — the key of its content, and the rows
+ * in it, because the content is what decides whether the rows may be used at
+ * all (see {@link WriteClaims.baseFor}) — or a refusal: a write landed that
  * this class could not describe, so nothing it holds is true of the file any
  * more, and nothing older is either.
  */
 type Base =
-    | { lines: string[]; rows: ClaimBase[] }
-    | { lines: null; rows: null };
+    | { content: ContentKey; rows: ClaimBase[] }
+    | { content: null; rows: null };
 
 /**
  * A write changed the file and could not say how.
  *
  * Shared, and never mutated: what matters is that the entry is there.
  */
-const SILENT: Base = { lines: null, rows: null };
+const SILENT: Base = { content: null, rows: null };
 
 /**
  * Turns a write's report of what it did to the lines into a claim about what
@@ -99,7 +109,7 @@ export class WriteClaims {
      *   from the same pipeline a scan uses. Null when the parser refuses to
      *   read the file as tasks at all (`tv-ignore`), which is not the same
      *   answer as a file with no rows in it.
-     * @param ledgerRows what the last scan of this file recorded.
+     * @param ledgerState what the last scan of this file recorded.
      * @param mintRuntimeId a name for a row this write made. Issued here, at
      *   the moment the line comes into being, rather than by the scan that
      *   reads it: two scans can read the same created line — one committing a
@@ -108,7 +118,7 @@ export class WriteClaims {
      */
     constructor(
         private readonly parseRows: (path: string, lines: readonly string[]) => ParsedRow[] | null,
-        private readonly ledgerRows: (path: string) => ClaimBase[],
+        private readonly ledgerState: (path: string) => LedgerState,
         private readonly mintRuntimeId: (path: string, parserId: ParserId) => string,
     ) { }
 
@@ -166,7 +176,7 @@ export class WriteClaims {
                 : { runtimeId: this.mintRuntimeId(path, row.parserId), created: true, text: row.text, line: row.line });
         }
 
-        this.bases.set(path, { lines: [...after], rows });
+        this.bases.set(path, { content: contentKeyOf(after), rows });
         return {
             hint: { rows: rows.map(row => ({ runtimeId: row.runtimeId, created: row.created, text: row.text })) },
             withdraw,
@@ -208,71 +218,63 @@ export class WriteClaims {
      * last scan recorded, else nothing.
      *
      * Either candidate is a guess about a file this code did not read, so it is
-     * checked rather than trusted. The two are checked differently, because
-     * they are guesses of different strength.
+     * checked rather than trusted, and both are checked the same way: the file
+     * has to read, whole, as the candidate says it did — the same comparison a
+     * scan makes when it weighs a claim (see `reproduces`) — and each of the
+     * candidate's rows has to read its own text on its own line.
      *
-     * A base is checked line for line, the whole file. Only the writes that
-     * report keep it up to date, and a file is written by plenty that do not —
-     * a write that reports nothing, a report that did not account for its own
-     * file, a writer with no sink at all, frontmatter and headings, which move
-     * every row below them without touching a row. Each of those leaves a base
-     * describing a file that is no longer there, and every one of them is
-     * caught by the same comparison, so nothing has to be delivered to this
-     * class for it to know. Rows alone would not do: they say nothing about the
-     * lines between them.
+     * The whole content, because rows alone say nothing about the lines between
+     * them. A file is written by plenty that do not report — a write that
+     * reports nothing, a report that did not account for its own file, a
+     * writer with no sink at all, frontmatter and headings, which move every
+     * row below them without touching a row — and an external edit reports to
+     * nobody. Each leaves the candidate describing a file that is no longer
+     * there, and the one comparison catches all of them, so nothing has to be
+     * delivered to this class for it to know.
      *
-     * A ledger is checked row by row, because that is all a ledger holds. It
-     * cannot prove there is no row it has never heard of — an external edit
-     * adding a task line passes here — but a claim missing a row does not
-     * reproduce what the scan reads, so it is refused there instead.
+     * The rows as well, because the content is compared by key (see
+     * `ContentKey`). Two contents sharing a key would also have to put every
+     * row's text on the row's line before a claim were built on the wrong one.
      *
      * An entry that is there at all stops the search rather than falling
      * through, whether or not it still fits. Its presence says a write of ours
      * landed after the last scan committed, so the ledger describes a file at
-     * least two writes old — known to be stale, and stale in the direction that
-     * matters: the rows it holds sit at the line numbers the file had *before*
-     * our own write moved them. Handed a copy inserted above its original, the
-     * ledger's row names the copy, and this would claim the copy carries the
-     * original's identity — with every text lining up, so the scan would adopt
-     * it. That is why a refusal leaves {@link SILENT} behind instead of
+     * least two writes old — and stale in the direction that matters: the rows
+     * it holds sit at the line numbers the file had *before* our own write
+     * moved them. That is why a refusal leaves {@link SILENT} behind instead of
      * removing the entry: the answer has to stay "nothing" for every write
      * until a scan commits, not just for the one that noticed.
      *
-     * The converse does not hold, and this code does not claim it does: *no*
-     * entry is not a promise that the ledger is current. {@link forget} runs on
-     * every commit, whatever the scan read — so a scan that read the file as it
-     * was before our last write, and committed after that write filed, takes
-     * the base with it and leaves the next write a ledger one write old. `fits`
-     * does not catch it: a ledger is checked row by row and cannot tell that a
-     * row it has never heard of is missing. What lands then is a claim built on
-     * rows at the line numbers the file had before that write moved them —
-     * the same error the paragraph above refuses to make, reached through the
-     * commit rather than by falling through. The precision lost there is left
-     * to the ladder, which is where such a claim ends up as soon as the texts
-     * fail to line up.
+     * *No* entry is not a promise that the ledger is current: {@link forget}
+     * runs on every commit, whatever the scan read. A scan that read the file
+     * as it was before our last write, and committed after that write filed,
+     * takes the base with it and leaves the next write a ledger one write old.
+     * Handed a copy inserted above its original, that ledger's row names the
+     * copy — the text there is the same word, so its rows still fit. What
+     * refuses it is its content: the ledger recorded the file before the copy,
+     * and the file this write was handed has it. Checked by rows alone, the
+     * copy would be claimed as the original with every text lining up, and a
+     * scan comparing whole contents would adopt it.
+     *
+     * A file no scan has committed has no ledger content, and gets no claim:
+     * nothing says what it read.
      */
     private baseFor(path: string, before: readonly string[]): ClaimBase[] | null {
+        const current = contentKeyOf(before);
+
         const base = this.bases.get(path);
         if (base) {
-            return base.lines !== null && sameLines(base.lines, before) ? base.rows : null;
+            return base.content === current && fits(base.rows, before) ? base.rows : null;
         }
 
-        const ledger = this.ledgerRows(path);
-        if (fits(ledger, before)) return ledger;
+        const ledger = this.ledgerState(path);
+        if (ledger.content === current && fits(ledger.rows, before)) return ledger.rows;
 
         return null;
     }
 }
 
-/** Whether the file is still, line for line, the one a write left behind. */
-function sameLines(left: readonly string[], right: readonly string[]): boolean {
-    if (left.length !== right.length) return false;
-    for (let i = 0; i < left.length; i++) {
-        if (left[i] !== right[i]) return false;
-    }
-    return true;
-}
-
+/** Whether each row still reads its own text on its own line. */
 function fits(rows: readonly ClaimBase[], lines: readonly string[]): boolean {
     for (const row of rows) {
         if (row.line < 0 || row.line >= lines.length) return false;
