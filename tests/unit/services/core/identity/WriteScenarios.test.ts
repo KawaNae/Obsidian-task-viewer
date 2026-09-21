@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { vaultSession, type VaultSession } from '../../../helpers/vaultSession';
+import type { WriteChannel } from '../../../../../src/utils/FileLines';
 
 /**
  * The two writes that used to move IDs under whoever held them, driven through
@@ -263,11 +264,11 @@ describe('IDs held across a delete', () => {
             .map(task => task.id);
     }
 
-    /** The write layer under the index, for the paths the index does not offer. */
-    function repositoryOf(session: VaultSession) {
-        return (session.index as unknown as {
-            repository: { deleteTaskFromFile(task: unknown, moved?: { to: string }): Promise<boolean> };
-        }).repository;
+    /** Take the report away from every write, leaving the ladder alone. */
+    function silenceWrites(session: VaultSession): void {
+        const observer = session.index.getRepository().getWriteObserver();
+        const resolve = (observer as unknown as { resolve: (file: string) => WriteChannel }).resolve;
+        observer.connect(file => ({ ...resolve(file), sink: undefined }));
     }
 
     it('the surviving twin keeps its own ID when the one above it goes', async () => {
@@ -291,15 +292,16 @@ describe('IDs held across a delete', () => {
         live = vaultSession(contents);
         await live.scanAll();
         const [first, second, below] = idsInFileOrder(live);
-        const task = live.index.getTask(first)!;
 
-        // The move's origin half: the same splice, filing nothing. Standing
-        // against the test above, it is why the claim is worth filing — the
-        // verbatim rung pairs the two identical lines by nearest ordinal, so
-        // the survivor answers to the ID of the line that went, and the ID it
-        // held is gone. A timer or a selection pointing at the surviving line
-        // resolves to nothing.
-        await repositoryOf(live).deleteTaskFromFile(task, { to: 'archive.md' });
+        // The same splice, filing nothing. Standing against the test above,
+        // it is why the claim is worth filing — the verbatim rung pairs the
+        // two identical lines by nearest ordinal, so the survivor answers to
+        // the ID of the line that went, and the ID it held is gone. A timer or
+        // a selection pointing at the surviving line resolves to nothing. The
+        // move's origin half used to be such a delete; since F3 no write of
+        // the plugin's is, so the report is taken away here by hand.
+        silenceWrites(live);
+        await live.index.deleteTask(first);
         await live.settle(FILE);
 
         expect(idsInFileOrder(live)).toEqual([first, below]);

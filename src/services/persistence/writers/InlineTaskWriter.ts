@@ -6,7 +6,7 @@ import { collectFlowLineIndicesInFile } from '../../flow/FlowLineScanner';
 import { FileOperations } from '../utils/FileOperations';
 import { ChildPropertyLineEditor } from '../utils/ChildPropertyLineEditor';
 import type { PropertyOp } from '../PropertyUpdatePlanner';
-import { type FlowInstanceInsert, renderFlowInstance } from '../FlowInstanceLines';
+import { renderFlowInstance } from '../FlowInstanceLines';
 import {
     appendLines, processLines, splitLines,
     type EditorLine, type LineEdits, type Refusal, type WriteOutcome,
@@ -137,69 +137,15 @@ export class InlineTaskWriter {
     }
 
     /**
-     * Fire-consumes a flow command: rewrite the task line without `==>` and
-     * delete the task's direct `- ==>` flow child lines — one atomic
-     * vault.process. Flow lines are located by a content scan from the
-     * resolved task line (never by stored body offsets, which are stale
-     * after create-next inserted the new instance above).
-     */
-    async stripFlow(task: Task): Promise<void> {
-        const file = this.app.vault.getAbstractFileByPath(task.file);
-        if (!(file instanceof TFile)) {
-            this.writes?.for(task.file)?.refused({ file: task.file, reason: { kind: 'gone' }, subject: subjectOf(task) });
-            return;
-        }
-
-        await processLines(this.app, file, (lines, _eol, { edits, lineOf }) => {
-            const currentLine = lineOf(refOf(task), subjectOf(task));
-            if (currentLine === null) return null;
-
-            // Every index here is below `currentLine`: the scan starts at
-            // `taskLineIndex + 1` and stops at the first line that is not a
-            // descendant (FlowLineScanner.ts:82-86). So the deletions leave
-            // `currentLine` where it is, and the `replaced` below is filed at
-            // the same coordinate it was read at.
-            const flowIndices = collectFlowLineIndicesInFile(lines, currentLine);
-            for (let i = flowIndices.length - 1; i >= 0; i--) {
-                edits.splice(flowIndices[i], 1);
-            }
-
-            const newLine = TaskParser.format({ ...task, flow: undefined });
-            const originalIndent = lines[currentLine].match(/^(\s*)/)?.[1] || '';
-            lines[currentLine] = originalIndent + newLine.trim();
-            // The fired line keeps its identity: losing `==>` rewrites the text
-            // but does not make it another task.
-            edits.replaced(currentLine);
-
-            return lines;
-        }, this.writes?.for(task.file));
-    }
-
-    /**
-     * @param moved where the task's lines were written before this call, when
-     * this delete is the origin half of a move. The half that matters for
-     * identity is the destination, and it is a separate write — to another
-     * file, or to another place in this one. Naming the destination rather
-     * than passing a flag is what stage 4 needs to tie the two halves
-     * together; today it only says "stay quiet".
      * @returns whether the task's lines were found and removed. A `false` means
      * the file still holds them — the caller must not report the task gone.
      */
-    async deleteTaskFromFile(task: Task, moved?: { to: string }): Promise<boolean> {
+    async deleteTaskFromFile(task: Task): Promise<boolean> {
         const file = this.app.vault.getAbstractFileByPath(task.file);
         if (!(file instanceof TFile)) {
             this.writes?.for(task.file)?.refused({ file: task.file, reason: { kind: 'gone' }, subject: subjectOf(task) });
             return false;
         }
-
-        // A move's origin does not claim. Within one file the move's rows are
-        // still alive further down, and `removed` would call a living row dead
-        // — the next scan would mint new IDs for rows the ladder could have
-        // carried. Across files the claim would be true, but telling the two
-        // apart is the same judgement stage 4 has to make for the destination
-        // hint, so both halves wait for it together.
-        const channel = this.writes?.for(task.file);
-        const quiet = moved && channel ? { ...channel, sink: undefined } : channel;
 
         return processLines(this.app, file, (lines, _eol, { edits, lineOf }) => {
             const currentLine = lineOf(refOf(task), subjectOf(task));
@@ -214,7 +160,7 @@ export class InlineTaskWriter {
             edits.splice(currentLine, 1 + childrenLines.length);
 
             return lines;
-        }, quiet).then(outcome => outcome.written);
+        }, this.writes?.for(task.file)).then(outcome => outcome.written);
     }
 
     /**
@@ -239,9 +185,16 @@ export class InlineTaskWriter {
      * separate writes did the same, each against the file the previous one
      * left, so the lines written are the same.
      */
-    async applyToTask(target: WriteTarget, ops: readonly TaskOp[]): Promise<WriteOutcome> {
+    async applyToTask(
+        target: WriteTarget,
+        ops: readonly TaskOp[],
+        opts: { tellRefusal?: boolean } = {},
+    ): Promise<WriteOutcome> {
         const file = this.app.vault.getAbstractFileByPath(target.file);
-        const channel = this.writes?.for(target.file);
+        const told = this.writes?.for(target.file);
+        // A caller that tells the refusal itself, in words of its own, has it
+        // from the outcome; telling it here too would be the same news twice.
+        const channel = told && opts.tellRefusal === false ? { ...told, refused: () => { } } : told;
         if (!(file instanceof TFile)) {
             const refused: Refusal = { file: target.file, reason: { kind: 'gone' }, subject: target.subject };
             channel?.refused(refused);
@@ -536,63 +489,48 @@ export class InlineTaskWriter {
     }
 
     /**
-     * Append task with children to file (for move command).
-     * Reads children from the original file and appends them together,
-     * adjusting children indentation relative to the new parent position.
+     * The half of a move to another file that writes to the destination: the
+     * row, as `content`, and its children, re-indented under it, appended to
+     * `destPath`. The children are read from the source here; the source is
+     * not written. Taking the original away is the caller's next write, to the
+     * source, and it is made only once this one has landed (see
+     * `FlowExecutor.executeFlow`). A move within one file is not this: it is
+     * one write that carries the row (`move-to-end` in {@link applyToTask}).
      *
-     * Atomicity note: when source === dest we read and write in a single
-     * `vault.process` (atomic). When source ≠ dest (the normal move case) the
-     * operation spans two files, which Obsidian's single-file `process` API
-     * cannot make atomic. That split is harmless: read(source) → write(dest)
-     * only copies the collected child lines into another file — a concurrent
-     * edit to source between the read and the append cannot corrupt the dest
-     * write, and the subsequent deletion of the original re-locates the task by
-     * line number, so it tracks any shift. Do not "fix" this by serializing the
-     * two files — the window has no observable effect.
+     * The two files cannot be one write — Obsidian's `process` is per file —
+     * so a source edited between this read and the caller's write can leave
+     * the task in both. Handing a move from one file to the other is F8's.
      *
-     * What the claim says here is what the file says today: the lines appended
-     * are new rows, because the move drops the task's `^id` on the way (see
-     * `FlowPlanner`'s archived copy). The other half of a move — the deletion
-     * of the original — stays silent, so the two halves are not claimed as one
-     * movement of identity. Stage 4 is where that changes, and it changes this
-     * claim with it.
+     * The appended lines are claimed as new rows: the move drops the task's
+     * `^id` on the way (see `FlowPlanner`'s archived copy), and a row in
+     * another file is another row to the index.
+     *
+     * @returns whether the destination was written. A `false` means nothing
+     * was: the source row could not be placed (told to the user as a
+     * refusal), or the destination is not a file.
      */
-    async appendTaskWithChildren(destPath: string, content: string, task: Task): Promise<void> {
-        const sourceFile = this.app.vault.getAbstractFileByPath(task.file);
-
-        // Same-file append: a single atomic process reads children and appends.
-        if (sourceFile instanceof TFile && destPath === task.file) {
-            await processLines(this.app, sourceFile, (lines, _eol, { edits, lineOf }) => {
-                const currentLine = lineOf(refOf(task), subjectOf(task));
-                if (currentLine === null) return null;
-                const adjustedChildren = this.childrenToCarry(lines, currentLine).map(child => child.text);
-                appendLines(lines, [...splitLines(content).lines, ...adjustedChildren], edits);
-                return lines;
-            }, this.writes?.for(task.file));
-            return;
-        }
-
-        // Cross-file: collect children from source, then append to dest (see note).
-        //
+    async appendTaskWithChildren(destPath: string, content: string, source: WriteTarget): Promise<boolean> {
+        const sourceFile = this.app.vault.getAbstractFileByPath(source.file);
+        const channel = this.writes?.for(source.file);
         // The source is only read, so its target is asked of the channel
         // directly rather than through a write. A source row that cannot be
         // placed is not archived at all: an archive of the parent alone would
         // lose the children once the original goes.
-        let adjustedChildren: string[] = [];
-        if (sourceFile instanceof TFile) {
-            const sourceLines = splitLines(await this.app.vault.read(sourceFile)).lines;
-            const channel = this.writes?.for(task.file);
-            const located = channel ? channel.locate(sourceLines, refOf(task)) : { kind: 'gone' as const };
-            if (located.kind !== 'at' || located.edited) {
-                const reason = located.kind === 'at' ? { kind: 'changed' as const } : located;
-                logWarn(`[InlineTaskWriter] move source not placed: ${task.file} ${reason.kind}`);
-                channel?.refused({ file: task.file, reason, subject: subjectOf(task) });
-                return;
-            }
-            adjustedChildren = this.childrenToCarry(sourceLines, located.line).map(child => child.text);
+        if (!(sourceFile instanceof TFile)) {
+            channel?.refused({ file: source.file, reason: { kind: 'gone' }, subject: source.subject });
+            return false;
         }
+        const sourceLines = splitLines(await this.app.vault.read(sourceFile)).lines;
+        const located = channel ? channel.locate(sourceLines, source.ref) : { kind: 'gone' as const };
+        if (located.kind !== 'at' || located.edited) {
+            const reason = located.kind === 'at' ? { kind: 'changed' as const } : located;
+            logWarn(`[InlineTaskWriter] move source not placed: ${source.file} ${reason.kind}`);
+            channel?.refused({ file: source.file, reason, subject: source.subject });
+            return false;
+        }
+        const children = this.childrenToCarry(sourceLines, located.line).map(child => child.text);
 
-        const fullContent = [content, ...adjustedChildren].join('\n');
-        await this.appendTaskToFile(destPath, fullContent);
+        const fullContent = [content, ...children].join('\n');
+        return (await this.appendTaskToFile(destPath, fullContent)) >= 0;
     }
 }

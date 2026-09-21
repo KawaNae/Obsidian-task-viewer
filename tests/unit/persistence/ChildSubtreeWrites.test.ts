@@ -1,5 +1,7 @@
 import { describe, it, expect } from 'vitest';
-import { writeBench, FILE } from '../helpers/writeBench';
+import { targetOf } from '../../../src/services/persistence/TaskRefs';
+import type { Task } from '../../../src/types';
+import { writeBench, FILE, type WriteBench } from '../helpers/writeBench';
 
 /**
  * How far a task's subtree reaches, as seen by the writes that move it.
@@ -284,7 +286,12 @@ describe('duplicateInlineTask shifts along the calendar', () => {
 
 // ── same-file move: the extent decides what travels ──
 
-describe('appendTaskWithChildren carries the subtree', () => {
+/** A move within the file, as the executor writes it: one op, the row carried to the end. */
+function moveToEnd(h: Awaited<ReturnType<typeof writeBench>>, text: string) {
+    return h.writer.applyToTask(targetOf(h.taskAt(0)), [{ kind: 'move-to-end', text }]);
+}
+
+describe('a move within the file carries the subtree', () => {
     it('re-indents descendants by stripping the old parent prefix', async () => {
         // The prefix removed is the parent's own indentation, so a top-level
         // parent removes nothing and the descendants keep their depth.
@@ -294,9 +301,9 @@ describe('appendTaskWithChildren carries the subtree', () => {
             '\t\t- [ ] grandchild',
         ].join('\n'));
 
-        await h.writer.appendTaskWithChildren(FILE, '- [x] parent @2026-08-15', h.taskAt(0));
+        await moveToEnd(h, '- [x] parent @2026-08-15');
 
-        expect(h.lines().slice(3)).toEqual([
+        expect(h.lines()).toEqual([
             '- [x] parent @2026-08-15',
             '\t- [ ] child',
             '\t\t- [ ] grandchild',
@@ -310,12 +317,9 @@ describe('appendTaskWithChildren carries the subtree', () => {
             '\t\t\t- [ ] grandchild',
         ].join('\n'));
 
-        await h.writer.appendTaskWithChildren(
-            FILE, '- [x] parent @2026-08-15',
-            h.taskAt(0)
-        );
+        await moveToEnd(h, '- [x] parent @2026-08-15');
 
-        expect(h.lines().slice(3)).toEqual([
+        expect(h.lines()).toEqual([
             '- [x] parent @2026-08-15',
             '\t- [ ] child',
             '\t\t- [ ] grandchild',
@@ -330,9 +334,9 @@ describe('appendTaskWithChildren carries the subtree', () => {
             '\t```',
         ].join('\n'));
 
-        await h.writer.appendTaskWithChildren(FILE, '- [x] parent @2026-08-15', h.taskAt(0));
+        await moveToEnd(h, '- [x] parent @2026-08-15');
 
-        expect(h.lines().slice(4)).toEqual([
+        expect(h.lines()).toEqual([
             '- [x] parent @2026-08-15',
             '\t```md',
             '\t- [ ] sample',
@@ -343,8 +347,13 @@ describe('appendTaskWithChildren carries the subtree', () => {
 
 // ── recurrence: the extent decides what the next instance inherits ──
 
-describe('insertRecurrenceForTask leaves the subtree with the instance that fired', () => {
+describe('a recurrence insert leaves the subtree with the instance that fired', () => {
     const NEXT = '- [ ] parent @2026-08-16';
+    /** `applyToTask` with the one op a recurrence's next-instance insert makes. */
+    const insertRecurrence = (h: WriteBench, task: Task, content: string, flowLines: string[] = []) =>
+        h.writer.applyToTask(targetOf(task), [
+            { kind: 'insert-instance', insert: { kind: 'recurrence', content, flowLines } },
+        ]);
 
     it('writes the new instance and nothing under it', async () => {
         // What sits under a task is what that instance did. A block is where
@@ -356,7 +365,7 @@ describe('insertRecurrenceForTask leaves the subtree with the instance that fire
             '\t\t- [x] done grandchild',
         ].join('\n'));
 
-        await h.cloner.insertRecurrenceForTask(h.taskAt(0), NEXT);
+        await insertRecurrence(h, h.taskAt(0), NEXT);
 
         expect(h.lines()).toEqual([
             NEXT,
@@ -374,7 +383,7 @@ describe('insertRecurrenceForTask leaves the subtree with the instance that fire
             '    - [ ] real child',
         ].join('\n'));
 
-        await h.cloner.insertRecurrenceForTask(h.taskAt(0), NEXT, ['every 1d']);
+        await insertRecurrence(h, h.taskAt(0), NEXT, ['every 1d']);
 
         expect(h.lines().slice(0, 2)).toEqual([NEXT, '    - ==> every 1d']);
     });
@@ -387,7 +396,7 @@ describe('insertRecurrenceForTask leaves the subtree with the instance that fire
             '    - ==> every 1d',
         ].join('\n'));
 
-        await h.cloner.insertRecurrenceForTask(h.taskAt(0), NEXT, ['every 1d']);
+        await insertRecurrence(h, h.taskAt(0), NEXT, ['every 1d']);
 
         expect(h.lines().slice(0, 2)).toEqual([NEXT, '    - ==> every 1d']);
     });
@@ -399,9 +408,7 @@ describe('insertRecurrenceForTask leaves the subtree with the instance that fire
             '\t- [ ] child',
         ].join('\n'));
 
-        await h.cloner.insertRecurrenceForTask(
-            h.taskAt(1), NEXT
-        );
+        await insertRecurrence(h, h.taskAt(1), NEXT);
 
         expect(h.lines()[0]).toBe(NEXT);
     });

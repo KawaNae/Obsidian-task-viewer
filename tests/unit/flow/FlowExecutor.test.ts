@@ -15,8 +15,7 @@ import { heldTasks } from '../helpers/heldTasks';
 function makeRepository() {
     return {
         applyToTask: vi.fn().mockResolvedValue({ written: true, refused: null, made: [] }),
-        insertRecurrenceForTask: vi.fn().mockResolvedValue(undefined),
-        appendTaskWithChildren: vi.fn().mockResolvedValue(undefined),
+        appendTaskWithChildren: vi.fn().mockResolvedValue(true),
         updateTaskInFile: vi.fn().mockResolvedValue(undefined),
         stripFlow: vi.fn().mockResolvedValue(undefined),
         deleteTaskFromFile: vi.fn().mockResolvedValue(true),
@@ -109,8 +108,6 @@ describe('FlowExecutor', () => {
         // The strip rewrites the fired row to itself without its command.
         expect(ops[1]).toEqual({ kind: 'strip-flow', text: TaskParser.format({ ...task, flow: undefined }).trim() });
 
-        expect(repository.insertRecurrenceForTask).not.toHaveBeenCalled();
-        expect(repository.stripFlow).not.toHaveBeenCalled();
         expect(repository.updateTaskInFile).not.toHaveBeenCalled();
 
         expect(repository.deleteTaskFromFile).not.toHaveBeenCalled();
@@ -141,7 +138,7 @@ describe('FlowExecutor', () => {
         expect(opsOfKind(repository, 'strip-flow')).toHaveLength(1);
     });
 
-    it('fires move: archives then deletes the original (no strip)', async () => {
+    it('fires move: archives, then takes the original away in one write (no strip)', async () => {
         const repository = makeRepository();
         const { executor } = makeExecutor(repository);
         const task = flowTask('move([[Archive]])');
@@ -150,20 +147,54 @@ describe('FlowExecutor', () => {
         await flush();
 
         expect(repository.appendTaskWithChildren).toHaveBeenCalledTimes(1);
-        const [dest, line] = repository.appendTaskWithChildren.mock.calls[0];
+        const [dest, line, source] = repository.appendTaskWithChildren.mock.calls[0];
         expect(dest).toBe('Archive.md');
         expect(line).not.toContain('==>');
-        expect(repository.deleteTaskFromFile).toHaveBeenCalledTimes(1);
+        expect(source).toEqual(targetOf(task));
+        expect(repository.applyToTask).toHaveBeenCalledTimes(1);
+        expect(opsOf(repository)).toEqual([{ kind: 'remove' }]);
+        expect(repository.deleteTaskFromFile).not.toHaveBeenCalled();
         expect(repository.updateTaskInFile).not.toHaveBeenCalled();
         expect(repository.appendTaskWithChildren.mock.invocationCallOrder[0])
-            .toBeLessThan(repository.deleteTaskFromFile.mock.invocationCallOrder[0]);
+            .toBeLessThan(repository.applyToTask.mock.invocationCallOrder[0]);
     });
 
-    it('says so when the move wrote the copy but could not delete the original', async () => {
-        // 移送先には書かれたので、元が消せないとタスクが2か所に居る。move で
-        // これだけは画面に何も出ないまま起きるので、通知で伝える。
+    it('fires a next instance and a move: the instance goes in with the removal, after the archive', async () => {
         const repository = makeRepository();
-        repository.deleteTaskFromFile.mockResolvedValue(false);
+        const { executor } = makeExecutor(repository);
+
+        await executor.handleTaskCompletion(flowTask('every mon move([[Archive]])'));
+        await flush();
+
+        expect(repository.appendTaskWithChildren).toHaveBeenCalledTimes(1);
+        expect(opsOf(repository).map(o => o.kind)).toEqual(['insert-instance', 'remove']);
+        expect(repository.appendTaskWithChildren.mock.invocationCallOrder[0])
+            .toBeLessThan(repository.applyToTask.mock.invocationCallOrder[0]);
+    });
+
+    it('writes nothing to the source when the archive was not written', async () => {
+        // 移送先に書けなかったなら、次回分も元の行の削除も書かない。
+        // 拒否の通知は書き込みの層が1回だけ出す。
+        const repository = makeRepository();
+        repository.appendTaskWithChildren.mockResolvedValue(false);
+        const { executor } = makeExecutor(repository);
+        Notice.messages.length = 0;
+
+        await executor.handleTaskCompletion(flowTask('every mon move([[Archive]])'));
+        await flush();
+
+        expect(repository.applyToTask).not.toHaveBeenCalled();
+        expect(Notice.messages).toHaveLength(0);
+    });
+
+    it('says so, once, when the move wrote the copy but could not take the original away', async () => {
+        // 移送先には書かれたので、元が消せないとタスクが2か所に居る。move で
+        // これだけは画面に何も出ないまま起きるので、通知で伝える。拒否の理由も
+        // 同じ1つの通知に入れ、書き込みの層には拒否を伝えさせない。
+        const repository = makeRepository();
+        repository.applyToTask.mockResolvedValue({
+            written: false, refused: { file: 'note.md', reason: { kind: 'changed' }, subject: 'Test task' }, made: [],
+        });
         const { executor } = makeExecutor(repository);
         Notice.messages.length = 0;
 
@@ -171,7 +202,11 @@ describe('FlowExecutor', () => {
         await flush();
 
         expect(repository.appendTaskWithChildren).toHaveBeenCalledTimes(1);
+        expect(repository.applyToTask.mock.calls[0][2]).toEqual({ tellRefusal: false });
         expect(Notice.messages).toHaveLength(1);
+        expect(Notice.messages[0]).toContain('Archive');
+        expect(Notice.messages[0]).toContain('the note has changed');
+        expect(Notice.messages[0]).toContain('Test task');
     });
 
     it('does not fire for non-complete statuses (Doing)', async () => {
@@ -182,8 +217,6 @@ describe('FlowExecutor', () => {
         await flush();
 
         expect(repository.applyToTask).not.toHaveBeenCalled();
-        expect(repository.insertRecurrenceForTask).not.toHaveBeenCalled();
-        expect(repository.stripFlow).not.toHaveBeenCalled();
     });
 
     it('re-checks after resolve: unchecked task is skipped', async () => {
@@ -196,8 +229,6 @@ describe('FlowExecutor', () => {
         await flush();
 
         expect(repository.applyToTask).not.toHaveBeenCalled();
-        expect(repository.insertRecurrenceForTask).not.toHaveBeenCalled();
-        expect(repository.stripFlow).not.toHaveBeenCalled();
     });
 
     it('consumes without generating when until has expired', async () => {
@@ -209,7 +240,6 @@ describe('FlowExecutor', () => {
 
         expect(repository.applyToTask).toHaveBeenCalledTimes(1);
         expect(opsOf(repository).map(o => o.kind)).toEqual(['strip-flow']);
-        expect(repository.insertRecurrenceForTask).not.toHaveBeenCalled();
     });
 
     it('leaves the command intact on runtime eval failure', async () => {
@@ -220,8 +250,6 @@ describe('FlowExecutor', () => {
         await flush();
 
         expect(repository.applyToTask).not.toHaveBeenCalled();
-        expect(repository.insertRecurrenceForTask).not.toHaveBeenCalled();
-        expect(repository.stripFlow).not.toHaveBeenCalled();
         expect(repository.deleteTaskFromFile).not.toHaveBeenCalled();
     });
 
@@ -281,7 +309,6 @@ describe('a fire that does not happen says so', () => {
         await flush();
 
         expect(repository.applyToTask).not.toHaveBeenCalled();
-        expect(repository.insertRecurrenceForTask).not.toHaveBeenCalled();
         expect(Notice.messages).toHaveLength(1);
         expect(Notice.messages[0]).toContain("Property 'end' is not set on this task");
         expect(Notice.messages[0]).toContain('週報');
@@ -369,10 +396,7 @@ describe('fireAndDelete', () => {
             { kind: 'insert-instance', insert: expect.objectContaining({ kind: 'recurrence' }) },
             { kind: 'remove' },
         ]);
-        expect(repository.insertRecurrenceForTask).not.toHaveBeenCalled();
         expect(repository.deleteTaskFromFile).not.toHaveBeenCalled();
-        // 行ごと消えるのだから、コマンドを剥がす書き込みは無駄でしかない。
-        expect(repository.stripFlow).not.toHaveBeenCalled();
     });
 
     it('fires an unchecked task: deletion is not a completion', async () => {

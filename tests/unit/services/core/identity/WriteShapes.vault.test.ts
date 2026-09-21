@@ -18,10 +18,11 @@ import type { TaskRepository } from '../../../../../src/services/persistence/Tas
  *   write, with no scan in between. The write still lands on its own row.
  *
  * Flow effects run inside the executor, after the completion scan. The
- * effects of a fire on its own row (create-next / create-generated, then
- * strip-flow) are one write, `applyToTask`; their B puts the outside edit
- * between that scan and that one write, by wrapping it. A move still writes
- * effect by effect, and its B wraps the method of the effect it targets.
+ * effects of a fire in its own file (the next instance, then the strip, the
+ * removal or the move to the end) are one write, `applyToTask`; their B puts
+ * the outside edit between that scan and that one write, by wrapping it. A
+ * move to another file writes the destination first (`appendTaskWithChildren`)
+ * and then the source's one write, and its B wraps the one it targets.
  *
  * The last block is the note whose rows read alike: after an outside edit,
  * the row named cannot be told from its twin, and the write is refused with
@@ -274,14 +275,15 @@ describe('3. deleteTaskFromFile', () => {
         expect(Notice.messages).toEqual([]);
     });
 
-    it('B: a line written above between the archive and the delete-original does not move the delete', async () => {
+    it('B: a line written above between the archive and the removal of the original does not move the removal', async () => {
         const { contents, session } = await open({
             [FILE]: NOTE('- [ ] 対象 @2026-09-21 ==> move([[archive]])', '\t- [ ] 子 @2026-09-21'),
             [ARCHIVE]: ['# archive', ''],
         });
         const held = { above: idOf(session, '上'), below: idOf(session, '下') };
 
-        editBefore(session, 'deleteTaskFromFile', () => writeOutside(contents, 1));
+        // The removal of the original is the source's one write (applyToTask).
+        editBefore(session, 'applyToTask', () => writeOutside(contents, 1));
         await check(session, idOf(session, '対象'));
         await flowSettled(session, ARCHIVE);
 

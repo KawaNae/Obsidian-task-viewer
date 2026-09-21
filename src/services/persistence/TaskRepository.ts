@@ -3,9 +3,8 @@ import type { DuplicateOptions, Task } from '../../types';
 import { FileOperations } from './utils/FileOperations';
 import { InlineTaskWriter } from './writers/InlineTaskWriter';
 import { FrontmatterWriter } from './writers/FrontmatterWriter';
-import { TaskCloner, type GeneratedChild, type InPlaceCopyLines } from './TaskCloner';
+import { TaskCloner, type InPlaceCopyLines } from './TaskCloner';
 import type { PropertyOp } from './PropertyUpdatePlanner';
-import type { FlowInstanceInsert } from './FlowInstanceLines';
 import { WriteObserver } from './WriteObserver';
 import type { EditorLine, WriteOutcome } from '../../utils/FileLines';
 import type { WriteTarget } from './TaskRefs';
@@ -60,20 +59,20 @@ export class TaskRepository {
     }
 
     /** @returns whether the task's lines were removed (see InlineTaskWriter). */
-    async deleteTaskFromFile(task: Task, moved?: { to: string }): Promise<boolean> {
-        return this.inlineWriter.deleteTaskFromFile(task, moved);
+    async deleteTaskFromFile(task: Task): Promise<boolean> {
+        return this.inlineWriter.deleteTaskFromFile(task);
     }
 
     /**
      * Everything one operation does to one row, as one write
      * (see {@link InlineTaskWriter.applyToTask}).
      */
-    async applyToTask(target: WriteTarget, ops: readonly TaskOp[]): Promise<WriteOutcome> {
-        return this.inlineWriter.applyToTask(target, ops);
-    }
-
-    async stripFlow(task: Task): Promise<void> {
-        return this.inlineWriter.stripFlow(task);
+    async applyToTask(
+        target: WriteTarget,
+        ops: readonly TaskOp[],
+        opts: { tellRefusal?: boolean } = {},
+    ): Promise<WriteOutcome> {
+        return this.inlineWriter.applyToTask(target, ops, opts);
     }
 
     async insertLineAfterTask(task: Task, lineContent: string): Promise<number> {
@@ -96,8 +95,9 @@ export class TaskRepository {
         return this.inlineWriter.appendTaskToFile(filePath, content);
     }
 
-    async appendTaskWithChildren(destPath: string, content: string, task: Task): Promise<void> {
-        return this.inlineWriter.appendTaskWithChildren(destPath, content, task);
+    /** @returns whether the destination was written (see InlineTaskWriter). */
+    async appendTaskWithChildren(destPath: string, content: string, source: WriteTarget): Promise<boolean> {
+        return this.inlineWriter.appendTaskWithChildren(destPath, content, source);
     }
 
     // --- Heading and frontmatter writes ---
@@ -127,21 +127,4 @@ export class TaskRepository {
         return this.cloner.duplicateInlineTaskInPlace(task, copies);
     }
 
-    async insertRecurrenceForTask(task: Task, content: string, flowLines: string[] = []): Promise<void> {
-        return this.cloner.insertRecurrenceForTask(task, content, flowLines);
-    }
-
-    /**
-     * Write the next instance from a gen block's output. See
-     * {@link TaskCloner.insertGeneratedInstance} for what the caller owes and
-     * what this layer decides.
-     */
-    async insertGeneratedInstance(
-        task: Task,
-        parentLine: string,
-        flowLines: string[],
-        children: GeneratedChild[],
-    ): Promise<void> {
-        return this.cloner.insertGeneratedInstance(task, parentLine, flowLines, children);
-    }
 }
