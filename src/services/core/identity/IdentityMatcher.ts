@@ -27,6 +27,9 @@ export interface MatchResult {
      * guess as which line the other one got. So is a row paired later — by
      * a weaker rung, or in the second pass — with a line position left over in
      * such a bucket: that the line was left over is where the guess went.
+     * And so is every row paired inside the children of a row position
+     * decided: which parent's scope a child was looked for in is the guess
+     * again, however unique the child is there.
      *
      * A scan does not read this — for identity, a guess by position is the
      * documented best it can do. A write does (see `TaskScanner.locate`):
@@ -104,7 +107,8 @@ export function matchFile(
     // every row of the file, children included, so each task is either paired
     // or newly written and both pools come out empty. They run all the same,
     // because rung 0 usually has nothing to say.
-    const scopes: Array<{ prev: LedgerEntry[]; cur: Task[] }> = [{ prev: prevRoots, cur: roots }];
+    // `among` is carried down from a parent pair position decided.
+    const scopes: Array<{ prev: LedgerEntry[]; cur: Task[]; among?: number }> = [{ prev: prevRoots, cur: roots }];
 
     while (scopes.length > 0) {
         const scope = scopes.pop()!;
@@ -118,6 +122,11 @@ export function matchFile(
             leftByPosition,
         );
         for (const [entry, among] of byPosition) guessed.set(entry.runtimeId, among);
+        if (scope.among !== undefined) {
+            for (const [entry] of pairs) {
+                if (!guessed.has(entry.runtimeId)) guessed.set(entry.runtimeId, scope.among);
+            }
+        }
         for (const [entry, task] of pairs) {
             pairedWith.set(task, entry);
             matchedPrev.add(entry.runtimeId);
@@ -126,6 +135,7 @@ export function matchFile(
             scopes.push({
                 prev: prevChildren.get(entry.runtimeId) ?? [],
                 cur: childrenOf.get(task) ?? [],
+                among: guessed.get(entry.runtimeId),
             });
         }
     }
