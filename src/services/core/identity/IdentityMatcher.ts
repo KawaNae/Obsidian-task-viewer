@@ -1,7 +1,7 @@
 import type { Task } from '../../../types';
 import type { Fingerprint } from './IdentityFingerprint';
 import { fingerprintOf } from './IdentityFingerprint';
-import type { HintResolution, PendingHint } from './IdentityHints';
+import type { HintEvidence, HintResolution } from './IdentityHints';
 import { resolveHints } from './IdentityHints';
 import type { LedgerEntry } from './IdentityLedger';
 
@@ -46,7 +46,7 @@ export function matchFile(
     previous: LedgerEntry[],
     tasks: Task[],
     mintRuntimeId: (task: Task) => string,
-    pending: readonly PendingHint[] = []
+    hints?: HintEvidence,
 ): MatchResult {
     const fingerprints = new Map<Task, Fingerprint>();
     for (const task of tasks) {
@@ -64,7 +64,9 @@ export function matchFile(
     const matchedPrev = new Set<string>();
 
     // --- rung 0: what our own writes said, when the file bears exactly one of them out ---
-    const resolution = resolveHints(previous, ordered, pending);
+    const resolution: HintResolution = hints
+        ? resolveHints(previous, ordered, hints)
+        : { consumed: 0, rows: null };
     const consumedHints = resolution.consumed;
     const hinted = settleHints(resolution, previous, ordered);
     for (const [entry, task] of hinted.pairs) {
@@ -477,14 +479,14 @@ export interface GuardedMatch {
  * itself learns to repeat an ID.
  */
 export function matchWithoutRepeatedIds(
-    run: (pending: readonly PendingHint[]) => MatchResult,
-    pending: readonly PendingHint[],
+    run: (hints: HintEvidence) => MatchResult,
+    hints: HintEvidence,
 ): GuardedMatch {
-    const result = run(pending);
-    if (pending.length === 0 || !repeatsAnId(result.entries)) {
+    const result = run(hints);
+    if (hints.pending.length === 0 || !repeatsAnId(result.entries)) {
         return { result, withoutClaims: false };
     }
-    return { result: run([]), withoutClaims: true };
+    return { result: run({ ...hints, pending: [] }), withoutClaims: true };
 }
 
 function repeatsAnId(entries: readonly LedgerEntry[]): boolean {

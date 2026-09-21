@@ -176,9 +176,10 @@ export class WriteClaims {
                 : { runtimeId: this.mintRuntimeId(path, row.parserId), created: true, text: row.text, line: row.line });
         }
 
-        this.bases.set(path, { content: contentKeyOf(after), rows });
+        const content = contentKeyOf(after);
+        this.bases.set(path, { content, rows });
         return {
-            hint: { rows: rows.map(row => ({ runtimeId: row.runtimeId, created: row.created, text: row.text })) },
+            hint: { content, rows: rows.map(row => ({ runtimeId: row.runtimeId, created: row.created, text: row.text })) },
             withdraw,
         };
     }
@@ -256,8 +257,11 @@ export class WriteClaims {
      * copy would be claimed as the original with every text lining up, and a
      * scan comparing whole contents would adopt it.
      *
-     * A file no scan has committed has no ledger content, and gets no claim:
-     * nothing says what it read.
+     * A file no scan has committed has no ledger content, and no rows either —
+     * the start-up scan skips a note with no list items, so this is every such
+     * note until something writes to it. Nothing there has a name anyone holds,
+     * so there is nothing a claim could hand to the wrong line: every row the
+     * write finds is new, and it builds on no rows at all.
      */
     private baseFor(path: string, before: readonly string[]): ClaimBase[] | null {
         const current = contentKeyOf(before);
@@ -268,6 +272,7 @@ export class WriteClaims {
         }
 
         const ledger = this.ledgerState(path);
+        if (ledger.content === null) return ledger.rows.length === 0 ? [] : null;
         if (ledger.content === current && fits(ledger.rows, before)) return ledger.rows;
 
         return null;

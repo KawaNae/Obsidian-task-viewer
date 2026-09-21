@@ -235,13 +235,17 @@ export class TaskScanner {
         const now = Date.now();
         const previousRows = this.ledger.snapshotFor(file.path);
         const guarded = matchWithoutRepeatedIds(
-            claims => matchFile(
+            hints => matchFile(
                 previousRows,
                 parsed.tasks,
                 task => TaskIdGenerator.mintRuntimeId(task, () => this.ledger.mint()),
-                claims,
+                hints,
             ),
-            this.hints.pendingFor(file.path, now),
+            {
+                pending: this.hints.pendingFor(file.path, now),
+                before: this.ledger.contentFor(file.path),
+                read: readKey,
+            },
         );
         if (guarded.withoutClaims) {
             // The log said something no file can be: one row on two lines. What
