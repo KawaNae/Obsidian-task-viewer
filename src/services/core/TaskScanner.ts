@@ -480,7 +480,33 @@ export class TaskScanner {
         const among = result.guessed.get(ref.runtimeId);
         if (among !== undefined) return { kind: 'ambiguous', count: among };
         const at = parsed.tasks.find(task => result.mapping.get(task.id) === ref.runtimeId);
-        return at ? { kind: 'at', line: at.line, edited: edited(at.line) } : { kind: 'gone' };
+        if (!at) return { kind: 'gone' };
+        return this.againstLastWrite(path, lines, at.line, ref) ?? { kind: 'at', line: at.line, edited: edited(at.line) };
+    }
+
+    /**
+     * A match made while a write of ours has landed since the last scan,
+     * checked against what that write left.
+     *
+     * The ladder pairs by the texts the ledger holds, and the ledger is known
+     * to be older than our last write (see `WriteClaims.stateFor`). A row that
+     * write changed is looked for under the text it no longer has, and one
+     * whose text it handed to another row comes out on that row's line. What
+     * the write left is the newest record there is, so the line has to read as
+     * the target's text there, and as no other row's — else the pairing rests
+     * on a text that has since moved. A write that could not say what it left
+     * leaves nothing to check against, and the answer is `changed` as well.
+     *
+     * Null when there is nothing to object to.
+     */
+    private againstLastWrite(path: string, lines: readonly string[], line: number, ref: TaskRef): Located | null {
+        if (!this.claims.writtenSinceScan(path)) return null;
+        const left = this.claims.rowsLeft(path);
+        const text = lines[line].trimStart();
+        const holders = left?.filter(row => row.text.trimStart() === text) ?? [];
+        if (!holders.some(row => row.runtimeId === ref.runtimeId)) return { kind: 'at', line, edited: true };
+        if (holders.length > 1) return { kind: 'ambiguous', count: holders.length };
+        return null;
     }
 
     /**

@@ -214,6 +214,15 @@ export class WriteClaims {
     }
 
     /**
+     * Whether a write of ours has landed on this file since its last scan
+     * committed — described or not. While one has, the ledger is known to be
+     * at least one write old (see {@link stateFor}).
+     */
+    writtenSinceScan(path: string): boolean {
+        return this.bases.has(path);
+    }
+
+    /**
      * Forget what this file's last write left.
      *
      * Called when a scan of the file commits, whatever it decided, and when the

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { writeBench, FILE } from '../helpers/writeBench';
+import { writeBench, FILE, type WriteBench } from '../helpers/writeBench';
 import type { Task } from '../../../src/types';
 
 /**
@@ -7,9 +7,9 @@ import type { Task } from '../../../src/types';
  * `TaskScanner.locate` where it stands).
  *
  * Each case pins the behaviour a write should have. N1, R4 and B1 were found
- * open on F2's first cut and closed in it; X1 is older than F2 (the ladder
- * pairing a stale ledger after our own rename) and stays `it.skip` until the
- * matcher's side takes it up. "Before F2" comments are inferred by reading
+ * open on F2's first cut and closed in it. X1 (older than F2: the ladder
+ * pairing a stale ledger after our own rename) and the second run's S1 and S2
+ * were closed after fe42086e; S2c, the scan's side of S2, stays `it.skip`. "Before F2" comments are inferred by reading
  * `FileOperations.findTaskLineNumber` at 0c20c7f4, not run.
  */
 
@@ -192,8 +192,11 @@ describe('F2-counter: own writes and outside edits interleaved', () => {
     // refreshed) lands on X.
     // Before F2 (inferred): the first exact match for Y's text is X's line ->
     // the same wrong line. Not opened by F2.
-    // Correct: gone (Y's line was deleted).
-    it.skip('X1: a write on a row deleted from outside does not land on the row our own write renamed to its text', async () => {
+    // Closed on the second run: our last write left two rows reading that
+    // text, so the pairing rests on a text that is not Y's alone
+    // (`TaskScanner.againstLastWrite`). Refused as ambiguous rather than gone:
+    // from the file alone, either of the two may be the one deleted.
+    it('X1: a write on a row deleted from outside does not land on the row our own write renamed to its text', async () => {
         const bench = await writeBench(['- [ ] A', '- [ ] B', '- [ ] C']);
         const x = bench.taskAt(0);
         const y = bench.taskAt(1);
@@ -204,7 +207,7 @@ describe('F2-counter: own writes and outside edits interleaved', () => {
 
         expect(written).toBe(false);
         expect(bench.lines()).toEqual(['- [ ] B', '- [ ] C']);
-        expect(bench.refused.map(r => r.reason.kind)).toEqual(['gone']);
+        expect(bench.refused.map(r => r.reason.kind)).toEqual(['ambiguous']);
     });
 
     it('a scan that read before the write and committed after it: the next write still finds the second of two identical rows', async () => {
@@ -327,5 +330,143 @@ describe('F2-counter: editor-driven writes', () => {
         await bench.writer.deleteLine(FILE, { line: 1, text: '- [ ] A' });
         await bench.scan();
         expect(bench.tasks().map(t => t.id)).toEqual([ids[0], ids[2]]);
+    });
+});
+
+// Second run, on fe42086e. S1 and S2 were open; both predate F2 (inferred:
+// the stored line reads the target's text in S1, and in S2 the first exact
+// match is the other row). S2c, the scan's side of S2, stays open.
+describe('F2-counter2: a guess by position one level up', () => {
+    // SHAPE S1 (wrong line). Identical parents pair by position and are
+    // `guessed`, but each one opens its children's scope, where the one `c`
+    // pairs on text and came out `at`. Which parent's scope a child was looked
+    // for in is the same guess, so the child is `guessed` too.
+    const before = [
+        '- [ ] p',
+        '\t- [ ] c',
+        '\t\t- [ ] g1',
+        '- [ ] p',
+        '\t- [ ] c',
+        '\t\t- [ ] g2',
+    ];
+
+    it('S1a: subtrees swapped from outside: the delete of c1 takes neither c and g', async () => {
+        const bench = await writeBench(before);
+        const c1 = bench.taskAt(1);
+        const swapped = ['- [ ] p', '\t- [ ] c', '\t\t- [ ] g2', '- [ ] p', '\t- [ ] c', '\t\t- [ ] g1'];
+        bench.edit(swapped);
+        expect(await bench.writer.deleteTaskFromFile(c1)).toBe(false);
+        expect(bench.lines()).toEqual(swapped);
+        expect(bench.refused.map(r => r.reason.kind)).toEqual(['ambiguous']);
+    });
+
+    it('S1b: the first subtree deleted from outside: a delete of c1 does not take c2', async () => {
+        const bench = await writeBench(before);
+        const c1 = bench.taskAt(1);
+        bench.edit(before.slice(3));
+        expect(await bench.writer.deleteTaskFromFile(c1)).toBe(false);
+        expect(bench.lines()).toEqual(before.slice(3));
+        expect(bench.refused.map(r => r.reason.kind)).toEqual(['ambiguous']);
+    });
+
+    it('S1c: the same, an update', async () => {
+        const bench = await writeBench(before);
+        const c1 = bench.taskAt(1);
+        bench.edit(before.slice(3));
+        expect(await bench.writer.updateTaskInFile(c1, checked(c1))).toBe(false);
+        expect(bench.lines()).toEqual(before.slice(3));
+    });
+
+    it('S1d: children that differ under swapped identical parents: refused, b untouched', async () => {
+        // Not written on a's own line either: in the guessed scope the ladder's
+        // last rung pairs a with b on the shared (empty) date, and the answer is
+        // a guess either way (availability, not a wrong line).
+        const bench = await writeBench(['- [ ] p', '\t- [ ] a', '- [ ] p', '\t- [ ] b']);
+        const a = bench.taskAt(1);
+        bench.edit(['- [ ] p', '\t- [ ] b', '- [ ] p', '\t- [ ] a']);
+        expect(await bench.writer.updateTaskInFile(a, checked(a))).toBe(false);
+        expect(bench.lines()).toEqual(['- [ ] p', '\t- [ ] b', '- [ ] p', '\t- [ ] a']);
+    });
+});
+
+describe('F2-counter2: two own writes trade the texts of two rows, then an unreported change', () => {
+    // SHAPE S2 (wrong line; X1's root with no outside delete). The change
+    // leaves the last write's base and every claim unusable, so `locate` goes
+    // to the ladder, which pairs by the ledger from before both writes: each
+    // name lands on the other's line, reading a text on record for it. The
+    // last write's rows are newer than the ledger, and the line has to read as
+    // the target's text there (`TaskScanner.againstLastWrite`).
+    const traded = async (): Promise<{ bench: WriteBench; x: Task }> => {
+        const bench = await writeBench(['- [ ] A', '- [x] A']);
+        const x = bench.taskAt(0);
+        const y = bench.taskAt(1);
+        expect(await bench.writer.updateTaskInFile(x, checked(x))).toBe(true);
+        expect(await bench.writer.updateTaskInFile(y, { ...y, statusChar: ' ' })).toBe(true);
+        expect(bench.lines()).toEqual(['- [x] A', '- [ ] A']);
+        return { bench, x };
+    };
+
+    it('S2a: after the plugin\'s own frontmatter write, a delete of X is refused, not taken from Y', async () => {
+        const { bench, x } = await traded();
+        await bench.repo.setFrontmatterKeys(FILE, { color: 'red' });
+        const after = bench.lines();
+        expect(await bench.writer.deleteTaskFromFile(x)).toBe(false);
+        expect(bench.lines()).toEqual(after);
+        expect(bench.refused.map(r => r.reason.kind)).toEqual(['changed']);
+    });
+
+    it('S2b: the same after a line appended from outside', async () => {
+        const { bench, x } = await traded();
+        bench.edit(['- [x] A', '- [ ] A', 'メモ']);
+        expect(await bench.writer.deleteTaskFromFile(x)).toBe(false);
+        expect(bench.lines()).toEqual(['- [x] A', '- [ ] A', 'メモ']);
+        expect(bench.refused.map(r => r.reason.kind)).toEqual(['changed']);
+    });
+
+    it('S2d: the same with renames (X to B, Y to A)', async () => {
+        const bench = await writeBench(['- [ ] A', '- [ ] B']);
+        const x = bench.taskAt(0);
+        const y = bench.taskAt(1);
+        await bench.writer.updateTaskInFile(x, { ...x, content: 'B', originalText: '- [ ] B' });
+        await bench.writer.updateTaskInFile(y, { ...y, content: 'A', originalText: '- [ ] A' });
+        expect(bench.lines()).toEqual(['- [ ] B', '- [ ] A']);
+        bench.edit(['- [ ] B', '- [ ] A', 'メモ']);
+        expect(await bench.writer.deleteTaskFromFile(x)).toBe(false);
+        expect(bench.lines()).toEqual(['- [ ] B', '- [ ] A', 'メモ']);
+    });
+
+    it('with the last write borne out, the same writes still land (stage 2)', async () => {
+        const { bench, x } = await traded();
+        expect(await bench.writer.deleteTaskFromFile(x)).toBe(true);
+        expect(bench.lines()).toEqual(['- [ ] A']);
+    });
+
+    it('a write that could not say what it left: later writes are refused until a scan (availability)', async () => {
+        // The first write goes through the ladder (the outside line leaves no
+        // state on record) and lands, but its claim has no base to build on,
+        // so the file is silent: the ledger is older than a write nothing
+        // describes. The second write has nothing newer to check against.
+        const bench = await writeBench(['- [ ] A', '- [ ] B']);
+        const a = bench.taskAt(0);
+        const b = bench.taskAt(1);
+        bench.edit(['メモ', '- [ ] A', '- [ ] B']);
+        expect(await bench.writer.updateTaskInFile(a, checked(a))).toBe(true);
+        expect(await bench.writer.updateTaskInFile(b, checked(b))).toBe(false);
+        expect(bench.refused.map(r => r.reason.kind)).toEqual(['changed']);
+        await bench.scan();
+        expect(await bench.writer.updateTaskInFile(bench.taskAt(2), checked(bench.taskAt(2)))).toBe(true);
+        expect(bench.lines()).toEqual(['メモ', '- [x] A', '- [x] B']);
+    });
+
+    // SHAPE S2c (wrong ID, open; downstream, not changed by F2). The scan
+    // after the outside line cannot adopt the claims either, and its ladder
+    // pairs by the same old ledger: X's name goes to the line Y's text is on.
+    // No claim is adopted, so it is the ladder's own guess, not a claim making
+    // it worse; F2 does not touch how a scan pairs. Reported, not closed here.
+    it.skip('S2c: the next scan keeps X on the first line', async () => {
+        const { bench, x } = await traded();
+        bench.edit(['- [x] A', '- [ ] A', 'メモ']);
+        await bench.scan();
+        expect(bench.taskAt(0).id).toBe(x.id);
     });
 });
