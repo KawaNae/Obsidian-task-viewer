@@ -543,6 +543,28 @@ describe('8. appendTaskWithChildren (a move archiving its subtree)', () => {
     });
 });
 
+describe('8. a move to another file whose source is refused after the archive', () => {
+    it('C: the task is in both files, and one notice says so with the reason', async () => {
+        const { contents, session } = await open({
+            [FILE]: NOTE('- [ ] 対象 @2026-09-21 ==> move([[archive]])', '\t- [ ] 子 @2026-09-21'),
+            [ARCHIVE]: ['# archive', ''],
+        });
+
+        // The fired row is rewritten from outside once the archive has landed,
+        // before the source's one write.
+        editBefore(session, 'applyToTask', () => contents.set(FILE, contents.get(FILE)!
+            .replace('- [x] 対象 @2026-09-21 ==> move([[archive]])', '- [x] 対象 @2026-09-21 書き足し ==> move([[archive]])')));
+        await check(session, idOf(session, '対象'));
+        await flowSettled(session, ARCHIVE);
+
+        expect(contents.get(ARCHIVE)).toBe(['# archive', '- [x] 対象 @2026-09-21', '\t- [ ] 子 @2026-09-21'].join('\n'));
+        expect(contents.get(FILE)).toContain('書き足し');
+        expect(Notice.messages).toEqual([t('notice.moveOriginKept', {
+            dest: 'archive', reason: t('notice.moveOriginChanged'), subject: '対象',
+        })]);
+    });
+});
+
 // ─── 9. duplicateInlineTask ──────────────────────────────────────────
 
 describe('9. duplicateInlineTask (a copy on another day)', () => {
