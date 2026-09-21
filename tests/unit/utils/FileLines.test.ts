@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { TFile } from 'obsidian';
-import { appendLines, joinLines, processLines, recordEdits, splitLines } from '../../../src/utils/FileLines';
+import { appendLines, joinLines, processLines, recordEdits, replayEdits, splitLines } from '../../../src/utils/FileLines';
 import type { LineEdit, Located, Refusal, TaskRef, WriteChannel } from '../../../src/utils/FileLines';
 
 /**
@@ -625,5 +625,74 @@ describe('LineEdits.splice', () => {
             { kind: 'removed', at: 1, count: 1 },
             { kind: 'inserted', at: 1, count: 1 },
         ]);
+    });
+});
+
+describe('LineEdits.carry', () => {
+    // A splice puts in new lines only. A move within one file puts a line in
+    // at the end and takes it away from where it stood, and without a way to
+    // say "this is that line" the report calls the moved row new.
+
+    it('says the carried line is the one it was, wherever it lands', () => {
+        const lines = ['a', 'row', 'child', 'b'];
+        const { edits, reported } = recordEdits(lines);
+
+        edits.carry(4, [{ from: 1, text: 'row, archived' }, { from: 2, text: 'child' }]);
+        edits.splice(1, 2);
+
+        expect(lines).toEqual(['a', 'b', 'row, archived', 'child']);
+        const replayed = replayEdits(4, reported);
+        expect(replayed?.origin).toEqual([0, 3, 1, 2]);
+        // Only the line whose text changed is reported rewritten.
+        expect(replayed?.rewritten).toEqual([false, false, true, false]);
+    });
+
+    it('reads its source before the lines move under it', () => {
+        const lines = ['row', 'a'];
+        const { edits, reported } = recordEdits(lines);
+
+        // The source stands past `at`, so the insert moves it down by one.
+        edits.carry(0, [{ from: 1, text: 'a' }]);
+        edits.splice(2, 1);
+
+        expect(lines).toEqual(['a', 'row']);
+        expect(replayEdits(2, reported)?.origin).toEqual([1, 0]);
+        expect(reported.some(edit => edit.kind === 'replaced')).toBe(false);
+    });
+
+    it('is not a report a file could follow while the source still stands', () => {
+        // One line in two places would give one name to two rows.
+        const lines = ['a', 'row'];
+        const { edits, reported } = recordEdits(lines);
+
+        edits.carry(2, [{ from: 1, text: 'row' }]);
+
+        expect(replayEdits(2, reported)).toBeNull();
+    });
+
+    it('is not a report a file could follow from a line that is not there', () => {
+        const lines = ['a'];
+        const { edits, reported } = recordEdits(lines);
+
+        edits.carry(1, [{ from: 5, text: 'x' }]);
+
+        expect(replayEdits(1, reported)).toBeNull();
+    });
+
+    it('files a claim for a move that took its source away, and none for one that did not', async () => {
+        for (const takeAway of [true, false]) {
+            const h = harness('a\nrow\nb\n');
+            const log = writeSink();
+
+            await processLines(h.app, h.file, (lines, _eol, { edits }) => {
+                edits.splice(3, 1);
+                edits.carry(3, [{ from: 1, text: 'row, moved' }]);
+                if (takeAway) edits.splice(1, 1);
+                return lines;
+            }, log.channel);
+
+            expect(h.text()).toBe(takeAway ? 'a\nb\nrow, moved' : 'a\nrow\nb\nrow, moved');
+            expect(log.standing()).toHaveLength(takeAway ? 1 : 0);
+        }
     });
 });

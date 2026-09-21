@@ -83,7 +83,9 @@ export function appendLines(lines: string[], body: string[], edits?: LineEdits):
 export type LineEdit =
     | { kind: 'replaced'; at: number }
     | { kind: 'inserted'; at: number; count: number }
-    | { kind: 'removed'; at: number; count: number };
+    | { kind: 'removed'; at: number; count: number }
+    /** Lines put in at `at`, each the line then standing at `from[i]`, moved. */
+    | { kind: 'carried'; at: number; from: number[] };
 
 /**
  * What a write tells the index it did, so the next scan can be told which line
@@ -103,10 +105,10 @@ export type LineEdit =
  * matching the text. So `replaced` means: this line still belongs to the same
  * task as before.
  *
- * There are only these two, and a splice is the only way to add or remove a
- * line. A writer that could say "three lines went in at 7" beside a splice that
- * put them at 6 is a writer that can be wrong about the one thing this
- * mechanism exists to get right.
+ * There are only these, and a splice or a carry is the only way to add or
+ * remove a line. A writer that could say "three lines went in at 7" beside a
+ * splice that put them at 6 is a writer that can be wrong about the one thing
+ * this mechanism exists to get right.
  */
 export interface LineEdits {
     /**
@@ -131,6 +133,24 @@ export interface LineEdits {
     splice(at: number, deleteCount: number, ...items: string[]): void;
     /** The line at `at` reads something else now, and is the same task. */
     replaced(at: number): void;
+    /**
+     * Put in at `at` lines that are lines already here, moved: each item is
+     * the line now standing at `from` (before this call), to read `text`
+     * where it lands.
+     *
+     * A splice cannot say this. Every line it puts in is a new line, so a
+     * write that moves a row by splicing it in below and away from above
+     * reports the row gone and a new one made — which is how a move within
+     * one file came to lose its task's identity. The carry says which line
+     * the moved one is, and the claim hands it that line's name.
+     *
+     * The source is left where it is; taking it away is a splice of its own,
+     * and a report in which one line still stands in two places is not one a
+     * file could follow (see {@link replayEdits}). A carried line that reads
+     * other than its source is reported {@link replaced} with it, from here,
+     * so the text a carry changes is always accounted for.
+     */
+    carry(at: number, items: ReadonlyArray<{ from: number; text: string }>): void;
 }
 
 /**
@@ -158,6 +178,17 @@ export function recordEdits(lines: string[]): { edits: LineEdits; reported: Line
             }
         },
         replaced: (at) => { reported.push({ kind: 'replaced', at }); },
+        carry: (at, items) => {
+            if (items.length === 0) return;
+            const start = spliceStart(lines.length, at);
+            // Read before the splice: a source at or past `start` moves with it.
+            const sources = items.map(item => lines[item.from]);
+            lines.splice(at, 0, ...items.map(item => item.text));
+            reported.push({ kind: 'carried', at: start, from: items.map(item => item.from) });
+            items.forEach((item, i) => {
+                if (item.text !== sources[i]) reported.push({ kind: 'replaced', at: start + i });
+            });
+        },
     };
     return { edits, reported };
 }
@@ -332,8 +363,8 @@ export interface LineOrigins {
  * Replay a write's report over a file of `beforeLength` lines.
  *
  * Answers null when the report does not describe anything a file could do —
- * an index outside the file, a removal running past the end. Callers treat
- * that the same as no report at all.
+ * an index outside the file, a removal running past the end, a line that ends
+ * up standing in two places. Callers treat that the same as no report at all.
  */
 export function replayEdits(beforeLength: number, edits: readonly LineEdit[]): LineOrigins | null {
     const origin: Array<number | null> = [];
@@ -361,7 +392,24 @@ export function replayEdits(beforeLength: number, edits: readonly LineEdit[]): L
                 origin.splice(edit.at, edit.count);
                 rewritten.splice(edit.at, edit.count);
                 break;
+            case 'carried': {
+                if (edit.at > origin.length) return null;
+                if (!edit.from.every(from => Number.isInteger(from) && from >= 0 && from < origin.length)) return null;
+                origin.splice(edit.at, 0, ...edit.from.map(from => origin[from]));
+                rewritten.splice(edit.at, 0, ...edit.from.map(from => rewritten[from]));
+                break;
+            }
         }
+    }
+
+    // A carry leaves its source standing until the write takes it away. One
+    // that is never taken away would give one line's name to two, and a claim
+    // built on that would hand the moved row's identity to its copy as well.
+    const seen = new Set<number>();
+    for (const from of origin) {
+        if (from === null) continue;
+        if (seen.has(from)) return null;
+        seen.add(from);
     }
 
     return { origin, rewritten };

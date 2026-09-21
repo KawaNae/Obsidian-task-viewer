@@ -112,13 +112,14 @@ describe.each([4, 3000])('a deletion fire at the head of its group (%i lines)', 
 });
 
 describe.each([4, 3000])('a same-file move (%i lines)', (fill) => {
-    // Not what this change is about: the move's delete files no claim, so its
-    // scan falls to the ladder, and where the ladder puts the moved line turns
-    // on how many task rows sit between the original and the copy (see
-    // structure.md). Pinned so that the answer stays what it was.
+    // The move is one write that carries the row to the end, and its claim
+    // says the moved line is the row that fired. Before F3 the delete was a
+    // write of its own that claimed nothing, the scan fell to the ladder, and
+    // the answer turned on how many task rows sat between the original and
+    // the copy: the moved line kept its ID at 4 lines and lost it at 3000.
     const move = `${TAB}- ==> move([[${FILE.replace(/\.md$/, '')}]])`;
 
-    it('mv-tail: the moved line ends up with the ID it ended up with before', async () => {
+    it('mv-tail: the moved line keeps its ID', async () => {
         const contents = new Map([[FILE, note([
             '- [ ] 見張り @2026-09-21', '- [ ] 移すタスク @2026-09-21', move,
         ], fill)]]);
@@ -132,11 +133,10 @@ describe.each([4, 3000])('a same-file move (%i lines)', (fill) => {
         const after = idsOf(live, '見張り', '移すタスク');
         expect(after.map(([content]) => content)).toEqual(['見張り', '移すタスク']);
         expect(after[0][1]).toBe(watcher);
-        if (fill <= 4) expect(after[1][1]).toBe(moving);
-        else expect(after[1][1]).not.toBe(moving);
+        expect(after[1][1]).toBe(moving);
     });
 
-    it('mv-twin: the twin and the moved line end up as they did before', async () => {
+    it('mv-twin: the twin keeps its row, and the moved line its ID', async () => {
         const contents = new Map([[FILE, note([
             '- [ ] 見張り @2026-09-21', '- [ ] 移すタスク @2026-09-21', move, '- [ ] 移すタスク @2026-09-21',
         ], fill)]]);
@@ -150,7 +150,6 @@ describe.each([4, 3000])('a same-file move (%i lines)', (fill) => {
         const after = idsOf(live, '見張り', '移すタスク');
         expect(after[0][1]).toBe(watcher);
         expect(after.slice(1).map(([, id]) => id)[0]).toBe(twin);
-        if (fill <= 4) expect(after[2][1]).toBe(moving);
-        else expect([moving, twin, watcher]).not.toContain(after[2][1]);
+        expect(after[2][1]).toBe(moving);
     });
 });

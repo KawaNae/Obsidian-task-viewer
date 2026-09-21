@@ -279,6 +279,25 @@ export class InlineTaskWriter {
                 edits.replaced(line);
                 return;
             }
+            case 'move-to-end': {
+                // The row and what goes with it are carried to the end — past
+                // the file's final terminator, where an append puts lines —
+                // and then its whole subtree is taken away from where it was.
+                // Everything is read before either: carrying to the end
+                // leaves every line above it where it is.
+                const [head, ...rest] = splitLines(op.text).lines;
+                const children = this.childrenToCarry(lines, line);
+                const { childrenLines } = this.fileOps.collectChildrenFromLines(lines, line);
+                const at = lines[lines.length - 1] === '' ? lines.length - 1 : lines.length;
+                edits.splice(at, lines.length - at);
+                edits.carry(at, [{ from: line, text: head }]);
+                // A line past the row's first is one the archive wrote, not
+                // one that was here.
+                if (rest.length > 0) edits.splice(at + 1, 0, ...rest);
+                edits.carry(at + 1 + rest.length, children);
+                edits.splice(line, 1 + childrenLines.length);
+                return;
+            }
             case 'remove': {
                 const { childrenLines } = this.fileOps.collectChildrenFromLines(lines, line);
                 edits.splice(line, 1 + childrenLines.length);
@@ -495,8 +514,11 @@ export class InlineTaskWriter {
      * them relative to the parent. Returns the children lines ready to append.
      * Shared by both the same-file (atomic) and cross-file paths of
      * `appendTaskWithChildren` so the collection logic lives in one place.
+     *
+     * Each comes with the index of the line it is made from: a move within one
+     * file carries them rather than copying them (see `LineEdits.carry`).
      */
-    private buildAdjustedChildren(lines: string[], currentLine: number): string[] {
+    private childrenToCarry(lines: string[], currentLine: number): Array<{ from: number; text: string }> {
 
         // Parent's original indentation prefix (preserves tabs/spaces)
         const parentIndent = lines[currentLine].match(/^\s*/)?.[0] ?? '';
@@ -505,9 +527,12 @@ export class InlineTaskWriter {
         // are NOT direct (structural-parent rule) and stay as templates.
         const flowAbs = new Set(collectFlowLineIndicesInFile(lines, currentLine));
         const { childrenLines } = this.fileOps.collectChildrenFromLines(lines, currentLine);
-        const kept = childrenLines.filter((_, i) => !flowAbs.has(currentLine + 1 + i));
-        const cleaned = this.fileOps.stripBlockIds(kept);
-        return FileOperations.adjustChildIndentation(cleaned, parentIndent);
+        const kept = childrenLines
+            .map((text, i) => ({ from: currentLine + 1 + i, text }))
+            .filter(child => !flowAbs.has(child.from));
+        const cleaned = this.fileOps.stripBlockIds(kept.map(child => child.text));
+        const adjusted = FileOperations.adjustChildIndentation(cleaned, parentIndent);
+        return kept.map((child, i) => ({ from: child.from, text: adjusted[i] }));
     }
 
     /**
@@ -540,7 +565,7 @@ export class InlineTaskWriter {
             await processLines(this.app, sourceFile, (lines, _eol, { edits, lineOf }) => {
                 const currentLine = lineOf(refOf(task), subjectOf(task));
                 if (currentLine === null) return null;
-                const adjustedChildren = this.buildAdjustedChildren(lines, currentLine);
+                const adjustedChildren = this.childrenToCarry(lines, currentLine).map(child => child.text);
                 appendLines(lines, [...splitLines(content).lines, ...adjustedChildren], edits);
                 return lines;
             }, this.writes?.for(task.file));
@@ -564,7 +589,7 @@ export class InlineTaskWriter {
                 channel?.refused({ file: task.file, reason, subject: subjectOf(task) });
                 return;
             }
-            adjustedChildren = this.buildAdjustedChildren(sourceLines, located.line);
+            adjustedChildren = this.childrenToCarry(sourceLines, located.line).map(child => child.text);
         }
 
         const fullContent = [content, ...adjustedChildren].join('\n');
