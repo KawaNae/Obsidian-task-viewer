@@ -7,7 +7,9 @@ import { TaskCloner, type GeneratedChild, type InPlaceCopyLines } from './TaskCl
 import type { PropertyOp } from './PropertyUpdatePlanner';
 import type { FlowInstanceInsert } from './FlowInstanceLines';
 import { WriteObserver } from './WriteObserver';
-import type { EditorLine } from '../../utils/FileLines';
+import type { EditorLine, WriteOutcome } from '../../utils/FileLines';
+import type { WriteTarget } from './TaskRefs';
+import type { TaskOp } from './TaskOps';
 
 /**
  * TaskRepository - タスクのファイル操作を統括するファサードクラス
@@ -68,6 +70,14 @@ export class TaskRepository {
      */
     async replaceTaskWithInstances(task: Task, inserts: FlowInstanceInsert[]): Promise<boolean> {
         return this.inlineWriter.replaceTaskWithInstances(task, inserts);
+    }
+
+    /**
+     * Everything one operation does to one row, as one write
+     * (see {@link InlineTaskWriter.applyToTask}).
+     */
+    async applyToTask(target: WriteTarget, ops: readonly TaskOp[]): Promise<WriteOutcome> {
+        return this.inlineWriter.applyToTask(target, ops);
     }
 
     async stripFlow(task: Task): Promise<void> {

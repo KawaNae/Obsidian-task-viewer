@@ -17,9 +17,11 @@ import type { TaskRepository } from '../../../../../src/services/persistence/Tas
  * - B: a line is written above the target by something else just before the
  *   write, with no scan in between. The write still lands on its own row.
  *
- * Flow effects run inside the executor, after the completion scan; their B
- * puts the outside edit between that scan and the effect's own write, by
- * wrapping the repository method the effect calls.
+ * Flow effects run inside the executor, after the completion scan. The
+ * effects of a fire on its own row (create-next / create-generated, then
+ * strip-flow) are one write, `applyToTask`; their B puts the outside edit
+ * between that scan and that one write, by wrapping it. A move still writes
+ * effect by effect, and its B wraps the method of the effect it targets.
  *
  * The last block is the note whose rows read alike: after an outside edit,
  * the row named cannot be told from its twin, and the write is refused with
@@ -199,18 +201,22 @@ describe('2. stripFlow (a completion consuming its command)', () => {
         expect(Notice.messages).toEqual([]);
     });
 
-    it('B: a line written above between the next instance and the strip does not move the strip', async () => {
+    it('B: a line written above just before the fire\'s write does not move the strip off the row', async () => {
+        // The fire is one write, so the outside line lands before both the
+        // next instance and the strip. It is a sibling at the head of the
+        // fired row's group, so the next instance goes in above it; the strip
+        // still rewrites the row that fired.
         const { contents, session } = await open({ [FILE]: NOTE('- [ ] 対象 @2026-09-21 ==> every mon') });
         const held = { above: idOf(session, '上'), target: idOf(session, '対象'), below: idOf(session, '下') };
 
-        editBefore(session, 'stripFlow', () => writeOutside(contents, 1));
+        editBefore(session, 'applyToTask', () => writeOutside(contents, 1));
         await check(session, held.target);
         await flowSettled(session);
 
         expect(contents.get(FILE)).toBe([
             '# note',
-            OUTSIDE,
             '- [ ] 対象 @2026-09-28 ==> every mon',
+            OUTSIDE,
             '- [ ] 上 @2026-09-21',
             '- [x] 対象 @2026-09-21',
             '- [ ] 下 @2026-09-21',
@@ -218,6 +224,7 @@ describe('2. stripFlow (a completion consuming its command)', () => {
         ].join('\n'));
         const after = rows(session);
         expect(after.map(row => row.id).slice(2)).toEqual([held.above, held.target, held.below]);
+        expect(Object.values(held)).not.toContain(after[0].id);
         expect(Notice.messages).toEqual([]);
     });
 });
@@ -630,11 +637,13 @@ describe('11. insertRecurrenceForTask (create-next)', () => {
         expect(Notice.messages).toEqual([]);
     });
 
-    it('B: a line written above just before the insert does not move it off the group', async () => {
+    it('B: a line written above just before the fire\'s write does not move the insert off the group', async () => {
+        // The outside line is a sibling at the head of the group when the one
+        // write reads the file, so the next instance goes in above it.
         const { contents, session } = await open({ [FILE]: NOTE('- [ ] 対象 @2026-09-21', '\t- ==> every mon') });
         const held = { above: idOf(session, '上'), target: idOf(session, '対象'), below: idOf(session, '下') };
 
-        editBefore(session, 'insertRecurrenceForTask', () => writeOutside(contents, 1));
+        editBefore(session, 'applyToTask', () => writeOutside(contents, 1));
         await check(session, held.target);
         await flowSettled(session);
 
@@ -685,12 +694,14 @@ describe('12. insertGeneratedInstance (create-generated)', () => {
         expect(Notice.messages).toEqual([]);
     });
 
-    it('B: a line written above just before the insert does not move it off the group', async () => {
+    it('B: a line written above just before the fire\'s write does not move the insert off the group', async () => {
+        // As in 11: the outside line heads the group when the one write reads
+        // the file, and the block's instance goes in above it.
         const { contents, session } = await open({ [FILE]: SOURCE() });
         const held = { above: idOf(session, '上'), target: idOf(session, '対象'), below: idOf(session, '下') };
         const child = idOf(session, '元の子');
 
-        editBefore(session, 'insertGeneratedInstance', () => writeOutside(contents, 1));
+        editBefore(session, 'applyToTask', () => writeOutside(contents, 1));
         await check(session, held.target);
         await flowSettled(session);
 
@@ -752,7 +763,7 @@ describe('twins after an outside edit: refused, with one notice', () => {
         const { contents, session } = await open({ [FILE]: TWINS('- [ ] 子 @2026-09-21 ==> every mon') });
         const second = rows(session)[2].id;
 
-        editBefore(session, 'insertRecurrenceForTask', () => {
+        editBefore(session, 'applyToTask', () => {
             contents.set(FILE, contents.get(FILE)!.replace('\t- [ ] 子', '\t- [x] 子'));
             writeOutside(contents, 1);
         });
@@ -764,8 +775,8 @@ describe('twins after an outside edit: refused, with one notice', () => {
             '\t- [x] 子 @2026-09-21 ==> every mon', '\t- [x] 子 @2026-09-21 ==> every mon',
             '- [ ] 下 @2026-09-21', '',
         ].join('\n'));
-        // Measured: each effect is refused on its own — create-next, then
-        // strip-flow — and each says so once.
-        expect(Notice.messages).toEqual([ambiguous('子'), ambiguous('子')]);
+        // The fire (create-next and strip-flow) is one write, refused once,
+        // and it says so once.
+        expect(Notice.messages).toEqual([ambiguous('子')]);
     });
 });
