@@ -39,6 +39,11 @@ export interface MatchResult {
  * because a claim names a runtime ID outright — there is no bucket for it to be
  * ambiguous in.
  *
+ * `evidence` is not optional. A caller with no claims to weigh says so with an
+ * empty `pending`; a caller that could simply leave it out would be one that
+ * forgot the claims, and the file would fall to the ladder without anyone
+ * noticing.
+ *
  * Pure and deterministic: no clock, no randomness, no I/O. Minting is the caller's,
  * through `mintRuntimeId`.
  */
@@ -46,7 +51,7 @@ export function matchFile(
     previous: LedgerEntry[],
     tasks: Task[],
     mintRuntimeId: (task: Task) => string,
-    hints?: HintEvidence,
+    evidence: HintEvidence,
 ): MatchResult {
     const fingerprints = new Map<Task, Fingerprint>();
     for (const task of tasks) {
@@ -64,9 +69,7 @@ export function matchFile(
     const matchedPrev = new Set<string>();
 
     // --- rung 0: what our own writes said, when the file bears exactly one of them out ---
-    const resolution: HintResolution = hints
-        ? resolveHints(previous, ordered, hints)
-        : { consumed: 0, rows: null };
+    const resolution: HintResolution = resolveHints(previous, ordered, evidence);
     const consumedHints = resolution.consumed;
     const hinted = settleHints(resolution, previous, ordered);
     for (const [entry, task] of hinted.pairs) {
