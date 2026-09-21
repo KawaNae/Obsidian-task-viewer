@@ -277,10 +277,19 @@ export interface WriteChannel {
  * What one `processLines` callback is handed besides the lines: the report of
  * its edits, and the question of where its target stands.
  *
- * `locate` answers about the lines as they were handed in. A callback asks
- * before it edits: once it has spliced, the lines are a content nothing is on
- * record for, and a coordinate from before the splice would have to be carried
- * across it — which is exactly what the question exists to avoid.
+ * `locate` answers once per name, about the lines as they were handed in: that
+ * is the one content the plugin can have on record, so it is the one the
+ * question can be put to. Asked again, it carries that answer across the
+ * edits this write has reported since, and across nothing else — every line
+ * the write moved, it moved through `edits`, and the report is the whole of
+ * what happened to the lines in between. A line the write took away is
+ * `gone`. So one write can apply several effects to one row without asking
+ * the file a second time, which is where a coordinate would go stale.
+ *
+ * The carrying is checked, because it is only as good as the report: a line
+ * the report does not say was rewritten has to read what it read, and a write
+ * that carried a coordinate is refused whole if its report does not account
+ * for the lines it returns.
  */
 export interface WriteSession {
     edits: LineEdits;
@@ -448,16 +457,42 @@ export async function processLines(
                 refused = { file: file.path, reason, subject };
                 return null;
             };
-            const locate = (ref: TaskRef): Located => {
-                if (__DEV__ && reported.length > 0) {
-                    throw new Error(`[FileLines] ${file.path}: locate asked after the lines were edited`);
+            // Each name is asked once, of the lines as they were handed in.
+            const answered = new Map<string, Located>();
+            // Whether a coordinate was carried across this write's own edits,
+            // and whether carrying one caught the report out.
+            let carried = false;
+            let unsound: string | null = null;
+            const carry = (at: Extract<Located, { kind: 'at' }>): Located => {
+                carried = true;
+                const replayed = replayEdits(before.length, reported);
+                const now = replayed?.origin.indexOf(at.line) ?? -1;
+                if (!replayed) {
+                    unsound = 'a report no file could follow';
+                    return { kind: 'gone' };
                 }
-                return channel ? channel.locate(before, ref) : { kind: 'gone' };
+                // Taken away by this very write: the row is not on these lines.
+                if (now < 0) return { kind: 'gone' };
+                if (!replayed.rewritten[now] && lines[now] !== before[at.line]) {
+                    unsound = `line ${at.line} carried to ${now} does not read what it read`;
+                    return { kind: 'gone' };
+                }
+                return { ...at, line: now };
             };
+            const locate = (ref: TaskRef): Located => {
+                let found = answered.get(ref.runtimeId);
+                if (found === undefined) {
+                    found = channel ? channel.locate(before, ref) : { kind: 'gone' };
+                    answered.set(ref.runtimeId, found);
+                }
+                return found.kind === 'at' && reported.length > 0 ? carry(found) : found;
+            };
+            let lastSubject = '';
             const session: WriteSession = {
                 edits,
                 locate,
                 lineOf: (ref, subject) => {
+                    lastSubject = subject;
                     const located = locate(ref);
                     if (located.kind !== 'at') return refuse(located, subject);
                     if (located.edited) return refuse({ kind: 'changed' }, subject);
@@ -466,6 +501,21 @@ export async function processLines(
                 refuse,
             };
             const next = edit(lines, eol, session);
+
+            // A write that took a coordinate across its own edits wrote where
+            // its report said the row had gone. If the report does not account
+            // for the lines, that coordinate is not known to be the row's, and
+            // nothing is written rather than something in the wrong place.
+            if (unsound === null && next !== null && carried && !explains(before, next, reported)) {
+                unsound = 'its report does not account for the lines it wrote';
+            }
+            if (unsound !== null) {
+                const message = `[FileLines] ${file.path}: a coordinate was carried across this write's edits, but ${unsound}; nothing written`;
+                if (__DEV__) throw new Error(message);
+                logError(message);
+                refuse({ kind: 'changed' }, lastSubject);
+                return content;
+            }
             if (next === null) return content;
             refused = null;
 

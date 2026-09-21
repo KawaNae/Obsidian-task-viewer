@@ -454,17 +454,95 @@ describe('processLines: asking where a row stands, and giving up', () => {
         expect(h.text()).toBe('- [x] a\n');
     });
 
-    it('does not let a write ask after it has edited', async () => {
-        // A coordinate from the lines as they were handed in means nothing
-        // once a splice has moved them.
-        const h = harness('- [ ] a\n');
-        const log = writeSink(() => ({ kind: 'at', line: 0, edited: false }));
+});
 
-        await expect(processLines(h.app, h.file, (lines, _eol, session) => {
+describe('a coordinate carried across a write\'s own edits', () => {
+    const REF: TaskRef = { runtimeId: 'tv-inline:note.md:1' };
+    const at = (line: number): Located => ({ kind: 'at', line, edited: false });
+
+    it('asks the channel once per name, about the lines as they were handed in', async () => {
+        const h = harness('- [ ] a\n- [ ] b\n');
+        const log = writeSink(() => at(1));
+
+        await processLines(h.app, h.file, (lines, _eol, session) => {
+            session.locate(REF);
             session.edits.splice(0, 0, 'new');
             session.locate(REF);
+            session.locate(REF);
             return lines;
-        }, log.channel)).rejects.toThrow('locate asked after the lines were edited');
+        }, log.channel);
+
+        expect(log.asked).toEqual([{ lines: ['- [ ] a', '- [ ] b', ''], ref: REF }]);
+    });
+
+    it('follows the row down past lines the write put above it, and up past lines it took away', async () => {
+        const h = harness('x\ny\n- [ ] b\nz\n');
+        const log = writeSink(() => at(2));
+        const seen: Located[] = [];
+
+        await processLines(h.app, h.file, (lines, _eol, session) => {
+            session.edits.splice(0, 0, 'n1', 'n2');
+            seen.push(session.locate(REF));
+            session.edits.splice(0, 3);
+            seen.push(session.locate(REF));
+            // Below the row: it stays where it is.
+            session.edits.splice(2, 1);
+            seen.push(session.locate(REF));
+            return lines;
+        }, log.channel);
+
+        expect(seen).toEqual([at(4), at(1), at(1)]);
+        expect(h.text()).toBe('y\n- [ ] b\n');
+    });
+
+    it('keeps a row the write rewrote, and loses one it took away', async () => {
+        const h = harness('- [ ] a\n- [ ] b\n');
+        const log = writeSink(() => at(0));
+        const seen: Located[] = [];
+
+        await processLines(h.app, h.file, (lines, _eol, session) => {
+            lines[0] = '- [x] a';
+            session.edits.replaced(0);
+            seen.push(session.locate(REF));
+            session.edits.splice(0, 1);
+            seen.push(session.locate(REF));
+            return session.lineOf(REF, 'a') === null ? null : lines;
+        }, log.channel);
+
+        expect(seen).toEqual([at(0), { kind: 'gone' }]);
+        expect(h.text()).toBe('- [ ] a\n- [ ] b\n');
+        expect(log.refusals).toEqual([{ file: 'note.md', reason: { kind: 'gone' }, subject: 'a' }]);
+    });
+
+    it('refuses the write when a splice went round the report and moved the row', async () => {
+        const h = harness('- [ ] a\n- [ ] b\n');
+        const log = writeSink(() => at(1));
+
+        await expect(processLines(h.app, h.file, (lines, _eol, session) => {
+            session.edits.splice(0, 0, 'reported');
+            lines.splice(0, 0, 'not reported');
+            session.locate(REF);
+            return lines;
+        }, log.channel)).rejects.toThrow('does not read what it read');
+        expect(h.text()).toBe('- [ ] a\n- [ ] b\n');
+    });
+
+    it('refuses the write when an unreported splice left the row reading the same', async () => {
+        // Twins: the line the carried coordinate lands on reads like the row,
+        // so only the report's account of the whole file can say it moved.
+        const h = harness('- [ ] a\n- [ ] a\n- [ ] a\n');
+        const log = writeSink(() => at(1));
+
+        await expect(processLines(h.app, h.file, (lines, _eol, session) => {
+            session.edits.splice(3, 0, 'reported');
+            lines.splice(0, 1);
+            const line = session.lineOf(REF, 'a');
+            if (line === null) return null;
+            lines[line] = '- [x] a';
+            session.edits.replaced(line);
+            return lines;
+        }, log.channel)).rejects.toThrow('does not account for the lines it wrote');
+        expect(h.text()).toBe('- [ ] a\n- [ ] a\n- [ ] a\n');
     });
 });
 
