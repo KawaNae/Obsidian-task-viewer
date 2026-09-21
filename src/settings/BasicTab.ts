@@ -210,7 +210,14 @@ function renderStatusDefinitionsList(container: HTMLElement, plugin: PluginConte
         });
 
         setting.addToggle(toggle => {
-            toggle.setValue(def.isComplete)
+            // A blank status is fixed to incomplete in isCompleteStatusChar
+            // (TaskModel.ts) no matter what this setting says, so the toggle
+            // would otherwise look live while doing nothing. Disable it and
+            // show the value that is actually in effect, rather than
+            // whatever a stale `data.json` happens to hold.
+            const isBlank = def.char === ' ';
+            toggle.setValue(isBlank ? false : def.isComplete)
+                .setDisabled(isBlank)
                 .onChange(async (value) => {
                     defs[i].isComplete = value;
                     await plugin.saveSettings();
