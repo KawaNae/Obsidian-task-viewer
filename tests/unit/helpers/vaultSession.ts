@@ -48,6 +48,15 @@ export function vaultSession(contents: Map<string, string>) {
                 if (next !== before) void scanner!.queueScan(file, true);
                 return next;
             },
+            // A file written whole. Obsidian answers the new TFile and sends a
+            // `create`, which the index scans like any other arrival — so the
+            // scan follows here too, and every row in the file is minted by it.
+            create: async (path: string, data: string) => {
+                const file = makeFile(path);
+                contents.set(path, data);
+                void scanner!.queueScan(file, true);
+                return file;
+            },
             getAbstractFileByPath: (path: string) => (contents.has(path) ? makeFile(path) : null),
             getMarkdownFiles: () => [...contents.keys()].map(makeFile),
         },
