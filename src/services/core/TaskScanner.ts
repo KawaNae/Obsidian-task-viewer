@@ -8,7 +8,7 @@ import { CompletionDetector } from './CompletionDetector';
 import type { FlowExecutor } from '../flow/FlowExecutor';
 import { TaskIdGenerator } from '../display/TaskIdGenerator';
 import { IdentityLedger, type LedgerEntry } from './identity/IdentityLedger';
-import { HintLog, type Hint } from './identity/IdentityHints';
+import { HintLog } from './identity/IdentityHints';
 import { matchFile, matchWithoutRepeatedIds } from './identity/IdentityMatcher';
 import { WriteClaims, type ClaimResult } from './identity/WriteClaims';
 import { applyIdentity, assertDistinctRuntimeIds, assertNoProvisionalIds, assertUniqueProvisionalIds } from './identity/IdentityApplier';
@@ -369,24 +369,10 @@ export class TaskScanner {
 
     /**
      * The hint log, for seeing from the console what the write layer claimed.
-     * @internal Read-only use: only scanFile and `addHints` change it.
+     * @internal Read-only use: only scanFile changes it.
      */
     getHintLog(): HintLog {
         return this.hints;
-    }
-
-    /**
-     * File what a write just claimed about a file's rows.
-     *
-     * The write layer calls this from inside its `vault.process` callback (see
-     * `processLines`); the next scan of that file weighs the claim against what
-     * it reads.
-     *
-     * @returns a handle that takes the claim back, for a write that raised it
-     *   and then failed.
-     */
-    addHints(file: string, hints: readonly Hint[]): () => void {
-        return this.hints.add(file, hints, Date.now());
     }
 
     /**

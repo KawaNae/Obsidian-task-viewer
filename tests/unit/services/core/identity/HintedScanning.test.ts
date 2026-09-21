@@ -82,7 +82,7 @@ class Harness {
     /** A write: the claim goes in from inside the callback, as the writer does. */
     async write(lines: string[], ...hints: Hint[]): Promise<void> {
         this.contents.set(FILE, lines.join('\n'));
-        if (hints.length > 0) this.scanner.addHints(FILE, hints);
+        if (hints.length > 0) this.scanner.getHintLog().add(FILE, hints, Date.now());
         await this.scanner.requestScan(makeFile(FILE));
     }
 
@@ -102,7 +102,7 @@ class Harness {
     /** Raise a claim without a scan following it — a write during a drag. */
     hintOnly(lines: string[], ...hints: Hint[]): void {
         this.contents.set(FILE, lines.join('\n'));
-        this.scanner.addHints(FILE, hints);
+        this.scanner.getHintLog().add(FILE, hints, Date.now());
     }
 
     async scan(): Promise<void> {
@@ -316,7 +316,7 @@ describe('a claim that found no scan of its own', () => {
         const original = harness.ids()[0];
 
         // Raised, but the file still reads as it did.
-        harness.scanner.addHints(FILE, [claim([null, TASK], [original, TASK])]);
+        harness.scanner.getHintLog().add(FILE, [claim([null, TASK], [original, TASK])], Date.now());
         await harness.scan();
         expect(harness.ids()).toEqual([original]);
         expect(harness.pendingCount()).toBe(1);
@@ -338,7 +338,7 @@ describe('a claim that found no scan of its own', () => {
         await harness.write([TASK, '']);
         const original = harness.ids()[0];
 
-        harness.scanner.addHints(FILE, [claim([null, TASK])]);
+        harness.scanner.getHintLog().add(FILE, [claim([null, TASK])], Date.now());
         await harness.scan();
 
         expect(harness.ids()).toEqual([original]);
