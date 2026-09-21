@@ -409,6 +409,33 @@ describe('FlowPlanner', () => {
 
             expect(effect.warnings).toEqual([]);
         });
+
+        it('G1: warns, without touching the line, for a generated child that is checked and carries its own command', () => {
+            // The child is written byte-for-byte as the block wrote it —
+            // only the parent's own status is normalized — but a checked
+            // child with a `==>` of its own will not fire until it is
+            // unchecked and rechecked by hand, so it is worth flagging.
+            const effect = planGenerated(
+                'every mon use("週報")',
+                ['- [ ] 週報', '    - [x] 経費確認 ==> every 1mo'],
+                { startDate: '2026-06-29' },
+            );
+
+            expect(effect.children).toEqual([{ depth: 1, body: '- [x] 経費確認 ==> every 1mo' }]);
+            expect(effect.warnings.map(w => w.code)).toEqual(['gen.generated-child-status']);
+            expect(effect.warnings[0].params).toEqual({ status: 'x' });
+        });
+
+        it('does not warn for a generated child that is checked but carries no command of its own', () => {
+            const effect = planGenerated(
+                'every mon use("週報")',
+                ['- [ ] 週報', '    - [x] 定型の確認'],
+                { startDate: '2026-06-29' },
+            );
+
+            expect(effect.children).toEqual([{ depth: 1, body: '- [x] 定型の確認' }]);
+            expect(effect.warnings).toEqual([]);
+        });
     });
 
     describe('dates: the whole date block, for the block that has to write one', () => {

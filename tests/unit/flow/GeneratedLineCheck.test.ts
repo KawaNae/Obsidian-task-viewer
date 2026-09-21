@@ -129,10 +129,29 @@ describe('a generated child line', () => {
         expect(childOk('- 参考: 先週の議事録').line).toBe('- 参考: 先週の議事録');
     });
 
-    it('leaves a checked child as the block wrote it', () => {
-        // Nothing fires from a child, so a checked one starts no runaway.
-        // Correcting it would edit a body the engine does not normalize.
-        expect(childOk('- [x] 定型の確認').line).toBe('- [x] 定型の確認');
+    it('leaves a checked child as the block wrote it, without a command', () => {
+        // A checked child with no command of its own has nothing to fire and
+        // nothing to mistype, so it is written and left silent. Correcting
+        // it would edit a body the engine does not normalize.
+        const result = childOk('- [x] 定型の確認');
+        expect(result.line).toBe('- [x] 定型の確認');
+        expect(result.warnings).toEqual([]);
+    });
+
+    it('warns, but still writes as-is, a checked child that carries its own command', () => {
+        // G1: this shape is not refused or normalized — the byte-for-byte
+        // line still passes through — but it is worth flagging, since the
+        // command will not fire until the box is unchecked and rechecked by
+        // hand, which is unlikely to be what was meant.
+        const result = childOk('- [x] 経費 @2026-08-24 ==> every 1mo');
+
+        expect(result.line).toBe('- [x] 経費 @2026-08-24 ==> every 1mo');
+        expect(result.warnings.map(w => w.code)).toEqual(['gen.generated-child-status']);
+        expect(result.warnings[0].params).toEqual({ status: 'x' });
+    });
+
+    it('warns for any non-blank status paired with a command, not only "x"', () => {
+        expect(childOk('- [-] 経費 ==> every 1mo').warnings[0].params).toEqual({ status: '-' });
     });
 
     it('refuses a block id, the one fault it shares with the parent', () => {
