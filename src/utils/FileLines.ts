@@ -200,10 +200,12 @@ export interface TaskRef {
  *
  * `edited` says the row's line reads as nothing the plugin has on record for
  * that row — not as the last scan read it, nor as any write of ours left it.
- * Something else rewrote the line after the index last saw it. The row is
- * still this one; what the index holds of its text is not. A write that
- * rebuilds the whole line from the index's copy would put back what the edit
- * took out, and refuses (see `WriteSession.lineOf`).
+ * Something else rewrote the line after the index last saw it. Matching may
+ * still pair the row there — the ladder's last rung pairs one leftover against
+ * one on a shared date alone — but a row whose text changed under it is a
+ * guess about which task that is, and what the index holds of it is out of
+ * date either way. `WriteSession.lineOf` refuses it as `changed`; the next
+ * scan reads the edit, and the write can be made again.
  */
 export type Located =
     | { kind: 'at'; line: number; edited: boolean }
@@ -269,13 +271,11 @@ export interface WriteSession {
     locate(ref: TaskRef): Located;
     /**
      * The target's line, or null when it has none — in which case the write is
-     * refused, and the callback returns the null this gives back.
-     *
-     * With `rewrites`, a line something else has edited since the index read
-     * it (`edited`) is refused too, as `changed`: the write is about to
-     * replace the line with one built from the index's copy of the row.
+     * refused, and the callback returns the null this gives back. A line
+     * something else edited since the index read it (`edited`) is refused
+     * too, as `changed`.
      */
-    lineOf(ref: TaskRef, subject: string, opts?: { rewrites?: boolean }): number | null;
+    lineOf(ref: TaskRef, subject: string): number | null;
     /** Give the write up: nothing is written, and the refusal is told once it is over. */
     refuse(reason: RefusalReason, subject: string): null;
 }
@@ -432,10 +432,10 @@ export async function processLines(
             const session: WriteSession = {
                 edits,
                 locate,
-                lineOf: (ref, subject, opts) => {
+                lineOf: (ref, subject) => {
                     const located = locate(ref);
                     if (located.kind !== 'at') return refuse(located, subject);
-                    if (opts?.rewrites && located.edited) return refuse({ kind: 'changed' }, subject);
+                    if (located.edited) return refuse({ kind: 'changed' }, subject);
                     return located.line;
                 },
                 refuse,
