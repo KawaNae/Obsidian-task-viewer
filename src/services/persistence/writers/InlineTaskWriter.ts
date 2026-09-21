@@ -2,7 +2,7 @@ import { type App, TFile } from 'obsidian';
 import type { Task } from '../../../types';
 import { TaskParser } from '../../parsing/TaskParser';
 import { TaskLineClassifier } from '../../parsing/utils/TaskLineClassifier';
-import { collectFlowLineIndicesInFile } from '../../flow/FlowLineScanner';
+import { collectFlowLineIndicesInFile, flowLineTail } from '../../flow/FlowLineScanner';
 import { FileOperations } from '../utils/FileOperations';
 import { ChildPropertyLineEditor } from '../utils/ChildPropertyLineEditor';
 import type { PropertyOp } from '../PropertyUpdatePlanner';
@@ -12,7 +12,7 @@ import {
     type EditorLine, type LineEdits, type Refusal, type WriteOutcome,
 } from '../../../utils/FileLines';
 import type { WriteObserver } from '../WriteObserver';
-import { refOf, subjectOf, type WriteTarget } from '../TaskRefs';
+import { refOf, subjectOf, type RowBasis, type WriteTarget } from '../TaskRefs';
 import type { TaskOp } from '../TaskOps';
 import { logWarn } from '../../../log/log';
 
@@ -186,7 +186,7 @@ export class InlineTaskWriter {
      * left, so the lines written are the same.
      */
     async applyToTask(
-        target: WriteTarget,
+        target: WriteTarget & { basis?: RowBasis },
         ops: readonly TaskOp[],
         opts: { tellRefusal?: boolean } = {},
     ): Promise<WriteOutcome> {
@@ -201,14 +201,43 @@ export class InlineTaskWriter {
             return { written: false, refused, made: [] };
         }
 
-        return processLines(this.app, file, (lines, _eol, { edits, lineOf }) => {
-            for (const op of ops) {
+        return processLines(this.app, file, (lines, _eol, { edits, lineOf, refuse }) => {
+            for (const [i, op] of ops.entries()) {
                 const line = lineOf(target.ref, target.subject);
                 if (line === null) return null;
+                // Asked of the lines as they were handed in, before any op
+                // has moved them: that is what the plan was made against.
+                if (i === 0 && target.basis && !this.readsAsPlanned(lines, line, target.basis)) {
+                    return refuse({ kind: 'changed' }, target.subject);
+                }
                 this.applyOp(lines, line, op, edits);
             }
             return lines;
         }, channel);
+    }
+
+    /**
+     * Whether the row at `line` still reads as the operation's plan read it:
+     * the row itself, its own command lines, and — for the source of a move
+     * away — its whole subtree as it was written to the destination.
+     *
+     * A plan made from a copy the file has moved on from would otherwise be
+     * written over what moved it: a strip putting the row back to an older
+     * text, a fire consuming a command line edited since, a move taking a
+     * child edited after the archive was written.
+     */
+    private readsAsPlanned(lines: readonly string[], line: number, basis: RowBasis): boolean {
+        if (lines[line].trimStart() !== basis.text.trimStart()) return false;
+        const commands = collectFlowLineIndicesInFile([...lines], line).map(i => flowLineTail(lines[i]));
+        if (commands.length !== basis.commands.length) return false;
+        if (commands.some((command, i) => command !== basis.commands[i])) return false;
+        if (basis.subtree) {
+            const { childrenLines } = this.fileOps.collectChildrenFromLines([...lines], line);
+            const subtree = lines.slice(line, line + 1 + childrenLines.length);
+            if (subtree.length !== basis.subtree.length) return false;
+            if (subtree.some((text, i) => text !== basis.subtree![i])) return false;
+        }
+        return true;
     }
 
     private applyOp(lines: string[], line: number, op: TaskOp, edits: LineEdits): void {
@@ -499,17 +528,24 @@ export class InlineTaskWriter {
      *
      * The two files cannot be one write — Obsidian's `process` is per file —
      * so a source edited between this read and the caller's write can leave
-     * the task in both. Handing a move from one file to the other is F8's.
+     * the task in both. The caller's write is checked against the subtree
+     * answered here, so an edit in between is refused there rather than
+     * taken away unseen. Handing a move from one file to the other is F8's.
      *
      * The appended lines are claimed as new rows: the move drops the task's
      * `^id` on the way (see `FlowPlanner`'s archived copy), and a row in
      * another file is another row to the index.
      *
-     * @returns whether the destination was written. A `false` means nothing
-     * was: the source row could not be placed (told to the user as a
-     * refusal), or the destination is not a file.
+     * @returns the source row and its subtree as they read when they were
+     * archived, verbatim; null when nothing was written — the source row could
+     * not be placed or no longer reads as the move was planned from (told to
+     * the user as a refusal), or the destination is not a file.
      */
-    async appendTaskWithChildren(destPath: string, content: string, source: WriteTarget): Promise<boolean> {
+    async appendTaskWithChildren(
+        destPath: string,
+        content: string,
+        source: WriteTarget & { basis?: RowBasis },
+    ): Promise<readonly string[] | null> {
         const sourceFile = this.app.vault.getAbstractFileByPath(source.file);
         const channel = this.writes?.for(source.file);
         // The source is only read, so its target is asked of the channel
@@ -518,19 +554,23 @@ export class InlineTaskWriter {
         // lose the children once the original goes.
         if (!(sourceFile instanceof TFile)) {
             channel?.refused({ file: source.file, reason: { kind: 'gone' }, subject: source.subject });
-            return false;
+            return null;
         }
         const sourceLines = splitLines(await this.app.vault.read(sourceFile)).lines;
         const located = channel ? channel.locate(sourceLines, source.ref) : { kind: 'gone' as const };
-        if (located.kind !== 'at' || located.edited) {
+        const unplanned = located.kind === 'at' && !located.edited
+            && source.basis !== undefined && !this.readsAsPlanned(sourceLines, located.line, source.basis);
+        if (located.kind !== 'at' || located.edited || unplanned) {
             const reason = located.kind === 'at' ? { kind: 'changed' as const } : located;
             logWarn(`[InlineTaskWriter] move source not placed: ${source.file} ${reason.kind}`);
             channel?.refused({ file: source.file, reason, subject: source.subject });
-            return false;
+            return null;
         }
         const children = this.childrenToCarry(sourceLines, located.line).map(child => child.text);
+        const { childrenLines } = this.fileOps.collectChildrenFromLines(sourceLines, located.line);
 
         const fullContent = [content, ...children].join('\n');
-        return (await this.appendTaskToFile(destPath, fullContent)) >= 0;
+        if ((await this.appendTaskToFile(destPath, fullContent)) < 0) return null;
+        return sourceLines.slice(located.line, located.line + 1 + childrenLines.length);
     }
 }

@@ -11,7 +11,7 @@ import type { FlowEffect } from './FlowEffects';
 import { type CreatingEffect, type FlowDeleteAssessment, assessFlowDelete, planFlowForDeletion } from './FlowDeletion';
 import type { FlowInstanceInsert } from '../persistence/FlowInstanceLines';
 import type { TaskOp } from '../persistence/TaskOps';
-import { targetOf } from '../persistence/TaskRefs';
+import { plannedOn } from '../persistence/TaskRefs';
 import type { Refusal } from '../../utils/FileLines';
 import { flowSource } from './FlowSegments';
 import { type FlowPlanDeps, GenerationError, planFlow } from './FlowPlanner';
@@ -227,7 +227,7 @@ export class FlowExecutor {
         // The instance goes in first, at the head of the sibling group, and
         // the removal follows at the row's line carried across that insert.
         const { written: removed } = await this.repository.applyToTask(
-            targetOf(task), [...inserts, { kind: 'remove' }]);
+            plannedOn(task), [...inserts, { kind: 'remove' }]);
         if (!removed) {
             // Told to the user by the write layer, which refused it.
             logWarn(`[FlowExecutor] Flow fired but the original could not be deleted: ${task.id}`);
@@ -305,19 +305,26 @@ export class FlowExecutor {
             (effect): effect is Extract<FlowEffect, { kind: 'archive-to' }> =>
                 effect.kind === 'archive-to' && effect.destPath !== task.file);
         if (away) {
+            const planned = plannedOn(task);
             const archived = await this.repository.appendTaskWithChildren(
-                away.destPath, TaskParser.format(away.archivedTask), targetOf(task));
-            if (!archived) {
+                away.destPath, TaskParser.format(away.archivedTask), planned);
+            if (archived === null) {
                 // Told to the user by the write layer, which refused it.
                 logWarn(`[FlowExecutor] Flow did not fire, nothing written: ${task.id}`);
                 return false;
             }
-            const outcome = await this.repository.applyToTask(targetOf(task), ops, { tellRefusal: false });
+            // The source has to read as it did when its subtree was archived:
+            // a child edited in between would otherwise go with the removal,
+            // its edit kept nowhere.
+            const outcome = await this.repository.applyToTask(
+                { ...planned, basis: { ...planned.basis, subtree: archived } }, ops, { tellRefusal: false });
             if (outcome.refused) this.reportMoveLeftCopy(task, away.destPath, outcome.refused);
             return true;
         }
 
-        const outcome = await this.repository.applyToTask(targetOf(task), ops);
+        // Named with what the plan was made from: the write refuses a row that
+        // no longer reads that way, rather than writing the plan over it.
+        const outcome = await this.repository.applyToTask(plannedOn(task), ops);
         if (!outcome.written) {
             // Told to the user by the write layer, which refused it.
             logWarn(`[FlowExecutor] Flow did not fire, nothing written: ${task.id}`);
@@ -349,8 +356,9 @@ export class FlowExecutor {
                 return [{ kind: 'insert-instance', insert: this.instanceInsertFor(task, effect) }];
             case 'strip-flow':
                 // The row as the index read it, without its command. The write
-                // refuses a row that reads otherwise now (`edited`), so this
-                // is not a stale copy written over someone else's edit.
+                // refuses a row, or command lines, that read otherwise now
+                // (`plannedOn`), so this is not a stale copy written over an
+                // edit made since — someone else's or a write of ours.
                 return [{ kind: 'strip-flow', text: TaskParser.format({ ...task, flow: undefined }).trim() }];
             case 'archive-to':
                 // To another file it is written before this write (see

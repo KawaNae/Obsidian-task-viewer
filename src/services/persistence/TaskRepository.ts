@@ -7,7 +7,7 @@ import { TaskCloner, type InPlaceCopyLines } from './TaskCloner';
 import type { PropertyOp } from './PropertyUpdatePlanner';
 import { WriteObserver } from './WriteObserver';
 import type { EditorLine, WriteOutcome } from '../../utils/FileLines';
-import type { WriteTarget } from './TaskRefs';
+import type { RowBasis, WriteTarget } from './TaskRefs';
 import type { TaskOp } from './TaskOps';
 
 /**
@@ -68,7 +68,7 @@ export class TaskRepository {
      * (see {@link InlineTaskWriter.applyToTask}).
      */
     async applyToTask(
-        target: WriteTarget,
+        target: WriteTarget & { basis?: RowBasis },
         ops: readonly TaskOp[],
         opts: { tellRefusal?: boolean } = {},
     ): Promise<WriteOutcome> {
@@ -95,8 +95,12 @@ export class TaskRepository {
         return this.inlineWriter.appendTaskToFile(filePath, content);
     }
 
-    /** @returns whether the destination was written (see InlineTaskWriter). */
-    async appendTaskWithChildren(destPath: string, content: string, source: WriteTarget): Promise<boolean> {
+    /** @returns the source subtree archived, or null when nothing was written (see InlineTaskWriter). */
+    async appendTaskWithChildren(
+        destPath: string,
+        content: string,
+        source: WriteTarget & { basis?: RowBasis },
+    ): Promise<readonly string[] | null> {
         return this.inlineWriter.appendTaskWithChildren(destPath, content, source);
     }
 
