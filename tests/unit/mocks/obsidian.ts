@@ -2,6 +2,7 @@
  * Lightweight obsidian module stub for unit tests.
  * Only the symbols actually imported by source code are stubbed here.
  */
+import { load as loadYaml } from 'js-yaml';
 
 // --- Core classes ---
 
@@ -128,6 +129,19 @@ export class FileSystemAdapter {
 
 export function setIcon(_el: HTMLElement, _icon: string) {}
 export function normalizePath(path: string) { return path; }
+
+/**
+ * Real Obsidian parses frontmatter with js-yaml (default schema), which is
+ * why a bare `2026-09-21` in a note comes back as a `Date`
+ * (`DateTimeFieldParser.normalizeYamlDate` exists to undo that). This stub
+ * used to be missing entirely, so every call from `FileParsePipeline`'s
+ * raw-block fallback (`FileParsePipeline.ts:54`) threw `TypeError: parseYaml
+ * is not a function`, caught and swallowed by the `catch {}` right after it.
+ * Every frontmatter read through that fallback silently produced nothing.
+ */
+export function parseYaml(yaml: string): any {
+    return loadYaml(yaml);
+}
 
 // --- CodeMirror integration stubs ---
 
