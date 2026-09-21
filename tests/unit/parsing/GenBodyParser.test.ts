@@ -206,6 +206,88 @@ describe('parseGenBody — diagnostics', () => {
     });
 });
 
+/**
+ * The two GeneratedLineCheck warnings, read here off a block's own literal
+ * source instead of a rendered instance — see GenGeneratedStatusCheck for
+ * the predicates this shares with the fire-time check, and GenBlockPreview
+ * for why classify() is where these have to land rather than a separate
+ * pass: a closed block's fence is what Live Preview actually shows, and
+ * that widget reads straight off `diagnostics` here.
+ */
+describe('parseGenBody — the two GeneratedLineCheck warnings, read statically', () => {
+    it('warns on a parent line written with a non-blank status', () => {
+        const ds = parse(['- [x] 週報 第4回']).diagnostics;
+
+        expect(ds.map(d => d.code)).toEqual(['gen.generated-status']);
+        expect(ds[0]).toMatchObject({ line: 1, params: { status: 'x' } });
+    });
+
+    it('stays quiet on a blank parent', () => {
+        expect(codes(['- [ ] 週報 第4回'])).toEqual([]);
+    });
+
+    it('warns on a checked child that carries its own command', () => {
+        const ds = parse([
+            '- [ ] 週報',
+            '    - [x] 経費 ==> every 1mo',
+        ]).diagnostics;
+
+        expect(ds.map(d => d.code)).toEqual(['gen.generated-child-status']);
+        expect(ds[0]).toMatchObject({ line: 2, params: { status: 'x' } });
+    });
+
+    it('stays quiet on a checked child with no command of its own', () => {
+        expect(codes([
+            '- [ ] 週報',
+            '    - [x] 定型の確認',
+        ])).toEqual([]);
+    });
+
+    it('stays quiet on a blank child that carries a command', () => {
+        expect(codes([
+            '- [ ] 週報',
+            '    - [ ] 経費 ==> every 1mo',
+        ])).toEqual([]);
+    });
+
+    it('stays quiet on a child that is not a checkbox at all', () => {
+        expect(codes([
+            '- [ ] 週報',
+            '    - 参考: ==> は矢印であってコマンドではない',
+        ])).toEqual([]);
+    });
+
+    it('stays quiet when the status arrives from a value, not literal text', () => {
+        // The checkbox pattern needs exactly one character between the
+        // brackets; `${status}` is several, so this line does not classify
+        // as a task at all — gen.generated-status never fires, though the
+        // line still earns the two diagnostics it always earned for the
+        // same reason (not a checkbox, and an unresolved name), unrelated
+        // to and unaffected by this stage.
+        expect(codes(['- [${status}] 週報']))
+            .toEqual([['expr.unknown-ident', 1], ['gen.root-not-a-task', 1]]);
+    });
+
+    it('stays quiet when the ==> arrives from a value, not literal text', () => {
+        // Nothing named "==>" is written on the line; it is what `${cmd}`
+        // happens to evaluate to at fire time.
+        expect(codes([
+            '- [ ] 週報',
+            '    - [x] 経費 ${cmd}',
+        ])).toEqual([['expr.unknown-ident', 2]]);
+    });
+
+    it('anchors the span past the line\'s own indentation', () => {
+        const [d] = parse([
+            '- [ ] 週報',
+            '    - [x] 経費 ==> every 1mo',
+        ]).diagnostics;
+        const line = '- [x] 経費 ==> every 1mo';
+
+        expect(d.span).toEqual({ start: 4, end: 4 + line.length });
+    });
+});
+
 describe('parseGenBody — the cells the command declares', () => {
     const cells = new Map<string, StaticType>([['n', 'number']]);
     const withCells = (body: string[]) => parseGenBody(body, 1, cells);
