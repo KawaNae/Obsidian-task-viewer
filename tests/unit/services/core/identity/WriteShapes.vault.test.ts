@@ -485,11 +485,11 @@ describe('8. appendTaskWithChildren (a move archiving its subtree)', () => {
         expect(Notice.messages).toEqual([]);
     });
 
-    it('A: within the same file, the subtree goes to the end and the rows above keep their IDs', async () => {
+    it('A: within the same file, the subtree goes to the end and every row keeps its ID, the moved ones too', async () => {
         const { contents, session } = await open({
             [FILE]: NOTE('- [ ] 対象 @2026-09-21 ==> move([[note]])', '\t- [ ] 子 @2026-09-21'),
         });
-        const held = { above: idOf(session, '上'), below: idOf(session, '下') };
+        const held = { above: idOf(session, '上'), below: idOf(session, '下'), target: idOf(session, '対象'), child: idOf(session, '子') };
 
         await check(session, idOf(session, '対象'));
         await flowSettled(session);
@@ -499,7 +499,7 @@ describe('8. appendTaskWithChildren (a move archiving its subtree)', () => {
         expect(contents.get(FILE)).toBe([
             '# note', '- [ ] 上 @2026-09-21', '- [ ] 下 @2026-09-21', '- [x] 対象 @2026-09-21', '\t- [ ] 子 @2026-09-21',
         ].join('\n'));
-        expect(rows(session).map(row => row.id).slice(0, 2)).toEqual([held.above, held.below]);
+        expect(rows(session).map(row => row.id)).toEqual([held.above, held.below, held.target, held.child]);
         expect(Notice.messages).toEqual([]);
     });
 
@@ -526,16 +526,17 @@ describe('8. appendTaskWithChildren (a move archiving its subtree)', () => {
         const { contents, session } = await open({
             [FILE]: NOTE('- [ ] 対象 @2026-09-21 ==> move([[note]])', '\t- [ ] 子 @2026-09-21'),
         });
-        const held = { above: idOf(session, '上'), below: idOf(session, '下') };
+        const held = { above: idOf(session, '上'), below: idOf(session, '下'), target: idOf(session, '対象'), child: idOf(session, '子') };
 
-        editBefore(session, 'appendTaskWithChildren', () => writeOutside(contents, 1));
+        // A move within one file is one write (applyToTask).
+        editBefore(session, 'applyToTask', () => writeOutside(contents, 1));
         await check(session, idOf(session, '対象'));
         await flowSettled(session);
 
         expect(contents.get(FILE)).toBe([
             '# note', OUTSIDE, '- [ ] 上 @2026-09-21', '- [ ] 下 @2026-09-21', '- [x] 対象 @2026-09-21', '\t- [ ] 子 @2026-09-21',
         ].join('\n'));
-        expect(rows(session).map(row => row.id).slice(1, 3)).toEqual([held.above, held.below]);
+        expect(rows(session).map(row => row.id).slice(1)).toEqual([held.above, held.below, held.target, held.child]);
         expect(Notice.messages).toEqual([]);
     });
 });

@@ -13,9 +13,14 @@ import type { FlowInstanceInsert } from './FlowInstanceLines';
  *   sibling group, indented from the file.
  * - `strip-flow`: the command is consumed — the row's own `- ==>` lines go,
  *   and the row reads `text` (indentation kept from the file).
+ * - `move-to-end`: the row is moved to the end of its file, reading `text`,
+ *   with its children re-indented under it and without its own `- ==>`
+ *   lines. The row and its children are carried, not copied: they are the
+ *   rows they were (see `LineEdits.carry`).
  * - `remove`: the row and its children are taken out.
  */
 export type TaskOp =
     | { kind: 'insert-instance'; insert: FlowInstanceInsert }
     | { kind: 'strip-flow'; text: string }
+    | { kind: 'move-to-end'; text: string }
     | { kind: 'remove' };

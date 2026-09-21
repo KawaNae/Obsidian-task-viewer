@@ -28,13 +28,6 @@ import { runtimeText } from './runtimeText';
  * rewritten), which changes the completion-detection signature. Running
  * two fires against a stale index would double-generate.
  */
-/** An effect on the row that fired, in its own file. */
-type RowEffect = Exclude<FlowEffect, { kind: 'archive-to' | 'delete-original' }>;
-
-function isOnTheRow(effect: FlowEffect): effect is RowEffect {
-    return effect.kind !== 'archive-to' && effect.kind !== 'delete-original';
-}
-
 /** How long one failure stays quiet after it has been shown. */
 const FAILURE_NOTICE_WINDOW_MS = 5000;
 
@@ -293,7 +286,7 @@ export class FlowExecutor {
             throw err;
         }
 
-        if (effects.some(effect => effect.kind === 'archive-to' || effect.kind === 'delete-original')) {
+        if (effects.some(effect => effect.kind === 'archive-to' && effect.destPath !== task.file)) {
             for (const effect of effects) {
                 logInfo(`[Flow:effect] ${effect.kind} taskId=${task.id}`);
                 await this.applyEffect(task, effect);
@@ -304,9 +297,9 @@ export class FlowExecutor {
         // Every effect here is on the row that fired, in its own file, so they
         // are one write: all of them land or none does, and a command is never
         // consumed without its next instance, nor the other way round.
-        const ops = effects.filter(isOnTheRow).map(effect => {
+        const ops = effects.flatMap(effect => {
             logInfo(`[Flow:effect] ${effect.kind} taskId=${task.id}`);
-            return this.opFor(task, effect);
+            return this.opsFor(task, effect);
         });
         const outcome = await this.repository.applyToTask(targetOf(task), ops);
         if (!outcome.written) {
@@ -316,17 +309,29 @@ export class FlowExecutor {
         return outcome.written;
     }
 
-    /** What one effect does to the row that fired, as the write applies it. */
-    private opFor(task: Task, effect: RowEffect): TaskOp {
+    /**
+     * What one effect does to the row that fired, as the write applies it —
+     * for a fire whose every effect is in the row's own file.
+     */
+    private opsFor(task: Task, effect: FlowEffect): TaskOp[] {
         switch (effect.kind) {
             case 'create-next':
             case 'create-generated':
-                return { kind: 'insert-instance', insert: this.instanceInsertFor(task, effect) };
+                return [{ kind: 'insert-instance', insert: this.instanceInsertFor(task, effect) }];
             case 'strip-flow':
                 // The row as the index read it, without its command. The write
                 // refuses a row that reads otherwise now (`edited`), so this
                 // is not a stale copy written over someone else's edit.
-                return { kind: 'strip-flow', text: TaskParser.format({ ...task, flow: undefined }).trim() };
+                return [{ kind: 'strip-flow', text: TaskParser.format({ ...task, flow: undefined }).trim() }];
+            case 'archive-to':
+                // A move within the file is one op: the row is carried to the
+                // end, so the moved row is the row that fired, and the removal
+                // of where it stood is part of the same carrying. Its text is
+                // made from the index's copy on the same terms as the strip.
+                return [{ kind: 'move-to-end', text: TaskParser.format(effect.archivedTask) }];
+            case 'delete-original':
+                // Done by `move-to-end`, above.
+                return [];
         }
     }
 
