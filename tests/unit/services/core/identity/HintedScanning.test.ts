@@ -315,11 +315,13 @@ describe('a claim that found no scan of its own', () => {
         expect(harness.ids()[0]).not.toBe(original);
     });
 
-    it('waits for its own scan when another read the file first', async () => {
-        // The window the per-line design accepted and this one closes: a claim
-        // is raised inside the write callback, a moment before the file reaches
-        // disk. A scan reading in between sees the file as it was. Nothing
-        // moved, so the claim is still about the next read, and it is kept.
+    it('is given up by a scan that read the file first', async () => {
+        // A claim is raised inside the write callback, a moment before the file
+        // reaches disk, and a scan reading in between sees the file as it was.
+        // The claim is not kept for the write's own scan: kept, it would wait
+        // for a content the file might reach by another path (see settle), so
+        // that scan is left to the ladder. The ladder cannot tell the copy from
+        // the original; what matters here is that no claim decides it.
         const harness = new Harness();
         await harness.write([TASK, '']);
         const original = harness.ids()[0];
@@ -328,21 +330,20 @@ describe('a claim that found no scan of its own', () => {
         harness.scanner.getHintLog().add(FILE, [about([TASK, TASK, ''], claim([null, TASK], [original, TASK]))], Date.now());
         await harness.scan();
         expect(harness.ids()).toEqual([original]);
-        expect(harness.pendingCount()).toBe(1);
+        expect(harness.pendingCount()).toBe(0);
 
-        // Now the write lands, and its own scan follows — with no claim of its
-        // own, because the write already filed one.
+        // Now the write lands, and its own scan follows with nothing to weigh.
         await harness.write([TASK, TASK, '']);
 
-        expect(harness.ids()[1]).toBe(original);
-        expect(harness.ids()[0]).not.toBe(original);
+        expect(harness.ids().filter(id => id === original)).toHaveLength(1);
+        expect(harness.pendingCount()).toBe(0);
     });
 
     it('decides nothing when it and the file as it stands disagree', async () => {
         // A write that deleted the row and wrote the same text back. Until its
         // scan arrives, the file reads exactly as before, and the two answers —
         // the row is the old one, the row is new — cannot both be right. The
-        // ladder takes it, and the claim stays for the scan that can settle it.
+        // ladder takes it, and the claim goes with the scan.
         const harness = new Harness();
         await harness.write([TASK, '']);
         const original = harness.ids()[0];
@@ -351,7 +352,7 @@ describe('a claim that found no scan of its own', () => {
         await harness.scan();
 
         expect(harness.ids()).toEqual([original]);
-        expect(harness.pendingCount()).toBe(1);
+        expect(harness.pendingCount()).toBe(0);
     });
 });
 
@@ -479,10 +480,11 @@ describe('a flow firing, through the write layer', () => {
 
     it('decides the rows even when the tick\'s claim found no scan', async () => {
         // The order a claiming tick makes reachable: the scan whose tail fires
-        // the flow read the file before the tick landed, so the tick's claim
-        // is still standing when the other two file theirs. It describes a
-        // file that has been written past twice, so it reproduces nothing and
-        // drops out — the newest claim that fits is still the one adopted.
+        // the flow read the file before the tick landed. That scan adopts
+        // nothing, so the tick's claim goes with it, and the two writes of the
+        // firing, built on a ledger older than the file they were handed, claim
+        // nothing either. The ladder answers, and the date the instance was
+        // computed for keeps the fired line its row.
         const harness = new Harness();
         const live = TASK + ' ==> every 1d';
         await harness.write([live, '']);
@@ -494,7 +496,7 @@ describe('a flow firing, through the write layer', () => {
         harness.contents.set(FILE, [live, ''].join('\n'));
         held.release();
         await held.scanning;
-        expect(harness.pendingCount()).toBe(1);
+        expect(harness.pendingCount()).toBe(0);
 
         // The tick did land, and the firing goes ahead on top of it.
         harness.contents.set(FILE, ticked.join('\n'));
@@ -505,8 +507,6 @@ describe('a flow firing, through the write layer', () => {
         const ids = harness.ids();
         expect(ids[1]).toBe(original);
         expect(ids[0]).not.toBe(original);
-        // The whole log went with it: a claim the file has moved past is
-        // retired by the scan that adopts a later one.
         expect(harness.pendingCount()).toBe(0);
     });
 
@@ -858,8 +858,9 @@ describe('the whole content decides which state was read', () => {
 
         // The ladder's answer: the one previous row goes to the one line.
         expect(harness.ids()).toEqual([original]);
-        // Nothing adopted, and nothing moved, so both claims stay.
-        expect(harness.pendingCount()).toBe(2);
+        // Nothing adopted, so both claims go: neither may be believed about a
+        // later read either.
+        expect(harness.pendingCount()).toBe(0);
     });
 
     it('falls to the ladder when something else wrote between the write and the scan', async () => {

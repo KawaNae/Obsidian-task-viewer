@@ -183,32 +183,32 @@ export class HintLog {
     }
 
     /**
-     * Retire what this scan finished with, and what it has now made unusable.
+     * Retire what this scan finished with.
      *
      * @param consumed how many claims from the head are done with — the adopted
      *   one and everything older, which describe states the file has moved past.
-     * @param ledgerMoved whether this scan changed the file's rows. A scan that
-     *   adopted nothing and still moved the ledger absorbed something it could
-     *   not account for — including, possibly, the very writes the pending
-     *   claims describe, which the ladder then placed its own way. Believing
-     *   those claims later would be believing them about a file that has
-     *   already been read some other way, so the whole log goes. What that
-     *   costs is precision on the next write.
+     *   The claims behind it describe writes still to be read, and are kept.
      *
-     * A claim that simply did not match is kept. Claims do not chain, so a
-     * pending one blocks nothing behind it, and the usual reason it did not
-     * match is that its write has not reached this reader yet: a scan whose
-     * read started before the write landed reads the file as it was, commits
-     * that, and the write's own scan follows. Dropping it there would throw
-     * away a claim about the very next read. What that leaves open is a hand
-     * edit landing, in those milliseconds, on exactly the lines the pending
-     * claim describes — accepted, and narrow enough to say so in one line.
+     * A scan that adopted nothing takes the whole log with it. A claim kept past
+     * such a scan waits for a content the file did not have when it was read,
+     * and nothing says the file will reach that content by the write the claim
+     * describes. The write may have landed and been undone before the read (a
+     * sync, an undo), and the file reach the same content later by another
+     * path — a hand edit that takes out the one line the write had also taken
+     * out. The claim would then be the only candidate that fits, because the
+     * previous state no longer does, and it would hand its names to rows it
+     * never described. A missing claim costs one scan's precision; a revived
+     * one names the wrong row.
+     *
+     * What that gives up is the read that started a moment before the write
+     * landed: it reads the file as it was, adopts nothing, and the write's own
+     * scan follows with no claim to weigh, so the ladder answers it.
      */
-    settle(file: string, consumed: number, ledgerMoved: boolean): void {
+    settle(file: string, consumed: number): void {
         const pending = this.files.get(file);
         if (!pending) return;
 
-        if (consumed === 0 && ledgerMoved) {
+        if (consumed === 0) {
             this.files.delete(file);
             return;
         }
