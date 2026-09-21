@@ -205,6 +205,15 @@ export class WriteClaims {
     }
 
     /**
+     * The rows this file's last write left, whether or not the file still
+     * reads as it left them; null when no write has left any since the last
+     * scan, or the last write could not say.
+     */
+    rowsLeft(path: string): readonly ClaimBase[] | null {
+        return this.bases.get(path)?.rows ?? null;
+    }
+
+    /**
      * Forget what this file's last write left.
      *
      * Called when a scan of the file commits, whatever it decided, and when the

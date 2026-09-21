@@ -332,7 +332,7 @@ describe('processLines: asking where a row stands, and giving up', () => {
 
     it('asks the channel about the lines as they were handed in', async () => {
         const h = harness('- [ ] a\r\n- [ ] b\r\n');
-        const log = writeSink(() => ({ kind: 'at', line: 1 }));
+        const log = writeSink(() => ({ kind: 'at', line: 1, edited: false }));
 
         const outcome = await processLines(h.app, h.file, (lines, _eol, session) => {
             const at = session.lineOf(REF, 'b');
@@ -429,7 +429,7 @@ describe('processLines: asking where a row stands, and giving up', () => {
         // A coordinate from the lines as they were handed in means nothing
         // once a splice has moved them.
         const h = harness('- [ ] a\n');
-        const log = writeSink(() => ({ kind: 'at', line: 0 }));
+        const log = writeSink(() => ({ kind: 'at', line: 0, edited: false }));
 
         await expect(processLines(h.app, h.file, (lines, _eol, session) => {
             session.edits.splice(0, 0, 'new');

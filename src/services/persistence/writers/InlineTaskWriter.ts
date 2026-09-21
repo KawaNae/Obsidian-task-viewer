@@ -39,7 +39,7 @@ export class InlineTaskWriter {
         }
 
         return processLines(this.app, file, (lines, _eol, { edits, lineOf }) => {
-            const currentLine = lineOf(refOf(task), subjectOf(task));
+            const currentLine = lineOf(refOf(task), subjectOf(task), { rewrites: true });
             if (currentLine === null) return null;
 
             // Re-format line
@@ -147,7 +147,7 @@ export class InlineTaskWriter {
         }
 
         await processLines(this.app, file, (lines, _eol, { edits, lineOf }) => {
-            const currentLine = lineOf(refOf(task), subjectOf(task));
+            const currentLine = lineOf(refOf(task), subjectOf(task), { rewrites: true });
             if (currentLine === null) return null;
 
             // Every index here is below `currentLine`: the scan starts at
