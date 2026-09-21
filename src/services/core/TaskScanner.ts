@@ -441,15 +441,23 @@ export class TaskScanner {
      * — is found through 2, or through 3 when a pending claim is adopted. On
      * lines that bear neither out it is `gone`: the only thing left to go on
      * would be its text.
+     *
+     * Found through 1 or 3, the line may read differently from anything on
+     * record for the row — the ladder pairs a row whose text or dates changed,
+     * and a `^id` holds across any edit. That is still the row, and `edited`
+     * says so (see `Located`). Through 2 it cannot happen: the content is one
+     * on record, line for line.
      */
     locate(path: string, lines: readonly string[], ref: TaskRef): Located {
+        const edited = (line: number): boolean => !this.recordedTexts(path, ref.runtimeId).has(lines[line]);
+
         const byBlockId = lineOfBlockId(lines, ref.blockId);
-        if (byBlockId !== null) return { kind: 'at', line: byBlockId };
+        if (byBlockId !== null) return { kind: 'at', line: byBlockId, edited: edited(byBlockId) };
 
         const recorded = this.claims.stateFor(path, lines);
         if (recorded !== null) {
             const row = recorded.find(candidate => candidate.runtimeId === ref.runtimeId);
-            return row ? { kind: 'at', line: row.line } : { kind: 'gone' };
+            return row ? { kind: 'at', line: row.line, edited: false } : { kind: 'gone' };
         }
 
         const parsed = FileParsePipeline.parse(
@@ -472,7 +480,26 @@ export class TaskScanner {
         const among = result.guessed.get(ref.runtimeId);
         if (among !== undefined) return { kind: 'ambiguous', count: among };
         const at = parsed.tasks.find(task => result.mapping.get(task.id) === ref.runtimeId);
-        return at ? { kind: 'at', line: at.line } : { kind: 'gone' };
+        return at ? { kind: 'at', line: at.line, edited: edited(at.line) } : { kind: 'gone' };
+    }
+
+    /**
+     * Every text the plugin has on record for one row: as the last scan read
+     * it, as the last write left it, and as each pending claim says it reads.
+     */
+    private recordedTexts(path: string, runtimeId: string): Set<string> {
+        const texts = new Set<string>();
+        const entry = this.ledger.get(runtimeId);
+        if (entry && entry.file === path) texts.add(entry.fingerprint.originalText);
+        for (const row of this.claims.rowsLeft(path) ?? []) {
+            if (row.runtimeId === runtimeId) texts.add(row.text);
+        }
+        for (const pending of this.hints.peekFor(path, Date.now())) {
+            for (const row of pending.hint.rows) {
+                if (row.runtimeId === runtimeId) texts.add(row.text);
+            }
+        }
+        return texts;
     }
 
     /**

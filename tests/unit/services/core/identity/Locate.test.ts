@@ -7,6 +7,7 @@ import { TaskParser } from '../../../../../src/services/parsing/TaskParser';
 import { DEFAULT_SETTINGS } from '../../../../../src/types';
 import type { Task } from '../../../../../src/types';
 import type { LineEdit, Located, TaskRef } from '../../../../../src/utils/FileLines';
+import { HINT_TTL_MS } from '../../../../../src/services/core/identity/IdentityHints';
 import { makeTask } from '../../../helpers/makeTask';
 
 /**
@@ -95,7 +96,7 @@ class Harness {
     }
 }
 
-const at = (line: number): Located => ({ kind: 'at', line });
+const at = (line: number, edited = false): Located => ({ kind: 'at', line, edited });
 const ambiguous = (count: number): Located => ({ kind: 'ambiguous', count });
 const gone: Located = { kind: 'gone' };
 
@@ -246,6 +247,55 @@ describe('locate by matching, when the content is not on record', () => {
         // is on no record the file matches, and its text is all that is left.
         harness.edit([TASK, OTHER, 'synced']);
         expect(harness.locate(made)).toEqual(gone);
+    });
+});
+
+describe('locate says when the line was edited from outside', () => {
+    it('marks a row the ladder paired though its text changed', async () => {
+        const harness = new Harness();
+        const dated = (content: string) => TaskParser.format(makeTask({ content, statusChar: ' ', startDate: '2026-08-15' }));
+        await harness.write([dated('設計'), '']);
+        const [task] = harness.ids();
+
+        // The name changed, the date did not: still the row, not its text.
+        harness.edit([dated('設計書'), '']);
+        expect(harness.locate(task)).toEqual(at(0, true));
+    });
+
+    it('marks a ^id line whose text changed', async () => {
+        const harness = new Harness();
+        await harness.write([`${TASK} ^keep`, '']);
+        const [task] = harness.ids();
+
+        harness.edit([`${OTHER} ^keep`, '']);
+        expect(harness.locate({ runtimeId: task, blockId: 'keep' })).toEqual(at(0, true));
+    });
+
+    it('does not mark a line only the plugin changed', async () => {
+        const harness = new Harness();
+        await harness.write([TASK, '']);
+        const [task] = harness.ids();
+
+        // Our own rewrite, then an edit elsewhere from outside, no scan.
+        harness.report([OTHER, ''], [{ kind: 'replaced', at: 0 }]);
+        harness.edit(['メモ', OTHER, '']);
+        expect(harness.locate(task)).toEqual(at(1, false));
+    });
+
+    it('does not mark it once the claim has expired and only the write\'s base remembers', async () => {
+        vi.useFakeTimers();
+        try {
+            const harness = new Harness();
+            await harness.write([TASK, '']);
+            const [task] = harness.ids();
+
+            harness.report([OTHER, ''], [{ kind: 'replaced', at: 0 }]);
+            vi.advanceTimersByTime(HINT_TTL_MS + 1);
+            harness.edit(['メモ', OTHER, '']);
+            expect(harness.locate(task)).toEqual(at(1, false));
+        } finally {
+            vi.useRealTimers();
+        }
     });
 });
 

@@ -143,3 +143,44 @@ describe('a row with no name', () => {
         expect(bench.refused).toEqual([{ file: FILE, reason: { kind: 'ambiguous', count: 2 }, subject: '- [ ]  @2026-08-15' }]);
     });
 });
+
+describe('a line edited from outside since the index read it', () => {
+    // The ladder still pairs the row (its dates did not change), so the write
+    // knows where it is. What it does not know is the text: an update rebuilds
+    // the whole line from the index's copy, and that copy predates the edit.
+    // Writing it would put back what the edit took out.
+
+    it('is not rebuilt from the index\'s copy', async () => {
+        const { bench, written } = await checkAfterEdit(
+            ['- [ ]  @2026-08-15'],
+            0,
+            ['- [ ] 名前あり @2026-08-15'],
+        );
+
+        expect(written).toBe(false);
+        expect(bench.lines()).toEqual(['- [ ] 名前あり @2026-08-15']);
+        expect(bench.refused).toEqual([{ file: FILE, reason: { kind: 'changed' }, subject: '- [ ]  @2026-08-15' }]);
+    });
+
+    it('is still written when only other lines moved', async () => {
+        const { bench, written } = await checkAfterEdit(
+            ['- [ ] 設計 @2026-08-15'],
+            0,
+            ['メモ', '- [ ] 設計 @2026-08-15'],
+        );
+
+        expect(written).toBe(true);
+        expect(bench.lines()).toEqual(['メモ', '- [x] 設計 @2026-08-15']);
+    });
+
+    it('is still written when the plugin itself changed it and no scan has read it yet', async () => {
+        const bench = await writeBench(['- [ ] 設計 @2026-08-15']);
+        const task = bench.taskAt(0);
+        // Our own update, then an edit elsewhere from outside, before any scan.
+        expect(await bench.writer.updateTaskInFile(task, { ...task, content: '設計書' })).toBe(true);
+        bench.edit(['メモ', ...bench.lines()]);
+
+        expect(await bench.writer.updateTaskInFile(task, checked({ ...task, content: '設計書' }))).toBe(true);
+        expect(bench.lines()).toEqual(['メモ', '- [x] 設計書 @2026-08-15']);
+    });
+});

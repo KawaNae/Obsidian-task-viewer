@@ -197,9 +197,16 @@ export interface TaskRef {
  * the last scan paired the name with one line on evidence rather than on
  * position. `ambiguous` when the name went to one of `count` rows no evidence
  * tells apart. `gone` when the name stands on no line of these.
+ *
+ * `edited` says the row's line reads as nothing the plugin has on record for
+ * that row — not as the last scan read it, nor as any write of ours left it.
+ * Something else rewrote the line after the index last saw it. The row is
+ * still this one; what the index holds of its text is not. A write that
+ * rebuilds the whole line from the index's copy would put back what the edit
+ * took out, and refuses (see `WriteSession.lineOf`).
  */
 export type Located =
-    | { kind: 'at'; line: number }
+    | { kind: 'at'; line: number; edited: boolean }
     | { kind: 'ambiguous'; count: number }
     | { kind: 'gone' };
 
@@ -263,8 +270,12 @@ export interface WriteSession {
     /**
      * The target's line, or null when it has none — in which case the write is
      * refused, and the callback returns the null this gives back.
+     *
+     * With `rewrites`, a line something else has edited since the index read
+     * it (`edited`) is refused too, as `changed`: the write is about to
+     * replace the line with one built from the index's copy of the row.
      */
-    lineOf(ref: TaskRef, subject: string): number | null;
+    lineOf(ref: TaskRef, subject: string, opts?: { rewrites?: boolean }): number | null;
     /** Give the write up: nothing is written, and the refusal is told once it is over. */
     refuse(reason: RefusalReason, subject: string): null;
 }
@@ -421,11 +432,11 @@ export async function processLines(
             const session: WriteSession = {
                 edits,
                 locate,
-                lineOf: (ref, subject) => {
+                lineOf: (ref, subject, opts) => {
                     const located = locate(ref);
-                    if (located.kind === 'at') return located.line;
-                    refuse(located, subject);
-                    return null;
+                    if (located.kind !== 'at') return refuse(located, subject);
+                    if (opts?.rewrites && located.edited) return refuse({ kind: 'changed' }, subject);
+                    return located.line;
                 },
                 refuse,
             };
