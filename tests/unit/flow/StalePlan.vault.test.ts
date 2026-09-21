@@ -13,8 +13,10 @@ import { t } from '../../../src/i18n';
  * rewritten since the copy was taken came back to its older text, a command
  * line edited from outside was consumed by the plan it no longer said, and a
  * child edited between the two writes of a move away went with the removal
- * and was kept nowhere (the first F3 counterexample run: CE1, CE2, CE3; all
- * older than F3). Each is refused now, whole, with one notice.
+ * and was kept nowhere (the first F3 counterexample run: CE1, CE2, CE3), and
+ * a generation block edited from outside was written as it no longer read
+ * (the second run: CX1). All are older than F3. Each is refused now, whole,
+ * with one notice.
  */
 
 const FILE = 'note.md';
@@ -165,5 +167,56 @@ describe('CE3: a child edited between the archive and the source\'s write', () =
         expect(Notice.messages).toEqual([t('notice.moveOriginKept', {
             dest: 'other', reason: t('notice.moveOriginChanged'), subject: 'A',
         })]);
+    });
+});
+
+describe('CX1: a generation block edited from outside, before any scan read it', () => {
+    const NOTE = [
+        '# note', '- [ ] Z', '',
+        '```tv-gen w', '- [ ] A ${dates}', '\t- [ ] old child', '```', '',
+    ];
+
+    it('a completion fire does not write the block as it no longer reads', async () => {
+        const { contents, session } = await open({
+            [FILE]: ['# note', '- [x] A @2026-09-21', '\t- ==> every mon use("w")', ...NOTE.slice(1)],
+        });
+        const task = session.index.getTask(idOf(session, 'A'))!;
+        const edited = contents.get(FILE)!.replace('old child', 'new child');
+        contents.set(FILE, edited);
+
+        await executor(session).handleTaskCompletion(task);
+        await flowSettled(session);
+
+        expect(contents.get(FILE)).toBe(edited);
+        expect(Notice.messages).toEqual([CHANGED]);
+    });
+
+    it('a deletion fire neither deletes the row nor writes the old block', async () => {
+        const { contents, session } = await open({
+            [FILE]: ['# note', '- [ ] A @2026-09-21', '\t- ==> every mon use("w")', ...NOTE.slice(1)],
+        });
+        const id = idOf(session, 'A');
+        const edited = contents.get(FILE)!.replace('old child', 'new child');
+        contents.set(FILE, edited);
+
+        expect(await session.index.deleteTask(id, { fireFlow: true })).toBe(false);
+
+        expect(contents.get(FILE)).toBe(edited);
+        expect(Notice.messages).toEqual([CHANGED]);
+    });
+
+    it('a block left as it was does not stop the fire', async () => {
+        const { contents, session } = await open({
+            [FILE]: ['# note', '- [x] A @2026-09-21', '\t- ==> every mon use("w")', ...NOTE.slice(1)],
+        });
+        const task = session.index.getTask(idOf(session, 'A'))!;
+
+        await executor(session).handleTaskCompletion(task);
+        await flowSettled(session);
+
+        expect(contents.get(FILE)).toContain('- [x] A @2026-09-21');
+        expect(contents.get(FILE)).not.toContain('- [x] A @2026-09-21 ==>');
+        expect(contents.get(FILE)!.split('\n').filter(line => line === '\t- [ ] old child')).toHaveLength(2);
+        expect(Notice.messages).toEqual([]);
     });
 });

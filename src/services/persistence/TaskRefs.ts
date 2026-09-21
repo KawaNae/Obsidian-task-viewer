@@ -51,6 +51,12 @@ export interface RowBasis {
      * wrote them somewhere else first — the source's half of a move away.
      */
     subtree?: readonly string[];
+    /**
+     * The `tv-gen` blocks of the row's file the plan read, by name, with their
+     * body as it read it. A block is the other half of a generated instance's
+     * plan: edited since, it would be written as it no longer reads.
+     */
+    blocks?: ReadonlyArray<{ name: string; body: readonly string[] }>;
 }
 
 /** A target that also carries what the operation was planned from. */
@@ -58,12 +64,16 @@ export interface PlannedTarget extends WriteTarget {
     basis: RowBasis;
 }
 
-export function plannedOn(task: Task): PlannedTarget {
+export function plannedOn(
+    task: Task,
+    blocks: ReadonlyArray<{ name: string; body: readonly string[] }> = [],
+): PlannedTarget {
     return {
         ...targetOf(task),
         basis: {
             text: task.originalText,
             commands: (task.flow?.childSegments ?? []).map(segment => segment.raw),
+            ...(blocks.length > 0 ? { blocks } : {}),
         },
     };
 }

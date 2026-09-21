@@ -209,7 +209,8 @@ export class FlowExecutor {
      * then have to clear away by hand.
      */
     private async executeDeletionFire(task: Task): Promise<boolean> {
-        const outlook = planFlowForDeletion(task, this.buildDeps());
+        const read = this.readingBlocks();
+        const outlook = planFlowForDeletion(task, read.deps);
 
         if (outlook.kind === 'failed') {
             logWarn(`[FlowExecutor] Delete cancelled, flow did not fire for ${task.id}: ${outlook.error.message}`);
@@ -227,7 +228,7 @@ export class FlowExecutor {
         // The instance goes in first, at the head of the sibling group, and
         // the removal follows at the row's line carried across that insert.
         const { written: removed } = await this.repository.applyToTask(
-            plannedOn(task), [...inserts, { kind: 'remove' }]);
+            plannedOn(task, read.blocks), [...inserts, { kind: 'remove' }]);
         if (!removed) {
             // Told to the user by the write layer, which refused it.
             logWarn(`[FlowExecutor] Flow fired but the original could not be deleted: ${task.id}`);
@@ -272,8 +273,9 @@ export class FlowExecutor {
         if (!program) return false;
 
         let effects: FlowEffect[];
+        const read = this.readingBlocks();
         try {
-            effects = planFlow(task, program, this.buildDeps());
+            effects = planFlow(task, program, read.deps);
         } catch (err) {
             if (err instanceof EvalError || err instanceof GenerationError) {
                 // Runtime expression failure (e.g. unset property), or a
@@ -305,7 +307,7 @@ export class FlowExecutor {
             (effect): effect is Extract<FlowEffect, { kind: 'archive-to' }> =>
                 effect.kind === 'archive-to' && effect.destPath !== task.file);
         if (away) {
-            const planned = plannedOn(task);
+            const planned = plannedOn(task, read.blocks);
             const archived = await this.repository.appendTaskWithChildren(
                 away.destPath, TaskParser.format(away.archivedTask), planned);
             if (archived === null) {
@@ -324,7 +326,7 @@ export class FlowExecutor {
 
         // Named with what the plan was made from: the write refuses a row that
         // no longer reads that way, rather than writing the plan over it.
-        const outcome = await this.repository.applyToTask(plannedOn(task), ops);
+        const outcome = await this.repository.applyToTask(plannedOn(task, read.blocks), ops);
         if (!outcome.written) {
             // Told to the user by the write layer, which refused it.
             logWarn(`[FlowExecutor] Flow did not fire, nothing written: ${task.id}`);
@@ -412,6 +414,26 @@ export class FlowExecutor {
         if (this.recentFailures.has(key)) return;
         this.recentFailures.set(key, now);
         new Notice(t(messageKey, { reason: runtimeText(err), file: fileName(task.file) }));
+    }
+
+    /**
+     * Plan dependencies that remember the generation blocks the plan read, so
+     * the write can find them still reading that way (see `plannedOn`).
+     */
+    private readingBlocks(): { deps: FlowPlanDeps; blocks: Array<{ name: string; body: readonly string[] }> } {
+        const deps = this.buildDeps();
+        const blocks: Array<{ name: string; body: readonly string[] }> = [];
+        return {
+            blocks,
+            deps: {
+                ...deps,
+                getBlock: (filePath, name) => {
+                    const block = deps.getBlock(filePath, name);
+                    if (block) blocks.push({ name: block.name, body: [...block.body] });
+                    return block;
+                },
+            },
+        };
     }
 
     private buildDeps(): FlowPlanDeps {
