@@ -39,7 +39,7 @@ export class InlineTaskWriter {
         }
 
         return processLines(this.app, file, (lines, _eol, { edits, lineOf }) => {
-            const currentLine = lineOf(refOf(task), subjectOf(task), { rewrites: true });
+            const currentLine = lineOf(refOf(task), subjectOf(task));
             if (currentLine === null) return null;
 
             // Re-format line
@@ -147,7 +147,7 @@ export class InlineTaskWriter {
         }
 
         await processLines(this.app, file, (lines, _eol, { edits, lineOf }) => {
-            const currentLine = lineOf(refOf(task), subjectOf(task), { rewrites: true });
+            const currentLine = lineOf(refOf(task), subjectOf(task));
             if (currentLine === null) return null;
 
             // Every index here is below `currentLine`: the scan starts at
@@ -547,9 +547,10 @@ export class InlineTaskWriter {
             const sourceLines = splitLines(await this.app.vault.read(sourceFile)).lines;
             const channel = this.writes?.for(task.file);
             const located = channel ? channel.locate(sourceLines, refOf(task)) : { kind: 'gone' as const };
-            if (located.kind !== 'at') {
-                logWarn(`[InlineTaskWriter] move source not placed: ${task.file} ${located.kind}`);
-                channel?.refused({ file: task.file, reason: located, subject: subjectOf(task) });
+            if (located.kind !== 'at' || located.edited) {
+                const reason = located.kind === 'at' ? { kind: 'changed' as const } : located;
+                logWarn(`[InlineTaskWriter] move source not placed: ${task.file} ${reason.kind}`);
+                channel?.refused({ file: task.file, reason, subject: subjectOf(task) });
                 return;
             }
             adjustedChildren = this.buildAdjustedChildren(sourceLines, located.line);

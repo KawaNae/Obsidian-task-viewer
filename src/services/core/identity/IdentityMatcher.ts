@@ -24,7 +24,9 @@ export interface MatchResult {
      * was one of: every previous row of a bucket that held more than one row
      * on either side, where nearest ordinal is what decided. The row position
      * left unpaired is in here too — that it was the one to go is as much a
-     * guess as which line the other one got.
+     * guess as which line the other one got. So is a row paired later — by
+     * a weaker rung, or in the second pass — with a line position left over in
+     * such a bucket: that the line was left over is where the guess went.
      *
      * A scan does not read this — for identity, a guess by position is the
      * documented best it can do. A write does (see `TaskScanner.locate`):
@@ -81,6 +83,8 @@ export function matchFile(
     const pairedWith = new Map<Task, LedgerEntry>();
     const matchedPrev = new Set<string>();
     const guessed = new Map<string, number>();
+    // Current lines a position-decided bucket held, across both passes.
+    const leftByPosition = new Map<Task, number>();
 
     // --- rung 0: what our own writes said, when the file bears exactly one of them out ---
     const resolution: HintResolution = resolveHints(previous, ordered, evidence);
@@ -110,7 +114,8 @@ export function matchFile(
                 .map(entry => ({ item: entry, fingerprint: entry.fingerprint })),
             scope.cur
                 .filter(task => !pairedWith.has(task) && !hinted.fresh.has(task))
-                .map(task => ({ item: task, fingerprint: fingerprints.get(task)! }))
+                .map(task => ({ item: task, fingerprint: fingerprints.get(task)! })),
+            leftByPosition,
         );
         for (const [entry, among] of byPosition) guessed.set(entry.runtimeId, among);
         for (const [entry, task] of pairs) {
@@ -132,7 +137,8 @@ export function matchFile(
     const poolCur = ordered.filter(task => !pairedWith.has(task) && !hinted.fresh.has(task));
     const rescued = runLadder(
         poolPrev.map(entry => ({ item: entry, fingerprint: entry.fingerprint })),
-        poolCur.map(task => ({ item: task, fingerprint: fingerprints.get(task)! }))
+        poolCur.map(task => ({ item: task, fingerprint: fingerprints.get(task)! })),
+        leftByPosition,
     );
     for (const [entry, task] of rescued.pairs) {
         pairedWith.set(task, entry);
@@ -282,11 +288,26 @@ interface LadderResult<P, C> {
  * (`pairByOrdinal`), so an n-against-m bucket resolves to min(n, m) pairs
  * instead of guessing.
  */
-function runLadder<P, C>(prev: Array<Rung<P>>, cur: Array<Rung<C>>): LadderResult<P, C> {
+function runLadder<P, C>(
+    prev: Array<Rung<P>>,
+    cur: Array<Rung<C>>,
+    /**
+     * Current items a position-decided bucket held, with its size. Filled here
+     * and read here, and shared across calls, so a line left over by position
+     * in one pass carries that into whatever pairs it later.
+     */
+    byPositionCur: Map<C, number>,
+): LadderResult<P, C> {
     const pairs: Array<[P, C]> = [];
     const byPosition: Array<[P, number]> = [];
     const takenPrev = new Set<number>();
     const takenCur = new Set<number>();
+    // A line an earlier bucket left over by position hands that on to the row
+    // it is paired with now.
+    const inherit = (p: number, c: number): void => {
+        const among = byPositionCur.get(cur[c].item);
+        if (among !== undefined) byPosition.push([prev[p].item, among]);
+    };
 
     const zip = (keyOf: (fingerprint: Fingerprint) => string | null, oneToOneOnly: boolean): void => {
         const prevBuckets = bucket(prev, takenPrev, keyOf);
@@ -307,6 +328,10 @@ function runLadder<P, C>(prev: Array<Rung<P>>, cur: Array<Rung<C>>): LadderResul
                 takenPrev.add(p);
                 takenCur.add(c);
                 pairs.push([prev[p].item, cur[c].item]);
+                inherit(p, c);
+            }
+            if (among > 1) {
+                for (const c of curIndexes) byPositionCur.set(cur[c].item, among);
             }
         }
     };
@@ -325,6 +350,7 @@ function runLadder<P, C>(prev: Array<Rung<P>>, cur: Array<Rung<C>>): LadderResul
             takenPrev.add(prevRest[0]);
             takenCur.add(curRest[0]);
             pairs.push([prev[prevRest[0]].item, cur[curRest[0]].item]);
+            inherit(prevRest[0], curRest[0]);
         }
     }
 

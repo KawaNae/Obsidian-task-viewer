@@ -449,7 +449,7 @@ export class TaskScanner {
      * on record, line for line.
      */
     locate(path: string, lines: readonly string[], ref: TaskRef): Located {
-        const edited = (line: number): boolean => !this.recordedTexts(path, ref.runtimeId).has(lines[line]);
+        const edited = (line: number): boolean => !this.recordedTexts(path, ref.runtimeId).has(lines[line].trimStart());
 
         const byBlockId = lineOfBlockId(lines, ref.blockId);
         if (byBlockId !== null) return { kind: 'at', line: byBlockId, edited: edited(byBlockId) };
@@ -486,17 +486,20 @@ export class TaskScanner {
     /**
      * Every text the plugin has on record for one row: as the last scan read
      * it, as the last write left it, and as each pending claim says it reads.
+     * Without the indentation, which places the row in the tree and is read
+     * off the file by every write that needs it: a row moved under another is
+     * not a row whose text changed.
      */
     private recordedTexts(path: string, runtimeId: string): Set<string> {
         const texts = new Set<string>();
         const entry = this.ledger.get(runtimeId);
-        if (entry && entry.file === path) texts.add(entry.fingerprint.originalText);
+        if (entry && entry.file === path) texts.add(entry.fingerprint.originalText.trimStart());
         for (const row of this.claims.rowsLeft(path) ?? []) {
-            if (row.runtimeId === runtimeId) texts.add(row.text);
+            if (row.runtimeId === runtimeId) texts.add(row.text.trimStart());
         }
         for (const pending of this.hints.peekFor(path, Date.now())) {
             for (const row of pending.hint.rows) {
-                if (row.runtimeId === runtimeId) texts.add(row.text);
+                if (row.runtimeId === runtimeId) texts.add(row.text.trimStart());
             }
         }
         return texts;
