@@ -312,7 +312,7 @@ describe('F2-counter: flow effects', () => {
         const bench = await writeBench({ [FILE]: '- [ ] alpha\n- [ ] buy milk\n- [ ] omega', 'archive.md': '' });
         const milk = bench.taskAt(1);
         bench.edit(['- [ ] alpha', '- [ ] omega', '- [ ] call mom']);
-        expect(await bench.writer.appendTaskWithChildren('archive.md', '- [x] buy milk', targetOf(milk))).toBe(false);
+        expect(await bench.writer.appendTaskWithChildren('archive.md', '- [x] buy milk', targetOf(milk))).toBeNull();
         expect(bench.text('archive.md')).toBe('');
         expect(bench.refused.map(r => r.reason.kind)).toEqual(['changed']);
     });

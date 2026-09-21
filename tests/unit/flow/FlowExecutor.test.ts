@@ -6,7 +6,7 @@ import { parseFlowSegments, singleLineFlow } from '../../../src/services/flow/Fl
 import { TaskIndex } from '../../../src/services/core/TaskIndex';
 import { TaskRepository } from '../../../src/services/persistence/TaskRepository';
 import type { TaskOp } from '../../../src/services/persistence/TaskOps';
-import { targetOf } from '../../../src/services/persistence/TaskRefs';
+import { plannedOn } from '../../../src/services/persistence/TaskRefs';
 import { TaskParser } from '../../../src/services/parsing/TaskParser';
 import { DEFAULT_SETTINGS, Task } from '../../../src/types';
 import { makeTask } from '../helpers/makeTask';
@@ -15,7 +15,7 @@ import { heldTasks } from '../helpers/heldTasks';
 function makeRepository() {
     return {
         applyToTask: vi.fn().mockResolvedValue({ written: true, refused: null, made: [] }),
-        appendTaskWithChildren: vi.fn().mockResolvedValue(true),
+        appendTaskWithChildren: vi.fn().mockResolvedValue(['- [x] Test task']),
         updateTaskInFile: vi.fn().mockResolvedValue(undefined),
         stripFlow: vi.fn().mockResolvedValue(undefined),
         deleteTaskFromFile: vi.fn().mockResolvedValue(true),
@@ -98,7 +98,7 @@ describe('FlowExecutor', () => {
         // One write for the whole fire, naming the row that fired.
         expect(repository.applyToTask).toHaveBeenCalledTimes(1);
         const [target, ops] = repository.applyToTask.mock.calls[0];
-        expect(target).toEqual(targetOf(task));
+        expect(target).toEqual(plannedOn(task));
 
         // Order: insert BEFORE strip, as the ops of that one write.
         expect(ops.map((o: TaskOp) => o.kind)).toEqual(['insert-instance', 'strip-flow']);
@@ -150,7 +150,11 @@ describe('FlowExecutor', () => {
         const [dest, line, source] = repository.appendTaskWithChildren.mock.calls[0];
         expect(dest).toBe('Archive.md');
         expect(line).not.toContain('==>');
-        expect(source).toEqual(targetOf(task));
+        expect(source).toEqual(plannedOn(task));
+        // The source's write is held to the subtree the archive was made from.
+        expect(repository.applyToTask.mock.calls[0][0]).toEqual({
+            ...plannedOn(task), basis: { ...plannedOn(task).basis, subtree: ['- [x] Test task'] },
+        });
         expect(repository.applyToTask).toHaveBeenCalledTimes(1);
         expect(opsOf(repository)).toEqual([{ kind: 'remove' }]);
         expect(repository.deleteTaskFromFile).not.toHaveBeenCalled();
@@ -176,7 +180,7 @@ describe('FlowExecutor', () => {
         // 移送先に書けなかったなら、次回分も元の行の削除も書かない。
         // 拒否の通知は書き込みの層が1回だけ出す。
         const repository = makeRepository();
-        repository.appendTaskWithChildren.mockResolvedValue(false);
+        repository.appendTaskWithChildren.mockResolvedValue(null);
         const { executor } = makeExecutor(repository);
         Notice.messages.length = 0;
 
@@ -392,7 +396,7 @@ describe('fireAndDelete', () => {
         // 挿入と削除を分けると、2本目が originalText で行を探し直すことになる。
         // 次回分は元の行と同じ本文になりうるので、その探索は当てにできない。
         expect(repository.applyToTask).toHaveBeenCalledTimes(1);
-        expect(repository.applyToTask).toHaveBeenCalledWith(targetOf(task), [
+        expect(repository.applyToTask).toHaveBeenCalledWith(plannedOn(task), [
             { kind: 'insert-instance', insert: expect.objectContaining({ kind: 'recurrence' }) },
             { kind: 'remove' },
         ]);

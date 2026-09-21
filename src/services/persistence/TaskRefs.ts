@@ -31,3 +31,39 @@ export interface WriteTarget {
 export function targetOf(task: Task): WriteTarget {
     return { file: task.file, ref: refOf(task), subject: subjectOf(task) };
 }
+
+/**
+ * What an operation was planned from: the row as the index read it, and the
+ * row's own `- ==>` lines. A fire's plan — the next instance, the text the
+ * strip or the archive writes, where a move goes — is made from the index's
+ * copy, not from the file, so the write has to find the file still reading
+ * as that copy. `locate`'s `edited` does not say so: it accepts any text on
+ * record for the row, a write of ours included, and it does not look at the
+ * command lines at all.
+ */
+export interface RowBasis {
+    /** The row's line, as the index read it (compared without its indentation). */
+    text: string;
+    /** The text after `==>` on each of the row's own command lines, in order. */
+    commands: readonly string[];
+    /**
+     * The row and every line of its subtree, verbatim, when the operation
+     * wrote them somewhere else first — the source's half of a move away.
+     */
+    subtree?: readonly string[];
+}
+
+/** A target that also carries what the operation was planned from. */
+export interface PlannedTarget extends WriteTarget {
+    basis: RowBasis;
+}
+
+export function plannedOn(task: Task): PlannedTarget {
+    return {
+        ...targetOf(task),
+        basis: {
+            text: task.originalText,
+            commands: (task.flow?.childSegments ?? []).map(segment => segment.raw),
+        },
+    };
+}
