@@ -56,7 +56,7 @@ export interface ClaimResult {
  *
  * Either the file as that write left it — the key of its content, and the rows
  * in it, because the content is what decides whether the rows may be used at
- * all (see {@link WriteClaims.baseFor}) — or a refusal: a write landed that
+ * all (see {@link WriteClaims.stateFor}) — or a refusal: a write landed that
  * this class could not describe, so nothing it holds is true of the file any
  * more, and nothing older is either.
  */
@@ -145,7 +145,7 @@ export class WriteClaims {
             return { hint: null, withdraw };
         };
 
-        const base = this.baseFor(path, before);
+        const base = this.stateFor(path, before);
         if (base === null) return nothing();
 
         const replayed = replayEdits(before.length, edits);
@@ -215,8 +215,14 @@ export class WriteClaims {
     }
 
     /**
-     * The rows to build this claim on: what the last write left, else what the
-     * last scan recorded, else nothing.
+     * The rows these lines are known to hold: what the last write left, else
+     * what the last scan recorded, else nothing.
+     *
+     * Asked about the lines a write was handed, before it changes them, and by
+     * two parties: the write's claim builds on the answer, and the write's
+     * `locate` reads its target's coordinate off it (see `TaskScanner.locate`).
+     * A coordinate is good only inside the content it was read from, and this
+     * is the one place that says which content that is.
      *
      * Either candidate is a guess about a file this code did not read, so it is
      * checked rather than trusted, and both are checked the same way: the file
@@ -263,7 +269,7 @@ export class WriteClaims {
      * so there is nothing a claim could hand to the wrong line: every row the
      * write finds is new, and it builds on no rows at all.
      */
-    private baseFor(path: string, before: readonly string[]): ClaimBase[] | null {
+    stateFor(path: string, before: readonly string[]): ClaimBase[] | null {
         const current = contentKeyOf(before);
 
         const base = this.bases.get(path);

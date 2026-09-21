@@ -13,7 +13,8 @@ import { matchFile, matchWithoutRepeatedIds } from './identity/IdentityMatcher';
 import { WriteClaims, type ClaimResult } from './identity/WriteClaims';
 import { contentKeyOf } from './identity/ContentKey';
 import { applyIdentity, assertDistinctRuntimeIds, assertNoProvisionalIds, assertUniqueProvisionalIds } from './identity/IdentityApplier';
-import { splitLines, type WriteSink } from '../../utils/FileLines';
+import { splitLines, type Located, type TaskRef, type WriteSink } from '../../utils/FileLines';
+import { CodeFenceTracker } from '../../utils/CodeFenceTracker';
 import { logDebug, logError, logInfo } from '../../log/log';
 
 /**
@@ -412,6 +413,69 @@ export class TaskScanner {
     }
 
     /**
+     * Where the row a write names stands in the lines that write was handed.
+     *
+     * The upstream half of identity: the question a scan answers for a whole
+     * file, asked for one name and without writing anything down. The ledger
+     * and the claim log are read, never changed — only a scan writes them —
+     * so asking twice, or asking and then not writing, leaves no trace.
+     *
+     * A coordinate comes out of three things and nothing else:
+     *
+     * 1. the row's `^id`, when it names exactly one line outside a fence —
+     *    the one piece of evidence that outlives every edit;
+     * 2. a content on record (`WriteClaims.stateFor`): the lines read, whole,
+     *    as the last write left them or the last scan read them, so the rows
+     *    recorded for that content stand where they were recorded — no parse;
+     * 3. otherwise the match a scan of these lines would make, against the
+     *    ledger and the pending claims, as the scan makes it. The name has to
+     *    come out paired with one line on evidence: a pair the ladder chose by
+     *    position among identical rows is `ambiguous`, because writing on a
+     *    guess is worse than not writing.
+     *
+     * What never comes out of here is the line a task held when it was last
+     * scanned, or the first line that reads like it. Neither says anything
+     * about the lines in hand.
+     *
+     * A name the ledger has not heard of — a row a write made, not yet scanned
+     * — is found through 2, or through 3 when a pending claim is adopted. On
+     * lines that bear neither out it is `gone`: the only thing left to go on
+     * would be its text.
+     */
+    locate(path: string, lines: readonly string[], ref: TaskRef): Located {
+        const byBlockId = lineOfBlockId(lines, ref.blockId);
+        if (byBlockId !== null) return { kind: 'at', line: byBlockId };
+
+        const recorded = this.claims.stateFor(path, lines);
+        if (recorded !== null) {
+            const row = recorded.find(candidate => candidate.runtimeId === ref.runtimeId);
+            return row ? { kind: 'at', line: row.line } : { kind: 'gone' };
+        }
+
+        const parsed = FileParsePipeline.parse(
+            path, [...lines], this.app.metadataCache.getCache(path)?.frontmatter, this.settings);
+        if (parsed.ignored) return { kind: 'gone' };
+
+        const previous = this.ledger.snapshotFor(path);
+        // Names for the rows nothing pairs. They leave this function with
+        // nothing but a comparison against `ref`, which none of them can equal.
+        let unnamed = 0;
+        const { result } = matchWithoutRepeatedIds(
+            hints => matchFile(previous, parsed.tasks, () => `locate:unnamed:${++unnamed}`, hints),
+            {
+                pending: this.hints.peekFor(path, Date.now()),
+                before: this.ledger.contentFor(path),
+                read: contentKeyOf(lines),
+            },
+        );
+
+        const among = result.guessed.get(ref.runtimeId);
+        if (among !== undefined) return { kind: 'ambiguous', count: among };
+        const at = parsed.tasks.find(task => result.mapping.get(task.id) === ref.runtimeId);
+        return at ? { kind: 'at', line: at.line } : { kind: 'gone' };
+    }
+
+    /**
      * 初期化状態を設定
      */
     setInitializing(value: boolean): void {
@@ -426,3 +490,22 @@ export class TaskScanner {
     }
 }
 
+/**
+ * The one line outside a fence that carries this `^id`, or null when there is
+ * none or more than one. A `^id` copied along with its line names two rows,
+ * and proves nothing about either — the same rule as the ladder's first rung.
+ */
+function lineOfBlockId(lines: readonly string[], blockId: string | undefined): number | null {
+    const id = blockId?.trim();
+    if (!id) return null;
+
+    const pattern = new RegExp(`\\s\\^${id.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s*$`);
+    const fenced = CodeFenceTracker.mask([...lines]);
+    let found: number | null = null;
+    for (let i = 0; i < lines.length; i++) {
+        if (fenced[i] || !pattern.test(lines[i])) continue;
+        if (found !== null) return null;
+        found = i;
+    }
+    return found;
+}

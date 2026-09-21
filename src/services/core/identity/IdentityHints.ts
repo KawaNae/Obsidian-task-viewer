@@ -183,6 +183,19 @@ export class HintLog {
     }
 
     /**
+     * What {@link pendingFor} would hand a scan now, without doing to the log
+     * what a scan does. For a question asked in passing (a write's `locate`):
+     * an expired log answers nothing here either, and is left for the next
+     * scan to drop.
+     */
+    peekFor(file: string, now: number): readonly PendingHint[] {
+        const pending = this.files.get(file);
+        if (!pending) return [];
+        if (pending.some(entry => now - entry.at >= HINT_TTL_MS)) return [];
+        return pending;
+    }
+
+    /**
      * Retire what this scan finished with.
      *
      * @param consumed how many claims from the head are done with — the adopted

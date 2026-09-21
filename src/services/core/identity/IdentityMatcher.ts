@@ -19,6 +19,19 @@ export interface MatchResult {
      * the one it adopted and everything older. 0 when it adopted none.
      */
     consumedHints: number;
+    /**
+     * Previous rows whose fate position decided, each with how many rows it
+     * was one of: every previous row of a bucket that held more than one row
+     * on either side, where nearest ordinal is what decided. The row position
+     * left unpaired is in here too — that it was the one to go is as much a
+     * guess as which line the other one got.
+     *
+     * A scan does not read this — for identity, a guess by position is the
+     * documented best it can do. A write does (see `TaskScanner.locate`):
+     * writing on a line chosen by position is writing on a guess, and a write
+     * would rather not write at all.
+     */
+    guessed: Map<string, number>;
 }
 
 /**
@@ -67,6 +80,7 @@ export function matchFile(
 
     const pairedWith = new Map<Task, LedgerEntry>();
     const matchedPrev = new Set<string>();
+    const guessed = new Map<string, number>();
 
     // --- rung 0: what our own writes said, when the file bears exactly one of them out ---
     const resolution: HintResolution = resolveHints(previous, ordered, evidence);
@@ -90,7 +104,7 @@ export function matchFile(
 
     while (scopes.length > 0) {
         const scope = scopes.pop()!;
-        const { pairs } = runLadder(
+        const { pairs, byPosition } = runLadder(
             scope.prev
                 .filter(entry => !matchedPrev.has(entry.runtimeId))
                 .map(entry => ({ item: entry, fingerprint: entry.fingerprint })),
@@ -98,6 +112,7 @@ export function matchFile(
                 .filter(task => !pairedWith.has(task) && !hinted.fresh.has(task))
                 .map(task => ({ item: task, fingerprint: fingerprints.get(task)! }))
         );
+        for (const [entry, among] of byPosition) guessed.set(entry.runtimeId, among);
         for (const [entry, task] of pairs) {
             pairedWith.set(task, entry);
             matchedPrev.add(entry.runtimeId);
@@ -122,6 +137,7 @@ export function matchFile(
     for (const [entry, task] of rescued.pairs) {
         pairedWith.set(task, entry);
     }
+    for (const [entry, among] of rescued.byPosition) guessed.set(entry.runtimeId, among);
 
     const minted: string[] = [];
     const runtimeIdOf = new Map<Task, string>();
@@ -163,6 +179,7 @@ export function matchFile(
         minted,
         retired: [...hinted.retired, ...rescued.prevLeft.map(entry => entry.runtimeId)],
         consumedHints,
+        guessed,
     };
 }
 
@@ -244,6 +261,8 @@ interface Rung<T> {
 
 interface LadderResult<P, C> {
     pairs: Array<[P, C]>;
+    /** Previous rows of the buckets position decided, with the size of their bucket. */
+    byPosition: Array<[P, number]>;
     prevLeft: P[];
     curLeft: C[];
 }
@@ -265,6 +284,7 @@ interface LadderResult<P, C> {
  */
 function runLadder<P, C>(prev: Array<Rung<P>>, cur: Array<Rung<C>>): LadderResult<P, C> {
     const pairs: Array<[P, C]> = [];
+    const byPosition: Array<[P, number]> = [];
     const takenPrev = new Set<number>();
     const takenCur = new Set<number>();
 
@@ -277,6 +297,12 @@ function runLadder<P, C>(prev: Array<Rung<P>>, cur: Array<Rung<C>>): LadderResul
             if (!prevIndexes) continue;
             if (oneToOneOnly && (prevIndexes.length !== 1 || curIndexes.length !== 1)) continue;
 
+            // One against one is decided by the key. Anything larger is
+            // decided by nearest ordinal, which is position.
+            const among = Math.max(prevIndexes.length, curIndexes.length);
+            if (among > 1) {
+                for (const p of prevIndexes) byPosition.push([prev[p].item, among]);
+            }
             for (const [p, c] of pairByOrdinal(prevIndexes, curIndexes)) {
                 takenPrev.add(p);
                 takenCur.add(c);
@@ -304,6 +330,7 @@ function runLadder<P, C>(prev: Array<Rung<P>>, cur: Array<Rung<C>>): LadderResul
 
     return {
         pairs,
+        byPosition,
         prevLeft: remaining(prev, takenPrev).map(index => prev[index].item),
         curLeft: remaining(cur, takenCur).map(index => cur[index].item),
     };
