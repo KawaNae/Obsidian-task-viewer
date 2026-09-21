@@ -11,6 +11,7 @@ import { IdentityLedger, type LedgerEntry } from './identity/IdentityLedger';
 import { HintLog } from './identity/IdentityHints';
 import { matchFile, matchWithoutRepeatedIds } from './identity/IdentityMatcher';
 import { WriteClaims, type ClaimResult } from './identity/WriteClaims';
+import { contentKeyOf } from './identity/ContentKey';
 import { applyIdentity, assertDistinctRuntimeIds, assertNoProvisionalIds, assertUniqueProvisionalIds } from './identity/IdentityApplier';
 import { splitLines, type WriteSink } from '../../utils/FileLines';
 import { logDebug, logError, logInfo } from '../../log/log';
@@ -201,6 +202,7 @@ export class TaskScanner {
         // (see resolveHints).
         const content = await this.app.vault.read(file);
         const { lines } = splitLines(content);
+        const readKey = contentKeyOf(lines);
 
         // --- parse ---
         const parsed = FileParsePipeline.parse(
@@ -305,7 +307,7 @@ export class TaskScanner {
 
             // Last, so a store write that throws leaves the ledger on the
             // previous generation too.
-            this.ledger.replaceFile(file.path, identity.entries);
+            this.ledger.replaceFile(file.path, identity.entries, readKey);
             this.hints.settle(
                 file.path, identity.consumedHints,
                 ledgerMoved(previousRows, identity.entries),

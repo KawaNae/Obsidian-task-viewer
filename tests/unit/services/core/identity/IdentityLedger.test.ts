@@ -20,7 +20,7 @@ describe('IdentityLedger', () => {
             entry('r1', 'a.md', null, 0),
             entry('r2', 'a.md', 'r1', 0),
             entry('r3', 'a.md', null, 1),
-        ]);
+        ], 'k:a.md');
 
         expect(ledger.snapshotFor('a.md').map(e => e.runtimeId)).toEqual(['r1', 'r2', 'r3']);
         expect(ledger.snapshotFor('other.md')).toEqual([]);
@@ -29,8 +29,8 @@ describe('IdentityLedger', () => {
 
     it('replaces a file wholesale, forgetting the rows it dropped', () => {
         const ledger = new IdentityLedger();
-        ledger.replaceFile('a.md', [entry('r1', 'a.md', null, 0), entry('r2', 'a.md', null, 1)]);
-        ledger.replaceFile('a.md', [entry('r2', 'a.md', null, 0), entry('r9', 'a.md', null, 1)]);
+        ledger.replaceFile('a.md', [entry('r1', 'a.md', null, 0), entry('r2', 'a.md', null, 1)], 'k:a.md');
+        ledger.replaceFile('a.md', [entry('r2', 'a.md', null, 0), entry('r9', 'a.md', null, 1)], 'k:a.md');
 
         expect(ledger.snapshotFor('a.md').map(e => e.runtimeId)).toEqual(['r2', 'r9']);
         // Mutation: skip the dropFile inside replaceFile and `r1` answers forever.
@@ -39,8 +39,8 @@ describe('IdentityLedger', () => {
 
     it('drops a file without touching the others', () => {
         const ledger = new IdentityLedger();
-        ledger.replaceFile('a.md', [entry('r1', 'a.md', null, 0)]);
-        ledger.replaceFile('b.md', [entry('r2', 'b.md', null, 0)]);
+        ledger.replaceFile('a.md', [entry('r1', 'a.md', null, 0)], 'k:a.md');
+        ledger.replaceFile('b.md', [entry('r2', 'b.md', null, 0)], 'k:b.md');
 
         ledger.dropFile('a.md');
 
@@ -54,7 +54,7 @@ describe('IdentityLedger', () => {
         ledger.replaceFile('old.md', [
             entry('tv-inline:old.md:seq:1', 'old.md', null, 0),
             entry('tv-inline:old.md:seq:2', 'old.md', 'tv-inline:old.md:seq:1', 0),
-        ]);
+        ], 'k:old.md');
 
         ledger.rekeyFile('old.md', 'new.md', id => id.replace('old.md', 'new.md'));
 
@@ -69,12 +69,51 @@ describe('IdentityLedger', () => {
 
     it('rekeying onto an occupied path leaves no stale rows behind', () => {
         const ledger = new IdentityLedger();
-        ledger.replaceFile('old.md', [entry('r1', 'old.md', null, 0)]);
-        ledger.replaceFile('new.md', [entry('stale', 'new.md', null, 0)]);
+        ledger.replaceFile('old.md', [entry('r1', 'old.md', null, 0)], 'k:old.md');
+        ledger.replaceFile('new.md', [entry('stale', 'new.md', null, 0)], 'k:new.md');
 
         ledger.rekeyFile('old.md', 'new.md', id => id);
 
         expect(ledger.snapshotFor('new.md').map(e => e.runtimeId)).toEqual(['r1']);
+        expect(ledger.get('stale')).toBeUndefined();
+    });
+
+    it('records the content a scan read, rows or none', () => {
+        const ledger = new IdentityLedger();
+        // A file with no rows is still a state a write can build on.
+        ledger.replaceFile('empty.md', [], 'k:empty');
+        ledger.replaceFile('a.md', [entry('r1', 'a.md', null, 0)], 'k:a1');
+
+        expect(ledger.contentFor('empty.md')).toBe('k:empty');
+        expect(ledger.contentFor('a.md')).toBe('k:a1');
+        expect(ledger.contentFor('never-read.md')).toBeNull();
+
+        ledger.replaceFile('a.md', [], 'k:a2');
+        expect(ledger.contentFor('a.md')).toBe('k:a2');
+    });
+
+    it('forgets the content with the file, and on clear', () => {
+        const ledger = new IdentityLedger();
+        ledger.replaceFile('a.md', [], 'k:a');
+        ledger.replaceFile('b.md', [], 'k:b');
+
+        ledger.dropFile('a.md');
+        expect(ledger.contentFor('a.md')).toBeNull();
+        expect(ledger.contentFor('b.md')).toBe('k:b');
+
+        ledger.clear();
+        expect(ledger.contentFor('b.md')).toBeNull();
+    });
+
+    it('carries the content across a rename, even for a file with no rows', () => {
+        const ledger = new IdentityLedger();
+        ledger.replaceFile('old.md', [], 'k:old');
+        ledger.replaceFile('new.md', [entry('stale', 'new.md', null, 0)], 'k:stale');
+
+        ledger.rekeyFile('old.md', 'new.md', id => id);
+
+        expect(ledger.contentFor('new.md')).toBe('k:old');
+        expect(ledger.contentFor('old.md')).toBeNull();
         expect(ledger.get('stale')).toBeUndefined();
     });
 
@@ -89,7 +128,7 @@ describe('IdentityLedger', () => {
         expect(ledger.mint()).toBe(1);
         expect(ledger.mint()).toBe(2);
 
-        ledger.replaceFile('a.md', [entry('r1', 'a.md', null, 0)]);
+        ledger.replaceFile('a.md', [entry('r1', 'a.md', null, 0)], 'k:a.md');
         ledger.clear();
 
         expect(ledger.snapshotFor('a.md')).toEqual([]);
