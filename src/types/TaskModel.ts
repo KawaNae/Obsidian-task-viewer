@@ -36,8 +36,10 @@ export const DEFAULT_STATUS_DEFINITIONS: StatusDefinition[] = [
  * and a pre-existing `data.json` value at once. The reason it matters: a
  * flow's next instance is always written as `[ ]` (`FlowEffects.ts`), and
  * if blank could read as complete, that instance would complete itself the
- * moment it lands, with only `isLocalChange` standing between that and a
- * fire loop (see `.plan/structure.md`, "自己書き込みの判定と発火の可否").
+ * moment it lands. The only thing standing between that and a fire loop is
+ * that the write which lands it never sets the flag firing reads (a flow's
+ * own writes are not marked as a local edit), so this is a second, cheaper
+ * line of defense against the same runaway rather than the only one.
  */
 export function isCompleteStatusChar(statusChar: string, defs: StatusDefinition[]): boolean {
     if (statusChar === ' ') return false;

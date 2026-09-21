@@ -102,8 +102,8 @@ export function checkGeneratedParentLine(raw: string): GeneratedLineCheck {
  * not transfer here as an argument for silence — a checked child is indexed
  * as a task of its own (it is not consumed the way the parent's completion
  * is), and the only reason it does not immediately fire its own command is
- * that the write which created it never sets the flag firing reads (see
- * `.plan/structure.md`, "自己書き込みの判定と発火の可否"). A child that
+ * that the write which created it never marks itself as a local edit, which
+ * is what firing reads to decide a completion is new. A child that
  * carries both a completed status and its own `==>` is not a shape anyone
  * means to write, so it earns a warning without being refused or rewritten.
  *
