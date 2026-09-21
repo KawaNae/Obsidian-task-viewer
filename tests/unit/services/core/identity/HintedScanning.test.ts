@@ -839,3 +839,55 @@ describe('a rewrite that moves the row to another parser', () => {
         expect(harness.ids()[0]).not.toBe(before);
     });
 });
+
+describe('the whole content decides which state was read', () => {
+    it('refuses when two writes bring the file back to a content it had', async () => {
+        // The one refusal the content cannot remove. A copy goes in above the
+        // original, and the next write takes the original away: the file reads
+        // exactly as it did before either write, so the scan reading it cannot
+        // tell "neither write has landed" from "both have". The two answers
+        // name different rows — the original, or the copy — and it takes
+        // neither.
+        const harness = new Harness();
+        await harness.write([TASK, '']);
+        const original = harness.ids()[0];
+
+        harness.report([TASK, TASK, ''], [{ kind: 'inserted', at: 0, count: 1 }]);
+        harness.report([TASK, ''], [{ kind: 'removed', at: 1, count: 1 }]);
+        await harness.scan();
+
+        // The ladder's answer: the one previous row goes to the one line.
+        expect(harness.ids()).toEqual([original]);
+        // Nothing adopted, and nothing moved, so both claims stay.
+        expect(harness.pendingCount()).toBe(2);
+    });
+
+    it('falls to the ladder when something else wrote between the write and the scan', async () => {
+        // A sync or a linter touches a line no task stands on. The rows still
+        // read as the claim says, but the file does not, and a claim is
+        // believed about the file it describes or not at all. What the scan
+        // decides is then exactly what it decides with no claim filed.
+        const external = [TASK, TASK, 'synced'];
+
+        const control = new Harness();
+        await control.write([TASK, '']);
+        const controlOriginal = control.ids()[0];
+        control.contents.set(FILE, external.join('\n'));
+        await control.scan();
+
+        const harness = new Harness();
+        await harness.write([TASK, '']);
+        const original = harness.ids()[0];
+        harness.report([TASK, TASK, ''], [{ kind: 'inserted', at: 0, count: 1 }]);
+        harness.contents.set(FILE, external.join('\n'));
+        await harness.scan();
+
+        const shape = (ids: string[], kept: string) => ids.map(id => (id === kept ? 'kept' : 'new'));
+        // The claim would have said the copy is on top; the ladder, pairing
+        // by position, keeps the top line.
+        expect(shape(control.ids(), controlOriginal)).toEqual(['kept', 'new']);
+        expect(shape(harness.ids(), original)).toEqual(['kept', 'new']);
+        // The claim was not believed, and the rows moved, so the log is gone.
+        expect(harness.pendingCount()).toBe(0);
+    });
+});
