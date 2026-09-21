@@ -22,11 +22,13 @@ export interface LedgerEntry {
     /**
      * The 0-based line the last scan read this row on.
      *
-     * For the write layer, which needs somewhere to start from when it says
-     * what it did to a file's lines (see WriteClaims). Never an identity key:
-     * it is a guess about a file that may have changed since, and the only
-     * thing done with it is to check whether the line still reads what this
-     * row read. The matcher does not look at it at all.
+     * A coordinate in the content the last scan read, and good only there: it
+     * is used as a coordinate when the lines in hand are that content, whole
+     * (the key the ledger keeps for the file, see `contentFor`), and not
+     * otherwise. That is how a write's claim builds on it (see
+     * `WriteClaims.stateFor`) and how a write's target is found without a
+     * parse (see `TaskScanner.locate`). Never an identity key: the matcher
+     * does not look at it at all.
      */
     line: number;
     fingerprint: Fingerprint;

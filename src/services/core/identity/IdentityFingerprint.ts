@@ -6,10 +6,9 @@ import type { ParserId, Task } from '../../../types';
  * This is the whole reason the ledger exists: the old ID carried `ln:<line>`, so
  * inserting one line above a task made it a different task. What survives an edit
  * is the text and the dates, not the position — so those are what the matcher
- * compares, in the same order the write layer resolves a line
- * (`FileOperations.findTaskLineNumber`: blockId → originalText → content + dates).
- * Keeping the two ladders aligned avoids the combination "the write lands but the
- * identity breaks".
+ * compares: blockId → originalText → content + dates. The write layer does not
+ * keep a ladder of its own; it asks this one (`TaskScanner.locate`), so a
+ * write and the scan after it cannot disagree about which line a name is on.
  */
 export interface Fingerprint {
     parserId: ParserId;

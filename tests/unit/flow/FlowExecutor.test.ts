@@ -7,6 +7,7 @@ import { TaskIndex } from '../../../src/services/core/TaskIndex';
 import { TaskRepository } from '../../../src/services/persistence/TaskRepository';
 import { DEFAULT_SETTINGS, Task } from '../../../src/types';
 import { makeTask } from '../helpers/makeTask';
+import { heldTasks } from '../helpers/heldTasks';
 
 function makeRepository() {
     return {
@@ -19,10 +20,10 @@ function makeRepository() {
     };
 }
 
-function makeTaskIndex(resolved: (task: Task) => Task | undefined) {
+function makeTaskIndex(tasks: ReturnType<typeof heldTasks>) {
     return {
         waitForScan: vi.fn().mockResolvedValue(undefined),
-        resolveTask: vi.fn((t: Task) => resolved(t)),
+        getTask: tasks.getTask,
         requestScan: vi.fn().mockResolvedValue(undefined),
         notifyImmediate: vi.fn(),
     };
@@ -31,13 +32,14 @@ function makeTaskIndex(resolved: (task: Task) => Task | undefined) {
 const app = { vault: { getAbstractFileByPath: () => null } };
 
 function makeExecutor(repository: ReturnType<typeof makeRepository>, resolved: (task: Task) => Task | undefined = t => t) {
-    const taskIndex = makeTaskIndex(resolved);
-    const executor = new FlowExecutor(
+    const tasks = heldTasks(resolved);
+    const taskIndex = makeTaskIndex(tasks);
+    const executor = tasks.hold(new FlowExecutor(
         repository as unknown as TaskRepository,
         taskIndex as unknown as TaskIndex,
         app as never,
         () => DEFAULT_SETTINGS
-    );
+    ));
     return { executor, taskIndex };
 }
 
@@ -191,8 +193,9 @@ describe('FlowExecutor', () => {
         const repository = makeRepository();
         const { executor, taskIndex } = makeExecutor(repository);
 
-        await executor.handleTaskCompletion(flowTask('at(today + 1d)', { content: 'A', originalText: '- [x] A' }));
-        await executor.handleTaskCompletion(flowTask('at(today + 1d)', { content: 'B', originalText: '- [x] B' }));
+        // Two rows, so two names: the executor looks each up by its ID.
+        await executor.handleTaskCompletion(flowTask('at(today + 1d)', { id: 'tv-inline:note.md:A', content: 'A', originalText: '- [x] A' }));
+        await executor.handleTaskCompletion(flowTask('at(today + 1d)', { id: 'tv-inline:note.md:B', content: 'B', originalText: '- [x] B' }));
         await flush();
 
         expect(repository.insertRecurrenceForTask).toHaveBeenCalledTimes(2);
@@ -395,7 +398,8 @@ describe('fireAndDelete', () => {
 
     it('reports the task still there when the write found no line', async () => {
         // 行が解決できなければ次回分も書かれていない。タスクは消えていないので
-        // 答えは no で、ユーザーには通知で伝える。呼んだ側が黙って再試行しても
+        // 答えは no。ユーザーへの通知は書き込みを拒否した側（TaskIndex.reportRefusal）
+        // が一度だけ出すので、ここでは出さない。呼んだ側が黙って再試行しても
         // 二重には書かれないが、消えたと思わせるわけにはいかない。
         const repository = makeRepository();
         repository.replaceTaskWithInstances.mockResolvedValue(false);
@@ -405,7 +409,7 @@ describe('fireAndDelete', () => {
         const removed = await executor.fireAndDelete(flowTask('every mon', { statusChar: ' ' }));
 
         expect(removed).toBe(false);
-        expect(Notice.messages).toHaveLength(1);
+        expect(Notice.messages).toHaveLength(0);
     });
 
     it('resolves only after the work is done, so the caller can rescan', async () => {
@@ -447,10 +451,11 @@ describe('fireAndDelete', () => {
         const repository = makeRepository();
         const { executor } = makeExecutor(repository);
 
+        // Two rows, so two names: the executor looks each up by its ID.
         const completion = executor.handleTaskCompletion(
-            flowTask('every mon', { content: 'A', originalText: '- [x] A' }));
+            flowTask('every mon', { id: 'tv-inline:note.md:A', content: 'A', originalText: '- [x] A' }));
         const deletion = executor.fireAndDelete(
-            flowTask('every tue', { content: 'B', originalText: '- [ ] B', statusChar: ' ' }));
+            flowTask('every tue', { id: 'tv-inline:note.md:B', content: 'B', originalText: '- [ ] B', statusChar: ' ' }));
         await Promise.all([completion, deletion]);
 
         expect(repository.stripFlow.mock.invocationCallOrder[0])

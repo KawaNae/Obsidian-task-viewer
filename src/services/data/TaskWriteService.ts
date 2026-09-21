@@ -1,4 +1,5 @@
 import type { TFile } from 'obsidian';
+import type { EditorLine } from '../../utils/FileLines';
 import type { DuplicateOptions, Task } from '../../types';
 import type { TaskIndex } from '../core/TaskIndex';
 import type { FlowDeleteAssessment } from '../flow/FlowDeletion';
@@ -134,16 +135,16 @@ export class TaskWriteService {
     // line via the editor cursor (e.g. TaskMenuExtension) or another trusted
     // source.
 
-    async updateLine(filePath: string, lineNumber: number, newContent: string): Promise<void> {
-        return this.taskIndex.updateLine(filePath, lineNumber, newContent);
+    async updateLine(filePath: string, at: EditorLine, newContent: string): Promise<void> {
+        return this.taskIndex.updateLine(filePath, at, newContent);
     }
 
-    async insertLineAfterLine(filePath: string, lineNumber: number, newContent: string): Promise<void> {
-        return this.taskIndex.insertLineAfterLine(filePath, lineNumber, newContent);
+    async insertLineAfterLine(filePath: string, at: EditorLine, newContent: string): Promise<void> {
+        return this.taskIndex.insertLineAfterLine(filePath, at, newContent);
     }
 
-    async deleteLine(filePath: string, lineNumber: number): Promise<void> {
-        return this.taskIndex.deleteLine(filePath, lineNumber);
+    async deleteLine(filePath: string, at: EditorLine): Promise<void> {
+        return this.taskIndex.deleteLine(filePath, at);
     }
 
     // ===== Frontmatter key writes (Task を介さない書き込み) =====

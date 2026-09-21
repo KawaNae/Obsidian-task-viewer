@@ -1,10 +1,10 @@
 import { type App, TFile } from 'obsidian';
 import type { DuplicateOptions, Task } from '../../types';
-import { formatFlowLine } from '../flow/FlowLineScanner';
 import { DateUtils } from '../../utils/DateUtils';
 import { logWarn } from '../../log/log';
 import { FileOperations } from './utils/FileOperations';
-import { appendLines, processLines, splitLines, type LineEdits } from '../../utils/FileLines';
+import { processLines, type LineEdits } from '../../utils/FileLines';
+import { refOf, subjectOf } from './TaskRefs';
 import type { WriteObserver } from './WriteObserver';
 
 import { type GeneratedChild, renderFlowInstance } from './FlowInstanceLines';
@@ -50,16 +50,13 @@ export class TaskCloner {
 
         const file = this.app.vault.getAbstractFileByPath(task.file);
         if (!(file instanceof TFile)) {
-            logWarn(`[TaskCloner] File not found: ${task.file}`);
+            this.writes?.for(task.file)?.refused({ file: task.file, reason: { kind: 'gone' }, subject: subjectOf(task) });
             return false;
         }
 
-        return processLines(this.app, file, (lines, _eol, edits) => {
-            const idx = this.fileOps.findTaskLineNumber(lines, task);
-            if (idx < 0 || idx >= lines.length) {
-                logWarn('[TaskCloner] Task not found in file (duplicate)');
-                return null;
-            }
+        return processLines(this.app, file, (lines, _eol, { edits, lineOf }) => {
+            const idx = lineOf(refOf(task), subjectOf(task));
+            if (idx === null) return null;
 
             const cleanParent = this.fileOps.stripBlockIds([lines[idx]])[0];
             const parents: string[] = [];
@@ -69,7 +66,7 @@ export class TaskCloner {
             }
 
             return this.spliceCopies(lines, idx, parents, 'before', edits);
-        }, this.writes?.for(task.file));
+        }, this.writes?.for(task.file)).then(outcome => outcome.written);
     }
 
     /**
@@ -90,16 +87,13 @@ export class TaskCloner {
     async duplicateInlineTaskInPlace(task: Task, copies: InPlaceCopyLines): Promise<boolean> {
         const file = this.app.vault.getAbstractFileByPath(task.file);
         if (!(file instanceof TFile)) {
-            logWarn(`[TaskCloner] File not found: ${task.file}`);
+            this.writes?.for(task.file)?.refused({ file: task.file, reason: { kind: 'gone' }, subject: subjectOf(task) });
             return false;
         }
 
-        return processLines(this.app, file, (lines, _eol, edits) => {
-            const idx = this.fileOps.findTaskLineNumber(lines, task);
-            if (idx < 0 || idx >= lines.length) {
-                logWarn('[TaskCloner] Task not found in file (duplicate as next)');
-                return null;
-            }
+        return processLines(this.app, file, (lines, _eol, { edits, lineOf }) => {
+            const idx = lineOf(refOf(task), subjectOf(task));
+            if (idx === null) return null;
 
             const indent = lines[idx].match(/^(\s*)/)?.[1] ?? '';
             const parents = copies.kind === 'verbatim'
@@ -108,7 +102,7 @@ export class TaskCloner {
                 : copies.lines.map(l => indent + l.trim());
 
             return this.spliceCopies(lines, idx, parents, 'after', edits);
-        }, this.writes?.for(task.file));
+        }, this.writes?.for(task.file)).then(outcome => outcome.written);
     }
 
     /**
@@ -124,18 +118,19 @@ export class TaskCloner {
      */
     async insertRecurrenceForTask(task: Task, content: string, flowLines: string[] = []): Promise<void> {
         const file = this.app.vault.getAbstractFileByPath(task.file);
-        if (!(file instanceof TFile)) return;
+        if (!(file instanceof TFile)) {
+            this.writes?.for(task.file)?.refused({ file: task.file, reason: { kind: 'gone' }, subject: subjectOf(task) });
+            return;
+        }
 
-        await processLines(this.app, file, (lines, _eol, edits) => {
-            const currentLine = this.fileOps.findTaskLineNumber(lines, task);
-            if (currentLine < 0 || currentLine >= lines.length) {
-                // Task not found: append to end
-                appendLines(lines, [
-                    ...splitLines(content).lines,
-                    ...flowLines.map(raw => formatFlowLine('\t', raw)),
-                ], edits);
-                return lines;
-            }
+        await processLines(this.app, file, (lines, _eol, { edits, lineOf }) => {
+            // A task that cannot be placed is not written around. The next
+            // instance used to go to the end of the file when the search found
+            // nothing; with the target named rather than searched for, nothing
+            // means the row is gone or cannot be told from its twins, and
+            // neither is a reason to write a new one somewhere else.
+            const currentLine = lineOf(refOf(task), subjectOf(task));
+            if (currentLine === null) return null;
 
             const rendered = renderFlowInstance(this.fileOps, lines, currentLine,
                 { kind: 'recurrence', content, flowLines });
@@ -172,14 +167,14 @@ export class TaskCloner {
         children: GeneratedChild[],
     ): Promise<void> {
         const file = this.app.vault.getAbstractFileByPath(task.file);
-        if (!(file instanceof TFile)) return;
+        if (!(file instanceof TFile)) {
+            this.writes?.for(task.file)?.refused({ file: task.file, reason: { kind: 'gone' }, subject: subjectOf(task) });
+            return;
+        }
 
-        await processLines(this.app, file, (lines, _eol, edits) => {
-            const currentLine = this.fileOps.findTaskLineNumber(lines, task);
-            if (currentLine < 0 || currentLine >= lines.length) {
-                logWarn('[TaskCloner] Task not found in file (insertGeneratedInstance)');
-                return null;
-            }
+        await processLines(this.app, file, (lines, _eol, { edits, lineOf }) => {
+            const currentLine = lineOf(refOf(task), subjectOf(task));
+            if (currentLine === null) return null;
 
             const rendered = renderFlowInstance(this.fileOps, lines, currentLine,
                 { kind: 'generated', parentLine, flowLines, children });

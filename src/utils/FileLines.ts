@@ -203,6 +203,80 @@ export type Located =
     | { kind: 'ambiguous'; count: number }
     | { kind: 'gone' };
 
+/**
+ * A line the editor pointed at: its number, and the text the editor showed on
+ * it. The one place a write takes a coordinate from outside — the editor's
+ * cursor is not a row the index knows — so the coordinate travels with the
+ * text that says whether it still holds. The editor's buffer and the file on
+ * disk part ways while an edit is unsaved; where they have, the text no longer
+ * matches and nothing is written.
+ */
+export interface EditorLine {
+    line: number;
+    text: string;
+}
+
+/**
+ * Why a write was not made: its target was one of `count` rows nothing tells
+ * apart, it is on no line of the file, or the line the caller pointed at no
+ * longer reads what the caller saw there.
+ */
+export type RefusalReason =
+    | { kind: 'ambiguous'; count: number }
+    | { kind: 'gone' }
+    | { kind: 'changed' };
+
+/** A write that was not made, as it is told to whoever reports it. */
+export interface Refusal {
+    file: string;
+    reason: RefusalReason;
+    /** What the write was about, in the user's words: the task's text or the line's. */
+    subject: string;
+}
+
+/**
+ * What a write to one file is handed by the index: where to report what it
+ * did, where to ask for its target, and where to say it gave up.
+ *
+ * Closures rather than an import, so that the write layer never depends on
+ * identity (see `WriteObserver`).
+ */
+export interface WriteChannel {
+    /** Absent for a write that must not claim anything (see `deleteTaskFromFile`). */
+    sink?: WriteSink;
+    locate(lines: readonly string[], ref: TaskRef): Located;
+    refused(refusal: Refusal): void;
+}
+
+/**
+ * What one `processLines` callback is handed besides the lines: the report of
+ * its edits, and the question of where its target stands.
+ *
+ * `locate` answers about the lines as they were handed in. A callback asks
+ * before it edits: once it has spliced, the lines are a content nothing is on
+ * record for, and a coordinate from before the splice would have to be carried
+ * across it — which is exactly what the question exists to avoid.
+ */
+export interface WriteSession {
+    edits: LineEdits;
+    locate(ref: TaskRef): Located;
+    /**
+     * The target's line, or null when it has none — in which case the write is
+     * refused, and the callback returns the null this gives back.
+     */
+    lineOf(ref: TaskRef, subject: string): number | null;
+    /** Give the write up: nothing is written, and the refusal is told once it is over. */
+    refuse(reason: RefusalReason, subject: string): null;
+}
+
+/** What became of one `processLines`. */
+export interface WriteOutcome {
+    /** Whether the callback returned lines, whether or not they differed. */
+    written: boolean;
+    /** Why it did not, when it gave the write up. */
+    refused: Refusal | null;
+}
+
 /** Where each line of the file came from, once a write's report is replayed. */
 export interface LineOrigins {
     /** For each line now, its index before the write, or null if it is new. */
@@ -283,8 +357,16 @@ function explains(
  * `edit` returns null to write nothing at all: the file is left
  * byte-identical, Obsidian fires no `modify`, and no rescan follows. That is
  * the whole contract for a write that could not be placed. The caller learns
- * it from the `false` returned here instead of from a no-op it cannot tell
- * apart from success.
+ * it from `written: false` instead of from a no-op it cannot tell apart from
+ * success.
+ *
+ * Where to write is asked of the `channel`, through the session: a write
+ * names its target and `locate` answers where that target stands in these
+ * lines. A write whose target has no line gives up through `session.refuse`,
+ * and the refusal is handed to the channel once `vault.process` is over —
+ * once, however many times Obsidian ran the callback. With no channel there is
+ * nobody to ask, and every target is `gone`: the index that would answer has
+ * been taken down.
  *
  * `edit` may also report what it did to the lines, through the {@link
  * LineEdits} it is handed, and that report is what lets the next scan know
@@ -302,10 +384,12 @@ function explains(
 export async function processLines(
     app: App,
     file: TFile,
-    edit: (lines: string[], eol: Eol, edits: LineEdits) => string[] | null,
-    sink?: WriteSink,
-): Promise<boolean> {
+    edit: (lines: string[], eol: Eol, session: WriteSession) => string[] | null,
+    channel?: WriteChannel,
+): Promise<WriteOutcome> {
     let written = false;
+    let refused: Refusal | null = null;
+    const sink = channel?.sink;
     // A list rather than one slot: `vault.process` may run the callback again,
     // and everything filed has to be withdrawable.
     const withdrawals: Array<() => void> = [];
@@ -316,6 +400,7 @@ export async function processLines(
             // write). The previous attempt's claims describe a file that never
             // reached disk, so they go before this attempt files its own.
             for (const withdraw of withdrawals.splice(0)) withdraw();
+            refused = null;
 
             const { lines, eol } = splitLines(content);
             const before = [...lines];
@@ -323,8 +408,30 @@ export async function processLines(
             // handed. A write that returns some other array is not reporting
             // about the file it wrote, and the check below refuses it.
             const { edits, reported } = recordEdits(lines);
-            const next = edit(lines, eol, edits);
+            const refuse = (reason: RefusalReason, subject: string): null => {
+                refused = { file: file.path, reason, subject };
+                return null;
+            };
+            const locate = (ref: TaskRef): Located => {
+                if (__DEV__ && reported.length > 0) {
+                    throw new Error(`[FileLines] ${file.path}: locate asked after the lines were edited`);
+                }
+                return channel ? channel.locate(before, ref) : { kind: 'gone' };
+            };
+            const session: WriteSession = {
+                edits,
+                locate,
+                lineOf: (ref, subject) => {
+                    const located = locate(ref);
+                    if (located.kind === 'at') return located.line;
+                    refuse(located, subject);
+                    return null;
+                },
+                refuse,
+            };
+            const next = edit(lines, eol, session);
             if (next === null) return content;
+            refused = null;
 
             written = true;
             const rebuilt = joinLines(next, eol);
@@ -357,5 +464,8 @@ export async function processLines(
         throw error;
     }
 
-    return written;
+    // Set inside the callback, which the compiler does not follow.
+    const outcome = refused as Refusal | null;
+    if (outcome !== null) channel?.refused(outcome);
+    return { written, refused: outcome };
 }

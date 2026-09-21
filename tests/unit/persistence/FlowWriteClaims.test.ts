@@ -1,14 +1,8 @@
 import { describe, it, expect } from 'vitest';
-import { TFile } from 'obsidian';
-import { TaskCloner } from '../../../src/services/persistence/TaskCloner';
-import { InlineTaskWriter } from '../../../src/services/persistence/writers/InlineTaskWriter';
-import { WriteObserver } from '../../../src/services/persistence/WriteObserver';
-import { TaskRepository } from '../../../src/services/persistence/TaskRepository';
-import { FileOperations } from '../../../src/services/persistence/utils/FileOperations';
 import { makeTask } from '../helpers/makeTask';
+import { writeBench, FILE, type Filed } from '../helpers/writeBench';
 import { TaskParser } from '../../../src/services/parsing/TaskParser';
 import type { Task } from '../../../src/types';
-import type { LineEdit } from '../../../src/utils/FileLines';
 
 /**
  * What the three writes a firing makes report about the lines they wrote.
@@ -20,43 +14,9 @@ import type { LineEdit } from '../../../src/utils/FileLines';
  * handed, arithmetic included.
  */
 
-const FILE = 'note.md';
 const TASK = '- [ ] ポモドーロ';
 const DONE = '- [x] ポモドーロ';
 const FLOW = '\t- ==> every 1d';
-
-interface Filed {
-    before: string[];
-    after: string[];
-    edits: LineEdit[];
-}
-
-function bench(text: string) {
-    let content = text;
-    const file = new TFile();
-    file.path = FILE;
-    const app = {
-        vault: {
-            getAbstractFileByPath: () => file,
-            process: async (_f: TFile, fn: (data: string) => string) => { content = fn(content); },
-        },
-    } as any;
-
-    const filed: Filed[] = [];
-    const writes = new WriteObserver();
-    writes.connect(() => (before, after, edits) => {
-        filed.push({ before: [...before], after: [...after], edits: [...edits] });
-        return () => { filed.pop(); };
-    });
-
-    const fileOps = new FileOperations(app);
-    return {
-        cloner: new TaskCloner(app, fileOps, writes),
-        writer: new InlineTaskWriter(app, fileOps, writes),
-        filed,
-        lines: () => content.split('\n'),
-    };
-}
 
 /** The one claim a write filed. Fails loudly when a write filed none. */
 function only(filed: Filed[]): Filed {
@@ -69,17 +29,9 @@ describe('what stripFlow reports', () => {
     // instance sits above the fired line, both carrying their `==>` child.
     const fired = [TASK, FLOW, DONE, FLOW, ''];
 
-    const task = () => makeTask({
-        file: FILE,
-        line: 2,
-        content: 'ポモドーロ',
-        statusChar: 'x',
-        originalText: DONE,
-    });
-
     it('names the flow child it removed and the line it rewrote', async () => {
-        const b = bench(fired.join('\n'));
-        await b.writer.stripFlow(task());
+        const b = await writeBench(fired.join('\n'));
+        await b.writer.stripFlow(b.taskAt(2));
 
         const claim = only(b.filed);
         expect(claim.edits).toEqual([
@@ -100,8 +52,8 @@ describe('what stripFlow reports', () => {
         // line had: taking the top one first would shift the rest, and the
         // second report would name a line one above the one that went.
         const two = [TASK, FLOW, DONE, FLOW, '\t- ==> until 2026-12-31', ''];
-        const b = bench(two.join('\n'));
-        await b.writer.stripFlow(task());
+        const b = await writeBench(two.join('\n'));
+        await b.writer.stripFlow(b.taskAt(2));
 
         const claim = only(b.filed);
         expect(claim.edits).toEqual([
@@ -116,42 +68,34 @@ describe('what stripFlow reports', () => {
 });
 
 describe('what the next instance reports', () => {
-    const task = () => makeTask({
-        file: FILE,
-        line: 0,
-        content: 'ポモドーロ',
-        statusChar: 'x',
-        originalText: DONE,
-    });
-
     it('names the lines it inserted above the fired one', async () => {
-        const b = bench([DONE, FLOW, ''].join('\n'));
-        await b.cloner.insertRecurrenceForTask(task(), TASK, ['every 1d']);
+        const b = await writeBench([DONE, FLOW, ''].join('\n'));
+        await b.cloner.insertRecurrenceForTask(b.taskAt(0), TASK, ['every 1d']);
 
         const claim = only(b.filed);
         expect(claim.edits).toEqual([{ kind: 'inserted', at: 0, count: 2 }]);
         expect(b.lines()).toEqual([TASK, FLOW, DONE, FLOW, '']);
     });
 
-    it('names the append when the task is gone from the file', async () => {
-        const b = bench(['- [ ] 別のタスク', ''].join('\n'));
-        await b.cloner.insertRecurrenceForTask(task(), TASK, ['every 1d']);
+    it('writes and reports nothing when the task is gone from the file', async () => {
+        // The next instance used to be appended at the end of the file. With
+        // no line to place it by, it is not written at all.
+        const b = await writeBench([DONE, FLOW, '- [ ] 別のタスク', ''].join('\n'));
+        const fired = b.taskAt(0);
+        b.edit(['- [ ] 別のタスク', ''].join('\n'));
+        await b.cloner.insertRecurrenceForTask(fired, TASK, ['every 1d']);
 
-        const claim = only(b.filed);
-        // appendLines replaces the trailing blank rather than writing past it.
-        expect(claim.edits).toEqual([
-            { kind: 'removed', at: 1, count: 1 },
-            { kind: 'inserted', at: 1, count: 2 },
-        ]);
-        expect(b.lines()).toEqual(['- [ ] 別のタスク', TASK, FLOW]);
+        expect(b.filed).toEqual([]);
+        expect(b.lines()).toEqual(['- [ ] 別のタスク', '']);
+        expect(b.refused).toEqual([{ file: FILE, reason: { kind: 'gone' }, subject: 'ポモドーロ' }]);
     });
 });
 
 describe('what a generated instance reports', () => {
     it('names the parent, its flow line and its children as one insert', async () => {
-        const b = bench([DONE, FLOW, ''].join('\n'));
+        const b = await writeBench([DONE, FLOW, ''].join('\n'));
         await b.cloner.insertGeneratedInstance(
-            makeTask({ file: FILE, line: 0, content: 'ポモドーロ', statusChar: 'x', originalText: DONE }),
+            b.taskAt(0),
             TASK,
             ['every 1d'],
             [{ depth: 1, body: '- [ ] 子' }],
@@ -170,25 +114,17 @@ describe('when the flow is written on the task line itself', () => {
     const LIVE = '- [ ] ポモドーロ ==> every 1d';
     const FIRED = '- [x] ポモドーロ ==> every 1d';
 
-    const task = (line: number) => makeTask({
-        file: FILE,
-        line,
-        content: 'ポモドーロ',
-        statusChar: 'x',
-        originalText: FIRED,
-    });
-
     it('reports the strip as a rewrite of that one line', async () => {
-        const b = bench([LIVE, FIRED, ''].join('\n'));
-        await b.writer.stripFlow(task(1));
+        const b = await writeBench([LIVE, FIRED, ''].join('\n'));
+        await b.writer.stripFlow(b.taskAt(1));
 
         expect(only(b.filed).edits).toEqual([{ kind: 'replaced', at: 1 }]);
         expect(b.lines()).toEqual([LIVE, DONE, '']);
     });
 
     it('reports the next instance as one inserted line', async () => {
-        const b = bench([FIRED, ''].join('\n'));
-        await b.cloner.insertRecurrenceForTask(task(0), LIVE, []);
+        const b = await writeBench([FIRED, ''].join('\n'));
+        await b.cloner.insertRecurrenceForTask(b.taskAt(0), LIVE, []);
 
         expect(only(b.filed).edits).toEqual([{ kind: 'inserted', at: 0, count: 1 }]);
         expect(b.lines()).toEqual([LIVE, FIRED, '']);
@@ -200,33 +136,14 @@ describe('the wiring', () => {
     // change, and it is handed over in exactly one place. Everything the
     // writes stage adds later depends on that one line still being there.
     it('carries a strip through the repository to whoever is listening', async () => {
-        let content = ['- [x] ポモドーロ ==> every 1d', ''].join('\n');
-        const file = new TFile();
-        file.path = FILE;
-        const app = {
-            vault: {
-                getAbstractFileByPath: () => file,
-                process: async (_f: TFile, fn: (data: string) => string) => { content = fn(content); },
-            },
-        } as any;
+        // The bench connects the repository's own observer, not the one its
+        // `writer` and `cloner` are built with.
+        const b = await writeBench(['- [x] ポモドーロ ==> every 1d', ''].join('\n'));
 
-        const repo = new TaskRepository(app);
-        const filed: LineEdit[][] = [];
-        repo.getWriteObserver().connect(() => (_before, _after, edits) => {
-            filed.push([...edits]);
-            return () => { filed.pop(); };
-        });
+        await b.repo.stripFlow(b.taskAt(0));
 
-        await repo.stripFlow(makeTask({
-            file: FILE,
-            line: 0,
-            content: 'ポモドーロ',
-            statusChar: 'x',
-            originalText: '- [x] ポモドーロ ==> every 1d',
-        }));
-
-        expect(filed).toEqual([[{ kind: 'replaced', at: 0 }]]);
-        expect(content.split('\n')).toEqual([DONE, '']);
+        expect(b.filed.map(claim => claim.edits)).toEqual([[{ kind: 'replaced', at: 0 }]]);
+        expect(b.lines()).toEqual([DONE, '']);
     });
 });
 
@@ -236,15 +153,7 @@ describe('what an update reports', () => {
     // would pin a shape the writer never produces (#202).
     const bare = (statusChar: string) =>
         TaskParser.format(makeTask({ content: 'ポモドーロ', statusChar }));
-
-    const task = (over: Partial<Task> = {}) => makeTask({
-        file: FILE,
-        line: 0,
-        content: 'ポモドーロ',
-        statusChar: ' ',
-        originalText: bare(' '),
-        ...over,
-    });
+    const checked = (task: Task): Task => ({ ...task, statusChar: 'x' });
 
     it('is the writer that decides what TASK and DONE read', () => {
         // The constants the rest of this file and the scanner's tests are
@@ -254,8 +163,8 @@ describe('what an update reports', () => {
     });
 
     it('names the task line it rewrote, and nothing else', async () => {
-        const b = bench([TASK, ''].join('\n'));
-        await b.writer.updateTaskInFile(task(), task({ statusChar: 'x' }));
+        const b = await writeBench([TASK, ''].join('\n'));
+        await b.writer.updateTaskInFile(b.taskAt(0), checked(b.taskAt(0)));
 
         expect(only(b.filed).edits).toEqual([{ kind: 'replaced', at: 0 }]);
         expect(b.lines()).toEqual([DONE, '']);
@@ -264,19 +173,23 @@ describe('what an update reports', () => {
     it('says nothing when the line could not be found', async () => {
         // Nothing was written, so a claim here would be weighed against a file
         // that never changed.
-        const b = bench(['- [ ] 別のタスク', ''].join('\n'));
-        await b.writer.updateTaskInFile(task(), task({ statusChar: 'x' }));
+        const b = await writeBench([TASK, '- [ ] 別のタスク', ''].join('\n'));
+        const task = b.taskAt(0);
+        b.edit(['- [ ] 別のタスク', ''].join('\n'));
+        const written = await b.writer.updateTaskInFile(task, checked(task));
 
+        expect(written).toBe(false);
         expect(b.filed).toEqual([]);
         expect(b.lines()).toEqual(['- [ ] 別のタスク', '']);
+        expect(b.refused).toEqual([{ file: FILE, reason: { kind: 'gone' }, subject: 'ポモドーロ' }]);
     });
 
     describe('with child property ops', () => {
         const CHILD = '\t- 金額:: 100';
 
         it('names the child line it rewrote as a rewrite', async () => {
-            const b = bench([TASK, CHILD, ''].join('\n'));
-            await b.writer.updateTaskInFile(task(), task({ statusChar: 'x' }), [
+            const b = await writeBench([TASK, CHILD, ''].join('\n'));
+            await b.writer.updateTaskInFile(b.taskAt(0), checked(b.taskAt(0)), [
                 { key: '金額', op: 'set', value: '200' },
             ]);
 
@@ -291,8 +204,8 @@ describe('what an update reports', () => {
         });
 
         it('names a child line it added as an insert', async () => {
-            const b = bench([TASK, ''].join('\n'));
-            await b.writer.updateTaskInFile(task(), task({ statusChar: 'x' }), [
+            const b = await writeBench([TASK, ''].join('\n'));
+            await b.writer.updateTaskInFile(b.taskAt(0), checked(b.taskAt(0)), [
                 { key: '金額', op: 'set', value: '200' },
             ]);
 
@@ -307,8 +220,8 @@ describe('what an update reports', () => {
             // Two declarations of one key, removed from the bottom up so each
             // index is the one that line had — the same arithmetic stripFlow
             // relies on.
-            const b = bench([TASK, CHILD, '\t- 金額:: 300', ''].join('\n'));
-            await b.writer.updateTaskInFile(task(), task({ statusChar: 'x' }), [
+            const b = await writeBench([TASK, CHILD, '\t- 金額:: 300', ''].join('\n'));
+            await b.writer.updateTaskInFile(b.taskAt(0), checked(b.taskAt(0)), [
                 { key: '金額', op: 'delete' },
             ]);
 
@@ -325,8 +238,8 @@ describe('what an update reports', () => {
             // `findOwnPropertyLines` skips it, so the write must not claim it
             // either — and must not touch it.
             const fenced = [TASK, CHILD, '\t```', '\t- 金額:: 999', '\t```', ''];
-            const b = bench(fenced.join('\n'));
-            await b.writer.updateTaskInFile(task(), task({ statusChar: 'x' }), [
+            const b = await writeBench(fenced.join('\n'));
+            await b.writer.updateTaskInFile(b.taskAt(0), checked(b.taskAt(0)), [
                 { key: '金額', op: 'set', value: '200' },
             ]);
 
@@ -342,36 +255,30 @@ describe('what an update reports', () => {
         // Two rows reading exactly the same thing. This is the shape the whole
         // mechanism exists for, and `updateTaskInFile` now runs into it on
         // every ordinary edit rather than only on a firing.
-        it('names the stored line, not the first row that matches', async () => {
-            const b = bench([TASK, TASK, ''].join('\n'));
-            await b.writer.updateTaskInFile(
-                task({ line: 1 }),
-                task({ line: 1, statusChar: 'x' }),
-            );
+        it('names the row it was asked about, not the first row that matches', async () => {
+            const b = await writeBench([TASK, TASK, ''].join('\n'));
+            await b.writer.updateTaskInFile(b.taskAt(1), checked(b.taskAt(1)));
 
-            // Strategy 0 (the stored line, verified against originalText) runs
-            // before the first-match scan for exactly this reason
-            // (FileOperations.ts:309-310).
+            // The file is the one the scan read, so the row stands where the
+            // scan recorded it.
             expect(only(b.filed).edits).toEqual([{ kind: 'replaced', at: 1 }]);
             expect(b.lines()).toEqual([TASK, DONE, '']);
         });
 
-        it('reports the row it really wrote when the stored line has shifted', async () => {
-            // The one case that can land on the wrong twin: the stored line no
-            // longer holds the task, and the fallback takes the first row with
-            // the same text. That is a `findTaskLineNumber` limitation, not
-            // one this claim introduces — and the claim still describes what
-            // happened to the file, so the two rows keep their identities
-            // instead of the ladder swapping them on top of the misplaced
-            // write.
-            const b = bench([TASK, TASK, '- [ ] 別のタスク', ''].join('\n'));
-            await b.writer.updateTaskInFile(
-                task({ line: 2 }),
-                task({ line: 2, statusChar: 'x' }),
-            );
+        it('writes neither twin when nothing tells them apart', async () => {
+            // The task was read below another row, and something else has since
+            // moved it up beside its twin. Nothing but position pairs the two
+            // rows with the two lines, and a write used to land on the first
+            // line with the same text. It is refused instead.
+            const b = await writeBench([TASK, '- [ ] 別のタスク', TASK, ''].join('\n'));
+            const task = b.taskAt(2);
+            b.edit([TASK, TASK, '- [ ] 別のタスク', ''].join('\n'));
+            const written = await b.writer.updateTaskInFile(task, checked(task));
 
-            expect(only(b.filed).edits).toEqual([{ kind: 'replaced', at: 0 }]);
-            expect(b.lines()).toEqual([DONE, TASK, '- [ ] 別のタスク', '']);
+            expect(written).toBe(false);
+            expect(b.filed).toEqual([]);
+            expect(b.lines()).toEqual([TASK, TASK, '- [ ] 別のタスク', '']);
+            expect(b.refused).toEqual([{ file: FILE, reason: { kind: 'ambiguous', count: 2 }, subject: 'ポモドーロ' }]);
         });
     });
 });
@@ -381,8 +288,8 @@ describe('what the editor menu\'s line edit reports', () => {
     // the editor's own right-click menu (TaskMenuExtension.ts:122), where a
     // status change and the conversion of a bare checkbox both come through.
     it('names the line it rewrote', async () => {
-        const b = bench([TASK, ''].join('\n'));
-        await b.writer.updateLine(FILE, 0, DONE);
+        const b = await writeBench([TASK, ''].join('\n'));
+        await b.writer.updateLine(FILE, { line: 0, text: TASK }, DONE);
 
         expect(only(b.filed).edits).toEqual([{ kind: 'replaced', at: 0 }]);
         expect(b.lines()).toEqual([DONE, '']);
@@ -391,19 +298,29 @@ describe('what the editor menu\'s line edit reports', () => {
     it('names the twin the editor pointed at, not the first one', async () => {
         // Here the line number is the editor's own, so there is no ambiguity
         // to resolve — and the claim carries that certainty to the scan.
-        const b = bench([TASK, TASK, ''].join('\n'));
-        await b.writer.updateLine(FILE, 1, DONE);
+        const b = await writeBench([TASK, TASK, ''].join('\n'));
+        await b.writer.updateLine(FILE, { line: 1, text: TASK }, DONE);
 
         expect(only(b.filed).edits).toEqual([{ kind: 'replaced', at: 1 }]);
         expect(b.lines()).toEqual([TASK, DONE, '']);
     });
 
     it('says nothing when the line is past the end of the file', async () => {
-        const b = bench([TASK, ''].join('\n'));
-        await b.writer.updateLine(FILE, 9, DONE);
+        const b = await writeBench([TASK, ''].join('\n'));
+        await b.writer.updateLine(FILE, { line: 9, text: TASK }, DONE);
 
         expect(b.filed).toEqual([]);
         expect(b.lines()).toEqual([TASK, '']);
+        expect(b.refused).toEqual([{ file: FILE, reason: { kind: 'changed' }, subject: TASK }]);
+    });
+
+    it('says nothing when the line no longer reads what the editor showed', async () => {
+        const b = await writeBench([TASK, ''].join('\n'));
+        await b.writer.updateLine(FILE, { line: 0, text: '- [ ] 別のタスク' }, DONE);
+
+        expect(b.filed).toEqual([]);
+        expect(b.lines()).toEqual([TASK, '']);
+        expect(b.refused).toEqual([{ file: FILE, reason: { kind: 'changed' }, subject: '- [ ] 別のタスク' }]);
     });
 });
 
@@ -412,27 +329,21 @@ describe('the two writes that make twins trade texts', () => {
     // writer so that the lines and the reports both come from the thing that
     // writes them. Hand-built rows are how #202 nearly pinned a shape the
     // writer never produces.
-    const task = (line: number, statusChar: string) => makeTask({
-        file: FILE,
-        line,
-        content: 'ポモドーロ',
-        statusChar,
-        originalText: statusChar === 'x' ? DONE : TASK,
-    });
-
     it('writes and reports exactly what the scanner tests replay', async () => {
-        const b = bench([TASK, DONE, ''].join('\n'));
+        const b = await writeBench([TASK, DONE, ''].join('\n'));
+        const [open, done] = [b.taskAt(0), b.taskAt(1)];
 
-        // W1 checks the open row. The stored line still holds it, so the
-        // write lands on the upper twin rather than on the first text match.
-        await b.writer.updateTaskInFile(task(0, ' '), task(0, 'x'));
+        // W1 checks the open row. The file is the one the scan read, so the
+        // write lands on the upper row.
+        await b.writer.updateTaskInFile(open, { ...open, statusChar: 'x' });
         expect(b.lines()).toEqual([DONE, DONE, '']);
         expect(only(b.filed).edits).toEqual([{ kind: 'replaced', at: 0 }]);
         b.filed.pop();
 
-        // W2 unchecks the done row, and the file comes back to the two texts
-        // it started with — in the other order.
-        await b.writer.updateTaskInFile(task(1, 'x'), task(1, ' '));
+        // W2 unchecks the done row, with no scan between: the lines are the
+        // ones W1 left, and W1's report says which twin is which. The file
+        // comes back to the two texts it started with — in the other order.
+        await b.writer.updateTaskInFile(done, { ...done, statusChar: ' ' });
         expect(b.lines()).toEqual([DONE, TASK, '']);
         expect(only(b.filed).edits).toEqual([{ kind: 'replaced', at: 1 }]);
     });

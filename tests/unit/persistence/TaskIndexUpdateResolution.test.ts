@@ -122,12 +122,16 @@ describe('updateTask: when the write lands nowhere', () => {
 
 /**
  * The answer updateTask gives its caller. The UI ignores it and keeps relying
- * on the revert and the notice below; the API turns a `false` into an error,
+ * on the revert and on the notice the write layer raises when it refuses (see
+ * `reportRefusal` below); the API turns a `false` into an error,
  * because a CLI that prints the new values after a write that never happened
  * is the only consumer that cannot see the notice.
  */
 describe('updateTask: the answer', () => {
-    it('answers no and raises one notice when the write landed nowhere', async () => {
+    it('answers no and raises no notice of its own when the write landed nowhere', async () => {
+        // The write that gave up has already told the user why, through the
+        // channel's `refused` (reportRefusal). A second notice here would
+        // say the same thing twice.
         const task = makeTask({ content: 'x', startTime: '10:00' });
         const host = buildHost(task, false);
         Notice.messages.length = 0;
@@ -135,7 +139,7 @@ describe('updateTask: the answer', () => {
         const written = await proto.updateTask.call(host, task.id, { startTime: '11:00' });
 
         expect(written).toBe(false);
-        expect(Notice.messages).toHaveLength(1);
+        expect(Notice.messages).toHaveLength(0);
     });
 
     it('answers yes and stays quiet when the write landed', async () => {
@@ -157,5 +161,22 @@ describe('updateTask: the answer', () => {
 
         expect(written).toBe(false);
         expect(host.repository.updateTaskInFile).not.toHaveBeenCalled();
+    });
+});
+
+describe('reportRefusal', () => {
+    it('raises one notice per refusal, naming what the write was about', () => {
+        for (const reason of [
+            { kind: 'ambiguous', count: 2 },
+            { kind: 'gone' },
+            { kind: 'changed' },
+        ] as const) {
+            Notice.messages.length = 0;
+
+            proto.reportRefusal.call({}, { file: 'note.md', reason, subject: '週報' });
+
+            expect(Notice.messages).toHaveLength(1);
+            expect(Notice.messages[0]).toContain('週報');
+        }
     });
 });

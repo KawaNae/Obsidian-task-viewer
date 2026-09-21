@@ -1,8 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { TFile } from 'obsidian';
-import { InlineTaskWriter } from '../../../src/services/persistence/writers/InlineTaskWriter';
-import { FileOperations } from '../../../src/services/persistence/utils/FileOperations';
-import { makeTask } from '../helpers/makeTask';
+import { writeBench, FILE } from '../helpers/writeBench';
 
 /**
  * A deletion fire takes the line the user deleted, never the one it just
@@ -21,23 +18,6 @@ import { makeTask } from '../helpers/makeTask';
  * delete took the wrong one.
  */
 
-const FILE = 'note.md';
-
-function harness(initial: string) {
-    let content = initial;
-    const file = new TFile();
-    const app = {
-        vault: {
-            getAbstractFileByPath: () => file,
-            process: async (_f: TFile, fn: (data: string) => string) => { content = fn(content); },
-        },
-    } as any;
-    return {
-        writer: new InlineTaskWriter(app, new FileOperations(app)),
-        lines: () => content.split('\n'),
-    };
-}
-
 /** The next instance a `use("週報")` block writes: the same words, no child. */
 const GENERATED = {
     kind: 'generated' as const,
@@ -48,16 +28,13 @@ const GENERATED = {
 
 describe('deletion fire: which line the delete takes', () => {
     it('takes the original when the instance is worded exactly like it', async () => {
-        const h = harness([
+        const h = await writeBench([
             '- [ ] 週報',
             '\t- ==> use("週報")',
             '\t- [ ] 元の子',
         ].join('\n'));
 
-        const task = makeTask({
-            content: '週報', file: FILE, line: 0,
-            originalText: '- [ ] 週報',
-        });
+        const task = h.taskAt(0);
 
         const removed = await h.writer.replaceTaskWithInstances(task, [GENERATED]);
 
@@ -72,17 +49,14 @@ describe('deletion fire: which line the delete takes', () => {
         // The instance goes to the head of the sibling group, so the original
         // is no longer where its stored line says — the shift that used to
         // point the delete at the wrong one.
-        const h = harness([
+        const h = await writeBench([
             '- [ ] 兄弟',
             '- [ ] 週報',
             '\t- ==> use("週報")',
             '\t- [ ] 元の子',
         ].join('\n'));
 
-        const task = makeTask({
-            content: '週報', file: FILE, line: 1,
-            originalText: '- [ ] 週報',
-        });
+        const task = h.taskAt(1);
 
         const removed = await h.writer.replaceTaskWithInstances(task, [GENERATED]);
 
@@ -99,16 +73,13 @@ describe('deletion fire: which line the delete takes', () => {
         // resolves before any text is read. It stays as a case because it is
         // the one thing that used to stand between this bug and every
         // deletion fire.
-        const h = harness([
+        const h = await writeBench([
             '- [ ] 週報 ^tv-abc',
             '\t- ==> use("週報")',
             '\t- [ ] 元の子',
         ].join('\n'));
 
-        const task = makeTask({
-            content: '週報', file: FILE, line: 0,
-            originalText: '- [ ] 週報 ^tv-abc', blockId: 'tv-abc',
-        });
+        const task = h.taskAt(0);
 
         const removed = await h.writer.replaceTaskWithInstances(task, [GENERATED]);
 
@@ -123,16 +94,13 @@ describe('deletion fire: which line the delete takes', () => {
         // A dated recurrence never reads like the line it comes from, so this
         // shape was never wrong. It is here to hold the placement: one write
         // has to leave the file where two of them did.
-        const h = harness([
+        const h = await writeBench([
             '- [ ] 兄弟 @2026-09-21',
             '- [ ] 週報 @2026-09-21 ==> every mon',
             '\t- [ ] 元の子',
         ].join('\n'));
 
-        const task = makeTask({
-            content: '週報', file: FILE, line: 1, startDate: '2026-09-21',
-            originalText: '- [ ] 週報 @2026-09-21 ==> every mon',
-        });
+        const task = h.taskAt(1);
 
         const removed = await h.writer.replaceTaskWithInstances(task, [
             { kind: 'recurrence', content: '- [ ] 週報 @2026-09-28 ==> every mon', flowLines: [] },
@@ -153,16 +121,15 @@ describe('deletion fire: which line the delete takes', () => {
             '- [ ] 別のタスク',
             '',
         ].join('\n');
-        const h = harness(before);
-
-        const task = makeTask({
-            content: '週報', file: FILE, line: 0,
-            originalText: '- [ ] 週報',
-        });
+        // The task was read, then taken out of the file by something else.
+        const h = await writeBench(['- [ ] 週報', before].join('\n'));
+        const task = h.taskAt(0);
+        h.edit(before);
 
         const removed = await h.writer.replaceTaskWithInstances(task, [GENERATED]);
 
         expect(removed).toBe(false);
         expect(h.lines().join('\n')).toBe(before);
+        expect(h.refused).toEqual([{ file: FILE, reason: { kind: 'gone' }, subject: '週報' }]);
     });
 });

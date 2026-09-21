@@ -1,10 +1,9 @@
 import { describe, it, expect, vi } from 'vitest';
-import { TFile } from 'obsidian';
-import { InlineTaskWriter } from '../../../src/services/persistence/writers/InlineTaskWriter';
-import { FileOperations } from '../../../src/services/persistence/utils/FileOperations';
 import { TaskIndex } from '../../../src/services/core/TaskIndex';
 import { TaskWriteService } from '../../../src/services/data/TaskWriteService';
 import { makeTask } from '../helpers/makeTask';
+import { writeBench, FILE } from '../helpers/writeBench';
+import type { Refusal } from '../../../src/utils/FileLines';
 import type { Task } from '../../../src/types';
 
 /**
@@ -16,23 +15,22 @@ import type { Task } from '../../../src/types';
 // ── insertSiblingAfterTask against a fake vault ──
 // Session records after the first one are siblings of the record before them,
 // so this exercises the real writer: where the line lands, and at what depth.
-function runSiblingInsert(
+//
+// The file is scanned as `fileText` and the anchor is the task the scan read on
+// `line`. `now`, when given, is what the file reads by the time of the write:
+// something other than the plugin changed it after the scan.
+async function runSiblingInsert(
     fileText: string,
-    task: Task,
+    line: number,
     lineBody: string,
-    opts: { afterCompletedRun?: boolean } = {}
-): Promise<{ text: string; index: number }> {
-    let content = fileText;
-    const file = new TFile();
-    const app = {
-        vault: {
-            getAbstractFileByPath: () => file,
-            process: async (_f: TFile, fn: (data: string) => string) => { content = fn(content); },
-        },
-    } as any;
-    const writer = new InlineTaskWriter(app, new FileOperations(app));
-    return writer.insertSiblingAfterTask(task, lineBody, opts)
-        .then(index => ({ text: content, index }));
+    opts: { afterCompletedRun?: boolean } = {},
+    now?: string,
+): Promise<{ text: string; index: number; refused: Refusal[] }> {
+    const bench = await writeBench(fileText);
+    const task = bench.taskAt(line);
+    if (now !== undefined) bench.edit(now);
+    const index = await bench.writer.insertSiblingAfterTask(task, lineBody, opts);
+    return { text: bench.text(), index, refused: bench.refused };
 }
 
 const NEW_SESSION = '- [ ] ⏱️ task A @2026-08-13T16:00';
@@ -41,8 +39,7 @@ describe('insertSiblingAfterTask', () => {
     it('lands just past the task, at the task\'s own indentation', async () => {
         const anchor = '- [x] ⏱️ task A @2026-08-13T09:00>2026-08-13T10:00';
         const { text, index } = await runSiblingInsert(
-            [anchor, '- [ ] next task'].join('\n'),
-            makeTask({ content: '⏱️ task A', line: 0, originalText: anchor, statusChar: 'x' }),
+            [anchor, '- [ ] next task'].join('\n'), 0,
             NEW_SESSION
         );
 
@@ -54,14 +51,12 @@ describe('insertSiblingAfterTask', () => {
         // The task moved under a parent since it was indexed. Taking the indent
         // from originalText would put the record back at top level, silently
         // pulling it out of the parent it belongs to.
+        const read = '- [x] ⏱️ task A @2026-08-13T09:00>2026-08-13T10:00';
         const anchor = '    - [x] ⏱️ task A @2026-08-13T09:00>2026-08-13T10:00';
         const { text } = await runSiblingInsert(
+            [read, '- [ ] parent'].join('\n'), 0,
+            NEW_SESSION, {},
             ['- [ ] parent', anchor].join('\n'),
-            makeTask({
-                content: '⏱️ task A', line: 0, statusChar: 'x',
-                originalText: '- [x] ⏱️ task A @2026-08-13T09:00>2026-08-13T10:00',
-            }),
-            NEW_SESSION
         );
 
         expect(text.split('\n')).toEqual(['- [ ] parent', anchor, `    ${NEW_SESSION}`]);
@@ -70,8 +65,7 @@ describe('insertSiblingAfterTask', () => {
     it('preserves a tab-indented vault\'s style', async () => {
         const anchor = '\t- [x] ⏱️ task A @2026-08-13T09:00>2026-08-13T10:00';
         const { text } = await runSiblingInsert(
-            ['- [ ] parent', anchor].join('\n'),
-            makeTask({ content: '⏱️ task A', line: 1, originalText: anchor, statusChar: 'x' }),
+            ['- [ ] parent', anchor].join('\n'), 1,
             NEW_SESSION
         );
 
@@ -81,8 +75,7 @@ describe('insertSiblingAfterTask', () => {
     it('clears the task\'s own children', async () => {
         const anchor = '- [x] ⏱️ task A @2026-08-13T09:00>2026-08-13T10:00';
         const { text } = await runSiblingInsert(
-            [anchor, '    - memo', '    - [ ] sub'].join('\n'),
-            makeTask({ content: '⏱️ task A', line: 0, originalText: anchor, statusChar: 'x' }),
+            [anchor, '    - memo', '    - [ ] sub'].join('\n'), 0,
             NEW_SESSION
         );
 
@@ -90,15 +83,17 @@ describe('insertSiblingAfterTask', () => {
     });
 
     it('leaves the file untouched when the line cannot be resolved', async () => {
+        // The task was read, then taken out of the file by something else.
         const other = '- [ ] something else @2026-01-01';
-        const { text, index } = await runSiblingInsert(
+        const { text, index, refused } = await runSiblingInsert(
+            ['- [x] task A @2026-08-13', other].join('\n'), 0,
+            NEW_SESSION, {},
             other,
-            makeTask({ content: 'task A', line: 9, originalText: '- [x] task A', startDate: '2026-08-13' }),
-            NEW_SESSION
         );
 
         expect(text).toBe(other);
         expect(index).toBe(-1);
+        expect(refused).toEqual([{ file: FILE, reason: { kind: 'gone' }, subject: 'task A' }]);
     });
 });
 
@@ -109,7 +104,7 @@ describe('insertSiblingAfterTask afterCompletedRun', () => {
     const first = '- [x] ⏱️ task A @2026-08-13T09:00>2026-08-13T10:00';
     const second = '- [x] ⏱️ task A @2026-08-13T11:00>2026-08-13T12:00';
     const third = '- [x] ⏱️ task A @2026-08-13T14:00>2026-08-13T15:00';
-    const anchor = makeTask({ content: '⏱️ task A', line: 0, originalText: first, statusChar: 'x' });
+    const anchor = 0;
 
     it('moves past the completed siblings that follow', async () => {
         const { text, index } = await runSiblingInsert(
@@ -172,7 +167,7 @@ describe('insertSiblingAfterTask afterCompletedRun', () => {
         const nested = `    ${first}`;
         const { text } = await runSiblingInsert(
             ['- [ ] parent', nested, '- [x] unrelated top-level task'].join('\n'),
-            makeTask({ content: '⏱️ task A', line: 1, originalText: nested, statusChar: 'x' }),
+            1,
             NEW_SESSION,
             { afterCompletedRun: true }
         );
@@ -340,42 +335,34 @@ describe('TaskWriteService delegation', () => {
 });
 
 // ── child inserts resolve their own indent ──
-function runChildInsert(
+async function runChildInsert(
     fileText: string,
-    task: Task,
+    line: number,
     lineBody: string,
     mode: 'first' | 'after'
 ): Promise<{ text: string; index: number }> {
-    let content = fileText;
-    const file = new TFile();
-    const app = {
-        vault: {
-            getAbstractFileByPath: () => file,
-            process: async (_f: TFile, fn: (data: string) => string) => { content = fn(content); },
-        },
-    } as any;
-    const writer = new InlineTaskWriter(app, new FileOperations(app));
-    const call = mode === 'first'
-        ? writer.insertLineAsFirstChild(task, lineBody)
-        : writer.insertLineAfterTask(task, lineBody);
-    return call.then(index => ({ text: content, index }));
+    const bench = await writeBench(fileText);
+    const task = bench.taskAt(line);
+    const index = mode === 'first'
+        ? await bench.writer.insertLineAsFirstChild(task, lineBody)
+        : await bench.writer.insertLineAfterTask(task, lineBody);
+    return { text: bench.text(), index };
 }
 
 describe('child inserts take their indent from the file', () => {
     const parent = '- [ ] parent @2026-08-13T09:00';
-    const parentTask = () => makeTask({ content: 'parent', line: 0, originalText: parent });
     const RECORD = '- [x] ⏱️ parent @2026-08-13T10:00>11:00';
 
     it('follows an existing tab-indented child', async () => {
         const { text } = await runChildInsert(
-            [parent, '\t- [ ] existing'].join('\n'), parentTask(), RECORD, 'after'
+            [parent, '\t- [ ] existing'].join('\n'), 0, RECORD, 'after'
         );
         expect(text.split('\n')).toEqual([parent, '\t- [ ] existing', '\t' + RECORD]);
     });
 
     it('follows an existing space-indented child', async () => {
         const { text } = await runChildInsert(
-            [parent, '    - [ ] existing'].join('\n'), parentTask(), RECORD, 'after'
+            [parent, '    - [ ] existing'].join('\n'), 0, RECORD, 'after'
         );
         expect(text.split('\n')).toEqual([parent, '    - [ ] existing', '    ' + RECORD]);
     });
@@ -385,19 +372,19 @@ describe('child inserts take their indent from the file', () => {
         // the unit from the top-level parent line alone would answer 4 spaces.
         const { text } = await runChildInsert(
             [parent, '- [ ] other', '\t- [ ] other child'].join('\n'),
-            parentTask(), RECORD, 'first'
+            0, RECORD, 'first'
         );
         expect(text.split('\n')[1]).toBe('\t' + RECORD);
     });
 
     it('uses a tab when the file has no indentation to read', async () => {
-        const { text } = await runChildInsert(parent, parentTask(), RECORD, 'first');
+        const { text } = await runChildInsert(parent, 0, RECORD, 'first');
         expect(text.split('\n')[1]).toBe('\t' + RECORD);
     });
 
     it('ignores indentation supplied by the caller', async () => {
         const { text } = await runChildInsert(
-            [parent, '\t- [ ] existing'].join('\n'), parentTask(), '        ' + RECORD, 'after'
+            [parent, '\t- [ ] existing'].join('\n'), 0, '        ' + RECORD, 'after'
         );
         expect(text.split('\n')[2]).toBe('\t' + RECORD);
     });
@@ -413,7 +400,7 @@ describe('completed-run walk across mixed indentation', () => {
         const second = '\t- [x] ⏱️ rec @2026-08-13T11:00>11:30';
         const { text } = await runSiblingInsert(
             ['- [ ] parent', first, second].join('\n'),
-            makeTask({ content: '⏱️ rec', line: 1, originalText: first, statusChar: 'x', startDate: '2026-08-13', startTime: '10:00' }),
+            1,
             NEW_SESSION,
             { afterCompletedRun: true }
         );
@@ -425,7 +412,7 @@ describe('completed-run walk across mixed indentation', () => {
         const anchor = '\t- [x] ⏱️ rec @2026-08-13T10:00>10:30';
         const { text } = await runSiblingInsert(
             ['- [ ] parent', anchor, '- [x] top level'].join('\n'),
-            makeTask({ content: '⏱️ rec', line: 1, originalText: anchor, statusChar: 'x', startDate: '2026-08-13', startTime: '10:00' }),
+            1,
             NEW_SESSION,
             { afterCompletedRun: true }
         );
