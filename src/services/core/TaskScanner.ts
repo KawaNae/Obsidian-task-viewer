@@ -441,9 +441,17 @@ export class TaskScanner {
      * about the lines in hand.
      *
      * A name the ledger has not heard of — a row a write made, not yet scanned
-     * — is found through 2, or through 3 when a pending claim is adopted. On
-     * lines that bear neither out it is `gone`: the only thing left to go on
-     * would be its text.
+     * (the names a write answers as `made`) — is found through 2, or through 3
+     * when a pending claim is adopted. On lines that bear neither out it is
+     * `gone`, and that is the answer, not a gap. This function answers what
+     * the next scan of these lines would decide, and that scan would not adopt
+     * the claim that carries the name — the lines are not what the claim says
+     * — so the ladder, which only ever hands out names from the ledger, gives
+     * the row a new one. The name stands on no line of these. Answering with
+     * the one line that reads like the row would part from the scan, and on
+     * text alone, the weakest evidence there is: an outside edit that took the
+     * made row away and wrote another line in its words would have this write
+     * land on that line.
      *
      * Found through 1 or 3, the line may read differently from anything on
      * record for the row — the ladder pairs a row whose text or dates changed,

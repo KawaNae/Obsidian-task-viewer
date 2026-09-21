@@ -75,3 +75,36 @@ describe('the rows a write made', () => {
         expect(outcome.made).toEqual([]);
     });
 });
+
+describe('a made name, once the file has moved on without it', () => {
+    // A row a write made is known by the claim that carries its name until a
+    // scan adopts it. If something else edits the file first, no scan will:
+    // the lines are not the ones the claim describes. So the name belongs to
+    // no line, and `locate` answers `gone` rather than the line that reads
+    // like the row (TaskScanner.locate).
+    it('is gone before the scan, and on no row after it', async () => {
+        const { contents, session } = await open(['# note', '- [ ] 上 @2026-09-21', '']);
+        // A drag holds the file's scans back until it ends, as it does in use.
+        session.index.setDraggingFile(FILE);
+
+        const outcome = await processLines(session.app, makeFile(FILE), (lines, _eol, { edits }) => {
+            edits.splice(2, 0, '- [ ] 新 @2026-09-21');
+            return lines;
+        }, channel(session));
+        const [made] = outcome.made;
+        expect(made).toBeDefined();
+        // The claim is still waiting for its scan.
+        expect(session.scanner.getHintLog().peek().find(entry => entry.file === FILE)?.pending.length).toBe(1);
+
+        // Something else writes a line above, before any scan reads the file.
+        const edited = ['# note', '- [ ] 外 @2026-09-21', '- [ ] 上 @2026-09-21', '- [ ] 新 @2026-09-21', ''];
+        contents.set(FILE, edited.join('\n'));
+        expect(session.scanner.locate(FILE, edited, { runtimeId: made.runtimeId })).toEqual({ kind: 'gone' });
+
+        session.index.setDraggingFile(null);
+        await session.settle(FILE);
+        const ids = session.index.getTasks().filter(task => task.file === FILE).map(task => task.id);
+        expect(ids).toHaveLength(3);
+        expect(ids).not.toContain(made.runtimeId);
+    });
+});
