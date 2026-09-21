@@ -284,6 +284,17 @@ describe('F2-counter: flow effects', () => {
         expect(bench.lines()).toEqual(['- [ ] B', '- [x] A']);
     });
 
+    it('cross-file archive of a row replaced from outside (R4 shape): nothing archived, refused as changed', async () => {
+        // The source is read, not written, so `lineOf` is not in the way: the
+        // move asks `locate` itself and has to read `edited` on its own.
+        const bench = await writeBench({ [FILE]: '- [ ] alpha\n- [ ] buy milk\n- [ ] omega', 'archive.md': '' });
+        const milk = bench.taskAt(1);
+        bench.edit(['- [ ] alpha', '- [ ] omega', '- [ ] call mom']);
+        await bench.writer.appendTaskWithChildren('archive.md', '- [x] buy milk', milk);
+        expect(bench.text('archive.md')).toBe('');
+        expect(bench.refused.map(r => r.reason.kind)).toEqual(['changed']);
+    });
+
     it('same-file archive, a frontmatter write, then delete-original: refused, leaving both (availability)', async () => {
         // Before F2 (inferred): the stored line is shifted, the first exact
         // match is the original (above the archive) -> right by position.
