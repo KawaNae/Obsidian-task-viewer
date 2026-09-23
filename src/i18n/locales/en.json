@@ -668,7 +668,7 @@
     "timerTargetReadOnly": "This task's format is read-only. The timer cannot write records to it.",
     "writeTargetAmbiguous": "{{count}} lines read the same, so the one to write could not be told apart. Nothing was written: {{subject}}",
     "writeTargetGone": "The task could not be found, so nothing was written: {{subject}}",
-    "writeTargetChanged": "The note has changed since the menu opened, so nothing was written. Please try again: {{subject}}",
+    "writeTargetChanged": "The note has changed since it was last read, so nothing was written. Please try again: {{subject}}",
     "writeTargetUnplaceable": "There is no place in the body of the note (below the frontmatter, outside code blocks) to put the new line, so nothing was written: {{subject}}",
     "moveOriginKept": "Moved to {{dest}}, but the original line could not be removed, so the task is in two places ({{reason}}): {{subject}}",
     "moveOriginAmbiguous": "{{count}} lines read the same, so the original could not be told apart",
