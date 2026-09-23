@@ -7,6 +7,7 @@ import { processLines, type LineEdits } from '../../utils/FileLines';
 import { refOf, subjectOf } from './TaskRefs';
 import type { WriteObserver } from './WriteObserver';
 import { Outline } from '../parsing/utils/Outline';
+import { Placement } from './utils/Placement';
 
 export type { GeneratedChild } from './FlowInstanceLines';
 
@@ -64,7 +65,7 @@ export class TaskCloner {
                 parents.push(this.shiftInlineDates(cleanParent, offset));
             }
 
-            return this.spliceCopies(lines, idx, parents, 'before', edits);
+            return this.spliceCopies(lines, idx, parents, idx, edits);
         }, this.writes?.for(task.file)).then(outcome => outcome.written);
     }
 
@@ -91,9 +92,11 @@ export class TaskCloner {
             return false;
         }
 
-        return processLines(this.app, file, (lines, _eol, { edits, lineOf }) => {
+        return processLines(this.app, file, (lines, _eol, { edits, lineOf, refuse }) => {
             const idx = lineOf(refOf(task), subjectOf(task));
             if (idx === null) return null;
+            const at = Placement.afterSubtree(lines, idx);
+            if (at === null) return refuse({ kind: 'unplaceable' }, subjectOf(task));
 
             const indent = Outline.indentOf(lines[idx]);
             const parents = copies.kind === 'verbatim'
@@ -101,7 +104,7 @@ export class TaskCloner {
                     () => this.fileOps.stripBlockIds([lines[idx]])[0])
                 : copies.lines.map(l => indent + l.trim());
 
-            return this.spliceCopies(lines, idx, parents, 'after', edits);
+            return this.spliceCopies(lines, idx, parents, at, edits);
         }, this.writes?.for(task.file)).then(outcome => outcome.written);
     }
 
@@ -113,7 +116,8 @@ export class TaskCloner {
      *
      * Children travel verbatim. A child's dates are its own, not an offset
      * from its parent's, so nothing here rewrites them — the same rule in
-     * both duplication paths.
+     * both duplication paths. `insertIndex` is where the copies go: the
+     * task's own line to go before it, or `Placement.afterSubtree` to follow it.
      *
      * @returns the modified lines array.
      */
@@ -121,7 +125,7 @@ export class TaskCloner {
         lines: string[],
         taskLine: number,
         parentLines: string[],
-        position: 'before' | 'after',
+        insertIndex: number,
         edits: LineEdits,
     ): string[] {
         const { childrenLines } = this.fileOps.collectChildrenFromLines(lines, taskLine);
@@ -132,9 +136,6 @@ export class TaskCloner {
             linesToInsert.push(parent, ...cleanedChildren);
         }
 
-        const insertIndex = position === 'before'
-            ? taskLine
-            : Outline.subtreeEnd(lines, taskLine);
         // Through `edits` rather than beside it: the copy is worded exactly
         // like the line it copies, so a position off by one would read the same
         // and hand the original's identity to the copy. One number does both.

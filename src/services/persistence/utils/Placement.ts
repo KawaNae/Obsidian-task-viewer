@@ -66,6 +66,40 @@ export class Placement {
         return this.inBody(lines, head);
     }
 
+    /** Where a line just past `row`'s subtree goes: `row` gains a next sibling there. */
+    static afterSubtree(lines: readonly string[], row: number): number | null {
+        return this.inBody(lines, Outline.subtreeEnd(lines, row));
+    }
+
+    /** Where a first child of `row` goes: just below it. */
+    static firstChild(lines: readonly string[], row: number): number | null {
+        return this.inBody(lines, row + 1);
+    }
+
+    /**
+     * Where a line goes past the completed siblings that directly follow
+     * `row`, so a new record joins the end of a chronological run instead of
+     * splitting it: just past the subtree of the last of them (of `row`'s own
+     * when the next sibling is not completed).
+     *
+     * "Completed" is `[x]` and nothing else — the status character is a fact
+     * the parser knows, unlike the shape of a line, which cannot be told apart
+     * from something the user typed by hand. The run stops at the first line
+     * past a subtree that is not a completed sibling: a blank line, a line at
+     * another depth, or an unfinished one.
+     */
+    static afterCompletedRun(lines: readonly string[], row: number): number | null {
+        const depth = Outline.depthOf(lines[row]);
+        let end = Outline.subtreeEnd(lines, row);
+        while (end < lines.length) {
+            const line = lines[end];
+            if (line.trim() === '' || Outline.depthOf(line) !== depth) break;
+            if (TaskLineClassifier.classify(line)?.statusChar !== 'x') break;
+            end = Outline.subtreeEnd(lines, end);
+        }
+        return this.inBody(lines, end);
+    }
+
     /**
      * Where lines appended to the note go: after its last line, and before
      * the empty element a note that ends with a terminator splits into, so

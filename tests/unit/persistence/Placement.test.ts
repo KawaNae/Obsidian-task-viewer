@@ -109,6 +109,46 @@ describe('Placement.groupHead', () => {
     });
 });
 
+describe('Placement.afterSubtree', () => {
+    it('is past the children, a blank line inside them included, and before the blank lines after', () => {
+        const lines = ['- [ ] a', '\t- b', '', '\t- c', '', '- [ ] d'];
+        expect(Placement.afterSubtree(lines, 0)).toBe(4);
+    });
+
+    it('is null when the subtree ends inside a fence that goes on past it', () => {
+        // The fence opens at a depth the document-level reading sees, and
+        // nothing closes it: a line put after the subtree would be code.
+        const lines = ['- [ ] a', '  ```', '  x', 'after', ''];
+        expect(Placement.afterSubtree(lines, 0)).toBeNull();
+    });
+});
+
+describe('Placement.firstChild', () => {
+    it('is the line below the row', () => {
+        expect(Placement.firstChild(['- [ ] a', '\t- b'], 0)).toBe(1);
+    });
+});
+
+describe('Placement.afterCompletedRun', () => {
+    it('goes past the completed siblings that follow, and their children', () => {
+        const lines = ['- [ ] a', '- [x] b', '\t- note', '- [x] c', '- [ ] d'];
+        expect(Placement.afterCompletedRun(lines, 0)).toBe(4);
+    });
+
+    it('is past the row\'s own subtree when the next sibling is not completed', () => {
+        expect(Placement.afterCompletedRun(['- [ ] a', '\t- b', '- [ ] c'], 0)).toBe(2);
+    });
+
+    it('stops at a blank line between siblings', () => {
+        expect(Placement.afterCompletedRun(['- [ ] a', '- [x] b', '', '- [x] c'], 0)).toBe(2);
+    });
+
+    it('takes a sibling indented by a tab and one by four spaces for the same depth', () => {
+        const lines = ['- [ ] p', '\t- [ ] a', '    - [x] b', '\t- [x] c', '- [ ] q'];
+        expect(Placement.afterCompletedRun(lines, 1)).toBe(4);
+    });
+});
+
 describe('Placement.end', () => {
     it('is the index of the trailing empty element of a terminated file', () => {
         expect(Placement.end(['a', ''])).toBe(1);
