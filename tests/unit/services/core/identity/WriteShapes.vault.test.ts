@@ -290,7 +290,7 @@ describe('3. deleteTaskFromFile', () => {
         const expected = NOTE();
         expected.splice(1, 0, OUTSIDE);
         expect(contents.get(FILE)).toBe(expected.join('\n'));
-        expect(contents.get(ARCHIVE)).toBe(['# archive', '- [x] 対象 @2026-09-21', '\t- [ ] 子 @2026-09-21'].join('\n'));
+        expect(contents.get(ARCHIVE)).toBe(['# archive', '- [x] 対象 @2026-09-21', '\t- [ ] 子 @2026-09-21', ''].join('\n'));
         expect(rows(session).map(row => row.id).slice(1)).toEqual([held.above, held.below]);
         expect(Notice.messages).toEqual([]);
     });
@@ -481,7 +481,7 @@ describe('8. appendTaskWithChildren (a move archiving its subtree)', () => {
         await check(session, idOf(session, '対象'));
         await flowSettled(session, ARCHIVE);
 
-        expect(contents.get(ARCHIVE)).toBe(['# archive', '- [x] 対象 @2026-09-21', '\t- [ ] 子 @2026-09-21'].join('\n'));
+        expect(contents.get(ARCHIVE)).toBe(['# archive', '- [x] 対象 @2026-09-21', '\t- [ ] 子 @2026-09-21', ''].join('\n'));
         expect(contents.get(FILE)).toBe(NOTE().join('\n'));
         expect(rows(session, ARCHIVE).map(row => row.key)).toEqual(['x|対象|2026-09-21', ' |子|2026-09-21']);
         expect(Notice.messages).toEqual([]);
@@ -496,10 +496,10 @@ describe('8. appendTaskWithChildren (a move archiving its subtree)', () => {
         await check(session, idOf(session, '対象'));
         await flowSettled(session);
 
-        // The append takes the place of the file's final empty line, so the
-        // note ends without a terminator (appendLines).
+        // The append goes in before the note's final empty element, so the
+        // note keeps its terminator.
         expect(contents.get(FILE)).toBe([
-            '# note', '- [ ] 上 @2026-09-21', '- [ ] 下 @2026-09-21', '- [x] 対象 @2026-09-21', '\t- [ ] 子 @2026-09-21',
+            '# note', '- [ ] 上 @2026-09-21', '- [ ] 下 @2026-09-21', '- [x] 対象 @2026-09-21', '\t- [ ] 子 @2026-09-21', '',
         ].join('\n'));
         expect(rows(session).map(row => row.id)).toEqual([held.above, held.below, held.target, held.child]);
         expect(Notice.messages).toEqual([]);
@@ -516,7 +516,7 @@ describe('8. appendTaskWithChildren (a move archiving its subtree)', () => {
         await check(session, idOf(session, '対象'));
         await flowSettled(session, ARCHIVE);
 
-        expect(contents.get(ARCHIVE)).toBe(['# archive', '- [x] 対象 @2026-09-21', '\t- [ ] 子 @2026-09-21'].join('\n'));
+        expect(contents.get(ARCHIVE)).toBe(['# archive', '- [x] 対象 @2026-09-21', '\t- [ ] 子 @2026-09-21', ''].join('\n'));
         const expected = NOTE();
         expected.splice(1, 0, OUTSIDE);
         expect(contents.get(FILE)).toBe(expected.join('\n'));
@@ -536,7 +536,7 @@ describe('8. appendTaskWithChildren (a move archiving its subtree)', () => {
         await flowSettled(session);
 
         expect(contents.get(FILE)).toBe([
-            '# note', OUTSIDE, '- [ ] 上 @2026-09-21', '- [ ] 下 @2026-09-21', '- [x] 対象 @2026-09-21', '\t- [ ] 子 @2026-09-21',
+            '# note', OUTSIDE, '- [ ] 上 @2026-09-21', '- [ ] 下 @2026-09-21', '- [x] 対象 @2026-09-21', '\t- [ ] 子 @2026-09-21', '',
         ].join('\n'));
         expect(rows(session).map(row => row.id).slice(1)).toEqual([held.above, held.below, held.target, held.child]);
         expect(Notice.messages).toEqual([]);
@@ -557,7 +557,7 @@ describe('8. a move to another file whose source is refused after the archive', 
         await check(session, idOf(session, '対象'));
         await flowSettled(session, ARCHIVE);
 
-        expect(contents.get(ARCHIVE)).toBe(['# archive', '- [x] 対象 @2026-09-21', '\t- [ ] 子 @2026-09-21'].join('\n'));
+        expect(contents.get(ARCHIVE)).toBe(['# archive', '- [x] 対象 @2026-09-21', '\t- [ ] 子 @2026-09-21', ''].join('\n'));
         expect(contents.get(FILE)).toContain('書き足し');
         expect(Notice.messages).toEqual([t('notice.moveOriginKept', {
             dest: 'archive', reason: t('notice.moveOriginChanged'), subject: '対象',

@@ -67,6 +67,18 @@ export class Placement {
     }
 
     /**
+     * Where lines appended to the note go: after its last line, and before
+     * the empty element a note that ends with a terminator splits into, so
+     * the terminator stays the note's last character. Null when the note
+     * ends inside a fence that never closes: appended there, the lines are
+     * no tasks to the index.
+     */
+    static end(lines: readonly string[]): number | null {
+        const at = lines.length > 0 && lines[lines.length - 1] === '' ? lines.length - 1 : lines.length;
+        return this.inBody(lines, at);
+    }
+
+    /**
      * `at`, when a line spliced in there is read as part of the body; null
      * otherwise. A line goes in above the frontmatter's end, or inside a
      * fence — past its opening line and not past its closing one, or past

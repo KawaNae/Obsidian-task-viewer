@@ -303,7 +303,7 @@ describe('the half of a move that writes the destination', () => {
         expect(outcome.written).toBe(true);
         expect(outcome.made).toEqual([]);
         expect(contents.get(FILE)!.split('\n')).toEqual([
-            '- [ ] 見張り @2026-09-21', '- [x] 移す',
+            '- [ ] 見張り @2026-09-21', '- [x] 移す', '',
         ]);
         expect(idsOf(live)).toEqual([watcher.id, moving.id]);
         expect(claims.adopted).toEqual([FILE]);

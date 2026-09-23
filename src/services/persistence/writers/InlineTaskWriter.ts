@@ -10,7 +10,7 @@ import type { PropertyOp } from '../PropertyUpdatePlanner';
 import { renderFlowInstance } from '../FlowInstanceLines';
 import { collectGenBlocks } from '../../parsing/gen/GenBlockCollector';
 import {
-    appendLines, processLines, splitLines,
+    processLines, splitLines,
     type EditorLine, type LineEdits, type Refusal, type WriteOutcome,
 } from '../../../utils/FileLines';
 import type { WriteObserver } from '../WriteObserver';
@@ -283,16 +283,16 @@ export class InlineTaskWriter {
                 return true;
             }
             case 'move-to-end': {
-                // The row and what goes with it are carried to the end — past
-                // the file's final terminator, where an append puts lines —
-                // and then its whole subtree is taken away from where it was.
-                // Everything is read before either: carrying to the end
-                // leaves every line above it where it is.
+                // The row and what goes with it are carried to the end — where
+                // an append puts lines, the file's final terminator kept after
+                // them — and then its whole subtree is taken away from where
+                // it was. Everything is read before either: carrying to the
+                // end leaves every line above it where it is.
+                const at = Placement.end(lines);
+                if (at === null) return false;
                 const [head, ...rest] = splitLines(op.text).lines;
                 const children = this.childrenToCarry(lines, line);
                 const { childrenLines } = this.fileOps.collectChildrenFromLines(lines, line);
-                const at = lines[lines.length - 1] === '' ? lines.length - 1 : lines.length;
-                edits.splice(at, lines.length - at);
                 edits.carry(at, [{ from: line, text: head }]);
                 // A line past the row's first is one the archive wrote, not
                 // one that was here.
@@ -505,8 +505,11 @@ export class InlineTaskWriter {
         // The appended text is built with LF; splitting it here lets the file's
         // own terminator go back between every line, its own included.
         let insertedLine = -1;
-        await processLines(this.app, file, (lines, _eol, { edits }) => {
-            insertedLine = appendLines(lines, splitLines(content).lines, edits);
+        await processLines(this.app, file, (lines, _eol, { edits, refuse }) => {
+            const at = Placement.end(lines);
+            if (at === null) return refuse({ kind: 'unplaceable' }, splitLines(content).lines[0].trim());
+            edits.splice(at, 0, ...splitLines(content).lines);
+            insertedLine = at;
             return lines;
         }, this.writes?.for(filePath));
         return insertedLine;

@@ -62,7 +62,10 @@ describe.each(COMMANDS)('%s within the same file', (_name, command) => {
         await flowSettled(live);
 
         const lines = contents.get(FILE)!.split('\n');
-        expect(lines.slice(-2)).toEqual(['- [x] 移す @2026-09-21', '\t- [ ] 子 @2026-09-21']);
+        // The note still ends with its own terminator, so the moved rows land
+        // just before the trailing empty element rather than as the file's
+        // last two lines.
+        expect(lines.slice(-3)).toEqual(['- [x] 移す @2026-09-21', '\t- [ ] 子 @2026-09-21', '']);
         expect(lines).not.toContain('- [ ] 移す @2026-09-21');
 
         const after = rowsOf(live);

@@ -21,9 +21,9 @@ describe('Outline.depthOf', () => {
     });
 
     it('counts spaces and tabs only', () => {
-        expect(Outline.depthOf('﻿- [ ] x')).toBe(0);
-        expect(Outline.indentOf('﻿- [ ] x')).toBe('');
-        expect(Outline.indentOf(' \t x')).toBe(' \t');
+        expect(Outline.depthOf('\uFEFF- [ ] x')).toBe(0);
+        expect(Outline.indentOf('\uFEFF- [ ] x')).toBe('');
+        expect(Outline.indentOf(' \t\u00A0x')).toBe(' \t');
     });
 });
 

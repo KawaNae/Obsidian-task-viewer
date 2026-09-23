@@ -140,7 +140,7 @@ describe('HeadingInserter', () => {
             const result = insertFromText('', '- [ ] task', 'Tasks', 2);
             expect(result.content).toContain('## Tasks');
             expect(result.content).toContain('- [ ] task');
-            expect(result.insertedLine).toBe(2);
+            expect(result.insertedLine).toBe(1);
         });
 
         it('matches heading exactly (not partial)', () => {
