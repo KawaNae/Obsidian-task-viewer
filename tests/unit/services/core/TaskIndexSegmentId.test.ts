@@ -47,6 +47,8 @@ function buildHost(task: Task) {
         revertUnwrittenUpdate: proto.revertUnwrittenUpdate,
         adoptWrittenRow: proto.adoptWrittenRow,
         onRow: proto.onRow,
+        copyForWrite: proto.copyForWrite,
+        reportRefusal: vi.fn(),
         writeUpdate: proto.writeUpdate,
         // The dispose guard every write goes through; this index is open.
         disposed: false,
