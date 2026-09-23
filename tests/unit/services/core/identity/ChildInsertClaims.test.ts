@@ -1,7 +1,5 @@
 import { describe, it, expect, afterEach } from 'vitest';
 import { vaultSession, type VaultSession } from '../../../helpers/vaultSession';
-import type { WriteObserver } from '../../../../../src/services/persistence/WriteObserver';
-import type { Refusal } from '../../../../../src/utils/FileLines';
 import { plannedOn } from '../../../../../src/services/persistence/TaskRefs';
 
 /**
@@ -79,14 +77,10 @@ function repositoryOf(session: VaultSession) {
  * channel whole would leave every target `gone` and every write refused.
  */
 function silenceWrites(session: VaultSession): void {
-    const index = session.index as unknown as {
-        repository: { getWriteObserver: () => WriteObserver };
-        reportRefusal: (refusal: Refusal) => void;
-    };
-    index.repository.getWriteObserver().connect(path => ({
+    session.index.getRepository().getWriteObserver().connect(path => ({
         locate: (lines, ref) => session.scanner.locate(path, lines, ref),
         onRecord: (lines, ref, line) => session.scanner.onRecord(path, lines, ref, line),
-        refused: refusal => index.reportRefusal(refusal),
+        refused: refusal => session.reportRefusal(refusal),
     }));
 }
 

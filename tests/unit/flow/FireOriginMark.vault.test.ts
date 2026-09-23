@@ -18,9 +18,7 @@ const FILE = 'note.md';
 function open(lines: string[]) {
     const contents = new Map([[FILE, lines.join('\n')]]);
     const session = vaultSession(contents);
-    const executor = (session.index as unknown as {
-        commandExecutor: { handleTaskCompletion: (task: Task) => Promise<void>; isProcessing: boolean };
-    }).commandExecutor;
+    const executor = session.executor;
     const fired: string[] = [];
     const original = executor.handleTaskCompletion.bind(executor);
     executor.handleTaskCompletion = (task: Task) => { fired.push(task.content); return original(task); };
@@ -54,8 +52,7 @@ describe('what a mark answers for', () => {
     const A = (c: string) => `- [${c}] A @2026-09-21 ==> every mon`;
     const check = (task: Task, c: string): Task => ({ ...task, statusChar: c });
     const firedIn = (bench: WriteBench): number =>
-        ((bench.scanner as unknown as { commandExecutor: { handleTaskCompletion: { mock: { calls: unknown[] } } } })
-            .commandExecutor.handleTaskCompletion.mock.calls.length);
+        bench.flow.handleTaskCompletion.mock.calls.length;
 
     it('not a completed row a child was written under: a sync\'s completed row does not ride on it', async () => {
         const bench = await writeBench([A('x'), '- [ ] 乙']);

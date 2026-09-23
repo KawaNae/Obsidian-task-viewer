@@ -15,8 +15,7 @@ import type { Task } from '../../../src/types';
 const A = (c: string) => `- [${c}] A @2026-09-21 ==> every mon`;
 const check = (task: Task, c: string): Task => ({ ...task, statusChar: c });
 const fired = (bench: WriteBench): number =>
-    ((bench.scanner as unknown as { commandExecutor: { handleTaskCompletion: { mock: { calls: unknown[] } } } })
-        .commandExecutor.handleTaskCompletion.mock.calls.length);
+    bench.flow.handleTaskCompletion.mock.calls.length;
 
 describe('a flow\'s completed row beside a trade the ladder undoes', () => {
     it('fires nothing when the user\'s writes are undone by a sync built before them (L3)', async () => {

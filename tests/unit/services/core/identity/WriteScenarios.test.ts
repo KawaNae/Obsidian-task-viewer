@@ -1,6 +1,5 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { vaultSession, type VaultSession } from '../../../helpers/vaultSession';
-import type { WriteChannel } from '../../../../../src/utils/FileLines';
 
 /**
  * The two writes that used to move IDs under whoever held them, driven through
@@ -267,8 +266,7 @@ describe('IDs held across a delete', () => {
     /** Take the report away from every write, leaving the ladder alone. */
     function silenceWrites(session: VaultSession): void {
         const observer = session.index.getRepository().getWriteObserver();
-        const resolve = (observer as unknown as { resolve: (file: string) => WriteChannel }).resolve;
-        observer.connect(file => ({ ...resolve(file), sink: undefined }));
+        observer.connect(file => ({ ...session.channelOf(file), sink: undefined }));
     }
 
     it('the surviving twin keeps its own ID when the one above it goes', async () => {

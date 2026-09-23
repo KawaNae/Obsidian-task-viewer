@@ -20,9 +20,7 @@ interface Fired { count: number; contents: string[] }
 function open(lines: string[]) {
     const contents = new Map([[FILE, lines.join('\n')]]);
     const session = vaultSession(contents);
-    const executor = (session.index as unknown as {
-        commandExecutor: { handleTaskCompletion: (task: Task) => Promise<void>; isProcessing: boolean };
-    }).commandExecutor;
+    const executor = session.executor;
     const fired: Fired = { count: 0, contents: [] };
     const original = executor.handleTaskCompletion.bind(executor);
     executor.handleTaskCompletion = (task: Task) => {
@@ -30,7 +28,6 @@ function open(lines: string[]) {
         fired.contents.push(task.content);
         return original(task);
     };
-    const signal = (session.index as unknown as { editorSignal: { mark(path: string): void } }).editorSignal;
     const settled = async () => {
         await vi.waitFor(() => expect(executor.isProcessing).toBe(false));
         await session.settle(FILE);
@@ -44,7 +41,7 @@ function open(lines: string[]) {
         idOf: (content: string) => session.index.getTasks().find(t => t.content === content)!.id,
         /** Someone typed or clicked in the note's editor, and it saved `text`. */
         byHand: async (text: string[]) => {
-            signal.mark(FILE);
+            session.markEditor(FILE);
             contents.set(FILE, text.join('\n'));
             await session.fireVault('modify', makeFile(FILE));
             await settled();
@@ -140,7 +137,7 @@ describe('the user\'s completions', () => {
         // editor's flag, and the hand completion read as a sync.
         const note = open(TWO);
         await note.session.scanAll();
-        (note.session.index as unknown as { editorSignal: { mark(path: string): void } }).editorSignal.mark(FILE);
+        note.session.markEditor(FILE);
         await note.session.index.updateTask(note.idOf('乙'), { content: '乙2' });
         await note.settled();
         const lines = note.lines();
@@ -176,7 +173,7 @@ describe('what is not the user\'s', () => {
         // undone), with writes of ours in between, which leave it standing.
         const note = open(ONE);
         await note.session.scanAll();
-        (note.session.index as unknown as { editorSignal: { mark(path: string): void } }).editorSignal.mark(FILE);
+        note.session.markEditor(FILE);
         await note.session.index.updateTask(note.idOf('乙'), { content: '乙2' });
         await note.settled();
         const now = Date.now();
