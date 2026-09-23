@@ -334,15 +334,26 @@ describe('F5: 1要素1行。改行を含む値は、書き込みの前に理由�
     it('create: 改行の status を拒否', async () => {
         const api = createMockApi(undefined);
         await expect(api.create({ file: 'test.md', content: 'task', status: '\n' }))
-            .rejects.toThrow(/status must be a single character other than a line break/);
+            .rejects.toThrow(/status must be a single character a checkbox can hold/);
         await expect(api.create({ file: 'test.md', content: 'task', status: '\r' }))
-            .rejects.toThrow(/status must be a single character other than a line break/);
+            .rejects.toThrow(/status must be a single character a checkbox can hold/);
+    });
+
+    it('status の U+2028 と U+2029 を拒否（Obsidian はそのチェックボックスをタスクと読まない）', async () => {
+        const created = createMockApi(undefined);
+        const existing = createMockApi(makeTask({ isReadOnly: false }));
+        for (const sep of [' ', ' ']) {
+            await expect(created.create({ file: 'test.md', content: 'task', status: sep }))
+                .rejects.toThrow(/status must be a single character a checkbox can hold/);
+            await expect(existing.update({ id: 'test-1', status: sep }))
+                .rejects.toThrow(/status must be a single character a checkbox can hold/);
+        }
     });
 
     it('update: 改行の status を拒否', async () => {
         const api = createMockApi(makeTask({ isReadOnly: false }));
         await expect(api.update({ id: 'test-1', status: '\n' }))
-            .rejects.toThrow(/status must be a single character other than a line break/);
+            .rejects.toThrow(/status must be a single character a checkbox can hold/);
     });
 
     it('create: 改行を含む heading を拒否', async () => {
@@ -361,7 +372,7 @@ describe('F5: 1要素1行。改行を含む値は、書き込みの前に理由�
         await expect(existing.update({ id: 'test-1', content: 'a\rb' }))
             .rejects.toThrow(/content must not contain line breaks/);
         await expect(existing.update({ id: 'test-1', status: '\r' }))
-            .rejects.toThrow(/status must be a single character other than a line break/);
+            .rejects.toThrow(/status must be a single character a checkbox can hold/);
     });
 
     it('U+2028 と U+2029 は行の中身として通し、そのまま書き込みへ渡す（L1。Obsidian も読み手も行の区切りにしない）', async () => {

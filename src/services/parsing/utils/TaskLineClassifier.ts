@@ -23,6 +23,7 @@ export interface TaskLineMatch {
  */
 export class TaskLineClassifier {
     private static readonly TASK_LINE_REGEX = new RegExp(`^(${INDENT_SOURCE})(${LIST_BULLET_SOURCE}${MARKER_GAP_SOURCE}\\[)(${STATUS_CHAR_SOURCE})(\\]${CHECKBOX_GAP_SOURCE}${IN_LINE}*)$`);
+    private static readonly STATUS_CHAR_REGEX = new RegExp(`^${STATUS_CHAR_SOURCE}$`);
     private static readonly MARKER_REGEX = new RegExp(`^${INDENT_SOURCE}(${LIST_BULLET_SOURCE})`);
     private static readonly BLOCK_ID_REGEX = /(?:^|\s)\^([A-Za-z0-9-]+)\s*$/;
 
@@ -89,6 +90,14 @@ export class TaskLineClassifier {
             prefix: indent + bulletBracket,
             suffix: bracketTail,
         };
+    }
+
+    /**
+     * Whether `status` is a character a checkbox can hold (`STATUS_CHAR_SOURCE`):
+     * one written there makes a line that reads back as a task.
+     */
+    static isStatusChar(status: string): boolean {
+        return this.STATUS_CHAR_REGEX.test(status);
     }
 
     /** Boolean-only check — avoids object allocation on hot paths. */
