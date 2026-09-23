@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { TFile } from 'obsidian';
 import { LineBreakInLine, draftOver, joinLines, processLines, replayEdits, splitLines } from '../../../src/utils/FileLines';
 import type { LineEdit, Located, NamedRow, Refusal, TaskRef, WriteChannel } from '../../../src/utils/FileLines';
+import { holdsLineBreak } from '../../../src/utils/LineBreak';
 import { ON_RECORD } from '../../../src/services/persistence/RowBasis';
 
 /**
@@ -41,20 +42,46 @@ describe('splitLines', () => {
         expect(splitLines('a\r\nb\n').eol).toBe('\n');
     });
 
-    it('keeps a CR that is not a terminator', () => {
-        expect(splitLines('a\rb\n').lines).toEqual(['a\rb', '']);
+    it('ends a line at a CR on its own, as the editor does', () => {
+        // Obsidian's editor breaks the line there and its metadata counts two
+        // lines (R0). Read as one, every line below it has a number the editor
+        // does not give it.
+        expect(splitLines('a\rb\n').lines).toEqual(['a', 'b', '']);
+        expect(splitLines('a\nb\r').lines).toEqual(['a', 'b', '']);
     });
 
-    it('does not let the last line\'s trailing CR vote, but still strips it', () => {
-        // The file's one terminator is LF, so counting the stray CR would
-        // rewrite the whole file to CRLF. Leaving it on the text is no better:
-        // the parser's line regex ends at `$`, so a task line carrying a CR is
-        // not read as a task — that CR costs the line its card (found in Dev).
+    it('does not let a CR on its own vote for CRLF', () => {
+        // Obsidian writes such a note back with LF, and so does a write here:
+        // counting it for CRLF would rewrite a whole LF file.
+        expect(splitLines('a\rb\rc\r\nd\n').eol).toBe('\n');
         const split = splitLines('a\nb\r');
-        expect(split.eol).toBe('\n');
-        expect(split.lines).toEqual(['a', 'b']);
-        // The fragment of a terminator that was never finished goes with it.
-        expect(joinLines(split.lines, split.eol)).toBe('a\nb');
+        expect(joinLines(split.lines, split.eol)).toBe('a\nb\n');
+    });
+
+    it('keeps U+2028 and U+2029 inside the line', () => {
+        // Obsidian reads neither as a line break: the line is one checkbox (R0).
+        expect(splitLines('- [ ] a b\n- [ ] c d').lines).toEqual(['- [ ] a b', '- [ ] c d']);
+    });
+
+    it('gives back the lines it was handed, once they are joined', () => {
+        // What a write hands over is what the next scan reads, line for line:
+        // the claim, the report and the content key all count on it.
+        const lines = ['- [ ] a b', '', '\t- [ ] c', ''];
+        for (const eol of ['\n', '\r\n'] as const) {
+            expect(splitLines(joinLines(lines, eol)).lines).toEqual(lines);
+        }
+    });
+});
+
+describe('holdsLineBreak', () => {
+    it('is the set of characters splitLines ends a line at', () => {
+        expect(holdsLineBreak('a\nb')).toBe(true);
+        expect(holdsLineBreak('a\rb')).toBe(true);
+        expect(holdsLineBreak('a b')).toBe(false);
+        expect(holdsLineBreak('a b')).toBe(false);
+        for (const text of ['a\nb', 'a\rb', 'a\r\nb', 'a b', 'a b']) {
+            expect(holdsLineBreak(text)).toBe(splitLines(text).lines.length > 1);
+        }
     });
 });
 
@@ -376,6 +403,23 @@ describe('processLines: asking where a row stands, and giving up', () => {
         expect(outcome).toEqual({ written: true, refused: null, made: [], rows: new Map([[REF.runtimeId, { read: ['- [ ] b'], left: ['- [x] b'] }]]) });
         expect(h.text()).toBe('- [ ] a\r\n- [x] b\r\n');
         expect(log.refusals).toEqual([]);
+    });
+
+    it('writes an editor line on the line the editor numbered, below a CR on its own', async () => {
+        // The editor breaks at the CR, so the first `- [ ] b` is its line 2.
+        // Read as one line, `a\rX` put the second `- [ ] b` at 2 as well: same
+        // text, so the write went to the other row.
+        const h = harness('- [ ] a\rX\n- [ ] b\n- [ ] b\n');
+
+        const outcome = await processLines(h.app, h.file, undefined, (draft, _eol, session) => {
+            const at = session.row({ line: 2, text: '- [ ] b' });
+            if (at === null) return false;
+            draft.rewrite(at, '- [x] b');
+            return true;
+        });
+
+        expect(outcome.written).toBe(true);
+        expect(h.text()).toBe('- [ ] a\nX\n- [x] b\n- [ ] b\n');
     });
 
     it('refuses through row when the channel has no line to give', async () => {
