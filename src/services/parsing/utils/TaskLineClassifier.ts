@@ -34,7 +34,8 @@ export interface TaskLineMatch {
  */
 export class TaskLineClassifier {
     private static readonly TASK_LINE_REGEX = new RegExp(`^(${TASK_LEAD_SOURCE})(${LIST_BULLET_SOURCE} *\\[)(${STATUS_CHAR_SOURCE})(\\]${IN_LINE}*)$`);
-    private static readonly MARKER_REGEX = new RegExp(`^${TASK_LEAD_SOURCE}(${LIST_BULLET_SOURCE})`);
+    private static readonly BARE_CHECKBOX_REGEX = new RegExp(`^${TASK_LEAD_SOURCE}${LIST_BULLET_SOURCE} *\\[${STATUS_CHAR_SOURCE}\\]$`);
+    private static readonly MARKER_REGEX =new RegExp(`^${TASK_LEAD_SOURCE}(${LIST_BULLET_SOURCE})`);
     private static readonly BLOCK_ID_REGEX = /\s\^([A-Za-z0-9-]+)\s*$/;
 
     /**
@@ -46,9 +47,37 @@ export class TaskLineClassifier {
         const match = text.match(this.BLOCK_ID_REGEX);
         if (!match) return { text };
         return {
-            text: text.slice(0, match.index).trimEnd(),
+            // Up to and with the space before `^`: on `- [ ] ^a` that space is
+            // also the checkbox's gap, which `trimEnd` keeps.
+            text: this.trimEnd(text.slice(0, match.index! + 1)),
             blockId: match[1],
         };
+    }
+
+    /**
+     * `text` with its end trimmed, but not the gap after a checkbox that has
+     * nothing else on its line.
+     *
+     * A checkbox is a task to Obsidian only with a space or a tab after its
+     * `]`, so `- [ ] ` is a task with no content and `- [ ]` is none. A task
+     * with no content formats to the first; trimming the line as it is
+     * written would turn it into the second. Any other line's end is trimmed
+     * as before.
+     */
+    static trimEnd(text: string): string {
+        const trimmed = text.trimEnd();
+        return trimmed.length < text.length && this.BARE_CHECKBOX_REGEX.test(trimmed)
+            ? text.slice(0, trimmed.length + 1)
+            : trimmed;
+    }
+
+    /**
+     * A line as a writer puts it after the indentation it decides: the line's
+     * own indentation taken off, as the reading takes it off
+     * (`Outline.dedent`), and its end trimmed as {@link trimEnd} does.
+     */
+    static tidy(line: string): string {
+        return this.trimEnd(Outline.dedent(line));
     }
 
     /** Full classification — returns null if the line is not a task line. */

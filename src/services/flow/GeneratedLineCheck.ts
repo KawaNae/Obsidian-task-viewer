@@ -1,6 +1,5 @@
 import { type Diagnostic, error } from '../lang/Diagnostic';
 import { childStatusWarning, parentStatusWarning } from '../parsing/gen/GenGeneratedStatusCheck';
-import { Outline } from '../parsing/utils/Outline';
 import { TaskLineClassifier } from '../parsing/utils/TaskLineClassifier';
 import { FLOW_MARKER } from './FlowLineScanner';
 
@@ -33,7 +32,7 @@ export type GeneratedLineCheck =
  * file at the moment it is checked.
  */
 export function checkGeneratedParentLine(raw: string): GeneratedLineCheck {
-    const line = Outline.dedent(raw).trimEnd();
+    const line = TaskLineClassifier.tidy(raw);
     const whole = { start: 0, end: line.length };
 
     // A command here would be the second one on the line: the engine
@@ -114,7 +113,7 @@ export function checkGeneratedParentLine(raw: string): GeneratedLineCheck {
  * text has to be refused instead.
  */
 export function checkGeneratedChildLine(raw: string): GeneratedLineCheck {
-    const line = Outline.dedent(raw).trimEnd();
+    const line = TaskLineClassifier.tidy(raw);
     const { blockId } = TaskLineClassifier.extractBlockId(line);
     if (blockId) {
         return {

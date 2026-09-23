@@ -1,4 +1,5 @@
 import { type App, TFile } from 'obsidian';
+import { TaskLineClassifier } from '../../parsing/utils/TaskLineClassifier';
 import type { Task } from '../../../types';
 import { TaskParser } from '../../parsing/TaskParser';
 import { collectFlowLineIndicesInFile } from '../../flow/FlowLineScanner';
@@ -63,7 +64,7 @@ export class InlineTaskWriter {
             // the first line that is not a descendant), so this coordinate is
             // still this line afterwards.
             const originalIndent = Outline.indentOf(draft.lines[currentLine]);
-            draft.rewrite(currentLine, originalIndent + newLine.trim());
+            draft.rewrite(currentLine, originalIndent + TaskLineClassifier.tidy(newLine));
 
             // 子プロパティ行（- key:: value）の更新は同一 process 内で
             // 連続適用する（別 process だと originalText 失効と行番号
@@ -252,7 +253,7 @@ export class InlineTaskWriter {
                 }
                 const indent = Outline.indentOf(lines[line]);
                 // Losing `==>` rewrites the text; the row is the one that fired.
-                draft.rewrite(line, indent + op.text.trim());
+                draft.rewrite(line, indent + TaskLineClassifier.tidy(op.text));
                 return true;
             }
             case 'move-to-end': {
@@ -307,7 +308,7 @@ export class InlineTaskWriter {
             const indent = FileOperations.resolveChildIndent(lines, currentLine);
             const insertIndex = Placement.afterSubtree(lines, currentLine);
             if (insertIndex === null) return refuse({ kind: 'unplaceable' }, subjectOf(task));
-            draft.splice(insertIndex, 0, indent + lineBody.trim());
+            draft.splice(insertIndex, 0, indent + TaskLineClassifier.tidy(lineBody));
             insertedLineIndex = insertIndex;
 
             return true;
@@ -357,7 +358,7 @@ export class InlineTaskWriter {
                 ? Placement.afterCompletedRun(lines, currentLine)
                 : Placement.afterSubtree(lines, currentLine);
             if (insertIndex === null) return refuse({ kind: 'unplaceable' }, subjectOf(task));
-            draft.splice(insertIndex, 0, indent + lineBody.trim());
+            draft.splice(insertIndex, 0, indent + TaskLineClassifier.tidy(lineBody));
             insertedLineIndex = insertIndex;
 
             return true;
@@ -392,7 +393,7 @@ export class InlineTaskWriter {
             // Insert directly after the task line (as first child)
             const insertIndex = Placement.firstChild(lines, currentLine);
             if (insertIndex === null) return refuse({ kind: 'unplaceable' }, subjectOf(task));
-            draft.splice(insertIndex, 0, indent + lineBody.trim());
+            draft.splice(insertIndex, 0, indent + TaskLineClassifier.tidy(lineBody));
             insertedLineIndex = insertIndex;
 
             return true;

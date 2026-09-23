@@ -1,4 +1,5 @@
 import { collectFlowLineIndicesInFile, formatFlowLine } from '../flow/FlowLineScanner';
+import { TaskLineClassifier } from '../parsing/utils/TaskLineClassifier';
 import { FileOperations } from './utils/FileOperations';
 import { Outline } from '../parsing/utils/Outline';
 
@@ -74,7 +75,7 @@ function renderRecurrence(
 ): string[] {
     // Re-indent the formatted line to match the original task line
     const originalIndent = Outline.indentOf(lines[currentLine]);
-    const newParentLine = originalIndent + content.trim();
+    const newParentLine = originalIndent + TaskLineClassifier.tidy(content);
 
     const flowAbs = new Set(collectFlowLineIndicesInFile(lines, currentLine));
     const { childrenLines } = fileOps.collectChildrenFromLines(lines, currentLine);
@@ -113,8 +114,8 @@ function renderGenerated(
         || FileOperations.detectIndentUnit(lines);
 
     return [
-        parentIndent + Outline.dedent(parentLine).trimEnd(),
+        parentIndent + TaskLineClassifier.tidy(parentLine),
         ...flowLines.map(raw => formatFlowLine(parentIndent + unit, raw)),
-        ...children.map(c => parentIndent + unit.repeat(Math.max(1, c.depth)) + Outline.dedent(c.body).trimEnd()),
+        ...children.map(c => parentIndent + unit.repeat(Math.max(1, c.depth)) + TaskLineClassifier.tidy(c.body)),
     ];
 }
