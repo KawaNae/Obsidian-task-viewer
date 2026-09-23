@@ -309,24 +309,9 @@ export class InlineTaskWriter {
         }
     }
 
-    /**
-     * The line index just past the task's subtree — where a following line
-     * would go. Trailing blank lines inside the subtree are not counted, so an
-     * insert lands against the last written line instead of after a gap.
-     */
+    /** The line index just past the task's subtree — where a following line would go. */
     private subtreeEnd(lines: string[], taskLineIndex: number): number {
-        const { childrenLines } = this.fileOps.collectChildrenFromLines(lines, taskLineIndex);
-
-        let effectiveChildrenCount = childrenLines.length;
-        for (let i = childrenLines.length - 1; i >= 0; i--) {
-            if (childrenLines[i].trim() === '') {
-                effectiveChildrenCount--;
-            } else {
-                break;
-            }
-        }
-
-        return taskLineIndex + 1 + effectiveChildrenCount;
+        return Outline.subtreeEnd(lines, taskLineIndex);
     }
 
     /**

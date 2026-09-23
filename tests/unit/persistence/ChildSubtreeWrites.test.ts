@@ -49,17 +49,20 @@ describe('deleteTaskFromFile removes the whole subtree', () => {
         expect(h.lines()).toEqual(['- [ ] sibling']);
     });
 
-    it('stops at a blank line, leaving what follows', async () => {
+    it('takes a child below a blank line too, leaving no orphan', async () => {
         const h = await writeBench([
             '- [ ] parent @2026-08-15',
             '\t- [ ] child',
             '',
-            '\t- [ ] stranded',
+            '\t- [ ] once stranded',
+            '',
+            '- [ ] next',
         ].join('\n'));
 
         await h.writer.deleteTaskFromFile(h.taskAt(0));
 
-        expect(h.lines()).toEqual(['', '\t- [ ] stranded']);
+        // The blank line after the subtree is not the parent's: it stays.
+        expect(h.lines()).toEqual(['', '- [ ] next']);
     });
 
     it('takes a fenced block whole, so no half fence is left behind', async () => {

@@ -37,18 +37,24 @@ export class Outline {
     }
 
     /**
-     * The index just past `row`'s subtree: the lines below it that are deeper
-     * than it, stopping at the first blank line, the first line no deeper than
-     * the row, or `limit`.
+     * The index just past `row`'s subtree: the lines below it up to the first
+     * line that is no deeper than the row, or `limit`.
+     *
+     * A blank line does not end it: a deeper line below a blank one is still
+     * the row's (as it is to Markdown, where a list item's content goes on
+     * past a blank line), and a subtree that stopped at the blank left that
+     * line behind — an orphan after a delete, a child left where it was by a
+     * move. The blank lines at the very end are not the row's, though: they
+     * stand between it and whatever follows, and stay there.
      */
     static subtreeEnd(lines: readonly string[], row: number, limit: number = lines.length): number {
         const depth = this.depthOf(lines[row]);
         let end = row + 1;
-        while (end < limit) {
-            const line = lines[end];
-            if (line.trim() === '') break;
+        for (let i = row + 1; i < limit; i++) {
+            const line = lines[i];
+            if (line.trim() === '') continue;
             if (this.depthOf(line) <= depth) break;
-            end++;
+            end = i + 1;
         }
         return end;
     }

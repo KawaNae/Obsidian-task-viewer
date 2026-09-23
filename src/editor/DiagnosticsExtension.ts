@@ -188,7 +188,7 @@ export function createDiagnosticsExtension(): Extension {
         let steps = 0;
         for (let n = lineNumber - 1; n >= 1 && steps < SCAN_LIMIT; n--, steps++) {
             const text = doc.line(n).text;
-            if (text.trim() === '') return null; // blank ends the child block
+            if (text.trim() === '') continue; // a blank line does not end the children (Outline.subtreeEnd)
             const indent = Outline.depthOf(text);
             if (indent < flowIndent) {
                 return TaskLineClassifier.isTaskLine(text) ? n : null;
@@ -216,10 +216,15 @@ export function createDiagnosticsExtension(): Extension {
         const windowLineNumbers: number[] = [rootLineNumber];
         for (let n = rootLineNumber + 1; n <= doc.lines && window.length <= SCAN_LIMIT; n++) {
             const text = doc.line(n).text;
-            if (text.trim() === '') break;
-            if (Outline.depthOf(text) <= rootIndent) break;
+            // A blank line does not end the children (Outline.subtreeEnd).
+            if (text.trim() !== '' && Outline.depthOf(text) <= rootIndent) break;
             window.push(text);
             windowLineNumbers.push(n);
+        }
+        // The blank lines after the last child are not the task's.
+        while (window.length > 1 && window[window.length - 1].trim() === '') {
+            window.pop();
+            windowLineNumbers.pop();
         }
 
         const mask = fenceMaskFor(doc);

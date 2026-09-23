@@ -84,12 +84,22 @@ describe('FlowLineScanner', () => {
             expect(collectFlowLineIndicesInFile(lines, 0)).toEqual([]);
         });
 
-        it('stops at a blank line (end of child block)', () => {
+        it('reads past a blank line inside the children', () => {
             const lines = [
                 '- [ ] task',
                 '\t- ==> every mon',
                 '',
                 '\t- ==> x3',
+            ];
+            expect(collectFlowLineIndicesInFile(lines, 0)).toEqual([1, 3]);
+        });
+
+        it('stops at the first line no deeper than the task, over a blank line', () => {
+            const lines = [
+                '- [ ] task',
+                '\t- ==> every mon',
+                '',
+                '- ==> not the task\'s',
             ];
             expect(collectFlowLineIndicesInFile(lines, 0)).toEqual([1]);
         });

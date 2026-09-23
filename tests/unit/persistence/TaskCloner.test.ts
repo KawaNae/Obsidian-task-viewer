@@ -140,10 +140,9 @@ describe('TaskCloner', () => {
             expect(out.filter(l => l.includes('^abc'))).toHaveLength(1);
         });
 
-        it('clears the whole indented region, not just the parsed children', () => {
-            // The parser ends the children at the blank line, but what follows
-            // it still reads as the task's. A copy dropped at the end of the
-            // parsed children would land in the middle of them.
+        it('copies the children below a blank line too, and goes after all of them', () => {
+            // The blank line is inside the subtree: what follows it is the
+            // task's, for the parser and for the copy alike.
             const withGap = [
                 '- [ ] p @2026-03-11T10:00>11:00',
                 '\t- c1',
@@ -159,11 +158,13 @@ describe('TaskCloner', () => {
                 '\t- c2',
                 '- [ ] copy',
                 '\t- c1',
+                '',
+                '\t- c2',
                 '- [ ] n',
             ]);
         });
 
-        it('does not cut a child code fence that has a blank line in it', () => {
+        it('copies a child code fence that has a blank line in it whole', () => {
             const withFence = [
                 '- [ ] p @2026-03-11T10:00>11:00',
                 '\t```js',
@@ -176,8 +177,9 @@ describe('TaskCloner', () => {
 
             const out = callSpliceCopies(withFence, 0, ['- [ ] copy'], 'after');
 
-            // The fence closes before the copy begins.
-            expect(out.indexOf('- [ ] copy')).toBeGreaterThan(out.lastIndexOf('\t```'));
+            // The original's fence closes before the copy begins, and the copy
+            // carries a fence that closes too.
+            expect(out).toEqual([...withFence.slice(0, 6), '- [ ] copy', ...withFence.slice(1, 6), '- [ ] n']);
         });
 
         it('leaves everything below the task alone when copying before it', () => {
@@ -188,7 +190,7 @@ describe('TaskCloner', () => {
                 '\t- c2',
             ];
 
-            expect(callSpliceCopies(withGap, 0, ['- [ ] copy'], 'before').slice(2)).toEqual([
+            expect(callSpliceCopies(withGap, 0, ['- [ ] copy'], 'before').slice(4)).toEqual([
                 '- [ ] p @2026-03-11T10:00>11:00',
                 '\t- c1',
                 '',

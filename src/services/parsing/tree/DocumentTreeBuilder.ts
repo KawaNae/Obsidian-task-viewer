@@ -297,7 +297,7 @@ export class DocumentTreeBuilder {
      * タスクブロックを収集（タスク行 + インデントされた子行 + ネスト再帰）。
      * `lines[i]` の絶対行番号を `lineNumbers[i]` が与える一般形 — トップ
      * レベル（絶対行配列 + 連番）とネスト（相対子行配列 + 行番号マップ）を
-     * 同じ 1 実装で賄う。走査規則: タスク行より深い非空行の連続、空行で停止。
+     * 同じ 1 実装で賄う。走査規則は Outline.subtreeEnd（空行では止まらず、タスク行より浅いか同じ深さの行で止まる。末尾の空行は含めない）。
      */
     private static collectBlock(
         lines: string[],
@@ -308,22 +308,9 @@ export class DocumentTreeBuilder {
     ): TaskBlock {
         const rawLine = lines[startIndex];
         const indent = Outline.depthOf(rawLine);
-        const childRawLines: string[] = [];
-        const childLineNumbers: number[] = [];
-        let j = startIndex + 1;
-
-        while (j < endIndex) {
-            const nextLine = lines[j];
-            if (nextLine.trim() === '') break;
-            const nextIndent = Outline.depthOf(nextLine);
-            if (nextIndent > indent) {
-                childRawLines.push(nextLine);
-                childLineNumbers.push(lineNumbers[j]);
-                j++;
-            } else {
-                break;
-            }
-        }
+        const end = Outline.subtreeEnd(lines, startIndex, endIndex);
+        const childRawLines = lines.slice(startIndex + 1, end);
+        const childLineNumbers = lineNumbers.slice(startIndex + 1, end);
 
         // フェンス判定はここで 1 度だけ行い、TaskBlock に載せて下流と共有する。
         // Fenced lines stay in childRawLines (they are part of the subtree

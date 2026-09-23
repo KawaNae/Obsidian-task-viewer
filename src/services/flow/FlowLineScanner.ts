@@ -58,10 +58,9 @@ export function isFlowLine(line: string): boolean {
  * (checkbox owners collect them via their own scan; others leave them as
  * plain child lines).
  *
- * The scan covers the task's child block: consecutive non-blank lines with
- * indent strictly greater than the task line (a blank line ends the block —
- * same convention as FileOperations.collectChildrenFromLines and
- * DocumentTreeBuilder).
+ * The scan covers the task's subtree as the parser and every write read it
+ * (`Outline.subtreeEnd`): the lines deeper than the task line, blank lines
+ * between them included.
  *
  * `fenced` is the parallel per-line code-fence mask. It is REQUIRED: a
  * `- ==>` written inside a fenced block is an example, not a command, and
@@ -80,9 +79,10 @@ export function collectFlowLineIndices(
     // Monotonic stack of ancestor indents; depth 1 = the task line itself.
     const ancestorIndents: number[] = [taskIndent];
 
-    for (let j = taskLineIndex + 1; j < lines.length; j++) {
+    const end = Outline.subtreeEnd(lines, taskLineIndex);
+    for (let j = taskLineIndex + 1; j < end; j++) {
         const line = lines[j];
-        if (line.trim() === '') break;
+        if (line.trim() === '') continue;
         const indent = Outline.depthOf(line);
         if (indent <= taskIndent) break;
 
