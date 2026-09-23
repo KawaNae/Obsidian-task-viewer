@@ -21,6 +21,14 @@ import { decideLazyEnd } from './TimerLazyEnd';
 import type { TimerStorageUtils } from './TimerStorageUtils';
 import { logInfo, logWarn } from '../log/log';
 
+/**
+ * What became of the line a resumed session runs on. Not written has been
+ * told to the user, once. Written, its id is there once a scan has read it.
+ */
+export type SessionLine =
+    | { written: false }
+    | { written: true; sessionTaskId?: string };
+
 export class TimerRecorder {
     private resolver: TimerTaskResolver;
     private storageUtils: TimerStorageUtils;
@@ -297,34 +305,30 @@ export class TimerRecorder {
      * Returns the child task ID, or undefined if insertion failed.
      */
     async createChildAtStart(timer: TimerInstance): Promise<string | undefined> {
-        if (isDailyTimer(timer)) return this.createDailyLineAtStart(timer);
-
         const { line, blockId } = this.buildSessionPlaceholder(timer);
-        await this.insertChildRecord(timer, line);
+        const file = await this.writeChildLine(timer, line);
+        if (file === null) return undefined;
 
-        const parentTask = this.resolver.resolveTvInline(timer);
-        if (!parentTask) {
-            logWarn(`[TimerRecorder] createChildAtStart: parent not resolved after placeholder write, session runs without a tail (${describeTimerAnchor(timer)})`);
-            return undefined;
-        }
-
-        return this.adoptWrittenSession(timer, parentTask.file, blockId);
+        timer.tailRecordBlockId = blockId;
+        return this.adoptWrittenSession(timer, file, blockId);
     }
 
     /**
-     * デイリーノート起点の 1 本目。
+     * セッション行を対象タスクの子として書き、書いたファイルを返す。書けなければ
+     * null で、理由は1回だけ通知済み。
      *
-     * 器になるタスクが無いので、設定の見出しの下へ行を直接置く。書いた後にノートの
-     * パスを `taskFile` へ引き取るのが要点で、これで尻尾の解決（ファイルで絞る）と
-     * 2 本目以降の兄弟挿入が通常タスクと同じ経路に乗る。
+     * デイリーノート起点は器になるタスクが無いので、設定の見出しの下へ行を直接置く。
+     * 書いた後にノートのパスを `taskFile` へ引き取るのが要点で、これで尻尾の解決
+     * （ファイルで絞る）と 2 本目以降の兄弟挿入が通常タスクと同じ経路に乗る。
      */
-    private async createDailyLineAtStart(timer: TimerInstance): Promise<string | undefined> {
-        const { line, blockId } = this.buildSessionPlaceholder(timer);
-        const filePath = await this.addTimerRecordToDailyNote(dailyDateOf(timer), line);
-        if (!filePath) return undefined;
-
-        timer.taskFile = filePath;
-        return this.adoptWrittenSession(timer, filePath, blockId);
+    private async writeChildLine(timer: TimerInstance, line: string): Promise<string | null> {
+        if (isDailyTimer(timer)) {
+            const filePath = await this.addTimerRecordToDailyNote(dailyDateOf(timer), line);
+            if (filePath) timer.taskFile = filePath;
+            return filePath;
+        }
+        if (!(await this.insertChildRecord(timer, line))) return null;
+        return this.resolver.resolveTvInline(timer)?.file ?? timer.taskFile;
     }
 
     /**
@@ -344,14 +348,15 @@ export class TimerRecorder {
             .insertSiblingAfterTask(anchor.id, line, { afterCompletedRun: true });
         if (!inserted) return undefined;
 
+        timer.tailRecordBlockId = blockId;
         return this.adoptWrittenSession(timer, anchor.file, blockId);
     }
 
     /**
-     * 書き込んだセッション行を尻尾として引き受ける。
+     * 書けたセッション行の task id を引き、走行中の行として引き受ける。
      *
-     * 引き直せたときだけ尻尾アンカーを進めるのが要点。書き込みが不発だった場合に
-     * 更新してしまうと、実在しない id を指したまま次の再開が迷子になる。
+     * 尻尾アンカーは書けた時点で呼び出し側が移している。行は書けているので、
+     * スキャンがまだ引けなくても、引けた時点で `^id` がその行を指す。
      */
     private async adoptWrittenSession(
         timer: TimerInstance,
@@ -359,9 +364,11 @@ export class TimerRecorder {
         blockId: string,
     ): Promise<string | undefined> {
         const sessionTaskId = await this.findSessionTaskId(filePath, blockId);
-        if (!sessionTaskId) return undefined;
+        if (!sessionTaskId) {
+            logWarn(`[TimerRecorder] session line ${blockId} written but not found by the scan yet (${describeTimerAnchor(timer)})`);
+            return undefined;
+        }
 
-        timer.tailRecordBlockId = blockId;
         timer.recordedChildTaskId = sessionTaskId;
         // 新しい行に走り始めたので、end 書き足しの門は引き直す。
         timer.lazyEndFloorMs = undefined;
@@ -507,10 +514,17 @@ export class TimerRecorder {
      * ものなので対象アンカーが尻尾を兼ねるが、child / sibling の対象は**器**で
      * あってレコードではない。器を尻尾と見なすと、その隣（＝ ユーザーのタスクと
      * 同じ深さ）にレコードを置いてしまう。
+     *
+     * self でも砦になるのは 1 本目のセッションの間だけ（走行中の 1 本目と、それを
+     * 記録して中断している間）。2 本目が走っている間、対象タスク行は書き終えた
+     * 1 本目の記録で、走行中の行ではない。そこへ落ちると、2 本目の end と名前が
+     * 1 本目の記録を書き換える。
      */
     resolveTailRecord(timer: TimerInstance): Task | undefined {
+        const anchorIsTail = timer.recordMode === 'self'
+            && (timer.sessionCount === 0 || (timer.sessionCount === 1 && timer.runState === 'suspended'));
         return this.resolveRecordedSession(timer)
-            ?? (timer.recordMode === 'self' ? this.resolveAnchorTask(timer) : undefined);
+            ?? (anchorIsTail ? this.resolveAnchorTask(timer) : undefined);
     }
 
     /**
@@ -551,30 +565,35 @@ export class TimerRecorder {
      * 最後の枝はフォールバックでもある: レコード行をユーザーが消して尻尾を失って
      * も、記録そのものは落とさない。
      */
-    async startNextSession(timer: TimerInstance): Promise<string | undefined> {
+    async startNextSession(timer: TimerInstance): Promise<SessionLine> {
         const tail = this.resolveTailRecord(timer);
-        // 新しい行を取れるまでは「走行中の行は無い」。書き込みが不発に終わったとき、
-        // 前のセッションの行を走行中と誤認して上書きさせないため。
+        const previous = { tailRecordBlockId: timer.tailRecordBlockId, recordedChildTaskId: timer.recordedChildTaskId };
+
+        const { line, blockId } = this.buildSessionPlaceholder(timer);
+        // 書く前に尻尾を新しい行へ移す。走行中の尻尾は今のセッションの行で、
+        // 前のセッションの記録ではない。行がスキャンに見えるまでは何も引けず、
+        // end の書き足しも名前の書き込みも待つ — 書き終えた記録へ走行中の
+        // end や名前を書かせないため。
+        timer.tailRecordBlockId = blockId;
         timer.recordedChildTaskId = undefined;
 
-        if (!tail) return this.createChildAtStart(timer);
-
-        const previousBlockId = tail.blockId;
-        const { line, blockId } = this.buildSessionPlaceholder(timer);
-        const inserted = await this.plugin.getTaskWriteService()
-            .insertSiblingAfterTask(tail.id, line);
-        // 尻尾は引けたのに書けなかった。理由は書き込みの層が1回だけ通知済み。
-        // 子へ書き直すと、同じ操作で通知が2回になり、書けていた場合は記録の
-        // 並びが逆になる。走行中の行が無いままでも、停止時の記録が子を足して
-        // 計測を拾う（updateChildAtEnd と addSessionRecord）。
-        if (!inserted) return undefined;
-
-        const sessionTaskId = await this.adoptWrittenSession(timer, tail.file, blockId);
-        if (sessionTaskId) {
-            // 尻尾は 1 個。新しい行が尻尾になった時点で前の行から id を外す。
-            await this.releaseTailId(timer, tail.file, previousBlockId);
+        const written = tail
+            ? await this.plugin.getTaskWriteService().insertSiblingAfterTask(tail.id, line)
+            : await this.writeChildLine(timer, line);
+        if (!written) {
+            // 書けなかった。理由は書き込みの層が1回だけ通知済み。再開そのものを
+            // 取り消すので（TimerLifecycle.resumeSession）、尻尾も戻す。
+            timer.tailRecordBlockId = previous.tailRecordBlockId;
+            timer.recordedChildTaskId = previous.recordedChildTaskId;
+            return { written: false };
         }
-        return sessionTaskId;
+        timer.lazyEndFloorMs = undefined;
+
+        const file = tail?.file ?? timer.taskFile;
+        const sessionTaskId = await this.adoptWrittenSession(timer, file, blockId);
+        // 尻尾は 1 個。新しい行を書けた時点で前の行から id を外す。
+        if (tail) await this.releaseTailId(timer, tail.file, tail.blockId);
+        return { written: true, sessionTaskId };
     }
 
     /**

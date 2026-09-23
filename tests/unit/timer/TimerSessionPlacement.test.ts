@@ -135,7 +135,7 @@ describe('startNextSession: the next record sits beside the last one', () => {
         // 尻尾の直後に置く。完了済みの連なりを辿らせるのは [x] 起点の「続き」だけ。
         expect(h.siblingInserts[0].opts.afterCompletedRun).toBeUndefined();
         expect(h.childInserts).toHaveLength(0);
-        expect(sessionId).toBe(NEW_SESSION_ID);
+        expect(sessionId).toEqual({ written: true, sessionTaskId: NEW_SESSION_ID });
     });
 
     it('carries the record name over instead of leaving the line unnamed', async () => {
@@ -197,13 +197,15 @@ describe('startNextSession: the next record sits beside the last one', () => {
         // The tail resolved, so the write layer has already said why it was
         // not made. A child written instead would be a second notice for one
         // resume, and, where the sibling had landed after all, a record out
-        // of order. The session runs without a line; the record at stop adds
-        // one (addSessionRecord).
+        // of order. The resume is taken back (TimerLifecycle.resumeSession),
+        // so the tail is left as it was: the last record, not a running line.
         const failing = makeHarness({ siblingFails: true });
         const timer = makeTimer();
-        expect(await failing.recorder.startNextSession(timer)).toBeUndefined();
+        const before = { tail: timer.tailRecordBlockId, id: timer.recordedChildTaskId };
+        expect(await failing.recorder.startNextSession(timer)).toEqual({ written: false });
         expect(failing.childInserts).toHaveLength(0);
-        expect(timer.recordedChildTaskId).toBeUndefined();
+        expect(timer.tailRecordBlockId).toBe(before.tail);
+        expect(timer.recordedChildTaskId).toBe(before.id);
     });
 });
 
