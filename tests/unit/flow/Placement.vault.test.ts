@@ -1,0 +1,104 @@
+import { describe, it, expect, afterEach, beforeEach, vi } from 'vitest';
+import { Notice } from 'obsidian';
+import { vaultSession, type VaultSession } from '../helpers/vaultSession';
+import { t } from '../../../src/i18n';
+
+/**
+ * A fire writes its next instance in the body of the note, or not at all
+ * (CY1, older than F3).
+ *
+ * The next instance of a row that is not indented goes to the head of the
+ * run of siblings above it. The walk that found the head took any unindented
+ * line for a sibling, and knew nothing of fences or the frontmatter: a row
+ * just under a fence put its next instance inside the fence, a row just under
+ * the frontmatter put it above the frontmatter. Either way the line written
+ * is no task to the index, the command was consumed, and the series stopped
+ * without a word.
+ */
+
+const FILE = 'note.md';
+
+let live: VaultSession | undefined;
+
+beforeEach(() => {
+    Notice.messages.length = 0;
+});
+
+afterEach(() => {
+    live?.dispose();
+    live = undefined;
+});
+
+async function open(lines: string[]): Promise<{ contents: Map<string, string>; session: VaultSession }> {
+    const contents = new Map([[FILE, lines.join('\n')]]);
+    live = vaultSession(contents);
+    await live.scanAll();
+    return { contents, session: live };
+}
+
+async function flowSettled(session: VaultSession): Promise<void> {
+    const executor = (session.index as unknown as { commandExecutor: { isProcessing: boolean; taskQueue: unknown[] } }).commandExecutor;
+    await vi.waitFor(() => {
+        expect(executor.isProcessing).toBe(false);
+        expect(executor.taskQueue).toHaveLength(0);
+    });
+    await session.settle(FILE);
+}
+
+function tasksWorded(session: VaultSession, content: string) {
+    return session.index.getTasks().filter(task => task.file === FILE && task.content === content);
+}
+
+async function fire(session: VaultSession): Promise<void> {
+    const [row] = tasksWorded(session, '対象');
+    expect(await session.index.updateTask(row.id, { statusChar: 'x' })).toBe(true);
+    await flowSettled(session);
+}
+
+const ROW = '- [ ] 対象 @2026-09-21 ==> every mon';
+const NEXT = '- [ ] 対象 @2026-09-28 ==> every mon';
+const DONE = '- [x] 対象 @2026-09-21';
+
+describe('CY1: the next instance of a row with no sibling above it', () => {
+    const SHAPES: Array<[string, string[]]> = [
+        ['a fence just above', ['# note', '```', '- [ ] sample', '```']],
+        ['a tilde fence just above', ['# note', '~~~markdown', 'text', '~~~']],
+        ['the frontmatter just above', ['---', 'tv-color: ff0000', '---']],
+        ['a --- rule just above', ['# note', 'text', '---']],
+        ['a paragraph just above', ['# note', 'Some text']],
+        ['a table just above', ['# note', '| a | b |', '| - | - |', '| 1 | 2 |']],
+    ];
+
+    for (const [name, above] of SHAPES) {
+        it(`goes in the body with ${name}, and the series goes on`, async () => {
+            const { contents, session } = await open([...above, ROW, '']);
+
+            await fire(session);
+
+            expect(contents.get(FILE)!.split('\n')).toEqual([...above, NEXT, DONE, '']);
+            expect(Notice.messages).toEqual([]);
+            // The next instance is a task the index reads, carrying the command.
+            const next = tasksWorded(session, '対象').filter(task => task.statusChar === ' ');
+            expect(next).toHaveLength(1);
+            expect(next[0].flow?.raw).toContain('every mon');
+        });
+    }
+});
+
+describe('a next instance with nowhere in the body to go', () => {
+    it('is refused whole: nothing written, the command kept, one notice', async () => {
+        // The indented row's group is under the first shallower line above,
+        // and that line is inside the fence the row stands just below.
+        const note = ['# note', '```', 'x', '   ```', `  ${ROW}`, ''];
+        const { contents, session } = await open(note);
+        const before = contents.get(FILE);
+        const [row] = tasksWorded(session, '対象');
+
+        expect(await session.index.updateTask(row.id, { statusChar: 'x' })).toBe(true);
+        await flowSettled(session);
+
+        const checked = before!.replace('  - [ ] 対象', '  - [x] 対象');
+        expect(contents.get(FILE)).toBe(checked);
+        expect(Notice.messages).toEqual([t('notice.writeTargetUnplaceable', { subject: '対象' })]);
+    });
+});

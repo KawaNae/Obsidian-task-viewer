@@ -274,13 +274,15 @@ export interface EditorLine {
 
 /**
  * Why a write was not made: its target was one of `count` rows nothing tells
- * apart, it is on no line of the file, or the line the caller pointed at no
- * longer reads what the caller saw there.
+ * apart, it is on no line of the file, the line the caller pointed at no
+ * longer reads what the caller saw there, or what it would write has nowhere
+ * in the body to go (see `Placement`).
  */
 export type RefusalReason =
     | { kind: 'ambiguous'; count: number }
     | { kind: 'gone' }
-    | { kind: 'changed' };
+    | { kind: 'changed' }
+    | { kind: 'unplaceable' };
 
 /** A write that was not made, as it is told to whoever reports it. */
 export interface Refusal {

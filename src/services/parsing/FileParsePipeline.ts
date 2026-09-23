@@ -2,6 +2,7 @@ import { parseYaml } from 'obsidian';
 import type { Task, TaskViewerSettings } from '../../types';
 import { collectGenBlocks, type GenBlock } from './gen/GenBlockCollector';
 import { DocumentTreeBuilder } from './tree/DocumentTreeBuilder';
+import { Outline } from './utils/Outline';
 import { SectionPropertyResolver } from './tree/SectionPropertyResolver';
 import { TreeTaskExtractor } from './tree/TreeTaskExtractor';
 
@@ -42,19 +43,17 @@ export class FileParsePipeline {
         settings: TaskViewerSettings
     ): FileParseResult {
         // --- Frontmatter境界検出 ---
-        let bodyStartIndex = 0;
+        // The same reading a write takes of where the body begins
+        // (`Placement`): a line the parser reads as body is one a write may
+        // place a line at.
+        const bodyStartIndex = Outline.bodyStart(lines);
         let frontmatterObj = cachedFrontmatter;
-        if (lines.length > 0 && lines[0].trim() === '---') {
-            for (let i = 1; i < lines.length; i++) {
-                if (lines[i].trim() === '---') { bodyStartIndex = i + 1; break; }
-            }
-            if (bodyStartIndex > 0 && !frontmatterObj) {
-                try {
-                    const yamlContent = lines.slice(1, bodyStartIndex - 1).join('\n');
-                    frontmatterObj = parseYaml(yamlContent);
-                } catch {
-                    // YAML パースエラー時は無視（metadataCache.changed で再スキャンされる）
-                }
+        if (bodyStartIndex > 0 && !frontmatterObj) {
+            try {
+                const yamlContent = lines.slice(1, bodyStartIndex - 1).join('\n');
+                frontmatterObj = parseYaml(yamlContent);
+            } catch {
+                // YAML パースエラー時は無視（metadataCache.changed で再スキャンされる）
             }
         }
 
