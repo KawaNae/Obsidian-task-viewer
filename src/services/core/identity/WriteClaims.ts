@@ -471,16 +471,23 @@ export class WriteClaims {
     }
 
     /**
-     * What the chain of one file holds, oldest first, and how many writes of
-     * ours are still waiting for their `modify`. For a console or a test that
-     * needs to see what was counted.
+     * What the chain of one file holds, oldest first; the rows the newest
+     * write of ours left (null when it could not say, undefined with none);
+     * and how many writes of ours are still waiting for their `modify`. For a
+     * console or a test that needs to see what was counted.
      *
      * @internal Read-only use.
      */
-    peek(path: string): { links: Array<'record' | 'mark' | 'foreign'>; awaiting: number } {
+    peek(path: string): {
+        links: Array<'record' | 'mark' | 'foreign'>;
+        left: readonly ClaimBase[] | null | undefined;
+        awaiting: number;
+    } {
+        const links = this.chains.get(path)?.links ?? [];
+        const newest = ownLinks(links).at(-1);
         return {
-            links: (this.chains.get(path)?.links ?? [])
-                .map(link => (isForeign(link) ? 'foreign' : link.content === null ? 'mark' : 'record')),
+            links: links.map(link => (isForeign(link) ? 'foreign' : link.content === null ? 'mark' : 'record')),
+            left: newest === undefined ? undefined : newest.content === null ? null : newest.rows,
             awaiting: this.awaiting.get(path)?.length ?? 0,
         };
     }
@@ -507,20 +514,13 @@ export class WriteClaims {
     }
 
     /**
-     * What the last write of ours that no committed scan has read left in this
-     * file: its rows, or null when it could not say. Undefined when every write
-     * of ours to the file has been read by a scan that committed — the only
-     * case where the ledger is not known to be older than one of them.
-     *
-     * Not the same as a write's `base` (see {@link reading}): a write does
-     * not build on its newest write past a scan that committed without
-     * reading it, and this one is dropped only by a scan that read the file
-     * after the write (see {@link forget}).
+     * Whether a write of ours to this file has not been read by a scan that
+     * committed — the one case where the ledger is known to be older than a
+     * write of ours. A write stops counting here only once a scan that read
+     * the file after it commits (see {@link forget}).
      */
-    lastWrite(path: string): { rows: readonly ClaimBase[] | null } | undefined {
-        const newest = ownLinks(this.chains.get(path)?.links ?? []).at(-1);
-        if (!newest) return undefined;
-        return { rows: newest.content === null ? null : newest.rows };
+    unread(path: string): boolean {
+        return ownLinks(this.chains.get(path)?.links ?? []).length > 0;
     }
 
     /**
@@ -725,7 +725,7 @@ export class WriteClaims {
      * mark it took before reading, and the placing {@link reading} made of the
      * lines — the one the match it commits was made from. What it keeps is what
      * the ledger it commits may not have seen, never built on again (see
-     * {@link lastWrite}):
+     * {@link unread}):
      *
      * - lines that are one known state and nothing else: the read saw that
      *   state and every one before it; the links after it are kept. For the

@@ -476,7 +476,7 @@ describe('a flow firing, through the write layer', () => {
         // Built on the ledger: the instance is a row that has been recorded,
         // not one this write made, and the claim says so.
         expect(harness.pendingCount()).toBe(1);
-        const rows = harness.scanner.getWriteClaims().lastWrite(FILE)?.rows ?? [];
+        const rows = harness.scanner.getWriteClaims().peek(FILE).left ?? [];
         expect(rows.map(row => row.created)).toEqual([false, false]);
         expect(rows.map(row => row.runtimeId)).toEqual([instance, original]);
 

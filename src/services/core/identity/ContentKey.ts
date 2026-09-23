@@ -11,7 +11,7 @@
  * scanned file for the whole session. The key carries the line count and the
  * length next to the hash, and nothing decides on the key alone: wherever it is
  * compared, the rows it vouches for are checked on their text as well (see
- * `reproduces` and `WriteClaims.stateFor`), so a collision would also have to
+ * `reproduces` and `WriteClaims.reading`), so a collision would also have to
  * reproduce every row's text before it could decide anything.
  *
  * Lines are joined with LF whatever the file is written in, because a scan sees

@@ -66,7 +66,7 @@ const known = (runtimeId: string, line: number, text: string): ClaimBase =>
  * when that write could only leave a mark.
  */
 function left(claims: WriteClaims): Array<{ runtimeId: string; created: boolean; text: string }> {
-    const rows = claims.lastWrite(FILE)?.rows ?? null;
+    const rows = claims.peek(FILE).left ?? null;
     return rows === null ? null! : rows.map(({ runtimeId, created, text }) => ({ runtimeId, created, text }));
 }
 
@@ -386,7 +386,7 @@ describe('WriteClaims: a write that did not land', () => {
 
         // The mark stays: the ledger is still older than a write nobody
         // described, and the file does not read as the ledger says.
-        expect(claims.lastWrite(FILE)).toEqual({ rows: null });
+        expect(claims.peek(FILE).left).toBeNull();
         expect(claims.reading(FILE, ['- [ ] 丙', '- [ ] 甲'], 'write', []).base).toBeNull();
     });
 
@@ -411,7 +411,7 @@ describe('WriteClaims: a write that did not land', () => {
         const second = claims.claim(FILE, ['- [ ] 甲', '- [ ] 乙'], ['- [ ] 甲', '- [ ] 乙', '- [ ] 丙'], [inserted(2, 1)]);
         second.withdraw();
 
-        expect(claims.lastWrite(FILE)?.rows?.map(row => row.runtimeId)).toEqual(['r1', 'w1']);
+        expect(claims.peek(FILE).left?.map(row => row.runtimeId)).toEqual(['r1', 'w1']);
     });
 });
 
@@ -602,27 +602,27 @@ describe('changes counted against our writes (I1)', () => {
     it('a write waits for one modify; the next is outside', () => {
         const claims = claimsWith([], ONE);
         claims.claim(FILE, ONE, TWO, edits, 'user');
-        expect(claims.peek(FILE)).toEqual({ links: ['record'], awaiting: 1 });
+        expect(claims.peek(FILE)).toMatchObject({ links: ['record'], awaiting: 1 });
         claims.noteChange(FILE);
-        expect(claims.peek(FILE)).toEqual({ links: ['record'], awaiting: 0 });
+        expect(claims.peek(FILE)).toMatchObject({ links: ['record'], awaiting: 0 });
         claims.noteChange(FILE);
-        expect(claims.peek(FILE)).toEqual({ links: ['record', 'foreign'], awaiting: 0 });
+        expect(claims.peek(FILE)).toMatchObject({ links: ['record', 'foreign'], awaiting: 0 });
     });
 
     it('a write\'s modify that comes after a scan committed past it is still ours', () => {
         const claims = claimsWith();
         claims.claim(FILE, ONE, TWO, edits, 'user');
         claims.forget(FILE, { readMark: claims.readMark(), place: claims.reading(FILE, TWO, 'scan', []) });
-        expect(claims.peek(FILE)).toEqual({ links: [], awaiting: 1 });
+        expect(claims.peek(FILE)).toMatchObject({ links: [], awaiting: 1 });
         claims.noteChange(FILE);
-        expect(claims.peek(FILE)).toEqual({ links: [], awaiting: 0 });
+        expect(claims.peek(FILE)).toMatchObject({ links: [], awaiting: 0 });
     });
 
     it('a write taken back waits for nothing, even after a scan dropped it', () => {
         const claims = claimsWith();
         const kept = claims.claim(FILE, ONE, TWO, edits, 'user');
         kept.withdraw();
-        expect(claims.peek(FILE)).toEqual({ links: [], awaiting: 0 });
+        expect(claims.peek(FILE)).toMatchObject({ links: [], awaiting: 0 });
 
         const dropped = claims.claim(FILE, ONE, TWO, edits, 'user');
         claims.forget(FILE, { readMark: claims.readMark(), place: claims.reading(FILE, TWO, 'scan', []) });
@@ -638,13 +638,13 @@ describe('changes counted against our writes (I1)', () => {
         claims.noteChange(FILE);
         claims.claim(FILE, TWO, ['- [x] A', 'x', ''], [{ kind: 'inserted', at: 1, count: 1 }], 'user');
         first.withdraw();
-        expect(claims.peek(FILE)).toEqual({ links: ['record', 'record'], awaiting: 1 });
+        expect(claims.peek(FILE)).toMatchObject({ links: ['record', 'record'], awaiting: 1 });
     });
 
     it('a delete or rename drops what was waiting', () => {
         const claims = claimsWith();
         claims.claim(FILE, ONE, TWO, edits, 'user');
         claims.dropFile(FILE);
-        expect(claims.peek(FILE)).toEqual({ links: [], awaiting: 0 });
+        expect(claims.peek(FILE)).toMatchObject({ links: [], awaiting: 0 });
     });
 });

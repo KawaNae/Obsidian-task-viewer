@@ -26,7 +26,7 @@ export interface LedgerEntry {
      * is used as a coordinate when the lines in hand are that content, whole
      * (the key the ledger keeps for the file, see `contentFor`), and not
      * otherwise. That is how a write's claim builds on it (see
-     * `WriteClaims.stateFor`) and how a write's target is found without a
+     * `WriteClaims.reading`) and how a write's target is found without a
      * parse (see `TaskScanner.locate`). Never an identity key: the matcher
      * does not look at it at all.
      */

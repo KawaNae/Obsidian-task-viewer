@@ -215,7 +215,7 @@ export class TaskScanner {
         const readKey = contentKeyOf(lines);
         if (unlessRead
             && readKey === this.ledger.contentFor(file.path)
-            && this.claims.lastWrite(file.path) === undefined) {
+            && !this.claims.unread(file.path)) {
             return false;
         }
         this.validator.clearErrorsForFile(file.path);
@@ -343,7 +343,7 @@ export class TaskScanner {
             // the next claim identities the ledger does not agree with, and the
             // texts would line up well enough that nothing later would notice.
             // A write this read may not have seen is still kept, for `locate` to
-            // know the ledger is older than it (`WriteClaims.lastWrite`).
+            // know the ledger is older than it (`WriteClaims.unread`).
             this.claims.forget(file.path, { readMark, place });
         } finally {
             this.store.endBatch();
@@ -520,7 +520,7 @@ export class TaskScanner {
         if (among !== undefined) return { kind: 'ambiguous', count: among };
         const at = parsed.tasks.find(task => result.mapping.get(task.id) === ref.runtimeId);
         if (!at) return { kind: 'gone' };
-        return this.againstLastWrite(path, lines, at.line, ref) ?? { kind: 'at', line: at.line };
+        return { kind: 'at', line: at.line };
     }
 
     /**
@@ -531,33 +531,6 @@ export class TaskScanner {
      */
     onRecord(path: string, lines: readonly string[], ref: TaskRef, line: number): boolean {
         return this.recordedTexts(path, ref.runtimeId).has(Outline.UP_TO_INDENT.key(lines[line]));
-    }
-
-    /**
-     * A match made while a write of ours has landed that no committed scan
-     * has read, checked against what that write left. A scan that read the
-     * file before the write and committed after it does not count: its ledger
-     * is older than the write all the same (`WriteClaims.lastWrite`).
-     *
-     * The ladder pairs by the texts the ledger holds, and the ledger is known
-     * to be older than our last write (see `WriteClaims.stateFor`). A row that
-     * write changed is looked for under the text it no longer has, and one
-     * whose text it handed to another row comes out on that row's line. What
-     * the write left is the newest record there is, so the line has to read as
-     * the target's text there, and as no other row's — else the pairing rests
-     * on a text that has since moved, and the answer is `outdated`. A write
-     * that could not say what it left leaves nothing to check against, and the
-     * answer is `outdated` as well.
-     *
-     * Null when there is nothing to object to.
-     */
-    private againstLastWrite(path: string, lines: readonly string[], line: number, ref: TaskRef): Located | null {
-        const last = this.claims.lastWrite(path);
-        if (last === undefined) return null;
-        const holders = last.rows?.filter(row => Outline.UP_TO_INDENT.holds(row.text, lines[line])) ?? [];
-        if (!holders.some(row => row.runtimeId === ref.runtimeId)) return { kind: 'outdated' };
-        if (holders.length > 1) return { kind: 'ambiguous', count: holders.length };
-        return null;
     }
 
     /**

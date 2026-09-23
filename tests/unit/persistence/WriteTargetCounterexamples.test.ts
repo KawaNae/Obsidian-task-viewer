@@ -213,9 +213,10 @@ describe('F2-counter: own writes and outside edits interleaved', () => {
     // Before F2 (inferred): the first exact match for Y's text is X's line ->
     // the same wrong line. Not opened by F2.
     // Closed on the second run: our last write left two rows reading that
-    // text, so the pairing rests on a text that is not Y's alone
-    // (`TaskScanner.againstLastWrite`). Refused as ambiguous rather than gone:
-    // from the file alone, either of the two may be the one deleted.
+    // text, so the pairing rests on a text that is not Y's alone. Since I1 the
+    // ladder pairs against what that write left, where position decides
+    // between the two. Refused as ambiguous rather than gone: from the file
+    // alone, either of the two may be the one deleted.
     it('X1: a write on a row deleted from outside does not land on the row our own write renamed to its text', async () => {
         const bench = await writeBench(['- [ ] A', '- [ ] B', '- [ ] C']);
         const x = bench.taskAt(0);
@@ -423,8 +424,8 @@ describe('F2-counter2: two own writes trade the texts of two rows, then an unrep
     // leaves the last write's base and every claim unusable, so `locate` goes
     // to the ladder, which pairs by the ledger from before both writes: each
     // name lands on the other's line, reading a text on record for it. The
-    // last write's rows are newer than the ledger, and the line has to read as
-    // the target's text there (`TaskScanner.againstLastWrite`).
+    // last write's rows are newer than the ledger, and since I1 a write pairs
+    // against them alone (`WriteClaims.reading`).
     const traded = async (): Promise<{ bench: WriteBench; x: Task }> => {
         const bench = await writeBench(['- [ ] A', '- [x] A']);
         const x = bench.taskAt(0);
@@ -539,7 +540,7 @@ async function gatedScan(bench: WriteBench): Promise<{ release: () => void; done
 // the file before our write and committed after it: the commit dropped what the
 // write left, and nothing said the ledger it committed was older than the
 // write. The scan now hands over the mark it took before reading, and a write
-// filed after it is kept for `locate` (`WriteClaims.lastWrite`), though claims
+// filed after it is kept for `locate` (`WriteClaims.unread`), though claims
 // never build on it again.
 describe('F2-counter3: a scan that read before our write, committed after it', () => {
     it('C1 (X1 through the race): the write on Y, deleted from outside, is refused', async () => {

@@ -52,7 +52,7 @@ export class FrontmatterWriter {
 
         // Reported like any other write: every row below a key added or
         // removed here moves, and without the report the next scan could not
-        // be told which is which (see `WriteClaims.stateFor`).
+        // be told which is which (see `WriteClaims.reading`).
         return processLines(this.app, file, this.writes?.for(filePath, 'user'), (draft) => {
             // Nothing to delete from: the file already reads as asked, the way
             // a rewrite to the same bytes does. Written, and nothing changes.

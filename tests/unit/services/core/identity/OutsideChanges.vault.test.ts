@@ -42,16 +42,16 @@ describe('outside changes, counted against our writes', () => {
         const session = await open();
         session.index.setDraggingFile(FILE);
         expect(await session.index.updateTask(idOf(session, '- [ ] A'), { statusChar: 'x' })).toBe(true);
-        expect(chain(session)).toEqual({ links: ['record'], awaiting: 0 });
+        expect(chain(session)).toMatchObject({ links: ['record'], awaiting: 0 });
     });
 
     it('an edit by hand is one outside mark, and two in a row are still one', async () => {
         const session = await open();
         session.index.setDraggingFile(FILE);
         await fromOutside(session, ['- [ ] A', '- [ ] B', 'x']);
-        expect(chain(session)).toEqual({ links: ['foreign'], awaiting: 0 });
+        expect(chain(session)).toMatchObject({ links: ['foreign'], awaiting: 0 });
         await fromOutside(session, ['- [ ] A', '- [ ] B', 'xy']);
-        expect(chain(session)).toEqual({ links: ['foreign'], awaiting: 0 });
+        expect(chain(session)).toMatchObject({ links: ['foreign'], awaiting: 0 });
     });
 
     it('our write, then an edit by hand, then our write: each in its place', async () => {
@@ -68,9 +68,9 @@ describe('outside changes, counted against our writes', () => {
         const before = contents.get(FILE);
         expect(await session.index.updateTask(idOf(session, '- [x] A'), { statusChar: 'x' })).toBe(true);
         expect(contents.get(FILE)).toBe(before);
-        expect(chain(session)).toEqual({ links: [], awaiting: 0 });
+        expect(chain(session)).toMatchObject({ links: [], awaiting: 0 });
         await fromOutside(session, ['- [x] A', '- [ ] B', 'x']);
-        expect(chain(session)).toEqual({ links: ['foreign'], awaiting: 0 });
+        expect(chain(session)).toMatchObject({ links: ['foreign'], awaiting: 0 });
     });
 
     it('counted while a drag holds the scan: the change is on record for the scan that reads it', async () => {
@@ -99,7 +99,7 @@ describe('outside changes, counted against our writes', () => {
         const session = await open();
         expect(await session.index.updateTask(idOf(session, '- [ ] A'), { statusChar: 'x' })).toBe(true);
         await session.settle(FILE);
-        expect(chain(session)).toEqual({ links: [], awaiting: 0 });
+        expect(chain(session)).toMatchObject({ links: [], awaiting: 0 });
         session.index.setDraggingFile(FILE);
         await fromOutside(session, ['- [x] A', '- [ ] B', 'x']);
         expect(chain(session).links).toEqual(['foreign']);

@@ -37,8 +37,8 @@ async function open(text: string): Promise<VaultSession> {
 
 /** What the last write of ours left: its rows, null for the mark, undefined for nothing. */
 function lastWrite(session: VaultSession): { rows: readonly unknown[] | null } | undefined {
-    return (session.scanner as unknown as { claims: { lastWrite(path: string): { rows: readonly unknown[] | null } | undefined } })
-        .claims.lastWrite(FILE);
+    const left = session.scanner.getWriteClaims().peek(FILE).left;
+    return left === undefined ? undefined : { rows: left };
 }
 
 function task(session: VaultSession, text: string): Task {
