@@ -22,7 +22,7 @@ export interface TaskLineMatch {
  * Supports `-`, `*`, `+`, and ordered list markers (`1.`, `1)`).
  */
 export class TaskLineClassifier {
-    private static readonly TASK_LINE_REGEX = new RegExp(`^(${INDENT_SOURCE})(${LIST_BULLET_SOURCE}${MARKER_GAP_SOURCE}\\[)(${STATUS_CHAR_SOURCE})(\\]${CHECKBOX_GAP_SOURCE}${IN_LINE}*)$`);
+    private static readonly TASK_LINE_REGEX = new RegExp(`^(${INDENT_SOURCE})(${LIST_BULLET_SOURCE}${MARKER_GAP_SOURCE}\\[)(${STATUS_CHAR_SOURCE})(\\]${CHECKBOX_GAP_SOURCE}(${IN_LINE}*))$`);
     private static readonly STATUS_CHAR_REGEX = new RegExp(`^${STATUS_CHAR_SOURCE}$`);
     private static readonly MARKER_REGEX = new RegExp(`^${INDENT_SOURCE}(${LIST_BULLET_SOURCE})`);
     private static readonly BLOCK_ID_REGEX = /(?:^|\s)\^([A-Za-z0-9-]+)\s*$/;
@@ -80,9 +80,8 @@ export class TaskLineClassifier {
     static classify(line: string): TaskLineMatch | null {
         const m = line.match(this.TASK_LINE_REGEX);
         if (!m) return null;
-        const [, indent, bulletBracket, statusChar, bracketTail] = m;
-        // rawContent: past `]` and the one space or tab a task line has there
-        const rawContent = bracketTail.slice(2);
+        // rawContent: past `]` and the gap a task line has there
+        const [, indent, bulletBracket, statusChar, bracketTail, rawContent] = m;
         return {
             indent,
             statusChar,
