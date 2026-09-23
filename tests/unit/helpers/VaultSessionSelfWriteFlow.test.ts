@@ -1,6 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import { TFile } from 'obsidian';
 import { vaultSession, makeFile } from './vaultSession';
+import type { Task } from '../../../src/types';
 
 /**
  * A flow's own writes do not fire again (structure.md, 「自己書き込みの判定と
@@ -12,11 +13,9 @@ import { vaultSession, makeFile } from './vaultSession';
  */
 function countFires(session: ReturnType<typeof vaultSession>): { count: number } {
     const counter = { count: 0 };
-    const executor = (session.index as unknown as {
-        commandExecutor: { handleTaskCompletion: (task: unknown) => Promise<void> };
-    }).commandExecutor;
+    const executor = session.executor;
     const original = executor.handleTaskCompletion.bind(executor);
-    executor.handleTaskCompletion = (task: unknown) => { counter.count++; return original(task); };
+    executor.handleTaskCompletion = (task: Task) => { counter.count++; return original(task); };
     return counter;
 }
 
@@ -63,7 +62,7 @@ describe("vaultSession: a flow's own writes", () => {
             await vi.advanceTimersByTimeAsync(1500);
             const settled = contents.get(FILE);
 
-            const scanner = session.scanner as unknown as { rescanUnlessRead: (f: TFile) => Promise<boolean> };
+            const scanner = session.scannerPrivates;
             const original = scanner.rescanUnlessRead.bind(scanner);
             const answers: Promise<boolean>[] = [];
             scanner.rescanUnlessRead = (f: TFile) => { const answer = original(f); answers.push(answer); return answer; };
@@ -82,7 +81,7 @@ describe("vaultSession: a flow's own writes", () => {
         const session = vaultSession(contents);
         await session.scanAll();
         contents.set(FILE, ['- [ ] 週報 @2026-09-21 ==> every mon', '- [ ] 新しい', ''].join('\n'));
-        const scanner = session.scanner as unknown as { rescanUnlessRead: (f: TFile) => Promise<boolean> };
+        const scanner = session.scannerPrivates;
         expect(await scanner.rescanUnlessRead(makeFile(FILE))).toBe(true);
         expect(session.index.getTasks().map(t => t.content)).toContain('新しい');
     });

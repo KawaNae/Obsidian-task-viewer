@@ -195,6 +195,8 @@ export function vaultSession(contents: Map<string, string>) {
         scanner,
         /** The flow executor: whether it is busy, its queue, the completion it is handed. */
         executor,
+        /** The scanner's private scan entry, which a test wraps to see its answers. */
+        scannerPrivates: scanner as unknown as { rescanUnlessRead: (file: TFile) => Promise<boolean> },
         /** The scanner's write ledger. */
         claims: (scanner as unknown as { claims: ClaimsView }).claims,
         /** The channel `TaskIndex` gave a write to `file`, even after a test has connected another. */
@@ -224,7 +226,7 @@ export function vaultSession(contents: Map<string, string>) {
 }
 
 /** The note a session opens when it is given one text or one list of lines. */
-export const NOTE = 'note.md';
+const NOTE = 'note.md';
 
 /**
  * A session over `files`, scanned once. One text or one list of lines is
