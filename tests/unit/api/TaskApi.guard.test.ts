@@ -352,4 +352,19 @@ describe('F5: 1要素1行。改行を含む値は、書き込みの前に理由�
         await expect(api.create({ file: 'test.md', content: 'task', heading: 'Tasks\rx' }))
             .rejects.toThrow(/heading must not contain line breaks/);
     });
+
+    it('U+2028 と U+2029 も改行として拒否（行がタスクとして読まれなくなるため）', async () => {
+        const created = createMockApi(undefined);
+        const existing = createMockApi(makeTask({ isReadOnly: false }));
+        for (const sep of ['\u2028', '\u2029']) {
+            await expect(created.create({ file: 'test.md', content: `a${sep}b` }))
+                .rejects.toThrow(/content must not contain line breaks/);
+            await expect(existing.update({ id: 'test-1', content: `a${sep}b` }))
+                .rejects.toThrow(/content must not contain line breaks/);
+            await expect(existing.update({ id: 'test-1', status: sep }))
+                .rejects.toThrow(/status must be a single character other than a line break/);
+            await expect(created.create({ file: 'test.md', content: 'task', heading: `T${sep}x` }))
+                .rejects.toThrow(/heading must not contain line breaks/);
+        }
+    });
 });
