@@ -193,7 +193,7 @@ export class WriteClaims {
         after: readonly string[],
         edits: readonly LineEdit[] | null,
         origin: WriteOrigin,
-        named: ReadonlyMap<string, string> = new Map(),
+        named: ReadonlyMap<string, string> | null = null,
     ): ClaimResult {
         // Every way out of here without a claim is the same situation: this
         // write changed the file — `processLines` calls a sink for nothing
@@ -271,8 +271,8 @@ export class WriteClaims {
      * how — for when even {@link claim} could not run. The same mark a claim
      * that cannot say leaves, and taken back the same way.
      */
-    silence(path: string, origin?: WriteOrigin, named?: ReadonlyMap<string, string>): () => void {
-        return this.append(path, { filed: ++this.filed, content: null, origin, wrote: named });
+    silence(path: string, origin?: WriteOrigin, named?: ReadonlyMap<string, string> | null): () => void {
+        return this.append(path, { filed: ++this.filed, content: null, origin, wrote: named ?? undefined });
     }
 
     /**
