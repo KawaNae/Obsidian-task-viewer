@@ -116,6 +116,27 @@ describe('line breaks, as Obsidian ends a line', () => {
         }
     });
 
+    it('reads a checkbox as a task only with a space or a tab after `]`', () => {
+        // Dev, Obsidian 1.12.4: `listItems` and the reading view agree
+        // (`.plan/stages/l1-lines/device-1.md`).
+        for (const tail of [' x', '\tx', ' ']) {
+            expect(TaskLineClassifier.isTaskLine(`- [ ]${tail}`)).toBe(true);
+            expect(ChildLineClassifier.CHECKBOX_CHAR.test(`\t- [ ]${tail}`)).toBe(true);
+        }
+        for (const tail of ['x', '', `${NBSP}x`, `${IDEOGRAPHIC}x`, `${LS}x`, `${PS}x`]) {
+            expect(TaskLineClassifier.isTaskLine(`- [ ]${tail}`)).toBe(false);
+            expect(ChildLineClassifier.CHECKBOX_CHAR.test(`\t- [ ]${tail}`)).toBe(false);
+            expect(parse(`- [ ] p\n\t- [ ]${tail}\n`).contents).toEqual(['p']);
+        }
+        expect(TaskLineClassifier.classify('- [ ]\tx')?.rawContent).toBe('x');
+        expect(TaskLineClassifier.classify('- [ ] ')?.rawContent).toBe('');
+    });
+
+    it('reads a task with no content and a block id as a task', () => {
+        const read = parse('- [ ] ^abc\n');
+        expect(read.tasks.map(task => [task.content, task.blockId])).toEqual([['', 'abc']]);
+    });
+
     it('reads a CR on its own as the end of the line', () => {
         // Obsidian draws two lines and reads the first as the checkbox.
         const read = parse('- [ ] before\rafter\n');

@@ -1,5 +1,5 @@
 import { IN_LINE } from '../../../utils/LineBreak';
-import { LIST_BULLET_SOURCE, STATUS_CHAR_SOURCE } from './ListMarker';
+import { CHECKBOX_GAP_SOURCE, LIST_BULLET_SOURCE, STATUS_CHAR_SOURCE } from './ListMarker';
 import { INDENT_SOURCE, Outline } from './Outline';
 
 /**
@@ -33,7 +33,7 @@ export interface TaskLineMatch {
  * Supports `-`, `*`, `+`, and ordered list markers (`1.`, `1)`).
  */
 export class TaskLineClassifier {
-    private static readonly TASK_LINE_REGEX = new RegExp(`^(${TASK_LEAD_SOURCE})(${LIST_BULLET_SOURCE} *\\[)(${STATUS_CHAR_SOURCE})(\\]${IN_LINE}*)$`);
+    private static readonly TASK_LINE_REGEX = new RegExp(`^(${TASK_LEAD_SOURCE})(${LIST_BULLET_SOURCE} *\\[)(${STATUS_CHAR_SOURCE})(\\]${CHECKBOX_GAP_SOURCE}${IN_LINE}*)$`);
     private static readonly BARE_CHECKBOX_REGEX = new RegExp(`^${TASK_LEAD_SOURCE}${LIST_BULLET_SOURCE} *\\[${STATUS_CHAR_SOURCE}\\]$`);
     private static readonly MARKER_REGEX =new RegExp(`^${TASK_LEAD_SOURCE}(${LIST_BULLET_SOURCE})`);
     private static readonly BLOCK_ID_REGEX = /\s\^([A-Za-z0-9-]+)\s*$/;
@@ -86,8 +86,8 @@ export class TaskLineClassifier {
         if (!m) return null;
         const [, lead, bulletBracket, statusChar, bracketTail] = m;
         const indent = Outline.indentOf(lead);
-        // rawContent: strip leading `] ` (bracket + optional space)
-        const rawContent = bracketTail.replace(/^\]\s?/, '');
+        // rawContent: past `]` and the one space or tab a task line has there
+        const rawContent = bracketTail.slice(2);
         return {
             indent,
             statusChar,

@@ -1,6 +1,6 @@
 import type { ChildLine, PropertyType, PropertyValue } from '../../../types';
 import { IN_LINE } from '../../../utils/LineBreak';
-import { LIST_BULLET_SOURCE, STATUS_CHAR_SOURCE } from './ListMarker';
+import { CHECKBOX_GAP_SOURCE, LIST_BULLET_SOURCE, STATUS_CHAR_SOURCE } from './ListMarker';
 import { INDENT_SOURCE, Outline } from './Outline';
 import { extractWikilinkTarget } from '../../../utils/WikilinkUtils';
 
@@ -11,7 +11,7 @@ import { extractWikilinkTarget } from '../../../utils/WikilinkUtils';
 export class ChildLineClassifier {
     /** `- [[link]]` with any list bullet. */
     static readonly WIKILINK_CHILD = new RegExp(`^${INDENT_SOURCE}${LIST_BULLET_SOURCE}\\s+\\[\\[([^\\]]+)\\]\\]\\s*$`);
-    static readonly CHECKBOX_CHAR = new RegExp(`^${INDENT_SOURCE}${LIST_BULLET_SOURCE}\\s*\\[(${STATUS_CHAR_SOURCE})\\]`);
+    static readonly CHECKBOX_CHAR = new RegExp(`^${INDENT_SOURCE}${LIST_BULLET_SOURCE}\\s*\\[(${STATUS_CHAR_SOURCE})\\]${CHECKBOX_GAP_SOURCE}`);
     /**
      * Matches `- key:: value` (Dataview-compatible) but not checkbox or wikilink lines.
      * 値部は空を許す（`- key ::` は空値プロパティ）。`(.+)` にすると末尾空白の

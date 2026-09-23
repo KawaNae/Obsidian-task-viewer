@@ -17,3 +17,12 @@ export const LIST_BULLET_SOURCE = '(?:[-*+]|\\d+[.)])';
  * the status cannot be one of them.
  */
 export const STATUS_CHAR_SOURCE = '[^\\r\\n\\u2028\\u2029]';
+
+/**
+ * What must follow a checkbox's `]` for the line to be a task, as a regex
+ * fragment: a space or a tab. Obsidian 1.12.4 reads `- [ ]x`, `- [ ]` with
+ * nothing after it, and `]` followed by a no-break space, a full-width space,
+ * U+2028 or U+2029 as a list item with no task — in `listItems` and in the
+ * reading view. `- [ ] ` with nothing but the space is a task with no content.
+ */
+export const CHECKBOX_GAP_SOURCE = '[ \\t]';
