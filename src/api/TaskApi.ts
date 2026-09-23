@@ -18,6 +18,8 @@ import type { FilterState } from '../services/filter/FilterTypes';
 import { loadFilterFile } from './FilterFileLoader';
 import { holdsLineBreak } from '../utils/LineBreak';
 import { TaskLineClassifier } from '../services/parsing/utils/TaskLineClassifier';
+import { TaskParser } from '../services/parsing/TaskParser';
+import { createTempTask } from '../services/data/createTempTask';
 import {
     assertParams, renderParamTable,
     LIST_SCHEMA, TODAY_SCHEMA, GET_SCHEMA, CREATE_SCHEMA, UPDATE_SCHEMA,
@@ -672,7 +674,7 @@ export class TaskApi {
         const task = this.readService.getTask(params.parentId);
         if (!task) throw new TaskApiError(`Task not found: ${params.parentId}`);
         if (task.isReadOnly) throw new TaskApiError(`Task ${params.parentId} is read-only (parserId=${task.parserId})`);
-        const written = await this.writeService.insertChildTask(params.parentId, TaskLineClassifier.formatPrefix(' ') + TaskLineClassifier.joinContent(params.content));
+        const written = await this.writeService.insertChildTask(params.parentId, TaskParser.format(createTempTask({ id: 'api-child', content: params.content })));
         if (!written) throw new TaskApiError(`Child task could not be written under: ${params.parentId}`);
         return { parentId: params.parentId };
     }
