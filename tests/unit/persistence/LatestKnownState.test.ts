@@ -304,3 +304,21 @@ describe('an outside write built on the file before our writes', () => {
         expect(bench.taskAt(1).id).toBe(x.id);
     });
 });
+
+describe('a scan that read exactly what a write filed past its read mark left', () => {
+    it('has read that write: the next write builds its claim on the new ledger', async () => {
+        // Until F5b the write was kept past the commit by the mark alone, and
+        // the next write, with nothing it was allowed to build on, left the
+        // mark instead of a claim (availability).
+        const bench = await writeBench(['- [ ] A', '- [ ] B']);
+        const scan = await lateRead(bench);
+        await bench.writer.appendTaskToFile(FILE, '- [ ] Z');
+        scan.release();
+        await scan.done;
+        expect(bench.scanner.getHintLog().peek().find(entry => entry.file === FILE)).toBeUndefined();
+
+        const b = bench.taskAt(1);
+        expect((await bench.writer.updateTaskInFile(plannedOn(b), checked(b))).written).toBe(true);
+        expect(bench.scanner.getHintLog().peek().find(entry => entry.file === FILE)?.pending.length).toBe(1);
+    });
+});
