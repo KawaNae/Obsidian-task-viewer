@@ -31,9 +31,12 @@ export class CheckboxWiring {
     ): void {
         if (readOnly) return;
         checkbox.addEventListener('click', () => {
-            const isChecked = (checkbox as HTMLInputElement).checked;
+            const input = checkbox as HTMLInputElement;
+            const isChecked = input.checked;
             const newStatusChar = isChecked ? 'x' : ' ';
-            this.writeService.updateTask(taskId, { statusChar: newStatusChar });
+            void this.writeService.updateTask(taskId, { statusChar: newStatusChar }).then(written => {
+                if (!written) this.putBack(input, !isChecked, null);
+            });
         });
         checkbox.addEventListener('pointerdown', (e) => e.stopPropagation());
 
@@ -82,10 +85,14 @@ export class CheckboxWiring {
         settings: TaskViewerSettings
     ): void {
         checkbox.addEventListener('click', () => {
-            const isChecked = (checkbox as HTMLInputElement).checked;
+            const input = checkbox as HTMLInputElement;
+            const isChecked = input.checked;
             const newStatusChar = isChecked ? 'x' : ' ';
-            this.updateCheckboxDataTask(checkbox as HTMLElement, newStatusChar);
-            this.writeService.updateTask(taskId, { statusChar: newStatusChar });
+            const previousChar = input.getAttribute('data-task') ?? ' ';
+            this.updateCheckboxDataTask(input, newStatusChar);
+            void this.writeService.updateTask(taskId, { statusChar: newStatusChar }).then(written => {
+                if (!written) this.putBack(input, !isChecked, previousChar);
+            });
         });
         checkbox.addEventListener('pointerdown', (e) => e.stopPropagation());
 
@@ -115,6 +122,18 @@ export class CheckboxWiring {
                 });
             }
         }, { kind: 'position', x: e.pageX, y: e.pageY });
+    }
+
+    /**
+     * Undo what a click did to the box when its write was not made. The index
+     * has put its copy back and the user has been told why; a card that
+     * re-renders from the copy replaces this element anyway, but one that does
+     * not would keep showing a status the file does not hold.
+     */
+    private putBack(input: HTMLInputElement, checked: boolean, dataTask: string | null): void {
+        if (!input.isConnected) return;
+        input.checked = checked;
+        if (dataTask !== null) this.updateCheckboxDataTask(input, dataTask);
     }
 
     private updateCheckboxDataTask(el: HTMLElement, newChar: string): void {

@@ -203,8 +203,20 @@ export class WindowAttachment {
             ) as HTMLDivElement | null;
             if (currentValueDiv) currentValueDiv.textContent = hex;
 
-            this.queueColorWrite(() => this.ctx.suggestHost.getTaskWriteService()
-                .setFrontmatterKeys(activeFile.path, { [colorKey]: hex }));
+            this.queueColorWrite(async () => {
+                const written = await this.ctx.suggestHost.getTaskWriteService()
+                    .setFrontmatterKeys(activeFile.path, { [colorKey]: hex });
+                if (!written) {
+                    // 書けなかった。表示を先に変えていたので、ファイルの値へ戻す。
+                    // 理由は書き込みの層が通知済み。
+                    const onFile = this.ctx.app.metadataCache.getFileCache(activeFile)?.frontmatter?.[colorKey];
+                    const shown = container.querySelector(
+                        '.metadata-input-longtext'
+                    ) as HTMLDivElement | null;
+                    if (shown) shown.textContent = typeof onFile === 'string' ? onFile : '';
+                }
+                return written;
+            });
         });
 
         // ピッカーを閉じた時点で確定させる（debounce の満了を待たない）。

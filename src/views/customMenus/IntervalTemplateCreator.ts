@@ -371,6 +371,9 @@ export class IntervalTemplateCreator {
                 const file = isEditing
                     ? await writer.updateTemplate(this.editingFilePath!, data)
                     : await writer.saveTemplate(this.folderPath, data);
+                // 書けなかった。理由は書き込みの層が通知済みなので、モーダルを
+                // 開いたまま残して、もう一度保存できるようにする。
+                if (!file) return;
                 this.close();
                 this.callbacks?.onSaved(file.path);
             } catch (e) {

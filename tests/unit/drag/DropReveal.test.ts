@@ -155,7 +155,7 @@ class OrderProbeStrategy extends BaseDragStrategy {
     }
 }
 
-function makeContext(log: string[], onUpdate?: () => void): DragContext {
+function makeContext(log: string[], onUpdate?: () => void, written = true): DragContext {
     return {
         plugin: { settings: { startHour: 5 } },
         writeService: {
@@ -163,6 +163,7 @@ function makeContext(log: string[], onUpdate?: () => void): DragContext {
                 log.push('commit');
                 onUpdate?.();
                 await Promise.resolve();
+                return written;
             },
         },
         onTaskClick: () => log.push('restoreSelection'),
@@ -182,6 +183,22 @@ describe('BaseDragStrategy.commitAndReveal', () => {
         await strategy.run(context, plan, [el]);
 
         expect(strategy.log).toEqual(['commit', 'restoreSelection', 'applyGeometry', 'clearGhosts']);
+        expect(el.classes.has('is-drag-hidden')).toBe(false);
+    });
+
+    it('reveals the old geometry, applying nothing, when the write was refused', async () => {
+        // The file still holds the old geometry, so the source card is right
+        // as it is; drawing it at the drop would show a place the task is not.
+        const strategy = new OrderProbeStrategy();
+        const context = makeContext(strategy.log, undefined, false);
+        const el = makeEl('is-drag-hidden');
+
+        await strategy.run(context, {
+            edits: { effectiveStartDate: '2026-08-13', effectiveStartTime: '10:00' },
+            baseTask: makeTask(),
+        }, [el]);
+
+        expect(strategy.log).toEqual(['commit', 'restoreSelection', 'clearGhosts']);
         expect(el.classes.has('is-drag-hidden')).toBe(false);
     });
 
