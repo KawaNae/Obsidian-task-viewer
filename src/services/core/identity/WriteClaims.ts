@@ -76,9 +76,16 @@ export const MAX_CHAIN_PER_FILE = 1024;
  *
  * `filed` numbers the writes in the order they landed (see
  * {@link WriteClaims.readMark}).
+ *
+ * A described link also says whom the write was made for, and which rows it
+ * wrote — made, or gave a new text — with the text it gave each. That is what
+ * lets a scan answer, row by row, whether a completion it reads is one a write
+ * of ours made and for whom (see {@link WriteClaims.writerOf}). Unlike the
+ * rows, every described link keeps it: a read can be of any state in the
+ * chain, and what an older write wrote is what such a read holds.
  */
 type Link =
-    | { filed: number; content: ContentKey; state: LinkState | null }
+    | { filed: number; content: ContentKey; state: LinkState | null; origin: WriteOrigin; wrote: ReadonlyMap<string, string> }
     | { filed: number; content: null };
 
 interface LinkState {
@@ -213,6 +220,7 @@ export class WriteClaims {
 
         const rows: ClaimBase[] = [];
         const made: ClaimResult['made'] = [];
+        const wrote = new Map<string, string>();
         const nameOf = new Map<Task, string>();
         const crossed = new Set<string>();
         for (const task of parsed) {
@@ -225,6 +233,7 @@ export class WriteClaims {
             if (carried) {
                 rows.push({ runtimeId: carried.runtimeId, created: carried.created, text: task.originalText, line: task.line, parserId: task.parserId });
                 nameOf.set(task, carried.runtimeId);
+                if (carried.text !== task.originalText) wrote.set(carried.runtimeId, task.originalText);
                 if (carried.parserId !== undefined && carried.parserId !== task.parserId) crossed.add(carried.runtimeId);
                 continue;
             }
@@ -233,6 +242,7 @@ export class WriteClaims {
             const runtimeId = this.mintRuntimeId(path, task.parserId);
             rows.push({ runtimeId, created: true, text: task.originalText, line: task.line, parserId: task.parserId });
             nameOf.set(task, runtimeId);
+            wrote.set(runtimeId, task.originalText);
             made.push({ line: task.line, runtimeId });
         }
 
@@ -245,7 +255,7 @@ export class WriteClaims {
         // `reproduces`).
         const ladder = ledgerRowsOf(parsed, task => nameOf.get(task)!)
             .filter(entry => !crossed.has(entry.runtimeId));
-        const withdraw = this.append(path, { filed: ++this.filed, content, state: { rows, ladder } });
+        const withdraw = this.append(path, { filed: ++this.filed, content, state: { rows, ladder }, origin, wrote });
         return {
             hint: { content, rows: rows.map(row => ({ runtimeId: row.runtimeId, created: row.created, text: row.text })), origin },
             withdraw,
@@ -392,6 +402,53 @@ export class WriteClaims {
             case 'after':
                 return newestDescribed(chain.links)?.state?.ladder ?? ledger.rows;
         }
+    }
+
+    /**
+     * Whom the write of ours that last wrote this row, as the read holds it,
+     * was made for — or null when no write of ours the read is known to hold
+     * wrote the row, or the row reads otherwise than that write left it.
+     *
+     * Which writes a read holds comes from where it stands in the chain, the
+     * same placing {@link ladderFor} makes: an earlier or the newest write's
+     * lines hold that write and every one before it; lines changed after the
+     * newest described write hold every described write, and something else
+     * besides; the ledger's own lines, and a read past the cap, hold none that
+     * can be told.
+     *
+     * The text is what keeps "held" honest for a read that changed after our
+     * writes: a row whose line was rewritten since is not the one our write
+     * left, whoever named it. Asked only about rows a scan is deciding on, and
+     * before the scan's commit forgets the chain.
+     *
+     * @param read the key of the lines read.
+     * @param ledger the key of the content the last scan recorded.
+     */
+    writerOf(path: string, read: ContentKey, ledger: ContentKey | null, runtimeId: string, text: string): WriteOrigin | null {
+        const chain = this.chains.get(path);
+        if (!chain) return null;
+        const place = placeRead(chain, read, ledger);
+        let upTo: number;
+        switch (place.kind) {
+            case 'ledger':
+            case 'unknown':
+                return null;
+            case 'earlier':
+            case 'newest':
+                upTo = place.at;
+                break;
+            case 'after':
+                upTo = chain.links.length - 1;
+                break;
+        }
+        for (let i = upTo; i >= 0; i--) {
+            const link = chain.links[i];
+            if (link.content === null) continue;
+            const written = link.wrote.get(runtimeId);
+            if (written === undefined) continue;
+            return written === text ? link.origin : null;
+        }
+        return null;
     }
 
     /**
