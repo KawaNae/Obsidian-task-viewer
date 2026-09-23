@@ -92,10 +92,10 @@ async function carried(before: string[], after: string[]): Promise<number[]> {
 
 describe('what counts as the other row, and which pairs are looked at', () => {
     it('a row its words already hold elsewhere is not the other row', async () => {
-        // `\t- [x] C @d` is the third row's, word for word; the first row's
-        // pair (its date removed) keeps its name.
-        expect(await carried(['- [ ] B', `- [x] C${D}`, `- [x] C${D}`, ''], ['- [x] C', '- [ ] B', `\t- [x] C${D}`, '']))
-            .toEqual([1, 0, 2]);
+        // `\t- [ ] A @d` is A's child's, word for word; A's pair on its content
+        // and dates keeps its name.
+        expect(await carried(['- [ ] P', `- [ ] A${D}`, `\t- [ ] A${D}`, ''], ['- [ ] P', `\t- [ ] A${D}`, `- [x] A${D}`, '']))
+            .toEqual([0, 2, 1]);
     });
 
     it('a row that reads as the previous row word for word is not the other row', async () => {
