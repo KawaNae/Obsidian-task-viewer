@@ -381,13 +381,17 @@ export class WriteClaims {
     ): readonly LedgerEntry[] | null {
         const chain = this.chains.get(path);
         if (!chain) return ledger.rows;
-        if (ledger.content !== null && read === ledger.content) return ledger.rows;
-
-        const newest = newestDescribed(chain.links);
-        if (newest?.content === read && newest.state) return newest.state.ladder;
-        if (chain.links.some(link => link.content === read)) return ledger.rows;
-        if (chain.lost > 0) return null;
-        return newest?.state?.ladder ?? ledger.rows;
+        const place = placeRead(chain, read, ledger.content);
+        switch (place.kind) {
+            case 'ledger':
+            case 'earlier':
+                return ledger.rows;
+            case 'unknown':
+                return null;
+            case 'newest':
+            case 'after':
+                return newestDescribed(chain.links)?.state?.ladder ?? ledger.rows;
+        }
     }
 
     /**
@@ -403,18 +407,49 @@ export class WriteClaims {
      *
      * Called when a scan of the file commits, whatever it decided, and when the
      * file's claims are dropped for good (a rename, a delete, `tv-ignore`). A
-     * committing scan passes the mark it took before reading: a write filed
-     * after that mark is one the ledger it commits may not have seen, and is
-     * kept, though never built on again (see {@link lastWrite}).
+     * committing scan says what it read (`seen`): the mark it took before
+     * reading, the key of the lines, and the ledger's content before the
+     * commit. What it keeps is what the ledger it commits may not have seen,
+     * never built on again (see {@link lastWrite}), and which that is comes
+     * from where the read stands in the chain — the same placing
+     * {@link ladderFor} made for the match this scan committed:
+     *
+     * - lines that are an earlier write's: the read saw that write and every
+     *   one before it; the ones after it are kept;
+     * - lines that are the newest described write's, or that changed after
+     *   it: the read saw every described write, and none is kept. Keeping one
+     *   would leave the chain saying the new ledger is older than a write it
+     *   has read, and the next unmatched read would pair against a state
+     *   older than the ledger. Marks are kept as the mark decides below: a
+     *   mark's own content is not known, so the read may not have seen it;
+     * - otherwise (the ledger's own lines, or no placing at all) the mark
+     *   decides: a write filed after it may have landed after the read.
      */
-    forget(path: string, readMark?: number): void {
+    forget(path: string, seen?: { readMark: number; read: ContentKey; ledger: ContentKey | null }): void {
         const chain = this.chains.get(path);
         if (!chain) return;
-        if (readMark === undefined) {
+        if (seen === undefined) {
             this.chains.delete(path);
             return;
         }
-        chain.links = chain.links.filter(link => link.filed > readMark);
+        const { readMark } = seen;
+        const place = placeRead(chain, seen.read, seen.ledger);
+        const unread = (link: Link): boolean => link.filed > readMark;
+        switch (place.kind) {
+            case 'earlier':
+                chain.links = chain.links.slice(place.at + 1);
+                break;
+            case 'newest':
+                chain.links = chain.links.slice(place.at + 1);
+                break;
+            case 'after':
+                chain.links = chain.links.filter(link => link.content === null && unread(link));
+                break;
+            case 'ledger':
+            case 'unknown':
+                chain.links = chain.links.filter(unread);
+                break;
+        }
         if (chain.links.length === 0) {
             this.chains.delete(path);
             return;
@@ -508,6 +543,32 @@ export class WriteClaims {
 
         return null;
     }
+}
+
+/**
+ * Where a read of `read` stands in the chain (see `WriteClaims.ladderFor`):
+ * the ledger's own lines; the lines an earlier described write left (`at`,
+ * its index); the newest described write's (`at`); lines that are none of
+ * these, so changed after the newest described write; or, past the cap, not
+ * known.
+ */
+function placeRead(
+    chain: Chain,
+    read: ContentKey,
+    ledger: ContentKey | null,
+):
+    | { kind: 'ledger' }
+    | { kind: 'earlier'; at: number }
+    | { kind: 'newest'; at: number }
+    | { kind: 'after' }
+    | { kind: 'unknown' } {
+    if (ledger !== null && read === ledger) return { kind: 'ledger' };
+    const newest = newestDescribed(chain.links);
+    const at = chain.links.findIndex(link => link.content === read);
+    if (newest && newest.content === read) return { kind: 'newest', at: chain.links.lastIndexOf(newest) };
+    if (at >= 0) return { kind: 'earlier', at };
+    if (chain.lost > 0) return { kind: 'unknown' };
+    return { kind: 'after' };
 }
 
 /** The newest link of the chain that describes what it left, if any. */
