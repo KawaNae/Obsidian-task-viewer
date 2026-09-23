@@ -1,3 +1,5 @@
+import { CodeFenceTracker } from '../../../utils/CodeFenceTracker';
+
 /**
  * What the lines of a note are to each other: how deep a line is, where a
  * task's subtree ends, where the body begins.
@@ -49,6 +51,35 @@ export class Outline {
      */
     static subtreeEnd(lines: readonly string[], row: number, limit: number = lines.length): number {
         const depth = this.depthOf(lines[row]);
+        // A fence opened inside the subtree is the subtree's up to its closing
+        // line, whatever the depth of the lines in it: the parser reads every
+        // one of them as fenced (`CodeFenceTracker.mask`). An end in the middle
+        // of it would leave half a fence behind a delete or a move — and the
+        // closing line left alone opens a fence that swallows what follows.
+        // The row itself is outside every fence, so a tracker started below it
+        // reads the fences exactly as the whole-document reading does.
+        const fence = new CodeFenceTracker();
+        let end = row + 1;
+        for (let i = row + 1; i < limit; i++) {
+            const line = lines[i];
+            if (fence.isInside()) {
+                fence.feed(line);
+                end = i + 1;
+                continue;
+            }
+            if (line.trim() === '') continue;
+            if (this.depthOf(line) <= depth) break;
+            fence.feed(line);
+            end = i + 1;
+        }
+        // A fence that never closes runs to the end of the note, and the
+        // subtree does not go with it: taking it would take everything after.
+        // The subtree is then read by depth alone, as if there were no fence.
+        return fence.isInside() ? this.plainEnd(lines, row, depth, limit) : end;
+    }
+
+    /** {@link subtreeEnd} read without fences. */
+    private static plainEnd(lines: readonly string[], row: number, depth: number, limit: number): number {
         let end = row + 1;
         for (let i = row + 1; i < limit; i++) {
             const line = lines[i];
