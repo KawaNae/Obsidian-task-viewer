@@ -42,6 +42,13 @@ describe('Placement.groupHead', () => {
             expect(Placement.groupHead(lines, 4)).toBe(4);
         });
 
+        it('does not take a task line inside a fence whose closing line is indented', () => {
+            // The indented closer reads as deeper than the row, so the walk
+            // passes it and meets the fenced task line on the way up.
+            const lines = ['# note', '```', '- [ ] sample', '  ```', '- [ ] current'];
+            expect(Placement.groupHead(lines, 4)).toBe(4);
+        });
+
         it('does not go above the frontmatter when it is the first line of the body', () => {
             const lines = ['---', 'tv-color: ff0000', '---', '- [ ] current', '\t- [ ] child'];
             expect(Placement.groupHead(lines, 3)).toBe(3);
