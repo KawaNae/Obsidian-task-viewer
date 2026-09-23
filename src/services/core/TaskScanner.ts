@@ -297,13 +297,18 @@ export class TaskScanner {
         // of ours wrote, as this read holds it, answers by whom the write was
         // for — the user, or a flow carrying out a command, whose own writes
         // must not fire again. A row no write of ours wrote came from an editor
-        // or from outside, and only the editor's signal tells the two apart,
-        // taken once for the whole scan (see EditorSignal).
-        let byHand: boolean | undefined;
+        // or from outside, and only the editor's signal tells the two apart.
+        // Every read that is not, whole, a state our own writes left takes the
+        // signal, whether or not it completes anything: that read carries the
+        // editor's save, and a signal it left standing would speak for the
+        // next change, a sync as well (see EditorSignal). A read our writes
+        // left carries no one's hand, and leaves the signal to the save.
+        const byHand = this.claims.leftByUs(file.path, readKey, before)
+            ? false
+            : this.editorSignal.take(file.path);
         const mayFire = (task: Task): boolean => {
             const writer = this.claims.writerOf(file.path, readKey, before, task.id, task.originalText);
             if (writer !== null) return writer === 'user';
-            byHand ??= this.editorSignal.take(file.path);
             return byHand;
         };
         const tasksToTrigger = this.completionDetector.detect(file.path, parsed.tasks, {
@@ -324,7 +329,7 @@ export class TaskScanner {
         // than to a copy, so with verbose on, one change printing this line
         // twice is a surviving pipeline saying so.
         if (!this.isInitializing) {
-            logDebug(`[scan] file=${file.path} byHand=${byHand ?? '-'} fired=${tasksToTrigger.length} minted=${identity.minted.length} retired=${identity.retired.length}`);
+            logDebug(`[scan] file=${file.path} byHand=${byHand} fired=${tasksToTrigger.length} minted=${identity.minted.length} retired=${identity.retired.length}`);
         }
 
         // --- commit (batched: 1 file = 1 revision bump) ---

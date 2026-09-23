@@ -452,6 +452,19 @@ export class WriteClaims {
     }
 
     /**
+     * Whether the lines read are, whole, a state a write of ours left: an
+     * earlier or the newest described write's. Such a read carries no change
+     * from anywhere else — no editor's save, no sync — so it speaks for
+     * nobody's hand (see `EditorSignal`).
+     */
+    leftByUs(path: string, read: ContentKey, ledger: ContentKey | null): boolean {
+        const chain = this.chains.get(path);
+        if (!chain) return false;
+        const place = placeRead(chain, read, ledger);
+        return place.kind === 'earlier' || place.kind === 'newest';
+    }
+
+    /**
      * A mark for a scan to take before it reads a file: a write filed after
      * it may be one the read did not see.
      */
