@@ -3,7 +3,7 @@ import type { DuplicateOptions } from '../../types';
 import { DateUtils } from '../../utils/DateUtils';
 import { logWarn } from '../../log/log';
 import { FileOperations } from './utils/FileOperations';
-import { processLines, type LineDraft } from '../../utils/FileLines';
+import { fileGone, processLines, type LineDraft, type WriteOutcome } from '../../utils/FileLines';
 import type { PlannedTarget } from './TaskRefs';
 import type { WriteObserver } from './WriteObserver';
 import { Outline } from '../parsing/utils/Outline';
@@ -45,14 +45,11 @@ export class TaskCloner {
      * @returns whether the copy was written. A `false` means the original line
      * could not be resolved and the file is untouched.
      */
-    async duplicateInlineTask(target: PlannedTarget, options?: DuplicateOptions): Promise<boolean> {
+    async duplicateInlineTask(target: PlannedTarget, options?: DuplicateOptions): Promise<WriteOutcome> {
         const { dayOffset = 0, count = 1 } = options ?? {};
 
         const file = this.app.vault.getAbstractFileByPath(target.file);
-        if (!(file instanceof TFile)) {
-            this.writes?.for(target.file, 'user')?.refused({ file: target.file, reason: { kind: 'gone' }, subject: target.subject });
-            return false;
-        }
+        if (!(file instanceof TFile)) return fileGone(this.writes?.for(target.file, 'user'), target.file, target.subject);
 
         return processLines(this.app, file, this.writes?.for(target.file, 'user'), (draft, _eol, { row, refuse }) => {
             const lines = draft.lines;
@@ -68,7 +65,7 @@ export class TaskCloner {
 
             return this.spliceCopies(draft, idx, parents, idx)
                 || refuse({ kind: 'unplaceable' }, target.subject);
-        }).then(outcome => outcome.written);
+        });
     }
 
     /**
@@ -87,12 +84,9 @@ export class TaskCloner {
      *
      * @returns whether the copies were written.
      */
-    async duplicateInlineTaskInPlace(target: PlannedTarget, copies: InPlaceCopyLines): Promise<boolean> {
+    async duplicateInlineTaskInPlace(target: PlannedTarget, copies: InPlaceCopyLines): Promise<WriteOutcome> {
         const file = this.app.vault.getAbstractFileByPath(target.file);
-        if (!(file instanceof TFile)) {
-            this.writes?.for(target.file, 'user')?.refused({ file: target.file, reason: { kind: 'gone' }, subject: target.subject });
-            return false;
-        }
+        if (!(file instanceof TFile)) return fileGone(this.writes?.for(target.file, 'user'), target.file, target.subject);
 
         return processLines(this.app, file, this.writes?.for(target.file, 'user'), (draft, _eol, { row, refuse }) => {
             const lines = draft.lines;
@@ -109,7 +103,7 @@ export class TaskCloner {
 
             return this.spliceCopies(draft, idx, parents, at)
                 || refuse({ kind: 'unplaceable' }, target.subject);
-        }).then(outcome => outcome.written);
+        });
     }
 
     // --- Private helpers ---

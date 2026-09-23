@@ -65,7 +65,7 @@ function makeHarness(): Harness {
             insertSiblingAfterTask: async (afterTaskId: string, line: string) => {
                 siblings.push({ afterTaskId, line });
                 registerWrittenLine(line);
-                return 5;
+                return true;
             },
         }),
     } as unknown as TaskViewerPlugin;

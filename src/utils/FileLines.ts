@@ -1,4 +1,4 @@
-import type { App, TFile } from 'obsidian';
+import { TFile, type App } from 'obsidian';
 import { logError, logWarn } from '../log/log';
 import { LINE_BREAK, holdsLineBreak } from './LineBreak';
 import { ON_RECORD, readsAsPlanned, subtreeAt, type OnRecord, type RowBasis } from '../services/persistence/RowBasis';
@@ -471,6 +471,12 @@ export interface WriteSession {
  */
 export type WriteOutcome = WriteMade | WriteRefused;
 
+/**
+ * A write that adds one row, and where it put it: the line a caller looks the
+ * new row up by once the scan has read it (`TaskApi.createTask`).
+ */
+export type WriteAt = WriteRefused | (WriteMade & { line: number });
+
 /** A write that was not made. */
 export interface WriteRefused {
     written: false;
@@ -648,37 +654,9 @@ export async function processLines(
     const withdrawals: Array<() => void> = [];
     // What the write is about, for a refusal said after the callback is over.
     let lastSubject = '';
-    // What the latest run of the callback handed back to be written, or null
-    // while it has handed back nothing — it threw, or has not run.
-    let handedBack: string | null = null;
 
-    try {
-        await app.vault.process(file, (content) => {
-            handedBack = null;
-            handedBack = attempt(content);
-            return handedBack;
-        });
-    } catch (error) {
-        // A development build's report of a caller's bug: seen, not absorbed.
-        if (error instanceof BrokenWrite) {
-            for (const withdraw of withdrawals) withdraw();
-            throw error;
-        }
-        // Obsidian can fail after the callback, and a failure there does not
-        // say whether the bytes reached disk. The file does: if it reads as
-        // the callback left it, the write landed, and what it filed stands.
-        if (handedBack === null || !(await readsAs(app, file, handedBack))) {
-            // The file never changed, so claims about it describe a state that
-            // never existed. Left in the log they would be matched against
-            // whatever the next scan happens to read.
-            for (const withdraw of withdrawals) withdraw();
-            logError(`[FileLines] ${file.path}: the write failed; nothing written: ${String(error)}`);
-            const failed: Refusal = { file: file.path, reason: { kind: 'failed' }, subject: lastSubject || file.path };
-            channel?.refused(failed);
-            return { written: false, refused: failed };
-        }
-        logWarn(`[FileLines] ${file.path}: the write reported a failure, but the file reads as written; kept: ${String(error)}`);
-    }
+    const threw = await processOrFail(app, file, channel, withdrawals, attempt, () => lastSubject || file.path);
+    if (threw) return threw;
 
     // Set inside the callback, which the compiler does not follow.
     const outcome = refused as Refusal | null;
@@ -850,6 +828,97 @@ export class BrokenWrite extends Error {
     }
 }
 
+/**
+ * Run one `vault.process`, and answer `failed` — told once through the
+ * channel — if it throws without the file reading as `attempt` left it.
+ *
+ * Obsidian can fail after the callback, and a failure there does not say
+ * whether the bytes reached disk. The file does: if it reads as the callback
+ * left it, the write landed, and what it filed stands (null). Otherwise the
+ * file never changed, so claims about it describe a state that never
+ * existed; left in the log they would be matched against whatever the next
+ * scan happens to read, and they are withdrawn.
+ */
+async function processOrFail(
+    app: App,
+    file: TFile,
+    channel: WriteChannel | undefined,
+    withdrawals: Array<() => void>,
+    attempt: (content: string) => string,
+    subject: () => string,
+): Promise<WriteRefused | null> {
+    // What the latest run of the callback handed back to be written, or null
+    // while it has handed back nothing: it threw, or has not run.
+    let handedBack: string | null = null;
+    try {
+        await app.vault.process(file, (content) => {
+            handedBack = null;
+            handedBack = attempt(content);
+            return handedBack;
+        });
+        return null;
+    } catch (error) {
+        // A development build's report of a caller's bug: seen, not absorbed.
+        if (error instanceof BrokenWrite) {
+            for (const withdraw of withdrawals) withdraw();
+            throw error;
+        }
+        if (handedBack !== null && await readsAs(app, file, handedBack)) {
+            logWarn(`[FileLines] ${file.path}: the write reported a failure, but the file reads as written; kept: ${String(error)}`);
+            return null;
+        }
+        for (const withdraw of withdrawals) withdraw();
+        return writeFailed(channel, file.path, subject(), error);
+    }
+}
+
+/** A write that threw: logged, refused as `failed`, and told once. */
+export function writeFailed(channel: WriteChannel | undefined, file: string, subject: string, error: unknown): WriteRefused {
+    logError(`[FileLines] ${file}: the write failed; nothing written: ${String(error)}`);
+    const refused: Refusal = { file, reason: { kind: 'failed' }, subject };
+    channel?.refused(refused);
+    return { written: false, refused };
+}
+
+/**
+ * A write whose file is not there to open (taken away, renamed, a folder):
+ * refused as `gone` and told once, as a write that finds no line is.
+ */
+export function fileGone(channel: WriteChannel | undefined, file: string, subject: string): WriteRefused {
+    const refused: Refusal = { file, reason: { kind: 'gone' }, subject };
+    channel?.refused(refused);
+    return { written: false, refused };
+}
+
+/**
+ * Create a note holding `content`, as one write: made, or refused as
+ * `failed` and told once. As with `processLines`, a failure that left the
+ * note in place reading as asked is a write that landed.
+ *
+ * Nothing is filed: a note that did not exist has nothing in the ledger, and
+ * a claim would say what the ledger's silence already says.
+ */
+export async function createFile(
+    app: App,
+    path: string,
+    channel: WriteChannel | undefined,
+    content: string,
+    subject: string,
+    prepare?: () => Promise<unknown>,
+): Promise<WriteOutcome> {
+    try {
+        await prepare?.();
+        await app.vault.create(path, content);
+    } catch (error) {
+        const made = app.vault.getAbstractFileByPath(path);
+        if (!(made instanceof TFile && await readsAs(app, made, content))) {
+            return writeFailed(channel, path, subject, error);
+        }
+        logWarn(`[FileLines] ${path}: creating the note reported a failure, but it reads as written; kept: ${String(error)}`);
+    }
+    return { written: true, refused: null, made: [], rows: new Map() };
+}
+
 /** Whether the file now reads as `content`, the mark at its head aside. A file that cannot be read does not. */
 async function readsAs(app: App, file: TFile, content: string): Promise<boolean> {
     try {
@@ -902,18 +971,14 @@ export async function replaceWhole(
     file: TFile,
     channel: WriteChannel | undefined,
     content: string,
-): Promise<void> {
+): Promise<WriteOutcome> {
     const withdrawals: Array<() => void> = [];
-    try {
-        await app.vault.process(file, (current) => {
-            for (const withdraw of withdrawals.splice(0)) withdraw();
-            if (current === content) return current;
-            const sink = channel?.sink;
-            if (sink) withdrawals.push(sink(splitLines(current).lines, splitLines(content).lines, null, null).withdraw);
-            return content;
-        });
-    } catch (error) {
-        for (const withdraw of withdrawals) withdraw();
-        throw error;
-    }
+    const threw = await processOrFail(app, file, channel, withdrawals, (current) => {
+        for (const withdraw of withdrawals.splice(0)) withdraw();
+        if (current === content) return current;
+        const sink = channel?.sink;
+        if (sink) withdrawals.push(sink(splitLines(current).lines, splitLines(content).lines, null, null).withdraw);
+        return content;
+    }, () => file.path);
+    return threw ?? { written: true, refused: null, made: [], rows: new Map() };
 }

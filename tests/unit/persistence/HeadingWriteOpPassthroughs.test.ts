@@ -23,8 +23,8 @@ function heading_harness(initial: string) {
 describe('TaskRepository.insertLineUnderHeading', () => {
     it('delegates to the shared heading-write op and returns insertedLine', async () => {
         const h = heading_harness('## Tasks\nexisting');
-        const insertedLine = await h.repo.insertLineUnderHeading('note.md', '- [ ] child', 'Tasks', 2);
-        expect(insertedLine).toBe(1);
+        const at = await h.repo.insertLineUnderHeading('note.md', '- [ ] child', 'Tasks', 2);
+        expect(at.written && at.line).toBe(1);
         expect(h.text().split('\n')[1]).toBe('- [ ] child');
     });
 });

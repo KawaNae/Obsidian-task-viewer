@@ -7,10 +7,14 @@ import { DailyNoteUtils } from '../../../utils/DailyNoteUtils';
 import { TaskLineClassifier } from '../../../services/parsing/utils/TaskLineClassifier';
 import { t } from '../../../i18n';
 
+/**
+ * The editor's writes to one line. Each answers whether it was written; a
+ * write that was not has told the user why (see `TaskIndex.reportRefusal`).
+ */
 export interface CheckboxLineOps {
-    updateLine(newContent: string): void | Promise<void>;
-    insertLineAfter(content: string): void | Promise<void>;
-    deleteLine(): void | Promise<void>;
+    updateLine(newContent: string): Promise<boolean>;
+    insertLineAfter(content: string): Promise<boolean>;
+    deleteLine(): Promise<boolean>;
 }
 
 /**

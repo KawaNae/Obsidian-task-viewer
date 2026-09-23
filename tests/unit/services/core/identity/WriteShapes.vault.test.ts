@@ -378,7 +378,7 @@ describe('6. insertSiblingAfterTask (timer records)', () => {
         const at = await session.index.insertSiblingAfterTask(idOf(session, '対象'), '- [ ] 記録 @2026-09-21');
         await session.settle(FILE);
 
-        expect(at).toBe(4);
+        expect(at).toBe(true);
         expect(contents.get(FILE)).toBe(NOTE('- [ ] 対象 @2026-09-21', '\t- [ ] 子 @2026-09-21', '- [ ] 記録 @2026-09-21').join('\n'));
         const after = rows(session).map(row => row.id);
         expect([after[0], after[1], after[2], after[4]]).toEqual(before);
@@ -393,7 +393,7 @@ describe('6. insertSiblingAfterTask (timer records)', () => {
         const at = await session.index.insertSiblingAfterTask(idOf(session, '対象'), '- [ ] 記録 @2026-09-21T13:00', { afterCompletedRun: true });
         await session.settle(FILE);
 
-        expect(at).toBe(5);
+        expect(at).toBe(true);
         expect(contents.get(FILE)).toBe(NOTE(...target, '- [ ] 記録 @2026-09-21T13:00').join('\n'));
         const after = rows(session).map(row => row.id);
         expect([...after.slice(0, 4), after[5]]).toEqual(before);
@@ -408,7 +408,7 @@ describe('6. insertSiblingAfterTask (timer records)', () => {
         const at = await session.index.insertSiblingAfterTask(idOf(session, '対象'), '- [ ] 記録 @2026-09-21');
         await session.settle(FILE);
 
-        expect(at).toBe(5);
+        expect(at).toBe(true);
         const expected = NOTE('- [ ] 対象 @2026-09-21', '\t- [ ] 子 @2026-09-21', '- [ ] 記録 @2026-09-21');
         expected.splice(1, 0, OUTSIDE);
         expect(contents.get(FILE)).toBe(expected.join('\n'));
@@ -426,7 +426,7 @@ describe('6. insertSiblingAfterTask (timer records)', () => {
         const at = await session.index.insertSiblingAfterTask(idOf(session, '対象'), '- [ ] 記録 @2026-09-21T13:00', { afterCompletedRun: true });
         await session.settle(FILE);
 
-        expect(at).toBe(6);
+        expect(at).toBe(true);
         const expected = NOTE(...target, '- [ ] 記録 @2026-09-21T13:00');
         expected.splice(1, 0, OUTSIDE);
         expect(contents.get(FILE)).toBe(expected.join('\n'));

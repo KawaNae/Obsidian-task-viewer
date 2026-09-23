@@ -138,7 +138,7 @@ describe('the ledger stays the partner where the read may be a state it knows', 
         const y = bench.taskAt(1);
         const scan = await gatedScan(bench);
         expect((await bench.writer.updateTaskInFile(plannedOn(y), { ...y, content: 'A', originalText: '- [ ] A' })).written).toBe(true);
-        expect(await bench.writer.deleteTaskFromFile(plannedOn(x, { subtree: true }))).toBe(true);
+        expect((await bench.writer.deleteTaskFromFile(plannedOn(x, { subtree: true }))).written).toBe(true);
         scan.release();
         await scan.done;
         expect(bench.scanner.getHintLog().peek().find(entry => entry.file === FILE)).toBeUndefined();

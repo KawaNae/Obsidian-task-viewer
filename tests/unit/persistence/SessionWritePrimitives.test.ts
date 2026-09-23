@@ -3,7 +3,7 @@ import { TaskIndex } from '../../../src/services/core/TaskIndex';
 import { TaskWriteService } from '../../../src/services/data/TaskWriteService';
 import { makeTask } from '../helpers/makeTask';
 import { writeBench, FILE } from '../helpers/writeBench';
-import type { Refusal } from '../../../src/utils/FileLines';
+import type { Refusal, WriteOutcome } from '../../../src/utils/FileLines';
 import type { Task } from '../../../src/types';
 
 /**
@@ -44,7 +44,7 @@ describe('insertSiblingAfterTask', () => {
         );
 
         expect(text.split('\n')).toEqual([anchor, NEW_SESSION, '- [ ] next task']);
-        expect(index).toBe(1);
+        expect(index.written).toBe(true);
     });
 
     it('reads the indent off the file rather than from the stored line', async () => {
@@ -92,7 +92,7 @@ describe('insertSiblingAfterTask', () => {
         );
 
         expect(text).toBe(other);
-        expect(index).toBe(-1);
+        expect(index.written).toBe(false);
         expect(refused).toEqual([{ file: FILE, reason: { kind: 'gone' }, subject: 'task A' }]);
     });
 });
@@ -112,7 +112,7 @@ describe('insertSiblingAfterTask afterCompletedRun', () => {
         );
 
         expect(text.split('\n')).toEqual([first, second, third, NEW_SESSION]);
-        expect(index).toBe(3);
+        expect(index.written).toBe(true);
     });
 
     it('splits the run when the option is off', async () => {
@@ -192,20 +192,22 @@ describe('insertSiblingAfterTask afterCompletedRun', () => {
         );
 
         expect(text.split('\n')).toEqual([first, second, NEW_SESSION]);
-        expect(index).toBe(2);
+        expect(index.written).toBe(true);
     });
 });
 
 // ── child insertion routing ──
+
+const MADE = { written: true, refused: null, made: [], rows: new Map() } as const;
 
 function buildIndexHost(task: Task | undefined) {
     return {
         store: { getTask: () => task },
         scanner: { waitForScan: vi.fn(async () => {}) },
         repository: {
-            insertLineAsFirstChild: vi.fn(async () => 0),
-            insertLineAfterTask: vi.fn(async () => 0),
-            insertSiblingAfterTask: vi.fn(async () => 7),
+            insertLineAsFirstChild: vi.fn(async () => MADE),
+            insertLineAfterTask: vi.fn(async () => MADE),
+            insertSiblingAfterTask: vi.fn(async () => MADE),
         },
         withNotify: vi.fn(async (_file: string, fn: () => Promise<unknown>) => await fn()),
         // The dispose guard every write goes through; this index is open.
@@ -272,7 +274,7 @@ describe('TaskIndex.insertSiblingAfterTask', () => {
         expect(host.repository.insertSiblingAfterTask).toHaveBeenCalledTimes(1);
         expect(host.repository.insertSiblingAfterTask.mock.calls[0][1]).toBe(NEW_SESSION);
         expect(host.repository.insertSiblingAfterTask.mock.calls[0][2]).toEqual({ afterCompletedRun: true });
-        expect(line).toBe(7);
+        expect(line).toBe(true);
     });
 
     // The line body arrives without indentation on purpose: the writer reads
@@ -286,10 +288,10 @@ describe('TaskIndex.insertSiblingAfterTask', () => {
 
     it('is a no-op for read-only and unknown tasks', async () => {
         const readOnly = buildIndexHost(makeTask({ isReadOnly: true, parserId: 'tasks-plugin' }));
-        expect(await proto.insertSiblingAfterTask.call(readOnly, 'x', NEW_SESSION)).toBe(-1);
+        expect(await proto.insertSiblingAfterTask.call(readOnly, 'x', NEW_SESSION)).toBe(false);
 
         const unknown = buildIndexHost(undefined);
-        expect(await proto.insertSiblingAfterTask.call(unknown, 'missing', NEW_SESSION)).toBe(-1);
+        expect(await proto.insertSiblingAfterTask.call(unknown, 'missing', NEW_SESSION)).toBe(false);
 
         for (const host of [readOnly, unknown]) {
             expect(host.withNotify).not.toHaveBeenCalled();
@@ -314,16 +316,16 @@ describe('TaskWriteService delegation', () => {
         expect(idx.appendChildTask).toHaveBeenCalledWith('p', '- [x] session');
     });
 
-    it('insertSiblingAfterTask reaches the index and returns its line index', async () => {
-        const { idx, svc } = serviceWith({ insertSiblingAfterTask: vi.fn(async () => 3) });
+    it('insertSiblingAfterTask reaches the index and returns whether it wrote', async () => {
+        const { idx, svc } = serviceWith({ insertSiblingAfterTask: vi.fn(async () => true) });
 
-        const line = await svc.insertSiblingAfterTask('p', NEW_SESSION, { afterCompletedRun: true });
+        const written = await svc.insertSiblingAfterTask('p', NEW_SESSION, { afterCompletedRun: true });
         expect(idx.insertSiblingAfterTask).toHaveBeenCalledWith('p', NEW_SESSION, { afterCompletedRun: true });
-        expect(line).toBe(3);
+        expect(written).toBe(true);
     });
 
     it('insertSiblingAfterTask defaults to no run-skipping', async () => {
-        const { idx, svc } = serviceWith({ insertSiblingAfterTask: vi.fn(async () => 0) });
+        const { idx, svc } = serviceWith({ insertSiblingAfterTask: vi.fn(async () => false) });
 
         await svc.insertSiblingAfterTask('p', NEW_SESSION);
         expect(idx.insertSiblingAfterTask).toHaveBeenCalledWith('p', NEW_SESSION, {});
@@ -336,7 +338,7 @@ async function runChildInsert(
     line: number,
     lineBody: string,
     mode: 'first' | 'after'
-): Promise<{ text: string; index: number }> {
+): Promise<{ text: string; index: WriteOutcome }> {
     const bench = await writeBench(fileText);
     const task = bench.taskAt(line);
     const index = mode === 'first'

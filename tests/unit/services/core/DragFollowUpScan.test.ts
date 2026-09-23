@@ -174,8 +174,8 @@ describe('writes after dispose', () => {
         expect(await proto.deleteTask.call(host(), 'id')).toBe(false);
         expect(await proto.duplicateTask.call(host(), 'id')).toBe(false);
         expect(await proto.insertChildTask.call(host(), 'id', '- [ ] x')).toBe(false);
-        expect(await proto.createTask.call(host(), FILE, '- [ ] x')).toBe(-1);
-        expect(await proto.insertSiblingAfterTask.call(host(), 'id', '- [ ] x')).toBe(-1);
+        expect(await proto.createTask.call(host(), FILE, '- [ ] x')).toBe(null);
+        expect(await proto.insertSiblingAfterTask.call(host(), 'id', '- [ ] x')).toBe(false);
     });
 
     it('reach neither the store nor the repository', async () => {

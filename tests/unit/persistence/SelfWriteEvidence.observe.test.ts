@@ -130,8 +130,8 @@ async function traded(bench: WriteBench): Promise<{ x: Task; y: Task }> {
 /** W1 appends a copy of the one row; W2, built on W1, removes the original. */
 async function copyThenRemove(bench: WriteBench): Promise<{ original: Task }> {
     const original = bench.taskAt(0);
-    expect(await bench.writer.appendTaskToFile(FILE, '- [ ] T', 'user')).toBeGreaterThanOrEqual(0);
-    expect(await bench.writer.deleteTaskFromFile(plannedOn(original, { subtree: true }))).toBe(true);
+    expect((await bench.writer.appendTaskToFile(FILE, '- [ ] T', 'user')).written).toBe(true);
+    expect((await bench.writer.deleteTaskFromFile(plannedOn(original, { subtree: true }))).written).toBe(true);
     return { original };
 }
 

@@ -8,8 +8,8 @@ import { Placement } from '../utils/Placement';
 import type { PropertyOp } from '../PropertyUpdatePlanner';
 import { renderFlowInstance } from '../FlowInstanceLines';
 import {
-    processLines, splitLines,
-    type EditorLine, type LineDraft, type Refusal, type WriteOrigin, type WriteOutcome,
+    createFile, fileGone, processLines, splitLines,
+    type EditorLine, type LineDraft, type Refusal, type WriteAt, type WriteOrigin, type WriteOutcome,
 } from '../../../utils/FileLines';
 import type { WriteObserver } from '../WriteObserver';
 import { recordedOn, subjectOf, type PlannedTarget } from '../TaskRefs';
@@ -78,16 +78,14 @@ export class InlineTaskWriter {
 
     /** Nothing written: the file is not there. Told as `gone`, like a row that is not. */
     private refusedGone(target: PlannedTarget, origin: WriteOrigin): WriteOutcome {
-        const refused: Refusal = { file: target.file, reason: { kind: 'gone' }, subject: target.subject };
-        this.writes?.for(target.file, origin)?.refused(refused);
-        return { written: false, refused };
+        return fileGone(this.writes?.for(target.file, origin), target.file, target.subject);
     }
 
-    async updateLine(filePath: string, at: EditorLine, newContent: string): Promise<void> {
+    async updateLine(filePath: string, at: EditorLine, newContent: string): Promise<WriteOutcome> {
         const file = this.app.vault.getAbstractFileByPath(filePath);
-        if (!(file instanceof TFile)) return;
+        if (!(file instanceof TFile)) return fileGone(this.writes?.for(filePath, 'user'), filePath, at.text.trim());
 
-        await processLines(this.app, file, this.writes?.for(filePath, 'user'), (draft, _eol, { row }) => {
+        return processLines(this.app, file, this.writes?.for(filePath, 'user'), (draft, _eol, { row }) => {
             const lineNumber = row(at);
             if (lineNumber === null) return false;
 
@@ -113,11 +111,11 @@ export class InlineTaskWriter {
      * which of them it made, and says so, where a reader comparing text has
      * nothing to go on but the order they appear in.
      */
-    async insertLineAfterLine(filePath: string, at: EditorLine, newContent: string): Promise<void> {
+    async insertLineAfterLine(filePath: string, at: EditorLine, newContent: string): Promise<WriteOutcome> {
         const file = this.app.vault.getAbstractFileByPath(filePath);
-        if (!(file instanceof TFile)) return;
+        if (!(file instanceof TFile)) return fileGone(this.writes?.for(filePath, 'user'), filePath, at.text.trim());
 
-        await processLines(this.app, file, this.writes?.for(filePath, 'user'), (draft, _eol, { row }) => {
+        return processLines(this.app, file, this.writes?.for(filePath, 'user'), (draft, _eol, { row }) => {
             const lineNumber = row(at);
             if (lineNumber === null) return false;
             draft.splice(lineNumber + 1, 0, newContent);
@@ -134,11 +132,11 @@ export class InlineTaskWriter {
      * where they are. A child that outlives its parent here keeps the identity
      * it had — it is the same line, one row higher.
      */
-    async deleteLine(filePath: string, at: EditorLine): Promise<void> {
+    async deleteLine(filePath: string, at: EditorLine): Promise<WriteOutcome> {
         const file = this.app.vault.getAbstractFileByPath(filePath);
-        if (!(file instanceof TFile)) return;
+        if (!(file instanceof TFile)) return fileGone(this.writes?.for(filePath, 'user'), filePath, at.text.trim());
 
-        await processLines(this.app, file, this.writes?.for(filePath, 'user'), (draft, _eol, { row }) => {
+        return processLines(this.app, file, this.writes?.for(filePath, 'user'), (draft, _eol, { row }) => {
             const lineNumber = row(at);
             if (lineNumber === null) return false;
             draft.splice(lineNumber, 1);
@@ -151,12 +149,12 @@ export class InlineTaskWriter {
      * the index read (`target.basis.subtree`), so a line written into the
      * subtree since, or a row rewritten from outside, is not taken with it.
      *
-     * @returns whether the task's lines were found and removed. A `false` means
-     * the file still holds them — the caller must not report the task gone.
+     * @returns the outcome. Not written means the file still holds the lines:
+     * the caller must not report the task gone.
      */
-    async deleteTaskFromFile(target: PlannedTarget): Promise<boolean> {
+    async deleteTaskFromFile(target: PlannedTarget): Promise<WriteOutcome> {
         const file = this.app.vault.getAbstractFileByPath(target.file);
-        if (!(file instanceof TFile)) return this.refusedGone(target, 'user').written;
+        if (!(file instanceof TFile)) return this.refusedGone(target, 'user');
 
         return processLines(this.app, file, this.writes?.for(target.file, 'user'), (draft, _eol, { row }) => {
             const currentLine = row(target);
@@ -171,7 +169,7 @@ export class InlineTaskWriter {
             draft.splice(currentLine, 1 + childrenLines.length);
 
             return true;
-        }).then(outcome => outcome.written);
+        });
     }
 
     /**
@@ -206,11 +204,7 @@ export class InlineTaskWriter {
         // A caller that tells the refusal itself, in words of its own, has it
         // from the outcome; telling it here too would be the same news twice.
         const channel = told && opts.tellRefusal === false ? { ...told, refused: () => { } } : told;
-        if (!(file instanceof TFile)) {
-            const refused: Refusal = { file: target.file, reason: { kind: 'gone' }, subject: target.subject };
-            channel?.refused(refused);
-            return { written: false, refused };
-        }
+        if (!(file instanceof TFile)) return fileGone(channel, target.file, target.subject);
 
         return processLines(this.app, file, channel, (draft, _eol, { row, refuse }) => {
             // Asked before any op, so the plan is checked against the lines as
@@ -290,16 +284,11 @@ export class InlineTaskWriter {
      * deriving the unit from the parent line alone, which returns four spaces
      * for any top-level task and so mixed spaces into tab-written files.
      */
-    async insertLineAfterTask(task: Task, lineBody: string): Promise<number> {
+    async insertLineAfterTask(task: Task, lineBody: string): Promise<WriteOutcome> {
         const file = this.app.vault.getAbstractFileByPath(task.file);
-        if (!(file instanceof TFile)) {
-            this.writes?.for(task.file, 'user')?.refused({ file: task.file, reason: { kind: 'gone' }, subject: subjectOf(task) });
-            return -1;
-        }
+        if (!(file instanceof TFile)) return fileGone(this.writes?.for(task.file, 'user'), task.file, subjectOf(task));
 
-        let insertedLineIndex = -1;
-
-        await processLines(this.app, file, this.writes?.for(task.file, 'user'), (draft, _eol, { row, refuse }) => {
+        return processLines(this.app, file, this.writes?.for(task.file, 'user'), (draft, _eol, { row, refuse }) => {
             const lines = draft.lines;
             const currentLine = row(recordedOn(task));
             if (currentLine === null) return false;
@@ -308,12 +297,9 @@ export class InlineTaskWriter {
             const insertIndex = Placement.afterSubtree(lines, currentLine);
             if (insertIndex === null) return refuse({ kind: 'unplaceable' }, subjectOf(task));
             draft.splice(insertIndex, 0, indent + Outline.dedent(lineBody));
-            insertedLineIndex = insertIndex;
 
             return true;
         });
-
-        return insertedLineIndex;
     }
 
     /**
@@ -332,22 +318,16 @@ export class InlineTaskWriter {
      * this `vault.process` would reintroduce the gap between "what the index
      * last saw" and "what the file holds now".
      *
-     * Returns the inserted line index, or -1 when the line cannot be resolved.
      */
     async insertSiblingAfterTask(
         task: Task,
         lineBody: string,
         opts: { afterCompletedRun?: boolean } = {}
-    ): Promise<number> {
+    ): Promise<WriteOutcome> {
         const file = this.app.vault.getAbstractFileByPath(task.file);
-        if (!(file instanceof TFile)) {
-            this.writes?.for(task.file, 'user')?.refused({ file: task.file, reason: { kind: 'gone' }, subject: subjectOf(task) });
-            return -1;
-        }
+        if (!(file instanceof TFile)) return fileGone(this.writes?.for(task.file, 'user'), task.file, subjectOf(task));
 
-        let insertedLineIndex = -1;
-
-        await processLines(this.app, file, this.writes?.for(task.file, 'user'), (draft, _eol, { row, refuse }) => {
+        return processLines(this.app, file, this.writes?.for(task.file, 'user'), (draft, _eol, { row, refuse }) => {
             const lines = draft.lines;
             const currentLine = row(recordedOn(task));
             if (currentLine === null) return false;
@@ -358,12 +338,9 @@ export class InlineTaskWriter {
                 : Placement.afterSubtree(lines, currentLine);
             if (insertIndex === null) return refuse({ kind: 'unplaceable' }, subjectOf(task));
             draft.splice(insertIndex, 0, indent + Outline.dedent(lineBody));
-            insertedLineIndex = insertIndex;
 
             return true;
         });
-
-        return insertedLineIndex;
     }
 
     /**
@@ -373,16 +350,11 @@ export class InlineTaskWriter {
      * As with {@link insertLineAfterTask}, the indent is resolved here from the
      * task's existing children rather than supplied by the caller.
      */
-    async insertLineAsFirstChild(task: Task, lineBody: string): Promise<number> {
+    async insertLineAsFirstChild(task: Task, lineBody: string): Promise<WriteOutcome> {
         const file = this.app.vault.getAbstractFileByPath(task.file);
-        if (!(file instanceof TFile)) {
-            this.writes?.for(task.file, 'user')?.refused({ file: task.file, reason: { kind: 'gone' }, subject: subjectOf(task) });
-            return -1;
-        }
+        if (!(file instanceof TFile)) return fileGone(this.writes?.for(task.file, 'user'), task.file, subjectOf(task));
 
-        let insertedLineIndex = -1;
-
-        await processLines(this.app, file, this.writes?.for(task.file, 'user'), (draft, _eol, { row, refuse }) => {
+        return processLines(this.app, file, this.writes?.for(task.file, 'user'), (draft, _eol, { row, refuse }) => {
             const lines = draft.lines;
             const currentLine = row(recordedOn(task));
             if (currentLine === null) return false;
@@ -393,47 +365,44 @@ export class InlineTaskWriter {
             const insertIndex = Placement.firstChild(lines, currentLine);
             if (insertIndex === null) return refuse({ kind: 'unplaceable' }, subjectOf(task));
             draft.splice(insertIndex, 0, indent + Outline.dedent(lineBody));
-            insertedLineIndex = insertIndex;
 
             return true;
         });
-
-        return insertedLineIndex;
     }
 
     /**
-     * @returns the 0-based line the task landed on, or -1 when nothing was written.
+     * @returns the outcome.
      *
      * The file that does not exist yet is the one write here with nothing to
      * claim: `vault.create` writes the whole file, so every row in it is new
      * and the scan that reads it has no previous generation to confuse them
      * with. A claim would say what the ledger's silence already says.
      */
-    async appendTaskToFile(filePath: string, content: string, origin: WriteOrigin): Promise<number> {
+    async appendTaskToFile(filePath: string, content: string, origin: WriteOrigin): Promise<WriteAt> {
         const file = this.app.vault.getAbstractFileByPath(filePath);
+        const subject = splitLines(content).lines[0].trim();
+        const channel = this.writes?.for(filePath, origin);
 
         if (!file) {
-            await this.fileOps.ensureDirectoryExists(filePath);
-            await this.app.vault.create(filePath, content);
-            return 0;
+            const created = await createFile(this.app, filePath, channel, content, subject,
+                () => this.fileOps.ensureDirectoryExists(filePath));
+            return created.written ? { ...created, line: 0 } : created;
         }
 
-        if (!(file instanceof TFile)) {
-            logWarn(`[InlineTaskWriter] Not a file: ${filePath}`);
-            return -1;
-        }
+        // A folder by that name: there is no note to append to.
+        if (!(file instanceof TFile)) return fileGone(channel, filePath, subject);
 
         // The appended text is built with LF; splitting it here lets the file's
         // own terminator go back between every line, its own included.
-        let insertedLine = -1;
-        await processLines(this.app, file, this.writes?.for(filePath, origin), (draft, _eol, { refuse }) => {
+        let inserted = -1;
+        const outcome = await processLines(this.app, file, channel, (draft, _eol, { refuse }) => {
             const at = Placement.end(draft.lines);
-            if (at === null) return refuse({ kind: 'unplaceable' }, splitLines(content).lines[0].trim());
+            if (at === null) return refuse({ kind: 'unplaceable' }, subject);
             draft.splice(at, 0, ...splitLines(content).lines);
-            insertedLine = at;
+            inserted = at;
             return true;
         });
-        return insertedLine;
+        return outcome.written ? { ...outcome, line: inserted } : outcome;
     }
 
     /**
@@ -515,7 +484,7 @@ export class InlineTaskWriter {
         const { childrenLines } = this.fileOps.collectChildrenFromLines(sourceLines, located.line);
 
         const fullContent = [content, ...children].join('\n');
-        if ((await this.appendTaskToFile(destPath, fullContent, 'flow')) < 0) return null;
+        if (!(await this.appendTaskToFile(destPath, fullContent, 'flow')).written) return null;
         return sourceLines.slice(located.line, located.line + 1 + childrenLines.length);
     }
 }

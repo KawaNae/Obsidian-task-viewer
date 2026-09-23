@@ -1,6 +1,6 @@
 import { type App, TFile, moment } from 'obsidian';
 import { HeadingInserter } from './HeadingInserter';
-import type { WriteChannel } from './FileLines';
+import { writeFailed, type WriteChannel } from './FileLines';
 import type { TaskViewerSettings, NoteType } from '../types';
 import { processTemplate, normalizeTrailingNewline } from './NoteTemplateProcessor';
 import { withWeekStartDay } from './momentWeekLocale';
@@ -227,7 +227,8 @@ export class DailyNoteUtils {
      * @param channelFor Where the write to the note reports what it did (see
      *        `TaskWriteService.writeChannel`). Asked once the note is known:
      *        the note may be the one this call creates.
-     * @returns 書き込んだノートのパス。ノートを用意できなければ null。
+     * @returns 書き込んだノートのパス。書けなかったときは null で、理由は
+     * 書き込みの層が1回だけ告げてある（ノートを作れなかったときも同じ）。
      *
      * パスを返すのは、書いた行を後から引き直す呼び出し側があるため。タイマーは
      * 走行中の行を `^id` で追い、停止時に同じ行を閉じる。
@@ -242,14 +243,19 @@ export class DailyNoteUtils {
     ): Promise<string | null> {
         let file = this.getDailyNote(app, date);
         if (!file) {
-            file = await this.createDailyNote(app, date);
+            const path = this.getDailyNotePath(date, this.getDailyNoteSettings(app));
+            try {
+                file = await this.createDailyNote(app, date);
+            } catch (error) {
+                writeFailed(channelFor(path), path, line.trim(), error);
+                return null;
+            }
         }
-        if (!file) return null;
 
         // file は既に手元にある TFile を直接渡す。作成直後のファイルは
         // getAbstractFileByPath で引き直せるとは限らないため、パスへ
         // 変換すると書き込みが黙って失敗しうる。
-        await HeadingInserter.writeUnderHeading(app, file, channelFor(file.path), line, header, headerLevel);
-        return file.path;
+        const outcome = await HeadingInserter.writeUnderHeading(app, file, channelFor(file.path), line, header, headerLevel);
+        return outcome.written ? file.path : null;
     }
 }

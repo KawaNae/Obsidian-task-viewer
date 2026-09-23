@@ -10,13 +10,13 @@ import type { TaskIndex } from '../../../src/services/core/TaskIndex';
  */
 describe('TaskWriteService frontmatter-key passthroughs', () => {
     it('setFrontmatterKeys delegates to repository.setFrontmatterKeys unchanged', async () => {
-        const setFrontmatterKeys = vi.fn().mockResolvedValue(undefined);
+        const setFrontmatterKeys = vi.fn().mockResolvedValue({ written: true, refused: null, made: [], rows: [] });
         const taskIndex = {
             getRepository: () => ({ setFrontmatterKeys }),
         } as unknown as TaskIndex;
         const service = new TaskWriteService(taskIndex);
 
-        await service.setFrontmatterKeys('note.md', { color: 'ff0000' });
+        expect(await service.setFrontmatterKeys('note.md', { color: 'ff0000' })).toBe(true);
 
         expect(setFrontmatterKeys).toHaveBeenCalledWith('note.md', { color: 'ff0000' });
         expect(setFrontmatterKeys).toHaveBeenCalledTimes(1);
