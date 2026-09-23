@@ -31,6 +31,22 @@ describe('ChildPropertyLineEditor', () => {
                 { lineIdx: 2, key: 'key2', value: 'value2' },
             ]);
         });
+
+        it('does not take a child task\'s property lines as its own', () => {
+            // The child is a task however its marker is spaced (`-\t[ ]`),
+            // so the lines below it are the child's, not the parent's.
+            const lines = [
+                '- [ ] task',
+                '    - [ ] child',
+                '        - key:: of-child',
+                '    -\t[ ] tabbed',
+                '        - key:: of-tabbed',
+                '    - key:: own',
+            ];
+            expect(ChildPropertyLineEditor.findOwnPropertyLines(lines, 0)).toEqual([
+                { lineIdx: 5, key: 'key', value: 'own' },
+            ]);
+        });
     });
 
     describe('a property line below a blank line inside the children', () => {

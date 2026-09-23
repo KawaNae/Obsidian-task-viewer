@@ -400,6 +400,14 @@ describe('FlowPlanner', () => {
             expect(effect.warnings.map(w => w.code)).toEqual(['gen.generated-status']);
         });
 
+        it('writes one space between an empty parent and its command', () => {
+            // The checkbox's gap is not content: the command joins the empty
+            // content, not the line, so no second space opens up before it.
+            const effect = planGenerated('every mon use("週報")', ['- [ ] '], { startDate: '2026-06-29' });
+
+            expect(effect.parentLine).toBe('- [ ] ==> every mon use("週報")');
+        });
+
         it('says nothing when there was nothing to correct', () => {
             const effect = planGenerated(
                 'every mon use("週報")',

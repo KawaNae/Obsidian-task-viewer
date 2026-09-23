@@ -135,3 +135,27 @@ describe('G4: create の行番号ベース再特定', () => {
         expect(readService.getTasks).not.toHaveBeenCalled();
     });
 });
+
+describe('the line create and insertChildTask write', () => {
+    // Parts join one space apart with their ends trimmed, as format() joins
+    // them, so a trailing space in the content leaves nothing behind.
+    it('create writes one space between the content and the date block', async () => {
+        const { api, writeService } = createMockApiForCreate({
+            insertedLine: 5,
+            createdTask: makeFullTask({ line: 5 }),
+        });
+        await api.create({ file: 'test.md', content: 'task ', start: '2026-07-18' });
+        expect(writeService.createTask).toHaveBeenCalledWith('test.md', '- [ ] task @2026-07-18', undefined);
+    });
+
+    it('insertChildTask writes the content with its end trimmed', async () => {
+        const { api, readService, writeService } = createMockApiForCreate({
+            insertedLine: 5,
+            createdTask: undefined,
+        });
+        readService.getTask.mockReturnValue(makeFullTask({ id: 'parent-1' }));
+        writeService.insertChildTask.mockResolvedValue(true);
+        await api.insertChildTask({ parentId: 'parent-1', content: 'child ' });
+        expect(writeService.insertChildTask).toHaveBeenCalledWith('parent-1', '- [ ] child');
+    });
+});
