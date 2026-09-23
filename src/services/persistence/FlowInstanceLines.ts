@@ -113,8 +113,8 @@ function renderGenerated(
         || FileOperations.detectIndentUnit(lines);
 
     return [
-        parentIndent + parentLine.trim(),
+        parentIndent + Outline.dedent(parentLine).trimEnd(),
         ...flowLines.map(raw => formatFlowLine(parentIndent + unit, raw)),
-        ...children.map(c => parentIndent + unit.repeat(Math.max(1, c.depth)) + c.body.trim()),
+        ...children.map(c => parentIndent + unit.repeat(Math.max(1, c.depth)) + Outline.dedent(c.body).trimEnd()),
     ];
 }
