@@ -384,8 +384,10 @@ export class InlineTaskWriter {
         const channel = this.writes?.for(filePath, origin);
 
         if (!file) {
-            const created = await createFile(this.app, filePath, channel, content, subject,
-                () => this.fileOps.ensureDirectoryExists(filePath));
+            const created = await createFile(this.app, filePath, channel, subject, async () => {
+                await this.fileOps.ensureDirectoryExists(filePath);
+                return content;
+            });
             return created.written ? { ...created, line: 0 } : created;
         }
 

@@ -7,7 +7,7 @@
 
 import { type App, TFile, TFolder, normalizePath } from 'obsidian';
 import type { IntervalGroup } from './TimerInstance';
-import { replaceWhole, type WriteChannel } from '../utils/FileLines';
+import { createFile, replaceWhole, type WriteChannel } from '../utils/FileLines';
 
 export interface TemplateCreateData {
     name: string;
@@ -34,9 +34,11 @@ export class IntervalTemplateWriter {
         return written ? existing : null;
     }
 
-    async saveTemplate(folderPath: string, data: TemplateCreateData): Promise<TFile> {
-        await this.ensureFolder(folderPath);
-
+    /**
+     * @returns the note, or null when it was not created (the write layer has
+     * told the user why). A name already taken throws, before anything is written.
+     */
+    async saveTemplate(folderPath: string, data: TemplateCreateData): Promise<TFile | null> {
         const content = this.buildFileContent(data);
         const sanitizedName = data.name.replace(/[\\/:*?"<>|]/g, '_');
         const filePath = normalizePath(`${folderPath}/${sanitizedName}.md`);
@@ -45,7 +47,11 @@ export class IntervalTemplateWriter {
         if (existing instanceof TFile) {
             throw new Error(`A template named "${data.name}" already exists.`);
         }
-        return await this.app.vault.create(filePath, content);
+        const created = await createFile(this.app, filePath, this.channelFor(filePath), data.name, async () => {
+            await this.ensureFolder(folderPath);
+            return content;
+        });
+        return created.written ? created.file : null;
     }
 
     private buildFileContent(data: TemplateCreateData): string {

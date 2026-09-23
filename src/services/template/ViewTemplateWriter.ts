@@ -11,7 +11,7 @@
 
 import { type App, TFile, TFolder, normalizePath } from 'obsidian';
 import type { ViewTemplate } from '../../types';
-import { replaceWhole, type WriteChannel } from '../../utils/FileLines';
+import { createFile, replaceWhole, type WriteChannel } from '../../utils/FileLines';
 
 export class ViewTemplateWriter {
     constructor(
@@ -24,12 +24,10 @@ export class ViewTemplateWriter {
      * Creates the folder if it doesn't exist.
      * Overwrites existing file with the same name.
      *
-     * @returns the note, or null when the overwrite was not written (the
-     * write layer has told the user why). Creating the note throws as before.
+     * @returns the note, or null when it was not written, overwritten or
+     * created (the write layer has told the user why).
      */
     async saveTemplate(folderPath: string, template: ViewTemplate): Promise<TFile | null> {
-        await this.ensureFolder(folderPath);
-
         const content = this.buildFileContent(template);
         const sanitizedName = template.name.replace(/[\\/:*?"<>|]/g, '_');
         const filePath = normalizePath(`${folderPath}/${sanitizedName}.md`);
@@ -41,7 +39,11 @@ export class ViewTemplateWriter {
             const { written } = await replaceWhole(this.app, existing, this.channelFor(filePath), content);
             return written ? existing : null;
         }
-        return await this.app.vault.create(filePath, content);
+        const created = await createFile(this.app, filePath, this.channelFor(filePath), template.name, async () => {
+            await this.ensureFolder(folderPath);
+            return content;
+        });
+        return created.written ? created.file : null;
     }
 
     private buildFileContent(template: ViewTemplate): string {

@@ -1,6 +1,6 @@
 import { type App, TFile, moment } from 'obsidian';
 import { HeadingInserter } from './HeadingInserter';
-import { writeFailed, type WriteChannel } from './FileLines';
+import { createFile, type WriteChannel } from './FileLines';
 import type { TaskViewerSettings, NoteType } from '../types';
 import { processTemplate, normalizeTrailingNewline } from './NoteTemplateProcessor';
 import { withWeekStartDay } from './momentWeekLocale';
@@ -76,9 +76,18 @@ export class DailyNoteUtils {
     }
 
     static async createDailyNote(app: App, date: Date): Promise<TFile> {
+        const { path, content } = this.dailyNoteToCreate(app, date);
+        return await app.vault.create(path, await content());
+    }
+
+    /** Where the daily note goes, and its content made: its folder in place and its template read. */
+    private static dailyNoteToCreate(app: App, date: Date): { path: string; content: () => Promise<string> } {
         const dailySettings = this.getDailyNoteSettings(app);
         const path = this.getDailyNotePath(date, dailySettings);
+        return { path, content: () => this.makeDailyNote(app, date, dailySettings) };
+    }
 
+    private static async makeDailyNote(app: App, date: Date, dailySettings: ReturnType<typeof DailyNoteUtils.getDailyNoteSettings>): Promise<string> {
         if (dailySettings.folder) {
             const folderExists = await app.vault.adapter.exists(dailySettings.folder);
             if (!folderExists) {
@@ -86,14 +95,12 @@ export class DailyNoteUtils {
             }
         }
 
-        const content = await this.loadAndApplyTemplate(app, dailySettings.template, {
+        return await this.loadAndApplyTemplate(app, dailySettings.template, {
             noteType: 'daily',
             triggerDate: date,
             filenameFormat: dailySettings.format,
             weekStartDay: 0,
         });
-
-        return await app.vault.create(path, content);
     }
 
     /**
@@ -243,13 +250,10 @@ export class DailyNoteUtils {
     ): Promise<string | null> {
         let file = this.getDailyNote(app, date);
         if (!file) {
-            const path = this.getDailyNotePath(date, this.getDailyNoteSettings(app));
-            try {
-                file = await this.createDailyNote(app, date);
-            } catch (error) {
-                writeFailed(channelFor(path), path, line.trim(), error);
-                return null;
-            }
+            const { path, content } = this.dailyNoteToCreate(app, date);
+            const created = await createFile(app, path, channelFor(path), line.trim(), content);
+            if (!created.written) return null;
+            file = created.file;
         }
 
         // file は既に手元にある TFile を直接渡す。作成直後のファイルは
