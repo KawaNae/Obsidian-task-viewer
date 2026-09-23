@@ -22,7 +22,7 @@ function build() {
         recorder: {
             recordSessionEnd: async () => true,
             createChildAtStart: async () => undefined,
-            startNextSession: async () => undefined,
+            startNextSession: async () => ({ written: true }),
             discardRunningPlaceholder: async () => { /* unused */ },
         } as unknown as TimerContext['recorder'],
         plugin: { settings: { pomodoroWorkMinutes: 25, pomodoroBreakMinutes: 5 } } as unknown as TimerContext['plugin'],
