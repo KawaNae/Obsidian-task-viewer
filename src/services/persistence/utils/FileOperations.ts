@@ -33,7 +33,7 @@ export class FileOperations {
      * the anchor of the line it was copied from.
      */
     stripBlockIds(lines: readonly string[]): string[] {
-        return lines.map(line => TaskLineClassifier.extractBlockId(line).text);
+        return lines.map(line => TaskLineClassifier.extractLineBlockId(line).text);
     }
 
     /**

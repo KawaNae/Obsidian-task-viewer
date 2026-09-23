@@ -189,7 +189,7 @@ describe('7. reading `- [ ] ^abc`', () => {
 
         const line = written(contents)[1];
         expect(line).toMatch(/^- \[x\] +\^abc$/);
-        const { text, blockId } = TaskLineClassifier.extractBlockId(line);
+        const { text, blockId } = TaskLineClassifier.extractLineBlockId(line);
         expect(blockId).toBe('abc');
         expect(text).toBe('- [x] ');
         expectBareTaskLine(text);
