@@ -584,3 +584,58 @@ describe('WriteClaims.writerOf: a write that could only leave a mark (F6)', () =
         expect(claims.writerOf(FILE, k(read), k(ledgerLines), 'r1', read[0])).toBeNull();
     });
 });
+
+describe('changes counted against our writes (I1)', () => {
+    const ONE = ['- [ ] A', ''];
+    const TWO = ['- [x] A', ''];
+    const edits: LineEdit[] = [{ kind: 'replaced', at: 0 }];
+
+    it('a write waits for one modify; the next is outside', () => {
+        const claims = claimsWith([], ONE);
+        claims.claim(FILE, ONE, TWO, edits, 'user');
+        expect(claims.peek(FILE)).toEqual({ links: ['record'], awaiting: 1 });
+        claims.noteChange(FILE);
+        expect(claims.peek(FILE)).toEqual({ links: ['record'], awaiting: 0 });
+        claims.noteChange(FILE);
+        expect(claims.peek(FILE)).toEqual({ links: ['record', 'foreign'], awaiting: 0 });
+    });
+
+    it('a write\'s modify that comes after a scan committed past it is still ours', () => {
+        const claims = claimsWith();
+        claims.claim(FILE, ONE, TWO, edits, 'user');
+        claims.forget(FILE, { readMark: claims.readMark(), read: contentKeyOf(TWO), ledger: null });
+        expect(claims.peek(FILE)).toEqual({ links: [], awaiting: 1 });
+        claims.noteChange(FILE);
+        expect(claims.peek(FILE)).toEqual({ links: [], awaiting: 0 });
+    });
+
+    it('a write taken back waits for nothing, even after a scan dropped it', () => {
+        const claims = claimsWith();
+        const kept = claims.claim(FILE, ONE, TWO, edits, 'user');
+        kept.withdraw();
+        expect(claims.peek(FILE)).toEqual({ links: [], awaiting: 0 });
+
+        const dropped = claims.claim(FILE, ONE, TWO, edits, 'user');
+        claims.forget(FILE, { readMark: claims.readMark(), read: contentKeyOf(TWO), ledger: null });
+        dropped.withdraw();
+        expect(claims.peek(FILE).awaiting).toBe(0);
+        claims.noteChange(FILE);
+        expect(claims.peek(FILE).links).toEqual(['foreign']);
+    });
+
+    it('a write another built on landed: taking it back keeps it waiting', () => {
+        const claims = claimsWith([], ONE);
+        const first = claims.claim(FILE, ONE, TWO, edits, 'user');
+        claims.noteChange(FILE);
+        claims.claim(FILE, TWO, ['- [x] A', 'x', ''], [{ kind: 'inserted', at: 1, count: 1 }], 'user');
+        first.withdraw();
+        expect(claims.peek(FILE)).toEqual({ links: ['record', 'record'], awaiting: 1 });
+    });
+
+    it('a delete or rename drops what was waiting', () => {
+        const claims = claimsWith();
+        claims.claim(FILE, ONE, TWO, edits, 'user');
+        claims.dropFile(FILE);
+        expect(claims.peek(FILE)).toEqual({ links: [], awaiting: 0 });
+    });
+});

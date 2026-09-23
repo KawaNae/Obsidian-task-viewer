@@ -1,3 +1,4 @@
+import { NoticedFiles } from './noticedFiles';
 import { vi } from 'vitest';
 import { TFile } from 'obsidian';
 import { TaskScanner } from '../../../src/services/core/TaskScanner';
@@ -80,7 +81,7 @@ export interface WriteBench {
  * Build the bench over `files` (one text is `note.md`) and scan every file once.
  */
 export async function writeBench(files: string | string[] | Record<string, string>): Promise<WriteBench> {
-    const contents = new Map<string, string>(
+    const contents = new NoticedFiles(
         typeof files === 'string' ? [[FILE, files]]
             : Array.isArray(files) ? [[FILE, files.join('\n')]]
             : Object.entries(files),
@@ -115,6 +116,7 @@ export async function writeBench(files: string | string[] | Record<string, strin
         app as never, store, new TaskValidator(), new EditorSignal(), flow as never, DEFAULT_SETTINGS,
     );
     scanner.setInitializing(false);
+    contents.listen(path => scanner.noteChange(path));
 
     const refused: Refusal[] = [];
     const filed: Filed[] = [];

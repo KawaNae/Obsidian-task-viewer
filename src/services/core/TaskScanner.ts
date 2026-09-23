@@ -392,8 +392,8 @@ export class TaskScanner {
         // would fail to apply and cost the file its next hint anyway.
         this.hints.dropFile(oldPath);
         this.hints.dropFile(newPath);
-        this.claims.forget(oldPath);
-        this.claims.forget(newPath);
+        this.claims.dropFile(oldPath);
+        this.claims.dropFile(newPath);
     }
 
     /**
@@ -405,7 +405,17 @@ export class TaskScanner {
         this.completionDetector.forgetFile(path);
         this.ledger.dropFile(path);
         this.hints.dropFile(path);
-        this.claims.forget(path);
+        this.claims.dropFile(path);
+    }
+
+    /**
+     * The file's bytes changed: a `modify` or a `create` came for it. Called
+     * for every one, before anything decides whether to scan, so that a change
+     * no write of ours accounts for is on record however long the scan that
+     * reads it is held off (see `WriteClaims.noteChange`).
+     */
+    noteChange(path: string): void {
+        this.claims.noteChange(path);
     }
 
     /**
@@ -414,6 +424,15 @@ export class TaskScanner {
      */
     getLedger(): IdentityLedger {
         return this.ledger;
+    }
+
+    /**
+     * The chain of what our writes left and what changed besides, for seeing
+     * from the console what was counted.
+     * @internal Read-only use: only writes, changes and scans change it.
+     */
+    getWriteClaims(): WriteClaims {
+        return this.claims;
     }
 
     /**

@@ -1,3 +1,4 @@
+import { NoticedFiles } from '../../../helpers/noticedFiles';
 import { describe, it, expect, vi } from 'vitest';
 import { TFile } from 'obsidian';
 import { TaskScanner } from '../../../../../src/services/core/TaskScanner';
@@ -40,7 +41,7 @@ const DONE = TaskParser.format(makeTask({ content: 'ポモドーロ', statusChar
 const CHILD = '    めじるし';
 
 class Harness {
-    readonly contents = new Map<string, string>();
+    readonly contents = new NoticedFiles();
     readonly store = new TaskStore(DEFAULT_SETTINGS);
     readonly scanner: TaskScanner;
 
@@ -57,6 +58,7 @@ class Harness {
             app as never, this.store, new TaskValidator(), new EditorSignal(), flow as never, DEFAULT_SETTINGS
         );
         this.scanner.setInitializing(false);
+        this.contents.listen(path => this.scanner.noteChange(path));
     }
 
     async write(lines: string[]): Promise<void> {
@@ -68,8 +70,9 @@ class Harness {
     report(lines: string[], edits: LineEdit[]): void {
         const raw = this.contents.get(FILE) ?? '';
         const before = raw.split('\n').map(l => (l.endsWith('\r') ? l.slice(0, -1) : l));
-        this.contents.set(FILE, lines.join('\n'));
+        // Filed before the bytes land, as from inside `vault.process`.
         this.scanner.writeSink(FILE)(before, lines, edits);
+        this.contents.set(FILE, lines.join('\n'));
     }
 
     /** An external edit (or an unreported write): contents change, nothing is filed. */

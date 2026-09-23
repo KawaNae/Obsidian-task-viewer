@@ -1,3 +1,4 @@
+import { NoticedFiles } from '../../../helpers/noticedFiles';
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { TFile } from 'obsidian';
 import { TaskScanner } from '../../../../../src/services/core/TaskScanner';
@@ -63,7 +64,7 @@ const claim = (...rows: Array<[string | null, string]>): Hint => ({
 const about = (lines: string[], hint: Hint): Hint => ({ ...hint, content: contentKeyOf(lines) });
 
 class Harness {
-    readonly contents = new Map<string, string>();
+    readonly contents = new NoticedFiles();
     readonly store = new TaskStore(DEFAULT_SETTINGS);
     readonly scanner: TaskScanner;
     /** Held while a read is in flight, so a scan can be paused mid-flight. */
@@ -85,6 +86,7 @@ class Harness {
             app as never, this.store, new TaskValidator(), new EditorSignal(), flow as never, DEFAULT_SETTINGS
         );
         this.scanner.setInitializing(false);
+        this.contents.listen(path => this.scanner.noteChange(path));
     }
 
     /** A write: the claim goes in from inside the callback, as the writer does. */
@@ -105,8 +107,9 @@ class Harness {
      */
     report(lines: string[], edits: LineEdit[]): void {
         const before = (this.contents.get(FILE) ?? '').split('\n');
-        this.contents.set(FILE, lines.join('\n'));
+        // Filed before the bytes land, as from inside `vault.process`.
         this.scanner.writeSink(FILE)(before, lines, edits);
+        this.contents.set(FILE, lines.join('\n'));
     }
 
     /** Raise a claim without a scan following it — a write during a drag. */

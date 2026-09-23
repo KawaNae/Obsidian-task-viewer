@@ -87,8 +87,33 @@ export const MAX_CHAIN_PER_FILE = 1024;
  * it left each on, are the write's own knowledge, not the claim's.
  */
 type Link =
-    | { filed: number; content: ContentKey; state: LinkState | null; origin: WriteOrigin; wrote: ReadonlyMap<string, string> }
-    | { filed: number; content: null; origin?: WriteOrigin; wrote?: ReadonlyMap<string, string> };
+    | { filed: number; content: ContentKey; state: LinkState | null; origin: WriteOrigin; wrote: ReadonlyMap<string, string>; foreign?: undefined }
+    | { filed: number; content: null; origin?: WriteOrigin; wrote?: ReadonlyMap<string, string>; foreign?: undefined }
+    | Foreign;
+
+/**
+ * A change to the file that no write of ours accounts for: a `modify` or a
+ * `create` that came when no write of ours was waiting for one (see
+ * {@link WriteClaims.noteChange}). Not a write, so it names nothing and says
+ * nothing of the content; what it says is that the file moved after whatever
+ * stands before it in the chain. Two in a row say no more than one, so they
+ * are one link, filed as the later.
+ */
+interface Foreign {
+    filed: number;
+    content: null;
+    foreign: true;
+    origin?: undefined;
+    wrote?: undefined;
+}
+
+const isForeign = (link: Link): link is Foreign => link.foreign === true;
+
+/** The chain's links that are writes of ours. */
+const ownLinks = (links: readonly Link[]): Link[] => links.filter(link => !isForeign(link));
+
+/** A link that says what its write left. */
+type Described = Link & { content: ContentKey };
 
 interface LinkState {
     /** The rows, as the next write builds on them and `locate` reads them. */
@@ -158,8 +183,19 @@ export class WriteClaims {
      */
     private readonly chains = new Map<string, Chain>();
 
-    /** How many writes have filed here, described or not. */
+    /** How many links have filed here: writes, described or not, and outside changes. */
     private filed = 0;
+
+    /**
+     * Per file, the writes of ours that have filed and whose `modify` has not
+     * come, oldest first, by `filed`.
+     *
+     * Kept apart from the chain because it outlives it: a scan can read a
+     * write's bytes and commit before that write's `modify` is delivered, and
+     * the `modify` that follows is still ours. Only a file's removal (a
+     * delete, a rename) drops it, and taking a write back drops its entry.
+     */
+    private readonly awaiting = new Map<string, number[]>();
 
     /**
      * @param parseRows the file's tasks, in the order a scan matches them,
@@ -291,12 +327,11 @@ export class WriteClaims {
      * that is removed gives the previous described link back the rows it
      * handed on to it.
      */
-    private append(path: string, link: Link): () => void {
-        const chain = this.chains.get(path) ?? { links: [], carried: false, lost: 0 };
-        this.chains.set(path, chain);
+    private append(path: string, link: Link & { foreign?: undefined }): () => void {
+        const chain = this.chainOf(path);
 
         // Only the newest described link keeps its rows.
-        let stripped: { link: Link & { content: ContentKey }; state: LinkState } | null = null;
+        let stripped: { link: Described; state: LinkState } | null = null;
         if (link.content !== null) {
             const previous = newestDescribed(chain.links);
             if (previous?.state) {
@@ -306,20 +341,97 @@ export class WriteClaims {
         }
         chain.links.push(link);
         this.cap(chain);
+        // Every write that files here changed the file (`processLines` calls
+        // a sink for nothing else), so a `modify` is on its way for it.
+        const waiting = this.awaiting.get(path) ?? [];
+        waiting.push(link.filed);
+        this.awaiting.set(path, waiting);
+
+        const unawait = (): void => {
+            const current = this.awaiting.get(path);
+            const at = current?.indexOf(link.filed) ?? -1;
+            if (at < 0) return;
+            current!.splice(at, 1);
+            if (current!.length === 0) this.awaiting.delete(path);
+        };
 
         return () => {
             const current = this.chains.get(path);
-            if (current !== chain) return;
-            const at = chain.links.indexOf(link);
-            if (at < 0) return;
-            const next = chain.links[at + 1];
+            const at = current === chain ? chain.links.indexOf(link) : -1;
+            // Gone from the chain already — a scan committed past it — or the
+            // chain with it: the write did not land, and no `modify` will come.
+            if (at < 0) {
+                unawait();
+                return;
+            }
+            // A later write of ours built on this one: it landed.
+            const next = chain.links.slice(at + 1).find(later => !isForeign(later));
             if (next && next.content !== null) return;
             chain.links.splice(at, 1);
+            unawait();
             if (stripped && chain.links.includes(stripped.link) && newestDescribed(chain.links) === stripped.link) {
                 stripped.link.state = stripped.state;
             }
             if (chain.links.length === 0) this.chains.delete(path);
         };
+    }
+
+    private chainOf(path: string): Chain {
+        const chain = this.chains.get(path) ?? { links: [], carried: false, lost: 0 };
+        this.chains.set(path, chain);
+        return chain;
+    }
+
+    /**
+     * The file changed on disk: a `modify` or a `create` came for it.
+     *
+     * Counted before anything decides whether to scan (a drag holds scans
+     * back, not changes). A change a write of ours is waiting for is that
+     * write landing, and the oldest waiting is taken: Obsidian sends one
+     * `modify` per write, in order, and never merges two (F6's observation). A
+     * change nothing of ours is waiting for came from outside — an editor's
+     * save, a sync, another program — and the chain says so.
+     */
+    noteChange(path: string): void {
+        const waiting = this.awaiting.get(path);
+        if (waiting && waiting.length > 0) {
+            waiting.shift();
+            if (waiting.length === 0) this.awaiting.delete(path);
+            return;
+        }
+        const chain = this.chainOf(path);
+        const last = chain.links.at(-1);
+        if (last && isForeign(last)) {
+            last.filed = ++this.filed;
+            return;
+        }
+        chain.links.push({ filed: ++this.filed, content: null, foreign: true });
+        this.cap(chain);
+    }
+
+    /**
+     * What the chain of one file holds, oldest first, and how many writes of
+     * ours are still waiting for their `modify`. For a console or a test that
+     * needs to see what was counted.
+     *
+     * @internal Read-only use.
+     */
+    peek(path: string): { links: Array<'record' | 'mark' | 'foreign'>; awaiting: number } {
+        return {
+            links: (this.chains.get(path)?.links ?? [])
+                .map(link => (isForeign(link) ? 'foreign' : link.content === null ? 'mark' : 'record')),
+            awaiting: this.awaiting.get(path)?.length ?? 0,
+        };
+    }
+
+    /**
+     * Forget everything about a file that is no longer there under this
+     * path: its chain, and the writes waiting for a `modify` that will now
+     * come under another name, or not at all.
+     */
+    dropFile(path: string): void {
+        this.chains.delete(path);
+        this.awaiting.delete(path);
     }
 
     /**
@@ -344,7 +456,7 @@ export class WriteClaims {
      * that read the file after the write (see {@link forget}).
      */
     lastWrite(path: string): { rows: readonly ClaimBase[] | null } | undefined {
-        const newest = this.chains.get(path)?.links.at(-1);
+        const newest = ownLinks(this.chains.get(path)?.links ?? []).at(-1);
         if (!newest) return undefined;
         return { rows: newest.content === null ? null : newest.state?.rows ?? null };
     }
@@ -393,8 +505,9 @@ export class WriteClaims {
         ledger: { content: ContentKey | null; rows: readonly LedgerEntry[] },
     ): readonly LedgerEntry[] | null {
         const chain = this.chains.get(path);
-        if (!chain) return ledger.rows;
-        const place = placeRead(chain, read, ledger.content);
+        const own = ownLinks(chain?.links ?? []);
+        if (!chain || own.length === 0) return ledger.rows;
+        const place = placeRead(own, chain.lost, read, ledger.content);
         switch (place.kind) {
             case 'ledger':
             case 'earlier':
@@ -403,7 +516,7 @@ export class WriteClaims {
                 return null;
             case 'newest':
             case 'after':
-                return newestDescribed(chain.links)?.state?.ladder ?? ledger.rows;
+                return newestDescribed(own)?.state?.ladder ?? ledger.rows;
         }
     }
 
@@ -429,8 +542,9 @@ export class WriteClaims {
      */
     writerOf(path: string, read: ContentKey, ledger: ContentKey | null, runtimeId: string, text: string): WriteOrigin | null {
         const chain = this.chains.get(path);
-        if (!chain) return null;
-        const place = placeRead(chain, read, ledger);
+        const own = ownLinks(chain?.links ?? []);
+        if (!chain || own.length === 0) return null;
+        const place = placeRead(own, chain.lost, read, ledger);
         let upTo: number;
         switch (place.kind) {
             case 'ledger':
@@ -441,11 +555,11 @@ export class WriteClaims {
                 upTo = place.at;
                 break;
             case 'after':
-                upTo = chain.links.length - 1;
+                upTo = own.length - 1;
                 break;
         }
         for (let i = upTo; i >= 0; i--) {
-            const link = chain.links[i];
+            const link = own[i];
             // A mark that could not say which rows it wrote may have written
             // this one, and may not: the rows before it cannot answer past it.
             if (link.content === null && (!link.wrote || !link.origin)) return null;
@@ -464,8 +578,9 @@ export class WriteClaims {
      */
     leftByUs(path: string, read: ContentKey, ledger: ContentKey | null): boolean {
         const chain = this.chains.get(path);
-        if (!chain) return false;
-        const place = placeRead(chain, read, ledger);
+        const own = ownLinks(chain?.links ?? []);
+        if (!chain || own.length === 0) return false;
+        const place = placeRead(own, chain.lost, read, ledger);
         return place.kind === 'earlier' || place.kind === 'newest';
     }
 
@@ -508,15 +623,16 @@ export class WriteClaims {
             return;
         }
         const { readMark } = seen;
-        const place = placeRead(chain, seen.read, seen.ledger);
+        const own = ownLinks(chain.links);
+        const place = own.length === 0 ? { kind: 'ledger' as const } : placeRead(own, chain.lost, seen.read, seen.ledger);
         const unread = (link: Link): boolean => link.filed > readMark;
         switch (place.kind) {
             case 'earlier':
-                chain.links = chain.links.slice(place.at + 1);
+            case 'newest': {
+                const from = chain.links.indexOf(own[place.at]);
+                chain.links = chain.links.filter((link, at) => at > from || (isForeign(link) && unread(link)));
                 break;
-            case 'newest':
-                chain.links = chain.links.slice(place.at + 1);
-                break;
+            }
             case 'after':
                 chain.links = chain.links.filter(link => link.content === null && unread(link));
                 break;
@@ -529,7 +645,9 @@ export class WriteClaims {
             this.chains.delete(path);
             return;
         }
-        chain.carried = true;
+        // Outside changes alone kept say nothing of the ledger being older
+        // than a write of ours.
+        chain.carried = ownLinks(chain.links).length > 0;
         if (chain.lost <= readMark) chain.lost = 0;
     }
 
@@ -600,14 +718,15 @@ export class WriteClaims {
         const current = contentKeyOf(before);
 
         const chain = this.chains.get(path);
-        if (chain) {
+        const own = ownLinks(chain?.links ?? []);
+        if (chain && own.length > 0) {
             // A scan committed without having read a write of ours: its ledger
             // is older than that write however well the content fits. The
             // write and what came after it can bring the file back to the very
             // content the ledger recorded, with the names moved between its
             // lines.
             if (chain.carried) return null;
-            const newest = chain.links.at(-1)!;
+            const newest = own.at(-1)!;
             if (newest.content === null || !newest.state) return null;
             return newest.content === current && fits(newest.state.rows, before) ? newest.state.rows : null;
         }
@@ -628,7 +747,8 @@ export class WriteClaims {
  * known.
  */
 function placeRead(
-    chain: Chain,
+    links: readonly Link[],
+    lost: number,
     read: ContentKey,
     ledger: ContentKey | null,
 ):
@@ -638,16 +758,16 @@ function placeRead(
     | { kind: 'after' }
     | { kind: 'unknown' } {
     if (ledger !== null && read === ledger) return { kind: 'ledger' };
-    const newest = newestDescribed(chain.links);
-    const at = chain.links.findIndex(link => link.content === read);
-    if (newest && newest.content === read) return { kind: 'newest', at: chain.links.lastIndexOf(newest) };
+    const newest = newestDescribed(links);
+    const at = links.findIndex(link => link.content === read);
+    if (newest && newest.content === read) return { kind: 'newest', at: links.lastIndexOf(newest) };
     if (at >= 0) return { kind: 'earlier', at };
-    if (chain.lost > 0) return { kind: 'unknown' };
+    if (lost > 0) return { kind: 'unknown' };
     return { kind: 'after' };
 }
 
 /** The newest link of the chain that describes what it left, if any. */
-function newestDescribed(links: readonly Link[]): (Link & { content: ContentKey }) | undefined {
+function newestDescribed(links: readonly Link[]): Described | undefined {
     for (let i = links.length - 1; i >= 0; i--) {
         const link = links[i];
         if (link.content !== null) return link;

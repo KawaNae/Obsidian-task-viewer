@@ -124,6 +124,9 @@ export class TaskIndex {
         // Vault イベントハンドラー
         this.own(this.app.vault, this.app.vault.on('modify', async (file) => {
             if (file instanceof TFile && file.extension === 'md') {
+                // 変化は、スキャンするかどうかを決める前に数える。ドラッグが止めるのは
+                // スキャンで、変化ではない（WriteClaims.noteChange）。
+                this.scanner.noteChange(file.path);
                 // ドラッグ中のファイルはスキャンをスキップ（古い値でストアが上書きされるのを防止）。
                 // 飛ばしたことは覚えておき、ドラッグの終了時に読み直す。忘れると、
                 // その間に届いた変更を読む契機がどこにも無くなる。
@@ -154,6 +157,8 @@ export class TaskIndex {
 
         this.own(this.app.vault, this.app.vault.on('create', (file) => {
             if (file instanceof TFile && file.extension === 'md') {
+                // 新規作成は modify でなく create で届く（同期の着地も同じ）。
+                this.scanner.noteChange(file.path);
                 void this.rescanAndNotify(file);
             }
         }));
