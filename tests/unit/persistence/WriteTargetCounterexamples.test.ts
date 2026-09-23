@@ -12,7 +12,7 @@ import { plannedOn } from '../../../src/services/persistence/TaskRefs';
  * Each case pins the behaviour a write should have. N1, R4 and B1 were found
  * open on F2's first cut and closed in it. X1 (older than F2: the ladder
  * pairing a stale ledger after our own rename) and the second run's S1 and S2
- * were closed after fe42086e; S2c, the scan's side of S2, stays `it.skip`. "Before F2" comments are inferred by reading
+ * were closed after fe42086e; S2c, the scan's side of S2, was closed in F5b. "Before F2" comments are inferred by reading
  * `FileOperations.findTaskLineNumber` at 0c20c7f4, not run.
  */
 
@@ -364,7 +364,7 @@ describe('F2-counter: editor-driven writes', () => {
 
 // Second run, on fe42086e. S1 and S2 were open; both predate F2 (inferred:
 // the stored line reads the target's text in S1, and in S2 the first exact
-// match is the other row). S2c, the scan's side of S2, stays open.
+// match is the other row). S2c, the scan's side of S2, was closed in F5b.
 describe('F2-counter2: a guess by position one level up', () => {
     // SHAPE S1 (wrong line). Identical parents pair by position and are
     // `guessed`, but each one opens its children's scope, where the one `c`
@@ -495,12 +495,12 @@ describe('F2-counter2: two own writes trade the texts of two rows, then an unrep
         expect(bench.lines()).toEqual(['メモ', '- [x] A', '- [x] B']);
     });
 
-    // SHAPE S2c (wrong ID, open; downstream, not changed by F2). The scan
-    // after the outside line cannot adopt the claims either, and its ladder
-    // pairs by the same old ledger: X's name goes to the line Y's text is on.
-    // No claim is adopted, so it is the ladder's own guess, not a claim making
-    // it worse; F2 does not touch how a scan pairs. Reported, not closed here.
-    it.skip('S2c: the next scan keeps X on the first line', async () => {
+    // SHAPE S2c (wrong ID until F5b; downstream). The scan after the outside
+    // line cannot adopt the claims either. Its ladder paired by the old ledger
+    // and gave X's name to the line Y's text is on. It pairs now against what
+    // the last write left, the outside line having come after it
+    // (`WriteClaims.ladderFor`; the other shapes are in LatestKnownState).
+    it('S2c: the next scan keeps X on the first line', async () => {
         const { bench, x } = await traded();
         bench.edit(['- [x] A', '- [ ] A', 'メモ']);
         await bench.scan();

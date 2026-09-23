@@ -62,6 +62,17 @@ export interface MatchResult {
  * forgot the claims, and the file would fall to the ladder without anyone
  * noticing.
  *
+ * `ladder` is what the two passes pair against when rung 0 adopts nothing:
+ * the newest state of the file that is known, which is the ledger unless a
+ * write of ours is known to be newer (see `WriteClaims.ladderFor`). Rung 0
+ * weighs the claims against `previous` all the same — the ledger, whose
+ * names are the ones a claim has to carry on. When a claim is adopted it
+ * answers for every row, and the ladder is `previous` so that what is left
+ * over (`retired`) is still counted against the ledger. Not optional either,
+ * for the reason `evidence` is not: a caller that could leave it out would
+ * be one that forgot the writes it knows of, and the ladder would pair
+ * against a state older than the file without anyone noticing.
+ *
  * Pure and deterministic: no clock, no randomness, no I/O. Minting is the caller's,
  * through `mintRuntimeId`.
  */
@@ -70,6 +81,7 @@ export function matchFile(
     tasks: Task[],
     mintRuntimeId: (task: Task) => string,
     evidence: HintEvidence,
+    ladder: readonly LedgerEntry[],
 ): MatchResult {
     const fingerprints = new Map<Task, Fingerprint>();
     for (const task of tasks) {
@@ -81,7 +93,6 @@ export function matchFile(
     const ordered = [...tasks].sort((a, b) => a.line - b.line);
 
     const { parentOf, roots, childrenOf } = buildCurrentTree(tasks, ordered);
-    const { prevRoots, prevChildren } = buildPreviousTree(previous);
 
     const pairedWith = new Map<Task, LedgerEntry>();
     const matchedPrev = new Set<string>();
@@ -101,6 +112,9 @@ export function matchFile(
     // not be offered to the ladder, where an identically worded sibling would
     // hand it on.
     for (const runtimeId of hinted.retired) matchedPrev.add(runtimeId);
+
+    const partner = resolution.rows ? previous : ladder;
+    const { prevRoots, prevChildren } = buildPreviousTree(partner);
 
     // --- 1st pass: scope by scope, from the roots down ---
     // An adopted claim leaves nothing for the two passes below: it answers for
@@ -143,7 +157,7 @@ export function matchFile(
     // --- 2nd pass: the leftovers of the whole file, no scoping ---
     // A task a hint called new stays out of it: the write said it was just
     // written, so there is no previous row for it to inherit from.
-    const poolPrev = previous.filter(entry => !matchedPrev.has(entry.runtimeId));
+    const poolPrev = partner.filter(entry => !matchedPrev.has(entry.runtimeId));
     const poolCur = ordered.filter(task => !pairedWith.has(task) && !hinted.fresh.has(task));
     const rescued = runLadder(
         poolPrev.map(entry => ({ item: entry, fingerprint: entry.fingerprint })),
@@ -513,7 +527,7 @@ function buildCurrentTree(tasks: Task[], ordered: Task[]) {
     return { parentOf, roots, childrenOf };
 }
 
-function buildPreviousTree(previous: LedgerEntry[]) {
+function buildPreviousTree(previous: readonly LedgerEntry[]) {
     const known = new Set(previous.map(entry => entry.runtimeId));
 
     const prevRoots: LedgerEntry[] = [];

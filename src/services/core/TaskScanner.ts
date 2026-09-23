@@ -81,6 +81,7 @@ export class TaskScanner {
                 created: false,
                 text: entry.fingerprint.originalText,
                 line: entry.line,
+                parserId: entry.fingerprint.parserId,
             })),
             content: this.ledger.contentFor(path),
         }),
@@ -221,16 +222,22 @@ export class TaskScanner {
         }
         const now = Date.now();
         const previousRows = this.ledger.snapshotFor(file.path);
+        const before = this.ledger.contentFor(file.path);
+        // With no claim adopted, the ladder pairs against the newest state
+        // known to be older than this read — the ledger, unless a write of
+        // ours is known to have landed after it (`WriteClaims.ladderFor`).
+        const ladder = this.claims.ladderFor(file.path, readKey, { content: before, rows: previousRows });
         const guarded = matchWithoutRepeatedIds(
             hints => matchFile(
                 previousRows,
                 parsed.tasks,
                 task => TaskIdGenerator.mintRuntimeId(task, () => this.ledger.mint()),
                 hints,
+                ladder,
             ),
             {
                 pending: this.hints.pendingFor(file.path, now),
-                before: this.ledger.contentFor(file.path),
+                before,
                 read: readKey,
             },
         );
@@ -461,7 +468,7 @@ export class TaskScanner {
         // nothing but a comparison against `ref`, which none of them can equal.
         let unnamed = 0;
         const { result } = matchWithoutRepeatedIds(
-            hints => matchFile(previous, parsed.tasks, () => `locate:unnamed:${++unnamed}`, hints),
+            hints => matchFile(previous, parsed.tasks, () => `locate:unnamed:${++unnamed}`, hints, previous),
             {
                 pending: this.hints.peekFor(path, Date.now()),
                 before: this.ledger.contentFor(path),
