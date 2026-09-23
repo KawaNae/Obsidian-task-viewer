@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { makeTask } from '../helpers/makeTask';
 import { writeBench, FILE, type Filed } from '../helpers/writeBench';
 import { TaskParser } from '../../../src/services/parsing/TaskParser';
-import { targetOf } from '../../../src/services/persistence/TaskRefs';
+import { plannedOn } from '../../../src/services/persistence/TaskRefs';
 import type { Task } from '../../../src/types';
 
 /** `applyToTask` with the one op a strip-flow write makes. */
@@ -38,7 +38,7 @@ describe('what a strip-flow write reports', () => {
     it('names the flow child it removed and the line it rewrote', async () => {
         const b = await writeBench(fired.join('\n'));
         const task = b.taskAt(2);
-        await b.writer.applyToTask(targetOf(task), [stripFlow(task)]);
+        await b.writer.applyToTask(plannedOn(task), [stripFlow(task)]);
 
         const claim = only(b.filed);
         expect(claim.edits).toEqual([
@@ -61,7 +61,7 @@ describe('what a strip-flow write reports', () => {
         const two = [TASK, FLOW, DONE, FLOW, '\t- ==> until 2026-12-31', ''];
         const b = await writeBench(two.join('\n'));
         const task = b.taskAt(2);
-        await b.writer.applyToTask(targetOf(task), [stripFlow(task)]);
+        await b.writer.applyToTask(plannedOn(task), [stripFlow(task)]);
 
         const claim = only(b.filed);
         expect(claim.edits).toEqual([
@@ -79,7 +79,7 @@ describe('what the next instance reports', () => {
     it('names the lines it inserted above the fired one', async () => {
         const b = await writeBench([DONE, FLOW, ''].join('\n'));
         const task = b.taskAt(0);
-        await b.writer.applyToTask(targetOf(task), [
+        await b.writer.applyToTask(plannedOn(task), [
             { kind: 'insert-instance', insert: { kind: 'recurrence', content: TASK, flowLines: ['every 1d'] } },
         ]);
 
@@ -94,7 +94,7 @@ describe('what the next instance reports', () => {
         const b = await writeBench([DONE, FLOW, '- [ ] 別のタスク', ''].join('\n'));
         const fired = b.taskAt(0);
         b.edit(['- [ ] 別のタスク', ''].join('\n'));
-        await b.writer.applyToTask(targetOf(fired), [
+        await b.writer.applyToTask(plannedOn(fired), [
             { kind: 'insert-instance', insert: { kind: 'recurrence', content: TASK, flowLines: ['every 1d'] } },
         ]);
 
@@ -108,7 +108,7 @@ describe('what a generated instance reports', () => {
     it('names the parent, its flow line and its children as one insert', async () => {
         const b = await writeBench([DONE, FLOW, ''].join('\n'));
         const task = b.taskAt(0);
-        await b.writer.applyToTask(targetOf(task), [
+        await b.writer.applyToTask(plannedOn(task), [
             {
                 kind: 'insert-instance',
                 insert: {
@@ -136,7 +136,7 @@ describe('when the flow is written on the task line itself', () => {
     it('reports the strip as a rewrite of that one line', async () => {
         const b = await writeBench([LIVE, FIRED, ''].join('\n'));
         const task = b.taskAt(1);
-        await b.writer.applyToTask(targetOf(task), [stripFlow(task)]);
+        await b.writer.applyToTask(plannedOn(task), [stripFlow(task)]);
 
         expect(only(b.filed).edits).toEqual([{ kind: 'replaced', at: 1 }]);
         expect(b.lines()).toEqual([LIVE, DONE, '']);
@@ -145,7 +145,7 @@ describe('when the flow is written on the task line itself', () => {
     it('reports the next instance as one inserted line', async () => {
         const b = await writeBench([FIRED, ''].join('\n'));
         const task = b.taskAt(0);
-        await b.writer.applyToTask(targetOf(task), [
+        await b.writer.applyToTask(plannedOn(task), [
             { kind: 'insert-instance', insert: { kind: 'recurrence', content: LIVE, flowLines: [] } },
         ]);
 
@@ -164,7 +164,7 @@ describe('the wiring', () => {
         const b = await writeBench(['- [x] ポモドーロ ==> every 1d', ''].join('\n'));
         const task = b.taskAt(0);
 
-        await b.repo.applyToTask(targetOf(task), [stripFlow(task)]);
+        await b.repo.applyToTask(plannedOn(task), [stripFlow(task)]);
 
         expect(b.filed.map(claim => claim.edits)).toEqual([[{ kind: 'replaced', at: 0 }]]);
         expect(b.lines()).toEqual([DONE, '']);
@@ -188,7 +188,7 @@ describe('what an update reports', () => {
 
     it('names the task line it rewrote, and nothing else', async () => {
         const b = await writeBench([TASK, ''].join('\n'));
-        await b.writer.updateTaskInFile(b.taskAt(0), checked(b.taskAt(0)));
+        await b.writer.updateTaskInFile(plannedOn(b.taskAt(0)), checked(b.taskAt(0)));
 
         expect(only(b.filed).edits).toEqual([{ kind: 'replaced', at: 0 }]);
         expect(b.lines()).toEqual([DONE, '']);
@@ -200,7 +200,7 @@ describe('what an update reports', () => {
         const b = await writeBench([TASK, '- [ ] 別のタスク', ''].join('\n'));
         const task = b.taskAt(0);
         b.edit(['- [ ] 別のタスク', ''].join('\n'));
-        const written = await b.writer.updateTaskInFile(task, checked(task));
+        const written = (await b.writer.updateTaskInFile(plannedOn(task), checked(task))).written;
 
         expect(written).toBe(false);
         expect(b.filed).toEqual([]);
@@ -213,7 +213,7 @@ describe('what an update reports', () => {
 
         it('names the child line it rewrote as a rewrite', async () => {
             const b = await writeBench([TASK, CHILD, ''].join('\n'));
-            await b.writer.updateTaskInFile(b.taskAt(0), checked(b.taskAt(0)), [
+            await b.writer.updateTaskInFile(plannedOn(b.taskAt(0)), checked(b.taskAt(0)), [
                 { key: '金額', op: 'set', value: '200' },
             ]);
 
@@ -229,7 +229,7 @@ describe('what an update reports', () => {
 
         it('names a child line it added as an insert', async () => {
             const b = await writeBench([TASK, ''].join('\n'));
-            await b.writer.updateTaskInFile(b.taskAt(0), checked(b.taskAt(0)), [
+            await b.writer.updateTaskInFile(plannedOn(b.taskAt(0)), checked(b.taskAt(0)), [
                 { key: '金額', op: 'set', value: '200' },
             ]);
 
@@ -245,7 +245,7 @@ describe('what an update reports', () => {
             // index is the one that line had — the same arithmetic stripFlow
             // relies on.
             const b = await writeBench([TASK, CHILD, '\t- 金額:: 300', ''].join('\n'));
-            await b.writer.updateTaskInFile(b.taskAt(0), checked(b.taskAt(0)), [
+            await b.writer.updateTaskInFile(plannedOn(b.taskAt(0)), checked(b.taskAt(0)), [
                 { key: '金額', op: 'delete' },
             ]);
 
@@ -263,7 +263,7 @@ describe('what an update reports', () => {
             // either — and must not touch it.
             const fenced = [TASK, CHILD, '\t```', '\t- 金額:: 999', '\t```', ''];
             const b = await writeBench(fenced.join('\n'));
-            await b.writer.updateTaskInFile(b.taskAt(0), checked(b.taskAt(0)), [
+            await b.writer.updateTaskInFile(plannedOn(b.taskAt(0)), checked(b.taskAt(0)), [
                 { key: '金額', op: 'set', value: '200' },
             ]);
 
@@ -281,7 +281,7 @@ describe('what an update reports', () => {
         // every ordinary edit rather than only on a firing.
         it('names the row it was asked about, not the first row that matches', async () => {
             const b = await writeBench([TASK, TASK, ''].join('\n'));
-            await b.writer.updateTaskInFile(b.taskAt(1), checked(b.taskAt(1)));
+            await b.writer.updateTaskInFile(plannedOn(b.taskAt(1)), checked(b.taskAt(1)));
 
             // The file is the one the scan read, so the row stands where the
             // scan recorded it.
@@ -297,7 +297,7 @@ describe('what an update reports', () => {
             const b = await writeBench([TASK, '- [ ] 別のタスク', TASK, ''].join('\n'));
             const task = b.taskAt(2);
             b.edit([TASK, TASK, '- [ ] 別のタスク', ''].join('\n'));
-            const written = await b.writer.updateTaskInFile(task, checked(task));
+            const written = (await b.writer.updateTaskInFile(plannedOn(task), checked(task))).written;
 
             expect(written).toBe(false);
             expect(b.filed).toEqual([]);
@@ -359,7 +359,7 @@ describe('the two writes that make twins trade texts', () => {
 
         // W1 checks the open row. The file is the one the scan read, so the
         // write lands on the upper row.
-        await b.writer.updateTaskInFile(open, { ...open, statusChar: 'x' });
+        await b.writer.updateTaskInFile(plannedOn(open), { ...open, statusChar: 'x' });
         expect(b.lines()).toEqual([DONE, DONE, '']);
         expect(only(b.filed).edits).toEqual([{ kind: 'replaced', at: 0 }]);
         b.filed.pop();
@@ -367,7 +367,7 @@ describe('the two writes that make twins trade texts', () => {
         // W2 unchecks the done row, with no scan between: the lines are the
         // ones W1 left, and W1's report says which twin is which. The file
         // comes back to the two texts it started with — in the other order.
-        await b.writer.updateTaskInFile(done, { ...done, statusChar: ' ' });
+        await b.writer.updateTaskInFile(plannedOn(done), { ...done, statusChar: ' ' });
         expect(b.lines()).toEqual([DONE, TASK, '']);
         expect(only(b.filed).edits).toEqual([{ kind: 'replaced', at: 1 }]);
     });

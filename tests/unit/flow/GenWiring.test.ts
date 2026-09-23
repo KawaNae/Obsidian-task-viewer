@@ -8,7 +8,7 @@ import { TaskIndex } from '../../../src/services/core/TaskIndex';
 import { TaskRepository } from '../../../src/services/persistence/TaskRepository';
 import type { TaskOp } from '../../../src/services/persistence/TaskOps';
 import type { FlowInstanceInsert } from '../../../src/services/persistence/FlowInstanceLines';
-import { targetOf } from '../../../src/services/persistence/TaskRefs';
+import { plannedOn } from '../../../src/services/persistence/TaskRefs';
 import { DEFAULT_SETTINGS, type Task } from '../../../src/types';
 import { heldTasks } from '../helpers/heldTasks';
 import { makeTask } from '../helpers/makeTask';
@@ -393,7 +393,7 @@ describe('a block body reaches the file unchanged', () => {
         const h = await writeBench(document.join('\n'));
         const { parentLine, children } = shapeOf(document, '週報');
 
-        await h.writer.applyToTask(targetOf(h.taskAt(0)), [
+        await h.writer.applyToTask(plannedOn(h.taskAt(0)), [
             {
                 kind: 'insert-instance',
                 insert: { kind: 'generated', parentLine: parentLine!, flowLines: ['every mon', 'use("週報")'], children },
@@ -418,7 +418,7 @@ describe('a block body reaches the file unchanged', () => {
         const h = await writeBench(document.join('\n'));
         const { parentLine, children } = shapeOf(document, '週報');
 
-        await h.writer.applyToTask(targetOf(h.taskAt(0)), [
+        await h.writer.applyToTask(plannedOn(h.taskAt(0)), [
             { kind: 'insert-instance', insert: { kind: 'generated', parentLine: parentLine!, flowLines: [], children } },
         ]);
 
@@ -456,7 +456,7 @@ describe('a block body reaches the file unchanged', () => {
         const h = await writeBench(spaced.join('\n'));
         const { parentLine, children } = shapeOf(spaced, '週報');
 
-        await h.writer.applyToTask(targetOf(h.taskAt(0)), [
+        await h.writer.applyToTask(plannedOn(h.taskAt(0)), [
             { kind: 'insert-instance', insert: { kind: 'generated', parentLine: parentLine!, flowLines: [], children } },
         ]);
 

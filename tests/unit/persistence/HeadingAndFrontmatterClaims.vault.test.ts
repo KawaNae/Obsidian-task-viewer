@@ -1,6 +1,7 @@
 import { describe, it, expect, afterEach } from 'vitest';
 import { vaultSession, type VaultSession } from '../helpers/vaultSession';
 import type { Refusal } from '../../../src/utils/FileLines';
+import { plannedOn } from '../../../src/services/persistence/TaskRefs';
 
 /**
  * The two writes that used to report nothing — a key set in the frontmatter,
@@ -120,7 +121,7 @@ describe('a key set in the frontmatter', () => {
 
         session.index.setDraggingFile(FILE); // hold the scans off
         await session.index.getRepository().setFrontmatterKeys(FILE, { 'tv-color': 'ff0000' });
-        expect(await session.index.getRepository().updateTaskInFile(a, { ...a, statusChar: 'x' })).toBe(true);
+        expect((await session.index.getRepository().updateTaskInFile(plannedOn(a), { ...a, statusChar: 'x' })).written).toBe(true);
         expect(claims.filed).toEqual([FILE, FILE]);
     });
 });

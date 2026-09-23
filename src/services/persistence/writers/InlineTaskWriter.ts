@@ -1,19 +1,19 @@
 import { type App, TFile } from 'obsidian';
 import type { Task } from '../../../types';
 import { TaskParser } from '../../parsing/TaskParser';
-import { collectFlowLineIndicesInFile, flowLineTail } from '../../flow/FlowLineScanner';
+import { collectFlowLineIndicesInFile } from '../../flow/FlowLineScanner';
 import { FileOperations } from '../utils/FileOperations';
 import { ChildPropertyLineEditor } from '../utils/ChildPropertyLineEditor';
 import { Placement } from '../utils/Placement';
 import type { PropertyOp } from '../PropertyUpdatePlanner';
 import { renderFlowInstance } from '../FlowInstanceLines';
-import { collectGenBlocks } from '../../parsing/gen/GenBlockCollector';
 import {
     processLines, splitLines,
     type EditorLine, type LineDraft, type Refusal, type WriteOrigin, type WriteOutcome,
 } from '../../../utils/FileLines';
 import type { WriteObserver } from '../WriteObserver';
-import { refOf, subjectOf, type RowBasis, type WriteTarget } from '../TaskRefs';
+import { recordedOn, subjectOf, type PlannedTarget } from '../TaskRefs';
+import { readsAsPlanned } from '../RowBasis';
 import type { TaskOp } from '../TaskOps';
 import { logWarn } from '../../../log/log';
 import { Outline } from '../../parsing/utils/Outline';
@@ -31,21 +31,25 @@ export class InlineTaskWriter {
     ) { }
 
     /**
-     * @returns whether the task's line was found and rewritten. A `false` here
-     * means nothing was written at all, which the caller must not treat as a
-     * successful no-op: the index has already been updated optimistically, and
-     * an unwritten file leaves the two disagreeing until something else forces
-     * a rescan.
+     * Rewrite the row as `updatedTask`, and its property lines by `childOps`.
+     *
+     * The line is made from the index's copy, so it is written only over a
+     * row that still reads as that copy (`target.basis`): a line edited since
+     * — by hand, by the editor's menu, by a fire — would otherwise be put back
+     * to what the copy says, the edit lost without a word.
+     *
+     * @returns the outcome. `written: false` means nothing was written at all,
+     * which the caller must not treat as a successful no-op: the index has
+     * already been updated optimistically, and an unwritten file leaves the two
+     * disagreeing until something else forces a rescan. `left` holds the row
+     * as it was written.
      */
-    async updateTaskInFile(task: Task, updatedTask: Task, childOps: PropertyOp[] = []): Promise<boolean> {
-        const file = this.app.vault.getAbstractFileByPath(task.file);
-        if (!(file instanceof TFile)) {
-            this.writes?.for(task.file, 'user')?.refused({ file: task.file, reason: { kind: 'gone' }, subject: subjectOf(task) });
-            return false;
-        }
+    async updateTaskInFile(target: PlannedTarget, updatedTask: Task, childOps: PropertyOp[] = []): Promise<WriteOutcome> {
+        const file = this.app.vault.getAbstractFileByPath(target.file);
+        if (!(file instanceof TFile)) return this.refusedGone(target, 'user');
 
-        return processLines(this.app, file, this.writes?.for(task.file, 'user'), (draft, _eol, { lineOf }) => {
-            const currentLine = lineOf(refOf(task), subjectOf(task));
+        return processLines(this.app, file, this.writes?.for(target.file, 'user'), (draft, _eol, { row }) => {
+            const currentLine = row(target);
             if (currentLine === null) return false;
 
             // Re-format line
@@ -69,16 +73,23 @@ export class InlineTaskWriter {
             }
 
             return true;
-        }).then(outcome => outcome.written);
+        });
+    }
+
+    /** Nothing written: the file is not there. Told as `gone`, like a row that is not. */
+    private refusedGone(target: PlannedTarget, origin: WriteOrigin): WriteOutcome {
+        const refused: Refusal = { file: target.file, reason: { kind: 'gone' }, subject: target.subject };
+        this.writes?.for(target.file, origin)?.refused(refused);
+        return { written: false, refused, made: [], left: new Map() };
     }
 
     async updateLine(filePath: string, at: EditorLine, newContent: string): Promise<void> {
         const file = this.app.vault.getAbstractFileByPath(filePath);
         if (!(file instanceof TFile)) return;
-        const lineNumber = at.line;
 
-        await processLines(this.app, file, this.writes?.for(filePath, 'user'), (draft, _eol, { refuse }) => {
-            if (draft.lines[lineNumber] !== at.text) return refuse({ kind: 'changed' }, at.text.trim());
+        await processLines(this.app, file, this.writes?.for(filePath, 'user'), (draft, _eol, { row }) => {
+            const lineNumber = row(at);
+            if (lineNumber === null) return false;
 
             // Preserve original indentation
             const originalIndent = Outline.indentOf(draft.lines[lineNumber]);
@@ -105,10 +116,10 @@ export class InlineTaskWriter {
     async insertLineAfterLine(filePath: string, at: EditorLine, newContent: string): Promise<void> {
         const file = this.app.vault.getAbstractFileByPath(filePath);
         if (!(file instanceof TFile)) return;
-        const lineNumber = at.line;
 
-        await processLines(this.app, file, this.writes?.for(filePath, 'user'), (draft, _eol, { refuse }) => {
-            if (draft.lines[lineNumber] !== at.text) return refuse({ kind: 'changed' }, at.text.trim());
+        await processLines(this.app, file, this.writes?.for(filePath, 'user'), (draft, _eol, { row }) => {
+            const lineNumber = row(at);
+            if (lineNumber === null) return false;
             draft.splice(lineNumber + 1, 0, newContent);
             return true;
         });
@@ -126,28 +137,29 @@ export class InlineTaskWriter {
     async deleteLine(filePath: string, at: EditorLine): Promise<void> {
         const file = this.app.vault.getAbstractFileByPath(filePath);
         if (!(file instanceof TFile)) return;
-        const lineNumber = at.line;
 
-        await processLines(this.app, file, this.writes?.for(filePath, 'user'), (draft, _eol, { refuse }) => {
-            if (draft.lines[lineNumber] !== at.text) return refuse({ kind: 'changed' }, at.text.trim());
+        await processLines(this.app, file, this.writes?.for(filePath, 'user'), (draft, _eol, { row }) => {
+            const lineNumber = row(at);
+            if (lineNumber === null) return false;
             draft.splice(lineNumber, 1);
             return true;
         });
     }
 
     /**
+     * Take the row away with its subtree. Planned from the row and the subtree
+     * the index read (`target.basis.subtree`), so a line written into the
+     * subtree since, or a row rewritten from outside, is not taken with it.
+     *
      * @returns whether the task's lines were found and removed. A `false` means
      * the file still holds them — the caller must not report the task gone.
      */
-    async deleteTaskFromFile(task: Task): Promise<boolean> {
-        const file = this.app.vault.getAbstractFileByPath(task.file);
-        if (!(file instanceof TFile)) {
-            this.writes?.for(task.file, 'user')?.refused({ file: task.file, reason: { kind: 'gone' }, subject: subjectOf(task) });
-            return false;
-        }
+    async deleteTaskFromFile(target: PlannedTarget): Promise<boolean> {
+        const file = this.app.vault.getAbstractFileByPath(target.file);
+        if (!(file instanceof TFile)) return this.refusedGone(target, 'user').written;
 
-        return processLines(this.app, file, this.writes?.for(task.file, 'user'), (draft, _eol, { lineOf }) => {
-            const currentLine = lineOf(refOf(task), subjectOf(task));
+        return processLines(this.app, file, this.writes?.for(target.file, 'user'), (draft, _eol, { row }) => {
+            const currentLine = row(target);
             if (currentLine === null) return false;
 
             const { childrenLines } = this.fileOps.collectChildrenFromLines(draft.lines, currentLine);
@@ -185,7 +197,7 @@ export class InlineTaskWriter {
      * left, so the lines written are the same.
      */
     async applyToTask(
-        target: WriteTarget & { basis?: RowBasis },
+        target: PlannedTarget,
         ops: readonly TaskOp[],
         opts: { tellRefusal?: boolean } = {},
     ): Promise<WriteOutcome> {
@@ -197,57 +209,22 @@ export class InlineTaskWriter {
         if (!(file instanceof TFile)) {
             const refused: Refusal = { file: target.file, reason: { kind: 'gone' }, subject: target.subject };
             channel?.refused(refused);
-            return { written: false, refused, made: [] };
+            return { written: false, refused, made: [], left: new Map() };
         }
 
-        return processLines(this.app, file, channel, (draft, _eol, { lineOf, refuse }) => {
-            for (const [i, op] of ops.entries()) {
-                const line = lineOf(target.ref, target.subject);
+        return processLines(this.app, file, channel, (draft, _eol, { row, refuse }) => {
+            // Asked before any op, so the plan is checked against the lines as
+            // they were handed in — and checked at all, whatever the ops are.
+            if (row(target) === null) return false;
+            for (const op of ops) {
+                const line = row(target);
                 if (line === null) return false;
-                // Asked of the lines as they were handed in, before any op
-                // has moved them: that is what the plan was made against.
-                if (i === 0 && target.basis && !this.readsAsPlanned(draft.lines, line, target.basis)) {
-                    return refuse({ kind: 'changed' }, target.subject);
-                }
                 if (!this.applyOp(draft, line, op)) {
                     return refuse({ kind: 'unplaceable' }, target.subject);
                 }
             }
             return true;
         });
-    }
-
-    /**
-     * Whether the row at `line` still reads as the operation's plan read it:
-     * the row itself, its own command lines, the generation blocks the plan
-     * read, and — for the source of a move away — its whole subtree as it was
-     * written to the destination.
-     *
-     * A plan made from a copy the file has moved on from would otherwise be
-     * written over what moved it: a strip putting the row back to an older
-     * text, a fire consuming a command line edited since, a move taking a
-     * child edited after the archive was written.
-     */
-    private readsAsPlanned(lines: readonly string[], line: number, basis: RowBasis): boolean {
-        if (lines[line].trimStart() !== basis.text.trimStart()) return false;
-        const commands = collectFlowLineIndicesInFile([...lines], line).map(i => flowLineTail(lines[i]));
-        if (commands.length !== basis.commands.length) return false;
-        if (commands.some((command, i) => command !== basis.commands[i])) return false;
-        if (basis.subtree) {
-            const { childrenLines } = this.fileOps.collectChildrenFromLines([...lines], line);
-            const subtree = lines.slice(line, line + 1 + childrenLines.length);
-            if (subtree.length !== basis.subtree.length) return false;
-            if (subtree.some((text, i) => text !== basis.subtree![i])) return false;
-        }
-        if (basis.blocks) {
-            const current = collectGenBlocks([...lines]).blocks;
-            for (const block of basis.blocks) {
-                const body = current.get(block.name)?.body;
-                if (!body || body.length !== block.body.length) return false;
-                if (body.some((text, i) => text !== block.body[i])) return false;
-            }
-        }
-        return true;
     }
 
     /**
@@ -322,9 +299,9 @@ export class InlineTaskWriter {
 
         let insertedLineIndex = -1;
 
-        await processLines(this.app, file, this.writes?.for(task.file, 'user'), (draft, _eol, { lineOf, refuse }) => {
+        await processLines(this.app, file, this.writes?.for(task.file, 'user'), (draft, _eol, { row, refuse }) => {
             const lines = draft.lines;
-            const currentLine = lineOf(refOf(task), subjectOf(task));
+            const currentLine = row(recordedOn(task));
             if (currentLine === null) return false;
 
             const indent = FileOperations.resolveChildIndent(lines, currentLine);
@@ -370,9 +347,9 @@ export class InlineTaskWriter {
 
         let insertedLineIndex = -1;
 
-        await processLines(this.app, file, this.writes?.for(task.file, 'user'), (draft, _eol, { lineOf, refuse }) => {
+        await processLines(this.app, file, this.writes?.for(task.file, 'user'), (draft, _eol, { row, refuse }) => {
             const lines = draft.lines;
-            const currentLine = lineOf(refOf(task), subjectOf(task));
+            const currentLine = row(recordedOn(task));
             if (currentLine === null) return false;
 
             const indent = Outline.indentOf(lines[currentLine]);
@@ -405,9 +382,9 @@ export class InlineTaskWriter {
 
         let insertedLineIndex = -1;
 
-        await processLines(this.app, file, this.writes?.for(task.file, 'user'), (draft, _eol, { lineOf, refuse }) => {
+        await processLines(this.app, file, this.writes?.for(task.file, 'user'), (draft, _eol, { row, refuse }) => {
             const lines = draft.lines;
-            const currentLine = lineOf(refOf(task), subjectOf(task));
+            const currentLine = row(recordedOn(task));
             if (currentLine === null) return false;
 
             const indent = FileOperations.resolveChildIndent(lines, currentLine);
@@ -512,24 +489,24 @@ export class InlineTaskWriter {
     async appendTaskWithChildren(
         destPath: string,
         content: string,
-        source: WriteTarget & { basis?: RowBasis },
+        source: PlannedTarget,
     ): Promise<readonly string[] | null> {
         const sourceFile = this.app.vault.getAbstractFileByPath(source.file);
         const channel = this.writes?.for(source.file, 'flow');
         // The source is only read, so its target is asked of the channel
-        // directly rather than through a write. A source row that cannot be
-        // placed is not archived at all: an archive of the parent alone would
-        // lose the children once the original goes.
+        // directly rather than through a write, and checked against its basis
+        // the way a write's is (`WriteSession.row`). A source row that cannot
+        // be placed is not archived at all: an archive of the parent alone
+        // would lose the children once the original goes.
         if (!(sourceFile instanceof TFile)) {
             channel?.refused({ file: source.file, reason: { kind: 'gone' }, subject: source.subject });
             return null;
         }
         const sourceLines = splitLines(await this.app.vault.read(sourceFile)).lines;
         const located = channel ? channel.locate(sourceLines, source.ref) : { kind: 'gone' as const };
-        const unplanned = located.kind === 'at' && !located.edited
-            && source.basis !== undefined && !this.readsAsPlanned(sourceLines, located.line, source.basis);
-        if (located.kind !== 'at' || located.edited || unplanned) {
-            const reason = located.kind === 'at' ? { kind: 'changed' as const } : located;
+        const unplanned = located.kind === 'at' && !readsAsPlanned(sourceLines, located.line, source.basis);
+        if (located.kind !== 'at' || unplanned) {
+            const reason = located.kind === 'at' || located.kind === 'outdated' ? { kind: 'changed' as const } : located;
             logWarn(`[InlineTaskWriter] move source not placed: ${source.file} ${reason.kind}`);
             channel?.refused({ file: source.file, reason, subject: source.subject });
             return null;

@@ -68,6 +68,14 @@ export class FileParsePipeline {
             filePath,
             scopeKeys: settings.scopeKeys,
         });
+        // What an operation that takes a row away plans from (`RowBasis`).
+        // Slices of one array share its strings, so a deep tree costs one
+        // reference per line and level, not a copy of the text.
+        for (const task of tasks) {
+            if (task.line >= 0 && task.line < lines.length) {
+                task.subtreeLines = lines.slice(task.line, Outline.subtreeEnd(lines, task.line));
+            }
+        }
 
         // Blocks are collected from the whole file (frontmatter cannot hold a
         // fence, and a block is not a task, so the body offset is irrelevant).

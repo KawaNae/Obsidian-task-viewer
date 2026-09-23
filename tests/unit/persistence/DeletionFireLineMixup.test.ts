@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { writeBench, FILE, type WriteBench } from '../helpers/writeBench';
 import type { Task } from '../../../src/types';
 import type { FlowInstanceInsert } from '../../../src/services/persistence/FlowInstanceLines';
-import { targetOf } from '../../../src/services/persistence/TaskRefs';
+import { plannedOn } from '../../../src/services/persistence/TaskRefs';
 
 /**
  * A deletion fire takes the line the user deleted, never the one it just
@@ -31,7 +31,7 @@ const GENERATED = {
 
 /** A deletion fire as the executor writes it: the instances, then the removal, as one write. */
 async function deletionFire(h: WriteBench, task: Task, inserts: FlowInstanceInsert[]): Promise<boolean> {
-    const outcome = await h.writer.applyToTask(targetOf(task), [
+    const outcome = await h.writer.applyToTask(plannedOn(task), [
         ...inserts.map(insert => ({ kind: 'insert-instance' as const, insert })),
         { kind: 'remove' as const },
     ]);

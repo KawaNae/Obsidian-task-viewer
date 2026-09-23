@@ -3,7 +3,7 @@ import { writeBench, FILE, type Filed, type WriteBench } from '../helpers/writeB
 import type { Task } from '../../../src/types';
 import { TaskParser } from '../../../src/services/parsing/TaskParser';
 import type { TaskOp } from '../../../src/services/persistence/TaskOps';
-import { targetOf } from '../../../src/services/persistence/TaskRefs';
+import { plannedOn } from '../../../src/services/persistence/TaskRefs';
 
 /**
  * Counterexamples run against F2 (a write names its target and asks
@@ -47,7 +47,7 @@ describe('F2-counter: nested rows that read the same', () => {
         const bench = await writeBench(before);
         const c2 = bench.taskAt(4);
         bench.edit(['メモ', ...before]);
-        await bench.writer.deleteTaskFromFile(c2);
+        await bench.writer.deleteTaskFromFile(plannedOn(c2, { subtree: true }));
         expect(bench.lines()).toEqual(['メモ', ...before.slice(0, 4)]);
         expect(bench.refused).toEqual([]);
     });
@@ -76,7 +76,7 @@ describe('F2-counter: nested rows that read the same', () => {
             '- [ ] P2',
         ];
         bench.edit(moved);
-        const written = await bench.writer.deleteTaskFromFile(c2);
+        const written = await bench.writer.deleteTaskFromFile(plannedOn(c2, { subtree: true }));
 
         expect(written).toBe(false);
         expect(bench.lines()).toEqual(moved);
@@ -89,22 +89,23 @@ describe('F2-counter: one-against-one leftovers (ladder rung 4)', () => {
     // SHAPE R4 (F2 writes where the old search refused). Undated rows all share
     // the empty date key, so rung 4 pairs any one leftover with any one new row.
     // "buy milk" is replaced from outside by "call mom" (a sync, or a delete and
-    // an add in one save). `locate(buy milk)` answers `at` with edited: true,
-    // and only the rewrites (update, stripFlow) read `edited`. A delete, an
-    // insert-under, a duplicate, an archive take the line.
+    // an add in one save). `locate(buy milk)` answers `at`; until F5 it also
+    // said `edited`, and only the rewrites (update, stripFlow) read it. A
+    // delete, an insert-under, a duplicate, an archive took the line.
     // Before F2 (inferred): no ^id, stored line text differs, no exact text,
     // no content match, the loose check on the stored line fails -> -1, refused.
     // F2 opened it. Whether it is wrong depends on whether the user renamed the
     // row or replaced it; the scan calls it the same row (documented price), but
-    // the write has `edited` in hand and discards it for destructive writes.
+    // the write had `edited` in hand and discarded it for destructive writes.
     // Correct (by the contract "rather not write than write the wrong line"):
-    // refuse as changed.
+    // refuse as changed. Since F5 every write that names a row carries its
+    // basis, and "call mom" does not read as the copy of "buy milk".
     it('R4: refuses to delete a row whose line no record reads (undated rung-4 pairing)', async () => {
         const before = ['- [ ] alpha', '- [ ] buy milk', '- [ ] omega'];
         const bench = await writeBench(before);
         const milk = bench.taskAt(1);
         bench.edit(['- [ ] alpha', '- [ ] omega', '- [ ] call mom']);
-        const written = await bench.writer.deleteTaskFromFile(milk);
+        const written = await bench.writer.deleteTaskFromFile(plannedOn(milk, { subtree: true }));
 
         expect(written).toBe(false);
         expect(bench.lines()).toEqual(['- [ ] alpha', '- [ ] omega', '- [ ] call mom']);
@@ -115,7 +116,7 @@ describe('F2-counter: one-against-one leftovers (ladder rung 4)', () => {
         const bench = await writeBench(['- [ ] alpha', '- [ ] buy milk', '- [ ] omega']);
         const milk = bench.taskAt(1);
         bench.edit(['- [ ] alpha', '- [ ] omega', '- [ ] call mom']);
-        const written = await bench.writer.updateTaskInFile(milk, checked(milk));
+        const written = (await bench.writer.updateTaskInFile(plannedOn(milk), checked(milk))).written;
         expect(written).toBe(false);
         expect(bench.lines()).toEqual(['- [ ] alpha', '- [ ] omega', '- [ ] call mom']);
         expect(bench.refused.map(r => r.reason.kind)).toEqual(['changed']);
@@ -127,7 +128,7 @@ describe('F2-counter: one-against-one leftovers (ladder rung 4)', () => {
         const bench = await writeBench(['- [ ] A @2026-01-01', '- [ ] B @2026-01-02']);
         const a = bench.taskAt(0);
         bench.edit(['- [x] A @2026-01-01 #tag', '- [ ] B @2026-01-02']);
-        const written = await bench.writer.updateTaskInFile(a, { ...a, startDate: '2026-01-05' });
+        const written = (await bench.writer.updateTaskInFile(plannedOn(a), { ...a, startDate: '2026-01-05' })).written;
         expect(written).toBe(false);
         expect(bench.lines()).toEqual(['- [x] A @2026-01-01 #tag', '- [ ] B @2026-01-02']);
     });
@@ -139,7 +140,7 @@ describe('F2-counter: identical rows', () => {
     it('with nothing changed, the ledger tells them apart and the second is written', async () => {
         const bench = await writeBench(same);
         const y = bench.taskAt(1);
-        await bench.writer.updateTaskInFile(y, checked(y));
+        await bench.writer.updateTaskInFile(plannedOn(y), checked(y));
         expect(bench.lines()).toEqual(['- [ ] 読書', '- [x] 読書', '- [ ] other']);
     });
 
@@ -147,7 +148,7 @@ describe('F2-counter: identical rows', () => {
         const bench = await writeBench(same);
         const y = bench.taskAt(1);
         bench.edit(['メモ', ...same]);
-        const written = await bench.writer.updateTaskInFile(y, checked(y));
+        const written = (await bench.writer.updateTaskInFile(plannedOn(y), checked(y))).written;
         expect(written).toBe(false);
         expect(bench.lines()).toEqual(['メモ', ...same]);
         expect(bench.refused.map(r => r.reason.kind)).toEqual(['ambiguous']);
@@ -158,7 +159,7 @@ describe('F2-counter: identical rows', () => {
         const bench = await writeBench(same);
         const y = bench.taskAt(1);
         bench.edit(['- [ ] 読書', '- [ ] 読書', '- [ ] other!']);
-        const written = await bench.writer.updateTaskInFile(y, checked(y));
+        const written = (await bench.writer.updateTaskInFile(plannedOn(y), checked(y))).written;
         expect(written).toBe(false);
         expect(bench.refused.map(r => r.reason.kind)).toEqual(['ambiguous']);
     });
@@ -167,7 +168,7 @@ describe('F2-counter: identical rows', () => {
         const bench = await writeBench(['- [ ] A ^a']);
         const x = bench.taskAt(0);
         bench.edit(['- [ ] A ^a', '- [ ] A ^a']);
-        const written = await bench.writer.updateTaskInFile(x, checked(x));
+        const written = (await bench.writer.updateTaskInFile(plannedOn(x), checked(x))).written;
         expect(written).toBe(false);
         expect(bench.lines()).toEqual(['- [ ] A ^a', '- [ ] A ^a']);
     });
@@ -180,11 +181,11 @@ describe('F2-counter: identical rows', () => {
         // read off the frontmatter write's record.
         const bench = await writeBench(['- [ ] A', '- [ ] B']);
         const a = bench.taskAt(0);
-        expect(await bench.cloner.duplicateInlineTask(a)).toBe(true);
+        expect(await bench.cloner.duplicateInlineTask(plannedOn(a))).toBe(true);
         expect(bench.lines()).toEqual(['- [ ] A', '- [ ] A', '- [ ] B']);
         await bench.repo.setFrontmatterKeys(FILE, { color: 'red' });
         expect(bench.lines()[0]).toBe('---');
-        const written = await bench.writer.updateTaskInFile(a, checked(a));
+        const written = (await bench.writer.updateTaskInFile(plannedOn(a), checked(a))).written;
         expect(written).toBe(true);
         // The copy goes above the original (future-first).
         expect(bench.lines().slice(-3)).toEqual(['- [ ] A', '- [x] A', '- [ ] B']);
@@ -194,9 +195,9 @@ describe('F2-counter: identical rows', () => {
         const bench = await writeBench(['- [ ] A', '- [ ] B']);
         const a = bench.taskAt(0);
         const b = bench.taskAt(1);
-        await bench.writer.updateTaskInFile(a, checked(a));
+        await bench.writer.updateTaskInFile(plannedOn(a), checked(a));
         await bench.repo.setFrontmatterKeys(FILE, { color: 'red' });
-        const written = await bench.writer.updateTaskInFile(b, checked(b));
+        const written = (await bench.writer.updateTaskInFile(plannedOn(b), checked(b))).written;
         expect(written).toBe(true);
         expect(bench.lines().slice(-2)).toEqual(['- [x] A', '- [x] B']);
     });
@@ -206,8 +207,8 @@ describe('F2-counter: own writes and outside edits interleaved', () => {
     // SHAPE X1 (wrong line, before and after F2). Our write renames X to Y's
     // text, then Y is deleted from outside before any scan. The stale ledger
     // pairs Y with X's line one-against-one (the claim does not fit the file,
-    // so it is not adopted), and X's line reads Y's recorded text, so it is
-    // not `edited` either. A write on Y (from a view the scan has not
+    // so it is not adopted), and X's line reads Y's recorded text, so it
+    // passed F2's `edited` too. A write on Y (from a view the scan has not
     // refreshed) lands on X.
     // Before F2 (inferred): the first exact match for Y's text is X's line ->
     // the same wrong line. Not opened by F2.
@@ -219,10 +220,10 @@ describe('F2-counter: own writes and outside edits interleaved', () => {
         const bench = await writeBench(['- [ ] A', '- [ ] B', '- [ ] C']);
         const x = bench.taskAt(0);
         const y = bench.taskAt(1);
-        await bench.writer.updateTaskInFile(x, { ...x, content: 'B', originalText: '- [ ] B' });
+        await bench.writer.updateTaskInFile(plannedOn(x), { ...x, content: 'B', originalText: '- [ ] B' });
         expect(bench.lines()).toEqual(['- [ ] B', '- [ ] B', '- [ ] C']);
         bench.edit(['- [ ] B', '- [ ] C']);
-        const written = await bench.writer.updateTaskInFile(y, checked(y));
+        const written = (await bench.writer.updateTaskInFile(plannedOn(y), checked(y))).written;
 
         expect(written).toBe(false);
         expect(bench.lines()).toEqual(['- [ ] B', '- [ ] C']);
@@ -244,12 +245,12 @@ describe('F2-counter: own writes and outside edits interleaved', () => {
             return snapshot;
         };
         const scanning = bench.scan();
-        await bench.writer.updateTaskInFile(other, checked(other));
+        await bench.writer.updateTaskInFile(plannedOn(other), checked(other));
         release();
         await scanning;
         bench.app.vault.read = read;
 
-        const written = await bench.writer.updateTaskInFile(y, checked(y));
+        const written = (await bench.writer.updateTaskInFile(plannedOn(y), checked(y))).written;
         expect(written).toBe(true);
         expect(bench.lines()).toEqual(['- [ ] 読書', '- [x] 読書', '- [x] other']);
 
@@ -263,7 +264,9 @@ describe('F2-counter: ^id', () => {
     // task onto a paragraph line from outside, a scan commits (the row's name
     // survives by its text), and a write from a snapshot taken before the scan
     // still carries the ^id. Step 1 takes the one line that carries it, which
-    // is not a task line. `edited` catches a rewrite; a delete does not read it.
+    // is not a task line. F2's `edited` caught a rewrite, and a delete did not
+    // read it; since F5 the delete's basis is the row's line, which the
+    // paragraph does not read as.
     // Before F2 (inferred): Strategy -1 is the same code -> same line.
     // Correct: the only line bearing the ^id is not a task line, so it names nothing.
     it('B1: a delete from a stale snapshot does not take the paragraph that now carries the ^id', async () => {
@@ -271,7 +274,7 @@ describe('F2-counter: ^id', () => {
         const stale = bench.taskAt(0);
         bench.edit(['- [ ] A', 'text ^a']);
         await bench.scan();
-        const written = await bench.writer.deleteTaskFromFile(stale);
+        const written = await bench.writer.deleteTaskFromFile(plannedOn(stale, { subtree: true }));
 
         // Either the row itself goes (named by the ledger) or nothing does;
         // the paragraph never does.
@@ -293,7 +296,7 @@ describe('F2-counter: flow effects', () => {
         // the insert's report rather than from a second search.
         const bench = await writeBench([DONE, FLOW, DONE, FLOW, '']);
         const second = bench.taskAt(2);
-        await bench.writer.applyToTask(targetOf(second), fire(second, TODO));
+        await bench.writer.applyToTask(plannedOn(second), fire(second, TODO));
         expect(bench.lines()).toEqual([TODO, FLOW, DONE, FLOW, DONE, '']);
         expect(bench.refused).toEqual([]);
     });
@@ -304,19 +307,19 @@ describe('F2-counter: flow effects', () => {
         // removal takes the line the row was located at, before the carry.
         const bench = await writeBench(['- [x] A', '- [ ] B']);
         const a = bench.taskAt(0);
-        const outcome = await bench.writer.applyToTask(targetOf(a), [{ kind: 'move-to-end', text: '- [x] A' }]);
+        const outcome = await bench.writer.applyToTask(plannedOn(a), [{ kind: 'move-to-end', text: '- [x] A' }]);
         expect(outcome.written).toBe(true);
         expect(bench.lines()).toEqual(['- [ ] B', '- [x] A']);
         expect(only(bench.filed).edits.some(edit => edit.kind === 'carried')).toBe(true);
     });
 
     it('cross-file archive of a row replaced from outside (R4 shape): nothing archived, refused as changed', async () => {
-        // The source is read, not written, so `lineOf` is not in the way: the
-        // move asks `locate` itself and has to read `edited` on its own.
+        // The source is read, not written, so `WriteSession.row` is not in the
+        // way: the move asks `locate` itself and checks its basis on its own.
         const bench = await writeBench({ [FILE]: '- [ ] alpha\n- [ ] buy milk\n- [ ] omega', 'archive.md': '' });
         const milk = bench.taskAt(1);
         bench.edit(['- [ ] alpha', '- [ ] omega', '- [ ] call mom']);
-        expect(await bench.writer.appendTaskWithChildren('archive.md', '- [x] buy milk', targetOf(milk))).toBeNull();
+        expect(await bench.writer.appendTaskWithChildren('archive.md', '- [x] buy milk', plannedOn(milk))).toBeNull();
         expect(bench.text('archive.md')).toBe('');
         expect(bench.refused.map(r => r.reason.kind)).toEqual(['changed']);
     });
@@ -329,7 +332,7 @@ describe('F2-counter: flow effects', () => {
         const bench = await writeBench(['- [x] A', '- [ ] B']);
         const a = bench.taskAt(0);
         await bench.repo.setFrontmatterKeys(FILE, { color: 'red' });
-        const outcome = await bench.writer.applyToTask(targetOf(a), [{ kind: 'move-to-end', text: '- [x] A' }]);
+        const outcome = await bench.writer.applyToTask(plannedOn(a), [{ kind: 'move-to-end', text: '- [x] A' }]);
         expect(outcome.written).toBe(true);
         expect(bench.lines().filter(line => line.startsWith('- ['))).toEqual(['- [ ] B', '- [x] A']);
         expect(bench.refused).toEqual([]);
@@ -381,7 +384,7 @@ describe('F2-counter2: a guess by position one level up', () => {
         const c1 = bench.taskAt(1);
         const swapped = ['- [ ] p', '\t- [ ] c', '\t\t- [ ] g2', '- [ ] p', '\t- [ ] c', '\t\t- [ ] g1'];
         bench.edit(swapped);
-        expect(await bench.writer.deleteTaskFromFile(c1)).toBe(false);
+        expect(await bench.writer.deleteTaskFromFile(plannedOn(c1, { subtree: true }))).toBe(false);
         expect(bench.lines()).toEqual(swapped);
         expect(bench.refused.map(r => r.reason.kind)).toEqual(['ambiguous']);
     });
@@ -390,7 +393,7 @@ describe('F2-counter2: a guess by position one level up', () => {
         const bench = await writeBench(before);
         const c1 = bench.taskAt(1);
         bench.edit(before.slice(3));
-        expect(await bench.writer.deleteTaskFromFile(c1)).toBe(false);
+        expect(await bench.writer.deleteTaskFromFile(plannedOn(c1, { subtree: true }))).toBe(false);
         expect(bench.lines()).toEqual(before.slice(3));
         expect(bench.refused.map(r => r.reason.kind)).toEqual(['ambiguous']);
     });
@@ -399,7 +402,7 @@ describe('F2-counter2: a guess by position one level up', () => {
         const bench = await writeBench(before);
         const c1 = bench.taskAt(1);
         bench.edit(before.slice(3));
-        expect(await bench.writer.updateTaskInFile(c1, checked(c1))).toBe(false);
+        expect((await bench.writer.updateTaskInFile(plannedOn(c1), checked(c1))).written).toBe(false);
         expect(bench.lines()).toEqual(before.slice(3));
     });
 
@@ -410,7 +413,7 @@ describe('F2-counter2: a guess by position one level up', () => {
         const bench = await writeBench(['- [ ] p', '\t- [ ] a', '- [ ] p', '\t- [ ] b']);
         const a = bench.taskAt(1);
         bench.edit(['- [ ] p', '\t- [ ] b', '- [ ] p', '\t- [ ] a']);
-        expect(await bench.writer.updateTaskInFile(a, checked(a))).toBe(false);
+        expect((await bench.writer.updateTaskInFile(plannedOn(a), checked(a))).written).toBe(false);
         expect(bench.lines()).toEqual(['- [ ] p', '\t- [ ] b', '- [ ] p', '\t- [ ] a']);
     });
 });
@@ -426,10 +429,14 @@ describe('F2-counter2: two own writes trade the texts of two rows, then an unrep
         const bench = await writeBench(['- [ ] A', '- [x] A']);
         const x = bench.taskAt(0);
         const y = bench.taskAt(1);
-        expect(await bench.writer.updateTaskInFile(x, checked(x))).toBe(true);
-        expect(await bench.writer.updateTaskInFile(y, { ...y, statusChar: ' ' })).toBe(true);
+        const wrote = await bench.writer.updateTaskInFile(plannedOn(x), checked(x));
+        expect(wrote.written).toBe(true);
+        expect((await bench.writer.updateTaskInFile(plannedOn(y), { ...y, statusChar: ' ' })).written).toBe(true);
         expect(bench.lines()).toEqual(['- [x] A', '- [ ] A']);
-        return { bench, x };
+        // X's copy as the index holds it after its update: brought up to the
+        // lines the write left (`TaskIndex.updateTask`).
+        const left = wrote.left.get(x.id)!;
+        return { bench, x: { ...checked(x), originalText: left[0], subtreeLines: left } };
     };
 
     it('S2a: after the plugin\'s own frontmatter write, a delete of X takes X, not Y', async () => {
@@ -440,7 +447,7 @@ describe('F2-counter2: two own writes trade the texts of two rows, then an unrep
         await bench.repo.setFrontmatterKeys(FILE, { color: 'red' });
         const after = bench.lines();
         expect(after.slice(-2)).toEqual(['- [x] A', '- [ ] A']);
-        expect(await bench.writer.deleteTaskFromFile(x)).toBe(true);
+        expect(await bench.writer.deleteTaskFromFile(plannedOn(x, { subtree: true }))).toBe(true);
         expect(bench.lines()).toEqual([...after.slice(0, -2), '- [ ] A']);
         expect(bench.refused).toEqual([]);
     });
@@ -448,7 +455,7 @@ describe('F2-counter2: two own writes trade the texts of two rows, then an unrep
     it('S2b: the same after a line appended from outside', async () => {
         const { bench, x } = await traded();
         bench.edit(['- [x] A', '- [ ] A', 'メモ']);
-        expect(await bench.writer.deleteTaskFromFile(x)).toBe(false);
+        expect(await bench.writer.deleteTaskFromFile(plannedOn(x, { subtree: true }))).toBe(false);
         expect(bench.lines()).toEqual(['- [x] A', '- [ ] A', 'メモ']);
         expect(bench.refused.map(r => r.reason.kind)).toEqual(['changed']);
     });
@@ -457,17 +464,17 @@ describe('F2-counter2: two own writes trade the texts of two rows, then an unrep
         const bench = await writeBench(['- [ ] A', '- [ ] B']);
         const x = bench.taskAt(0);
         const y = bench.taskAt(1);
-        await bench.writer.updateTaskInFile(x, { ...x, content: 'B', originalText: '- [ ] B' });
-        await bench.writer.updateTaskInFile(y, { ...y, content: 'A', originalText: '- [ ] A' });
+        await bench.writer.updateTaskInFile(plannedOn(x), { ...x, content: 'B', originalText: '- [ ] B' });
+        await bench.writer.updateTaskInFile(plannedOn(y), { ...y, content: 'A', originalText: '- [ ] A' });
         expect(bench.lines()).toEqual(['- [ ] B', '- [ ] A']);
         bench.edit(['- [ ] B', '- [ ] A', 'メモ']);
-        expect(await bench.writer.deleteTaskFromFile(x)).toBe(false);
+        expect(await bench.writer.deleteTaskFromFile(plannedOn(x, { subtree: true }))).toBe(false);
         expect(bench.lines()).toEqual(['- [ ] B', '- [ ] A', 'メモ']);
     });
 
     it('with the last write borne out, the same writes still land (stage 2)', async () => {
         const { bench, x } = await traded();
-        expect(await bench.writer.deleteTaskFromFile(x)).toBe(true);
+        expect(await bench.writer.deleteTaskFromFile(plannedOn(x, { subtree: true }))).toBe(true);
         expect(bench.lines()).toEqual(['- [ ] A']);
     });
 
@@ -480,11 +487,11 @@ describe('F2-counter2: two own writes trade the texts of two rows, then an unrep
         const a = bench.taskAt(0);
         const b = bench.taskAt(1);
         bench.edit(['メモ', '- [ ] A', '- [ ] B']);
-        expect(await bench.writer.updateTaskInFile(a, checked(a))).toBe(true);
-        expect(await bench.writer.updateTaskInFile(b, checked(b))).toBe(false);
+        expect((await bench.writer.updateTaskInFile(plannedOn(a), checked(a))).written).toBe(true);
+        expect((await bench.writer.updateTaskInFile(plannedOn(b), checked(b))).written).toBe(false);
         expect(bench.refused.map(r => r.reason.kind)).toEqual(['changed']);
         await bench.scan();
-        expect(await bench.writer.updateTaskInFile(bench.taskAt(2), checked(bench.taskAt(2)))).toBe(true);
+        expect((await bench.writer.updateTaskInFile(plannedOn(bench.taskAt(2)), checked(bench.taskAt(2)))).written).toBe(true);
         expect(bench.lines()).toEqual(['メモ', '- [x] A', '- [x] B']);
     });
 
@@ -534,12 +541,12 @@ describe('F2-counter3: a scan that read before our write, committed after it', (
         const x = bench.taskAt(0);
         const y = bench.taskAt(1);
         const scan = await gatedScan(bench);
-        await bench.writer.updateTaskInFile(x, { ...x, content: 'B', originalText: '- [ ] B' });
+        await bench.writer.updateTaskInFile(plannedOn(x), { ...x, content: 'B', originalText: '- [ ] B' });
         scan.release();
         await scan.done;
         expect(bench.lines()).toEqual(['- [ ] B', '- [ ] B', '- [ ] C']);
         bench.edit(['- [ ] B', '- [ ] C']);
-        expect(await bench.writer.updateTaskInFile(y, checked(y))).toBe(false);
+        expect((await bench.writer.updateTaskInFile(plannedOn(y), checked(y))).written).toBe(false);
         expect(bench.lines()).toEqual(['- [ ] B', '- [ ] C']);
         expect(bench.refused.map(r => r.reason.kind)).toEqual(['ambiguous']);
     });
@@ -549,13 +556,13 @@ describe('F2-counter3: a scan that read before our write, committed after it', (
         const x = bench.taskAt(0);
         const y = bench.taskAt(1);
         const scan = await gatedScan(bench);
-        expect(await bench.writer.updateTaskInFile(x, checked(x))).toBe(true);
-        expect(await bench.writer.updateTaskInFile(y, { ...y, statusChar: ' ' })).toBe(true);
+        expect((await bench.writer.updateTaskInFile(plannedOn(x), checked(x))).written).toBe(true);
+        expect((await bench.writer.updateTaskInFile(plannedOn(y), { ...y, statusChar: ' ' })).written).toBe(true);
         scan.release();
         await scan.done;
         await bench.repo.setFrontmatterKeys(FILE, { color: 'red' });
         const after = bench.lines();
-        expect(await bench.writer.deleteTaskFromFile(x)).toBe(false);
+        expect(await bench.writer.deleteTaskFromFile(plannedOn(x, { subtree: true }))).toBe(false);
         expect(bench.lines()).toEqual(after);
         expect(bench.refused.map(r => r.reason.kind)).toEqual(['changed']);
     });
@@ -567,11 +574,11 @@ describe('F2-counter3: a scan that read before our write, committed after it', (
         const bench = await writeBench(['- [ ] A', '- [ ] B']);
         const a = bench.taskAt(0);
         bench.edit(['メモ', '- [ ] A', '- [ ] B']);
-        expect(await bench.writer.updateTaskInFile(a, checked(a))).toBe(true);
+        expect((await bench.writer.updateTaskInFile(plannedOn(a), checked(a))).written).toBe(true);
         await bench.scan();
         const b = bench.taskAt(2);
         bench.edit(['メモ', 'メモ2', '- [x] A', '- [ ] B']);
-        expect(await bench.writer.updateTaskInFile(b, checked(b))).toBe(true);
+        expect((await bench.writer.updateTaskInFile(plannedOn(b), checked(b))).written).toBe(true);
         expect(bench.lines()).toEqual(['メモ', 'メモ2', '- [x] A', '- [x] B']);
         expect(bench.refused).toEqual([]);
     });
@@ -590,7 +597,7 @@ describe('F2-counter3: availability', () => {
         const bench = await writeBench([DONE, FLOW, '']);
         const rec = bench.taskAt(0);
         bench.edit(['メモ', DONE, FLOW, '']);
-        const outcome = await bench.writer.applyToTask(targetOf(rec), fire(rec, TODO));
+        const outcome = await bench.writer.applyToTask(plannedOn(rec), fire(rec, TODO));
         expect(outcome.written).toBe(true);
         // The paragraph is not a sibling: the next instance goes below it.
         expect(bench.lines()).toEqual(['メモ', TODO, FLOW, DONE, '']);
@@ -602,7 +609,7 @@ describe('F2-counter3: availability', () => {
         const rec = bench.taskAt(0);
         const edited = ['- [x] 🍅 記録 書き足し', FLOW, ''];
         bench.edit(edited);
-        const outcome = await bench.writer.applyToTask(targetOf(rec), fire(rec, TODO));
+        const outcome = await bench.writer.applyToTask(plannedOn(rec), fire(rec, TODO));
         expect(outcome.written).toBe(false);
         expect(bench.lines()).toEqual(edited);
         expect(bench.refused.map(r => r.reason.kind)).toEqual(['changed']);
@@ -613,7 +620,7 @@ describe('F2-counter3: availability', () => {
         // the first's splice. The instance the first wrote does not stay.
         const bench = await writeBench([DONE, FLOW, '']);
         const rec = bench.taskAt(0);
-        const outcome = await bench.writer.applyToTask(targetOf(rec), [
+        const outcome = await bench.writer.applyToTask(plannedOn(rec), [
             { kind: 'insert-instance', insert: { kind: 'recurrence', content: TODO, flowLines: ['every 1d'] } },
             { kind: 'remove' },
             { kind: 'strip-flow', text: DONE },
@@ -636,13 +643,13 @@ describe('F2-counter4: the file back at the content the ledger recorded, names m
         const x = bench.taskAt(0);
         const y = bench.taskAt(1);
         const scan = await gatedScan(bench);
-        expect(await bench.writer.deleteTaskFromFile(x)).toBe(true);
+        expect(await bench.writer.deleteTaskFromFile(plannedOn(x, { subtree: true }))).toBe(true);
         await bench.writer.appendTaskToFile(FILE, '- [ ] B');
-        expect(await bench.writer.updateTaskInFile(y, { ...y, content: 'A', originalText: '- [ ] A' })).toBe(true);
+        expect((await bench.writer.updateTaskInFile(plannedOn(y), { ...y, content: 'A', originalText: '- [ ] A' })).written).toBe(true);
         scan.release();
         await scan.done;
         expect(bench.lines()).toEqual(['- [ ] A', '- [ ] B']);
-        expect(await bench.writer.deleteTaskFromFile(x)).toBe(false);
+        expect(await bench.writer.deleteTaskFromFile(plannedOn(x, { subtree: true }))).toBe(false);
         expect(bench.lines()).toEqual(['- [ ] A', '- [ ] B']);
         expect(bench.refused.map(r => r.reason.kind)).toEqual(['changed']);
     });
@@ -652,12 +659,12 @@ describe('F2-counter4: the file back at the content the ledger recorded, names m
         const x = bench.taskAt(0);
         const y = bench.taskAt(1);
         const scan = await gatedScan(bench);
-        expect(await bench.writer.updateTaskInFile(y, { ...y, content: 'A', originalText: '- [ ] A' })).toBe(true);
-        expect(await bench.writer.deleteTaskFromFile(x)).toBe(true);
+        expect((await bench.writer.updateTaskInFile(plannedOn(y), { ...y, content: 'A', originalText: '- [ ] A' })).written).toBe(true);
+        expect(await bench.writer.deleteTaskFromFile(plannedOn(x, { subtree: true }))).toBe(true);
         scan.release();
         await scan.done;
         bench.edit(['- [ ] A', '- [ ] B']);
-        expect(await bench.writer.updateTaskInFile(x, checked(x))).toBe(false);
+        expect((await bench.writer.updateTaskInFile(plannedOn(x), checked(x))).written).toBe(false);
         expect(bench.lines()).toEqual(['- [ ] A', '- [ ] B']);
         expect(bench.refused.map(r => r.reason.kind)).toEqual(['changed']);
     });
@@ -667,13 +674,13 @@ describe('F2-counter4: the file back at the content the ledger recorded, names m
         const a = bench.taskAt(0);
         bench.edit(['メモ', '- [ ] A', '- [ ] B']);
         const scan = await gatedScan(bench);
-        expect(await bench.writer.updateTaskInFile(a, checked(a))).toBe(true);
+        expect((await bench.writer.updateTaskInFile(plannedOn(a), checked(a))).written).toBe(true);
         scan.release();
         await scan.done;
-        expect(await bench.writer.updateTaskInFile(bench.taskAt(2), checked(bench.taskAt(2)))).toBe(false);
+        expect((await bench.writer.updateTaskInFile(plannedOn(bench.taskAt(2)), checked(bench.taskAt(2)))).written).toBe(false);
         expect(bench.refused.map(r => r.reason.kind)).toEqual(['changed']);
         await bench.scan();
-        expect(await bench.writer.updateTaskInFile(bench.taskAt(2), checked(bench.taskAt(2)))).toBe(true);
+        expect((await bench.writer.updateTaskInFile(plannedOn(bench.taskAt(2)), checked(bench.taskAt(2)))).written).toBe(true);
         expect(bench.lines()).toEqual(['メモ', '- [x] A', '- [x] B']);
     });
 });

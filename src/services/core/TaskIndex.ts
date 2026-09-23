@@ -19,6 +19,7 @@ import { toDisplayTask } from '../display/DisplayTaskConverter';
 import { planInPlaceCopies } from '../persistence/DuplicateShift';
 import type { GenBlock } from '../parsing/gen/GenBlockCollector';
 import { FileOperations } from '../persistence/utils/FileOperations';
+import { plannedOn } from '../persistence/TaskRefs';
 import { logError, logInfo, logWarn } from '../../log/log';
 import type { EditorLine, Refusal } from '../../utils/FileLines';
 
@@ -104,6 +105,7 @@ export class TaskIndex {
         this.repository.getWriteObserver().connect((path, origin) => ({
             sink: this.scanner.writeSink(path, origin),
             locate: (lines, ref) => this.scanner.locate(path, lines, ref),
+            onRecord: (lines, ref, line) => this.scanner.onRecord(path, lines, ref, line),
             refused: refusal => this.reportRefusal(refusal),
         }));
     }
@@ -459,7 +461,7 @@ export class TaskIndex {
         // 探索は更新前の姿で行う。ファイルに書かれているのは更新前の行なので、
         // 更新後の日付や時刻で探しに行くと、まさにその値を変える更新のときに
         // 空振りする。第 2 引数が書く内容、第 1 引数がどの行かを決める。
-        const written = await this.repository.updateTaskInFile(before, task, propertyOps);
+        const { written } = await this.repository.updateTaskInFile(plannedOn(before), task, propertyOps);
 
         if (!written) {
             this.revertUnwrittenUpdate(task, taskId, before, updates);
@@ -535,7 +537,7 @@ export class TaskIndex {
             if (options.fireFlow && isTvInline(task)) {
                 removed = await this.commandExecutor.fireAndDelete(task);
             } else {
-                removed = await this.repository.deleteTaskFromFile(task);
+                removed = await this.repository.deleteTaskFromFile(plannedOn(task, { subtree: true }));
                 if (!removed) {
                     // Nothing was written, so no rescan follows and the store
                     // still holds a task the file also still holds. They agree,
@@ -584,13 +586,13 @@ export class TaskIndex {
     private async writeDuplicate(task: Task, options?: DuplicateOptions): Promise<boolean> {
         const { dayOffset = 0, count = 1 } = options ?? {};
         if (dayOffset !== 0) {
-            return this.repository.duplicateInlineTask(task, options);
+            return this.repository.duplicateInlineTask(plannedOn(task), options);
         }
 
         const display = toDisplayTask(task, this.settings.startHour, (id) => this.store.getTask(id));
         const copies = planInPlaceCopies(task, display, count);
         return this.repository.duplicateInlineTaskInPlace(
-            task,
+            plannedOn(task),
             copies.kind === 'verbatim'
                 ? copies
                 : { kind: 'lines', lines: copies.tasks.map(copy => TaskParser.format(copy)) },

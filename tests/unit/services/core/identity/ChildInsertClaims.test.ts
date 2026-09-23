@@ -2,7 +2,7 @@ import { describe, it, expect, afterEach } from 'vitest';
 import { vaultSession, type VaultSession } from '../../../helpers/vaultSession';
 import type { WriteObserver } from '../../../../../src/services/persistence/WriteObserver';
 import type { Refusal } from '../../../../../src/utils/FileLines';
-import { targetOf } from '../../../../../src/services/persistence/TaskRefs';
+import { plannedOn } from '../../../../../src/services/persistence/TaskRefs';
 
 /**
  * What the writes that *add* a line tell the next scan.
@@ -85,6 +85,7 @@ function silenceWrites(session: VaultSession): void {
     };
     index.repository.getWriteObserver().connect(path => ({
         locate: (lines, ref) => session.scanner.locate(path, lines, ref),
+        onRecord: (lines, ref, line) => session.scanner.onRecord(path, lines, ref, line),
         refused: refusal => index.reportRefusal(refusal),
     }));
 }
@@ -297,7 +298,7 @@ describe('the half of a move that writes the destination', () => {
         const task = live.index.getTask(moving.id)!;
         const claims = watchClaims(live);
 
-        const outcome = await repositoryOf(live).applyToTask(targetOf(task), [{ kind: 'move-to-end', text: '- [x] 移す' }]);
+        const outcome = await repositoryOf(live).applyToTask(plannedOn(task), [{ kind: 'move-to-end', text: '- [x] 移す' }]);
         await live.settle(FILE);
 
         expect(outcome.written).toBe(true);
@@ -321,7 +322,7 @@ describe('the half of a move that writes the destination', () => {
         const claims = watchClaims(live);
 
         await repositoryOf(live).appendTaskWithChildren(
-            'archive.md', '- [x] 移す @2026-09-21', targetOf(live.index.getTask(moving.id)!));
+            'archive.md', '- [x] 移す @2026-09-21', plannedOn(live.index.getTask(moving.id)!));
         await live.settle('archive.md');
 
         const after = rowsOf(live, 'archive.md');

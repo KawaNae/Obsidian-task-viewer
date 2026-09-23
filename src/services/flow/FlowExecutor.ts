@@ -228,7 +228,7 @@ export class FlowExecutor {
         // The instance goes in first, at the head of the sibling group, and
         // the removal follows at the row's line carried across that insert.
         const { written: removed } = await this.repository.applyToTask(
-            plannedOn(task, read.blocks), [...inserts, { kind: 'remove' }]);
+            plannedOn(task, { commands: true, subtree: true, blocks: read.blocks }), [...inserts, { kind: 'remove' }]);
         if (!removed) {
             // Told to the user by the write layer, which refused it.
             logWarn(`[FlowExecutor] Flow fired but the original could not be deleted: ${task.id}`);
@@ -307,7 +307,7 @@ export class FlowExecutor {
             (effect): effect is Extract<FlowEffect, { kind: 'archive-to' }> =>
                 effect.kind === 'archive-to' && effect.destPath !== task.file);
         if (away) {
-            const planned = plannedOn(task, read.blocks);
+            const planned = plannedOn(task, { commands: true, subtree: true, blocks: read.blocks });
             const archived = await this.repository.appendTaskWithChildren(
                 away.destPath, TaskParser.format(away.archivedTask), planned);
             if (archived === null) {
@@ -325,8 +325,12 @@ export class FlowExecutor {
         }
 
         // Named with what the plan was made from: the write refuses a row that
-        // no longer reads that way, rather than writing the plan over it.
-        const outcome = await this.repository.applyToTask(plannedOn(task, read.blocks), ops);
+        // no longer reads that way, rather than writing the plan over it. A
+        // move within the file carries the row's subtree, so the subtree is
+        // part of what it planned from.
+        const carries = ops.some(op => op.kind === 'move-to-end' || op.kind === 'remove');
+        const outcome = await this.repository.applyToTask(
+            plannedOn(task, { commands: true, subtree: carries, blocks: read.blocks }), ops);
         if (!outcome.written) {
             // Told to the user by the write layer, which refused it.
             logWarn(`[FlowExecutor] Flow did not fire, nothing written: ${task.id}`);
