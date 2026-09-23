@@ -135,6 +135,22 @@ describe('a next instance with nowhere in the body to go', () => {
         expect(Notice.messages).toEqual([t('notice.writeTargetUnplaceable', { subject: '対象' })]);
     });
 
+    it('refuses a copy that would carry a fence it never closes above the original', async () => {
+        // The subtree's fence never closes, so the subtree is read by depth
+        // alone; a copy of it put above T would fence T and everything after.
+        const note = ['# note', '- [ ] T @2026-09-21', '  ```', '- [ ] U', '- [ ] V', ''];
+        const { contents, session } = await open(note);
+        const before = contents.get(FILE)!;
+        const [row] = session.index.getTasks().filter(task => task.content === 'T');
+
+        await session.index.duplicateTask(row.id, { dayOffset: 1 });
+        await session.settle(FILE);
+
+        expect(contents.get(FILE)).toBe(before);
+        expect(session.index.getTask(row.id)?.content).toBe('T');
+        expect(Notice.messages).toEqual([t('notice.writeTargetUnplaceable', { subject: 'T' })]);
+    });
+
     it('refuses a move to the end of a note that ends inside a fence that never closes', async () => {
         // Appended past the opening line, the row and its child would be code.
         const note = ['# note', '- [ ] 対象 @2026-09-21 ==> move([[note]])', '\t- [ ] 子', '```', 'code', ''];

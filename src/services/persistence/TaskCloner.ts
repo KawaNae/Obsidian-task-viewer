@@ -54,7 +54,7 @@ export class TaskCloner {
             return false;
         }
 
-        return processLines(this.app, file, (lines, _eol, { edits, lineOf }) => {
+        return processLines(this.app, file, (lines, _eol, { edits, lineOf, refuse }) => {
             const idx = lineOf(refOf(task), subjectOf(task));
             if (idx === null) return null;
 
@@ -65,7 +65,8 @@ export class TaskCloner {
                 parents.push(this.shiftInlineDates(cleanParent, offset));
             }
 
-            return this.spliceCopies(lines, idx, parents, idx, edits);
+            return this.spliceCopies(lines, idx, parents, idx, edits)
+                ?? refuse({ kind: 'unplaceable' }, subjectOf(task));
         }, this.writes?.for(task.file)).then(outcome => outcome.written);
     }
 
@@ -104,7 +105,8 @@ export class TaskCloner {
                     () => this.fileOps.stripBlockIds([lines[idx]])[0])
                 : copies.lines.map(l => indent + l.trim());
 
-            return this.spliceCopies(lines, idx, parents, at, edits);
+            return this.spliceCopies(lines, idx, parents, at, edits)
+                ?? refuse({ kind: 'unplaceable' }, subjectOf(task));
         }, this.writes?.for(task.file)).then(outcome => outcome.written);
     }
 
@@ -119,7 +121,8 @@ export class TaskCloner {
      * both duplication paths. `insertIndex` is where the copies go: the
      * task's own line to go before it, or `Placement.afterSubtree` to follow it.
      *
-     * @returns the modified lines array.
+     * @returns the modified lines array; null, and nothing spliced, when the
+     * copies would leave a fence open (`Placement.closesItsFences`).
      */
     private spliceCopies(
         lines: string[],
@@ -127,7 +130,7 @@ export class TaskCloner {
         parentLines: string[],
         insertIndex: number,
         edits: LineEdits,
-    ): string[] {
+    ): string[] | null {
         const { childrenLines } = this.fileOps.collectChildrenFromLines(lines, taskLine);
         const cleanedChildren = this.fileOps.stripBlockIds(childrenLines);
 
@@ -135,6 +138,7 @@ export class TaskCloner {
         for (const parent of parentLines) {
             linesToInsert.push(parent, ...cleanedChildren);
         }
+        if (!Placement.closesItsFences(linesToInsert)) return null;
 
         // Through `edits` rather than beside it: the copy is worded exactly
         // like the line it copies, so a position off by one would read the same

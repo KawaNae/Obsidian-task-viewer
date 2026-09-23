@@ -113,6 +113,21 @@ export class Placement {
     }
 
     /**
+     * Whether `block`, put in as a whole, leaves no fence open behind it.
+     *
+     * A block that opens a fence it does not close — a subtree whose fence
+     * never closes, copied — fences everything below where it goes: the
+     * original it was copied from, and every task after it, read as code.
+     * Read across the whole document, the way that reading would carry on
+     * past the block; a fence within the block's own subtree ends with it.
+     */
+    static closesItsFences(block: readonly string[]): boolean {
+        const fence = new CodeFenceTracker();
+        for (const line of block) fence.feed(line);
+        return !fence.isInside();
+    }
+
+    /**
      * `at`, when a line spliced in there is read as part of the body; null
      * otherwise. A line goes in above the frontmatter's end, or inside a
      * fence — past its opening line and not past its closing one, or past
