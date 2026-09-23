@@ -36,8 +36,9 @@ export class FileParsePipeline {
      * cache describes the file at some other moment: inside a write's
      * `vault.process` it is the file before the write, and when the scan
      * a `modify` starts reads, Obsidian has not re-read it yet — while the
-     * `changed` that follows is ignored for a file the plugin just wrote
-     * (`TaskIndex.selfWrites`). A frontmatter key decides whether the note
+     * scan the `changed` that follows asks for does nothing when it reads what
+     * the last scan read (`TaskScanner.rescanUnlessRead`). A frontmatter key
+     * decides whether the note
      * has rows at all (`tv-ignore`) and what every row inherits (dates,
      * which the ladder compares), so a write's record, a write's `locate` and
      * the scan that follows have to read the same lines the same way, which

@@ -197,7 +197,7 @@ Quick reference for locating the right layer when implementing a feature.
 | **TaskIndex** | `services/core/TaskIndex.ts` | Central orchestrator for scanning, indexing, and event management; branches on `parserId` |
 | **TaskStore** | `services/core/TaskStore.ts` | In-memory task cache; notifies UI via `onChange` listeners |
 | **TaskScanner** | `services/core/TaskScanner.ts` | File scanning → `FileParsePipeline` invocation (parse/detect/commit の3相 orchestration) |
-| **SyncDetector / EditorObserver** | `services/core/SyncDetector.ts` et al. | Distinguishes local edits from remote sync changes |
+| **EditorSignal / EditorObserver** | `services/core/EditorSignal.ts` et al. | Says whether a completion no write of ours made was made by hand in an editor (see Sync Detection) |
 | **ParserChain** | `services/parsing/strategies/ParserChain.ts` | Tries multiple parsers in order (Strategy chain) |
 | **TVInlineParser** | `services/parsing/tv-inline/TVInlineParser.ts` | Parses `@date` inline notation (line-level) |
 | **TaskRepository** | `services/persistence/TaskRepository.ts` | Write facade over the inline writer, the cloner and frontmatter key writes |
@@ -770,23 +770,19 @@ ScheduleView omits view-mode, zoom, and sidebar-toggle.
 
 ### Mechanism
 
-The plugin detects local edits through two channels:
+A completed task with a `==>` command fires only when the user completed it. A scan answers that row by row:
 
-1. **Active editor input event monitoring**
-   - Listens for `beforeinput` / `input` events on the active editor.
-   - Marks the file as "locally edited".
+1. **A write of ours wrote the row.** Every write the plugin makes says whom it was made for (`WriteOrigin`: `user` for the UI, the editor's menu, the API and timers; `flow` for a command's effects) and which rows it wrote. If the lines the scan read hold that write (`WriteClaims.placeRead`) and the row reads as the write left it, the row answers by the write's origin: `user` fires, `flow` does not. This is what keeps a flow from firing on its own writes.
+2. **No write of ours wrote it.** The change came from an editor or from outside (a sync). The editor's signal tells them apart: typing (`beforeinput`), or a change to the focused editor within a second of a key or a press (a checkbox clicked in Live Preview, the checkbox toggle's hotkey, a command). A read that is not wholly a state our writes left takes the signal once; it lapses ten seconds after the last hand.
 
-2. **Plugin UI operations**
-   - Timeline view drag/edit operations.
-   - Internally marks the file as "locally edited".
-
-If `vault.modify` fires without either mark being set, the change is classified as a remote sync.
+Rows with the same signature fire no more often than those that may, and a row a flow wrote since the last scan does not count toward the increase.
 
 ### Implementation
 
-- [`TaskIndex.ts`](./src/services/core/TaskIndex.ts): composition point; holds `editorObserver` and `syncDetector` and wires them together
-- [`EditorObserver.ts`](./src/services/core/EditorObserver.ts): `setupInteractionListeners()` attaches editor event listeners
-- [`SyncDetector.ts`](./src/services/core/SyncDetector.ts): `markLocalEdit()` sets the local-edit flag for a given file path
+- [`TaskScanner.ts`](./src/services/core/TaskScanner.ts): answers each completed row (`whose`) before the scan commits
+- [`WriteClaims.ts`](./src/services/core/identity/WriteClaims.ts): `writerOf()` finds the write of ours that last wrote a row, as the read holds it
+- [`CompletionDetector.ts`](./src/services/core/CompletionDetector.ts): counts completions per signature and fires the user's
+- [`EditorObserver.ts`](./src/services/core/EditorObserver.ts) and [`EditorSignal.ts`](./src/services/core/EditorSignal.ts): the editor's signal
 
 ---
 
