@@ -5,7 +5,7 @@ import { type CellStore, type Scope, SECTION_FUEL, cellScope, execProgram } from
 import type { Value } from '../../lang/Value';
 import { TaskLineClassifier } from '../utils/TaskLineClassifier';
 import { Outline } from '../utils/Outline';
-import { LINE_BREAK } from '../../../utils/LineBreak';
+import { LINE_BREAK, holdsLineBreak } from '../../../utils/LineBreak';
 import { type GenBody, type GenLine, indentDepth, isSpliceLine, leadingIndent } from './GenBodyParser';
 
 /** One generated child line: its text, and how deep it sits under the parent. */
@@ -193,7 +193,7 @@ function checkSize(entries: RenderedEntry[], from: number): void {
  */
 function renderParent(line: GenLine, ctx: EvalContext): string {
     const text = renderLine(line, ctx);
-    if (text.includes('\n')) {
+    if (holdsLineBreak(text)) {
         throw new EvalError('eval.gen-parent-multiline',
             'The generated task is one line — a value of several lines cannot go on it',
             { start: 0, end: line.text.length });
@@ -217,7 +217,7 @@ function renderChild(line: GenLine, ctx: EvalContext): RenderedEntry[] {
     // mixes text and value keeps its first line where it was written, because
     // the text before the value is sitting there.
     const placeFirstByValue = isSpliceLine(line);
-    if (!text.includes('\n') && !placeFirstByValue) {
+    if (!holdsLineBreak(text) && !placeFirstByValue) {
         return [{ depth: line.depth, body: text, from: line }];
     }
 
@@ -232,7 +232,7 @@ function renderChild(line: GenLine, ctx: EvalContext): RenderedEntry[] {
 
 function renderLine(line: GenLine, ctx: EvalContext): string {
     const parts = renderInterpolation(line.parts, ctx);
-    const multiLineAt = parts.findIndex(p => p.fromExpr && p.text.includes('\n'));
+    const multiLineAt = parts.findIndex(p => p.fromExpr && holdsLineBreak(p.text));
     if (multiLineAt !== -1 && hasTextAfter(parts, multiLineAt)) {
         throw new EvalError('eval.gen-multiline-not-last',
             'A value of several lines has to end the line — there is text after it',
