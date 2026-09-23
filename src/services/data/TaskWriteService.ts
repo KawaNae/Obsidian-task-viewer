@@ -1,5 +1,5 @@
 import type { TFile } from 'obsidian';
-import type { EditorLine } from '../../utils/FileLines';
+import type { EditorLine, WriteChannel } from '../../utils/FileLines';
 import type { DuplicateOptions, Task } from '../../types';
 import type { TaskIndex } from '../core/TaskIndex';
 import type { FlowDeleteAssessment } from '../flow/FlowDeletion';
@@ -156,6 +156,15 @@ export class TaskWriteService {
 
     async setFrontmatterKeys(filePath: string, updates: Record<string, string | null>): Promise<void> {
         return this.taskIndex.getRepository().setFrontmatterKeys(filePath, updates);
+    }
+
+    /**
+     * Where a write to `filePath` made outside the repository reports what it
+     * did — the daily note's heading insert, for one. Undefined once the
+     * index is taken down.
+     */
+    writeChannel(filePath: string): WriteChannel | undefined {
+        return this.taskIndex.getRepository().getWriteObserver().for(filePath);
     }
 
     // ===== Drag state control =====

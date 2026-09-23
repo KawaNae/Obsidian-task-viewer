@@ -1,5 +1,6 @@
 import { type App, TFile, moment } from 'obsidian';
 import { HeadingInserter } from './HeadingInserter';
+import type { WriteChannel } from './FileLines';
 import type { TaskViewerSettings, NoteType } from '../types';
 import { processTemplate, normalizeTrailingNewline } from './NoteTemplateProcessor';
 import { withWeekStartDay } from './momentWeekLocale';
@@ -223,6 +224,9 @@ export class DailyNoteUtils {
      * @param line The line to append (should include full task format, e.g., "- [x] ...")
      * @param header Header text (without # prefix)
      * @param headerLevel Number of # to use (e.g., 2 for ##)
+     * @param channelFor Where the write to the note reports what it did (see
+     *        `TaskWriteService.writeChannel`). Asked once the note is known:
+     *        the note may be the one this call creates.
      * @returns 書き込んだノートのパス。ノートを用意できなければ null。
      *
      * パスを返すのは、書いた行を後から引き直す呼び出し側があるため。タイマーは
@@ -233,7 +237,8 @@ export class DailyNoteUtils {
         date: Date,
         line: string,
         header: string,
-        headerLevel: number
+        headerLevel: number,
+        channelFor: (path: string) => WriteChannel | undefined,
     ): Promise<string | null> {
         let file = this.getDailyNote(app, date);
         if (!file) {
@@ -244,7 +249,7 @@ export class DailyNoteUtils {
         // file は既に手元にある TFile を直接渡す。作成直後のファイルは
         // getAbstractFileByPath で引き直せるとは限らないため、パスへ
         // 変換すると書き込みが黙って失敗しうる。
-        await HeadingInserter.writeUnderHeading(app, file, line, header, headerLevel);
+        await HeadingInserter.writeUnderHeading(app, file, channelFor(file.path), line, header, headerLevel);
         return file.path;
     }
 }
