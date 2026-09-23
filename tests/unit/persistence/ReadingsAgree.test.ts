@@ -112,3 +112,18 @@ describe('a note with no two rows alike: an outside mark changes no answer', () 
         expect(counted).not.toContain('new');
     });
 });
+
+describe('the rows a scan paired by position stay on record past its commit (guessedFor)', () => {
+    it('are the rows alike an outside edit left the ladder to pair, and none once a scan reads a known state', async () => {
+        const bench = await writeBench(['- [ ] T', '- [ ] T', '- [ ] U', '']);
+        expect(bench.scanner.getLedger().guessedFor(FILE).size).toBe(0);
+        bench.edit(['メモ', '- [ ] T', '- [ ] T', '- [ ] U', '']);
+        await bench.scan();
+        const twins = bench.tasks().filter(task => task.originalText === '- [ ] T').map(task => task.id);
+        expect([...bench.scanner.getLedger().guessedFor(FILE).keys()].sort()).toEqual([...twins].sort());
+        const u = bench.tasks().find(task => task.originalText === '- [ ] U')!;
+        expect((await bench.writer.updateTaskInFile(plannedOn(u), { ...u, statusChar: 'x', originalText: '- [x] U' })).written).toBe(true);
+        await bench.scan();
+        expect(bench.scanner.getLedger().guessedFor(FILE).size).toBe(0);
+    });
+});
