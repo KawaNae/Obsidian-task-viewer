@@ -179,8 +179,22 @@ interface View {
 }
 
 /**
- * The ladder's reading of the lines against `partner`: the two passes, and
- * nothing else. Rows it finds no evidence for are left unnamed.
+ * The ladder's reading of the lines against `partner`: the two passes, then
+ * the check that no pair's evidence is contradicted. Rows it finds no
+ * evidence for are left unnamed.
+ *
+ * A pair (E, T) is taken apart when E or T and some other row R are joined
+ * by stronger words than the pair's, or by the pair's own words and a place
+ * the pair does not have — unless R's own pair accounts for it. Both rows
+ * of a pair taken apart are new. Which of the two is right is not in the
+ * lines: a row cut off from its parent reads the same as a row typed
+ * elsewhere in its words, and a row indented by hand as one moved away with
+ * another typed where it sat.
+ *
+ * A pair taken apart takes its children's scope with it: the ladder runs
+ * again without its two rows, and the rows below them are paired afresh
+ * by the rest of the file. That run is checked the same way, until nothing
+ * is taken apart. Rows taken apart only grow, so it ends.
  */
 function pairByLadder(
     ordered: Task[],
@@ -188,6 +202,31 @@ function pairByLadder(
     fingerprints: Map<Task, Fingerprint>,
     partner: readonly LedgerEntry[],
 ): View {
+    const evidence = evidenceBetween(partner, ordered, tree, fingerprints);
+    const barred = new Set<LedgerEntry | Task>();
+    for (;;) {
+        const { pairedWith, guessed } = ladderOnce(ordered, tree, fingerprints, partner, barred);
+        const contradicted = evidence.contradicted(pairedWith);
+        if (contradicted.length === 0) {
+            const names = new Map<Task, string>();
+            for (const [task, entry] of pairedWith) names.set(task, entry.runtimeId);
+            return { names, guessed };
+        }
+        for (const [entry, task] of contradicted) {
+            barred.add(entry);
+            barred.add(task);
+        }
+    }
+}
+
+/** The two passes of the ladder over the rows not `barred`. */
+function ladderOnce(
+    ordered: Task[],
+    tree: ReturnType<typeof buildCurrentTree>,
+    fingerprints: Map<Task, Fingerprint>,
+    partner: readonly LedgerEntry[],
+    barred: ReadonlySet<LedgerEntry | Task>,
+): { pairedWith: Map<Task, LedgerEntry>; guessed: Map<string, number> } {
     const { roots, childrenOf } = tree;
     const pairedWith = new Map<Task, LedgerEntry>();
     const matchedPrev = new Set<string>();
@@ -200,193 +239,212 @@ function pairByLadder(
     // --- 1st pass: scope by scope, from the roots down ---
     // `among` is carried down from a parent pair position decided.
     const scopes: Array<{ prev: LedgerEntry[]; cur: Task[]; among?: number }> = [{ prev: prevRoots, cur: roots }];
-    const pair = (entry: LedgerEntry, task: Task, among: number | undefined): void => {
-        if (among !== undefined && !guessed.has(entry.runtimeId)) guessed.set(entry.runtimeId, among);
-        pairedWith.set(task, entry);
-        matchedPrev.add(entry.runtimeId);
-        // Only a matched parent opens its children's scope. An unmatched one
-        // takes its whole subtree to the 2nd pass instead of renumbering it.
-        scopes.push({
-            prev: prevChildren.get(entry.runtimeId) ?? [],
-            cur: childrenOf.get(task) ?? [],
-            among: guessed.get(entry.runtimeId),
-        });
-    };
-
-    // Rung 4 is not decided inside a scope. "The one row left on each side"
-    // is true of the scope, not of the file: a row cut off from its parent by
-    // an outside edit, or given a new one, is left over under a parent of the
-    // other side, and pairing it there on a shared date hands it a name its
-    // text says is someone else's (the root a card deleted, or a root the new
-    // parent takes the place of). So each scope hands its rung-4 pair back,
-    // and once no scope is left to run, a pair is made only where neither
-    // side has a stronger candidate among the rows the file has not paired
-    // yet. Rows another handed-back pair holds are not candidates against
-    // it: they have a scope of their own, and counting them would break two
-    // scopes whose rows were rewritten into each other's words, each blocking
-    // the other. A pair made opens its children's scope and the pass goes on.
-    //
-    // A pair still blocked when nothing more can be decided is a place where
-    // the evidence disagrees: the scope says the two rows are one, the text
-    // elsewhere says one of them is another row. Which is right is not in the
-    // lines — a row cut off from its parent, and a row typed elsewhere in the
-    // words of one a card renamed, read the same. Neither is taken: both rows
-    // of the pair stay out of the 2nd pass, the previous one goes and the
-    // current one is new, and the row whose text pointed at them is left to
-    // what else the 2nd pass finds for it.
-    const deferred: Array<{ entry: LedgerEntry; task: Task; among: number | undefined }> = [];
-    const run = (): void => {
-        while (scopes.length > 0) {
-            const scope = scopes.pop()!;
-            const { pairs, byPosition, weak } = runLadder(
-                scope.prev
-                    .filter(entry => !matchedPrev.has(entry.runtimeId))
-                    .map(entry => ({ item: entry, fingerprint: entry.fingerprint })),
-                scope.cur
-                    .filter(task => !pairedWith.has(task))
-                    .map(task => ({ item: task, fingerprint: fingerprints.get(task)! })),
-                leftByPosition,
-                'defer',
-            );
-            for (const [entry, among] of byPosition) guessed.set(entry.runtimeId, among);
-            for (const [entry, task] of pairs) pair(entry, task, scope.among);
-            if (weak) deferred.push({ entry: weak[0], task: weak[1], among: scope.among });
+    while (scopes.length > 0) {
+        const scope = scopes.pop()!;
+        const { pairs, byPosition } = runLadder(
+            scope.prev
+                .filter(entry => !matchedPrev.has(entry.runtimeId) && !barred.has(entry))
+                .map(entry => ({ item: entry, fingerprint: entry.fingerprint })),
+            scope.cur
+                .filter(task => !pairedWith.has(task) && !barred.has(task))
+                .map(task => ({ item: task, fingerprint: fingerprints.get(task)! })),
+            leftByPosition,
+        );
+        for (const [entry, among] of byPosition) guessed.set(entry.runtimeId, among);
+        for (const [entry, task] of pairs) {
+            if (scope.among !== undefined && !guessed.has(entry.runtimeId)) guessed.set(entry.runtimeId, scope.among);
+            pairedWith.set(task, entry);
+            matchedPrev.add(entry.runtimeId);
+            // Only a matched parent opens its children's scope. An unmatched one
+            // takes its whole subtree to the 2nd pass instead of renumbering it.
+            scopes.push({
+                prev: prevChildren.get(entry.runtimeId) ?? [],
+                cur: childrenOf.get(task) ?? [],
+                among: guessed.get(entry.runtimeId),
+            });
         }
-    };
-    const stronger = strongerCandidates(partner, ordered, fingerprints);
-    const below = <T>(root: T, childrenOf: (at: T) => readonly T[]): Set<T> => {
-        const found = new Set<T>();
-        const walk = (at: T): void => {
-            for (const child of childrenOf(at)) {
-                if (child === root || found.has(child)) continue;
-                found.add(child);
-                walk(child);
-            }
-        };
-        walk(root);
-        return found;
-    };
-    run();
-    for (let decided = true; decided && deferred.length > 0;) {
-        decided = false;
-        const held = new Set<LedgerEntry | Task>();
-        for (const { entry, task } of deferred) { held.add(entry); held.add(task); }
-        const free = (row: LedgerEntry | Task): boolean => !held.has(row)
-            && ('runtimeId' in row ? !matchedPrev.has(row.runtimeId) : !pairedWith.has(row));
-        for (let i = 0; i < deferred.length; i++) {
-            const { entry, task, among } = deferred[i];
-            if (matchedPrev.has(entry.runtimeId) || pairedWith.has(task)) {
-                deferred.splice(i--, 1);
-                continue;
-            }
-            // A row below the pair is not evidence against it when its strongest
-            // match lies wholly below the other side of the same pair: a root
-            // rewritten into its child's words would otherwise be blocked by
-            // that child, whose own scope — unopened while the pair is held —
-            // pairs it with its twin below. Both subtrees move with the pair,
-            // so that evidence agrees with it. A row below one side whose
-            // strongest match is anywhere else still blocks: the child a card's
-            // delete cut off, the root a new parent took in, and a child whose
-            // words the other side itself now reads, with only a weaker match
-            // below (a deleted root's child and grandchild shifting up a name
-            // each).
-            const underEntry = below<LedgerEntry>(entry, at => prevChildren.get(at.runtimeId) ?? []);
-            const underTask = below<Task>(task, at => childrenOf.get(at) ?? []);
-            const within = <T>(found: T[], under: Set<T>): boolean =>
-                found.length > 0 && found.every(twin => under.has(twin));
-            const against = (row: LedgerEntry | Task): boolean => {
-                if (!free(row)) return false;
-                return 'runtimeId' in row
-                    ? !(underEntry.has(row) && within(stronger.strongestForPrevious(row), underTask))
-                    : !(underTask.has(row) && within(stronger.strongestForCurrent(row), underEntry));
-            };
-            if (stronger.forPrevious(entry).some(against) || stronger.forCurrent(task).some(against)) continue;
-            deferred.splice(i--, 1);
-            // A line a bucket left over by position hands that on, as in the ladder.
-            const left = leftByPosition.get(task);
-            if (left !== undefined) guessed.set(entry.runtimeId, left);
-            pair(entry, task, among);
-            decided = true;
-        }
-        run();
-    }
-
-    const barred = new Set<LedgerEntry | Task>();
-    for (const { entry, task } of deferred) {
-        barred.add(entry);
-        barred.add(task);
     }
 
     // --- 2nd pass: the leftovers of the whole file, no scoping ---
-    const poolPrev = partner.filter(entry => !matchedPrev.has(entry.runtimeId) && !barred.has(entry));
-    const poolCur = ordered.filter(task => !pairedWith.has(task) && !barred.has(task));
     const rescued = runLadder(
-        poolPrev.map(entry => ({ item: entry, fingerprint: entry.fingerprint })),
-        poolCur.map(task => ({ item: task, fingerprint: fingerprints.get(task)! })),
+        partner
+            .filter(entry => !matchedPrev.has(entry.runtimeId) && !barred.has(entry))
+            .map(entry => ({ item: entry, fingerprint: entry.fingerprint })),
+        ordered
+            .filter(task => !pairedWith.has(task) && !barred.has(task))
+            .map(task => ({ item: task, fingerprint: fingerprints.get(task)! })),
         leftByPosition,
     );
-    for (const [entry, task] of rescued.pairs) {
-        pairedWith.set(task, entry);
-    }
+    for (const [entry, task] of rescued.pairs) pairedWith.set(task, entry);
     for (const [entry, among] of rescued.byPosition) guessed.set(entry.runtimeId, among);
 
-    // --- the place a row left, against its text ---
-    // A pair made on the text (rung 2) or on the content and dates (rung 3)
-    // is not taken where the row's place disagrees: a row of the previous
-    // side's words under another indentation sits where that row sat (right
-    // after the row its predecessor became), and the paired row does not. An
-    // indent changed by hand and a row typed elsewhere in the old words read
-    // the same as the row moved away and one typed in its place with another
-    // indentation; which is right is not in the lines. As at rung 4, neither
-    // is taken: the previous name goes and both rows are new.
+    return { pairedWith, guessed };
+}
+
+/**
+ * How strongly the words of a previous and a current row say they are one
+ * row, weakest first. The rungs of the ladder, except that the text is
+ * compared up to its indentation: the indentation is where the row sits,
+ * which is weighed as place.
+ */
+const Words = {
+    None: 0,
+    /** The content or the dates (rung 4). */
+    ContentOrDates: 1,
+    /** The content and the dates (rung 3). */
+    ContentAndDates: 2,
+    /** The text up to its indentation (rung 2). */
+    Text: 3,
+    /** A `^id` that names one row on each side (rung 1). */
+    BlockId: 4,
+} as const;
+type Words = (typeof Words)[keyof typeof Words];
+
+/** What says a previous and a current row are one row. */
+interface Relation {
+    words: Words;
+    /** Their parents are a pair, or both are roots. */
+    scope: boolean;
+    /** The rows before them are a pair, or both come first. */
+    place: boolean;
+    /** The line reads the same, indentation and all. */
+    depth: boolean;
+}
+
+/**
+ * Whether `other` says something `pair` does not: stronger words, or the
+ * same text and a place the pair lacks. Place counts only between rows of
+ * the same text: the ladder never names a row by place, and uses it only to
+ * choose among rows the words allow.
+ */
+function contradicts(other: Relation, pair: Relation): boolean {
+    if (other.words !== pair.words) return other.words > pair.words;
+    return other.words === Words.Text
+        && ((other.scope && !pair.scope) || (other.place && !pair.place) || (other.depth && !pair.depth));
+}
+
+/** The evidence between the rows of the two sides, and the check of a ladder's pairs against it. */
+function evidenceBetween(
+    partner: readonly LedgerEntry[],
+    ordered: readonly Task[],
+    tree: ReturnType<typeof buildCurrentTree>,
+    fingerprints: Map<Task, Fingerprint>,
+): { contradicted: (pairedWith: ReadonlyMap<Task, LedgerEntry>) => Array<[LedgerEntry, Task]> } {
+    const byRuntimeId = new Map(partner.map(entry => [entry.runtimeId, entry]));
+    const parentOfEntry = (entry: LedgerEntry): LedgerEntry | null => {
+        const parent = entry.parent === null ? undefined : byRuntimeId.get(entry.parent);
+        return parent === undefined || parent === entry ? null : parent;
+    };
+    const parentOfTask = (task: Task): Task | null => tree.parentOf.get(task) ?? null;
     const previousOrder = [...partner].sort((a, b) => a.line - b.line);
     const entryBefore = new Map<LedgerEntry, LedgerEntry | null>(
         previousOrder.map((entry, index) => [entry, index > 0 ? previousOrder[index - 1] : null]));
     const taskBefore = new Map<Task, Task | null>(
         ordered.map((task, index) => [task, index > 0 ? ordered[index - 1] : null]));
-    const unindented = (fingerprint: Fingerprint): string =>
-        JSON.stringify([fingerprint.parserId, fingerprint.originalText.trimStart()]);
-    const tasksUnindented = new Map<string, Task[]>();
-    for (const task of ordered) {
-        const key = unindented(fingerprints.get(task)!);
-        const list = tasksUnindented.get(key);
-        if (list) list.push(task);
-        else tasksUnindented.set(key, [task]);
-    }
-    //
-    // A `^id` needs no case here. The other row carries the entry's words, so
-    // the `^id` in them too, and a `^id` on two rows proves nothing (rung 1
-    // takes only one that names a single row on each side).
-    const heldByItsWords = (task: Task): boolean => {
-        const entry = pairedWith.get(task);
-        return entry !== undefined && originalTextKey(fingerprints.get(task)!) === originalTextKey(entry.fingerprint);
-    };
-    const displaced: Task[] = [];
-    for (const [task, entry] of pairedWith) {
-        const fingerprint = fingerprints.get(task)!;
-        if (originalTextKey(fingerprint) !== originalTextKey(entry.fingerprint)
-            && contentDateKey(fingerprint) !== contentDateKey(entry.fingerprint)) continue;
-        const sitsWhereEntrySat = (row: Task): boolean => {
-            const before = taskBefore.get(row) ?? null;
-            const entryWasAfter = entryBefore.get(entry) ?? null;
-            return entryWasAfter === null ? before === null : before !== null && pairedWith.get(before) === entryWasAfter;
-        };
-        if (sitsWhereEntrySat(task)) continue;
-        const left = (tasksUnindented.get(unindented(entry.fingerprint)) ?? []).some(other =>
-            other !== task
-            && fingerprints.get(other)!.originalText !== entry.fingerprint.originalText
-            && !heldByItsWords(other)
-            && sitsWhereEntrySat(other));
-        if (left) displaced.push(task);
-    }
-    for (const task of displaced) {
-        guessed.delete(pairedWith.get(task)!.runtimeId);
-        pairedWith.delete(task);
-    }
 
-    const names = new Map<Task, string>();
-    for (const [task, entry] of pairedWith) names.set(task, entry.runtimeId);
-    return { names, guessed };
+    const count = (keys: Array<string | null>): Map<string, number> => {
+        const counted = new Map<string, number>();
+        for (const key of keys) if (key !== null) counted.set(key, (counted.get(key) ?? 0) + 1);
+        return counted;
+    };
+    const previousIds = count(partner.map(entry => blockIdKey(entry.fingerprint)));
+    const currentIds = count(ordered.map(task => blockIdKey(fingerprints.get(task)!)));
+
+    const wordsOf = (entry: LedgerEntry, task: Task): Words => {
+        const left = entry.fingerprint;
+        const right = fingerprints.get(task)!;
+        if (left.parserId !== right.parserId) return Words.None;
+        const id = blockIdKey(left);
+        if (id !== null && id === blockIdKey(right) && previousIds.get(id) === 1 && currentIds.get(id) === 1) return Words.BlockId;
+        if (textKey(left) === textKey(right)) return Words.Text;
+        if (contentDateKey(left) === contentDateKey(right)) return Words.ContentAndDates;
+        if (left.contentKey === right.contentKey || left.dateKey === right.dateKey) return Words.ContentOrDates;
+        return Words.None;
+    };
+
+    // Rows of the other side a row shares words with that can say more than
+    // a pair: content or dates alone never outweigh a pair, which has at least that.
+    const keysOf = (fingerprint: Fingerprint): string[] =>
+        [blockIdKey(fingerprint), textKey(fingerprint), contentDateKey(fingerprint)]
+            .filter((key): key is string => key !== null);
+    const index = <T>(rows: readonly T[], fingerprintOfRow: (row: T) => Fingerprint): Map<string, T[]> => {
+        const by = new Map<string, T[]>();
+        for (const row of rows) {
+            for (const key of keysOf(fingerprintOfRow(row))) {
+                const list = by.get(key);
+                if (list) list.push(row);
+                else by.set(key, [row]);
+            }
+        }
+        return by;
+    };
+    const tasksBy = index(ordered, task => fingerprints.get(task)!);
+    const entriesBy = index(partner, entry => entry.fingerprint);
+    const sharing = <T>(fingerprint: Fingerprint, by: Map<string, T[]>): Set<T> =>
+        new Set(keysOf(fingerprint).flatMap(key => by.get(key) ?? []));
+
+    return {
+        contradicted: pairedWith => {
+            const taskOf = new Map<LedgerEntry, Task>();
+            for (const [task, entry] of pairedWith) taskOf.set(entry, task);
+            const relation = (entry: LedgerEntry, task: Task): Relation => {
+                const entryParent = parentOfEntry(entry);
+                const taskParent = parentOfTask(task);
+                const entryPrior = entryBefore.get(entry) ?? null;
+                const taskPrior = taskBefore.get(task) ?? null;
+                return {
+                    words: wordsOf(entry, task),
+                    scope: entryParent === null
+                        ? taskParent === null
+                        : taskParent !== null && pairedWith.get(taskParent) === entryParent,
+                    place: entryPrior === null
+                        ? taskPrior === null
+                        : taskPrior !== null && pairedWith.get(taskPrior) === entryPrior,
+                    depth: entry.fingerprint.originalText === fingerprints.get(task)!.originalText,
+                };
+            };
+
+            const contradictedTasks = new Set<Task>();
+            for (const [task, entry] of pairedWith) {
+                const pair = relation(entry, task);
+                const byCurrent = [...sharing(entry.fingerprint, tasksBy)].some(other => {
+                    if (other === task) return false;
+                    const said = relation(entry, other);
+                    if (!contradicts(said, pair)) return false;
+                    const own = pairedWith.get(other);
+                    return own === undefined || contradicts(said, relation(own, other));
+                });
+                const byPrevious = byCurrent || [...sharing(fingerprints.get(task)!, entriesBy)].some(other => {
+                    if (other === entry) return false;
+                    const said = relation(other, task);
+                    if (!contradicts(said, pair)) return false;
+                    const own = taskOf.get(other);
+                    return own === undefined || contradicts(said, relation(other, own));
+                });
+                if (byPrevious) contradictedTasks.add(task);
+            }
+
+            // A pair whose scope a contradicted pair opened is left to the next
+            // run, where it has no scope and is paired afresh.
+            const contradicted: Array<[LedgerEntry, Task]> = [];
+            for (const task of contradictedTasks) {
+                let below = task;
+                let opened = false;
+                for (;;) {
+                    const parent = parentOfTask(below);
+                    const entryParent = parentOfEntry(pairedWith.get(below)!);
+                    if (parent === null || entryParent === null || pairedWith.get(parent) !== entryParent) break;
+                    if (contradictedTasks.has(parent)) {
+                        opened = true;
+                        break;
+                    }
+                    below = parent;
+                }
+                if (!opened) contradicted.push([pairedWith.get(task)!, task]);
+            }
+            return contradicted;
+        },
+    };
 }
 
 
@@ -438,12 +496,6 @@ interface LadderResult<P, C> {
     byPosition: Array<[P, number]>;
     prevLeft: P[];
     curLeft: C[];
-    /**
-     * The pair rung 4 would make, when the caller asked for it to be handed
-     * back rather than made (`weak: 'defer'`). Not in `pairs`, and both of
-     * its items are in the leftovers.
-     */
-    weak: [P, C] | null;
 }
 
 /**
@@ -461,11 +513,8 @@ interface LadderResult<P, C> {
  * (`pairByOrdinal`), so an n-against-m bucket resolves to min(n, m) pairs
  * instead of guessing.
  *
- * Rung 4 is the weakest evidence the ladder takes, and "one against one" is
- * only true of the rows handed in. Inside one scope that says nothing of the
- * rest of the file, so a caller running scope by scope asks for the pair to be
- * handed back (`weak: 'defer'`) and decides it with the file in view (see
- * `pairByLadder`).
+ * Every rung decides on the rows handed in. What the rest of the file says
+ * against a pair is weighed once the passes are done (see `pairByLadder`).
  */
 function runLadder<P, C>(
     prev: Array<Rung<P>>,
@@ -476,9 +525,7 @@ function runLadder<P, C>(
      * in one pass carries that into whatever pairs it later.
      */
     byPositionCur: Map<C, number>,
-    weak: 'decide' | 'defer' = 'decide',
 ): LadderResult<P, C> {
-    let handedBack: [P, C] | null = null;
     const pairs: Array<[P, C]> = [];
     const byPosition: Array<[P, number]> = [];
     const takenPrev = new Set<number>();
@@ -527,9 +574,7 @@ function runLadder<P, C>(
         const left = prev[prevRest[0]].fingerprint;
         const right = cur[curRest[0]].fingerprint;
         const sharesSomething = left.contentKey === right.contentKey || left.dateKey === right.dateKey;
-        if (left.parserId === right.parserId && sharesSomething && weak === 'defer') {
-            handedBack = [prev[prevRest[0]].item, cur[curRest[0]].item];
-        } else if (left.parserId === right.parserId && sharesSomething) {
+        if (left.parserId === right.parserId && sharesSomething) {
             takenPrev.add(prevRest[0]);
             takenCur.add(curRest[0]);
             pairs.push([prev[prevRest[0]].item, cur[curRest[0]].item]);
@@ -542,54 +587,6 @@ function runLadder<P, C>(
         byPosition,
         prevLeft: remaining(prev, takenPrev).map(index => prev[index].item),
         curLeft: remaining(cur, takenCur).map(index => cur[index].item),
-        weak: handedBack,
-    };
-}
-
-/**
- * For each row of either side, the rows of the other side that share a key a
- * rung stronger than 4 would pair on — `^id`, the text, the content and the
- * dates — under the same parser.
- */
-function strongerCandidates(
-    partner: readonly LedgerEntry[],
-    ordered: readonly Task[],
-    fingerprints: Map<Task, Fingerprint>,
-): {
-    forPrevious: (entry: LedgerEntry) => Task[];
-    forCurrent: (task: Task) => LedgerEntry[];
-    strongestForPrevious: (entry: LedgerEntry) => Task[];
-    strongestForCurrent: (task: Task) => LedgerEntry[];
-} {
-    const keysOf = (fingerprint: Fingerprint): string[] =>
-        [blockIdKey(fingerprint), originalTextKey(fingerprint), contentDateKey(fingerprint)]
-            .filter((key): key is string => key !== null);
-    const add = <T>(into: Map<string, T[]>, key: string, item: T): void => {
-        const list = into.get(key);
-        if (list) list.push(item);
-        else into.set(key, [item]);
-    };
-    const tasksBy = new Map<string, Task[]>();
-    for (const task of ordered) {
-        for (const key of keysOf(fingerprints.get(task)!)) add(tasksBy, key, task);
-    }
-    const entriesBy = new Map<string, LedgerEntry[]>();
-    for (const entry of partner) {
-        for (const key of keysOf(entry.fingerprint)) add(entriesBy, key, entry);
-    }
-    // The candidates of the strongest rung that has any, `^id` first.
-    const strongest = <T>(keys: string[], by: Map<string, T[]>): T[] => {
-        for (const key of keys) {
-            const found = by.get(key);
-            if (found && found.length > 0) return found;
-        }
-        return [];
-    };
-    return {
-        forPrevious: entry => keysOf(entry.fingerprint).flatMap(key => tasksBy.get(key) ?? []),
-        forCurrent: task => keysOf(fingerprints.get(task)!).flatMap(key => entriesBy.get(key) ?? []),
-        strongestForPrevious: entry => strongest(keysOf(entry.fingerprint), tasksBy),
-        strongestForCurrent: task => strongest(keysOf(fingerprints.get(task)!), entriesBy),
     };
 }
 
@@ -669,6 +666,11 @@ function blockIdKey(fingerprint: Fingerprint): string | null {
 
 function originalTextKey(fingerprint: Fingerprint): string {
     return JSON.stringify([fingerprint.parserId, fingerprint.originalText]);
+}
+
+/** The text up to its indentation. */
+function textKey(fingerprint: Fingerprint): string {
+    return JSON.stringify([fingerprint.parserId, fingerprint.originalText.trimStart()]);
 }
 
 function contentDateKey(fingerprint: Fingerprint): string {

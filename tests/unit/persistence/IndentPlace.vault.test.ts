@@ -91,23 +91,31 @@ async function carried(before: string[], after: string[]): Promise<number[]> {
 }
 
 describe('what counts as the other row, and which pairs are looked at', () => {
-    it('a row its words already hold elsewhere is not the other row', async () => {
-        // `\t- [ ] A @d` is A's child's, word for word; A's pair on its content
-        // and dates keeps its name.
+    it('a row in the words of a pair and the place of another row: neither keeps its name', async () => {
+        // `\t- [ ] A @d` reads as A's child did and sits right after P, where A
+        // sat; `- [x] A @d` reads as A up to its status. Twins up to the
+        // indentation and the status: the lines cannot tell them apart. (M6
+        // kept the pair on content and dates, as held by its own words.)
         expect(await carried(['- [ ] P', `- [ ] A${D}`, `\t- [ ] A${D}`, ''], ['- [ ] P', `\t- [ ] A${D}`, `- [x] A${D}`, '']))
-            .toEqual([0, 2, 1]);
+            .toEqual([0, -1, -1]);
     });
 
-    it('a row that reads as the previous row word for word is not the other row', async () => {
-        // Its twin under the same indentation is a pair of its own words, not
-        // a row the indent changed.
+    it('a twin that reads as the previous row word for word is weighed like any other row', async () => {
+        // The first `\t- [ ] B` sits where A's child sat and reads as it but
+        // for the indentation; the last reads as the grandchild word for word
+        // and sits elsewhere. Twins: both B rows are new. (M7 left a word for
+        // word row out of the check.)
         expect(await carried(['- [ ] A', '\t- [ ] B', '\t\t- [ ] B', ''], ['\t- [ ] B', '\t- [ ] A', '\t- [ ] B', '']))
-            .toEqual([1, 0, 2]);
+            .toEqual([-1, 0, -1]);
     });
 
-    it('a pair made at rung 4 is not looked at: the rung-4 guard decides it', async () => {
+    it('a pair made at rung 4 is weighed like any other pair', async () => {
+        // `\t- [x] A @d` sits right after C, where the last A sat, and is paired
+        // with the other `- [x] A @d`; the last A is paired with `- [x] A` on
+        // its content alone. The words cross the two pairs, and neither is
+        // taken. (M8 left rung-4 pairs to a guard of their own.)
         expect(await carried([`- [ ] A${D}`, `- [x] A${D}`, `- [x] C${D}`, `- [x] A${D}`, ''], [`- [ ] A${D}`, `- [x] C${D}`, `\t- [x] A${D}`, '- [x] A', '']))
-            .toEqual([0, 2, 1, 3]);
+            .toEqual([0, 2, -1, -1]);
     });
 
     it('a `^id` on two rows settles nothing: the place and the words still disagree', async () => {

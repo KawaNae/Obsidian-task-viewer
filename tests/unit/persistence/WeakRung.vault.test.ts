@@ -110,17 +110,18 @@ describe('a root that gains a parent from outside: its name goes to no other row
 });
 
 describe('two scopes whose rows were rewritten into each other\'s words', () => {
-    // A guard that counted every unpaired row as a stronger candidate would
-    // have each scope's rung-4 pair block the other's, and the second pass
-    // would pair the rows across scopes by their text — a confident swap. The
-    // rows another held-back pair holds do not count against it.
-    it('each row keeps its name under its own parent', async () => {
+    // Each scope pairs its one row on the content they share, and each row
+    // now reads in the words of the other scope's row. Rewritten in place, or
+    // moved into each other's scope: the two read the same, and the words
+    // cross both pairs. Neither is taken, and no row is handed the other
+    // scope's name (I1, the 2026-09-24 decision).
+    it('no row keeps a name: the words and the scopes disagree', async () => {
         const session = await open(['- [ ] P1', '\t- [ ] A', '- [ ] P2', '\t- [ ] B', '']);
         const p = idOf(session, 'A');
         const q = idOf(session, 'B');
         await fromOutside(session, ['- [ ] P1', '\t- [ ] A2', '- [ ] P2', '\t- [ ] A', '']);
-        expect(idOf(session, 'A2')).toBe(p);
-        expect(idOf(session, 'A')).toBe(q);
+        expect([idOf(session, 'A2'), idOf(session, 'A')]).not.toContain(p);
+        expect([idOf(session, 'A2'), idOf(session, 'A')]).not.toContain(q);
     });
 });
 

@@ -266,14 +266,20 @@ describe('matchFile: nearest ordinal in an uneven bucket', () => {
         expect(id(second, 'prov:b')).toBe(id(first, 'prov:1'));
     });
 
-    it('breaks a tie toward the smaller previous ordinal', () => {
-        // "[ ]" at 0 and 2 before, one "[ ]" at 1 after: both gaps are 1.
+    it('breaks a tie toward the smaller previous ordinal, and the place then speaks against it', () => {
+        // "[ ]" at 0 and 2 before, one "[ ]" at 1 after: both gaps are 1, and
+        // the tie goes to 0. But the row at 1 follows the row 1 was, as 2 did,
+        // so its words and its place say 2 while the pair says 0, and 2 is
+        // left to the "[x]" at 2 on its content alone. The "[x]" at 2 in turn
+        // follows the row 0 was, as 1 did. Twins up to the status: no pair is
+        // taken, and every row is new (I1).
         const before = [open('prov:0', 0), done('prov:1', 1), open('prov:2', 2)];
         const after = [done('prov:a', 0), open('prov:b', 1), done('prov:c', 2)];
 
         const { first, second } = roundTrip(before, after);
 
-        expect(id(second, 'prov:b')).toBe(id(first, 'prov:0'));
+        const was = ['prov:0', 'prov:1', 'prov:2'].map(name => id(first, name));
+        for (const name of ['prov:a', 'prov:b', 'prov:c']) expect(was).not.toContain(id(second, name));
     });
 });
 
@@ -497,5 +503,33 @@ describe('matchWithoutRepeatedIds', () => {
 
         expect(runs).toBe(1);
         expect(guarded.withoutClaims).toBe(false);
+    });
+});
+
+describe('matchFile: the check of the evidence', () => {
+    // Two scopes whose rows were rewritten into each other's words: each pair
+    // is contradicted by the other's row. Every pair is weighed against the
+    // same run, so which pair the check looks at first does not matter.
+    const build = (texts: string[]): Task[] => {
+        const [p1, a, p2, b] = texts.map((text, line) => t(`prov:${line}`, line, text));
+        link(p1, a);
+        link(p2, b);
+        return [p1, a, p2, b];
+    };
+
+    it('takes the same pairs apart whatever order the rows come in', () => {
+        const mint = makeMint();
+        const first = matchFile([], build(['P1', 'A', 'P2', 'B']), mint);
+        const kept = (result: MatchResult): Array<string | null> =>
+            ['prov:0', 'prov:1', 'prov:2', 'prov:3'].map(name => {
+                const runtimeId = id(result, name);
+                return first.entries.some(entry => entry.runtimeId === runtimeId) ? runtimeId : null;
+            });
+
+        const inOrder = matchFile(first.entries, build(['P1', 'A2', 'P2', 'A']), mint);
+        const reversed = matchFile([...first.entries].reverse(), build(['P1', 'A2', 'P2', 'A']).reverse(), mint);
+
+        expect(kept(inOrder)).toEqual([id(first, 'prov:0'), null, id(first, 'prov:2'), null]);
+        expect(kept(reversed)).toEqual(kept(inOrder));
     });
 });
