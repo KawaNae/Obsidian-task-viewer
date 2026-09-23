@@ -19,6 +19,7 @@ import type { FlowEffect } from './FlowEffects';
 import { checkGeneratedChildLine, checkGeneratedParentLine } from './GeneratedLineCheck';
 import { flowRaws, joinSegments } from './FlowSegments';
 import { serializeFlowLines } from './FlowSerializer';
+import { holdsLineBreak } from '../../utils/LineBreak';
 import { type DateAnchor, type NextOccurrence, nextOccurrence } from './ScheduleEngine';
 
 export interface FlowPlanDeps {
@@ -407,7 +408,7 @@ function applySet(newTask: Task, program: FlowProgram, deps: FlowPlanDeps): void
                 // would split it, and the write refuses such a line without a
                 // word (`LineBreakInLine`), so it is said here instead, where
                 // the fire can stop with a reason.
-                if (/[\r\n\u2028\u2029]/.test(content)) {
+                if (holdsLineBreak(content)) {
                     throw new EvalError('eval.set-content-multiline',
                         'The content is one line — a value of several lines cannot be set on it',
                         program.sets!.content!.expr.span);

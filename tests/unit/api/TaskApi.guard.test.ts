@@ -353,18 +353,29 @@ describe('F5: 1要素1行。改行を含む値は、書き込みの前に理由�
             .rejects.toThrow(/heading must not contain line breaks/);
     });
 
-    it('U+2028 と U+2029 も改行として拒否（行がタスクとして読まれなくなるため）', async () => {
+    it('単独の CR は改行として拒否（エディタが行を割るため）', async () => {
         const created = createMockApi(undefined);
         const existing = createMockApi(makeTask({ isReadOnly: false }));
+        await expect(created.create({ file: 'test.md', content: 'a\rb' }))
+            .rejects.toThrow(/content must not contain line breaks/);
+        await expect(existing.update({ id: 'test-1', content: 'a\rb' }))
+            .rejects.toThrow(/content must not contain line breaks/);
+        await expect(existing.update({ id: 'test-1', status: '\r' }))
+            .rejects.toThrow(/status must be a single character other than a line break/);
+    });
+
+    it('U+2028 と U+2029 は行の中身として通し、そのまま書き込みへ渡す（L1。Obsidian も読み手も行の区切りにしない）', async () => {
         for (const sep of ['\u2028', '\u2029']) {
-            await expect(created.create({ file: 'test.md', content: `a${sep}b` }))
-                .rejects.toThrow(/content must not contain line breaks/);
-            await expect(existing.update({ id: 'test-1', content: `a${sep}b` }))
-                .rejects.toThrow(/content must not contain line breaks/);
-            await expect(existing.update({ id: 'test-1', status: sep }))
-                .rejects.toThrow(/status must be a single character other than a line break/);
-            await expect(created.create({ file: 'test.md', content: 'task', heading: `T${sep}x` }))
-                .rejects.toThrow(/heading must not contain line breaks/);
+            const created = createMockApi(undefined);
+            const existing = createMockApi(makeTask({ isReadOnly: false }));
+            const write = (existing as any).plugin.getTaskWriteService();
+            // What the mock task lacks for the result does not matter here: the
+            // value reached the write, unchanged.
+            await existing.update({ id: 'test-1', content: `a${sep}b` }).catch(() => undefined);
+            expect(write.updateTask).toHaveBeenCalledWith('test-1', expect.objectContaining({ content: `a${sep}b` }));
+            // create checks the file after the values: getting that far means the values passed.
+            await expect(created.create({ file: 'test.md', content: `a${sep}b`, heading: `T${sep}x` }))
+                .rejects.toThrow(/File not found/);
         }
     });
 });

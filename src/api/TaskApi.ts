@@ -16,6 +16,7 @@ import { DateResolver } from '../services/filter/DateResolver';
 import { buildFilterFromParams, buildRangeFilterFromParams, assertValidFilterState } from './FilterParamsBuilder';
 import type { FilterState } from '../services/filter/FilterTypes';
 import { loadFilterFile } from './FilterFileLoader';
+import { holdsLineBreak } from '../utils/LineBreak';
 import {
     assertParams, renderParamTable,
     LIST_SCHEMA, TODAY_SCHEMA, GET_SCHEMA, CREATE_SCHEMA, UPDATE_SCHEMA,
@@ -54,12 +55,12 @@ import {
  * such a line whole (`LineBreakInLine`). Refused here instead, where the
  * caller can be told which parameter it was.
  *
- * U+2028 and U+2029 as well. A note keeps them inside a line, but the task
- * line is read by patterns whose `.` does not match them, so a task written
- * with one is no longer read as a task at all.
+ * A line break is what ends a line of a note (`holdsLineBreak`): CR and LF.
+ * U+2028 and U+2029 are not — Obsidian keeps them inside the line, and so
+ * does every reader here — so a value may hold them.
  */
 function hasLineBreak(value: string): boolean {
-    return /[\r\n\u2028\u2029]/.test(value);
+    return holdsLineBreak(value);
 }
 
 export const API_HELP_TEXT = `
