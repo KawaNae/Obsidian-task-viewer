@@ -21,7 +21,8 @@ export class IntervalTemplateWriter {
         private channelFor: (path: string) => WriteChannel | undefined,
     ) {}
 
-    async updateTemplate(filePath: string, data: TemplateCreateData): Promise<TFile> {
+    /** @returns the note, or null when the overwrite was not written (the write layer has told the user why). */
+    async updateTemplate(filePath: string, data: TemplateCreateData): Promise<TFile | null> {
         const existing = this.app.vault.getAbstractFileByPath(filePath);
         if (!(existing instanceof TFile)) {
             throw new Error('Template file not found.');
@@ -29,8 +30,8 @@ export class IntervalTemplateWriter {
         const content = this.buildFileContent(data);
         // 全体上書き。どの行がどの行になったかは言えないので、申告の
         // 代わりに連鎖が切れた印を残す（replaceWhole）。
-        await replaceWhole(this.app, existing, this.channelFor(filePath), content);
-        return existing;
+        const { written } = await replaceWhole(this.app, existing, this.channelFor(filePath), content);
+        return written ? existing : null;
     }
 
     async saveTemplate(folderPath: string, data: TemplateCreateData): Promise<TFile> {

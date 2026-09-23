@@ -72,9 +72,11 @@ export abstract class BaseDragStrategy implements DragStrategy {
      * 直接作らない。これにより endDate inclusive/exclusive の dual semantic を
      * 1 箇所（materializeRawDates）に閉じ込める。
      *
-     * @returns 実際に書き戻したか。false は「掴んだが値は変わっていない」＝
-     *          ソースカードの旧ジオメトリがそのまま正しい、を意味する
-     *          （{@link commitAndReveal} の再可視化判断に使う）。
+     * @returns 実際に書き戻したか。false は「掴んだが値は変わっていない」か
+     *          「書き込みが拒否された」＝ファイルは旧ジオメトリのままで、ソース
+     *          カードの旧ジオメトリがそのまま正しい、を意味する
+     *          （{@link commitAndReveal} の再可視化判断に使う）。拒否の通知と
+     *          写しの巻き戻しは TaskIndex が行う。
      */
     protected async commitPlan(context: DragContext, plan: DragPlan | null, taskId: string): Promise<boolean> {
         if (!plan) return false;
@@ -82,9 +84,9 @@ export abstract class BaseDragStrategy implements DragStrategy {
         const startHour = context.plugin.settings.startHour;
         const updates = this.diffUpdates(materializeRawDates(edits, baseTask, startHour), baseTask);
         if (Object.keys(updates).length === 0) return false;
-        await context.writeService.updateTask(taskId, updates);
+        const written = await context.writeService.updateTask(taskId, updates);
         this.restoreSelection(context, taskId);
-        return true;
+        return written;
     }
 
     /**
@@ -100,7 +102,7 @@ export abstract class BaseDragStrategy implements DragStrategy {
      * 要素を {@link DropReveal.markApplied} する責務を持つ。反映できなかった
      * 要素は隠したまま次 render に委ねられる。
      *
-     * 書き戻しが起きなかったとき（plan なし / 値が変わっていない）は旧ジオメトリ
+     * 書き戻しが起きなかったとき（plan なし / 値が変わっていない / 拒否された）は旧ジオメトリ
      * がそのまま正しいので、ゲートを立てずに全要素を可視へ戻す。ここを取り違えると
      * 「render が来ないので永久に隠れたまま」の逆バグになる。
      */

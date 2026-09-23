@@ -23,8 +23,11 @@ export class ViewTemplateWriter {
      * Save a view template to the configured folder.
      * Creates the folder if it doesn't exist.
      * Overwrites existing file with the same name.
+     *
+     * @returns the note, or null when the overwrite was not written (the
+     * write layer has told the user why). Creating the note throws as before.
      */
-    async saveTemplate(folderPath: string, template: ViewTemplate): Promise<TFile> {
+    async saveTemplate(folderPath: string, template: ViewTemplate): Promise<TFile | null> {
         await this.ensureFolder(folderPath);
 
         const content = this.buildFileContent(template);
@@ -35,8 +38,8 @@ export class ViewTemplateWriter {
         if (existing instanceof TFile) {
             // 全体上書き。どの行がどの行になったかは言えないので、申告の
             // 代わりに連鎖が切れた印を残す（replaceWhole）。
-            await replaceWhole(this.app, existing, this.channelFor(filePath), content);
-            return existing;
+            const { written } = await replaceWhole(this.app, existing, this.channelFor(filePath), content);
+            return written ? existing : null;
         }
         return await this.app.vault.create(filePath, content);
     }

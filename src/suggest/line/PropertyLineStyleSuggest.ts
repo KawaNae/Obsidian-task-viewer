@@ -49,9 +49,10 @@ export class PropertyLineStyleSuggest extends AbstractInputSuggest<string> {
         }
 
         const linestyleKey = this.plugin.settings.scopeKeys.linestyle;
-        await this.plugin.getTaskWriteService()
+        const written = await this.plugin.getTaskWriteService()
             .setFrontmatterKeys(activeFile.path, { [linestyleKey]: value });
 
-        this.syncValue(value);
+        // 書けなかったときは表示を変えない。理由は書き込みの層が通知済み。
+        if (written) this.syncValue(value);
     }
 }

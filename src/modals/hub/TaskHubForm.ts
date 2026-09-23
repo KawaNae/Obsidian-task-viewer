@@ -358,9 +358,15 @@ export class TaskHubForm {
         this.task = { ...this.task, ...updates };
         const id = this.task.id;
         this.commitChain = this.commitChain
-            // 書けたかどうかはここでは見ない。失敗の通知と巻き戻しは
-            // TaskIndex が行い、ハブは refresh でその結果を受ける。
-            .then(async () => { await this.deps.writeService.updateTask(id, updates); })
+            // 書けなかったときの通知と写しの巻き戻しは TaskIndex が行う。
+            // ローカル model には楽観更新が残るので、ここで写しを読み直す。
+            // 巻き戻しの通知はドラッグ中には届かないので、それを待たない。
+            .then(async () => {
+                const written = await this.deps.writeService.updateTask(id, updates);
+                if (written) return;
+                const fresh = this.deps.readService.getTask(id);
+                if (fresh) this.refresh(fresh);
+            })
             .catch((e) => logError(`[TaskHubForm] commit failed: ${e instanceof Error ? e.message : String(e)}`));
     }
 

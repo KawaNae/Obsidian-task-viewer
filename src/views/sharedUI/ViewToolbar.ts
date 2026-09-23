@@ -14,6 +14,7 @@ import { buildExportFilename } from '../../services/export/ExportFilename';
 import type { MenuPresenter } from '../../interaction/menu/MenuPresenter';
 import { viewContentEl } from '../../utils/ObsidianView';
 import type { WriteChannel } from '../../utils/FileLines';
+import { logError } from '../../log/log';
 
 /**
  * Persistent toolbar root with mount/detach lifecycle.
@@ -547,7 +548,17 @@ export class ViewSettingsMenu {
                             const template = getViewTemplate();
                             template.name = name;
                             const writer = new ViewTemplateWriter(app, options.writeChannel);
-                            await writer.saveTemplate(folder, template);
+                            let saved;
+                            try {
+                                saved = await writer.saveTemplate(folder, template);
+                            } catch (e) {
+                                // ノートを作れなかった。上書きの失敗と同じ文面で1回だけ伝える。
+                                logError(`[ViewToolbar] view template not saved: ${e instanceof Error ? e.message : String(e)}`);
+                                new Notice(t('notice.writeFailed', { subject: name }));
+                                return;
+                            }
+                            // 上書きが書けなかったときは、書き込みの層が理由を通知済み。
+                            if (!saved) return;
                             onRename(name);
                             new Notice(t('notice.viewSaved', { name }));
                         },
