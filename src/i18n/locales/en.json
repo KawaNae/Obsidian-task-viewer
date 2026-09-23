@@ -661,7 +661,6 @@
     "countdownRecorded": "{{icon}} Countdown recorded! ({{duration}})",
     "kindRecorded": "{{icon}} {{kind}} recorded! ({{duration}})",
     "taskUpdated": "{{icon}} Task updated! ({{duration}})",
-    "childTaskNotFound": "Child task not found, creating new record.",
     "flowDidNotFire": "Flow did not fire: {{reason}} ({{file}})",
     "flowDeleteDidNotFire": "The flow did not fire, so the task was not deleted: {{reason}} ({{file}})",
     "timerTargetNotFound": "Timer target task was not found. It may have been deleted, moved, or renamed.",

@@ -40,7 +40,7 @@ function makeHarness(options: { childExists?: boolean; childContent?: string } =
         },
         getTasks: () => (childExists ? [parent, child] : [parent]),
         getTaskByFileLine: () => parent,
-        updateTask: async (id: string, u: Record<string, unknown>) => { updates.push({ id, updates: u }); },
+        updateTask: async (id: string, u: Record<string, unknown>) => { updates.push({ id, updates: u }); return true; },
         waitForScan: async () => { /* unused */ },
     };
 
@@ -48,7 +48,7 @@ function makeHarness(options: { childExists?: boolean; childContent?: string } =
         settings: { pomodoroWorkMinutes: 25, pomodoroBreakMinutes: 5 },
         getTaskIndex: () => taskIndex,
         getTaskWriteService: () => ({
-            insertChildTask: async (_parentId: string, line: string) => { inserted.push(line); },
+            insertChildTask: async (_parentId: string, line: string) => { inserted.push(line); return true; },
         }),
     } as unknown as TaskViewerPlugin;
 
@@ -249,8 +249,9 @@ describe('stop paths do not bypass recordSessionEnd', () => {
         const { readFileSync } = await import('node:fs');
         const source = readFileSync('src/timer/TimerLifecycle.ts', 'utf8');
         expect(source.match(/recorder\.recordSessionEnd\(/g)).toHaveLength(1);
+        // 名前を書けなければ記録に進まず、書けたら直後に記録する。
         expect(source).toMatch(
-            /await this\.ctx\.flushTimerContent\(timer\.id\);\s*\n\s*await this\.ctx\.recorder\.recordSessionEnd\(timer\);/
+            /if \(!\(await this\.ctx\.flushTimerContent\(timer\.id\)\)\) return false;\s*\n\s*return this\.ctx\.recorder\.recordSessionEnd\(timer\);/
         );
     });
 });

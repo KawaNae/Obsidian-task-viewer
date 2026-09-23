@@ -70,7 +70,8 @@ export class TimerTargetManager {
 
         const newTargetId = this.storageUtils.generateTimerTargetId();
         try {
-            await taskIndex.updateTask(currentTask.id, { blockId: newTargetId });
+            // 付けられなかった id を探しに行かない。理由は書き込みの層が通知済み。
+            if (!(await taskIndex.updateTask(currentTask.id, { blockId: newTargetId }))) return;
             await taskIndex.waitForScan(currentTask.file);
 
             const updatedTask =

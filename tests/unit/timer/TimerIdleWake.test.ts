@@ -20,7 +20,7 @@ function build() {
     const ctx = {
         timers: new Map<string, TimerInstance>(),
         recorder: {
-            recordSessionEnd: async () => { /* unused */ },
+            recordSessionEnd: async () => true,
             createChildAtStart: async () => undefined,
             startNextSession: async () => undefined,
             discardRunningPlaceholder: async () => { /* unused */ },
@@ -32,7 +32,7 @@ function build() {
         renderTimerItem: () => { /* unused */ },
         persistTimersToStorage: () => { /* unused */ },
         onTimerClosed: () => { /* unused */ },
-        flushTimerContent: async () => { /* unused */ },
+        flushTimerContent: async () => true,
         discardTimerContent: () => { /* unused */ },
         ensureContainer: () => ({}) as HTMLElement,
         destroyContainer: () => { /* unused */ },

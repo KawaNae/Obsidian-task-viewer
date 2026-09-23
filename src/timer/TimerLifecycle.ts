@@ -180,6 +180,7 @@ export class TimerLifecycle {
     }
 
     private async finishIntervalTimer(timerId: string, timer: IntervalTimer): Promise<void> {
+        const segmentPhase = timer.phase === 'break' ? 'break' : 'work';
         this.prepareBaseElapsed.delete(timerId);
         if (timer.totalDuration > 0) {
             timer.totalElapsedTime = timer.totalDuration;
@@ -192,7 +193,14 @@ export class TimerLifecycle {
         this.stopTimerTick(timerId);
 
         AudioUtils.playFinishSound();
-        await this.flushAndRecord(timer);
+        if (!(await this.flushAndRecord(timer))) {
+            // 区間の途中で止まった形に戻す。phase 'idle' のままだと操作列が
+            // 「開始」だけになり、押すと経過が捨てられ、記録をやり直す ■ も無い。
+            // 区間中で走っていない形なら ■ が出る（TimerRenderer）。
+            timer.phase = segmentPhase;
+            this.keepUnrecorded();
+            return;
+        }
         this.closeTimer(timerId);
     }
 
@@ -206,9 +214,46 @@ export class TimerLifecycle {
      * 打った名前が 1 セッション繰り越される。2 行を並べて書くと片方だけに手が入り、
      * 実際に interval の停止でそうなった（`TimerRenderer` の 2 つの停止ハンドラ）。
      */
-    private async flushAndRecord(timer: TimerInstance): Promise<void> {
-        await this.ctx.flushTimerContent(timer.id);
-        await this.ctx.recorder.recordSessionEnd(timer);
+    private async flushAndRecord(timer: TimerInstance): Promise<boolean> {
+        // 名前を書けなかったら記録に進まない。古い名前で記録を書けば、通知が
+        // 拒否と成功の2回になり、打った名前は下書きに残ったまま行き先を失う。
+        if (!(await this.ctx.flushTimerContent(timer.id))) return false;
+        return this.ctx.recorder.recordSessionEnd(timer);
+    }
+
+    /**
+     * 記録を書けなかった出口の後始末。widget は閉じず、計測は一時停止のまま
+     * 残す（経過は `pausedElapsedTime` に在り、`recordedElapsedTime` には足さない）。
+     * 理由の通知は書き込みの層か recorder が1回だけ出し終えている。もう一度
+     * 同じ出口を押せば記録をやり直し、✕ なら記録せずに閉じる。計測を捨てるのは
+     * 利用者の操作だけにする。
+     */
+    private keepUnrecorded(): void {
+        this.ctx.render();
+        this.ctx.persistTimersToStorage();
+    }
+
+    /**
+     * 記録を書けずに一時停止のまま残った走行か。計測を持っているので、✕ は
+     * 走行中と同じく確認を挟んで捨てる（{@link discardTimer}）。
+     *
+     * countup / countdown は、走行（runState 'running'）が止まっていて経過を持つ
+     * 形。UI の操作で止まるのは中断（suspended）だけなので、この形は記録に失敗した
+     * 出口か、停止の記録待ちのまま落ちた復元からしか来ない。interval は、区間の
+     * 途中（work / break）で走っていない形で、同じ2つからしか来ない
+     * （TimerRenderer の操作列の注記）。
+     */
+    holdsUnrecordedRun(timer: TimerInstance): boolean {
+        if (timer.isRunning || timer.runState === 'suspended') return false;
+        switch (timer.timerType) {
+            case 'countup':
+            case 'countdown':
+                return timer.runState === 'running' && timer.pausedElapsedTime > 0;
+            case 'interval':
+                return timer.phase === 'work' || timer.phase === 'break';
+            default:
+                return false;
+        }
     }
 
     // ─── Pause / Resume / Close ───────────────────────────────
@@ -255,9 +300,14 @@ export class TimerLifecycle {
         if (timer.timerType === 'interval' || timer.timerType === 'idle') return;
         if (timer.runState === 'suspended') return;
 
-        this.pauseTimer(timer);
+        // 記録に失敗して一時停止のまま残った走行をやり直すときは、止め直さない。
+        // `pauseTimer` は `startTimeMs` を戻さないので、二度目は経過を二重に足す。
+        if (timer.isRunning) this.pauseTimer(timer);
         const sessionSeconds = getTimerElapsedSeconds(timer);
-        await this.flushAndRecord(timer);
+        if (!(await this.flushAndRecord(timer))) {
+            this.keepUnrecorded();
+            return;
+        }
 
         timer.recordedElapsedTime += Math.max(0, sessionSeconds);
         timer.sessionCount += 1;
@@ -327,9 +377,13 @@ export class TimerLifecycle {
      */
     async finishTimer(timer: TimerInstance): Promise<void> {
         if (timer.runState === 'running' && timer.timerType !== 'idle') {
-            this.pauseTimer(timer);
+            // やり直しでは止め直さない（suspendTimer と同じ理由）。
+            if (timer.isRunning) this.pauseTimer(timer);
             const sessionSeconds = getTimerElapsedSeconds(timer);
-            await this.flushAndRecord(timer);
+            if (!(await this.flushAndRecord(timer))) {
+                this.keepUnrecorded();
+                return;
+            }
             timer.recordedElapsedTime += Math.max(0, sessionSeconds);
             timer.sessionCount += 1;
         }
@@ -374,7 +428,10 @@ export class TimerLifecycle {
     async stopIntervalTimer(timer: IntervalTimer): Promise<void> {
         this.pauseOrSnapshotIntervalForStop(timer);
         AudioUtils.playFinishSound();
-        await this.flushAndRecord(timer);
+        if (!(await this.flushAndRecord(timer))) {
+            this.keepUnrecorded();
+            return;
+        }
         this.closeTimer(timer.id);
     }
 
