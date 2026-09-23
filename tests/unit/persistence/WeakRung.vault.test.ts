@@ -137,4 +137,17 @@ describe('a root rewritten into its child\'s words', () => {
         await fromOutside(session, ['- [ ] B @2026-09-21', '\t- [x] B @2026-09-21', '']);
         expect(tasks(session).map(task => task.id)).toEqual([root, child]);
     });
+
+    // The exception is for a child whose strongest match lies wholly below
+    // the other side. A child whose own words the other side now reads, with
+    // only its content and date matched below, still blocks the pair.
+    it('a root deleted over a child and grandchild of one content: no name shifts up (fuzz r4 3432)', async () => {
+        const session = await open(['- [x] B @2026-09-21', '\t- [x] D @2026-09-21', '\t\t- [ ] D @2026-09-21', '']);
+        const [root, child, grandchild] = tasks(session).map(task => task.id);
+        await fromOutside(session, ['\t- [x] D @2026-09-21', '\t\t- [ ] D @2026-09-21', '']);
+        const [first, second] = tasks(session).map(task => task.id);
+        expect([first, second]).not.toContain(root);
+        expect(second).not.toBe(child);
+        expect(second).toBe(grandchild);
+    });
 });

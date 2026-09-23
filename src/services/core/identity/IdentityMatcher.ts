@@ -279,21 +279,26 @@ function pairByLadder(
                 deferred.splice(i--, 1);
                 continue;
             }
-            // A row below the pair is not evidence against it when its stronger
-            // key points below the other side of the same pair: a root rewritten
-            // into its child's words would otherwise be blocked by that child,
-            // whose own scope — unopened while the pair is held — pairs it with
-            // its twin below. Both subtrees move with the pair, so that evidence
-            // agrees with it. A row below one side whose key points anywhere
-            // else still blocks (the child a card's delete cut off, the root a
-            // new parent took in).
+            // A row below the pair is not evidence against it when its strongest
+            // match lies wholly below the other side of the same pair: a root
+            // rewritten into its child's words would otherwise be blocked by
+            // that child, whose own scope — unopened while the pair is held —
+            // pairs it with its twin below. Both subtrees move with the pair,
+            // so that evidence agrees with it. A row below one side whose
+            // strongest match is anywhere else still blocks: the child a card's
+            // delete cut off, the root a new parent took in, and a child whose
+            // words the other side itself now reads, with only a weaker match
+            // below (a deleted root's child and grandchild shifting up a name
+            // each).
             const underEntry = below<LedgerEntry>(entry, at => prevChildren.get(at.runtimeId) ?? []);
             const underTask = below<Task>(task, at => childrenOf.get(at) ?? []);
+            const within = <T>(found: T[], under: Set<T>): boolean =>
+                found.length > 0 && found.every(twin => under.has(twin));
             const against = (row: LedgerEntry | Task): boolean => {
                 if (!free(row)) return false;
                 return 'runtimeId' in row
-                    ? !(underEntry.has(row) && stronger.forPrevious(row).some(twin => underTask.has(twin)))
-                    : !(underTask.has(row) && stronger.forCurrent(row).some(twin => underEntry.has(twin)));
+                    ? !(underEntry.has(row) && within(stronger.strongestForPrevious(row), underTask))
+                    : !(underTask.has(row) && within(stronger.strongestForCurrent(row), underEntry));
             };
             if (stronger.forPrevious(entry).some(against) || stronger.forCurrent(task).some(against)) continue;
             deferred.splice(i--, 1);
@@ -552,7 +557,12 @@ function strongerCandidates(
     partner: readonly LedgerEntry[],
     ordered: readonly Task[],
     fingerprints: Map<Task, Fingerprint>,
-): { forPrevious: (entry: LedgerEntry) => Task[]; forCurrent: (task: Task) => LedgerEntry[] } {
+): {
+    forPrevious: (entry: LedgerEntry) => Task[];
+    forCurrent: (task: Task) => LedgerEntry[];
+    strongestForPrevious: (entry: LedgerEntry) => Task[];
+    strongestForCurrent: (task: Task) => LedgerEntry[];
+} {
     const keysOf = (fingerprint: Fingerprint): string[] =>
         [blockIdKey(fingerprint), originalTextKey(fingerprint), contentDateKey(fingerprint)]
             .filter((key): key is string => key !== null);
@@ -569,9 +579,19 @@ function strongerCandidates(
     for (const entry of partner) {
         for (const key of keysOf(entry.fingerprint)) add(entriesBy, key, entry);
     }
+    // The candidates of the strongest rung that has any, `^id` first.
+    const strongest = <T>(keys: string[], by: Map<string, T[]>): T[] => {
+        for (const key of keys) {
+            const found = by.get(key);
+            if (found && found.length > 0) return found;
+        }
+        return [];
+    };
     return {
         forPrevious: entry => keysOf(entry.fingerprint).flatMap(key => tasksBy.get(key) ?? []),
         forCurrent: task => keysOf(fingerprints.get(task)!).flatMap(key => entriesBy.get(key) ?? []),
+        strongestForPrevious: entry => strongest(keysOf(entry.fingerprint), tasksBy),
+        strongestForCurrent: task => strongest(keysOf(fingerprints.get(task)!), entriesBy),
     };
 }
 
