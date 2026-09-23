@@ -15,7 +15,7 @@ import { Outline } from '../parsing/utils/Outline';
  * read, an edit made since cannot make wrong, and is not checked.
  */
 export interface RowBasis {
-    /** The row's line, as the index read it (compared without its indentation). */
+    /** The row's line, as the index read it, indentation included. */
     text: string;
     /** The text after `==>` on each of the row's own command lines, in order. */
     commands?: readonly string[];
@@ -59,7 +59,7 @@ export type OnRecord = typeof ON_RECORD;
  * written after the index read the row.
  */
 export function readsAsPlanned(lines: readonly string[], line: number, basis: RowBasis): boolean {
-    if (!Outline.UP_TO_INDENT.holds(lines[line], basis.text)) return false;
+    if (lines[line] !== basis.text) return false;
     if (basis.commands) {
         const commands = collectFlowLineIndicesInFile(lines, line).map(i => flowLineTail(lines[i]));
         if (commands.length !== basis.commands.length) return false;

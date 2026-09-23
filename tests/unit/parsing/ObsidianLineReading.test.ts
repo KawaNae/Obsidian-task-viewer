@@ -84,12 +84,14 @@ describe('indentation, as Obsidian nests a list', () => {
         expect(FileOperations.detectIndentUnit(['- a', '\t- b'])).toBe('\t');
     });
 
-    it('does not take a line opened with a full-width space for the row a basis was read from', () => {
-        // The basis compares a row modulo its indentation. A full-width space
-        // is not indentation, so that line is another line, not this row moved.
-        const basis = { text: '- [ ] a' };
+    it('takes only the row as written, indentation included, for the row a basis was read from', () => {
+        // The basis compares a row verbatim. A full-width space is not
+        // indentation, and a tab moves the row to another depth: either way
+        // that line is another line, not the row the plan read.
+        const basis = { text: '\t- [ ] a' };
         expect(readsAsPlanned([`${IDEOGRAPHIC}- [ ] a`], 0, basis)).toBe(false);
         expect(readsAsPlanned([`${NBSP}- [ ] a`], 0, basis)).toBe(false);
+        expect(readsAsPlanned(['- [ ] a'], 0, basis)).toBe(false);
         expect(readsAsPlanned(['\t- [ ] a'], 0, basis)).toBe(true);
     });
 });
