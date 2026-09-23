@@ -17,6 +17,7 @@ import type { WriteObserver } from '../WriteObserver';
 import { refOf, subjectOf, type RowBasis, type WriteTarget } from '../TaskRefs';
 import type { TaskOp } from '../TaskOps';
 import { logWarn } from '../../../log/log';
+import { Outline } from '../../parsing/utils/Outline';
 
 
 /**
@@ -346,7 +347,7 @@ export class InlineTaskWriter {
         // counting characters makes the tab line look shallower — the walk then
         // stops at the first sibling spelled differently and a new record lands
         // in the middle of the run instead of at its end.
-        const baseWidth = FileOperations.indentWidth(lines[taskLineIndex]);
+        const baseWidth = Outline.depthOf(lines[taskLineIndex]);
 
         let last = taskLineIndex;
         for (; ;) {
@@ -355,7 +356,7 @@ export class InlineTaskWriter {
 
             const line = lines[next];
             if (line.trim() === '') return last;
-            if (FileOperations.indentWidth(line) !== baseWidth) return last;
+            if (Outline.depthOf(line) !== baseWidth) return last;
 
             const parsed = TaskLineClassifier.classify(line);
             if (parsed?.statusChar !== 'x') return last;

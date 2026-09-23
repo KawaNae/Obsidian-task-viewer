@@ -90,6 +90,13 @@ describe('Placement.groupHead', () => {
             expect(Placement.groupHead(lines, 3)).toBe(1);
         });
 
+        it('takes a sibling indented by a tab for a sibling, not a parent', () => {
+            // A tab and four spaces are the same depth: `a` is `current`'s elder
+            // sibling, and the group's head is under `parent`.
+            const lines = ['- [ ] parent', '\t- [x] a', '    - [ ] current'];
+            expect(Placement.groupHead(lines, 2)).toBe(1);
+        });
+
         it('goes below its parent over a blank line, not to the top of the note', () => {
             const lines = ['---', 'tags: a', '---', '# note', '- [ ] parent', '', '    - [ ] current'];
             expect(Placement.groupHead(lines, 6)).toBe(5);

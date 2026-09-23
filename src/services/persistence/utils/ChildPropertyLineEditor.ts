@@ -3,6 +3,7 @@ import { CodeFenceTracker } from '../../../utils/CodeFenceTracker';
 import { FileOperations } from './FileOperations';
 import type { PropertyOp } from '../PropertyUpdatePlanner';
 import type { LineEdits } from '../../../utils/FileLines';
+import { Outline } from '../../parsing/utils/Outline';
 
 interface OwnPropertyLine {
     lineIdx: number;
@@ -35,7 +36,7 @@ export class ChildPropertyLineEditor {
      * （TreeTaskExtractor の除外規則の write 層版）。
      */
     static findOwnPropertyLines(lines: string[], taskLineIdx: number): OwnPropertyLine[] {
-        const taskIndent = lines[taskLineIdx].search(/\S|$/);
+        const taskIndent = Outline.depthOf(lines[taskLineIdx]);
         const result: OwnPropertyLine[] = [];
         let skipDeeperThan: number | null = null;
 
@@ -50,7 +51,7 @@ export class ChildPropertyLineEditor {
         for (let j = taskLineIdx + 1; j < lines.length; j++) {
             const line = lines[j];
             if (line.trim() === '') break;
-            const indent = line.search(/\S|$/);
+            const indent = Outline.depthOf(line);
             if (indent <= taskIndent) break;
 
             if (fenced[j - taskLineIdx - 1]) continue;

@@ -2,6 +2,7 @@ import type { DocumentNode, SectionNode, BlockNode, PropertyBlockEntry, TaskBloc
 import { ChildLineClassifier } from '../utils/ChildLineClassifier';
 import { TaskLineClassifier } from '../utils/TaskLineClassifier';
 import { CodeFenceTracker } from '../../../utils/CodeFenceTracker';
+import { Outline } from '../utils/Outline';
 
 /**
  * A markdown heading line: capture group 1 = `#` run, group 2 = title text.
@@ -180,7 +181,7 @@ export class DocumentTreeBuilder {
             const lineNum = leadLines[idx];
             const line = allLines[lineNum];
             if (line.trim() === '') continue;
-            if (line.search(/\S|$/) !== 0) continue;
+            if (Outline.depthOf(line) !== 0) continue;
 
             // グループ形式: `- properties::` の直下の indented エントリを吸収
             if (PROPERTY_GROUP_HEADER.test(line)) {
@@ -188,7 +189,7 @@ export class DocumentTreeBuilder {
                 while (j < leadLines.length) {
                     const childLine = allLines[leadLines[j]];
                     if (childLine.trim() === '') { j++; continue; }
-                    const childIndent = childLine.search(/\S|$/);
+                    const childIndent = Outline.depthOf(childLine);
                     if (childIndent === 0) break;
                     const propMatch = childLine.match(ChildLineClassifier.PROPERTY_LINE);
                     if (propMatch) {
@@ -306,7 +307,7 @@ export class DocumentTreeBuilder {
         fenceMask: boolean[]
     ): TaskBlock {
         const rawLine = lines[startIndex];
-        const indent = rawLine.search(/\S|$/);
+        const indent = Outline.depthOf(rawLine);
         const childRawLines: string[] = [];
         const childLineNumbers: number[] = [];
         let j = startIndex + 1;
@@ -314,7 +315,7 @@ export class DocumentTreeBuilder {
         while (j < endIndex) {
             const nextLine = lines[j];
             if (nextLine.trim() === '') break;
-            const nextIndent = nextLine.search(/\S|$/);
+            const nextIndent = Outline.depthOf(nextLine);
             if (nextIndent > indent) {
                 childRawLines.push(nextLine);
                 childLineNumbers.push(lineNumbers[j]);
