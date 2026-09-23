@@ -19,7 +19,7 @@ const FILE = 'note.md';
 
 /** The real pipeline, as the scanner runs it — same order, same refusal. */
 const parseRows = (path: string, lines: readonly string[]) => {
-    const parsed = FileParsePipeline.parse(path, [...lines], undefined, DEFAULT_SETTINGS);
+    const parsed = FileParsePipeline.parse(path, [...lines], DEFAULT_SETTINGS);
     if (parsed.ignored) return null;
     return parsed.tasks;
 };

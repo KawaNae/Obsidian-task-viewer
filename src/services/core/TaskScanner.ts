@@ -59,15 +59,9 @@ export class TaskScanner {
      */
     private claims = new WriteClaims(
         (path, lines) => {
-            // The frontmatter is the cache's, which is the file as it was
-            // before the write asking this question — Obsidian updates the
-            // cache from the `modify` that has not fired yet. Nothing here can
-            // do better from inside `vault.process`. What it costs is a claim
-            // made under the old reading of a `tv-ignore` or a notation
-            // switch; the scan that follows reads the new one and refuses a
-            // claim that does not reproduce what it sees.
-            const parsed = FileParsePipeline.parse(
-                path, [...lines], this.app.metadataCache.getCache(path)?.frontmatter, this.settings);
+            // The frontmatter is the one these lines hold, as the scan that
+            // follows reads it (see `FileParsePipeline.parse`).
+            const parsed = FileParsePipeline.parse(path, [...lines], this.settings);
             // Not the same answer as a file with no tasks: an ignored file is
             // one this pipeline declines to read, and "it has no rows" would
             // be a claim about it.
@@ -206,12 +200,7 @@ export class TaskScanner {
         const readKey = contentKeyOf(lines);
 
         // --- parse ---
-        const parsed = FileParsePipeline.parse(
-            file.path,
-            lines,
-            this.app.metadataCache.getCache(file.path)?.frontmatter,
-            this.settings
-        );
+        const parsed = FileParsePipeline.parse(file.path, lines, this.settings);
 
         if (parsed.ignored) {
             this.store.removeTasksByFile(file.path);
@@ -464,8 +453,7 @@ export class TaskScanner {
             return row ? { kind: 'at', line: row.line } : { kind: 'gone' };
         }
 
-        const parsed = FileParsePipeline.parse(
-            path, [...lines], this.app.metadataCache.getCache(path)?.frontmatter, this.settings);
+        const parsed = FileParsePipeline.parse(path, [...lines], this.settings);
         if (parsed.ignored) return { kind: 'gone' };
 
         const previous = this.ledger.snapshotFor(path);

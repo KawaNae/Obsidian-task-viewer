@@ -65,7 +65,7 @@ const MIXED = [
 
 describe('a note that mixes tabs and spaces', () => {
     it('is read with the parent and children it shows', () => {
-        const parsed = FileParsePipeline.parse('note.md', [...MIXED], undefined, DEFAULT_SETTINGS);
+        const parsed = FileParsePipeline.parse('note.md', [...MIXED], DEFAULT_SETTINGS);
         if (parsed.ignored) throw new Error('ignored');
         const byContent = new Map(parsed.tasks.map(task => [task.content, task]));
         const parentOf = (content: string) => {
@@ -115,7 +115,7 @@ describe('Outline.subtreeEnd', () => {
 describe('a child below a blank line', () => {
     it('is read as the child of the task above the blank line', () => {
         const lines = ['- [ ] p', '\t- [ ] a', '', '\t- [ ] b', '\t- key:: value', '', '- [ ] q', ''];
-        const parsed = FileParsePipeline.parse('note.md', [...lines], undefined, DEFAULT_SETTINGS);
+        const parsed = FileParsePipeline.parse('note.md', [...lines], DEFAULT_SETTINGS);
         if (parsed.ignored) throw new Error('ignored');
         const p = parsed.tasks.find(task => task.content === 'p')!;
         const b = parsed.tasks.find(task => task.content === 'b')!;
@@ -127,7 +127,7 @@ describe('a child below a blank line', () => {
 
     it('of a child task stays the child\'s, not the parent\'s child line', () => {
         const lines = ['- [ ] p', '\t- [ ] c', '', '\t\tmemo of c', '\tmemo of p', ''];
-        const parsed = FileParsePipeline.parse('note.md', [...lines], undefined, DEFAULT_SETTINGS);
+        const parsed = FileParsePipeline.parse('note.md', [...lines], DEFAULT_SETTINGS);
         if (parsed.ignored) throw new Error('ignored');
         const p = parsed.tasks.find(task => task.content === 'p')!;
         expect(p.childLines.map(line => line.text.trim())).toEqual(['memo of p']);

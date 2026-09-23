@@ -14,7 +14,7 @@ import { DEFAULT_SETTINGS, type Task } from '../../../src/types';
  */
 
 function childItems(lines: string[]) {
-    const { tasks } = FileParsePipeline.parse('note.md', lines, undefined, DEFAULT_SETTINGS);
+    const { tasks } = FileParsePipeline.parse('note.md', lines, DEFAULT_SETTINGS);
     const byId = new Map(tasks.map(task => [task.id, task]));
     const parent = tasks[0];
     const entries = buildChildEntries(parent, id => byId.get(id) as Task | undefined);
