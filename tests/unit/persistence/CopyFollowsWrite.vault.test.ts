@@ -91,3 +91,40 @@ describe('after a card\'s update, before any scan', () => {
         expect(contents.get(FILE)).toBe(edited);
     });
 });
+
+describe('a subtree the update did not plan from is not taken into the copy', () => {
+    // Found by the F5 counterexample run. A card's update plans from the row's
+    // line only, so a child written in from outside since the scan does not
+    // stop it. Taking the subtree the write left into the copy would make that
+    // child part of what the next delete plans from, and it would go with the
+    // row. A `^id` makes `locate` answer at once, so nothing else stands in
+    // the way of that delete.
+    const ROW = '- [ ] A @2026-09-21 ^keep';
+
+    it('refuses the delete that follows, as it refuses one with no update before it', async () => {
+        const { contents, session } = await open(['# note', ROW, '- [ ] Z', '']);
+        const id = idOf(session, 'A');
+        session.index.setDraggingFile(FILE);
+        contents.set(FILE, ['# note', ROW, '\t- [ ] 外から足した子', '- [ ] Z', ''].join('\n'));
+
+        expect(await session.index.updateTask(id, { statusChar: 'x' })).toBe(true);
+        const afterUpdate = contents.get(FILE);
+        expect(afterUpdate).toBe(['# note', '- [x] A @2026-09-21 ^keep', '\t- [ ] 外から足した子', '- [ ] Z', ''].join('\n'));
+
+        expect(await session.index.deleteTask(id)).toBe(false);
+        expect(contents.get(FILE)).toBe(afterUpdate);
+    });
+
+    it('refuses the deletion fire that follows', async () => {
+        const { contents, session } = await open(['# note', ROW, '\t- ==> every 1d', '- [ ] Z', '']);
+        const id = idOf(session, 'A');
+        session.index.setDraggingFile(FILE);
+        contents.set(FILE, ['# note', ROW, '\t- ==> every 1d', '\t- 外から足したメモ', '- [ ] Z', ''].join('\n'));
+
+        expect(await session.index.updateTask(id, { content: 'A2' })).toBe(true);
+        const afterUpdate = contents.get(FILE);
+
+        expect(await session.index.deleteTask(id, { fireFlow: true })).toBe(false);
+        expect(contents.get(FILE)).toBe(afterUpdate);
+    });
+});

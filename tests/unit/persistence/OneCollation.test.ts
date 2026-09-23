@@ -179,7 +179,10 @@ describe('what an update leaves', () => {
 
         const outcome = await bench.writer.updateTaskInFile(plannedOn(a), checked(a));
 
-        expect(outcome.left.get(a.id)).toEqual(['- [x] A', '    - key:: v']);
+        expect(outcome.rows.get(a.id)).toEqual({
+            read: ['- [ ] A', '    - key:: v'],
+            left: ['- [x] A', '    - key:: v'],
+        });
     });
 
     it('answers nothing when nothing was written', async () => {
@@ -190,6 +193,6 @@ describe('what an update leaves', () => {
         const outcome = await bench.writer.updateTaskInFile(plannedOn(a), checked(a));
 
         expect(outcome.written).toBe(false);
-        expect(outcome.left.size).toBe(0);
+        expect(outcome.rows.size).toBe(0);
     });
 });

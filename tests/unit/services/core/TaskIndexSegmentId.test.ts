@@ -42,7 +42,7 @@ function buildHost(task: Task) {
         scanner: { requestScan: vi.fn(async () => { }) },
         app: { vault: { getAbstractFileByPath: () => null } },
         repository: {
-            updateTaskInFile: vi.fn(async () => ({ written: true, refused: null, made: [], left: new Map() })),
+            updateTaskInFile: vi.fn(async () => ({ written: true, refused: null, made: [], rows: new Map() })),
         },
         draggingFilePath: null,
         revertUnwrittenUpdate: proto.revertUnwrittenUpdate,
