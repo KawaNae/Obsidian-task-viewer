@@ -602,13 +602,15 @@ describe('a firing whose gen block writes a parent of its own', () => {
         expect(harness.ids()[0]).not.toBe(original);
     });
 
-    it('loses the strip with the instance when a hand edit lands on both', async () => {
-        // What the second claim's correctness is worth to the third. A line
-        // typed into the file in the same moment leaves the scan reading
-        // something neither claim describes; it adopts nothing and the rows
-        // moved anyway, so the whole log goes — the strip's claim with it,
-        // though no scan ever read the state it describes. The firing then
-        // lands exactly where it would have with nothing claimed at all.
+    it('pairs against what the firing left when a hand edit lands on both (F5b)', async () => {
+        // A line typed into the file in the same moment leaves the scan
+        // reading something neither claim describes; it adopts nothing, so
+        // the whole log goes — the strip's claim with it, though no scan ever
+        // read the state it describes. The ladder then pairs against what the
+        // firing left rather than against the ledger from before it: the
+        // typed line came after the writes, so the rows they left are the
+        // newest known (`WriteClaims.ladderFor`). Until F5b it paired against
+        // the ledger, and the name went to the instance above.
         const { harness, original } = await fired();
 
         harness.report([BARE, GEN_FIRED, ''], [{ kind: 'inserted', at: 0, count: 1 }]);
@@ -620,10 +622,9 @@ describe('a firing whose gen block writes a parent of its own', () => {
 
         // Both claims are gone, not just the one that failed to match.
         expect(harness.pendingCount()).toBe(0);
-        // And the ladder placed the row the way it places it with no claim:
-        // on the instance, above the line that fired.
-        expect(harness.ids()[0]).toBe(original);
-        expect(harness.ids()[1]).not.toBe(original);
+        // And the row keeps its name on the line that fired.
+        expect(harness.ids()[1]).toBe(original);
+        expect(harness.ids()[0]).not.toBe(original);
 
         // The typed line goes again. Nothing is left to say otherwise, so the
         // answer the ladder already committed stands.
@@ -866,8 +867,9 @@ describe('the whole content decides which state was read', () => {
     it('falls to the ladder when something else wrote between the write and the scan', async () => {
         // A sync or a linter touches a line no task stands on. The rows still
         // read as the claim says, but the file does not, and a claim is
-        // believed about the file it describes or not at all. What the scan
-        // decides is then exactly what it decides with no claim filed.
+        // believed about the file it describes or not at all. The ladder then
+        // pairs against what the write left, the newest state known before
+        // the sync (F5b); with no claim filed it pairs against the ledger.
         const external = [TASK, TASK, 'synced'];
 
         const control = new Harness();
@@ -884,10 +886,11 @@ describe('the whole content decides which state was read', () => {
         await harness.scan();
 
         const shape = (ids: string[], kept: string) => ids.map(id => (id === kept ? 'kept' : 'new'));
-        // The claim would have said the copy is on top; the ladder, pairing
-        // by position, keeps the top line.
+        // With nothing claimed, the ladder pairs by position and keeps the
+        // top line. The write said the copy went on top, and the ladder
+        // paired against what it left keeps the lower one, as the write did.
         expect(shape(control.ids(), controlOriginal)).toEqual(['kept', 'new']);
-        expect(shape(harness.ids(), original)).toEqual(['kept', 'new']);
+        expect(shape(harness.ids(), original)).toEqual(['new', 'kept']);
         // The claim was not believed, and the rows moved, so the log is gone.
         expect(harness.pendingCount()).toBe(0);
     });

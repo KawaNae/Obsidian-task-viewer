@@ -19,6 +19,8 @@ export interface ClaimBase {
     created: boolean;
     text: string;
     line: number;
+    /** The parser that read the row, when the one who recorded it knew. */
+    parserId?: ParserId;
 }
 
 /**
@@ -212,6 +214,7 @@ export class WriteClaims {
         const rows: ClaimBase[] = [];
         const made: ClaimResult['made'] = [];
         const nameOf = new Map<Task, string>();
+        const crossed = new Set<string>();
         for (const task of parsed) {
             const from = replayed.origin[task.line];
             // `created` travels with the identity, not with this write: a row
@@ -220,22 +223,28 @@ export class WriteClaims {
             // however many writes it has sat through since.
             const carried = from === null ? undefined : identityOf.get(from);
             if (carried) {
-                rows.push({ runtimeId: carried.runtimeId, created: carried.created, text: task.originalText, line: task.line });
+                rows.push({ runtimeId: carried.runtimeId, created: carried.created, text: task.originalText, line: task.line, parserId: task.parserId });
                 nameOf.set(task, carried.runtimeId);
+                if (carried.parserId !== undefined && carried.parserId !== task.parserId) crossed.add(carried.runtimeId);
                 continue;
             }
             // Either the write made this line, or it made a task of a line
             // that was not one — a row with no past either way.
             const runtimeId = this.mintRuntimeId(path, task.parserId);
-            rows.push({ runtimeId, created: true, text: task.originalText, line: task.line });
+            rows.push({ runtimeId, created: true, text: task.originalText, line: task.line, parserId: task.parserId });
             nameOf.set(task, runtimeId);
             made.push({ line: task.line, runtimeId });
         }
 
         const content = contentKeyOf(after);
         // The same rows, read the way a scan would have recorded them, for a
-        // ladder that has to pair against this state.
-        const ladder = ledgerRowsOf(parsed, task => nameOf.get(task)!);
+        // ladder that has to pair against this state. Less a row whose name
+        // the write carried from one parser's reading to another's: a scan
+        // never hands a name across parsers, and neither may a ladder paired
+        // against this state (the claim itself is refused for it, see
+        // `reproduces`).
+        const ladder = ledgerRowsOf(parsed, task => nameOf.get(task)!)
+            .filter(entry => !crossed.has(entry.runtimeId));
         const withdraw = this.append(path, { filed: ++this.filed, content, state: { rows, ladder } });
         return {
             hint: { content, rows: rows.map(row => ({ runtimeId: row.runtimeId, created: row.created, text: row.text })), origin },
@@ -325,6 +334,60 @@ export class WriteClaims {
         const newest = this.chains.get(path)?.links.at(-1);
         if (!newest) return undefined;
         return { rows: newest.content === null ? null : newest.state?.rows ?? null };
+    }
+
+    /**
+     * What a ladder over these lines pairs against: the newest state of the
+     * file that is known to be older than what was read.
+     *
+     * The ledger is the state the last scan read. Once a write of ours has
+     * landed after it, the ledger is older than that write, and a ladder that
+     * pairs against it pairs across our own writes as well as whatever came
+     * after them — two writes that traded the texts of two rows hand each
+     * name to the other's line (F2's S2c). The chain says what those writes
+     * left, so when the lines are known to have changed after the last of
+     * them, the ladder pairs against what the last described write left.
+     * Across a mark, that is the state beneath it: the write that could not
+     * say what it did is paired across like any edit nobody reported.
+     *
+     * "Known to have changed after the last of them" takes every state the
+     * file was in since the ledger. A read can land between two of our writes,
+     * and a read of an earlier state paired against a later one hands names
+     * to rows in the order the later one has them. So:
+     *
+     * - lines the ledger recorded, whole, are the ledger's: their content
+     *   names that state. If the newest write left the same content with
+     *   the names moved, which one was read is not something the lines can
+     *   say, and the ladder answers as it did before any of this;
+     * - lines an earlier write of the chain left are ledger's too, for the
+     *   same reason: the read may have been of that moment, and the state a
+     *   write left is not paired against as a whole — that would adopt, by
+     *   the ladder's door, a claim the log has dropped;
+     * - lines that are none of these changed after our last write, and the
+     *   newest state we know is the partner;
+     * - and when the cap has dropped earlier states (`lost`), "none of these"
+     *   cannot be told from a dropped state, and no partner is safe: the
+     *   ledger is older than our writes, the newest state may be newer than
+     *   the read. Every row is then new, the one answer that hands no name to
+     *   the wrong row.
+     *
+     * @param read the key of the lines read.
+     * @param ledger what the last scan recorded: its content key and its rows.
+     */
+    ladderFor(
+        path: string,
+        read: ContentKey,
+        ledger: { content: ContentKey | null; rows: readonly LedgerEntry[] },
+    ): readonly LedgerEntry[] {
+        const chain = this.chains.get(path);
+        if (!chain) return ledger.rows;
+        if (ledger.content !== null && read === ledger.content) return ledger.rows;
+
+        const newest = newestDescribed(chain.links);
+        if (newest?.content === read && newest.state) return newest.state.ladder;
+        if (chain.links.some(link => link.content === read)) return ledger.rows;
+        if (chain.lost > 0) return [];
+        return newest?.state?.ladder ?? ledger.rows;
     }
 
     /**

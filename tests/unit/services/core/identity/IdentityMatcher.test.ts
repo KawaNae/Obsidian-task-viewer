@@ -17,7 +17,7 @@ import type { Task } from '../../../../../src/types';
 
 /** The matcher with no claims to weigh: the ladder on its own. */
 function matchFile(previous: LedgerEntry[], tasks: Task[], mint: (task: Task) => string) {
-    return matchWithEvidence(previous, tasks, mint, rowsOnlyEvidence(previous, tasks, []));
+    return matchWithEvidence(previous, tasks, mint, rowsOnlyEvidence(previous, tasks, []), previous);
 }
 
 /** Runtime IDs in the transitional `parserId:file:seq:n` shape of stage 1. */

@@ -14,7 +14,7 @@ function matchFile(
     pending?: readonly PendingHint[],
 ) {
     return matchWithEvidence(previous, tasks, mint,
-        rowsOnlyEvidence(previous, tasks, pending ?? []));
+        rowsOnlyEvidence(previous, tasks, pending ?? []), previous);
 }
 import type { Task } from '../../../../../src/types';
 

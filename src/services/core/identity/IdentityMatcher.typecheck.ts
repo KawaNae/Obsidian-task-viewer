@@ -19,5 +19,10 @@ export function matchFileSignatureChecks(previous: LedgerEntry[], tasks: Task[],
     // Claims alone, without the contents they are weighed against, do not
     // compile either.
     // @ts-expect-error before and read are required
-    matchFile(previous, tasks, mint, { pending: [] });
+    matchFile(previous, tasks, mint, { pending: [] }, previous);
+
+    // A scan that leaves out what the ladder pairs against would pair against
+    // the ledger however far our own writes have moved the file past it.
+    // @ts-expect-error the ladder's partner is required
+    matchFile(previous, tasks, mint, { pending: [], before: null, read: '' });
 }

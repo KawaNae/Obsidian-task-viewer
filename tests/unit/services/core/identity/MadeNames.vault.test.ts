@@ -78,10 +78,12 @@ describe('the rows a write made', () => {
 describe('a made name, once the file has moved on without it', () => {
     // A row a write made is known by the claim that carries its name until a
     // scan adopts it. If something else edits the file first, no scan will:
-    // the lines are not the ones the claim describes. So the name belongs to
-    // no line, and `locate` answers `gone` rather than the line that reads
-    // like the row (TaskScanner.locate).
-    it('is gone before the scan, and on no row after it', async () => {
+    // the lines are not the ones the claim describes. The chain still says
+    // what the write left, and the edit came after it, so the scan's ladder
+    // pairs against that state and the row keeps the name the write gave it
+    // (F5b; before it the ladder paired against the ledger, which has never
+    // heard the name).
+    it('is kept by the row the write made', async () => {
         const { contents, session } = await open(['# note', '- [ ] 上 @2026-09-21', '']);
         // A drag holds the file's scans back until it ends, as it does in use.
         session.index.setDraggingFile(FILE);
@@ -104,6 +106,7 @@ describe('a made name, once the file has moved on without it', () => {
         await session.settle(FILE);
         const ids = session.index.getTasks().filter(task => task.file === FILE).map(task => task.id);
         expect(ids).toHaveLength(3);
-        expect(ids).not.toContain(made.runtimeId);
+        const kept = session.index.getTasks().find(task => task.id === made.runtimeId);
+        expect(kept?.originalText).toBe('- [ ] 新 @2026-09-21');
     });
 });
