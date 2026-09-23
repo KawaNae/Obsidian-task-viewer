@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { writeBench, FILE } from '../helpers/writeBench';
 import { plannedOn } from '../../../src/services/persistence/TaskRefs';
 import { FrontmatterWriter } from '../../../src/services/persistence/writers/FrontmatterWriter';
@@ -91,7 +91,7 @@ describe('creating a note', () => {
     it('createFile: a create that threw and left no note is refused as failed, told once', async () => {
         const b = await benchCreateThrows(null);
 
-        const outcome = await createFile(b.app, NEW, b.channel(NEW), CONTENT, '新しいタスク');
+        const outcome = await createFile(b.app, NEW, b.channel(NEW), '新しいタスク', () => CONTENT);
 
         expect(outcome.written).toBe(false);
         expect(outcome.refused).toEqual({ file: NEW, reason: { kind: 'failed' }, subject: '新しいタスク' });
@@ -101,7 +101,7 @@ describe('creating a note', () => {
     it('createFile: a create that threw and left a note reading otherwise is refused as failed', async () => {
         const b = await benchCreateThrows('別の中身');
 
-        const outcome = await createFile(b.app, NEW, b.channel(NEW), CONTENT, '新しいタスク');
+        const outcome = await createFile(b.app, NEW, b.channel(NEW), '新しいタスク', () => CONTENT);
 
         expect(outcome.written).toBe(false);
         expect(outcome.refused?.reason).toEqual({ kind: 'failed' });
@@ -111,10 +111,24 @@ describe('creating a note', () => {
     it('createFile: a create that threw but left the note as asked is written, nothing told', async () => {
         const b = await benchCreateThrows(CONTENT);
 
-        const outcome = await createFile(b.app, NEW, b.channel(NEW), CONTENT, '新しいタスク');
+        const outcome = await createFile(b.app, NEW, b.channel(NEW), '新しいタスク', () => CONTENT);
 
         expect(outcome.written).toBe(true);
         expect(b.refused).toEqual([]);
+    });
+
+    it('createFile: content that could not be made (a folder, a template) is refused as failed, told once, and nothing created', async () => {
+        const b = await writeBench({ [FILE]: '# note' });
+        const create = vi.spyOn(b.app.vault, 'create');
+
+        const outcome = await createFile(b.app, NEW, b.channel(NEW), '新しいタスク', async () => {
+            throw new Error('template unreadable');
+        });
+
+        expect(outcome.written).toBe(false);
+        expect(outcome.refused?.reason).toEqual({ kind: 'failed' });
+        expect(b.refused).toHaveLength(1);
+        expect(create).not.toHaveBeenCalled();
     });
 
     it('appendTaskToFile: a note that could not be created is refused as failed, told once', async () => {

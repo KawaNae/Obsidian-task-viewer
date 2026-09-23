@@ -845,8 +845,8 @@ export class BrokenWrite extends Error {
  * existed; left in the log they would be matched against whatever the next
  * scan happens to read, and they are withdrawn.
  *
- * This is the one place that decides whether a write landed, and a withdrawal
- * is how the rest of the plugin hears that it did not (see
+ * This is the one place that decides whether a write that filed a report
+ * landed, and a withdrawal is how the rest of the plugin hears that it did not (see
  * {@link WriteReceipt.withdraw}). The file only answers for this write while
  * no other write of ours has touched it since, so writes to one file run here
  * one at a time, the reading back included.
@@ -926,32 +926,37 @@ export function fileGone(channel: WriteChannel | undefined, file: string, subjec
 }
 
 /**
- * Create a note holding `content`, as one write: made, or refused as
- * `failed` and told once. As with `processLines`, a failure that left the
- * note in place reading as asked is a write that landed.
+ * Create a note holding what `content` makes, as one write: made, with the
+ * note, or refused as `failed` and told once. Every note the plugin creates
+ * for a write is created here. Making the content — a folder to put it in, a
+ * template to read — is part of the write, and failing there fails it too.
+ * As with `processLines`, a failure that left the note in place reading as
+ * asked is a write that landed.
  *
  * Nothing is filed: a note that did not exist has nothing in the ledger, and
- * a claim would say what the ledger's silence already says.
+ * a claim would say what the ledger's silence already says. So these writes
+ * do not queue with the ones that file (see {@link processOrFail}).
  */
 export async function createFile(
     app: App,
     path: string,
     channel: WriteChannel | undefined,
-    content: string,
     subject: string,
-    prepare?: () => Promise<unknown>,
-): Promise<WriteOutcome> {
+    content: () => string | Promise<string>,
+): Promise<WriteRefused | (WriteMade & { file: TFile })> {
+    let asked: string | null = null;
     try {
-        await prepare?.();
-        await app.vault.create(path, content);
+        asked = await content();
+        const file = await app.vault.create(path, asked);
+        return { written: true, refused: null, made: [], rows: new Map(), file };
     } catch (error) {
         const made = app.vault.getAbstractFileByPath(path);
-        if (!(made instanceof TFile && await readsAs(app, made, content))) {
+        if (!(asked !== null && made instanceof TFile && await readsAs(app, made, asked))) {
             return writeFailed(channel, path, subject, error);
         }
         logWarn(`[FileLines] ${path}: creating the note reported a failure, but it reads as written; kept: ${String(error)}`);
+        return { written: true, refused: null, made: [], rows: new Map(), file: made };
     }
-    return { written: true, refused: null, made: [], rows: new Map() };
 }
 
 /** Whether the file now reads as `content`, the mark at its head aside. A file that cannot be read does not. */
