@@ -116,6 +116,35 @@ describe('TimerContentBinding: a flush during a write', () => {
         expect(h.timer.pendingContent).toBeUndefined();
     });
 
+    it('a refused write does not put its name back over a newer one typed on its way', async () => {
+        // The draft already holds the newer name; the refusal of the older one
+        // must not take it back, or a reload (or the field redrawn) shows the
+        // older name and the newer keys are lost.
+        vi.useFakeTimers();
+        const h = harness();
+        h.type('一つ目');
+        await vi.advanceTimersByTimeAsync(CONTENT_WRITE_DEBOUNCE_MS + 1);
+        expect(h.calls).toEqual(['一つ目']);
+        h.type('二つ目');
+
+        const flushed = h.binding.flush(h.timer);
+        h.settle(false);
+
+        expect(await flushed).toBe(false);
+        expect(h.timer.pendingContent).toBe('二つ目');
+        expect(h.binding.displayValue(h.timer)).toBe('二つ目');
+        // Nothing but the refused write went out.
+        expect(h.calls).toEqual(['一つ目']);
+
+        // The next flush writes the newer name, and only it.
+        const again = h.binding.flush(h.timer);
+        await vi.advanceTimersByTimeAsync(0);
+        expect(h.calls).toEqual(['一つ目', '二つ目']);
+        h.settle(true);
+        expect(await again).toBe(true);
+        expect(h.timer.pendingContent).toBeUndefined();
+    });
+
     it('writes a name flushed after a flush that had nothing to write', async () => {
         const h = harness();
         // A stop flushes whether or not a name was typed.
