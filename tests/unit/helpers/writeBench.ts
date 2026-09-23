@@ -7,7 +7,6 @@ import { TaskValidator } from '../../../src/services/core/TaskValidator';
 import { InlineTaskWriter } from '../../../src/services/persistence/writers/InlineTaskWriter';
 import { TaskCloner } from '../../../src/services/persistence/TaskCloner';
 import { TaskRepository } from '../../../src/services/persistence/TaskRepository';
-import { WriteObserver } from '../../../src/services/persistence/WriteObserver';
 import { FileOperations } from '../../../src/services/persistence/utils/FileOperations';
 import { DEFAULT_SETTINGS } from '../../../src/types';
 import type { Task } from '../../../src/types';
@@ -50,10 +49,9 @@ export interface Filed {
 export interface WriteBench {
     readonly app: any;
     readonly contents: Map<string, string>;
-    readonly store: TaskStore;
     readonly scanner: TaskScanner;
-    readonly writes: WriteObserver;
-    readonly fileOps: FileOperations;
+    /** The flow the scanner fires a completion into: a mock, so a test counts its calls. */
+    readonly flow: { handleTaskCompletion: ReturnType<typeof vi.fn> };
     readonly writer: InlineTaskWriter;
     readonly cloner: TaskCloner;
     readonly repo: TaskRepository;
@@ -61,8 +59,6 @@ export interface WriteBench {
     readonly refused: Refusal[];
     /** The reports the sink holds now: a withdrawn one is taken off again. */
     readonly filed: Filed[];
-    /** How many times `vault.process` ran for each path. */
-    readonly processed: Map<string, number>;
     /** The channel a write to `path` is handed. */
     channel(path?: string): WriteChannel;
     text(path?: string): string;
@@ -85,7 +81,6 @@ export async function writeBench(files: string | string[] | Record<string, strin
             : Array.isArray(files) ? [[FILE, files.join('\n')]]
             : Object.entries(files),
     );
-    const processed = new Map<string, number>();
 
     // Obsidian holds one TFile per note, and a write to it queues by that
     // object (`processOrFail`): the same path answers the same file.
@@ -96,7 +91,6 @@ export async function writeBench(files: string | string[] | Record<string, strin
             read: async (file: TFile) => contents.get(file.path) ?? '',
             cachedRead: async (file: TFile) => contents.get(file.path) ?? '',
             process: async (file: TFile, fn: (data: string) => string) => {
-                processed.set(file.path, (processed.get(file.path) ?? 0) + 1);
                 const next = fn(contents.get(file.path) ?? '');
                 contents.set(file.path, next);
                 return next;
@@ -140,25 +134,21 @@ export async function writeBench(files: string | string[] | Record<string, strin
         };
     };
 
-    const writes = new WriteObserver();
+    const repo = new TaskRepository(app);
+    const writes = repo.getWriteObserver();
     writes.connect(channel);
     const fileOps = new FileOperations(app);
-    const repo = new TaskRepository(app);
-    repo.getWriteObserver().connect(channel);
 
     const bench: WriteBench = {
         app,
         contents,
-        store,
+        flow,
         scanner,
-        writes,
-        fileOps,
         writer: new InlineTaskWriter(app, fileOps, writes),
         cloner: new TaskCloner(app, fileOps, writes),
         repo,
         refused,
         filed,
-        processed,
         channel: (path = FILE) => channel(path),
         text: (path = FILE) => contents.get(path) ?? '',
         lines: (path = FILE) => (contents.get(path) ?? '').split('\n'),
