@@ -95,6 +95,14 @@ describe('CliOutputFormatter', () => {
             expect(lines[1]).toContain('A');
         });
 
+        it('keeps a tsv row on one line when the content holds U+2028 or U+2029', () => {
+            // A note keeps them inside a line (L1), but a reader of tsv may
+            // split its rows there, as at a newline.
+            const content = ['a', 'b', 'c'].join(String.fromCharCode(0x2028)) + String.fromCharCode(0x2029) + 'd';
+            const row = formatOutput([makeNormalized({ content })], 'tsv', ['content']).split('\n')[1];
+            expect(row).toBe('a b c d');
+        });
+
         it('formats as jsonl with one line per task', () => {
             const tasks = [makeNormalized({ content: 'A' }), makeNormalized({ content: 'B' })];
             const fields = ['content'];
