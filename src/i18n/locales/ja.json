@@ -969,6 +969,7 @@
       "gen-multiple-roots": "ブロックが生成するタスクは 1 つですが、最上位の行が複数できました",
       "gen-parent-multiline": "生成されるタスクは 1 行です。複数行の値は載せられません",
       "gen-root-not-a-task": "生成されるタスクはチェックボックスの行である必要があります",
+      "set-content-multiline": "タスクの本文は 1 行です。複数行の値は設定できません",
       "gen-too-deep": "この行は {{depth}} 段の深さで、タスクが持てる {{max}} 段を超えています",
       "gen-too-many-lines": "このブロックは {{max}} 行を超える行を生成しました。1 つのタスクが持てる量を超えています",
       "index-not-number": "配列の添字は数値です（{{actual}} でした）",

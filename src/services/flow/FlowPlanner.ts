@@ -401,9 +401,20 @@ function applySet(newTask: Task, program: FlowProgram, deps: FlowPlanDeps): void
 
     for (const { field, value } of results) {
         switch (field) {
-            case 'content':
-                newTask.content = value.type === 'none' ? '' : valueToDisplay(value);
+            case 'content': {
+                const content = value.type === 'none' ? '' : valueToDisplay(value);
+                // The next instance is one line. A value of several lines
+                // would split it, and the write refuses such a line without a
+                // word (`LineBreakInLine`), so it is said here instead, where
+                // the fire can stop with a reason.
+                if (/[\r\n\u2028\u2029]/.test(content)) {
+                    throw new EvalError('eval.set-content-multiline',
+                        'The content is one line — a value of several lines cannot be set on it',
+                        program.sets!.content!.expr.span);
+                }
+                newTask.content = content;
                 break;
+            }
             case 'start':
                 if (value.type === 'none') {
                     newTask.startDate = undefined;
