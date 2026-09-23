@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { FrontmatterLineEditor } from '../../../src/services/persistence/utils/FrontmatterLineEditor';
+import { draftOver } from '../../../src/utils/FileLines';
 
 /**
  * applyUpdates は行配列を返す（ファイルの改行は呼び口が持つ）。これらのケースが
@@ -7,11 +8,15 @@ import { FrontmatterLineEditor } from '../../../src/services/persistence/utils/F
  * 残し、境界だけここで合わせる。
  */
 function applyUpdatesToText(
-    lines: string[],
+    lines: readonly string[],
     fmEnd: number,
     updates: Record<string, string | string[] | null>,
 ): string {
-    return FrontmatterLineEditor.applyUpdates(lines, fmEnd, updates).join('\n');
+    // Draft over a copy: `source` below is reused across two `it`s, and
+    // mutating it in place here would leak this call's edit into the next.
+    const { draft } = draftOver([...lines]);
+    FrontmatterLineEditor.applyUpdates(draft, fmEnd, updates);
+    return draft.lines.join('\n');
 }
 
 describe('FrontmatterLineEditor', () => {
@@ -225,33 +230,38 @@ describe('FrontmatterLineEditor', () => {
     describe('ensureBlock', () => {
         it('returns the existing block untouched', () => {
             const lines = ['---', 'title: foo', '---', 'body'];
-            const r = FrontmatterLineEditor.ensureBlock(lines);
-            expect(r.fmEnd).toBe(2);
-            expect(r.lines).toBe(lines);
+            const { draft } = draftOver(lines);
+            const fmEnd = FrontmatterLineEditor.ensureBlock(draft);
+            expect(fmEnd).toBe(2);
+            expect(draft.lines).toBe(lines);
         });
 
         it('prepends an empty block when the file has none', () => {
-            const r = FrontmatterLineEditor.ensureBlock(['# heading', 'body']);
-            expect(r.fmEnd).toBe(1);
-            expect(r.lines).toEqual(['---', '---', '# heading', 'body']);
+            const { draft } = draftOver(['# heading', 'body']);
+            const fmEnd = FrontmatterLineEditor.ensureBlock(draft);
+            expect(fmEnd).toBe(1);
+            expect(draft.lines).toEqual(['---', '---', '# heading', 'body']);
         });
 
         it('prepends an empty block for an empty file', () => {
-            const r = FrontmatterLineEditor.ensureBlock(['']);
-            expect(r.fmEnd).toBe(1);
-            expect(r.lines).toEqual(['---', '---', '']);
+            const { draft } = draftOver(['']);
+            const fmEnd = FrontmatterLineEditor.ensureBlock(draft);
+            expect(fmEnd).toBe(1);
+            expect(draft.lines).toEqual(['---', '---', '']);
         });
 
         it('treats an unterminated block as absent', () => {
-            const r = FrontmatterLineEditor.ensureBlock(['---', 'title: foo']);
-            expect(r.fmEnd).toBe(1);
-            expect(r.lines).toEqual(['---', '---', '---', 'title: foo']);
+            const { draft } = draftOver(['---', 'title: foo']);
+            const fmEnd = FrontmatterLineEditor.ensureBlock(draft);
+            expect(fmEnd).toBe(1);
+            expect(draft.lines).toEqual(['---', '---', '---', 'title: foo']);
         });
 
         it('a key written into a created block lands inside it', () => {
-            const { lines, fmEnd } = FrontmatterLineEditor.ensureBlock(['body']);
-            const out = applyUpdatesToText(lines, fmEnd, { 'tv-color': 'ff0000' });
-            expect(out).toBe('---\ntv-color: ff0000\n---\nbody');
+            const { draft } = draftOver(['body']);
+            const fmEnd = FrontmatterLineEditor.ensureBlock(draft);
+            FrontmatterLineEditor.applyUpdates(draft, fmEnd, { 'tv-color': 'ff0000' });
+            expect(draft.lines.join('\n')).toBe('---\ntv-color: ff0000\n---\nbody');
         });
     });
 

@@ -49,7 +49,7 @@ export type FlowInstanceInsert =
  */
 export function renderFlowInstance(
     fileOps: FileOperations,
-    lines: string[],
+    lines: readonly string[],
     currentLine: number,
     insert: FlowInstanceInsert,
 ): string[] {
@@ -67,7 +67,7 @@ export function renderFlowInstance(
  */
 function renderRecurrence(
     fileOps: FileOperations,
-    lines: string[],
+    lines: readonly string[],
     currentLine: number,
     content: string,
     flowLines: string[],
@@ -102,7 +102,7 @@ function renderRecurrence(
  * child-insert primitives use, so a subtree keeps one spelling.
  */
 function renderGenerated(
-    lines: string[],
+    lines: readonly string[],
     currentLine: number,
     parentLine: string,
     flowLines: string[],

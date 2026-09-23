@@ -49,15 +49,16 @@ export class FrontmatterWriter {
 
         const hasSet = Object.values(updates).some(v => v !== null);
 
-        await processLines(this.app, file, (raw) => {
-            if (FrontmatterLineEditor.findEnd(raw) < 0 && !hasSet) return null;
+        await processLines(this.app, file, undefined, (draft) => {
+            if (FrontmatterLineEditor.findEnd(draft.lines) < 0 && !hasSet) return false;
 
-            const { lines, fmEnd } = FrontmatterLineEditor.ensureBlock(raw);
+            const fmEnd = FrontmatterLineEditor.ensureBlock(draft);
             const escaped: Record<string, string | null> = {};
             for (const [key, value] of Object.entries(updates)) {
                 escaped[key] = value === null ? null : FrontmatterLineEditor.escapeYamlScalar(value);
             }
-            return FrontmatterLineEditor.applyUpdates(lines, fmEnd, escaped);
+            FrontmatterLineEditor.applyUpdates(draft, fmEnd, escaped);
+            return true;
         });
     }
 }

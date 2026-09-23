@@ -96,7 +96,7 @@ export interface GenBlockScan {
  * `scan` may be passed in by a caller that already walked the same lines
  * (the editor extension needs the membership mask anyway).
  */
-export function collectGenBlocks(lines: string[], scan?: FenceScan): GenBlockScan {
+export function collectGenBlocks(lines: readonly string[], scan?: FenceScan): GenBlockScan {
     const { fenced, opens } = scan ?? CodeFenceTracker.scan(lines);
     const blocks = new Map<string, GenBlock>();
     const diagnostics: LocatedDiagnostic[] = [];
@@ -170,7 +170,7 @@ export function collectGenBlocks(lines: string[], scan?: FenceScan): GenBlockSca
  * notation quiet: a delimiter quoted inside a wider fence IS inside a
  * fence, so it never reaches this warning.
  */
-function indentedBlockDiagnostics(lines: string[], fenced: boolean[]): LocatedDiagnostic[] {
+function indentedBlockDiagnostics(lines: readonly string[], fenced: boolean[]): LocatedDiagnostic[] {
     const result: LocatedDiagnostic[] = [];
     for (let i = 0; i < lines.length; i++) {
         if (fenced[i]) continue;

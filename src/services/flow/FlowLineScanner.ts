@@ -69,7 +69,7 @@ export function isFlowLine(line: string): boolean {
  * {@link collectFlowLineIndicesInFile}, which builds the mask itself.
  */
 export function collectFlowLineIndices(
-    lines: string[],
+    lines: readonly string[],
     taskLineIndex: number,
     fenced: boolean[],
 ): number[] {
@@ -105,7 +105,7 @@ export function collectFlowLineIndices(
  * judgment (document-level mask OR the dedented subtree mask, since a fence
  * nested under a task carries the list item's indentation).
  */
-export function collectFlowLineIndicesInFile(lines: string[], taskLineIndex: number): number[] {
+export function collectFlowLineIndicesInFile(lines: readonly string[], taskLineIndex: number): number[] {
     const documentMask = CodeFenceTracker.mask(lines);
     const subtreeMask = CodeFenceTracker.subtreeMask(lines.slice(taskLineIndex + 1));
     const fenced = lines.map((_, i) =>

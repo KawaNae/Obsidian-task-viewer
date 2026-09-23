@@ -67,7 +67,7 @@ export function joinLines(lines: string[], eol: Eol): string {
  * One thing a write did to the file's lines, in the coordinates of the moment.
  *
  * Internal to this module and the replay: a writer never builds one. It says
- * what it did through {@link LineEdits}, which is the only thing that produces
+ * what it did through {@link LineDraft}, which is the only thing that produces
  * these, so the numbers in a report always come from the splice that moved the
  * lines rather than from a second reading of the same intention.
  */
@@ -79,29 +79,92 @@ export type LineEdit =
     | { kind: 'carried'; at: number; from: number[] };
 
 /**
- * What a write tells the index it did, so the next scan can be told which line
- * is which.
+ * The lines a write is handed, and the only way it has to change them.
+ *
+ * Every change goes through here and is reported as it is made, so what the
+ * index is told a write did is what the write did: there is no second
+ * statement of the same intention to get wrong, and no way to change a line
+ * and leave the report out. The lines themselves are read-only to the write —
+ * an assignment past the draft would be an edit nobody heard of.
  *
  * Each call describes one operation in the line numbers as they stand *at that
- * moment* — report right after doing it, and a run of edits reads back in the
- * order it happened.
+ * moment*, and a run of edits reads back in the order it happened.
  *
- * A rewrite and a tear-down-and-rebuild produce the same file, and the check
- * below cannot tell them apart: the lines come out identical either way.
- * Only the writer knows which it meant, and both mistakes cost something.
- * Saying {@link replaced} where a line was really torn down and rebuilt hands a
+ * A rewrite and a tear-down-and-rebuild produce the same file, and nothing
+ * made from the file can tell them apart: the lines come out identical either
+ * way. Only the writer knows which it meant, and both mistakes cost something.
+ * Saying {@link rewrite} where a line was really torn down and rebuilt hands a
  * new task the old one's identity. Splicing a line away and a new one in where
  * it was only rewritten calls a row that is still there new, and the hub or the
  * selection holding it loses its task — the ladder would have kept it by
- * matching the text. So `replaced` means: this line still belongs to the same
+ * matching the text. So `rewrite` means: this line still belongs to the same
  * task as before.
- *
- * There are only these, and a splice or a carry is the only way to add or
- * remove a line. A writer that could say "three lines went in at 7" beside a
- * splice that put them at 6 is a writer that can be wrong about the one thing
- * this mechanism exists to get right.
  */
-export interface LineEdits {
+export interface LineDraft {
+    /** The lines as they stand now, after every change made so far. */
+    readonly lines: readonly string[];
+    /**
+     * Do a splice and report it, so the two cannot disagree.
+     *
+     * The check a report is held to compares text, and text is exactly what
+     * a duplicate does not vary: inserting a copy of a line next to that line
+     * reads the same whether it went above or below, so a position off by one
+     * passes every test that can be made from the file alone — and hands the
+     * copy the original's identity, which is the failure this whole mechanism
+     * exists to prevent. The remedy is not a better check. It is to take the
+     * number that moved the lines and the number that is reported from the
+     * same place.
+     *
+     * A splice that removes and inserts at once says both, in that order: the
+     * old lines are gone and the new ones are new. A line being *rewritten*
+     * while staying the same task is {@link rewrite} instead.
+     */
+    splice(at: number, deleteCount: number, ...items: string[]): void;
+    /** Make the line at `at` read `text`; it is the same task it was. */
+    rewrite(at: number, text: string): void;
+    /**
+     * Put in at `at` lines that are lines already here, moved: each item is
+     * the line now standing at `from` (before this call), to read `text`
+     * where it lands.
+     *
+     * A splice cannot say this. Every line it puts in is a new line, so a
+     * write that moves a row by splicing it in below and away from above
+     * reports the row gone and a new one made — which is how a move within
+     * one file came to lose its task's identity. The carry says which line
+     * the moved one is, and the claim hands it that line's name.
+     *
+     * The source is left where it is; taking it away is a splice of its own,
+     * and a report in which one line still stands in two places is not one a
+     * file could follow (see {@link replayEdits}). A carried line that reads
+     * other than its source is reported rewritten with it, from here, so the
+     * text a carry changes is always accounted for.
+     */
+    carry(at: number, items: ReadonlyArray<{ from: number; text: string }>): void;
+}
+
+/**
+ * A {@link LineDraft} over one array of lines, and the report it fills in.
+ *
+ * `processLines` builds this over the lines it is about to hand a write, and a
+ * test builds it over the lines it passes in, so both run the same arithmetic
+ * instead of a copy of it.
+ */
+export function draftOver(lines: string[]): { draft: LineDraft; reported: LineEdit[] } {
+    const { edits, reported } = recordEdits(lines);
+    const draft: LineDraft = {
+        lines,
+        splice: edits.splice,
+        rewrite: (at, text) => {
+            lines[at] = text;
+            edits.replaced(at);
+        },
+        carry: edits.carry,
+    };
+    return { draft, reported };
+}
+
+/** What a draft does to its array, each change reported as it is made. */
+interface LineEdits {
     /**
      * Do a splice and report it, so the two cannot disagree.
      *
@@ -144,14 +207,8 @@ export interface LineEdits {
     carry(at: number, items: ReadonlyArray<{ from: number; text: string }>): void;
 }
 
-/**
- * A {@link LineEdits} over one array of lines, and the report it fills in.
- *
- * `processLines` builds this over the lines it is about to hand a write, and a
- * test builds it over the lines it passes in, so both run the same arithmetic
- * instead of a copy of it.
- */
-export function recordEdits(lines: string[]): { edits: LineEdits; reported: LineEdit[] } {
+/** The arithmetic under {@link draftOver}: each change, and what it reported. */
+function recordEdits(lines: string[]): { edits: LineEdits; reported: LineEdit[] } {
     const reported: LineEdit[] = [];
     const edits: LineEdits = {
         splice: (at, deleteCount, ...items) => {
@@ -298,14 +355,14 @@ export interface WriteChannel {
 }
 
 /**
- * What one `processLines` callback is handed besides the lines: the report of
- * its edits, and the question of where its target stands.
+ * What one `processLines` callback is handed besides its draft: the question
+ * of where its target stands, and the way to give the write up.
  *
  * `locate` answers once per name, about the lines as they were handed in: that
  * is the one content the plugin can have on record, so it is the one the
  * question can be put to. Asked again, it carries that answer across the
  * edits this write has reported since, and across nothing else — every line
- * the write moved, it moved through `edits`, and the report is the whole of
+ * the write moved, it moved through its draft, and the report is the whole of
  * what happened to the lines in between. A line the write took away is
  * `gone`. So one write can apply several effects to one row without asking
  * the file a second time, which is where a coordinate would go stale.
@@ -316,22 +373,20 @@ export interface WriteChannel {
  * for the lines it returns.
  */
 export interface WriteSession {
-    edits: LineEdits;
     locate(ref: TaskRef): Located;
     /**
      * The target's line, or null when it has none — in which case the write is
-     * refused, and the callback returns the null this gives back. A line
-     * something else edited since the index read it (`edited`) is refused
-     * too, as `changed`.
+     * refused, and the callback returns false. A line something else edited
+     * since the index read it (`edited`) is refused too, as `changed`.
      */
     lineOf(ref: TaskRef, subject: string): number | null;
     /** Give the write up: nothing is written, and the refusal is told once it is over. */
-    refuse(reason: RefusalReason, subject: string): null;
+    refuse(reason: RefusalReason, subject: string): false;
 }
 
 /** What became of one `processLines`. */
 export interface WriteOutcome {
-    /** Whether the callback returned lines, whether or not they differed. */
+    /** Whether the callback said to write, whether or not the lines differed. */
     written: boolean;
     /** Why it did not, when it gave the write up. */
     refused: Refusal | null;
@@ -435,14 +490,17 @@ function explains(
 }
 
 /**
- * Read a file as lines, let `edit` rewrite them, and write it back with the
- * file's own terminator — one atomic `vault.process`.
+ * Read a file as lines, let `edit` change them through a draft, and write them
+ * back with the file's own terminator — one atomic `vault.process`.
  *
- * `edit` returns null to write nothing at all: the file is left
+ * `edit` returns false to write nothing at all: the file is left
  * byte-identical, Obsidian fires no `modify`, and no rescan follows. That is
  * the whole contract for a write that could not be placed. The caller learns
  * it from `written: false` instead of from a no-op it cannot tell apart from
  * success.
+ *
+ * The channel is not optional, though it may be absent: every caller says
+ * which one its write goes to, so no write leaves it out by forgetting it.
  *
  * Where to write is asked of the `channel`, through the session: a write
  * names its target and `locate` answers where that target stands in these
@@ -452,14 +510,12 @@ function explains(
  * nobody to ask, and every target is `gone`: the index that would answer has
  * been taken down.
  *
- * `edit` may also report what it did to the lines, through the {@link
- * LineEdits} it is handed, and that report is what lets the next scan know
- * which line is which. Reporting is per write site and optional: a write that
- * says nothing is a write the scan works out for itself, as every write did
- * before stage 2. A write that says *something* has to say everything, and a
- * report that does not account for the file it produced is logged and dropped.
- * The write itself still lands — the report is bookkeeping, and losing a user's
- * edit over bookkeeping would be the worse failure by far.
+ * Every change `edit` makes goes through the {@link LineDraft} it is handed,
+ * which reports it, and that report is what lets the next scan know which
+ * line is which. A report that does not account for the file it produced is
+ * logged and dropped. The write itself still lands — the report is
+ * bookkeeping, and losing a user's edit over bookkeeping would be the worse
+ * failure by far.
  *
  * Anything a write owes the rest of the plugin belongs on the written branch
  * only. A claim left behind by a write that never happened would be weighed by
@@ -468,8 +524,8 @@ function explains(
 export async function processLines(
     app: App,
     file: TFile,
-    edit: (lines: string[], eol: Eol, session: WriteSession) => string[] | null,
-    channel?: WriteChannel,
+    channel: WriteChannel | undefined,
+    edit: (draft: LineDraft, eol: Eol, session: WriteSession) => boolean,
 ): Promise<WriteOutcome> {
     let written = false;
     let refused: Refusal | null = null;
@@ -490,13 +546,12 @@ export async function processLines(
 
             const { lines, eol, bom } = splitLines(content);
             const before = [...lines];
-            // Over `lines` itself: a report describes the array the write was
-            // handed. A write that returns some other array is not reporting
-            // about the file it wrote, and the check below refuses it.
-            const { edits, reported } = recordEdits(lines);
-            const refuse = (reason: RefusalReason, subject: string): null => {
+            // Over `lines` itself: every change the write makes, it makes to
+            // this array through the draft, and the draft reports it.
+            const { draft, reported } = draftOver(lines);
+            const refuse = (reason: RefusalReason, subject: string): false => {
                 refused = { file: file.path, reason, subject };
-                return null;
+                return false;
             };
             // Each name is asked once, of the lines as they were handed in.
             const answered = new Map<string, Located>();
@@ -530,18 +585,17 @@ export async function processLines(
             };
             let lastSubject = '';
             const session: WriteSession = {
-                edits,
                 locate,
                 lineOf: (ref, subject) => {
                     lastSubject = subject;
                     const located = locate(ref);
-                    if (located.kind !== 'at') return refuse(located, subject);
-                    if (located.edited) return refuse({ kind: 'changed' }, subject);
+                    if (located.kind !== 'at') { refuse(located, subject); return null; }
+                    if (located.edited) { refuse({ kind: 'changed' }, subject); return null; }
                     return located.line;
                 },
                 refuse,
             };
-            const next = edit(lines, eol, session);
+            const next = edit(draft, eol, session) ? lines : null;
 
             // A write that took a coordinate across its own edits wrote where
             // its report said the row had gone. If the report does not account

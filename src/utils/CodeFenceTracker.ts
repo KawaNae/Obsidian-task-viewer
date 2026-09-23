@@ -79,7 +79,7 @@ export class CodeFenceTracker {
      * rather than matching the delimiter themselves: only this walk knows
      * that a delimiter sitting inside a wider fence is quoted content.
      */
-    static scan(lines: string[]): FenceScan {
+    static scan(lines: readonly string[]): FenceScan {
         const tracker = new CodeFenceTracker();
         const fenced: boolean[] = [];
         const opens: FenceOpen[] = [];
@@ -102,7 +102,7 @@ export class CodeFenceTracker {
     }
 
     /** Per-line fence membership for a whole document. */
-    static mask(lines: string[]): boolean[] {
+    static mask(lines: readonly string[]): boolean[] {
         return this.scan(lines).fenced;
     }
 
@@ -116,7 +116,7 @@ export class CodeFenceTracker {
      * A subtree mask is only ever half the answer: the subtree may itself sit
      * inside a document-level fence. Callers OR the two together.
      */
-    static subtreeMask(lines: string[]): boolean[] {
+    static subtreeMask(lines: readonly string[]): boolean[] {
         return this.scan(lines.map(line => line.trimStart())).fenced;
     }
 }

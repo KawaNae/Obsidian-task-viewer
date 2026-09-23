@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { TaskCloner } from '../../../src/services/persistence/TaskCloner';
-import { recordEdits } from '../../../src/utils/FileLines';
+import { draftOver } from '../../../src/utils/FileLines';
 import { FileOperations } from '../../../src/services/persistence/utils/FileOperations';
 import { Placement } from '../../../src/services/persistence/utils/Placement';
 import type { App } from 'obsidian';
@@ -27,7 +27,7 @@ function callSpliceCopies(
 /**
  * The lines a copy produced, and what it said it did to them.
  *
- * Through the real {@link recordEdits}, over the array the copy is about to
+ * Through the real {@link draftOver}, over the array the copy is about to
  * splice — the same object `processLines` hands a write. A stand-in here would
  * be a second implementation of the arithmetic this file exists to check.
  */
@@ -38,12 +38,11 @@ function spliceAndReport(
     position: 'before' | 'after',
 ) {
     const target = [...lines];
-    const { edits, reported } = recordEdits(target);
     // Where the two duplicate paths put their copies.
     const at = position === 'before' ? taskLine : Placement.afterSubtree(target, taskLine);
-    const out: string[] = proto.spliceCopies.call(
-        { fileOps }, target, taskLine, parentLines, at, edits);
-    return { lines: out, reported };
+    const { draft, reported } = draftOver(target);
+    proto.spliceCopies.call({ fileOps }, draft, taskLine, parentLines, at);
+    return { lines: target, reported };
 }
 
 // ---------------------------------------------------------------------------
