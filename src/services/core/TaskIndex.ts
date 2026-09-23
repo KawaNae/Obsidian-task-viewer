@@ -19,7 +19,7 @@ import { toDisplayTask } from '../display/DisplayTaskConverter';
 import { planInPlaceCopies } from '../persistence/DuplicateShift';
 import type { GenBlock } from '../parsing/gen/GenBlockCollector';
 import { FileOperations } from '../persistence/utils/FileOperations';
-import { plannedOn } from '../persistence/TaskRefs';
+import { plannedOn, subjectOf } from '../persistence/TaskRefs';
 import { logError, logInfo, logWarn } from '../../log/log';
 import type { EditorLine, Refusal, RowLines } from '../../utils/FileLines';
 
@@ -413,16 +413,14 @@ export class TaskIndex {
         }
 
         const id = taskId;
-        return this.onRow(id, () => this.writeUpdate(id, updates));
+        const known = this.store.getTask(id);
+        return this.onRow(id, () => this.writeUpdate(id, updates, known));
     }
 
     /** {@link updateTask}, once every write already asked of the row has finished. */
-    private async writeUpdate(taskId: string, updates: Partial<Task>): Promise<boolean> {
-        const task = this.store.getTask(taskId);
-        if (!task) {
-            logWarn(`[TaskIndex] Task ${taskId} not found`);
-            return false;
-        }
+    private async writeUpdate(taskId: string, updates: Partial<Task>, known: Task | undefined): Promise<boolean> {
+        const task = this.copyForWrite(taskId, known);
+        if (!task) return false;
         if (task.isReadOnly) return false;
 
         // 非時刻プロパティ（color/tags/custom 等）の書き込み操作を導出。
@@ -477,6 +475,25 @@ export class TaskIndex {
      * Per row, not per file: a write to another row plans from that row's
      * copy, which this one does not change.
      */
+    /**
+     * The copy of a row a write is planned from, or undefined when the store no
+     * longer holds the row — an earlier write to it took it away, or a scan
+     * read the file without it — which is told once, as `gone`, like any
+     * write that finds its row gone. `known` is the copy as the write was
+     * asked for, to say which row it was.
+     */
+    private copyForWrite(taskId: string, known: Task | undefined): Task | undefined {
+        const task = this.store.getTask(taskId);
+        if (task) return task;
+        logWarn(`[TaskIndex] write to a row the index no longer holds: id=${taskId}`);
+        this.reportRefusal({
+            file: known?.file ?? '',
+            reason: { kind: 'gone' },
+            subject: known ? subjectOf(known) : taskId,
+        });
+        return undefined;
+    }
+
     private onRow<T>(taskId: string, op: () => Promise<T>): Promise<T> {
         const queue = (this.rowWrites ??= new Map<string, Promise<unknown>>());
         const previous = queue.get(taskId) ?? Promise.resolve();
@@ -576,12 +593,13 @@ export class TaskIndex {
      */
     async deleteTask(taskId: string, options: { fireFlow?: boolean } = {}): Promise<boolean> {
         if (this.refuseAfterDispose('deleteTask')) return false;
-        return this.onRow(taskId, () => this.writeDelete(taskId, options));
+        const known = this.store.getTask(taskId);
+        return this.onRow(taskId, () => this.writeDelete(taskId, options, known));
     }
 
     /** {@link deleteTask}, once every write already asked of the row has finished. */
-    private async writeDelete(taskId: string, options: { fireFlow?: boolean }): Promise<boolean> {
-        const task = this.store.getTask(taskId);
+    private async writeDelete(taskId: string, options: { fireFlow?: boolean }, known: Task | undefined): Promise<boolean> {
+        const task = this.copyForWrite(taskId, known);
         if (!task) return false;
         return this.withNotify(task.file, async () => {
             logInfo(`[deleteTask] id=${taskId} fireFlow=${options.fireFlow === true}`);
@@ -609,8 +627,9 @@ export class TaskIndex {
     /** @returns whether the copy was written. */
     async duplicateTask(taskId: string, options?: DuplicateOptions): Promise<boolean> {
         if (this.refuseAfterDispose('duplicateTask')) return false;
+        const known = this.store.getTask(taskId);
         return this.onRow(taskId, async () => {
-            const task = this.store.getTask(taskId);
+            const task = this.copyForWrite(taskId, known);
             if (!task) return false;
             return this.writeDuplicateOf(task, taskId, options);
         });
@@ -684,7 +703,7 @@ export class TaskIndex {
     /** @returns whether the child line was written. */
     async insertChildTask(parentTaskId: string, childLine: string): Promise<boolean> {
         if (this.refuseAfterDispose('insertChildTask')) return false;
-        const task = this.store.getTask(parentTaskId);
+        const task = this.copyForWrite(parentTaskId, undefined);
         if (!task) return false;
         // Read-only parsers (Tasks / dayPlanner) must never be written to.
         // TaskApi guards this as well, but the menu path reaches the write
@@ -715,7 +734,7 @@ export class TaskIndex {
     /** @returns whether the child line was written. */
     async appendChildTask(parentTaskId: string, childLine: string): Promise<boolean> {
         if (this.refuseAfterDispose('appendChildTask')) return false;
-        const task = this.store.getTask(parentTaskId);
+        const task = this.copyForWrite(parentTaskId, undefined);
         if (!task) return false;
         if (task.isReadOnly) return false;
         return this.withNotify(task.file, async () => {
@@ -740,7 +759,7 @@ export class TaskIndex {
         opts: { afterCompletedRun?: boolean } = {}
     ): Promise<boolean> {
         if (this.refuseAfterDispose('insertSiblingAfterTask')) return false;
-        const task = this.store.getTask(taskId);
+        const task = this.copyForWrite(taskId, undefined);
         if (!task) return false;
         if (task.isReadOnly) return false;
         return this.withNotify(task.file, async () => {
