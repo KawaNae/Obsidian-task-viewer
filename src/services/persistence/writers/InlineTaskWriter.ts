@@ -1,7 +1,6 @@
 import { type App, TFile } from 'obsidian';
 import type { Task } from '../../../types';
 import { TaskParser } from '../../parsing/TaskParser';
-import { TaskLineClassifier } from '../../parsing/utils/TaskLineClassifier';
 import { collectFlowLineIndicesInFile, flowLineTail } from '../../flow/FlowLineScanner';
 import { FileOperations } from '../utils/FileOperations';
 import { ChildPropertyLineEditor } from '../utils/ChildPropertyLineEditor';
@@ -309,47 +308,6 @@ export class InlineTaskWriter {
         }
     }
 
-    /** The line index just past the task's subtree — where a following line would go. */
-    private subtreeEnd(lines: string[], taskLineIndex: number): number {
-        return Outline.subtreeEnd(lines, taskLineIndex);
-    }
-
-    /**
-     * Walk forward over the siblings that immediately follow `taskLineIndex`
-     * for as long as they are completed, and return the last one's index (the
-     * starting index when the very next sibling is not completed).
-     *
-     * "Completed" is `[x]` and nothing else — the status character is a fact the
-     * parser knows, unlike the shape of a line, which cannot be told apart from
-     * something the user typed by hand. The run stops at the first line that is
-     * not a completed sibling: a blank line, a shallower line, or an unfinished
-     * one. Deeper lines are never seen here because they belong to a subtree
-     * that {@link subtreeEnd} has already skipped over.
-     */
-    private completedRunEnd(lines: string[], taskLineIndex: number): number {
-        // Depth is compared by visual width, not by character count: a file that
-        // mixes tabs and four-space indents writes the same depth two ways, and
-        // counting characters makes the tab line look shallower — the walk then
-        // stops at the first sibling spelled differently and a new record lands
-        // in the middle of the run instead of at its end.
-        const baseWidth = Outline.depthOf(lines[taskLineIndex]);
-
-        let last = taskLineIndex;
-        for (; ;) {
-            const next = this.subtreeEnd(lines, last);
-            if (next >= lines.length) return last;
-
-            const line = lines[next];
-            if (line.trim() === '') return last;
-            if (Outline.depthOf(line) !== baseWidth) return last;
-
-            const parsed = TaskLineClassifier.classify(line);
-            if (parsed?.statusChar !== 'x') return last;
-
-            last = next;
-        }
-    }
-
     /**
      * Append `lineBody` as the task's last child.
      *
@@ -367,12 +325,13 @@ export class InlineTaskWriter {
 
         let insertedLineIndex = -1;
 
-        await processLines(this.app, file, (lines, _eol, { edits, lineOf }) => {
+        await processLines(this.app, file, (lines, _eol, { edits, lineOf, refuse }) => {
             const currentLine = lineOf(refOf(task), subjectOf(task));
             if (currentLine === null) return null;
 
             const indent = FileOperations.resolveChildIndent(lines, currentLine);
-            const insertIndex = this.subtreeEnd(lines, currentLine);
+            const insertIndex = Placement.afterSubtree(lines, currentLine);
+            if (insertIndex === null) return refuse({ kind: 'unplaceable' }, subjectOf(task));
             edits.splice(insertIndex, 0, indent + lineBody.trim());
             insertedLineIndex = insertIndex;
 
@@ -391,7 +350,7 @@ export class InlineTaskWriter {
      * lands one level off would silently become a child of the wrong line.
      *
      * With `opts.afterCompletedRun`, the insert moves past the completed
-     * siblings that directly follow the task (see {@link completedRunEnd}) so a
+     * siblings that directly follow the task (see `Placement.afterCompletedRun`) so a
      * new session record joins the end of a chronological run instead of
      * splitting it. Deciding *where* belongs here rather than in the caller
      * because the answer needs the file's own lines, and reading them outside
@@ -413,16 +372,15 @@ export class InlineTaskWriter {
 
         let insertedLineIndex = -1;
 
-        await processLines(this.app, file, (lines, _eol, { edits, lineOf }) => {
+        await processLines(this.app, file, (lines, _eol, { edits, lineOf, refuse }) => {
             const currentLine = lineOf(refOf(task), subjectOf(task));
             if (currentLine === null) return null;
 
             const indent = Outline.indentOf(lines[currentLine]);
-            const anchor = opts.afterCompletedRun
-                ? this.completedRunEnd(lines, currentLine)
-                : currentLine;
-
-            const insertIndex = this.subtreeEnd(lines, anchor);
+            const insertIndex = opts.afterCompletedRun
+                ? Placement.afterCompletedRun(lines, currentLine)
+                : Placement.afterSubtree(lines, currentLine);
+            if (insertIndex === null) return refuse({ kind: 'unplaceable' }, subjectOf(task));
             edits.splice(insertIndex, 0, indent + lineBody.trim());
             insertedLineIndex = insertIndex;
 
@@ -448,14 +406,15 @@ export class InlineTaskWriter {
 
         let insertedLineIndex = -1;
 
-        await processLines(this.app, file, (lines, _eol, { edits, lineOf }) => {
+        await processLines(this.app, file, (lines, _eol, { edits, lineOf, refuse }) => {
             const currentLine = lineOf(refOf(task), subjectOf(task));
             if (currentLine === null) return null;
 
             const indent = FileOperations.resolveChildIndent(lines, currentLine);
 
             // Insert directly after the task line (as first child)
-            const insertIndex = currentLine + 1;
+            const insertIndex = Placement.firstChild(lines, currentLine);
+            if (insertIndex === null) return refuse({ kind: 'unplaceable' }, subjectOf(task));
             edits.splice(insertIndex, 0, indent + lineBody.trim());
             insertedLineIndex = insertIndex;
 

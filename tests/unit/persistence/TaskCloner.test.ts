@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { TaskCloner } from '../../../src/services/persistence/TaskCloner';
 import { recordEdits } from '../../../src/utils/FileLines';
 import { FileOperations } from '../../../src/services/persistence/utils/FileOperations';
+import { Placement } from '../../../src/services/persistence/utils/Placement';
 import type { App } from 'obsidian';
 
 // Access private methods via prototype
@@ -38,8 +39,10 @@ function spliceAndReport(
 ) {
     const target = [...lines];
     const { edits, reported } = recordEdits(target);
+    // Where the two duplicate paths put their copies.
+    const at = position === 'before' ? taskLine : Placement.afterSubtree(target, taskLine);
     const out: string[] = proto.spliceCopies.call(
-        { fileOps }, target, taskLine, parentLines, position, edits);
+        { fileOps }, target, taskLine, parentLines, at, edits);
     return { lines: out, reported };
 }
 
