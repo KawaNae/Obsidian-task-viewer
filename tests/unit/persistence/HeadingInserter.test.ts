@@ -199,6 +199,25 @@ describe('HeadingInserter', () => {
             expect(result.insertedLine).toBe(5);
         });
 
+        it('does not take a heading-like line inside the frontmatter for the heading', () => {
+            const content = '---\n## Tasks\na: 1\n---\nbody';
+            const result = insertFromText(content, '- [ ] task', 'Tasks', 2);
+            const lines = result.content.split('\n');
+            expect(lines.slice(0, 4)).toEqual(['---', '## Tasks', 'a: 1', '---']);
+            expect(lines[result.insertedLine]).toBe('- [ ] task');
+            expect(lines[result.insertedLine - 1]).toBe('## Tasks');
+            expect(result.insertedLine).toBeGreaterThan(4);
+        });
+
+        it('does not take an indented heading-like line for the heading', () => {
+            // Indented, it is a line of the task above it, as the parser reads it.
+            const content = '- [ ] P\n    ## Tasks\n    - [ ] c\n';
+            const result = insertFromText(content, '- [ ] task', 'Tasks', 2);
+            const lines = result.content.split('\n');
+            expect(lines.slice(0, 3)).toEqual(['- [ ] P', '    ## Tasks', '    - [ ] c']);
+            expect(lines[result.insertedLine - 1]).toBe('## Tasks');
+        });
+
         it('frontmatter のみのファイルで heading 作成時の行番号', () => {
             const content = '---\ntv-color: fff\n---';
             const result = insertFromText(content, '- [ ] task', 'Tasks', 2);
