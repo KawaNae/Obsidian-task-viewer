@@ -1,5 +1,6 @@
 import type { App, TFile } from 'obsidian';
 import { processLines, type WriteChannel } from './FileLines';
+import type { WriteObserver } from '../services/persistence/WriteObserver';
 
 /**
  * Compile-time checks on how a write reaches the file. Nothing imports this
@@ -12,7 +13,7 @@ import { processLines, type WriteChannel } from './FileLines';
  * without the change being reported: the lines can only be changed through
  * the draft, which reports every change as it makes it.
  */
-export function writeSignatureChecks(app: App, file: TFile, channel: WriteChannel | undefined): void {
+export function writeSignatureChecks(app: App, file: TFile, channel: WriteChannel | undefined, writes: WriteObserver): void {
     // A line assigned past the draft would be an edit nobody heard of.
     void processLines(app, file, channel, (draft) => {
         // @ts-expect-error the lines are read-only to the write
@@ -29,4 +30,9 @@ export function writeSignatureChecks(app: App, file: TFile, channel: WriteChanne
     // write names one, even when there is none to name.
     // @ts-expect-error the channel is not optional
     void processLines(app, file, () => true);
+
+    // A write says whom it was made for — the user or a flow — so the claim
+    // it files can say so too.
+    // @ts-expect-error the origin is not optional
+    void writes.for('note.md');
 }

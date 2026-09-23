@@ -1,6 +1,7 @@
 import type { Task } from '../../../types';
 import type { LedgerEntry } from './IdentityLedger';
 import type { ContentKey } from './ContentKey';
+import type { WriteOrigin } from '../../../utils/FileLines';
 
 /**
  * What the plugin's own writes tell the next scan about which line is which.
@@ -53,6 +54,12 @@ export interface Hint {
     content: ContentKey;
     /** The task rows in that content, in the order a scan matches them. */
     rows: ClaimedRow[];
+    /**
+     * Whom the write was made for (see `WriteOrigin`). Filled in, not yet
+     * read. Null only on the stand-in for the state before any write, which
+     * no write made and no scan adopts (see {@link resolveHints}).
+     */
+    origin: WriteOrigin | null;
 }
 
 /**
@@ -321,6 +328,7 @@ export function resolveHints(
             created: false,
             text: entry.fingerprint.originalText,
         })),
+        origin: null,
     };
 
     // Index 0 is the state before the writes; index i + 1 is the file as the

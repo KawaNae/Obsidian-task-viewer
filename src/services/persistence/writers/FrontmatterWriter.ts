@@ -28,7 +28,7 @@ export class FrontmatterWriter {
         header: string,
         headerLevel: number
     ): Promise<number> {
-        return HeadingInserter.writeUnderHeading(this.app, filePath, this.writes?.for(filePath), lineContent, header, headerLevel);
+        return HeadingInserter.writeUnderHeading(this.app, filePath, this.writes?.for(filePath, 'user'), lineContent, header, headerLevel);
     }
 
     /**
@@ -54,7 +54,7 @@ export class FrontmatterWriter {
         // Reported like any other write: every row below a key added or
         // removed here moves, and without the report the next scan could not
         // be told which is which (see `WriteClaims.stateFor`).
-        await processLines(this.app, file, this.writes?.for(filePath), (draft) => {
+        await processLines(this.app, file, this.writes?.for(filePath, 'user'), (draft) => {
             if (FrontmatterLineEditor.findEnd(draft.lines) < 0 && !hasSet) return false;
 
             const fmEnd = FrontmatterLineEditor.ensureBlock(draft);

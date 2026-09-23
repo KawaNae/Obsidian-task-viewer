@@ -1,6 +1,6 @@
 import type { ParserId } from '../../../types';
 import type { Hint } from './IdentityHints';
-import { replayEdits, type LineEdit } from '../../../utils/FileLines';
+import { replayEdits, type LineEdit, type WriteOrigin } from '../../../utils/FileLines';
 import { contentKeyOf, type ContentKey } from './ContentKey';
 
 /**
@@ -156,6 +156,7 @@ export class WriteClaims {
         before: readonly string[],
         after: readonly string[],
         edits: readonly LineEdit[] | null,
+        origin: WriteOrigin,
     ): ClaimResult {
         const withdraw = this.rollback(path);
         // Every way out of here without a claim is the same situation: this
@@ -210,7 +211,7 @@ export class WriteClaims {
         const content = contentKeyOf(after);
         this.bases.set(path, { content, rows, filed: ++this.filed });
         return {
-            hint: { content, rows: rows.map(row => ({ runtimeId: row.runtimeId, created: row.created, text: row.text })) },
+            hint: { content, rows: rows.map(row => ({ runtimeId: row.runtimeId, created: row.created, text: row.text })), origin },
             withdraw,
             made,
         };

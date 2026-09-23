@@ -6,7 +6,7 @@ import { FrontmatterWriter } from './writers/FrontmatterWriter';
 import { TaskCloner, type InPlaceCopyLines } from './TaskCloner';
 import type { PropertyOp } from './PropertyUpdatePlanner';
 import { WriteObserver } from './WriteObserver';
-import type { EditorLine, WriteOutcome } from '../../utils/FileLines';
+import type { EditorLine, WriteOrigin, WriteOutcome } from '../../utils/FileLines';
 import type { RowBasis, WriteTarget } from './TaskRefs';
 import type { TaskOp } from './TaskOps';
 
@@ -91,8 +91,8 @@ export class TaskRepository {
         return this.inlineWriter.insertLineAsFirstChild(task, lineContent);
     }
 
-    async appendTaskToFile(filePath: string, content: string): Promise<number> {
-        return this.inlineWriter.appendTaskToFile(filePath, content);
+    async appendTaskToFile(filePath: string, content: string, origin: WriteOrigin): Promise<number> {
+        return this.inlineWriter.appendTaskToFile(filePath, content, origin);
     }
 
     /** @returns the source subtree archived, or null when nothing was written (see InlineTaskWriter). */

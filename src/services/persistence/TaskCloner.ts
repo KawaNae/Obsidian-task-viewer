@@ -50,11 +50,11 @@ export class TaskCloner {
 
         const file = this.app.vault.getAbstractFileByPath(task.file);
         if (!(file instanceof TFile)) {
-            this.writes?.for(task.file)?.refused({ file: task.file, reason: { kind: 'gone' }, subject: subjectOf(task) });
+            this.writes?.for(task.file, 'user')?.refused({ file: task.file, reason: { kind: 'gone' }, subject: subjectOf(task) });
             return false;
         }
 
-        return processLines(this.app, file, this.writes?.for(task.file), (draft, _eol, { lineOf, refuse }) => {
+        return processLines(this.app, file, this.writes?.for(task.file, 'user'), (draft, _eol, { lineOf, refuse }) => {
             const lines = draft.lines;
             const idx = lineOf(refOf(task), subjectOf(task));
             if (idx === null) return false;
@@ -90,11 +90,11 @@ export class TaskCloner {
     async duplicateInlineTaskInPlace(task: Task, copies: InPlaceCopyLines): Promise<boolean> {
         const file = this.app.vault.getAbstractFileByPath(task.file);
         if (!(file instanceof TFile)) {
-            this.writes?.for(task.file)?.refused({ file: task.file, reason: { kind: 'gone' }, subject: subjectOf(task) });
+            this.writes?.for(task.file, 'user')?.refused({ file: task.file, reason: { kind: 'gone' }, subject: subjectOf(task) });
             return false;
         }
 
-        return processLines(this.app, file, this.writes?.for(task.file), (draft, _eol, { lineOf, refuse }) => {
+        return processLines(this.app, file, this.writes?.for(task.file, 'user'), (draft, _eol, { lineOf, refuse }) => {
             const lines = draft.lines;
             const idx = lineOf(refOf(task), subjectOf(task));
             if (idx === null) return false;
