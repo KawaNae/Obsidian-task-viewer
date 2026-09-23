@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { TFile } from 'obsidian';
-import { LineBreakInLine, draftOver, joinLines, processLines, replayEdits, splitLines } from '../../../src/utils/FileLines';
+import { BrokenWrite, LineBreakInLine, draftOver, joinLines, processLines, replayEdits, splitLines } from '../../../src/utils/FileLines';
 import type { LineEdit, Located, NamedRow, Refusal, TaskRef, WriteChannel } from '../../../src/utils/FileLines';
 import { holdsLineBreak } from '../../../src/utils/LineBreak';
 import { ON_RECORD } from '../../../src/services/persistence/RowBasis';
@@ -99,7 +99,16 @@ describe('joinLines', () => {
     });
 });
 
-function harness(initial: string, opts: { throwAfterCallback?: boolean; callbackRuns?: number } = {}) {
+/**
+ * `failWrite` makes `vault.process` throw once the callback has run: after
+ * the bytes reached disk (`landed`), or without them reaching it (`lost`).
+ * `unreadable` makes reading the file back throw.
+ */
+function harness(initial: string, opts: {
+    failWrite?: 'landed' | 'lost';
+    unreadable?: boolean;
+    callbackRuns?: number;
+} = {}) {
     let content = initial;
     let calls = 0;
     const file = new TFile();
@@ -109,11 +118,19 @@ function harness(initial: string, opts: { throwAfterCallback?: boolean; callback
             process: async (_f: TFile, fn: (data: string) => string) => {
                 // Obsidian re-runs the callback when another write landed in
                 // between, and throws when the write itself fails.
+                let next = content;
                 for (let run = 0; run < (opts.callbackRuns ?? 1); run++) {
                     calls++;
-                    content = fn(content);
+                    next = fn(content);
+                    if (run < (opts.callbackRuns ?? 1) - 1) content = next;
                 }
-                if (opts.throwAfterCallback) throw new Error('write failed');
+                if (opts.failWrite !== 'lost') content = next;
+                if (opts.failWrite) throw new Error('write failed');
+            },
+            read: async (_f: TFile) => {
+                if (opts.unreadable) throw new Error('read failed');
+                // Obsidian hands a read back without the mark at the head.
+                return content.replace(/^\uFEFF/, '');
             },
         },
     } as never;
@@ -298,26 +315,93 @@ describe('processLines', () => {
         const h = harness('- [ ] a\n');
         const log = writeSink();
 
-        await processLines(h.app, h.file, log.channel, (draft) => {
+        await processLines(h.app, h.file, log.channel, (draft, _eol, { refuse }) => {
             draft.rewrite(0, draft.lines[0]);
-            return false;
+            return refuse({ kind: 'unplaceable' }, 'a');
         });
 
         expect(log.standing()).toEqual([]);
     });
 
-    it('takes the report back when the write throws after the callback', async () => {
+    it('takes the report back and answers failed when the write throws and the file never changed', async () => {
         // The file never changed, so the claim describes a state that never
         // existed. Left standing, it would be weighed against whatever the
         // next scan happens to read.
-        const h = harness('- [ ] a\n', { throwAfterCallback: true });
+        const h = harness('- [ ] a\n', { failWrite: 'lost' });
         const log = writeSink();
 
-        await expect(processLines(h.app, h.file, log.channel, (draft) => {
+        const outcome = await processLines(h.app, h.file, log.channel, (draft) => {
             draft.rewrite(0, '- [x] a');
             return true;
-        })).rejects.toThrow('write failed');
+        });
 
+        expect(outcome).toEqual({ written: false, refused: { file: 'note.md', reason: { kind: 'failed' }, subject: 'note.md' } });
+        expect(h.text()).toBe('- [ ] a\n');
+        expect(log.standing()).toEqual([]);
+        expect(log.refusals).toEqual([outcome.refused]);
+    });
+
+    it('keeps the report and answers written when the write throws but the file reads as written', async () => {
+        // Obsidian's failure does not say whether the bytes reached disk; the
+        // file does. Answering failed here would have the caller write the
+        // same thing again (a timer records twice) or put back a value the
+        // file already holds.
+        const h = harness('\uFEFF- [ ] a\n', { failWrite: 'landed' });
+        const log = writeSink();
+
+        const outcome = await processLines(h.app, h.file, log.channel, (draft) => {
+            draft.rewrite(0, '- [x] a');
+            return true;
+        });
+
+        expect(outcome.written).toBe(true);
+        expect(h.text()).toBe('\uFEFF- [x] a\n');
+        expect(log.standing()).toHaveLength(1);
+        expect(log.refusals).toEqual([]);
+    });
+
+    it('answers failed when the write throws and the file cannot be read back', async () => {
+        const h = harness('- [ ] a\n', { failWrite: 'landed', unreadable: true });
+        const log = writeSink();
+
+        const outcome = await processLines(h.app, h.file, log.channel, (draft) => {
+            draft.rewrite(0, '- [x] a');
+            return true;
+        });
+
+        expect(outcome.written).toBe(false);
+        expect(outcome.refused?.reason).toEqual({ kind: 'failed' });
+        expect(log.standing()).toEqual([]);
+        expect(log.refusals).toHaveLength(1);
+    });
+
+    it('answers failed, filing nothing, when the callback throws', async () => {
+        // A write's own code failing is not a reason to leave the caller
+        // without an answer: the card that asked for it puts its value back.
+        const h = harness('- [ ] a\n- [ ] b\n', { callbackRuns: 2 });
+        const log = writeSink(() => ({ kind: 'at', line: 0 }));
+        let run = 0;
+
+        const outcome = await processLines(h.app, h.file, log.channel, (draft, _eol, { row }) => {
+            run++;
+            row({ ref: { runtimeId: 'a' }, subject: 'a', basis: ON_RECORD });
+            draft.splice(1, 0, '- [ ] made');
+            if (run === 2) throw new Error('boom');
+            return true;
+        });
+
+        expect(outcome).toEqual({ written: false, refused: { file: 'note.md', reason: { kind: 'failed' }, subject: 'a' } });
+        expect(log.standing()).toEqual([]);
+        expect(log.refusals).toHaveLength(1);
+    });
+
+    it('holds a callback to saying why when it gives a write up', async () => {
+        // A false with no refusal would leave the caller a write neither made
+        // nor refused. A development build throws; a release build answers failed.
+        const h = harness('- [ ] a\n');
+        const log = writeSink();
+
+        await expect(processLines(h.app, h.file, log.channel, () => false)).rejects.toThrow(BrokenWrite);
         expect(log.standing()).toEqual([]);
     });
 
@@ -371,10 +455,9 @@ describe('processLines', () => {
     it('leaves the file byte-identical when the edit declines', async () => {
         const original = '- [ ] a\r\n- [ ] b\n';
         const h = harness(original);
-        const outcome = await processLines(h.app, h.file, undefined, () => false);
+        const outcome = await processLines(h.app, h.file, undefined, (_draft, _eol, { refuse }) => refuse({ kind: 'unplaceable' }, 'a'));
 
-        // Declining without a reason is not a refusal: nobody is told.
-        expect(outcome).toEqual({ written: false, refused: null, made: [], rows: new Map() });
+        expect(outcome).toEqual({ written: false, refused: { file: 'note.md', reason: { kind: 'unplaceable' }, subject: 'a' } });
         // Not even the mixed terminators are unified: a write that could not be
         // placed must leave no trace, or Obsidian fires a modify for it and a
         // rescan follows a change nobody made.
@@ -434,7 +517,7 @@ describe('processLines: asking where a row stands, and giving up', () => {
         });
 
         const refusal = { file: 'note.md', reason: { kind: 'ambiguous', count: 2 }, subject: 'a' };
-        expect(outcome).toEqual({ written: false, refused: refusal, made: [], rows: new Map() });
+        expect(outcome).toEqual({ written: false, refused: refusal });
         expect(log.refusals).toEqual([refusal]);
         expect(h.text()).toBe('- [ ] a\n');
     });
@@ -449,8 +532,6 @@ describe('processLines: asking where a row stands, and giving up', () => {
         expect(outcome).toEqual({
             written: false,
             refused: { file: 'note.md', reason: { kind: 'gone' }, subject: 'a' },
-            made: [],
-            rows: new Map(),
         });
         expect(h.text()).toBe('- [ ] a\n');
     });
@@ -463,7 +544,7 @@ describe('processLines: asking where a row stands, and giving up', () => {
             session.refuse({ kind: 'changed' }, '- [ ] a'));
 
         const refusal = { file: 'note.md', reason: { kind: 'changed' }, subject: '- [ ] a' };
-        expect(outcome).toEqual({ written: false, refused: refusal, made: [], rows: new Map() });
+        expect(outcome).toEqual({ written: false, refused: refusal });
         expect(log.refusals).toEqual([refusal]);
         expect(h.text()).toBe('- [ ] a\n');
     });

@@ -1,5 +1,5 @@
 import type { App, TFile } from 'obsidian';
-import { logError } from '../log/log';
+import { logError, logWarn } from '../log/log';
 import { LINE_BREAK, holdsLineBreak } from './LineBreak';
 import { ON_RECORD, readsAsPlanned, subtreeAt, type OnRecord, type RowBasis } from '../services/persistence/RowBasis';
 
@@ -380,14 +380,16 @@ export interface EditorLine {
 /**
  * Why a write was not made: its target was one of `count` rows nothing tells
  * apart, it is on no line of the file, the line the caller pointed at no
- * longer reads what the caller saw there, or what it would write has nowhere
- * in the body to go (see `Placement`).
+ * longer reads what the caller saw there, what it would write has nowhere
+ * in the body to go (see `Placement`), or the write itself failed — it threw,
+ * or the file could not be read or written.
  */
 export type RefusalReason =
     | { kind: 'ambiguous'; count: number }
     | { kind: 'gone' }
     | { kind: 'changed' }
-    | { kind: 'unplaceable' };
+    | { kind: 'unplaceable' }
+    | { kind: 'failed' };
 
 /** A write that was not made, as it is told to whoever reports it. */
 export interface Refusal {
@@ -461,12 +463,25 @@ export interface WriteSession {
     refuse(reason: RefusalReason, subject: string): false;
 }
 
-/** What became of one `processLines`. */
-export interface WriteOutcome {
-    /** Whether the callback said to write, whether or not the lines differed. */
-    written: boolean;
-    /** Why it did not, when it gave the write up. */
-    refused: Refusal | null;
+/**
+ * What became of one write: made, or not made and why. Every write of the
+ * plugin answers with this — there is no third way for a write to end, an
+ * exception included — and a write that was not made has already been told to
+ * the user, once, by the write layer (see {@link WriteChannel.refused}).
+ */
+export type WriteOutcome = WriteMade | WriteRefused;
+
+/** A write that was not made. */
+export interface WriteRefused {
+    written: false;
+    refused: Refusal;
+}
+
+/** A write that was made. */
+export interface WriteMade {
+    /** The callback said to write, whether or not the lines differed. */
+    written: true;
+    refused: null;
     /**
      * The rows the write made, by the names the next scan gives them if it
      * adopts this write's claim. Empty when the write claimed nothing (see
@@ -624,7 +639,6 @@ export async function processLines(
     channel: WriteChannel | undefined,
     edit: (draft: LineDraft, eol: Eol, session: WriteSession) => boolean,
 ): Promise<WriteOutcome> {
-    let written = false;
     let refused: Refusal | null = null;
     let made: readonly MadeRow[] = [];
     let rows: ReadonlyMap<string, RowLines> = new Map();
@@ -632,156 +646,218 @@ export async function processLines(
     // A list rather than one slot: `vault.process` may run the callback again,
     // and everything filed has to be withdrawable.
     const withdrawals: Array<() => void> = [];
+    // What the write is about, for a refusal said after the callback is over.
+    let lastSubject = '';
+    // What the latest run of the callback handed back to be written, or null
+    // while it has handed back nothing — it threw, or has not run.
+    let handedBack: string | null = null;
 
     try {
         await app.vault.process(file, (content) => {
-            // Obsidian may run the callback again (it retries on a conflicting
-            // write). The previous attempt's claims describe a file that never
-            // reached disk, so they go before this attempt files its own.
-            for (const withdraw of withdrawals.splice(0)) withdraw();
-            refused = null;
-            made = [];
-            rows = new Map();
-
-            const { lines, eol, bom } = splitLines(content);
-            const before = [...lines];
-            // Over `lines` itself: every change the write makes, it makes to
-            // this array through the draft, and the draft reports it.
-            const { draft, reported } = draftOver(lines);
-            const refuse = (reason: RefusalReason, subject: string): false => {
-                refused = { file: file.path, reason, subject };
-                return false;
-            };
-            // Each row is asked once, of the lines as they were handed in, and
-            // its basis checked there: the answer is its line, or why not.
-            const answered = new Map<string, number | RefusalReason>();
-            // Whether a coordinate was carried across this write's own edits,
-            // and whether carrying one caught the report out.
-            let carried = false;
-            let unsound: string | null = null;
-            const carry = (line: number): number | null => {
-                carried = true;
-                const replayed = replayEdits(before.length, reported);
-                if (!replayed) {
-                    unsound = 'a report no file could follow';
-                    return null;
-                }
-                const now = replayed.origin.indexOf(line);
-                // Taken away by this very write: the row is not on these lines.
-                if (now < 0) return null;
-                if (!replayed.rewritten[now] && lines[now] !== before[line]) {
-                    unsound = `line ${line} carried to ${now} does not read what it read`;
-                    return null;
-                }
-                return now;
-            };
-            const answer = (target: NamedRow | EditorLine): number | RefusalReason => {
-                if (!('ref' in target)) {
-                    // The editor's line is its own coordinate, good only while
-                    // the line still reads what the editor showed there.
-                    return before[target.line] === target.text ? target.line : { kind: 'changed' };
-                }
-                const located: Located = channel ? channel.locate(before, target.ref) : { kind: 'gone' };
-                if (located.kind === 'outdated') return { kind: 'changed' };
-                if (located.kind !== 'at') return located;
-                const holds = target.basis === ON_RECORD
-                    ? channel!.onRecord(before, target.ref, located.line)
-                    : readsAsPlanned(before, located.line, target.basis);
-                return holds ? located.line : { kind: 'changed' };
-            };
-            // The names the write asked for, to say how it left them.
-            const named = new Map<string, number>();
-            let lastSubject = '';
-            const session: WriteSession = {
-                row: (target) => {
-                    const subject = 'ref' in target ? target.subject : target.text.trim();
-                    lastSubject = subject;
-                    const key = 'ref' in target ? target.ref.runtimeId : `editor:${target.line}`;
-                    let found = answered.get(key);
-                    if (found === undefined) {
-                        found = answer(target);
-                        answered.set(key, found);
-                        if ('ref' in target && typeof found === 'number') named.set(key, found);
-                    }
-                    if (typeof found !== 'number') { refuse(found, subject); return null; }
-                    if (reported.length === 0) return found;
-                    const now = carry(found);
-                    if (now === null) { refuse({ kind: 'gone' }, subject); return null; }
-                    return now;
-                },
-                refuse,
-            };
-            let next: string[] | null;
-            try {
-                next = edit(draft, eol, session) ? lines : null;
-            } catch (error) {
-                if (!(error instanceof LineBreakInLine)) throw error;
-                // A caller's bug, not the user's: the input should have been
-                // refused where it came in (`TaskApi`). The file is left as it
-                // was rather than written with a line the report cannot count.
-                const message = `[FileLines] ${file.path}: ${error.message}; nothing written`;
-                if (__DEV__) throw new Error(message);
-                logError(message);
-                refused = null;
-                return content;
-            }
-
-            // A write that took a coordinate across its own edits wrote where
-            // its report said the row had gone. If the report does not account
-            // for the lines, that coordinate is not known to be the row's, and
-            // nothing is written rather than something in the wrong place.
-            if (unsound === null && next !== null && carried && !explains(before, next, reported)) {
-                unsound = 'its report does not account for the lines it wrote';
-            }
-            if (unsound !== null) {
-                const message = `[FileLines] ${file.path}: a coordinate was carried across this write's edits, but ${unsound}; nothing written`;
-                if (__DEV__) throw new Error(message);
-                logError(message);
-                refuse({ kind: 'changed' }, lastSubject);
-                return content;
-            }
-            if (next === null) return content;
-            refused = null;
-
-            written = true;
-            rows = rowsLeft(before, reported, next, named);
-            // The mark the note opened with, put back where it was.
-            const rebuilt = (bom ? BOM : '') + joinLines(next, eol);
-
-            // A rewrite that produced the same bytes is not a write: Obsidian
-            // fires no `modify` for it, so no scan follows, and a claim filed
-            // here would wait for a scan that never comes. The caller still
-            // hears `true` — the line was found, which is what it asked.
-            //
-            // Claims are handed over here rather than after the `await` on
-            // purpose: the scan this write triggers starts reading before
-            // `vault.process` resolves, so a claim raised afterwards is too late
-            // for it. Filing early means filing before the write is known to
-            // have succeeded, which is what the withdrawal below is for.
-            if (sink && rebuilt !== content) {
-                const accounted = explains(before, next, reported);
-                if (!accounted) {
-                    logError(`[FileLines] ${file.path}: a write's report does not account for the lines it wrote; no claim filed, the chain of records marked broken`);
-                }
-                const receipt = sink(before, next, accounted ? reported : null, accounted ? rewrittenBy(rows) : null);
-                withdrawals.push(receipt.withdraw);
-                made = receipt.made;
-            }
-
-            return rebuilt;
+            handedBack = null;
+            handedBack = attempt(content);
+            return handedBack;
         });
     } catch (error) {
-        // The file never changed, so claims about it describe a state that
-        // never existed. Left in the log they would be matched against whatever
-        // the next scan happens to read.
-        for (const withdraw of withdrawals) withdraw();
-        throw error;
+        // A development build's report of a caller's bug: seen, not absorbed.
+        if (error instanceof BrokenWrite) {
+            for (const withdraw of withdrawals) withdraw();
+            throw error;
+        }
+        // Obsidian can fail after the callback, and a failure there does not
+        // say whether the bytes reached disk. The file does: if it reads as
+        // the callback left it, the write landed, and what it filed stands.
+        if (handedBack === null || !(await readsAs(app, file, handedBack))) {
+            // The file never changed, so claims about it describe a state that
+            // never existed. Left in the log they would be matched against
+            // whatever the next scan happens to read.
+            for (const withdraw of withdrawals) withdraw();
+            logError(`[FileLines] ${file.path}: the write failed; nothing written: ${String(error)}`);
+            const failed: Refusal = { file: file.path, reason: { kind: 'failed' }, subject: lastSubject || file.path };
+            channel?.refused(failed);
+            return { written: false, refused: failed };
+        }
+        logWarn(`[FileLines] ${file.path}: the write reported a failure, but the file reads as written; kept: ${String(error)}`);
     }
 
     // Set inside the callback, which the compiler does not follow.
     const outcome = refused as Refusal | null;
-    if (outcome !== null) channel?.refused(outcome);
-    return { written, refused: outcome, made, rows };
+    if (outcome !== null) {
+        channel?.refused(outcome);
+        return { written: false, refused: outcome };
+    }
+    return { written: true, refused: null, made, rows };
+
+    /** One run of the callback: the content to write, or the content as it was. */
+    function attempt(content: string): string {
+        // Obsidian may run the callback again (it retries on a conflicting
+        // write). The previous attempt's claims describe a file that never
+        // reached disk, so they go before this attempt files its own.
+        for (const withdraw of withdrawals.splice(0)) withdraw();
+        refused = null;
+        made = [];
+        rows = new Map();
+
+        const { lines, eol, bom } = splitLines(content);
+        const before = [...lines];
+        // Over `lines` itself: every change the write makes, it makes to
+        // this array through the draft, and the draft reports it.
+        const { draft, reported } = draftOver(lines);
+        const refuse = (reason: RefusalReason, subject: string): false => {
+            refused = { file: file.path, reason, subject };
+            return false;
+        };
+        // Each row is asked once, of the lines as they were handed in, and
+        // its basis checked there: the answer is its line, or why not.
+        const answered = new Map<string, number | RefusalReason>();
+        // Whether a coordinate was carried across this write's own edits,
+        // and whether carrying one caught the report out.
+        let carried = false;
+        let unsound: string | null = null;
+        const carry = (line: number): number | null => {
+            carried = true;
+            const replayed = replayEdits(before.length, reported);
+            if (!replayed) {
+                unsound = 'a report no file could follow';
+                return null;
+            }
+            const now = replayed.origin.indexOf(line);
+            // Taken away by this very write: the row is not on these lines.
+            if (now < 0) return null;
+            if (!replayed.rewritten[now] && lines[now] !== before[line]) {
+                unsound = `line ${line} carried to ${now} does not read what it read`;
+                return null;
+            }
+            return now;
+        };
+        const answer = (target: NamedRow | EditorLine): number | RefusalReason => {
+            if (!('ref' in target)) {
+                // The editor's line is its own coordinate, good only while
+                // the line still reads what the editor showed there.
+                return before[target.line] === target.text ? target.line : { kind: 'changed' };
+            }
+            const located: Located = channel ? channel.locate(before, target.ref) : { kind: 'gone' };
+            if (located.kind === 'outdated') return { kind: 'changed' };
+            if (located.kind !== 'at') return located;
+            const holds = target.basis === ON_RECORD
+                ? channel!.onRecord(before, target.ref, located.line)
+                : readsAsPlanned(before, located.line, target.basis);
+            return holds ? located.line : { kind: 'changed' };
+        };
+        // The names the write asked for, to say how it left them.
+        const named = new Map<string, number>();
+        lastSubject = '';
+        const session: WriteSession = {
+            row: (target) => {
+                const subject = 'ref' in target ? target.subject : target.text.trim();
+                lastSubject = subject;
+                const key = 'ref' in target ? target.ref.runtimeId : `editor:${target.line}`;
+                let found = answered.get(key);
+                if (found === undefined) {
+                    found = answer(target);
+                    answered.set(key, found);
+                    if ('ref' in target && typeof found === 'number') named.set(key, found);
+                }
+                if (typeof found !== 'number') { refuse(found, subject); return null; }
+                if (reported.length === 0) return found;
+                const now = carry(found);
+                if (now === null) { refuse({ kind: 'gone' }, subject); return null; }
+                return now;
+            },
+            refuse,
+        };
+        let next: string[] | null;
+        try {
+            next = edit(draft, eol, session) ? lines : null;
+        } catch (error) {
+            if (!(error instanceof LineBreakInLine)) throw error;
+            // A caller's bug, not the user's: the input should have been
+            // refused where it came in (`TaskApi`). The file is left as it
+            // was rather than written with a line the report cannot count.
+            const message = `[FileLines] ${file.path}: ${error.message}; nothing written`;
+            if (__DEV__) throw new BrokenWrite(message);
+            logError(message);
+            refuse({ kind: 'failed' }, lastSubject || file.path);
+            return content;
+        }
+
+        // A write that took a coordinate across its own edits wrote where
+        // its report said the row had gone. If the report does not account
+        // for the lines, that coordinate is not known to be the row's, and
+        // nothing is written rather than something in the wrong place.
+        if (unsound === null && next !== null && carried && !explains(before, next, reported)) {
+            unsound = 'its report does not account for the lines it wrote';
+        }
+        if (unsound !== null) {
+            const message = `[FileLines] ${file.path}: a coordinate was carried across this write's edits, but ${unsound}; nothing written`;
+            if (__DEV__) throw new BrokenWrite(message);
+            logError(message);
+            refuse({ kind: 'changed' }, lastSubject);
+            return content;
+        }
+        if (next === null) {
+            // Every way a callback gives a write up says why (`refuse`,
+            // or `row` answering null). One that just returns false has
+            // not, and would leave its caller a write neither made nor
+            // refused.
+            if (refused === null) {
+                const message = `[FileLines] ${file.path}: a write was given up without a reason; nothing written`;
+                if (__DEV__) throw new BrokenWrite(message);
+                logError(message);
+                refuse({ kind: 'failed' }, lastSubject || file.path);
+            }
+            return content;
+        }
+        refused = null;
+
+        rows = rowsLeft(before, reported, next, named);
+        // The mark the note opened with, put back where it was.
+        const rebuilt = (bom ? BOM : '') + joinLines(next, eol);
+
+        // A rewrite that produced the same bytes is not a write: Obsidian
+        // fires no `modify` for it, so no scan follows, and a claim filed
+        // here would wait for a scan that never comes. The caller still
+        // hears `true` — the line was found, which is what it asked.
+        //
+        // Claims are handed over here rather than after the `await` on
+        // purpose: the scan this write triggers starts reading before
+        // `vault.process` resolves, so a claim raised afterwards is too late
+        // for it. Filing early means filing before the write is known to
+        // have succeeded, which is what the withdrawal below is for.
+        if (sink && rebuilt !== content) {
+            const accounted = explains(before, next, reported);
+            if (!accounted) {
+                logError(`[FileLines] ${file.path}: a write's report does not account for the lines it wrote; no claim filed, the chain of records marked broken`);
+            }
+            const receipt = sink(before, next, accounted ? reported : null, accounted ? rewrittenBy(rows) : null);
+            withdrawals.push(receipt.withdraw);
+            made = receipt.made;
+        }
+
+        return rebuilt;
+    }
+}
+
+/**
+ * A development build's report of a bug in a write's caller — a line handed
+ * over with a break in it, a report that does not follow — thrown so the bug
+ * is seen. A release build refuses the write instead.
+ */
+export class BrokenWrite extends Error {
+    constructor(message: string) {
+        super(message);
+        this.name = 'BrokenWrite';
+    }
+}
+
+/** Whether the file now reads as `content`, the mark at its head aside. A file that cannot be read does not. */
+async function readsAs(app: App, file: TFile, content: string): Promise<boolean> {
+    try {
+        const now = await app.vault.read(file);
+        return now.replace(/^\uFEFF/, '') === content.replace(/^\uFEFF/, '');
+    } catch {
+        return false;
+    }
 }
 
 /** The line each named row was left on, for the rows the write gave a new text. */
