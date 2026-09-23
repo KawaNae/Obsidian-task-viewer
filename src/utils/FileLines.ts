@@ -282,11 +282,15 @@ export interface MadeRow {
 /** What filing a report left: a handle that takes it back, and the rows it named. */
 export interface WriteReceipt {
     /**
-     * Called when, and only when, the write this report describes did not
-     * land: its callback ran again, or the write failed and the file does not
-     * read as it was left. Called at most once, and before any later write of
-     * ours to the same file files a report — so what it takes back is always
-     * our newest report on that file. A write that landed never calls it.
+     * Called when the write this report describes is not known to have
+     * landed: its callback ran again, or the write failed and the file does
+     * not read as it was left. A write that returned, or failed with the file
+     * reading as it was left, never calls it. One that landed and failed, with
+     * an edit from outside before the file was read back, is not told from
+     * one that did not land, and calls it: the report is lost, never wrongly
+     * kept. Called at most once, and before any later write of ours to the
+     * same file files a report — so what it takes back is always our newest
+     * report on that file.
      */
     withdraw: () => void;
     /**
