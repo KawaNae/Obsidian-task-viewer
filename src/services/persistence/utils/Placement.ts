@@ -117,12 +117,44 @@ export class Placement {
      * otherwise. A line goes in above the frontmatter's end, or inside a
      * fence — past its opening line and not past its closing one, or past
      * the end of a fence that never closes — and is not.
+     *
+     * Fences are read both ways the parser reads them: across the whole
+     * document, and within the subtree of the task a line stands under, where
+     * a fence carries the list item's indentation and the whole-document
+     * reading cannot see it (`CodeFenceTracker.subtreeMask`). Such a fence
+     * that never closes ends with the subtree.
      */
     static inBody(lines: readonly string[], at: number): number | null {
         if (at < Outline.bodyStart(lines) || at > lines.length) return null;
-        for (const fence of CodeFenceTracker.scan([...lines]).opens) {
+        const whole = CodeFenceTracker.scan([...lines]);
+        for (const fence of whole.opens) {
             if (at > fence.line && at <= (fence.close ?? lines.length)) return null;
         }
+        const top = this.enclosingTask(lines, at, whole.fenced);
+        if (top !== null) {
+            const end = Outline.subtreeEnd(lines, top);
+            const subtree = CodeFenceTracker.scan(lines.slice(top + 1, end).map(line => line.trimStart()));
+            for (const fence of subtree.opens) {
+                const open = top + 1 + fence.line;
+                const close = fence.close === null ? end - 1 : top + 1 + fence.close;
+                if (at > open && at <= close) return null;
+            }
+        }
         return at;
+    }
+
+    /**
+     * The unindented task whose subtree a line put in at `at` would stand
+     * inside of, or null: the nearest unindented line above, when it is a
+     * task outside any fence and its subtree reaches past `at - 1`.
+     */
+    private static enclosingTask(lines: readonly string[], at: number, fenced: boolean[]): number | null {
+        for (let i = at - 1; i >= 0; i--) {
+            const line = lines[i];
+            if (line.trim() === '' || Outline.depthOf(line) > 0) continue;
+            if (fenced[i] || !TaskLineClassifier.isTaskLine(line)) return null;
+            return Outline.subtreeEnd(lines, i) >= at ? i : null;
+        }
+        return null;
     }
 }
