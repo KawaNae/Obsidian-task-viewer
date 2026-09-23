@@ -25,12 +25,13 @@ export class DocumentTreeBuilder {
         lines: string[],
         bodyStartLine: number
     ): DocumentNode {
-        const bodyLines = lines.slice(bodyStartLine);
-        const sections = this.buildSectionTree(bodyLines, bodyStartLine);
         // Absolute-indexed fence membership: a `- [ ]` inside a fenced block is
-        // sample text, not a task. Computed once from line 0 so that every
-        // consumer below can ask about any absolute line number.
+        // sample text, not a task, and a `# comment` in one is no heading.
+        // Computed once from line 0 so that every consumer below can ask about
+        // any absolute line number.
         const fenceMask = CodeFenceTracker.mask(lines);
+        const bodyLines = lines.slice(bodyStartLine);
+        const sections = this.buildSectionTree(bodyLines, bodyStartLine, fenceMask);
         for (const section of this.flattenSections(sections)) {
             this.classifyBlocks(section, lines, fenceMask);
         }
@@ -39,10 +40,14 @@ export class DocumentTreeBuilder {
 
     // ── Pass 1: セクションツリー構築 ──
 
-    private static buildSectionTree(bodyLines: string[], bodyStartLine: number): SectionNode[] {
+    private static buildSectionTree(bodyLines: string[], bodyStartLine: number, fenceMask: boolean[]): SectionNode[] {
         const headings: { level: number; text: string; line: number }[] = [];
 
         for (let i = 0; i < bodyLines.length; i++) {
+            // A heading-like line in a fence is code: splitting a section there
+            // cut the subtree of the task the fence stands under, and a write
+            // carried lines the parser gave to no one.
+            if (fenceMask[bodyStartLine + i]) continue;
             const m = bodyLines[i].match(HEADING_REGEX);
             if (m) {
                 headings.push({ level: m[1].length, text: m[2].trim(), line: bodyStartLine + i });
