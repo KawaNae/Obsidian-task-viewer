@@ -1,5 +1,6 @@
 import { type App, TFolder } from 'obsidian';
 import { TaskLineClassifier } from '../../parsing/utils/TaskLineClassifier';
+import { Outline } from '../../parsing/utils/Outline';
 
 
 /**
@@ -19,7 +20,7 @@ export class FileOperations {
         taskIndent: number;
     } {
         const taskLine = lines[taskLineIndex];
-        const taskIndent = taskLine.search(/\S|$/);
+        const taskIndent = Outline.depthOf(taskLine);
         const childrenLines: string[] = [];
 
         let j = taskLineIndex + 1;
@@ -31,7 +32,7 @@ export class FileOperations {
                 break;
             }
 
-            const nextIndent = nextLine.search(/\S|$/);
+            const nextIndent = Outline.depthOf(nextLine);
             if (nextIndent > taskIndent) {
                 childrenLines.push(nextLine);
                 j++;
@@ -81,11 +82,11 @@ export class FileOperations {
      * matching {@link collectChildrenFromLines}.
      */
     static firstChildIndent(lines: string[], taskLineIndex: number): string | null {
-        const taskIndent = lines[taskLineIndex].search(/\S|$/);
+        const taskIndent = Outline.depthOf(lines[taskLineIndex]);
         for (let j = taskLineIndex + 1; j < lines.length; j++) {
             const line = lines[j];
             if (line.trim() === '') break;
-            if (line.search(/\S|$/) <= taskIndent) break;
+            if (Outline.depthOf(line) <= taskIndent) break;
             return line.match(/^(\s*)/)?.[1] ?? null;
         }
         return null;
@@ -118,22 +119,6 @@ export class FileOperations {
 
         const parentIndent = lines[taskLineIndex].match(/^(\s*)/)?.[1] ?? '';
         return parentIndent + FileOperations.detectIndentUnit(lines);
-    }
-
-    /**
-     * Visual width of a line's indentation, counting a tab as four columns.
-     *
-     * Obsidian accepts only a tab or four spaces per level, so this maps both
-     * spellings of the same depth onto the same number. Comparing raw character
-     * counts instead treats a tab as one column, which makes a tab-indented
-     * sibling look shallower than a space-indented one and cuts sibling walks
-     * short in files where the two are mixed.
-     */
-    static indentWidth(line: string): number {
-        const indent = line.match(/^(\s*)/)?.[1] ?? '';
-        let width = 0;
-        for (const ch of indent) width += ch === '\t' ? 4 : 1;
-        return width;
     }
 
     /**

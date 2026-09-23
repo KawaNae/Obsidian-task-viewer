@@ -153,7 +153,8 @@ describe('FileOperations', () => {
             ];
             const result = ops.collectChildrenFromLines(lines, 0);
             expect(result.childrenLines).toHaveLength(2);
-            expect(result.taskIndent).toBe(1);
+            // Width, not characters: one tab is four columns.
+            expect(result.taskIndent).toBe(4);
         });
     });
 
@@ -198,21 +199,6 @@ describe('FileOperations', () => {
     });
 
     // ── indent resolution (static) ──
-    describe('indentWidth', () => {
-        it('counts a tab as four columns', () => {
-            expect(FileOperations.indentWidth('\t- [ ] x')).toBe(4);
-            expect(FileOperations.indentWidth('    - [ ] x')).toBe(4);
-        });
-
-        it('gives the same depth the same width regardless of spelling', () => {
-            expect(FileOperations.indentWidth('\t\t- x')).toBe(FileOperations.indentWidth('        - x'));
-        });
-
-        it('is zero for a top-level line', () => {
-            expect(FileOperations.indentWidth('- [ ] x')).toBe(0);
-        });
-    });
-
     describe('detectIndentUnit', () => {
         it('takes the spelling of the first indented line', () => {
             expect(FileOperations.detectIndentUnit(['- a', '\t- b'])).toBe('\t');

@@ -416,9 +416,9 @@ describe('a recurrence insert leaves the subtree with the instance that fired', 
 
 // ── conversion and replacement: the extent decides what is read or replaced ──
 
-describe('mixed indentation (current behaviour, revisited by the width change)', () => {
-    it('treats a 4-space child of a tab parent as a descendant', async () => {
-        // 1 char vs 4 chars: the space line looks deeper, so it is collected.
+describe('mixed indentation is read by the width it shows at', () => {
+    it('does not treat a 4-space line under a tab parent as a descendant', async () => {
+        // A tab and four spaces are one depth: the space line is a sibling.
         const h = await writeBench([
             '\t- [ ] parent @2026-08-15',
             '    - [ ] same visual depth, spelled with spaces',
@@ -427,12 +427,14 @@ describe('mixed indentation (current behaviour, revisited by the width change)',
 
         await h.writer.deleteTaskFromFile(h.taskAt(0));
 
-        // The middle line goes with the parent today. Visually it is a sibling.
-        expect(h.lines()).toEqual(['\t- [ ] sibling']);
+        expect(h.lines()).toEqual([
+            '    - [ ] same visual depth, spelled with spaces',
+            '\t- [ ] sibling',
+        ]);
     });
 
     it('does not treat a tab child of a 4-space parent as a descendant', async () => {
-        // The mirror image: 1 char is not greater than 4, so it ends the subtree.
+        // The mirror image, which counting characters already read this way.
         const h = await writeBench([
             '    - [ ] parent @2026-08-15',
             '\t- [ ] same visual depth, spelled with a tab',

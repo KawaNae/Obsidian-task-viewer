@@ -7,6 +7,7 @@ import { TagExtractor } from '../utils/TagExtractor';
 import { TaskParser } from '../TaskParser';
 import { collectFlowLineIndices, flowLineTail } from '../../flow/FlowLineScanner';
 import { flowValidation, parseFlowSegments } from '../../flow/FlowSegments';
+import { Outline } from '../utils/Outline';
 
 export interface TaskExtractionContext {
     filePath: string;
@@ -129,11 +130,11 @@ export class TreeTaskExtractor {
             if (!taskProducingLines.has(absLine)) continue;
             excludeIndices.add(k);
             // この子タスクより深いインデントの後続行も除外
-            const ctIndent = children[k].search(/\S|$/);
+            const ctIndent = Outline.depthOf(children[k]);
             for (let m = k + 1; m < children.length; m++) {
                 const nextLine = children[m];
                 if (nextLine.trim() === '') { excludeIndices.add(m); continue; }
-                if (nextLine.search(/\S|$/) > ctIndent) {
+                if (Outline.depthOf(nextLine) > ctIndent) {
                     excludeIndices.add(m);
                 } else {
                     break;

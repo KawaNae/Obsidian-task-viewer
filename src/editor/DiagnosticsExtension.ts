@@ -27,6 +27,7 @@ import {
     inertNotationOf,
     type InertNotation,
 } from '../services/parsing/tv-inline/InertFlowDiagnostics';
+import { Outline } from '../services/parsing/utils/Outline';
 
 /** Bound for the up/down document scans around the viewport. */
 const SCAN_LIMIT = 100;
@@ -183,12 +184,12 @@ export function createDiagnosticsExtension(): Extension {
      */
     const findOwnerTaskLine = (view: EditorView, lineNumber: number): number | null => {
         const doc = view.state.doc;
-        const flowIndent = doc.line(lineNumber).text.search(/\S|$/);
+        const flowIndent = Outline.depthOf(doc.line(lineNumber).text);
         let steps = 0;
         for (let n = lineNumber - 1; n >= 1 && steps < SCAN_LIMIT; n--, steps++) {
             const text = doc.line(n).text;
             if (text.trim() === '') return null; // blank ends the child block
-            const indent = text.search(/\S|$/);
+            const indent = Outline.depthOf(text);
             if (indent < flowIndent) {
                 return TaskLineClassifier.isTaskLine(text) ? n : null;
             }
@@ -208,7 +209,7 @@ export function createDiagnosticsExtension(): Extension {
     ): { segments: SegmentLoc[]; childLines: string[] } | null => {
         const doc = view.state.doc;
         const rootText = doc.line(rootLineNumber).text;
-        const rootIndent = rootText.search(/\S|$/);
+        const rootIndent = Outline.depthOf(rootText);
         const markerIdx = rootText.indexOf(FLOW_MARKER);
 
         const window: string[] = [rootText];
@@ -216,7 +217,7 @@ export function createDiagnosticsExtension(): Extension {
         for (let n = rootLineNumber + 1; n <= doc.lines && window.length <= SCAN_LIMIT; n++) {
             const text = doc.line(n).text;
             if (text.trim() === '') break;
-            if (text.search(/\S|$/) <= rootIndent) break;
+            if (Outline.depthOf(text) <= rootIndent) break;
             window.push(text);
             windowLineNumbers.push(n);
         }

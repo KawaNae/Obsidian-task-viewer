@@ -6,6 +6,7 @@ import { FileOperations } from './utils/FileOperations';
 import { processLines, type LineEdits } from '../../utils/FileLines';
 import { refOf, subjectOf } from './TaskRefs';
 import type { WriteObserver } from './WriteObserver';
+import { Outline } from '../parsing/utils/Outline';
 
 export type { GeneratedChild } from './FlowInstanceLines';
 
@@ -161,14 +162,14 @@ export class TaskCloner {
      * what its subtree is.
      */
     private static indentedRegionEnd(lines: string[], taskLine: number): number {
-        const taskIndent = lines[taskLine].search(/\S|$/);
+        const taskIndent = Outline.depthOf(lines[taskLine]);
         let last = taskLine;
 
         for (let j = taskLine + 1; j < lines.length; j++) {
             const line = lines[j];
             // A blank line decides nothing on its own — what follows it does.
             if (line.trim() === '') continue;
-            if (line.search(/\S|$/) <= taskIndent) break;
+            if (Outline.depthOf(line) <= taskIndent) break;
             last = j;
         }
 

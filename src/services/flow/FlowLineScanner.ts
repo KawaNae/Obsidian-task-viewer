@@ -10,6 +10,7 @@
 
 import { CodeFenceTracker } from '../../utils/CodeFenceTracker';
 import { LIST_BULLET_SOURCE } from '../parsing/utils/ListMarker';
+import { Outline } from '../parsing/utils/Outline';
 
 /**
  * The marker that turns the tail of a line into a flow command, on a task
@@ -73,7 +74,7 @@ export function collectFlowLineIndices(
     taskLineIndex: number,
     fenced: boolean[],
 ): number[] {
-    const taskIndent = lines[taskLineIndex].search(/\S|$/);
+    const taskIndent = Outline.depthOf(lines[taskLineIndex]);
     const result: number[] = [];
 
     // Monotonic stack of ancestor indents; depth 1 = the task line itself.
@@ -82,7 +83,7 @@ export function collectFlowLineIndices(
     for (let j = taskLineIndex + 1; j < lines.length; j++) {
         const line = lines[j];
         if (line.trim() === '') break;
-        const indent = line.search(/\S|$/);
+        const indent = Outline.depthOf(line);
         if (indent <= taskIndent) break;
 
         while (ancestorIndents.length > 1 && ancestorIndents[ancestorIndents.length - 1] >= indent) {

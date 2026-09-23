@@ -10,9 +10,30 @@
  * through here, so there is one.
  */
 export class Outline {
-    /** The line's depth: how far its first non-blank character is indented. */
+    /**
+     * The line's depth: the width its indentation shows at, a tab reaching the
+     * next multiple of four columns (CommonMark's tab stop).
+     *
+     * Width, not a count of characters: a note that indents with tabs in one
+     * place and four spaces in another writes the same depth two ways, and
+     * counting characters makes the tab line look shallower — a child reads
+     * as a sibling, a sibling as its elder's child, and the parser and every
+     * write disagree with what the note shows.
+     */
     static depthOf(line: string): number {
-        return line.search(/\S|$/);
+        let width = 0;
+        for (const ch of this.indentOf(line)) {
+            width = ch === '\t' ? width + 4 - (width % 4) : width + 1;
+        }
+        return width;
+    }
+
+    /**
+     * The line's indentation as written: the spaces and tabs it opens with,
+     * and nothing else. A byte order mark or a non-breaking space is text.
+     */
+    static indentOf(line: string): string {
+        return /^[ \t]*/.exec(line)![0];
     }
 
     /**
