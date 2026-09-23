@@ -78,8 +78,11 @@ export class EditorObserver {
 
         // mousedown: チェックボックスクリック対応
         // Obsidianのチェックボックスクリックはbeforeinputを発火しないため、
-        // mousedownでローカル編集をマーキングする
-        this.mousedownListenerBound = () => {
+        // mousedownでローカル編集をマーキングする。チェックボックスの上の
+        // mousedown に限る: 本文のどこかをクリックしただけで立てると、その
+        // 操作と無関係な次の変更（同期）が手の完了として発火していた。
+        this.mousedownListenerBound = (e: MouseEvent) => {
+            if (!pressesCheckbox(e.target)) return;
             const file = view.file;
             if (file) {
                 this.editorSignal.mark(file.path);
@@ -101,4 +104,14 @@ export class EditorObserver {
         this.editorListenerBound = null;
         this.mousedownListenerBound = null;
     }
+}
+
+/**
+ * Whether a mousedown landed on a task's checkbox in the editor — the one
+ * press that changes the note without a `beforeinput` (Live Preview toggles
+ * the checkbox through its own transaction).
+ */
+export function pressesCheckbox(target: EventTarget | null): boolean {
+    const element = target as { closest?: (selector: string) => unknown } | null;
+    return typeof element?.closest === 'function' && element.closest('.task-list-item-checkbox') !== null;
 }
