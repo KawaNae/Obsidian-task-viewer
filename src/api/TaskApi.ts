@@ -17,6 +17,7 @@ import { buildFilterFromParams, buildRangeFilterFromParams, assertValidFilterSta
 import type { FilterState } from '../services/filter/FilterTypes';
 import { loadFilterFile } from './FilterFileLoader';
 import { holdsLineBreak } from '../utils/LineBreak';
+import { TaskLineClassifier } from '../services/parsing/utils/TaskLineClassifier';
 import {
     assertParams, renderParamTable,
     LIST_SCHEMA, TODAY_SCHEMA, GET_SCHEMA, CREATE_SCHEMA, UPDATE_SCHEMA,
@@ -462,11 +463,9 @@ export class TaskApi {
         if (!(file instanceof TFile)) throw new TaskApiError(`File not found: ${params.file}`);
         const content = params.content;
 
-        let line = `- [${statusChar}] ${content}`;
-
+        let dateBlock = '';
         const hasDateFields = params.start || params.end || params.due;
         if (hasDateFields) {
-            let dateBlock = '';
             if (params.start) {
                 const parsed = parseDateTimeParam(params.start, 'start');
                 dateBlock = `@${parsed.date}`;
@@ -487,8 +486,8 @@ export class TaskApi {
                 dateBlock += `>${parsed.date}`;
             }
 
-            line += ` ${dateBlock}`;
         }
+        const line = TaskLineClassifier.formatPrefix(statusChar) + TaskLineClassifier.joinContent(content, dateBlock);
 
         const insertedLine = await this.writeService.createTask(params.file, line, params.heading);
         if (insertedLine < 0) throw new TaskApiError(`Task could not be written to: ${params.file}`);
@@ -673,7 +672,7 @@ export class TaskApi {
         const task = this.readService.getTask(params.parentId);
         if (!task) throw new TaskApiError(`Task not found: ${params.parentId}`);
         if (task.isReadOnly) throw new TaskApiError(`Task ${params.parentId} is read-only (parserId=${task.parserId})`);
-        const written = await this.writeService.insertChildTask(params.parentId, `- [ ] ${params.content}`);
+        const written = await this.writeService.insertChildTask(params.parentId, TaskLineClassifier.formatPrefix(' ') + TaskLineClassifier.joinContent(params.content));
         if (!written) throw new TaskApiError(`Child task could not be written under: ${params.parentId}`);
         return { parentId: params.parentId };
     }

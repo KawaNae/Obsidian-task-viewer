@@ -118,7 +118,7 @@ describe('3. a strip-flow on a task with no content and no date', () => {
         // The next instance goes above with the command (its date is the
         // next Monday from today, so only its shape is pinned); the row that
         // fired keeps its place below, the command stripped from it.
-        expect(lines[1]).toMatch(/^- \[ \]  @\d{4}-\d{2}-\d{2}$/);
+        expect(lines[1]).toMatch(/^- \[ \] @\d{4}-\d{2}-\d{2}$/);
         expect(lines.slice(2)).toEqual(['\t- ==> every mon', '- [x] ', '- [ ] 下', '']);
         expectBareTaskLine(lines[3]);
         const row = expectIndexedBare(session, 3, 'x');
@@ -197,11 +197,7 @@ describe('7. reading `- [ ] ^abc`', () => {
         expect(again.blockId).toBe('abc');
     });
 
-    // The formatter writes `] ` + content + ` ^abc`, so an empty content
-    // gives two spaces: `- [x]  ^abc`. It reads back as the same task, but
-    // the line is not written byte for byte as it was read. Known, not fixed
-    // here; this case turns red once it is.
-    it.fails('writes the checked line as `- [x] ^abc` byte for byte', async () => {
+    it('writes the checked line as `- [x] ^abc` byte for byte', async () => {
         const { session, contents } = await open(['# note', '- [ ] ^abc', '']);
         const task = expectIndexedBare(session, 1, ' ');
         expect(await session.index.updateTask(task.id, { statusChar: 'x' })).toBe(true);

@@ -296,7 +296,7 @@ function composeParentLine(
     newTask: Task,
     warnings: Diagnostic[],
 ): string {
-    if (parentText === null) return TaskLineClassifier.tidy(TaskParser.format(newTask));
+    if (parentText === null) return TaskParser.format(newTask);
 
     const checked = checkGeneratedParentLine(parentText);
     // The line check speaks in diagnostics, and its sentence is the whole of
@@ -304,7 +304,8 @@ function composeParentLine(
     // a diagnostic's code up where diagnostics keep their translations.
     if (!checked.ok) throw new GenerationError(checked.error.code, checked.error.message, checked.error.params);
     warnings.push(...checked.warnings);
-    return checked.line + (newTask.flow?.raw ? ` ==> ${newTask.flow.raw}` : '');
+    const { head, content } = TaskLineClassifier.splitContent(checked.line);
+    return head + TaskLineClassifier.joinContent(content, newTask.flow?.raw ? `==> ${newTask.flow.raw}` : '');
 }
 
 function checkedChild(child: { depth: number; body: string }, warnings: Diagnostic[]): GeneratedChild {

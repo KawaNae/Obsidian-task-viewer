@@ -34,8 +34,7 @@ export interface TaskLineMatch {
  */
 export class TaskLineClassifier {
     private static readonly TASK_LINE_REGEX = new RegExp(`^(${TASK_LEAD_SOURCE})(${LIST_BULLET_SOURCE} *\\[)(${STATUS_CHAR_SOURCE})(\\]${CHECKBOX_GAP_SOURCE}${IN_LINE}*)$`);
-    private static readonly BARE_CHECKBOX_REGEX = new RegExp(`^${TASK_LEAD_SOURCE}${LIST_BULLET_SOURCE} *\\[${STATUS_CHAR_SOURCE}\\]$`);
-    private static readonly MARKER_REGEX =new RegExp(`^${TASK_LEAD_SOURCE}(${LIST_BULLET_SOURCE})`);
+    private static readonly MARKER_REGEX = new RegExp(`^${TASK_LEAD_SOURCE}(${LIST_BULLET_SOURCE})`);
     private static readonly BLOCK_ID_REGEX = /(?:^|\s)\^([A-Za-z0-9-]+)\s*$/;
 
     /**
@@ -55,41 +54,36 @@ export class TaskLineClassifier {
     }
 
     /**
-     * {@link extractBlockId} on a whole line: taken off the line's content —
-     * what follows a task's gap, or any other line's indentation — so that
-     * the checkbox, its gap and the indentation stay as they are.
+     * {@link extractBlockId} on a whole line: taken off the line's content
+     * ({@link splitContent}), so that the checkbox, its gap and the
+     * indentation stay as they are.
      */
     static extractLineBlockId(line: string): { text: string; blockId?: string } {
+        const { head, content } = this.splitContent(line);
+        const { text, blockId } = this.extractBlockId(content);
+        return { text: head + text, blockId };
+    }
+
+    /**
+     * A line cut where its content begins. A task's content follows the
+     * space or tab after its `]` — that gap is the checkbox's, and a task
+     * with no content still has it (`- [ ] `), since without it the line is
+     * no task to Obsidian. Any other line's content follows its indentation.
+     */
+    static splitContent(line: string): { head: string; content: string } {
         const task = this.classify(line);
-        const head = task ? line.length - task.rawContent.length : Outline.indentOf(line).length;
-        const { text, blockId } = this.extractBlockId(line.slice(head));
-        return { text: line.slice(0, head) + text, blockId };
+        const at = task ? line.length - task.rawContent.length : Outline.indentOf(line).length;
+        return { head: line.slice(0, at), content: line.slice(at) };
     }
 
     /**
-     * `text` with its end trimmed, but not the gap after a checkbox that has
-     * nothing else on its line.
-     *
-     * A checkbox is a task to Obsidian only with a space or a tab after its
-     * `]`, so `- [ ] ` is a task with no content and `- [ ]` is none. A task
-     * with no content formats to the first; trimming the line as it is
-     * written would turn it into the second. Any other line's end is trimmed
-     * as before.
+     * A content made of parts — the text, the date block, the command, the
+     * block id — one space apart, each with its end trimmed and the empty
+     * ones left out. How every line the plugin writes puts its content
+     * together, so that no part leaves a space behind when it is absent.
      */
-    static trimEnd(text: string): string {
-        const trimmed = text.trimEnd();
-        return trimmed.length < text.length && this.BARE_CHECKBOX_REGEX.test(trimmed)
-            ? text.slice(0, trimmed.length + 1)
-            : trimmed;
-    }
-
-    /**
-     * A line as a writer puts it after the indentation it decides: the line's
-     * own indentation taken off, as the reading takes it off
-     * (`Outline.dedent`), and its end trimmed as {@link trimEnd} does.
-     */
-    static tidy(line: string): string {
-        return this.trimEnd(Outline.dedent(line));
+    static joinContent(...parts: string[]): string {
+        return parts.map(part => part.trimEnd()).filter(part => part !== '').join(' ');
     }
 
     /** Full classification — returns null if the line is not a task line. */
