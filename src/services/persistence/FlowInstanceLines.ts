@@ -1,5 +1,6 @@
 import { collectFlowLineIndicesInFile, formatFlowLine } from '../flow/FlowLineScanner';
 import { FileOperations } from './utils/FileOperations';
+import { Outline } from '../parsing/utils/Outline';
 
 /**
  * One generated child line, as the block described it.
@@ -72,15 +73,19 @@ function renderRecurrence(
     flowLines: string[],
 ): string[] {
     // Re-indent the formatted line to match the original task line
-    const originalIndent = lines[currentLine].match(/^(\s*)/)?.[1] || '';
+    const originalIndent = Outline.indentOf(lines[currentLine]);
     const newParentLine = originalIndent + content.trim();
 
     const flowAbs = new Set(collectFlowLineIndicesInFile(lines, currentLine));
     const { childrenLines } = fileOps.collectChildrenFromLines(lines, currentLine);
     const ordinaryChildren = childrenLines.filter((_, i) => !flowAbs.has(currentLine + 1 + i));
 
-    const childIndent = ordinaryChildren.find(l => l.trim() !== '')?.match(/^\s*/)?.[0]
-        ?? childrenLines.find(l => l.trim() !== '')?.match(/^\s*/)?.[0]
+    const firstIndent = (children: string[]) => {
+        const first = children.find(l => l.trim() !== '');
+        return first === undefined ? undefined : Outline.indentOf(first);
+    };
+    const childIndent = firstIndent(ordinaryChildren)
+        ?? firstIndent(childrenLines)
         ?? originalIndent + '\t';
 
     return [newParentLine, ...flowLines.map(raw => formatFlowLine(childIndent, raw))];
@@ -103,7 +108,7 @@ function renderGenerated(
     flowLines: string[],
     children: GeneratedChild[],
 ): string[] {
-    const parentIndent = lines[currentLine].match(/^(\s*)/)?.[1] ?? '';
+    const parentIndent = Outline.indentOf(lines[currentLine]);
     const unit = FileOperations.resolveChildIndent(lines, currentLine).slice(parentIndent.length)
         || FileOperations.detectIndentUnit(lines);
 

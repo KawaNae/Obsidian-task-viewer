@@ -95,7 +95,7 @@ export class TaskCloner {
             const idx = lineOf(refOf(task), subjectOf(task));
             if (idx === null) return null;
 
-            const indent = lines[idx].match(/^(\s*)/)?.[1] ?? '';
+            const indent = Outline.indentOf(lines[idx]);
             const parents = copies.kind === 'verbatim'
                 ? Array.from({ length: copies.count },
                     () => this.fileOps.stripBlockIds([lines[idx]])[0])

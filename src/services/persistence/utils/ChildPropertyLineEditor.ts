@@ -114,7 +114,7 @@ export class ChildPropertyLineEditor {
                     continue;
                 }
                 // プレフィックスが取れない（理論上到達しない）場合は行ごと再構築
-                const indent = lines[target.lineIdx].match(/^(\s*)/)?.[1] ?? '';
+                const indent = Outline.indentOf(lines[target.lineIdx]);
                 lines[target.lineIdx] = `${indent}- ${op.key}:: ${this.formatValue(op.value, target.value)}`;
                 edits.replaced(target.lineIdx);
                 continue;
@@ -130,7 +130,7 @@ export class ChildPropertyLineEditor {
             if (ownLines.length > 0) {
                 const last = ownLines[ownLines.length - 1];
                 insertIdx = last.lineIdx + 1;
-                indent = lines[last.lineIdx].match(/^(\s*)/)?.[1] ?? '';
+                indent = Outline.indentOf(lines[last.lineIdx]);
             } else {
                 insertIdx = taskLineIdx + 1;
                 indent = FileOperations.resolveChildIndent(lines, taskLineIdx);

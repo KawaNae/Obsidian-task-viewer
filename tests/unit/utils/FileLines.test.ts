@@ -11,16 +11,22 @@ import type { LineEdit, Located, Refusal, TaskRef, WriteChannel } from '../../..
 
 describe('splitLines', () => {
     it('drops the CR of a CRLF terminator', () => {
-        expect(splitLines('a\r\nb\r\n')).toEqual({ lines: ['a', 'b', ''], eol: '\r\n' });
+        expect(splitLines('a\r\nb\r\n')).toEqual({ lines: ['a', 'b', ''], eol: '\r\n', bom: false });
+    });
+
+    it('takes a byte order mark off the first line and says it was there', () => {
+        expect(splitLines('﻿- [ ] a\nb\n')).toEqual({ lines: ['- [ ] a', 'b', ''], eol: '\n', bom: true });
+        // Only at the very start: a mark further in is text.
+        expect(splitLines('a\n﻿b').lines).toEqual(['a', '﻿b']);
     });
 
     it('leaves an LF file alone', () => {
-        expect(splitLines('a\nb\n')).toEqual({ lines: ['a', 'b', ''], eol: '\n' });
+        expect(splitLines('a\nb\n')).toEqual({ lines: ['a', 'b', ''], eol: '\n', bom: false });
     });
 
     it('reads a file with no terminator at all as LF', () => {
-        expect(splitLines('a')).toEqual({ lines: ['a'], eol: '\n' });
-        expect(splitLines('')).toEqual({ lines: [''], eol: '\n' });
+        expect(splitLines('a')).toEqual({ lines: ['a'], eol: '\n', bom: false });
+        expect(splitLines('')).toEqual({ lines: [''], eol: '\n', bom: false });
     });
 
     it('decides a mixed file by majority', () => {
@@ -155,6 +161,19 @@ describe('processLines', () => {
 
         expect(written).toBe(true);
         expect(h.text()).toBe('- [x] a\r\n- [ ] b\r\n');
+    });
+
+    it('hands the edit no byte order mark, and puts the one mark back', async () => {
+        const h = harness('﻿- [ ] a\r\n');
+        let seen: string[] = [];
+        await processLines(h.app, h.file, (lines, _eol, { edits }) => {
+            seen = [...lines];
+            edits.splice(0, 0, '- [ ] new');
+            return lines;
+        });
+
+        expect(seen).toEqual(['- [ ] a', '']);
+        expect(h.text()).toBe('﻿- [ ] new\r\n- [ ] a\r\n');
     });
 
     it('hands the edit lines with no CR on them', async () => {

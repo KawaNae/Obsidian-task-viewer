@@ -63,7 +63,7 @@ export class FileOperations {
      * there is nothing to read — implies 4 spaces.
      */
     static getIndentUnit(line: string): string {
-        const indent = line.match(/^(\s*)/)?.[1] ?? '';
+        const indent = Outline.indentOf(line);
         return indent.includes('\t') ? '\t' : '    ';
     }
 
@@ -72,7 +72,7 @@ export class FileOperations {
      * Detects tabs vs spaces from the parent and adds one level.
      */
     static getChildIndent(parentLine: string): string {
-        const parentIndent = parentLine.match(/^(\s*)/)?.[1] ?? '';
+        const parentIndent = Outline.indentOf(parentLine);
         return parentIndent + FileOperations.getIndentUnit(parentLine);
     }
 
@@ -87,7 +87,7 @@ export class FileOperations {
             const line = lines[j];
             if (line.trim() === '') break;
             if (Outline.depthOf(line) <= taskIndent) break;
-            return line.match(/^(\s*)/)?.[1] ?? null;
+            return Outline.indentOf(line);
         }
         return null;
     }
@@ -117,7 +117,7 @@ export class FileOperations {
         const own = FileOperations.firstChildIndent(lines, taskLineIndex);
         if (own !== null) return own;
 
-        const parentIndent = lines[taskLineIndex].match(/^(\s*)/)?.[1] ?? '';
+        const parentIndent = Outline.indentOf(lines[taskLineIndex]);
         return parentIndent + FileOperations.detectIndentUnit(lines);
     }
 
@@ -132,7 +132,7 @@ export class FileOperations {
                 return line.substring(oldParentIndent.length);
             }
             // Defensive: line indent is shorter than declared parent prefix.
-            const currentIndent = line.match(/^\s*/)?.[0] ?? '';
+            const currentIndent = Outline.indentOf(line);
             return line.substring(Math.min(oldParentIndent.length, currentIndent.length));
         });
     }
