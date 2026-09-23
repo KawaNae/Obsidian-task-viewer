@@ -586,4 +586,55 @@ describe('matchFile: a rerun of the ladder after the check (I1-counter3)', () =>
         expect(held[0]).toBe(0);
         expect(held[1]).toBe(2);
     });
+
+    // Found by mutation testing (stage I1): a task the check bars in a scope's
+    // 1st pass must not go on to pair with something else in that same rerun's
+    // 2nd pass — `ladderOnce` marks it `spent` for exactly that reason. Left
+    // free, this file's 4th row (`\t- [ ] Baz @2026-09-01 ^x2`) picks up the
+    // name of the other file's line 3, a name it never earned: nothing on
+    // either side speaks for that pairing once the barred one is taken apart.
+    it('a task offered to a barred row does not pick up a different name in the same rerun', () => {
+        const held = heldFrom(
+            [
+                '- [ ] Bar @2026-09-02',
+                '\t- [ ] Baz @2026-09-01 ^x1',
+                '- [ ] Bar',
+                '\t- [ ] Baz @2026-09-01',
+                '- [ ] Foo ^x1',
+                '\t- [ ] Bar ^x2',
+            ],
+            [
+                '- [ ] Bar @2026-09-02',
+                '\t- [ ] Baz @2026-09-01 ^x2',
+                '- [ ] Bar ^x2',
+                '\t- [ ] Baz @2026-09-01 ^x2',
+                '- [ ] Foo ^x1',
+            ],
+        );
+        expect(held[3]).toBeNull();
+    });
+
+    // Found by mutation testing (stage I1): the evidence check has to look up
+    // a pair's own `^id` among the other side's rows even when the pair
+    // itself matched on weaker words — that is what notices a row's `^id`
+    // moving to a different line elsewhere in the file (here, `^x1` leaves
+    // `- [ ] Baz ^x1` for the new child of `- [ ] Bar @2026-09-02`). Without
+    // that lookup nothing bars the weak text-only pairing the ladder makes
+    // for the row the id left behind, and it wrongly keeps a name that went
+    // with the id.
+    it('a row whose ^id moved elsewhere does not keep its name on a weaker match', () => {
+        const held = heldFrom(
+            [
+                '- [ ] Bar @2026-09-02',
+                '- [ ] Baz ^x1',
+                '\t- [ ] Foo @2026-09-02 ^x2',
+            ],
+            [
+                '- [ ] Bar @2026-09-02',
+                '\t- [ ] Baz @2026-09-01 ^x1',
+                '- [ ] Baz',
+            ],
+        );
+        expect(held[2]).toBeNull();
+    });
 });

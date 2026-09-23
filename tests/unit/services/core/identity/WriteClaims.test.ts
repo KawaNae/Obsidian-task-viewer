@@ -651,4 +651,24 @@ describe('changes counted against our writes (I1)', () => {
         claims.dropFile(FILE);
         expect(claims.peek(FILE)).toMatchObject({ links: [], awaiting: 0 });
     });
+
+    // Found by mutation testing (stage I1): once an outside change comes
+    // after our write, a write reading the state put back is answered
+    // through `nameRows`, not straight from the record's own rows — and
+    // `nameRows` has to ask the chain whether each name was one a write of
+    // ours made, rather than assume every name it re-derives is the
+    // ledger's. A row this write created stays created however many outside
+    // changes come and go around it.
+    it('a row a write created keeps that flag once an outside change puts its state back', () => {
+        const claims = claimsWith([], null);
+
+        const first = claims.claim(FILE, [], ['- [ ] 甲'], [inserted(0, 1)]);
+        expect(first.made).toEqual([{ line: 0, runtimeId: 'w1' }]);
+        claims.noteChange(FILE); // our own write's modify
+        claims.noteChange(FILE); // an outside change nobody reported
+
+        const base = claims.reading(FILE, ['- [ ] 甲'], 'write').base;
+        expect(base?.map(row => ({ runtimeId: row.runtimeId, created: row.created })))
+            .toEqual([{ runtimeId: 'w1', created: true }]);
+    });
 });
