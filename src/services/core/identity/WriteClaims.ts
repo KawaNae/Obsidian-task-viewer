@@ -147,12 +147,15 @@ export class WriteClaims {
      * What this write claims the file's rows now are — a null `hint` when it
      * cannot say, in which case the next scan falls to the ladder, as it did
      * before stage 2.
+     *
+     * `edits` is null for a write that changed the file and could not say how
+     * (see `WriteSink`): it claims nothing and leaves the mark.
      */
     claim(
         path: string,
         before: readonly string[],
         after: readonly string[],
-        edits: readonly LineEdit[],
+        edits: readonly LineEdit[] | null,
     ): ClaimResult {
         const withdraw = this.rollback(path);
         // Every way out of here without a claim is the same situation: this
@@ -165,6 +168,8 @@ export class WriteClaims {
             this.bases.set(path, SILENT(++this.filed));
             return { hint: null, withdraw, made: [] };
         };
+
+        if (edits === null) return nothing();
 
         const base = this.stateFor(path, before);
         if (base === null) return nothing();
@@ -209,6 +214,17 @@ export class WriteClaims {
             withdraw,
             made,
         };
+    }
+
+    /**
+     * Mark that a write of ours changed this file and nothing here can say
+     * how — for when even {@link claim} could not run. The same mark a claim
+     * that cannot say leaves, and taken back the same way.
+     */
+    silence(path: string): () => void {
+        const withdraw = this.rollback(path);
+        this.bases.set(path, SILENT(++this.filed));
+        return withdraw;
     }
 
     /**

@@ -549,7 +549,7 @@ export class TimerView extends ItemView {
                 editBtn.addEventListener('click', (e) => {
                     e.stopPropagation();
                     if (!this.templateCreator) {
-                        this.templateCreator = new IntervalTemplateCreator(this.app);
+                        this.templateCreator = new IntervalTemplateCreator(this.app, path => this.plugin.getTaskWriteService().writeChannel(path));
                     }
                     this.templateCreator.showEdit(editBtn, folder, template, {
                         onSaved: async (filePath: string) => {
@@ -578,7 +578,7 @@ export class TimerView extends ItemView {
         addBtn.createSpan({ text: t('timer.newTemplate') });
         addBtn.onclick = () => {
             if (!this.templateCreator) {
-                this.templateCreator = new IntervalTemplateCreator(this.app);
+                this.templateCreator = new IntervalTemplateCreator(this.app, path => this.plugin.getTaskWriteService().writeChannel(path));
             }
             this.templateCreator.show(addBtn, folder, {
                 onSaved: async (filePath: string) => {
