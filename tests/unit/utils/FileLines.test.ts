@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { TFile } from 'obsidian';
-import { joinLines, processLines, recordEdits, replayEdits, splitLines } from '../../../src/utils/FileLines';
+import { draftOver, joinLines, processLines, replayEdits, splitLines } from '../../../src/utils/FileLines';
 import type { LineEdit, Located, Refusal, TaskRef, WriteChannel } from '../../../src/utils/FileLines';
 
 /**
@@ -134,9 +134,9 @@ function writeSink(answer: (lines: readonly string[], ref: TaskRef) => Located =
 describe('processLines', () => {
     it('writes the edited lines back with the file\'s own terminator', async () => {
         const h = harness('- [ ] a\r\n- [ ] b\r\n');
-        const { written } = await processLines(h.app, h.file, (lines) => {
-            lines[0] = '- [x] a';
-            return lines;
+        const { written } = await processLines(h.app, h.file, undefined, (draft) => {
+            draft.rewrite(0, '- [x] a');
+            return true;
         });
 
         expect(written).toBe(true);
@@ -146,10 +146,10 @@ describe('processLines', () => {
     it('hands the edit no byte order mark, and puts the one mark back', async () => {
         const h = harness('\uFEFF- [ ] a\r\n');
         let seen: string[] = [];
-        await processLines(h.app, h.file, (lines, _eol, { edits }) => {
-            seen = [...lines];
-            edits.splice(0, 0, '- [ ] new');
-            return lines;
+        await processLines(h.app, h.file, undefined, (draft) => {
+            seen = [...draft.lines];
+            draft.splice(0, 0, '- [ ] new');
+            return true;
         });
 
         expect(seen).toEqual(['- [ ] a', '']);
@@ -159,7 +159,7 @@ describe('processLines', () => {
     it('hands the edit lines with no CR on them', async () => {
         const h = harness('- [ ] a\r\n');
         let seen: string[] = [];
-        await processLines(h.app, h.file, (lines) => { seen = [...lines]; return lines; });
+        await processLines(h.app, h.file, undefined, (draft) => { seen = [...draft.lines]; return true; });
 
         expect(seen).toEqual(['- [ ] a', '']);
     });
@@ -168,11 +168,10 @@ describe('processLines', () => {
         const h = harness('- [ ] a\n');
         const log = writeSink();
 
-        await processLines(h.app, h.file, (lines, _eol, { edits }) => {
-            lines[0] = '- [x] a';
-            edits.replaced(0);
-            return lines;
-        }, log.channel);
+        await processLines(h.app, h.file, log.channel, (draft) => {
+            draft.rewrite(0, '- [x] a');
+            return true;
+        });
 
         expect(log.standing()).toEqual([{
             before: ['- [ ] a', ''],
@@ -184,13 +183,15 @@ describe('processLines', () => {
     it('says nothing about a write that reported nothing', async () => {
         // Reporting is per write site. A write that does not report is a write
         // the scan works out for itself, which is every write before stage 2.
+        // The draft's `lines` are read-only to a write; the cast simulates a
+        // write that changed a line without going through `rewrite`/`splice`.
         const h = harness('- [ ] a\n');
         const log = writeSink();
 
-        const { written } = await processLines(h.app, h.file, (lines) => {
-            lines[0] = '- [x] a';
-            return lines;
-        }, log.channel);
+        const { written } = await processLines(h.app, h.file, log.channel, (draft) => {
+            (draft.lines as string[])[0] = '- [x] a';
+            return true;
+        });
 
         expect(written).toBe(true);
         expect(h.text()).toBe('- [x] a\n');
@@ -203,12 +204,11 @@ describe('processLines', () => {
         const h = harness('- [ ] a\n- [ ] b\n');
         const log = writeSink();
 
-        const { written } = await processLines(h.app, h.file, (lines, _eol, { edits }) => {
-            lines[0] = '- [x] a';
-            lines[1] = '- [x] b';
-            edits.replaced(0);
-            return lines;
-        }, log.channel);
+        const { written } = await processLines(h.app, h.file, log.channel, (draft) => {
+            draft.rewrite(0, '- [x] a');
+            (draft.lines as string[])[1] = '- [x] b';
+            return true;
+        });
 
         expect(written).toBe(true);
         expect(h.text()).toBe('- [x] a\n- [x] b\n');
@@ -219,12 +219,11 @@ describe('processLines', () => {
         const h = harness('- [ ] a\n');
         const log = writeSink();
 
-        await processLines(h.app, h.file, (lines, _eol, { edits }) => {
-            lines[0] = '- [x] a';
-            edits.replaced(0);
-            edits.replaced(9);
-            return lines;
-        }, log.channel);
+        await processLines(h.app, h.file, log.channel, (draft) => {
+            draft.rewrite(0, '- [x] a');
+            draft.rewrite(9, '- [x] a');
+            return true;
+        });
 
         expect(log.standing()).toEqual([]);
     });
@@ -235,12 +234,11 @@ describe('processLines', () => {
         const h = harness('x\ny\n');
         const log = writeSink();
 
-        await processLines(h.app, h.file, (lines, _eol, { edits }) => {
-            edits.splice(0, 0, 'new');
-            lines[1] = 'X';
-            edits.replaced(1);
-            return lines;
-        }, log.channel);
+        await processLines(h.app, h.file, log.channel, (draft) => {
+            draft.splice(0, 0, 'new');
+            draft.rewrite(1, 'X');
+            return true;
+        });
 
         expect(h.text()).toBe('new\nX\ny\n');
         expect(log.standing()[0].edits).toEqual([
@@ -255,10 +253,10 @@ describe('processLines', () => {
         const h = harness('- [ ] a\n');
         const log = writeSink();
 
-        const { written } = await processLines(h.app, h.file, (lines, _eol, { edits }) => {
-            edits.replaced(0);
-            return lines;
-        }, log.channel);
+        const { written } = await processLines(h.app, h.file, log.channel, (draft) => {
+            draft.rewrite(0, draft.lines[0]);
+            return true;
+        });
 
         // The line was found, which is what the caller asked.
         expect(written).toBe(true);
@@ -269,10 +267,10 @@ describe('processLines', () => {
         const h = harness('- [ ] a\n');
         const log = writeSink();
 
-        await processLines(h.app, h.file, (_lines, _eol, { edits }) => {
-            edits.replaced(0);
-            return null;
-        }, log.channel);
+        await processLines(h.app, h.file, log.channel, (draft) => {
+            draft.rewrite(0, draft.lines[0]);
+            return false;
+        });
 
         expect(log.standing()).toEqual([]);
     });
@@ -284,11 +282,10 @@ describe('processLines', () => {
         const h = harness('- [ ] a\n', { throwAfterCallback: true });
         const log = writeSink();
 
-        await expect(processLines(h.app, h.file, (lines, _eol, { edits }) => {
-            lines[0] = '- [x] a';
-            edits.replaced(0);
-            return lines;
-        }, log.channel)).rejects.toThrow('write failed');
+        await expect(processLines(h.app, h.file, log.channel, (draft) => {
+            draft.rewrite(0, '- [x] a');
+            return true;
+        })).rejects.toThrow('write failed');
 
         expect(log.standing()).toEqual([]);
     });
@@ -300,12 +297,11 @@ describe('processLines', () => {
         const log = writeSink();
         let run = 0;
 
-        await processLines(h.app, h.file, (lines, _eol, { edits }) => {
+        await processLines(h.app, h.file, log.channel, (draft) => {
             run++;
-            lines[0] = `- [x] a (${run})`;
-            edits.replaced(0);
-            return lines;
-        }, log.channel);
+            draft.rewrite(0, `- [x] a (${run})`);
+            return true;
+        });
 
         const standing = log.standing();
         expect(standing).toHaveLength(1);
@@ -322,28 +318,28 @@ describe('processLines', () => {
         };
         let run = 0;
 
-        const outcome = await processLines(h.app, h.file, (lines, _eol, { edits }) => {
+        const outcome = await processLines(h.app, h.file, channel, (draft) => {
             run++;
-            edits.splice(1, 0, `- [ ] b (${run})`);
-            return lines;
-        }, channel);
+            draft.splice(1, 0, `- [ ] b (${run})`);
+            return true;
+        });
         expect(outcome.made).toEqual([{ line: 1, runtimeId: 'made-2' }]);
 
         // The second attempt changes nothing, so it files nothing and names nothing.
         const same = harness('- [ ] a\n', { callbackRuns: 2 });
         run = 0;
-        const unchanged = await processLines(same.app, same.file, (lines, _eol, { edits }) => {
+        const unchanged = await processLines(same.app, same.file, channel, (draft) => {
             run++;
-            if (run === 1) edits.splice(1, 0, '- [ ] b');
-            return lines;
-        }, channel);
+            if (run === 1) draft.splice(1, 0, '- [ ] b');
+            return true;
+        });
         expect(unchanged.made).toEqual([]);
     });
 
     it('leaves the file byte-identical when the edit declines', async () => {
         const original = '- [ ] a\r\n- [ ] b\n';
         const h = harness(original);
-        const outcome = await processLines(h.app, h.file, () => null);
+        const outcome = await processLines(h.app, h.file, undefined, () => false);
 
         // Declining without a reason is not a refusal: nobody is told.
         expect(outcome).toEqual({ written: false, refused: null, made: [] });
@@ -361,12 +357,12 @@ describe('processLines: asking where a row stands, and giving up', () => {
         const h = harness('- [ ] a\r\n- [ ] b\r\n');
         const log = writeSink(() => ({ kind: 'at', line: 1, edited: false }));
 
-        const outcome = await processLines(h.app, h.file, (lines, _eol, session) => {
+        const outcome = await processLines(h.app, h.file, log.channel, (draft, _eol, session) => {
             const at = session.lineOf(REF, 'b');
-            if (at === null) return null;
-            lines[at] = '- [x] b';
-            return lines;
-        }, log.channel);
+            if (at === null) return false;
+            draft.rewrite(at, '- [x] b');
+            return true;
+        });
 
         expect(log.asked).toEqual([{ lines: ['- [ ] a', '- [ ] b', ''], ref: REF }]);
         expect(outcome).toEqual({ written: true, refused: null, made: [] });
@@ -378,12 +374,12 @@ describe('processLines: asking where a row stands, and giving up', () => {
         const h = harness('- [ ] a\n');
         const log = writeSink(() => ({ kind: 'ambiguous', count: 2 }));
 
-        const outcome = await processLines(h.app, h.file, (lines, _eol, session) => {
+        const outcome = await processLines(h.app, h.file, log.channel, (draft, _eol, session) => {
             const at = session.lineOf(REF, 'a');
-            if (at === null) return null;
-            lines[at] = '- [x] a';
-            return lines;
-        }, log.channel);
+            if (at === null) return false;
+            draft.rewrite(at, '- [x] a');
+            return true;
+        });
 
         const refusal = { file: 'note.md', reason: { kind: 'ambiguous', count: 2 }, subject: 'a' };
         expect(outcome).toEqual({ written: false, refused: refusal, made: [] });
@@ -394,9 +390,9 @@ describe('processLines: asking where a row stands, and giving up', () => {
     it('finds every target gone when there is no channel to ask', async () => {
         const h = harness('- [ ] a\n');
 
-        const outcome = await processLines(h.app, h.file, (lines, _eol, session) => {
+        const outcome = await processLines(h.app, h.file, undefined, (_draft, _eol, session) => {
             expect(session.locate(REF)).toEqual({ kind: 'gone' });
-            return session.lineOf(REF, 'a') === null ? null : lines;
+            return session.lineOf(REF, 'a') !== null;
         });
 
         expect(outcome).toEqual({
@@ -411,8 +407,8 @@ describe('processLines: asking where a row stands, and giving up', () => {
         const h = harness('- [ ] a\n');
         const log = writeSink();
 
-        const outcome = await processLines(h.app, h.file, (_lines, _eol, session) =>
-            session.refuse({ kind: 'changed' }, '- [ ] a'), log.channel);
+        const outcome = await processLines(h.app, h.file, log.channel, (_draft, _eol, session) =>
+            session.refuse({ kind: 'changed' }, '- [ ] a'));
 
         const refusal = { file: 'note.md', reason: { kind: 'changed' }, subject: '- [ ] a' };
         expect(outcome).toEqual({ written: false, refused: refusal, made: [] });
@@ -426,8 +422,8 @@ describe('processLines: asking where a row stands, and giving up', () => {
         const h = harness('- [ ] a\n', { callbackRuns: 2 });
         const log = writeSink();
 
-        const outcome = await processLines(h.app, h.file, (_lines, _eol, session) =>
-            session.refuse({ kind: 'changed' }, '- [ ] a'), log.channel);
+        const outcome = await processLines(h.app, h.file, log.channel, (_draft, _eol, session) =>
+            session.refuse({ kind: 'changed' }, '- [ ] a'));
 
         expect(h.calls()).toBe(2);
         expect(log.refusals).toEqual([{ file: 'note.md', reason: { kind: 'changed' }, subject: '- [ ] a' }]);
@@ -441,12 +437,12 @@ describe('processLines: asking where a row stands, and giving up', () => {
         const log = writeSink();
         let run = 0;
 
-        const outcome = await processLines(h.app, h.file, (lines, _eol, session) => {
+        const outcome = await processLines(h.app, h.file, log.channel, (draft, _eol, session) => {
             run++;
             if (run === 1) return session.refuse({ kind: 'gone' }, 'a');
-            lines[0] = '- [x] a';
-            return lines;
-        }, log.channel);
+            draft.rewrite(0, '- [x] a');
+            return true;
+        });
 
         expect(outcome).toEqual({ written: true, refused: null, made: [] });
         expect(log.refusals).toEqual([]);
@@ -463,13 +459,13 @@ describe('a coordinate carried across a write\'s own edits', () => {
         const h = harness('- [ ] a\n- [ ] b\n');
         const log = writeSink(() => at(1));
 
-        await processLines(h.app, h.file, (lines, _eol, session) => {
+        await processLines(h.app, h.file, log.channel, (draft, _eol, session) => {
             session.locate(REF);
-            session.edits.splice(0, 0, 'new');
+            draft.splice(0, 0, 'new');
             session.locate(REF);
             session.locate(REF);
-            return lines;
-        }, log.channel);
+            return true;
+        });
 
         expect(log.asked).toEqual([{ lines: ['- [ ] a', '- [ ] b', ''], ref: REF }]);
     });
@@ -479,16 +475,16 @@ describe('a coordinate carried across a write\'s own edits', () => {
         const log = writeSink(() => at(2));
         const seen: Located[] = [];
 
-        await processLines(h.app, h.file, (lines, _eol, session) => {
-            session.edits.splice(0, 0, 'n1', 'n2');
+        await processLines(h.app, h.file, log.channel, (draft, _eol, session) => {
+            draft.splice(0, 0, 'n1', 'n2');
             seen.push(session.locate(REF));
-            session.edits.splice(0, 3);
+            draft.splice(0, 3);
             seen.push(session.locate(REF));
             // Below the row: it stays where it is.
-            session.edits.splice(2, 1);
+            draft.splice(2, 1);
             seen.push(session.locate(REF));
-            return lines;
-        }, log.channel);
+            return true;
+        });
 
         expect(seen).toEqual([at(4), at(1), at(1)]);
         expect(h.text()).toBe('y\n- [ ] b\n');
@@ -499,14 +495,13 @@ describe('a coordinate carried across a write\'s own edits', () => {
         const log = writeSink(() => at(0));
         const seen: Located[] = [];
 
-        await processLines(h.app, h.file, (lines, _eol, session) => {
-            lines[0] = '- [x] a';
-            session.edits.replaced(0);
+        await processLines(h.app, h.file, log.channel, (draft, _eol, session) => {
+            draft.rewrite(0, '- [x] a');
             seen.push(session.locate(REF));
-            session.edits.splice(0, 1);
+            draft.splice(0, 1);
             seen.push(session.locate(REF));
-            return session.lineOf(REF, 'a') === null ? null : lines;
-        }, log.channel);
+            return session.lineOf(REF, 'a') !== null;
+        });
 
         expect(seen).toEqual([at(0), { kind: 'gone' }]);
         expect(h.text()).toBe('- [ ] a\n- [ ] b\n');
@@ -517,12 +512,15 @@ describe('a coordinate carried across a write\'s own edits', () => {
         const h = harness('- [ ] a\n- [ ] b\n');
         const log = writeSink(() => at(1));
 
-        await expect(processLines(h.app, h.file, (lines, _eol, session) => {
-            session.edits.splice(0, 0, 'reported');
-            lines.splice(0, 0, 'not reported');
+        await expect(processLines(h.app, h.file, log.channel, (draft, _eol, session) => {
+            draft.splice(0, 0, 'reported');
+            // Bypasses the draft's own bookkeeping — the same array, mutated
+            // without going through `splice`, to simulate an edit that never
+            // reported itself.
+            (draft.lines as string[]).splice(0, 0, 'not reported');
             session.locate(REF);
-            return lines;
-        }, log.channel)).rejects.toThrow('does not read what it read');
+            return true;
+        })).rejects.toThrow('does not read what it read');
         expect(h.text()).toBe('- [ ] a\n- [ ] b\n');
     });
 
@@ -532,15 +530,14 @@ describe('a coordinate carried across a write\'s own edits', () => {
         const h = harness('- [ ] a\n- [ ] a\n- [ ] a\n');
         const log = writeSink(() => at(1));
 
-        await expect(processLines(h.app, h.file, (lines, _eol, session) => {
-            session.edits.splice(3, 0, 'reported');
-            lines.splice(0, 1);
+        await expect(processLines(h.app, h.file, log.channel, (draft, _eol, session) => {
+            draft.splice(3, 0, 'reported');
+            (draft.lines as string[]).splice(0, 1);
             const line = session.lineOf(REF, 'a');
-            if (line === null) return null;
-            lines[line] = '- [x] a';
-            session.edits.replaced(line);
-            return lines;
-        }, log.channel)).rejects.toThrow('does not account for the lines it wrote');
+            if (line === null) return false;
+            draft.rewrite(line, '- [x] a');
+            return true;
+        })).rejects.toThrow('does not account for the lines it wrote');
         expect(h.text()).toBe('- [ ] a\n- [ ] a\n- [ ] a\n');
     });
 });
@@ -571,10 +568,10 @@ describe('LineEdits.splice', () => {
             const expected = ['a', 'b', 'c', 'd', ''];
             expected.splice(at, del, ...items);
 
-            await processLines(h.app, h.file, (lines, _eol, { edits }) => {
-                edits.splice(at, del, ...items);
-                return lines;
-            }, log.channel);
+            await processLines(h.app, h.file, log.channel, (draft) => {
+                draft.splice(at, del, ...items);
+                return true;
+            });
 
             expect(h.text()).toBe(expected.join('\n'));
             // A report that does not account for the file it produced is
@@ -585,10 +582,10 @@ describe('LineEdits.splice', () => {
 
     it('says where the lines landed, not where it was asked to put them', () => {
         const lines = ['a', 'b'];
-        const { edits, reported } = recordEdits(lines);
+        const { draft, reported } = draftOver(lines);
 
-        edits.splice(9, 0, 'new');
-        edits.splice(-1, 1);
+        draft.splice(9, 0, 'new');
+        draft.splice(-1, 1);
 
         expect(lines).toEqual(['a', 'b']);
         expect(reported).toEqual([
@@ -601,9 +598,9 @@ describe('LineEdits.splice', () => {
         // Not an argument: the array is the one `processLines` is about to
         // write, so a report cannot end up describing some other array.
         const lines = ['a'];
-        const { edits } = recordEdits(lines);
+        const { draft } = draftOver(lines);
 
-        edits.splice(1, 0, 'b');
+        draft.splice(1, 0, 'b');
 
         expect(lines).toEqual(['a', 'b']);
     });
@@ -617,10 +614,10 @@ describe('LineEdits.carry', () => {
 
     it('says the carried line is the one it was, wherever it lands', () => {
         const lines = ['a', 'row', 'child', 'b'];
-        const { edits, reported } = recordEdits(lines);
+        const { draft, reported } = draftOver(lines);
 
-        edits.carry(4, [{ from: 1, text: 'row, archived' }, { from: 2, text: 'child' }]);
-        edits.splice(1, 2);
+        draft.carry(4, [{ from: 1, text: 'row, archived' }, { from: 2, text: 'child' }]);
+        draft.splice(1, 2);
 
         expect(lines).toEqual(['a', 'b', 'row, archived', 'child']);
         const replayed = replayEdits(4, reported);
@@ -631,11 +628,11 @@ describe('LineEdits.carry', () => {
 
     it('reads its source before the lines move under it', () => {
         const lines = ['row', 'a'];
-        const { edits, reported } = recordEdits(lines);
+        const { draft, reported } = draftOver(lines);
 
         // The source stands past `at`, so the insert moves it down by one.
-        edits.carry(0, [{ from: 1, text: 'a' }]);
-        edits.splice(2, 1);
+        draft.carry(0, [{ from: 1, text: 'a' }]);
+        draft.splice(2, 1);
 
         expect(lines).toEqual(['a', 'row']);
         expect(replayEdits(2, reported)?.origin).toEqual([1, 0]);
@@ -645,18 +642,18 @@ describe('LineEdits.carry', () => {
     it('is not a report a file could follow while the source still stands', () => {
         // One line in two places would give one name to two rows.
         const lines = ['a', 'row'];
-        const { edits, reported } = recordEdits(lines);
+        const { draft, reported } = draftOver(lines);
 
-        edits.carry(2, [{ from: 1, text: 'row' }]);
+        draft.carry(2, [{ from: 1, text: 'row' }]);
 
         expect(replayEdits(2, reported)).toBeNull();
     });
 
     it('is not a report a file could follow from a line that is not there', () => {
         const lines = ['a'];
-        const { edits, reported } = recordEdits(lines);
+        const { draft, reported } = draftOver(lines);
 
-        edits.carry(1, [{ from: 5, text: 'x' }]);
+        draft.carry(1, [{ from: 5, text: 'x' }]);
 
         expect(replayEdits(1, reported)).toBeNull();
     });
@@ -666,12 +663,12 @@ describe('LineEdits.carry', () => {
             const h = harness('a\nrow\nb\n');
             const log = writeSink();
 
-            await processLines(h.app, h.file, (lines, _eol, { edits }) => {
-                edits.splice(3, 1);
-                edits.carry(3, [{ from: 1, text: 'row, moved' }]);
-                if (takeAway) edits.splice(1, 1);
-                return lines;
-            }, log.channel);
+            await processLines(h.app, h.file, log.channel, (draft) => {
+                draft.splice(3, 1);
+                draft.carry(3, [{ from: 1, text: 'row, moved' }]);
+                if (takeAway) draft.splice(1, 1);
+                return true;
+            });
 
             expect(h.text()).toBe(takeAway ? 'a\nb\nrow, moved' : 'a\nrow\nb\nrow, moved');
             expect(log.standing()).toHaveLength(takeAway ? 1 : 0);

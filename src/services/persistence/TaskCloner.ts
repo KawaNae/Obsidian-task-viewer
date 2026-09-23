@@ -3,7 +3,7 @@ import type { DuplicateOptions, Task } from '../../types';
 import { DateUtils } from '../../utils/DateUtils';
 import { logWarn } from '../../log/log';
 import { FileOperations } from './utils/FileOperations';
-import { processLines, type LineEdits } from '../../utils/FileLines';
+import { processLines, type LineDraft } from '../../utils/FileLines';
 import { refOf, subjectOf } from './TaskRefs';
 import type { WriteObserver } from './WriteObserver';
 import { Outline } from '../parsing/utils/Outline';
@@ -54,9 +54,10 @@ export class TaskCloner {
             return false;
         }
 
-        return processLines(this.app, file, (lines, _eol, { edits, lineOf, refuse }) => {
+        return processLines(this.app, file, this.writes?.for(task.file), (draft, _eol, { lineOf, refuse }) => {
+            const lines = draft.lines;
             const idx = lineOf(refOf(task), subjectOf(task));
-            if (idx === null) return null;
+            if (idx === null) return false;
 
             const cleanParent = this.fileOps.stripBlockIds([lines[idx]])[0];
             const parents: string[] = [];
@@ -65,9 +66,9 @@ export class TaskCloner {
                 parents.push(this.shiftInlineDates(cleanParent, offset));
             }
 
-            return this.spliceCopies(lines, idx, parents, idx, edits)
-                ?? refuse({ kind: 'unplaceable' }, subjectOf(task));
-        }, this.writes?.for(task.file)).then(outcome => outcome.written);
+            return this.spliceCopies(draft, idx, parents, idx)
+                || refuse({ kind: 'unplaceable' }, subjectOf(task));
+        }).then(outcome => outcome.written);
     }
 
     /**
@@ -93,9 +94,10 @@ export class TaskCloner {
             return false;
         }
 
-        return processLines(this.app, file, (lines, _eol, { edits, lineOf, refuse }) => {
+        return processLines(this.app, file, this.writes?.for(task.file), (draft, _eol, { lineOf, refuse }) => {
+            const lines = draft.lines;
             const idx = lineOf(refOf(task), subjectOf(task));
-            if (idx === null) return null;
+            if (idx === null) return false;
             const at = Placement.afterSubtree(lines, idx);
             if (at === null) return refuse({ kind: 'unplaceable' }, subjectOf(task));
 
@@ -105,9 +107,9 @@ export class TaskCloner {
                     () => this.fileOps.stripBlockIds([lines[idx]])[0])
                 : copies.lines.map(l => indent + l.trim());
 
-            return this.spliceCopies(lines, idx, parents, at, edits)
-                ?? refuse({ kind: 'unplaceable' }, subjectOf(task));
-        }, this.writes?.for(task.file)).then(outcome => outcome.written);
+            return this.spliceCopies(draft, idx, parents, at)
+                || refuse({ kind: 'unplaceable' }, subjectOf(task));
+        }).then(outcome => outcome.written);
     }
 
     // --- Private helpers ---
@@ -121,16 +123,16 @@ export class TaskCloner {
      * both duplication paths. `insertIndex` is where the copies go: the
      * task's own line to go before it, or `Placement.afterSubtree` to follow it.
      *
-     * @returns the modified lines array; null, and nothing spliced, when the
+     * @returns true; false, and nothing spliced, when the
      * copies would leave a fence open (`Placement.closesItsFences`).
      */
     private spliceCopies(
-        lines: string[],
+        draft: LineDraft,
         taskLine: number,
         parentLines: string[],
         insertIndex: number,
-        edits: LineEdits,
-    ): string[] | null {
+    ): boolean {
+        const lines = draft.lines;
         const { childrenLines } = this.fileOps.collectChildrenFromLines(lines, taskLine);
         const cleanedChildren = this.fileOps.stripBlockIds(childrenLines);
 
@@ -138,7 +140,7 @@ export class TaskCloner {
         for (const parent of parentLines) {
             linesToInsert.push(parent, ...cleanedChildren);
         }
-        if (!Placement.closesItsFences(linesToInsert)) return null;
+        if (!Placement.closesItsFences(linesToInsert)) return false;
 
         // Through `edits` rather than beside it: the copy is worded exactly
         // like the line it copies, so a position off by one would read the same
@@ -147,9 +149,9 @@ export class TaskCloner {
         // Which of these lines are tasks is not this layer's question — the
         // copied children can hold anything, a fence among them — and the index
         // answers it by parsing what was written.
-        edits.splice(insertIndex, 0, ...linesToInsert);
+        draft.splice(insertIndex, 0, ...linesToInsert);
 
-        return lines;
+        return true;
     }
 
     /**

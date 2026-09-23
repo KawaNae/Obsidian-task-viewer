@@ -33,11 +33,11 @@ describe('the rows a write made', () => {
         const { session } = await open(['# note', '- [ ] 上 @2026-09-21', '- [ ] 下 @2026-09-21', '']);
         const kept = session.index.getTasks().map(task => task.id).sort();
 
-        const outcome = await processLines(session.app, makeFile(FILE), (lines, _eol, { edits }) => {
+        const outcome = await processLines(session.app, makeFile(FILE), channel(session), (draft) => {
             // Two rows, and a line between them that is not one.
-            edits.splice(2, 0, '- [ ] 新1 @2026-09-21', 'メモ', '\t- [ ] 新2');
-            return lines;
-        }, channel(session));
+            draft.splice(2, 0, '- [ ] 新1 @2026-09-21', 'メモ', '\t- [ ] 新2');
+            return true;
+        });
         await session.settle(FILE);
 
         expect(outcome.written).toBe(true);
@@ -51,11 +51,10 @@ describe('the rows a write made', () => {
     it('are none when the write rewrote rows and made nothing', async () => {
         const { session } = await open(['- [ ] 上', '']);
 
-        const outcome = await processLines(session.app, makeFile(FILE), (lines, _eol, { edits }) => {
-            lines[0] = '- [x] 上';
-            edits.replaced(0);
-            return lines;
-        }, channel(session));
+        const outcome = await processLines(session.app, makeFile(FILE), channel(session), (draft) => {
+            draft.rewrite(0, '- [x] 上');
+            return true;
+        });
 
         expect(outcome.made).toEqual([]);
     });
@@ -65,10 +64,10 @@ describe('the rows a write made', () => {
         // Something else wrote the file; no scan has read it.
         contents.set(FILE, ['- [ ] 外', '- [ ] 上', ''].join('\n'));
 
-        const outcome = await processLines(session.app, makeFile(FILE), (lines, _eol, { edits }) => {
-            edits.splice(2, 0, '- [ ] 新');
-            return lines;
-        }, channel(session));
+        const outcome = await processLines(session.app, makeFile(FILE), channel(session), (draft) => {
+            draft.splice(2, 0, '- [ ] 新');
+            return true;
+        });
         await session.settle(FILE);
 
         expect(outcome.written).toBe(true);
@@ -87,10 +86,10 @@ describe('a made name, once the file has moved on without it', () => {
         // A drag holds the file's scans back until it ends, as it does in use.
         session.index.setDraggingFile(FILE);
 
-        const outcome = await processLines(session.app, makeFile(FILE), (lines, _eol, { edits }) => {
-            edits.splice(2, 0, '- [ ] 新 @2026-09-21');
-            return lines;
-        }, channel(session));
+        const outcome = await processLines(session.app, makeFile(FILE), channel(session), (draft) => {
+            draft.splice(2, 0, '- [ ] 新 @2026-09-21');
+            return true;
+        });
         const [made] = outcome.made;
         expect(made).toBeDefined();
         // The claim is still waiting for its scan.

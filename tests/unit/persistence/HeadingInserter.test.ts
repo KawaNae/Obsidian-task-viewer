@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { TFile } from 'obsidian';
 import { HeadingInserter } from '../../../src/utils/HeadingInserter';
+import { draftOver } from '../../../src/utils/FileLines';
 
 /**
  * writeUnderHeading は TaskIndex.createTask / DailyNoteUtils.appendLineToDailyNote /
@@ -27,8 +28,9 @@ function harness(initial: string) {
  * 元のままにしておき、境界だけここで合わせる。
  */
 function insertFromText(content: string, line: string, header: string, headerLevel: number) {
-    const result = HeadingInserter.insertUnderHeading(content.split('\n'), line, header, headerLevel);
-    return { content: result.lines.join('\n'), insertedLine: result.insertedLine };
+    const { draft } = draftOver(content.split('\n'));
+    const insertedLine = HeadingInserter.insertUnderHeading(draft, line, header, headerLevel);
+    return { content: draft.lines.join('\n'), insertedLine };
 }
 
 describe('HeadingInserter', () => {

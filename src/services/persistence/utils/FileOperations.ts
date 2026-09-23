@@ -15,7 +15,7 @@ export class FileOperations {
      * them (`Outline.subtreeEnd`): blank lines between them included, the
      * blank lines after the last of them not. `taskIndent` is the task's depth.
      */
-    collectChildrenFromLines(lines: string[], taskLineIndex: number): {
+    collectChildrenFromLines(lines: readonly string[], taskLineIndex: number): {
         childrenLines: string[];
         taskIndent: number;
     } {
@@ -32,7 +32,7 @@ export class FileOperations {
      * line the parser still reads as anchored, and the copy would then claim
      * the anchor of the line it was copied from.
      */
-    stripBlockIds(lines: string[]): string[] {
+    stripBlockIds(lines: readonly string[]): string[] {
         return lines.map(line => TaskLineClassifier.extractBlockId(line).text);
     }
 
@@ -60,7 +60,7 @@ export class FileOperations {
      * The indent string of the task's first child, or null when it has none:
      * the first line of its subtree that is not blank.
      */
-    static firstChildIndent(lines: string[], taskLineIndex: number): string | null {
+    static firstChildIndent(lines: readonly string[], taskLineIndex: number): string | null {
         const end = Outline.subtreeEnd(lines, taskLineIndex);
         for (let j = taskLineIndex + 1; j < end; j++) {
             if (lines[j].trim() !== '') return Outline.indentOf(lines[j]);
@@ -72,7 +72,7 @@ export class FileOperations {
      * One indent level as this file spells it, taken from the first indented
      * line. A file with no indentation anywhere gets a tab, Obsidian's default.
      */
-    static detectIndentUnit(lines: string[]): string {
+    static detectIndentUnit(lines: readonly string[]): string {
         for (const line of lines) {
             const m = line.match(/^([ \t]+)\S/);
             if (m) return m[1].includes('\t') ? '\t' : '    ';
@@ -89,7 +89,7 @@ export class FileOperations {
      * {@link getIndentUnit} then answers four spaces for every file, tab-written
      * ones included. That is how the two spellings ended up in one subtree.
      */
-    static resolveChildIndent(lines: string[], taskLineIndex: number): string {
+    static resolveChildIndent(lines: readonly string[], taskLineIndex: number): string {
         const own = FileOperations.firstChildIndent(lines, taskLineIndex);
         if (own !== null) return own;
 

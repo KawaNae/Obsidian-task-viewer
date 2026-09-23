@@ -1,10 +1,10 @@
 import { describe, it, expect } from 'vitest';
 import { ChildPropertyLineEditor } from '../../../src/services/persistence/utils/ChildPropertyLineEditor';
-import { recordEdits, type LineEdit } from '../../../src/utils/FileLines';
+import { draftOver, type LineEdit } from '../../../src/utils/FileLines';
 import type { PropertyOp } from '../../../src/services/persistence/PropertyUpdatePlanner';
 
 /**
- * `applyOps` over a recorder, the way `processLines` hands it one.
+ * `applyOps` over a draft, the way `processLines` hands it one.
  *
  * Answers the report, so a test can pin what the edit said as well as what it
  * left in the file. The two have to agree: a line these ops rewrite without
@@ -12,8 +12,8 @@ import type { PropertyOp } from '../../../src/services/persistence/PropertyUpdat
  * dropped.
  */
 function apply(lines: string[], taskLineIdx: number, ops: PropertyOp[]): LineEdit[] {
-    const { edits, reported } = recordEdits(lines);
-    ChildPropertyLineEditor.applyOps(lines, taskLineIdx, ops, edits);
+    const { draft, reported } = draftOver(lines);
+    ChildPropertyLineEditor.applyOps(draft, taskLineIdx, ops);
     return reported;
 }
 
