@@ -82,6 +82,40 @@ describe('a row that left its place as well follows its text', () => {
     });
 });
 
+/** For each row now, the index of the row before whose name it carries, or -1. */
+async function carried(before: string[], after: string[]): Promise<number[]> {
+    const session = await open(before);
+    const was = ids(session);
+    await fromOutside(session, after);
+    return ids(session).map(id => was.indexOf(id));
+}
+
+describe('what counts as the other row, and which pairs are looked at', () => {
+    it('a row its words already hold elsewhere is not the other row', async () => {
+        // `\t- [x] C @d` is the third row's, word for word; the first row's
+        // pair (its date removed) keeps its name.
+        expect(await carried(['- [ ] B', `- [x] C${D}`, `- [x] C${D}`, ''], ['- [x] C', '- [ ] B', `\t- [x] C${D}`, '']))
+            .toEqual([1, 0, 2]);
+    });
+
+    it('a row that reads as the previous row word for word is not the other row', async () => {
+        // Its twin under the same indentation is a pair of its own words, not
+        // a row the indent changed.
+        expect(await carried(['- [ ] A', '\t- [ ] B', '\t\t- [ ] B', ''], ['\t- [ ] B', '\t- [ ] A', '\t- [ ] B', '']))
+            .toEqual([1, 0, 2]);
+    });
+
+    it('a pair made at rung 4 is not looked at: the rung-4 guard decides it', async () => {
+        expect(await carried([`- [ ] A${D}`, `- [x] A${D}`, `- [x] C${D}`, `- [x] A${D}`, ''], [`- [ ] A${D}`, `- [x] C${D}`, `\t- [x] A${D}`, '- [x] A', '']))
+            .toEqual([0, 2, 1, 3]);
+    });
+
+    it('a `^id` on two rows settles nothing: the place and the words still disagree', async () => {
+        expect(await carried(['- [ ] P', '- [ ] A ^b1', ''], ['- [ ] P', '\t- [ ] A ^b1', '- [ ] A ^b1', '']))
+            .toEqual([0, -1, -1]);
+    });
+});
+
 describe('a plain indent keeps its name', () => {
     it('with no other row of its words', async () => {
         const session = await open(['- [ ] P', '- [ ] A', '']);

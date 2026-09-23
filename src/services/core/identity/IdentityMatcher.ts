@@ -353,19 +353,17 @@ function pairByLadder(
         if (list) list.push(task);
         else tasksUnindented.set(key, [task]);
     }
+    //
+    // A `^id` needs no case here. The other row carries the entry's words, so
+    // the `^id` in them too, and a `^id` on two rows proves nothing (rung 1
+    // takes only one that names a single row on each side).
     const heldByItsWords = (task: Task): boolean => {
         const entry = pairedWith.get(task);
-        if (!entry) return false;
-        const fingerprint = fingerprints.get(task)!;
-        const byId = blockIdKey(fingerprint);
-        return (byId !== null && byId === blockIdKey(entry.fingerprint))
-            || originalTextKey(fingerprint) === originalTextKey(entry.fingerprint);
+        return entry !== undefined && originalTextKey(fingerprints.get(task)!) === originalTextKey(entry.fingerprint);
     };
     const displaced: Task[] = [];
     for (const [task, entry] of pairedWith) {
         const fingerprint = fingerprints.get(task)!;
-        const byId = blockIdKey(fingerprint);
-        if (byId !== null && byId === blockIdKey(entry.fingerprint)) continue;
         if (originalTextKey(fingerprint) !== originalTextKey(entry.fingerprint)
             && contentDateKey(fingerprint) !== contentDateKey(entry.fingerprint)) continue;
         const sitsWhereEntrySat = (row: Task): boolean => {
