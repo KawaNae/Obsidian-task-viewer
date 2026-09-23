@@ -84,15 +84,6 @@ function editBefore(session: VaultSession, method: keyof TaskRepository, edit: (
 }
 
 /** The flow queue has drained and the scans it asked for have run. */
-async function flowSettled(session: VaultSession, ...paths: string[]): Promise<void> {
-    const executor = (session.index as unknown as { commandExecutor: { isProcessing: boolean; taskQueue: unknown[] } }).commandExecutor;
-    await vi.waitFor(() => {
-        expect(executor.isProcessing).toBe(false);
-        expect(executor.taskQueue).toHaveLength(0);
-    });
-    for (const path of [FILE, ...paths]) await session.settle(path);
-}
-
 async function check(session: VaultSession, id: string): Promise<void> {
     expect(await session.index.updateTask(id, { statusChar: 'x' })).toBe(true);
 }
@@ -186,7 +177,7 @@ describe('2. stripFlow (a completion consuming its command)', () => {
         const held = { above: idOf(session, '上'), target: idOf(session, '対象'), below: idOf(session, '下') };
 
         await check(session, held.target);
-        await flowSettled(session);
+        await session.flowSettled(FILE);
 
         expect(contents.get(FILE)).toBe([
             '# note',
@@ -212,7 +203,7 @@ describe('2. stripFlow (a completion consuming its command)', () => {
 
         editBefore(session, 'applyToTask', () => writeOutside(contents, 1));
         await check(session, held.target);
-        await flowSettled(session);
+        await session.flowSettled(FILE);
 
         expect(contents.get(FILE)).toBe([
             '# note',
@@ -268,7 +259,7 @@ describe('3. deleteTaskFromFile', () => {
         const held = { above: idOf(session, '上'), below: idOf(session, '下') };
 
         await check(session, idOf(session, '対象'));
-        await flowSettled(session, ARCHIVE);
+        await session.flowSettled(FILE, ARCHIVE);
 
         expect(contents.get(FILE)).toBe(NOTE().join('\n'));
         expect(rows(session).map(row => row.id)).toEqual([held.above, held.below]);
@@ -285,7 +276,7 @@ describe('3. deleteTaskFromFile', () => {
         // The removal of the original is the source's one write (applyToTask).
         editBefore(session, 'applyToTask', () => writeOutside(contents, 1));
         await check(session, idOf(session, '対象'));
-        await flowSettled(session, ARCHIVE);
+        await session.flowSettled(FILE, ARCHIVE);
 
         const expected = NOTE();
         expected.splice(1, 0, OUTSIDE);
@@ -304,7 +295,7 @@ describe('4. a deletion fire (the instance and the removal, one applyToTask)', (
         const held = { above: idOf(session, '上'), target: idOf(session, '対象'), below: idOf(session, '下') };
 
         expect(await session.index.deleteTask(held.target, { fireFlow: true })).toBe(true);
-        await flowSettled(session);
+        await session.flowSettled(FILE);
 
         expect(contents.get(FILE)).toBe([
             '# note', '- [ ] 対象 @2026-09-28 ==> every mon', '- [ ] 上 @2026-09-21', '- [ ] 下 @2026-09-21', '',
@@ -322,7 +313,7 @@ describe('4. a deletion fire (the instance and the removal, one applyToTask)', (
 
         writeOutside(contents, 1);
         expect(await session.index.deleteTask(held.target, { fireFlow: true })).toBe(true);
-        await flowSettled(session);
+        await session.flowSettled(FILE);
 
         expect(contents.get(FILE)).toBe([
             '# note', '- [ ] 対象 @2026-09-28 ==> every mon', OUTSIDE, '- [ ] 上 @2026-09-21', '- [ ] 下 @2026-09-21', '',
@@ -479,7 +470,7 @@ describe('8. appendTaskWithChildren (a move archiving its subtree)', () => {
         });
 
         await check(session, idOf(session, '対象'));
-        await flowSettled(session, ARCHIVE);
+        await session.flowSettled(FILE, ARCHIVE);
 
         expect(contents.get(ARCHIVE)).toBe(['# archive', '- [x] 対象 @2026-09-21', '\t- [ ] 子 @2026-09-21', ''].join('\n'));
         expect(contents.get(FILE)).toBe(NOTE().join('\n'));
@@ -494,7 +485,7 @@ describe('8. appendTaskWithChildren (a move archiving its subtree)', () => {
         const held = { above: idOf(session, '上'), below: idOf(session, '下'), target: idOf(session, '対象'), child: idOf(session, '子') };
 
         await check(session, idOf(session, '対象'));
-        await flowSettled(session);
+        await session.flowSettled(FILE);
 
         // The append goes in before the note's final empty element, so the
         // note keeps its terminator.
@@ -514,7 +505,7 @@ describe('8. appendTaskWithChildren (a move archiving its subtree)', () => {
 
         editBefore(session, 'appendTaskWithChildren', () => writeOutside(contents, 1));
         await check(session, idOf(session, '対象'));
-        await flowSettled(session, ARCHIVE);
+        await session.flowSettled(FILE, ARCHIVE);
 
         expect(contents.get(ARCHIVE)).toBe(['# archive', '- [x] 対象 @2026-09-21', '\t- [ ] 子 @2026-09-21', ''].join('\n'));
         const expected = NOTE();
@@ -533,7 +524,7 @@ describe('8. appendTaskWithChildren (a move archiving its subtree)', () => {
         // A move within one file is one write (applyToTask).
         editBefore(session, 'applyToTask', () => writeOutside(contents, 1));
         await check(session, idOf(session, '対象'));
-        await flowSettled(session);
+        await session.flowSettled(FILE);
 
         expect(contents.get(FILE)).toBe([
             '# note', OUTSIDE, '- [ ] 上 @2026-09-21', '- [ ] 下 @2026-09-21', '- [x] 対象 @2026-09-21', '\t- [ ] 子 @2026-09-21', '',
@@ -555,7 +546,7 @@ describe('8. a move to another file whose source is refused after the archive', 
         editBefore(session, 'applyToTask', () => contents.set(FILE, contents.get(FILE)!
             .replace('- [x] 対象 @2026-09-21 ==> move([[archive]])', '- [x] 対象 @2026-09-21 書き足し ==> move([[archive]])')));
         await check(session, idOf(session, '対象'));
-        await flowSettled(session, ARCHIVE);
+        await session.flowSettled(FILE, ARCHIVE);
 
         expect(contents.get(ARCHIVE)).toBe(['# archive', '- [x] 対象 @2026-09-21', '\t- [ ] 子 @2026-09-21', ''].join('\n'));
         expect(contents.get(FILE)).toContain('書き足し');
@@ -646,7 +637,7 @@ describe('11. insertRecurrenceForTask (create-next)', () => {
         const held = { above: idOf(session, '上'), target: idOf(session, '対象'), below: idOf(session, '下') };
 
         await check(session, held.target);
-        await flowSettled(session);
+        await session.flowSettled(FILE);
 
         expect(contents.get(FILE)).toBe([
             '# note',
@@ -670,7 +661,7 @@ describe('11. insertRecurrenceForTask (create-next)', () => {
 
         editBefore(session, 'applyToTask', () => writeOutside(contents, 1));
         await check(session, held.target);
-        await flowSettled(session);
+        await session.flowSettled(FILE);
 
         expect(contents.get(FILE)).toBe([
             '# note',
@@ -700,7 +691,7 @@ describe('12. insertGeneratedInstance (create-generated)', () => {
         const child = idOf(session, '元の子');
 
         await check(session, held.target);
-        await flowSettled(session);
+        await session.flowSettled(FILE);
 
         expect(contents.get(FILE)).toBe([
             '# note',
@@ -728,7 +719,7 @@ describe('12. insertGeneratedInstance (create-generated)', () => {
 
         editBefore(session, 'applyToTask', () => writeOutside(contents, 1));
         await check(session, held.target);
-        await flowSettled(session);
+        await session.flowSettled(FILE);
 
         expect(contents.get(FILE)).toBe([
             '# note',
@@ -800,7 +791,7 @@ describe('twins after an outside edit: refused, with one notice', () => {
             writeOutside(contents, 1);
         });
         await check(session, second);
-        await flowSettled(session);
+        await session.flowSettled(FILE);
 
         expect(contents.get(FILE)).toBe([
             '# note', OUTSIDE, '- [ ] 親 @2026-09-21',

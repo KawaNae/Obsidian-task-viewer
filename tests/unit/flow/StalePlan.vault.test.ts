@@ -37,20 +37,6 @@ async function open(files: Record<string, string[]>): Promise<{ contents: Map<st
     return { contents, session: live };
 }
 
-function executor(session: VaultSession) {
-    return (session.index as unknown as {
-        commandExecutor: { handleTaskCompletion(task: unknown): Promise<void>; isProcessing: boolean; taskQueue: unknown[] };
-    }).commandExecutor;
-}
-
-async function flowSettled(session: VaultSession, ...paths: string[]): Promise<void> {
-    await vi.waitFor(() => {
-        expect(executor(session).isProcessing).toBe(false);
-        expect(executor(session).taskQueue).toHaveLength(0);
-    });
-    for (const path of [FILE, ...paths]) await session.settle(path);
-}
-
 function idOf(session: VaultSession, content: string): string {
     const found = session.index.getTasks().filter(task => task.file === FILE && task.content === content);
     expect(found).toHaveLength(1);
@@ -80,8 +66,8 @@ describe('CE1: a row a write of ours rewrote, before any scan read it', () => {
             await session.index.updateLine(FILE, { line: 1, text: '- [x] A @2026-09-21' }, '- [x] A renamed @2026-09-21');
             const renamed = contents.get(FILE);
 
-            await executor(session).handleTaskCompletion(session.index.getTask(id)!);
-            await vi.waitFor(() => expect(executor(session).isProcessing).toBe(false));
+            await session.executor.handleTaskCompletion(session.index.getTask(id)!);
+            await vi.waitFor(() => expect(session.executor.isProcessing).toBe(false));
 
             // The stale plan wrote nothing: no line anywhere reads the row as
             // the store's copy had it. The rename is the user's own write of a
@@ -106,8 +92,8 @@ describe('CE2: a command line edited from outside, before any scan read it', () 
         const edited = contents.get(FILE)!.replace('every 1d', 'every 1w');
         contents.set(FILE, edited);
 
-        await executor(session).handleTaskCompletion(task);
-        await flowSettled(session);
+        await session.executor.handleTaskCompletion(task);
+        await session.flowSettled(FILE);
 
         expect(contents.get(FILE)).toBe(edited);
         expect(Notice.messages).toEqual([CHANGED]);
@@ -133,8 +119,8 @@ describe('CE2: a command line edited from outside, before any scan read it', () 
         const edited = contents.get(FILE)!.replace('move([[note]])', 'move([[other]])');
         contents.set(FILE, edited);
 
-        await executor(session).handleTaskCompletion(task);
-        await flowSettled(session);
+        await session.executor.handleTaskCompletion(task);
+        await session.flowSettled(FILE);
 
         expect(contents.get(FILE)).toBe(edited);
         expect(contents.has(OTHER)).toBe(false);
@@ -168,8 +154,8 @@ describe('CE3: a child edited between the archive and the source\'s write', () =
         const task = live.index.getTask(idOf(live, 'A'))!;
         contents.armed = true;
 
-        await executor(live).handleTaskCompletion(task);
-        await flowSettled(live, OTHER);
+        await live.executor.handleTaskCompletion(task);
+        await live.flowSettled(FILE, OTHER);
 
         expect(contents.get(FILE)).toBe(source.replace('\t- [ ] c', '\t- [ ] c edited'));
         expect(contents.get(OTHER)).toBe(['# other', '- [x] A @2026-09-21', '\t- [ ] c', ''].join('\n'));
@@ -193,8 +179,8 @@ describe('CX1: a generation block edited from outside, before any scan read it',
         const edited = contents.get(FILE)!.replace('old child', 'new child');
         contents.set(FILE, edited);
 
-        await executor(session).handleTaskCompletion(task);
-        await flowSettled(session);
+        await session.executor.handleTaskCompletion(task);
+        await session.flowSettled(FILE);
 
         expect(contents.get(FILE)).toBe(edited);
         expect(Notice.messages).toEqual([CHANGED]);
@@ -220,8 +206,8 @@ describe('CX1: a generation block edited from outside, before any scan read it',
         });
         const task = session.index.getTask(idOf(session, 'A'))!;
 
-        await executor(session).handleTaskCompletion(task);
-        await flowSettled(session);
+        await session.executor.handleTaskCompletion(task);
+        await session.flowSettled(FILE);
 
         expect(contents.get(FILE)).toContain('- [x] A @2026-09-21');
         expect(contents.get(FILE)).not.toContain('- [x] A @2026-09-21 ==>');
@@ -244,8 +230,8 @@ describe('F5: a subtree changed from outside, before any scan read it', () => {
         const edited = contents.get(FILE)!.replace('\t- [ ] 子', '\t- [ ] 子 書き足し');
         contents.set(FILE, edited);
 
-        await executor(session).handleTaskCompletion(task);
-        await flowSettled(session);
+        await session.executor.handleTaskCompletion(task);
+        await session.flowSettled(FILE);
 
         expect(contents.get(FILE)).toBe(edited);
         expect(Notice.messages).toEqual([CHANGED]);

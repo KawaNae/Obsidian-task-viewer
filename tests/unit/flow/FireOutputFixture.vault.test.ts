@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
+import { describe, it, expect, afterEach, beforeEach } from 'vitest';
 import { Notice } from 'obsidian';
 import { vaultSession, type VaultSession } from '../helpers/vaultSession';
 
@@ -34,15 +34,6 @@ async function open(files: Record<string, string>): Promise<{ contents: Map<stri
     live = vaultSession(contents);
     await live.scanAll();
     return { contents, session: live };
-}
-
-async function flowSettled(session: VaultSession, ...paths: string[]): Promise<void> {
-    const executor = (session.index as unknown as { commandExecutor: { isProcessing: boolean; taskQueue: unknown[] } }).commandExecutor;
-    await vi.waitFor(() => {
-        expect(executor.isProcessing).toBe(false);
-        expect(executor.taskQueue).toHaveLength(0);
-    });
-    for (const path of [FILE, ...paths]) await session.settle(path);
 }
 
 function idOf(session: VaultSession, content: string): string {
@@ -118,7 +109,7 @@ describe('a completion fire leaves the same bytes', () => {
             const { contents, session } = await open(files);
 
             expect(await session.index.updateTask(idOf(session, '対象'), { statusChar: 'x' })).toBe(true);
-            await flowSettled(session, ...(others ?? []));
+            await session.flowSettled(FILE, ...(others ?? []));
 
             expect(bytes(contents)).toMatchSnapshot();
             expect(Notice.messages).toEqual([]);
@@ -146,7 +137,7 @@ describe('a deletion fire leaves the same bytes', () => {
             const { contents, session } = await open({ [FILE]: note });
 
             expect(await session.index.deleteTask(idOf(session, '対象'), { fireFlow: true })).toBe(true);
-            await flowSettled(session);
+            await session.flowSettled(FILE);
 
             expect(bytes(contents)).toMatchSnapshot();
             expect(Notice.messages).toEqual([]);

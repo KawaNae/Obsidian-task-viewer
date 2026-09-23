@@ -1,4 +1,4 @@
-import { describe, it, expect, afterEach, beforeEach, vi } from 'vitest';
+import { describe, it, expect, afterEach, beforeEach } from 'vitest';
 import { Notice } from 'obsidian';
 import { vaultSession, type VaultSession } from '../helpers/vaultSession';
 
@@ -33,15 +33,6 @@ async function open(files: Record<string, string[]>): Promise<{ contents: Map<st
     return { contents, session: live };
 }
 
-async function flowSettled(session: VaultSession, ...paths: string[]): Promise<void> {
-    const executor = (session.index as unknown as { commandExecutor: { isProcessing: boolean; taskQueue: unknown[] } }).commandExecutor;
-    await vi.waitFor(() => {
-        expect(executor.isProcessing).toBe(false);
-        expect(executor.taskQueue).toHaveLength(0);
-    });
-    for (const path of [FILE, ...paths]) await session.settle(path);
-}
-
 function idOf(session: VaultSession, content: string, file = FILE): string {
     const found = session.index.getTasks().filter(task => task.file === file && task.content === content);
     expect(found).toHaveLength(1);
@@ -50,7 +41,7 @@ function idOf(session: VaultSession, content: string, file = FILE): string {
 
 async function complete(session: VaultSession, content: string, ...paths: string[]): Promise<void> {
     expect(await session.index.updateTask(idOf(session, content), { statusChar: 'x' })).toBe(true);
-    await flowSettled(session, ...paths);
+    await session.flowSettled(FILE, ...paths);
 }
 
 describe('a subtree with a blank line inside it', () => {
@@ -92,7 +83,7 @@ describe('a subtree with a blank line inside it', () => {
         });
 
         expect(await session.index.deleteTask(idOf(session, '対象'), { fireFlow: true })).toBe(true);
-        await flowSettled(session);
+        await session.flowSettled(FILE);
 
         const lines = contents.get(FILE)!.split('\n');
         expect(lines).not.toContain('\t- [ ] 子2');

@@ -1,3 +1,4 @@
+import { expect, vi } from 'vitest';
 import { type App, parseYaml, TFile } from 'obsidian';
 import { TaskIndex } from '../../../src/services/core/TaskIndex';
 import type { TaskScanner } from '../../../src/services/core/TaskScanner';
@@ -7,7 +8,9 @@ import { TimerCreator } from '../../../src/timer/TimerCreator';
 import type { TimerContext } from '../../../src/timer/TimerContext';
 import type { TimerStorageUtils } from '../../../src/timer/TimerStorageUtils';
 import { DEFAULT_SETTINGS } from '../../../src/types';
+import type { Task } from '../../../src/types';
 import { splitLines } from '../../../src/utils/FileLines';
+import type { Refusal, WriteChannel, WriteOrigin } from '../../../src/utils/FileLines';
 
 export function makeFile(path: string): TFile {
     const file = new TFile();
@@ -68,6 +71,29 @@ function computeCache(content: string): VaultCache {
 
     const listItems = lines.some(line => LIST_LINE.test(line)) ? [{}] : undefined;
     return { frontmatter, listItems };
+}
+
+/**
+ * The private parts of a session that tests reach into. Every cast to one is
+ * here, so a change to a private name is a change to this file.
+ */
+
+/** What a test reads of the index's flow executor. */
+export interface FlowExecutorView {
+    isProcessing: boolean;
+    taskQueue: unknown[];
+    handleTaskCompletion(task: Task): Promise<void>;
+}
+
+/** What a test reads of the scanner's write ledger. */
+export interface ClaimsView {
+    lastWrite(path: string): { rows: readonly unknown[] | null } | undefined;
+    claim: (...args: unknown[]) => unknown;
+}
+
+/** The scanner a `TaskIndex` built, for a test that makes its own index. */
+export function scannerOf(index: TaskIndex): TaskScanner {
+    return (index as unknown as { scanner: TaskScanner }).scanner;
 }
 
 /**
@@ -135,11 +161,21 @@ export function vaultSession(contents: Map<string, string>) {
     };
 
     const index = new TaskIndex(app as never, { ...DEFAULT_SETTINGS });
-    scanner = (index as unknown as { scanner: TaskScanner }).scanner;
+    scanner = scannerOf(index);
     scanner.setInitializing(false);
     // Registers the real vault/metadataCache handlers `process`/`create`
     // above call into. `onLayoutReady` never runs its callback here.
     void index.initialize();
+
+    const internals = index as unknown as {
+        commandExecutor: FlowExecutorView;
+        editorSignal: { mark(path: string): void };
+        reportRefusal(refusal: Refusal): void;
+    };
+    const executor = internals.commandExecutor;
+    // The channel `TaskIndex` connected, taken before a test connects another.
+    const observer = index.getRepository().getWriteObserver();
+    const connected = (observer as unknown as { resolve: (file: string, origin: WriteOrigin) => WriteChannel }).resolve;
 
     let n = 0;
     const storageUtils = {
@@ -157,11 +193,32 @@ export function vaultSession(contents: Map<string, string>) {
         app: app as unknown as App,
         index,
         scanner,
+        /** The flow executor: whether it is busy, its queue, the completion it is handed. */
+        executor,
+        /** The scanner's write ledger. */
+        claims: (scanner as unknown as { claims: ClaimsView }).claims,
+        /** The channel `TaskIndex` gave a write to `file`, even after a test has connected another. */
+        channelOf: (file: string, origin: WriteOrigin = 'user'): WriteChannel => connected(file, origin),
+        /** Tell `TaskIndex` a write was refused, as its own channel does. */
+        reportRefusal: (refusal: Refusal): void => internals.reportRefusal(refusal),
+        /** The editor signals a change to `path` — a keystroke — the way the live editor does. */
+        markEditor: (path: string): void => internals.editorSignal.mark(path),
         recorder: new TimerRecorder(app as never, plugin as never, storageUtils),
         creator: new TimerCreator({} as TimerContext, storageUtils),
         fireVault: (name: string, ...args: unknown[]) => vaultHandlers.get(name)!(...args),
         scanAll: () => scanner!.scanVault(),
         settle: (path: string) => index.waitForScan(path),
+        /**
+         * Wait until the flow executor has nothing running or queued, then
+         * until the scan of each `path` has finished.
+         */
+        flowSettled: async (...paths: string[]): Promise<void> => {
+            await vi.waitFor(() => {
+                expect(executor.isProcessing).toBe(false);
+                expect(executor.taskQueue).toHaveLength(0);
+            });
+            for (const path of paths) await index.waitForScan(path);
+        },
         dispose: () => index.dispose(),
     };
 }
