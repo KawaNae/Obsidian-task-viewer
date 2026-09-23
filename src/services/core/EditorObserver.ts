@@ -33,26 +33,52 @@ export interface InputSource {
  * the hand: Obsidian also reports a change when it reloads an open note that
  * something else wrote — a sync, or a write of ours from a card — and a key
  * typed into another note, or a click on a card, is not in that editor.
+ *
+ * "Within" is measured from when the key or the press happened, not from when
+ * this observer heard it. A hotkey's command runs from Obsidian's own
+ * listener, which is ahead of this one on the same key: the editor's change
+ * arrives first, and the key after it, in the same dispatch. A change on the
+ * focused editor with no hand before it waits for a key or a press that
+ * happened before the change, and is marked when one arrives.
  */
 export class EditorObserver {
     private currentEditorEl: HTMLElement | null = null;
     private editorListenerBound: ((e: InputEvent) => void) | null = null;
     private leafChangeRef: EventRef | null = null;
     private editorChangeRef: EventRef | null = null;
-    /** When a key or a press last reached the app, or -Infinity. */
+    /** When the last key or press happened, or -Infinity. */
     private lastHand = -Infinity;
+    /** A change to the focused editor that no hand was heard before yet. */
+    private unclaimed: { path: string; at: number } | null = null;
     private readonly onHand = (e: Event) => {
         if (!e.isTrusted) return;
         if (e.type === 'keydown' && !editsByKey(e as KeyboardEvent)) return;
-        this.lastHand = this.now();
+        const at = this.happenedAt(e);
+        this.lastHand = Math.max(this.lastHand, at);
+        const change = this.unclaimed;
+        this.unclaimed = null;
+        if (change && change.at >= at && change.at - at <= HAND_WINDOW_MS) this.editorSignal.mark(change.path);
     };
 
     constructor(
         private app: App,
         private editorSignal: EditorSignal,
         private readonly inputs: InputSource | null = typeof window === 'undefined' ? null : window,
-        private readonly now: () => number = () => Date.now(),
+        private readonly now: () => number = () => performance.timeOrigin + performance.now(),
     ) { }
+
+    /**
+     * When an input happened, on the clock {@link now} reads: its time stamp,
+     * from the time origin of the window it happened in (a popped-out window
+     * has its own). Now, for an event that carries none.
+     */
+    private happenedAt(e: Event): number {
+        const view = (e as UIEvent).view ?? (e.target as Node | null)?.ownerDocument?.defaultView ?? null;
+        const origin = view?.performance?.timeOrigin;
+        return typeof e.timeStamp === 'number' && e.timeStamp > 0 && typeof origin === 'number'
+            ? origin + e.timeStamp
+            : this.now();
+    }
 
     /**
      * インタラクションリスナーを設定
@@ -69,10 +95,14 @@ export class EditorObserver {
         this.inputs?.addEventListener('keydown', this.onHand, true);
         this.inputs?.addEventListener('pointerdown', this.onHand, true);
         this.editorChangeRef = this.app.workspace.on('editor-change', (editor: Editor, info: MarkdownView | MarkdownFileInfo) => {
-            if (this.now() - this.lastHand > HAND_WINDOW_MS) return;
-            if (!editor.hasFocus()) return;
             const file = info.file;
-            if (file) this.editorSignal.mark(file.path);
+            if (!file || !editor.hasFocus()) return;
+            const at = this.now();
+            if (at >= this.lastHand && at - this.lastHand <= HAND_WINDOW_MS) {
+                this.editorSignal.mark(file.path);
+                return;
+            }
+            this.unclaimed = { path: file.path, at };
         });
 
         // 初回

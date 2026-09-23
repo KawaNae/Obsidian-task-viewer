@@ -41,6 +41,9 @@ function observe() {
     return {
         signal,
         advance: (ms: number) => { now += ms; },
+        clock: () => now,
+        /** A key whose time stamp says it happened at `at`, heard now. */
+        keyAt: (at: number) => inputs.get('keydown')!({ isTrusted: true, type: 'keydown', key: 'l', ctrlKey: true, timeStamp: at, view: { performance: { timeOrigin: 0 } } } as unknown as Event),
         key: (key = 'Enter', ctrlKey = false) => inputs.get('keydown')!({ isTrusted: true, type: 'keydown', key, ctrlKey } as unknown as Event),
         press: (trusted = true) => inputs.get('pointerdown')!({ isTrusted: trusted } as Event),
         /** The note's editor changed; `focused` says whether it had the focus. */
@@ -121,6 +124,27 @@ describe('EditorObserver: what raises the signal', () => {
         editor.key('Enter', true);
         editor.change();
         expect(editor.signal.take('note.md')).toBe(true);
+    });
+
+    it('a hotkey\'s command, whose change is heard before its key, raises it when the key happened first', () => {
+        // Found on Dev: Obsidian's hotkey listener runs ahead of this one on
+        // the same key, so Ctrl+L's toggle reported its change before the key
+        // reached here, and nothing was marked.
+        const editor = observe();
+        const pressedAt = editor.clock();
+        editor.advance(3);
+        editor.change();
+        expect(editor.signal.take('note.md')).toBe(false);
+        editor.keyAt(pressedAt);
+        expect(editor.signal.take('note.md')).toBe(true);
+    });
+
+    it('a key that happened after a change does not claim it', () => {
+        const editor = observe();
+        editor.change();
+        editor.advance(50);
+        editor.keyAt(editor.clock());
+        expect(editor.signal.take('note.md')).toBe(false);
     });
 
     it('typing raises it', () => {
