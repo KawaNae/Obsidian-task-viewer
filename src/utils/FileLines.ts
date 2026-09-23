@@ -153,14 +153,41 @@ export function draftOver(lines: string[]): { draft: LineDraft; reported: LineEd
     const { edits, reported } = recordEdits(lines);
     const draft: LineDraft = {
         lines,
-        splice: edits.splice,
+        splice: (at, deleteCount, ...items) => {
+            items.forEach(oneLine);
+            edits.splice(at, deleteCount, ...items);
+        },
         rewrite: (at, text) => {
+            oneLine(text);
             lines[at] = text;
             edits.replaced(at);
         },
-        carry: edits.carry,
+        carry: (at, items) => {
+            items.forEach(item => oneLine(item.text));
+            edits.carry(at, items);
+        },
     };
     return { draft, reported };
+}
+
+/**
+ * A draft was handed a line that holds a line break.
+ *
+ * One element of the array is one line of the file. An element holding a
+ * break is written as two lines while every count made of the array — the
+ * report, the claim, the content key — says one, so the file and everything
+ * said about it part from that line on. Nothing is written instead (see
+ * `processLines`).
+ */
+export class LineBreakInLine extends Error {
+    constructor(text: string) {
+        super(`a line holds a line break: ${JSON.stringify(text.length > 80 ? text.slice(0, 80) + '…' : text)}`);
+        this.name = 'LineBreakInLine';
+    }
+}
+
+function oneLine(text: string): void {
+    if (/[\r\n]/.test(text)) throw new LineBreakInLine(text);
 }
 
 /** What a draft does to its array, each change reported as it is made. */
@@ -595,7 +622,20 @@ export async function processLines(
                 },
                 refuse,
             };
-            const next = edit(draft, eol, session) ? lines : null;
+            let next: string[] | null;
+            try {
+                next = edit(draft, eol, session) ? lines : null;
+            } catch (error) {
+                if (!(error instanceof LineBreakInLine)) throw error;
+                // A caller's bug, not the user's: the input should have been
+                // refused where it came in (`TaskApi`). The file is left as it
+                // was rather than written with a line the report cannot count.
+                const message = `[FileLines] ${file.path}: ${error.message}; nothing written`;
+                if (__DEV__) throw new Error(message);
+                logError(message);
+                refused = null;
+                return content;
+            }
 
             // A write that took a coordinate across its own edits wrote where
             // its report said the row had gone. If the report does not account
