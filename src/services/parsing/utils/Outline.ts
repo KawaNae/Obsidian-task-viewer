@@ -18,6 +18,20 @@ export const INDENT_SOURCE = '[ \\t]*';
 const INDENT_RE = new RegExp(`^${INDENT_SOURCE}`);
 
 /**
+ * A way two lines of a note can be the same line: two lines stand in it when
+ * their keys are equal. `key` is what a collection of lines is keyed by, and
+ * `holds` is only ever `key(a) === key(b)`, so the two cannot disagree.
+ */
+export interface LineRelation {
+    key(line: string): string;
+    holds(a: string, b: string): boolean;
+}
+
+function relation(key: (line: string) => string): LineRelation {
+    return { key, holds: (a, b) => key(a) === key(b) };
+}
+
+/**
  * What the lines of a note are to each other: how deep a line is, where a
  * task's subtree ends, where the body begins.
  *
@@ -59,6 +73,33 @@ export class Outline {
     static dedent(line: string): string {
         return line.slice(this.indentOf(line).length);
     }
+
+    /*
+     * Two lines are compared as one of these two relations and no other, and
+     * which question asks which is written here, once:
+     *
+     * - `VERBATIM`: the ladder's step 2; a plan's subtree and generation
+     *   blocks (`RowBasis.readsAsPlanned`); the text a timer
+     *   finds its task by (`TimerTaskResolver`)
+     * - `UP_TO_INDENT`: a plan's row (`RowBasis.readsAsPlanned`, until W1
+     *   makes it `VERBATIM`); the weaker check `ON_RECORD`
+     *   (`TaskScanner.onRecord`); a match checked against our last write
+     *   (`TaskScanner.againstLastWrite`)
+     *
+     * A comparison of lines not in the table picks one of the two and joins
+     * it; one that needs a third relation is a question for the outline, not
+     * for its caller.
+     */
+
+    /** The same line, character for character, indentation included. */
+    static readonly VERBATIM: LineRelation = relation(line => line);
+
+    /**
+     * The same line but for its indentation: what it reads wherever it stands
+     * in the tree ({@link dedent}). A row moved under another is this to what
+     * it was.
+     */
+    static readonly UP_TO_INDENT: LineRelation = relation(line => Outline.dedent(line));
 
     /**
      * The index just past `row`'s subtree: the lines below it up to the first

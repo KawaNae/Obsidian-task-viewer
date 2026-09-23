@@ -54,3 +54,25 @@ describe('one definition of indentation', () => {
         expect(found).toEqual([]);
     });
 });
+
+describe('two relations between lines', () => {
+    /**
+     * Two lines are compared as one of `Outline`'s two relations (`VERBATIM`,
+     * `UP_TO_INDENT`), and "the same but for the indentation" has one
+     * implementation: `UP_TO_INDENT`. A comparison or a lookup made of
+     * dedented lines by hand is a second one, which can drift from it.
+     */
+    it('leaves no comparison of dedented lines outside Outline', () => {
+        const byHand = /dedent\(.*([!=]==|\.has\(|\.get\()|([!=]==|\.has\(|\.get\().*dedent\(/;
+        const found: string[] = [];
+        for (const path of sources(SRC)) {
+            const file = relative(SRC, path).split('\\').join('/');
+            if (file === 'services/parsing/utils/Outline.ts') continue;
+            readFileSync(path, 'utf8').split(/\r?\n/).forEach((line, i) => {
+                if (line.trim().startsWith('*') || line.trim().startsWith('//')) return;
+                if (byHand.test(line)) found.push(`${file}:${i + 1}`);
+            });
+        }
+        expect(found).toEqual([]);
+    });
+});

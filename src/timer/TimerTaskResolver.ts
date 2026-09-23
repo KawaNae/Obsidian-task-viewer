@@ -1,6 +1,7 @@
 import type { PluginContext } from '../PluginContext';
 import { type Task, isTvInline } from '../types';
 import type { TimerInstance } from './TimerInstance';
+import { Outline } from '../services/parsing/utils/Outline';
 
 /** 解決に失敗した理由。文言を選ぶためだけに使う。 */
 export type TimerResolveFailure = 'read-only' | 'not-found';
@@ -63,7 +64,7 @@ export class TimerTaskResolver {
             const byOriginalText = allTasks.find((task) =>
                 isTvInline(task)
                 && task.file === timer.taskFile
-                && task.originalText === timer.taskOriginalText
+                && Outline.VERBATIM.holds(task.originalText, timer.taskOriginalText!)
             );
             if (byOriginalText) {
                 return byOriginalText;

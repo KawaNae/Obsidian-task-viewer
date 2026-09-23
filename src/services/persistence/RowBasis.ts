@@ -59,7 +59,7 @@ export type OnRecord = typeof ON_RECORD;
  * written after the index read the row.
  */
 export function readsAsPlanned(lines: readonly string[], line: number, basis: RowBasis): boolean {
-    if (Outline.dedent(lines[line]) !== Outline.dedent(basis.text)) return false;
+    if (!Outline.UP_TO_INDENT.holds(lines[line], basis.text)) return false;
     if (basis.commands) {
         const commands = collectFlowLineIndicesInFile(lines, line).map(i => flowLineTail(lines[i]));
         if (commands.length !== basis.commands.length) return false;
@@ -82,5 +82,5 @@ export function subtreeAt(lines: readonly string[], line: number): string[] {
 }
 
 function sameLines(a: readonly string[], b: readonly string[]): boolean {
-    return a.length === b.length && a.every((text, i) => text === b[i]);
+    return a.length === b.length && a.every((text, i) => Outline.VERBATIM.holds(text, b[i]));
 }

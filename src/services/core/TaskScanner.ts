@@ -544,7 +544,7 @@ export class TaskScanner {
      * keep until F9 (`RowBasis.ON_RECORD`).
      */
     onRecord(path: string, lines: readonly string[], ref: TaskRef, line: number): boolean {
-        return this.recordedTexts(path, ref.runtimeId).has(Outline.dedent(lines[line]));
+        return this.recordedTexts(path, ref.runtimeId).has(Outline.UP_TO_INDENT.key(lines[line]));
     }
 
     /**
@@ -568,8 +568,7 @@ export class TaskScanner {
     private againstLastWrite(path: string, lines: readonly string[], line: number, ref: TaskRef): Located | null {
         const last = this.claims.lastWrite(path);
         if (last === undefined) return null;
-        const text = Outline.dedent(lines[line]);
-        const holders = last.rows?.filter(row => Outline.dedent(row.text) === text) ?? [];
+        const holders = last.rows?.filter(row => Outline.UP_TO_INDENT.holds(row.text, lines[line])) ?? [];
         if (!holders.some(row => row.runtimeId === ref.runtimeId)) return { kind: 'outdated' };
         if (holders.length > 1) return { kind: 'ambiguous', count: holders.length };
         return null;
@@ -585,13 +584,13 @@ export class TaskScanner {
     private recordedTexts(path: string, runtimeId: string): Set<string> {
         const texts = new Set<string>();
         const entry = this.ledger.get(runtimeId);
-        if (entry && entry.file === path) texts.add(Outline.dedent(entry.fingerprint.originalText));
+        if (entry && entry.file === path) texts.add(Outline.UP_TO_INDENT.key(entry.fingerprint.originalText));
         for (const row of this.claims.lastWrite(path)?.rows ?? []) {
-            if (row.runtimeId === runtimeId) texts.add(Outline.dedent(row.text));
+            if (row.runtimeId === runtimeId) texts.add(Outline.UP_TO_INDENT.key(row.text));
         }
         for (const pending of this.hints.peekFor(path, Date.now())) {
             for (const row of pending.hint.rows) {
-                if (row.runtimeId === runtimeId) texts.add(Outline.dedent(row.text));
+                if (row.runtimeId === runtimeId) texts.add(Outline.UP_TO_INDENT.key(row.text));
             }
         }
         return texts;
