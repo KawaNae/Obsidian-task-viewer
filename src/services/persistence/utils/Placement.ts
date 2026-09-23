@@ -119,7 +119,7 @@ export class Placement {
      * the end of a fence that never closes — and is not.
      *
      * Fences are read both ways the parser reads them: across the whole
-     * document, and within the subtree of the task a line stands under, where
+     * document, and within the subtree of the root task a line stands under, where
      * a fence carries the list item's indentation and the whole-document
      * reading cannot see it (`CodeFenceTracker.subtreeMask`). Such a fence
      * that never closes ends with the subtree.
@@ -144,16 +144,22 @@ export class Placement {
     }
 
     /**
-     * The unindented task whose subtree a line put in at `at` would stand
-     * inside of, or null: the nearest unindented line above, when it is a
-     * task outside any fence and its subtree reaches past `at - 1`.
+     * The task the parser reads as a root whose subtree a line put in at `at`
+     * would stand inside of, or null. The roots are found as the parser finds
+     * them: each task line outside a fence that no earlier root's subtree
+     * holds, indented or not — one under a plain bullet or a paragraph is a
+     * root too.
      */
     private static enclosingTask(lines: readonly string[], at: number, fenced: boolean[]): number | null {
-        for (let i = at - 1; i >= 0; i--) {
-            const line = lines[i];
-            if (line.trim() === '' || Outline.depthOf(line) > 0) continue;
-            if (fenced[i] || !TaskLineClassifier.isTaskLine(line)) return null;
-            return Outline.subtreeEnd(lines, i) >= at ? i : null;
+        let i = Outline.bodyStart(lines);
+        while (i < at) {
+            if (fenced[i] || !TaskLineClassifier.isTaskLine(lines[i])) {
+                i++;
+                continue;
+            }
+            const end = Outline.subtreeEnd(lines, i);
+            if (at <= end) return i;
+            i = end;
         }
         return null;
     }

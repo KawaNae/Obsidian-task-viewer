@@ -203,6 +203,15 @@ describe('Placement.inBody', () => {
         expect(Placement.inBody(lines, 5)).toBe(5);
     });
 
+    it('reads the subtree fences of a root task that is indented under a plain bullet', () => {
+        // The parser reads P as a root (its parent is no task) and the fence
+        // within P's subtree.
+        const lines = ['- item', '\t- [ ] P', '\t\t- [ ] T', '\t\t\t```', '\t\tshallow', '\t\t\t```', '\t\t- [ ] Z'];
+        expect(Placement.inBody(lines, 4)).toBeNull();
+        expect(Placement.afterSubtree(lines, 2)).toBeNull();
+        expect(Placement.inBody(lines, 6)).toBe(6);
+    });
+
     it('ends a subtree fence that never closes with the subtree', () => {
         const lines = ['- [ ] P', '\t```', '\tx', '- [ ] next'];
         expect(Placement.inBody(lines, 2)).toBeNull();
