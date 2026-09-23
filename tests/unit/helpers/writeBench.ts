@@ -11,7 +11,7 @@ import { WriteObserver } from '../../../src/services/persistence/WriteObserver';
 import { FileOperations } from '../../../src/services/persistence/utils/FileOperations';
 import { DEFAULT_SETTINGS } from '../../../src/types';
 import type { Task } from '../../../src/types';
-import type { LineEdit, Refusal, WriteChannel } from '../../../src/utils/FileLines';
+import type { LineEdit, Refusal, WriteChannel, WriteOrigin } from '../../../src/utils/FileLines';
 
 /**
  * A vault in memory with a real `TaskScanner` over it, and the write layer
@@ -113,8 +113,8 @@ export async function writeBench(files: string | string[] | Record<string, strin
 
     const refused: Refusal[] = [];
     const filed: Filed[] = [];
-    const channel = (path: string): WriteChannel => {
-        const sink = scanner.writeSink(path);
+    const channel = (path: string, origin: WriteOrigin = 'user'): WriteChannel => {
+        const sink = scanner.writeSink(path, origin);
         return {
             sink: (before, after, edits) => {
                 const entry: Filed = { file: path, before: [...before], after: [...after], edits: [...edits] };
