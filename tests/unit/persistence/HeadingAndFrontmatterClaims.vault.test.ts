@@ -60,9 +60,8 @@ function watchClaims(session: VaultSession) {
 function watchRefusals(session: VaultSession): Refusal[] {
     const refused: Refusal[] = [];
     const observer = session.index.getRepository().getWriteObserver();
-    const resolve = (observer as unknown as { resolve: (file: string) => { refused: (r: Refusal) => void } }).resolve;
     observer.connect(file => {
-        const channel = resolve(file);
+        const channel = session.channelOf(file);
         return { ...channel, refused: (refusal: Refusal) => { refused.push(refusal); channel.refused(refusal); } } as never;
     });
     return refused;

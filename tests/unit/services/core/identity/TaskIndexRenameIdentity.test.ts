@@ -1,7 +1,7 @@
 import { describe, it, expect, afterEach } from 'vitest';
 import { TFile } from 'obsidian';
 import { TaskIndex } from '../../../../../src/services/core/TaskIndex';
-import type { TaskScanner } from '../../../../../src/services/core/TaskScanner';
+import { scannerOf } from '../../../helpers/vaultSession';
 import { TaskIdGenerator } from '../../../../../src/services/display/TaskIdGenerator';
 import { DEFAULT_SETTINGS } from '../../../../../src/types';
 
@@ -58,7 +58,7 @@ function setup() {
         workspace: Object.assign(workspace, { onLayoutReady: () => { }, activeLeaf: null }),
     };
     const index = new TaskIndex(app as never, { ...DEFAULT_SETTINGS });
-    const scanner = (index as unknown as { scanner: TaskScanner }).scanner;
+    const scanner = scannerOf(index);
     scanner.setInitializing(false);
     return { contents, vault, index, scanner };
 }

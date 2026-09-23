@@ -37,8 +37,7 @@ async function open(text: string): Promise<VaultSession> {
 
 /** What the last write of ours left: its rows, null for the mark, undefined for nothing. */
 function lastWrite(session: VaultSession): { rows: readonly unknown[] | null } | undefined {
-    return (session.scanner as unknown as { claims: { lastWrite(path: string): { rows: readonly unknown[] | null } | undefined } })
-        .claims.lastWrite(FILE);
+    return session.claims.lastWrite(FILE);
 }
 
 function task(session: VaultSession, text: string): Task {
@@ -160,8 +159,7 @@ describe('every write of ours leaves a record or the mark', () => {
 
     it('a write whose claim throws while it is made leaves the mark', async () => {
         const session = await open(NOTE);
-        const claims = (session.scanner as unknown as { claims: { claim: (...args: unknown[]) => unknown } }).claims;
-        claims.claim = () => { throw new Error('parse failed'); };
+        session.claims.claim = () => { throw new Error('parse failed'); };
         await session.index.getRepository().appendTaskToFile(FILE, '- [ ] C');
         marked(session);
     });
