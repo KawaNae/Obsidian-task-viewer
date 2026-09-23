@@ -1,18 +1,6 @@
 import { IN_LINE } from '../../../utils/LineBreak';
-import { CHECKBOX_GAP_SOURCE, LIST_BULLET_SOURCE, STATUS_CHAR_SOURCE } from './ListMarker';
+import { CHECKBOX_GAP_SOURCE, LIST_BULLET_SOURCE, MARKER_GAP_SOURCE, STATUS_CHAR_SOURCE } from './ListMarker';
 import { INDENT_SOURCE, Outline } from './Outline';
-
-/**
- * What may stand before a task's list marker, as a regex fragment.
- *
- * Its indentation and nothing else: a line opened with a full-width or a
- * no-break space is no list item to Obsidian, so no task either (R0). Kept a
- * name of its own rather than written as `INDENT_SOURCE` in place, because
- * "is this line a task" and "how deep is it" are two questions: were such a
- * line ever to read as a task, it would widen here while its depth stayed
- * `Outline`'s.
- */
-const TASK_LEAD_SOURCE = INDENT_SOURCE;
 
 export interface TaskLineMatch {
     /** Leading whitespace */
@@ -28,13 +16,14 @@ export interface TaskLineMatch {
 }
 
 /**
- * Unified classifier for parent task lines (`- [ ] content`).
- * Centralises the checkbox-line regex so that callers don't maintain their own copies.
+ * The one reading of "is this line a task" (`- [ ] content`), for a row and
+ * for a checkbox among a row's children alike: a child checkbox is a task
+ * line deeper than its parent. Callers do not keep copies of the pattern.
  * Supports `-`, `*`, `+`, and ordered list markers (`1.`, `1)`).
  */
 export class TaskLineClassifier {
-    private static readonly TASK_LINE_REGEX = new RegExp(`^(${TASK_LEAD_SOURCE})(${LIST_BULLET_SOURCE} *\\[)(${STATUS_CHAR_SOURCE})(\\]${CHECKBOX_GAP_SOURCE}${IN_LINE}*)$`);
-    private static readonly MARKER_REGEX = new RegExp(`^${TASK_LEAD_SOURCE}(${LIST_BULLET_SOURCE})`);
+    private static readonly TASK_LINE_REGEX = new RegExp(`^(${INDENT_SOURCE})(${LIST_BULLET_SOURCE}${MARKER_GAP_SOURCE}\\[)(${STATUS_CHAR_SOURCE})(\\]${CHECKBOX_GAP_SOURCE}${IN_LINE}*)$`);
+    private static readonly MARKER_REGEX = new RegExp(`^${INDENT_SOURCE}(${LIST_BULLET_SOURCE})`);
     private static readonly BLOCK_ID_REGEX = /(?:^|\s)\^([A-Za-z0-9-]+)\s*$/;
 
     /**
@@ -90,15 +79,14 @@ export class TaskLineClassifier {
     static classify(line: string): TaskLineMatch | null {
         const m = line.match(this.TASK_LINE_REGEX);
         if (!m) return null;
-        const [, lead, bulletBracket, statusChar, bracketTail] = m;
-        const indent = Outline.indentOf(lead);
+        const [, indent, bulletBracket, statusChar, bracketTail] = m;
         // rawContent: past `]` and the one space or tab a task line has there
         const rawContent = bracketTail.slice(2);
         return {
             indent,
             statusChar,
             rawContent,
-            prefix: lead + bulletBracket,
+            prefix: indent + bulletBracket,
             suffix: bracketTail,
         };
     }

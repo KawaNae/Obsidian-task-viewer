@@ -1,4 +1,5 @@
 import { ChildLineClassifier } from '../../parsing/utils/ChildLineClassifier';
+import { TaskLineClassifier } from '../../parsing/utils/TaskLineClassifier';
 import { CodeFenceTracker } from '../../../utils/CodeFenceTracker';
 import { FileOperations } from './FileOperations';
 import type { PropertyOp } from '../PropertyUpdatePlanner';
@@ -61,7 +62,7 @@ export class ChildPropertyLineEditor {
                 if (indent > skipDeeperThan) continue;
                 skipDeeperThan = null;
             }
-            if (ChildLineClassifier.CHECKBOX_CHAR.test(line)) {
+            if (TaskLineClassifier.isTaskLine(line)) {
                 skipDeeperThan = indent;
                 continue;
             }

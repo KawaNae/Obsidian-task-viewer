@@ -1,4 +1,5 @@
 import { CodeFenceTracker } from '../../../utils/CodeFenceTracker';
+import { SPACE_OR_TAB_SOURCE } from './ListMarker';
 
 /**
  * Indentation, as a regex fragment: the tabs and spaces a line opens with.
@@ -13,7 +14,7 @@ import { CodeFenceTracker } from '../../../utils/CodeFenceTracker';
  * line patterns, the depth, and the writes that keep or strip a line's
  * indentation — is made of this one.
  */
-export const INDENT_SOURCE = '[ \\t]*';
+export const INDENT_SOURCE = `${SPACE_OR_TAB_SOURCE}*`;
 
 const INDENT_RE = new RegExp(`^${INDENT_SOURCE}`);
 
