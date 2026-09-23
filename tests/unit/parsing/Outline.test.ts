@@ -20,10 +20,15 @@ describe('Outline.depthOf', () => {
         expect(Outline.depthOf('- [ ] x')).toBe(0);
     });
 
-    it('counts spaces and tabs only', () => {
+    it('does not read a byte order mark as indentation', () => {
         expect(Outline.depthOf('\uFEFF- [ ] x')).toBe(0);
         expect(Outline.indentOf('\uFEFF- [ ] x')).toBe('');
-        expect(Outline.indentOf(' \t\u00A0x')).toBe(' \t');
+    });
+
+    it('reads the whitespace a task line may open with as indentation, a full-width space included', () => {
+        // The task-line reading accepts these before the marker (`^\s*`).
+        expect(Outline.indentOf(' \t\u00A0x')).toBe(' \t\u00A0');
+        expect(Outline.depthOf('\u3000\u3000- [ ] x')).toBe(2);
     });
 });
 

@@ -31,11 +31,19 @@ export class Outline {
     }
 
     /**
-     * The line's indentation as written: the spaces and tabs it opens with,
-     * and nothing else. A byte order mark or a non-breaking space is text.
+     * The line's indentation as written: the whitespace it opens with, a byte
+     * order mark excepted.
+     *
+     * The same whitespace the task-line reading accepts before a list marker
+     * (`TaskLineClassifier`, `^\s*`), so a line read as an indented task is
+     * read at the depth it is indented to, and a write that keeps a line's
+     * indentation keeps all of it — a full-width space included. A byte order
+     * mark is not indentation: it is the file's (`splitLines` takes it off),
+     * and a mark read as indentation was copied onto every line written
+     * beside the first.
      */
     static indentOf(line: string): string {
-        return /^[ \t]*/.exec(line)![0];
+        return /^[^\S﻿]*/.exec(line)![0];
     }
 
     /**
