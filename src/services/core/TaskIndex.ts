@@ -462,20 +462,6 @@ export class TaskIndex {
     }
 
     /**
-     * Run `op` once every write already asked of this row has finished.
-     *
-     * A write that names a row is planned from the index's copy of it
-     * (`plannedOn`), and a card's update brings the copy up to what it wrote
-     * only when its write is back (`adoptWrittenRow`). A second write asked
-     * before then — a checkbox clicked twice, which does not wait for the
-     * first — would plan from the copy the first write has already moved on
-     * from, and be refused against our own write. In order, each is planned
-     * from the copy the one before it left.
-     *
-     * Per row, not per file: a write to another row plans from that row's
-     * copy, which this one does not change.
-     */
-    /**
      * The copy of a row a write is planned from, or undefined when the store no
      * longer holds the row — an earlier write to it took it away, or a scan
      * read the file without it — which is told once, as `gone`, like any
@@ -497,6 +483,20 @@ export class TaskIndex {
         return undefined;
     }
 
+    /**
+     * Run `op` once every write already asked of this row has finished.
+     *
+     * A write that names a row is planned from the index's copy of it
+     * (`plannedOn`), and a card's update brings the copy up to what it wrote
+     * only when its write is back (`adoptWrittenRow`). A second write asked
+     * before then — a checkbox clicked twice, which does not wait for the
+     * first — would plan from the copy the first write has already moved on
+     * from, and be refused against our own write. In order, each is planned
+     * from the copy the one before it left.
+     *
+     * Per row, not per file: a write to another row plans from that row's
+     * copy, which this one does not change.
+     */
     private onRow<T>(taskId: string, op: () => Promise<T>): Promise<T> {
         const queue = (this.rowWrites ??= new Map<string, Promise<unknown>>());
         const previous = queue.get(taskId) ?? Promise.resolve();
