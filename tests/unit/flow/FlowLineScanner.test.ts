@@ -6,7 +6,7 @@ import {
     formatFlowLine,
     isFlowLine,
     matchFlowLine,
-} from '../../../src/services/flow/FlowLineScanner';
+} from '../../../src/services/parsing/utils/FlowLineScanner';
 
 describe('FlowLineScanner', () => {
     describe('flowLineTail / isFlowLine', () => {

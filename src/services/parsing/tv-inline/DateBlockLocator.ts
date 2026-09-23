@@ -1,5 +1,5 @@
 import type { Span } from '../../lang/Diagnostic';
-import { FLOW_SPLIT } from '../../flow/FlowLineScanner';
+import { FLOW_SPLIT } from '../utils/FlowLineScanner';
 import type { DateTimeRule } from '../../../types';
 
 /**

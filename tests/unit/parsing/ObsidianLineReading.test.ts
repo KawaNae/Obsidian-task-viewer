@@ -3,7 +3,7 @@ import { FileParsePipeline } from '../../../src/services/parsing/FileParsePipeli
 import { Outline } from '../../../src/services/parsing/utils/Outline';
 import { TaskLineClassifier } from '../../../src/services/parsing/utils/TaskLineClassifier';
 import { ChildLineClassifier } from '../../../src/services/parsing/utils/ChildLineClassifier';
-import { matchFlowLine } from '../../../src/services/flow/FlowLineScanner';
+import { matchFlowLine } from '../../../src/services/parsing/utils/FlowLineScanner';
 import { readsAsPlanned } from '../../../src/services/persistence/RowBasis';
 import { FileOperations } from '../../../src/services/persistence/utils/FileOperations';
 import { leadingIndent } from '../../../src/services/parsing/gen/GenBodyParser';

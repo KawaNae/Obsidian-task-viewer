@@ -17,7 +17,7 @@ import {
     segmentIndexAt,
 } from '../services/flow/FlowSegments';
 import { childCopyMigrationWarning } from '../services/flow/ChildCopyMigration';
-import { FLOW_MARKER, collectFlowLineIndices, isFlowLine, matchFlowLine } from '../services/flow/FlowLineScanner';
+import { FLOW_MARKER, collectFlowLineIndices, isFlowLine, matchFlowLine } from '../services/parsing/utils/FlowLineScanner';
 import { diagnosticText } from '../services/flow/diagnosticText';
 import { TaskLineClassifier } from '../services/parsing/utils/TaskLineClassifier';
 import { TaskParser } from '../services/parsing/TaskParser';

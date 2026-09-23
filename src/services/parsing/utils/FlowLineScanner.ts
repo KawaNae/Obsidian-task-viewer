@@ -8,10 +8,10 @@
  * (DiagnosticsExtension) all share it — do not duplicate the judgment.
  */
 
-import { CodeFenceTracker } from '../../utils/CodeFenceTracker';
-import { LIST_BULLET_SOURCE } from '../parsing/utils/ListMarker';
-import { INDENT_SOURCE, Outline } from '../parsing/utils/Outline';
-import { IN_LINE } from '../../utils/LineBreak';
+import { CodeFenceTracker } from '../../../utils/CodeFenceTracker';
+import { LIST_BULLET_SOURCE } from './ListMarker';
+import { INDENT_SOURCE, Outline } from './Outline';
+import { IN_LINE } from '../../../utils/LineBreak';
 
 /**
  * The marker that turns the tail of a line into a flow command, on a task

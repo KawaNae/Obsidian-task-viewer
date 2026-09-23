@@ -1,7 +1,7 @@
 import type { Task, TaskFlow } from '../../../types';
 import { t } from '../../../i18n';
 import { flowValidation, singleLineFlow } from '../../flow/FlowSegments';
-import { FLOW_SPLIT } from '../../flow/FlowLineScanner';
+import { FLOW_SPLIT } from '../utils/FlowLineScanner';
 import { createBaseTask } from '../TaskFactory';
 import type { LeafParserStrategy } from '../strategies/ParserStrategy';
 import { isTimerTargetId } from '../../../utils/TimerTargetIdUtils';

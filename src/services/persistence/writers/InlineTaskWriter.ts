@@ -1,7 +1,7 @@
 import { type App, TFile } from 'obsidian';
 import type { Task } from '../../../types';
 import { TaskParser } from '../../parsing/TaskParser';
-import { collectFlowLineIndicesInFile } from '../../flow/FlowLineScanner';
+import { collectFlowLineIndicesInFile } from '../../parsing/utils/FlowLineScanner';
 import { FileOperations } from '../utils/FileOperations';
 import { ChildPropertyLineEditor } from '../utils/ChildPropertyLineEditor';
 import { Placement } from '../utils/Placement';

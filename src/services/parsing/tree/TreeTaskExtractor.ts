@@ -5,7 +5,7 @@ import { BuiltinPropertyExtractor } from './BuiltinPropertyExtractor';
 import { ChildLineClassifier } from '../utils/ChildLineClassifier';
 import { TagExtractor } from '../utils/TagExtractor';
 import { TaskParser } from '../TaskParser';
-import { collectFlowLineIndices, flowLineTail } from '../../flow/FlowLineScanner';
+import { collectFlowLineIndices, flowLineTail } from '../utils/FlowLineScanner';
 import { flowValidation, parseFlowSegments } from '../../flow/FlowSegments';
 import { Outline } from '../utils/Outline';
 

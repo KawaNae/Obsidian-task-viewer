@@ -1,5 +1,5 @@
 import { type Diagnostic, warning } from '../../lang/Diagnostic';
-import { FLOW_MARKER } from '../../flow/FlowLineScanner';
+import { FLOW_MARKER } from '../utils/FlowLineScanner';
 import type { TaskLineMatch } from '../utils/TaskLineClassifier';
 
 /**

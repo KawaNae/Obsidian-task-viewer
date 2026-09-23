@@ -1,4 +1,4 @@
-import { collectFlowLineIndicesInFile, formatFlowLine } from '../flow/FlowLineScanner';
+import { collectFlowLineIndicesInFile, formatFlowLine } from '../parsing/utils/FlowLineScanner';
 import { FileOperations } from './utils/FileOperations';
 import { Outline } from '../parsing/utils/Outline';
 
