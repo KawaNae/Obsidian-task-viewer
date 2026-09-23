@@ -33,6 +33,33 @@ describe('ChildPropertyLineEditor', () => {
         });
     });
 
+    describe('a property line below a blank line inside the children', () => {
+        // The parser reads it as the task's property (Outline.subtreeEnd); an
+        // edit that did not would add a second declaration of the key.
+        const lines = () => [
+            '- [ ] task @2026-07-18T10:00',
+            '    - [ ] child',
+            '',
+            '    - key:: old',
+            '',
+            '- [ ] next',
+        ];
+
+        it('is found as the task\'s own', () => {
+            expect(ChildPropertyLineEditor.findOwnPropertyLines(lines(), 0)).toEqual([
+                { lineIdx: 3, key: 'key', value: 'old' },
+            ]);
+        });
+
+        it('is updated in place, not declared again', () => {
+            const edited = lines();
+            apply(edited, 0, [{ op: 'set', key: 'key', value: 'new' }]);
+            expect(edited).toEqual([
+                '- [ ] task @2026-07-18T10:00', '    - [ ] child', '', '    - key:: new', '', '- [ ] next',
+            ]);
+        });
+    });
+
     describe('applyOps: set', () => {
         it('空値行への値設定はセパレータ空白を補ってその場更新する', () => {
             const lines = [

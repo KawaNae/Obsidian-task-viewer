@@ -108,6 +108,14 @@ describe('a child below a blank line', () => {
         // A property line below the blank line is the task's too.
         expect(p.properties.key?.value).toBe('value');
     });
+
+    it('of a child task stays the child\'s, not the parent\'s child line', () => {
+        const lines = ['- [ ] p', '\t- [ ] c', '', '\t\tmemo of c', '\tmemo of p', ''];
+        const parsed = FileParsePipeline.parse('note.md', [...lines], undefined, DEFAULT_SETTINGS);
+        if (parsed.ignored) throw new Error('ignored');
+        const p = parsed.tasks.find(task => task.content === 'p')!;
+        expect(p.childLines.map(line => line.text.trim())).toEqual(['memo of p']);
+    });
 });
 
 /**
