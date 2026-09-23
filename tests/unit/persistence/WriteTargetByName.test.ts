@@ -184,7 +184,7 @@ describe('a line edited from outside since the index read it', () => {
 
         // The copy brought up to the line the update wrote, as the index does
         // (`TaskIndex.updateTask`).
-        const copy = { ...task, content: '設計書', originalText: first.left.get(task.id)![0] };
+        const copy = { ...task, content: '設計書', originalText: first.rows.get(task.id)!.left[0] };
         expect((await bench.writer.updateTaskInFile(plannedOn(copy), checked(copy))).written).toBe(true);
         expect(bench.lines()).toEqual(['メモ', '- [x] 設計書 @2026-08-15']);
     });

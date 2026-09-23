@@ -21,7 +21,7 @@ import type { GenBlock } from '../parsing/gen/GenBlockCollector';
 import { FileOperations } from '../persistence/utils/FileOperations';
 import { plannedOn } from '../persistence/TaskRefs';
 import { logError, logInfo, logWarn } from '../../log/log';
-import type { EditorLine, Refusal } from '../../utils/FileLines';
+import type { EditorLine, Refusal, RowLines } from '../../utils/FileLines';
 
 /**
  * TaskIndex - タスク管理の統括ファサードクラス
@@ -467,7 +467,7 @@ export class TaskIndex {
             this.revertUnwrittenUpdate(task, taskId, before, updates);
             return false;
         }
-        this.adoptWrittenRow(task, taskId, outcome.left.get(before.id));
+        this.adoptWrittenRow(task, taskId, before, outcome.rows.get(before.id));
         return true;
     }
 
@@ -482,14 +482,25 @@ export class TaskIndex {
      * a second update or a deletion fire in the moment before the scan would
      * be refused against our own write. The write knows what it left.
      *
+     * The line always: the update was planned from it, and the write checked
+     * the file still read so. The subtree only when the write found it as the
+     * copy has it. The update did not plan from the subtree, so a line written
+     * into it from outside since the scan was not checked — taken into the
+     * copy, it would become part of what the next delete plans from, and go
+     * with the row unseen. Otherwise the copy is left with no subtree, and a
+     * delete before the scan is refused if the row has any.
+     *
      * Only the copy the store still holds: a scan that has already read the
      * write has replaced it with its own reading, which is newer. The ledger is
      * not touched — only a scan writes it.
      */
-    private adoptWrittenRow(task: Task, taskId: string, left: readonly string[] | undefined): void {
-        if (!left || this.store.getTask(taskId) !== task) return;
-        task.originalText = left[0];
-        task.subtreeLines = left;
+    private adoptWrittenRow(task: Task, taskId: string, before: Task, lines: RowLines | undefined): void {
+        if (!lines || this.store.getTask(taskId) !== task) return;
+        task.originalText = lines.left[0];
+        const planned = before.subtreeLines;
+        const unchanged = planned !== undefined && planned.length === lines.read.length
+            && planned.every((line, i) => line === lines.read[i]);
+        task.subtreeLines = unchanged ? lines.left : undefined;
     }
 
     /**

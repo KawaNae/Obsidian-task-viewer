@@ -26,7 +26,7 @@ function buildHost(task: Task, written = true) {
         scanner: { requestScan: vi.fn(async () => {}) },
         app: { vault: { getAbstractFileByPath: () => null } },
         repository: {
-            updateTaskInFile: vi.fn(async () => ({ written, refused: null, made: [], left: new Map() })),
+            updateTaskInFile: vi.fn(async () => ({ written, refused: null, made: [], rows: new Map() })),
         },
         draggingFilePath: null,
         // The revert lives on the prototype; the host stands in for `this`.
@@ -193,21 +193,37 @@ describe('reportRefusal', () => {
 describe('updateTask: the copy follows the write', () => {
     const LEFT = ['- [x] x @T11:00', '    - key:: v'];
 
-    function hostLeaving(task: Task, left: readonly string[] | undefined) {
+    function hostLeaving(task: Task, left: readonly string[] | undefined, read: readonly string[] = task.subtreeLines ?? []) {
         const host = buildHost(task);
         host.repository.updateTaskInFile = vi.fn(async () => ({
-            written: true, refused: null, made: [], left: new Map(left ? [[task.id, left]] : []),
+            written: true, refused: null, made: [], rows: new Map(left ? [[task.id, { read, left }]] : []),
         })) as never;
         return host;
     }
 
-    it('takes the row\'s line and subtree from what the write left', async () => {
-        const task = makeTask({ content: 'x', startTime: '10:00', originalText: '- [ ] x @T10:00' });
+    const SCANNED = ['- [ ] x @T10:00', '    - key:: v'];
 
-        await proto.updateTask.call(hostLeaving(task, LEFT), task.id, { startTime: '11:00', statusChar: 'x' });
+    it('takes the row\'s line and subtree from what the write left', async () => {
+        const task = makeTask({ content: 'x', startTime: '10:00', originalText: SCANNED[0], subtreeLines: SCANNED });
+
+        await proto.updateTask.call(hostLeaving(task, LEFT, SCANNED), task.id, { startTime: '11:00', statusChar: 'x' });
 
         expect(task.originalText).toBe('- [x] x @T11:00');
         expect(task.subtreeLines).toEqual(LEFT);
+    });
+
+    it('takes the line but not a subtree the write found other than the copy has it', async () => {
+        // A child written in from outside since the scan: the update did not
+        // plan from the subtree and did not check it, so the next delete must
+        // not come to plan from it either.
+        const task = makeTask({ content: 'x', startTime: '10:00', originalText: SCANNED[0], subtreeLines: SCANNED });
+        const found = [...SCANNED, '    - [ ] 外から足した子'];
+
+        await proto.updateTask.call(
+            hostLeaving(task, ['- [x] x @T11:00', ...found.slice(1)], found), task.id, { startTime: '11:00', statusChar: 'x' });
+
+        expect(task.originalText).toBe('- [x] x @T11:00');
+        expect(task.subtreeLines).toBeUndefined();
     });
 
     it('leaves a copy the store no longer holds alone: a scan has read the write', async () => {

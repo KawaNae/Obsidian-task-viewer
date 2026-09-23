@@ -468,13 +468,21 @@ export interface WriteOutcome {
      */
     made: readonly MadeRow[];
     /**
-     * For each row the write named and left standing, by runtime ID: its line
-     * and every line of its subtree as the write left them. What the index
-     * holds of a row it had the write make from its copy can be brought up to
-     * the file from here, before any scan reads it. Empty when nothing was
-     * written.
+     * For each row the write named and left standing, by runtime ID: the row
+     * and its subtree as the write was handed them and as it left them. What
+     * the index holds of a row it had the write make from its copy can be
+     * brought up to the file from here, before any scan reads it. Empty when
+     * nothing was written.
      */
-    left: ReadonlyMap<string, readonly string[]>;
+    rows: ReadonlyMap<string, RowLines>;
+}
+
+/** A row's line and every line of its subtree, before and after one write. */
+export interface RowLines {
+    /** As the write was handed them — what the file held, whatever the plan read. */
+    read: readonly string[];
+    /** As the write left them. */
+    left: readonly string[];
 }
 
 /** Where each line of the file came from, once a write's report is replayed. */
@@ -612,7 +620,7 @@ export async function processLines(
     let written = false;
     let refused: Refusal | null = null;
     let made: readonly MadeRow[] = [];
-    let left: ReadonlyMap<string, readonly string[]> = new Map();
+    let rows: ReadonlyMap<string, RowLines> = new Map();
     const sink = channel?.sink;
     // A list rather than one slot: `vault.process` may run the callback again,
     // and everything filed has to be withdrawable.
@@ -626,7 +634,7 @@ export async function processLines(
             for (const withdraw of withdrawals.splice(0)) withdraw();
             refused = null;
             made = [];
-            left = new Map();
+            rows = new Map();
 
             const { lines, eol, bom } = splitLines(content);
             const before = [...lines];
@@ -729,7 +737,7 @@ export async function processLines(
             refused = null;
 
             written = true;
-            left = leftStanding(before.length, reported, next, named);
+            rows = rowsLeft(before, reported, next, named);
             // The mark the note opened with, put back where it was.
             const rebuilt = (bom ? BOM : '') + joinLines(next, eol);
 
@@ -766,24 +774,24 @@ export async function processLines(
     // Set inside the callback, which the compiler does not follow.
     const outcome = refused as Refusal | null;
     if (outcome !== null) channel?.refused(outcome);
-    return { written, refused: outcome, made, left };
+    return { written, refused: outcome, made, rows };
 }
 
-/** Each named row still standing once the write is done, and its subtree there. */
-function leftStanding(
-    beforeLength: number,
+/** Each named row still standing once the write is done: its subtree before and after. */
+function rowsLeft(
+    before: readonly string[],
     edits: readonly LineEdit[],
     after: readonly string[],
     named: ReadonlyMap<string, number>,
-): Map<string, readonly string[]> {
-    const left = new Map<string, readonly string[]>();
-    const replayed = replayEdits(beforeLength, edits);
-    if (!replayed) return left;
+): Map<string, RowLines> {
+    const rows = new Map<string, RowLines>();
+    const replayed = replayEdits(before.length, edits);
+    if (!replayed) return rows;
     for (const [runtimeId, line] of named) {
         const now = replayed.origin.indexOf(line);
-        if (now >= 0) left.set(runtimeId, subtreeAt(after, now));
+        if (now >= 0) rows.set(runtimeId, { read: subtreeAt(before, line), left: subtreeAt(after, now) });
     }
-    return left;
+    return rows;
 }
 
 /**

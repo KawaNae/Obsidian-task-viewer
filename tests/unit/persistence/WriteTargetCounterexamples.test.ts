@@ -435,7 +435,7 @@ describe('F2-counter2: two own writes trade the texts of two rows, then an unrep
         expect(bench.lines()).toEqual(['- [x] A', '- [ ] A']);
         // X's copy as the index holds it after its update: brought up to the
         // lines the write left (`TaskIndex.updateTask`).
-        const left = wrote.left.get(x.id)!;
+        const left = wrote.rows.get(x.id)!.left;
         return { bench, x: { ...checked(x), originalText: left[0], subtreeLines: left } };
     };
 

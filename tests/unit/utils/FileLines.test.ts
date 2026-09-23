@@ -347,7 +347,7 @@ describe('processLines', () => {
         const outcome = await processLines(h.app, h.file, undefined, () => false);
 
         // Declining without a reason is not a refusal: nobody is told.
-        expect(outcome).toEqual({ written: false, refused: null, made: [], left: new Map() });
+        expect(outcome).toEqual({ written: false, refused: null, made: [], rows: new Map() });
         // Not even the mixed terminators are unified: a write that could not be
         // placed must leave no trace, or Obsidian fires a modify for it and a
         // rescan follows a change nobody made.
@@ -373,7 +373,7 @@ describe('processLines: asking where a row stands, and giving up', () => {
         });
 
         expect(log.asked).toEqual([{ lines: ['- [ ] a', '- [ ] b', ''], ref: REF }]);
-        expect(outcome).toEqual({ written: true, refused: null, made: [], left: new Map([[REF.runtimeId, ['- [x] b']]]) });
+        expect(outcome).toEqual({ written: true, refused: null, made: [], rows: new Map([[REF.runtimeId, { read: ['- [ ] b'], left: ['- [x] b'] }]]) });
         expect(h.text()).toBe('- [ ] a\r\n- [x] b\r\n');
         expect(log.refusals).toEqual([]);
     });
@@ -390,7 +390,7 @@ describe('processLines: asking where a row stands, and giving up', () => {
         });
 
         const refusal = { file: 'note.md', reason: { kind: 'ambiguous', count: 2 }, subject: 'a' };
-        expect(outcome).toEqual({ written: false, refused: refusal, made: [], left: new Map() });
+        expect(outcome).toEqual({ written: false, refused: refusal, made: [], rows: new Map() });
         expect(log.refusals).toEqual([refusal]);
         expect(h.text()).toBe('- [ ] a\n');
     });
@@ -406,7 +406,7 @@ describe('processLines: asking where a row stands, and giving up', () => {
             written: false,
             refused: { file: 'note.md', reason: { kind: 'gone' }, subject: 'a' },
             made: [],
-            left: new Map(),
+            rows: new Map(),
         });
         expect(h.text()).toBe('- [ ] a\n');
     });
@@ -419,7 +419,7 @@ describe('processLines: asking where a row stands, and giving up', () => {
             session.refuse({ kind: 'changed' }, '- [ ] a'));
 
         const refusal = { file: 'note.md', reason: { kind: 'changed' }, subject: '- [ ] a' };
-        expect(outcome).toEqual({ written: false, refused: refusal, made: [], left: new Map() });
+        expect(outcome).toEqual({ written: false, refused: refusal, made: [], rows: new Map() });
         expect(log.refusals).toEqual([refusal]);
         expect(h.text()).toBe('- [ ] a\n');
     });
@@ -452,7 +452,7 @@ describe('processLines: asking where a row stands, and giving up', () => {
             return true;
         });
 
-        expect(outcome).toEqual({ written: true, refused: null, made: [], left: new Map() });
+        expect(outcome).toEqual({ written: true, refused: null, made: [], rows: new Map() });
         expect(log.refusals).toEqual([]);
         expect(h.text()).toBe('- [x] a\n');
     });
@@ -509,7 +509,7 @@ describe('a coordinate carried across a write\'s own edits', () => {
             return true;
         });
 
-        expect(outcome.left).toEqual(new Map([[REF.runtimeId, ['- [ ] a', '\t- child']]]));
+        expect(outcome.rows).toEqual(new Map([[REF.runtimeId, { read: ['- [ ] a', '\t- child'], left: ['- [ ] a', '\t- child'] }]]));
         expect(h.text()).toBe('new\n- [ ] a\n\t- child\n');
     });
 

@@ -41,8 +41,8 @@ export class InlineTaskWriter {
      * @returns the outcome. `written: false` means nothing was written at all,
      * which the caller must not treat as a successful no-op: the index has
      * already been updated optimistically, and an unwritten file leaves the two
-     * disagreeing until something else forces a rescan. `left` holds the row
-     * as it was written.
+     * disagreeing until something else forces a rescan. `rows` holds the row
+     * as it was handed in and as it was written.
      */
     async updateTaskInFile(target: PlannedTarget, updatedTask: Task, childOps: PropertyOp[] = []): Promise<WriteOutcome> {
         const file = this.app.vault.getAbstractFileByPath(target.file);
@@ -80,7 +80,7 @@ export class InlineTaskWriter {
     private refusedGone(target: PlannedTarget, origin: WriteOrigin): WriteOutcome {
         const refused: Refusal = { file: target.file, reason: { kind: 'gone' }, subject: target.subject };
         this.writes?.for(target.file, origin)?.refused(refused);
-        return { written: false, refused, made: [], left: new Map() };
+        return { written: false, refused, made: [], rows: new Map() };
     }
 
     async updateLine(filePath: string, at: EditorLine, newContent: string): Promise<void> {
@@ -209,7 +209,7 @@ export class InlineTaskWriter {
         if (!(file instanceof TFile)) {
             const refused: Refusal = { file: target.file, reason: { kind: 'gone' }, subject: target.subject };
             channel?.refused(refused);
-            return { written: false, refused, made: [], left: new Map() };
+            return { written: false, refused, made: [], rows: new Map() };
         }
 
         return processLines(this.app, file, channel, (draft, _eol, { row, refuse }) => {
