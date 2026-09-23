@@ -46,6 +46,7 @@ function buildHost(task: Task) {
         },
         draggingFilePath: null,
         revertUnwrittenUpdate: proto.revertUnwrittenUpdate,
+        adoptWrittenRow: proto.adoptWrittenRow,
         // The dispose guard every write goes through; this index is open.
         disposed: false,
         refuseAfterDispose: proto.refuseAfterDispose,

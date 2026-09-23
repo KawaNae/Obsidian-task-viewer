@@ -461,12 +461,35 @@ export class TaskIndex {
         // 探索は更新前の姿で行う。ファイルに書かれているのは更新前の行なので、
         // 更新後の日付や時刻で探しに行くと、まさにその値を変える更新のときに
         // 空振りする。第 2 引数が書く内容、第 1 引数がどの行かを決める。
-        const { written } = await this.repository.updateTaskInFile(plannedOn(before), task, propertyOps);
+        const outcome = await this.repository.updateTaskInFile(plannedOn(before), task, propertyOps);
 
-        if (!written) {
+        if (!outcome.written) {
             this.revertUnwrittenUpdate(task, taskId, before, updates);
+            return false;
         }
-        return written;
+        this.adoptWrittenRow(task, taskId, outcome.left.get(before.id));
+        return true;
+    }
+
+    /**
+     * Bring the copy of a row a card's update wrote up to the lines the write
+     * left, before any scan reads them.
+     *
+     * The next write to this row is planned from the copy (`plannedOn`), and
+     * the copy's fields already say what the update wrote — `Object.assign`
+     * put them there before the line was made from them. Only the line and the
+     * subtree, which the scan reads, would still say what was there before, so
+     * a second update or a deletion fire in the moment before the scan would
+     * be refused against our own write. The write knows what it left.
+     *
+     * Only the copy the store still holds: a scan that has already read the
+     * write has replaced it with its own reading, which is newer. The ledger is
+     * not touched — only a scan writes it.
+     */
+    private adoptWrittenRow(task: Task, taskId: string, left: readonly string[] | undefined): void {
+        if (!left || this.store.getTask(taskId) !== task) return;
+        task.originalText = left[0];
+        task.subtreeLines = left;
     }
 
     /**
