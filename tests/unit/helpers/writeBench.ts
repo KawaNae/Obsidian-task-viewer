@@ -43,7 +43,8 @@ export interface Filed {
     file: string;
     before: string[];
     after: string[];
-    edits: LineEdit[];
+    /** Null for a write that could not say how it changed the lines (a mark). */
+    edits: LineEdit[] | null;
 }
 
 export interface WriteBench {
@@ -117,7 +118,7 @@ export async function writeBench(files: string | string[] | Record<string, strin
         const sink = scanner.writeSink(path, origin);
         return {
             sink: (before, after, edits, named) => {
-                const entry: Filed = { file: path, before: [...before], after: [...after], edits: [...edits] };
+                const entry: Filed = { file: path, before: [...before], after: [...after], edits: edits ? [...edits] : null };
                 filed.push(entry);
                 const receipt = sink(before, after, edits, named);
                 return {
