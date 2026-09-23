@@ -129,17 +129,9 @@ export class TreeTaskExtractor {
             const absLine = block.childLineNumbers[k];
             if (!taskProducingLines.has(absLine)) continue;
             excludeIndices.add(k);
-            // この子タスクより深いインデントの後続行も除外
-            const ctIndent = Outline.depthOf(children[k]);
-            for (let m = k + 1; m < children.length; m++) {
-                const nextLine = children[m];
-                if (nextLine.trim() === '') { excludeIndices.add(m); continue; }
-                if (Outline.depthOf(nextLine) > ctIndent) {
-                    excludeIndices.add(m);
-                } else {
-                    break;
-                }
-            }
+            // この子タスクの部分木（Outline.subtreeEnd）も除外
+            const end = Outline.subtreeEnd(children, k);
+            for (let m = k + 1; m < end; m++) excludeIndices.add(m);
         }
 
         // インデント正規化 + タスク生成行除外 + 絶対行番号の付与

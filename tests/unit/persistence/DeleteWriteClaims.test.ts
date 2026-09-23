@@ -38,21 +38,23 @@ describe('what deleteTaskFromFile reports', () => {
     });
 
     it('counts what the splice took, not what the subtree looked like', async () => {
-        // The subtree stops at the blank line, so the blank and the task after
-        // it stay. A claim that counted to the end of the indented run would
-        // say four and be refused by `explains`; this one says two because two
-        // lines left the array.
+        // The subtree goes on past the blank line inside it and stops before
+        // the blank line after it, which stays with the task that follows. A
+        // claim that counted to the next task would say five and be refused by
+        // `explains`; this one says four because four lines left the array.
         const b = await writeBench([
             parent,
             '\t- [ ] 子1',
             '',
-            '\t- [ ] 別の塊の行',
+            '\t- [ ] 空行の下の子',
+            '',
+            '- [ ] 次のタスク',
         ]);
 
         await b.writer.deleteTaskFromFile(b.taskAt(0));
 
-        expect(only(b.filed).edits).toEqual([{ kind: 'removed', at: 0, count: 2 }]);
-        expect(b.lines()).toEqual(['', '\t- [ ] 別の塊の行']);
+        expect(only(b.filed).edits).toEqual([{ kind: 'removed', at: 0, count: 4 }]);
+        expect(b.lines()).toEqual(['', '- [ ] 次のタスク']);
     });
 
     it('files nothing when the line cannot be resolved', async () => {

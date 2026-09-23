@@ -31,7 +31,7 @@ export class ChildPropertyLineEditor {
     /**
      * タスク直下の own プロパティ行を列挙する。
      * 子範囲の規則は FileOperations.collectChildrenFromLines と同一
-     * （空行で終端、インデントがタスク行より深い連続行）。範囲内の
+     * （Outline.subtreeEnd。空行では終端しない）。範囲内の
      * ネスト子タスク（checkbox 行）のブロックは own でないためスキップ
      * （TreeTaskExtractor の除外規則の write 層版）。
      */
@@ -48,9 +48,10 @@ export class ChildPropertyLineEditor {
         // cannot see.
         const fenced = CodeFenceTracker.subtreeMask(lines.slice(taskLineIdx + 1));
 
-        for (let j = taskLineIdx + 1; j < lines.length; j++) {
+        const end = Outline.subtreeEnd(lines, taskLineIdx);
+        for (let j = taskLineIdx + 1; j < end; j++) {
             const line = lines[j];
-            if (line.trim() === '') break;
+            if (line.trim() === '') continue;
             const indent = Outline.depthOf(line);
             if (indent <= taskIndent) break;
 

@@ -81,6 +81,35 @@ describe('a note that mixes tabs and spaces', () => {
     });
 });
 
+describe('Outline.subtreeEnd', () => {
+    it('goes past a blank line to a deeper line, and stops before the blank lines after', () => {
+        const lines = ['- [ ] a', '\t- b', '', '\t- c', '', '', '- [ ] d'];
+        expect(Outline.subtreeEnd(lines, 0)).toBe(4);
+    });
+
+    it('is the line after the row when nothing below is deeper', () => {
+        expect(Outline.subtreeEnd(['- [ ] a', '', '- [ ] b'], 0)).toBe(1);
+    });
+
+    it('stops at the limit', () => {
+        expect(Outline.subtreeEnd(['- [ ] a', '\t- b', '\t- c'], 0, 2)).toBe(2);
+    });
+});
+
+describe('a child below a blank line', () => {
+    it('is read as the child of the task above the blank line', () => {
+        const lines = ['- [ ] p', '\t- [ ] a', '', '\t- [ ] b', '\t- key:: value', '', '- [ ] q', ''];
+        const parsed = FileParsePipeline.parse('note.md', [...lines], undefined, DEFAULT_SETTINGS);
+        if (parsed.ignored) throw new Error('ignored');
+        const p = parsed.tasks.find(task => task.content === 'p')!;
+        const b = parsed.tasks.find(task => task.content === 'b')!;
+        expect(b.parentId).toBe(p.id);
+        expect(parsed.tasks.find(task => task.content === 'q')!.parentId).toBeUndefined();
+        // A property line below the blank line is the task's too.
+        expect(p.properties.key?.value).toBe('value');
+    });
+});
+
 /**
  * The lines a write takes for a task's subtree are the lines the parser reads
  * as its children, for every task of every shape here. A write that carried
@@ -94,6 +123,12 @@ describe('the write and the parser agree on every subtree', () => {
         ['spaces of two', ['- [ ] a', '  - [ ] b', '    - c', '  - d', '- [ ] e', '']],
         ['a fence in a child', ['- [ ] a', '\t```', '\t- [ ] x', '\t```', '\t- [ ] b', '- [ ] c', '']],
         ['a non-task parent', ['- note', '\t- [ ] a', '\t\t- [ ] b', '- [ ] c', '']],
+        ['a blank line inside the children', ['- [ ] a', '\t- [ ] b', '', '\t- [ ] c', '\t\tmemo', '- [ ] d', '']],
+        ['blank lines after the children', ['- [ ] a', '\t- [ ] b', '', '', '- [ ] c', '']],
+        ['a blank line inside a grandchild', ['- [ ] a', '\t- [ ] b', '', '\t\t- [ ] c', '\t- [ ] d', '']],
+        ['a child fence with a blank line', ['- [ ] a', '\t```', '\tx', '', '\ty', '\t```', '- [ ] b', '']],
+        ['a blank line and then a shallower line', ['- [ ] a', '\t- [ ] b', '', 'text', '\t- [ ] c', '']],
+        ['a heading after a blank line', ['- [ ] a', '\t- [ ] b', '', '# h', '\t- [ ] c', '']],
     ];
 
     for (const [name, lines] of SHAPES) {

@@ -84,15 +84,17 @@ describe('FileOperations', () => {
         // Characterization: a blank line terminates the subtree even when
         // deeper-indented lines follow. Pinned deliberately — the session-record
         // work may revisit it, so any change must be a conscious one.
-        it('stops at blank line', () => {
+        it('reads past a blank line inside the children, and leaves the ones after them', () => {
             const lines = [
                 '- [ ] parent',
                 '    - [ ] child',
                 '',
-                '    - [ ] not-child',
+                '    - [ ] also a child',
+                '',
+                '- [ ] sibling',
             ];
             const result = ops.collectChildrenFromLines(lines, 0);
-            expect(result.childrenLines).toEqual(['    - [ ] child']);
+            expect(result.childrenLines).toEqual(['    - [ ] child', '', '    - [ ] also a child']);
         });
 
         // Characterization: this is a *range* function — every consumer uses the

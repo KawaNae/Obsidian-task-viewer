@@ -11,36 +11,16 @@ export class FileOperations {
     constructor(private app: App) { }
 
     /**
-     * Helper: Collect children lines from file content starting at taskLine
-     * Returns { childrenLines, taskIndent }
-     * Note: Empty/blank lines are NOT included as children
+     * The lines of the task's subtree below its own line, as the parser reads
+     * them (`Outline.subtreeEnd`): blank lines between them included, the
+     * blank lines after the last of them not. `taskIndent` is the task's depth.
      */
     collectChildrenFromLines(lines: string[], taskLineIndex: number): {
         childrenLines: string[];
         taskIndent: number;
     } {
-        const taskLine = lines[taskLineIndex];
-        const taskIndent = Outline.depthOf(taskLine);
-        const childrenLines: string[] = [];
-
-        let j = taskLineIndex + 1;
-        while (j < lines.length) {
-            const nextLine = lines[j];
-
-            // Skip blank lines - they are NOT children
-            if (nextLine.trim() === '') {
-                break;
-            }
-
-            const nextIndent = Outline.depthOf(nextLine);
-            if (nextIndent > taskIndent) {
-                childrenLines.push(nextLine);
-                j++;
-            } else {
-                break;
-            }
-        }
-
+        const taskIndent = Outline.depthOf(lines[taskLineIndex]);
+        const childrenLines = lines.slice(taskLineIndex + 1, Outline.subtreeEnd(lines, taskLineIndex));
         return { childrenLines, taskIndent };
     }
 
@@ -77,17 +57,13 @@ export class FileOperations {
     }
 
     /**
-     * The indent string of the task's first child, or null when it has none.
-     * Blank lines and anything at or above the task's own depth end the search,
-     * matching {@link collectChildrenFromLines}.
+     * The indent string of the task's first child, or null when it has none:
+     * the first line of its subtree that is not blank.
      */
     static firstChildIndent(lines: string[], taskLineIndex: number): string | null {
-        const taskIndent = Outline.depthOf(lines[taskLineIndex]);
-        for (let j = taskLineIndex + 1; j < lines.length; j++) {
-            const line = lines[j];
-            if (line.trim() === '') break;
-            if (Outline.depthOf(line) <= taskIndent) break;
-            return Outline.indentOf(line);
+        const end = Outline.subtreeEnd(lines, taskLineIndex);
+        for (let j = taskLineIndex + 1; j < end; j++) {
+            if (lines[j].trim() !== '') return Outline.indentOf(lines[j]);
         }
         return null;
     }

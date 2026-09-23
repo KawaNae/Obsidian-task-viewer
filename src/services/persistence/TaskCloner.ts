@@ -134,7 +134,7 @@ export class TaskCloner {
 
         const insertIndex = position === 'before'
             ? taskLine
-            : TaskCloner.indentedRegionEnd(lines, taskLine);
+            : Outline.subtreeEnd(lines, taskLine);
         // Through `edits` rather than beside it: the copy is worded exactly
         // like the line it copies, so a position off by one would read the same
         // and hand the original's identity to the copy. One number does both.
@@ -145,35 +145,6 @@ export class TaskCloner {
         edits.splice(insertIndex, 0, ...linesToInsert);
 
         return lines;
-    }
-
-    /**
-     * The index just past everything indented under the task line.
-     *
-     * The parser ends a task's children at the first blank line, and the
-     * lines after that blank still read as the task's — a second group of
-     * notes, a fenced block with a blank line in it. A copy dropped at the
-     * end of the parsed children would land in the middle of them, and the
-     * fence would be cut in half. So the region runs to the last line deeper
-     * than the task, and the copy goes after that.
-     *
-     * Only the insertion point is measured this way. What a copy carries is
-     * still the children the parser sees, so the copy and the index agree on
-     * what its subtree is.
-     */
-    private static indentedRegionEnd(lines: string[], taskLine: number): number {
-        const taskIndent = Outline.depthOf(lines[taskLine]);
-        let last = taskLine;
-
-        for (let j = taskLine + 1; j < lines.length; j++) {
-            const line = lines[j];
-            // A blank line decides nothing on its own — what follows it does.
-            if (line.trim() === '') continue;
-            if (Outline.depthOf(line) <= taskIndent) break;
-            last = j;
-        }
-
-        return last + 1;
     }
 
     /**
