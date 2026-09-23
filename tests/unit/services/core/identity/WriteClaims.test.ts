@@ -21,11 +21,7 @@ const FILE = 'note.md';
 const parseRows = (path: string, lines: readonly string[]) => {
     const parsed = FileParsePipeline.parse(path, [...lines], undefined, DEFAULT_SETTINGS);
     if (parsed.ignored) return null;
-    return parsed.tasks.map(task => ({
-        line: task.line,
-        text: task.originalText,
-        parserId: task.parserId,
-    }));
+    return parsed.tasks;
 };
 
 /**

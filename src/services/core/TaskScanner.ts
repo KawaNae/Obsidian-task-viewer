@@ -77,11 +77,7 @@ export class TaskScanner {
             // `matchFile`, so a claim ordered some other way would pair its
             // rows with different rows than the scan read — invisibly, where
             // two swapped rows read the same.
-            return parsed.tasks.map(task => ({
-                line: task.line,
-                text: task.originalText,
-                parserId: task.parserId,
-            }));
+            return parsed.tasks;
         },
         // Everything the ledger holds has been read by a scan, so nothing it
         // hands back is a row still waiting to be recorded.

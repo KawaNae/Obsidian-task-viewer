@@ -1,5 +1,7 @@
-import type { ParserId } from '../../../types';
+import type { ParserId, Task } from '../../../types';
 import type { Hint } from './IdentityHints';
+import type { LedgerEntry } from './IdentityLedger';
+import { ledgerRowsOf } from './IdentityMatcher';
 import { replayEdits, type LineEdit, type WriteOrigin } from '../../../utils/FileLines';
 import { contentKeyOf, type ContentKey } from './ContentKey';
 
@@ -17,13 +19,6 @@ export interface ClaimBase {
     created: boolean;
     text: string;
     line: number;
-}
-
-/** A file's task rows, as the parser sees them. */
-export interface ParsedRow {
-    line: number;
-    text: string;
-    parserId: ParserId;
 }
 
 /**
@@ -70,7 +65,7 @@ export interface ClaimResult {
  * {@link WriteClaims.readMark}).
  */
 type Base =
-    | { content: ContentKey; rows: ClaimBase[]; filed: number }
+    | { content: ContentKey; rows: ClaimBase[]; ladder: LedgerEntry[]; filed: number }
     | { content: null; rows: null; filed: number };
 
 /**
@@ -126,7 +121,7 @@ export class WriteClaims {
     private filed = 0;
 
     /**
-     * @param parseRows the file's task rows, in the order a scan matches them,
+     * @param parseRows the file's tasks, in the order a scan matches them,
      *   from the same pipeline a scan uses. Null when the parser refuses to
      *   read the file as tasks at all (`tv-ignore`), which is not the same
      *   answer as a file with no rows in it.
@@ -138,7 +133,7 @@ export class WriteClaims {
      *   issued by the reader would be a different name each time.
      */
     constructor(
-        private readonly parseRows: (path: string, lines: readonly string[]) => ParsedRow[] | null,
+        private readonly parseRows: (path: string, lines: readonly string[]) => Task[] | null,
         private readonly ledgerState: (path: string) => LedgerState,
         private readonly mintRuntimeId: (path: string, parserId: ParserId) => string,
     ) { }
@@ -190,26 +185,32 @@ export class WriteClaims {
 
         const rows: ClaimBase[] = [];
         const made: ClaimResult['made'] = [];
-        for (const row of parsed) {
-            const from = replayed.origin[row.line];
+        const nameOf = new Map<Task, string>();
+        for (const task of parsed) {
+            const from = replayed.origin[task.line];
             // `created` travels with the identity, not with this write: a row
             // the *previous* write made is still one the ledger has never
             // heard of, and the scan that finally reads it has to be told so
             // however many writes it has sat through since.
             const carried = from === null ? undefined : identityOf.get(from);
             if (carried) {
-                rows.push({ runtimeId: carried.runtimeId, created: carried.created, text: row.text, line: row.line });
+                rows.push({ runtimeId: carried.runtimeId, created: carried.created, text: task.originalText, line: task.line });
+                nameOf.set(task, carried.runtimeId);
                 continue;
             }
             // Either the write made this line, or it made a task of a line
             // that was not one — a row with no past either way.
-            const runtimeId = this.mintRuntimeId(path, row.parserId);
-            rows.push({ runtimeId, created: true, text: row.text, line: row.line });
-            made.push({ line: row.line, runtimeId });
+            const runtimeId = this.mintRuntimeId(path, task.parserId);
+            rows.push({ runtimeId, created: true, text: task.originalText, line: task.line });
+            nameOf.set(task, runtimeId);
+            made.push({ line: task.line, runtimeId });
         }
 
         const content = contentKeyOf(after);
-        this.bases.set(path, { content, rows, filed: ++this.filed });
+        // The same rows, read the way a scan would have recorded them, for a
+        // ladder that has to pair against this state.
+        const ladder = ledgerRowsOf(parsed, task => nameOf.get(task)!);
+        this.bases.set(path, { content, rows, ladder, filed: ++this.filed });
         return {
             hint: { content, rows: rows.map(row => ({ runtimeId: row.runtimeId, created: row.created, text: row.text })), origin },
             withdraw,
