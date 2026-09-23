@@ -192,9 +192,11 @@ interface View {
  * another typed where it sat.
  *
  * A pair taken apart takes its children's scope with it: the ladder runs
- * again without its two rows, and the rows below them are paired afresh
- * by the rest of the file. That run is checked the same way, until nothing
- * is taken apart. Rows taken apart only grow, so it ends.
+ * again, and the rows below them are paired afresh by the rest of the
+ * file. Its two rows are still candidates in that run, and take what the
+ * ladder gives them, so no other pair is decided for their being gone;
+ * only their pair is not made. That run is checked the same way, until
+ * nothing is taken apart. Rows taken apart only grow, so it ends.
  */
 function pairByLadder(
     ordered: Task[],
