@@ -221,12 +221,19 @@ function pairByLadder(
     // parent takes the place of). So each scope hands its rung-4 pair back,
     // and once no scope is left to run, a pair is made only where neither
     // side has a stronger candidate among the rows the file has not paired
-    // yet — the ones no scope can reach any more, which the 2nd pass will
-    // match on all the evidence. Rows another handed-back pair holds are not
-    // candidates against it: they have a scope of their own, and counting
-    // them would break two scopes whose rows were rewritten into each other's
-    // words, each blocking the other. A pair made opens its children's scope
-    // and the pass goes on.
+    // yet. Rows another handed-back pair holds are not candidates against
+    // it: they have a scope of their own, and counting them would break two
+    // scopes whose rows were rewritten into each other's words, each blocking
+    // the other. A pair made opens its children's scope and the pass goes on.
+    //
+    // A pair still blocked when nothing more can be decided is a place where
+    // the evidence disagrees: the scope says the two rows are one, the text
+    // elsewhere says one of them is another row. Which is right is not in the
+    // lines — a row cut off from its parent, and a row typed elsewhere in the
+    // words of one a card renamed, read the same. Neither is taken: both rows
+    // of the pair stay out of the 2nd pass, the previous one goes and the
+    // current one is new, and the row whose text pointed at them is left to
+    // what else the 2nd pass finds for it.
     const deferred: Array<{ entry: LedgerEntry; task: Task; among: number | undefined }> = [];
     const run = (): void => {
         while (scopes.length > 0) {
@@ -271,9 +278,15 @@ function pairByLadder(
         run();
     }
 
+    const barred = new Set<LedgerEntry | Task>();
+    for (const { entry, task } of deferred) {
+        barred.add(entry);
+        barred.add(task);
+    }
+
     // --- 2nd pass: the leftovers of the whole file, no scoping ---
-    const poolPrev = partner.filter(entry => !matchedPrev.has(entry.runtimeId));
-    const poolCur = ordered.filter(task => !pairedWith.has(task));
+    const poolPrev = partner.filter(entry => !matchedPrev.has(entry.runtimeId) && !barred.has(entry));
+    const poolCur = ordered.filter(task => !pairedWith.has(task) && !barred.has(task));
     const rescued = runLadder(
         poolPrev.map(entry => ({ item: entry, fingerprint: entry.fingerprint })),
         poolCur.map(task => ({ item: task, fingerprint: fingerprints.get(task)! })),

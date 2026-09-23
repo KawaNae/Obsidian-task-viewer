@@ -8,7 +8,9 @@ import { vaultSession, makeFile, type VaultSession } from '../helpers/vaultSessi
  * an outside edit cut off from its parent took the name of the root a card
  * deleted, and a new parent line took the name of the root it was put over
  * (the F4–F6 comprehensive review's counterexample 2). Rung 4 is now decided
- * only where neither side has a stronger candidate anywhere in the file (I1).
+ * only where neither side has a stronger candidate anywhere in the file; where
+ * the scope and the text elsewhere disagree, neither is taken and both rows
+ * of the pair are new (I1). A name is lost; none goes to the wrong row.
  *
  * The shapes are the review's probes (`DeletedNameReused.probe.test.ts`,
  * `Reparent.probe.test.ts`). The probes held writes and outside edits back
@@ -52,7 +54,7 @@ async function release(session: VaultSession): Promise<void> {
     await session.settle(FILE);
 }
 
-describe('a row that leaves its parent does not take the name of a root that went', () => {
+describe('a row that leaves its parent: the name of a root that went goes to no other row', () => {
     const NOTE = ['# h', '- [x] 消す @2026-09-21', '- [ ] 親 @2026-09-21', '\t- [ ] 子A @2026-09-21', '\t- [ ] 子B @2026-09-21 ==> every mon', ''];
     const SPLIT = ['# h', '- [x] 消す @2026-09-21', '- [ ] 親 @2026-09-21', '\t- [ ] 子A @2026-09-21', 'para', '\t- [ ] 子B @2026-09-21 ==> every mon', ''];
     const AFTER = ['# h', '- [ ] 親 @2026-09-21', '\t- [ ] 子A @2026-09-21', 'para', '\t- [ ] 子B @2026-09-21 ==> every mon', ''];
@@ -71,7 +73,7 @@ describe('a row that leaves its parent does not take the name of a root that wen
         expect(await session.index.deleteTask(deleted)).toBe(true);
         await release(session);
         expect(contents.get(FILE)!.split('\n')).toEqual(AFTER);
-        expect(verdict(session, b, deleted)).toBe('kept');
+        expect(verdict(session, b, deleted)).toBe('new');
     });
 
     it('the same with the outside edit after the delete (a record)', async () => {
@@ -90,20 +92,20 @@ describe('a row that leaves its parent does not take the name of a root that wen
         const deleted = idOf(session, '消す');
         const b = idOf(session, '子B');
         await fromOutside(session, AFTER);
-        expect(verdict(session, b, deleted)).toBe('kept');
+        expect(verdict(session, b, deleted)).toBe('new');
     });
 });
 
-describe('a root that gains a parent from outside keeps its name', () => {
+describe('a root that gains a parent from outside: its name goes to no other row', () => {
     it.each([
-        ['indented root under a heading', ['# h', '\t- [ ] m', '- [ ] t1', ''], ['# h', '- [ ] n', '\t- [ ] m', '- [ ] t1', '']],
-        ['root at depth 0 indented under a new parent', ['# h', '- [ ] m', '- [ ] t1', ''], ['# h', '- [ ] n', '\t- [ ] m', '- [ ] t1', '']],
-        ['child moved to a new parent', ['# h', '- [ ] p', '\t- [ ] m', '- [ ] t1', ''], ['# h', '- [ ] p', '- [ ] n', '\t- [ ] m', '- [ ] t1', '']],
-    ])('%s', async (_name, from, to) => {
+        ['indented root under a heading', ['# h', '\t- [ ] m', '- [ ] t1', ''], ['# h', '- [ ] n', '\t- [ ] m', '- [ ] t1', ''], 'new'],
+        ['root at depth 0 indented under a new parent', ['# h', '- [ ] m', '- [ ] t1', ''], ['# h', '- [ ] n', '\t- [ ] m', '- [ ] t1', ''], 'new'],
+        ['child moved to a new parent', ['# h', '- [ ] p', '\t- [ ] m', '- [ ] t1', ''], ['# h', '- [ ] p', '- [ ] n', '\t- [ ] m', '- [ ] t1', ''], 'kept'],
+    ])('%s', async (_name, from, to, kept) => {
         const session = await open(from);
         const m = idOf(session, 'm');
         await fromOutside(session, to);
-        expect({ m: idOf(session, 'm'), n: idOf(session, 'n') === m ? 'n took m' : 'n new' }).toEqual({ m, n: 'n new' });
+        expect({ m: idOf(session, 'm') === m ? 'kept' : 'new', n: idOf(session, 'n') === m ? 'n took m' : 'n new' }).toEqual({ m: kept, n: 'n new' });
     });
 });
 
