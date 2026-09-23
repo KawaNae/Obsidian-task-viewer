@@ -32,6 +32,8 @@ function buildHost(task: Task, written = true) {
         // The revert lives on the prototype; the host stands in for `this`.
         revertUnwrittenUpdate: proto.revertUnwrittenUpdate,
         adoptWrittenRow: proto.adoptWrittenRow,
+        onRow: proto.onRow,
+        writeUpdate: proto.writeUpdate,
         // The dispose guard every write goes through; this index is open.
         disposed: false,
         refuseAfterDispose: proto.refuseAfterDispose,

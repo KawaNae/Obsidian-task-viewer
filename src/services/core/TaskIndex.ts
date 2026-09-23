@@ -54,6 +54,9 @@ export class TaskIndex {
      */
     private disposed = false;
 
+    /** The writes asked of each row, in order (see {@link onRow}). */
+    private rowWrites?: Map<string, Promise<unknown>>;
+
     // 1 フレーム（16ms）分の通知を 1 回にまとめる。合流規則は NotifyCoalescer 側。
     private readonly notify = new NotifyCoalescer(
         (taskId, changes) => this.store.notifyListeners(taskId, changes),
@@ -428,6 +431,12 @@ export class TaskIndex {
             taskId = segmentInfo.baseId;
         }
 
+        const id = taskId;
+        return this.onRow(id, () => this.writeUpdate(id, updates));
+    }
+
+    /** {@link updateTask}, once every write already asked of the row has finished. */
+    private async writeUpdate(taskId: string, updates: Partial<Task>): Promise<boolean> {
         const task = this.store.getTask(taskId);
         if (!task) {
             logWarn(`[TaskIndex] Task ${taskId} not found`);
@@ -461,7 +470,10 @@ export class TaskIndex {
         // 探索は更新前の姿で行う。ファイルに書かれているのは更新前の行なので、
         // 更新後の日付や時刻で探しに行くと、まさにその値を変える更新のときに
         // 空振りする。第 2 引数が書く内容、第 1 引数がどの行かを決める。
-        const outcome = await this.repository.updateTaskInFile(plannedOn(before), task, propertyOps);
+        // 子のプロパティ行も写しの値から作るので、書き換えるときは部分木も
+        // 計画が読んだものになる。外から足したタグの上に写しのタグを書かない。
+        const outcome = await this.repository.updateTaskInFile(
+            plannedOn(before, { subtree: propertyOps.length > 0 }), task, propertyOps);
 
         if (!outcome.written) {
             this.revertUnwrittenUpdate(task, taskId, before, updates);
@@ -469,6 +481,31 @@ export class TaskIndex {
         }
         this.adoptWrittenRow(task, taskId, before, outcome.rows.get(before.id));
         return true;
+    }
+
+    /**
+     * Run `op` once every write already asked of this row has finished.
+     *
+     * A write that names a row is planned from the index's copy of it
+     * (`plannedOn`), and a card's update brings the copy up to what it wrote
+     * only when its write is back (`adoptWrittenRow`). A second write asked
+     * before then — a checkbox clicked twice, which does not wait for the
+     * first — would plan from the copy the first write has already moved on
+     * from, and be refused against our own write. In order, each is planned
+     * from the copy the one before it left.
+     *
+     * Per row, not per file: a write to another row plans from that row's
+     * copy, which this one does not change.
+     */
+    private onRow<T>(taskId: string, op: () => Promise<T>): Promise<T> {
+        const queue = (this.rowWrites ??= new Map<string, Promise<unknown>>());
+        const previous = queue.get(taskId) ?? Promise.resolve();
+        // After the one before, whether it landed or threw.
+        const next = previous.then(op, op);
+        queue.set(taskId, next);
+        const settled = () => { if (queue.get(taskId) === next) queue.delete(taskId); };
+        next.then(settled, settled);
+        return next;
     }
 
     /**
@@ -559,6 +596,11 @@ export class TaskIndex {
      */
     async deleteTask(taskId: string, options: { fireFlow?: boolean } = {}): Promise<boolean> {
         if (this.refuseAfterDispose('deleteTask')) return false;
+        return this.onRow(taskId, () => this.writeDelete(taskId, options));
+    }
+
+    /** {@link deleteTask}, once every write already asked of the row has finished. */
+    private async writeDelete(taskId: string, options: { fireFlow?: boolean }): Promise<boolean> {
         const task = this.store.getTask(taskId);
         if (!task) return false;
         return this.withNotify(task.file, async () => {
@@ -588,8 +630,15 @@ export class TaskIndex {
     /** @returns whether the copy was written. */
     async duplicateTask(taskId: string, options?: DuplicateOptions): Promise<boolean> {
         if (this.refuseAfterDispose('duplicateTask')) return false;
-        const task = this.store.getTask(taskId);
-        if (!task) return false;
+        return this.onRow(taskId, async () => {
+            const task = this.store.getTask(taskId);
+            if (!task) return false;
+            return this.writeDuplicateOf(task, taskId, options);
+        });
+    }
+
+    /** {@link duplicateTask} on the copy the store holds once the row's earlier writes are done. */
+    private async writeDuplicateOf(task: Task, taskId: string, options?: DuplicateOptions): Promise<boolean> {
         return this.withNotify(task.file, async () => {
             if (task.isReadOnly) return false;
 

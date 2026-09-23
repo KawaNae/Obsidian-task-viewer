@@ -8,7 +8,8 @@ import { Outline } from '../parsing/utils/Outline';
  * made only if the file still reads that way (see {@link readsAsPlanned}).
  *
  * Only what the plan read is here. A card's update makes the row's line from
- * the index's copy of it; a fire reads the command lines and the generation
+ * the index's copy of it, and its property lines too when it rewrites them
+ * (a tag list is written whole from the copy's); a fire reads the command lines and the generation
  * blocks as well; an operation that takes the row away, or carries it, takes
  * its subtree with it, so it has read the subtree too. What a plan did not
  * read, an edit made since cannot make wrong, and is not checked.

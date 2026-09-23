@@ -128,3 +128,70 @@ describe('a subtree the update did not plan from is not taken into the copy', ()
         expect(contents.get(FILE)).toBe(afterUpdate);
     });
 });
+
+describe('writes asked of one row before the one before them is back', () => {
+    // Found by the F5 counterexample run's second pass. A card's checkbox does
+    // not wait for its update, so two clicks can ask two writes of one row
+    // before the first is written. Planned from the copy as it stood when each
+    // was asked, the second would be refused against the first — and the
+    // user's last click lost. Each is planned once the one before it is back.
+
+    it('lands a check and an uncheck asked back to back, in that order', async () => {
+        const { contents, session } = await open(['# note', '- [ ] A @2026-09-21', '']);
+        const id = idOf(session, 'A');
+
+        const written = await Promise.all([
+            session.index.updateTask(id, { statusChar: 'x' }),
+            session.index.updateTask(id, { statusChar: ' ' }),
+        ]);
+
+        expect(written).toEqual([true, true]);
+        expect(contents.get(FILE)).toBe(['# note', '- [ ] A @2026-09-21', ''].join('\n'));
+        expect(Notice.messages).toEqual([]);
+    });
+
+    it('lands a rename and a check asked back to back, and a delete asked after them', async () => {
+        const { contents, session } = await open(['# note', '- [ ] A @2026-09-21', '- [ ] Z', '']);
+        const id = idOf(session, 'A');
+        session.index.setDraggingFile(FILE);
+
+        const done = await Promise.all([
+            session.index.updateTask(id, { content: 'A2' }),
+            session.index.updateTask(id, { statusChar: 'x' }),
+        ]);
+        expect(done).toEqual([true, true]);
+        expect(contents.get(FILE)).toBe(['# note', '- [x] A2 @2026-09-21', '- [ ] Z', ''].join('\n'));
+
+        expect(await session.index.deleteTask(id)).toBe(true);
+        expect(contents.get(FILE)).toBe(['# note', '- [ ] Z', ''].join('\n'));
+        expect(Notice.messages).toEqual([]);
+    });
+});
+
+describe('an update that rewrites property lines plans from them', () => {
+    // Found by the F5 counterexample run's second pass, older than F5. A tag
+    // list is written whole from the copy's, so a tag added from outside since
+    // the scan would be written over. The update's basis takes in the subtree
+    // when it rewrites property lines, and the write is refused instead.
+
+    it('refuses a tag update over a tag added from outside', async () => {
+        const { contents, session } = await open(['# note', '- [ ] A @2026-09-21', '\t- tags:: #a', '']);
+        const id = idOf(session, 'A');
+        const task = session.index.getTask(id)!;
+        session.index.setDraggingFile(FILE);
+        const edited = ['# note', '- [ ] A @2026-09-21', '\t- tags:: #a #b', ''].join('\n');
+        contents.set(FILE, edited);
+
+        expect(await session.index.updateTask(id, { tags: [...task.tags, 'c'] })).toBe(false);
+        expect(contents.get(FILE)).toBe(edited);
+    });
+
+    it('still writes a tag update over the lines as they were read', async () => {
+        const { contents, session } = await open(['# note', '- [ ] A @2026-09-21', '\t- tags:: #a', '']);
+        const id = idOf(session, 'A');
+        const task = session.index.getTask(id)!;
+
+        expect(await session.index.updateTask(id, { tags: [...task.tags, 'c'] })).toBe(true);
+        expect(contents.get(FILE)).toContain('#c');
+    });
+});
