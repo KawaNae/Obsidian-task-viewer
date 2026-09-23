@@ -363,6 +363,47 @@ describe('WriteClaims: a write that did not land', () => {
         );
         expect(retry.hint!.rows.map(row => row.runtimeId)).toEqual(['w1', 'r1', 'w3']);
     });
+
+    it('does not paper over a later mark with the state from before it (F5b)', () => {
+        const claims = claimsWith([known('r1', 0, '- [ ] 甲')]);
+
+        const failed = claims.claim(FILE, ['- [ ] 甲'], ['- [ ] 甲', '- [ ] 乙'], [inserted(1, 1)]);
+        // A second write in flight was handed the file as it is on disk —
+        // without the first write, which is about to fail — and could not
+        // build on anything.
+        const second = claims.claim(FILE, ['- [ ] 甲'], ['- [ ] 丙', '- [ ] 甲'], [inserted(0, 1)]);
+        expect(second.hint).toBeNull();
+        failed.withdraw();
+
+        // The mark stays: the ledger is still older than a write nobody
+        // described, and the file does not read as the ledger says.
+        expect(claims.lastWrite(FILE)).toEqual({ rows: null });
+        expect(claims.stateFor(FILE, ['- [ ] 丙', '- [ ] 甲'])).toBeNull();
+    });
+
+    it('keeps a write that a later write was built on, whatever its caller was told (F5b)', () => {
+        const claims = claimsWith([known('r1', 0, '- [ ] 甲')]);
+
+        const first = claims.claim(FILE, ['- [ ] 甲'], ['- [ ] 甲', '- [ ] 乙'], [inserted(1, 1)]);
+        const second = claims.claim(FILE, ['- [ ] 甲', '- [ ] 乙'], ['- [ ] 甲', '- [ ] 乙', '- [ ] 丙'], [inserted(2, 1)]);
+        expect(second.hint!.rows.map(row => row.runtimeId)).toEqual(['r1', 'w1', 'w2']);
+        first.withdraw();
+
+        // The second write fitted the file only because the first one's
+        // content was there. What it left is still what the file reads.
+        expect(claims.stateFor(FILE, ['- [ ] 甲', '- [ ] 乙', '- [ ] 丙'])?.map(row => row.runtimeId))
+            .toEqual(['r1', 'w1', 'w2']);
+    });
+
+    it('gives the previous state its rows back when the newest is taken back (F5b)', () => {
+        const claims = claimsWith([known('r1', 0, '- [ ] 甲')]);
+
+        claims.claim(FILE, ['- [ ] 甲'], ['- [ ] 甲', '- [ ] 乙'], [inserted(1, 1)]);
+        const second = claims.claim(FILE, ['- [ ] 甲', '- [ ] 乙'], ['- [ ] 甲', '- [ ] 乙', '- [ ] 丙'], [inserted(2, 1)]);
+        second.withdraw();
+
+        expect(claims.lastWrite(FILE)?.rows?.map(row => row.runtimeId)).toEqual(['r1', 'w1']);
+    });
 });
 
 describe('WriteClaims: the limit of a report', () => {

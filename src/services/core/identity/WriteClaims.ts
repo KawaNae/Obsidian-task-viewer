@@ -53,27 +53,64 @@ export interface ClaimResult {
 }
 
 /**
- * What this file's last write left for the next one.
+ * How many writes one file's chain may hold (see {@link Chain}).
  *
- * Either the file as that write left it — the key of its content, and the rows
- * in it, because the content is what decides whether the rows may be used at
- * all (see {@link WriteClaims.stateFor}) — or a refusal: a write landed that
- * this class could not describe, so nothing it holds is true of the file any
- * more, and nothing older is either.
+ * Far past anything a file sees between two scans: every write is followed by
+ * the scan its own `modify` starts, and only a file whose scans are held off
+ * (a drag) gathers more than one or two. What this exists for is a file no
+ * scan reaches again, which must not grow without bound. A link past the
+ * newest described one is a key and a number, so the cap costs well under a
+ * hundred bytes a link.
+ */
+export const MAX_CHAIN_PER_FILE = 1024;
+
+/**
+ * One write of ours to a file that the ledger has not read, as it landed.
+ *
+ * Either described — the key of the content the write left, and, for the
+ * newest described link only, the rows in it (`state`) — or a mark: a write
+ * landed that this class could not describe, so nothing it holds is true of
+ * the file any more, and nothing older is either.
  *
  * `filed` numbers the writes in the order they landed (see
  * {@link WriteClaims.readMark}).
  */
-type Base =
-    | { content: ContentKey; rows: ClaimBase[]; ladder: LedgerEntry[]; filed: number }
-    | { content: null; rows: null; filed: number };
+type Link =
+    | { filed: number; content: ContentKey; state: LinkState | null }
+    | { filed: number; content: null };
+
+interface LinkState {
+    /** The rows, as the next write builds on them and `locate` reads them. */
+    rows: ClaimBase[];
+    /** The same rows, as a ladder reads its previous side. */
+    ladder: LedgerEntry[];
+}
 
 /**
- * A write changed the file and could not say how.
+ * Every write of ours to one file that the ledger has not read, in the order
+ * they landed.
  *
- * What matters is that the entry is there.
+ * Not only the last: the question a scan will put to this chain — is what I
+ * read some state our own writes left, or a change that came after the last
+ * of them — takes every state, because a read can land between two writes.
+ * Only the newest described state keeps its rows. The older ones are only
+ * ever compared, by key.
  */
-const SILENT = (filed: number): Base => ({ content: null, rows: null, filed });
+interface Chain {
+    links: Link[];
+    /**
+     * A scan committed without having read these writes: it read the file
+     * before they landed, and committed after. Its ledger is older than them,
+     * and {@link WriteClaims.stateFor} builds on neither.
+     */
+    carried: boolean;
+    /**
+     * The newest `filed` among the links the cap dropped, or 0. While a scan
+     * that read after it has not committed, the chain cannot say it knows
+     * every state the file was in.
+     */
+    lost: number;
+}
 
 /**
  * Turns a write's report of what it did to the lines into a claim about what
@@ -95,27 +132,20 @@ const SILENT = (filed: number): Base => ({ content: null, rows: null, filed });
  */
 export class WriteClaims {
     /**
-     * Per file, the rows the last reported write left behind.
+     * Per file, the writes of ours the ledger has not read.
      *
-     * This is what lets a second write claim anything when no scan has run in
-     * between — the ledger still holds the state before the first write, and
-     * the second write's file does not match it. It lives only until the next
-     * scan of that file commits: after that the ledger is the authority, and a
-     * base kept across a scan that answered some other way (the ladder, when a
-     * claim went unadopted) would carry identities the ledger does not agree
-     * with. The texts would still line up, so nothing downstream would catch
-     * it.
+     * The newest described one is what lets a second write claim anything when
+     * no scan has run in between — the ledger still holds the state before the
+     * first write, and the second write's file does not match it. That use
+     * lasts only until the next scan of the file commits: after that the
+     * ledger is the authority, and a state kept across a scan that answered
+     * some other way (the ladder, when a claim went unadopted) would carry
+     * identities the ledger does not agree with. The texts would still line
+     * up, so nothing downstream would catch it. What a committing scan did not
+     * read is kept all the same, marked `carried`, to say the ledger is older
+     * than it (see {@link forget}).
      */
-    private readonly bases = new Map<string, Base>();
-
-    /**
-     * What the last write left, for a file whose last scan committed without
-     * having read it: the scan read the file before the write landed, and
-     * committed after. {@link stateFor} does not build on it, for the reason
-     * above. It is kept for one thing only: to say that the ledger is older
-     * than a write of ours, and what that write left (see {@link lastWrite}).
-     */
-    private readonly outrun = new Map<string, Base>();
+    private readonly chains = new Map<string, Chain>();
 
     /** How many writes have filed here, described or not. */
     private filed = 0;
@@ -153,17 +183,13 @@ export class WriteClaims {
         edits: readonly LineEdit[] | null,
         origin: WriteOrigin,
     ): ClaimResult {
-        const withdraw = this.rollback(path);
         // Every way out of here without a claim is the same situation: this
         // write changed the file — `processLines` calls a sink for nothing
-        // else — and nothing here can say what the file now is. Dropping the
-        // base would say the opposite, that the ledger may be read again, and
-        // the ledger is older still. So the file is marked silent instead, and
-        // stays silent until a scan of it commits.
-        const nothing = (): ClaimResult => {
-            this.bases.set(path, SILENT(++this.filed));
-            return { hint: null, withdraw, made: [] };
-        };
+        // else — and nothing here can say what the file now is. Leaving no
+        // link would say the opposite, that the state before it may be built
+        // on again, and that state is older now. So the file is marked
+        // instead, and stays marked until a scan of it commits.
+        const nothing = (): ClaimResult => ({ hint: null, withdraw: this.silence(path), made: [] });
 
         if (edits === null) return nothing();
 
@@ -210,7 +236,7 @@ export class WriteClaims {
         // The same rows, read the way a scan would have recorded them, for a
         // ladder that has to pair against this state.
         const ladder = ledgerRowsOf(parsed, task => nameOf.get(task)!);
-        this.bases.set(path, { content, rows, ladder, filed: ++this.filed });
+        const withdraw = this.append(path, { filed: ++this.filed, content, state: { rows, ladder } });
         return {
             hint: { content, rows: rows.map(row => ({ runtimeId: row.runtimeId, created: row.created, text: row.text })), origin },
             withdraw,
@@ -224,29 +250,65 @@ export class WriteClaims {
      * that cannot say leaves, and taken back the same way.
      */
     silence(path: string): () => void {
-        const withdraw = this.rollback(path);
-        this.bases.set(path, SILENT(++this.filed));
-        return withdraw;
+        return this.append(path, { filed: ++this.filed, content: null });
     }
 
     /**
-     * Put this file's base back the way it is at this moment.
+     * Add a write to the file's chain, and answer the handle that takes it
+     * back.
      *
-     * Taken before the call changes anything, so one handle covers every way
-     * out of {@link claim} — the claim that was filed, the mark a refusal left.
+     * Taking it back removes this link and nothing else. The chain may have
+     * grown since — two writes to one file can be in flight at once — and what
+     * a later write left is still true: a later mark still says the file was
+     * changed in a way nobody described, and putting back the state from
+     * before this call would paper over it with a state older than the file.
      *
-     * "The way it is at this moment", not "the way the file is": two writes to
-     * one file can be in flight at once, and the later one to fail puts back a
-     * state older than the one on disk. What keeps that harmless is that a base
-     * is only ever used on a file that still reads, line for line, as the base
-     * says — an older base simply goes unused.
+     * Two things follow. A described link a later described link was built on
+     * stays: that one fitted the file only because this write's content was
+     * there, so this write landed whatever its caller was told. And a link
+     * that is removed gives the previous described link back the rows it
+     * handed on to it.
      */
-    private rollback(path: string): () => void {
-        const previous = this.bases.get(path);
+    private append(path: string, link: Link): () => void {
+        const chain = this.chains.get(path) ?? { links: [], carried: false, lost: 0 };
+        this.chains.set(path, chain);
+
+        // Only the newest described link keeps its rows.
+        let stripped: { link: Link & { content: ContentKey }; state: LinkState } | null = null;
+        if (link.content !== null) {
+            const previous = newestDescribed(chain.links);
+            if (previous?.state) {
+                stripped = { link: previous, state: previous.state };
+                previous.state = null;
+            }
+        }
+        chain.links.push(link);
+        this.cap(chain);
+
         return () => {
-            if (previous) this.bases.set(path, previous);
-            else this.bases.delete(path);
+            const current = this.chains.get(path);
+            if (current !== chain) return;
+            const at = chain.links.indexOf(link);
+            if (at < 0) return;
+            const next = chain.links[at + 1];
+            if (next && next.content !== null) return;
+            chain.links.splice(at, 1);
+            if (stripped && chain.links.includes(stripped.link) && newestDescribed(chain.links) === stripped.link) {
+                stripped.link.state = stripped.state;
+            }
+            if (chain.links.length === 0) this.chains.delete(path);
         };
+    }
+
+    /**
+     * Keep the chain under {@link MAX_CHAIN_PER_FILE}, oldest links first, and
+     * remember how far the loss reaches.
+     */
+    private cap(chain: Chain): void {
+        const excess = chain.links.length - MAX_CHAIN_PER_FILE;
+        if (excess <= 0) return;
+        const dropped = chain.links.splice(0, excess);
+        chain.lost = Math.max(chain.lost, dropped[dropped.length - 1].filed);
     }
 
     /**
@@ -255,13 +317,14 @@ export class WriteClaims {
      * of ours to the file has been read by a scan that committed — the only
      * case where the ledger is not known to be older than one of them.
      *
-     * Not the same as the base {@link stateFor} builds on: that one is dropped
-     * by any scan that commits, this one only by a scan that read the file
-     * after the write (see {@link forget}).
+     * Not the same as the base {@link stateFor} builds on: that one is not
+     * built on past any scan that commits, this one is dropped only by a scan
+     * that read the file after the write (see {@link forget}).
      */
     lastWrite(path: string): { rows: readonly ClaimBase[] | null } | undefined {
-        const base = this.bases.get(path) ?? this.outrun.get(path);
-        return base && { rows: base.rows };
+        const newest = this.chains.get(path)?.links.at(-1);
+        if (!newest) return undefined;
+        return { rows: newest.content === null ? null : newest.state?.rows ?? null };
     }
 
     /**
@@ -273,19 +336,28 @@ export class WriteClaims {
     }
 
     /**
-     * Forget what this file's last write left.
+     * Forget what this file's writes left.
      *
      * Called when a scan of the file commits, whatever it decided, and when the
      * file's claims are dropped for good (a rename, a delete, `tv-ignore`). A
      * committing scan passes the mark it took before reading: a write filed
      * after that mark is one the ledger it commits may not have seen, and is
-     * kept for {@link lastWrite} though never built on again.
+     * kept, though never built on again (see {@link lastWrite}).
      */
     forget(path: string, readMark?: number): void {
-        const newest = this.bases.get(path) ?? this.outrun.get(path);
-        this.bases.delete(path);
-        if (readMark !== undefined && newest && newest.filed > readMark) this.outrun.set(path, newest);
-        else this.outrun.delete(path);
+        const chain = this.chains.get(path);
+        if (!chain) return;
+        if (readMark === undefined) {
+            this.chains.delete(path);
+            return;
+        }
+        chain.links = chain.links.filter(link => link.filed > readMark);
+        if (chain.links.length === 0) {
+            this.chains.delete(path);
+            return;
+        }
+        chain.carried = true;
+        if (chain.lost <= readMark) chain.lost = 0;
     }
 
     /**
@@ -317,32 +389,33 @@ export class WriteClaims {
      * `ContentKey`). Two contents sharing a key would also have to put every
      * row's text on the row's line before a claim were built on the wrong one.
      *
-     * An entry that is there at all stops the search rather than falling
-     * through, whether or not it still fits. Its presence says a write of ours
-     * landed after the last scan committed, so the ledger describes a file at
-     * least two writes old — and stale in the direction that matters: the rows
-     * it holds sit at the line numbers the file had *before* our own write
-     * moved them. That is why a refusal leaves {@link SILENT} behind instead of
-     * removing the entry: the answer has to stay "nothing" for every write
-     * until a scan commits, not just for the one that noticed.
+     * A chain that is there at all stops the search rather than falling
+     * through, whether or not its newest link still fits. Its presence says a
+     * write of ours landed after the last scan committed, so the ledger
+     * describes a file at least two writes old — and stale in the direction
+     * that matters: the rows it holds sit at the line numbers the file had
+     * *before* our own write moved them. That is why a refusal leaves a mark
+     * behind instead of no link: the answer has to stay "nothing" for every
+     * write until a scan commits, not just for the one that noticed.
      *
-     * *No* entry is not a promise that the ledger is current: {@link forget}
-     * runs on every commit, whatever the scan read. A scan that read the file
-     * as it was before our last write, and committed after that write filed,
-     * takes the base with it and leaves the next write a ledger one write old.
-     * Handed a copy inserted above its original, that ledger's row names the
-     * copy — the text there is the same word, so its rows still fit. What
-     * refuses it is its content: the ledger recorded the file before the copy,
-     * and the file this write was handed has it. Checked by rows alone, the
-     * copy would be claimed as the original with every text lining up, and a
-     * scan comparing whole contents would adopt it.
+     * *No* chain is not a promise that the ledger is current: {@link forget}
+     * drops what a committing scan read, whatever the ledger it commits.
+     * Before scans handed over the mark they took before reading, a scan that
+     * read the file as it was before our last write, and committed after that
+     * write filed, took the base with it and left the next write a ledger one
+     * write old. Handed a copy inserted above its original, that ledger's row
+     * names the copy — the text there is the same word, so its rows still
+     * fit. What refuses it is its content: the ledger recorded the file before
+     * the copy, and the file this write was handed has it. Checked by rows
+     * alone, the copy would be claimed as the original with every text lining
+     * up, and a scan comparing whole contents would adopt it.
      *
      * The content does not refuse everything, though: our writes, and what
      * came after them, can bring the file back to the very content that ledger
      * recorded, with the names moved between its lines (delete X, append a
-     * row, rename Y to X's text). So a commit hands {@link forget} the mark
-     * the scan took before reading, and while a write filed after it is kept
-     * (`outrun`), the ledger is not answered with at all.
+     * row, rename Y to X's text). So a commit keeps what the scan did not read
+     * (`carried`), and while it is kept, the ledger is not answered with at
+     * all.
      *
      * A file no scan has committed has no ledger content, and no rows either —
      * the start-up scan skips a note with no list items, so this is every such
@@ -353,16 +426,18 @@ export class WriteClaims {
     stateFor(path: string, before: readonly string[]): ClaimBase[] | null {
         const current = contentKeyOf(before);
 
-        const base = this.bases.get(path);
-        if (base) {
-            return base.content === current && fits(base.rows, before) ? base.rows : null;
+        const chain = this.chains.get(path);
+        if (chain) {
+            // A scan committed without having read a write of ours: its ledger
+            // is older than that write however well the content fits. The
+            // write and what came after it can bring the file back to the very
+            // content the ledger recorded, with the names moved between its
+            // lines.
+            if (chain.carried) return null;
+            const newest = chain.links.at(-1)!;
+            if (newest.content === null || !newest.state) return null;
+            return newest.content === current && fits(newest.state.rows, before) ? newest.state.rows : null;
         }
-
-        // A scan committed without having read a write of ours: its ledger is
-        // older than that write however well the content fits. The write and
-        // what came after it can bring the file back to the very content the
-        // ledger recorded, with the names moved between its lines.
-        if (this.outrun.has(path)) return null;
 
         const ledger = this.ledgerState(path);
         if (ledger.content === null) return ledger.rows.length === 0 ? [] : null;
@@ -370,6 +445,15 @@ export class WriteClaims {
 
         return null;
     }
+}
+
+/** The newest link of the chain that describes what it left, if any. */
+function newestDescribed(links: readonly Link[]): (Link & { content: ContentKey }) | undefined {
+    for (let i = links.length - 1; i >= 0; i--) {
+        const link = links[i];
+        if (link.content !== null) return link;
+    }
+    return undefined;
 }
 
 /** Whether each row still reads its own text on its own line. */
