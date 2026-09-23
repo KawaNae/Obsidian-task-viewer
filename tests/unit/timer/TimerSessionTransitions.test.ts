@@ -46,7 +46,7 @@ function build() {
             return results.record;
         },
         createChildAtStart: async () => { calls.createChildAtStart++; calls.order.push('placeholder'); return 'tv-inline:notes/a.md:ln:4'; },
-        startNextSession: async () => { calls.startNextSession++; calls.order.push('nextSession'); return 'tv-inline:notes/a.md:ln:5'; },
+        startNextSession: async () => { calls.startNextSession++; calls.order.push('nextSession'); return { written: true, sessionTaskId: 'tv-inline:notes/a.md:ln:5' }; },
         discardRunningPlaceholder: async () => { calls.discardRunningPlaceholder++; calls.order.push('discard'); },
     };
 
@@ -303,8 +303,8 @@ describe('the session cycle', () => {
 
         await h.lifecycle.suspendTimer(timer);
         h.lifecycle.resumeSession(timer);
-        await Promise.resolve();
-        await Promise.resolve();
+        // 再開の往復が済むまで、ほかの出口は受け付けない（TimerLifecycle.busy）。
+        await new Promise(r => setTimeout(r, 0));
         await h.lifecycle.finishTimer(timer);
 
         // 1 セッション = 1 レコード。開始で行を書き、終いに記録する、が 2 周。

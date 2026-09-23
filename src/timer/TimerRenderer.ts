@@ -497,7 +497,10 @@ export class TimerRenderer {
         const neverStarted = !timer.isRunning
             && timer.runState === 'running'
             && timer.sessionCount === 0
-            && timer.elapsedTime === 0;
+            && timer.elapsedTime === 0
+            // 1 秒未満で止めて記録を書けなかった走行は、経過が 0 でも未開始ではない。
+            // 「開始」を出すと、止めた時刻を持ったまま次の走行が始まる。
+            && timer.stoppedAtMs === undefined;
 
         if (neverStarted) {
             this.addWidgetButton(container, 'primary', 'play', t('timer.start'), () => {
@@ -589,10 +592,14 @@ export class TimerRenderer {
         // 区間中（work / break）で走っていない状態。UI 操作では作れない
         // （一時停止は必ず prepare に入る）が、停止の記録待ちのまま Obsidian が
         // 落ちると localStorage にこの形が残り、復元でここに来る。操作列が無いと
-        // 記録も終了もできなくなるので、prepare と同じ 2 つを出す。
-        this.addWidgetButton(container, 'primary', 'play', t('timer.resume'), () => {
-            this.lifecycle.resumeTimer(timer);
-        });
+        // 記録も終了もできなくなるので、prepare と同じ 2 つを出す。自動終了の
+        // 記録を書けずに残った走行は、続ける区間が無いので ■ だけにする。再開すると
+        // 次の tick ですぐ満了し、押した時刻で終わる記録になる。
+        if (timer.segmentTimeRemaining > 0) {
+            this.addWidgetButton(container, 'primary', 'play', t('timer.resume'), () => {
+                this.lifecycle.resumeTimer(timer);
+            });
+        }
         this.addWidgetButton(container, 'secondary', 'square', t('timer.stop'), () => {
             void this.lifecycle.stopIntervalTimer(timer);
         });
