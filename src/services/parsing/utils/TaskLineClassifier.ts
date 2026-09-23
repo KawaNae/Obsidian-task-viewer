@@ -1,5 +1,5 @@
 import { IN_LINE } from '../../../utils/LineBreak';
-import { LIST_BULLET_SOURCE } from './ListMarker';
+import { LIST_BULLET_SOURCE, STATUS_CHAR_SOURCE } from './ListMarker';
 import { INDENT_SOURCE, Outline } from './Outline';
 
 /**
@@ -33,7 +33,7 @@ export interface TaskLineMatch {
  * Supports `-`, `*`, `+`, and ordered list markers (`1.`, `1)`).
  */
 export class TaskLineClassifier {
-    private static readonly TASK_LINE_REGEX = new RegExp(`^(${TASK_LEAD_SOURCE})(${LIST_BULLET_SOURCE} *\\[)(${IN_LINE})(\\]${IN_LINE}*)$`);
+    private static readonly TASK_LINE_REGEX = new RegExp(`^(${TASK_LEAD_SOURCE})(${LIST_BULLET_SOURCE} *\\[)(${STATUS_CHAR_SOURCE})(\\]${IN_LINE}*)$`);
     private static readonly MARKER_REGEX = new RegExp(`^${TASK_LEAD_SOURCE}(${LIST_BULLET_SOURCE})`);
     private static readonly BLOCK_ID_REGEX = /\s\^([A-Za-z0-9-]+)\s*$/;
 

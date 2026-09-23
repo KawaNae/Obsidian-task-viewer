@@ -102,6 +102,20 @@ describe('line breaks, as Obsidian ends a line', () => {
         }
     });
 
+    it('takes any status but U+2028 and U+2029, which are no task to Obsidian', () => {
+        // Dev, Obsidian 1.12.4: `listItems`, Live Preview and the reading view
+        // agree (`.plan/stages/l1-lines/device-1.md`).
+        for (const sep of [LS, PS]) {
+            expect(TaskLineClassifier.isTaskLine(`- [${sep}] a`)).toBe(false);
+            expect(ChildLineClassifier.CHECKBOX_CHAR.test(`\t- [${sep}] a`)).toBe(false);
+            expect(parse(`- [ ] p\n\t- [${sep}] c\n`).contents).toEqual(['p']);
+        }
+        for (const status of ['\t', NBSP, IDEOGRAPHIC, BOM, String.fromCharCode(0x200b)]) {
+            expect(TaskLineClassifier.classify(`- [${status}] a`)?.statusChar).toBe(status);
+            expect(ChildLineClassifier.CHECKBOX_CHAR.exec(`\t- [${status}] a`)?.[1]).toBe(status);
+        }
+    });
+
     it('reads a CR on its own as the end of the line', () => {
         // Obsidian draws two lines and reads the first as the checkbox.
         const read = parse('- [ ] before\rafter\n');
