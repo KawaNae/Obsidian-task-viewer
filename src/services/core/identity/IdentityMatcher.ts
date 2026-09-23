@@ -325,6 +325,62 @@ function pairByLadder(
     }
     for (const [entry, among] of rescued.byPosition) guessed.set(entry.runtimeId, among);
 
+    // --- the place a row left, against its text ---
+    // A pair made on the text (rung 2) or on the content and dates (rung 3)
+    // is not taken where the row's place disagrees: a row of the previous
+    // side's words under another indentation sits where that row sat (right
+    // after the row its predecessor became), and the paired row does not. An
+    // indent changed by hand and a row typed elsewhere in the old words read
+    // the same as the row moved away and one typed in its place with another
+    // indentation; which is right is not in the lines. As at rung 4, neither
+    // is taken: the previous name goes and both rows are new.
+    const previousOrder = [...partner].sort((a, b) => a.line - b.line);
+    const entryBefore = new Map<LedgerEntry, LedgerEntry | null>(
+        previousOrder.map((entry, index) => [entry, index > 0 ? previousOrder[index - 1] : null]));
+    const taskBefore = new Map<Task, Task | null>(
+        ordered.map((task, index) => [task, index > 0 ? ordered[index - 1] : null]));
+    const unindented = (fingerprint: Fingerprint): string =>
+        JSON.stringify([fingerprint.parserId, fingerprint.originalText.trimStart()]);
+    const tasksUnindented = new Map<string, Task[]>();
+    for (const task of ordered) {
+        const key = unindented(fingerprints.get(task)!);
+        const list = tasksUnindented.get(key);
+        if (list) list.push(task);
+        else tasksUnindented.set(key, [task]);
+    }
+    const heldByItsWords = (task: Task): boolean => {
+        const entry = pairedWith.get(task);
+        if (!entry) return false;
+        const fingerprint = fingerprints.get(task)!;
+        const byId = blockIdKey(fingerprint);
+        return (byId !== null && byId === blockIdKey(entry.fingerprint))
+            || originalTextKey(fingerprint) === originalTextKey(entry.fingerprint);
+    };
+    const displaced: Task[] = [];
+    for (const [task, entry] of pairedWith) {
+        const fingerprint = fingerprints.get(task)!;
+        const byId = blockIdKey(fingerprint);
+        if (byId !== null && byId === blockIdKey(entry.fingerprint)) continue;
+        if (originalTextKey(fingerprint) !== originalTextKey(entry.fingerprint)
+            && contentDateKey(fingerprint) !== contentDateKey(entry.fingerprint)) continue;
+        const sitsWhereEntrySat = (row: Task): boolean => {
+            const before = taskBefore.get(row) ?? null;
+            const entryWasAfter = entryBefore.get(entry) ?? null;
+            return entryWasAfter === null ? before === null : before !== null && pairedWith.get(before) === entryWasAfter;
+        };
+        if (sitsWhereEntrySat(task)) continue;
+        const left = (tasksUnindented.get(unindented(entry.fingerprint)) ?? []).some(other =>
+            other !== task
+            && fingerprints.get(other)!.originalText !== entry.fingerprint.originalText
+            && !heldByItsWords(other)
+            && sitsWhereEntrySat(other));
+        if (left) displaced.push(task);
+    }
+    for (const task of displaced) {
+        guessed.delete(pairedWith.get(task)!.runtimeId);
+        pairedWith.delete(task);
+    }
+
     const names = new Map<Task, string>();
     for (const [task, entry] of pairedWith) names.set(task, entry.runtimeId);
     return { names, guessed };
