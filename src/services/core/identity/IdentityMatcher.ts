@@ -176,27 +176,50 @@ export function matchFile(
         mapping.set(task.id, runtimeIdOf.get(task)!);
     }
 
-    const ordinals = buildOrdinals(roots, childrenOf);
-    const entries: LedgerEntry[] = ordered.map(task => {
-        const parent = parentOf.get(task);
-        return {
-            runtimeId: runtimeIdOf.get(task)!,
-            file: task.file,
-            parent: parent ? runtimeIdOf.get(parent)! : null,
-            ordinal: ordinals.get(task) ?? 0,
-            line: task.line,
-            fingerprint: fingerprints.get(task)!,
-        };
-    });
-
     return {
         mapping,
-        entries,
+        entries: rowsOfTree(ordered, { parentOf, roots, childrenOf }, task => runtimeIdOf.get(task)!, task => fingerprints.get(task)!),
         minted,
         retired: [...hinted.retired, ...rescued.prevLeft.map(entry => entry.runtimeId)],
         consumedHints,
         guessed,
     };
+}
+
+/**
+ * A file's rows as the ladder reads its previous side: each task under the
+ * name it is given, with its parent, its ordinal and its fingerprint, in file
+ * order.
+ *
+ * The one definition of that shape. A scan builds the ledger with it, and a
+ * write builds the record of what it left with it (`WriteClaims`), so the two
+ * cannot read the same lines into different previous sides — a ladder paired
+ * against a write's record has to see exactly what it would have seen had a
+ * scan read those lines.
+ */
+export function ledgerRowsOf(tasks: Task[], runtimeIdOf: (task: Task) => string): LedgerEntry[] {
+    const ordered = [...tasks].sort((a, b) => a.line - b.line);
+    return rowsOfTree(ordered, buildCurrentTree(tasks, ordered), runtimeIdOf, fingerprintOf);
+}
+
+function rowsOfTree(
+    ordered: Task[],
+    tree: ReturnType<typeof buildCurrentTree>,
+    runtimeIdOf: (task: Task) => string,
+    fingerprintOfTask: (task: Task) => Fingerprint,
+): LedgerEntry[] {
+    const ordinals = buildOrdinals(tree.roots, tree.childrenOf);
+    return ordered.map(task => {
+        const parent = tree.parentOf.get(task);
+        return {
+            runtimeId: runtimeIdOf(task),
+            file: task.file,
+            parent: parent ? runtimeIdOf(parent) : null,
+            ordinal: ordinals.get(task) ?? 0,
+            line: task.line,
+            fingerprint: fingerprintOfTask(task),
+        };
+    });
 }
 
 interface HintOutcome {
