@@ -231,3 +231,76 @@ describe('a write, where no partner is safe', () => {
         expect(bench.scanner.locate(FILE, lines, { runtimeId: x.id })).toEqual({ kind: 'outdated' });
     });
 });
+
+/** A scan that takes its read mark now and reads the file as it is when released. */
+async function lateRead(bench: WriteBench): Promise<{ release: () => void; done: Promise<void> }> {
+    let reading!: () => void;
+    const called = new Promise<void>(resolve => { reading = resolve; });
+    const read = bench.app.vault.read;
+    let open!: () => void;
+    const gate = new Promise<void>(resolve => { open = resolve; });
+    bench.app.vault.read = async (file: { path: string }) => {
+        reading();
+        await gate;
+        return bench.contents.get(file.path) ?? '';
+    };
+    const done = bench.scan();
+    await called;
+    return { release: () => { open(); bench.app.vault.read = read; }, done };
+}
+
+describe('a scan that read after a write filed past its read mark', () => {
+    // Found by F5b's counterexample run (C1). The scan took its mark, then a
+    // write of ours and an outside edit landed, and the read returned after
+    // both. Its ledger is newer than the write. Kept past the commit by the
+    // mark alone, the write's record looked newer than that ledger, and the
+    // next unmatched read paired against it. The commit now places the read
+    // in the chain as the match did: lines that changed after the newest
+    // write mean the read saw every write.
+    async function setup(): Promise<{ bench: WriteBench; x: Task; y: Task }> {
+        const bench = await writeBench(['- [ ] A', '- [ ] B']);
+        const x = bench.taskAt(0);
+        const y = bench.taskAt(1);
+        const scan = await lateRead(bench);
+        await bench.writer.appendTaskToFile(FILE, '- [ ] Z');
+        bench.edit(['- [x] A', '- [ ] B', '- [ ] Z']);
+        scan.release();
+        await scan.done;
+        expect(bench.taskAt(0).id).toBe(x.id);
+        expect(bench.taskAt(1).id).toBe(y.id);
+        bench.edit(['- [x] A', '- [ ] A', '- [ ] Z']);
+        return { bench, x, y };
+    }
+
+    it('the next scan keeps X and Y on their lines', async () => {
+        const { bench, x, y } = await setup();
+        await bench.scan();
+        expect(bench.taskAt(0).id).toBe(x.id);
+        expect(bench.taskAt(1).id).toBe(y.id);
+    });
+
+    it('a write on X does not land on Y\'s line', async () => {
+        const { bench, x } = await setup();
+        expect(bench.scanner.locate(FILE, bench.lines(), { runtimeId: x.id })).not.toEqual({ kind: 'at', line: 1 });
+        await bench.writer.deleteTaskFromFile(plannedOn(x));
+        expect(bench.lines()).not.toEqual(['- [x] A', '- [ ] Z']);
+    });
+});
+
+// LIMIT (F5b, pinned as it is; counterexample run C2). S2c turned inside
+// out: after two own writes trade two texts, an outside write built on the
+// file as it was before them lands (another device's sync, a stale buffer)
+// with a line of its own. The lines cannot say which state the outside write
+// started from; the ladder pairs against the newest state we know and X and
+// Y trade names. Before F5b it paired against the ledger and got this one
+// right, and S2c wrong. In use, each write's own scan commits first and the
+// ledger is the newest state, so outside this window both pair alike.
+describe('an outside write built on the file before our writes', () => {
+    it('LIMIT: X and Y trade names', async () => {
+        const { bench, x, y } = await traded();
+        bench.edit(['- [ ] A', '- [x] A', 'メモ']);
+        await bench.scan();
+        expect(bench.taskAt(0).id).toBe(y.id);
+        expect(bench.taskAt(1).id).toBe(x.id);
+    });
+});

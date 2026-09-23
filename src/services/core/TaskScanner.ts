@@ -317,7 +317,7 @@ export class TaskScanner {
             // texts would line up well enough that nothing later would notice.
             // A write this read may not have seen is still kept, for `locate` to
             // know the ledger is older than it (`WriteClaims.lastWrite`).
-            this.claims.forget(file.path, readMark);
+            this.claims.forget(file.path, { readMark, read: readKey, ledger: before });
         } finally {
             this.store.endBatch();
         }
