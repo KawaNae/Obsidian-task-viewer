@@ -2,15 +2,18 @@ import type { StatusDefinition, Task } from '../../types';
 import { flowSource } from '../flow/FlowSegments';
 import { canTriggerFlow } from '../flow/FlowTrigger';
 
+export type CompletionOrigin = 'user' | 'flow' | 'other';
+
 export interface DetectOptions {
     /**
-     * Whether this completed row may fire, asked only of rows whose signature
-     * counts more completions than before: true when the user completed it —
+     * Whose this completed row is, asked only of rows whose signature counts
+     * more completions than before: `user` when the user completed it —
      * through a write of ours made for the user, or by hand in an editor — and
-     * false when a flow's own write made it, or it came from outside (a sync).
-     * The scan answers it (`TaskScanner`); this class only counts.
+     * may fire; `flow` when a flow's own write since the last scan made it;
+     * `other` when it came from outside (a sync) or was already there. The
+     * scan answers it (`TaskScanner`); this class only counts.
      */
-    mayFire: (task: Task) => boolean;
+    whose: (task: Task) => CompletionOrigin;
     /** True while the initial vault scan is running. */
     isInitializing: boolean;
     statusDefinitions: StatusDefinition[];
@@ -64,12 +67,17 @@ export class CompletionDetector {
 
             if (currentCount > previousCount) {
                 // トリガー条件: 初期化中でない、初回スキャンでない、ユーザーが完了させた行である。
-                // 同じ署名の行が複数あると、どれが新しい完了かは決まらない。発火してよい
+                // 同じ署名の行が複数あると、どれが新しい完了かは決まらない。そこで、
+                // 前回のスキャンのあとにフローが書いた行は増分に数えず、発火してよい
                 // 行の数を超えては発火しない — フローが書いた同じ本文の完了行が、
-                // ユーザーの完了の数に紛れて発火しないように。
+                // ユーザーの完了の数に紛れて発火しないように（梯子が同じ本文の行の
+                // 名前を入れ替えると、どの行がユーザーの行かも確かではない）。
                 if (!opts.isInitializing && !isFirstScan) {
-                    const fireable = doneTasks.filter(done => this.getTaskSignature(done) === sig && opts.mayFire(done));
-                    const times = Math.min(currentCount - previousCount, fireable.length);
+                    const rows = doneTasks.filter(done => this.getTaskSignature(done) === sig);
+                    const origins = rows.map(row => opts.whose(row));
+                    const fireable = rows.filter((_, i) => origins[i] === 'user');
+                    const byFlow = origins.filter(origin => origin === 'flow').length;
+                    const times = Math.min(currentCount - byFlow - previousCount, fireable.length);
                     for (let k = 0; k < times; k++) {
                         tasksToTrigger.push(fireable[0]);
                     }

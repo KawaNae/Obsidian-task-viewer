@@ -4,7 +4,7 @@ import { FileParsePipeline } from '../parsing/FileParsePipeline';
 import type { TaskStore } from './TaskStore';
 import type { TaskValidator } from './TaskValidator';
 import type { EditorSignal } from './EditorSignal';
-import { CompletionDetector } from './CompletionDetector';
+import { CompletionDetector, type CompletionOrigin } from './CompletionDetector';
 import type { FlowExecutor } from '../flow/FlowExecutor';
 import { TaskIdGenerator } from '../display/TaskIdGenerator';
 import { IdentityLedger, type LedgerEntry } from './identity/IdentityLedger';
@@ -306,13 +306,13 @@ export class TaskScanner {
         const byHand = this.claims.leftByUs(file.path, readKey, before)
             ? false
             : this.editorSignal.take(file.path);
-        const mayFire = (task: Task): boolean => {
+        const whose = (task: Task): CompletionOrigin => {
             const writer = this.claims.writerOf(file.path, readKey, before, task.id, task.originalText);
-            if (writer !== null) return writer === 'user';
-            return byHand;
+            if (writer !== null) return writer;
+            return byHand ? 'user' : 'other';
         };
         const tasksToTrigger = this.completionDetector.detect(file.path, parsed.tasks, {
-            mayFire,
+            whose,
             isInitializing: this.isInitializing,
             statusDefinitions: this.settings.statusDefinitions,
         });

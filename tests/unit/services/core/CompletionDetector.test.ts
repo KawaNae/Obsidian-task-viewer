@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { CompletionDetector } from '../../../../src/services/core/CompletionDetector';
+import { CompletionDetector, type CompletionOrigin } from '../../../../src/services/core/CompletionDetector';
 import { FileParsePipeline } from '../../../../src/services/parsing/FileParsePipeline';
 import { DEFAULT_SETTINGS, type Task } from '../../../../src/types';
 
@@ -12,8 +12,9 @@ import { DEFAULT_SETTINGS, type Task } from '../../../../src/types';
 
 const FILE = 'note.md';
 const parse = (lines: string[]): Task[] => FileParsePipeline.parse(FILE, lines, DEFAULT_SETTINGS).tasks;
-const opts = (mayFire: (task: Task) => boolean) => ({
-    mayFire, isInitializing: false, statusDefinitions: DEFAULT_SETTINGS.statusDefinitions,
+const opts = (mayFire: (task: Task) => boolean | CompletionOrigin) => ({
+    whose: (task: Task): CompletionOrigin => { const said = mayFire(task); return said === true ? 'user' : said === false ? 'other' : said; },
+    isInitializing: false, statusDefinitions: DEFAULT_SETTINGS.statusDefinitions,
 });
 
 describe('CompletionDetector: rows that share a signature', () => {
@@ -33,6 +34,26 @@ describe('CompletionDetector: rows that share a signature', () => {
         detector.detect(FILE, parse(OPEN), opts(() => true));
         const fired = detector.detect(FILE, parse(TWO_DONE), opts(task => task.line === 1));
         expect(fired.map(task => task.line)).toEqual([1]);
+    });
+
+    it('do not count a row a flow wrote since the last scan toward the increase', () => {
+        // F6's counterexample run (L4): the user checked one row and unchecked
+        // the other, a flow appended a completed row with the same words, and a
+        // sync built on the file before the user's writes undid them. The ladder
+        // then named a checked row after the user's; the count grew by the
+        // flow's row alone, and it fired as the user's.
+        const detector = new CompletionDetector();
+        detector.detect(FILE, parse(['- [x] 甲 ==> every 1d', '- [ ] 甲 ==> every 1d', '- [ ] 乙']), opts(() => true));
+        const tasks = parse(['- [x] 甲 ==> every 1d', '- [ ] 甲 ==> every 1d', '- [x] 甲 ==> every 1d', '- [ ] 乙']);
+        const fired = detector.detect(FILE, tasks, opts(task => (task.line === 2 ? 'flow' : 'user')));
+        expect(fired).toHaveLength(0);
+    });
+
+    it('still fire the user\'s own completion beside a flow\'s', () => {
+        const detector = new CompletionDetector();
+        detector.detect(FILE, parse(OPEN), opts(() => true));
+        const fired = detector.detect(FILE, parse(TWO_DONE), opts(task => (task.line === 1 ? 'flow' : 'user')));
+        expect(fired.map(task => task.line)).toEqual([0]);
     });
 
     it('fire each new completion when every row may', () => {
