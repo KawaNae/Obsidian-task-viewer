@@ -253,10 +253,10 @@ export class TimerWidget implements TimerContext {
         await this.flushTimerContent(timer.id);
     }
 
-    async flushTimerContent(timerId: string): Promise<void> {
+    async flushTimerContent(timerId: string): Promise<boolean> {
         const timer = this.timers.get(timerId);
-        if (!timer) return;
-        await this.contentBinding.flush(timer);
+        if (!timer) return true;
+        return this.contentBinding.flush(timer);
     }
 
     discardTimerContent(timerId: string): void {

@@ -37,7 +37,7 @@ export class TimerRecorder {
     /**
      * Record a completed Countup timer session.
      */
-    async addCountupRecord(timer: TimerInstance): Promise<void> {
+    async addCountupRecord(timer: TimerInstance): Promise<boolean> {
         const elapsedSeconds = getTimerElapsedSeconds(timer);
         const endTime = new Date();
         const startTime = new Date(endTime.getTime() - elapsedSeconds * 1000);
@@ -52,14 +52,15 @@ export class TimerRecorder {
         );
         const formattedLine = TaskParser.format(taskObj);
 
-        await this.insertChildRecord(timer, formattedLine);
+        if (!(await this.insertChildRecord(timer, formattedLine))) return false;
         new Notice(t('notice.timerRecorded', { icon, duration: TimeFormatter.formatSeconds(elapsedSeconds) }));
+        return true;
     }
 
     /**
      * Record a completed Countdown timer session.
      */
-    async addCountdownRecord(timer: TimerInstance): Promise<void> {
+    async addCountdownRecord(timer: TimerInstance): Promise<boolean> {
         const elapsedSeconds = getTimerElapsedSeconds(timer);
         const endTime = new Date();
         const startTime = new Date(endTime.getTime() - elapsedSeconds * 1000);
@@ -74,15 +75,16 @@ export class TimerRecorder {
         );
         const formattedLine = TaskParser.format(taskObj);
 
-        await this.insertChildRecord(timer, formattedLine);
+        if (!(await this.insertChildRecord(timer, formattedLine))) return false;
         new Notice(t('notice.countdownRecorded', { icon, duration: TimeFormatter.formatSeconds(elapsedSeconds) }));
+        return true;
     }
 
     /**
      * Record a completed Interval timer session.
      * Pomodoro-origin intervals are recorded with 🍅 label.
      */
-    async addIntervalRecord(timer: TimerInstance): Promise<void> {
+    async addIntervalRecord(timer: TimerInstance): Promise<boolean> {
         const elapsedSeconds = getTimerElapsedSeconds(timer);
         const endTime = new Date();
         const startTime = new Date(endTime.getTime() - elapsedSeconds * 1000);
@@ -99,9 +101,10 @@ export class TimerRecorder {
         );
         const formattedLine = TaskParser.format(taskObj);
 
-        await this.insertChildRecord(timer, formattedLine);
+        if (!(await this.insertChildRecord(timer, formattedLine))) return false;
         const kind = isPomodoroSource ? 'Pomodoro' : 'Interval';
         new Notice(t('notice.kindRecorded', { icon, kind, duration: TimeFormatter.formatSeconds(elapsedSeconds) }));
+        return true;
     }
 
     /**
@@ -118,39 +121,38 @@ export class TimerRecorder {
      * ここを通さずに `addCountdownRecord` / `addIntervalRecord` を直接呼ぶと、
      * 開始時に作った placeholder が更新されず 1 セッションが 2 行になる。停止経路は
      * 必ずこれを呼ぶこと。
+     *
+     * @returns 記録を書けたか（記録するものが無い idle は書けたと答える）。書けな
+     * かったときは、その理由を1回だけ通知済みで、成功の通知は出していない。
+     * 呼び出し側は widget を閉じず、計測を残す。
      */
-    async recordSessionEnd(timer: TimerInstance): Promise<void> {
+    async recordSessionEnd(timer: TimerInstance): Promise<boolean> {
         if (!timer.recordedChildTaskId && timer.recordMode === 'self' && timer.sessionCount === 0) {
-            await this.updateTaskDirectly(timer);
-            return;
+            return this.updateTaskDirectly(timer);
         }
-        await this.addSessionRecord(timer);
+        return this.addSessionRecord(timer);
     }
 
     /**
      * Record for stopwatch-style modes; idle is intentionally ignored.
      * If a child task was created at start (recordedChildTaskId), update it instead.
      */
-    async addSessionRecord(timer: TimerInstance): Promise<void> {
+    async addSessionRecord(timer: TimerInstance): Promise<boolean> {
         if (timer.recordedChildTaskId) {
-            await this.updateChildAtEnd(timer);
-            return;
+            return this.updateChildAtEnd(timer);
         }
         switch (timer.timerType) {
             case 'countup':
-                await this.addCountupRecord(timer);
-                break;
+                return this.addCountupRecord(timer);
             case 'countdown':
-                await this.addCountdownRecord(timer);
-                break;
+                return this.addCountdownRecord(timer);
             case 'interval':
-                await this.addIntervalRecord(timer);
-                break;
+                return this.addIntervalRecord(timer);
             case 'idle':
-                // No record for idle yet.
-                break;
+                // No record for idle yet: nothing to write, nothing lost.
+                return true;
             default:
-                break;
+                return true;
         }
     }
 
@@ -364,7 +366,7 @@ export class TimerRecorder {
     /**
      * Update the child task created at timer start with end time and completion.
      */
-    private async updateChildAtEnd(timer: TimerInstance): Promise<void> {
+    private async updateChildAtEnd(timer: TimerInstance): Promise<boolean> {
         const taskIndex = this.plugin.getTaskIndex();
         // id の直引きではなく尻尾アンカーで引く。task id はセッション限りなので、
         // リロードを挟むと永続化された recordedChildTaskId は何も指さない。
@@ -372,16 +374,17 @@ export class TimerRecorder {
         if (child) timer.recordedChildTaskId = child.id;
 
         if (!child) {
-            // Fallback: child was deleted, create a new record
-            new Notice(t('notice.childTaskNotFound'));
+            // Fallback: child was deleted, create a new record. Said once, by
+            // the record's own notice: what the user needs to hear is whether
+            // the session was recorded, not which line took it.
+            logWarn(`[TimerRecorder] updateChildAtEnd: running line not found, adding a record instead (${describeTimerAnchor(timer)})`);
             timer.recordedChildTaskId = undefined;
             switch (timer.timerType) {
-                case 'countup': await this.addCountupRecord(timer); break;
-                case 'countdown': await this.addCountdownRecord(timer); break;
-                case 'interval': await this.addIntervalRecord(timer); break;
-                default: break;
+                case 'countup': return this.addCountupRecord(timer);
+                case 'countdown': return this.addCountdownRecord(timer);
+                case 'interval': return this.addIntervalRecord(timer);
+                default: return true;
             }
-            return;
         }
 
         const elapsedSeconds = getTimerElapsedSeconds(timer);
@@ -393,7 +396,7 @@ export class TimerRecorder {
         // {@link withTimerIcon} が持つ。
         const content = withTimerIcon(icon, child.content.trim());
 
-        await taskIndex.updateTask(child.id, {
+        const written = await taskIndex.updateTask(child.id, {
             content,
             endDate: this.formatDate(endTime),
             endTime: this.formatTime(endTime),
@@ -404,8 +407,12 @@ export class TimerRecorder {
             blockId: child.blockId,
         });
 
+        // Not written: the write layer has said why, once.
+        if (!written) return false;
+
         const kind = this.getTimerKind(timer);
         new Notice(t('notice.kindRecorded', { icon, kind, duration: TimeFormatter.formatSeconds(elapsedSeconds) }));
+        return true;
     }
 
     /**
@@ -581,7 +588,8 @@ export class TimerRecorder {
             return;
         }
 
-        await this.plugin.getTaskIndex().updateTask(taskId, { blockId: undefined });
+        // 外せなかった id は行に残っている。対象アンカーも手放さない。
+        if (!(await this.plugin.getTaskIndex().updateTask(taskId, { blockId: undefined }))) return;
 
         if (timer.timerTargetId === blockId) {
             // 対象アンカーを手放す瞬間。以後この timer は taskId / originalText の
@@ -639,7 +647,7 @@ export class TimerRecorder {
      * Update the task's start/end times directly (for 'self' recordMode).
      * This converts the task to SE-Timed type.
      */
-    async updateTaskDirectly(timer: TimerInstance): Promise<void> {
+    async updateTaskDirectly(timer: TimerInstance): Promise<boolean> {
         const elapsedSeconds = getTimerElapsedSeconds(timer);
         const endTime = new Date();
         const startTime = new Date(endTime.getTime() - elapsedSeconds * 1000);
@@ -654,8 +662,8 @@ export class TimerRecorder {
             const task = this.resolver.resolveTvInline(timer);
 
             if (!task) {
-                this.noticeResolveFailure(timer, 'updateTaskDirectly (self stop, record lost)');
-                return;
+                this.noticeResolveFailure(timer, 'updateTaskDirectly (self stop, not recorded)');
+                return false;
             }
 
             const icon = this.getTimerIcon(timer);
@@ -675,7 +683,8 @@ export class TimerRecorder {
                 content: withTimerIcon(icon, task.content.trim()),
             };
 
-            await taskIndex.updateTask(task.id, updates);
+            // 書けなかったときは、書き込みの層が理由を1回だけ通知済み。
+            if (!(await taskIndex.updateTask(task.id, updates))) return false;
 
             // この行が最初のレコード＝尻尾。次の再開はここの隣に並ぶ。
             timer.tailRecordBlockId = task.blockId;
@@ -684,29 +693,30 @@ export class TimerRecorder {
 
         const icon = this.getTimerIcon(timer);
         new Notice(t('notice.taskUpdated', { icon, duration: TimeFormatter.formatSeconds(elapsedSeconds) }));
+        return true;
     }
 
     /**
      * Insert a child record line for the given timer.
      * The target is resolved with timerTargetId first.
      */
-    private async insertChildRecord(timer: TimerInstance, formattedLine: string): Promise<void> {
+    /** @returns whether the record was written. Not written has been told to the user, once. */
+    private async insertChildRecord(timer: TimerInstance, formattedLine: string): Promise<boolean> {
         // デイリーノートには器になるタスクが無いので見出しの下へ直接置く。開始時の
         // 1 本目は {@link createDailyLineAtStart} が通り、ここへ来るのは尻尾を
         // 見失ったときのフォールバック（1 行だけ足して記録を落とさない）。
         if (isDailyTimer(timer)) {
-            await this.addTimerRecordToDailyNote(dailyDateOf(timer), formattedLine);
-            return;
+            return (await this.addTimerRecordToDailyNote(dailyDateOf(timer), formattedLine)) !== null;
         }
 
         const resolvedTask = this.resolver.resolveTvInline(timer);
 
         if (!resolvedTask) {
-            this.noticeResolveFailure(timer, 'insertChildRecord (record lost)');
-            return;
+            this.noticeResolveFailure(timer, 'insertChildRecord (not recorded)');
+            return false;
         }
 
-        await this.plugin.getTaskWriteService().insertChildTask(resolvedTask.id, formattedLine);
+        return this.plugin.getTaskWriteService().insertChildTask(resolvedTask.id, formattedLine);
     }
 
     /**

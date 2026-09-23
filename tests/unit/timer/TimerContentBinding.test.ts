@@ -62,6 +62,7 @@ function makeHarness(options: { tail?: Task | undefined } = {}): Harness {
                     updates.push({ id, updates: u });
                     // 書いた値は行に載る（次の比較の対象になる）。
                     if (tail && tail.id === id) tail = { ...tail, content: u.content as string };
+                    return true;
                 },
             }),
         },

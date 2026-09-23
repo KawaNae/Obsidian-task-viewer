@@ -196,8 +196,10 @@ export class TimerRenderer {
             setIcon(closeBtn, 'x');
             closeBtn.onclick = () => {
                 // 中断中は記録済み＝失うものが無いので確認なしで閉じる。
-                // 走行中は 2-tap 確認（走行分は記録せず捨てる）。
-                if (timer.runState === 'suspended' || !timer.isRunning) {
+                // 走行中は 2-tap 確認（走行分は記録せず捨てる）。記録を書けずに
+                // 止まったまま残った走行も、計測を持つので走行中と同じに扱う。
+                if (timer.runState === 'suspended'
+                    || (!timer.isRunning && !this.lifecycle.holdsUnrecordedRun(timer))) {
                     this.clearCloseConfirmTimer(timerId);
                     this.lifecycle.closeTimer(timerId);
                     return;
