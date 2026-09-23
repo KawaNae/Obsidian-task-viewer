@@ -216,3 +216,18 @@ describe('the chain past its cap, across a scan that read before the loss', () =
         expect(ids).not.toContain(y.id);
     });
 });
+
+describe('a write, where no partner is safe', () => {
+    it('is refused as outdated past the chain\'s cap', async () => {
+        const { bench, x } = await traded(['- [ ] Z']);
+        let z = bench.taskAt(2);
+        for (let i = 0; i < MAX_CHAIN_PER_FILE; i++) {
+            const next = { ...z, statusChar: i % 2 === 0 ? 'x' : ' ' };
+            expect((await bench.writer.updateTaskInFile(plannedOn(z), next)).written).toBe(true);
+            z = { ...next, originalText: bench.lines()[2] };
+        }
+        bench.edit([...bench.lines(), 'メモ']);
+        const lines = bench.lines();
+        expect(bench.scanner.locate(FILE, lines, { runtimeId: x.id })).toEqual({ kind: 'outdated' });
+    });
+});
