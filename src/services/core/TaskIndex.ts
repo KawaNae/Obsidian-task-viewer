@@ -486,10 +486,13 @@ export class TaskIndex {
         const task = this.store.getTask(taskId);
         if (task) return task;
         logWarn(`[TaskIndex] write to a row the index no longer holds: id=${taskId}`);
+        // A row the caller named but the store never held here: say which
+        // note, as a write refused before it read the note does.
+        const file = known?.file ?? TaskIdGenerator.parse(taskId)?.filePath ?? '';
         this.reportRefusal({
-            file: known?.file ?? '',
+            file,
             reason: { kind: 'gone' },
-            subject: known ? subjectOf(known) : taskId,
+            subject: known ? subjectOf(known) : file,
         });
         return undefined;
     }

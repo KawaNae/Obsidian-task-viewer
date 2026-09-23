@@ -241,7 +241,12 @@ export class TimerWidget implements TimerContext {
         }
     }
 
-    private async writeFirstSession(timer: TimerInstance): Promise<void> {
+    /** 1 本目の行を書く。往復中の出口と破棄は受け付けない（TimerLifecycle.busy）。 */
+    private writeFirstSession(timer: TimerInstance): Promise<void> {
+        return this.lifecycle.exclusive(timer, () => this.writeFirstSessionLine(timer));
+    }
+
+    private async writeFirstSessionLine(timer: TimerInstance): Promise<void> {
         const sessionTaskId = timer.recordMode === 'sibling'
             ? await this.recorder.startContinuationSession(timer)
             : await this.recorder.createChildAtStart(timer);
