@@ -28,7 +28,7 @@ const parseRows = (path: string, lines: readonly string[]) => {
 
 function claimsWith(rows: ClaimBase[]): WriteClaims {
     let seq = 0;
-    return new WriteClaims(parseRows, () => ({ rows, content: 'collides' }), () => `w${++seq}`);
+    return new WriteClaims(parseRows, () => ({ rows, ladder: [], content: 'collides' }), () => `w${++seq}`);
 }
 
 const known = (runtimeId: string, line: number, text: string): ClaimBase =>
@@ -39,7 +39,7 @@ describe('a content key that collides', () => {
         const claims = claimsWith([known('r1', 0, '- [ ] 甲')]);
         const first = claims.claim(FILE, ['- [ ] 甲'], ['- [ ] 乙', '- [ ] 甲'], [{ kind: 'inserted', at: 0, count: 1 }]);
         expect(first.described).toBe(true);
-        expect(claims.reading(FILE, ['- [ ] 乙', '- [ ] 甲'], 'write', []).base!.map(row => row.runtimeId)).toEqual(['w1', 'r1']);
+        expect(claims.reading(FILE, ['- [ ] 乙', '- [ ] 甲'], 'write').base!.map(row => row.runtimeId)).toEqual(['w1', 'r1']);
 
         // A different file under the same key: someone swapped the two lines.
         const next = claims.claim(FILE, ['- [ ] 甲', '- [ ] 乙'], ['- [x] 甲', '- [ ] 乙'], [{ kind: 'replaced', at: 0 }]);

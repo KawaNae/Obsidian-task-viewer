@@ -4,6 +4,7 @@ import { FileParsePipeline } from '../../../../../src/services/parsing/FileParse
 import { DEFAULT_SETTINGS } from '../../../../../src/types';
 import type { LineEdit } from '../../../../../src/utils/FileLines';
 import { contentKeyOf } from '../../../../../src/services/core/identity/ContentKey';
+import { ledgerRowsOf } from '../../../../../src/services/core/identity/IdentityMatcher';
 
 /**
  * What a write reports about lines, turned into what the next scan is told
@@ -43,7 +44,10 @@ function mint() {
  * in it.
  */
 function ledgerOf(rows: ClaimBase[], read: readonly string[] | null = linesOf(rows)) {
-    return () => ({ rows, content: read === null ? null : contentKeyOf(read) });
+    // The same rows as a ladder reads them, named by the row on each line.
+    const ladder = read === null ? [] : ledgerRowsOf(parseRows(FILE, read) ?? [],
+        task => rows.find(row => row.line === task.line)?.runtimeId ?? `unrecorded:${task.line}`);
+    return () => ({ rows, ladder, content: read === null ? null : contentKeyOf(read) });
 }
 
 function linesOf(rows: readonly ClaimBase[]): string[] {
@@ -387,7 +391,7 @@ describe('WriteClaims: a write that did not land', () => {
         // The mark stays: the ledger is still older than a write nobody
         // described, and the file does not read as the ledger says.
         expect(claims.peek(FILE).left).toBeNull();
-        expect(claims.reading(FILE, ['- [ ] 丙', '- [ ] 甲'], 'write', []).base).toBeNull();
+        expect(claims.reading(FILE, ['- [ ] 丙', '- [ ] 甲'], 'write').base).toBeNull();
     });
 
     it('keeps a write that a later write was built on, whatever its caller was told (F5b)', () => {
@@ -400,7 +404,7 @@ describe('WriteClaims: a write that did not land', () => {
 
         // The second write fitted the file only because the first one's
         // content was there. What it left is still what the file reads.
-        expect(claims.reading(FILE, ['- [ ] 甲', '- [ ] 乙', '- [ ] 丙'], 'write', []).base?.map(row => row.runtimeId))
+        expect(claims.reading(FILE, ['- [ ] 甲', '- [ ] 乙', '- [ ] 丙'], 'write').base?.map(row => row.runtimeId))
             .toEqual(['r1', 'w1', 'w2']);
     });
 
@@ -612,7 +616,7 @@ describe('changes counted against our writes (I1)', () => {
     it('a write\'s modify that comes after a scan committed past it is still ours', () => {
         const claims = claimsWith();
         claims.claim(FILE, ONE, TWO, edits, 'user');
-        claims.forget(FILE, { readMark: claims.readMark(), place: claims.reading(FILE, TWO, 'scan', []) });
+        claims.forget(FILE, { readMark: claims.readMark(), place: claims.reading(FILE, TWO, 'scan') });
         expect(claims.peek(FILE)).toMatchObject({ links: [], awaiting: 1 });
         claims.noteChange(FILE);
         expect(claims.peek(FILE)).toMatchObject({ links: [], awaiting: 0 });
@@ -625,7 +629,7 @@ describe('changes counted against our writes (I1)', () => {
         expect(claims.peek(FILE)).toMatchObject({ links: [], awaiting: 0 });
 
         const dropped = claims.claim(FILE, ONE, TWO, edits, 'user');
-        claims.forget(FILE, { readMark: claims.readMark(), place: claims.reading(FILE, TWO, 'scan', []) });
+        claims.forget(FILE, { readMark: claims.readMark(), place: claims.reading(FILE, TWO, 'scan') });
         dropped.withdraw();
         expect(claims.peek(FILE).awaiting).toBe(0);
         claims.noteChange(FILE);

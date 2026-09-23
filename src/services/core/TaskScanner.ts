@@ -69,16 +69,20 @@ export class TaskScanner {
         },
         // Everything the ledger holds has been read by a scan, so nothing it
         // hands back is a row still waiting to be recorded.
-        (path) => ({
-            rows: this.ledger.snapshotFor(path).map(entry => ({
-                runtimeId: entry.runtimeId,
-                created: false,
-                text: entry.fingerprint.originalText,
-                line: entry.line,
-                parserId: entry.fingerprint.parserId,
-            })),
-            content: this.ledger.contentFor(path),
-        }),
+        (path) => {
+            const ladder = this.ledger.snapshotFor(path);
+            return {
+                rows: ladder.map(entry => ({
+                    runtimeId: entry.runtimeId,
+                    created: false,
+                    text: entry.fingerprint.originalText,
+                    line: entry.line,
+                    parserId: entry.fingerprint.parserId,
+                })),
+                ladder,
+                content: this.ledger.contentFor(path),
+            };
+        },
         // The same counter a scan mints from, so a name issued by a write can
         // never collide with one issued by a read.
         (path, parserId) => TaskIdGenerator.mintRuntimeId(
@@ -244,7 +248,7 @@ export class TaskScanner {
         // Where the read stands among the states this file is known to have
         // been in — the ledger's, and what our writes since left — and so
         // every way its lines may be told (`WriteClaims.reading`).
-        const place = this.claims.reading(file.path, lines, 'scan', previousRows);
+        const place = this.claims.reading(file.path, lines, 'scan');
         const guarded = matchWithoutRepeatedIds(
             reading => matchFile(
                 previousRows,
@@ -495,32 +499,25 @@ export class TaskScanner {
 
         // Every way these lines may be told, as a write sees them. Where none
         // can be told, a write would rather not write.
-        const previous = this.ledger.snapshotFor(path);
-        const place = this.claims.reading(path, lines, 'write', previous);
+        const place = this.claims.reading(path, lines, 'write');
         if (place.unknown) return { kind: 'outdated' };
         if (place.base !== null) {
             const row = place.base.find(candidate => candidate.runtimeId === ref.runtimeId);
             return row ? { kind: 'at', line: row.line } : { kind: 'gone' };
         }
 
-        const parsed = FileParsePipeline.parse(path, [...lines], this.settings);
-        if (parsed.ignored) return { kind: 'gone' };
-        // Names for the rows nothing pairs. They leave this function with
-        // nothing but a comparison against `ref`, which none of them can equal.
-        let unnamed = 0;
-        const { result } = matchWithoutRepeatedIds(
-            reading => matchFile(previous, parsed.tasks, () => `locate:unnamed:${++unnamed}`, reading),
-            place.reading,
-        );
+        // Matched as a scan of these lines would match them. A file the
+        // parser will not read as tasks has no row to find.
+        const named = place.named;
+        if (named === null) return { kind: 'gone' };
 
         // The readings of these lines disagree about this name: which row it
         // is cannot be told, and the scan will give it to none.
-        if (result.disputed.has(ref.runtimeId)) return { kind: 'ambiguous', count: 2 };
-        const among = result.guessed.get(ref.runtimeId);
+        if (named.disputed.has(ref.runtimeId)) return { kind: 'ambiguous', count: 2 };
+        const among = named.guessed.get(ref.runtimeId);
         if (among !== undefined) return { kind: 'ambiguous', count: among };
-        const at = parsed.tasks.find(task => result.mapping.get(task.id) === ref.runtimeId);
-        if (!at) return { kind: 'gone' };
-        return { kind: 'at', line: at.line };
+        const line = named.at.get(ref.runtimeId);
+        return line === undefined ? { kind: 'gone' } : { kind: 'at', line };
     }
 
     /**

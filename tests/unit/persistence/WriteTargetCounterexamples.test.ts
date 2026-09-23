@@ -721,3 +721,67 @@ describe('F2-counter4: the file back at the content the ledger recorded, names m
         expect(bench.lines()).toEqual(['メモ', '- [x] A', '- [x] B']);
     });
 });
+
+// Third run of I1's counterexamples (on 81162cc3, counterexample-3.md). Each
+// case gave the right answer on develop (a99896e6) and on 3c07a7cb.
+describe('I1-counter3: an outside change put back before our write, and twins a rerun makes one-against-one', () => {
+    // SHAPE MB (cause A, mark-back). An outside change comes and goes with no
+    // scan between, then our write renames A to C. The file our write read is
+    // the ledger's content, so what the write did is on record against it:
+    // A's row is the top line, now `- [ ] C`. An outside append of a new
+    // `- [ ] A` afterwards is a new row. With the write left as a bare mark,
+    // the next scan pairs the old ledger and hands A's name to the appended
+    // line, whose text is A's old one.
+    it('MB: a rename after an outside change that came back keeps A\'s name on the renamed line, not on a new line reading A', async () => {
+        const bench = await writeBench(['- [ ] A', '- [ ] B']);
+        const a = bench.taskAt(0);
+        const b = bench.taskAt(1);
+        bench.edit(['メモ', '- [ ] A', '- [ ] B']);
+        bench.edit(['- [ ] A', '- [ ] B']);
+        expect((await bench.writer.updateTaskInFile(plannedOn(a), { ...a, content: 'C', originalText: '- [ ] C' })).written).toBe(true);
+        bench.edit(['- [ ] C', '- [ ] B', '- [ ] A']);
+        await bench.scan();
+        expect(bench.taskAt(0).id).toBe(a.id);
+        expect(bench.taskAt(1).id).toBe(b.id);
+        expect([a.id, b.id]).not.toContain(bench.taskAt(2).id);
+    });
+
+    // SHAPE R1 (cause A, twoToggles). The same outside change that came back,
+    // then a toggle of A, then a toggle of C, all from the first scan's rows.
+    // C's line is untouched by either, and the first toggle wrote on known
+    // content, so C is where it was. Left as a bare mark, the first toggle
+    // made `locate` answer `outdated` and C was refused as `changed`.
+    it('R1: after an outside change that came back and a toggle of A, the toggle of C is written, not refused as changed', async () => {
+        const bench = await writeBench(['- [x] A', '- [x] C']);
+        const a = bench.taskAt(0);
+        const c = bench.taskAt(1);
+        bench.edit(['メモ', '- [x] A', '- [x] C']);
+        bench.edit(['- [x] A', '- [x] C']);
+        expect((await bench.writer.updateTaskInFile(plannedOn(a), { ...a, statusChar: ' ' })).written).toBe(true);
+        expect((await bench.writer.updateTaskInFile(plannedOn(c), { ...c, statusChar: ' ' })).written).toBe(true);
+        expect(bench.lines()).toEqual(['- [ ] A', '- [ ] C']);
+        expect(bench.refused).toEqual([]);
+    });
+
+    // SHAPE W (cause B, s117e). B and the root C swap, B is indented, and the
+    // child C is moved out to the root. Two rows read `- [ ] C` and nothing
+    // but position says which is the root C. The first ladder pairs the root
+    // C with line 2 by position and B and the child C by rung 4; the check
+    // takes those two pairs apart, and the rerun, with line 0 no longer a
+    // candidate, pairs the root C one against one and forgets it guessed.
+    // Which `- [ ] C` is the root C was still decided by position, so
+    // `locate` is `ambiguous`, the toggle is refused, and the scan of the
+    // same lines keeps the name among the rows it guessed.
+    it('W: twins a rerun of the ladder leaves one against one are still a guess: refused as ambiguous, not written on line 2', async () => {
+        const bench = await writeBench(['- [x] B', '- [ ] C', '\t- [ ] C']);
+        const c = bench.taskAt(1);
+        const outside = ['- [ ] C', '\t- [x] B', '- [ ] C'];
+        bench.edit(outside);
+        expect(bench.scanner.locate(FILE, bench.lines(), { runtimeId: c.id }).kind).toBe('ambiguous');
+        expect((await bench.writer.updateTaskInFile(plannedOn(c), checked(c))).written).toBe(false);
+        expect(bench.lines()).toEqual(outside);
+        expect(bench.refused.map(r => r.reason.kind)).toEqual(['ambiguous']);
+        await bench.scan();
+        expect([...bench.scanner.getLedger().guessedFor(FILE).keys()]).toContain(c.id);
+    });
+});

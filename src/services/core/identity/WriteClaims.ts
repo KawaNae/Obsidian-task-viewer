@@ -1,7 +1,7 @@
 import type { ParserId, Task } from '../../../types';
 import { UNKNOWN_READING, type ExactState, type Reading } from './IdentityHints';
 import type { LedgerEntry } from './IdentityLedger';
-import { ledgerRowsOf } from './IdentityMatcher';
+import { ledgerRowsOf, matchFile, matchWithoutRepeatedIds } from './IdentityMatcher';
 import { replayEdits, type LineEdit, type WriteOrigin } from '../../../utils/FileLines';
 import { contentKeyOf, type ContentKey } from './ContentKey';
 
@@ -29,6 +29,8 @@ export interface ClaimBase {
  */
 export interface LedgerState {
     rows: ClaimBase[];
+    /** The same rows as a ladder reads its previous side. */
+    ladder: readonly LedgerEntry[];
     content: ContentKey | null;
 }
 
@@ -151,12 +153,27 @@ export interface ReadPlace {
     /** Whether the read may be a change after the newest known state. */
     after: boolean;
     /**
-     * The rows the lines hold where they stand, when that can be read off
-     * the lines without parsing them: the read is one known state and
+     * The rows the lines hold where they stand, asked by a write: every row
+     * with the one name every reading of the lines gives it, and none by
+     * position. Read off the lines when the read is one known state and
      * nothing after it, and each of the state's rows reads its own text on
-     * its own line. Asked by a write only; null otherwise.
+     * its own line; otherwise as a scan of the lines would name them. Null
+     * when a row has no such name, and for a scan.
      */
     base: ClaimBase[] | null;
+    /**
+     * Asked by a write where the lines were matched: which line each name is
+     * on, which names position decided, and which the readings disagreed
+     * about (see `matchFile`). Null otherwise.
+     */
+    named: Named | null;
+}
+
+/** A write's matching of the lines it was handed, name by name. */
+export interface Named {
+    at: ReadonlyMap<string, number>;
+    guessed: ReadonlyMap<string, number>;
+    disputed: ReadonlySet<string>;
 }
 
 /** Who asks where a read stands (see {@link WriteClaims.reading}). */
@@ -284,7 +301,7 @@ export class WriteClaims {
         // What the rows of the lines this write was handed are, where they
         // stand. A write builds only on that; the ladder's partner does not
         // come into it.
-        const base = this.reading(path, before, 'write', []).base;
+        const base = this.reading(path, before, 'write').base;
         if (base === null) return nothing();
 
         const replayed = replayEdits(before.length, edits);
@@ -564,20 +581,20 @@ export class WriteClaims {
      * lines are not, row by row, what our newest write left, nothing can be
      * told (`unknown`), and a write refuses. A
      * ledger older than a write it did not read (`carried`) is no state
-     * either. Only a write gets a `base`.
+     * either. Only a write gets a `base`, and it is the rows as a scan of
+     * the lines would name them — the known state's where the read is that
+     * alone, the readings' where they agree on every row.
      *
      * @param lines the lines read.
-     * @param ledgerRows the ledger's rows as a ladder reads its previous
-     *   side, for a read paired against the ledger.
      */
-    reading(path: string, lines: readonly string[], reader: Reader, ledgerRows: readonly LedgerEntry[]): ReadPlace {
+    reading(path: string, lines: readonly string[], reader: Reader): ReadPlace {
         const read = contentKeyOf(lines);
         const chain = this.chains.get(path);
         const links = chain?.links ?? [];
         const ledger = this.ledgerState(path);
         const own = ownLinks(links);
         const newestOwn = own.at(-1);
-        const nothing: ReadPlace = { reading: UNKNOWN_READING, unknown: true, states: [], after: true, base: null };
+        const nothing: ReadPlace = { reading: UNKNOWN_READING, unknown: true, states: [], after: true, base: null, named: null };
 
         // The known states the read may be, each with the rows it holds.
         const candidates: Array<{ state: Described | 'ledger'; rows: readonly ClaimBase[]; at: number }> = [];
@@ -613,9 +630,11 @@ export class WriteClaims {
             newest = at;
         }
         const after = states.length === 0 || links.slice(newest + 1).some(isForeign);
-        const partner = newestDescribed(links)?.ladder ?? ledgerRows;
+        const partner = newestDescribed(links)?.ladder ?? ledger.ladder;
 
+        const reading: Reading = { states: exact, after, partner };
         let base: ClaimBase[] | null = null;
+        let named: Named | null = null;
         if (reader === 'write') {
             const only = candidates.find(candidate => candidate.state === states[0]);
             if (only && states.length === 1 && !after && fits(only.rows, lines)) base = [...only.rows];
@@ -627,8 +646,66 @@ export class WriteClaims {
             // Past the cap, the lines our last write left are still known
             // row by row; anything else is paired, and that is not told.
             if (lost && base === null) return nothing;
+            if (base === null) {
+                // The lines are a known state, its rows each on its line, and
+                // may be read otherwise besides: put back after a change, or
+                // one of two states with this content.
+                const known = candidates.some(candidate => states.includes(candidate.state) && fits(candidate.rows, lines));
+                ({ base, named } = this.nameRows(path, lines, reading, links, ledger.ladder, known));
+            }
         }
-        return { reading: { states: exact, after, partner }, unknown: false, states, after, base };
+        return { reading, unknown: false, states, after, base, named };
+    }
+
+    /**
+     * The rows of the lines as a scan of them would name them, for a write
+     * the lines could not be read off: which line each name is on and, for
+     * lines that are a known state (`known`), the rows themselves when every
+     * row has a name every reading agrees on and none by position. A write
+     * builds there on what a scan would have committed had it come first;
+     * where the scan would mint, or guess, it does not. Lines that are no
+     * known state are built on by no write, however the ladder pairs them.
+     */
+    private nameRows(
+        path: string,
+        lines: readonly string[],
+        reading: Reading,
+        links: readonly Link[],
+        ledgerRows: readonly LedgerEntry[],
+        known: boolean,
+    ): { base: ClaimBase[] | null; named: Named | null } {
+        const tasks = this.parseRows(path, lines);
+        if (tasks === null) return { base: null, named: null };
+        // Names for the rows nothing pairs, which no row on record can equal.
+        const unnamed = new Set<string>();
+        const { result } = matchWithoutRepeatedIds(
+            read => matchFile([...ledgerRows], tasks, () => {
+                const name = `unnamed:${unnamed.size}`;
+                unnamed.add(name);
+                return name;
+            }, read),
+            reading,
+        );
+        const at = new Map<string, number>();
+        for (const task of tasks) at.set(result.mapping.get(task.id)!, task.line);
+        const named: Named = { at, guessed: result.guessed, disputed: result.disputed };
+        if (!known || result.guessed.size > 0 || result.disputed.size > 0 || [...at.keys()].some(name => unnamed.has(name))) {
+            return { base: null, named };
+        }
+        // A name no write of ours made is one the ledger holds.
+        const createdOf = (name: string): boolean => {
+            for (let i = links.length - 1; i >= 0; i--) {
+                const link = links[i];
+                const row = link.content === null ? undefined : link.rows.find(candidate => candidate.runtimeId === name);
+                if (row) return row.created;
+            }
+            return false;
+        };
+        const base = tasks.map((task): ClaimBase => {
+            const runtimeId = result.mapping.get(task.id)!;
+            return { runtimeId, created: createdOf(runtimeId), text: task.originalText, line: task.line, parserId: task.parserId };
+        });
+        return { base, named };
     }
 
     /**
