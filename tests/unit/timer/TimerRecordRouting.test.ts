@@ -251,7 +251,7 @@ describe('stop paths do not bypass recordSessionEnd', () => {
         expect(source.match(/recorder\.recordSessionEnd\(/g)).toHaveLength(1);
         // 名前を書けなければ記録に進まず、書けたら直後に記録する。
         expect(source).toMatch(
-            /if \(!\(await this\.ctx\.flushTimerContent\(timer\.id\)\)\) return false;\s*\n\s*return this\.ctx\.recorder\.recordSessionEnd\(timer\);/
+            /if \(!\(await this\.ctx\.flushTimerContent\(timer\.id\)\)\) return false;\s*\n\s*if \(!\(await this\.ctx\.recorder\.recordSessionEnd\(timer\)\)\) return false;/
         );
     });
 });

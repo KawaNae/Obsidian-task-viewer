@@ -754,7 +754,7 @@ export async function processLines(
             // was rather than written with a line the report cannot count.
             const message = `[FileLines] ${file.path}: ${error.message}; nothing written`;
             if (__DEV__) throw new BrokenWrite(message);
-            logError(message);
+            logError(message, { notice: false });
             refuse({ kind: 'failed' }, lastSubject || file.path);
             return content;
         }
@@ -769,7 +769,7 @@ export async function processLines(
         if (unsound !== null) {
             const message = `[FileLines] ${file.path}: a coordinate was carried across this write's edits, but ${unsound}; nothing written`;
             if (__DEV__) throw new BrokenWrite(message);
-            logError(message);
+            logError(message, { notice: false });
             refuse({ kind: 'changed' }, lastSubject);
             return content;
         }
@@ -781,7 +781,7 @@ export async function processLines(
             if (refused === null) {
                 const message = `[FileLines] ${file.path}: a write was given up without a reason; nothing written`;
                 if (__DEV__) throw new BrokenWrite(message);
-                logError(message);
+                logError(message, { notice: false });
                 refuse({ kind: 'failed' }, lastSubject || file.path);
             }
             return content;
@@ -874,7 +874,7 @@ async function processOrFail(
 
 /** A write that threw: logged, refused as `failed`, and told once. */
 export function writeFailed(channel: WriteChannel | undefined, file: string, subject: string, error: unknown): WriteRefused {
-    logError(`[FileLines] ${file}: the write failed; nothing written: ${String(error)}`);
+    logError(`[FileLines] ${file}: the write failed; nothing written: ${String(error)}`, { notice: false });
     const refused: Refusal = { file, reason: { kind: 'failed' }, subject };
     channel?.refused(refused);
     return { written: false, refused };

@@ -25,6 +25,8 @@ interface RecorderCalls {
     startNextSession: number;
     discardRunningPlaceholder: number;
     order: string[];
+    /** 記録のたびに、記録が終わりとする時刻（`stoppedAtMs`）。 */
+    stoppedAt: Array<number | undefined>;
 }
 
 /** 書き込みの成否。既定は「書けた」。テストが途中で書き換えて失敗を起こす。 */
@@ -34,10 +36,15 @@ interface WriteResults {
 }
 
 function build() {
-    const calls: RecorderCalls = { recordSessionEnd: 0, createChildAtStart: 0, startNextSession: 0, discardRunningPlaceholder: 0, order: [] };
+    const calls: RecorderCalls = { recordSessionEnd: 0, createChildAtStart: 0, startNextSession: 0, discardRunningPlaceholder: 0, order: [], stoppedAt: [] };
     const results: WriteResults = { flush: true, record: true };
     const recorder = {
-        recordSessionEnd: async () => { calls.recordSessionEnd++; calls.order.push('record'); return results.record; },
+        recordSessionEnd: async (timer: TimerInstance) => {
+            calls.recordSessionEnd++;
+            calls.order.push('record');
+            calls.stoppedAt.push(timer.stoppedAtMs);
+            return results.record;
+        },
         createChildAtStart: async () => { calls.createChildAtStart++; calls.order.push('placeholder'); return 'tv-inline:notes/a.md:ln:4'; },
         startNextSession: async () => { calls.startNextSession++; calls.order.push('nextSession'); return 'tv-inline:notes/a.md:ln:5'; },
         discardRunningPlaceholder: async () => { calls.discardRunningPlaceholder++; calls.order.push('discard'); },
@@ -440,6 +447,19 @@ describe('an exit whose record was not written', () => {
             expect(timer.recordedElapsedTime).toBe(600);
             expect(timer.sessionCount).toBe(1);
             expect(h.ctx.timers.has(timer.id)).toBe(false);
+            // 押し直した記録も、最初に押した時刻で終わる。待った 120 秒は記録の幅に入らない。
+            expect(h.calls.stoppedAt).toEqual([T0, T0]);
+            expect(timer.stoppedAtMs).toBeUndefined();
+        });
+
+        it('forgets the stop time once the run is resumed instead of recorded', async () => {
+            const timer = startInterval(h.ctx, { isRunning: true, phase: 'work' });
+            h.results.record = false;
+            await h.lifecycle.stopIntervalTimer(timer);
+            expect(timer.stoppedAtMs).toBe(T0);
+
+            h.lifecycle.resumeTimer(timer);
+            expect(timer.stoppedAtMs).toBeUndefined();
         });
     });
 
