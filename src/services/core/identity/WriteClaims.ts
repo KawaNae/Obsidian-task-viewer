@@ -82,11 +82,13 @@ export const MAX_CHAIN_PER_FILE = 1024;
  * lets a scan answer, row by row, whether a completion it reads is one a write
  * of ours made and for whom (see {@link WriteClaims.writerOf}). Unlike the
  * rows, every described link keeps it: a read can be of any state in the
- * chain, and what an older write wrote is what such a read holds.
+ * chain, and what an older write wrote is what such a read holds. A mark keeps
+ * it too when the write knew it: the rows it asked for by name, and the line
+ * it left each on, are the write's own knowledge, not the claim's.
  */
 type Link =
     | { filed: number; content: ContentKey; state: LinkState | null; origin: WriteOrigin; wrote: ReadonlyMap<string, string> }
-    | { filed: number; content: null };
+    | { filed: number; content: null; origin?: WriteOrigin; wrote?: ReadonlyMap<string, string> };
 
 interface LinkState {
     /** The rows, as the next write builds on them and `locate` reads them. */
@@ -191,6 +193,7 @@ export class WriteClaims {
         after: readonly string[],
         edits: readonly LineEdit[] | null,
         origin: WriteOrigin,
+        named: ReadonlyMap<string, string> = new Map(),
     ): ClaimResult {
         // Every way out of here without a claim is the same situation: this
         // write changed the file — `processLines` calls a sink for nothing
@@ -198,7 +201,7 @@ export class WriteClaims {
         // link would say the opposite, that the state before it may be built
         // on again, and that state is older now. So the file is marked
         // instead, and stays marked until a scan of it commits.
-        const nothing = (): ClaimResult => ({ hint: null, withdraw: this.silence(path), made: [] });
+        const nothing = (): ClaimResult => ({ hint: null, withdraw: this.silence(path, origin, named), made: [] });
 
         if (edits === null) return nothing();
 
@@ -268,8 +271,8 @@ export class WriteClaims {
      * how — for when even {@link claim} could not run. The same mark a claim
      * that cannot say leaves, and taken back the same way.
      */
-    silence(path: string): () => void {
-        return this.append(path, { filed: ++this.filed, content: null });
+    silence(path: string, origin?: WriteOrigin, named?: ReadonlyMap<string, string>): () => void {
+        return this.append(path, { filed: ++this.filed, content: null, origin, wrote: named });
     }
 
     /**
@@ -443,10 +446,12 @@ export class WriteClaims {
         }
         for (let i = upTo; i >= 0; i--) {
             const link = chain.links[i];
-            if (link.content === null) continue;
-            const written = link.wrote.get(runtimeId);
+            // A mark that could not say which rows it wrote may have written
+            // this one, and may not: the rows before it cannot answer past it.
+            if (link.content === null && (!link.wrote || !link.origin)) return null;
+            const written = link.wrote!.get(runtimeId);
             if (written === undefined) continue;
-            return written === text ? link.origin : null;
+            return written === text ? link.origin! : null;
         }
         return null;
     }

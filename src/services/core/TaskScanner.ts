@@ -432,16 +432,16 @@ export class TaskScanner {
      * write pays for stage 2 — one pass over the file it just wrote.
      */
     writeSink(file: string, origin: WriteOrigin): WriteSink {
-        return (before, after, edits) => {
+        return (before, after, edits, named) => {
             let result: ClaimResult;
             try {
-                result = this.claims.claim(file, before, after, edits, origin);
+                result = this.claims.claim(file, before, after, edits, origin, named);
             } catch (error) {
                 logError(`[TaskScanner] could not read back ${file} after a write: ${(error as Error)?.message ?? error}`);
                 // The write changed the file all the same, and nothing on
                 // record describes it now. Left unmarked, a record from before
                 // it would look like the last one there is.
-                return { withdraw: this.claims.silence(file), made: [] };
+                return { withdraw: this.claims.silence(file, origin, named), made: [] };
             }
             // Both halves of what a claim leaves behind come back together:
             // the hint the next scan would weigh, and the base the next write

@@ -314,11 +314,18 @@ export type WriteOrigin = 'user' | 'flow';
  * taken as describing it until a scan has read it again (see
  * `WriteClaims`). A write of ours that changed the file and left neither a
  * claim nor this mark would leave the last record looking current.
+ *
+ * `named` holds the rows the write asked for by name, each with the line it
+ * left the row on — known to the write whatever the claim makes of it, and
+ * empty when the report does not account for the lines. A write whose claim
+ * cannot be built (its lines are no state on record) still says which rows it
+ * wrote, and for whom, which is what a completion it made answers to.
  */
 export type WriteSink = (
     before: readonly string[],
     after: readonly string[],
     edits: readonly LineEdit[] | null,
+    named: ReadonlyMap<string, string>,
 ) => WriteReceipt;
 
 /**
@@ -756,7 +763,7 @@ export async function processLines(
                 if (!accounted) {
                     logError(`[FileLines] ${file.path}: a write's report does not account for the lines it wrote; no claim filed, the chain of records marked broken`);
                 }
-                const receipt = sink(before, next, accounted ? reported : null);
+                const receipt = sink(before, next, accounted ? reported : null, accounted ? leftBy(rows) : new Map());
                 withdrawals.push(receipt.withdraw);
                 made = receipt.made;
             }
@@ -775,6 +782,15 @@ export async function processLines(
     const outcome = refused as Refusal | null;
     if (outcome !== null) channel?.refused(outcome);
     return { written, refused: outcome, made, rows };
+}
+
+/** The line each named row was left on. */
+function leftBy(rows: ReadonlyMap<string, RowLines>): Map<string, string> {
+    const left = new Map<string, string>();
+    for (const [runtimeId, lines] of rows) {
+        if (lines.left.length > 0) left.set(runtimeId, lines.left[0]);
+    }
+    return left;
 }
 
 /** Each named row still standing once the write is done: its subtree before and after. */
@@ -817,7 +833,7 @@ export async function replaceWhole(
             for (const withdraw of withdrawals.splice(0)) withdraw();
             if (current === content) return current;
             const sink = channel?.sink;
-            if (sink) withdrawals.push(sink(splitLines(current).lines, splitLines(content).lines, null).withdraw);
+            if (sink) withdrawals.push(sink(splitLines(current).lines, splitLines(content).lines, null, new Map()).withdraw);
             return content;
         });
     } catch (error) {
