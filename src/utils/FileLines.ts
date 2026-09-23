@@ -281,7 +281,13 @@ export interface MadeRow {
 
 /** What filing a report left: a handle that takes it back, and the rows it named. */
 export interface WriteReceipt {
-    /** For a write that reported and then failed, or whose callback ran again. */
+    /**
+     * Called when, and only when, the write this report describes did not
+     * land: its callback ran again, or the write failed and the file does not
+     * read as it was left. Called at most once, and before any later write of
+     * ours to the same file files a report — so what it takes back is always
+     * our newest report on that file. A write that landed never calls it.
+     */
     withdraw: () => void;
     /**
      * The rows the report named on the spot. Empty when nothing was claimed —
@@ -838,8 +844,37 @@ export class BrokenWrite extends Error {
  * file never changed, so claims about it describe a state that never
  * existed; left in the log they would be matched against whatever the next
  * scan happens to read, and they are withdrawn.
+ *
+ * This is the one place that decides whether a write landed, and a withdrawal
+ * is how the rest of the plugin hears that it did not (see
+ * {@link WriteReceipt.withdraw}). The file only answers for this write while
+ * no other write of ours has touched it since, so writes to one file run here
+ * one at a time, the reading back included.
  */
-async function processOrFail(
+function processOrFail(
+    app: App,
+    file: TFile,
+    channel: WriteChannel | undefined,
+    withdrawals: Array<() => void>,
+    attempt: (content: string) => string,
+    subject: () => string,
+): Promise<WriteRefused | null> {
+    const ahead = inLine.get(file);
+    const run = () => processAndSettle(app, file, channel, withdrawals, attempt, subject);
+    // Nothing ahead: start now, as a write did before there was a line.
+    const mine = ahead ? ahead.then(run) : run();
+    const settled = mine.then(() => undefined, () => undefined);
+    inLine.set(file, settled);
+    void settled.then(() => {
+        if (inLine.get(file) === settled) inLine.delete(file);
+    });
+    return mine;
+}
+
+/** Each file's latest write through {@link processOrFail}, settled when it is done. */
+const inLine = new WeakMap<TFile, Promise<void>>();
+
+async function processAndSettle(
     app: App,
     file: TFile,
     channel: WriteChannel | undefined,

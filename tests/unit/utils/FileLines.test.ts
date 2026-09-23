@@ -423,6 +423,96 @@ describe('processLines', () => {
         expect(standing[0].after).toEqual(['- [x] a (2)', '']);
     });
 
+    describe('whether a write landed, with the next write to the file close behind', () => {
+        /**
+         * A file whose first write throws (`landed` or `lost`, as in
+         * `harness`) and whose reading back waits until `release`, so a
+         * second write can be sent while the first is still being decided.
+         * `events` is the order reports were filed and taken back in.
+         */
+        function race(failFirst: 'landed' | 'lost') {
+            let content = '- [ ] a\n';
+            let writes = 0;
+            let release!: () => void;
+            const gate = new Promise<void>(resolve => { release = resolve; });
+            const file = new TFile();
+            file.path = 'note.md';
+            const app = {
+                vault: {
+                    process: async (_f: TFile, fn: (data: string) => string) => {
+                        const first = ++writes === 1;
+                        const next = fn(content);
+                        if (!(first && failFirst === 'lost')) content = next;
+                        if (first) throw new Error('write failed');
+                    },
+                    read: async () => {
+                        await gate;
+                        return content;
+                    },
+                },
+            } as never;
+            const events: string[] = [];
+            let filed = 0;
+            const channel: WriteChannel = {
+                sink: () => {
+                    const n = ++filed;
+                    events.push(`file ${n}`);
+                    return { withdraw: () => { events.push(`withdraw ${n}`); }, made: [] };
+                },
+                locate: () => ({ kind: 'gone' }),
+                onRecord: () => true,
+                refused: () => { },
+            };
+            const write = (text: string) => processLines(app, file, channel, (draft) => {
+                draft.rewrite(0, text);
+                return true;
+            });
+            return { write, release, events, text: () => content };
+        }
+
+        it('keeps a write that landed, though the next write changed the file before it was read back', async () => {
+            const r = race('landed');
+
+            const first = r.write('- [x] a');
+            const second = r.write('- [x] a!');
+            r.release();
+
+            expect((await first).written).toBe(true);
+            expect((await second).written).toBe(true);
+            expect(r.events).toEqual(['file 1', 'file 2']);
+            expect(r.text()).toBe('- [x] a!\n');
+        });
+
+        it('takes back a write that did not land once, before the next write files its report', async () => {
+            const r = race('lost');
+
+            const first = r.write('- [x] a');
+            const second = r.write('- [x] a!');
+            r.release();
+
+            expect((await first).written).toBe(false);
+            expect((await second).written).toBe(true);
+            expect(r.events).toEqual(['file 1', 'withdraw 1', 'file 2']);
+        });
+    });
+
+    it('lets the next write to a file run after one that threw at its caller', async () => {
+        // A development build's report of a caller's bug rejects the write;
+        // the file's writes queued behind it still run.
+        const h = harness('- [ ] a\n');
+        const log = writeSink();
+
+        const broken = processLines(h.app, h.file, log.channel, () => false);
+        const next = processLines(h.app, h.file, log.channel, (draft) => {
+            draft.rewrite(0, '- [x] a');
+            return true;
+        });
+
+        await expect(broken).rejects.toThrow(BrokenWrite);
+        expect((await next).written).toBe(true);
+        expect(h.text()).toBe('- [x] a\n');
+    });
+
     it('answers the rows the last attempt made, and none when that attempt claimed nothing', async () => {
         const h = harness('- [ ] a\n', { callbackRuns: 2 });
         let filed = 0;
