@@ -206,7 +206,7 @@ export class TimerRenderer {
                 }
                 // Idle timers close without confirmation, but ignore accidental clicks
                 // right after the idle timer spawns (e.g. double-clicking a previous close)
-                if (timer.phase === 'idle') {
+                if (timer.phase === 'idle' && !this.lifecycle.holdsUnrecordedRun(timer)) {
                     if (Date.now() - timer.startTimeMs < 500) return;
                     this.clearCloseConfirmTimer(timerId);
                     this.lifecycle.closeTimer(timerId);

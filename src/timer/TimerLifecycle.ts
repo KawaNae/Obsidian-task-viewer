@@ -240,8 +240,9 @@ export class TimerLifecycle {
      * countup / countdown は、走行（runState 'running'）が止まっていて経過を持つ
      * 形。UI の操作で止まるのは中断（suspended）だけなので、この形は記録に失敗した
      * 出口か、停止の記録待ちのまま落ちた復元からしか来ない。interval は、区間の
-     * 途中（work / break）で走っていない形で、同じ2つからしか来ない
-     * （TimerRenderer の操作列の注記）。
+     * 途中（work / break）か prepare で走っていない形で、同じ2つからしか来ない
+     * （TimerRenderer の操作列の注記）。countdown は超過のあとに止めると phase が
+     * 'idle' になるので、phase でなく経過で見る。
      */
     holdsUnrecordedRun(timer: TimerInstance): boolean {
         if (timer.isRunning || timer.runState === 'suspended') return false;
@@ -250,7 +251,9 @@ export class TimerLifecycle {
             case 'countdown':
                 return timer.runState === 'running' && timer.pausedElapsedTime > 0;
             case 'interval':
-                return timer.phase === 'work' || timer.phase === 'break';
+                // prepare で止まっているのは、prepare 中の停止が記録できなかった
+                // ときだけ（一時停止の prepare は走っている）。
+                return timer.phase === 'work' || timer.phase === 'break' || timer.phase === 'prepare';
             default:
                 return false;
         }

@@ -619,8 +619,29 @@ describe('holdsUnrecordedRun', () => {
         expect(h.lifecycle.holdsUnrecordedRun(timer)).toBe(false);
     });
 
-    it('is false for an interval in prepare', () => {
-        const timer = startInterval(h.ctx, { isRunning: false, phase: 'prepare' });
+    it('is false for an interval paused into prepare, which is running', () => {
+        const timer = startInterval(h.ctx, { isRunning: true, phase: 'prepare' });
         expect(h.lifecycle.holdsUnrecordedRun(timer)).toBe(false);
+    });
+
+    it('is true for an interval stopped in prepare whose record was not written', () => {
+        // A stop from prepare leaves it not running; only a stop that could
+        // not be recorded leaves the widget there.
+        const timer = startInterval(h.ctx, { isRunning: false, phase: 'prepare' });
+        expect(h.lifecycle.holdsUnrecordedRun(timer)).toBe(true);
+    });
+
+    it('is true for a countdown stopped past zero, whose phase went idle', async () => {
+        // Pausing past zero sets the phase to 'idle' (pauseTimer), so the close
+        // button's idle branch must not take this run away unasked.
+        const countdown = startCountup(h.ctx) as unknown as CountdownTimer;
+        (countdown as unknown as { timerType: string }).timerType = 'countdown';
+        countdown.totalTime = 300; // ran 600 s: 300 s past zero
+        h.results.record = false;
+
+        await h.lifecycle.finishTimer(countdown as unknown as TimerInstance);
+
+        expect(countdown.phase).toBe('idle');
+        expect(h.lifecycle.holdsUnrecordedRun(countdown as unknown as TimerInstance)).toBe(true);
     });
 });

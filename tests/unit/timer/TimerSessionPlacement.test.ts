@@ -193,10 +193,17 @@ describe('startNextSession: the next record sits beside the last one', () => {
         expect(h2.siblingInserts[0].taskId).toBe(TARGET_ID);
     });
 
-    it('falls back to a child insert when the sibling write cannot resolve the line', async () => {
+    it('writes nowhere else when the sibling write was not made', async () => {
+        // The tail resolved, so the write layer has already said why it was
+        // not made. A child written instead would be a second notice for one
+        // resume, and, where the sibling had landed after all, a record out
+        // of order. The session runs without a line; the record at stop adds
+        // one (addSessionRecord).
         const failing = makeHarness({ siblingFails: true });
-        await failing.recorder.startNextSession(makeTimer());
-        expect(failing.childInserts).toHaveLength(1);
+        const timer = makeTimer();
+        expect(await failing.recorder.startNextSession(timer)).toBeUndefined();
+        expect(failing.childInserts).toHaveLength(0);
+        expect(timer.recordedChildTaskId).toBeUndefined();
     });
 });
 
