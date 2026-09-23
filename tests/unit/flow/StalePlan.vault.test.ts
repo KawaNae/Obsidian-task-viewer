@@ -220,3 +220,54 @@ describe('CX1: a generation block edited from outside, before any scan read it',
         expect(Notice.messages).toEqual([]);
     });
 });
+
+describe('F5: a subtree changed from outside, before any scan read it', () => {
+    // An operation that takes the row away, or carries it, takes its subtree
+    // with it, so the subtree is part of what it planned from. A line that
+    // joined the subtree since, or a child edited since, would otherwise go
+    // with it unseen (F4's last out-of-scope shape, and its move twin).
+
+    it('a move within the file does not carry a child edited since', async () => {
+        const { contents, session } = await open({
+            [FILE]: ['# note', '- [x] A @2026-09-21', '\t- ==> move([[note]])', '\t- [ ] 子', '- [ ] Z', ''],
+        });
+        const task = session.index.getTask(idOf(session, 'A'))!;
+        const edited = contents.get(FILE)!.replace('\t- [ ] 子', '\t- [ ] 子 書き足し');
+        contents.set(FILE, edited);
+
+        await executor(session).handleTaskCompletion(task);
+        await flowSettled(session);
+
+        expect(contents.get(FILE)).toBe(edited);
+        expect(Notice.messages).toEqual([CHANGED]);
+    });
+
+    // A task goes from outside, and the line below it — past a blank, deeper
+    // than the task above — now reads as that task's child.
+    const scanned = ['# note', '- [ ] A @2026-09-21', '- [ ] B', '', '    B のメモ', ''];
+    const bGone = ['# note', '- [ ] A @2026-09-21', '', '    B のメモ', ''];
+
+    it('a delete does not take a line that joined the subtree', async () => {
+        const { contents, session } = await open({ [FILE]: scanned });
+        const id = idOf(session, 'A');
+        contents.set(FILE, bGone.join('\n'));
+
+        expect(await session.index.deleteTask(id)).toBe(false);
+
+        expect(contents.get(FILE)).toBe(bGone.join('\n'));
+        expect(Notice.messages).toEqual([CHANGED]);
+    });
+
+    it('a deletion fire does not take it either', async () => {
+        const withFlow = ['# note', '- [ ] A @2026-09-21', '\t- ==> every 1d', '- [ ] B', '', '    B のメモ', ''];
+        const { contents, session } = await open({ [FILE]: withFlow });
+        const id = idOf(session, 'A');
+        const edited = ['# note', '- [ ] A @2026-09-21', '\t- ==> every 1d', '', '    B のメモ', ''].join('\n');
+        contents.set(FILE, edited);
+
+        expect(await session.index.deleteTask(id, { fireFlow: true })).toBe(false);
+
+        expect(contents.get(FILE)).toBe(edited);
+        expect(Notice.messages).toEqual([CHANGED]);
+    });
+});
