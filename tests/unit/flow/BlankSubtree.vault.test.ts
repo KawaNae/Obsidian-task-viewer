@@ -154,13 +154,13 @@ describe('a task indented by full-width spaces', () => {
     // Read as a task before F4 and after; F4's first reading of indentation
     // (spaces and tabs only) lost its parent and its indentation (B4).
     it('stays its parent\'s child, and keeps its indentation when checked', async () => {
-        const { contents, session } = await open({ [FILE]: ['# note', '- [ ] P', '　　- [ ] 子', ''] });
+        const { contents, session } = await open({ [FILE]: ['# note', '- [ ] P', '\u3000\u3000- [ ] 子', ''] });
         const parent = idOf(session, 'P');
         expect(session.index.getTask(idOf(session, '子'))?.parentId).toBe(parent);
 
         await complete(session, '子');
 
-        expect(contents.get(FILE)).toBe(['# note', '- [ ] P', '　　- [x] 子', ''].join('\n'));
+        expect(contents.get(FILE)).toBe(['# note', '- [ ] P', '\u3000\u3000- [x] 子', ''].join('\n'));
     });
 });
 
