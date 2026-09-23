@@ -36,6 +36,10 @@ function buildHost(task: Task, written = true) {
         // The dispose guard every write goes through; this index is open.
         disposed: false,
         refuseAfterDispose: proto.refuseAfterDispose,
+
+        copyForWrite: proto.copyForWrite,
+
+        reportRefusal: () => { /* the notice is not measured here */ },
     };
 }
 
