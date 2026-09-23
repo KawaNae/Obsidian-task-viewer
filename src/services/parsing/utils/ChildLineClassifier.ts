@@ -1,7 +1,6 @@
 import type { ChildLine, PropertyType, PropertyValue } from '../../../types';
 import { IN_LINE } from '../../../utils/LineBreak';
 import { LIST_BULLET_SOURCE } from './ListMarker';
-import { TaskLineClassifier } from './TaskLineClassifier';
 import { INDENT_SOURCE, Outline } from './Outline';
 import { extractWikilinkTarget } from '../../../utils/WikilinkUtils';
 
@@ -13,7 +12,8 @@ export class ChildLineClassifier {
     /** `- [[link]]` with any list bullet. */
     static readonly WIKILINK_CHILD = new RegExp(`^${INDENT_SOURCE}${LIST_BULLET_SOURCE}\\s+\\[\\[([^\\]]+)\\]\\]\\s*$`);
     /**
-     * Matches `- key:: value` (Dataview-compatible) but not checkbox or wikilink lines.
+     * Matches `- key:: value` (Dataview-compatible). A key holds no `[` or `]`,
+     * so a checkbox line and a wikilink line are never property lines.
      * 値部は空を許す（`- key ::` は空値プロパティ）。`(.+)` にすると末尾空白の
      * 有無で認識が反転する（`- key :: ` だけマッチ）ため `(.*)` が正しい。
      */
@@ -25,27 +25,17 @@ export class ChildLineClassifier {
      */
     static classify(text: string, bodyLine: number): ChildLine {
         const indent = Outline.indentOf(text);
-        const isCheckbox = TaskLineClassifier.isTaskLine(text);
         const wikiMatch = text.match(this.WIKILINK_CHILD);
 
-        // Property extraction: only for non-checkbox, non-wikilink lines
-        let propertyKey: string | null = null;
-        let propertyValue: string | null = null;
-        if (!isCheckbox && !wikiMatch) {
-            const propMatch = text.match(this.PROPERTY_LINE);
-            if (propMatch) {
-                propertyKey = propMatch[1].trim();
-                propertyValue = propMatch[2].trim();
-            }
-        }
+        const propMatch = text.match(this.PROPERTY_LINE);
 
         return {
             text,
             bodyLine,
             indent,
             wikilinkTarget: wikiMatch ? extractWikilinkTarget(wikiMatch[1]) : null,
-            propertyKey,
-            propertyValue,
+            propertyKey: propMatch ? propMatch[1].trim() : null,
+            propertyValue: propMatch ? propMatch[2].trim() : null,
         };
     }
 
@@ -59,10 +49,9 @@ export class ChildLineClassifier {
 
     /**
      * `- key:: value` プロパティ行かの純粋述語（bodyLine 概念を持たない
-     * write 層向け。分類本体と同じ checkbox/wikilink 除外規則を通す）。
+     * write 層向け。分類本体と同じ `PROPERTY_LINE` を通す）。
      */
     static isPropertyLine(text: string): boolean {
-        if (TaskLineClassifier.isTaskLine(text) || this.WIKILINK_CHILD.test(text)) return false;
         return this.PROPERTY_LINE.test(text);
     }
 
