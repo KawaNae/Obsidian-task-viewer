@@ -54,14 +54,12 @@ describe("vaultSession: isLocal for a flow's own writes", () => {
         expect(trace.slice(1)).toEqual(trace.slice(1).map(() => false));
     });
 
-    it('does not refire from the metadataCache "changed" scan either, once that scan is not swallowed by a stale selfWrites mark', async () => {
-        // At ordinary speed `changed` never gets this far: the completing
-        // write's own selfWrites mark (TaskIndex.ts:179-181, a 1000ms window
-        // keyed by path, not by which write set it) still covers the flow's
-        // own writes, which land within a few ms of it — see report.md. This
-        // waits the window out so the path this scaffold now supports
-        // (fireVault('changed', ...) actually reaching TaskIndex) gets
-        // exercised on its own.
+    it('does not refire from the metadataCache "changed" scan either: it reads what the last scan read, and commits nothing', async () => {
+        // `changed` follows every write. Before F6 a 1000ms window keyed by
+        // path (selfWrites) swallowed it after a local write, whichever write
+        // set the mark; the window is waited out here to show that the answer
+        // no longer depends on it. The scan it asks for reads the content the
+        // flow's last write left, which the last scan already read.
         const contents = flowNote();
         const session = vaultSession(contents);
         await session.scanAll();
@@ -73,14 +71,27 @@ describe("vaultSession: isLocal for a flow's own writes", () => {
             await vi.advanceTimersByTimeAsync(1500);
             const settled = contents.get(FILE);
 
-            const trace = traceScans(session, FILE);
+            const scanner = session.scanner as unknown as { rescanUnlessRead: (f: TFile) => Promise<boolean> };
+            const original = scanner.rescanUnlessRead.bind(scanner);
+            const answers: Promise<boolean>[] = [];
+            scanner.rescanUnlessRead = (f: TFile) => { const answer = original(f); answers.push(answer); return answer; };
             session.fireVault('changed', makeFile(FILE));
             await vi.advanceTimersByTimeAsync(50);
 
-            expect(trace).toEqual([false]);
+            expect(await Promise.all(answers)).toEqual([false]);
             expect(contents.get(FILE)).toBe(settled);
         } finally {
             vi.useRealTimers();
         }
+    });
+
+    it('still reads a change the last scan did not read, when "changed" is the only word of it', async () => {
+        const contents = flowNote();
+        const session = vaultSession(contents);
+        await session.scanAll();
+        contents.set(FILE, ['- [ ] 週報 @2026-09-21 ==> every mon', '- [ ] 新しい', ''].join('\n'));
+        const scanner = session.scanner as unknown as { rescanUnlessRead: (f: TFile) => Promise<boolean> };
+        expect(await scanner.rescanUnlessRead(makeFile(FILE))).toBe(true);
+        expect(session.index.getTasks().map(t => t.content)).toContain('新しい');
     });
 });

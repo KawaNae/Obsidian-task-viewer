@@ -27,7 +27,7 @@ import { logDebug, logError, logInfo } from '../../log/log';
  *   commit   — store 更新 + ledger 置換 + フロー発火
  */
 export class TaskScanner {
-    private scanQueue: Map<string, Promise<void>> = new Map();
+    private scanQueue: Map<string, Promise<unknown>> = new Map();
     private completionDetector = new CompletionDetector();
     private isInitializing = true;
     /**
@@ -155,15 +155,36 @@ export class TaskScanner {
      * スキャンをキューに追加
      */
     async queueScan(file: TFile, isLocal: boolean = false): Promise<void> {
+        await this.queue(file, isLocal, false);
+    }
+
+    /**
+     * Scan the file unless what it reads is what the last scan read, and say
+     * whether it committed.
+     *
+     * For a change event that may only echo a write the file's own `modify`
+     * already had scanned (`metadataCache`'s `changed` comes after every
+     * write, ours or not). Content the ledger recorded, with no write of ours
+     * on record past it and no claim waiting, parses to what the index holds:
+     * the parse reads the content's own frontmatter, not the cache. So the
+     * question "was this already read" is the content's to answer, not a
+     * window of time after a write.
+     */
+    async rescanUnlessRead(file: TFile): Promise<boolean> {
+        return this.queue(file, false, true);
+    }
+
+    private queue(file: TFile, isLocal: boolean, unlessRead: boolean): Promise<boolean> {
         if (!this.isInitializing) logDebug(`[queueScan] file=${file.path} isLocal=${isLocal}`);
         // シンプルなキューメカニズム: ファイルパスごとにプロミスをチェーン
         const previousScan = this.scanQueue.get(file.path) || Promise.resolve();
 
         const currentScan = previousScan.then(async () => {
             try {
-                await this.scanFile(file, isLocal);
+                return await this.scanFile(file, isLocal, unlessRead);
             } catch (error) {
                 logError(`Error scanning file ${file.path}: ${(error as Error)?.message ?? error}`);
+                return false;
             }
         });
 
@@ -184,8 +205,7 @@ export class TaskScanner {
     /**
      * ファイルをスキャンしてタスクを抽出（parse → identity → validate → detect → commit）
      */
-    private async scanFile(file: TFile, isLocalChange: boolean = false): Promise<void> {
-        this.validator.clearErrorsForFile(file.path);
+    private async scanFile(file: TFile, isLocalChange: boolean, unlessRead: boolean): Promise<boolean> {
 
         // Everything from here to the match below is synchronous, so the claims
         // this scan weighs are, near enough, the ones filed by the time the read
@@ -199,6 +219,13 @@ export class TaskScanner {
         const content = await this.app.vault.read(file);
         const { lines } = splitLines(content);
         const readKey = contentKeyOf(lines);
+        if (unlessRead
+            && readKey === this.ledger.contentFor(file.path)
+            && this.claims.lastWrite(file.path) === undefined
+            && this.hints.peekFor(file.path, Date.now()).length === 0) {
+            return false;
+        }
+        this.validator.clearErrorsForFile(file.path);
 
         // --- parse ---
         const parsed = FileParsePipeline.parse(file.path, lines, this.settings);
@@ -211,7 +238,7 @@ export class TaskScanner {
             // With no rows to match against, a hint has nothing left to claim.
             this.hints.dropFile(file.path);
             this.claims.forget(file.path);
-            return;
+            return true;
         }
 
         // --- identity ---
@@ -326,6 +353,7 @@ export class TaskScanner {
         for (const task of tasksToTrigger) {
             await this.commandExecutor.handleTaskCompletion(task);
         }
+        return true;
     }
 
     /**
