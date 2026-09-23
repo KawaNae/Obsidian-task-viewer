@@ -166,6 +166,21 @@ describe('writes asked of one row before the one before them is back', () => {
         expect(contents.get(FILE)).toBe(['# note', '- [ ] Z', ''].join('\n'));
         expect(Notice.messages).toEqual([]);
     });
+
+    it('lands a delete asked while an update of the row is still being written', async () => {
+        const { contents, session } = await open(['# note', '- [ ] A @2026-09-21', '- [ ] Z', '']);
+        const id = idOf(session, 'A');
+        session.index.setDraggingFile(FILE);
+
+        const done = await Promise.all([
+            session.index.updateTask(id, { content: 'A2' }),
+            session.index.deleteTask(id),
+        ]);
+
+        expect(done).toEqual([true, true]);
+        expect(contents.get(FILE)).toBe(['# note', '- [ ] Z', ''].join('\n'));
+        expect(Notice.messages).toEqual([]);
+    });
 });
 
 describe('an update that rewrites property lines plans from them', () => {
