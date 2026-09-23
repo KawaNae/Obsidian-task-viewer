@@ -32,14 +32,20 @@ export interface FileParseResult {
  */
 export class FileParsePipeline {
     /**
-     * @param cachedFrontmatter metadataCache frontmatter when available;
-     *   the pipeline falls back to parsing the raw `---` block (covers the
-     *   vault.modify → metadataCache.changed window).
+     * The frontmatter is read off `lines`, never out of metadataCache. The
+     * cache describes the file at some other moment: inside a write's
+     * `vault.process` it is the file before the write, and when the scan
+     * a `modify` starts reads, Obsidian has not re-read it yet — while the
+     * `changed` that follows is ignored for a file the plugin just wrote
+     * (`TaskIndex.selfWrites`). A frontmatter key decides whether the note
+     * has rows at all (`tv-ignore`) and what every row inherits (dates,
+     * which the ladder compares), so a write's record, a write's `locate` and
+     * the scan that follows have to read the same lines the same way, which
+     * only the lines themselves allow.
      */
     static parse(
         filePath: string,
         lines: string[],
-        cachedFrontmatter: Record<string, any> | undefined,
         settings: TaskViewerSettings
     ): FileParseResult {
         // --- Frontmatter境界検出 ---
@@ -47,13 +53,15 @@ export class FileParsePipeline {
         // (`Placement`): a line the parser reads as body is one a write may
         // place a line at.
         const bodyStartIndex = Outline.bodyStart(lines);
-        let frontmatterObj = cachedFrontmatter;
-        if (bodyStartIndex > 0 && !frontmatterObj) {
+        let frontmatterObj: Record<string, any> | undefined;
+        if (bodyStartIndex > 0) {
             try {
                 const yamlContent = lines.slice(1, bodyStartIndex - 1).join('\n');
-                frontmatterObj = parseYaml(yamlContent);
+                const parsed: unknown = parseYaml(yamlContent);
+                if (parsed && typeof parsed === 'object') frontmatterObj = parsed as Record<string, any>;
             } catch {
-                // YAML パースエラー時は無視（metadataCache.changed で再スキャンされる）
+                // A malformed block reads as no frontmatter, as metadataCache
+                // reads it.
             }
         }
 
@@ -99,7 +107,7 @@ export class FileParsePipeline {
             return false;
         }
 
-        // metadataCache 未更新の窓に備え、raw frontmatter 行も直接照合する
+        // A block YAML refuses still says tv-ignore line by line.
         const escapedKey = ignoreKey.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
         const keyLineRegex = new RegExp(`^${escapedKey}\\s*:\\s*(.*)$`);
 

@@ -3,8 +3,8 @@ import { FileParsePipeline } from '../../../src/services/parsing/FileParsePipeli
 import { TaskStore } from '../../../src/services/core/TaskStore';
 import { DEFAULT_SETTINGS } from '../../../src/types';
 
-const parse = (lines: string[], frontmatter?: Record<string, any>) =>
-    FileParsePipeline.parse('note.md', lines, frontmatter, DEFAULT_SETTINGS);
+const parse = (lines: string[]) =>
+    FileParsePipeline.parse('note.md', lines, DEFAULT_SETTINGS);
 
 describe('FileParsePipeline — generation blocks', () => {
     it('carries the blocks of the file', () => {
@@ -30,10 +30,13 @@ describe('FileParsePipeline — generation blocks', () => {
 
     it('produces no blocks for a tv-ignore file', () => {
         const result = parse([
+            '---',
+            'tv-ignore: true',
+            '---',
             '```tv-gen 手順',
             '- [ ] 資料集め',
             '```',
-        ], { 'tv-ignore': true });
+        ]);
         expect(result.ignored).toBe(true);
         expect(result.genBlocks.size).toBe(0);
     });
