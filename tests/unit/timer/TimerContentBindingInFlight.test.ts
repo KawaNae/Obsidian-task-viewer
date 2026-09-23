@@ -87,4 +87,32 @@ describe('TimerContentBinding: a flush during a write', () => {
         expect(await flushed).toBe(true);
         expect(h.timer.pendingContent).toBeUndefined();
     });
+
+    it('keeps a later name as the draft when the first lands and the later one is refused', async () => {
+        // The name typed during the first write is the draft until that write
+        // lands, which clears the draft. The refusal of the later name is then
+        // the only thing that can put it back, for the next flush to write.
+        vi.useFakeTimers();
+        const h = harness();
+        h.type('一つ目');
+        await vi.advanceTimersByTimeAsync(CONTENT_WRITE_DEBOUNCE_MS + 1);
+        h.type('二つ目');
+
+        const flushed = h.binding.flush(h.timer);
+        h.settle(true);
+        await vi.advanceTimersByTimeAsync(0);
+        expect(h.calls).toEqual(['一つ目', '二つ目']);
+        h.settle(false);
+
+        expect(await flushed).toBe(false);
+        expect(h.timer.pendingContent).toBe('二つ目');
+
+        // The next flush writes it again.
+        const again = h.binding.flush(h.timer);
+        await vi.advanceTimersByTimeAsync(0);
+        expect(h.calls).toEqual(['一つ目', '二つ目', '二つ目']);
+        h.settle(true);
+        expect(await again).toBe(true);
+        expect(h.timer.pendingContent).toBeUndefined();
+    });
 });
