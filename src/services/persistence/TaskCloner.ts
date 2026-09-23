@@ -1,4 +1,5 @@
 import { type App, TFile } from 'obsidian';
+import { TaskLineClassifier } from '../parsing/utils/TaskLineClassifier';
 import type { DuplicateOptions } from '../../types';
 import { DateUtils } from '../../utils/DateUtils';
 import { logWarn } from '../../log/log';
@@ -105,7 +106,7 @@ export class TaskCloner {
             const parents = copies.kind === 'verbatim'
                 ? Array.from({ length: copies.count },
                     () => this.fileOps.stripBlockIds([lines[idx]])[0])
-                : copies.lines.map(l => indent + l.trim());
+                : copies.lines.map(l => indent + TaskLineClassifier.tidy(l));
 
             return this.spliceCopies(draft, idx, parents, at)
                 || refuse({ kind: 'unplaceable' }, target.subject);

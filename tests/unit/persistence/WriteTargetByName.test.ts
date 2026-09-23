@@ -132,7 +132,8 @@ describe('a row with no name', () => {
         );
 
         expect(written).toBe(true);
-        expect(bench.lines()).toEqual(['メモ', '- [x]', '- [ ] 名前あり']);
+        // The space after `]` stays: without it Obsidian reads no task.
+        expect(bench.lines()).toEqual(['メモ', '- [x] ', '- [ ] 名前あり']);
     });
 
     it('writes neither of two nameless rows that read the same', async () => {

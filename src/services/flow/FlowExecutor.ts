@@ -1,4 +1,5 @@
 import { type App, Notice, TFile } from 'obsidian';
+import { TaskLineClassifier } from '../parsing/utils/TaskLineClassifier';
 import type { Task, TaskViewerSettings } from '../../types';
 import { t } from '../../i18n';
 import { DateUtils } from '../../utils/DateUtils';
@@ -249,7 +250,7 @@ export class FlowExecutor {
         if (effect.kind === 'create-next') {
             return {
                 kind: 'recurrence',
-                content: TaskParser.format(effect.newTask).trim(),
+                content: TaskLineClassifier.tidy(TaskParser.format(effect.newTask)),
                 flowLines: (effect.newTask.flow?.childSegments ?? []).map(s => s.raw),
             };
         }
@@ -367,7 +368,7 @@ export class FlowExecutor {
                 // refuses a row, or command lines, that read otherwise now
                 // (`plannedOn`), so this is not a stale copy written over an
                 // edit made since — someone else's or a write of ours.
-                return [{ kind: 'strip-flow', text: TaskParser.format({ ...task, flow: undefined }).trim() }];
+                return [{ kind: 'strip-flow', text: TaskLineClassifier.tidy(TaskParser.format({ ...task, flow: undefined })) }];
             case 'archive-to':
                 // To another file it is written before this write (see
                 // executeFlow). Within the file it is one op: the row is

@@ -1,4 +1,5 @@
 import { differenceInCalendarDays } from 'date-fns';
+import { TaskLineClassifier } from '../parsing/utils/TaskLineClassifier';
 import type { Task, TaskFlow } from '../../types';
 import { DateUtils } from '../../utils/DateUtils';
 import { TIMER_ICON_PREFIX_RE } from '../../utils/TimerIcons';
@@ -295,7 +296,7 @@ function composeParentLine(
     newTask: Task,
     warnings: Diagnostic[],
 ): string {
-    if (parentText === null) return TaskParser.format(newTask).trim();
+    if (parentText === null) return TaskLineClassifier.tidy(TaskParser.format(newTask));
 
     const checked = checkGeneratedParentLine(parentText);
     // The line check speaks in diagnostics, and its sentence is the whole of
