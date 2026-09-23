@@ -1,6 +1,7 @@
 import { type Diagnostic, error } from '../lang/Diagnostic';
 import { childStatusWarning, parentStatusWarning } from '../parsing/gen/GenGeneratedStatusCheck';
 import { TaskLineClassifier } from '../parsing/utils/TaskLineClassifier';
+import { Outline } from '../parsing/utils/Outline';
 import { FLOW_MARKER } from './FlowLineScanner';
 
 /**
@@ -11,6 +12,17 @@ import { FLOW_MARKER } from './FlowLineScanner';
 export type GeneratedLineCheck =
     | { ok: true; line: string; warnings: Diagnostic[] }
     | { ok: false; error: Diagnostic };
+
+/**
+ * A generated line as it is written: its own indentation taken off (the
+ * writer puts the depth), and its content's end trimmed — a value that
+ * interpolates to nothing leaves no space behind it. The checkbox's gap is
+ * not content, so a line whose content is empty stays a task (`- [ ] `).
+ */
+function generatedLine(raw: string): string {
+    const { head, content } = TaskLineClassifier.splitContent(Outline.dedent(raw));
+    return head + TaskLineClassifier.joinContent(content);
+}
 
 /**
  * Check the parent line a generation block produced, and normalize what the
@@ -32,7 +44,7 @@ export type GeneratedLineCheck =
  * file at the moment it is checked.
  */
 export function checkGeneratedParentLine(raw: string): GeneratedLineCheck {
-    const line = TaskLineClassifier.tidy(raw);
+    const line = generatedLine(raw);
     const whole = { start: 0, end: line.length };
 
     // A command here would be the second one on the line: the engine
@@ -113,7 +125,7 @@ export function checkGeneratedParentLine(raw: string): GeneratedLineCheck {
  * text has to be refused instead.
  */
 export function checkGeneratedChildLine(raw: string): GeneratedLineCheck {
-    const line = TaskLineClassifier.tidy(raw);
+    const line = generatedLine(raw);
     const { blockId } = TaskLineClassifier.extractLineBlockId(line);
     if (blockId) {
         return {

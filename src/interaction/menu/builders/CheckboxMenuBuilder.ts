@@ -114,7 +114,8 @@ export class CheckboxMenuBuilder {
                         this.app,
                         async (result) => {
                             const formatted = formatTaskLine(result);
-                            const newLine = indent + formatted.replace(/^- \[ \]/, `${marker} [${statusChar}]`);
+                            const newLine = indent + TaskLineClassifier.formatPrefix(statusChar, '', marker)
+                                + TaskLineClassifier.splitContent(formatted).content;
                             await ops.updateLine(newLine);
                         },
                         { content, startDate: today },

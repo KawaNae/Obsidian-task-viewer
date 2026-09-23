@@ -248,17 +248,17 @@ export class TVInlineParser implements LeafParserStrategy {
         // block is handed are one implementation rather than two that agree
         // until one of them is changed.
         const dateBlock = formatDateBlock(task);
-        const metaStr = dateBlock ? ` ${dateBlock}` : '';
 
         // Flow text is always re-emitted verbatim (round-trip safety, even
         // for unparseable commands). Canonical re-serialization happens only
         // when a fire generates the next instance (FlowPlanner). Only the
         // task-line segment is emitted here — `- ==>` child segments are
         // physical lines of their own and are never rewritten by format().
-        const flowStr = task.flow?.raw ? ` ==> ${task.flow.raw}` : '';
+        const flowStr = task.flow?.raw ? `==> ${task.flow.raw}` : '';
 
-        const blockIdStr = task.blockId ? ` ^${task.blockId}` : '';
+        const blockIdStr = task.blockId ? `^${task.blockId}` : '';
         const marker = TaskLineClassifier.extractMarker(task.originalText);
-        return `${marker} [${statusChar}] ${task.content}${metaStr}${flowStr}${blockIdStr}`;
+        return TaskLineClassifier.formatPrefix(statusChar, '', marker)
+            + TaskLineClassifier.joinContent(task.content, dateBlock, flowStr, blockIdStr);
     }
 }
