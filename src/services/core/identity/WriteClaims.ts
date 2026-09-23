@@ -675,11 +675,12 @@ export class WriteClaims {
      * - lines that may be more than one of these, or past the cap: the
      *   read-mark decides.
      *
-     * And whatever the placing, an outside change the read is sure to have
-     * seen — its mark filed before the scan began — takes with it every link
-     * before it. A state the file moved on from by a change nobody reported
-     * can only be reached again by another route, and a record kept for that
-     * would be weighed against it as if its own write had put it there (E1).
+     * A record the read saw the file move on from by a change nobody reported
+     * goes with the commit whatever the placing: that change filed its mark
+     * before the scan began, so the record did too, and only what filed after
+     * the read-mark is kept past a read that is not one state alone. Kept, it
+     * would be weighed against a later read as if its own write had put the
+     * file there, when only another route can (E1).
      */
     forget(path: string, seen?: { readMark: number; place: ReadPlace }): void {
         const chain = this.chains.get(path);
@@ -700,9 +701,7 @@ export class WriteClaims {
         } else {
             keep = link => unread(link);
         }
-        let seenOutside = -1;
-        chain.links.forEach((link, at) => { if (isForeign(link) && !unread(link)) seenOutside = at; });
-        chain.links = chain.links.filter((link, at) => at > seenOutside && keep(link, at));
+        chain.links = chain.links.filter((link, at) => keep(link, at));
         if (chain.links.length === 0) {
             this.chains.delete(path);
             return;
