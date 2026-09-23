@@ -558,7 +558,11 @@ export class TimerRecorder {
         const { line, blockId } = this.buildSessionPlaceholder(timer);
         const inserted = await this.plugin.getTaskWriteService()
             .insertSiblingAfterTask(tail.id, line);
-        if (!inserted) return this.createChildAtStart(timer);
+        // 尻尾は引けたのに書けなかった。理由は書き込みの層が1回だけ通知済み。
+        // 子へ書き直すと、同じ操作で通知が2回になり、書けていた場合は記録の
+        // 並びが逆になる。走行中の行が無いままでも、停止時の記録が子を足して
+        // 計測を拾う（updateChildAtEnd と addSessionRecord）。
+        if (!inserted) return undefined;
 
         const sessionTaskId = await this.adoptWrittenSession(timer, tail.file, blockId);
         if (sessionTaskId) {
