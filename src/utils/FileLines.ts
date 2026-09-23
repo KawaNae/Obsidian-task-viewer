@@ -750,19 +750,23 @@ export async function processLines(
             },
             refuse,
         };
+        // A caller's bug, not the user's: a development build throws so the
+        // bug is seen, a release build leaves the file as it was and refuses.
+        const callerBug = (what: string, reason: RefusalReason): string => {
+            const message = `[FileLines] ${file.path}: ${what}; nothing written`;
+            if (__DEV__) throw new BrokenWrite(message);
+            logError(message, { notice: false });
+            refuse(reason, lastSubject || file.path);
+            return content;
+        };
         let next: string[] | null;
         try {
             next = edit(draft, eol, session) ? lines : null;
         } catch (error) {
             if (!(error instanceof LineBreakInLine)) throw error;
-            // A caller's bug, not the user's: the input should have been
-            // refused where it came in (`TaskApi`). The file is left as it
-            // was rather than written with a line the report cannot count.
-            const message = `[FileLines] ${file.path}: ${error.message}; nothing written`;
-            if (__DEV__) throw new BrokenWrite(message);
-            logError(message, { notice: false });
-            refuse({ kind: 'failed' }, lastSubject || file.path);
-            return content;
+            // The input should have been refused where it came in
+            // (`TaskApi`), not written with a line the report cannot count.
+            return callerBug(error.message, { kind: 'failed' });
         }
 
         // A write that took a coordinate across its own edits wrote where
@@ -772,25 +776,13 @@ export async function processLines(
         if (unsound === null && next !== null && carried && !explains(before, next, reported)) {
             unsound = 'its report does not account for the lines it wrote';
         }
-        if (unsound !== null) {
-            const message = `[FileLines] ${file.path}: a coordinate was carried across this write's edits, but ${unsound}; nothing written`;
-            if (__DEV__) throw new BrokenWrite(message);
-            logError(message, { notice: false });
-            refuse({ kind: 'changed' }, lastSubject);
-            return content;
-        }
+        if (unsound !== null) return callerBug(`a coordinate was carried across this write's edits, but ${unsound}`, { kind: 'changed' });
         if (next === null) {
             // Every way a callback gives a write up says why (`refuse`,
             // or `row` answering null). One that just returns false has
             // not, and would leave its caller a write neither made nor
             // refused.
-            if (refused === null) {
-                const message = `[FileLines] ${file.path}: a write was given up without a reason; nothing written`;
-                if (__DEV__) throw new BrokenWrite(message);
-                logError(message, { notice: false });
-                refuse({ kind: 'failed' }, lastSubject || file.path);
-            }
-            return content;
+            return refused === null ? callerBug('a write was given up without a reason', { kind: 'failed' }) : content;
         }
         refused = null;
 
