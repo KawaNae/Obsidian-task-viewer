@@ -21,14 +21,6 @@ import { decideLazyEnd } from './TimerLazyEnd';
 import type { TimerStorageUtils } from './TimerStorageUtils';
 import { logInfo, logWarn } from '../log/log';
 
-/**
- * What became of the line a resumed session runs on. Not written has been
- * told to the user, once. Written, its id is there once a scan has read it.
- */
-export type SessionLine =
-    | { written: false }
-    | { written: true; sessionTaskId?: string };
-
 export class TimerRecorder {
     private resolver: TimerTaskResolver;
     private storageUtils: TimerStorageUtils;
@@ -574,7 +566,7 @@ export class TimerRecorder {
      * 最後の枝はフォールバックでもある: レコード行をユーザーが消して尻尾を失って
      * も、記録そのものは落とさない。
      */
-    async startNextSession(timer: TimerInstance): Promise<SessionLine> {
+    async startNextSession(timer: TimerInstance): Promise<boolean> {
         const tail = this.resolveTailRecord(timer);
         const previous = { tailRecordBlockId: timer.tailRecordBlockId, recordedChildTaskId: timer.recordedChildTaskId };
 
@@ -594,15 +586,15 @@ export class TimerRecorder {
             // 取り消すので（TimerLifecycle.resumeSession）、尻尾も戻す。
             timer.tailRecordBlockId = previous.tailRecordBlockId;
             timer.recordedChildTaskId = previous.recordedChildTaskId;
-            return { written: false };
+            return false;
         }
         timer.lazyEndFloorMs = undefined;
 
         const file = tail?.file ?? timer.taskFile;
-        const sessionTaskId = await this.adoptWrittenSession(timer, file, blockId);
+        await this.adoptWrittenSession(timer, file, blockId);
         // 尻尾は 1 個。新しい行を書けた時点で前の行から id を外す。
         if (tail) await this.releaseTailId(timer, tail.file, tail.blockId);
-        return { written: true, sessionTaskId };
+        return true;
     }
 
     /**

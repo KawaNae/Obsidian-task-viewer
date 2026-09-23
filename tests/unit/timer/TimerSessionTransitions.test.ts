@@ -46,7 +46,7 @@ function build() {
             return results.record;
         },
         createChildAtStart: async () => { calls.createChildAtStart++; calls.order.push('placeholder'); return 'tv-inline:notes/a.md:ln:4'; },
-        startNextSession: async () => { calls.startNextSession++; calls.order.push('nextSession'); return { written: true, sessionTaskId: 'tv-inline:notes/a.md:ln:5' }; },
+        startNextSession: async () => { calls.startNextSession++; calls.order.push('nextSession'); return true; },
         discardRunningPlaceholder: async () => { calls.discardRunningPlaceholder++; calls.order.push('discard'); },
     };
 
