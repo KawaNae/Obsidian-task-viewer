@@ -314,7 +314,7 @@ function checkedChild(child: { depth: number; body: string }, warnings: Diagnost
     // write layer treats an element as a line and would emit the rest of it
     // without indentation, which reads as a different tree than the one the
     // block described.
-    if (checked.line.includes('\n')) {
+    if (holdsLineBreak(checked.line)) {
         throw new GenerationError('eval.gen-child-line-break',
             'A generated line cannot contain a line break');
     }
