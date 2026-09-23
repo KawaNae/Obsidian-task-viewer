@@ -43,7 +43,9 @@ function observe() {
         advance: (ms: number) => { now += ms; },
         clock: () => now,
         /** A key whose time stamp says it happened at `at`, heard now. */
-        keyAt: (at: number) => inputs.get('keydown')!({ isTrusted: true, type: 'keydown', key: 'l', ctrlKey: true, timeStamp: at, view: { performance: { timeOrigin: 0 } } } as unknown as Event),
+        keyAt: (at: number, skew = 0) => inputs.get('keydown')!({ isTrusted: true, type: 'keydown', key: 'l', ctrlKey: true, timeStamp: at + skew, view: { performance: { now: () => now + skew } } } as unknown as Event),
+        /** A press whose time stamp says it happened at `at`, heard now. */
+        pressAt: (at: number) => inputs.get('pointerdown')!({ isTrusted: true, type: 'pointerdown', timeStamp: at, view: { performance: { now: () => now } } } as unknown as Event),
         key: (key = 'Enter', ctrlKey = false) => inputs.get('keydown')!({ isTrusted: true, type: 'keydown', key, ctrlKey } as unknown as Event),
         press: (trusted = true) => inputs.get('pointerdown')!({ isTrusted: trusted } as Event),
         /** The note's editor changed; `focused` says whether it had the focus. */
@@ -144,6 +146,31 @@ describe('EditorObserver: what raises the signal', () => {
         editor.change();
         editor.advance(50);
         editor.keyAt(editor.clock());
+        expect(editor.signal.take('note.md')).toBe(false);
+    });
+
+    it('a popped-out window whose clock starts elsewhere still counts, and does not hold off the main one', () => {
+        // F6's counterexample run (C): a window's time origin need not agree
+        // with the main one's. Taking the latest time stamp as absolute let a
+        // window five seconds ahead hide every hand in the main window.
+        const editor = observe();
+        editor.keyAt(editor.clock() - 2, 5000);
+        editor.change();
+        expect(editor.signal.take('note.md')).toBe(true);
+        editor.advance(3000);
+        editor.press();
+        editor.change();
+        expect(editor.signal.take('note.md')).toBe(true);
+    });
+
+    it('a press heard late does not claim a change that came before it', () => {
+        // F6's counterexample run (Q): only a hotkey's key runs its command
+        // before this observer hears it. A press is heard first.
+        const editor = observe();
+        const pressedAt = editor.clock();
+        editor.advance(20);
+        editor.change();
+        editor.pressAt(pressedAt);
         expect(editor.signal.take('note.md')).toBe(false);
     });
 
