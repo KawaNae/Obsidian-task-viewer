@@ -119,6 +119,12 @@ export interface TimerBase {
      * 書き込みが返るまでの往復だけで、その間の打鍵を捨てないために要る。
      */
     pendingContent?: string;
+    /**
+     * 記録を書く出口を押した時刻。記録を書けずに widget が残ったとき、次に押した
+     * 記録もこの時刻で終わる（押し直すまでの待ちを記録の幅に入れない）。記録を
+     * 書けたときと、走行を再開したときに消す。
+     */
+    stoppedAtMs?: number;
     recordMode: TimerRecordMode;
     /** Always a current {@link ParserId}; legacy persisted values are normalized at load. */
     parserId: ParserId;

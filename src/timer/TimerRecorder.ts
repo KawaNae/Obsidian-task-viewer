@@ -34,12 +34,17 @@ export class TimerRecorder {
         this.storageUtils = storageUtils;
     }
 
+    /** When the session ended: the first press of the exit that records it, or now. */
+    private stoppedAt(timer: TimerInstance): Date {
+        return new Date(timer.stoppedAtMs ?? Date.now());
+    }
+
     /**
      * Record a completed Countup timer session.
      */
     async addCountupRecord(timer: TimerInstance): Promise<boolean> {
         const elapsedSeconds = getTimerElapsedSeconds(timer);
-        const endTime = new Date();
+        const endTime = this.stoppedAt(timer);
         const startTime = new Date(endTime.getTime() - elapsedSeconds * 1000);
 
         const icon = this.getTimerIcon(timer);
@@ -62,7 +67,7 @@ export class TimerRecorder {
      */
     async addCountdownRecord(timer: TimerInstance): Promise<boolean> {
         const elapsedSeconds = getTimerElapsedSeconds(timer);
-        const endTime = new Date();
+        const endTime = this.stoppedAt(timer);
         const startTime = new Date(endTime.getTime() - elapsedSeconds * 1000);
 
         const icon = this.getTimerIcon(timer);
@@ -86,7 +91,7 @@ export class TimerRecorder {
      */
     async addIntervalRecord(timer: TimerInstance): Promise<boolean> {
         const elapsedSeconds = getTimerElapsedSeconds(timer);
-        const endTime = new Date();
+        const endTime = this.stoppedAt(timer);
         const startTime = new Date(endTime.getTime() - elapsedSeconds * 1000);
 
         const isPomodoroSource = timer.timerType === 'interval' && timer.intervalSource === 'pomodoro';
@@ -388,7 +393,7 @@ export class TimerRecorder {
         }
 
         const elapsedSeconds = getTimerElapsedSeconds(timer);
-        const endTime = new Date();
+        const endTime = this.stoppedAt(timer);
 
         const icon = this.getTimerIcon(timer);
         // 名前は対象タスクから継ぐので、既にアイコン付きの行（完了済みレコードの
@@ -653,7 +658,7 @@ export class TimerRecorder {
      */
     async updateTaskDirectly(timer: TimerInstance): Promise<boolean> {
         const elapsedSeconds = getTimerElapsedSeconds(timer);
-        const endTime = new Date();
+        const endTime = this.stoppedAt(timer);
         const startTime = new Date(endTime.getTime() - elapsedSeconds * 1000);
 
         const startDateStr = this.formatDate(startTime);

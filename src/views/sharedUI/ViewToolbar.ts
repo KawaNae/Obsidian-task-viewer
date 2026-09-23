@@ -553,7 +553,7 @@ export class ViewSettingsMenu {
                                 saved = await writer.saveTemplate(folder, template);
                             } catch (e) {
                                 // ノートを作れなかった。上書きの失敗と同じ文面で1回だけ伝える。
-                                logError(`[ViewToolbar] view template not saved: ${e instanceof Error ? e.message : String(e)}`);
+                                logError(`[ViewToolbar] view template not saved: ${e instanceof Error ? e.message : String(e)}`, { notice: false });
                                 new Notice(t('notice.writeFailed', { subject: name }));
                                 return;
                             }

@@ -215,10 +215,14 @@ export class TimerLifecycle {
      * 実際に interval の停止でそうなった（`TimerRenderer` の 2 つの停止ハンドラ）。
      */
     private async flushAndRecord(timer: TimerInstance): Promise<boolean> {
+        // 押し直しの記録も、最初に押した時刻で終わる。
+        timer.stoppedAtMs ??= Date.now();
         // 名前を書けなかったら記録に進まない。古い名前で記録を書けば、通知が
         // 拒否と成功の2回になり、打った名前は下書きに残ったまま行き先を失う。
         if (!(await this.ctx.flushTimerContent(timer.id))) return false;
-        return this.ctx.recorder.recordSessionEnd(timer);
+        if (!(await this.ctx.recorder.recordSessionEnd(timer))) return false;
+        timer.stoppedAtMs = undefined;
+        return true;
     }
 
     /**
@@ -336,6 +340,7 @@ export class TimerLifecycle {
      */
     resumeSession(timer: TimerInstance): void {
         if (timer.runState !== 'suspended') return;
+        timer.stoppedAtMs = undefined;
 
         timer.runState = 'running';
         timer.startTimeMs = Date.now();
@@ -457,6 +462,8 @@ export class TimerLifecycle {
     }
 
     resumeTimer(timer: TimerInstance): void {
+        // 記録を書けずに止まっていた走行を続けるなら、止めた時刻はもう終わりではない。
+        timer.stoppedAtMs = undefined;
         if (timer.timerType === 'interval') {
             const segment = getCurrentSegment(timer);
             if (segment) {
