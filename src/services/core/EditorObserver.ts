@@ -42,7 +42,9 @@ export class EditorObserver {
     /** When a key or a press last reached the app, or -Infinity. */
     private lastHand = -Infinity;
     private readonly onHand = (e: Event) => {
-        if (e.isTrusted) this.lastHand = this.now();
+        if (!e.isTrusted) return;
+        if (e.type === 'keydown' && !editsByKey(e as KeyboardEvent)) return;
+        this.lastHand = this.now();
     };
 
     constructor(
@@ -143,4 +145,23 @@ export class EditorObserver {
         this.currentEditorEl = null;
         this.editorListenerBound = null;
     }
+}
+
+/** Keys that move, select or wait for another key: they change no note. */
+const QUIET_KEYS = new Set([
+    'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Home', 'End', 'PageUp', 'PageDown',
+    'Shift', 'Control', 'Alt', 'Meta', 'CapsLock', 'Escape', 'Tab',
+]);
+
+/**
+ * Whether a key is one the hand changes a note with. Not a key that only
+ * moves or selects: a sync that reloads the note a moment after an arrow key
+ * is not the hand's. Not undo or redo either: what they bring back is a state
+ * the note was in, not a completion the hand made — undoing a flow's write
+ * would otherwise complete the task again and fire it a second time.
+ */
+export function editsByKey(e: Pick<KeyboardEvent, 'key' | 'ctrlKey' | 'metaKey'>): boolean {
+    if (QUIET_KEYS.has(e.key)) return false;
+    if ((e.ctrlKey || e.metaKey) && ['z', 'Z', 'y', 'Y'].includes(e.key)) return false;
+    return true;
 }
