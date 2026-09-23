@@ -128,14 +128,15 @@ describe('startNextSession: the next record sits beside the last one', () => {
 
     it('inserts the session as the tail record’s sibling', async () => {
         const timer = makeTimer();
-        const sessionId = await h.recorder.startNextSession(timer);
+        const written = await h.recorder.startNextSession(timer);
 
         expect(h.siblingInserts).toHaveLength(1);
         expect(h.siblingInserts[0].taskId).toBe(TAIL_ID);
         // 尻尾の直後に置く。完了済みの連なりを辿らせるのは [x] 起点の「続き」だけ。
         expect(h.siblingInserts[0].opts.afterCompletedRun).toBeUndefined();
         expect(h.childInserts).toHaveLength(0);
-        expect(sessionId).toEqual({ written: true, sessionTaskId: NEW_SESSION_ID });
+        expect(written).toBe(true);
+        expect(timer.recordedChildTaskId).toBe(NEW_SESSION_ID);
     });
 
     it('carries the record name over instead of leaving the line unnamed', async () => {
@@ -202,7 +203,7 @@ describe('startNextSession: the next record sits beside the last one', () => {
         const failing = makeHarness({ siblingFails: true });
         const timer = makeTimer();
         const before = { tail: timer.tailRecordBlockId, id: timer.recordedChildTaskId };
-        expect(await failing.recorder.startNextSession(timer)).toEqual({ written: false });
+        expect(await failing.recorder.startNextSession(timer)).toBe(false);
         expect(failing.childInserts).toHaveLength(0);
         expect(timer.tailRecordBlockId).toBe(before.tail);
         expect(timer.recordedChildTaskId).toBe(before.id);

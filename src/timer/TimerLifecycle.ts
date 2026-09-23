@@ -401,7 +401,7 @@ export class TimerLifecycle {
         void this.exclusive(timer, async () => {
             // 中断中に打たれた入力は直前のレコード宛。新しい行を挿す前に流し込む。
             const began = await this.ctx.flushTimerContent(timer.id)
-                && (await this.ctx.recorder.startNextSession(timer)).written;
+                && await this.ctx.recorder.startNextSession(timer);
             if (!began) {
                 // 名前か走行中の行を書けなかった。理由は1回だけ通知済み。再開を
                 // 取り消し、中断に戻す — 行の無い走行は、書き終えた記録を走行中と
