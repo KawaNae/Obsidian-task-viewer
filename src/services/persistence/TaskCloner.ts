@@ -1,10 +1,10 @@
 import { type App, TFile } from 'obsidian';
-import type { DuplicateOptions, Task } from '../../types';
+import type { DuplicateOptions } from '../../types';
 import { DateUtils } from '../../utils/DateUtils';
 import { logWarn } from '../../log/log';
 import { FileOperations } from './utils/FileOperations';
 import { processLines, type LineDraft } from '../../utils/FileLines';
-import { refOf, subjectOf } from './TaskRefs';
+import type { PlannedTarget } from './TaskRefs';
 import type { WriteObserver } from './WriteObserver';
 import { Outline } from '../parsing/utils/Outline';
 import { Placement } from './utils/Placement';
@@ -45,18 +45,18 @@ export class TaskCloner {
      * @returns whether the copy was written. A `false` means the original line
      * could not be resolved and the file is untouched.
      */
-    async duplicateInlineTask(task: Task, options?: DuplicateOptions): Promise<boolean> {
+    async duplicateInlineTask(target: PlannedTarget, options?: DuplicateOptions): Promise<boolean> {
         const { dayOffset = 0, count = 1 } = options ?? {};
 
-        const file = this.app.vault.getAbstractFileByPath(task.file);
+        const file = this.app.vault.getAbstractFileByPath(target.file);
         if (!(file instanceof TFile)) {
-            this.writes?.for(task.file, 'user')?.refused({ file: task.file, reason: { kind: 'gone' }, subject: subjectOf(task) });
+            this.writes?.for(target.file, 'user')?.refused({ file: target.file, reason: { kind: 'gone' }, subject: target.subject });
             return false;
         }
 
-        return processLines(this.app, file, this.writes?.for(task.file, 'user'), (draft, _eol, { lineOf, refuse }) => {
+        return processLines(this.app, file, this.writes?.for(target.file, 'user'), (draft, _eol, { row, refuse }) => {
             const lines = draft.lines;
-            const idx = lineOf(refOf(task), subjectOf(task));
+            const idx = row(target);
             if (idx === null) return false;
 
             const cleanParent = this.fileOps.stripBlockIds([lines[idx]])[0];
@@ -67,7 +67,7 @@ export class TaskCloner {
             }
 
             return this.spliceCopies(draft, idx, parents, idx)
-                || refuse({ kind: 'unplaceable' }, subjectOf(task));
+                || refuse({ kind: 'unplaceable' }, target.subject);
         }).then(outcome => outcome.written);
     }
 
@@ -87,19 +87,19 @@ export class TaskCloner {
      *
      * @returns whether the copies were written.
      */
-    async duplicateInlineTaskInPlace(task: Task, copies: InPlaceCopyLines): Promise<boolean> {
-        const file = this.app.vault.getAbstractFileByPath(task.file);
+    async duplicateInlineTaskInPlace(target: PlannedTarget, copies: InPlaceCopyLines): Promise<boolean> {
+        const file = this.app.vault.getAbstractFileByPath(target.file);
         if (!(file instanceof TFile)) {
-            this.writes?.for(task.file, 'user')?.refused({ file: task.file, reason: { kind: 'gone' }, subject: subjectOf(task) });
+            this.writes?.for(target.file, 'user')?.refused({ file: target.file, reason: { kind: 'gone' }, subject: target.subject });
             return false;
         }
 
-        return processLines(this.app, file, this.writes?.for(task.file, 'user'), (draft, _eol, { lineOf, refuse }) => {
+        return processLines(this.app, file, this.writes?.for(target.file, 'user'), (draft, _eol, { row, refuse }) => {
             const lines = draft.lines;
-            const idx = lineOf(refOf(task), subjectOf(task));
+            const idx = row(target);
             if (idx === null) return false;
             const at = Placement.afterSubtree(lines, idx);
-            if (at === null) return refuse({ kind: 'unplaceable' }, subjectOf(task));
+            if (at === null) return refuse({ kind: 'unplaceable' }, target.subject);
 
             const indent = Outline.indentOf(lines[idx]);
             const parents = copies.kind === 'verbatim'
@@ -108,7 +108,7 @@ export class TaskCloner {
                 : copies.lines.map(l => indent + l.trim());
 
             return this.spliceCopies(draft, idx, parents, at)
-                || refuse({ kind: 'unplaceable' }, subjectOf(task));
+                || refuse({ kind: 'unplaceable' }, target.subject);
         }).then(outcome => outcome.written);
     }
 

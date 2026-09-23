@@ -7,7 +7,7 @@ import { TaskCloner, type InPlaceCopyLines } from './TaskCloner';
 import type { PropertyOp } from './PropertyUpdatePlanner';
 import { WriteObserver } from './WriteObserver';
 import type { EditorLine, WriteOrigin, WriteOutcome } from '../../utils/FileLines';
-import type { RowBasis, WriteTarget } from './TaskRefs';
+import type { PlannedTarget } from './TaskRefs';
 import type { TaskOp } from './TaskOps';
 
 /**
@@ -41,9 +41,9 @@ export class TaskRepository {
 
     // --- Inline Task Operations ---
 
-    /** @returns whether the write actually landed (see InlineTaskWriter). */
-    async updateTaskInFile(task: Task, updatedTask: Task, childOps: PropertyOp[] = []): Promise<boolean> {
-        return this.inlineWriter.updateTaskInFile(task, updatedTask, childOps);
+    /** @returns what became of the write, and the row as it left it (see InlineTaskWriter). */
+    async updateTaskInFile(target: PlannedTarget, updatedTask: Task, childOps: PropertyOp[] = []): Promise<WriteOutcome> {
+        return this.inlineWriter.updateTaskInFile(target, updatedTask, childOps);
     }
 
     async updateLine(filePath: string, at: EditorLine, newContent: string): Promise<void> {
@@ -59,8 +59,8 @@ export class TaskRepository {
     }
 
     /** @returns whether the task's lines were removed (see InlineTaskWriter). */
-    async deleteTaskFromFile(task: Task): Promise<boolean> {
-        return this.inlineWriter.deleteTaskFromFile(task);
+    async deleteTaskFromFile(target: PlannedTarget): Promise<boolean> {
+        return this.inlineWriter.deleteTaskFromFile(target);
     }
 
     /**
@@ -68,7 +68,7 @@ export class TaskRepository {
      * (see {@link InlineTaskWriter.applyToTask}).
      */
     async applyToTask(
-        target: WriteTarget & { basis?: RowBasis },
+        target: PlannedTarget,
         ops: readonly TaskOp[],
         opts: { tellRefusal?: boolean } = {},
     ): Promise<WriteOutcome> {
@@ -99,7 +99,7 @@ export class TaskRepository {
     async appendTaskWithChildren(
         destPath: string,
         content: string,
-        source: WriteTarget & { basis?: RowBasis },
+        source: PlannedTarget,
     ): Promise<readonly string[] | null> {
         return this.inlineWriter.appendTaskWithChildren(destPath, content, source);
     }
@@ -122,13 +122,13 @@ export class TaskRepository {
     // --- Task Cloning Operations ---
 
     /** @returns whether the copy was written (see TaskCloner). */
-    async duplicateInlineTask(task: Task, options?: DuplicateOptions): Promise<boolean> {
-        return this.cloner.duplicateInlineTask(task, options);
+    async duplicateInlineTask(target: PlannedTarget, options?: DuplicateOptions): Promise<boolean> {
+        return this.cloner.duplicateInlineTask(target, options);
     }
 
     /** @returns whether the copies were written (see TaskCloner). */
-    async duplicateInlineTaskInPlace(task: Task, copies: InPlaceCopyLines): Promise<boolean> {
-        return this.cloner.duplicateInlineTaskInPlace(task, copies);
+    async duplicateInlineTaskInPlace(target: PlannedTarget, copies: InPlaceCopyLines): Promise<boolean> {
+        return this.cloner.duplicateInlineTaskInPlace(target, copies);
     }
 
 }

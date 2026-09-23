@@ -1,7 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import { TFile } from 'obsidian';
 import { LineBreakInLine, draftOver, joinLines, processLines, replayEdits, splitLines } from '../../../src/utils/FileLines';
-import type { LineEdit, Located, Refusal, TaskRef, WriteChannel } from '../../../src/utils/FileLines';
+import type { LineEdit, Located, NamedRow, Refusal, TaskRef, WriteChannel } from '../../../src/utils/FileLines';
+import { ON_RECORD } from '../../../src/services/persistence/RowBasis';
 
 /**
  * The one place that decides what a line is and how the file gets put back
@@ -122,6 +123,7 @@ function writeSink(answer: (lines: readonly string[], ref: TaskRef) => Located =
             asked.push({ lines: [...lines], ref });
             return answer(lines, ref);
         },
+        onRecord: () => true,
         refused: (refusal) => { refusals.push(refusal); },
     };
     return {
@@ -316,6 +318,7 @@ describe('processLines', () => {
         const channel: WriteChannel = {
             sink: () => ({ withdraw: () => { }, made: [{ line: 1, runtimeId: `made-${++filed}` }] }),
             locate: () => ({ kind: 'gone' }),
+            onRecord: () => true,
             refused: () => { },
         };
         let run = 0;
@@ -344,7 +347,7 @@ describe('processLines', () => {
         const outcome = await processLines(h.app, h.file, undefined, () => false);
 
         // Declining without a reason is not a refusal: nobody is told.
-        expect(outcome).toEqual({ written: false, refused: null, made: [] });
+        expect(outcome).toEqual({ written: false, refused: null, made: [], left: new Map() });
         // Not even the mixed terminators are unified: a write that could not be
         // placed must leave no trace, or Obsidian fires a modify for it and a
         // rescan follows a change nobody made.
@@ -352,39 +355,42 @@ describe('processLines', () => {
     });
 });
 
+const REF: TaskRef = { runtimeId: 'tv-inline:note.md:1' };
+/** The row `REF` names, on a basis the stand-in channel always vouches for. */
+const named = (subject: string): NamedRow => ({ ref: REF, subject, basis: ON_RECORD });
+
 describe('processLines: asking where a row stands, and giving up', () => {
-    const REF: TaskRef = { runtimeId: 'tv-inline:note.md:1' };
 
     it('asks the channel about the lines as they were handed in', async () => {
         const h = harness('- [ ] a\r\n- [ ] b\r\n');
-        const log = writeSink(() => ({ kind: 'at', line: 1, edited: false }));
+        const log = writeSink(() => ({ kind: 'at', line: 1 }));
 
         const outcome = await processLines(h.app, h.file, log.channel, (draft, _eol, session) => {
-            const at = session.lineOf(REF, 'b');
+            const at = session.row(named('b'));
             if (at === null) return false;
             draft.rewrite(at, '- [x] b');
             return true;
         });
 
         expect(log.asked).toEqual([{ lines: ['- [ ] a', '- [ ] b', ''], ref: REF }]);
-        expect(outcome).toEqual({ written: true, refused: null, made: [] });
+        expect(outcome).toEqual({ written: true, refused: null, made: [], left: new Map([[REF.runtimeId, ['- [x] b']]]) });
         expect(h.text()).toBe('- [ ] a\r\n- [x] b\r\n');
         expect(log.refusals).toEqual([]);
     });
 
-    it('refuses through lineOf when the channel has no line to give', async () => {
+    it('refuses through row when the channel has no line to give', async () => {
         const h = harness('- [ ] a\n');
         const log = writeSink(() => ({ kind: 'ambiguous', count: 2 }));
 
         const outcome = await processLines(h.app, h.file, log.channel, (draft, _eol, session) => {
-            const at = session.lineOf(REF, 'a');
+            const at = session.row(named('a'));
             if (at === null) return false;
             draft.rewrite(at, '- [x] a');
             return true;
         });
 
         const refusal = { file: 'note.md', reason: { kind: 'ambiguous', count: 2 }, subject: 'a' };
-        expect(outcome).toEqual({ written: false, refused: refusal, made: [] });
+        expect(outcome).toEqual({ written: false, refused: refusal, made: [], left: new Map() });
         expect(log.refusals).toEqual([refusal]);
         expect(h.text()).toBe('- [ ] a\n');
     });
@@ -393,14 +399,14 @@ describe('processLines: asking where a row stands, and giving up', () => {
         const h = harness('- [ ] a\n');
 
         const outcome = await processLines(h.app, h.file, undefined, (_draft, _eol, session) => {
-            expect(session.locate(REF)).toEqual({ kind: 'gone' });
-            return session.lineOf(REF, 'a') !== null;
+            return session.row(named('a')) !== null;
         });
 
         expect(outcome).toEqual({
             written: false,
             refused: { file: 'note.md', reason: { kind: 'gone' }, subject: 'a' },
             made: [],
+            left: new Map(),
         });
         expect(h.text()).toBe('- [ ] a\n');
     });
@@ -413,7 +419,7 @@ describe('processLines: asking where a row stands, and giving up', () => {
             session.refuse({ kind: 'changed' }, '- [ ] a'));
 
         const refusal = { file: 'note.md', reason: { kind: 'changed' }, subject: '- [ ] a' };
-        expect(outcome).toEqual({ written: false, refused: refusal, made: [] });
+        expect(outcome).toEqual({ written: false, refused: refusal, made: [], left: new Map() });
         expect(log.refusals).toEqual([refusal]);
         expect(h.text()).toBe('- [ ] a\n');
     });
@@ -446,7 +452,7 @@ describe('processLines: asking where a row stands, and giving up', () => {
             return true;
         });
 
-        expect(outcome).toEqual({ written: true, refused: null, made: [] });
+        expect(outcome).toEqual({ written: true, refused: null, made: [], left: new Map() });
         expect(log.refusals).toEqual([]);
         expect(h.text()).toBe('- [x] a\n');
     });
@@ -454,18 +460,17 @@ describe('processLines: asking where a row stands, and giving up', () => {
 });
 
 describe('a coordinate carried across a write\'s own edits', () => {
-    const REF: TaskRef = { runtimeId: 'tv-inline:note.md:1' };
-    const at = (line: number): Located => ({ kind: 'at', line, edited: false });
+    const at = (line: number): Located => ({ kind: 'at', line });
 
     it('asks the channel once per name, about the lines as they were handed in', async () => {
         const h = harness('- [ ] a\n- [ ] b\n');
         const log = writeSink(() => at(1));
 
         await processLines(h.app, h.file, log.channel, (draft, _eol, session) => {
-            session.locate(REF);
+            session.row(named('b'));
             draft.splice(0, 0, 'new');
-            session.locate(REF);
-            session.locate(REF);
+            session.row(named('b'));
+            session.row(named('b'));
             return true;
         });
 
@@ -475,37 +480,36 @@ describe('a coordinate carried across a write\'s own edits', () => {
     it('follows the row down past lines the write put above it, and up past lines it took away', async () => {
         const h = harness('x\ny\n- [ ] b\nz\n');
         const log = writeSink(() => at(2));
-        const seen: Located[] = [];
+        const seen: Array<number | null> = [];
 
         await processLines(h.app, h.file, log.channel, (draft, _eol, session) => {
             draft.splice(0, 0, 'n1', 'n2');
-            seen.push(session.locate(REF));
+            seen.push(session.row(named('b')));
             draft.splice(0, 3);
-            seen.push(session.locate(REF));
+            seen.push(session.row(named('b')));
             // Below the row: it stays where it is.
             draft.splice(2, 1);
-            seen.push(session.locate(REF));
+            seen.push(session.row(named('b')));
             return true;
         });
 
-        expect(seen).toEqual([at(4), at(1), at(1)]);
+        expect(seen).toEqual([4, 1, 1]);
         expect(h.text()).toBe('y\n- [ ] b\n');
     });
 
     it('keeps a row the write rewrote, and loses one it took away', async () => {
         const h = harness('- [ ] a\n- [ ] b\n');
         const log = writeSink(() => at(0));
-        const seen: Located[] = [];
+        const seen: Array<number | null> = [];
 
         await processLines(h.app, h.file, log.channel, (draft, _eol, session) => {
             draft.rewrite(0, '- [x] a');
-            seen.push(session.locate(REF));
+            seen.push(session.row(named('a')));
             draft.splice(0, 1);
-            seen.push(session.locate(REF));
-            return session.lineOf(REF, 'a') !== null;
+            return session.row(named('a')) !== null;
         });
 
-        expect(seen).toEqual([at(0), { kind: 'gone' }]);
+        expect(seen).toEqual([0]);
         expect(h.text()).toBe('- [ ] a\n- [ ] b\n');
         expect(log.refusals).toEqual([{ file: 'note.md', reason: { kind: 'gone' }, subject: 'a' }]);
     });
@@ -520,7 +524,7 @@ describe('a coordinate carried across a write\'s own edits', () => {
             // without going through `splice`, to simulate an edit that never
             // reported itself.
             (draft.lines as string[]).splice(0, 0, 'not reported');
-            session.locate(REF);
+            session.row(named('b'));
             return true;
         })).rejects.toThrow('does not read what it read');
         expect(h.text()).toBe('- [ ] a\n- [ ] b\n');
@@ -535,7 +539,7 @@ describe('a coordinate carried across a write\'s own edits', () => {
         await expect(processLines(h.app, h.file, log.channel, (draft, _eol, session) => {
             draft.splice(3, 0, 'reported');
             (draft.lines as string[]).splice(0, 1);
-            const line = session.lineOf(REF, 'a');
+            const line = session.row(named('a'));
             if (line === null) return false;
             draft.rewrite(line, '- [x] a');
             return true;

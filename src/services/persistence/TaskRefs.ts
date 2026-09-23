@@ -1,5 +1,6 @@
 import type { Task } from '../../types';
 import type { TaskRef } from '../../utils/FileLines';
+import { ON_RECORD, type OnRecord, type RowBasis } from './RowBasis';
 
 /**
  * What a write names its target by. The task is the index's copy of the row
@@ -17,63 +18,61 @@ export function subjectOf(task: Task): string {
 }
 
 /**
- * A row as the index hands it to a write: the file it is in, its name, and
- * what to call it if the write has to be refused. Nothing of the index's copy
- * of the row travels with it — no line, no text to search by, no values to
- * write from.
+ * A row as the index hands it to a write: the file it is in, its name, what to
+ * call it if the write has to be refused, and what the operation was planned
+ * from. No line travels with it, and nothing to search the file by: the name
+ * says which row, and the basis only says whether that row still reads as the
+ * plan read it (see `WriteSession.row`).
  */
-export interface WriteTarget {
+export interface PlannedTarget {
     file: string;
     ref: TaskRef;
     subject: string;
-}
-
-export function targetOf(task: Task): WriteTarget {
-    return { file: task.file, ref: refOf(task), subject: subjectOf(task) };
-}
-
-/**
- * What an operation was planned from: the row as the index read it, and the
- * row's own `- ==>` lines. A fire's plan — the next instance, the text the
- * strip or the archive writes, where a move goes — is made from the index's
- * copy, not from the file, so the write has to find the file still reading
- * as that copy. `locate`'s `edited` does not say so: it accepts any text on
- * record for the row, a write of ours included, and it does not look at the
- * command lines at all.
- */
-export interface RowBasis {
-    /** The row's line, as the index read it (compared without its indentation). */
-    text: string;
-    /** The text after `==>` on each of the row's own command lines, in order. */
-    commands: readonly string[];
-    /**
-     * The row and every line of its subtree, verbatim, when the operation
-     * wrote them somewhere else first — the source's half of a move away.
-     */
-    subtree?: readonly string[];
-    /**
-     * The `tv-gen` blocks of the row's file the plan read, by name, with their
-     * body as it read it. A block is the other half of a generated instance's
-     * plan: edited since, it would be written as it no longer reads.
-     */
-    blocks?: ReadonlyArray<{ name: string; body: readonly string[] }>;
-}
-
-/** A target that also carries what the operation was planned from. */
-export interface PlannedTarget extends WriteTarget {
     basis: RowBasis;
 }
 
-export function plannedOn(
-    task: Task,
-    blocks: ReadonlyArray<{ name: string; body: readonly string[] }> = [],
-): PlannedTarget {
+/** What {@link plannedOn} is told the plan read, besides the row's line. */
+export interface PlanReads {
+    /** The row's own `==>` lines: a fire's plan reads its command. */
+    commands?: boolean;
+    /** The row's whole subtree: an operation that takes it away or carries it. */
+    subtree?: boolean;
+    /** The generation blocks the plan read (see `FlowExecutor.readingBlocks`). */
+    blocks?: ReadonlyArray<{ name: string; body: readonly string[] }>;
+}
+
+/**
+ * The target of an operation planned from the index's copy of `task`: its
+ * line, and whatever else `reads` says the plan read of it.
+ */
+export function plannedOn(task: Task, reads: PlanReads = {}): PlannedTarget {
     return {
-        ...targetOf(task),
+        file: task.file,
+        ref: refOf(task),
+        subject: subjectOf(task),
         basis: {
             text: task.originalText,
-            commands: (task.flow?.childSegments ?? []).map(segment => segment.raw),
-            ...(blocks.length > 0 ? { blocks } : {}),
+            ...(reads.commands ? { commands: (task.flow?.childSegments ?? []).map(segment => segment.raw) } : {}),
+            // A copy the scan did not read a subtree for is taken to have
+            // none: the write is then refused if the row has any, which is
+            // the side to err on.
+            ...(reads.subtree ? { subtree: task.subtreeLines ?? [task.originalText] } : {}),
+            ...(reads.blocks && reads.blocks.length > 0 ? { blocks: reads.blocks } : {}),
         },
     };
+}
+
+/**
+ * The target of a timer's insert, which stays on the weaker comparison until
+ * stage F9 (see {@link ON_RECORD}).
+ */
+export interface RecordedTarget {
+    file: string;
+    ref: TaskRef;
+    subject: string;
+    basis: OnRecord;
+}
+
+export function recordedOn(task: Task): RecordedTarget {
+    return { file: task.file, ref: refOf(task), subject: subjectOf(task), basis: ON_RECORD };
 }

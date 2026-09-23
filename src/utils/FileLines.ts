@@ -1,5 +1,6 @@
 import type { App, TFile } from 'obsidian';
 import { logError } from '../log/log';
+import { ON_RECORD, readsAsPlanned, subtreeAt, type OnRecord, type RowBasis } from '../services/persistence/RowBasis';
 
 /**
  * A file's line terminator. Obsidian writes LF, but notes arrive with CRLF
@@ -340,19 +341,21 @@ export interface TaskRef {
  * position. `ambiguous` when the name went to one of `count` rows no evidence
  * tells apart. `gone` when the name stands on no line of these.
  *
- * `edited` says the row's line reads as nothing the plugin has on record for
- * that row — not as the last scan read it, nor as any write of ours left it.
- * Something else rewrote the line after the index last saw it. Matching may
- * still pair the row there — the ladder's last rung pairs one leftover against
- * one on a shared date alone — but a row whose text changed under it is a
- * guess about which task that is, and what the index holds of it is out of
- * date either way. `WriteSession.lineOf` refuses it as `changed`; the next
- * scan reads the edit, and the write can be made again.
+ * `outdated` when the match was made against a ledger older than a write of
+ * ours no scan has read yet, and the line it paired does not read as that
+ * write left the row — or the write could not say what it left. The pairing
+ * rests on a text that has since moved, so there is no line to answer with
+ * (`TaskScanner.againstLastWrite`). The user hears it as `changed`: the note
+ * is not as the plugin last knew it.
+ *
+ * Whether the line reads as the write planned is not asked here. That is the
+ * write's basis, checked once by `WriteSession.row`.
  */
 export type Located =
-    | { kind: 'at'; line: number; edited: boolean }
+    | { kind: 'at'; line: number }
     | { kind: 'ambiguous'; count: number }
-    | { kind: 'gone' };
+    | { kind: 'gone' }
+    | { kind: 'outdated' };
 
 /**
  * A line the editor pointed at: its number, and the text the editor showed on
@@ -398,35 +401,55 @@ export interface WriteChannel {
     /** Absent where nobody takes a report: no write of the plugin's leaves it out. */
     sink?: WriteSink;
     locate(lines: readonly string[], ref: TaskRef): Located;
+    /**
+     * Whether the row's line at `line` reads as some text the plugin has on
+     * record for the row — the weaker comparison {@link ON_RECORD} keeps.
+     */
+    onRecord(lines: readonly string[], ref: TaskRef, line: number): boolean;
     refused(refusal: Refusal): void;
 }
 
 /**
- * What one `processLines` callback is handed besides its draft: the question
- * of where its target stands, and the way to give the write up.
+ * A row a write names, and what the write was planned from: the basis the
+ * lines have to read as for the write to be made there (see `RowBasis`).
+ */
+export interface NamedRow {
+    ref: TaskRef;
+    subject: string;
+    basis: RowBasis | OnRecord;
+}
+
+/**
+ * What one `processLines` callback is handed besides its draft: where its
+ * target stands, and the way to give the write up.
  *
- * `locate` answers once per name, about the lines as they were handed in: that
- * is the one content the plugin can have on record, so it is the one the
- * question can be put to. Asked again, it carries that answer across the
- * edits this write has reported since, and across nothing else — every line
- * the write moved, it moved through its draft, and the report is the whole of
- * what happened to the lines in between. A line the write took away is
- * `gone`. So one write can apply several effects to one row without asking
- * the file a second time, which is where a coordinate would go stale.
- *
- * The carrying is checked, because it is only as good as the report: a line
- * the report does not say was rewritten has to read what it read, and a write
- * that carried a coordinate is refused whole if its report does not account
- * for the lines it returns.
+ * `row` is the one way a write takes a line. A row is named with what the
+ * write was planned from, or it is a line the editor pointed at with the text
+ * the editor showed there; either way, the line is handed out only if the
+ * lines read as that. So every write that takes a line checks it once, and the
+ * same check, and no write writes a plan over an edit the plan never saw.
  */
 export interface WriteSession {
-    locate(ref: TaskRef): Located;
     /**
      * The target's line, or null when it has none — in which case the write is
-     * refused, and the callback returns false. A line something else edited
-     * since the index read it (`edited`) is refused too, as `changed`.
+     * refused, and the callback returns false.
+     *
+     * The first question about a row is put to the lines as they were handed
+     * in: that is the one content the plugin can have on record, so it is the
+     * one where a name can be looked for and a basis checked. Asked again, the
+     * answer is carried across the edits this write has reported since, and
+     * across nothing else — every line the write moved, it moved through its
+     * draft, and the report is the whole of what happened to the lines in
+     * between. A line the write took away is `gone`. So one write can apply
+     * several effects to one row without asking the file a second time, which
+     * is where a coordinate would go stale.
+     *
+     * The carrying is checked, because it is only as good as the report: a line
+     * the report does not say was rewritten has to read what it read, and a
+     * write that carried a coordinate is refused whole if its report does not
+     * account for the lines it returns.
      */
-    lineOf(ref: TaskRef, subject: string): number | null;
+    row(target: NamedRow | EditorLine): number | null;
     /** Give the write up: nothing is written, and the refusal is told once it is over. */
     refuse(reason: RefusalReason, subject: string): false;
 }
@@ -444,6 +467,14 @@ export interface WriteOutcome {
      * with it, and are never given to any line.
      */
     made: readonly MadeRow[];
+    /**
+     * For each row the write named and left standing, by runtime ID: its line
+     * and every line of its subtree as the write left them. What the index
+     * holds of a row it had the write make from its copy can be brought up to
+     * the file from here, before any scan reads it. Empty when nothing was
+     * written.
+     */
+    left: ReadonlyMap<string, readonly string[]>;
 }
 
 /** Where each line of the file came from, once a write's report is replayed. */
@@ -550,8 +581,10 @@ function explains(
  * which one its write goes to, so no write leaves it out by forgetting it.
  *
  * Where to write is asked of the `channel`, through the session: a write
- * names its target and `locate` answers where that target stands in these
- * lines. A write whose target has no line gives up through `session.refuse`,
+ * names its target with what it was planned from, `locate` answers where that
+ * target stands in these lines, and the lines there have to read as the plan
+ * read them (`WriteSession.row`). A write whose target has no line gives up
+ * through `session.refuse`,
  * and the refusal is handed to the channel once `vault.process` is over —
  * once, however many times Obsidian ran the callback. With no channel there is
  * nobody to ask, and every target is `gone`: the index that would answer has
@@ -579,6 +612,7 @@ export async function processLines(
     let written = false;
     let refused: Refusal | null = null;
     let made: readonly MadeRow[] = [];
+    let left: ReadonlyMap<string, readonly string[]> = new Map();
     const sink = channel?.sink;
     // A list rather than one slot: `vault.process` may run the callback again,
     // and everything filed has to be withdrawable.
@@ -592,6 +626,7 @@ export async function processLines(
             for (const withdraw of withdrawals.splice(0)) withdraw();
             refused = null;
             made = [];
+            left = new Map();
 
             const { lines, eol, bom } = splitLines(content);
             const before = [...lines];
@@ -602,45 +637,62 @@ export async function processLines(
                 refused = { file: file.path, reason, subject };
                 return false;
             };
-            // Each name is asked once, of the lines as they were handed in.
-            const answered = new Map<string, Located>();
+            // Each row is asked once, of the lines as they were handed in, and
+            // its basis checked there: the answer is its line, or why not.
+            const answered = new Map<string, number | RefusalReason>();
             // Whether a coordinate was carried across this write's own edits,
             // and whether carrying one caught the report out.
             let carried = false;
             let unsound: string | null = null;
-            const carry = (at: Extract<Located, { kind: 'at' }>): Located => {
+            const carry = (line: number): number | null => {
                 carried = true;
                 const replayed = replayEdits(before.length, reported);
-                const now = replayed?.origin.indexOf(at.line) ?? -1;
                 if (!replayed) {
                     unsound = 'a report no file could follow';
-                    return { kind: 'gone' };
+                    return null;
                 }
+                const now = replayed.origin.indexOf(line);
                 // Taken away by this very write: the row is not on these lines.
-                if (now < 0) return { kind: 'gone' };
-                if (!replayed.rewritten[now] && lines[now] !== before[at.line]) {
-                    unsound = `line ${at.line} carried to ${now} does not read what it read`;
-                    return { kind: 'gone' };
+                if (now < 0) return null;
+                if (!replayed.rewritten[now] && lines[now] !== before[line]) {
+                    unsound = `line ${line} carried to ${now} does not read what it read`;
+                    return null;
                 }
-                return { ...at, line: now };
+                return now;
             };
-            const locate = (ref: TaskRef): Located => {
-                let found = answered.get(ref.runtimeId);
-                if (found === undefined) {
-                    found = channel ? channel.locate(before, ref) : { kind: 'gone' };
-                    answered.set(ref.runtimeId, found);
+            const answer = (target: NamedRow | EditorLine): number | RefusalReason => {
+                if (!('ref' in target)) {
+                    // The editor's line is its own coordinate, good only while
+                    // the line still reads what the editor showed there.
+                    return before[target.line] === target.text ? target.line : { kind: 'changed' };
                 }
-                return found.kind === 'at' && reported.length > 0 ? carry(found) : found;
+                const located: Located = channel ? channel.locate(before, target.ref) : { kind: 'gone' };
+                if (located.kind === 'outdated') return { kind: 'changed' };
+                if (located.kind !== 'at') return located;
+                const holds = target.basis === ON_RECORD
+                    ? channel!.onRecord(before, target.ref, located.line)
+                    : readsAsPlanned(before, located.line, target.basis);
+                return holds ? located.line : { kind: 'changed' };
             };
+            // The names the write asked for, to say how it left them.
+            const named = new Map<string, number>();
             let lastSubject = '';
             const session: WriteSession = {
-                locate,
-                lineOf: (ref, subject) => {
+                row: (target) => {
+                    const subject = 'ref' in target ? target.subject : target.text.trim();
                     lastSubject = subject;
-                    const located = locate(ref);
-                    if (located.kind !== 'at') { refuse(located, subject); return null; }
-                    if (located.edited) { refuse({ kind: 'changed' }, subject); return null; }
-                    return located.line;
+                    const key = 'ref' in target ? target.ref.runtimeId : `editor:${target.line}`;
+                    let found = answered.get(key);
+                    if (found === undefined) {
+                        found = answer(target);
+                        answered.set(key, found);
+                        if ('ref' in target && typeof found === 'number') named.set(key, found);
+                    }
+                    if (typeof found !== 'number') { refuse(found, subject); return null; }
+                    if (reported.length === 0) return found;
+                    const now = carry(found);
+                    if (now === null) { refuse({ kind: 'gone' }, subject); return null; }
+                    return now;
                 },
                 refuse,
             };
@@ -677,6 +729,7 @@ export async function processLines(
             refused = null;
 
             written = true;
+            left = leftStanding(before.length, reported, next, named);
             // The mark the note opened with, put back where it was.
             const rebuilt = (bom ? BOM : '') + joinLines(next, eol);
 
@@ -713,7 +766,24 @@ export async function processLines(
     // Set inside the callback, which the compiler does not follow.
     const outcome = refused as Refusal | null;
     if (outcome !== null) channel?.refused(outcome);
-    return { written, refused: outcome, made };
+    return { written, refused: outcome, made, left };
+}
+
+/** Each named row still standing once the write is done, and its subtree there. */
+function leftStanding(
+    beforeLength: number,
+    edits: readonly LineEdit[],
+    after: readonly string[],
+    named: ReadonlyMap<string, number>,
+): Map<string, readonly string[]> {
+    const left = new Map<string, readonly string[]>();
+    const replayed = replayEdits(beforeLength, edits);
+    if (!replayed) return left;
+    for (const [runtimeId, line] of named) {
+        const now = replayed.origin.indexOf(line);
+        if (now >= 0) left.set(runtimeId, subtreeAt(after, now));
+    }
+    return left;
 }
 
 /**

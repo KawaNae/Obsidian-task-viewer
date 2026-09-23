@@ -98,7 +98,7 @@ describe('FlowExecutor', () => {
         // One write for the whole fire, naming the row that fired.
         expect(repository.applyToTask).toHaveBeenCalledTimes(1);
         const [target, ops] = repository.applyToTask.mock.calls[0];
-        expect(target).toEqual(plannedOn(task));
+        expect(target).toEqual(plannedOn(task, { commands: true }));
 
         // Order: insert BEFORE strip, as the ops of that one write.
         expect(ops.map((o: TaskOp) => o.kind)).toEqual(['insert-instance', 'strip-flow']);
@@ -150,10 +150,10 @@ describe('FlowExecutor', () => {
         const [dest, line, source] = repository.appendTaskWithChildren.mock.calls[0];
         expect(dest).toBe('Archive.md');
         expect(line).not.toContain('==>');
-        expect(source).toEqual(plannedOn(task));
+        expect(source).toEqual(plannedOn(task, { commands: true, subtree: true }));
         // The source's write is held to the subtree the archive was made from.
         expect(repository.applyToTask.mock.calls[0][0]).toEqual({
-            ...plannedOn(task), basis: { ...plannedOn(task).basis, subtree: ['- [x] Test task'] },
+            ...plannedOn(task, { commands: true, subtree: true }), basis: { ...plannedOn(task, { commands: true, subtree: true }).basis, subtree: ['- [x] Test task'] },
         });
         expect(repository.applyToTask).toHaveBeenCalledTimes(1);
         expect(opsOf(repository)).toEqual([{ kind: 'remove' }]);
@@ -396,7 +396,7 @@ describe('fireAndDelete', () => {
         // 挿入と削除を分けると、2本目が originalText で行を探し直すことになる。
         // 次回分は元の行と同じ本文になりうるので、その探索は当てにできない。
         expect(repository.applyToTask).toHaveBeenCalledTimes(1);
-        expect(repository.applyToTask).toHaveBeenCalledWith(plannedOn(task), [
+        expect(repository.applyToTask).toHaveBeenCalledWith(plannedOn(task, { commands: true, subtree: true }), [
             { kind: 'insert-instance', insert: expect.objectContaining({ kind: 'recurrence' }) },
             { kind: 'remove' },
         ]);

@@ -94,9 +94,14 @@ class Harness {
     locate(ref: TaskRef | string): Located {
         return this.scanner.locate(FILE, this.lines(), typeof ref === 'string' ? { runtimeId: ref } : ref);
     }
+
+    /** Whether the line reads as a text on record for the row (`TaskScanner.onRecord`). */
+    onRecord(ref: TaskRef | string, line: number): boolean {
+        return this.scanner.onRecord(FILE, this.lines(), typeof ref === 'string' ? { runtimeId: ref } : ref, line);
+    }
 }
 
-const at = (line: number, edited = false): Located => ({ kind: 'at', line, edited });
+const at = (line: number): Located => ({ kind: 'at', line });
 const ambiguous = (count: number): Located => ({ kind: 'ambiguous', count });
 const gone: Located = { kind: 'gone' };
 
@@ -250,8 +255,14 @@ describe('locate by matching, when the content is not on record', () => {
     });
 });
 
-describe('locate says when the line was edited from outside', () => {
-    it('marks a row the ladder paired though its text changed', async () => {
+/**
+ * Whether the line reads as the write planned is not `locate`'s question: it
+ * answers the row's line, and the write checks its basis there
+ * (`WriteSession.row`). The weaker question the timer's inserts keep until F9
+ * — does the line read as any text on record for the row — is `onRecord`.
+ */
+describe('locate answers the row\'s line whatever it reads; onRecord says whether that is a text on record', () => {
+    it('pairs a row the ladder matched though its text changed, which is not on record', async () => {
         const harness = new Harness();
         const dated = (content: string) => TaskParser.format(makeTask({ content, statusChar: ' ', startDate: '2026-08-15' }));
         await harness.write([dated('設計'), '']);
@@ -259,19 +270,21 @@ describe('locate says when the line was edited from outside', () => {
 
         // The name changed, the date did not: still the row, not its text.
         harness.edit([dated('設計書'), '']);
-        expect(harness.locate(task)).toEqual(at(0, true));
+        expect(harness.locate(task)).toEqual(at(0));
+        expect(harness.onRecord(task, 0)).toBe(false);
     });
 
-    it('marks a ^id line whose text changed', async () => {
+    it('answers a ^id line whose text changed, which is not on record', async () => {
         const harness = new Harness();
         await harness.write([`${TASK} ^keep`, '']);
         const [task] = harness.ids();
 
         harness.edit([`${OTHER} ^keep`, '']);
-        expect(harness.locate({ runtimeId: task, blockId: 'keep' })).toEqual(at(0, true));
+        expect(harness.locate({ runtimeId: task, blockId: 'keep' })).toEqual(at(0));
+        expect(harness.onRecord({ runtimeId: task, blockId: 'keep' }, 0)).toBe(false);
     });
 
-    it('does not mark a line only the plugin changed', async () => {
+    it('finds a line only the plugin changed on record', async () => {
         const harness = new Harness();
         await harness.write([TASK, '']);
         const [task] = harness.ids();
@@ -279,10 +292,11 @@ describe('locate says when the line was edited from outside', () => {
         // Our own rewrite, then an edit elsewhere from outside, no scan.
         harness.report([OTHER, ''], [{ kind: 'replaced', at: 0 }]);
         harness.edit(['メモ', OTHER, '']);
-        expect(harness.locate(task)).toEqual(at(1, false));
+        expect(harness.locate(task)).toEqual(at(1));
+        expect(harness.onRecord(task, 1)).toBe(true);
     });
 
-    it('does not mark it once the claim has expired and only the write\'s base remembers', async () => {
+    it('finds it on record once the claim has expired and only the write\'s base remembers', async () => {
         vi.useFakeTimers();
         try {
             const harness = new Harness();
@@ -292,7 +306,8 @@ describe('locate says when the line was edited from outside', () => {
             harness.report([OTHER, ''], [{ kind: 'replaced', at: 0 }]);
             vi.advanceTimersByTime(HINT_TTL_MS + 1);
             harness.edit(['メモ', OTHER, '']);
-            expect(harness.locate(task)).toEqual(at(1, false));
+            expect(harness.locate(task)).toEqual(at(1));
+            expect(harness.onRecord(task, 1)).toBe(true);
         } finally {
             vi.useRealTimers();
         }

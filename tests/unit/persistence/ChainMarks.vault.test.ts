@@ -117,12 +117,12 @@ describe('every write of ours leaves a record or the mark', () => {
     it.each([
         ['updateTaskInFile', async (s: VaultSession) => {
             const a = task(s, '- [ ] A');
-            await s.index.getRepository().updateTaskInFile(a, { ...a, statusChar: 'x' }, [{ op: 'set', key: 'key', value: 'w' }] as never);
+            await s.index.getRepository().updateTaskInFile(plannedOn(a), { ...a, statusChar: 'x' }, [{ op: 'set', key: 'key', value: 'w' }] as never);
         }],
-        ['deleteTaskFromFile', async (s: VaultSession) => { await s.index.getRepository().deleteTaskFromFile(task(s, '- [ ] B')); }],
-        ['duplicateInlineTask', async (s: VaultSession) => { await s.index.getRepository().duplicateInlineTask(task(s, '- [ ] B'), { dayOffset: 1 }); }],
+        ['deleteTaskFromFile', async (s: VaultSession) => { await s.index.getRepository().deleteTaskFromFile(plannedOn(task(s, '- [ ] B'), { subtree: true })); }],
+        ['duplicateInlineTask', async (s: VaultSession) => { await s.index.getRepository().duplicateInlineTask(plannedOn(task(s, '- [ ] B')), { dayOffset: 1 }); }],
         ['duplicateInlineTaskInPlace', async (s: VaultSession) => {
-            await s.index.getRepository().duplicateInlineTaskInPlace(task(s, '- [ ] B'), { kind: 'verbatim', count: 1 });
+            await s.index.getRepository().duplicateInlineTaskInPlace(plannedOn(task(s, '- [ ] B')), { kind: 'verbatim', count: 1 });
         }],
         ['insertLineAfterTask', async (s: VaultSession) => { await s.index.getRepository().insertLineAfterTask(task(s, '- [ ] A'), '- [ ] c'); }],
         ['insertSiblingAfterTask', async (s: VaultSession) => { await s.index.getRepository().insertSiblingAfterTask(task(s, '- [ ] A'), '- [ ] c'); }],

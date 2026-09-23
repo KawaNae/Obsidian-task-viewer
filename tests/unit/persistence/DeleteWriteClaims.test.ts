@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { writeBench, FILE, type Filed } from '../helpers/writeBench';
-import { targetOf } from '../../../src/services/persistence/TaskRefs';
+import { plannedOn } from '../../../src/services/persistence/TaskRefs';
 
 /**
  * What the two deleting writes report about the lines they removed.
@@ -30,7 +30,7 @@ describe('what deleteTaskFromFile reports', () => {
             '- [ ] 次の親 @2026-09-21',
         ]);
 
-        const removed = await b.writer.deleteTaskFromFile(b.taskAt(1));
+        const removed = await b.writer.deleteTaskFromFile(plannedOn(b.taskAt(1), { subtree: true }));
 
         expect(removed).toBe(true);
         expect(only(b.filed).edits).toEqual([{ kind: 'removed', at: 1, count: 3 }]);
@@ -51,7 +51,7 @@ describe('what deleteTaskFromFile reports', () => {
             '- [ ] 次のタスク',
         ]);
 
-        await b.writer.deleteTaskFromFile(b.taskAt(0));
+        await b.writer.deleteTaskFromFile(plannedOn(b.taskAt(0), { subtree: true }));
 
         expect(only(b.filed).edits).toEqual([{ kind: 'removed', at: 0, count: 4 }]);
         expect(b.lines()).toEqual(['', '- [ ] 次のタスク']);
@@ -63,7 +63,7 @@ describe('what deleteTaskFromFile reports', () => {
         const task = b.taskAt(1);
         b.edit(['# note', '- [ ] 別のタスク @2026-09-21']);
 
-        const removed = await b.writer.deleteTaskFromFile(task);
+        const removed = await b.writer.deleteTaskFromFile(plannedOn(task, { subtree: true }));
 
         expect(removed).toBe(false);
         expect(b.filed).toEqual([]);
@@ -82,7 +82,7 @@ describe('the origin half of a move says what it did', () => {
         // file is another row, as the ladder would also say.
         const b = await writeBench(['# note', moving, '\t- [ ] 子']);
 
-        const outcome = await b.writer.applyToTask(targetOf(b.taskAt(1)), [{ kind: 'remove' }]);
+        const outcome = await b.writer.applyToTask(plannedOn(b.taskAt(1)), [{ kind: 'remove' }]);
 
         expect(outcome.written).toBe(true);
         expect(b.lines()).toEqual(['# note']);
@@ -92,7 +92,7 @@ describe('the origin half of a move says what it did', () => {
     it('says the lines were carried, when the destination is this same file', async () => {
         const b = await writeBench(['# note', moving, '## archive', '']);
 
-        await b.writer.applyToTask(targetOf(b.taskAt(1)), [{ kind: 'move-to-end', text: '- [x] 移動する @2026-09-21' }]);
+        await b.writer.applyToTask(plannedOn(b.taskAt(1)), [{ kind: 'move-to-end', text: '- [x] 移動する @2026-09-21' }]);
 
         expect(b.lines()).toEqual(['# note', '## archive', '- [x] 移動する @2026-09-21', '']);
         expect(only(b.filed).edits.map(edit => edit.kind)).toEqual(['carried', 'replaced', 'removed']);

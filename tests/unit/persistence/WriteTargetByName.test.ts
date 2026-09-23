@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { writeBench, FILE } from '../helpers/writeBench';
 import type { Task } from '../../../src/types';
+import { plannedOn } from '../../../src/services/persistence/TaskRefs';
 
 /**
  * Which line a write lands on, in the shapes real notes hold.
@@ -24,7 +25,7 @@ async function checkAfterEdit(before: string[], line: number, after: string[]) {
     const bench = await writeBench(before);
     const task = bench.taskAt(line);
     bench.edit(after);
-    const written = await bench.writer.updateTaskInFile(task, checked(task));
+    const written = (await bench.writer.updateTaskInFile(plannedOn(task), checked(task))).written;
     return { bench, written };
 }
 
@@ -177,10 +178,26 @@ describe('a line edited from outside since the index read it', () => {
         const bench = await writeBench(['- [ ] 設計 @2026-08-15']);
         const task = bench.taskAt(0);
         // Our own update, then an edit elsewhere from outside, before any scan.
-        expect(await bench.writer.updateTaskInFile(task, { ...task, content: '設計書' })).toBe(true);
+        const first = await bench.writer.updateTaskInFile(plannedOn(task), { ...task, content: '設計書' });
+        expect(first.written).toBe(true);
         bench.edit(['メモ', ...bench.lines()]);
 
-        expect(await bench.writer.updateTaskInFile(task, checked({ ...task, content: '設計書' }))).toBe(true);
+        // The copy brought up to the line the update wrote, as the index does
+        // (`TaskIndex.updateTask`).
+        const copy = { ...task, content: '設計書', originalText: first.left.get(task.id)![0] };
+        expect((await bench.writer.updateTaskInFile(plannedOn(copy), checked(copy))).written).toBe(true);
         expect(bench.lines()).toEqual(['メモ', '- [x] 設計書 @2026-08-15']);
+    });
+
+    it('is not written from a copy that predates the plugin\'s own change', async () => {
+        const bench = await writeBench(['- [ ] 設計 @2026-08-15']);
+        const task = bench.taskAt(0);
+        expect((await bench.writer.updateTaskInFile(plannedOn(task), { ...task, content: '設計書' })).written).toBe(true);
+
+        // Planned from the copy the first update did not bring up: it would
+        // put the old name back over the one just written.
+        expect((await bench.writer.updateTaskInFile(plannedOn(task), checked(task))).written).toBe(false);
+        expect(bench.lines()).toEqual(['- [ ] 設計書 @2026-08-15']);
+        expect(bench.refused).toEqual([{ file: FILE, reason: { kind: 'changed' }, subject: '設計' }]);
     });
 });

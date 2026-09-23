@@ -454,20 +454,18 @@ export class TaskScanner {
      *
      * Found through 1 or 3, the line may read differently from anything on
      * record for the row — the ladder pairs a row whose text or dates changed,
-     * and a `^id` holds across any edit. That is still the row, and `edited`
-     * says so (see `Located`). Through 2 it cannot happen: the content is one
-     * on record, line for line.
+     * and a `^id` holds across any edit. That is still the row. Whether it
+     * still reads as the write planned is the write's question, not this
+     * one's (see `WriteSession.row`).
      */
     locate(path: string, lines: readonly string[], ref: TaskRef): Located {
-        const edited = (line: number): boolean => !this.recordedTexts(path, ref.runtimeId).has(lines[line].trimStart());
-
         const byBlockId = lineOfBlockId(lines, ref.blockId);
-        if (byBlockId !== null) return { kind: 'at', line: byBlockId, edited: edited(byBlockId) };
+        if (byBlockId !== null) return { kind: 'at', line: byBlockId };
 
         const recorded = this.claims.stateFor(path, lines);
         if (recorded !== null) {
             const row = recorded.find(candidate => candidate.runtimeId === ref.runtimeId);
-            return row ? { kind: 'at', line: row.line, edited: false } : { kind: 'gone' };
+            return row ? { kind: 'at', line: row.line } : { kind: 'gone' };
         }
 
         const parsed = FileParsePipeline.parse(
@@ -491,7 +489,17 @@ export class TaskScanner {
         if (among !== undefined) return { kind: 'ambiguous', count: among };
         const at = parsed.tasks.find(task => result.mapping.get(task.id) === ref.runtimeId);
         if (!at) return { kind: 'gone' };
-        return this.againstLastWrite(path, lines, at.line, ref) ?? { kind: 'at', line: at.line, edited: edited(at.line) };
+        return this.againstLastWrite(path, lines, at.line, ref) ?? { kind: 'at', line: at.line };
+    }
+
+    /**
+     * Whether the row's line at `line` reads as some text the plugin has on
+     * record for the row: as the last scan read it, as the last write left it,
+     * or as a pending claim says. The weaker comparison the timer's inserts
+     * keep until F9 (`RowBasis.ON_RECORD`).
+     */
+    onRecord(path: string, lines: readonly string[], ref: TaskRef, line: number): boolean {
+        return this.recordedTexts(path, ref.runtimeId).has(lines[line].trimStart());
     }
 
     /**
@@ -506,8 +514,9 @@ export class TaskScanner {
      * whose text it handed to another row comes out on that row's line. What
      * the write left is the newest record there is, so the line has to read as
      * the target's text there, and as no other row's — else the pairing rests
-     * on a text that has since moved. A write that could not say what it left
-     * leaves nothing to check against, and the answer is `changed` as well.
+     * on a text that has since moved, and the answer is `outdated`. A write
+     * that could not say what it left leaves nothing to check against, and the
+     * answer is `outdated` as well.
      *
      * Null when there is nothing to object to.
      */
@@ -516,7 +525,7 @@ export class TaskScanner {
         if (last === undefined) return null;
         const text = lines[line].trimStart();
         const holders = last.rows?.filter(row => row.text.trimStart() === text) ?? [];
-        if (!holders.some(row => row.runtimeId === ref.runtimeId)) return { kind: 'at', line, edited: true };
+        if (!holders.some(row => row.runtimeId === ref.runtimeId)) return { kind: 'outdated' };
         if (holders.length > 1) return { kind: 'ambiguous', count: holders.length };
         return null;
     }

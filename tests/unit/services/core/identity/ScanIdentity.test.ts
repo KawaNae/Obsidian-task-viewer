@@ -424,8 +424,8 @@ describe('scan identity — duplicated block IDs', () => {
         // A write asks the scanner where its row stands. The ^id names two
         // lines and proves nothing; the file is the one the scan read, and
         // each name is answered with the line it was read from.
-        expect(h.scanner.locate('a.md', lines, refOf(second))).toEqual({ kind: 'at', line: 1, edited: false });
-        expect(h.scanner.locate('a.md', lines, refOf(first))).toEqual({ kind: 'at', line: 0, edited: false });
+        expect(h.scanner.locate('a.md', lines, refOf(second))).toEqual({ kind: 'at', line: 1 });
+        expect(h.scanner.locate('a.md', lines, refOf(first))).toEqual({ kind: 'at', line: 0 });
     });
 
     it('keeps both IDs when a line is inserted above them', async () => {

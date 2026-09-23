@@ -129,6 +129,7 @@ export async function writeBench(files: string | string[] | Record<string, strin
                 };
             },
             locate: (lines, ref) => scanner.locate(path, lines, ref),
+            onRecord: (lines, ref, line) => scanner.onRecord(path, lines, ref, line),
             refused: refusal => { refused.push(refusal); },
         };
     };
