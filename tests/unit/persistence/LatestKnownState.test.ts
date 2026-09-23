@@ -117,6 +117,26 @@ describe('S2c: two own writes trade two texts, then a change nobody reported', (
     });
 });
 
+// LIMIT (F6 observed it as "E1 by the ladder"; see observation.md). After
+// the trade, and past the claims' age, an outside hand checks Y's line, takes
+// X's away and types a new unchecked line below. The file then reads exactly
+// as the trade left it, so the ladder pairs against the newest record and
+// hands X's name to Y's row. Only the `modify` count or a landing mtime could
+// tell it from the trade read as it landed (the test above); the content
+// cannot. Pinned as it is: when a rule tells the two apart, this fails and
+// is turned round.
+describe('the file leaves the newest record and comes back, past the claims\' age', () => {
+    it('LIMIT: the name of X goes to the row that was Y', async () => {
+        const { bench, x } = await traded();
+        bench.edit(['- [x] A']);
+        bench.edit(['- [x] A', '- [ ] A']);
+        vi.spyOn(Date, 'now').mockReturnValue(Date.now() + HINT_TTL_MS + 1);
+        await bench.scan();
+        // Truth: the top line is the row that was Y.
+        expect(bench.taskAt(0).id).toBe(x.id);
+    });
+});
+
 describe('the ledger stays the partner where the read may be a state it knows', () => {
     it('lines the ledger recorded: the ledger names them', async () => {
         // A sync puts back the file as the last scan read it. Which rows are
