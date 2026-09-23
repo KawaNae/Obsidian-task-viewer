@@ -104,6 +104,52 @@ describe('a subtree with a blank line inside it', () => {
     });
 });
 
+describe('a fence below a blank line whose closing line is at column 0', () => {
+    // The fence opens inside the subtree; its closing line, or a line of it,
+    // is no deeper than the task. A subtree that ended there left half the
+    // fence behind, and the closing line left alone opened a fence that
+    // swallowed the tasks below it (found by the F4 counterexample run).
+    const NOTE = ['# note', '- [ ] T @2026-09-21', '', '  ```js', 'code', '```', '- [ ] U', ''];
+
+    it('goes whole with a delete, and the task below stays a task', async () => {
+        const { contents, session } = await open({ [FILE]: NOTE });
+        const u = idOf(session, 'U');
+
+        expect(await session.index.deleteTask(idOf(session, 'T'))).toBe(true);
+        await session.settle(FILE);
+
+        expect(contents.get(FILE)).toBe(['# note', '- [ ] U', ''].join('\n'));
+        expect(idOf(session, 'U')).toBe(u);
+    });
+
+    it('goes whole with a move within the file, and every task keeps its ID', async () => {
+        const note = ['# note', '- [ ] T @2026-09-21 ==> move([[note]])', '', '  ```js', 'code', '```', '- [ ] U', ''];
+        const { contents, session } = await open({ [FILE]: note });
+        const held = { t: idOf(session, 'T'), u: idOf(session, 'U') };
+
+        await complete(session, 'T');
+
+        expect(contents.get(FILE)).toBe(
+            ['# note', '- [ ] U', '- [x] T @2026-09-21', '', '  ```js', 'code', '```', ''].join('\n'),
+        );
+        expect(idOf(session, 'T')).toBe(held.t);
+        expect(idOf(session, 'U')).toBe(held.u);
+    });
+
+    it('goes whole with a copy placed before the task, which keeps its ID', async () => {
+        const { contents, session } = await open({ [FILE]: NOTE });
+        const held = { t: idOf(session, 'T'), u: idOf(session, 'U') };
+
+        await session.index.duplicateTask(held.t, { dayOffset: 1 });
+        await session.settle(FILE);
+
+        const lines = contents.get(FILE)!.split('\n');
+        expect(lines.filter(line => line === '```')).toHaveLength(2);
+        expect(session.index.getTask(held.t)?.content).toBe('T');
+        expect(idOf(session, 'U')).toBe(held.u);
+    });
+});
+
 describe('a command line below a blank line', () => {
     it('is the task\'s command: completing the task fires it and consumes it', async () => {
         const { contents, session } = await open({

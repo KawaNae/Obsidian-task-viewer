@@ -91,6 +91,17 @@ describe('Outline.subtreeEnd', () => {
         expect(Outline.subtreeEnd(['- [ ] a', '', '- [ ] b'], 0)).toBe(1);
     });
 
+    it('takes a fence opened inside it whole, a closing line at column 0 included', () => {
+        const lines = ['- [ ] T', '', '  ```js', 'code', '```', '- [ ] U'];
+        expect(Outline.subtreeEnd(lines, 0)).toBe(5);
+    });
+
+    it('reads by depth alone when a fence opened inside it never closes', () => {
+        // Taking the fence would take the rest of the note.
+        const lines = ['- [ ] T', '', '  ```js', '  code', '- [ ] U', 'more'];
+        expect(Outline.subtreeEnd(lines, 0)).toBe(4);
+    });
+
     it('stops at the limit', () => {
         expect(Outline.subtreeEnd(['- [ ] a', '\t- b', '\t- c'], 0, 2)).toBe(2);
     });
@@ -137,6 +148,7 @@ describe('the write and the parser agree on every subtree', () => {
         ['a child fence with a blank line', ['- [ ] a', '\t```', '\tx', '', '\ty', '\t```', '- [ ] b', '']],
         ['a blank line and then a shallower line', ['- [ ] a', '\t- [ ] b', '', 'text', '\t- [ ] c', '']],
         ['a heading after a blank line', ['- [ ] a', '\t- [ ] b', '', '# h', '\t- [ ] c', '']],
+        ['a fence closed at column 0 below a blank line', ['- [ ] a', '\t- [ ] b', '', '  ```', 'x', '```', '- [ ] c', '']],
     ];
 
     for (const [name, lines] of SHAPES) {
