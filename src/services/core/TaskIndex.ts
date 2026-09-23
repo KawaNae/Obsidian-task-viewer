@@ -25,7 +25,7 @@ import type { EditorLine, Refusal, RowLines } from '../../utils/FileLines';
 
 /**
  * TaskIndex - タスク管理の統括ファサードクラス
- * 各種サービス（Store, Scanner, Validator, SyncDetector, EditorObserver）を統合
+ * 各種サービス（Store, Scanner, Validator, EditorSignal, EditorObserver）を統合
  */
 export class TaskIndex {
     private store: TaskStore;

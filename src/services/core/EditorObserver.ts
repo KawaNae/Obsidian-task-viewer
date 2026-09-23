@@ -4,7 +4,7 @@ import { editorCm } from '../../utils/editorCm';
 
 /**
  * How soon after a key or a press an editor's change is taken for the hand's.
- * A command bound to a key (Ctrl+Enter's checkbox toggle), a checkbox clicked
+ * A command bound to a key (the checkbox toggle, Ctrl+L by default), a checkbox clicked
  * in Live Preview, a button on the mobile toolbar: each changes the note in
  * the same task as the input, milliseconds after it (4–34ms on Dev). A change
  * with no input that recent came from somewhere else.
