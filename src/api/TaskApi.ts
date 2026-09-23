@@ -53,9 +53,13 @@ import {
  * line of a note; a break would split it in two, and the write layer refuses
  * such a line whole (`LineBreakInLine`). Refused here instead, where the
  * caller can be told which parameter it was.
+ *
+ * U+2028 and U+2029 as well. A note keeps them inside a line, but the task
+ * line is read by patterns whose `.` does not match them, so a task written
+ * with one is no longer read as a task at all.
  */
 function hasLineBreak(value: string): boolean {
-    return /[\r\n]/.test(value);
+    return /[\r\n\u2028\u2029]/.test(value);
 }
 
 export const API_HELP_TEXT = `
