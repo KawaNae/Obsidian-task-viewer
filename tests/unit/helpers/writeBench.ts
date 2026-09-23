@@ -116,10 +116,10 @@ export async function writeBench(files: string | string[] | Record<string, strin
     const channel = (path: string, origin: WriteOrigin = 'user'): WriteChannel => {
         const sink = scanner.writeSink(path, origin);
         return {
-            sink: (before, after, edits) => {
+            sink: (before, after, edits, named) => {
                 const entry: Filed = { file: path, before: [...before], after: [...after], edits: [...edits] };
                 filed.push(entry);
-                const receipt = sink(before, after, edits);
+                const receipt = sink(before, after, edits, named);
                 return {
                     withdraw: () => {
                         const at = filed.indexOf(entry);

@@ -551,3 +551,36 @@ describe('WriteClaims.writerOf: whom the write that last wrote a row was made fo
         expect(claims.writerOf(FILE, k(after), k(ledgerLines), 'r1', after[0])).toBe('user');
     });
 });
+
+describe('WriteClaims.writerOf: a write that could only leave a mark (F6)', () => {
+    const k = contentKeyOf;
+    const ledgerLines = ['- [ ] A ==> every 1d', '- [ ] B'];
+    const ledger = [known('r1', 0, ledgerLines[0]), known('r2', 1, ledgerLines[1])];
+    // A sync changed B before any scan read it: the write's lines are no state
+    // on record, so it cannot build a claim, and leaves a mark.
+    const synced = ['- [ ] A ==> every 1d', '- [ ] B synced'];
+    const checked = ['- [x] A ==> every 1d', '- [ ] B synced'];
+
+    it('still says the row it named, and for whom', () => {
+        const claims = claimsWith(ledger, ledgerLines);
+        const result = claims.claim(FILE, synced, checked, [replaced(0)], 'user', new Map([['r1', checked[0]]]));
+        expect(result.hint).toBeNull();
+        expect(claims.writerOf(FILE, k(checked), k(ledgerLines), 'r1', checked[0])).toBe('user');
+        expect(claims.writerOf(FILE, k(checked), k(ledgerLines), 'r2', checked[1])).toBeNull();
+    });
+
+    it('answers a flow for the rows a flow\'s mark named', () => {
+        const claims = claimsWith(ledger, ledgerLines);
+        claims.claim(FILE, synced, checked, [replaced(0)], 'flow', new Map([['r1', checked[0]]]));
+        expect(claims.writerOf(FILE, k(checked), k(ledgerLines), 'r1', checked[0])).toBe('flow');
+    });
+
+    it('does not look past a mark that could not say which rows it wrote', () => {
+        const claims = claimsWith(ledger, ledgerLines);
+        const w1 = ['- [x] A ==> every 1d', '- [ ] B'];
+        claims.claim(FILE, ledgerLines, w1, [replaced(0)], 'user');
+        claims.silence(FILE);
+        const read = ['- [x] A ==> every 1d', '- [ ] B', 'whole'];
+        expect(claims.writerOf(FILE, k(read), k(ledgerLines), 'r1', read[0])).toBeNull();
+    });
+});
