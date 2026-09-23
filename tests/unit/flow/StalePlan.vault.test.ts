@@ -83,8 +83,17 @@ describe('CE1: a row a write of ours rewrote, before any scan read it', () => {
             await executor(session).handleTaskCompletion(session.index.getTask(id)!);
             await vi.waitFor(() => expect(executor(session).isProcessing).toBe(false));
 
-            expect(contents.get(FILE)).toBe(renamed);
-            expect(contents.get(OTHER)).toBe(['# other', ''].join('\n'));
+            // The stale plan wrote nothing: no line anywhere reads the row as
+            // the store's copy had it. The rename is the user's own write of a
+            // completed row whose command is still there, so the scan that
+            // reads it fires once more, on the row as it now reads (F6: the
+            // menu's write says it was made for the user; before, the scan
+            // that followed the drag fired it when the drag ended).
+            const all = [...contents.values()].join('\n');
+            expect(all).not.toContain('- [x] A @2026-09-21');
+            expect(all).not.toContain('- [ ] A @');
+            expect(all.split('\n').filter(line => line.startsWith('- [x] A renamed @2026-09-21'))).toHaveLength(1);
+            expect(renamed).toContain('- [x] A renamed @2026-09-21');
             expect(Notice.messages).toEqual([CHANGED]);
         });
     }

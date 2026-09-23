@@ -38,7 +38,6 @@ function buildHost(task: Task) {
             notifyListeners: vi.fn(),
         },
         settings: { scopeKeys: {} },
-        syncDetector: { markLocalEdit: vi.fn() },
         scanner: { requestScan: vi.fn(async () => { }) },
         app: { vault: { getAbstractFileByPath: () => null } },
         repository: {

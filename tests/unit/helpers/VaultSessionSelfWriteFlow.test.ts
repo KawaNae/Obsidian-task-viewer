@@ -1,40 +1,36 @@
 import { describe, it, expect, vi } from 'vitest';
 import { TFile } from 'obsidian';
 import { vaultSession, makeFile } from './vaultSession';
-import type { TaskScanner } from '../../../src/services/core/TaskScanner';
 
 /**
- * `structure.md` names the scaffold's other limit: `vaultSession` forced
- * every post-write scan `isLocal=true`, so a flow's own writes (FlowExecutor
- * calls the repository directly and never marks local — `FlowExecutor.ts:220`
- * ほか) could never be told apart from a user's. These scenarios watch
- * `scanner.queueScan` directly, the way the write layer itself is watched
- * elsewhere in this suite (`ChildInsertClaims.test.ts`'s `watchClaims`).
+ * A flow's own writes do not fire again (structure.md, 「自己書き込みの判定と
+ * 発火の可否」). Before F6 the only thing that stopped them was a flag no flow
+ * write set, so each scan after the completing write ran with `isLocal`
+ * false. Now each completed row answers by whom the write that made it was
+ * for: the user's check fires, the flow's own writes do not. These count the
+ * firings through the index's own flow executor.
  */
-function traceScans(session: ReturnType<typeof vaultSession>, path: string): boolean[] {
-    const trace: boolean[] = [];
-    const scanner = session.scanner as unknown as {
-        queueScan: (f: TFile, isLocal?: boolean) => Promise<void>;
-    };
-    const original = scanner.queueScan.bind(scanner);
-    scanner.queueScan = (f: TFile, isLocal?: boolean) => {
-        if (f.path === path) trace.push(!!isLocal);
-        return original(f, isLocal);
-    };
-    return trace;
+function countFires(session: ReturnType<typeof vaultSession>): { count: number } {
+    const counter = { count: 0 };
+    const executor = (session.index as unknown as {
+        commandExecutor: { handleTaskCompletion: (task: unknown) => Promise<void> };
+    }).commandExecutor;
+    const original = executor.handleTaskCompletion.bind(executor);
+    executor.handleTaskCompletion = (task: unknown) => { counter.count++; return original(task); };
+    return counter;
 }
 
-describe("vaultSession: isLocal for a flow's own writes", () => {
+describe("vaultSession: a flow's own writes", () => {
     const FILE = 'flow.md';
     const flowNote = () => new Map([[FILE, ['- [ ] 週報 @2026-09-21 ==> every mon', ''].join('\n')]]);
 
-    it('is true only for the completing write; every scan the flow makes afterward is isLocal=false, and it fires exactly once', async () => {
+    it('fire nothing: the completing write fires once, and the scans of the flow\'s writes fire nothing', async () => {
         const contents = flowNote();
         const session = vaultSession(contents);
         await session.scanAll();
         const weekly = session.index.getTasks().find(t => t.content === '週報')!;
 
-        const trace = traceScans(session, FILE);
+        const fires = countFires(session);
         await session.index.updateTask(weekly.id, { statusChar: 'x' });
         // Length 2 lands after create-next; the strip that follows rewrites
         // the second line without changing the count, so wait for the exact
@@ -47,11 +43,7 @@ describe("vaultSession: isLocal for a flow's own writes", () => {
         });
         await session.settle(FILE);
 
-        // The completing write (a UI-equivalent CRUD call) is local; every
-        // scan the flow's own writes cause afterward is not.
-        expect(trace[0]).toBe(true);
-        expect(trace.length).toBeGreaterThan(1);
-        expect(trace.slice(1)).toEqual(trace.slice(1).map(() => false));
+        expect(fires.count).toBe(1);
     });
 
     it('does not refire from the metadataCache "changed" scan either: it reads what the last scan read, and commits nothing', async () => {

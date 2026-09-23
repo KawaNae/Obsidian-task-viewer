@@ -9,7 +9,7 @@ import type { FlowDeleteAssessment } from '../flow/FlowDeletion';
 import { TaskStore } from './TaskStore';
 import { TaskScanner } from './TaskScanner';
 import { TaskValidator, type ValidationError } from './TaskValidator';
-import { SyncDetector } from './SyncDetector';
+import { EditorSignal } from './EditorSignal';
 import { EditorObserver } from './EditorObserver';
 import { PathTtlWindow } from './PathTtlWindow';
 import { NotifyCoalescer } from './NotifyCoalescer';
@@ -31,7 +31,7 @@ export class TaskIndex {
     private store: TaskStore;
     private scanner: TaskScanner;
     private validator: TaskValidator;
-    private syncDetector: SyncDetector;
+    private editorSignal: EditorSignal;
     private editorObserver: EditorObserver;
     private repository: TaskRepository;
     private commandExecutor: FlowExecutor;
@@ -40,10 +40,10 @@ export class TaskIndex {
     private draggingFilePath: string | null = null;  // ドラッグ中のファイルパス
 
     /**
-     * ドラッグ中に読み飛ばした変更。終了時に読み直すために覚えておく。
-     * パスは常に `draggingFilePath` と同じで、`isLocal` は飛ばした変更の論理和。
+     * ドラッグ中に読み飛ばした変更のパス。終了時に読み直すために覚えておく。
+     * 常に `draggingFilePath` と同じ。
      */
-    private skippedDuringDrag: { path: string; isLocal: boolean } | null = null;
+    private skippedDuringDrag: string | null = null;
 
     /**
      * `dispose` 済みか。閉じたあとの書き込みは行わず、できなかったと答える。
@@ -86,16 +86,16 @@ export class TaskIndex {
         // サービスの初期化
         this.store = new TaskStore(settings);
         this.validator = new TaskValidator();
-        this.syncDetector = new SyncDetector();
+        this.editorSignal = new EditorSignal();
         this.repository = new TaskRepository(app);
         // Settings getter (not a snapshot): updateSettings replaces the
         // settings object, and trigger judgment must always see the latest
         // statusDefinitions.
         this.commandExecutor = new FlowExecutor(this.repository, this, app, () => this.settings);
-        this.editorObserver = new EditorObserver(app, this.syncDetector);
+        this.editorObserver = new EditorObserver(app, this.editorSignal);
         this.scanner = new TaskScanner(
             app, this.store, this.validator,
-            this.syncDetector, this.commandExecutor, settings
+            this.editorSignal, this.commandExecutor, settings
         );
         // Connected here rather than built into the repository, because the
         // scanner does not exist when the repository does — and cut on dispose,
@@ -124,23 +124,15 @@ export class TaskIndex {
         // Vault イベントハンドラー
         this.own(this.app.vault, this.app.vault.on('modify', async (file) => {
             if (file instanceof TFile && file.extension === 'md') {
-                const isLocal = this.syncDetector.isLocalEdit(file.path);
-                this.syncDetector.clearLocalEditFlag(file.path);
-
                 // ドラッグ中のファイルはスキャンをスキップ（古い値でストアが上書きされるのを防止）。
                 // 飛ばしたことは覚えておき、ドラッグの終了時に読み直す。忘れると、
                 // その間に届いた変更を読む契機がどこにも無くなる。
                 if (this.draggingFilePath === file.path) {
-                    this.skippedDuringDrag = {
-                        path: file.path,
-                        // 1つでも自己書き込みがあれば自己書き込みとして読み直す。
-                        // ドラッグ確定の書き込み自体がこれに当たる。
-                        isLocal: (this.skippedDuringDrag?.isLocal ?? false) || isLocal,
-                    };
+                    this.skippedDuringDrag = file.path;
                     return;
                 }
 
-                await this.scanner.queueScan(file, isLocal);
+                await this.scanner.queueScan(file);
                 // Skip notify when an API write (withNotify) is in flight for this
                 // file — withNotify's own notifyImmediate is the authoritative notify.
                 // Editor direct edits (no withNotify) are unaffected: the API
@@ -203,7 +195,7 @@ export class TaskIndex {
             if (this.draggingFilePath === oldPath) {
                 this.draggingFilePath = null;
             }
-            this.syncDetector.clearLocalEditFlag(oldPath);
+            this.editorSignal.forget(oldPath);
 
             this.store.removeTasksByFile(oldPath);
             this.scanner.handleFileRenamed(oldPath, file.path);
@@ -231,8 +223,8 @@ export class TaskIndex {
     }
 
     /** Read the file back into the store, then notify. */
-    private async rescanAndNotify(file: TFile, isLocal?: boolean): Promise<void> {
-        await this.scanner.queueScan(file, isLocal);
+    private async rescanAndNotify(file: TFile): Promise<void> {
+        await this.scanner.queueScan(file);
         this.notify.schedule();
     }
 
@@ -270,9 +262,9 @@ export class TaskIndex {
         this.skippedDuringDrag = null;
         if (!skipped) return;
 
-        const file = this.app.vault.getAbstractFileByPath(skipped.path);
+        const file = this.app.vault.getAbstractFileByPath(skipped);
         if (file instanceof TFile) {
-            void this.rescanAndNotify(file, skipped.isLocal);
+            void this.rescanAndNotify(file);
         }
     }
 
@@ -441,7 +433,6 @@ export class TaskIndex {
         // 更新前の姿。行の探索と、書けなかったときの巻き戻しの両方で要る。
         const before: Task = { ...task };
 
-        this.syncDetector.markLocalEdit(task.file);
         Object.assign(task, updates);
         this.store.bumpRevision();
 
@@ -596,7 +587,6 @@ export class TaskIndex {
             logInfo(`[deleteTask] id=${taskId} fireFlow=${options.fireFlow === true}`);
             if (task.isReadOnly) return false;
 
-            this.syncDetector.markLocalEdit(task.file);
 
             let removed: boolean;
             if (options.fireFlow && isTvInline(task)) {
@@ -631,7 +621,6 @@ export class TaskIndex {
         return this.withNotify(task.file, async () => {
             if (task.isReadOnly) return false;
 
-            this.syncDetector.markLocalEdit(task.file);
 
             const written = await this.writeDuplicate(task, options);
             if (!written) {
@@ -676,7 +665,6 @@ export class TaskIndex {
         let insertedLine = -1;
         await this.withNotify(filePath, async () => {
             logInfo(`[createTask] path=${filePath} heading=${heading ?? '(none)'}`);
-            this.syncDetector.markLocalEdit(filePath);
 
             if (heading) {
                 insertedLine = await this.repository.insertLineUnderHeading(filePath, taskLine, heading, 2);
@@ -702,7 +690,6 @@ export class TaskIndex {
         return this.withNotify(task.file, async () => {
             logInfo(`[insertChildTask] parentId=${parentTaskId}`);
 
-            this.syncDetector.markLocalEdit(task.file);
 
             // インデントは書き込み層が既存子行から決める（親行だけからは
             // トップレベルのとき 4 スペース固定になり、タブ書きのファイルに
@@ -730,7 +717,6 @@ export class TaskIndex {
         return this.withNotify(task.file, async () => {
             logInfo(`[appendChildTask] parentId=${parentTaskId}`);
 
-            this.syncDetector.markLocalEdit(task.file);
 
             await this.repository.insertLineAfterTask(task, childLine);
 
@@ -755,7 +741,6 @@ export class TaskIndex {
         return this.withNotify(task.file, async () => {
             logInfo(`[insertSiblingAfterTask] taskId=${taskId}`);
 
-            this.syncDetector.markLocalEdit(task.file);
             const insertedLine = await this.repository.insertSiblingAfterTask(task, siblingLine, opts);
             await this.scanner.waitForScan(task.file);
 
@@ -766,7 +751,6 @@ export class TaskIndex {
     async updateLine(filePath: string, at: EditorLine, newContent: string): Promise<void> {
         if (this.refuseAfterDispose('updateLine')) return;
         return this.withNotify(filePath, async () => {
-            this.syncDetector.markLocalEdit(filePath);
             await this.repository.updateLine(filePath, at, newContent);
 
             const file = this.app.vault.getAbstractFileByPath(filePath);
@@ -779,7 +763,6 @@ export class TaskIndex {
     async insertLineAfterLine(filePath: string, at: EditorLine, newContent: string): Promise<void> {
         if (this.refuseAfterDispose('insertLineAfterLine')) return;
         return this.withNotify(filePath, async () => {
-            this.syncDetector.markLocalEdit(filePath);
             await this.repository.insertLineAfterLine(filePath, at, newContent);
 
             const file = this.app.vault.getAbstractFileByPath(filePath);
@@ -792,7 +775,6 @@ export class TaskIndex {
     async deleteLine(filePath: string, at: EditorLine): Promise<void> {
         if (this.refuseAfterDispose('deleteLine')) return;
         return this.withNotify(filePath, async () => {
-            this.syncDetector.markLocalEdit(filePath);
             await this.repository.deleteLine(filePath, at);
 
             const file = this.app.vault.getAbstractFileByPath(filePath);

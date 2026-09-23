@@ -201,7 +201,6 @@ describe('insertSiblingAfterTask afterCompletedRun', () => {
 function buildIndexHost(task: Task | undefined) {
     return {
         store: { getTask: () => task },
-        syncDetector: { markLocalEdit: vi.fn() },
         scanner: { waitForScan: vi.fn(async () => {}) },
         repository: {
             insertLineAsFirstChild: vi.fn(async () => 0),
@@ -245,7 +244,6 @@ describe('TaskIndex child insertion', () => {
 
         expect(host.withNotify).not.toHaveBeenCalled();
         expect(host.repository.insertLineAsFirstChild).not.toHaveBeenCalled();
-        expect(host.syncDetector.markLocalEdit).not.toHaveBeenCalled();
     });
 
     it('appendChildTask is a no-op for a read-only task', async () => {
@@ -274,7 +272,6 @@ describe('TaskIndex.insertSiblingAfterTask', () => {
         expect(host.repository.insertSiblingAfterTask).toHaveBeenCalledTimes(1);
         expect(host.repository.insertSiblingAfterTask.mock.calls[0][1]).toBe(NEW_SESSION);
         expect(host.repository.insertSiblingAfterTask.mock.calls[0][2]).toEqual({ afterCompletedRun: true });
-        expect(host.syncDetector.markLocalEdit).toHaveBeenCalledWith('note.md');
         expect(line).toBe(7);
     });
 
@@ -297,7 +294,6 @@ describe('TaskIndex.insertSiblingAfterTask', () => {
         for (const host of [readOnly, unknown]) {
             expect(host.withNotify).not.toHaveBeenCalled();
             expect(host.repository.insertSiblingAfterTask).not.toHaveBeenCalled();
-            expect(host.syncDetector.markLocalEdit).not.toHaveBeenCalled();
         }
     });
 });

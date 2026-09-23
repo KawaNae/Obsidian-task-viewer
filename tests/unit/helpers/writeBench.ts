@@ -1,6 +1,7 @@
 import { vi } from 'vitest';
 import { TFile } from 'obsidian';
 import { TaskScanner } from '../../../src/services/core/TaskScanner';
+import { EditorSignal } from '../../../src/services/core/EditorSignal';
 import { TaskStore } from '../../../src/services/core/TaskStore';
 import { TaskValidator } from '../../../src/services/core/TaskValidator';
 import { InlineTaskWriter } from '../../../src/services/persistence/writers/InlineTaskWriter';
@@ -106,7 +107,7 @@ export async function writeBench(files: string | string[] | Record<string, strin
     const store = new TaskStore(DEFAULT_SETTINGS);
     const flow = { handleTaskCompletion: vi.fn(async () => { }) };
     const scanner = new TaskScanner(
-        app as never, store, new TaskValidator(), {} as never, flow as never, DEFAULT_SETTINGS,
+        app as never, store, new TaskValidator(), new EditorSignal(), flow as never, DEFAULT_SETTINGS,
     );
     scanner.setInitializing(false);
 
