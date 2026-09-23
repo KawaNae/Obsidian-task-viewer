@@ -1,7 +1,8 @@
 import { type App, TFile } from 'obsidian';
 import { CodeFenceTracker } from './CodeFenceTracker';
-import { processLines, type LineDraft } from './FileLines';
+import { processLines, type LineDraft, type WriteChannel } from './FileLines';
 import { Outline } from '../services/parsing/utils/Outline';
+import { Placement } from '../services/persistence/utils/Placement';
 
 /**
  * Heading-based line insertion utility.
@@ -16,20 +17,24 @@ export class HeadingInserter {
     /**
      * Insert a line under a specific heading in file content.
      * If the heading exists, inserts directly under the heading (headerIndex + 1).
-     * If the heading does not exist, creates it at the end of the file.
+     * If the heading does not exist, creates it at the end of the file — where
+     * `Placement.end` says lines appended to the note go.
      *
      * @param draft   The file's lines, as a write is handed them
      * @param line    Line to insert
      * @param header  Heading text (without # prefix)
      * @param headerLevel Number of # (e.g. 2 for ##)
-     * @returns The 0-based line number of the inserted line
+     * @returns The 0-based line number of the inserted line; null, and nothing
+     *          spliced, when the heading is absent and the note ends inside a
+     *          fence that never closes, so the heading and the line would be
+     *          written into it.
      */
     static insertUnderHeading(
         draft: LineDraft,
         line: string,
         header: string,
         headerLevel: number
-    ): number {
+    ): number | null {
         const out = draft.lines;
         const headerPrefix = '#'.repeat(headerLevel) + ' ';
         const fullHeader = headerPrefix + header;
@@ -57,7 +62,9 @@ export class HeadingInserter {
             // At the end, before the empty element a terminated file splits
             // into, so the file still ends with its terminator. One blank line
             // sets the new heading off from the text above it.
-            let at = out.length > 0 && out[out.length - 1] === '' ? out.length - 1 : out.length;
+            const end = Placement.end(out);
+            if (end === null) return null;
+            let at = end;
             if (at > 0 && out[at - 1].trim() !== '') draft.splice(at++, 0, '');
             draft.splice(at, 0, fullHeader, line);
             insertedLine = at + 1;
@@ -69,7 +76,12 @@ export class HeadingInserter {
     /**
      * Insert a line under a heading in the given file, via `vault.process`
      * (atomic read-modify-write). Returns the 0-based line number of the
-     * inserted line, or -1 if the file doesn't exist.
+     * inserted line, or -1 if the file doesn't exist or the line has nowhere
+     * in the body to go (told to the channel as `unplaceable`).
+     *
+     * The write reports what it did like every other (see `LineDraft`), so a
+     * task already under the heading keeps its name across the insert — even
+     * when it is indented and the new line becomes its parent.
      *
      * Accepts a `TFile` directly when the caller already has one — e.g. a
      * file just created via `vault.create` may not yet resolve back through
@@ -79,6 +91,7 @@ export class HeadingInserter {
     static async writeUnderHeading(
         app: App,
         fileOrPath: TFile | string,
+        channel: WriteChannel | undefined,
         line: string,
         header: string,
         headerLevel: number
@@ -89,8 +102,10 @@ export class HeadingInserter {
         if (!(file instanceof TFile)) return -1;
 
         let insertedLine = -1;
-        await processLines(app, file, undefined, (draft) => {
-            insertedLine = HeadingInserter.insertUnderHeading(draft, line, header, headerLevel);
+        await processLines(app, file, channel, (draft, _eol, { refuse }) => {
+            const at = HeadingInserter.insertUnderHeading(draft, line, header, headerLevel);
+            if (at === null) return refuse({ kind: 'unplaceable' }, line.trim());
+            insertedLine = at;
             return true;
         });
         return insertedLine;

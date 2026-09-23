@@ -38,7 +38,7 @@ describe('HeadingInserter', () => {
         it('writes the pure-function result back through vault.process and returns insertedLine', async () => {
             const h = harness('some text\n## Tasks\nexisting line');
             const insertedLine = await HeadingInserter.writeUnderHeading(
-                h.app, 'note.md', '- [ ] new task', 'Tasks', 2
+                h.app, 'note.md', undefined, '- [ ] new task', 'Tasks', 2
             );
             expect(insertedLine).toBe(2);
             expect(h.text().split('\n')[2]).toBe('- [ ] new task');
@@ -47,7 +47,7 @@ describe('HeadingInserter', () => {
         it('creates the heading when absent, matching insertUnderHeading', async () => {
             const h = harness('some text');
             const insertedLine = await HeadingInserter.writeUnderHeading(
-                h.app, 'note.md', '- [ ] task', 'Tasks', 2
+                h.app, 'note.md', undefined, '- [ ] task', 'Tasks', 2
             );
             const lines = h.text().split('\n');
             expect(lines).toContain('## Tasks');
@@ -57,7 +57,7 @@ describe('HeadingInserter', () => {
         it('returns -1 without writing when the file does not exist', async () => {
             const h = harness('unchanged');
             const insertedLine = await HeadingInserter.writeUnderHeading(
-                h.app, 'missing.md', '- [ ] task', 'Tasks', 2
+                h.app, 'missing.md', undefined, '- [ ] task', 'Tasks', 2
             );
             expect(insertedLine).toBe(-1);
             expect(h.text()).toBe('unchanged');
@@ -77,7 +77,7 @@ describe('HeadingInserter', () => {
             } as any;
 
             const insertedLine = await HeadingInserter.writeUnderHeading(
-                app, file, '- [ ] just created', 'Tasks', 2
+                app, file, undefined, '- [ ] just created', 'Tasks', 2
             );
             expect(insertedLine).toBe(1);
             expect(content.split('\n')[1]).toBe('- [ ] just created');

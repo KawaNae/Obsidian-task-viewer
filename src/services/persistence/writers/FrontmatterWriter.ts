@@ -3,6 +3,7 @@ import type { FileOperations } from '../utils/FileOperations';
 import { FrontmatterLineEditor } from '../utils/FrontmatterLineEditor';
 import { HeadingInserter } from '../../../utils/HeadingInserter';
 import { processLines } from '../../../utils/FileLines';
+import type { WriteObserver } from '../WriteObserver';
 
 /**
  * frontmatter と見出しへの書き込みを担当するクラス。frontmatter はノートの
@@ -13,6 +14,7 @@ export class FrontmatterWriter {
     constructor(
         private app: App,
         private fileOps: FileOperations,
+        private writes?: WriteObserver,
     ) {}
 
     /**
@@ -26,7 +28,7 @@ export class FrontmatterWriter {
         header: string,
         headerLevel: number
     ): Promise<number> {
-        return HeadingInserter.writeUnderHeading(this.app, filePath, lineContent, header, headerLevel);
+        return HeadingInserter.writeUnderHeading(this.app, filePath, this.writes?.for(filePath), lineContent, header, headerLevel);
     }
 
     /**
@@ -49,7 +51,10 @@ export class FrontmatterWriter {
 
         const hasSet = Object.values(updates).some(v => v !== null);
 
-        await processLines(this.app, file, undefined, (draft) => {
+        // Reported like any other write: every row below a key added or
+        // removed here moves, and without the report the next scan could not
+        // be told which is which (see `WriteClaims.stateFor`).
+        await processLines(this.app, file, this.writes?.for(filePath), (draft) => {
             if (FrontmatterLineEditor.findEnd(draft.lines) < 0 && !hasSet) return false;
 
             const fmEnd = FrontmatterLineEditor.ensureBlock(draft);

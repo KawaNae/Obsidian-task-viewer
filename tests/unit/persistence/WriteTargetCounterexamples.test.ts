@@ -172,9 +172,12 @@ describe('F2-counter: identical rows', () => {
         expect(bench.lines()).toEqual(['- [ ] A ^a', '- [ ] A ^a']);
     });
 
-    it('own duplicate, then a frontmatter write (no claim), then a write on the original: refused', async () => {
+    it('own duplicate, then a frontmatter write, then a write on the original: the original, not the copy', async () => {
         // Before F2 (inferred): stored line shifted by the frontmatter, first
-        // exact match is the copy -> wrong line. F2 closed it.
+        // exact match is the copy -> wrong line. F2 closed it by refusing:
+        // the frontmatter write claimed nothing, so nothing on record fit.
+        // Since F5 it reports, the chain of records holds, and the name is
+        // read off the frontmatter write's record.
         const bench = await writeBench(['- [ ] A', '- [ ] B']);
         const a = bench.taskAt(0);
         expect(await bench.cloner.duplicateInlineTask(a)).toBe(true);
@@ -182,8 +185,9 @@ describe('F2-counter: identical rows', () => {
         await bench.repo.setFrontmatterKeys(FILE, { color: 'red' });
         expect(bench.lines()[0]).toBe('---');
         const written = await bench.writer.updateTaskInFile(a, checked(a));
-        expect(written).toBe(false);
-        expect(bench.lines().slice(-3)).toEqual(['- [ ] A', '- [ ] A', '- [ ] B']);
+        expect(written).toBe(true);
+        // The copy goes above the original (future-first).
+        expect(bench.lines().slice(-3)).toEqual(['- [ ] A', '- [x] A', '- [ ] B']);
     });
 
     it('own write, then a frontmatter write, then a write on a unique row: written on the right line', async () => {
@@ -428,13 +432,17 @@ describe('F2-counter2: two own writes trade the texts of two rows, then an unrep
         return { bench, x };
     };
 
-    it('S2a: after the plugin\'s own frontmatter write, a delete of X is refused, not taken from Y', async () => {
+    it('S2a: after the plugin\'s own frontmatter write, a delete of X takes X, not Y', async () => {
+        // Until F5 the frontmatter write reported nothing and was the change
+        // that left every record unusable, and the delete was refused. It
+        // reports now, so the chain of records reaches the file and names X.
         const { bench, x } = await traded();
         await bench.repo.setFrontmatterKeys(FILE, { color: 'red' });
         const after = bench.lines();
-        expect(await bench.writer.deleteTaskFromFile(x)).toBe(false);
-        expect(bench.lines()).toEqual(after);
-        expect(bench.refused.map(r => r.reason.kind)).toEqual(['changed']);
+        expect(after.slice(-2)).toEqual(['- [x] A', '- [ ] A']);
+        expect(await bench.writer.deleteTaskFromFile(x)).toBe(true);
+        expect(bench.lines()).toEqual([...after.slice(0, -2), '- [ ] A']);
+        expect(bench.refused).toEqual([]);
     });
 
     it('S2b: the same after a line appended from outside', async () => {
