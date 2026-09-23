@@ -1,5 +1,5 @@
 import { type App, type EventRef, type WorkspaceLeaf, MarkdownView } from 'obsidian';
-import type { SyncDetector } from './SyncDetector';
+import type { EditorSignal } from './EditorSignal';
 import { editorCm } from '../../utils/editorCm';
 
 /**
@@ -14,7 +14,7 @@ export class EditorObserver {
 
     constructor(
         private app: App,
-        private syncDetector: SyncDetector
+        private editorSignal: EditorSignal
     ) { }
 
     /**
@@ -70,7 +70,7 @@ export class EditorObserver {
             if (e.data !== null || e.inputType === 'deleteContentBackward' || e.inputType === 'insertFromPaste') {
                 const file = view.file;
                 if (file) {
-                    this.syncDetector.markLocalEdit(file.path);
+                    this.editorSignal.mark(file.path);
                 }
             }
         };
@@ -82,7 +82,7 @@ export class EditorObserver {
         this.mousedownListenerBound = () => {
             const file = view.file;
             if (file) {
-                this.syncDetector.markLocalEdit(file.path);
+                this.editorSignal.mark(file.path);
             }
         };
         editorEl.addEventListener('mousedown', this.mousedownListenerBound);

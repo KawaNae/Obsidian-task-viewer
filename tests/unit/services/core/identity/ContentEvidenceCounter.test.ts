@@ -1,6 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import { TFile } from 'obsidian';
 import { TaskScanner } from '../../../../../src/services/core/TaskScanner';
+import { EditorSignal } from '../../../../../src/services/core/EditorSignal';
 import { TaskStore } from '../../../../../src/services/core/TaskStore';
 import { TaskValidator } from '../../../../../src/services/core/TaskValidator';
 import { TaskParser } from '../../../../../src/services/parsing/TaskParser';
@@ -53,7 +54,7 @@ class Harness {
         };
         const flow = { handleTaskCompletion: vi.fn(async () => {}) };
         this.scanner = new TaskScanner(
-            app as never, this.store, new TaskValidator(), {} as never, flow as never, DEFAULT_SETTINGS
+            app as never, this.store, new TaskValidator(), new EditorSignal(), flow as never, DEFAULT_SETTINGS
         );
         this.scanner.setInitializing(false);
     }

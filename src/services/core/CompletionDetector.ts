@@ -3,8 +3,14 @@ import { flowSource } from '../flow/FlowSegments';
 import { canTriggerFlow } from '../flow/FlowTrigger';
 
 export interface DetectOptions {
-    /** True when the change came from a local edit (sync changes never fire). */
-    isLocalChange: boolean;
+    /**
+     * Whether this completed row may fire, asked only of rows whose signature
+     * counts more completions than before: true when the user completed it —
+     * through a write of ours made for the user, or by hand in an editor — and
+     * false when a flow's own write made it, or it came from outside (a sync).
+     * The scan answers it (`TaskScanner`); this class only counts.
+     */
+    mayFire: (task: Task) => boolean;
     /** True while the initial vault scan is running. */
     isInitializing: boolean;
     statusDefinitions: StatusDefinition[];
@@ -57,10 +63,15 @@ export class CompletionDetector {
             const previousCount = this.processedCompletions.get(sig) || 0;
 
             if (currentCount > previousCount) {
-                // トリガー条件: 初期化中でない、初回スキャンでない、ローカル変更である
-                if (!opts.isInitializing && !isFirstScan && opts.isLocalChange) {
-                    for (let k = 0; k < currentCount - previousCount; k++) {
-                        tasksToTrigger.push(task);
+                // トリガー条件: 初期化中でない、初回スキャンでない、ユーザーが完了させた行である。
+                // 同じ署名の行が複数あると、どれが新しい完了かは決まらない。発火してよい
+                // 行の数を超えては発火しない — フローが書いた同じ本文の完了行が、
+                // ユーザーの完了の数に紛れて発火しないように。
+                if (!opts.isInitializing && !isFirstScan) {
+                    const fireable = doneTasks.filter(done => this.getTaskSignature(done) === sig && opts.mayFire(done));
+                    const times = Math.min(currentCount - previousCount, fireable.length);
+                    for (let k = 0; k < times; k++) {
+                        tasksToTrigger.push(fireable[0]);
                     }
                 }
             }

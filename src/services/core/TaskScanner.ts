@@ -1,9 +1,9 @@
 import type { App, TFile } from 'obsidian';
-import type { TaskViewerSettings } from '../../types';
+import type { Task, TaskViewerSettings } from '../../types';
 import { FileParsePipeline } from '../parsing/FileParsePipeline';
 import type { TaskStore } from './TaskStore';
 import type { TaskValidator } from './TaskValidator';
-import type { SyncDetector } from './SyncDetector';
+import type { EditorSignal } from './EditorSignal';
 import { CompletionDetector } from './CompletionDetector';
 import type { FlowExecutor } from '../flow/FlowExecutor';
 import { TaskIdGenerator } from '../display/TaskIdGenerator';
@@ -95,7 +95,7 @@ export class TaskScanner {
         private app: App,
         private store: TaskStore,
         private validator: TaskValidator,
-        private syncDetector: SyncDetector,
+        private editorSignal: EditorSignal,
         private commandExecutor: FlowExecutor,
         private settings: TaskViewerSettings
     ) { }
@@ -154,8 +154,8 @@ export class TaskScanner {
     /**
      * スキャンをキューに追加
      */
-    async queueScan(file: TFile, isLocal: boolean = false): Promise<void> {
-        await this.queue(file, isLocal, false);
+    async queueScan(file: TFile): Promise<void> {
+        await this.queue(file, false);
     }
 
     /**
@@ -171,17 +171,17 @@ export class TaskScanner {
      * window of time after a write.
      */
     async rescanUnlessRead(file: TFile): Promise<boolean> {
-        return this.queue(file, false, true);
+        return this.queue(file, true);
     }
 
-    private queue(file: TFile, isLocal: boolean, unlessRead: boolean): Promise<boolean> {
-        if (!this.isInitializing) logDebug(`[queueScan] file=${file.path} isLocal=${isLocal}`);
+    private queue(file: TFile, unlessRead: boolean): Promise<boolean> {
+        if (!this.isInitializing) logDebug(`[queueScan] file=${file.path}`);
         // シンプルなキューメカニズム: ファイルパスごとにプロミスをチェーン
         const previousScan = this.scanQueue.get(file.path) || Promise.resolve();
 
         const currentScan = previousScan.then(async () => {
             try {
-                return await this.scanFile(file, isLocal, unlessRead);
+                return await this.scanFile(file, unlessRead);
             } catch (error) {
                 logError(`Error scanning file ${file.path}: ${(error as Error)?.message ?? error}`);
                 return false;
@@ -205,7 +205,7 @@ export class TaskScanner {
     /**
      * ファイルをスキャンしてタスクを抽出（parse → identity → validate → detect → commit）
      */
-    private async scanFile(file: TFile, isLocalChange: boolean, unlessRead: boolean): Promise<boolean> {
+    private async scanFile(file: TFile, unlessRead: boolean): Promise<boolean> {
 
         // Everything from here to the match below is synchronous, so the claims
         // this scan weighs are, near enough, the ones filed by the time the read
@@ -293,8 +293,21 @@ export class TaskScanner {
         }
 
         // --- detect ---
+        // Whether a completed row may fire (structure.md, 論点5): a row a write
+        // of ours wrote, as this read holds it, answers by whom the write was
+        // for — the user, or a flow carrying out a command, whose own writes
+        // must not fire again. A row no write of ours wrote came from an editor
+        // or from outside, and only the editor's signal tells the two apart,
+        // taken once for the whole scan (see EditorSignal).
+        let byHand: boolean | undefined;
+        const mayFire = (task: Task): boolean => {
+            const writer = this.claims.writerOf(file.path, readKey, before, task.id, task.originalText);
+            if (writer !== null) return writer === 'user';
+            byHand ??= this.editorSignal.take(file.path);
+            return byHand;
+        };
         const tasksToTrigger = this.completionDetector.detect(file.path, parsed.tasks, {
-            isLocalChange,
+            mayFire,
             isInitializing: this.isInitializing,
             statusDefinitions: this.settings.statusDefinitions,
         });
@@ -311,7 +324,7 @@ export class TaskScanner {
         // than to a copy, so with verbose on, one change printing this line
         // twice is a surviving pipeline saying so.
         if (!this.isInitializing) {
-            logDebug(`[scan] file=${file.path} isLocal=${isLocalChange} fired=${tasksToTrigger.length} minted=${identity.minted.length} retired=${identity.retired.length}`);
+            logDebug(`[scan] file=${file.path} byHand=${byHand ?? '-'} fired=${tasksToTrigger.length} minted=${identity.minted.length} retired=${identity.retired.length}`);
         }
 
         // --- commit (batched: 1 file = 1 revision bump) ---

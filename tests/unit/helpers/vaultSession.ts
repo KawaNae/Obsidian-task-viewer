@@ -76,19 +76,12 @@ function computeCache(content: string): VaultCache {
  *
  * Writes go through the real write path (`vault.process`) and the real
  * `modify` handler `TaskIndex.initialize` registers (called here so a
- * session needs no separate opt-in): `isLocal` comes from `SyncDetector`,
- * exactly as it would from Obsidian's own `modify` event, rather than being
- * forced true. A write that changed bytes is followed by the `metadataCache`
- * `changed` event real Obsidian sends after `modify`.
- *
- * `TaskIndex` drops that `changed` for a local write via `selfWrites`
- * (`TaskIndex.ts:179-181`), but `selfWrites` is a 1000ms window keyed by path
- * alone, not by which write set it (`PathTtlWindow`) — so a flow's own writes,
- * landing within milliseconds of the local write that triggered them, have
- * their `changed` swallowed by that same mark too. Measured (report.md):
- * a normal firing's `changed` never reaches the second scan
- * (`TaskIndex.ts:182`, `:234-235`) at ordinary speed; it takes the window
- * actually expiring, or a manual `fireVault('changed', ...)`, to see it run.
+ * session needs no separate opt-in): whether a completion fires is answered
+ * by the scan from the writes it reads, exactly as it would be after
+ * Obsidian's own `modify` event. A write that changed bytes is followed by the
+ * `metadataCache` `changed` event real Obsidian sends after `modify`; the scan
+ * that asks for commits nothing when it reads what the last scan read
+ * (`TaskScanner.rescanUnlessRead`).
  *
  * A second `vaultSession` over the same `contents` is a reload: a new index,
  * a new ledger, new runtime IDs.
