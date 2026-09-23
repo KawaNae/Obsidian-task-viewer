@@ -90,6 +90,10 @@ export function vaultSession(contents: Map<string, string>) {
     let scanner: TaskScanner | undefined;
     const noop = { on: () => ({}), offref: () => { } };
     const vaultHandlers = new Map<string, (...args: unknown[]) => unknown>();
+    // Obsidian holds one TFile per note, and a write to it queues by that
+    // object (`processOrFail`): the same path answers the same file.
+    const held = new Map<string, TFile>();
+    const fileAt = (path: string): TFile => held.get(path) ?? held.set(path, makeFile(path)).get(path)!;
     const app = {
         vault: {
             on: (name: string, fn: (...args: unknown[]) => unknown) => { vaultHandlers.set(name, fn); return {}; },
@@ -115,13 +119,13 @@ export function vaultSession(contents: Map<string, string>) {
             // `create`, which the index scans like any other arrival — so the
             // scan follows here too, and every row in the file is minted by it.
             create: async (path: string, data: string) => {
-                const file = makeFile(path);
+                const file = fileAt(path);
                 contents.set(path, data);
                 await (vaultHandlers.get('create') as (f: TFile) => void | Promise<void>)(file);
                 return file;
             },
-            getAbstractFileByPath: (path: string) => (contents.has(path) ? makeFile(path) : null),
-            getMarkdownFiles: () => [...contents.keys()].map(makeFile),
+            getAbstractFileByPath: (path: string) => (contents.has(path) ? fileAt(path) : null),
+            getMarkdownFiles: () => [...contents.keys()].map(fileAt),
         },
         metadataCache: {
             ...noop,

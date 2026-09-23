@@ -87,6 +87,10 @@ export async function writeBench(files: string | string[] | Record<string, strin
     );
     const processed = new Map<string, number>();
 
+    // Obsidian holds one TFile per note, and a write to it queues by that
+    // object (`processOrFail`): the same path answers the same file.
+    const held = new Map<string, TFile>();
+    const fileAt = (path: string): TFile => held.get(path) ?? held.set(path, makeFile(path)).get(path)!;
     const app: any = {
         vault: {
             read: async (file: TFile) => contents.get(file.path) ?? '',
@@ -98,9 +102,9 @@ export async function writeBench(files: string | string[] | Record<string, strin
                 return next;
             },
             modify: async (file: TFile, data: string) => { contents.set(file.path, data); },
-            create: async (path: string, data: string) => { contents.set(path, data); return makeFile(path); },
-            getAbstractFileByPath: (path: string) => (contents.has(path) ? makeFile(path) : null),
-            getMarkdownFiles: () => [...contents.keys()].map(makeFile),
+            create: async (path: string, data: string) => { contents.set(path, data); return fileAt(path); },
+            getAbstractFileByPath: (path: string) => (contents.has(path) ? fileAt(path) : null),
+            getMarkdownFiles: () => [...contents.keys()].map(fileAt),
         },
         metadataCache: { getCache: () => null },
     };

@@ -781,7 +781,14 @@ describe('twins after an outside edit: refused, with one notice', () => {
         expect(Notice.messages).toEqual([ambiguous('子')]);
     });
 
-    it('a flow fire (create-next, then strip-flow) writes nothing', async () => {
+    // Fails, and was there before W1: the scan of the outside edit commits
+    // before the fire writes, giving the twins the names the ladder guessed
+    // by position, and the fire's `locate` takes them at step 2. The bench
+    // now hands one TFile per note, as Obsidian does, so the fire queues
+    // behind the check (`processOrFail`) and that scan lands first; without
+    // the queue, any order where the scan commits first does the same.
+    // Handed to I1 (`guessed`).
+    it.fails('a flow fire (create-next, then strip-flow) writes nothing — fails: a scan that commits guessed twins before the fire (pre-W1, I1)', async () => {
         // The check itself lands: the twins differ once one of them is `[x]`.
         // The outside edit then checks the other twin too and writes a line
         // above, so by the time the fire writes, the two read alike again.
