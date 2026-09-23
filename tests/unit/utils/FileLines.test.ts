@@ -497,6 +497,22 @@ describe('a coordinate carried across a write\'s own edits', () => {
         expect(h.text()).toBe('y\n- [ ] b\n');
     });
 
+    it('says how it left each row it named, where the row ended up, and nothing of one it took away', async () => {
+        const h = harness('- [ ] a\n\t- child\n- [ ] b\n');
+        const log = writeSink((_lines, ref) => (ref.runtimeId === 'gone' ? at(2) : at(0)));
+
+        const outcome = await processLines(h.app, h.file, log.channel, (draft, _eol, session) => {
+            session.row(named('a'));
+            session.row({ ref: { runtimeId: 'gone' }, subject: 'b', basis: ON_RECORD });
+            draft.splice(0, 0, 'new');
+            draft.splice(3, 1);
+            return true;
+        });
+
+        expect(outcome.left).toEqual(new Map([[REF.runtimeId, ['- [ ] a', '\t- child']]]));
+        expect(h.text()).toBe('new\n- [ ] a\n\t- child\n');
+    });
+
     it('keeps a row the write rewrote, and loses one it took away', async () => {
         const h = harness('- [ ] a\n- [ ] b\n');
         const log = writeSink(() => at(0));
