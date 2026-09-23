@@ -154,6 +154,8 @@ describe('the write and the parser agree on every subtree', () => {
         ['a blank line and then a shallower line', ['- [ ] a', '\t- [ ] b', '', 'text', '\t- [ ] c', '']],
         ['a heading after a blank line', ['- [ ] a', '\t- [ ] b', '', '# h', '\t- [ ] c', '']],
         ['a fence closed at column 0 below a blank line', ['- [ ] a', '\t- [ ] b', '', '  ```', 'x', '```', '- [ ] c', '']],
+        // A `# comment` in a fence is code, not a section heading.
+        ['a heading-like line in a fence under a task', ['- [ ] T', '  ```', '# x', '  ```', '\t- [ ] C', '- [ ] U', '']],
     ];
 
     for (const [name, lines] of SHAPES) {
