@@ -1,6 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import { vaultSession, makeFile } from '../helpers/vaultSession';
 import type { Task } from '../../../src/types';
+import { EDITOR_SIGNAL_LIFETIME_MS } from '../../../src/services/core/EditorSignal';
 
 /**
  * Whether a completion fires is answered row by row (structure.md,
@@ -155,6 +156,36 @@ describe('what is not the user\'s', () => {
         const note = open(ONE);
         await note.session.scanAll();
         await note.fromOutside(['# note', '- [x] 甲 @2026-09-21 ==> every mon', '- [ ] 乙', '']);
+        expect(note.fired.count).toBe(0);
+    });
+
+    it('a sync\'s completion does not fire on the signal of a hand edit that completed nothing', async () => {
+        // Found by F6's counterexample run (F1): the signal was taken only by a
+        // scan with a row to decide, so a hand edit that completed nothing left
+        // it up, and the next sync's completion (another device's, already
+        // fired there) fired here too.
+        const note = open(ONE);
+        await note.session.scanAll();
+        await note.byHand(['# note', '- [ ] 甲 @2026-09-21 ==> every mon', '- [ ] 乙 typed', '']);
+        await note.fromOutside(['# note', '- [x] 甲 @2026-09-21 ==> every mon', '- [ ] 乙 typed', '']);
+        expect(note.fired.count).toBe(0);
+    });
+
+    it('a sync\'s completion does not fire on a signal older than its lifetime', async () => {
+        // A hand in the editor whose save never reached a scan (typed and
+        // undone), with writes of ours in between, which leave it standing.
+        const note = open(ONE);
+        await note.session.scanAll();
+        (note.session.index as unknown as { editorSignal: { mark(path: string): void } }).editorSignal.mark(FILE);
+        await note.session.index.updateTask(note.idOf('乙'), { content: '乙2' });
+        await note.settled();
+        const now = Date.now();
+        vi.spyOn(Date, 'now').mockReturnValue(now + EDITOR_SIGNAL_LIFETIME_MS + 1);
+        try {
+            await note.fromOutside(note.lines().map(line => line.replace('- [ ] 甲', '- [x] 甲')));
+        } finally {
+            vi.restoreAllMocks();
+        }
         expect(note.fired.count).toBe(0);
     });
 
