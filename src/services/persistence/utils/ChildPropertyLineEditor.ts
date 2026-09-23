@@ -3,7 +3,7 @@ import { CodeFenceTracker } from '../../../utils/CodeFenceTracker';
 import { FileOperations } from './FileOperations';
 import type { PropertyOp } from '../PropertyUpdatePlanner';
 import type { LineDraft } from '../../../utils/FileLines';
-import { Outline } from '../../parsing/utils/Outline';
+import { INDENT_SOURCE, Outline } from '../../parsing/utils/Outline';
 
 interface OwnPropertyLine {
     lineIdx: number;
@@ -26,7 +26,7 @@ interface OwnPropertyLine {
  */
 export class ChildPropertyLineEditor {
     /** `- key:: ` プレフィックス捕捉用（PROPERTY_LINE と同じ形状制約） */
-    private static readonly PROPERTY_PREFIX = /^(\s*-\s+[^:[\]]+?::\s*)/;
+    private static readonly PROPERTY_PREFIX = new RegExp(`^(${INDENT_SOURCE}-\\s+[^:[\\]]+?::\\s*)`);
 
     /**
      * タスク直下の own プロパティ行を列挙する。

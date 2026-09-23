@@ -1,4 +1,5 @@
 import type { Span } from '../../lang/Diagnostic';
+import { FLOW_SPLIT } from '../../flow/FlowLineScanner';
 import type { DateTimeRule } from '../../../types';
 
 /**
@@ -40,7 +41,7 @@ export interface DateBlockLocation {
  * yields the same match at directly usable line columns.
  */
 export function locateDateBlock(lineText: string): DateBlockLocation | null {
-    const taskPart = lineText.split(/==>(.+)/)[0];
+    const taskPart = lineText.split(FLOW_SPLIT)[0];
 
     const globalRe = new RegExp(DATE_BLOCK_REGEX.source, 'g');
     let block: Span | null = null;

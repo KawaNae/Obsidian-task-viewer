@@ -1,6 +1,23 @@
 import { CodeFenceTracker } from '../../../utils/CodeFenceTracker';
 
 /**
+ * Indentation, as a regex fragment: the tabs and spaces a line opens with.
+ *
+ * Only these two, because only these two nest a list item in Obsidian. A line
+ * opened with a full-width space (U+3000) or a no-break space (U+00A0) is not
+ * a list item to it at all: its metadata reads the line as the item above
+ * going on (R0). `\s` took both for indentation, and U+2028 and a byte order
+ * mark besides, so such a line was read as a child the note does not have.
+ *
+ * Every reading of a line's indentation — the task, child, flow and property
+ * line patterns, the depth, and the writes that keep or strip a line's
+ * indentation — is made of this one.
+ */
+export const INDENT_SOURCE = '[ \\t]*';
+
+const INDENT_RE = new RegExp(`^${INDENT_SOURCE}`);
+
+/**
  * What the lines of a note are to each other: how deep a line is, where a
  * task's subtree ends, where the body begins.
  *
@@ -31,19 +48,16 @@ export class Outline {
     }
 
     /**
-     * The line's indentation as written: the whitespace it opens with, a byte
-     * order mark excepted.
-     *
-     * The same whitespace the task-line reading accepts before a list marker
-     * (`TaskLineClassifier`, `^\s*`), so a line read as an indented task is
-     * read at the depth it is indented to, and a write that keeps a line's
-     * indentation keeps all of it — a full-width space included. A byte order
-     * mark is not indentation: it is the file's (`splitLines` takes it off),
-     * and a mark read as indentation was copied onto every line written
-     * beside the first.
+     * The line's indentation as written: the tabs and spaces it opens with
+     * (`INDENT_SOURCE`).
      */
     static indentOf(line: string): string {
-        return /^[^\S\uFEFF]*/.exec(line)![0];
+        return INDENT_RE.exec(line)![0];
+    }
+
+    /** The line with its indentation taken off: what it reads wherever it stands. */
+    static dedent(line: string): string {
+        return line.slice(this.indentOf(line).length);
     }
 
     /**

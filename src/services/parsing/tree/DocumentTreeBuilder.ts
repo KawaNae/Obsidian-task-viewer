@@ -2,7 +2,8 @@ import type { DocumentNode, SectionNode, BlockNode, PropertyBlockEntry, TaskBloc
 import { ChildLineClassifier } from '../utils/ChildLineClassifier';
 import { TaskLineClassifier } from '../utils/TaskLineClassifier';
 import { CodeFenceTracker } from '../../../utils/CodeFenceTracker';
-import { Outline } from '../utils/Outline';
+import { IN_LINE } from '../../../utils/LineBreak';
+import { INDENT_SOURCE, Outline } from '../utils/Outline';
 
 /**
  * A markdown heading line: capture group 1 = `#` run, group 2 = title text.
@@ -12,8 +13,8 @@ import { Outline } from '../utils/Outline';
  * matching). Matching this against a string that can contain `\n` would let
  * group 2 swallow past the line the caller thinks it matched.
  */
-export const HEADING_REGEX = /^(#{1,6})\s+(.*)/;
-const PROPERTY_GROUP_HEADER = /^\s*-\s+properties::\s*$/;
+export const HEADING_REGEX = new RegExp(`^(#{1,6})\\s+(${IN_LINE}*)`);
+const PROPERTY_GROUP_HEADER = new RegExp(`^${INDENT_SOURCE}-\\s+properties::\\s*$`);
 
 /**
  * Markdown ファイルの行配列からドキュメント構造ツリーを構築する。

@@ -1,5 +1,7 @@
 import type { ChildLine, PropertyType, PropertyValue } from '../../../types';
+import { IN_LINE } from '../../../utils/LineBreak';
 import { LIST_BULLET_SOURCE } from './ListMarker';
+import { INDENT_SOURCE, Outline } from './Outline';
 import { extractWikilinkTarget } from '../../../utils/WikilinkUtils';
 
 /**
@@ -8,21 +10,21 @@ import { extractWikilinkTarget } from '../../../utils/WikilinkUtils';
  */
 export class ChildLineClassifier {
     /** `- [[link]]` with any list bullet. */
-    static readonly WIKILINK_CHILD = new RegExp(`^\\s*${LIST_BULLET_SOURCE}\\s+\\[\\[([^\\]]+)\\]\\]\\s*$`);
-    static readonly CHECKBOX_CHAR = new RegExp(`^\\s*${LIST_BULLET_SOURCE}\\s*\\[(.)\\]`);
+    static readonly WIKILINK_CHILD = new RegExp(`^${INDENT_SOURCE}${LIST_BULLET_SOURCE}\\s+\\[\\[([^\\]]+)\\]\\]\\s*$`);
+    static readonly CHECKBOX_CHAR = new RegExp(`^${INDENT_SOURCE}${LIST_BULLET_SOURCE}\\s*\\[(${IN_LINE})\\]`);
     /**
      * Matches `- key:: value` (Dataview-compatible) but not checkbox or wikilink lines.
      * 値部は空を許す（`- key ::` は空値プロパティ）。`(.+)` にすると末尾空白の
      * 有無で認識が反転する（`- key :: ` だけマッチ）ため `(.*)` が正しい。
      */
-    static readonly PROPERTY_LINE = /^\s*-\s+([^:\[\]]+?)::\s*(.*)$/;
+    static readonly PROPERTY_LINE = new RegExp(`^${INDENT_SOURCE}-\\s+([^:\\[\\]]+?)::\\s*(${IN_LINE}*)$`);
 
     /**
      * 生テキスト → ChildLine に変換。
      * @param bodyLine 絶対ファイル行（`Task.line` と同規約、-1 = body 行なし）
      */
     static classify(text: string, bodyLine: number): ChildLine {
-        const indent = text.match(/^(\s*)/)?.[1] ?? '';
+        const indent = Outline.indentOf(text);
         const cbMatch = text.match(this.CHECKBOX_CHAR);
         const wikiMatch = text.match(this.WIKILINK_CHILD);
 
@@ -80,7 +82,7 @@ export class ChildLineClassifier {
     static inferType(raw: string): PropertyType {
         if (/^\d+(\.\d+)?$/.test(raw)) return 'number';
         if (raw === 'True' || raw === 'False') return 'boolean';
-        if (/^\[.*\]$/.test(raw) || raw.includes(',')) return 'array';
+        if (new RegExp(`^\\[${IN_LINE}*\\]$`).test(raw) || raw.includes(',')) return 'array';
         return 'string';
     }
 }

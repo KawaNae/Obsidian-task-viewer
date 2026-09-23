@@ -74,8 +74,8 @@ export class FileOperations {
      */
     static detectIndentUnit(lines: readonly string[]): string {
         for (const line of lines) {
-            const m = line.match(/^([ \t]+)\S/);
-            if (m) return m[1].includes('\t') ? '\t' : '    ';
+            const indent = Outline.indentOf(line);
+            if (indent !== '' && line.trim() !== '') return indent.includes('\t') ? '\t' : '    ';
         }
         return '\t';
     }

@@ -25,10 +25,11 @@ describe('Outline.depthOf', () => {
         expect(Outline.indentOf('\uFEFF- [ ] x')).toBe('');
     });
 
-    it('reads the whitespace a task line may open with as indentation, a full-width space included', () => {
-        // The task-line reading accepts these before the marker (`^\s*`).
-        expect(Outline.indentOf(' \t\u00A0x')).toBe(' \t\u00A0');
-        expect(Outline.depthOf('\u3000\u3000- [ ] x')).toBe(2);
+    it('reads only tabs and spaces as indentation, as Obsidian nests a list', () => {
+        // A full-width or a no-break space does not nest a list item (R0).
+        expect(Outline.indentOf(' \t\u00A0x')).toBe(' \t');
+        expect(Outline.depthOf('\u3000\u3000- [ ] x')).toBe(0);
+        expect(Outline.dedent(' \t\u00A0x')).toBe('\u00A0x');
     });
 });
 

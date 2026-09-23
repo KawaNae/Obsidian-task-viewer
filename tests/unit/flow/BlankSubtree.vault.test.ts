@@ -150,17 +150,18 @@ describe('a fence below a blank line whose closing line is at column 0', () => {
     });
 });
 
-describe('a task indented by full-width spaces', () => {
-    // Read as a task before F4 and after; F4's first reading of indentation
-    // (spaces and tabs only) lost its parent and its indentation (B4).
-    it('stays its parent\'s child, and keeps its indentation when checked', async () => {
+describe('a checkbox indented by full-width spaces', () => {
+    // Obsidian does not nest it: its metadata reads the line as P going on,
+    // not as a list item (R0), so it is no task here either (L1). F4's B4 was
+    // a write that took such a line's full-width spaces off; whatever the
+    // line is read as, no write may do that.
+    it('is no task and no child, and a write to its parent leaves it as it was', async () => {
         const { contents, session } = await open({ [FILE]: ['# note', '- [ ] P', '\u3000\u3000- [ ] 子', ''] });
-        const parent = idOf(session, 'P');
-        expect(session.index.getTask(idOf(session, '子'))?.parentId).toBe(parent);
+        expect(session.index.getTasks().map(task => task.content)).toEqual(['P']);
 
-        await complete(session, '子');
+        await complete(session, 'P');
 
-        expect(contents.get(FILE)).toBe(['# note', '- [ ] P', '\u3000\u3000- [x] 子', ''].join('\n'));
+        expect(contents.get(FILE)).toBe(['# note', '- [x] P', '\u3000\u3000- [ ] 子', ''].join('\n'));
     });
 });
 

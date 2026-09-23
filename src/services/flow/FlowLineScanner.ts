@@ -10,7 +10,8 @@
 
 import { CodeFenceTracker } from '../../utils/CodeFenceTracker';
 import { LIST_BULLET_SOURCE } from '../parsing/utils/ListMarker';
-import { Outline } from '../parsing/utils/Outline';
+import { INDENT_SOURCE, Outline } from '../parsing/utils/Outline';
+import { IN_LINE } from '../../utils/LineBreak';
 
 /**
  * The marker that turns the tail of a line into a flow command, on a task
@@ -18,8 +19,15 @@ import { Outline } from '../parsing/utils/Outline';
  */
 export const FLOW_MARKER = '==>';
 
+/**
+ * Splits a task line at its first marker: `[before, command, after]`. The
+ * command is the rest of the line, U+2028 and U+2029 included — with `.` it
+ * stopped at one and the rest of the command was dropped.
+ */
+export const FLOW_SPLIT = new RegExp(`${FLOW_MARKER}(${IN_LINE}+)`);
+
 /** `- ==> <tail>` with any list bullet. Group 1 = indent, group 2 = tail. */
-export const FLOW_LINE_RE = new RegExp(`^(\\s*)${LIST_BULLET_SOURCE}\\s*==>\\s?(.*)$`);
+export const FLOW_LINE_RE = new RegExp(`^(${INDENT_SOURCE})${LIST_BULLET_SOURCE}\\s*==>\\s?(${IN_LINE}*)$`);
 
 export interface FlowLineMatch {
     /** Leading whitespace of the line. */

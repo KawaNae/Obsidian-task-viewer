@@ -1,4 +1,18 @@
+import { IN_LINE } from '../../../utils/LineBreak';
 import { LIST_BULLET_SOURCE } from './ListMarker';
+import { INDENT_SOURCE, Outline } from './Outline';
+
+/**
+ * What may stand before a task's list marker, as a regex fragment.
+ *
+ * Its indentation and nothing else: a line opened with a full-width or a
+ * no-break space is no list item to Obsidian, so no task either (R0). Kept a
+ * name of its own rather than written as `INDENT_SOURCE` in place, because
+ * "is this line a task" and "how deep is it" are two questions: were such a
+ * line ever to read as a task, it would widen here while its depth stayed
+ * `Outline`'s.
+ */
+const TASK_LEAD_SOURCE = INDENT_SOURCE;
 
 export interface TaskLineMatch {
     /** Leading whitespace */
@@ -19,8 +33,8 @@ export interface TaskLineMatch {
  * Supports `-`, `*`, `+`, and ordered list markers (`1.`, `1)`).
  */
 export class TaskLineClassifier {
-    private static readonly TASK_LINE_REGEX = new RegExp(`^(\\s*)(${LIST_BULLET_SOURCE} *\\[)(.)(\\].*)$`);
-    private static readonly MARKER_REGEX = new RegExp(`^\\s*(${LIST_BULLET_SOURCE})`);
+    private static readonly TASK_LINE_REGEX = new RegExp(`^(${TASK_LEAD_SOURCE})(${LIST_BULLET_SOURCE} *\\[)(${IN_LINE})(\\]${IN_LINE}*)$`);
+    private static readonly MARKER_REGEX = new RegExp(`^${TASK_LEAD_SOURCE}(${LIST_BULLET_SOURCE})`);
     private static readonly BLOCK_ID_REGEX = /\s\^([A-Za-z0-9-]+)\s*$/;
 
     /**
@@ -41,14 +55,15 @@ export class TaskLineClassifier {
     static classify(line: string): TaskLineMatch | null {
         const m = line.match(this.TASK_LINE_REGEX);
         if (!m) return null;
-        const [, indent, bulletBracket, statusChar, bracketTail] = m;
+        const [, lead, bulletBracket, statusChar, bracketTail] = m;
+        const indent = Outline.indentOf(lead);
         // rawContent: strip leading `] ` (bracket + optional space)
         const rawContent = bracketTail.replace(/^\]\s?/, '');
         return {
             indent,
             statusChar,
             rawContent,
-            prefix: indent + bulletBracket,
+            prefix: lead + bulletBracket,
             suffix: bracketTail,
         };
     }
