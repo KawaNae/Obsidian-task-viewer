@@ -1,8 +1,8 @@
 import type { Task } from '../../../types';
 import type { Fingerprint } from './IdentityFingerprint';
 import { fingerprintOf } from './IdentityFingerprint';
-import type { HintEvidence, HintResolution } from './IdentityHints';
-import { resolveHints } from './IdentityHints';
+import type { Reading } from './IdentityHints';
+import { reproduces } from './IdentityHints';
 import type { LedgerEntry } from './IdentityLedger';
 
 export interface MatchResult {
@@ -10,15 +10,10 @@ export interface MatchResult {
     mapping: Map<string, string>;
     /** The file's new ledger rows, in file order (`task.line` ascending). */
     entries: LedgerEntry[];
-    /** Runtime IDs handed out in this run, in file order. */
+    /** Runtime IDs this run gave rows that the previous rows did not hold, in file order. */
     minted: string[];
     /** Previous runtime IDs nothing matched. They are gone for good. */
     retired: string[];
-    /**
-     * How many pending claims this scan is done with, counted from the head —
-     * the one it adopted and everything older. 0 when it adopted none.
-     */
-    consumedHints: number;
     /**
      * Previous rows whose fate position decided, each with how many rows it
      * was one of: every previous row of a bucket that held more than one row
@@ -31,17 +26,36 @@ export interface MatchResult {
      * decided: which parent's scope a child was looked for in is the guess
      * again, however unique the child is there.
      *
-     * A scan does not read this — for identity, a guess by position is the
-     * documented best it can do. A write does (see `TaskScanner.locate`):
-     * writing on a line chosen by position is writing on a guess, and a write
-     * would rather not write at all.
+     * A scan does not read this to decide identity — for identity, a guess by
+     * position is the documented best it can do. A write does (see
+     * `TaskScanner.locate`): writing on a line chosen by position is writing
+     * on a guess, and a write would rather not write at all. The ledger keeps
+     * what a committing scan guessed (`IdentityLedger.guessedFor`) for the
+     * consumers that must know which rows were guessed after the fact.
      */
     guessed: Map<string, number>;
+    /**
+     * Names the readings of the lines disagreed about: some reading gave the
+     * name to a row, another gave that row another name or put the name
+     * elsewhere, so no row carries it now. A write that asks for one is
+     * asking for a row that cannot be told (`ambiguous`).
+     */
+    disputed: Set<string>;
 }
 
 /**
  * Match the previous scan's rows for one file against this scan's tasks and
  * decide which tasks keep their runtime ID.
+ *
+ * `reading` says every way the lines may be told (see `WriteClaims.reading`):
+ * as one of the known states whose content they are — the ledger's, a write's
+ * of ours — and, when a change nobody reported may have come after the newest
+ * of them, as that change, which the ladder pairs against `reading.partner`.
+ *
+ * A known state that reproduces the read decides every row outright: line i
+ * is whatever the state says line i is, and a row it no longer holds is one
+ * that went. The ladder is the fallback, for lines no known state has, and it
+ * answers by evidence, strongest first:
  *
  * Two passes. The first walks the tree from the roots down, running the ladder
  * inside one scope (the children of one matched parent) at a time, so a group of
@@ -51,27 +65,20 @@ export interface MatchResult {
  * ladder once over whatever is left, which is how a task whose parent changed (or
  * whose parent's text was merely edited) is rescued instead of being renumbered.
  *
- * Ahead of both passes is rung 0: the claims the plugin's own writes left
- * behind, when one of them and only one describes the rows that were read (see
- * IdentityHints). They are settled file-wide rather than inside the ladder
- * because a claim names a runtime ID outright — there is no bucket for it to be
- * ambiguous in.
+ * With one reading open, its answer is the answer. With more than one — two
+ * known states with the same content, or a known state and a change after
+ * the newest one — which of them the read is cannot be told from the lines,
+ * and a row keeps a name only where every reading that names the row gives it
+ * that name, and none puts that name on another row. Everywhere else the row
+ * is new. A reading that leaves a row unnamed (the ladder found no evidence)
+ * has nothing to say about it and does not stand in the way; one that names
+ * the row otherwise does. This is the rule a claim was always held to — a
+ * decision is taken only when no candidate decides differently — kept row by
+ * row: rows the readings agree on are right whichever reading is true.
  *
- * `evidence` is not optional. A caller with no claims to weigh says so with an
- * empty `pending`; a caller that could simply leave it out would be one that
- * forgot the claims, and the file would fall to the ladder without anyone
- * noticing.
- *
- * `ladder` is what the two passes pair against when rung 0 adopts nothing:
- * the newest state of the file that is known, which is the ledger unless a
- * write of ours is known to be newer (see `WriteClaims.ladderFor`). Rung 0
- * weighs the claims against `previous` all the same — the ledger, whose
- * names are the ones a claim has to carry on. When a claim is adopted it
- * answers for every row, and the ladder is `previous` so that what is left
- * over (`retired`) is still counted against the ledger. Not optional either,
- * for the reason `evidence` is not: a caller that could leave it out would
- * be one that forgot the writes it knows of, and the ladder would pair
- * against a state older than the file without anyone noticing.
+ * `reading` is not optional. A caller that could leave it out would be one
+ * that forgot the writes it knows of, and the ladder would pair against a
+ * state older than the file without anyone noticing.
  *
  * Pure and deterministic: no clock, no randomness, no I/O. Minting is the caller's,
  * through `mintRuntimeId`.
@@ -80,8 +87,7 @@ export function matchFile(
     previous: LedgerEntry[],
     tasks: Task[],
     mintRuntimeId: (task: Task) => string,
-    evidence: HintEvidence,
-    ladder: readonly LedgerEntry[],
+    reading: Reading,
 ): MatchResult {
     const fingerprints = new Map<Task, Fingerprint>();
     for (const task of tasks) {
@@ -91,36 +97,107 @@ export function matchFile(
     // File order is the only order the matcher trusts on the current side;
     // `ordinal` and the zip in the ladder both read it.
     const ordered = [...tasks].sort((a, b) => a.line - b.line);
+    const tree = buildCurrentTree(tasks, ordered);
 
-    const { parentOf, roots, childrenOf } = buildCurrentTree(tasks, ordered);
+    const byRuntimeId = new Map(previous.map(entry => [entry.runtimeId, entry]));
+    const views: View[] = [];
+    for (const state of reading.states) {
+        if (!reproduces(state, ordered, byRuntimeId)) continue;
+        const names = new Map<Task, string>();
+        ordered.forEach((task, i) => names.set(task, state.rows[i].runtimeId));
+        views.push({ names, guessed: new Map() });
+    }
+    // A state whose content was read but whose rows were not (a parser that
+    // reads the lines otherwise now) tells nothing, and the ladder answers.
+    if (reading.after || views.length === 0) {
+        views.push(pairByLadder(ordered, tree, fingerprints, reading.partner));
+    }
 
+    const runtimeIdOf = new Map<Task, string>();
+    const guessed = new Map<string, number>();
+    const disputed = new Set<string>();
+    if (views.length === 1) {
+        const [only] = views;
+        for (const [task, name] of only.names) runtimeIdOf.set(task, name);
+        for (const [name, among] of only.guessed) guessed.set(name, among);
+    } else {
+        const placed = views.map(view => {
+            const at = new Map<string, Task>();
+            for (const [task, name] of view.names) at.set(name, task);
+            return at;
+        });
+        for (const task of ordered) {
+            const said = views.map(view => view.names.get(task)).filter((name): name is string => name !== undefined);
+            const name = said[0];
+            const agreed = name !== undefined
+                && said.every(other => other === name)
+                && placed.every(at => { const there = at.get(name); return there === undefined || there === task; });
+            for (const other of said) if (!agreed || other !== name) disputed.add(other);
+            if (!agreed) continue;
+            runtimeIdOf.set(task, name);
+        }
+        // What position decided in any reading is a guess, whichever is true.
+        for (const view of views) {
+            for (const [name, among] of view.guessed) guessed.set(name, Math.max(guessed.get(name) ?? 0, among));
+        }
+        for (const task of ordered) {
+            const name = runtimeIdOf.get(task);
+            if (name !== undefined) disputed.delete(name);
+        }
+    }
+
+    const minted: string[] = [];
+    for (const task of ordered) {
+        let name = runtimeIdOf.get(task);
+        if (name === undefined) {
+            name = mintRuntimeId(task);
+            runtimeIdOf.set(task, name);
+        }
+        if (!byRuntimeId.has(name)) minted.push(name);
+    }
+    const kept = new Set(runtimeIdOf.values());
+
+    const mapping = new Map<string, string>();
+    for (const task of ordered) {
+        mapping.set(task.id, runtimeIdOf.get(task)!);
+    }
+
+    return {
+        mapping,
+        entries: rowsOfTree(ordered, tree, task => runtimeIdOf.get(task)!, task => fingerprints.get(task)!),
+        minted,
+        retired: previous.filter(entry => !kept.has(entry.runtimeId)).map(entry => entry.runtimeId),
+        guessed,
+        disputed,
+    };
+}
+
+/** One reading of the lines: the name it gives each row it names, and which of those position decided. */
+interface View {
+    names: Map<Task, string>;
+    guessed: Map<string, number>;
+}
+
+/**
+ * The ladder's reading of the lines against `partner`: the two passes, and
+ * nothing else. Rows it finds no evidence for are left unnamed.
+ */
+function pairByLadder(
+    ordered: Task[],
+    tree: ReturnType<typeof buildCurrentTree>,
+    fingerprints: Map<Task, Fingerprint>,
+    partner: readonly LedgerEntry[],
+): View {
+    const { roots, childrenOf } = tree;
     const pairedWith = new Map<Task, LedgerEntry>();
     const matchedPrev = new Set<string>();
     const guessed = new Map<string, number>();
     // Current lines a position-decided bucket held, across both passes.
     const leftByPosition = new Map<Task, number>();
 
-    // --- rung 0: what our own writes said, when the file bears exactly one of them out ---
-    const resolution: HintResolution = resolveHints(previous, ordered, evidence);
-    const consumedHints = resolution.consumed;
-    const hinted = settleHints(resolution, previous, ordered);
-    for (const [entry, task] of hinted.pairs) {
-        pairedWith.set(task, entry);
-        matchedPrev.add(entry.runtimeId);
-    }
-    // A retired row is spoken for: the write said its line is gone, so it must
-    // not be offered to the ladder, where an identically worded sibling would
-    // hand it on.
-    for (const runtimeId of hinted.retired) matchedPrev.add(runtimeId);
-
-    const partner = resolution.rows ? previous : ladder;
     const { prevRoots, prevChildren } = buildPreviousTree(partner);
 
     // --- 1st pass: scope by scope, from the roots down ---
-    // An adopted claim leaves nothing for the two passes below: it answers for
-    // every row of the file, children included, so each task is either paired
-    // or newly written and both pools come out empty. They run all the same,
-    // because rung 0 usually has nothing to say.
     // `among` is carried down from a parent pair position decided.
     const scopes: Array<{ prev: LedgerEntry[]; cur: Task[]; among?: number }> = [{ prev: prevRoots, cur: roots }];
 
@@ -131,7 +208,7 @@ export function matchFile(
                 .filter(entry => !matchedPrev.has(entry.runtimeId))
                 .map(entry => ({ item: entry, fingerprint: entry.fingerprint })),
             scope.cur
-                .filter(task => !pairedWith.has(task) && !hinted.fresh.has(task))
+                .filter(task => !pairedWith.has(task))
                 .map(task => ({ item: task, fingerprint: fingerprints.get(task)! })),
             leftByPosition,
         );
@@ -155,10 +232,8 @@ export function matchFile(
     }
 
     // --- 2nd pass: the leftovers of the whole file, no scoping ---
-    // A task a hint called new stays out of it: the write said it was just
-    // written, so there is no previous row for it to inherit from.
     const poolPrev = partner.filter(entry => !matchedPrev.has(entry.runtimeId));
-    const poolCur = ordered.filter(task => !pairedWith.has(task) && !hinted.fresh.has(task));
+    const poolCur = ordered.filter(task => !pairedWith.has(task));
     const rescued = runLadder(
         poolPrev.map(entry => ({ item: entry, fingerprint: entry.fingerprint })),
         poolCur.map(task => ({ item: task, fingerprint: fingerprints.get(task)! })),
@@ -169,36 +244,11 @@ export function matchFile(
     }
     for (const [entry, among] of rescued.byPosition) guessed.set(entry.runtimeId, among);
 
-    const minted: string[] = [];
-    const runtimeIdOf = new Map<Task, string>();
-    for (const task of ordered) {
-        const entry = pairedWith.get(task);
-        if (entry) {
-            runtimeIdOf.set(task, entry.runtimeId);
-            continue;
-        }
-        // A row the write named keeps that name. Minting one here would issue
-        // a second name for a line that already has one, and a scan that ran
-        // earlier over the same line would have issued a different one.
-        const fresh = hinted.fresh.get(task) ?? mintRuntimeId(task);
-        runtimeIdOf.set(task, fresh);
-        minted.push(fresh);
-    }
-
-    const mapping = new Map<string, string>();
-    for (const task of ordered) {
-        mapping.set(task.id, runtimeIdOf.get(task)!);
-    }
-
-    return {
-        mapping,
-        entries: rowsOfTree(ordered, { parentOf, roots, childrenOf }, task => runtimeIdOf.get(task)!, task => fingerprints.get(task)!),
-        minted,
-        retired: [...hinted.retired, ...rescued.prevLeft.map(entry => entry.runtimeId)],
-        consumedHints,
-        guessed,
-    };
+    const names = new Map<Task, string>();
+    for (const [task, entry] of pairedWith) names.set(task, entry.runtimeId);
+    return { names, guessed };
 }
+
 
 /**
  * A file's rows as the ladder reads its previous side: each task under the
@@ -236,76 +286,6 @@ function rowsOfTree(
     });
 }
 
-interface HintOutcome {
-    pairs: Array<[LedgerEntry, Task]>;
-    /**
-     * Tasks a hint named as newly written, each with the name the write gave
-     * it. They inherit nothing, and they are not renamed either: the write
-     * already said what this row is called.
-     */
-    fresh: Map<Task, string>;
-    /** Rows a hint said are gone. */
-    retired: string[];
-}
-
-/**
- * Read the adopted claim off as pairs.
- *
- * `resolveHints` has already found the claim line for line identical to what
- * was read, and found no other candidate that would decide differently, so
- * there is nothing left to decide: line i is whatever the claim says line i is.
- * A row the claim no longer holds is one a write removed.
- *
- * What settles a row is whether the ledger holds its name, not whether the
- * write called it new. A created row read for the first time has no entry and
- * keeps the name the write gave it; the same row read again, after a scan has
- * committed it and while a later claim still carries it, does have one — and
- * has to be paired, not waved through. Waved through, it would land in
- * `retired` as a row that vanished and in `minted` as one just issued, both
- * of them false of a line that has not moved.
- */
-function settleHints(
-    resolution: HintResolution,
-    previous: LedgerEntry[],
-    ordered: Task[]
-): HintOutcome {
-    const pairs: Array<[LedgerEntry, Task]> = [];
-    const fresh = new Map<Task, string>();
-    const retired: string[] = [];
-
-    const rows = resolution.rows;
-    if (!rows) return { pairs, fresh, retired };
-
-    const byRuntimeId = new Map(previous.map(entry => [entry.runtimeId, entry]));
-    const survived = new Set<string>();
-
-    for (let i = 0; i < ordered.length; i++) {
-        const runtimeId = rows[i].runtimeId;
-        const entry = byRuntimeId.get(runtimeId);
-        if (!entry) {
-            // Only a created row can name something `previous` does not hold:
-            // `reproduces` refused the claim otherwise. That refusal is the
-            // only thing standing between this branch and a name invented out
-            // of nowhere, so in development it is checked here as well — where
-            // the row is actually used, rather than where it was let through.
-            if (__DEV__ && !rows[i].created) {
-                throw new Error(
-                    `[identity] a claim named a row the ledger does not hold: ${runtimeId}`
-                );
-            }
-            fresh.set(ordered[i], runtimeId);
-            continue;
-        }
-        survived.add(runtimeId);
-        pairs.push([entry, ordered[i]]);
-    }
-
-    for (const entry of previous) {
-        if (!survived.has(entry.runtimeId)) retired.push(entry.runtimeId);
-    }
-
-    return { pairs, fresh, retired };
-}
 
 interface Rung<T> {
     item: T;
@@ -557,13 +537,13 @@ function buildOrdinals(roots: Task[], childrenOf: Map<Task, Task[]>): Map<Task, 
 
 export interface GuardedMatch {
     result: MatchResult;
-    /** Whether the claims were thrown out and the file matched again without them. */
+    /** Whether the known states were thrown out and the file matched again without them. */
     withoutClaims: boolean;
 }
 
 /**
  * Match, and if the answer would give one runtime ID to two rows, match again
- * with no claims at all.
+ * with no known state at all.
  *
  * A duplicate is the one answer that does lasting damage. The store is keyed by
  * ID, so the second row overwrites the first and the file comes out a task
@@ -576,20 +556,21 @@ export interface GuardedMatch {
  * its own: it takes each previous row at most once, which is the property that
  * makes a duplicate impossible. What that costs is the precision of one scan.
  *
- * Only a claim can bring this about, which is why matching again without them
- * is the whole remedy — and why the second run is not checked again here. A
+ * Only a known state can bring this about (a record whose rows repeat a name
+ * is refused by `reproduces`, and readings that disagree keep no name twice),
+ * which is why matching again without them is the whole remedy — and why the second run is not checked again here. A
  * dev-build assertion at the store's threshold covers the case where the ladder
  * itself learns to repeat an ID.
  */
 export function matchWithoutRepeatedIds(
-    run: (hints: HintEvidence) => MatchResult,
-    hints: HintEvidence,
+    run: (reading: Reading) => MatchResult,
+    reading: Reading,
 ): GuardedMatch {
-    const result = run(hints);
-    if (hints.pending.length === 0 || !repeatsAnId(result.entries)) {
+    const result = run(reading);
+    if (reading.states.length === 0 || !repeatsAnId(result.entries)) {
         return { result, withoutClaims: false };
     }
-    return { result: run({ ...hints, pending: [] }), withoutClaims: true };
+    return { result: run({ states: [], after: true, partner: reading.partner }), withoutClaims: true };
 }
 
 function repeatsAnId(entries: readonly LedgerEntry[]): boolean {

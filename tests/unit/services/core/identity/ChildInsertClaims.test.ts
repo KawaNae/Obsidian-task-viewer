@@ -42,26 +42,26 @@ function idsOf(session: VaultSession, file = FILE): string[] {
 /**
  * The claims this session's writes file, and what each scan did with them.
  *
- * Counted by wrapping the log itself rather than inferred from the IDs: a
- * claim that decides what the ladder would have decided anyway leaves no trace
- * in the result, and "the scan believed the write" is the thing under test.
+ * Counted by wrapping the records themselves rather than inferred from the
+ * IDs: a claim that decides what the ladder would have decided anyway leaves
+ * no trace in the result, and "the scan believed the write" is the thing under
+ * test. A committing scan read a write's record when the lines it read are the
+ * content that record left.
  */
 function watchClaims(session: VaultSession) {
-    const log = session.scanner.getHintLog() as unknown as {
-        add: (file: string, hints: unknown[], now: number) => () => void;
-        settle: (file: string, consumed: number, moved: boolean) => void;
-    };
+    const claims = session.scanner.getWriteClaims();
     const filed: string[] = [];
     const adopted: string[] = [];
-    const add = log.add.bind(log);
-    const settle = log.settle.bind(log);
-    log.add = (file, hints, now) => {
-        if (hints.length > 0) filed.push(file);
-        return add(file, hints, now);
+    const claim = claims.claim.bind(claims);
+    const forget = claims.forget.bind(claims);
+    claims.claim = (...args: Parameters<typeof claims.claim>) => {
+        const result = claim(...args);
+        if (result.described) filed.push(args[0]);
+        return result;
     };
-    log.settle = (file, consumed, moved) => {
-        if (consumed > 0) adopted.push(file);
-        settle(file, consumed, moved);
+    claims.forget = (path, seen) => {
+        if (seen && seen.place.states.some(state => state !== 'ledger')) adopted.push(path);
+        forget(path, seen);
     };
     return { filed, adopted };
 }

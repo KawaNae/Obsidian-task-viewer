@@ -35,8 +35,8 @@ export interface RowBasis {
 /**
  * The basis of a write that stays on the weaker comparison until stage F9:
  * the row's line has to read as some text the plugin has on record for it —
- * as the last scan read it, as a write of ours left it, or as a pending claim
- * says — rather than as the index's copy reads it.
+ * as the last scan read it, or as a write of ours since left it — rather than
+ * as the index's copy reads it.
  *
  * The timer's three inserts only (`InlineTaskWriter.insertLineAfterTask`,
  * `insertSiblingAfterTask`, `insertLineAsFirstChild`) — the last of which is

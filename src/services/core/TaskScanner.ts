@@ -9,7 +9,6 @@ import { CompletionDetector, type CompletionOrigin } from './CompletionDetector'
 import type { FlowExecutor } from '../flow/FlowExecutor';
 import { TaskIdGenerator } from '../display/TaskIdGenerator';
 import { IdentityLedger, type LedgerEntry } from './identity/IdentityLedger';
-import { HintLog } from './identity/IdentityHints';
 import { matchFile, matchWithoutRepeatedIds } from './identity/IdentityMatcher';
 import { WriteClaims, type ClaimResult } from './identity/WriteClaims';
 import { contentKeyOf } from './identity/ContentKey';
@@ -44,19 +43,13 @@ export class TaskScanner {
     private ledger = new IdentityLedger(Date.now() * 1000);
 
     /**
-     * What the plugin's own writes left for the next scan of each file.
-     *
-     * Owned here for the same reason the ledger is: a scan is the only thing
-     * that consumes a hint, and the consuming and the ledger's commit have to
-     * happen in the same step or a hint could outlive the state it describes.
-     */
-    private hints = new HintLog();
-
-    /**
-     * Turns what a write reports about a file's lines into a claim about its
-     * rows. Owned here because it needs both the parser and the ledger, and
-     * because its bookkeeping has to be dropped in the same step that commits
-     * a scan — see `WriteClaims`.
+     * The one record of the states each file is known to have been in: what
+     * our writes left since the last scan, and the changes nobody reported,
+     * read against the ledger as the state before them. Turns what a write
+     * reports about a file's lines into a record of its rows. Owned here
+     * because it needs both the parser and the ledger, and because its
+     * bookkeeping has to be dropped in the same step that commits a scan —
+     * see `WriteClaims`.
      */
     private claims = new WriteClaims(
         (path, lines) => {
@@ -208,22 +201,21 @@ export class TaskScanner {
      */
     private async scanFile(file: TFile, unlessRead: boolean): Promise<boolean> {
 
-        // Everything from here to the match below is synchronous, so the claims
-        // this scan weighs are, near enough, the ones filed by the time the read
-        // resolved. Near enough rather than exactly: another write's callback
-        // can slip in between the read settling and this line running, and its
-        // claim describes a file this read never saw. Nothing here tries to
-        // fence that off, because a position cannot — what keeps such a claim
-        // from deciding anything is that it has to be the only one that fits
-        // (see resolveHints).
+        // Everything from here to the match below is synchronous, so the
+        // records this scan weighs are, near enough, the ones filed by the time
+        // the read resolved. Near enough rather than exactly: another write's
+        // callback can slip in between the read settling and this line
+        // running, and its record describes a file this read never saw.
+        // Nothing here tries to fence that off, because a position cannot —
+        // what keeps such a record from deciding anything is that the read's
+        // content has to be its content (see `WriteClaims.reading`).
         const readMark = this.claims.readMark();
         const content = await this.app.vault.read(file);
         const { lines } = splitLines(content);
         const readKey = contentKeyOf(lines);
         if (unlessRead
             && readKey === this.ledger.contentFor(file.path)
-            && this.claims.lastWrite(file.path) === undefined
-            && this.hints.peekFor(file.path, Date.now()).length === 0) {
+            && this.claims.lastWrite(file.path) === undefined) {
             return false;
         }
         this.validator.clearErrorsForFile(file.path);
@@ -236,8 +228,7 @@ export class TaskScanner {
             this.completionDetector.clearForFile(file.path);
             // Retired for good: lifting tv-ignore later mints fresh IDs.
             this.ledger.dropFile(file.path);
-            // With no rows to match against, a hint has nothing left to claim.
-            this.hints.dropFile(file.path);
+            // With no rows to match against, a record has nothing left to say.
             this.claims.forget(file.path);
             return true;
         }
@@ -248,35 +239,26 @@ export class TaskScanner {
         if (__DEV__) {
             assertUniqueProvisionalIds(parsed.tasks);
         }
-        const now = Date.now();
         const previousRows = this.ledger.snapshotFor(file.path);
         const before = this.ledger.contentFor(file.path);
-        // With no claim adopted, the ladder pairs against the newest state
-        // known to be older than this read — the ledger, unless a write of
-        // ours is known to have landed after it (`WriteClaims.ladderFor`).
-        const ladder = this.claims.ladderFor(file.path, readKey, { content: before, rows: previousRows });
+        // Where the read stands among the states this file is known to have
+        // been in — the ledger's, and what our writes since left — and so
+        // every way its lines may be told (`WriteClaims.reading`).
+        const place = this.claims.reading(file.path, readKey, { content: before, rows: previousRows });
         const guarded = matchWithoutRepeatedIds(
-            hints => matchFile(
+            reading => matchFile(
                 previousRows,
                 parsed.tasks,
                 task => TaskIdGenerator.mintRuntimeId(task, () => this.ledger.mint()),
-                hints,
-                ladder ?? [],
+                reading,
             ),
-            {
-                pending: this.hints.pendingFor(file.path, now),
-                before,
-                read: readKey,
-            },
+            place.reading,
         );
         if (guarded.withoutClaims) {
-            // The log said something no file can be: one row on two lines. What
-            // it would cost to commit is a task the index cannot see again (see
-            // matchWithoutRepeatedIds), so the ladder answered instead and the
-            // file's claims go — a log that produced this is not one to weigh
-            // the next read against.
-            logError(`[TaskScanner] ${file.path}: a claim gave one runtime ID to two rows; matched without the log`);
-            this.hints.dropFile(file.path);
+            // A known state said something no file can be: one row on two
+            // lines. What it would cost to commit is a task the index cannot
+            // see again (see matchWithoutRepeatedIds), so the ladder answered.
+            logError(`[TaskScanner] ${file.path}: a known state gave one runtime ID to two rows; matched by the ladder alone`);
         }
         const identity = guarded.result;
         applyIdentity(parsed, identity.mapping);
@@ -354,8 +336,7 @@ export class TaskScanner {
 
             // Last, so a store write that throws leaves the ledger on the
             // previous generation too.
-            this.ledger.replaceFile(file.path, identity.entries, readKey);
-            this.hints.settle(file.path, identity.consumedHints);
+            this.ledger.replaceFile(file.path, identity.entries, readKey, identity.guessed);
             // Whatever this scan decided, it decided: the next write builds on
             // the ledger rather than on what the last write thought it left. A
             // base carried across a scan that answered its own way would hand
@@ -363,7 +344,7 @@ export class TaskScanner {
             // texts would line up well enough that nothing later would notice.
             // A write this read may not have seen is still kept, for `locate` to
             // know the ledger is older than it (`WriteClaims.lastWrite`).
-            this.claims.forget(file.path, { readMark, read: readKey, ledger: before });
+            this.claims.forget(file.path, { readMark, place });
         } finally {
             this.store.endBatch();
         }
@@ -387,11 +368,9 @@ export class TaskScanner {
         this.scanQueue.delete(oldPath);
         this.completionDetector.forgetFile(oldPath);
         this.ledger.rekeyFile(oldPath, newPath, id => TaskIdGenerator.renameFile(id, oldPath, newPath));
-        // Hints name runtime IDs, and a rename rewrites those, so carrying the
-        // log across would leave claims about rows nothing answers to. They
-        // would fail to apply and cost the file its next hint anyway.
-        this.hints.dropFile(oldPath);
-        this.hints.dropFile(newPath);
+        // Records name runtime IDs, and a rename rewrites those, so carrying
+        // the chain across would leave records about rows nothing answers to.
+        // They would fail to reproduce and cost the file its next one anyway.
         this.claims.dropFile(oldPath);
         this.claims.dropFile(newPath);
     }
@@ -404,7 +383,6 @@ export class TaskScanner {
         this.scanQueue.delete(path);
         this.completionDetector.forgetFile(path);
         this.ledger.dropFile(path);
-        this.hints.dropFile(path);
         this.claims.dropFile(path);
     }
 
@@ -436,14 +414,6 @@ export class TaskScanner {
     }
 
     /**
-     * The hint log, for seeing from the console what the write layer claimed.
-     * @internal Read-only use: only scanFile changes it.
-     */
-    getHintLog(): HintLog {
-        return this.hints;
-    }
-
-    /**
      * Where a write reports what it did to one file's lines.
      *
      * Everything here is inside the writer's `vault.process` callback, so
@@ -463,12 +433,9 @@ export class TaskScanner {
                 // it would look like the last one there is.
                 return { withdraw: this.claims.silence(file, origin, named), made: [] };
             }
-            // Both halves of what a claim leaves behind come back together:
-            // the hint the next scan would weigh, and the base the next write
-            // to this file would build on.
-            if (!result.hint) return { withdraw: result.withdraw, made: [] };
-            const drop = this.hints.add(file, [result.hint], Date.now());
-            return { withdraw: () => { drop(); result.withdraw(); }, made: result.made };
+            // One write, one link: the state the next scan weighs the read
+            // against is the same record the next write builds on.
+            return { withdraw: result.withdraw, made: result.made };
         };
     }
 
@@ -477,8 +444,9 @@ export class TaskScanner {
      *
      * The upstream half of identity: the question a scan answers for a whole
      * file, asked for one name and without writing anything down. The ledger
-     * and the claim log are read, never changed — only a scan writes them —
-     * so asking twice, or asking and then not writing, leaves no trace.
+     * and the chain of records are read, never changed — only scans, writes
+     * and changes change them — so asking twice, or asking and then not
+     * writing, leaves no trace.
      *
      * A coordinate comes out of three things and nothing else:
      *
@@ -488,13 +456,14 @@ export class TaskScanner {
      *    as the last write left them or the last scan read them, so the rows
      *    recorded for that content stand where they were recorded — no parse;
      * 3. otherwise the match a scan of these lines would make, as the scan
-     *    makes it: the pending claims weighed against the ledger, and with
-     *    none adopted, the ladder paired against the newest state known to be
-     *    older than these lines (`WriteClaims.ladderFor`). The name has to
-     *    come out paired with one line on evidence: a pair the ladder chose by
-     *    position among identical rows is `ambiguous`, because writing on a
-     *    guess is worse than not writing. Where no partner is safe (the
-     *    chain's cap has dropped states), the answer is `outdated`.
+     *    makes it: every way the lines may be told (`WriteClaims.reading`) —
+     *    a known state whose content they are, and the ladder paired against
+     *    the newest state known when they may be a change after it. The name
+     *    has to come out paired with one line on evidence: a pair the ladder
+     *    chose by position among identical rows is `ambiguous`, and so is a
+     *    name the readings disagree about, because writing on a guess is
+     *    worse than not writing. Where nothing can be told (the chain's cap
+     *    has dropped states), the answer is `outdated`.
      *
      * What never comes out of here is the line a task held when it was last
      * scanned, or the first line that reads like it. Neither says anything
@@ -502,8 +471,8 @@ export class TaskScanner {
      *
      * A name the ledger has not heard of — a row a write made, not yet scanned
      * (the names a write answers as `made`) — is found through 2, or through 3
-     * when a pending claim is adopted or when the ladder pairs against the
-     * state the write left (lines that changed after it). On lines where the
+     * when the lines are the state the write left, or when the ladder pairs
+     * against that state (lines that changed after it). On lines where the
      * next scan would hand the name to no row it is `gone`, and that is the
      * answer, not a gap: this function answers what that scan would decide.
      * Answering with the one line that reads like the row would part from the
@@ -533,22 +502,21 @@ export class TaskScanner {
         const previous = this.ledger.snapshotFor(path);
         const before = this.ledger.contentFor(path);
         const read = contentKeyOf(lines);
-        // The partner the next scan of these lines would pair against. None
-        // is safe past the chain's cap, and a write would rather not write.
-        const ladder = this.claims.ladderFor(path, read, { content: before, rows: previous });
-        if (ladder === null) return { kind: 'outdated' };
+        // Every way the next scan of these lines could tell them. Past the
+        // chain's cap none can be told, and a write would rather not write.
+        const place = this.claims.reading(path, read, { content: before, rows: previous });
+        if (place.unknown) return { kind: 'outdated' };
         // Names for the rows nothing pairs. They leave this function with
         // nothing but a comparison against `ref`, which none of them can equal.
         let unnamed = 0;
         const { result } = matchWithoutRepeatedIds(
-            hints => matchFile(previous, parsed.tasks, () => `locate:unnamed:${++unnamed}`, hints, ladder),
-            {
-                pending: this.hints.peekFor(path, Date.now()),
-                before,
-                read,
-            },
+            reading => matchFile(previous, parsed.tasks, () => `locate:unnamed:${++unnamed}`, reading),
+            place.reading,
         );
 
+        // The readings of these lines disagree about this name: which row it
+        // is cannot be told, and the scan will give it to none.
+        if (result.disputed.has(ref.runtimeId)) return { kind: 'ambiguous', count: 2 };
         const among = result.guessed.get(ref.runtimeId);
         if (among !== undefined) return { kind: 'ambiguous', count: among };
         const at = parsed.tasks.find(task => result.mapping.get(task.id) === ref.runtimeId);
@@ -558,8 +526,8 @@ export class TaskScanner {
 
     /**
      * Whether the row's line at `line` reads as some text the plugin has on
-     * record for the row: as the last scan read it, as the last write left it,
-     * or as a pending claim says. The weaker comparison the timer's inserts
+     * record for the row: as the last scan read it, or as a write of ours
+     * since left it. The weaker comparison the timer's inserts
      * keep until F9 (`RowBasis.ON_RECORD`).
      */
     onRecord(path: string, lines: readonly string[], ref: TaskRef, line: number): boolean {
@@ -595,7 +563,7 @@ export class TaskScanner {
 
     /**
      * Every text the plugin has on record for one row: as the last scan read
-     * it, as the last write left it, and as each pending claim says it reads.
+     * it, and as each write of ours since left it.
      * Without the indentation, which places the row in the tree and is read
      * off the file by every write that needs it: a row moved under another is
      * not a row whose text changed.
@@ -604,14 +572,7 @@ export class TaskScanner {
         const texts = new Set<string>();
         const entry = this.ledger.get(runtimeId);
         if (entry && entry.file === path) texts.add(Outline.UP_TO_INDENT.key(entry.fingerprint.originalText));
-        for (const row of this.claims.lastWrite(path)?.rows ?? []) {
-            if (row.runtimeId === runtimeId) texts.add(Outline.UP_TO_INDENT.key(row.text));
-        }
-        for (const pending of this.hints.peekFor(path, Date.now())) {
-            for (const row of pending.hint.rows) {
-                if (row.runtimeId === runtimeId) texts.add(Outline.UP_TO_INDENT.key(row.text));
-            }
-        }
+        for (const text of this.claims.textsOnRecord(path, runtimeId)) texts.add(Outline.UP_TO_INDENT.key(text));
         return texts;
     }
 

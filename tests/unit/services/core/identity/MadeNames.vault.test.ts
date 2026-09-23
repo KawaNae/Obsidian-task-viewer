@@ -94,8 +94,8 @@ describe('a made name, once the file has moved on without it', () => {
         });
         const [made] = outcome.made;
         expect(made).toBeDefined();
-        // The claim is still waiting for its scan.
-        expect(session.scanner.getHintLog().peek().find(entry => entry.file === FILE)?.pending.length).toBe(1);
+        // The write's record is still waiting for its scan.
+        expect(session.scanner.getWriteClaims().peek(FILE).links).toEqual(['record']);
 
         // Something else writes a line above, before any scan reads the file.
         const edited = ['# note', '- [ ] 外 @2026-09-21', '- [ ] 上 @2026-09-21', '- [ ] 新 @2026-09-21', ''];

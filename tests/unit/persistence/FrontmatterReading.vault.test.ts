@@ -1,5 +1,6 @@
 import { describe, it, expect, afterEach } from 'vitest';
 import { vaultSession, type VaultSession } from '../helpers/vaultSession';
+import { watchAdoptions as watchScans } from '../helpers/watchAdoptions';
 
 /**
  * Whether a note has rows at all hangs on a frontmatter key (`tv-ignore`),
@@ -33,16 +34,9 @@ function idsByText(session: VaultSession): Map<string, string> {
         .map(task => [task.originalText.trim(), task.id]));
 }
 
-/** How many claims the scans adopted, counted on the log (see HeadingAndFrontmatterClaims). */
+/** How many records the scans adopted (see the helper). */
 function watchAdoptions(session: VaultSession): { adopted: number } {
-    const log = session.scanner.getHintLog() as unknown as { settle: (file: string, consumed: number) => void };
-    const seen = { adopted: 0 };
-    const settle = log.settle.bind(log);
-    log.settle = (file, consumed) => {
-        if (consumed > 0) seen.adopted++;
-        settle(file, consumed);
-    };
-    return seen;
+    return watchScans(session.scanner);
 }
 
 describe('a write that lifts tv-ignore', () => {

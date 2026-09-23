@@ -67,7 +67,7 @@ async function moved(session: VaultSession, contents: Map<string, string>): Prom
 }
 
 function pendingFor(session: VaultSession): number {
-    return session.scanner.getHintLog().peek().find(entry => entry.file === FILE)?.pending.length ?? 0;
+    return session.scanner.getWriteClaims().peek(FILE).links.filter(link => link === 'record').length;
 }
 
 describe.each([4, 3000])('a deletion fire at the head of its group (%i lines)', (fill) => {

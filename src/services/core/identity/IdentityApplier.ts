@@ -86,9 +86,10 @@ export function assertNoProvisionalIds(tasks: Task[], isProvisional: (id: string
  * missing refuses every write with "not found" while its line sits there in
  * plain sight.
  *
- * Three things would have to fail for this to fire. Rung 0 refuses a claim that
- * names a row twice; a result that repeats an ID anyway is thrown out and the
- * file matched again with no claims at all (`matchWithoutRepeatedIds`); and the
+ * Three things would have to fail for this to fire. A known state that names a
+ * row twice is refused (`reproduces`); a result that repeats an ID anyway is
+ * thrown out and the file matched again with no known state at all
+ * (`matchWithoutRepeatedIds`); and the
  * ladder that then answers takes each previous row at most once. What is left
  * for this to catch is the ladder itself learning to repeat a row — which is
  * why it is an assertion and not a recovery. The recovery is upstream.

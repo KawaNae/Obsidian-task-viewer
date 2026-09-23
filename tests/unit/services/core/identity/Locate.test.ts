@@ -9,7 +9,6 @@ import { TaskParser } from '../../../../../src/services/parsing/TaskParser';
 import { DEFAULT_SETTINGS } from '../../../../../src/types';
 import type { Task } from '../../../../../src/types';
 import type { LineEdit, Located, TaskRef } from '../../../../../src/utils/FileLines';
-import { HINT_TTL_MS } from '../../../../../src/services/core/identity/IdentityHints';
 import { makeTask } from '../../../helpers/makeTask';
 
 /**
@@ -64,12 +63,13 @@ class Harness {
         await this.scan();
     }
 
-    /** A write that reports its lines, with no scan following. */
-    report(lines: string[], edits: LineEdit[]): void {
+    /** A write that reports its lines, with no scan following. Answers the names it made. */
+    report(lines: string[], edits: LineEdit[]): string[] {
         const before = this.lines();
         // Filed before the bytes land, as from inside `vault.process`.
-        this.scanner.writeSink(FILE)(before, lines, edits);
+        const receipt = this.scanner.writeSink(FILE, 'user')(before, lines, edits, null);
         this.contents.set(FILE, lines.join('\n'));
+        return receipt.made.map(row => row.runtimeId);
     }
 
     /** Something other than the plugin changed the file. */
@@ -89,11 +89,6 @@ class Harness {
         return this.tasks().map(task => task.id);
     }
 
-    /** The names the pending claims carry, newest last. */
-    claimed(): string[][] {
-        const entry = this.scanner.getHintLog().peek().find(candidate => candidate.file === FILE);
-        return (entry?.pending ?? []).map(pending => pending.hint.rows.map(row => row.runtimeId));
-    }
 
     locate(ref: TaskRef | string): Located {
         return this.scanner.locate(FILE, this.lines(), typeof ref === 'string' ? { runtimeId: ref } : ref);
@@ -163,12 +158,11 @@ describe('locate on a content on record', () => {
 
         // A copy goes in above. The ledger still says line 0; the write's own
         // record says the original moved down.
-        harness.report([TASK, TASK, ''], [{ kind: 'inserted', at: 0, count: 1 }]);
+        const [made] = harness.report([TASK, TASK, ''], [{ kind: 'inserted', at: 0, count: 1 }]);
         expect(harness.locate(original)).toEqual(at(1));
 
         // The line the write made has a name of its own already, and the
         // record knows where it is.
-        const [made] = harness.claimed()[0];
         expect(harness.locate(made)).toEqual(at(0));
     });
 
@@ -222,25 +216,30 @@ describe('locate by matching, when the content is not on record', () => {
         expect(harness.locate(other)).toEqual(gone);
     });
 
-    it('weighs the pending claims the way the next scan will', async () => {
+    it('weighs what our writes left the way the next scan will (E1, closed in I1)', async () => {
         const harness = new Harness();
         await harness.write([TASK, '']);
         const [original] = harness.ids();
 
         // W1 copies below, W2 removes the upper line; W2 is undone from
-        // outside, and a scan reads W1's file and keeps W2 pending.
+        // outside, and a scan reads W1's file. The undo came after W2, so the
+        // read is W1's lines put back or a change after W2 that reads the
+        // same; the two name both lines differently, and both are new. The
+        // scan has seen the undo, so W2 goes with it.
         harness.report([TASK, TASK, ''], [{ kind: 'inserted', at: 1, count: 1 }]);
         harness.report([TASK, ''], [{ kind: 'removed', at: 0, count: 1 }]);
         harness.edit([TASK, TASK, '']);
         await harness.scan();
-        const [, copy] = harness.ids();
+        const [upper, lower] = harness.ids();
+        expect([upper, lower]).not.toContain(original);
+        expect(harness.scanner.getWriteClaims().peek(FILE).links).toEqual([]);
 
-        // The file reaches W2's content by another route. Nothing on record
-        // describes it (the scan dropped the base), so it comes to matching,
-        // and matching adopts W2 as the scan will (E1, see HintedScanning):
-        // the one line is the copy's.
+        // The file reaches W2's content by another route. W2 is not on record
+        // to name the line; the ladder pairs it against the two rows that
+        // read alike, by position, and a write refuses on a guess.
         harness.edit([TASK, '']);
-        expect(harness.locate(copy)).toEqual(at(0));
+        expect(harness.locate(lower)).toEqual({ kind: 'ambiguous', count: 2 });
+        expect(harness.locate(upper)).toEqual({ kind: 'ambiguous', count: 2 });
         expect(harness.locate(original)).toEqual(gone);
     });
 
@@ -248,8 +247,7 @@ describe('locate by matching, when the content is not on record', () => {
         const harness = new Harness();
         await harness.write([TASK, '']);
 
-        harness.report([TASK, OTHER, ''], [{ kind: 'inserted', at: 1, count: 1 }]);
-        const made = harness.claimed()[0][1];
+        const [made] = harness.report([TASK, OTHER, ''], [{ kind: 'inserted', at: 1, count: 1 }]);
         expect(harness.locate(made)).toEqual(at(1));
 
         // Something else edits the file before any scan. No record matches
@@ -303,7 +301,7 @@ describe('locate answers the row\'s line whatever it reads; onRecord says whethe
         expect(harness.onRecord(task, 1)).toBe(true);
     });
 
-    it('finds it on record once the claim has expired and only the write\'s base remembers', async () => {
+    it('finds it on record however long the write has waited for its scan: a record does not age (I1)', async () => {
         vi.useFakeTimers();
         try {
             const harness = new Harness();
@@ -311,7 +309,7 @@ describe('locate answers the row\'s line whatever it reads; onRecord says whethe
             const [task] = harness.ids();
 
             harness.report([OTHER, ''], [{ kind: 'replaced', at: 0 }]);
-            vi.advanceTimersByTime(HINT_TTL_MS + 1);
+            vi.advanceTimersByTime(60 * 60 * 1000);
             harness.edit(['メモ', OTHER, '']);
             expect(harness.locate(task)).toEqual(at(1));
             expect(harness.onRecord(task, 1)).toBe(true);
@@ -327,12 +325,12 @@ describe('locate writes nothing down', () => {
         await harness.write([TASK, TASK, '']);
         harness.report([TASK, TASK, TASK, ''], [{ kind: 'inserted', at: 0, count: 1 }]);
         harness.edit(['メモ', TASK, TASK, TASK, '']);
-        const claimed = harness.claimed();
+        const chain = harness.scanner.getWriteClaims().peek(FILE);
         const ids = harness.ids();
 
         for (const id of ids) harness.locate(id);
 
-        expect(harness.claimed()).toEqual(claimed);
+        expect(harness.scanner.getWriteClaims().peek(FILE)).toEqual(chain);
         expect(harness.ids()).toEqual(ids);
     });
 });

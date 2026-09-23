@@ -31,16 +31,15 @@ function task(session: VaultSession, text: string): Task {
     return found;
 }
 
-/** The origin of every claim filed, by file, in order. */
+/** The origin of every record filed (a write that could say what it left), by file, in order. */
 function watchOrigins(session: VaultSession): Array<[string, unknown]> {
-    const log = session.scanner.getHintLog() as unknown as {
-        add: (file: string, hints: Array<{ origin: unknown }>, now: number) => () => void;
-    };
+    const claims = session.scanner.getWriteClaims();
     const seen: Array<[string, unknown]> = [];
-    const add = log.add.bind(log);
-    log.add = (file, hints, now) => {
-        for (const hint of hints) seen.push([file, hint.origin]);
-        return add(file, hints, now);
+    const claim = claims.claim.bind(claims);
+    claims.claim = (file, before, after, edits, origin, named) => {
+        const result = claim(file, before, after, edits, origin, named);
+        if (result.described) seen.push([file, origin]);
+        return result;
     };
     return seen;
 }

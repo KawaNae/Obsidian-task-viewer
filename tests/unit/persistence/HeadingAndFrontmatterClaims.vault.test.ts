@@ -36,23 +36,21 @@ function idByText(session: VaultSession): Map<string, string> {
         .map(task => [task.originalText.trim(), task.id]));
 }
 
-/** Claims filed and adopted, counted on the log itself (see ChildInsertClaims.test.ts). */
+/** Records filed and adopted, counted on the chain itself (see watchAdoptions). */
 function watchClaims(session: VaultSession) {
-    const log = session.scanner.getHintLog() as unknown as {
-        add: (file: string, hints: unknown[], now: number) => () => void;
-        settle: (file: string, consumed: number, moved: boolean) => void;
-    };
+    const claims = session.scanner.getWriteClaims();
     const filed: string[] = [];
     const adopted: string[] = [];
-    const add = log.add.bind(log);
-    const settle = log.settle.bind(log);
-    log.add = (file, hints, now) => {
-        if (hints.length > 0) filed.push(file);
-        return add(file, hints, now);
+    const claim = claims.claim.bind(claims);
+    claims.claim = (file, before, after, edits, origin, named) => {
+        const result = claim(file, before, after, edits, origin, named);
+        if (result.described) filed.push(file);
+        return result;
     };
-    log.settle = (file, consumed, moved) => {
-        if (consumed > 0) adopted.push(file);
-        settle(file, consumed, moved);
+    const forget = claims.forget.bind(claims);
+    claims.forget = (file, read) => {
+        if (read && !read.place.after && read.place.states.some(state => state !== 'ledger')) adopted.push(file);
+        forget(file, read);
     };
     return { filed, adopted };
 }

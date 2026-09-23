@@ -2,7 +2,6 @@ import { describe, it, expect, afterEach, vi } from 'vitest';
 import { writeBench, FILE, type WriteBench } from '../helpers/writeBench';
 import type { Task } from '../../../src/types';
 import { plannedOn } from '../../../src/services/persistence/TaskRefs';
-import { HINT_TTL_MS } from '../../../src/services/core/identity/IdentityHints';
 
 /**
  * Observation for stage F6, not a gate: the four shapes where what a scan
@@ -21,8 +20,10 @@ import { HINT_TTL_MS } from '../../../src/services/core/identity/IdentityHints';
  *   the read, taken as what an outside writer built on.
  *
  * Nothing here changes a decision: the bench records, the tests compare. The
- * identity outcomes pin what the code does today (the same as E1, OPEN and
- * LIMIT elsewhere); the evidence rows are what `observation.md` tabulates.
+ * identity outcomes pin what the code does now; the evidence rows are what
+ * `observation.md` tabulates. Since I1 the `modify` count is in the code as
+ * outside marks, and E1 and S2c on an earlier write's lines answer otherwise
+ * than when F6 observed them (see the tests).
  */
 
 afterEach(() => { vi.restoreAllMocks(); });
@@ -138,19 +139,24 @@ async function copyThenRemove(bench: WriteBench): Promise<{ original: Task }> {
 describe('E1: a later claim adopted after its write was undone and the content reached again', () => {
     // W2 takes the file back to the ledger's content, so the nearest state is
     // a tie between the ledger and W2 in the shape and the control alike.
-    it('shape: the original is named as the copy; modify and mtime tell it, nearest cannot', async () => {
+    it('shape: closed in I1 — W2 is not taken; the lines are new, no name goes to the wrong row', async () => {
         const bench = await writeBench(['- [ ] T', '']);
         const rec = record(bench);
         const { original } = await copyThenRemove(bench);
         const [w1] = rec.own();
         bench.edit(w1.after);                 // W2 undone from outside
-        await bench.scan();                   // adopts W1, leaves W2 pending
-        const copy = bench.tasks()[1].id;
+        await bench.scan();                   // W1 put back or a change after W2: the readings disagree
+        const read = bench.tasks().map(t => t.id);
+        expect(read).not.toContain(original.id);
+        // The scan saw the undo, so W2 went with it and cannot be taken later.
+        expect(bench.scanner.getWriteClaims().peek(FILE).links).toEqual([]);
         const ledger = rec.ledger();
         bench.edit(['- [ ] T', '']);          // by hand: the copy (lower line) goes
         await bench.scan();
-        expect(bench.tasks().map(t => t.id)).toEqual([copy]);   // wrong: the original stands there
-        expect(original.id).not.toBe(copy);
+        const [final] = bench.tasks().map(t => t.id);
+        // Before I1 this was W2's name for the copy. Now it is one of the two
+        // names the last scan gave, paired by position (a guess).
+        expect(read).toContain(final);
         expect(evidence(rec, 1, { ledger, writes: [1] })).toEqual({ foreignSince: 2, lastLanding: false, nearest: [1] });
     });
 
@@ -164,10 +170,16 @@ describe('E1: a later claim adopted after its write was undone and the content r
     });
 });
 
-describe('E1 by the ladder: claims past their age, the file leaves the newest record and comes back', () => {
+describe('E1 by the ladder: the file leaves the newest record and comes back (remains in I1)', () => {
     // After the trade, Y's line is checked by hand and X's line goes; a new
-    // unchecked line is typed below. The file reads as the trade left it, so
-    // the ladder pairs against the newest record and hands X's name to Y's row.
+    // unchecked line is typed below. The file reads as the trade left it,
+    // word for word. Put back, the trade's record names the rows; changed
+    // after it, the ladder pairs against the same record and says the same.
+    // Both readings agree and hand X's name to Y's row. This form remains
+    // (structure.md): whichever of the ledger and the newest record is taken,
+    // one of them is confidently wrong, the same kind of limit as an outside
+    // edit handing a name to a row that reads alike. Records no longer age
+    // (I1), so the claims do not have to be past their age for it.
     it('shape: X\'s name goes to Y\'s row; modify and mtime tell it, nearest cannot', async () => {
         const bench = await writeBench(['- [ ] A', '- [x] A']);
         const rec = record(bench);
@@ -175,7 +187,6 @@ describe('E1 by the ladder: claims past their age, the file leaves the newest re
         const ledger = rec.ledger();
         bench.edit(['- [x] A']);
         bench.edit(['- [x] A', '- [ ] A']);
-        vi.spyOn(Date, 'now').mockReturnValue(Date.now() + HINT_TTL_MS + 1);
         await bench.scan();
         expect(bench.taskAt(0).id).toBe(x.id);   // wrong: Y's row
         expect(bench.tasks().map(t => t.id)).not.toContain(undefined);
@@ -183,12 +194,11 @@ describe('E1 by the ladder: claims past their age, the file leaves the newest re
         expect(evidence(rec, 1, { ledger, writes: [0, 1] })).toEqual({ foreignSince: 2, lastLanding: false, nearest: [1] });
     });
 
-    it('control: claims past their age, the trade read as it landed; modify and mtime keep the partner', async () => {
+    it('control: the trade read as it landed; modify and mtime keep the partner', async () => {
         const bench = await writeBench(['- [ ] A', '- [x] A']);
         const rec = record(bench);
         const { x, y } = await traded(bench);
         const ledger = rec.ledger();
-        vi.spyOn(Date, 'now').mockReturnValue(Date.now() + HINT_TTL_MS + 1);
         await bench.scan();
         expect(bench.taskAt(0).id).toBe(x.id);
         expect(bench.taskAt(1).id).toBe(y.id);
@@ -222,7 +232,7 @@ describe('S2c on an earlier write\'s lines (OPEN)', () => {
     // records, and a write filed after that commit leaves a mark, under which
     // W2's lines pair against W2. What is left is the third write undone from
     // outside, as the OPEN test has it.
-    it('shape (a third write undone from outside): the ledger pairs across two writes; modify and mtime say "not W2 as it landed"', async () => {
+    it('shape (a third write undone from outside): closed in I1 — X and Y right; modify and mtime say "not W2 as it landed"', async () => {
         const bench = await writeBench(['- [ ] A', '- [ ] B']);
         const rec = record(bench);
         const x = bench.taskAt(0);
@@ -236,9 +246,10 @@ describe('S2c on an earlier write\'s lines (OPEN)', () => {
         await scan.done;
         bench.edit(rec.own()[1].after);
         await bench.scan();
-        // Truth: X reads B on the top line. The ledger pairs by text.
-        expect(bench.taskAt(1).id).toBe(x.id);
-        expect(bench.taskAt(0).id).toBe(y.id);
+        // Truth: X reads B on the top line. W2 put back and a change after
+        // the third write, paired against it, both say so.
+        expect(bench.taskAt(0).id).toBe(x.id);
+        expect(bench.taskAt(1).id).toBe(y.id);
         expect(evidence(rec, 1, { ledger, writes: [0, 1, 2] })).toEqual({ foreignSince: 1, lastLanding: false, nearest: [1] });
     });
 

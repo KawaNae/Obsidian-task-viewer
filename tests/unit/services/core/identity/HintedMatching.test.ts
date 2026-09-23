@@ -1,20 +1,20 @@
 import { describe, it, expect } from 'vitest';
 import { matchFile as matchWithEvidence } from '../../../../../src/services/core/identity/IdentityMatcher';
 import type { LedgerEntry } from '../../../../../src/services/core/identity/IdentityLedger';
-import { rowsOnlyEvidence } from '../../../helpers/rowsOnlyEvidence';
+import { rowsOnlyReading, type RecordOf } from '../../../helpers/rowsOnlyEvidence';
 import type { MatchResult } from '../../../../../src/services/core/identity/IdentityMatcher';
-import type { ClaimedRow, Hint, PendingHint } from '../../../../../src/services/core/identity/IdentityHints';
+import type { ClaimedRow } from '../../../../../src/services/core/identity/IdentityHints';
 import { makeTask } from '../../../helpers/makeTask';
 
-/** The matcher, weighing claims about a file made only of its rows (see rowsOnlyEvidence). */
+/** The matcher, weighing records about a file made only of its rows (see rowsOnlyReading). */
 function matchFile(
     previous: LedgerEntry[],
     tasks: Task[],
     mint: (task: Task) => string,
-    pending?: readonly PendingHint[],
+    records?: readonly RecordOf[],
 ) {
     return matchWithEvidence(previous, tasks, mint,
-        rowsOnlyEvidence(previous, tasks, pending ?? []), previous);
+        rowsOnlyReading(previous, tasks, records ?? []));
 }
 import type { Task } from '../../../../../src/types';
 
@@ -58,7 +58,7 @@ let coined = 0;
  * write, at the moment the line came into being — with `created` saying that
  * no scan has recorded it yet.
  */
-const claim = (...rows: Array<[string | null, string]>): Hint => ({
+const claim = (...rows: Array<[string | null, string]>): RecordOf => ({
     rows: rows.map(([runtimeId, text]): ClaimedRow => runtimeId === null
         ? { runtimeId: `w${++coined}`, created: true, text }
         : { runtimeId, created: false, text }),
@@ -71,8 +71,8 @@ const made = (runtimeId: string, text: string): ClaimedRow => ({ runtimeId, crea
 /** A row a write kept. */
 const kept = (runtimeId: string, text: string): ClaimedRow => ({ runtimeId, created: false, text });
 
-function pendingOf(...hints: Hint[]): PendingHint[] {
-    return hints.map((hint, i) => ({ seq: i + 1, at: 0, hint }));
+function recordsOf(...records: RecordOf[]): RecordOf[] {
+    return records;
 }
 
 function runtimeId(result: MatchResult, provisionalId: string): string {
@@ -90,14 +90,15 @@ describe('rung 0: the duplicate', () => {
         const original = runtimeId(first, 'prov:0');
 
         // The copy went in above; both lines read the same.
+        const record = claim([null, POMODORO], [original, POMODORO]);
         const second = matchFile(
             first.entries,
             [t('prov:0', 0, POMODORO), t('prov:1', 1, POMODORO)],
             mint,
-            pendingOf(claim([null, POMODORO], [original, POMODORO])),
+            recordsOf(record),
         );
 
-        expect(second.consumedHints).toBe(1);
+        expect(runtimeId(second, 'prov:0')).toBe(record.rows[0].runtimeId);
         expect(runtimeId(second, 'prov:1')).toBe(original);
         expect(second.minted).toEqual([runtimeId(second, 'prov:0')]);
     });
@@ -127,10 +128,9 @@ describe('rung 0: the duplicate', () => {
             first.entries,
             [t('prov:0', 0, POMODORO)],
             mint,
-            pendingOf(claim([null, POMODORO], [original, POMODORO])),
+            recordsOf(claim([null, POMODORO], [original, POMODORO])),
         );
 
-        expect(second.consumedHints).toBe(0);
         expect(runtimeId(second, 'prov:0')).toBe(original);
         expect(second.minted).toEqual([]);
     });
@@ -150,17 +150,16 @@ describe('rung 0: a line the write named', () => {
 
         // W1 put a copy above the original and named it. W2 ticked the
         // original off, building on W1's base, so the copy keeps that name.
-        const w1: Hint = { rows: [made(copy, POMODORO), kept(original, POMODORO)] };
-        const w2: Hint = { rows: [made(copy, POMODORO), kept(original, done)] };
+        const w1: RecordOf = { rows: [made(copy, POMODORO), kept(original, POMODORO)] };
+        const w2: RecordOf = { rows: [made(copy, POMODORO), kept(original, done)] };
 
         // S1's read started before W2 landed, so it reads what W1 left.
         const s1 = matchFile(
             first.entries,
             [t('prov:0', 0, POMODORO), t('prov:1', 1, POMODORO)],
             mint,
-            pendingOf(w1, w2),
+            recordsOf(w1, w2),
         );
-        expect(s1.consumedHints).toBe(1);
         expect(runtimeId(s1, 'prov:0')).toBe(copy);
         expect(s1.minted).toEqual([copy]);
 
@@ -170,9 +169,8 @@ describe('rung 0: a line the write named', () => {
             s1.entries,
             [t('prov:0', 0, POMODORO), t('prov:1', 1, done)],
             mint,
-            pendingOf(w2),
+            recordsOf(w2),
         );
-        expect(s2.consumedHints).toBe(1);
         expect(runtimeId(s2, 'prov:0')).toBe(copy);
         expect(runtimeId(s2, 'prov:1')).toBe(original);
         // Neither gone nor new: the line has not moved since S1 recorded it.
@@ -189,8 +187,8 @@ describe('rung 0: a line the write named', () => {
         const copy = 'coined:1';
         const copyAgain = 'coined:2';
 
-        const w1: Hint = { rows: [made(copy, POMODORO), kept(original, POMODORO)] };
-        const w2: Hint = {
+        const w1: RecordOf = { rows: [made(copy, POMODORO), kept(original, POMODORO)] };
+        const w2: RecordOf = {
             rows: [made(copyAgain, POMODORO), made(copy, POMODORO), kept(original, POMODORO)],
         };
 
@@ -198,7 +196,7 @@ describe('rung 0: a line the write named', () => {
             first.entries,
             [t('prov:0', 0, POMODORO), t('prov:1', 1, POMODORO)],
             mint,
-            pendingOf(w1),
+            recordsOf(w1),
         );
         expect(runtimeId(s1, 'prov:0')).toBe(copy);
 
@@ -206,9 +204,8 @@ describe('rung 0: a line the write named', () => {
             s1.entries,
             [t('prov:0', 0, POMODORO), t('prov:1', 1, POMODORO), t('prov:2', 2, POMODORO)],
             mint,
-            pendingOf(w2),
+            recordsOf(w2),
         );
-        expect(s2.consumedHints).toBe(1);
         expect(runtimeId(s2, 'prov:0')).toBe(copyAgain);
         expect(runtimeId(s2, 'prov:1')).toBe(copy);
         expect(runtimeId(s2, 'prov:2')).toBe(original);
@@ -229,12 +226,11 @@ describe('rung 0: rewrite and retire', () => {
             first.entries,
             [t('prov:0', 0, after)],
             mint,
-            pendingOf(claim([held, after])),
+            recordsOf(claim([held, after])),
         );
 
         // Text and dates both changed, which is a new task to the ladder — the
         // documented limit of "when in doubt, mint". The write knew better.
-        expect(second.consumedHints).toBe(1);
         expect(runtimeId(second, 'prov:0')).toBe(held);
         expect(second.minted).toEqual([]);
     });
@@ -253,10 +249,9 @@ describe('rung 0: rewrite and retire', () => {
             first.entries,
             [t('prov:1', 0, POMODORO)],
             mint,
-            pendingOf(claim([survivor, POMODORO])),
+            recordsOf(claim([survivor, POMODORO])),
         );
 
-        expect(second.consumedHints).toBe(1);
         expect(runtimeId(second, 'prov:1')).toBe(survivor);
         expect(second.retired).toEqual([gone]);
     });
@@ -277,13 +272,12 @@ describe('rung 0: rewrite and retire', () => {
             first.entries,
             [t('prov:a', 0, '- [ ] foo @2026-09-23'), t('prov:b', 1, '- [ ] foo @2026-09-22')],
             mint,
-            pendingOf(
+            recordsOf(
                 claim([a, '- [ ] foo @2026-09-22'], [b, '- [ ] foo @2026-09-22']),
                 claim([a, '- [ ] foo @2026-09-23'], [b, '- [ ] foo @2026-09-22']),
             ),
         );
 
-        expect(second.consumedHints).toBe(2);
         expect(runtimeId(second, 'prov:a')).toBe(a);
         expect(runtimeId(second, 'prov:b')).toBe(b);
         expect(second.minted).toEqual([]);
@@ -322,13 +316,12 @@ describe('rung 0: children', () => {
             first.entries,
             [parentA2, childA2, parentB2, childB2],
             mint,
-            pendingOf(claim(
+            recordsOf(claim(
                 [heldA, '- [x] 親A'], [heldChildA, CHILD],
                 [heldB, '- [ ] 親B'], [heldChildB, CHILD],
             )),
         );
 
-        expect(second.consumedHints).toBe(1);
         expect(runtimeId(second, 'prov:a')).toBe(heldA);
         expect(runtimeId(second, 'prov:a1')).toBe(heldChildA);
         expect(runtimeId(second, 'prov:b1')).toBe(heldChildB);
@@ -364,13 +357,12 @@ describe('rung 0: children', () => {
             first.entries,
             [parentB2, childB2, parentA2, childA2],
             mint,
-            pendingOf(claim(
+            recordsOf(claim(
                 [heldA, '- [x] 親A'], [heldChildA, CHILD],
                 [heldB, '- [x] 親B'], [heldChildB, CHILD],
             )),
         );
 
-        expect(second.consumedHints).toBe(0);
         expect(runtimeId(second, 'prov:a1')).toBe(heldChildA);
         expect(runtimeId(second, 'prov:b1')).toBe(heldChildB);
     });
@@ -388,10 +380,9 @@ describe('rung 0: what it does not disturb', () => {
         const withStaleHint = matchFile(
             firstB.entries, after(), makeMint(),
             // A claim about rows this file does not have.
-            pendingOf(claim(['nobody', '- [ ] どこかの行'])),
+            recordsOf(claim(['nobody', '- [ ] どこかの行'])),
         );
 
-        expect(withStaleHint.consumedHints).toBe(0);
         expect([...withStaleHint.mapping]).toEqual([...withoutHints.mapping]);
         expect(withStaleHint.entries).toEqual(withoutHints.entries);
         expect(withStaleHint.minted).toEqual(withoutHints.minted);
@@ -418,7 +409,7 @@ describe('rung 0: a flow firing', () => {
             ticked.entries,
             [t('prov:0', 0, LIVE), t('prov:1', 1, FIRED)],
             mint,
-            pendingOf(claim([null, LIVE], [original, FIRED])),
+            recordsOf(claim([null, LIVE], [original, FIRED])),
         );
         const instance = runtimeId(afterInstance, 'prov:0');
         expect(runtimeId(afterInstance, 'prov:1')).toBe(original);
@@ -431,7 +422,7 @@ describe('rung 0: a flow firing', () => {
             afterInstance.entries,
             [t('prov:0', 0, LIVE), t('prov:1', 1, STRIPPED)],
             mint,
-            pendingOf({ rows: [kept(instance, LIVE), kept(original, STRIPPED)] }),
+            recordsOf({ rows: [kept(instance, LIVE), kept(original, STRIPPED)] }),
         );
         expect(runtimeId(afterStrip, 'prov:0')).toBe(instance);
         expect(runtimeId(afterStrip, 'prov:1')).toBe(original);
@@ -451,13 +442,12 @@ describe('rung 0: a flow firing', () => {
             ticked.entries,
             [t('prov:0', 0, LIVE), t('prov:1', 1, STRIPPED)],
             mint,
-            pendingOf(
+            recordsOf(
                 claim([null, LIVE], [original, FIRED]),
                 { rows: [made('w-instance', LIVE), kept(original, STRIPPED)] },
             ),
         );
 
-        expect(afterBoth.consumedHints).toBe(2);
         expect(runtimeId(afterBoth, 'prov:0')).toBe('w-instance');
         expect(runtimeId(afterBoth, 'prov:1')).toBe(original);
         expect(afterBoth.retired).toEqual([]);
@@ -475,15 +465,16 @@ describe('the ladder\'s partner, once a claim is adopted (F5b)', () => {
         const tasks = [t('prov:0', 0, POMODORO), t('prov:1', 1, POMODORO)];
         const foreign: LedgerEntry = { ...first.entries[0], runtimeId: 'foreign', line: 5 };
 
+        const record = claim([null, POMODORO], [original, POMODORO]);
         const second = matchWithEvidence(
             first.entries,
             tasks,
             mint,
-            rowsOnlyEvidence(first.entries, tasks, pendingOf(claim([null, POMODORO], [original, POMODORO]))),
-            [...first.entries, foreign],
+            rowsOnlyReading(first.entries, tasks, recordsOf(record), { partner: [...first.entries, foreign] }),
         );
 
-        expect(second.consumedHints).toBe(1);
+        expect(runtimeId(second, 'prov:0')).toBe(record.rows[0].runtimeId);
+        expect(runtimeId(second, 'prov:1')).toBe(original);
         expect(second.retired).toEqual([]);
     });
 });

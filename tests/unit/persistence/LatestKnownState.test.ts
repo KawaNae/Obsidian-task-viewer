@@ -2,7 +2,6 @@ import { describe, it, expect, afterEach, vi } from 'vitest';
 import { writeBench, FILE, type WriteBench } from '../helpers/writeBench';
 import type { Task } from '../../../src/types';
 import { plannedOn } from '../../../src/services/persistence/TaskRefs';
-import { HINT_TTL_MS } from '../../../src/services/core/identity/IdentityHints';
 import { MAX_CHAIN_PER_FILE } from '../../../src/services/core/identity/WriteClaims';
 
 /**
@@ -76,8 +75,9 @@ describe('S2c: two own writes trade two texts, then a change nobody reported', (
         // overwrite, a report `explains` refused).
         const before = bench.lines();
         const after = [...before, 'テンプレート'];
+        // Filed before its bytes land, as from inside `vault.process`.
+        bench.scanner.writeSink(FILE, 'user')(before, after, null, null);
         bench.edit(after);
-        bench.scanner.writeSink(FILE, 'user')(before, after, null);
         await bench.scan();
         expect(bench.taskAt(0).id).toBe(x.id);
         expect(bench.taskAt(1).id).toBe(y.id);
@@ -90,49 +90,60 @@ describe('S2c: two own writes trade two texts, then a change nobody reported', (
         // It lands (Z reads the same everywhere) but has nothing to build a
         // claim on: the file is not what the last write left.
         expect((await bench.writer.updateTaskInFile(plannedOn(z), checked(z))).written).toBe(true);
-        expect(bench.scanner.getHintLog().peek().find(entry => entry.file === FILE)?.pending.length).toBe(2);
+        expect(bench.scanner.getWriteClaims().peek(FILE).links).toEqual(['record', 'record', 'foreign', 'mark']);
         await bench.scan();
         expect(bench.taskAt(0).id).toBe(x.id);
         expect(bench.taskAt(1).id).toBe(y.id);
         expect(bench.taskAt(2).id).toBe(z.id);
     });
 
-    it('claims past their age: the chain has none, and pairs the same way', async () => {
+    it('records do not age (I1): long after the writes, the change pairs the same way', async () => {
         const { bench, x, y } = await traded();
         const start = Date.now();
-        vi.spyOn(Date, 'now').mockReturnValue(start + HINT_TTL_MS + 1);
+        vi.spyOn(Date, 'now').mockReturnValue(start + 60 * 60 * 1000);
         bench.edit(['- [x] A', '- [ ] A', 'メモ']);
         await bench.scan();
         expect(bench.taskAt(0).id).toBe(x.id);
         expect(bench.taskAt(1).id).toBe(y.id);
     });
 
-    it('claims past their age and nothing else changed (a drag held past it)', async () => {
+    it('long after the writes and nothing else changed (a drag held past it): the newest record is the read', async () => {
         const { bench, x, y } = await traded();
         const start = Date.now();
-        vi.spyOn(Date, 'now').mockReturnValue(start + HINT_TTL_MS + 1);
+        vi.spyOn(Date, 'now').mockReturnValue(start + 60 * 60 * 1000);
         await bench.scan();
         expect(bench.taskAt(0).id).toBe(x.id);
         expect(bench.taskAt(1).id).toBe(y.id);
     });
 });
 
-describe('the ledger stays the partner where the read may be a state it knows', () => {
-    it('lines the ledger recorded: the ledger names them', async () => {
-        // A sync puts back the file as the last scan read it. Which rows are
-        // which is the ledger's answer, as it was before F5b.
+// I1. A read whose lines are a state we know, with a change nobody reported
+// after that state, is either that state put back (a sync, an undo) or a
+// change after our newest write that happens to read the same. The lines
+// cannot say which. Before I1 the first of these tests was the ledger's (it
+// named them), and the second the ledger's by F5b's rule for an earlier
+// write's lines; both were right for a put-back and wrong for the other
+// route. Now a row keeps its name only where both readings agree: here, where
+// our writes moved names between rows that read alike, they disagree, and the
+// rows are new. A name is lost; none is handed to the wrong row.
+describe('a known state put back after our writes, with a change nobody reported after them', () => {
+    it('lines the ledger recorded: the rows our writes traded are new', async () => {
+        // A sync puts back the file as the last scan read it.
         const { bench, x, y } = await traded();
         bench.edit(['- [ ] A', '- [x] A']);
         await bench.scan();
-        expect(bench.taskAt(0).id).toBe(x.id);
-        expect(bench.taskAt(1).id).toBe(y.id);
+        const ids = bench.tasks().map(task => task.id);
+        expect(ids).toHaveLength(2);
+        expect(ids).not.toContain(x.id);
+        expect(ids).not.toContain(y.id);
     });
 
-    it('lines an earlier write left, after a scan that read before the writes dropped their claims', async () => {
-        // The scan that read the file before our writes adopts nothing, and
-        // the claims go with it. The next read is of the first write's lines
-        // (the second has not landed, or was undone). Paired against the
-        // newest state, Y would take the top line; the ledger pairs it right.
+    it('lines an earlier write left, after a scan that read before the writes: the rows are new', async () => {
+        // The scan that read the file before our writes keeps both records,
+        // as it has not seen them. The next read is of the first write's lines
+        // (the second undone from outside). Put back, X is on top and Y below;
+        // changed after the second write (which took X away), the ladder
+        // finds Y on one of the two rows that read alike.
         const bench = await writeBench(['- [ ] A', '- [ ] B']);
         const x = bench.taskAt(0);
         const y = bench.taskAt(1);
@@ -141,24 +152,22 @@ describe('the ledger stays the partner where the read may be a state it knows', 
         expect((await bench.writer.deleteTaskFromFile(plannedOn(x, { subtree: true }))).written).toBe(true);
         scan.release();
         await scan.done;
-        expect(bench.scanner.getHintLog().peek().find(entry => entry.file === FILE)).toBeUndefined();
+        expect(bench.scanner.getWriteClaims().peek(FILE).links).toEqual(['record', 'record']);
 
         bench.edit(['- [ ] A', '- [ ] A']);
         await bench.scan();
-        expect(bench.taskAt(0).id).toBe(x.id);
-        expect(bench.taskAt(1).id).toBe(y.id);
+        const ids = bench.tasks().map(task => task.id);
+        expect(ids).toHaveLength(2);
+        expect(ids).not.toContain(x.id);
+        expect(ids).not.toContain(y.id);
     });
 
-    // OPEN (F5b, pinned as it is). The same rule leaves S2c's shape where the
-    // read is an earlier write's lines: the ledger is older than writes whose
-    // contents are known, and the ladder pairs across them. Here two renames
-    // trade A and B, a third write appends a row, and the read is of the
-    // second write's lines (a read that raced the third, or the third undone
-    // from outside). Pairing against that state would take a claim the log
-    // dropped by the ladder's door (F1's counterexample A); pairing against
-    // the newest state would be wrong for a read that came before it. To be
-    // looked at with E1 in F6's review.
-    it('OPEN: an earlier write\'s lines after two renames traded the texts: X goes to Y\'s line', async () => {
+    // Was OPEN (F5b): S2c where the read is an earlier write's lines. Two
+    // renames trade A and B, a third write appends a row, and the third is
+    // undone from outside. Put back, the second write's lines name X on top;
+    // changed after the third write, the ladder pairs by text against it and
+    // says the same. Both readings agree, and X and Y stay on their lines.
+    it('an earlier write\'s lines after two renames traded the texts: X and Y stay (S2c on an earlier state, closed in I1)', async () => {
         const bench = await writeBench(['- [ ] A', '- [ ] B']);
         const x = bench.taskAt(0);
         const y = bench.taskAt(1);
@@ -171,9 +180,9 @@ describe('the ledger stays the partner where the read may be a state it knows', 
 
         bench.edit(['- [ ] B', '- [ ] A']);
         await bench.scan();
-        // Truth: X reads B on the top line. The ledger pairs by text.
-        expect(bench.taskAt(1).id).toBe(x.id);
-        expect(bench.taskAt(0).id).toBe(y.id);
+        // Truth: X reads B on the top line.
+        expect(bench.taskAt(0).id).toBe(x.id);
+        expect(bench.taskAt(1).id).toBe(y.id);
     });
 });
 
@@ -287,16 +296,18 @@ describe('a scan that read after a write filed past its read mark', () => {
     });
 });
 
-// LIMIT (F5b, pinned as it is; counterexample run C2). S2c turned inside
-// out: after two own writes trade two texts, an outside write built on the
-// file as it was before them lands (another device's sync, a stale buffer)
-// with a line of its own. The lines cannot say which state the outside write
-// started from; the ladder pairs against the newest state we know and X and
-// Y trade names. Before F5b it paired against the ledger and got this one
-// right, and S2c wrong. In use, each write's own scan commits first and the
-// ledger is the newest state, so outside this window both pair alike.
-describe('an outside write built on the file before our writes', () => {
-    it('LIMIT: X and Y trade names', async () => {
+// KNOWN EXCEPTION to contract 1 (C2; accepted by the user on 2026-09-23).
+// S2c turned inside out: after two own writes trade two texts, an outside
+// write built on the file as it was before them lands (another device's sync,
+// a stale buffer) with a line of its own. The ladder's premise is that an
+// outside writer builds on the newest state we know; this one did not, and
+// the lines cannot say which state it started from. The ladder pairs against
+// the newest state and X and Y trade names. No evidence we hold tells it: the
+// outside change counts the same as a hand edit built on the newest state.
+// The harm is two rows that read alike trading names. Pinned as it is: when
+// this test fails, contract 1 has moved, and the change needs deciding.
+describe('an outside write built on the file before our writes (C2, a known exception)', () => {
+    it('KNOWN EXCEPTION: X and Y trade names', async () => {
         const { bench, x, y } = await traded();
         bench.edit(['- [ ] A', '- [x] A', 'メモ']);
         await bench.scan();
@@ -315,10 +326,10 @@ describe('a scan that read exactly what a write filed past its read mark left', 
         await bench.writer.appendTaskToFile(FILE, '- [ ] Z');
         scan.release();
         await scan.done;
-        expect(bench.scanner.getHintLog().peek().find(entry => entry.file === FILE)).toBeUndefined();
+        expect(bench.scanner.getWriteClaims().peek(FILE).links).toEqual([]);
 
         const b = bench.taskAt(1);
         expect((await bench.writer.updateTaskInFile(plannedOn(b), checked(b))).written).toBe(true);
-        expect(bench.scanner.getHintLog().peek().find(entry => entry.file === FILE)?.pending.length).toBe(1);
+        expect(bench.scanner.getWriteClaims().peek(FILE).links).toEqual(['record']);
     });
 });

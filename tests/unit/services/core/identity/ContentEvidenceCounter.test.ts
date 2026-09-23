@@ -66,13 +66,17 @@ class Harness {
         await this.scan();
     }
 
-    /** A reporting write; no scan follows. `before` is the file split as processLines splits it. */
-    report(lines: string[], edits: LineEdit[]): void {
+    /**
+     * A reporting write; no scan follows. `before` is the file split as
+     * processLines splits it. Answers the names the write gave the rows it made.
+     */
+    report(lines: string[], edits: LineEdit[]): string[] {
         const raw = this.contents.get(FILE) ?? '';
         const before = raw.split('\n').map(l => (l.endsWith('\r') ? l.slice(0, -1) : l));
         // Filed before the bytes land, as from inside `vault.process`.
-        this.scanner.writeSink(FILE)(before, lines, edits);
+        const { made } = this.scanner.writeSink(FILE, 'user')(before, lines, edits, null);
         this.contents.set(FILE, lines.join('\n'));
+        return made.map(row => row.runtimeId);
     }
 
     /** An external edit (or an unreported write): contents change, nothing is filed. */
@@ -92,8 +96,18 @@ class Harness {
         return this.tasks().map(t => t.id);
     }
 
+    /**
+     * Put bytes in place without a change being heard: a read that raced our
+     * writes and saw the file mid-way through them, or a write of ours whose
+     * landing was already counted. Not an outside change, so nothing marks it.
+     */
+    raced(lines: string[]): void {
+        Map.prototype.set.call(this.contents, FILE, lines.join('\n'));
+    }
+
+    /** The records in the file's chain: writes of ours the ledger has not read. */
     pendingCount(): number {
-        return this.scanner.getHintLog().peek().find(e => e.file === FILE)?.pending.length ?? 0;
+        return this.scanner.getWriteClaims().peek(FILE).links.filter(l => l === 'record').length;
     }
 }
 
@@ -109,22 +123,29 @@ describe('whole-content evidence: the unchanged candidate drops out on content',
         const [a, b] = h.ids();
 
         // One plugin write: copy above a, delete b with its child. Truth: [copy, a].
-        h.report([TASK, TASK, ''], [inserted(0, 1), removed(2, 2)]);
+        const [copy] = h.report([TASK, TASK, ''], [inserted(0, 1), removed(2, 2)]);
         expect(h.pendingCount()).toBe(1);
 
         // Before the write's scan reads, an external revert (sync / undo) puts
-        // the file back. Truth is [a, b] again. The scan reads that; nothing moved.
+        // the file back. Truth is [a, b] again. The scan reads that.
         h.set([TASK, TASK, CHILD, '']);
         await h.scan();
-        expect(h.ids()).toEqual([a, b]);
-        // Adopted nothing, so the claim goes with it.
+        // I1: the read is the ledger's content with an outside change after
+        // it, so it may be the ledger's state or a change after the write,
+        // paired against the write's rows [copy, a]. The two readings name
+        // both rows differently, so both are new (was: [a, b], the ledger's).
+        const reverted = h.ids();
+        expect(new Set([...reverted, a, b, copy]).size).toBe(5);
+        // The revert was seen, and the write's record goes with the commit.
         expect(h.pendingCount()).toBe(0);
 
-        // The user deletes the child line by hand. Truth: still [a, b].
-        // The content is now exactly what the stale claim described.
+        // The user deletes the child line by hand. The content is now exactly
+        // what the stale claim described.
         h.set([TASK, TASK, '']);
         await h.scan();
-        expect(h.ids()).toEqual([a, b]);
+        // I1: nothing of the write is left to weigh; the ladder keeps what
+        // the last scan named (was: [a, b]). The claim hands out nothing.
+        expect(h.ids()).toEqual(reverted);
     });
 
 });
@@ -192,10 +213,13 @@ describe('whole-content evidence: content returning (A->B->A)', () => {
         const k1 = [TASK, TASK, ''];
         h.report(k1, [inserted(0, 1)]);
         h.report([TASK, ''], [removed(1, 1)]);
-        h.set(k1);
+        // The scan's read raced the second write and saw the first's file;
+        // then the second write's bytes stand. Neither is an outside change:
+        // both landings were counted.
+        h.raced(k1);
         await h.scan();
         const mid = h.ids();
-        h.set([TASK, '']);
+        h.raced([TASK, '']);
         await h.scan();
         expect(h.ids()).not.toContain(a);
         expect(h.ids()).toEqual([mid[0]]);
@@ -208,10 +232,12 @@ describe('whole-content evidence: content returning (A->B->A)', () => {
         h.report([DONE, TASK, ''], [replaced(0)]);
         h.report([TASK, TASK, ''], [replaced(0)]);
         h.report([TASK, DONE, ''], [replaced(1)]);
-        h.set([TASK, TASK, '']);
+        // A read in the middle of the writes (a race), then the last write's
+        // bytes, whose landing was already counted.
+        h.raced([TASK, TASK, '']);
         await h.scan();
         expect(h.ids()).toEqual([a, b]);
-        h.set([TASK, DONE, '']);
+        h.raced([TASK, DONE, '']);
         await h.scan();
         expect(h.ids()).toEqual([a, b]);
     });
@@ -223,10 +249,12 @@ describe('whole-content evidence: never-scanned file', () => {
         h.set(['本文', '']);
         h.report(['本文', TASK, ''], [inserted(1, 1)]);
         h.report(['本文', TASK, TASK, ''], [inserted(1, 1)]);
-        h.set(['本文', TASK, '']);
+        // The first scan's read raced the second write, then the second
+        // write's bytes stand; both landings were already counted.
+        h.raced(['本文', TASK, '']);
         await h.scan();
         const [x] = h.ids();
-        h.set(['本文', TASK, TASK, '']);
+        h.raced(['本文', TASK, TASK, '']);
         await h.scan();
         const ids = h.ids();
         expect(ids[1]).toBe(x);

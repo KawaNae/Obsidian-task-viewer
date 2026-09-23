@@ -1,19 +1,19 @@
 import { describe, it, expect } from 'vitest';
 import { matchFile as matchWithEvidence } from '../../../../../src/services/core/identity/IdentityMatcher';
 import type { LedgerEntry } from '../../../../../src/services/core/identity/IdentityLedger';
-import { rowsOnlyEvidence } from '../../../helpers/rowsOnlyEvidence';
-import type { Hint, PendingHint } from '../../../../../src/services/core/identity/IdentityHints';
+import { rowsOnlyReading, type RecordOf } from '../../../helpers/rowsOnlyEvidence';
+import { reproduces } from '../../../../../src/services/core/identity/IdentityHints';
 import { makeTask } from '../../../helpers/makeTask';
 
-/** The matcher, weighing claims about a file made only of its rows (see rowsOnlyEvidence). */
+/** The matcher, weighing records about a file made only of its rows (see rowsOnlyReading). */
 function matchFile(
     previous: LedgerEntry[],
     tasks: Task[],
     mint: (task: Task) => string,
-    pending?: readonly PendingHint[],
+    records?: readonly RecordOf[],
 ) {
     return matchWithEvidence(previous, tasks, mint,
-        rowsOnlyEvidence(previous, tasks, pending ?? []), previous);
+        rowsOnlyReading(previous, tasks, records ?? []));
 }
 import type { Task } from '../../../../../src/types';
 
@@ -148,7 +148,7 @@ function toTasks(lines: ModelLine[]): Task[] {
 }
 
 /** What a write layer that knows the truth would claim: the file's rows. */
-function claimOf(lines: ModelLine[]): Hint {
+function claimOf(lines: ModelLine[]): RecordOf {
     return {
         rows: lines.map(line => ({
             runtimeId: line.owner,
@@ -161,7 +161,7 @@ function claimOf(lines: ModelLine[]): Hint {
 interface Run {
     /** The file as it stood after each write, index 0 being before them all. */
     states: ModelLine[][];
-    hints: PendingHint[];
+    records: RecordOf[];
     before: ReturnType<typeof matchFile>;
     /** The run's own minter, so a later read cannot re-issue an earlier ID. */
     mint: (task: Task) => string;
@@ -183,14 +183,14 @@ function run(names: string[]): Run | null {
     }));
 
     const states: ModelLine[][] = [model.map(line => ({ ...line }))];
-    const hints: PendingHint[] = [];
+    const records: RecordOf[] = [];
     for (const operation of sequence) {
         if (!operation.apply(model)) return null;
-        hints.push({ seq: hints.length + 1, at: 0, hint: claimOf(model) });
+        records.push(claimOf(model));
         states.push(model.map(line => ({ ...line })));
     }
 
-    return { states, hints, before, mint };
+    return { states, records, before, mint };
 }
 
 function byName(available: Operation[], names: string[]): Operation[] {
@@ -220,7 +220,7 @@ describe('every short write sequence, read back at every point', () => {
             const outcome = run(sequence);
             if (!outcome) continue;
 
-            const { states, hints, before, mint } = outcome;
+            const { states, records, before, mint } = outcome;
             const previousIds = new Set(before.entries.map(entry => entry.runtimeId));
             const name = label(sequence);
 
@@ -230,12 +230,13 @@ describe('every short write sequence, read back at every point', () => {
                 reads++;
 
                 const tasks = toTasks(truth);
-                const result = matchFile(before.entries, tasks, mint, hints);
+                const result = matchFile(before.entries, tasks, mint, records);
                 const where = `${name} @read ${read}`;
 
+                // I1: "a claim was adopted" is now "no reading disputed a name" (was: consumedHints > 0).
                 if (read === states.length - 1) {
                     currentReads++;
-                    if (result.consumedHints > 0) adoptedOnCurrentRead++;
+                    if (result.disputed.size === 0) adoptedOnCurrentRead++;
                 }
 
                 // The one-sided part, stated in code: what the ladder decides
@@ -244,11 +245,22 @@ describe('every short write sequence, read back at every point', () => {
                 // created, worded like no other, still takes the leftover row
                 // at the bottom rung) — that is the imprecision rung 0 exists
                 // to reduce, not a contradiction to catch.
-                if (result.consumedHints === 0) continue;
+                const reading = rowsOnlyReading(before.entries, tasks, records);
+                const byRuntimeId = new Map(before.entries.map(entry => [entry.runtimeId, entry]));
+                if (!reading.states.some(state => reproduces(state, tasks, byRuntimeId))) continue;
 
+                const recordNames = new Set(records.flatMap(record => record.rows.map(claimed => claimed.runtimeId)));
                 for (let i = 0; i < truth.length; i++) {
                     const decided = result.mapping.get(tasks[i].id)!;
                     const owner = truth[i].owner;
+
+                    // I1: readings that disagree leave the row a new name, which says nothing false
+                    // (was: the whole read fell to the ladder and was skipped). The true owner has to be
+                    // among the names disputed.
+                    if (!previousIds.has(decided) && !recordNames.has(decided)) {
+                        expect(result.disputed.has(owner), `${where} line ${i} minted without a dispute`).toBe(true);
+                        continue;
+                    }
 
                     if (truth[i].created) {
                         // The name the write coined for it, and no other. A

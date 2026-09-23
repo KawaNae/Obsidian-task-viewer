@@ -55,6 +55,12 @@ export class IdentityLedger {
      * adds to it is built on that state.
      */
     private readonly contents = new Map<string, ContentKey>();
+    /**
+     * Per file, the rows the last scan paired by position (see
+     * `MatchResult.guessed`), with how many rows each was one of. Written with
+     * the rows, by the scan that committed them, and gone with them.
+     */
+    private readonly guesses = new Map<string, ReadonlyMap<string, number>>();
     private counter: number;
 
     /**
@@ -87,12 +93,33 @@ export class IdentityLedger {
     }
 
     /**
-     * Swap a file's rows wholesale, and record which content they were read
-     * from. Pass the new rows in file order.
+     * The rows the last scan of this file paired by position — which line
+     * each of those names is on is a guess among rows that read alike. Kept
+     * past the scan's commit for whoever must know, after the fact, that a
+     * row's name was a guess (the firing of a guessed row is stage X's to
+     * decide). A write's `locate` does not refuse on it: every read of a note
+     * with two rows that read alike guesses them, and refusing would leave
+     * those rows unwritable from a card for as long as the note is edited.
      */
-    replaceFile(file: string, entries: LedgerEntry[], content: ContentKey): void {
+    guessedFor(file: string): ReadonlyMap<string, number> {
+        return this.guesses.get(file) ?? new Map();
+    }
+
+    /**
+     * Swap a file's rows wholesale, and record which content they were read
+     * from and which of them position decided. Pass the new rows in file order.
+     */
+    replaceFile(
+        file: string,
+        entries: LedgerEntry[],
+        content: ContentKey,
+        guessed: ReadonlyMap<string, number> = new Map(),
+    ): void {
         this.dropFile(file);
         this.contents.set(file, content);
+        const names = new Set(entries.map(entry => entry.runtimeId));
+        const kept = new Map([...guessed].filter(([runtimeId]) => names.has(runtimeId)));
+        if (kept.size > 0) this.guesses.set(file, kept);
         if (entries.length === 0) return;
 
         const ids: string[] = [];
@@ -106,6 +133,7 @@ export class IdentityLedger {
     /** Forget a file entirely (deleted, or newly `tv-ignore`d). */
     dropFile(file: string): void {
         this.contents.delete(file);
+        this.guesses.delete(file);
         const ids = this.files.get(file);
         if (!ids) return;
 
@@ -129,6 +157,7 @@ export class IdentityLedger {
         // what the file reads.
         const content = this.contentFor(oldPath);
         if (content === null) return;
+        const guessed = this.guessedFor(oldPath);
 
         this.dropFile(oldPath);
         // A rename onto an occupied path makes the rows already there stale.
@@ -142,7 +171,7 @@ export class IdentityLedger {
             ordinal: entry.ordinal,
             fingerprint: entry.fingerprint,
         }));
-        this.replaceFile(newPath, rekeyed, content);
+        this.replaceFile(newPath, rekeyed, content, new Map([...guessed].map(([id, among]) => [rewriteId(id), among])));
     }
 
     get(runtimeId: string): LedgerEntry | undefined {
@@ -162,5 +191,6 @@ export class IdentityLedger {
         this.entries.clear();
         this.files.clear();
         this.contents.clear();
+        this.guesses.clear();
     }
 }

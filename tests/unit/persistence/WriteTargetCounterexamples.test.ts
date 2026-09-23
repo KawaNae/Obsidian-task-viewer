@@ -657,7 +657,11 @@ describe('F2-counter4: the file back at the content the ledger recorded, names m
         expect(bench.lines()).toEqual(['- [ ] A', '- [ ] B']);
         expect((await bench.writer.deleteTaskFromFile(plannedOn(x, { subtree: true }))).written).toBe(false);
         expect(bench.lines()).toEqual(['- [ ] A', '- [ ] B']);
-        expect(bench.refused.map(r => r.reason.kind)).toEqual(['changed']);
+        // I1: the late scan's read is the ledger's content and our third
+        // write's, which name the rows differently (K2): both rows are new,
+        // X is gone (as it is: W1 deleted it). Before I1 the ledger named them
+        // and `againstLastWrite` refused as `changed`.
+        expect(bench.refused.map(r => r.reason.kind)).toEqual(['gone']);
     });
 
     it('P2: an outside append brings it back after X1 through the race: the check of X does not land on Y', async () => {
@@ -672,7 +676,12 @@ describe('F2-counter4: the file back at the content the ledger recorded, names m
         bench.edit(['- [ ] A', '- [ ] B']);
         expect((await bench.writer.updateTaskInFile(plannedOn(x), checked(x))).written).toBe(false);
         expect(bench.lines()).toEqual(['- [ ] A', '- [ ] B']);
-        expect(bench.refused.map(r => r.reason.kind)).toEqual(['changed']);
+        // I1: the outside append puts back the ledger's content after our
+        // writes. Put back, X is on top; changed after our last write (which
+        // took X away), the top line is Y's. The readings disagree on the top
+        // line, and X is `ambiguous`. Before I1 the ledger paired and
+        // `againstLastWrite` refused as `changed`.
+        expect(bench.refused.map(r => r.reason.kind)).toEqual(['ambiguous']);
     });
 
     it('V1: a silent write filed while an outside edit\'s scan read: the next write is refused until a later scan (availability)', async () => {

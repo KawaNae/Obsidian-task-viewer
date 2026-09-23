@@ -5,13 +5,12 @@ import { TaskScanner } from '../../../../../src/services/core/TaskScanner';
 import { EditorSignal } from '../../../../../src/services/core/EditorSignal';
 import { TaskStore } from '../../../../../src/services/core/TaskStore';
 import { TaskValidator } from '../../../../../src/services/core/TaskValidator';
-import { HINT_TTL_MS, type ClaimedRow, type Hint } from '../../../../../src/services/core/identity/IdentityHints';
+import type { ClaimedRow } from '../../../../../src/services/core/identity/IdentityHints';
 import { TaskParser } from '../../../../../src/services/parsing/TaskParser';
 import { DEFAULT_SETTINGS } from '../../../../../src/types';
 import type { Task } from '../../../../../src/types';
 import type { LineEdit } from '../../../../../src/utils/FileLines';
 import { makeTask } from '../../../helpers/makeTask';
-import { contentKeyOf } from '../../../../../src/services/core/identity/ContentKey';
 
 /**
  * Claims through the real scanner: raised by a write, weighed against what the
@@ -38,6 +37,11 @@ const FILE = 'a.md';
  */
 const TASK = TaskParser.format(makeTask({ content: 'ポモドーロ', statusChar: ' ' }));
 
+/** One write's record, as its rows: what `WriteClaims.fileRecord` files. */
+interface Hint {
+    rows: ClaimedRow[];
+}
+
 /** One write's claim: the file's rows, as `[runtimeId | null, text]` pairs. */
 let coined = 0;
 
@@ -56,12 +60,6 @@ const claim = (...rows: Array<[string | null, string]>): Hint => ({
         ? { runtimeId: `tv-inline:${FILE}:seq:${++coined}`, created: true, text }
         : { runtimeId, created: false, text }),
 });
-
-/**
- * A hand-built claim about the file these lines make. A write that reports
- * gets this from `WriteClaims`; the claims built by hand here say it outright.
- */
-const about = (lines: string[], hint: Hint): Hint => ({ ...hint, content: contentKeyOf(lines) });
 
 class Harness {
     readonly contents = new NoticedFiles();
@@ -89,13 +87,29 @@ class Harness {
         this.contents.listen(path => this.scanner.noteChange(path));
     }
 
-    /** A write: the claim goes in from inside the callback, as the writer does. */
+    /**
+     * A write: the record goes in from inside the callback, before the bytes
+     * land, as the writer does — so the change that follows is its landing.
+     * With no record it is a change nobody reported.
+     */
     async write(lines: string[], ...hints: Hint[]): Promise<void> {
+        this.file(lines, hints);
         this.contents.set(FILE, lines.join('\n'));
-        if (hints.length > 0) {
-            this.scanner.getHintLog().add(FILE, hints.map(hint => hint.content ? hint : about(lines, hint)), Date.now());
-        }
         await this.scanner.requestScan(makeFile(FILE));
+    }
+
+    /** File a hand-built record per hint, each about the file `lines` make. */
+    file(lines: string[], hints: Hint[]): void {
+        for (const hint of hints) this.scanner.getWriteClaims().fileRecord(FILE, lines, hint.rows);
+    }
+
+    /**
+     * Put bytes in place without a change being heard: a read that raced our
+     * writes and saw the file mid-way through them, or a write of ours whose
+     * landing was already counted. Not an outside change, so nothing marks it.
+     */
+    raced(lines: string[]): void {
+        Map.prototype.set.call(this.contents, FILE, lines.join('\n'));
     }
 
     /**
@@ -103,19 +117,21 @@ class Harness {
      *
      * Nothing is hand-built here: `WriteClaims` reads the file back, works out
      * which lines are rows, and names the ones the write made. No scan
-     * follows, so the caller decides which state each scan reads.
+     * follows, so the caller decides which state each scan reads. Answers the
+     * names the write gave the rows it made.
      */
-    report(lines: string[], edits: LineEdit[]): void {
+    report(lines: string[], edits: LineEdit[]): string[] {
         const before = (this.contents.get(FILE) ?? '').split('\n');
         // Filed before the bytes land, as from inside `vault.process`.
-        this.scanner.writeSink(FILE)(before, lines, edits);
+        const { made } = this.scanner.writeSink(FILE, 'user')(before, lines, edits, null);
         this.contents.set(FILE, lines.join('\n'));
+        return made.map(row => row.runtimeId);
     }
 
     /** Raise a claim without a scan following it — a write during a drag. */
     hintOnly(lines: string[], ...hints: Hint[]): void {
+        this.file(lines, hints);
         this.contents.set(FILE, lines.join('\n'));
-        this.scanner.getHintLog().add(FILE, hints.map(hint => hint.content ? hint : about(lines, hint)), Date.now());
     }
 
     async scan(): Promise<void> {
@@ -143,17 +159,11 @@ class Harness {
         return this.tasks().map(task => task.id);
     }
 
+    /** The records in the file's chain: writes of ours the ledger has not read. */
     pendingCount(): number {
-        return this.scanner.getHintLog().peek()
-            .find(entry => entry.file === FILE)?.pending.length ?? 0;
+        return this.scanner.getWriteClaims().peek(FILE).links.filter(link => link === 'record').length;
     }
 }
-
-let clock: ReturnType<typeof vi.useFakeTimers> | undefined;
-afterEach(() => {
-    if (clock) vi.useRealTimers();
-    clock = undefined;
-});
 
 describe('a claim through the scanner', () => {
     it('keeps the original\'s ID when a duplicate is written above it', async () => {
@@ -205,8 +215,9 @@ describe('a line the write named, through the write layer', () => {
         harness.report(afterTick, [{ kind: 'replaced', at: 1 }]);
 
         // S1's read started before W2 landed, so it reads the file W1 left,
-        // and commits it: the copy is now a row the ledger holds.
-        harness.contents.set(FILE, afterCopy.join('\n'));
+        // and commits it: the copy is now a row the ledger holds. A race, not
+        // an outside change: both writes' landings were already counted.
+        harness.raced(afterCopy);
         await harness.scan();
         const afterFirst = harness.ids();
         expect(afterFirst[1]).toBe(original);
@@ -215,7 +226,7 @@ describe('a line the write named, through the write layer', () => {
         // S2 reads what W2 actually left, with W2's claim still pending. The
         // copy is the row it already was — the name came from the write, and
         // the write gave it once.
-        harness.contents.set(FILE, afterTick.join('\n'));
+        harness.raced(afterTick);
         await harness.scan();
         expect(harness.ids()).toEqual(afterFirst);
     });
@@ -244,7 +255,7 @@ describe('a line the write named, through the write layer', () => {
 
         // The write reports its copy, but a hand edit arrived in the same
         // moment: the claim does not reproduce what the scan reads, so the
-        // ladder answers and the log goes.
+        // ladder answers and its record goes.
         harness.report([TASK, TASK, ''], [{ kind: 'inserted', at: 0, count: 1 }]);
         harness.contents.set(FILE, [TASK, TASK, '- [ ] 手で書いた行', ''].join('\n'));
         await harness.scan();
@@ -285,23 +296,6 @@ describe('a claim that found no scan of its own', () => {
         expect(harness.ids()[0]).not.toBe(stranded[0]);
     });
 
-    it('expires rather than waiting forever', async () => {
-        clock = vi.useFakeTimers();
-        const harness = new Harness();
-        await harness.write([TASK, '']);
-        const original = harness.ids()[0];
-
-        // A write made while scans are suppressed (a drag): the claim is filed,
-        // but no scan follows it.
-        harness.hintOnly([TASK, TASK, ''], claim([null, TASK], [original, TASK]));
-        vi.advanceTimersByTime(HINT_TTL_MS);
-
-        // Whatever finally scans this file gets no help from it.
-        await harness.scan();
-        expect(harness.ids()[1]).not.toBe(original);
-        expect(harness.ids()[0]).toBe(original);
-    });
-
     it('is adopted by a scan whose read overlapped the write', async () => {
         // The scan started before this write existed, and its read still saw
         // the write's lines. Measured: a scan's read can span a later write.
@@ -323,7 +317,7 @@ describe('a claim that found no scan of its own', () => {
         // A claim is raised inside the write callback, a moment before the file
         // reaches disk, and a scan reading in between sees the file as it was.
         // The claim is not kept for the write's own scan: kept, it would wait
-        // for a content the file might reach by another path (see settle), so
+        // for a content the file might reach by another path, so
         // that scan is left to the ladder. The ladder cannot tell the copy from
         // the original; what matters here is that no claim decides it.
         const harness = new Harness();
@@ -331,7 +325,7 @@ describe('a claim that found no scan of its own', () => {
         const original = harness.ids()[0];
 
         // Raised, but the file still reads as it did.
-        harness.scanner.getHintLog().add(FILE, [about([TASK, TASK, ''], claim([null, TASK], [original, TASK]))], Date.now());
+        harness.file([TASK, TASK, ''], [claim([null, TASK], [original, TASK])]);
         await harness.scan();
         expect(harness.ids()).toEqual([original]);
         expect(harness.pendingCount()).toBe(0);
@@ -347,15 +341,22 @@ describe('a claim that found no scan of its own', () => {
         // A write that deleted the row and wrote the same text back. Until its
         // scan arrives, the file reads exactly as before, and the two answers —
         // the row is the old one, the row is new — cannot both be right. The
-        // ladder takes it, and the claim goes with the scan.
+        // row keeps neither name, and the claim goes with the scan.
         const harness = new Harness();
         await harness.write([TASK, '']);
         const original = harness.ids()[0];
 
-        harness.scanner.getHintLog().add(FILE, [about([TASK, ''], claim([null, TASK]))], Date.now());
+        const rebuilt = claim([null, TASK]);
+        harness.file([TASK, ''], [rebuilt]);
         await harness.scan();
 
-        expect(harness.ids()).toEqual([original]);
+        // I1: the ledger's reading names the row the original, the record's
+        // names it the rebuilt row's; they disagree, so the row is new (was:
+        // the ladder's answer, the original).
+        const [row] = harness.ids();
+        expect(harness.ids()).toHaveLength(1);
+        expect(row).not.toBe(original);
+        expect(row).not.toBe(rebuilt.rows[0].runtimeId);
         expect(harness.pendingCount()).toBe(0);
     });
 });
@@ -399,7 +400,7 @@ describe('a flow firing, through the write layer', () => {
 
         // The tick and the scan that commits it — the one whose tail fires the
         // flow. The tick now files a claim, and that scan retires it, which is
-        // why the two writes below still start from a clean log.
+        // why the two writes below still start from a clean chain.
         harness.report(ticked, TICK);
         await harness.scan();
         expect(harness.ids()).toEqual([original]);
@@ -427,7 +428,7 @@ describe('a flow firing, through the write layer', () => {
     it('keeps both rows when a scan reads between the two writes', async () => {
         // The order the 3000-line measurement shows, with the third write's
         // claim filed before that scan commits: the claim is raised after the
-        // read, which is exactly the case `pendingFor` refuses to cut off, and
+        // read, which is exactly the case the read-mark keeps (`WriteClaims.forget`), and
         // it has to survive the commit that follows.
         const { harness, original } = await fired();
 
@@ -435,8 +436,9 @@ describe('a flow firing, through the write layer', () => {
 
         const held = harness.holdRead();
         harness.report(stripped, STRIP);
-        // The read in flight still sees the file as the second write left it.
-        harness.contents.set(FILE, instanced.join('\n'));
+        // The read in flight still sees the file as the second write left it:
+        // a race, not an outside change.
+        harness.raced(instanced);
         held.release();
         await held.scanning;
 
@@ -449,7 +451,8 @@ describe('a flow firing, through the write layer', () => {
         // stripped file is not left to the ladder.
         expect(harness.pendingCount()).toBe(1);
 
-        harness.contents.set(FILE, stripped.join('\n'));
+        // The strip had landed; its change was counted when it did.
+        harness.raced(stripped);
         await harness.scan();
         expect(harness.ids()).toEqual([instance, original]);
     });
@@ -472,11 +475,10 @@ describe('a flow firing, through the write layer', () => {
 
         // Built on the ledger: the instance is a row that has been recorded,
         // not one this write made, and the claim says so.
-        const pending = harness.scanner.getHintLog().peek()
-            .find(entry => entry.file === FILE)?.pending ?? [];
-        expect(pending).toHaveLength(1);
-        expect(pending[0].hint.rows.map(row => row.created)).toEqual([false, false]);
-        expect(pending[0].hint.rows.map(row => row.runtimeId)).toEqual([instance, original]);
+        expect(harness.pendingCount()).toBe(1);
+        const rows = harness.scanner.getWriteClaims().lastWrite(FILE)?.rows ?? [];
+        expect(rows.map(row => row.created)).toEqual([false, false]);
+        expect(rows.map(row => row.runtimeId)).toEqual([instance, original]);
 
         await harness.scan();
         expect(harness.ids()).toEqual([instance, original]);
@@ -496,14 +498,16 @@ describe('a flow firing, through the write layer', () => {
 
         const held = harness.holdRead();
         harness.report(ticked, TICK);
-        // The read in flight still sees the file as it was before the tick.
-        harness.contents.set(FILE, [live, ''].join('\n'));
+        // The read in flight still sees the file as it was before the tick:
+        // a race, not an outside change.
+        harness.raced([live, '']);
         held.release();
         await held.scanning;
         expect(harness.pendingCount()).toBe(0);
 
-        // The tick did land, and the firing goes ahead on top of it.
-        harness.contents.set(FILE, ticked.join('\n'));
+        // The tick did land, and the firing goes ahead on top of it. Its
+        // change was counted when it landed.
+        harness.raced(ticked);
         harness.report(instanced, INSTANCE);
         harness.report(stripped, STRIP);
 
@@ -547,14 +551,15 @@ describe('a flow firing, through the write layer', () => {
             [{ kind: 'inserted', at: 0, count: 2 }]);
         harness.report([LIVE, CHILD, '- [x] ポモドーロ', ''],
             [{ kind: 'removed', at: 3, count: 1 }, { kind: 'replaced', at: 2 }]);
-        harness.contents.set(FILE, [LIVE, CHILD, '- [x] ポモドーロ', CHILD, ''].join('\n'));
+        // The scan reads the file before the strip landed: a race.
+        harness.raced([LIVE, CHILD, '- [x] ポモドーロ', CHILD, '']);
 
         await harness.scan();
         const afterMiddle = harness.ids();
         expect(afterMiddle[1]).toBe(original);
         expect(harness.pendingCount()).toBe(1);
 
-        harness.contents.set(FILE, [LIVE, CHILD, '- [x] ポモドーロ', ''].join('\n'));
+        harness.raced([LIVE, CHILD, '- [x] ポモドーロ', '']);
         await harness.scan();
         expect(harness.ids()).toEqual(afterMiddle);
         expect(harness.pendingCount()).toBe(0);
@@ -609,7 +614,7 @@ describe('a firing whose gen block writes a parent of its own', () => {
     it('pairs against what the firing left when a hand edit lands on both (F5b)', async () => {
         // A line typed into the file in the same moment leaves the scan
         // reading something neither claim describes; it adopts nothing, so
-        // the whole log goes — the strip's claim with it, though no scan ever
+        // every record goes — the strip's claim with it, though no scan ever
         // read the state it describes. The ladder then pairs against what the
         // firing left rather than against the ledger from before it: the
         // typed line came after the writes, so the rows they left are the
@@ -773,23 +778,6 @@ describe('an ordinary update, through the write layer', () => {
         expect(harness.ids()).toEqual([first, second]);
         expect(harness.pendingCount()).toBe(0);
     });
-
-    it('falls back to the ladder when the drag outlasts the claims', async () => {
-        // A drag longer than the log's TTL takes the claims with it. Nothing
-        // is wrong with that — it is where every write stood before stage 2 —
-        // but it means a long drag over twins is decided by text alone.
-        clock = vi.useFakeTimers();
-        const harness = new Harness();
-        await harness.write([TASK, TASK, '']);
-
-        harness.report([DONE, TASK, ''], rewrite(0));
-        expect(harness.pendingCount()).toBe(1);
-
-        vi.advanceTimersByTime(HINT_TTL_MS + 1);
-        await harness.scan();
-
-        expect(harness.pendingCount()).toBe(0);
-    });
 });
 
 describe('a rewrite that moves the row to another parser', () => {
@@ -857,14 +845,19 @@ describe('the whole content decides which state was read', () => {
         await harness.write([TASK, '']);
         const original = harness.ids()[0];
 
-        harness.report([TASK, TASK, ''], [{ kind: 'inserted', at: 0, count: 1 }]);
+        const [copy] = harness.report([TASK, TASK, ''], [{ kind: 'inserted', at: 0, count: 1 }]);
         harness.report([TASK, ''], [{ kind: 'removed', at: 1, count: 1 }]);
         await harness.scan();
 
-        // The ladder's answer: the one previous row goes to the one line.
-        expect(harness.ids()).toEqual([original]);
-        // Nothing adopted, so both claims go: neither may be believed about a
-        // later read either.
+        // I1: two readings, the ledger's (the original) and W2's (the copy),
+        // name the one row differently, so it keeps neither and is new (was:
+        // the ladder's answer, the original).
+        const [row] = harness.ids();
+        expect(harness.ids()).toHaveLength(1);
+        expect(row).not.toBe(original);
+        expect(row).not.toBe(copy);
+        // Read as more than one state: what was filed before the read goes
+        // with the commit, so neither may be believed about a later read.
         expect(harness.pendingCount()).toBe(0);
     });
 
@@ -895,47 +888,54 @@ describe('the whole content decides which state was read', () => {
         // paired against what it left keeps the lower one, as the write did.
         expect(shape(control.ids(), controlOriginal)).toEqual(['kept', 'new']);
         expect(shape(harness.ids(), original)).toEqual(['new', 'kept']);
-        // The claim was not believed, and the rows moved, so the log is gone.
+        // The claim was not believed, and the rows moved, so the record is gone.
         expect(harness.pendingCount()).toBe(0);
     });
 });
 
-describe('a later claim left pending (E1, a known limit)', () => {
-    // Pinned as it stands, not as it should be. structure.md names this shape
-    // E1 in 「下流で読んだ内容がどの状態かを決める」 and leaves it open: the
-    // whole content, the write's own record and `^id` cannot tell it from the
-    // second write landing, and what could (the `modify` count, the landing
-    // mtime) is to be observed in the self-write stage (F6) before anything is
-    // decided. When that stage closes it, this test fails and is turned round.
+describe('a later claim whose write was undone from outside (E1)', () => {
+    // structure.md names this shape E1 in 「下流で読んだ内容がどの状態かを決め
+    // る」. The whole content, the write's own record and `^id` cannot tell it
+    // from the second write landing; the `modify` count can (F6): the undo is
+    // a change no write of ours accounts for, so it is an outside mark in the
+    // chain, and a record before it is never again weighed as its own write's.
 
-    it('adopts the second claim when another route reaches the content it describes', async () => {
+    it('does not hand the copy\'s name to a line that reaches its content by another route', async () => {
         const harness = new Harness();
         await harness.write([TASK, '']);
         const original = harness.ids()[0];
 
         // W1 puts a copy below the original; W2, built on W1, takes the
         // original (the upper line) away.
-        harness.report([TASK, TASK, ''], [{ kind: 'inserted', at: 1, count: 1 }]);
+        const [copy] = harness.report([TASK, TASK, ''], [{ kind: 'inserted', at: 1, count: 1 }]);
         harness.report([TASK, ''], [{ kind: 'removed', at: 0, count: 1 }]);
 
         // W2 is taken back from outside (a sync, an undo) before any scan
-        // reads it. The scan reads W1's file, adopts W1, and leaves W2 in the
-        // log: a claim later than the one adopted may still be on its way.
+        // reads it. The scan reads W1's content, but after an outside change:
+        // it may be W1's state, or a change after W2, paired by the ladder
+        // against W2's rows — the copy alone.
         harness.contents.set(FILE, [TASK, TASK, ''].join('\n'));
         await harness.scan();
-        const [kept, copy] = harness.ids();
-        expect(kept).toBe(original);
-        expect(harness.pendingCount()).toBe(1);
+        const [upper, lower] = harness.ids();
+        // I1: W1 names the rows [original, copy]; the reading "after" gives
+        // the copy's name, the only one W2 holds, to the upper line (nearest
+        // ordinal). No name is agreed on, so both rows are new (was: the upper
+        // kept the original, W1 adopted).
+        expect(new Set([upper, lower, original, copy]).size).toBe(4);
+        // I1: the outside mark was seen, and every record before it goes with
+        // the commit (was: W2 left pending).
+        expect(harness.pendingCount()).toBe(0);
 
-        // A hand edit deletes the lower line, the copy. The file now reads
-        // exactly as W2 said it would, by the other route.
+        // A hand edit deletes the lower line. The file now reads exactly as W2
+        // said it would, by the other route.
         harness.contents.set(FILE, [TASK, ''].join('\n'));
         await harness.scan();
 
-        // The original is what stands on the line. W2 is the only candidate
-        // that fits, and it names the copy. The ladder alone would pair the
-        // one line with the nearer previous row, the original.
-        expect(harness.ids()).toEqual([copy]);
+        // I1: nothing of W2 is left to weigh, so the ladder pairs the one line
+        // with the nearer previous row, the upper one (was: W2 adopted, and
+        // the line took the name of the row just deleted).
+        expect(harness.ids()).toEqual([upper]);
+        expect(harness.ids()).not.toContain(copy);
         expect(harness.pendingCount()).toBe(0);
     });
 });

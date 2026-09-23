@@ -15,7 +15,7 @@ vi.mock('../../../../../src/services/core/identity/ContentKey', () => ({
 import { WriteClaims, type ClaimBase } from '../../../../../src/services/core/identity/WriteClaims';
 import { FileParsePipeline } from '../../../../../src/services/parsing/FileParsePipeline';
 import { DEFAULT_SETTINGS } from '../../../../../src/types';
-import { resolveHints } from '../../../../../src/services/core/identity/IdentityHints';
+import { matchFile } from '../../../../../src/services/core/identity/IdentityMatcher';
 import { makeTask } from '../../../helpers/makeTask';
 
 const FILE = 'note.md';
@@ -38,12 +38,13 @@ describe('a content key that collides', () => {
     it('does not let a write build on a base whose rows no longer read their text', () => {
         const claims = claimsWith([known('r1', 0, '- [ ] 甲')]);
         const first = claims.claim(FILE, ['- [ ] 甲'], ['- [ ] 乙', '- [ ] 甲'], [{ kind: 'inserted', at: 0, count: 1 }]);
-        expect(first.hint!.rows.map(row => row.runtimeId)).toEqual(['w1', 'r1']);
+        expect(first.described).toBe(true);
+        expect(claims.stateFor(FILE, ['- [ ] 乙', '- [ ] 甲'])!.map(row => row.runtimeId)).toEqual(['w1', 'r1']);
 
         // A different file under the same key: someone swapped the two lines.
         const next = claims.claim(FILE, ['- [ ] 甲', '- [ ] 乙'], ['- [x] 甲', '- [ ] 乙'], [{ kind: 'replaced', at: 0 }]);
 
-        expect(next.hint).toBeNull();
+        expect(next.described).toBe(false);
     });
 
     it('does not let a write build on a ledger whose rows no longer read their text', () => {
@@ -51,21 +52,17 @@ describe('a content key that collides', () => {
 
         const claim = claims.claim(FILE, ['- [ ] 乙', '- [ ] 甲'], ['- [x] 乙', '- [ ] 甲'], [{ kind: 'replaced', at: 0 }]);
 
-        expect(claim.hint).toBeNull();
+        expect(claim.described).toBe(false);
     });
 });
 
 describe('a content key that collides, downstream', () => {
     it('does not let a scan adopt a claim whose rows are not the rows it read', () => {
         const read = [makeTask({ id: 'prov:0', line: 0, originalText: '- [ ] 甲', content: '甲' })];
-        const pending = [{
-            seq: 1, at: 0,
-            hint: { content: 'collides', rows: [{ runtimeId: 'w1', created: true, text: '- [ ] 乙' }] },
-        }];
+        const record = { rows: [{ runtimeId: 'w1', created: true, text: '- [ ] 乙' }] };
 
-        const resolved = resolveHints([], read, { pending, before: null, read: 'collides' });
+        const result = matchFile([], read, () => 'minted', { states: [record], after: false, partner: [] });
 
-        expect(resolved.consumed).toBe(0);
-        expect(resolved.rows).toBeNull();
+        expect(result.mapping.get('prov:0')).toBe('minted');
     });
 });

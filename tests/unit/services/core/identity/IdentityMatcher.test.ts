@@ -1,8 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import { matchFile as matchWithEvidence, matchWithoutRepeatedIds } from '../../../../../src/services/core/identity/IdentityMatcher';
 import type { LedgerEntry } from '../../../../../src/services/core/identity/IdentityLedger';
-import { rowsOnlyEvidence } from '../../../helpers/rowsOnlyEvidence';
 import type { MatchResult } from '../../../../../src/services/core/identity/IdentityMatcher';
+import type { Reading } from '../../../../../src/services/core/identity/IdentityHints';
 import { makeTask } from '../../../helpers/makeTask';
 import type { Task } from '../../../../../src/types';
 
@@ -17,7 +17,7 @@ import type { Task } from '../../../../../src/types';
 
 /** The matcher with no claims to weigh: the ladder on its own. */
 function matchFile(previous: LedgerEntry[], tasks: Task[], mint: (task: Task) => string) {
-    return matchWithEvidence(previous, tasks, mint, rowsOnlyEvidence(previous, tasks, []), previous);
+    return matchWithEvidence(previous, tasks, mint, { states: [], after: true, partner: previous });
 }
 
 /** Runtime IDs in the transitional `parserId:file:seq:n` shape of stage 1. */
@@ -459,27 +459,28 @@ describe('matchWithoutRepeatedIds', () => {
         })),
         minted: [],
         retired: [],
-        consumedHints: runtimeIds.length,
+        guessed: new Map(),
+        disputed: new Set(),
     });
-    const claims = { pending: [{ seq: 1, at: 0, hint: { content: 'k', rows: [] } }], before: null, read: 'k' };
+    const claims: Reading = { states: [{ rows: [] }], after: false, partner: [] };
 
     it('keeps an answer that gives each row its own ID', () => {
         const runs: Array<readonly unknown[]> = [];
-        const guarded = matchWithoutRepeatedIds(hints => {
-            runs.push(hints.pending);
+        const guarded = matchWithoutRepeatedIds(reading => {
+            runs.push(reading.states);
             return answer('r1', 'r2');
         }, claims);
 
         expect(guarded.withoutClaims).toBe(false);
         expect(runs).toHaveLength(1);
-        expect(guarded.result.consumedHints).toBe(2);
+        expect(guarded.result.entries.map(entry => entry.runtimeId)).toEqual(['r1', 'r2']);
     });
 
     it('matches again with no claims when one ID landed on two rows', () => {
         const seen: number[] = [];
-        const guarded = matchWithoutRepeatedIds(hints => {
-            seen.push(hints.pending.length);
-            return hints.pending.length > 0 ? answer('r1', 'r1', 'r2') : answer('r1', 'r3', 'r2');
+        const guarded = matchWithoutRepeatedIds(reading => {
+            seen.push(reading.states.length);
+            return reading.states.length > 0 ? answer('r1', 'r1', 'r2') : answer('r1', 'r3', 'r2');
         }, claims);
 
         expect(seen).toEqual([1, 0]);
@@ -492,7 +493,7 @@ describe('matchWithoutRepeatedIds', () => {
         const guarded = matchWithoutRepeatedIds(() => {
             runs++;
             return answer('r1', 'r1');
-        }, { pending: [], before: null, read: 'k' });
+        }, { states: [], after: true, partner: [] });
 
         expect(runs).toBe(1);
         expect(guarded.withoutClaims).toBe(false);
