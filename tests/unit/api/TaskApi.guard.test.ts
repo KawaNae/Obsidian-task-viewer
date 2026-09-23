@@ -350,6 +350,17 @@ describe('F5: 1要素1行。改行を含む値は、書き込みの前に理由�
         }
     });
 
+    it('status は文字列に限る（数や toString を持つ値を文字に直して書かない）', async () => {
+        const created = createMockApi(undefined);
+        const existing = createMockApi(makeTask({ isReadOnly: false }));
+        for (const bad of [5, { toString: () => 'y' }]) {
+            await expect(created.create({ file: 'test.md', content: 'task', status: bad as unknown as string }))
+                .rejects.toThrow(/status must be a single character a checkbox can hold/);
+            await expect(existing.update({ id: 'test-1', status: bad as unknown as string }))
+                .rejects.toThrow(/status must be a single character a checkbox can hold/);
+        }
+    });
+
     it('update: 改行の status を拒否', async () => {
         const api = createMockApi(makeTask({ isReadOnly: false }));
         await expect(api.update({ id: 'test-1', status: '\n' }))
