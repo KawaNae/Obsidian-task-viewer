@@ -55,6 +55,9 @@ export class EditorObserver {
         if (e.type === 'keydown' && !editsByKey(e as KeyboardEvent)) return;
         const at = this.happenedAt(e);
         this.lastHand = Math.max(this.lastHand, at);
+        // Only a key claims a change heard before it: that is the hotkey's
+        // order. A press is heard before anything it changes.
+        if (e.type !== 'keydown') return;
         const change = this.unclaimed;
         this.unclaimed = null;
         if (change && change.at >= at && change.at - at <= HAND_WINDOW_MS) this.editorSignal.mark(change.path);
@@ -68,16 +71,17 @@ export class EditorObserver {
     ) { }
 
     /**
-     * When an input happened, on the clock {@link now} reads: its time stamp,
-     * from the time origin of the window it happened in (a popped-out window
-     * has its own). Now, for an event that carries none.
+     * When an input happened, on the clock {@link now} reads: now, less how
+     * long ago it happened by the clock of the window it happened in. A
+     * popped-out window keeps its own clock, and its time origin need not
+     * agree with this one's; how long ago is the same on either. Now, for an
+     * event that carries no time stamp.
      */
     private happenedAt(e: Event): number {
         const view = (e as UIEvent).view ?? (e.target as Node | null)?.ownerDocument?.defaultView ?? null;
-        const origin = view?.performance?.timeOrigin;
-        return typeof e.timeStamp === 'number' && e.timeStamp > 0 && typeof origin === 'number'
-            ? origin + e.timeStamp
-            : this.now();
+        const clock = view?.performance;
+        if (typeof e.timeStamp !== 'number' || e.timeStamp <= 0 || typeof clock?.now !== 'function') return this.now();
+        return this.now() - Math.max(0, clock.now() - e.timeStamp);
     }
 
     /**
