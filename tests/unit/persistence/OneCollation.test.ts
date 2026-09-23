@@ -193,6 +193,6 @@ describe('what an update leaves', () => {
         const outcome = await bench.writer.updateTaskInFile(plannedOn(a), checked(a));
 
         expect(outcome.written).toBe(false);
-        expect(outcome.rows.size).toBe(0);
+        expect(outcome).not.toHaveProperty('rows');
     });
 });

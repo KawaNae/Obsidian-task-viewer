@@ -80,7 +80,7 @@ export class InlineTaskWriter {
     private refusedGone(target: PlannedTarget, origin: WriteOrigin): WriteOutcome {
         const refused: Refusal = { file: target.file, reason: { kind: 'gone' }, subject: target.subject };
         this.writes?.for(target.file, origin)?.refused(refused);
-        return { written: false, refused, made: [], rows: new Map() };
+        return { written: false, refused };
     }
 
     async updateLine(filePath: string, at: EditorLine, newContent: string): Promise<void> {
@@ -209,7 +209,7 @@ export class InlineTaskWriter {
         if (!(file instanceof TFile)) {
             const refused: Refusal = { file: target.file, reason: { kind: 'gone' }, subject: target.subject };
             channel?.refused(refused);
-            return { written: false, refused, made: [], rows: new Map() };
+            return { written: false, refused };
         }
 
         return processLines(this.app, file, channel, (draft, _eol, { row, refuse }) => {
