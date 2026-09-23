@@ -1,6 +1,6 @@
 import { describe, it, expect, afterEach, beforeEach } from 'vitest';
 import { Notice } from 'obsidian';
-import { vaultSession, type VaultSession } from '../helpers/vaultSession';
+import { openVault, type VaultSession } from '../helpers/vaultSession';
 
 /**
  * What a fire leaves in the file, byte for byte, pinned before the effects of
@@ -30,10 +30,9 @@ afterEach(() => {
 });
 
 async function open(files: Record<string, string>): Promise<{ contents: Map<string, string>; session: VaultSession }> {
-    const contents = new Map(Object.entries(files));
-    live = vaultSession(contents);
-    await live.scanAll();
-    return { contents, session: live };
+    const opened = await openVault(files);
+    live = opened.session;
+    return opened;
 }
 
 function idOf(session: VaultSession, content: string): string {

@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach } from 'vitest';
-import { vaultSession, makeFile, type VaultSession } from '../../../helpers/vaultSession';
+import { openVault, makeFile, type VaultSession } from '../../../helpers/vaultSession';
 import { processLines } from '../../../../../src/utils/FileLines';
 
 /**
@@ -18,10 +18,9 @@ afterEach(() => {
 });
 
 async function open(lines: string[]): Promise<{ contents: Map<string, string>; session: VaultSession }> {
-    const contents = new Map([[FILE, lines.join('\n')]]);
-    live = vaultSession(contents);
-    await live.scanAll();
-    return { contents, session: live };
+    const opened = await openVault(lines);
+    live = opened.session;
+    return opened;
 }
 
 function channel(session: VaultSession) {

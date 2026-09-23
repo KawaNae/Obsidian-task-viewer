@@ -1,6 +1,6 @@
 import { describe, it, expect, afterEach } from 'vitest';
 import { Notice } from 'obsidian';
-import { vaultSession, type VaultSession } from '../helpers/vaultSession';
+import { openVault, type VaultSession } from '../helpers/vaultSession';
 
 /**
  * Stage F5: a card's update brings the index's copy of the row up to what it
@@ -25,10 +25,9 @@ afterEach(() => {
 });
 
 async function open(lines: string[]): Promise<{ contents: Map<string, string>; session: VaultSession }> {
-    const contents = new Map([[FILE, lines.join('\n')]]);
-    live = vaultSession(contents);
-    await live.scanAll();
-    return { contents, session: live };
+    const opened = await openVault(lines);
+    live = opened.session;
+    return opened;
 }
 
 function idOf(session: VaultSession, content: string): string {

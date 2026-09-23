@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach } from 'vitest';
-import { vaultSession, type VaultSession } from '../helpers/vaultSession';
+import { openVault, type VaultSession } from '../helpers/vaultSession';
 import type { Refusal } from '../../../src/utils/FileLines';
 import { plannedOn } from '../../../src/services/persistence/TaskRefs';
 
@@ -24,9 +24,9 @@ afterEach(() => {
 });
 
 async function open(text: string): Promise<VaultSession> {
-    contents = new Map([[FILE, text]]);
-    live = vaultSession(contents);
-    await live.scanAll();
+    const opened = await openVault(text);
+    contents = opened.contents;
+    live = opened.session;
     return live;
 }
 
