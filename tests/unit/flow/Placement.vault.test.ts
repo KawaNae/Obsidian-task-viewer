@@ -90,13 +90,13 @@ describe('a note that opens with a byte order mark', () => {
     // scan and the write read line 0 differently; and the next instance took
     // its indentation from line 0 — the mark with it — and went in above it.
     it('keeps one mark, at the start, when its first line fires', async () => {
-        const { contents, session } = await open(['﻿' + ROW, '\t- [ ] 子', '']);
+        const { contents, session } = await open(['\uFEFF' + ROW, '\t- [ ] 子', '']);
 
         await fire(session);
 
         const text = contents.get(FILE)!;
-        expect(text.split('﻿')).toHaveLength(2);
-        expect(text).toBe(['﻿' + NEXT, DONE, '\t- [ ] 子', ''].join('\n'));
+        expect(text.split('\uFEFF')).toHaveLength(2);
+        expect(text).toBe(['\uFEFF' + NEXT, DONE, '\t- [ ] 子', ''].join('\n'));
         expect(Notice.messages).toEqual([]);
         // The tab child is read under the row that fired, which the mark on
         // its line once made as deep as the child.
@@ -120,5 +120,28 @@ describe('a next instance with nowhere in the body to go', () => {
         const checked = before!.replace('  - [ ] 対象', '  - [x] 対象');
         expect(contents.get(FILE)).toBe(checked);
         expect(Notice.messages).toEqual([t('notice.writeTargetUnplaceable', { subject: '対象' })]);
+    });
+
+    it('refuses a move to the end of a note that ends inside a fence that never closes', async () => {
+        // Appended past the opening line, the row and its child would be code.
+        const note = ['# note', '- [ ] 対象 @2026-09-21 ==> move([[note]])', '\t- [ ] 子', '```', 'code', ''];
+        const { contents, session } = await open(note);
+        const before = contents.get(FILE)!;
+
+        await fire(session);
+
+        expect(contents.get(FILE)).toBe(before.replace('- [ ] 対象', '- [x] 対象'));
+        expect(Notice.messages).toEqual([t('notice.writeTargetUnplaceable', { subject: '対象' })]);
+    });
+});
+
+describe('the end of a note', () => {
+    it('keeps its final terminator when a move carries a row there', async () => {
+        const note = ['# note', '- [ ] 対象 @2026-09-21 ==> move([[note]])', '\t- [ ] 子', '- [ ] 下', ''];
+        const { contents, session } = await open(note);
+
+        await fire(session);
+
+        expect(contents.get(FILE)).toBe(['# note', '- [ ] 下', '- [x] 対象 @2026-09-21', '\t- [ ] 子', ''].join('\n'));
     });
 });

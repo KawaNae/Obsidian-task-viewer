@@ -92,8 +92,8 @@ describe('the origin half of a move says what it did', () => {
 
         await b.writer.applyToTask(targetOf(b.taskAt(1)), [{ kind: 'move-to-end', text: '- [x] 移動する @2026-09-21' }]);
 
-        expect(b.lines()).toEqual(['# note', '## archive', '- [x] 移動する @2026-09-21']);
-        expect(only(b.filed).edits.map(edit => edit.kind)).toEqual(['removed', 'carried', 'replaced', 'removed']);
+        expect(b.lines()).toEqual(['# note', '## archive', '- [x] 移動する @2026-09-21', '']);
+        expect(only(b.filed).edits.map(edit => edit.kind)).toEqual(['carried', 'replaced', 'removed']);
     });
 });
 

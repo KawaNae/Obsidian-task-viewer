@@ -163,7 +163,7 @@ describe('CE3: a child edited between the archive and the source\'s write', () =
         await flowSettled(live, OTHER);
 
         expect(contents.get(FILE)).toBe(source.replace('\t- [ ] c', '\t- [ ] c edited'));
-        expect(contents.get(OTHER)).toBe(['# other', '- [x] A @2026-09-21', '\t- [ ] c'].join('\n'));
+        expect(contents.get(OTHER)).toBe(['# other', '- [x] A @2026-09-21', '\t- [ ] c', ''].join('\n'));
         expect(Notice.messages).toEqual([t('notice.moveOriginKept', {
             dest: 'other', reason: t('notice.moveOriginChanged'), subject: 'A',
         })]);

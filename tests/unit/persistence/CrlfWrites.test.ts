@@ -137,9 +137,10 @@ describe('a note written in CRLF', () => {
         await vi.waitFor(() => expect(contents.get('archive.md')).toContain('子2'));
         await live.settle('archive.md');
 
-        // Heading, task, child, child: three terminators, and the appended
-        // block ends without one — as an append to a note always has.
-        expect(terminators(contents.get('archive.md')!)).toEqual({ crlf: 3, lf: 0 });
+        // Heading, task, child, child: four terminators — the append goes in
+        // before the note's own trailing terminator, which stays the note's
+        // last character, as any append now does.
+        expect(terminators(contents.get('archive.md')!)).toEqual({ crlf: 4, lf: 0 });
     });
 });
 

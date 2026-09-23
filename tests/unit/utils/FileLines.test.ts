@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { TFile } from 'obsidian';
-import { appendLines, joinLines, processLines, recordEdits, replayEdits, splitLines } from '../../../src/utils/FileLines';
+import { joinLines, processLines, recordEdits, replayEdits, splitLines } from '../../../src/utils/FileLines';
 import type { LineEdit, Located, Refusal, TaskRef, WriteChannel } from '../../../src/utils/FileLines';
 
 /**
@@ -15,9 +15,9 @@ describe('splitLines', () => {
     });
 
     it('takes a byte order mark off the first line and says it was there', () => {
-        expect(splitLines('﻿- [ ] a\nb\n')).toEqual({ lines: ['- [ ] a', 'b', ''], eol: '\n', bom: true });
+        expect(splitLines('\uFEFF- [ ] a\nb\n')).toEqual({ lines: ['- [ ] a', 'b', ''], eol: '\n', bom: true });
         // Only at the very start: a mark further in is text.
-        expect(splitLines('a\n﻿b').lines).toEqual(['a', '﻿b']);
+        expect(splitLines('a\n\uFEFFb').lines).toEqual(['a', '\uFEFFb']);
     });
 
     it('leaves an LF file alone', () => {
@@ -68,26 +68,6 @@ describe('joinLines', () => {
     it('rewrites a mixed file in one terminator', () => {
         const { lines, eol } = splitLines('a\r\nb\nc\n');
         expect(joinLines(lines, eol)).toBe('a\nb\nc\n');
-    });
-});
-
-describe('appendLines', () => {
-    it('replaces the empty last element of a terminated file', () => {
-        const lines = ['a', ''];
-        expect(appendLines(lines, ['b'])).toBe(1);
-        expect(lines).toEqual(['a', 'b']);
-    });
-
-    it('follows the last line of an unterminated file', () => {
-        const lines = ['a'];
-        expect(appendLines(lines, ['b'])).toBe(1);
-        expect(lines).toEqual(['a', 'b']);
-    });
-
-    it('fills an empty file', () => {
-        const lines = [''];
-        expect(appendLines(lines, ['a', 'b'])).toBe(0);
-        expect(lines).toEqual(['a', 'b']);
     });
 });
 
@@ -164,7 +144,7 @@ describe('processLines', () => {
     });
 
     it('hands the edit no byte order mark, and puts the one mark back', async () => {
-        const h = harness('﻿- [ ] a\r\n');
+        const h = harness('\uFEFF- [ ] a\r\n');
         let seen: string[] = [];
         await processLines(h.app, h.file, (lines, _eol, { edits }) => {
             seen = [...lines];
@@ -173,7 +153,7 @@ describe('processLines', () => {
         });
 
         expect(seen).toEqual(['- [ ] a', '']);
-        expect(h.text()).toBe('﻿- [ ] new\r\n- [ ] a\r\n');
+        expect(h.text()).toBe('\uFEFF- [ ] new\r\n- [ ] a\r\n');
     });
 
     it('hands the edit lines with no CR on them', async () => {
@@ -628,23 +608,6 @@ describe('LineEdits.splice', () => {
         expect(lines).toEqual(['a', 'b']);
     });
 
-    it('reports the empty last element an append replaced', async () => {
-        // A terminated file ends in an empty element and the body takes its
-        // place, so an append is a removal and an insert — not an insert.
-        const h = harness('a\n');
-        const log = writeSink();
-
-        await processLines(h.app, h.file, (lines, _eol, { edits }) => {
-            appendLines(lines, ['b'], edits);
-            return lines;
-        }, log.channel);
-
-        expect(h.text()).toBe('a\nb');
-        expect(log.standing()[0].edits).toEqual([
-            { kind: 'removed', at: 1, count: 1 },
-            { kind: 'inserted', at: 1, count: 1 },
-        ]);
-    });
 });
 
 describe('LineEdits.carry', () => {

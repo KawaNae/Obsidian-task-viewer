@@ -54,12 +54,13 @@ export class HeadingInserter {
             insertedLine = headerIndex + 1;
             out.splice(insertedLine, 0, line);
         } else {
-            if (out.length > 0 && out[out.length - 1].trim() !== '') {
-                out.push('');
-            }
-            out.push(fullHeader);
-            insertedLine = out.length;
-            out.push(line);
+            // At the end, before the empty element a terminated file splits
+            // into, so the file still ends with its terminator. One blank line
+            // sets the new heading off from the text above it.
+            let at = out.length > 0 && out[out.length - 1] === '' ? out.length - 1 : out.length;
+            if (at > 0 && out[at - 1].trim() !== '') out.splice(at++, 0, '');
+            out.splice(at, 0, fullHeader, line);
+            insertedLine = at + 1;
         }
 
         return { lines: out, insertedLine };

@@ -109,6 +109,28 @@ describe('Placement.groupHead', () => {
     });
 });
 
+describe('Placement.end', () => {
+    it('is the index of the trailing empty element of a terminated file', () => {
+        expect(Placement.end(['a', ''])).toBe(1);
+    });
+
+    it('follows the last line of an unterminated file', () => {
+        expect(Placement.end(['a'])).toBe(1);
+    });
+
+    it('is 0 for an empty file', () => {
+        expect(Placement.end([''])).toBe(0);
+    });
+
+    it('is null when the note ends inside an unclosed fence', () => {
+        expect(Placement.end(['text', '```', 'code', ''])).toBeNull();
+    });
+
+    it('is past a fence that closes at the end', () => {
+        expect(Placement.end(['```', 'x', '```', ''])).toBe(3);
+    });
+});
+
 describe('Placement.inBody', () => {
     it('refuses above the end of the frontmatter', () => {
         const lines = ['---', 'a: 1', '---', 'body'];

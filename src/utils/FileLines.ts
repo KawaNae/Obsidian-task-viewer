@@ -17,7 +17,7 @@ export interface SplitLines {
 }
 
 /** U+FEFF, the byte order mark a note may open with. */
-const BOM = '﻿';
+const BOM = '\uFEFF';
 
 /**
  * Split file content into lines, dropping the CR of a CRLF terminator.
@@ -61,25 +61,6 @@ export function splitLines(content: string): SplitLines {
 /** Put the lines back together with the terminator the file is written in. */
 export function joinLines(lines: string[], eol: Eol): string {
     return lines.join(eol);
-}
-
-/**
- * Append `body` to `lines` and answer the index its first line landed on.
- *
- * A file that ends with a terminator has an empty last element, and the body
- * replaces it instead of following it — otherwise every append to a normally
- * terminated note would open with a blank line. That replacement is why an
- * append reports through {@link LineEdits} rather than as a plain insert: the
- * empty element is a line of the array like any other, and a report that left
- * it out would not account for the file.
- *
- * `edits` has to be the one built over *this* array (see {@link recordEdits}).
- */
-export function appendLines(lines: string[], body: string[], edits?: LineEdits): number {
-    const at = lines[lines.length - 1] === '' ? lines.length - 1 : lines.length;
-    if (edits) edits.splice(at, lines.length - at, ...body);
-    else lines.splice(at, lines.length - at, ...body);
-    return at;
 }
 
 /**
