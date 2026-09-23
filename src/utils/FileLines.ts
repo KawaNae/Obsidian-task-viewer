@@ -1,5 +1,6 @@
 import type { App, TFile } from 'obsidian';
 import { logError } from '../log/log';
+import { LINE_BREAK, holdsLineBreak } from './LineBreak';
 import { ON_RECORD, readsAsPlanned, subtreeAt, type OnRecord, type RowBasis } from '../services/persistence/RowBasis';
 
 /**
@@ -21,7 +22,8 @@ export interface SplitLines {
 const BOM = '\uFEFF';
 
 /**
- * Split file content into lines, dropping the CR of a CRLF terminator.
+ * Split file content into lines at every terminator Obsidian reads as one
+ * (`LINE_BREAK`: CRLF, LF, a CR on its own).
  *
  * Every read and every write goes through here, so "what a line is" has one
  * answer. It had two: the scanner dropped the CR and the writers did not, so
@@ -40,21 +42,16 @@ export function splitLines(content: string): SplitLines {
     // the write read line 0 of the same note as two different lines — and a
     // line written from line 0's indentation opened with a second mark.
     const bom = content.startsWith(BOM);
-    const lines = (bom ? content.slice(BOM.length) : content).split('\n');
+    const text = bom ? content.slice(BOM.length) : content;
+    // A CR on its own ends a line too, as it does in the editor (`LINE_BREAK`).
+    // Kept inside the line, it put every line below it one number off the
+    // editor's, and a write addressed by the editor's number found the same
+    // text there on another row.
+    const lines = text.split(LINE_BREAK);
     const terminators = lines.length - 1;
-    let crlf = 0;
-
-    for (let i = 0; i < lines.length; i++) {
-        if (!lines[i].endsWith('\r')) continue;
-        // Always off the text. A CR the parser can see is a CR the parser
-        // refuses: its line regex ends at `$` and `.` does not match CR, so a
-        // line carrying one is not read as a task at all.
-        lines[i] = lines[i].slice(0, -1);
-        // Only the lines that have a terminator get a vote. The last element
-        // has none, and letting its stray CR count would rewrite an entire LF
-        // file to CRLF on the next write.
-        if (i < terminators) crlf++;
-    }
+    // A lone CR votes with LF: Obsidian saves such a note with LF, and
+    // counting it for CRLF would rewrite a whole LF file.
+    const crlf = text.split('\r\n').length - 1;
 
     return { lines, eol: crlf > terminators - crlf ? '\r\n' : '\n', bom };
 }
@@ -188,7 +185,7 @@ export class LineBreakInLine extends Error {
 }
 
 function oneLine(text: string): void {
-    if (/[\r\n]/.test(text)) throw new LineBreakInLine(text);
+    if (holdsLineBreak(text)) throw new LineBreakInLine(text);
 }
 
 /** What a draft does to its array, each change reported as it is made. */
