@@ -193,6 +193,22 @@ describe('Placement.inBody', () => {
         expect(Placement.inBody(lines, 3)).toBeNull();
     });
 
+    it('refuses inside a fence that only the reading within a subtree sees', () => {
+        // Indented under P by tabs, the fence is invisible to the
+        // whole-document reading; the parser reads it within P's subtree.
+        const lines = ['- [ ] P', '\t- [ ] Q', '\t\t```', '\tx', '\t\t```', '\t- [ ] R'];
+        expect(Placement.inBody(lines, 3)).toBeNull();
+        expect(Placement.inBody(lines, 4)).toBeNull();
+        expect(Placement.inBody(lines, 2)).toBe(2);
+        expect(Placement.inBody(lines, 5)).toBe(5);
+    });
+
+    it('ends a subtree fence that never closes with the subtree', () => {
+        const lines = ['- [ ] P', '\t```', '\tx', '- [ ] next'];
+        expect(Placement.inBody(lines, 2)).toBeNull();
+        expect(Placement.inBody(lines, 3)).toBe(3);
+    });
+
     it('reads a first line of --- that nothing closes as body', () => {
         expect(Placement.inBody(['---', '- [ ] a'], 0)).toBe(0);
     });

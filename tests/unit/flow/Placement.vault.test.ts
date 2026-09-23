@@ -122,6 +122,19 @@ describe('a next instance with nowhere in the body to go', () => {
         expect(Notice.messages).toEqual([t('notice.writeTargetUnplaceable', { subject: '対象' })]);
     });
 
+    it('is refused when the line its group is under is inside a fence in the parent\'s subtree', async () => {
+        // The fence is indented under P, so only the reading within P's
+        // subtree sees it; the first line shallower than the row is in it.
+        const note = ['# note', '- [ ] P', '\t- [ ] Q', '\t\t```', '\tx', '\t\t```', `\t\t${ROW}`, ''];
+        const { contents, session } = await open(note);
+        const before = contents.get(FILE)!;
+
+        await fire(session);
+
+        expect(contents.get(FILE)).toBe(before.replace('\t\t- [ ] 対象', '\t\t- [x] 対象'));
+        expect(Notice.messages).toEqual([t('notice.writeTargetUnplaceable', { subject: '対象' })]);
+    });
+
     it('refuses a move to the end of a note that ends inside a fence that never closes', async () => {
         // Appended past the opening line, the row and its child would be code.
         const note = ['# note', '- [ ] 対象 @2026-09-21 ==> move([[note]])', '\t- [ ] 子', '```', 'code', ''];
