@@ -123,3 +123,18 @@ describe('two scopes whose rows were rewritten into each other\'s words', () => 
         expect(idOf(session, 'A')).toBe(q);
     });
 });
+
+describe('a root rewritten into its child\'s words', () => {
+    // The child reads as the root now reads (content and date), so it is a
+    // stronger candidate for the root's rung-4 pair. But its own twin is the
+    // child below the pair: both subtrees move with the pair, and that
+    // evidence agrees with it. Counted against the pair, it would hold the
+    // pair until nothing more could be decided, and the root would lose its
+    // name to a scope that had not opened yet.
+    it('the root and its child keep their names', async () => {
+        const session = await open(['- [ ] A @2026-09-21', '\t- [x] B @2026-09-21', '']);
+        const [root, child] = tasks(session).map(task => task.id);
+        await fromOutside(session, ['- [ ] B @2026-09-21', '\t- [x] B @2026-09-21', '']);
+        expect(tasks(session).map(task => task.id)).toEqual([root, child]);
+    });
+});

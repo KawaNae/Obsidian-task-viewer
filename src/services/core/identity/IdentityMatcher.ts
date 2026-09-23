@@ -254,6 +254,18 @@ function pairByLadder(
         }
     };
     const stronger = strongerCandidates(partner, ordered, fingerprints);
+    const below = <T>(root: T, childrenOf: (at: T) => readonly T[]): Set<T> => {
+        const found = new Set<T>();
+        const walk = (at: T): void => {
+            for (const child of childrenOf(at)) {
+                if (child === root || found.has(child)) continue;
+                found.add(child);
+                walk(child);
+            }
+        };
+        walk(root);
+        return found;
+    };
     run();
     for (let decided = true; decided && deferred.length > 0;) {
         decided = false;
@@ -267,7 +279,23 @@ function pairByLadder(
                 deferred.splice(i--, 1);
                 continue;
             }
-            if (stronger.forPrevious(entry).some(free) || stronger.forCurrent(task).some(free)) continue;
+            // A row below the pair is not evidence against it when its stronger
+            // key points below the other side of the same pair: a root rewritten
+            // into its child's words would otherwise be blocked by that child,
+            // whose own scope — unopened while the pair is held — pairs it with
+            // its twin below. Both subtrees move with the pair, so that evidence
+            // agrees with it. A row below one side whose key points anywhere
+            // else still blocks (the child a card's delete cut off, the root a
+            // new parent took in).
+            const underEntry = below<LedgerEntry>(entry, at => prevChildren.get(at.runtimeId) ?? []);
+            const underTask = below<Task>(task, at => childrenOf.get(at) ?? []);
+            const against = (row: LedgerEntry | Task): boolean => {
+                if (!free(row)) return false;
+                return 'runtimeId' in row
+                    ? !(underEntry.has(row) && stronger.forPrevious(row).some(twin => underTask.has(twin)))
+                    : !(underTask.has(row) && stronger.forCurrent(row).some(twin => underEntry.has(twin)));
+            };
+            if (stronger.forPrevious(entry).some(against) || stronger.forCurrent(task).some(against)) continue;
             deferred.splice(i--, 1);
             // A line a bucket left over by position hands that on, as in the ladder.
             const left = leftByPosition.get(task);
