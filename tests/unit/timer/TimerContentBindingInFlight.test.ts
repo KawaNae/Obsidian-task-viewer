@@ -1,0 +1,90 @@
+import { describe, expect, it, vi, afterEach } from 'vitest';
+import { TimerContentBinding, CONTENT_WRITE_DEBOUNCE_MS } from '../../../src/timer/TimerContentBinding';
+import type { TimerContext } from '../../../src/timer/TimerContext';
+import type { TimerInstance } from '../../../src/timer/TimerInstance';
+import { makeTask } from '../helpers/makeTask';
+
+/**
+ * A flush that arrives while the typed name is being written answers with that
+ * write's outcome, not with a guess.
+ *
+ * Stopping a timer flushes the name and records only if it was written
+ * (`TimerLifecycle.flushAndRecord`). A flush that answered "written" without
+ * waiting would let the stop record past a name that was then refused, and
+ * the user would hear twice: the refusal, then the record.
+ */
+
+const TAIL_ID = 'tv-inline:notes/a.md:blk:tv-t-1';
+
+function harness() {
+    let settle!: (written: boolean) => void;
+    const calls: string[] = [];
+    const timer = {
+        id: 'timer-1',
+        taskId: 'tv-inline:notes/a.md:ln:3',
+        taskName: '器タスク',
+        taskFile: 'notes/a.md',
+        recordMode: 'child',
+        timerType: 'countup',
+        runState: 'running',
+    } as unknown as TimerInstance;
+    let tail = makeTask({ id: TAIL_ID, file: 'notes/a.md', line: 3, content: '器タスク', blockId: 'tv-t-1' });
+    const ctx = {
+        timers: new Map([[timer.id, timer]]),
+        recorder: { resolveTailRecord: () => tail },
+        plugin: {
+            getTaskIndex: () => ({
+                updateTask: (_id: string, u: Record<string, unknown>) => {
+                    calls.push(u.content as string);
+                    return new Promise<boolean>((resolve) => {
+                        settle = (written) => {
+                            // A write that lands is on the line, as the index would read it.
+                            if (written) tail = { ...tail, content: u.content as string };
+                            resolve(written);
+                        };
+                    });
+                },
+            }),
+        },
+        persistTimersToStorage: () => { /* not measured */ },
+    } as unknown as TimerContext;
+    const binding = new TimerContentBinding(ctx);
+    const input = { value: '器タスク', oninput: null as (() => void) | null, ownerDocument: { activeElement: null } };
+    binding.bind(timer, input as unknown as HTMLInputElement);
+    return {
+        binding, timer, calls,
+        type(value: string) { input.value = value; input.oninput?.(); },
+        settle: (written: boolean) => settle(written),
+    };
+}
+
+describe('TimerContentBinding: a flush during a write', () => {
+    afterEach(() => { vi.useRealTimers(); });
+
+    it('answers not written when the write in flight is refused, and keeps the name as the draft', async () => {
+        vi.useFakeTimers();
+        const h = harness();
+        h.type('新しい名前');
+        await vi.advanceTimersByTimeAsync(CONTENT_WRITE_DEBOUNCE_MS + 1);
+        expect(h.calls).toEqual(['新しい名前']);
+
+        const flushed = h.binding.flush(h.timer);
+        h.settle(false);
+
+        expect(await flushed).toBe(false);
+        expect(h.timer.pendingContent).toBe('新しい名前');
+    });
+
+    it('answers written when the write in flight lands', async () => {
+        vi.useFakeTimers();
+        const h = harness();
+        h.type('新しい名前');
+        await vi.advanceTimersByTimeAsync(CONTENT_WRITE_DEBOUNCE_MS + 1);
+
+        const flushed = h.binding.flush(h.timer);
+        h.settle(true);
+
+        expect(await flushed).toBe(true);
+        expect(h.timer.pendingContent).toBeUndefined();
+    });
+});

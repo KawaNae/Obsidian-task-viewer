@@ -22,8 +22,11 @@ interface BindingState {
     /** 未書き込みの素の名前。無いときは書くものが無い。 */
     pending?: string;
     timeoutId?: ReturnType<typeof setTimeout>;
-    /** 書き込み中。返るまで次を走らせない（行の取り違えを防ぐ）。 */
-    writing: boolean;
+    /**
+     * 書き込み中の drain。返るまで次を走らせない（行の取り違えを防ぐ）。
+     * 途中で呼ばれた flush は、これが書き切れたかを待って答える。
+     */
+    draining?: Promise<boolean>;
 }
 
 /** 貼り付け・IME 由来の改行を含め、記録前に必ず 1 行へ畳む。 */
@@ -141,7 +144,7 @@ export class TimerContentBinding {
     private stateFor(timerId: string): BindingState {
         let state = this.states.get(timerId);
         if (!state) {
-            state = { writing: false };
+            state = {};
             this.states.set(timerId, state);
         }
         return state;
@@ -160,22 +163,27 @@ export class TimerContentBinding {
      * 書き込み中に来た入力は `pending` に上書きされ、1 本目が返ってから続けて
      * 走る。並べて投げると、行を引き直す前のスナップショットで書くことになる。
      */
-    private async drain(timer: TimerInstance): Promise<boolean> {
+    private drain(timer: TimerInstance): Promise<boolean> {
         const state = this.stateFor(timer.id);
-        // 書き込み中の drain が残りを書く。その成否はそちらが持つ。
-        if (state.writing) return true;
+        // 書き込み中の drain が、いま積まれた分まで書く。その成否を待って答える。
+        // 待たずに書けたと答えると、停止は名前の書き込みの結果を知らずに記録へ
+        // 進み、名前が拒否されたときに通知が拒否と成功の2回になる。
+        if (state.draining) return state.draining;
 
-        state.writing = true;
-        try {
-            while (state.pending !== undefined) {
-                const next = state.pending;
-                state.pending = undefined;
-                if (!(await this.writeOnce(timer, next))) return false;
+        const draining = (async () => {
+            try {
+                while (state.pending !== undefined) {
+                    const next = state.pending;
+                    state.pending = undefined;
+                    if (!(await this.writeOnce(timer, next))) return false;
+                }
+                return true;
+            } finally {
+                state.draining = undefined;
             }
-            return true;
-        } finally {
-            state.writing = false;
-        }
+        })();
+        state.draining = draining;
+        return draining;
     }
 
     /** @returns whether the name was written, or had nothing to be written to yet. */
