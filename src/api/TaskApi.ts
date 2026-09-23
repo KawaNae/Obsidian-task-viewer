@@ -48,6 +48,16 @@ import {
     type StartHourResult,
 } from './TaskApiTypes';
 
+/**
+ * Whether a value holds a line break. Every value here becomes part of one
+ * line of a note; a break would split it in two, and the write layer refuses
+ * such a line whole (`LineBreakInLine`). Refused here instead, where the
+ * caller can be told which parameter it was.
+ */
+function hasLineBreak(value: string): boolean {
+    return /[\r\n]/.test(value);
+}
+
 export const API_HELP_TEXT = `
 Task Viewer API Reference
 =========================
@@ -437,9 +447,11 @@ export class TaskApi {
         assertParams(params, CREATE_SCHEMA, 'create');
 
         const statusChar = params.status || ' ';
-        if (statusChar.length !== 1) throw new TaskApiError(`status must be a single character, got: "${statusChar}"`);
+        if (statusChar.length !== 1 || hasLineBreak(statusChar)) throw new TaskApiError(`status must be a single character other than a line break, got: ${JSON.stringify(statusChar)}`);
 
-        if (params.content.includes('\n')) throw new TaskApiError('content must not contain newlines');
+        if (hasLineBreak(params.content)) throw new TaskApiError('content must not contain line breaks (\\r or \\n)');
+
+        if (params.heading !== undefined && hasLineBreak(params.heading)) throw new TaskApiError('heading must not contain line breaks (\\r or \\n)');
 
         const file = this.plugin.app.vault.getAbstractFileByPath(params.file);
         if (!(file instanceof TFile)) throw new TaskApiError(`File not found: ${params.file}`);
@@ -495,12 +507,12 @@ export class TaskApi {
         const updates: Partial<Task> = {};
 
         if (params.content !== undefined) {
-            if (params.content.includes('\n')) throw new TaskApiError('content must not contain newlines');
+            if (hasLineBreak(params.content)) throw new TaskApiError('content must not contain line breaks (\\r or \\n)');
             updates.content = params.content;
         }
         if (params.status !== undefined) {
             const sc = params.status === 'none' ? ' ' : params.status;
-            if (sc.length !== 1) throw new TaskApiError(`status must be a single character or "none", got: "${params.status}"`);
+            if (sc.length !== 1 || hasLineBreak(sc)) throw new TaskApiError(`status must be a single character other than a line break, or "none", got: ${JSON.stringify(params.status)}`);
             updates.statusChar = sc;
         }
 
@@ -652,7 +664,7 @@ export class TaskApi {
      */
     async insertChildTask(params: InsertChildTaskParams): Promise<InsertChildTaskResult> {
         assertParams(params, INSERT_CHILD_TASK_SCHEMA, 'insertChildTask');
-        if (params.content.includes('\n')) throw new TaskApiError('content must not contain newlines');
+        if (hasLineBreak(params.content)) throw new TaskApiError('content must not contain line breaks (\\r or \\n)');
         const task = this.readService.getTask(params.parentId);
         if (!task) throw new TaskApiError(`Task not found: ${params.parentId}`);
         if (task.isReadOnly) throw new TaskApiError(`Task ${params.parentId} is read-only (parserId=${task.parserId})`);

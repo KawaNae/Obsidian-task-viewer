@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { TFile } from 'obsidian';
-import { draftOver, joinLines, processLines, replayEdits, splitLines } from '../../../src/utils/FileLines';
+import { LineBreakInLine, draftOver, joinLines, processLines, replayEdits, splitLines } from '../../../src/utils/FileLines';
 import type { LineEdit, Located, Refusal, TaskRef, WriteChannel } from '../../../src/utils/FileLines';
 
 /**
@@ -673,5 +673,34 @@ describe('LineEdits.carry', () => {
             expect(h.text()).toBe(takeAway ? 'a\nb\nrow, moved' : 'a\nrow\nb\nrow, moved');
             expect(log.standing()).toHaveLength(takeAway ? 1 : 0);
         }
+    });
+});
+
+describe('one element, one line', () => {
+    // An element holding a break is written as two lines while the report,
+    // the claim and the content key count one. The draft takes none.
+    const breaks = ['a\nb', 'a\rb', 'a\r\nb', '\n'];
+
+    it.each(breaks)('the draft refuses %j through splice, rewrite and carry, and changes nothing', (text) => {
+        const lines = ['x', 'y'];
+        const { draft, reported } = draftOver(lines);
+        expect(() => draft.splice(1, 0, 'ok', text)).toThrow(LineBreakInLine);
+        expect(() => draft.rewrite(0, text)).toThrow(LineBreakInLine);
+        expect(() => draft.carry(2, [{ from: 0, text }])).toThrow(LineBreakInLine);
+        expect(lines).toEqual(['x', 'y']);
+        expect(reported).toEqual([]);
+    });
+
+    it('a write that hands one over writes nothing and files nothing', async () => {
+        const h = harness('- [ ] a\n');
+        const log = writeSink();
+        // In a development build the write throws, so the bug is seen; a
+        // release build logs it and leaves the file as it was.
+        await expect(processLines(h.app, h.file, log.channel, (draft) => {
+            draft.splice(1, 0, '- [ ] b\n- [ ] c');
+            return true;
+        })).rejects.toThrow(/line break/);
+        expect(h.text()).toBe('- [ ] a\n');
+        expect(log.standing()).toEqual([]);
     });
 });
