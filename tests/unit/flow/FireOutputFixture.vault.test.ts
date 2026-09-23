@@ -10,6 +10,9 @@ import { vaultSession, type VaultSession } from '../helpers/vaultSession';
  * the next instance, then the strip or the delete, each resolving the task
  * again. Folding them must change how many writes there are and nothing about
  * what they leave.
+ *
+ * Placement (F4) changed what some of them leave, and only where it meant
+ * to: a next instance written above the frontmatter now goes below it.
  */
 
 const FILE = 'note.md';
@@ -60,8 +63,8 @@ function bytes(contents: Map<string, string>): Record<string, string[]> {
     return out;
 }
 
-// The note under frontmatter pins the next instance going above the
-// frontmatter, which is placement (F4), not this stage's to change.
+// The note under frontmatter pinned the next instance going above the
+// frontmatter until placement (F4) kept it in the body (CY1).
 const GEN = ['```tv-gen 週報', '- [ ] 対象', '\t- [ ] 生成子', '```', ''];
 
 /** Each note holds one row worded `対象`, the one that fires. */

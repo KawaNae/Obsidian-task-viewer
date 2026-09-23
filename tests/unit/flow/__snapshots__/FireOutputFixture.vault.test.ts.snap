@@ -150,10 +150,10 @@ exports[`a completion fire leaves the same bytes > state carried to the next ins
 exports[`a completion fire leaves the same bytes > under frontmatter 1`] = `
 {
   "note.md": [
-    ""- [ ] 対象 @2026-09-28 ==> every mon"",
     ""---"",
     ""tv-color: ff0000"",
     ""---"",
+    ""- [ ] 対象 @2026-09-28 ==> every mon"",
     ""- [x] 対象 @2026-09-21"",
     ""\\t- [ ] 子"",
     """",

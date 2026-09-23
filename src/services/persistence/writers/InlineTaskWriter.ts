@@ -5,6 +5,7 @@ import { TaskLineClassifier } from '../../parsing/utils/TaskLineClassifier';
 import { collectFlowLineIndicesInFile, flowLineTail } from '../../flow/FlowLineScanner';
 import { FileOperations } from '../utils/FileOperations';
 import { ChildPropertyLineEditor } from '../utils/ChildPropertyLineEditor';
+import { Placement } from '../utils/Placement';
 import type { PropertyOp } from '../PropertyUpdatePlanner';
 import { renderFlowInstance } from '../FlowInstanceLines';
 import { collectGenBlocks } from '../../parsing/gen/GenBlockCollector';
@@ -211,7 +212,9 @@ export class InlineTaskWriter {
                 if (i === 0 && target.basis && !this.readsAsPlanned(lines, line, target.basis)) {
                     return refuse({ kind: 'changed' }, target.subject);
                 }
-                this.applyOp(lines, line, op, edits);
+                if (!this.applyOp(lines, line, op, edits)) {
+                    return refuse({ kind: 'unplaceable' }, target.subject);
+                }
             }
             return lines;
         }, channel);
@@ -250,12 +253,19 @@ export class InlineTaskWriter {
         return true;
     }
 
-    private applyOp(lines: string[], line: number, op: TaskOp, edits: LineEdits): void {
+    /**
+     * Apply one op to the row at `line`. False when the op's lines have
+     * nowhere in the body to go: the write is then refused whole, and the
+     * ops before this one are not written either.
+     */
+    private applyOp(lines: string[], line: number, op: TaskOp, edits: LineEdits): boolean {
         switch (op.kind) {
             case 'insert-instance': {
+                const at = Placement.groupHead(lines, line);
+                if (at === null) return false;
                 const rendered = renderFlowInstance(this.fileOps, lines, line, op.insert);
-                edits.splice(this.fileOps.findSiblingGroupStart(lines, line), 0, ...rendered);
-                return;
+                edits.splice(at, 0, ...rendered);
+                return true;
             }
             case 'strip-flow': {
                 // Every flow line is below the row (the scan starts past it
@@ -269,7 +279,7 @@ export class InlineTaskWriter {
                 lines[line] = indent + op.text.trim();
                 // Losing `==>` rewrites the text; the row is the one that fired.
                 edits.replaced(line);
-                return;
+                return true;
             }
             case 'move-to-end': {
                 // The row and what goes with it are carried to the end — past
@@ -288,12 +298,12 @@ export class InlineTaskWriter {
                 if (rest.length > 0) edits.splice(at + 1, 0, ...rest);
                 edits.carry(at + 1 + rest.length, children);
                 edits.splice(line, 1 + childrenLines.length);
-                return;
+                return true;
             }
             case 'remove': {
                 const { childrenLines } = this.fileOps.collectChildrenFromLines(lines, line);
                 edits.splice(line, 1 + childrenLines.length);
-                return;
+                return true;
             }
         }
     }

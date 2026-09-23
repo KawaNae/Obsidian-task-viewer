@@ -584,7 +584,8 @@ describe('F2-counter3: availability', () => {
         bench.edit(['メモ', DONE, FLOW, '']);
         const outcome = await bench.writer.applyToTask(targetOf(rec), fire(rec, TODO));
         expect(outcome.written).toBe(true);
-        expect(bench.lines()).toEqual([TODO, FLOW, 'メモ', DONE, '']);
+        // The paragraph is not a sibling: the next instance goes below it.
+        expect(bench.lines()).toEqual(['メモ', TODO, FLOW, DONE, '']);
         expect(bench.refused).toEqual([]);
     });
 

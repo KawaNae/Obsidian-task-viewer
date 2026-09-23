@@ -1,3 +1,5 @@
+import { Outline } from '../../parsing/utils/Outline';
+
 /**
  * Frontmatter の行レベル編集ユーティリティ。
  * vault.process() コールバック内で使用する静的メソッドを提供。
@@ -14,11 +16,9 @@ export class FrontmatterLineEditor {
      * frontmatter がない場合は -1 を返す。
      */
     static findEnd(lines: string[]): number {
-        if (!lines.length || lines[0]?.trim() !== '---') return -1;
-        for (let i = 1; i < lines.length; i++) {
-            if (lines[i].trim() === '---') return i;
-        }
-        return -1;
+        // The parser's reading of where the body begins, so the block edited
+        // here is the one the index reads as frontmatter.
+        return Outline.bodyStart(lines) - 1;
     }
 
     /**

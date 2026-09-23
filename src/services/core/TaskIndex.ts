@@ -749,6 +749,9 @@ export class TaskIndex {
             case 'changed':
                 new Notice(t('notice.writeTargetChanged', { subject }));
                 return;
+            case 'unplaceable':
+                new Notice(t('notice.writeTargetUnplaceable', { subject }));
+                return;
         }
     }
 
