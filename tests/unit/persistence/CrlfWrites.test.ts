@@ -227,8 +227,9 @@ describe('a note whose last line ends with a stray CR', () => {
 
         expect(written).toBe(true);
         expect(contents.get(FILE)).toContain('- [x] beta @2026-09-21');
-        // The unfinished terminator goes with the write; nothing else changes.
-        expect(terminators(contents.get(FILE)!)).toEqual({ crlf: 0, lf: 2 });
+        // The CR ends the line, as the editor reads it, and is written back as
+        // the file's own terminator; nothing else changes.
+        expect(terminators(contents.get(FILE)!)).toEqual({ crlf: 0, lf: 3 });
         expect(contents.get(FILE)!.endsWith('\r')).toBe(false);
     });
 

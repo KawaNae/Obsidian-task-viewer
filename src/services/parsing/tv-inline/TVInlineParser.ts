@@ -1,6 +1,7 @@
 import type { Task, TaskFlow } from '../../../types';
 import { t } from '../../../i18n';
 import { flowValidation, singleLineFlow } from '../../flow/FlowSegments';
+import { FLOW_SPLIT } from '../../flow/FlowLineScanner';
 import { createBaseTask } from '../TaskFactory';
 import type { LeafParserStrategy } from '../strategies/ParserStrategy';
 import { isTimerTargetId } from '../../../utils/TimerTargetIdUtils';
@@ -43,7 +44,7 @@ export class TVInlineParser implements LeafParserStrategy {
         const timerTargetId = blockId && isTimerTargetId(blockId) ? blockId : undefined;
 
         // 1. Split flow commands (==>)
-        const flowSplit = lineForParse.split(/==>(.+)/);
+        const flowSplit = lineForParse.split(FLOW_SPLIT);
         const taskPart = flowSplit[0];
         const flowPart = flowSplit[1] || '';
 

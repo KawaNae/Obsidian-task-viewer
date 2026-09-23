@@ -137,7 +137,7 @@ export class TreeTaskExtractor {
         // インデント正規化 + タスク生成行除外 + 絶対行番号の付与
         const nonEmptyChildren = children.filter(c => c.trim() !== '');
         if (nonEmptyChildren.length > 0) {
-            const minIndent = Math.min(...nonEmptyChildren.map(c => c.search(/\S|$/)));
+            const minIndent = Math.min(...nonEmptyChildren.map(c => Outline.indentOf(c).length));
             const normalized = children.map(c => {
                 if (c.trim() === '') return c;
                 return c.substring(minIndent);

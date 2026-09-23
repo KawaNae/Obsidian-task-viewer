@@ -1,4 +1,5 @@
 import type { App, TFile } from 'obsidian';
+import { Outline } from '../parsing/utils/Outline';
 import type { Task, TaskViewerSettings } from '../../types';
 import { FileParsePipeline } from '../parsing/FileParsePipeline';
 import type { TaskStore } from './TaskStore';
@@ -543,7 +544,7 @@ export class TaskScanner {
      * keep until F9 (`RowBasis.ON_RECORD`).
      */
     onRecord(path: string, lines: readonly string[], ref: TaskRef, line: number): boolean {
-        return this.recordedTexts(path, ref.runtimeId).has(lines[line].trimStart());
+        return this.recordedTexts(path, ref.runtimeId).has(Outline.dedent(lines[line]));
     }
 
     /**
@@ -567,8 +568,8 @@ export class TaskScanner {
     private againstLastWrite(path: string, lines: readonly string[], line: number, ref: TaskRef): Located | null {
         const last = this.claims.lastWrite(path);
         if (last === undefined) return null;
-        const text = lines[line].trimStart();
-        const holders = last.rows?.filter(row => row.text.trimStart() === text) ?? [];
+        const text = Outline.dedent(lines[line]);
+        const holders = last.rows?.filter(row => Outline.dedent(row.text) === text) ?? [];
         if (!holders.some(row => row.runtimeId === ref.runtimeId)) return { kind: 'outdated' };
         if (holders.length > 1) return { kind: 'ambiguous', count: holders.length };
         return null;
@@ -584,13 +585,13 @@ export class TaskScanner {
     private recordedTexts(path: string, runtimeId: string): Set<string> {
         const texts = new Set<string>();
         const entry = this.ledger.get(runtimeId);
-        if (entry && entry.file === path) texts.add(entry.fingerprint.originalText.trimStart());
+        if (entry && entry.file === path) texts.add(Outline.dedent(entry.fingerprint.originalText));
         for (const row of this.claims.lastWrite(path)?.rows ?? []) {
-            if (row.runtimeId === runtimeId) texts.add(row.text.trimStart());
+            if (row.runtimeId === runtimeId) texts.add(Outline.dedent(row.text));
         }
         for (const pending of this.hints.peekFor(path, Date.now())) {
             for (const row of pending.hint.rows) {
-                if (row.runtimeId === runtimeId) texts.add(row.text.trimStart());
+                if (row.runtimeId === runtimeId) texts.add(Outline.dedent(row.text));
             }
         }
         return texts;

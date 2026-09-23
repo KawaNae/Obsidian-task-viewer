@@ -4,6 +4,8 @@ import { type RenderedPart, renderInterpolation } from '../../lang/Interpolation
 import { type CellStore, type Scope, SECTION_FUEL, cellScope, execProgram } from '../../lang/StmtEvaluator';
 import type { Value } from '../../lang/Value';
 import { TaskLineClassifier } from '../utils/TaskLineClassifier';
+import { Outline } from '../utils/Outline';
+import { LINE_BREAK } from '../../../utils/LineBreak';
 import { type GenBody, type GenLine, indentDepth, isSpliceLine, leadingIndent } from './GenBodyParser';
 
 /** One generated child line: its text, and how deep it sits under the parent. */
@@ -220,10 +222,10 @@ function renderChild(line: GenLine, ctx: EvalContext): RenderedEntry[] {
     }
 
     const out: RenderedEntry[] = [];
-    text.split('\n').forEach((raw, i) => {
+    text.split(LINE_BREAK).forEach((raw, i) => {
         if (raw.trim() === '') return;
         const own = i > 0 || placeFirstByValue ? indentDepth(leadingIndent(raw)) : 0;
-        out.push({ depth: line.depth + own, body: raw.trimStart(), from: line });
+        out.push({ depth: line.depth + own, body: Outline.dedent(raw), from: line });
     });
     return out;
 }

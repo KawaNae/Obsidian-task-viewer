@@ -10,6 +10,8 @@ import type { Program } from '../../lang/StmtAst';
 import { checkProgram } from '../../lang/StmtChecker';
 import { parseProgram } from '../../lang/StmtParser';
 import { TaskLineClassifier } from '../utils/TaskLineClassifier';
+import { INDENT_SOURCE, Outline } from '../utils/Outline';
+import { IN_LINE } from '../../../utils/LineBreak';
 import type { LocatedDiagnostic } from './GenBlockCollector';
 import { childStatusWarning, parentStatusWarning } from './GenGeneratedStatusCheck';
 
@@ -106,14 +108,14 @@ export function indentDepth(indent: string): number {
 
 /** Leading whitespace of a line. */
 export function leadingIndent(raw: string): string {
-    return raw.slice(0, raw.length - raw.trimStart().length);
+    return Outline.indentOf(raw);
 }
 
 /** Opening and closing tags of the leading js section. */
-const JS_OPEN_RE = /^\s*<js>/;
-const JS_CLOSE_RE = /^\s*<\/js>\s*$/;
+const JS_OPEN_RE = new RegExp(`^${INDENT_SOURCE}<js>`);
+const JS_CLOSE_RE = new RegExp(`^${INDENT_SOURCE}<\\/js>\\s*$`);
 /** The whole section on one line, which is a shape worth writing. */
-const JS_INLINE_RE = /^\s*<js>.*<\/js>\s*$/;
+const JS_INLINE_RE = new RegExp(`^${INDENT_SOURCE}<js>${IN_LINE}*<\\/js>\\s*$`);
 
 /**
  * Read the literal lines of a block body.
@@ -210,7 +212,7 @@ function readGenBody(body: string[], firstLine: number, cells?: GenCellTypes): G
 
         // Spans are measured from the start of the raw line, which is where
         // the editor puts them, so the interpolations carry the indent.
-        const text = raw.trimStart();
+        const text = Outline.dedent(raw);
         const lineDiagnostics: Diagnostic[] = [];
         const parts = splitInterpolations(text, lineDiagnostics, indent.length);
         for (const d of lineDiagnostics) diagnostics.push({ ...d, line });

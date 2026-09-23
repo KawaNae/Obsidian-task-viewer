@@ -93,7 +93,7 @@ export class InlineTaskWriter {
 
             // Preserve original indentation
             const originalIndent = Outline.indentOf(draft.lines[lineNumber]);
-            const newContentTrimmed = newContent.trimStart();
+            const newContentTrimmed = Outline.dedent(newContent);
 
             // The editor's own menu comes through here: a status change, and
             // the conversion of a bare checkbox into an inline task. Both
