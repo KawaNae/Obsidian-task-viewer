@@ -463,3 +463,27 @@ describe('rung 0: a flow firing', () => {
         expect(afterBoth.retired).toEqual([]);
     });
 });
+
+describe('the ladder\'s partner, once a claim is adopted (F5b)', () => {
+    it('counts what is left over against the ledger, not against the partner', () => {
+        // An adopted claim answers for every row, so the ladder pairs nothing.
+        // What a scan retires is still counted against the ledger: a row the
+        // partner holds and the ledger does not was never there to retire.
+        const mint = makeMint();
+        const first = matchFile([], [t('prov:0', 0, POMODORO)], mint);
+        const original = runtimeId(first, 'prov:0');
+        const tasks = [t('prov:0', 0, POMODORO), t('prov:1', 1, POMODORO)];
+        const foreign: LedgerEntry = { ...first.entries[0], runtimeId: 'foreign', line: 5 };
+
+        const second = matchWithEvidence(
+            first.entries,
+            tasks,
+            mint,
+            rowsOnlyEvidence(first.entries, tasks, pendingOf(claim([null, POMODORO], [original, POMODORO]))),
+            [...first.entries, foreign],
+        );
+
+        expect(second.consumedHints).toBe(1);
+        expect(second.retired).toEqual([]);
+    });
+});

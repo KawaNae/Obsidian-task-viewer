@@ -196,3 +196,23 @@ describe('the chain past its cap', () => {
         expect(ids).not.toContain(y.id);
     });
 });
+
+describe('the chain past its cap, across a scan that read before the loss', () => {
+    it('still hands no name to another row: what the cap dropped is newer than that read', async () => {
+        const { bench, x, y } = await traded(['- [ ] Z']);
+        const scan = await gatedScan(bench);
+        let z = bench.taskAt(2);
+        for (let i = 0; i <= MAX_CHAIN_PER_FILE; i++) {
+            const next = { ...z, statusChar: i % 2 === 0 ? 'x' : ' ' };
+            expect((await bench.writer.updateTaskInFile(plannedOn(z), next)).written).toBe(true);
+            z = { ...next, originalText: bench.lines()[2] };
+        }
+        scan.release();
+        await scan.done;
+        bench.edit([...bench.lines(), 'メモ']);
+        await bench.scan();
+        const ids = bench.tasks().map(task => task.id);
+        expect(ids).not.toContain(x.id);
+        expect(ids).not.toContain(y.id);
+    });
+});
