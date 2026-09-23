@@ -294,6 +294,16 @@ export interface WriteReceipt {
 }
 
 /**
+ * Who a write was made for: the user, through the UI, the editor's menu, the
+ * API or a timer; or a flow, carrying out a command's effects. A claim carries
+ * it, so that a scan which adopts the claim knows whether the completion it
+ * reads there came from the user or from a flow's own write — the question
+ * whether a completion may fire (`structure.md`, 論点5). Stage F5 only fills
+ * it in; nothing reads it yet.
+ */
+export type WriteOrigin = 'user' | 'flow';
+
+/**
  * Where a write's report goes: every write that changed the file, once.
  *
  * `edits` is null when the write changed the file and cannot say how — its

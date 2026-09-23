@@ -10,7 +10,7 @@ import { renderFlowInstance } from '../FlowInstanceLines';
 import { collectGenBlocks } from '../../parsing/gen/GenBlockCollector';
 import {
     processLines, splitLines,
-    type EditorLine, type LineDraft, type Refusal, type WriteOutcome,
+    type EditorLine, type LineDraft, type Refusal, type WriteOrigin, type WriteOutcome,
 } from '../../../utils/FileLines';
 import type { WriteObserver } from '../WriteObserver';
 import { refOf, subjectOf, type RowBasis, type WriteTarget } from '../TaskRefs';
@@ -40,11 +40,11 @@ export class InlineTaskWriter {
     async updateTaskInFile(task: Task, updatedTask: Task, childOps: PropertyOp[] = []): Promise<boolean> {
         const file = this.app.vault.getAbstractFileByPath(task.file);
         if (!(file instanceof TFile)) {
-            this.writes?.for(task.file)?.refused({ file: task.file, reason: { kind: 'gone' }, subject: subjectOf(task) });
+            this.writes?.for(task.file, 'user')?.refused({ file: task.file, reason: { kind: 'gone' }, subject: subjectOf(task) });
             return false;
         }
 
-        return processLines(this.app, file, this.writes?.for(task.file), (draft, _eol, { lineOf }) => {
+        return processLines(this.app, file, this.writes?.for(task.file, 'user'), (draft, _eol, { lineOf }) => {
             const currentLine = lineOf(refOf(task), subjectOf(task));
             if (currentLine === null) return false;
 
@@ -77,7 +77,7 @@ export class InlineTaskWriter {
         if (!(file instanceof TFile)) return;
         const lineNumber = at.line;
 
-        await processLines(this.app, file, this.writes?.for(filePath), (draft, _eol, { refuse }) => {
+        await processLines(this.app, file, this.writes?.for(filePath, 'user'), (draft, _eol, { refuse }) => {
             if (draft.lines[lineNumber] !== at.text) return refuse({ kind: 'changed' }, at.text.trim());
 
             // Preserve original indentation
@@ -107,7 +107,7 @@ export class InlineTaskWriter {
         if (!(file instanceof TFile)) return;
         const lineNumber = at.line;
 
-        await processLines(this.app, file, this.writes?.for(filePath), (draft, _eol, { refuse }) => {
+        await processLines(this.app, file, this.writes?.for(filePath, 'user'), (draft, _eol, { refuse }) => {
             if (draft.lines[lineNumber] !== at.text) return refuse({ kind: 'changed' }, at.text.trim());
             draft.splice(lineNumber + 1, 0, newContent);
             return true;
@@ -128,7 +128,7 @@ export class InlineTaskWriter {
         if (!(file instanceof TFile)) return;
         const lineNumber = at.line;
 
-        await processLines(this.app, file, this.writes?.for(filePath), (draft, _eol, { refuse }) => {
+        await processLines(this.app, file, this.writes?.for(filePath, 'user'), (draft, _eol, { refuse }) => {
             if (draft.lines[lineNumber] !== at.text) return refuse({ kind: 'changed' }, at.text.trim());
             draft.splice(lineNumber, 1);
             return true;
@@ -142,11 +142,11 @@ export class InlineTaskWriter {
     async deleteTaskFromFile(task: Task): Promise<boolean> {
         const file = this.app.vault.getAbstractFileByPath(task.file);
         if (!(file instanceof TFile)) {
-            this.writes?.for(task.file)?.refused({ file: task.file, reason: { kind: 'gone' }, subject: subjectOf(task) });
+            this.writes?.for(task.file, 'user')?.refused({ file: task.file, reason: { kind: 'gone' }, subject: subjectOf(task) });
             return false;
         }
 
-        return processLines(this.app, file, this.writes?.for(task.file), (draft, _eol, { lineOf }) => {
+        return processLines(this.app, file, this.writes?.for(task.file, 'user'), (draft, _eol, { lineOf }) => {
             const currentLine = lineOf(refOf(task), subjectOf(task));
             if (currentLine === null) return false;
 
@@ -190,7 +190,7 @@ export class InlineTaskWriter {
         opts: { tellRefusal?: boolean } = {},
     ): Promise<WriteOutcome> {
         const file = this.app.vault.getAbstractFileByPath(target.file);
-        const told = this.writes?.for(target.file);
+        const told = this.writes?.for(target.file, 'flow');
         // A caller that tells the refusal itself, in words of its own, has it
         // from the outcome; telling it here too would be the same news twice.
         const channel = told && opts.tellRefusal === false ? { ...told, refused: () => { } } : told;
@@ -316,13 +316,13 @@ export class InlineTaskWriter {
     async insertLineAfterTask(task: Task, lineBody: string): Promise<number> {
         const file = this.app.vault.getAbstractFileByPath(task.file);
         if (!(file instanceof TFile)) {
-            this.writes?.for(task.file)?.refused({ file: task.file, reason: { kind: 'gone' }, subject: subjectOf(task) });
+            this.writes?.for(task.file, 'user')?.refused({ file: task.file, reason: { kind: 'gone' }, subject: subjectOf(task) });
             return -1;
         }
 
         let insertedLineIndex = -1;
 
-        await processLines(this.app, file, this.writes?.for(task.file), (draft, _eol, { lineOf, refuse }) => {
+        await processLines(this.app, file, this.writes?.for(task.file, 'user'), (draft, _eol, { lineOf, refuse }) => {
             const lines = draft.lines;
             const currentLine = lineOf(refOf(task), subjectOf(task));
             if (currentLine === null) return false;
@@ -364,13 +364,13 @@ export class InlineTaskWriter {
     ): Promise<number> {
         const file = this.app.vault.getAbstractFileByPath(task.file);
         if (!(file instanceof TFile)) {
-            this.writes?.for(task.file)?.refused({ file: task.file, reason: { kind: 'gone' }, subject: subjectOf(task) });
+            this.writes?.for(task.file, 'user')?.refused({ file: task.file, reason: { kind: 'gone' }, subject: subjectOf(task) });
             return -1;
         }
 
         let insertedLineIndex = -1;
 
-        await processLines(this.app, file, this.writes?.for(task.file), (draft, _eol, { lineOf, refuse }) => {
+        await processLines(this.app, file, this.writes?.for(task.file, 'user'), (draft, _eol, { lineOf, refuse }) => {
             const lines = draft.lines;
             const currentLine = lineOf(refOf(task), subjectOf(task));
             if (currentLine === null) return false;
@@ -399,13 +399,13 @@ export class InlineTaskWriter {
     async insertLineAsFirstChild(task: Task, lineBody: string): Promise<number> {
         const file = this.app.vault.getAbstractFileByPath(task.file);
         if (!(file instanceof TFile)) {
-            this.writes?.for(task.file)?.refused({ file: task.file, reason: { kind: 'gone' }, subject: subjectOf(task) });
+            this.writes?.for(task.file, 'user')?.refused({ file: task.file, reason: { kind: 'gone' }, subject: subjectOf(task) });
             return -1;
         }
 
         let insertedLineIndex = -1;
 
-        await processLines(this.app, file, this.writes?.for(task.file), (draft, _eol, { lineOf, refuse }) => {
+        await processLines(this.app, file, this.writes?.for(task.file, 'user'), (draft, _eol, { lineOf, refuse }) => {
             const lines = draft.lines;
             const currentLine = lineOf(refOf(task), subjectOf(task));
             if (currentLine === null) return false;
@@ -432,7 +432,7 @@ export class InlineTaskWriter {
      * and the scan that reads it has no previous generation to confuse them
      * with. A claim would say what the ledger's silence already says.
      */
-    async appendTaskToFile(filePath: string, content: string): Promise<number> {
+    async appendTaskToFile(filePath: string, content: string, origin: WriteOrigin): Promise<number> {
         const file = this.app.vault.getAbstractFileByPath(filePath);
 
         if (!file) {
@@ -449,7 +449,7 @@ export class InlineTaskWriter {
         // The appended text is built with LF; splitting it here lets the file's
         // own terminator go back between every line, its own included.
         let insertedLine = -1;
-        await processLines(this.app, file, this.writes?.for(filePath), (draft, _eol, { refuse }) => {
+        await processLines(this.app, file, this.writes?.for(filePath, origin), (draft, _eol, { refuse }) => {
             const at = Placement.end(draft.lines);
             if (at === null) return refuse({ kind: 'unplaceable' }, splitLines(content).lines[0].trim());
             draft.splice(at, 0, ...splitLines(content).lines);
@@ -515,7 +515,7 @@ export class InlineTaskWriter {
         source: WriteTarget & { basis?: RowBasis },
     ): Promise<readonly string[] | null> {
         const sourceFile = this.app.vault.getAbstractFileByPath(source.file);
-        const channel = this.writes?.for(source.file);
+        const channel = this.writes?.for(source.file, 'flow');
         // The source is only read, so its target is asked of the channel
         // directly rather than through a write. A source row that cannot be
         // placed is not archived at all: an archive of the parent alone would
@@ -538,7 +538,7 @@ export class InlineTaskWriter {
         const { childrenLines } = this.fileOps.collectChildrenFromLines(sourceLines, located.line);
 
         const fullContent = [content, ...children].join('\n');
-        if ((await this.appendTaskToFile(destPath, fullContent)) < 0) return null;
+        if ((await this.appendTaskToFile(destPath, fullContent, 'flow')) < 0) return null;
         return sourceLines.slice(located.line, located.line + 1 + childrenLines.length);
     }
 }

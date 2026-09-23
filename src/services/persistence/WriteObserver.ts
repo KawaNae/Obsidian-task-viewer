@@ -1,4 +1,4 @@
-import type { WriteChannel } from '../../utils/FileLines';
+import type { WriteChannel, WriteOrigin } from '../../utils/FileLines';
 
 /**
  * Where the write layer asks the index where a named row stands, tells it what
@@ -15,9 +15,9 @@ import type { WriteChannel } from '../../utils/FileLines';
  * is left to say where one stands.
  */
 export class WriteObserver {
-    private resolve: ((file: string) => WriteChannel) | null = null;
+    private resolve: ((file: string, origin: WriteOrigin) => WriteChannel) | null = null;
 
-    connect(resolve: (file: string) => WriteChannel): void {
+    connect(resolve: (file: string, origin: WriteOrigin) => WriteChannel): void {
         this.resolve = resolve;
     }
 
@@ -25,8 +25,12 @@ export class WriteObserver {
         this.resolve = null;
     }
 
-    /** The channel for writes to `file`, or undefined while nothing is listening. */
-    for(file: string): WriteChannel | undefined {
-        return this.resolve?.(file);
+    /**
+     * The channel for writes to `file` made for `origin`, or undefined while
+     * nothing is listening. The origin is not optional: every write says whom
+     * it was made for, so the claim it files can say so too.
+     */
+    for(file: string, origin: WriteOrigin): WriteChannel | undefined {
+        return this.resolve?.(file, origin);
     }
 }

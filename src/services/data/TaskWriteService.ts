@@ -164,7 +164,7 @@ export class TaskWriteService {
      * index is taken down.
      */
     writeChannel(filePath: string): WriteChannel | undefined {
-        return this.taskIndex.getRepository().getWriteObserver().for(filePath);
+        return this.taskIndex.getRepository().getWriteObserver().for(filePath, 'user');
     }
 
     // ===== Drag state control =====

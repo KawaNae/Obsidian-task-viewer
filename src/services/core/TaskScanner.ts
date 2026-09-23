@@ -13,7 +13,7 @@ import { matchFile, matchWithoutRepeatedIds } from './identity/IdentityMatcher';
 import { WriteClaims, type ClaimResult } from './identity/WriteClaims';
 import { contentKeyOf } from './identity/ContentKey';
 import { applyIdentity, assertDistinctRuntimeIds, assertNoProvisionalIds, assertUniqueProvisionalIds } from './identity/IdentityApplier';
-import { splitLines, type Located, type TaskRef, type WriteSink } from '../../utils/FileLines';
+import { splitLines, type Located, type TaskRef, type WriteOrigin, type WriteSink } from '../../utils/FileLines';
 import { CodeFenceTracker } from '../../utils/CodeFenceTracker';
 import { logDebug, logError, logInfo } from '../../log/log';
 
@@ -393,11 +393,11 @@ export class TaskScanner {
      * a log line, never a lost write. The parse this runs is the one place a
      * write pays for stage 2 — one pass over the file it just wrote.
      */
-    writeSink(file: string): WriteSink {
+    writeSink(file: string, origin: WriteOrigin): WriteSink {
         return (before, after, edits) => {
             let result: ClaimResult;
             try {
-                result = this.claims.claim(file, before, after, edits);
+                result = this.claims.claim(file, before, after, edits, origin);
             } catch (error) {
                 logError(`[TaskScanner] could not read back ${file} after a write: ${(error as Error)?.message ?? error}`);
                 // The write changed the file all the same, and nothing on

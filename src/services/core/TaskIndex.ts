@@ -101,8 +101,8 @@ export class TaskIndex {
         // Connected here rather than built into the repository, because the
         // scanner does not exist when the repository does — and cut on dispose,
         // so a write that outlives this index files nothing (see WriteObserver).
-        this.repository.getWriteObserver().connect(path => ({
-            sink: this.scanner.writeSink(path),
+        this.repository.getWriteObserver().connect((path, origin) => ({
+            sink: this.scanner.writeSink(path, origin),
             locate: (lines, ref) => this.scanner.locate(path, lines, ref),
             refused: refusal => this.reportRefusal(refusal),
         }));
@@ -608,7 +608,7 @@ export class TaskIndex {
                 insertedLine = await this.repository.insertLineUnderHeading(filePath, taskLine, heading, 2);
                 if (insertedLine < 0) return; // ファイルが無ければ何も書けていない
             } else {
-                insertedLine = await this.repository.appendTaskToFile(filePath, taskLine);
+                insertedLine = await this.repository.appendTaskToFile(filePath, taskLine, 'user');
             }
 
             await this.scanner.waitForScan(filePath);
