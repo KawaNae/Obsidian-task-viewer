@@ -75,8 +75,7 @@ function computeCache(content: string): VaultCache {
  * an in-memory vault shared between sessions.
  *
  * Writes go through the real write path (`vault.process`) and the real
- * `modify` handler `TaskIndex.initialize` registers (called here so a
- * session needs no separate opt-in): whether a completion fires is answered
+ * `modify` handler `TaskIndex.initialize` registers (called here): whether a completion fires is answered
  * by the scan from the writes it reads, exactly as it would be after
  * Obsidian's own `modify` event. A write that changed bytes is followed by the
  * `metadataCache` `changed` event real Obsidian sends after `modify`; the scan
@@ -139,10 +138,7 @@ export function vaultSession(contents: Map<string, string>) {
     scanner = (index as unknown as { scanner: TaskScanner }).scanner;
     scanner.setInitializing(false);
     // Registers the real vault/metadataCache handlers `process`/`create`
-    // above call into. Safe to call again (existing callers of the
-    // `initialize` returned below still may): `onLayoutReady` never runs its
-    // callback here, so this only re-registers handlers in `vaultHandlers`,
-    // which a same-named `on` just overwrites.
+    // above call into. `onLayoutReady` never runs its callback here.
     void index.initialize();
 
     let n = 0;
@@ -163,8 +159,6 @@ export function vaultSession(contents: Map<string, string>) {
         scanner,
         recorder: new TimerRecorder(app as never, plugin as never, storageUtils),
         creator: new TimerCreator({} as TimerContext, storageUtils),
-        /** No longer required: the session already initializes itself. Kept for existing callers. */
-        initialize: () => index.initialize(),
         fireVault: (name: string, ...args: unknown[]) => vaultHandlers.get(name)!(...args),
         scanAll: () => scanner!.scanVault(),
         settle: (path: string) => index.waitForScan(path),

@@ -82,7 +82,6 @@ describe('through the real modify handler', () => {
         const contents = new Map([[FILE, `${ALPHA}\n`]]);
         const live = vaultSession(contents);
         try {
-            await live.initialize();
             await live.scanAll();
             expect(live.index.getTasks()).toHaveLength(1);
 
@@ -113,7 +112,6 @@ describe('through the real modify handler', () => {
         const contents = new Map([[FILE, WEEKLY]]);
         const live = vaultSession(contents);
         try {
-            await live.initialize();
             await live.scanAll();
             const weekly = live.index.getTasks()[0];
             live.index.setDraggingFile(FILE);
@@ -134,7 +132,6 @@ describe('through the real modify handler', () => {
         const contents = new Map([[FILE, WEEKLY]]);
         const live = vaultSession(contents);
         try {
-            await live.initialize();
             await live.scanAll();
             live.index.setDraggingFile(FILE);
             contents.set(FILE, CHECKED);
@@ -151,7 +148,6 @@ describe('through the real modify handler', () => {
         const contents = new Map([[FILE, `${ALPHA}\n`]]);
         const live = vaultSession(contents);
         try {
-            await live.initialize();
             await live.scanAll();
             const before = live.index.getRevision();
 

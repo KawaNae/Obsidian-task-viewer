@@ -112,7 +112,6 @@ describe('stopping a timer after a reload', () => {
     it('finds the record after a rename even when recordedChildTaskId still names the old path', async () => {
         const contents = new Map([[FILE, ['- [ ] 対象 @2026-09-21', '- [ ] 下のタスク @2026-09-21', ''].join('\n')]]);
         const live = session(contents);
-        await live.initialize();
         await live.scanAll();
         const timer = await startTimer(live, 'child');
         const staleId = timer.recordedChildTaskId!;
