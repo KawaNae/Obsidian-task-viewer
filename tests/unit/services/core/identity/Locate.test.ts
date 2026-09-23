@@ -240,7 +240,7 @@ describe('locate by matching, when the content is not on record', () => {
         expect(harness.locate(original)).toEqual(gone);
     });
 
-    it('answers gone for a row a write made when the file bears nothing out', async () => {
+    it('finds a row a write made after something else edited the file (F5b)', async () => {
         const harness = new Harness();
         await harness.write([TASK, '']);
 
@@ -248,10 +248,13 @@ describe('locate by matching, when the content is not on record', () => {
         const made = harness.claimed()[0][1];
         expect(harness.locate(made)).toEqual(at(1));
 
-        // Something else edits the file before any scan. The made row's name
-        // is on no record the file matches, and its text is all that is left.
+        // Something else edits the file before any scan. No record matches
+        // the file, but the edit came after the write, so the next scan
+        // pairs against what the write left and gives the row the name the
+        // write made (`WriteClaims.ladderFor`). Until F5b the scan paired
+        // against the ledger, which never heard the name, and this was gone.
         harness.edit([TASK, OTHER, 'synced']);
-        expect(harness.locate(made)).toEqual(gone);
+        expect(harness.locate(made)).toEqual(at(1));
     });
 });
 

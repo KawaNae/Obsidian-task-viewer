@@ -233,7 +233,7 @@ export class TaskScanner {
                 parsed.tasks,
                 task => TaskIdGenerator.mintRuntimeId(task, () => this.ledger.mint()),
                 hints,
-                ladder,
+                ladder ?? [],
             ),
             {
                 pending: this.hints.pendingFor(file.path, now),
@@ -421,11 +421,14 @@ export class TaskScanner {
      * 2. a content on record (`WriteClaims.stateFor`): the lines read, whole,
      *    as the last write left them or the last scan read them, so the rows
      *    recorded for that content stand where they were recorded — no parse;
-     * 3. otherwise the match a scan of these lines would make, against the
-     *    ledger and the pending claims, as the scan makes it. The name has to
+     * 3. otherwise the match a scan of these lines would make, as the scan
+     *    makes it: the pending claims weighed against the ledger, and with
+     *    none adopted, the ladder paired against the newest state known to be
+     *    older than these lines (`WriteClaims.ladderFor`). The name has to
      *    come out paired with one line on evidence: a pair the ladder chose by
      *    position among identical rows is `ambiguous`, because writing on a
-     *    guess is worse than not writing.
+     *    guess is worse than not writing. Where no partner is safe (the
+     *    chain's cap has dropped states), the answer is `outdated`.
      *
      * What never comes out of here is the line a task held when it was last
      * scanned, or the first line that reads like it. Neither says anything
@@ -433,16 +436,14 @@ export class TaskScanner {
      *
      * A name the ledger has not heard of — a row a write made, not yet scanned
      * (the names a write answers as `made`) — is found through 2, or through 3
-     * when a pending claim is adopted. On lines that bear neither out it is
-     * `gone`, and that is the answer, not a gap. This function answers what
-     * the next scan of these lines would decide, and that scan would not adopt
-     * the claim that carries the name — the lines are not what the claim says
-     * — so the ladder, which only ever hands out names from the ledger, gives
-     * the row a new one. The name stands on no line of these. Answering with
-     * the one line that reads like the row would part from the scan, and on
-     * text alone, the weakest evidence there is: an outside edit that took the
-     * made row away and wrote another line in its words would have this write
-     * land on that line.
+     * when a pending claim is adopted or when the ladder pairs against the
+     * state the write left (lines that changed after it). On lines where the
+     * next scan would hand the name to no row it is `gone`, and that is the
+     * answer, not a gap: this function answers what that scan would decide.
+     * Answering with the one line that reads like the row would part from the
+     * scan, and on text alone, the weakest evidence there is: an outside edit
+     * that took the made row away and wrote another line in its words would
+     * have this write land on that line.
      *
      * Found through 1 or 3, the line may read differently from anything on
      * record for the row — the ladder pairs a row whose text or dates changed,
@@ -464,15 +465,21 @@ export class TaskScanner {
         if (parsed.ignored) return { kind: 'gone' };
 
         const previous = this.ledger.snapshotFor(path);
+        const before = this.ledger.contentFor(path);
+        const read = contentKeyOf(lines);
+        // The partner the next scan of these lines would pair against. None
+        // is safe past the chain's cap, and a write would rather not write.
+        const ladder = this.claims.ladderFor(path, read, { content: before, rows: previous });
+        if (ladder === null) return { kind: 'outdated' };
         // Names for the rows nothing pairs. They leave this function with
         // nothing but a comparison against `ref`, which none of them can equal.
         let unnamed = 0;
         const { result } = matchWithoutRepeatedIds(
-            hints => matchFile(previous, parsed.tasks, () => `locate:unnamed:${++unnamed}`, hints, previous),
+            hints => matchFile(previous, parsed.tasks, () => `locate:unnamed:${++unnamed}`, hints, ladder),
             {
                 pending: this.hints.peekFor(path, Date.now()),
-                before: this.ledger.contentFor(path),
-                read: contentKeyOf(lines),
+                before,
+                read,
             },
         );
 

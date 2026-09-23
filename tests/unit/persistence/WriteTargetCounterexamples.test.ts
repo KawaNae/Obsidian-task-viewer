@@ -452,15 +452,21 @@ describe('F2-counter2: two own writes trade the texts of two rows, then an unrep
         expect(bench.refused).toEqual([]);
     });
 
-    it('S2b: the same after a line appended from outside', async () => {
+    it('S2b: the same after a line appended from outside: X, not Y (F5b)', async () => {
+        // Refused as changed until F5b: the ladder paired by the ledger from
+        // before both writes, and the answer did not read as X's text in what
+        // the last write left. The line came after the writes, so the ladder
+        // pairs now against what the last one left, and X is where it put X.
         const { bench, x } = await traded();
         bench.edit(['- [x] A', '- [ ] A', 'メモ']);
-        expect(await bench.writer.deleteTaskFromFile(plannedOn(x, { subtree: true }))).toBe(false);
-        expect(bench.lines()).toEqual(['- [x] A', '- [ ] A', 'メモ']);
-        expect(bench.refused.map(r => r.reason.kind)).toEqual(['changed']);
+        expect(await bench.writer.deleteTaskFromFile(plannedOn(x, { subtree: true }))).toBe(true);
+        expect(bench.lines()).toEqual(['- [ ] A', 'メモ']);
+        expect(bench.refused).toEqual([]);
     });
 
-    it('S2d: the same with renames (X to B, Y to A)', async () => {
+    it('S2d: the same with renames (X to B, Y to A), X planned from a copy older than its rename', async () => {
+        // Refused by X's basis, which still reads A: the ladder finds X on the
+        // line that reads B (F5b; before it, the ladder's answer was refused).
         const bench = await writeBench(['- [ ] A', '- [ ] B']);
         const x = bench.taskAt(0);
         const y = bench.taskAt(1);

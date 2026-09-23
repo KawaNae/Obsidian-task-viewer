@@ -368,8 +368,8 @@ export class WriteClaims {
      * - and when the cap has dropped earlier states (`lost`), "none of these"
      *   cannot be told from a dropped state, and no partner is safe: the
      *   ledger is older than our writes, the newest state may be newer than
-     *   the read. Every row is then new, the one answer that hands no name to
-     *   the wrong row.
+     *   the read. The answer is null: a scan makes every row new, the one
+     *   answer that hands no name to the wrong row, and a write refuses.
      *
      * @param read the key of the lines read.
      * @param ledger what the last scan recorded: its content key and its rows.
@@ -378,7 +378,7 @@ export class WriteClaims {
         path: string,
         read: ContentKey,
         ledger: { content: ContentKey | null; rows: readonly LedgerEntry[] },
-    ): readonly LedgerEntry[] {
+    ): readonly LedgerEntry[] | null {
         const chain = this.chains.get(path);
         if (!chain) return ledger.rows;
         if (ledger.content !== null && read === ledger.content) return ledger.rows;
@@ -386,7 +386,7 @@ export class WriteClaims {
         const newest = newestDescribed(chain.links);
         if (newest?.content === read && newest.state) return newest.state.ladder;
         if (chain.links.some(link => link.content === read)) return ledger.rows;
-        if (chain.lost > 0) return [];
+        if (chain.lost > 0) return null;
         return newest?.state?.ladder ?? ledger.rows;
     }
 
