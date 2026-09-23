@@ -670,6 +670,7 @@
     "writeTargetGone": "対象のタスクが見つからないため、書き込みませんでした: {{subject}}",
     "writeTargetChanged": "ノートの内容が変わっているため、書き込みませんでした。もう一度操作してください: {{subject}}",
     "writeTargetUnplaceable": "新しい行を置ける場所がノートの本文（frontmatter の下、コードブロックの外）に無いため、書き込みませんでした: {{subject}}",
+    "writeFailed": "ノートに書き込めなかったため、何も変わっていません。詳細はコンソールを確認してください: {{subject}}",
     "moveOriginKept": "{{dest}} に移しましたが、元の行を消せなかったため、タスクが2か所にあります（{{reason}}）: {{subject}}",
     "moveOriginAmbiguous": "同じ内容の行が {{count}} 行あり、元の行を1つに決められません",
     "moveOriginGone": "元の行が見つかりません",

@@ -808,6 +808,9 @@ export class TaskIndex {
             case 'unplaceable':
                 new Notice(t('notice.writeTargetUnplaceable', { subject }));
                 return;
+            case 'failed':
+                new Notice(t('notice.writeFailed', { subject }));
+                return;
         }
     }
 
