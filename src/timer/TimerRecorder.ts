@@ -151,7 +151,9 @@ export class TimerRecorder {
      * If a child task was created at start (recordedChildTaskId), update it instead.
      */
     async addSessionRecord(timer: TimerInstance): Promise<boolean> {
-        if (timer.recordedChildTaskId) {
+        // 走行中の尻尾は今のセッションの行（書く前に移し、書けなければ戻す）。
+        // 行は書けたがスキャンがまだ id を返していなくても、閉じる相手はその行。
+        if (timer.recordedChildTaskId || timer.tailRecordBlockId) {
             return this.updateChildAtEnd(timer);
         }
         switch (timer.timerType) {
@@ -306,10 +308,14 @@ export class TimerRecorder {
      */
     async createChildAtStart(timer: TimerInstance): Promise<string | undefined> {
         const { line, blockId } = this.buildSessionPlaceholder(timer);
-        const file = await this.writeChildLine(timer, line);
-        if (file === null) return undefined;
-
+        // 尻尾は書く前に新しい行へ移す（startNextSession と同じ）。
+        const previous = timer.tailRecordBlockId;
         timer.tailRecordBlockId = blockId;
+        const file = await this.writeChildLine(timer, line);
+        if (file === null) {
+            timer.tailRecordBlockId = previous;
+            return undefined;
+        }
         return this.adoptWrittenSession(timer, file, blockId);
     }
 
@@ -344,11 +350,14 @@ export class TimerRecorder {
         if (!anchor) return this.createChildAtStart(timer);
 
         const { line, blockId } = this.buildSessionPlaceholder(timer);
+        const previous = timer.tailRecordBlockId;
+        timer.tailRecordBlockId = blockId;
         const inserted = await this.plugin.getTaskWriteService()
             .insertSiblingAfterTask(anchor.id, line, { afterCompletedRun: true });
-        if (!inserted) return undefined;
-
-        timer.tailRecordBlockId = blockId;
+        if (!inserted) {
+            timer.tailRecordBlockId = previous;
+            return undefined;
+        }
         return this.adoptWrittenSession(timer, anchor.file, blockId);
     }
 

@@ -218,7 +218,7 @@ export class TimerLifecycle {
     // ─── 記録 ─────────────────────────────────────────────────
 
     /** `op` を、そのタイマーの往復中の操作が無いときだけ走らせる（{@link busy}）。 */
-    private async exclusive(timer: TimerInstance, op: () => Promise<void>): Promise<void> {
+    async exclusive(timer: TimerInstance, op: () => Promise<void>): Promise<void> {
         if (this.busy.has(timer.id)) return;
         this.busy.add(timer.id);
         try {

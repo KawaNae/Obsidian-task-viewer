@@ -68,7 +68,8 @@ describe('a write whose row the index no longer holds is told once, as gone', ()
             const before = contents.get(FILE);
             Notice.messages.length = 0;
             expect(await s.index[op](id, '- [ ] 子')).toBe(false);
-            expect(Notice.messages).toEqual([gone(id)]);
+            // The store never held it here: the note is named, not the internal id.
+            expect(Notice.messages).toEqual([gone(FILE)]);
             expect(contents.get(FILE)).toBe(before);
             s.dispose();
         });
@@ -84,7 +85,7 @@ describe('a write whose row the index no longer holds is told once, as gone', ()
         const before = contents.get(FILE);
         Notice.messages.length = 0;
         expect(await s.index.updateTask(id, { statusChar: 'x' })).toBe(false);
-        expect(Notice.messages).toEqual([gone(id)]);
+        expect(Notice.messages).toEqual([gone(FILE)]);
         expect(contents.get(FILE)).toBe(before);
         s.dispose();
     });
