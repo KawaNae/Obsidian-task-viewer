@@ -63,11 +63,6 @@ export class TaskIndex {
         16,
     );
 
-    // 自己発信書き込みを覚えておくためのウィンドウ。
-    // vault.modify 後にメタデータキャッシュが遅延発火しても、自己書き込み由来であれば
-    // 重ねて notify を発火しないようにするため。
-    private readonly selfWrites = new PathTtlWindow(1000);
-
     // API CRUD (withNotify) の実行中を覚えておくためのウィンドウ。
     private readonly apiWrites = new PathTtlWindow(2000);
 
@@ -132,12 +127,6 @@ export class TaskIndex {
                 const isLocal = this.syncDetector.isLocalEdit(file.path);
                 this.syncDetector.clearLocalEditFlag(file.path);
 
-                // 自己書き込み: 後続の metadataCache.changed が遅延着弾しても
-                // 二重 notify にならないよう短時間だけマーク
-                if (isLocal) {
-                    this.selfWrites.mark(file.path);
-                }
-
                 // ドラッグ中のファイルはスキャンをスキップ（古い値でストアが上書きされるのを防止）。
                 // 飛ばしたことは覚えておき、ドラッグの終了時に読み直す。忘れると、
                 // その間に届いた変更を読む契機がどこにも無くなる。
@@ -183,13 +172,14 @@ export class TaskIndex {
                 if (this.draggingFilePath === file.path) {
                     return;
                 }
-                // 自己書き込み直後のメタデータキャッシュ更新は完全に無視する。
-                // ドラッグ完了後 setDraggingFile(null) と相前後して着弾する遅延イベントが
-                // 余分な scan + notify を引き起こすのを防ぐ。
-                if (this.selfWrites.has(file.path)) {
-                    return;
-                }
-                void this.rescanAndNotify(file);
+                // `changed` follows every write, and mostly echoes a change
+                // the file's `modify` already had scanned — ours, someone
+                // else's, or the drag's own commit read when the drag ended.
+                // The scan answers that by content and skips the commit and the
+                // notify when there is nothing new (see rescanUnlessRead).
+                void this.scanner.rescanUnlessRead(file).then(committed => {
+                    if (committed) this.notify.schedule();
+                });
             }
         }));
 
@@ -327,7 +317,6 @@ export class TaskIndex {
         this.repository.getWriteObserver().disconnect();
 
         this.notify.dispose();
-        this.selfWrites.dispose();
         this.apiWrites.dispose();
     }
 
