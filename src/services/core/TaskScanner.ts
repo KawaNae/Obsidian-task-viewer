@@ -244,7 +244,7 @@ export class TaskScanner {
         // Where the read stands among the states this file is known to have
         // been in — the ledger's, and what our writes since left — and so
         // every way its lines may be told (`WriteClaims.reading`).
-        const place = this.claims.reading(file.path, readKey, { content: before, rows: previousRows });
+        const place = this.claims.reading(file.path, lines, 'scan', previousRows);
         const guarded = matchWithoutRepeatedIds(
             reading => matchFile(
                 previousRows,
@@ -452,18 +452,21 @@ export class TaskScanner {
      *
      * 1. the row's `^id`, when it names exactly one line outside a fence —
      *    the one piece of evidence that outlives every edit;
-     * 2. a content on record (`WriteClaims.stateFor`): the lines read, whole,
-     *    as the last write left them or the last scan read them, so the rows
-     *    recorded for that content stand where they were recorded — no parse;
-     * 3. otherwise the match a scan of these lines would make, as the scan
-     *    makes it: every way the lines may be told (`WriteClaims.reading`) —
-     *    a known state whose content they are, and the ladder paired against
-     *    the newest state known when they may be a change after it. The name
-     *    has to come out paired with one line on evidence: a pair the ladder
-     *    chose by position among identical rows is `ambiguous`, and so is a
-     *    name the readings disagree about, because writing on a guess is
-     *    worse than not writing. Where nothing can be told (the chain's cap
-     *    has dropped states), the answer is `outdated`.
+     * 2. a content on record: the lines read, whole, as our last write left
+     *    them — or, with none since the last scan, as that scan read them —
+     *    and nothing changed after, so the rows recorded for that content
+     *    stand where they were recorded, no parse (`WriteClaims.reading`'s
+     *    `base`);
+     * 3. otherwise the match a scan of these lines would make, from every way
+     *    a write may tell them (`WriteClaims.reading`): the state our last
+     *    write left, when they read as it, and the ladder paired against it
+     *    when they may be a change after it. The name has to come out paired
+     *    with one line on evidence: a pair the ladder chose by position among
+     *    identical rows is `ambiguous`, and so is a name the readings
+     *    disagree about, because writing on a guess is worse than not
+     *    writing. Where nothing can be told (our last write could not say
+     *    what it left, or the chain's cap has dropped states), the answer is
+     *    `outdated`.
      *
      * What never comes out of here is the line a task held when it was last
      * scanned, or the first line that reads like it. Neither says anything
@@ -490,22 +493,18 @@ export class TaskScanner {
         const byBlockId = lineOfBlockId(lines, ref.blockId);
         if (byBlockId !== null) return { kind: 'at', line: byBlockId };
 
-        const recorded = this.claims.stateFor(path, lines);
-        if (recorded !== null) {
-            const row = recorded.find(candidate => candidate.runtimeId === ref.runtimeId);
+        // Every way these lines may be told, as a write sees them. Where none
+        // can be told, a write would rather not write.
+        const previous = this.ledger.snapshotFor(path);
+        const place = this.claims.reading(path, lines, 'write', previous);
+        if (place.unknown) return { kind: 'outdated' };
+        if (place.base !== null) {
+            const row = place.base.find(candidate => candidate.runtimeId === ref.runtimeId);
             return row ? { kind: 'at', line: row.line } : { kind: 'gone' };
         }
 
         const parsed = FileParsePipeline.parse(path, [...lines], this.settings);
         if (parsed.ignored) return { kind: 'gone' };
-
-        const previous = this.ledger.snapshotFor(path);
-        const before = this.ledger.contentFor(path);
-        const read = contentKeyOf(lines);
-        // Every way the next scan of these lines could tell them. Past the
-        // chain's cap none can be told, and a write would rather not write.
-        const place = this.claims.reading(path, read, { content: before, rows: previous });
-        if (place.unknown) return { kind: 'outdated' };
         // Names for the rows nothing pairs. They leave this function with
         // nothing but a comparison against `ref`, which none of them can equal.
         let unnamed = 0;

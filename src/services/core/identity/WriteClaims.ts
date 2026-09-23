@@ -1,5 +1,5 @@
 import type { ParserId, Task } from '../../../types';
-import { ledgerState, UNKNOWN_READING, type ExactState, type Reading } from './IdentityHints';
+import { UNKNOWN_READING, type ExactState, type Reading } from './IdentityHints';
 import type { LedgerEntry } from './IdentityLedger';
 import { ledgerRowsOf } from './IdentityMatcher';
 import { replayEdits, type LineEdit, type WriteOrigin } from '../../../utils/FileLines';
@@ -141,13 +141,26 @@ type Described = Extract<Link, { content: ContentKey }>;
  */
 export interface ReadPlace {
     reading: Reading;
-    /** Past the cap: nothing about the read can be told. */
+    /**
+     * Nothing about the read can be told: the cap dropped states it may be,
+     * or, asked by a write, our newest write could not say what it left.
+     */
     unknown: boolean;
     /** The known states with the read's content, as links of the chain (or the ledger). */
     states: ReadonlyArray<object | 'ledger'>;
     /** Whether the read may be a change after the newest known state. */
     after: boolean;
+    /**
+     * The rows the lines hold where they stand, when that can be read off
+     * the lines without parsing them: the read is one known state and
+     * nothing after it, and each of the state's rows reads its own text on
+     * its own line. Asked by a write only; null otherwise.
+     */
+    base: ClaimBase[] | null;
 }
+
+/** Who asks where a read stands (see {@link WriteClaims.reading}). */
+export type Reader = 'scan' | 'write';
 
 /**
  * Every write of ours to one file that the ledger has not read, in the order
@@ -164,7 +177,7 @@ interface Chain {
     /**
      * A scan committed without having read these writes: it read the file
      * before they landed, and committed after. Its ledger is older than them,
-     * and {@link WriteClaims.stateFor} builds on neither.
+     * and a write builds on neither (see {@link WriteClaims.reading}).
      */
     carried: boolean;
     /**
@@ -268,7 +281,10 @@ export class WriteClaims {
 
         if (edits === null) return nothing();
 
-        const base = this.stateFor(path, before);
+        // What the rows of the lines this write was handed are, where they
+        // stand. A write builds only on that; the ladder's partner does not
+        // come into it.
+        const base = this.reading(path, before, 'write', []).base;
         if (base === null) return nothing();
 
         const replayed = replayEdits(before.length, edits);
@@ -496,9 +512,10 @@ export class WriteClaims {
      * of ours to the file has been read by a scan that committed — the only
      * case where the ledger is not known to be older than one of them.
      *
-     * Not the same as the base {@link stateFor} builds on: that one is not
-     * built on past any scan that commits, this one is dropped only by a scan
-     * that read the file after the write (see {@link forget}).
+     * Not the same as a write's `base` (see {@link reading}): a write does
+     * not build on its newest write past a scan that committed without
+     * reading it, and this one is dropped only by a scan that read the file
+     * after the write (see {@link forget}).
      */
     lastWrite(path: string): { rows: readonly ClaimBase[] | null } | undefined {
         const newest = ownLinks(this.chains.get(path)?.links ?? []).at(-1);
@@ -531,39 +548,79 @@ export class WriteClaims {
      *   differently are both open (K2): the file came back to a content it
      *   had, and when the read was is not in the lines.
      * - Once the cap has dropped states (`lost`), the read may be one of
-     *   those, and none of this can be told: every row is new, and a write
-     *   refuses (`unknown`).
+     *   those, and none of this can be told: every row is new (`unknown`).
      *
-     * @param read the key of the lines read.
-     * @param ledger what the last scan recorded: its content key and its rows.
+     * A write asks the same question of the lines it was handed, and knows
+     * one thing a scan does not: they came after every write of ours that
+     * filed here, each of which landed or was taken back before this one was
+     * handed the file (`WriteReceipt.withdraw`). So the ledger and the states
+     * between are not states its lines may be. Lines that read as one of them
+     * were put back by something else, which is a change after our newest
+     * write, and are paired against what that write left. What is left is
+     * the newest write of ours — or the ledger, with none — and, with an
+     * outside change after it, a change that reads the same. Where our newest
+     * write could not say what it left, or the cap has dropped states and the
+     * lines are not, row by row, what our newest write left, nothing can be
+     * told (`unknown`), and a write refuses. A
+     * ledger older than a write it did not read (`carried`) is no state
+     * either. Only a write gets a `base`.
+     *
+     * @param lines the lines read.
+     * @param ledgerRows the ledger's rows as a ladder reads its previous
+     *   side, for a read paired against the ledger.
      */
-    reading(
-        path: string,
-        read: ContentKey,
-        ledger: { content: ContentKey | null; rows: readonly LedgerEntry[] },
-    ): ReadPlace {
+    reading(path: string, lines: readonly string[], reader: Reader, ledgerRows: readonly LedgerEntry[]): ReadPlace {
+        const read = contentKeyOf(lines);
         const chain = this.chains.get(path);
         const links = chain?.links ?? [];
-        if (chain && chain.lost > 0) {
-            return { reading: UNKNOWN_READING, unknown: true, states: [], after: true };
+        const ledger = this.ledgerState(path);
+        const own = ownLinks(links);
+        const newestOwn = own.at(-1);
+        const nothing: ReadPlace = { reading: UNKNOWN_READING, unknown: true, states: [], after: true, base: null };
+
+        // The known states the read may be, each with the rows it holds.
+        const candidates: Array<{ state: Described | 'ledger'; rows: readonly ClaimBase[]; at: number }> = [];
+        const lost = chain !== undefined && chain.lost > 0;
+        if (reader === 'scan') {
+            if (lost) return nothing;
+            if (ledger.content !== null) candidates.push({ state: 'ledger', rows: ledger.rows, at: -1 });
+            links.forEach((link, at) => {
+                if (link.content !== null) candidates.push({ state: link, rows: link.rows, at });
+            });
+        } else if (newestOwn) {
+            if (newestOwn.content === null) return nothing;
+            if (!chain!.carried) candidates.push({ state: newestOwn, rows: newestOwn.rows, at: links.indexOf(newestOwn) });
+        } else if (ledger.content !== null) {
+            candidates.push({ state: 'ledger', rows: ledger.rows, at: -1 });
         }
 
         const states: Array<Described | 'ledger'> = [];
         const exact: ExactState[] = [];
-        if (ledger.content !== null && ledger.content === read) {
-            states.push('ledger');
-            exact.push(ledgerState(ledger.rows));
-        }
         let newest = -1;
-        links.forEach((link, at) => {
-            if (link.content !== read) return;
-            states.push(link);
-            exact.push({ rows: link.rows.map(row => ({ runtimeId: row.runtimeId, created: row.created, text: row.text })) });
+        const content = (state: Described | 'ledger') => (state === 'ledger' ? ledger.content : state.content);
+        for (const { state, rows, at } of candidates) {
+            if (content(state) !== read) continue;
+            states.push(state);
+            exact.push({ rows: rows.map(row => ({ runtimeId: row.runtimeId, created: row.created, text: row.text })) });
             newest = at;
-        });
+        }
         const after = states.length === 0 || links.slice(newest + 1).some(isForeign);
-        const partner = newestDescribed(links)?.ladder ?? ledger.rows;
-        return { reading: { states: exact, after, partner }, unknown: false, states, after };
+        const partner = newestDescribed(links)?.ladder ?? ledgerRows;
+
+        let base: ClaimBase[] | null = null;
+        if (reader === 'write') {
+            const [only] = candidates;
+            if (states.length === 1 && !after && fits(only.rows, lines)) base = [...only.rows];
+            // No scan has committed the file, and the ledger has no rows: the
+            // start-up scan skips a note with no list items, so this is every
+            // such note until something writes to it. Nothing there has a name
+            // anyone holds, and every row a write finds is new.
+            else if (!newestOwn && ledger.content === null && ledger.rows.length === 0) base = [];
+            // Past the cap, the lines our last write left are still known
+            // row by row; anything else is paired, and that is not told.
+            if (lost && base === null) return nothing;
+        }
+        return { reading: { states: exact, after, partner }, unknown: false, states, after, base };
     }
 
     /**
@@ -711,93 +768,6 @@ export class WriteClaims {
         chain.carried = ownLinks(chain.links).length > 0;
         if (chain.lost <= readMark) chain.lost = 0;
     }
-
-    /**
-     * The rows these lines are known to hold: what the last write left, else
-     * what the last scan recorded, else nothing.
-     *
-     * Asked about the lines a write was handed, before it changes them, and by
-     * two parties: the write's claim builds on the answer, and the write's
-     * `locate` reads its target's coordinate off it (see `TaskScanner.locate`).
-     * A coordinate is good only inside the content it was read from, and this
-     * is the one place that says which content that is.
-     *
-     * Either candidate is a guess about a file this code did not read, so it is
-     * checked rather than trusted, and both are checked the same way: the file
-     * has to read, whole, as the candidate says it did — the same comparison a
-     * scan makes when it weighs a claim (see `reproduces`) — and each of the
-     * candidate's rows has to read its own text on its own line.
-     *
-     * The whole content, because rows alone say nothing about the lines between
-     * them. A file is written by plenty that do not report — a write that
-     * reports nothing, a report that did not account for its own file, a
-     * writer with no sink at all, frontmatter and headings, which move every
-     * row below them without touching a row — and an external edit reports to
-     * nobody. Each leaves the candidate describing a file that is no longer
-     * there, and the one comparison catches all of them, so nothing has to be
-     * delivered to this class for it to know.
-     *
-     * The rows as well, because the content is compared by key (see
-     * `ContentKey`). Two contents sharing a key would also have to put every
-     * row's text on the row's line before a claim were built on the wrong one.
-     *
-     * A chain that is there at all stops the search rather than falling
-     * through, whether or not its newest link still fits. Its presence says a
-     * write of ours landed after the last scan committed, so the ledger
-     * describes a file at least two writes old — and stale in the direction
-     * that matters: the rows it holds sit at the line numbers the file had
-     * *before* our own write moved them. That is why a refusal leaves a mark
-     * behind instead of no link: the answer has to stay "nothing" for every
-     * write until a scan commits, not just for the one that noticed.
-     *
-     * *No* chain is not a promise that the ledger is current: {@link forget}
-     * drops what a committing scan read, whatever the ledger it commits.
-     * Before scans handed over the mark they took before reading, a scan that
-     * read the file as it was before our last write, and committed after that
-     * write filed, took the base with it and left the next write a ledger one
-     * write old. Handed a copy inserted above its original, that ledger's row
-     * names the copy — the text there is the same word, so its rows still
-     * fit. What refuses it is its content: the ledger recorded the file before
-     * the copy, and the file this write was handed has it. Checked by rows
-     * alone, the copy would be claimed as the original with every text lining
-     * up, and a scan comparing whole contents would adopt it.
-     *
-     * The content does not refuse everything, though: our writes, and what
-     * came after them, can bring the file back to the very content that ledger
-     * recorded, with the names moved between its lines (delete X, append a
-     * row, rename Y to X's text). So a commit keeps what the scan did not read
-     * (`carried`), and while it is kept, the ledger is not answered with at
-     * all.
-     *
-     * A file no scan has committed has no ledger content, and no rows either —
-     * the start-up scan skips a note with no list items, so this is every such
-     * note until something writes to it. Nothing there has a name anyone holds,
-     * so there is nothing a claim could hand to the wrong line: every row the
-     * write finds is new, and it builds on no rows at all.
-     */
-    stateFor(path: string, before: readonly string[]): ClaimBase[] | null {
-        const current = contentKeyOf(before);
-
-        const chain = this.chains.get(path);
-        const own = ownLinks(chain?.links ?? []);
-        if (chain && own.length > 0) {
-            // A scan committed without having read a write of ours: its ledger
-            // is older than that write however well the content fits. The
-            // write and what came after it can bring the file back to the very
-            // content the ledger recorded, with the names moved between its
-            // lines.
-            if (chain.carried) return null;
-            const newest = own.at(-1)!;
-            if (newest.content === null) return null;
-            return newest.content === current && fits(newest.rows, before) ? newest.rows : null;
-        }
-
-        const ledger = this.ledgerState(path);
-        if (ledger.content === null) return ledger.rows.length === 0 ? [] : null;
-        if (ledger.content === current && fits(ledger.rows, before)) return ledger.rows;
-
-        return null;
-    }
 }
 
 /**
@@ -839,7 +809,17 @@ function newestDescribed(links: readonly Link[]): Described | undefined {
     return undefined;
 }
 
-/** Whether each row still reads its own text on its own line. */
+/**
+ * Whether each row still reads its own text on its own line.
+ *
+ * Asked of a state whose content key the lines already have (see
+ * `WriteClaims.reading`). The whole content catches every writer that does
+ * not report — frontmatter, headings, an edit from outside all move rows
+ * without touching one — and the rows are checked as well because the content
+ * is compared by key (see `ContentKey`): two contents sharing a key would also
+ * have to put every row's text on the row's line before a write built on the
+ * wrong one.
+ */
 function fits(rows: readonly ClaimBase[], lines: readonly string[]): boolean {
     for (const row of rows) {
         if (row.line < 0 || row.line >= lines.length) return false;

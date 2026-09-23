@@ -642,7 +642,7 @@ describe('F2-counter3: availability', () => {
 // could still come back to the exact content the ledger recorded, names moved
 // between its lines, and the ledger answered as a state on record. While a
 // write the ledger has not read is kept, it is not answered with at all
-// (`WriteClaims.stateFor`).
+// (`WriteClaims.reading`, asked by a write).
 describe('F2-counter4: the file back at the content the ledger recorded, names moved', () => {
     it('P1: our own writes bring it back (delete X, append B, rename Y to A): the delete of X does not take Y', async () => {
         const bench = await writeBench(['- [ ] A', '- [ ] B']);
@@ -677,11 +677,14 @@ describe('F2-counter4: the file back at the content the ledger recorded, names m
         expect((await bench.writer.updateTaskInFile(plannedOn(x), checked(x))).written).toBe(false);
         expect(bench.lines()).toEqual(['- [ ] A', '- [ ] B']);
         // I1: the outside append puts back the ledger's content after our
-        // writes. Put back, X is on top; changed after our last write (which
-        // took X away), the top line is Y's. The readings disagree on the top
-        // line, and X is `ambiguous`. Before I1 the ledger paired and
-        // `againstLastWrite` refused as `changed`.
-        expect(bench.refused.map(r => r.reason.kind)).toEqual(['ambiguous']);
+        // writes. A write's lines come after every write of ours, so they
+        // are not the ledger's state but a change after our last write, which
+        // took X away: paired against what that write left, the top line is
+        // Y's, and X is `gone`. Before I1 the ledger paired and
+        // `againstLastWrite` refused as `changed`; before the write stopped
+        // weighing states older than its last write, the scan's two readings
+        // disagreed on the top line and X was `ambiguous`.
+        expect(bench.refused.map(r => r.reason.kind)).toEqual(['gone']);
     });
 
     it('V1: a silent write filed while an outside edit\'s scan read: the next write is refused until a later scan (availability)', async () => {

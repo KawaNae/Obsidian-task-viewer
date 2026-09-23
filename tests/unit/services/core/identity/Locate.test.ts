@@ -243,6 +243,24 @@ describe('locate by matching, when the content is not on record', () => {
         expect(harness.locate(original)).toEqual(gone);
     });
 
+    it('does not answer from what our last write left once an outside change came after it (I1)', async () => {
+        const harness = new Harness();
+        await harness.write([TASK, TASK, '']);
+        const [upper, lower] = harness.ids();
+
+        // Our write appends a row. Then something else takes a line away and
+        // puts one back, and the file reads, whole, as our write left it. The
+        // two identical rows may be ours as we left them, or not — a scan of
+        // these lines weighs both, and pairs them by position.
+        const [made] = harness.report([TASK, TASK, OTHER, ''], [{ kind: 'inserted', at: 2, count: 1 }]);
+        harness.edit([TASK, OTHER, '']);
+        harness.edit([TASK, TASK, OTHER, '']);
+        expect(harness.locate(upper)).toEqual(ambiguous(2));
+        expect(harness.locate(lower)).toEqual(ambiguous(2));
+        // The row no other reads like is still found.
+        expect(harness.locate(made)).toEqual(at(2));
+    });
+
     it('finds a row a write made after something else edited the file (F5b)', async () => {
         const harness = new Harness();
         await harness.write([TASK, '']);

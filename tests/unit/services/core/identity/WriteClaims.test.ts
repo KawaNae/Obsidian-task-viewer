@@ -387,7 +387,7 @@ describe('WriteClaims: a write that did not land', () => {
         // The mark stays: the ledger is still older than a write nobody
         // described, and the file does not read as the ledger says.
         expect(claims.lastWrite(FILE)).toEqual({ rows: null });
-        expect(claims.stateFor(FILE, ['- [ ] 丙', '- [ ] 甲'])).toBeNull();
+        expect(claims.reading(FILE, ['- [ ] 丙', '- [ ] 甲'], 'write', []).base).toBeNull();
     });
 
     it('keeps a write that a later write was built on, whatever its caller was told (F5b)', () => {
@@ -400,7 +400,7 @@ describe('WriteClaims: a write that did not land', () => {
 
         // The second write fitted the file only because the first one's
         // content was there. What it left is still what the file reads.
-        expect(claims.stateFor(FILE, ['- [ ] 甲', '- [ ] 乙', '- [ ] 丙'])?.map(row => row.runtimeId))
+        expect(claims.reading(FILE, ['- [ ] 甲', '- [ ] 乙', '- [ ] 丙'], 'write', []).base?.map(row => row.runtimeId))
             .toEqual(['r1', 'w1', 'w2']);
     });
 
@@ -612,7 +612,7 @@ describe('changes counted against our writes (I1)', () => {
     it('a write\'s modify that comes after a scan committed past it is still ours', () => {
         const claims = claimsWith();
         claims.claim(FILE, ONE, TWO, edits, 'user');
-        claims.forget(FILE, { readMark: claims.readMark(), place: claims.reading(FILE, contentKeyOf(TWO), { content: null, rows: [] }) });
+        claims.forget(FILE, { readMark: claims.readMark(), place: claims.reading(FILE, TWO, 'scan', []) });
         expect(claims.peek(FILE)).toEqual({ links: [], awaiting: 1 });
         claims.noteChange(FILE);
         expect(claims.peek(FILE)).toEqual({ links: [], awaiting: 0 });
@@ -625,7 +625,7 @@ describe('changes counted against our writes (I1)', () => {
         expect(claims.peek(FILE)).toEqual({ links: [], awaiting: 0 });
 
         const dropped = claims.claim(FILE, ONE, TWO, edits, 'user');
-        claims.forget(FILE, { readMark: claims.readMark(), place: claims.reading(FILE, contentKeyOf(TWO), { content: null, rows: [] }) });
+        claims.forget(FILE, { readMark: claims.readMark(), place: claims.reading(FILE, TWO, 'scan', []) });
         dropped.withdraw();
         expect(claims.peek(FILE).awaiting).toBe(0);
         claims.noteChange(FILE);
