@@ -12,7 +12,12 @@ export interface SplitLines {
     lines: string[];
     /** What {@link joinLines} puts back between them. */
     eol: Eol;
+    /** Whether the content opened with a byte order mark, which is not in `lines`. */
+    bom: boolean;
 }
+
+/** U+FEFF, the byte order mark a note may open with. */
+const BOM = '﻿';
 
 /**
  * Split file content into lines, dropping the CR of a CRLF terminator.
@@ -29,7 +34,12 @@ export interface SplitLines {
  * would put the bookkeeping in all seventeen write sites instead of here.
  */
 export function splitLines(content: string): SplitLines {
-    const lines = content.split('\n');
+    // The mark belongs to the file, not to its first line. Obsidian's `read`
+    // takes it off and `process` hands it over, so without this the scan and
+    // the write read line 0 of the same note as two different lines — and a
+    // line written from line 0's indentation opened with a second mark.
+    const bom = content.startsWith(BOM);
+    const lines = (bom ? content.slice(BOM.length) : content).split('\n');
     const terminators = lines.length - 1;
     let crlf = 0;
 
@@ -45,7 +55,7 @@ export function splitLines(content: string): SplitLines {
         if (i < terminators) crlf++;
     }
 
-    return { lines, eol: crlf > terminators - crlf ? '\r\n' : '\n' };
+    return { lines, eol: crlf > terminators - crlf ? '\r\n' : '\n', bom };
 }
 
 /** Put the lines back together with the terminator the file is written in. */
@@ -497,7 +507,7 @@ export async function processLines(
             refused = null;
             made = [];
 
-            const { lines, eol } = splitLines(content);
+            const { lines, eol, bom } = splitLines(content);
             const before = [...lines];
             // Over `lines` itself: a report describes the array the write was
             // handed. A write that returns some other array is not reporting
@@ -570,7 +580,8 @@ export async function processLines(
             refused = null;
 
             written = true;
-            const rebuilt = joinLines(next, eol);
+            // The mark the note opened with, put back where it was.
+            const rebuilt = (bom ? BOM : '') + joinLines(next, eol);
 
             // A rewrite that produced the same bytes is not a write: Obsidian
             // fires no `modify` for it, so no scan follows, and a claim filed

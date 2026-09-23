@@ -53,7 +53,7 @@ export class InlineTaskWriter {
             const newLine = TaskParser.format(updatedTask);
 
             // Preserve indentation if possible
-            const originalIndent = lines[currentLine].match(/^(\s*)/)?.[1] || '';
+            const originalIndent = Outline.indentOf(lines[currentLine]);
             lines[currentLine] = originalIndent + newLine.trim();
             // An update rewrites the line and leaves it the same task — the
             // whole point of the call is that this row is the one being
@@ -84,7 +84,7 @@ export class InlineTaskWriter {
 
             // Preserve original indentation
             const originalLine = lines[lineNumber];
-            const originalIndent = originalLine.match(/^(\s*)/)?.[1] || '';
+            const originalIndent = Outline.indentOf(originalLine);
             const newContentTrimmed = newContent.trimStart();
 
             lines[lineNumber] = originalIndent + newContentTrimmed;
@@ -276,7 +276,7 @@ export class InlineTaskWriter {
                 for (let i = flowIndices.length - 1; i >= 0; i--) {
                     edits.splice(flowIndices[i], 1);
                 }
-                const indent = lines[line].match(/^(\s*)/)?.[1] || '';
+                const indent = Outline.indentOf(lines[line]);
                 lines[line] = indent + op.text.trim();
                 // Losing `==>` rewrites the text; the row is the one that fired.
                 edits.replaced(line);
@@ -432,7 +432,7 @@ export class InlineTaskWriter {
             const currentLine = lineOf(refOf(task), subjectOf(task));
             if (currentLine === null) return null;
 
-            const indent = lines[currentLine].match(/^(\s*)/)?.[1] ?? '';
+            const indent = Outline.indentOf(lines[currentLine]);
             const anchor = opts.afterCompletedRun
                 ? this.completedRunEnd(lines, currentLine)
                 : currentLine;
@@ -524,7 +524,7 @@ export class InlineTaskWriter {
     private childrenToCarry(lines: string[], currentLine: number): Array<{ from: number; text: string }> {
 
         // Parent's original indentation prefix (preserves tabs/spaces)
-        const parentIndent = lines[currentLine].match(/^\s*/)?.[0] ?? '';
+        const parentIndent = Outline.indentOf(lines[currentLine]);
         // The task's own direct `- ==>` flow lines are consumed by the fire —
         // they must not travel to the archive. Descendant tasks' flow lines
         // are NOT direct (structural-parent rule) and stay as templates.

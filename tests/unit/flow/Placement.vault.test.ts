@@ -85,6 +85,26 @@ describe('CY1: the next instance of a row with no sibling above it', () => {
     }
 });
 
+describe('a note that opens with a byte order mark', () => {
+    // Obsidian's `read` takes the mark off and `process` hands it over, so the
+    // scan and the write read line 0 differently; and the next instance took
+    // its indentation from line 0 — the mark with it — and went in above it.
+    it('keeps one mark, at the start, when its first line fires', async () => {
+        const { contents, session } = await open(['﻿' + ROW, '\t- [ ] 子', '']);
+
+        await fire(session);
+
+        const text = contents.get(FILE)!;
+        expect(text.split('﻿')).toHaveLength(2);
+        expect(text).toBe(['﻿' + NEXT, DONE, '\t- [ ] 子', ''].join('\n'));
+        expect(Notice.messages).toEqual([]);
+        // The tab child is read under the row that fired, which the mark on
+        // its line once made as deep as the child.
+        const [child] = tasksWorded(session, '子');
+        expect(child.parentId).toBe(tasksWorded(session, '対象').find(task => task.statusChar === 'x')!.id);
+    });
+});
+
 describe('a next instance with nowhere in the body to go', () => {
     it('is refused whole: nothing written, the command kept, one notice', async () => {
         // The indented row's group is under the first shallower line above,
