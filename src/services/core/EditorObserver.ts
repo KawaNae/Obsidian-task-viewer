@@ -1,20 +1,52 @@
-import { type App, type EventRef, type WorkspaceLeaf, MarkdownView } from 'obsidian';
+import { type App, type EventRef, type WorkspaceLeaf, type Editor, type MarkdownFileInfo, MarkdownView } from 'obsidian';
 import type { EditorSignal } from './EditorSignal';
 import { editorCm } from '../../utils/editorCm';
 
 /**
+ * How soon after a key or a press an editor's change is taken for the hand's.
+ * A command bound to a key (Ctrl+Enter's checkbox toggle), a checkbox clicked
+ * in Live Preview, a button on the mobile toolbar: each changes the note in
+ * the same task as the input, milliseconds after it (4–34ms on Dev). A change
+ * with no input that recent came from somewhere else.
+ */
+export const HAND_WINDOW_MS = 1000;
+
+/** What the observer listens on for keys and presses: the window, in the app. */
+export interface InputSource {
+    addEventListener(type: string, listener: (e: Event) => void, options?: boolean): void;
+    removeEventListener(type: string, listener: (e: Event) => void, options?: boolean): void;
+}
+
+/**
  * エディタオブザーバー - エディタイベントの監視
  * ユーザーによるローカル編集とファイル同期を区別するための監視機能
+ *
+ * What it raises is the editor's signal (see `EditorSignal`): that a hand
+ * changed a note in an editor. Two ways say so. Typing says it directly: a
+ * `beforeinput` in the editor's content. Everything else — a checkbox clicked
+ * in Live Preview, a command run from a key or the palette, the mobile
+ * toolbar — changes the note through the editor without a `beforeinput`, so
+ * what says it is an editor change that follows a key or a press within
+ * {@link HAND_WINDOW_MS}. A press alone says nothing: a click that places the
+ * cursor changes no note, and taking it for a hand's change made the next
+ * sync fire as one.
  */
 export class EditorObserver {
     private currentEditorEl: HTMLElement | null = null;
     private editorListenerBound: ((e: InputEvent) => void) | null = null;
-    private mousedownListenerBound: ((e: MouseEvent) => void) | null = null;
     private leafChangeRef: EventRef | null = null;
+    private editorChangeRef: EventRef | null = null;
+    /** When a key or a press last reached the app, or -Infinity. */
+    private lastHand = -Infinity;
+    private readonly onHand = (e: Event) => {
+        if (e.isTrusted) this.lastHand = this.now();
+    };
 
     constructor(
         private app: App,
-        private editorSignal: EditorSignal
+        private editorSignal: EditorSignal,
+        private readonly inputs: InputSource | null = typeof window === 'undefined' ? null : window,
+        private readonly now: () => number = () => Date.now(),
     ) { }
 
     /**
@@ -27,6 +59,16 @@ export class EditorObserver {
             this.attachEditorListener(leaf);
         });
 
+        // Captured, so a handler that stops the event on its way down does not
+        // hide the key or the press from here.
+        this.inputs?.addEventListener('keydown', this.onHand, true);
+        this.inputs?.addEventListener('pointerdown', this.onHand, true);
+        this.editorChangeRef = this.app.workspace.on('editor-change', (_editor: Editor, info: MarkdownView | MarkdownFileInfo) => {
+            if (this.now() - this.lastHand > HAND_WINDOW_MS) return;
+            const file = info.file;
+            if (file) this.editorSignal.mark(file.path);
+        });
+
         // 初回
         this.attachEditorListener(this.app.workspace.activeLeaf);
     }
@@ -34,17 +76,23 @@ export class EditorObserver {
     /**
      * Stop watching, and leave no listener behind.
      *
-     * What this observer marks is "the user typed here", which decides whether
-     * a change is local and therefore whether a completed command may fire. An
-     * observer that outlives its index goes on marking edits into a detector
-     * nobody reads, and the workspace subscription would keep re-attaching the
-     * pair to whichever editor is opened next.
+     * What this observer marks is "the user's hand changed this note", which
+     * decides whether a completion no write of ours made may fire. An observer
+     * that outlives its index goes on marking edits into a signal nobody
+     * reads, and the workspace subscription would keep re-attaching the
+     * listener to whichever editor is opened next.
      */
     dispose(): void {
         if (this.leafChangeRef) {
             this.app.workspace.offref(this.leafChangeRef);
             this.leafChangeRef = null;
         }
+        if (this.editorChangeRef) {
+            this.app.workspace.offref(this.editorChangeRef);
+            this.editorChangeRef = null;
+        }
+        this.inputs?.removeEventListener('keydown', this.onHand, true);
+        this.inputs?.removeEventListener('pointerdown', this.onHand, true);
         this.detachEditorListener();
     }
 
@@ -75,43 +123,15 @@ export class EditorObserver {
             }
         };
         editorEl.addEventListener('beforeinput', this.editorListenerBound as EventListener);
-
-        // mousedown: チェックボックスクリック対応
-        // Obsidianのチェックボックスクリックはbeforeinputを発火しないため、
-        // mousedownでローカル編集をマーキングする。チェックボックスの上の
-        // mousedown に限る: 本文のどこかをクリックしただけで立てると、その
-        // 操作と無関係な次の変更（同期）が手の完了として発火していた。
-        this.mousedownListenerBound = (e: MouseEvent) => {
-            if (!pressesCheckbox(e.target)) return;
-            const file = view.file;
-            if (file) {
-                this.editorSignal.mark(file.path);
-            }
-        };
-        editorEl.addEventListener('mousedown', this.mousedownListenerBound);
     }
 
-    /** Take the pair off whichever editor currently carries it. */
+    /** Take the listener off whichever editor currently carries it. */
     private detachEditorListener(): void {
         if (!this.currentEditorEl) return;
         if (this.editorListenerBound) {
             this.currentEditorEl.removeEventListener('beforeinput', this.editorListenerBound as EventListener);
         }
-        if (this.mousedownListenerBound) {
-            this.currentEditorEl.removeEventListener('mousedown', this.mousedownListenerBound);
-        }
         this.currentEditorEl = null;
         this.editorListenerBound = null;
-        this.mousedownListenerBound = null;
     }
-}
-
-/**
- * Whether a mousedown landed on a task's checkbox in the editor — the one
- * press that changes the note without a `beforeinput` (Live Preview toggles
- * the checkbox through its own transaction).
- */
-export function pressesCheckbox(target: EventTarget | null): boolean {
-    const element = target as { closest?: (selector: string) => unknown } | null;
-    return typeof element?.closest === 'function' && element.closest('.task-list-item-checkbox') !== null;
 }
