@@ -1,6 +1,7 @@
 import type { ChildLine, PropertyType, PropertyValue } from '../../../types';
 import { IN_LINE } from '../../../utils/LineBreak';
-import { CHECKBOX_GAP_SOURCE, LIST_BULLET_SOURCE, STATUS_CHAR_SOURCE } from './ListMarker';
+import { LIST_BULLET_SOURCE } from './ListMarker';
+import { TaskLineClassifier } from './TaskLineClassifier';
 import { INDENT_SOURCE, Outline } from './Outline';
 import { extractWikilinkTarget } from '../../../utils/WikilinkUtils';
 
@@ -11,7 +12,6 @@ import { extractWikilinkTarget } from '../../../utils/WikilinkUtils';
 export class ChildLineClassifier {
     /** `- [[link]]` with any list bullet. */
     static readonly WIKILINK_CHILD = new RegExp(`^${INDENT_SOURCE}${LIST_BULLET_SOURCE}\\s+\\[\\[([^\\]]+)\\]\\]\\s*$`);
-    static readonly CHECKBOX_CHAR = new RegExp(`^${INDENT_SOURCE}${LIST_BULLET_SOURCE}\\s*\\[(${STATUS_CHAR_SOURCE})\\]${CHECKBOX_GAP_SOURCE}`);
     /**
      * Matches `- key:: value` (Dataview-compatible) but not checkbox or wikilink lines.
      * 値部は空を許す（`- key ::` は空値プロパティ）。`(.+)` にすると末尾空白の
@@ -25,13 +25,13 @@ export class ChildLineClassifier {
      */
     static classify(text: string, bodyLine: number): ChildLine {
         const indent = Outline.indentOf(text);
-        const cbMatch = text.match(this.CHECKBOX_CHAR);
+        const isCheckbox = TaskLineClassifier.isTaskLine(text);
         const wikiMatch = text.match(this.WIKILINK_CHILD);
 
         // Property extraction: only for non-checkbox, non-wikilink lines
         let propertyKey: string | null = null;
         let propertyValue: string | null = null;
-        if (!cbMatch && !wikiMatch) {
+        if (!isCheckbox && !wikiMatch) {
             const propMatch = text.match(this.PROPERTY_LINE);
             if (propMatch) {
                 propertyKey = propMatch[1].trim();
@@ -62,7 +62,7 @@ export class ChildLineClassifier {
      * write 層向け。分類本体と同じ checkbox/wikilink 除外規則を通す）。
      */
     static isPropertyLine(text: string): boolean {
-        if (this.CHECKBOX_CHAR.test(text) || this.WIKILINK_CHILD.test(text)) return false;
+        if (TaskLineClassifier.isTaskLine(text) || this.WIKILINK_CHILD.test(text)) return false;
         return this.PROPERTY_LINE.test(text);
     }
 

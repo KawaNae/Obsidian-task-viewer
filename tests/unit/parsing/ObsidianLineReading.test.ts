@@ -107,12 +107,12 @@ describe('line breaks, as Obsidian ends a line', () => {
         // agree (`.plan/stages/l1-lines/device-1.md`).
         for (const sep of [LS, PS]) {
             expect(TaskLineClassifier.isTaskLine(`- [${sep}] a`)).toBe(false);
-            expect(ChildLineClassifier.CHECKBOX_CHAR.test(`\t- [${sep}] a`)).toBe(false);
+            expect(TaskLineClassifier.isTaskLine(`\t- [${sep}] a`)).toBe(false);
             expect(parse(`- [ ] p\n\t- [${sep}] c\n`).contents).toEqual(['p']);
         }
         for (const status of ['\t', NBSP, IDEOGRAPHIC, BOM, String.fromCharCode(0x200b)]) {
             expect(TaskLineClassifier.classify(`- [${status}] a`)?.statusChar).toBe(status);
-            expect(ChildLineClassifier.CHECKBOX_CHAR.exec(`\t- [${status}] a`)?.[1]).toBe(status);
+            expect(TaskLineClassifier.classify(`\t- [${status}] a`)?.statusChar).toBe(status);
         }
     });
 
@@ -121,15 +121,36 @@ describe('line breaks, as Obsidian ends a line', () => {
         // (`.plan/stages/l1-lines/device-1.md`).
         for (const tail of [' x', '\tx', ' ']) {
             expect(TaskLineClassifier.isTaskLine(`- [ ]${tail}`)).toBe(true);
-            expect(ChildLineClassifier.CHECKBOX_CHAR.test(`\t- [ ]${tail}`)).toBe(true);
+            expect(TaskLineClassifier.isTaskLine(`\t- [ ]${tail}`)).toBe(true);
         }
         for (const tail of ['x', '', `${NBSP}x`, `${IDEOGRAPHIC}x`, `${LS}x`, `${PS}x`]) {
             expect(TaskLineClassifier.isTaskLine(`- [ ]${tail}`)).toBe(false);
-            expect(ChildLineClassifier.CHECKBOX_CHAR.test(`\t- [ ]${tail}`)).toBe(false);
+            expect(TaskLineClassifier.isTaskLine(`\t- [ ]${tail}`)).toBe(false);
             expect(parse(`- [ ] p\n\t- [ ]${tail}\n`).contents).toEqual(['p']);
         }
         expect(TaskLineClassifier.classify('- [ ]\tx')?.rawContent).toBe('x');
         expect(TaskLineClassifier.classify('- [ ] ')?.rawContent).toBe('');
+    });
+
+    it('reads a checkbox as a task only after one to four spaces or one tab past the marker', () => {
+        // Dev, Obsidian 1.12.4: `listItems` and the reading view agree, for
+        // every marker, at the top level and nested (verify-scripts
+        // `l1-marker-gap.js`). Live Preview draws a checkbox after anything.
+        for (const marker of ['-', '*', '+', '1.', '1)']) {
+            for (const gap of [' ', '  ', '   ', '    ', '\t']) {
+                expect(TaskLineClassifier.isTaskLine(`${marker}${gap}[ ] x`), `${marker}${JSON.stringify(gap)}`).toBe(true);
+                expect(TaskLineClassifier.isTaskLine(`\t${marker}${gap}[ ] x`)).toBe(true);
+            }
+            for (const gap of ['', '     ', ' \t', '\t\t', NBSP, IDEOGRAPHIC]) {
+                expect(TaskLineClassifier.isTaskLine(`${marker}${gap}[ ] x`), `${marker}${JSON.stringify(gap)}`).toBe(false);
+                expect(TaskLineClassifier.isTaskLine(`\t${marker}${gap}[ ] x`)).toBe(false);
+            }
+        }
+        expect(parse('- [ ] p\n\t-\t[ ] c\n').contents).toEqual(['p', 'c']);
+        expect(parse('- [ ] p\n\t-     [ ] c\n').contents).toEqual(['p']);
+        expect(parse('-[ ] p\n').contents).toEqual([]);
+        // A checkbox among a row's children is the same reading: not a property
+        expect(ChildLineClassifier.classify('\t-\t[ ] k:: v', 0).propertyKey).toBeNull();
     });
 
     it('reads a task with no content and a block id as a task', () => {
