@@ -43,7 +43,7 @@ export class Outline {
      * beside the first.
      */
     static indentOf(line: string): string {
-        return /^[^\S﻿]*/.exec(line)![0];
+        return /^[^\S\uFEFF]*/.exec(line)![0];
     }
 
     /**
