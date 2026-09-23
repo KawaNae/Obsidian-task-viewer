@@ -37,11 +37,14 @@ export interface RowBasis {
  * as the last scan read it, as a write of ours left it, or as a pending claim
  * says — rather than as the index's copy reads it.
  *
- * The timer's three inserts only. A timer that is stopped writes its record
- * and closes whatever the write answers (`TimerLifecycle.finishTimer`), so a
- * write refused in the moment between a write of ours and the scan that reads
- * it would lose the measurement, not just wait for the scan. Taking the
- * answer is F9's.
+ * The timer's three inserts only (`InlineTaskWriter.insertLineAfterTask`,
+ * `insertSiblingAfterTask`, `insertLineAsFirstChild`) — the last of which is
+ * also how a child is added from a card's menu or the API. A timer that is
+ * stopped writes its record and closes whatever the write answers
+ * (`TimerLifecycle.finishTimer`), so a write refused in the moment between a
+ * write of ours and the scan that reads it would lose the measurement, not
+ * just wait for the scan. Taking the answer is F9's. None of the three
+ * rewrites the row it names: each puts a new line beside it.
  */
 export const ON_RECORD = 'on-record' as const;
 export type OnRecord = typeof ON_RECORD;
