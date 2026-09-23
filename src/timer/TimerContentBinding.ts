@@ -169,6 +169,10 @@ export class TimerContentBinding {
         // 待たずに書けたと答えると、停止は名前の書き込みの結果を知らずに記録へ
         // 進み、名前が拒否されたときに通知が拒否と成功の2回になる。
         if (state.draining) return state.draining;
+        // 書くものが無ければ握らない。本体に await が無いと `finally` が先に
+        // 同期で走り、解けた握りの上に解決済みの promise が残る。以後の flush は
+        // それを返して、名前を書かずに書けたと答えていた。
+        if (state.pending === undefined) return Promise.resolve(true);
 
         const draining = (async () => {
             try {

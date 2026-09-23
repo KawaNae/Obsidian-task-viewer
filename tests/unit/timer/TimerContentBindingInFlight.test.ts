@@ -115,4 +115,19 @@ describe('TimerContentBinding: a flush during a write', () => {
         expect(await again).toBe(true);
         expect(h.timer.pendingContent).toBeUndefined();
     });
+
+    it('writes a name flushed after a flush that had nothing to write', async () => {
+        const h = harness();
+        // A stop flushes whether or not a name was typed.
+        expect(await h.binding.flush(h.timer)).toBe(true);
+        expect(h.calls).toEqual([]);
+
+        h.timer.pendingContent = 'あとで打った名前';
+        const flushed = h.binding.flush(h.timer);
+        await Promise.resolve();
+        expect(h.calls).toEqual(['あとで打った名前']);
+        h.settle(true);
+        expect(await flushed).toBe(true);
+        expect(h.timer.pendingContent).toBeUndefined();
+    });
 });
