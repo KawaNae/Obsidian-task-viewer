@@ -554,11 +554,12 @@ export class WriteClaims {
      * one thing a scan does not: they came after every write of ours that
      * filed here, each of which landed or was taken back before this one was
      * handed the file (`WriteReceipt.withdraw`). So the ledger and the states
-     * between are not states its lines may be. Lines that read as one of them
-     * were put back by something else, which is a change after our newest
-     * write, and are paired against what that write left. What is left is
-     * the newest write of ours — or the ledger, with none — and, with an
-     * outside change after it, a change that reads the same. Where our newest
+     * between are not what its lines are as they stand: the lines are the
+     * newest write of ours — or the ledger, with none — or a change after it.
+     * Only a change after it can have put an older state back, so with an
+     * outside change after our newest write the older states come in as a
+     * scan weighs them, put back, next to "after"; with none they are no
+     * reading at all. Where our newest
      * write could not say what it left, or the cap has dropped states and the
      * lines are not, row by row, what our newest write left, nothing can be
      * told (`unknown`), and a write refuses. A
@@ -589,7 +590,14 @@ export class WriteClaims {
             });
         } else if (newestOwn) {
             if (newestOwn.content === null) return nothing;
-            if (!chain!.carried) candidates.push({ state: newestOwn, rows: newestOwn.rows, at: links.indexOf(newestOwn) });
+            const at = links.indexOf(newestOwn);
+            if (links.slice(at + 1).some(isForeign)) {
+                if (ledger.content !== null) candidates.push({ state: 'ledger', rows: ledger.rows, at: -1 });
+                links.slice(0, at).forEach((link, earlier) => {
+                    if (link.content !== null) candidates.push({ state: link, rows: link.rows, at: earlier });
+                });
+            }
+            if (!chain!.carried) candidates.push({ state: newestOwn, rows: newestOwn.rows, at });
         } else if (ledger.content !== null) {
             candidates.push({ state: 'ledger', rows: ledger.rows, at: -1 });
         }
@@ -609,8 +617,8 @@ export class WriteClaims {
 
         let base: ClaimBase[] | null = null;
         if (reader === 'write') {
-            const [only] = candidates;
-            if (states.length === 1 && !after && fits(only.rows, lines)) base = [...only.rows];
+            const only = candidates.find(candidate => candidate.state === states[0]);
+            if (only && states.length === 1 && !after && fits(only.rows, lines)) base = [...only.rows];
             // No scan has committed the file, and the ledger has no rows: the
             // start-up scan skips a note with no list items, so this is every
             // such note until something writes to it. Nothing there has a name

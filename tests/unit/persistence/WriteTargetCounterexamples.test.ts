@@ -676,15 +676,33 @@ describe('F2-counter4: the file back at the content the ledger recorded, names m
         bench.edit(['- [ ] A', '- [ ] B']);
         expect((await bench.writer.updateTaskInFile(plannedOn(x), checked(x))).written).toBe(false);
         expect(bench.lines()).toEqual(['- [ ] A', '- [ ] B']);
-        // I1: the outside append puts back the ledger's content after our
-        // writes. A write's lines come after every write of ours, so they
-        // are not the ledger's state but a change after our last write, which
-        // took X away: paired against what that write left, the top line is
-        // Y's, and X is `gone`. Before I1 the ledger paired and
-        // `againstLastWrite` refused as `changed`; before the write stopped
-        // weighing states older than its last write, the scan's two readings
-        // disagreed on the top line and X was `ambiguous`.
-        expect(bench.refused.map(r => r.reason.kind)).toEqual(['gone']);
+        // I1: the lines come after our writes and read as the ledger's. Either
+        // something put the ledger's content back (X on top), or it appended B
+        // after our last write, which took X away (Y on top). The two readings
+        // disagree on the top line, and X is `ambiguous`. Before I1 the ledger
+        // paired and `againstLastWrite` refused as `changed`.
+        expect(bench.refused.map(r => r.reason.kind)).toEqual(['ambiguous']);
+    });
+
+    it('P2y: the same lines, a write to Y: refused as the scan names neither line, not written on what may be X\'s line', async () => {
+        const bench = await writeBench(['- [ ] A', '- [ ] B']);
+        const x = bench.taskAt(0);
+        const y = bench.taskAt(1);
+        const scan = await gatedScan(bench);
+        const renamed = { ...y, content: 'A', originalText: '- [ ] A' };
+        expect((await bench.writer.updateTaskInFile(plannedOn(y), renamed)).written).toBe(true);
+        expect(await bench.writer.deleteTaskFromFile(plannedOn(x, { subtree: true }))).toBe(true);
+        scan.release();
+        await scan.done;
+        bench.edit(['- [ ] A', '- [ ] B']);
+        // I1: a write that answered only "after our last write" put Y on the
+        // top line, which is X's if the ledger's content was put back, while
+        // the scan of the same lines names neither line.
+        expect((await bench.writer.updateTaskInFile(plannedOn(renamed), checked(renamed))).written).toBe(false);
+        expect(bench.lines()).toEqual(['- [ ] A', '- [ ] B']);
+        expect(bench.refused.map(r => r.reason.kind)).toEqual(['ambiguous']);
+        await bench.scan();
+        expect(bench.tasks().map(task => task.id).filter(id => id === x.id || id === y.id)).toEqual([]);
     });
 
     it('V1: a silent write filed while an outside edit\'s scan read: the next write is refused until a later scan (availability)', async () => {
