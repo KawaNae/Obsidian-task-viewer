@@ -43,7 +43,10 @@ function observe() {
         advance: (ms: number) => { now += ms; },
         key: () => inputs.get('keydown')!({ isTrusted: true } as Event),
         press: (trusted = true) => inputs.get('pointerdown')!({ isTrusted: trusted } as Event),
-        change: () => workspace.get('editor-change')!({}, { file: { path: 'note.md' } }),
+        /** The note's editor changed; `focused` says whether it had the focus. */
+        change: (focused = true) => workspace.get('editor-change')!({ hasFocus: () => focused }, { file: { path: 'note.md' } }),
+        /** A key or a press inside the editor's own element (a popped-out window's). */
+        keyInEditor: () => content.get('keydown')!({ isTrusted: true } as Event),
         type: () => content.get('beforeinput')!({ data: 'x', inputType: 'insertText' }),
     };
 }
@@ -82,6 +85,26 @@ describe('EditorObserver: what raises the signal', () => {
         editor.press(false);
         editor.change();
         expect(editor.signal.take('note.md')).toBe(false);
+    });
+
+    it("a change to an editor without the focus is not the hand's: a sync reloading the note after a key typed elsewhere, or after a press on a card", () => {
+        // F6's counterexample run (P1, P2): Obsidian reports a change when it
+        // reloads an open note something else wrote.
+        const editor = observe();
+        editor.key();
+        editor.advance(200);
+        editor.change(false);
+        expect(editor.signal.take('note.md')).toBe(false);
+        editor.press();
+        editor.change(false);
+        expect(editor.signal.take('note.md')).toBe(false);
+    });
+
+    it("a key in a popped-out window's editor counts, heard on the editor itself", () => {
+        const editor = observe();
+        editor.keyInEditor();
+        editor.change();
+        expect(editor.signal.take('note.md')).toBe(true);
     });
 
     it('typing raises it', () => {

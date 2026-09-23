@@ -26,10 +26,13 @@ export interface InputSource {
  * `beforeinput` in the editor's content. Everything else — a checkbox clicked
  * in Live Preview, a command run from a key or the palette, the mobile
  * toolbar — changes the note through the editor without a `beforeinput`, so
- * what says it is an editor change that follows a key or a press within
- * {@link HAND_WINDOW_MS}. A press alone says nothing: a click that places the
- * cursor changes no note, and taking it for a hand's change made the next
- * sync fire as one.
+ * what says it is a change to the editor that has the focus, within
+ * {@link HAND_WINDOW_MS} of a key or a press. A press alone says nothing: a
+ * click that places the cursor changes no note, and taking it for a hand's
+ * change made the next sync fire as one. The focus is what ties the change to
+ * the hand: Obsidian also reports a change when it reloads an open note that
+ * something else wrote — a sync, or a write of ours from a card — and a key
+ * typed into another note, or a click on a card, is not in that editor.
  */
 export class EditorObserver {
     private currentEditorEl: HTMLElement | null = null;
@@ -63,8 +66,9 @@ export class EditorObserver {
         // hide the key or the press from here.
         this.inputs?.addEventListener('keydown', this.onHand, true);
         this.inputs?.addEventListener('pointerdown', this.onHand, true);
-        this.editorChangeRef = this.app.workspace.on('editor-change', (_editor: Editor, info: MarkdownView | MarkdownFileInfo) => {
+        this.editorChangeRef = this.app.workspace.on('editor-change', (editor: Editor, info: MarkdownView | MarkdownFileInfo) => {
             if (this.now() - this.lastHand > HAND_WINDOW_MS) return;
+            if (!editor.hasFocus()) return;
             const file = info.file;
             if (file) this.editorSignal.mark(file.path);
         });
@@ -123,6 +127,9 @@ export class EditorObserver {
             }
         };
         editorEl.addEventListener('beforeinput', this.editorListenerBound as EventListener);
+        // A popped-out window's keys and presses do not reach the main one.
+        editorEl.addEventListener('keydown', this.onHand, true);
+        editorEl.addEventListener('pointerdown', this.onHand, true);
     }
 
     /** Take the listener off whichever editor currently carries it. */
@@ -131,6 +138,8 @@ export class EditorObserver {
         if (this.editorListenerBound) {
             this.currentEditorEl.removeEventListener('beforeinput', this.editorListenerBound as EventListener);
         }
+        this.currentEditorEl.removeEventListener('keydown', this.onHand, true);
+        this.currentEditorEl.removeEventListener('pointerdown', this.onHand, true);
         this.currentEditorEl = null;
         this.editorListenerBound = null;
     }
