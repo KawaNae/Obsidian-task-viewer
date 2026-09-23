@@ -66,6 +66,19 @@ describe('after the editor\'s menu rewrote a row, before any scan', () => {
         expect(bench.lines()).toEqual([TICKED, '\t- [x] ⏱️ 記録', '']);
     });
 
+    it('refuses a timer\'s record on a row rewritten from outside, which no record reads', async () => {
+        // The weaker comparison still compares: an undated row the ladder
+        // pairs one-against-one with a line written from outside (R4) is not
+        // on record for it.
+        const bench = await writeBench(['- [ ] alpha', '- [ ] buy milk', '- [ ] omega']);
+        const milk = bench.taskAt(1);
+        bench.edit(['- [ ] alpha', '- [ ] omega', '- [ ] call mom']);
+
+        expect(await bench.writer.insertLineAsFirstChild(milk, '- [x] ⏱️ 記録')).toBe(-1);
+        expect(bench.lines()).toEqual(['- [ ] alpha', '- [ ] omega', '- [ ] call mom']);
+        expect(bench.refused.map(r => r.reason.kind)).toEqual(['changed']);
+    });
+
     it('lets the same writes through once a scan has read the tick', async () => {
         const { bench } = await afterMenu();
         await bench.scan();
