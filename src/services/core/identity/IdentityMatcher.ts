@@ -233,6 +233,10 @@ function ladderOnce(
     const guessed = new Map<string, number>();
     // Current lines a position-decided bucket held, across both passes.
     const leftByPosition = new Map<Task, number>();
+    // A barred row is still a candidate: it takes whatever the ladder would
+    // give it, so no other pair is decided for its being gone. Only the pair
+    // is not made, and it opens no scope.
+    const spent = new Set<Task>();
 
     const { prevRoots, prevChildren } = buildPreviousTree(partner);
 
@@ -243,18 +247,22 @@ function ladderOnce(
         const scope = scopes.pop()!;
         const { pairs, byPosition } = runLadder(
             scope.prev
-                .filter(entry => !matchedPrev.has(entry.runtimeId) && !barred.has(entry))
+                .filter(entry => !matchedPrev.has(entry.runtimeId))
                 .map(entry => ({ item: entry, fingerprint: entry.fingerprint })),
             scope.cur
-                .filter(task => !pairedWith.has(task) && !barred.has(task))
+                .filter(task => !pairedWith.has(task) && !spent.has(task))
                 .map(task => ({ item: task, fingerprint: fingerprints.get(task)! })),
             leftByPosition,
         );
         for (const [entry, among] of byPosition) guessed.set(entry.runtimeId, among);
         for (const [entry, task] of pairs) {
+            matchedPrev.add(entry.runtimeId);
+            if (barred.has(entry) || barred.has(task)) {
+                spent.add(task);
+                continue;
+            }
             if (scope.among !== undefined && !guessed.has(entry.runtimeId)) guessed.set(entry.runtimeId, scope.among);
             pairedWith.set(task, entry);
-            matchedPrev.add(entry.runtimeId);
             // Only a matched parent opens its children's scope. An unmatched one
             // takes its whole subtree to the 2nd pass instead of renumbering it.
             scopes.push({
@@ -268,14 +276,16 @@ function ladderOnce(
     // --- 2nd pass: the leftovers of the whole file, no scoping ---
     const rescued = runLadder(
         partner
-            .filter(entry => !matchedPrev.has(entry.runtimeId) && !barred.has(entry))
+            .filter(entry => !matchedPrev.has(entry.runtimeId))
             .map(entry => ({ item: entry, fingerprint: entry.fingerprint })),
         ordered
-            .filter(task => !pairedWith.has(task) && !barred.has(task))
+            .filter(task => !pairedWith.has(task) && !spent.has(task))
             .map(task => ({ item: task, fingerprint: fingerprints.get(task)! })),
         leftByPosition,
     );
-    for (const [entry, task] of rescued.pairs) pairedWith.set(task, entry);
+    for (const [entry, task] of rescued.pairs) {
+        if (!barred.has(entry) && !barred.has(task)) pairedWith.set(task, entry);
+    }
     for (const [entry, among] of rescued.byPosition) guessed.set(entry.runtimeId, among);
 
     return { pairedWith, guessed };
@@ -350,38 +360,67 @@ function evidenceBetween(
     const previousIds = count(partner.map(entry => blockIdKey(entry.fingerprint)));
     const currentIds = count(ordered.map(task => blockIdKey(fingerprints.get(task)!)));
 
+    // Each row's keys, worked out once: the check asks for them of every
+    // row it weighs, in every run.
+    interface Keys { id: string | null; text: string; contentDate: string; parserId: string; contentKey: string; dateKey: string }
+    const keysOf = (fingerprint: Fingerprint): Keys => ({
+        id: blockIdKey(fingerprint),
+        text: textKey(fingerprint),
+        contentDate: contentDateKey(fingerprint),
+        parserId: fingerprint.parserId,
+        contentKey: fingerprint.contentKey,
+        dateKey: fingerprint.dateKey,
+    });
+    const entryKeys = new Map(partner.map(entry => [entry, keysOf(entry.fingerprint)]));
+    const taskKeys = new Map(ordered.map(task => [task, keysOf(fingerprints.get(task)!)]));
+
     const wordsOf = (entry: LedgerEntry, task: Task): Words => {
-        const left = entry.fingerprint;
-        const right = fingerprints.get(task)!;
+        const left = entryKeys.get(entry)!;
+        const right = taskKeys.get(task)!;
         if (left.parserId !== right.parserId) return Words.None;
-        const id = blockIdKey(left);
-        if (id !== null && id === blockIdKey(right) && previousIds.get(id) === 1 && currentIds.get(id) === 1) return Words.BlockId;
-        if (textKey(left) === textKey(right)) return Words.Text;
-        if (contentDateKey(left) === contentDateKey(right)) return Words.ContentAndDates;
+        if (left.id !== null && left.id === right.id && previousIds.get(left.id) === 1 && currentIds.get(left.id) === 1) return Words.BlockId;
+        if (left.text === right.text) return Words.Text;
+        if (left.contentDate === right.contentDate) return Words.ContentAndDates;
         if (left.contentKey === right.contentKey || left.dateKey === right.dateKey) return Words.ContentOrDates;
         return Words.None;
     };
 
-    // Rows of the other side a row shares words with that can say more than
-    // a pair: content or dates alone never outweigh a pair, which has at least that.
-    const keysOf = (fingerprint: Fingerprint): string[] =>
-        [blockIdKey(fingerprint), textKey(fingerprint), contentDateKey(fingerprint)]
-            .filter((key): key is string => key !== null);
-    const index = <T>(rows: readonly T[], fingerprintOfRow: (row: T) => Fingerprint): Map<string, T[]> => {
-        const by = new Map<string, T[]>();
+    // The rows of the other side that share one kind of key with a row.
+    type Kind = 'id' | 'text' | 'contentDate';
+    const index = <T>(rows: readonly T[], keysOfRow: (row: T) => Keys): Record<Kind, Map<string, T[]>> => {
+        const by: Record<Kind, Map<string, T[]>> = { id: new Map(), text: new Map(), contentDate: new Map() };
         for (const row of rows) {
-            for (const key of keysOf(fingerprintOfRow(row))) {
-                const list = by.get(key);
+            const keys = keysOfRow(row);
+            for (const kind of ['id', 'text', 'contentDate'] as const) {
+                const key = keys[kind];
+                if (key === null) continue;
+                const list = by[kind].get(key);
                 if (list) list.push(row);
-                else by.set(key, [row]);
+                else by[kind].set(key, [row]);
             }
         }
         return by;
     };
-    const tasksBy = index(ordered, task => fingerprints.get(task)!);
-    const entriesBy = index(partner, entry => entry.fingerprint);
-    const sharing = <T>(fingerprint: Fingerprint, by: Map<string, T[]>): Set<T> =>
-        new Set(keysOf(fingerprint).flatMap(key => by.get(key) ?? []));
+    const tasksBy = index(ordered, task => taskKeys.get(task)!);
+    const entriesBy = index(partner, entry => entryKeys.get(entry)!);
+    /**
+     * The rows that can say something `pair` does not: those sharing a key
+     * of stronger words than the pair's, and, where the pair lacks a place,
+     * those of its own text. Content or dates alone never outweigh a pair,
+     * which has at least that.
+     */
+    const against = <T>(keys: Keys, pair: Relation, by: Record<Kind, Map<string, T[]>>): T[][] => {
+        const lists: T[][] = [];
+        const add = (kind: Kind): void => {
+            const key = keys[kind];
+            const list = key === null ? undefined : by[kind].get(key);
+            if (list) lists.push(list);
+        };
+        if (pair.words < Words.BlockId) add('id');
+        if (pair.words < Words.Text || (pair.words === Words.Text && !(pair.scope && pair.place && pair.depth))) add('text');
+        if (pair.words < Words.ContentAndDates) add('contentDate');
+        return lists;
+    };
 
     return {
         contradicted: pairedWith => {
@@ -407,20 +446,20 @@ function evidenceBetween(
             const contradictedTasks = new Set<Task>();
             for (const [task, entry] of pairedWith) {
                 const pair = relation(entry, task);
-                const byCurrent = [...sharing(entry.fingerprint, tasksBy)].some(other => {
+                const byCurrent = against(entryKeys.get(entry)!, pair, tasksBy).some(list => list.some(other => {
                     if (other === task) return false;
                     const said = relation(entry, other);
                     if (!contradicts(said, pair)) return false;
                     const own = pairedWith.get(other);
                     return own === undefined || contradicts(said, relation(own, other));
-                });
-                const byPrevious = byCurrent || [...sharing(fingerprints.get(task)!, entriesBy)].some(other => {
+                }));
+                const byPrevious = byCurrent || against(taskKeys.get(task)!, pair, entriesBy).some(list => list.some(other => {
                     if (other === entry) return false;
                     const said = relation(other, task);
                     if (!contradicts(said, pair)) return false;
                     const own = taskOf.get(other);
                     return own === undefined || contradicts(said, relation(other, own));
-                });
+                }));
                 if (byPrevious) contradictedTasks.add(task);
             }
 

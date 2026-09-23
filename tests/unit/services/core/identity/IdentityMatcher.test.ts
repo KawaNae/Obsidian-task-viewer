@@ -5,6 +5,8 @@ import type { MatchResult } from '../../../../../src/services/core/identity/Iden
 import type { Reading } from '../../../../../src/services/core/identity/IdentityHints';
 import { makeTask } from '../../../helpers/makeTask';
 import type { Task } from '../../../../../src/types';
+import { DEFAULT_SETTINGS } from '../../../../../src/types';
+import { FileParsePipeline } from '../../../../../src/services/parsing/FileParsePipeline';
 
 /**
  * What survives a save, and what is honestly a new task.
@@ -531,5 +533,57 @@ describe('matchFile: the check of the evidence', () => {
 
         expect(kept(inOrder)).toEqual([id(first, 'prov:0'), null, id(first, 'prov:2'), null]);
         expect(kept(reversed)).toEqual(kept(inOrder));
+    });
+});
+
+describe('matchFile: a rerun of the ladder after the check (I1-counter3)', () => {
+    // The ladder over two parsed files, with no claims: what a scan does after
+    // an outside edit. Answers, per line of the second file, the name its row
+    // had in the first file (by line), or null for a new name.
+    const heldFrom = (before: string[], after: string[]): Array<number | null> => {
+        const mint = makeMint();
+        const first = matchFile([], FileParsePipeline.parse('note.md', before, DEFAULT_SETTINGS).tasks, mint);
+        const lineOf = new Map(first.entries.map(entry => [entry.runtimeId, entry.line]));
+        const tasks = FileParsePipeline.parse('note.md', after, DEFAULT_SETTINGS).tasks;
+        const second = matchFile(first.entries, tasks, mint);
+        return tasks.map(task => lineOf.get(id(second, task.id)) ?? null);
+    };
+
+    // SHAPE L1 (counterexample-3, seed 2942). The root B and the grandchild C
+    // are deleted. What is left, `\t- [ ] B @d` and `\t- [ ] C`, is worded,
+    // indented and dated as before, and `\t- [ ] B @d` is the only row of its
+    // words on either side. The first ladder pairs both rows with their own
+    // in pass 2, and the check takes the C pair apart (the deleted
+    // `\t\t- [ ] C` reads the same). In the rerun, with that C out, the
+    // deleted root `- [ ] B` finds `\t- [ ] B @d` its only rung-4 candidate
+    // and pass 1 takes it before pass 2 can pair it with its own row; the
+    // check takes that pair apart too, and B @d loses its name. Nothing speaks
+    // against B @d and its own row, so the name stays (develop and 3c07a7cb
+    // kept it).
+    it('L1: a row worded, indented and dated as before keeps its name when a rerun offers it to a deleted row', () => {
+        const held = heldFrom(
+            ['- [ ] B', '\t- [ ] B @2026-09-21', '\t\t- [ ] C', '\t- [ ] C'],
+            ['\t- [ ] B @2026-09-21', '\t- [ ] C'],
+        );
+        expect(held[0]).toBe(1);
+        // `\t- [ ] C` may lose its name: the deleted grandchild reads the same
+        // but for its indent, which is shape (i). Not asserted (develop and
+        // 3c07a7cb kept it on line 3).
+    });
+
+    // SHAPE 4138 (counterexample-3). Of the three `D` rows, one goes: the two
+    // left are `\t- [ ] D` twins under A, after B. Only the rerun after the
+    // check takes the twins' pair apart. The rows with no twin, `- [x] A @d`
+    // and `\t- [x] B @d`, are worded, dated and placed as before and keep
+    // their names whatever the rerun does to the twins. (81162cc3 already
+    // keeps them; it gives both twins new names where develop and 3c07a7cb
+    // kept lines 1 and 4, which is shape (i) and not asserted.)
+    it('4138: the rows with no twin keep their names when a rerun takes twins apart', () => {
+        const held = heldFrom(
+            ['- [x] A @2026-09-21', '\t- [ ] D', '\t- [x] B @2026-09-21', '- [ ] D', '\t- [ ] D'],
+            ['- [x] A @2026-09-21', '\t- [x] B @2026-09-21', '\t- [ ] D', '\t- [ ] D'],
+        );
+        expect(held[0]).toBe(0);
+        expect(held[1]).toBe(2);
     });
 });
