@@ -41,12 +41,12 @@ function observe() {
     return {
         signal,
         advance: (ms: number) => { now += ms; },
-        key: () => inputs.get('keydown')!({ isTrusted: true } as Event),
+        key: (key = 'Enter', ctrlKey = false) => inputs.get('keydown')!({ isTrusted: true, type: 'keydown', key, ctrlKey } as unknown as Event),
         press: (trusted = true) => inputs.get('pointerdown')!({ isTrusted: trusted } as Event),
         /** The note's editor changed; `focused` says whether it had the focus. */
         change: (focused = true) => workspace.get('editor-change')!({ hasFocus: () => focused }, { file: { path: 'note.md' } }),
         /** A key or a press inside the editor's own element (a popped-out window's). */
-        keyInEditor: () => content.get('keydown')!({ isTrusted: true } as Event),
+        keyInEditor: () => content.get('keydown')!({ isTrusted: true, type: 'keydown', key: 'Enter', ctrlKey: true } as unknown as Event),
         type: () => content.get('beforeinput')!({ data: 'x', inputType: 'insertText' }),
     };
 }
@@ -103,6 +103,22 @@ describe('EditorObserver: what raises the signal', () => {
     it("a key in a popped-out window's editor counts, heard on the editor itself", () => {
         const editor = observe();
         editor.keyInEditor();
+        editor.change();
+        expect(editor.signal.take('note.md')).toBe(true);
+    });
+
+    it('a key that only moves, or undoes, does not count: an arrow before a sync’s reload, a Ctrl+Z that brings back a completion', () => {
+        // F6's counterexample run (K1, U1). Undoing a flow's write in the editor
+        // restores the completed row with its command; taken for the hand's, it
+        // fired again and the flow wrote its instance a second time.
+        const editor = observe();
+        editor.key('ArrowDown');
+        editor.change();
+        expect(editor.signal.take('note.md')).toBe(false);
+        editor.key('z', true);
+        editor.change();
+        expect(editor.signal.take('note.md')).toBe(false);
+        editor.key('Enter', true);
         editor.change();
         expect(editor.signal.take('note.md')).toBe(true);
     });
