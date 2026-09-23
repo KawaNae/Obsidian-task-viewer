@@ -36,22 +36,34 @@ export class TaskLineClassifier {
     private static readonly TASK_LINE_REGEX = new RegExp(`^(${TASK_LEAD_SOURCE})(${LIST_BULLET_SOURCE} *\\[)(${STATUS_CHAR_SOURCE})(\\]${CHECKBOX_GAP_SOURCE}${IN_LINE}*)$`);
     private static readonly BARE_CHECKBOX_REGEX = new RegExp(`^${TASK_LEAD_SOURCE}${LIST_BULLET_SOURCE} *\\[${STATUS_CHAR_SOURCE}\\]$`);
     private static readonly MARKER_REGEX =new RegExp(`^${TASK_LEAD_SOURCE}(${LIST_BULLET_SOURCE})`);
-    private static readonly BLOCK_ID_REGEX = /\s\^([A-Za-z0-9-]+)\s*$/;
+    private static readonly BLOCK_ID_REGEX = /(?:^|\s)\^([A-Za-z0-9-]+)\s*$/;
 
     /**
-     * Strip a trailing `^block-id` from a line/content string. The single
+     * Strip a trailing `^block-id` from a line's content. The single
      * implementation shared by all parsers (timer-target semantics of the
      * id are the caller's concern).
+     *
+     * An id is part of the content, never of the checkbox: it stands at the
+     * content's end, alone or after a space. `content` is what follows a
+     * task's gap (`classify`'s `rawContent`); for a whole line, see
+     * {@link extractLineBlockId}.
      */
-    static extractBlockId(text: string): { text: string; blockId?: string } {
-        const match = text.match(this.BLOCK_ID_REGEX);
-        if (!match) return { text };
-        return {
-            // Up to and with the space before `^`: on `- [ ] ^a` that space is
-            // also the checkbox's gap, which `trimEnd` keeps.
-            text: this.trimEnd(text.slice(0, match.index! + 1)),
-            blockId: match[1],
-        };
+    static extractBlockId(content: string): { text: string; blockId?: string } {
+        const match = content.match(this.BLOCK_ID_REGEX);
+        if (!match) return { text: content };
+        return { text: content.slice(0, match.index).trimEnd(), blockId: match[1] };
+    }
+
+    /**
+     * {@link extractBlockId} on a whole line: taken off the line's content —
+     * what follows a task's gap, or any other line's indentation — so that
+     * the checkbox, its gap and the indentation stay as they are.
+     */
+    static extractLineBlockId(line: string): { text: string; blockId?: string } {
+        const task = this.classify(line);
+        const head = task ? line.length - task.rawContent.length : Outline.indentOf(line).length;
+        const { text, blockId } = this.extractBlockId(line.slice(head));
+        return { text: line.slice(0, head) + text, blockId };
     }
 
     /**

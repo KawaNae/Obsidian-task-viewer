@@ -29,14 +29,29 @@ describe('TaskLineClassifier.tidy', () => {
 
 describe('TaskLineClassifier.extractBlockId', () => {
     it('reads `- [ ] ^a` as `- [ ] ` and the id', () => {
-        expect(TaskLineClassifier.extractBlockId('- [ ] ^a')).toEqual({ text: '- [ ] ', blockId: 'a' });
+        expect(TaskLineClassifier.extractLineBlockId('- [ ] ^a')).toEqual({ text: '- [ ] ', blockId: 'a' });
     });
 
     it('reads `- [ ] a ^b` as `- [ ] a` and the id', () => {
-        expect(TaskLineClassifier.extractBlockId('- [ ] a ^b')).toEqual({ text: '- [ ] a', blockId: 'b' });
+        expect(TaskLineClassifier.extractLineBlockId('- [ ] a ^b')).toEqual({ text: '- [ ] a', blockId: 'b' });
     });
 
     it('reads a content `a ^b` as `a` and the id', () => {
         expect(TaskLineClassifier.extractBlockId('a ^b')).toEqual({ text: 'a', blockId: 'b' });
+    });
+
+    it('reads a content that is the id alone as empty and the id', () => {
+        expect(TaskLineClassifier.extractBlockId('^b')).toEqual({ text: '', blockId: 'b' });
+        expect(TaskLineClassifier.extractBlockId('a^b')).toEqual({ text: 'a^b' });
+    });
+
+    it('keeps a tab gap: `- [ ]\\t^a` -> `- [ ]\\t`', () => {
+        expect(TaskLineClassifier.extractLineBlockId('- [ ]\t^a')).toEqual({ text: '- [ ]\t', blockId: 'a' });
+    });
+
+    it('keeps the indentation of a line that is no task', () => {
+        expect(TaskLineClassifier.extractLineBlockId('\t- item ^a')).toEqual({ text: '\t- item', blockId: 'a' });
+        expect(TaskLineClassifier.extractLineBlockId('\t^a')).toEqual({ text: '\t', blockId: 'a' });
+        expect(TaskLineClassifier.extractLineBlockId('- [ ]^a')).toEqual({ text: '- [ ]^a' });
     });
 });

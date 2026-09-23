@@ -39,21 +39,20 @@ export class TVInlineParser implements LeafParserStrategy {
     readonly isReadOnly = false;
 
     parse(line: string, filePath: string, lineNumber: number): Task | null {
-        // Extract trailing block ID (^id) before parsing task structure.
-        const { text: lineForParse, blockId } = TaskLineClassifier.extractBlockId(line);
-        const timerTargetId = blockId && isTimerTargetId(blockId) ? blockId : undefined;
-
-        // 1. Split flow commands (==>)
-        const flowSplit = lineForParse.split(FLOW_SPLIT);
-        const taskPart = flowSplit[0];
-        const flowPart = flowSplit[1] || '';
-
-        const classified = TaskLineClassifier.classify(taskPart);
+        const classified = TaskLineClassifier.classify(line);
         if (!classified) {
             return null;
         }
+        const { statusChar } = classified;
 
-        const { statusChar, rawContent } = classified;
+        // 1. The trailing block ID (^id) is the content's last part
+        const { text: body, blockId } = TaskLineClassifier.extractBlockId(classified.rawContent);
+        const timerTargetId = blockId && isTimerTargetId(blockId) ? blockId : undefined;
+
+        // Split flow commands (==>)
+        const flowSplit = body.split(FLOW_SPLIT);
+        const rawContent = flowSplit[0];
+        const flowPart = flowSplit[1] || '';
 
         // 2. Parse the flow command. `raw` always carries the verbatim text
         // so format() re-emits it losslessly even when parsing failed;

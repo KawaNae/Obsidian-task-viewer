@@ -51,7 +51,7 @@ export function checkGeneratedParentLine(raw: string): GeneratedLineCheck {
     // Every fire would write the same id, so the vault ends up with several
     // lines claiming one anchor and the index keeps one of them. The
     // recurrence path drops the ids it copies for exactly this reason.
-    const { blockId } = TaskLineClassifier.extractBlockId(line);
+    const { blockId } = TaskLineClassifier.extractLineBlockId(line);
     if (blockId) {
         return {
             ok: false,
@@ -114,7 +114,7 @@ export function checkGeneratedParentLine(raw: string): GeneratedLineCheck {
  */
 export function checkGeneratedChildLine(raw: string): GeneratedLineCheck {
     const line = TaskLineClassifier.tidy(raw);
-    const { blockId } = TaskLineClassifier.extractBlockId(line);
+    const { blockId } = TaskLineClassifier.extractLineBlockId(line);
     if (blockId) {
         return {
             ok: false,
