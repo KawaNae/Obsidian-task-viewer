@@ -13,6 +13,7 @@ import { exportDescriptorFor, resolveExportContainer } from '../../services/expo
 import { buildExportFilename } from '../../services/export/ExportFilename';
 import type { MenuPresenter } from '../../interaction/menu/MenuPresenter';
 import { viewContentEl } from '../../utils/ObsidianView';
+import type { WriteChannel } from '../../utils/FileLines';
 
 /**
  * Persistent toolbar root with mount/detach lifecycle.
@@ -480,6 +481,8 @@ export interface ViewSettingsOptions {
     buildUri: () => ViewUriOptions;
     viewType: string;
     getViewTemplateFolder: () => string;
+    /** Where saving a view template over an existing note reports that it did. */
+    writeChannel: (path: string) => WriteChannel | undefined;
     getViewTemplate: () => ViewTemplate;
     onApplyTemplate: (template: ViewTemplate) => void;
     onReset: () => void;
@@ -543,7 +546,7 @@ export class ViewSettingsMenu {
                             if (!name) return;
                             const template = getViewTemplate();
                             template.name = name;
-                            const writer = new ViewTemplateWriter(app);
+                            const writer = new ViewTemplateWriter(app, options.writeChannel);
                             await writer.saveTemplate(folder, template);
                             onRename(name);
                             new Notice(t('notice.viewSaved', { name }));

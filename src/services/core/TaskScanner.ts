@@ -400,11 +400,10 @@ export class TaskScanner {
                 result = this.claims.claim(file, before, after, edits);
             } catch (error) {
                 logError(`[TaskScanner] could not read back ${file} after a write: ${(error as Error)?.message ?? error}`);
-                // Whatever base this file had is left alone. It describes the
-                // file as it was before this write, so it no longer fits, and
-                // a base that no longer fits is what stops the next write from
-                // building on a ledger that is older still.
-                return { withdraw: () => { }, made: [] };
+                // The write changed the file all the same, and nothing on
+                // record describes it now. Left unmarked, a record from before
+                // it would look like the last one there is.
+                return { withdraw: this.claims.silence(file), made: [] };
             }
             // Both halves of what a claim leaves behind come back together:
             // the hint the next scan would weigh, and the base the next write

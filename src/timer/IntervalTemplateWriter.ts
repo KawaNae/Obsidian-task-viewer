@@ -7,6 +7,7 @@
 
 import { type App, TFile, TFolder, normalizePath } from 'obsidian';
 import type { IntervalGroup } from './TimerInstance';
+import { replaceWhole, type WriteChannel } from '../utils/FileLines';
 
 export interface TemplateCreateData {
     name: string;
@@ -15,7 +16,10 @@ export interface TemplateCreateData {
 }
 
 export class IntervalTemplateWriter {
-    constructor(private app: App) {}
+    constructor(
+        private app: App,
+        private channelFor: (path: string) => WriteChannel | undefined,
+    ) {}
 
     async updateTemplate(filePath: string, data: TemplateCreateData): Promise<TFile> {
         const existing = this.app.vault.getAbstractFileByPath(filePath);
@@ -23,9 +27,9 @@ export class IntervalTemplateWriter {
             throw new Error('Template file not found.');
         }
         const content = this.buildFileContent(data);
-        // 全体上書きで読み取り結果は使わないが、他の書き込み経路と揃えて
-        // vault.process を使う（read-modify-write の atomic 性を持つ）。
-        await this.app.vault.process(existing, () => content);
+        // 全体上書き。どの行がどの行になったかは言えないので、申告の
+        // 代わりに連鎖が切れた印を残す（replaceWhole）。
+        await replaceWhole(this.app, existing, this.channelFor(filePath), content);
         return existing;
     }
 

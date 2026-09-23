@@ -293,11 +293,21 @@ export interface WriteReceipt {
     made: readonly MadeRow[];
 }
 
-/** Where a write's report goes. */
+/**
+ * Where a write's report goes: every write that changed the file, once.
+ *
+ * `edits` is null when the write changed the file and cannot say how — its
+ * report does not account for the lines it wrote, or it replaced the file
+ * whole. That is not the same as saying nothing: it is the mark that the
+ * chain of records broke here, so that nothing on record for the file is
+ * taken as describing it until a scan has read it again (see
+ * `WriteClaims`). A write of ours that changed the file and left neither a
+ * claim nor this mark would leave the last record looking current.
+ */
 export type WriteSink = (
     before: readonly string[],
     after: readonly string[],
-    edits: readonly LineEdit[],
+    edits: readonly LineEdit[] | null,
 ) => WriteReceipt;
 
 /**
@@ -540,9 +550,11 @@ function explains(
  * Every change `edit` makes goes through the {@link LineDraft} it is handed,
  * which reports it, and that report is what lets the next scan know which
  * line is which. A report that does not account for the file it produced is
- * logged and dropped. The write itself still lands — the report is
- * bookkeeping, and losing a user's edit over bookkeeping would be the worse
- * failure by far.
+ * logged and dropped, and the sink is told the write could not say what it
+ * did (see {@link WriteSink}): every write that changes the file leaves a
+ * claim or that mark, never nothing. The write itself still lands — the
+ * report is bookkeeping, and losing a user's edit over bookkeeping would be
+ * the worse failure by far.
  *
  * Anything a write owes the rest of the plugin belongs on the written branch
  * only. A claim left behind by a write that never happened would be weighed by
@@ -668,14 +680,14 @@ export async function processLines(
             // `vault.process` resolves, so a claim raised afterwards is too late
             // for it. Filing early means filing before the write is known to
             // have succeeded, which is what the withdrawal below is for.
-            if (sink && reported.length > 0 && rebuilt !== content) {
-                if (explains(before, next, reported)) {
-                    const receipt = sink(before, next, reported);
-                    withdrawals.push(receipt.withdraw);
-                    made = receipt.made;
-                } else {
-                    logError(`[FileLines] ${file.path}: a write's report does not account for the lines it wrote; no claim filed`);
+            if (sink && rebuilt !== content) {
+                const accounted = explains(before, next, reported);
+                if (!accounted) {
+                    logError(`[FileLines] ${file.path}: a write's report does not account for the lines it wrote; no claim filed, the chain of records marked broken`);
                 }
+                const receipt = sink(before, next, accounted ? reported : null);
+                withdrawals.push(receipt.withdraw);
+                made = receipt.made;
             }
 
             return rebuilt;
@@ -692,4 +704,36 @@ export async function processLines(
     const outcome = refused as Refusal | null;
     if (outcome !== null) channel?.refused(outcome);
     return { written, refused: outcome, made };
+}
+
+/**
+ * Replace a file's content whole — one atomic `vault.process` — for a writer
+ * that builds the file from scratch rather than editing its lines (a saved
+ * template).
+ *
+ * Such a write cannot say which line became which, and a report that every
+ * line went and new ones came would call any row in the new content new,
+ * where the ladder could have told it by its text. So it claims nothing and
+ * marks the chain of records broken instead (see {@link WriteSink}). A write
+ * that changes nothing is no write, as in {@link processLines}.
+ */
+export async function replaceWhole(
+    app: App,
+    file: TFile,
+    channel: WriteChannel | undefined,
+    content: string,
+): Promise<void> {
+    const withdrawals: Array<() => void> = [];
+    try {
+        await app.vault.process(file, (current) => {
+            for (const withdraw of withdrawals.splice(0)) withdraw();
+            if (current === content) return current;
+            const sink = channel?.sink;
+            if (sink) withdrawals.push(sink(splitLines(current).lines, splitLines(content).lines, null).withdraw);
+            return content;
+        });
+    } catch (error) {
+        for (const withdraw of withdrawals) withdraw();
+        throw error;
+    }
 }

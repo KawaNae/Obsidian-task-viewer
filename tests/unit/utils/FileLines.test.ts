@@ -96,7 +96,8 @@ function harness(initial: string, opts: { throwAfterCallback?: boolean; callback
 interface Reported {
     before: readonly string[];
     after: readonly string[];
-    edits: readonly LineEdit[];
+    /** Null for a write that changed the file and could not say how: the mark. */
+    edits: readonly LineEdit[] | null;
 }
 
 /**
@@ -113,7 +114,7 @@ function writeSink(answer: (lines: readonly string[], ref: TaskRef) => Located =
     const channel: WriteChannel = {
         sink: (before, after, edits) => {
             const at = reports.length;
-            reports.push({ before: [...before], after: [...after], edits: [...edits] });
+            reports.push({ before: [...before], after: [...after], edits: edits && [...edits] });
             live.add(at);
             return { withdraw: () => { live.delete(at); }, made: [] };
         },
@@ -180,11 +181,11 @@ describe('processLines', () => {
         }]);
     });
 
-    it('says nothing about a write that reported nothing', async () => {
-        // Reporting is per write site. A write that does not report is a write
-        // the scan works out for itself, which is every write before stage 2.
+    it('marks the chain broken for a write that reported nothing', async () => {
         // The draft's `lines` are read-only to a write; the cast simulates a
         // write that changed a line without going through `rewrite`/`splice`.
+        // It claims nothing, and says it changed the file: a write of ours
+        // that left neither would leave the last record looking current.
         const h = harness('- [ ] a\n');
         const log = writeSink();
 
@@ -195,12 +196,13 @@ describe('processLines', () => {
 
         expect(written).toBe(true);
         expect(h.text()).toBe('- [x] a\n');
-        expect(log.standing()).toEqual([]);
+        expect(log.standing().map(report => report.edits)).toEqual([null]);
     });
 
-    it('drops a report that does not account for the lines it wrote', async () => {
+    it('drops a report that does not account for the lines it wrote, and marks the chain broken', async () => {
         // The write moved a line it never mentioned. The report is bookkeeping
         // and the write is the user's, so the write lands and the report goes.
+        // What is left in its place is the mark, not nothing.
         const h = harness('- [ ] a\n- [ ] b\n');
         const log = writeSink();
 
@@ -212,10 +214,10 @@ describe('processLines', () => {
 
         expect(written).toBe(true);
         expect(h.text()).toBe('- [x] a\n- [x] b\n');
-        expect(log.standing()).toEqual([]);
+        expect(log.standing().map(report => report.edits)).toEqual([null]);
     });
 
-    it('drops a report whose indexes are not in the file', async () => {
+    it('drops a report whose indexes are not in the file, and marks the chain broken', async () => {
         const h = harness('- [ ] a\n');
         const log = writeSink();
 
@@ -225,7 +227,7 @@ describe('processLines', () => {
             return true;
         });
 
-        expect(log.standing()).toEqual([]);
+        expect(log.standing().map(report => report.edits)).toEqual([null]);
     });
 
     it('reads a run of reports in the order they were made', async () => {
@@ -658,7 +660,7 @@ describe('LineEdits.carry', () => {
         expect(replayEdits(1, reported)).toBeNull();
     });
 
-    it('files a claim for a move that took its source away, and none for one that did not', async () => {
+    it('files a claim for a move that took its source away, and only the mark for one that did not', async () => {
         for (const takeAway of [true, false]) {
             const h = harness('a\nrow\nb\n');
             const log = writeSink();
@@ -671,7 +673,8 @@ describe('LineEdits.carry', () => {
             });
 
             expect(h.text()).toBe(takeAway ? 'a\nb\nrow, moved' : 'a\nrow\nb\nrow, moved');
-            expect(log.standing()).toHaveLength(takeAway ? 1 : 0);
+            expect(log.standing()).toHaveLength(1);
+            expect(log.standing()[0].edits === null).toBe(!takeAway);
         }
     });
 });

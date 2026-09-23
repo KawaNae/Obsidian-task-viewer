@@ -14,6 +14,7 @@ import type { IntervalTemplate } from '../../timer/IntervalTemplateLoader';
 import { PopoverStack } from '../sharedUI/PopoverStack';
 import type { PopoverShell } from '../sharedUI/PopoverShell';
 import { OverlayShell } from '../sharedUI/OverlayShell';
+import type { WriteChannel } from '../../utils/FileLines';
 
 export interface TemplateCreatorCallbacks {
     onSaved: (filePath: string) => void;
@@ -48,7 +49,10 @@ export class IntervalTemplateCreator {
     private folderPath = '';
     private editingFilePath: string | null = null;
 
-    constructor(private app: App) {}
+    constructor(
+        private app: App,
+        private channelFor: (path: string) => WriteChannel | undefined,
+    ) {}
 
     isOpen(): boolean {
         return this.overlay.isOpen();
@@ -356,7 +360,7 @@ export class IntervalTemplateCreator {
             errorEl.setText('');
 
             const groups = this.buildGroups();
-            const writer = new IntervalTemplateWriter(this.app);
+            const writer = new IntervalTemplateWriter(this.app, this.channelFor);
             const data = {
                 name: this.state.name.trim(),
                 icon: this.state.icon.trim() || 'rotate-cw',
