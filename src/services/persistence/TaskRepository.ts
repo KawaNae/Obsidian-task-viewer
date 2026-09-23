@@ -6,7 +6,7 @@ import { FrontmatterWriter } from './writers/FrontmatterWriter';
 import { TaskCloner, type InPlaceCopyLines } from './TaskCloner';
 import type { PropertyOp } from './PropertyUpdatePlanner';
 import { WriteObserver } from './WriteObserver';
-import type { EditorLine, WriteOrigin, WriteOutcome } from '../../utils/FileLines';
+import type { EditorLine, WriteAt, WriteOrigin, WriteOutcome } from '../../utils/FileLines';
 import type { PlannedTarget } from './TaskRefs';
 import type { TaskOp } from './TaskOps';
 
@@ -46,20 +46,20 @@ export class TaskRepository {
         return this.inlineWriter.updateTaskInFile(target, updatedTask, childOps);
     }
 
-    async updateLine(filePath: string, at: EditorLine, newContent: string): Promise<void> {
+    async updateLine(filePath: string, at: EditorLine, newContent: string): Promise<WriteOutcome> {
         return this.inlineWriter.updateLine(filePath, at, newContent);
     }
 
-    async insertLineAfterLine(filePath: string, at: EditorLine, newContent: string): Promise<void> {
+    async insertLineAfterLine(filePath: string, at: EditorLine, newContent: string): Promise<WriteOutcome> {
         return this.inlineWriter.insertLineAfterLine(filePath, at, newContent);
     }
 
-    async deleteLine(filePath: string, at: EditorLine): Promise<void> {
+    async deleteLine(filePath: string, at: EditorLine): Promise<WriteOutcome> {
         return this.inlineWriter.deleteLine(filePath, at);
     }
 
     /** @returns whether the task's lines were removed (see InlineTaskWriter). */
-    async deleteTaskFromFile(target: PlannedTarget): Promise<boolean> {
+    async deleteTaskFromFile(target: PlannedTarget): Promise<WriteOutcome> {
         return this.inlineWriter.deleteTaskFromFile(target);
     }
 
@@ -75,7 +75,7 @@ export class TaskRepository {
         return this.inlineWriter.applyToTask(target, ops, opts);
     }
 
-    async insertLineAfterTask(task: Task, lineContent: string): Promise<number> {
+    async insertLineAfterTask(task: Task, lineContent: string): Promise<WriteOutcome> {
         return this.inlineWriter.insertLineAfterTask(task, lineContent);
     }
 
@@ -83,15 +83,15 @@ export class TaskRepository {
         task: Task,
         lineBody: string,
         opts: { afterCompletedRun?: boolean } = {}
-    ): Promise<number> {
+    ): Promise<WriteOutcome> {
         return this.inlineWriter.insertSiblingAfterTask(task, lineBody, opts);
     }
 
-    async insertLineAsFirstChild(task: Task, lineContent: string): Promise<number> {
+    async insertLineAsFirstChild(task: Task, lineContent: string): Promise<WriteOutcome> {
         return this.inlineWriter.insertLineAsFirstChild(task, lineContent);
     }
 
-    async appendTaskToFile(filePath: string, content: string, origin: WriteOrigin): Promise<number> {
+    async appendTaskToFile(filePath: string, content: string, origin: WriteOrigin): Promise<WriteAt> {
         return this.inlineWriter.appendTaskToFile(filePath, content, origin);
     }
 
@@ -107,7 +107,7 @@ export class TaskRepository {
     // --- Heading and frontmatter writes ---
 
     /** @returns 挿入した行の 0-based 行番号。ファイルが無ければ -1。 */
-    async insertLineUnderHeading(filePath: string, lineContent: string, header: string, headerLevel: number): Promise<number> {
+    async insertLineUnderHeading(filePath: string, lineContent: string, header: string, headerLevel: number): Promise<WriteAt> {
         return this.frontmatterWriter.insertLineUnderHeading(filePath, lineContent, header, headerLevel);
     }
 
@@ -115,19 +115,19 @@ export class TaskRepository {
      * Task を介さない frontmatter 書き込みの入口。プロパティ欄のサジェストが
      * 使う（Task ではなくファイルとキーで書き先が決まる）。
      */
-    async setFrontmatterKeys(filePath: string, updates: Record<string, string | null>): Promise<void> {
+    async setFrontmatterKeys(filePath: string, updates: Record<string, string | null>): Promise<WriteOutcome> {
         return this.frontmatterWriter.setKeys(filePath, updates);
     }
 
     // --- Task Cloning Operations ---
 
     /** @returns whether the copy was written (see TaskCloner). */
-    async duplicateInlineTask(target: PlannedTarget, options?: DuplicateOptions): Promise<boolean> {
+    async duplicateInlineTask(target: PlannedTarget, options?: DuplicateOptions): Promise<WriteOutcome> {
         return this.cloner.duplicateInlineTask(target, options);
     }
 
     /** @returns whether the copies were written (see TaskCloner). */
-    async duplicateInlineTaskInPlace(target: PlannedTarget, copies: InPlaceCopyLines): Promise<boolean> {
+    async duplicateInlineTaskInPlace(target: PlannedTarget, copies: InPlaceCopyLines): Promise<WriteOutcome> {
         return this.cloner.duplicateInlineTaskInPlace(target, copies);
     }
 

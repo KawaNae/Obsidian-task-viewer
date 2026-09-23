@@ -32,7 +32,7 @@ describe('what deleteTaskFromFile reports', () => {
 
         const removed = await b.writer.deleteTaskFromFile(plannedOn(b.taskAt(1), { subtree: true }));
 
-        expect(removed).toBe(true);
+        expect(removed.written).toBe(true);
         expect(only(b.filed).edits).toEqual([{ kind: 'removed', at: 1, count: 3 }]);
         expect(b.lines()).toEqual(['# note', '- [ ] 次の親 @2026-09-21']);
     });
@@ -65,7 +65,7 @@ describe('what deleteTaskFromFile reports', () => {
 
         const removed = await b.writer.deleteTaskFromFile(plannedOn(task, { subtree: true }));
 
-        expect(removed).toBe(false);
+        expect(removed.written).toBe(false);
         expect(b.filed).toEqual([]);
         expect(b.lines()).toEqual(['# note', '- [ ] 別のタスク @2026-09-21']);
         expect(b.refused).toEqual([{ file: FILE, reason: { kind: 'gone' }, subject: '親' }]);

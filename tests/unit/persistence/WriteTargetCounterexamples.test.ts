@@ -76,7 +76,7 @@ describe('F2-counter: nested rows that read the same', () => {
             '- [ ] P2',
         ];
         bench.edit(moved);
-        const written = await bench.writer.deleteTaskFromFile(plannedOn(c2, { subtree: true }));
+        const { written } = await bench.writer.deleteTaskFromFile(plannedOn(c2, { subtree: true }));
 
         expect(written).toBe(false);
         expect(bench.lines()).toEqual(moved);
@@ -105,7 +105,7 @@ describe('F2-counter: one-against-one leftovers (ladder rung 4)', () => {
         const bench = await writeBench(before);
         const milk = bench.taskAt(1);
         bench.edit(['- [ ] alpha', '- [ ] omega', '- [ ] call mom']);
-        const written = await bench.writer.deleteTaskFromFile(plannedOn(milk, { subtree: true }));
+        const { written } = await bench.writer.deleteTaskFromFile(plannedOn(milk, { subtree: true }));
 
         expect(written).toBe(false);
         expect(bench.lines()).toEqual(['- [ ] alpha', '- [ ] omega', '- [ ] call mom']);
@@ -181,7 +181,7 @@ describe('F2-counter: identical rows', () => {
         // read off the frontmatter write's record.
         const bench = await writeBench(['- [ ] A', '- [ ] B']);
         const a = bench.taskAt(0);
-        expect(await bench.cloner.duplicateInlineTask(plannedOn(a))).toBe(true);
+        expect((await bench.cloner.duplicateInlineTask(plannedOn(a))).written).toBe(true);
         expect(bench.lines()).toEqual(['- [ ] A', '- [ ] A', '- [ ] B']);
         await bench.repo.setFrontmatterKeys(FILE, { color: 'red' });
         expect(bench.lines()[0]).toBe('---');
@@ -274,7 +274,7 @@ describe('F2-counter: ^id', () => {
         const stale = bench.taskAt(0);
         bench.edit(['- [ ] A', 'text ^a']);
         await bench.scan();
-        const written = await bench.writer.deleteTaskFromFile(plannedOn(stale, { subtree: true }));
+        const { written } = await bench.writer.deleteTaskFromFile(plannedOn(stale, { subtree: true }));
 
         // Either the row itself goes (named by the ledger) or nothing does;
         // the paragraph never does.
@@ -384,7 +384,7 @@ describe('F2-counter2: a guess by position one level up', () => {
         const c1 = bench.taskAt(1);
         const swapped = ['- [ ] p', '\t- [ ] c', '\t\t- [ ] g2', '- [ ] p', '\t- [ ] c', '\t\t- [ ] g1'];
         bench.edit(swapped);
-        expect(await bench.writer.deleteTaskFromFile(plannedOn(c1, { subtree: true }))).toBe(false);
+        expect((await bench.writer.deleteTaskFromFile(plannedOn(c1, { subtree: true }))).written).toBe(false);
         expect(bench.lines()).toEqual(swapped);
         expect(bench.refused.map(r => r.reason.kind)).toEqual(['ambiguous']);
     });
@@ -393,7 +393,7 @@ describe('F2-counter2: a guess by position one level up', () => {
         const bench = await writeBench(before);
         const c1 = bench.taskAt(1);
         bench.edit(before.slice(3));
-        expect(await bench.writer.deleteTaskFromFile(plannedOn(c1, { subtree: true }))).toBe(false);
+        expect((await bench.writer.deleteTaskFromFile(plannedOn(c1, { subtree: true }))).written).toBe(false);
         expect(bench.lines()).toEqual(before.slice(3));
         expect(bench.refused.map(r => r.reason.kind)).toEqual(['ambiguous']);
     });
@@ -447,7 +447,7 @@ describe('F2-counter2: two own writes trade the texts of two rows, then an unrep
         await bench.repo.setFrontmatterKeys(FILE, { color: 'red' });
         const after = bench.lines();
         expect(after.slice(-2)).toEqual(['- [x] A', '- [ ] A']);
-        expect(await bench.writer.deleteTaskFromFile(plannedOn(x, { subtree: true }))).toBe(true);
+        expect((await bench.writer.deleteTaskFromFile(plannedOn(x, { subtree: true }))).written).toBe(true);
         expect(bench.lines()).toEqual([...after.slice(0, -2), '- [ ] A']);
         expect(bench.refused).toEqual([]);
     });
@@ -459,7 +459,7 @@ describe('F2-counter2: two own writes trade the texts of two rows, then an unrep
         // pairs now against what the last one left, and X is where it put X.
         const { bench, x } = await traded();
         bench.edit(['- [x] A', '- [ ] A', 'メモ']);
-        expect(await bench.writer.deleteTaskFromFile(plannedOn(x, { subtree: true }))).toBe(true);
+        expect((await bench.writer.deleteTaskFromFile(plannedOn(x, { subtree: true }))).written).toBe(true);
         expect(bench.lines()).toEqual(['- [ ] A', 'メモ']);
         expect(bench.refused).toEqual([]);
     });
@@ -474,13 +474,13 @@ describe('F2-counter2: two own writes trade the texts of two rows, then an unrep
         await bench.writer.updateTaskInFile(plannedOn(y), { ...y, content: 'A', originalText: '- [ ] A' });
         expect(bench.lines()).toEqual(['- [ ] B', '- [ ] A']);
         bench.edit(['- [ ] B', '- [ ] A', 'メモ']);
-        expect(await bench.writer.deleteTaskFromFile(plannedOn(x, { subtree: true }))).toBe(false);
+        expect((await bench.writer.deleteTaskFromFile(plannedOn(x, { subtree: true }))).written).toBe(false);
         expect(bench.lines()).toEqual(['- [ ] B', '- [ ] A', 'メモ']);
     });
 
     it('with the last write borne out, the same writes still land (stage 2)', async () => {
         const { bench, x } = await traded();
-        expect(await bench.writer.deleteTaskFromFile(plannedOn(x, { subtree: true }))).toBe(true);
+        expect((await bench.writer.deleteTaskFromFile(plannedOn(x, { subtree: true }))).written).toBe(true);
         expect(bench.lines()).toEqual(['- [ ] A']);
     });
 
@@ -568,7 +568,7 @@ describe('F2-counter3: a scan that read before our write, committed after it', (
         await scan.done;
         await bench.repo.setFrontmatterKeys(FILE, { color: 'red' });
         const after = bench.lines();
-        expect(await bench.writer.deleteTaskFromFile(plannedOn(x, { subtree: true }))).toBe(false);
+        expect((await bench.writer.deleteTaskFromFile(plannedOn(x, { subtree: true }))).written).toBe(false);
         expect(bench.lines()).toEqual(after);
         expect(bench.refused.map(r => r.reason.kind)).toEqual(['changed']);
     });
@@ -649,13 +649,13 @@ describe('F2-counter4: the file back at the content the ledger recorded, names m
         const x = bench.taskAt(0);
         const y = bench.taskAt(1);
         const scan = await gatedScan(bench);
-        expect(await bench.writer.deleteTaskFromFile(plannedOn(x, { subtree: true }))).toBe(true);
+        expect((await bench.writer.deleteTaskFromFile(plannedOn(x, { subtree: true }))).written).toBe(true);
         await bench.writer.appendTaskToFile(FILE, '- [ ] B');
         expect((await bench.writer.updateTaskInFile(plannedOn(y), { ...y, content: 'A', originalText: '- [ ] A' })).written).toBe(true);
         scan.release();
         await scan.done;
         expect(bench.lines()).toEqual(['- [ ] A', '- [ ] B']);
-        expect(await bench.writer.deleteTaskFromFile(plannedOn(x, { subtree: true }))).toBe(false);
+        expect((await bench.writer.deleteTaskFromFile(plannedOn(x, { subtree: true }))).written).toBe(false);
         expect(bench.lines()).toEqual(['- [ ] A', '- [ ] B']);
         expect(bench.refused.map(r => r.reason.kind)).toEqual(['changed']);
     });
@@ -666,7 +666,7 @@ describe('F2-counter4: the file back at the content the ledger recorded, names m
         const y = bench.taskAt(1);
         const scan = await gatedScan(bench);
         expect((await bench.writer.updateTaskInFile(plannedOn(y), { ...y, content: 'A', originalText: '- [ ] A' })).written).toBe(true);
-        expect(await bench.writer.deleteTaskFromFile(plannedOn(x, { subtree: true }))).toBe(true);
+        expect((await bench.writer.deleteTaskFromFile(plannedOn(x, { subtree: true }))).written).toBe(true);
         scan.release();
         await scan.done;
         bench.edit(['- [ ] A', '- [ ] B']);

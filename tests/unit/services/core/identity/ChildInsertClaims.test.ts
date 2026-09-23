@@ -227,7 +227,8 @@ describe('the lines a timer writes beside a task', () => {
         await live.settle(FILE);
 
         // Past the completed siblings, not between them.
-        expect(at).toBe(3);
+        expect(at).toBe(true);
+        expect(contents.get(FILE)!.split('\n')[3]).toBe('- [x] 記録 @2026-09-18');
         const after = idsOf(live);
         expect([after[0], after[1], after[2], after[4]]).toEqual(before);
         expect(after[3]).not.toBe(before[3]);

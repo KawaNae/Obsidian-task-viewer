@@ -1,6 +1,6 @@
 import { type App, TFile } from 'obsidian';
 import { CodeFenceTracker } from './CodeFenceTracker';
-import { processLines, type LineDraft, type WriteChannel } from './FileLines';
+import { fileGone, processLines, type LineDraft, type WriteAt, type WriteChannel } from './FileLines';
 import { Outline } from '../services/parsing/utils/Outline';
 import { Placement } from '../services/persistence/utils/Placement';
 
@@ -95,19 +95,21 @@ export class HeadingInserter {
         line: string,
         header: string,
         headerLevel: number
-    ): Promise<number> {
+    ): Promise<WriteAt> {
         const file = typeof fileOrPath === 'string'
             ? app.vault.getAbstractFileByPath(fileOrPath)
             : fileOrPath;
-        if (!(file instanceof TFile)) return -1;
+        if (!(file instanceof TFile)) {
+            return fileGone(channel, typeof fileOrPath === 'string' ? fileOrPath : fileOrPath.path, line.trim());
+        }
 
-        let insertedLine = -1;
-        await processLines(app, file, channel, (draft, _eol, { refuse }) => {
+        let inserted = -1;
+        const outcome = await processLines(app, file, channel, (draft, _eol, { refuse }) => {
             const at = HeadingInserter.insertUnderHeading(draft, line, header, headerLevel);
             if (at === null) return refuse({ kind: 'unplaceable' }, line.trim());
-            insertedLine = at;
+            inserted = at;
             return true;
         });
-        return insertedLine;
+        return outcome.written ? { ...outcome, line: inserted } : outcome;
     }
 }

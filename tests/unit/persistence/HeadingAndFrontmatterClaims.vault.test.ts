@@ -91,7 +91,7 @@ describe('a line put under a heading', () => {
 
         const line = await session.index.createTask(FILE, '- [ ] N', 'Tasks');
 
-        expect(line).toBe(-1);
+        expect(line).toBe(null);
         expect(contents.get(FILE)!).toBe(text);
         expect(refused.map(r => r.reason.kind)).toEqual(['unplaceable']);
     });

@@ -61,7 +61,7 @@ describe('what a mark answers for', () => {
         const bench = await writeBench([A('x'), '- [ ] 乙']);
         const y = bench.taskAt(0);
         bench.edit([A('x'), '- [ ] 乙 synced']);
-        expect(await bench.writer.insertLineAfterTask(y, 'メモ')).toBeGreaterThan(0);
+        expect((await bench.writer.insertLineAfterTask(y, 'メモ')).written).toBe(true);
         bench.edit([...bench.lines(), A('x')]);
         await bench.scan();
         expect(firedIn(bench)).toBe(0);
@@ -84,7 +84,7 @@ describe('what a mark answers for', () => {
             const y = bench.taskAt(0), x = bench.taskAt(1);
             expect((await bench.writer.updateTaskInFile(plannedOn(x), check(x, 'x'))).written).toBe(true);
             if (withSync) bench.edit([...bench.lines().slice(0, 2), '- [ ] 乙 synced']);
-            expect(await bench.writer.insertLineAfterTask(y, 'メモ')).toBeGreaterThan(0);
+            expect((await bench.writer.insertLineAfterTask(y, 'メモ')).written).toBe(true);
             await bench.writer.appendTaskToFile(BENCH_FILE, A('x'), 'flow');
             await bench.scan();
             expect(firedIn(bench)).toBe(1);

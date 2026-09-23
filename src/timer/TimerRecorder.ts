@@ -335,7 +335,7 @@ export class TimerRecorder {
         const { line, blockId } = this.buildSessionPlaceholder(timer);
         const inserted = await this.plugin.getTaskWriteService()
             .insertSiblingAfterTask(anchor.id, line, { afterCompletedRun: true });
-        if (inserted < 0) return undefined;
+        if (!inserted) return undefined;
 
         return this.adoptWrittenSession(timer, anchor.file, blockId);
     }
@@ -551,7 +551,7 @@ export class TimerRecorder {
         const { line, blockId } = this.buildSessionPlaceholder(timer);
         const inserted = await this.plugin.getTaskWriteService()
             .insertSiblingAfterTask(tail.id, line);
-        if (inserted < 0) return this.createChildAtStart(timer);
+        if (!inserted) return this.createChildAtStart(timer);
 
         const sessionTaskId = await this.adoptWrittenSession(timer, tail.file, blockId);
         if (sessionTaskId) {

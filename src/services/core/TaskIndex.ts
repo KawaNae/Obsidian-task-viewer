@@ -592,7 +592,7 @@ export class TaskIndex {
             if (options.fireFlow && isTvInline(task)) {
                 removed = await this.commandExecutor.fireAndDelete(task);
             } else {
-                removed = await this.repository.deleteTaskFromFile(plannedOn(task, { subtree: true }));
+                removed = (await this.repository.deleteTaskFromFile(plannedOn(task, { subtree: true }))).written;
                 if (!removed) {
                     // Nothing was written, so no rescan follows and the store
                     // still holds a task the file also still holds. They agree,
@@ -647,35 +647,38 @@ export class TaskIndex {
     private async writeDuplicate(task: Task, options?: DuplicateOptions): Promise<boolean> {
         const { dayOffset = 0, count = 1 } = options ?? {};
         if (dayOffset !== 0) {
-            return this.repository.duplicateInlineTask(plannedOn(task), options);
+            return (await this.repository.duplicateInlineTask(plannedOn(task), options)).written;
         }
 
         const display = toDisplayTask(task, this.settings.startHour, (id) => this.store.getTask(id));
         const copies = planInPlaceCopies(task, display, count);
-        return this.repository.duplicateInlineTaskInPlace(
+        const outcome = await this.repository.duplicateInlineTaskInPlace(
             plannedOn(task),
             copies.kind === 'verbatim'
                 ? copies
                 : { kind: 'lines', lines: copies.tasks.map(copy => TaskParser.format(copy)) },
         );
+        return outcome.written;
     }
 
-    async createTask(filePath: string, taskLine: string, heading?: string): Promise<number> {
-        if (this.refuseAfterDispose('createTask')) return -1;
-        let insertedLine = -1;
-        await this.withNotify(filePath, async () => {
+    /**
+     * @returns the line the task was written on, or null when it was not — a
+     * write that was not has told the user why.
+     */
+    async createTask(filePath: string, taskLine: string, heading?: string): Promise<number | null> {
+        if (this.refuseAfterDispose('createTask')) return null;
+        return this.withNotify(filePath, async () => {
             logInfo(`[createTask] path=${filePath} heading=${heading ?? '(none)'}`);
 
-            if (heading) {
-                insertedLine = await this.repository.insertLineUnderHeading(filePath, taskLine, heading, 2);
-                if (insertedLine < 0) return; // ファイルが無ければ何も書けていない
-            } else {
-                insertedLine = await this.repository.appendTaskToFile(filePath, taskLine, 'user');
-            }
+            const outcome = heading
+                ? await this.repository.insertLineUnderHeading(filePath, taskLine, heading, 2)
+                : await this.repository.appendTaskToFile(filePath, taskLine, 'user');
+            // Nothing written: no modify, so no scan to wait for.
+            if (!outcome.written) return null;
 
             await this.scanner.waitForScan(filePath);
+            return outcome.line;
         });
-        return insertedLine;
     }
 
     /** @returns whether the child line was written. */
@@ -694,13 +697,13 @@ export class TaskIndex {
             // インデントは書き込み層が既存子行から決める（親行だけからは
             // トップレベルのとき 4 スペース固定になり、タブ書きのファイルに
             // スペースが混ざる）。
-            const insertedLine = await this.repository.insertLineAsFirstChild(task, childLine);
-            if (insertedLine < 0) {
+            const { written } = await this.repository.insertLineAsFirstChild(task, childLine);
+            if (!written) {
                 logWarn(`[TaskIndex] child insert was not written: parentId=${parentTaskId}`);
             }
 
             await this.scanner.waitForScan(task.file);
-            return insertedLine >= 0;
+            return written;
         });
     }
 
@@ -709,18 +712,20 @@ export class TaskIndex {
      * insertChildTask's head insertion. Session records accumulate over time,
      * so head insertion would print the log backwards.
      */
-    async appendChildTask(parentTaskId: string, childLine: string): Promise<void> {
-        if (this.refuseAfterDispose('appendChildTask')) return;
+    /** @returns whether the child line was written. */
+    async appendChildTask(parentTaskId: string, childLine: string): Promise<boolean> {
+        if (this.refuseAfterDispose('appendChildTask')) return false;
         const task = this.store.getTask(parentTaskId);
-        if (!task) return;
-        if (task.isReadOnly) return;
+        if (!task) return false;
+        if (task.isReadOnly) return false;
         return this.withNotify(task.file, async () => {
             logInfo(`[appendChildTask] parentId=${parentTaskId}`);
 
 
-            await this.repository.insertLineAfterTask(task, childLine);
+            const { written } = await this.repository.insertLineAfterTask(task, childLine);
 
             await this.scanner.waitForScan(task.file);
+            return written;
         });
     }
 
@@ -733,54 +738,51 @@ export class TaskIndex {
         taskId: string,
         siblingLine: string,
         opts: { afterCompletedRun?: boolean } = {}
-    ): Promise<number> {
-        if (this.refuseAfterDispose('insertSiblingAfterTask')) return -1;
+    ): Promise<boolean> {
+        if (this.refuseAfterDispose('insertSiblingAfterTask')) return false;
         const task = this.store.getTask(taskId);
-        if (!task) return -1;
-        if (task.isReadOnly) return -1;
+        if (!task) return false;
+        if (task.isReadOnly) return false;
         return this.withNotify(task.file, async () => {
             logInfo(`[insertSiblingAfterTask] taskId=${taskId}`);
 
-            const insertedLine = await this.repository.insertSiblingAfterTask(task, siblingLine, opts);
+            const { written } = await this.repository.insertSiblingAfterTask(task, siblingLine, opts);
             await this.scanner.waitForScan(task.file);
 
-            return insertedLine;
+            return written;
         });
     }
 
-    async updateLine(filePath: string, at: EditorLine, newContent: string): Promise<void> {
-        if (this.refuseAfterDispose('updateLine')) return;
+    /** @returns whether the line was written. */
+    async updateLine(filePath: string, at: EditorLine, newContent: string): Promise<boolean> {
+        if (this.refuseAfterDispose('updateLine')) return false;
         return this.withNotify(filePath, async () => {
-            await this.repository.updateLine(filePath, at, newContent);
-
-            const file = this.app.vault.getAbstractFileByPath(filePath);
-            if (file instanceof TFile) {
-                await this.scanner.waitForScan(filePath);
-            }
+            const { written } = await this.repository.updateLine(filePath, at, newContent);
+            // Nothing written: no modify, so no scan to wait for.
+            if (written) await this.scanner.waitForScan(filePath);
+            return written;
         });
     }
 
-    async insertLineAfterLine(filePath: string, at: EditorLine, newContent: string): Promise<void> {
-        if (this.refuseAfterDispose('insertLineAfterLine')) return;
+    /** @returns whether the line was written. */
+    async insertLineAfterLine(filePath: string, at: EditorLine, newContent: string): Promise<boolean> {
+        if (this.refuseAfterDispose('insertLineAfterLine')) return false;
         return this.withNotify(filePath, async () => {
-            await this.repository.insertLineAfterLine(filePath, at, newContent);
-
-            const file = this.app.vault.getAbstractFileByPath(filePath);
-            if (file instanceof TFile) {
-                await this.scanner.waitForScan(filePath);
-            }
+            const { written } = await this.repository.insertLineAfterLine(filePath, at, newContent);
+            // Nothing written: no modify, so no scan to wait for.
+            if (written) await this.scanner.waitForScan(filePath);
+            return written;
         });
     }
 
-    async deleteLine(filePath: string, at: EditorLine): Promise<void> {
-        if (this.refuseAfterDispose('deleteLine')) return;
+    /** @returns whether the line was written. */
+    async deleteLine(filePath: string, at: EditorLine): Promise<boolean> {
+        if (this.refuseAfterDispose('deleteLine')) return false;
         return this.withNotify(filePath, async () => {
-            await this.repository.deleteLine(filePath, at);
-
-            const file = this.app.vault.getAbstractFileByPath(filePath);
-            if (file instanceof TFile) {
-                await this.scanner.waitForScan(filePath);
-            }
+            const { written } = await this.repository.deleteLine(filePath, at);
+            // Nothing written: no modify, so no scan to wait for.
+            if (written) await this.scanner.waitForScan(filePath);
+            return written;
         });
     }
 

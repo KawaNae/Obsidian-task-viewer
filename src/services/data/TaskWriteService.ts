@@ -88,7 +88,8 @@ export class TaskWriteService {
 
     // ===== Task creation =====
 
-    async createTask(filePath: string, taskLine: string, heading?: string): Promise<number> {
+    /** @returns the line the task was written on, or null when it was not. */
+    async createTask(filePath: string, taskLine: string, heading?: string): Promise<number | null> {
         return this.taskIndex.createTask(filePath, taskLine, heading);
     }
 
@@ -102,7 +103,7 @@ export class TaskWriteService {
      * a log, so they must accumulate in chronological order — insertChildTask
      * inserts at the head and would read backwards.
      */
-    async appendChildTask(parentTaskId: string, childLine: string): Promise<void> {
+    async appendChildTask(parentTaskId: string, childLine: string): Promise<boolean> {
         return this.taskIndex.appendChildTask(this.resolveTaskId(parentTaskId), childLine);
     }
 
@@ -117,14 +118,14 @@ export class TaskWriteService {
      * order when the timer resumes from an earlier one. Completion means `[x]`
      * and nothing else.
      *
-     * Returns the inserted line index, or -1 when nothing was written
-     * (unknown / read-only task, or an unresolvable line).
+     * Returns whether the line was written. Not written: an unknown or
+     * read-only task, or a write that was refused (and told the user why).
      */
     async insertSiblingAfterTask(
         taskId: string,
         siblingLine: string,
         opts: { afterCompletedRun?: boolean } = {}
-    ): Promise<number> {
+    ): Promise<boolean> {
         return this.taskIndex.insertSiblingAfterTask(this.resolveTaskId(taskId), siblingLine, opts);
     }
 
@@ -135,15 +136,15 @@ export class TaskWriteService {
     // line via the editor cursor (e.g. TaskMenuExtension) or another trusted
     // source.
 
-    async updateLine(filePath: string, at: EditorLine, newContent: string): Promise<void> {
+    async updateLine(filePath: string, at: EditorLine, newContent: string): Promise<boolean> {
         return this.taskIndex.updateLine(filePath, at, newContent);
     }
 
-    async insertLineAfterLine(filePath: string, at: EditorLine, newContent: string): Promise<void> {
+    async insertLineAfterLine(filePath: string, at: EditorLine, newContent: string): Promise<boolean> {
         return this.taskIndex.insertLineAfterLine(filePath, at, newContent);
     }
 
-    async deleteLine(filePath: string, at: EditorLine): Promise<void> {
+    async deleteLine(filePath: string, at: EditorLine): Promise<boolean> {
         return this.taskIndex.deleteLine(filePath, at);
     }
 
@@ -154,8 +155,9 @@ export class TaskWriteService {
     // ノートのスコープ属性で、タスクは作らない。no-op な vault.process が
     // modify を発火しない挙動もここでは変わらない。
 
-    async setFrontmatterKeys(filePath: string, updates: Record<string, string | null>): Promise<void> {
-        return this.taskIndex.getRepository().setFrontmatterKeys(filePath, updates);
+    /** @returns whether the keys were written. */
+    async setFrontmatterKeys(filePath: string, updates: Record<string, string | null>): Promise<boolean> {
+        return (await this.taskIndex.getRepository().setFrontmatterKeys(filePath, updates)).written;
     }
 
     /**

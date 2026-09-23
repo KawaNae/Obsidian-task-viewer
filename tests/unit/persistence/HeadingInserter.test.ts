@@ -8,7 +8,7 @@ import { draftOver } from '../../../src/utils/FileLines';
  * FrontmatterWriter.insertLineUnderHeading の 3 重実装を一本化した先。この
  * ラッパー自体は「insertUnderHeading の結果を vault.process で書き戻し、
  * insertedLine を返す」だけなので、pin するのは vault.process への配線と
- * ファイル不在時の -1 フォールバックの 2 点。
+ * ファイル不在時の拒否（gone）の 2 点。
  */
 function harness(initial: string) {
     let content = initial;
@@ -37,29 +37,31 @@ describe('HeadingInserter', () => {
     describe('writeUnderHeading', () => {
         it('writes the pure-function result back through vault.process and returns insertedLine', async () => {
             const h = harness('some text\n## Tasks\nexisting line');
-            const insertedLine = await HeadingInserter.writeUnderHeading(
+            const at = await HeadingInserter.writeUnderHeading(
                 h.app, 'note.md', undefined, '- [ ] new task', 'Tasks', 2
             );
-            expect(insertedLine).toBe(2);
+            expect(at.written && at.line).toBe(2);
             expect(h.text().split('\n')[2]).toBe('- [ ] new task');
         });
 
         it('creates the heading when absent, matching insertUnderHeading', async () => {
             const h = harness('some text');
-            const insertedLine = await HeadingInserter.writeUnderHeading(
+            const at = await HeadingInserter.writeUnderHeading(
                 h.app, 'note.md', undefined, '- [ ] task', 'Tasks', 2
             );
             const lines = h.text().split('\n');
             expect(lines).toContain('## Tasks');
-            expect(lines[insertedLine]).toBe('- [ ] task');
+            if (!at.written) throw new Error('expected the write to be made');
+            expect(lines[at.line]).toBe('- [ ] task');
         });
 
-        it('returns -1 without writing when the file does not exist', async () => {
+        it('is refused as gone without writing when the file does not exist', async () => {
             const h = harness('unchanged');
-            const insertedLine = await HeadingInserter.writeUnderHeading(
+            const at = await HeadingInserter.writeUnderHeading(
                 h.app, 'missing.md', undefined, '- [ ] task', 'Tasks', 2
             );
-            expect(insertedLine).toBe(-1);
+            expect(at.written).toBe(false);
+            expect(at.refused?.reason).toEqual({ kind: 'gone' });
             expect(h.text()).toBe('unchanged');
         });
 
@@ -76,10 +78,10 @@ describe('HeadingInserter', () => {
                 },
             } as any;
 
-            const insertedLine = await HeadingInserter.writeUnderHeading(
+            const at = await HeadingInserter.writeUnderHeading(
                 app, file, undefined, '- [ ] just created', 'Tasks', 2
             );
-            expect(insertedLine).toBe(1);
+            expect(at.written && at.line).toBe(1);
             expect(content.split('\n')[1]).toBe('- [ ] just created');
         });
     });

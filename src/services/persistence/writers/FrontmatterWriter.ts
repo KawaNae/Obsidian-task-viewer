@@ -2,7 +2,7 @@ import { type App, TFile } from 'obsidian';
 import type { FileOperations } from '../utils/FileOperations';
 import { FrontmatterLineEditor } from '../utils/FrontmatterLineEditor';
 import { HeadingInserter } from '../../../utils/HeadingInserter';
-import { processLines } from '../../../utils/FileLines';
+import { fileGone, processLines, type WriteAt, type WriteOutcome } from '../../../utils/FileLines';
 import type { WriteObserver } from '../WriteObserver';
 
 /**
@@ -20,14 +20,13 @@ export class FrontmatterWriter {
     /**
      * 指定ファイルの見出し下に行を挿入する（見出し付きのタスク作成に使う
      * 汎用操作）。見出しが存在しない場合はファイル末尾に作成する。
-     * @returns 挿入した行の 0-based 行番号。ファイルが無ければ -1。
      */
     async insertLineUnderHeading(
         filePath: string,
         lineContent: string,
         header: string,
         headerLevel: number
-    ): Promise<number> {
+    ): Promise<WriteAt> {
         return HeadingInserter.writeUnderHeading(this.app, filePath, this.writes?.for(filePath, 'user'), lineContent, header, headerLevel);
     }
 
@@ -45,16 +44,16 @@ export class FrontmatterWriter {
      * 設定するキーが1つでもあれば block の無いファイルには block を作る。
      * 削除だけの場合は作らない（消す相手が無いので書く必要がない）。
      */
-    async setKeys(filePath: string, updates: Record<string, string | null>): Promise<void> {
+    async setKeys(filePath: string, updates: Record<string, string | null>): Promise<WriteOutcome> {
         const file = this.app.vault.getAbstractFileByPath(filePath);
-        if (!(file instanceof TFile)) return;
+        if (!(file instanceof TFile)) return fileGone(this.writes?.for(filePath, 'user'), filePath, filePath);
 
         const hasSet = Object.values(updates).some(v => v !== null);
 
         // Reported like any other write: every row below a key added or
         // removed here moves, and without the report the next scan could not
         // be told which is which (see `WriteClaims.stateFor`).
-        await processLines(this.app, file, this.writes?.for(filePath, 'user'), (draft) => {
+        return processLines(this.app, file, this.writes?.for(filePath, 'user'), (draft) => {
             // Nothing to delete from: the file already reads as asked, the way
             // a rewrite to the same bytes does. Written, and nothing changes.
             if (FrontmatterLineEditor.findEnd(draft.lines) < 0 && !hasSet) return true;

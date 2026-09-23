@@ -76,10 +76,10 @@ function makeHarness(options: { tail?: Task | undefined; siblingFails?: boolean 
                 appearWritten(NEW_BLOCK_ID);
             },
             insertSiblingAfterTask: async (taskId: string, line: string, opts = {}) => {
-                if (options.siblingFails) return -1;
+                if (options.siblingFails) return false;
                 siblingInserts.push({ taskId, line, opts });
                 appearWritten(NEW_BLOCK_ID);
-                return 4;
+                return true;
             },
         }),
     } as unknown as TaskViewerPlugin;

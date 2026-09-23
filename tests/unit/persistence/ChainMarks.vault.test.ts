@@ -80,19 +80,21 @@ describe('where a file can be changed at all', () => {
             });
         }
 
-        // processLines and replaceWhole: the two ways a note is changed.
-        expect(found).toEqual(['utils/FileLines.ts', 'utils/FileLines.ts']);
+        // processLines and replaceWhole: the two ways a note is changed, both
+        // through the one `vault.process` in processOrFail.
+        expect(found).toEqual(['utils/FileLines.ts']);
         // A created note starts a chain (no record of the path exists to go
         // stale); a binary export is not a note. Each is named here so a new
-        // one is looked at, not waved through.
+        // one is looked at, not waved through. FileLines' is createFile, which
+        // an append to a note that is not there yet goes through.
         expect([...new Set(created)].sort()).toEqual([
             'log/log-manager.ts',
             'main.ts',
             'services/export/ExportUtils.ts',
-            'services/persistence/writers/InlineTaskWriter.ts',
             'services/template/ViewTemplateWriter.ts',
             'timer/IntervalTemplateWriter.ts',
             'utils/DailyNoteUtils.ts',
+            'utils/FileLines.ts',
         ]);
     });
 });

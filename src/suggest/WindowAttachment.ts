@@ -30,7 +30,7 @@ export class WindowAttachment {
     private observer: MutationObserver | null = null;
     private nativeSuggestStyles: Map<string, HTMLStyleElement> = new Map();
     private colorWriteTimer: number | null = null;
-    private pendingColorWrite: (() => Promise<void>) | null = null;
+    private pendingColorWrite: (() => Promise<boolean>) | null = null;
 
     constructor(
         private win: Window,
@@ -61,7 +61,7 @@ export class WindowAttachment {
     }
 
     /** 最後の色だけを書くよう予約し直す（前の予約は破棄する）。 */
-    private queueColorWrite(write: () => Promise<void>): void {
+    private queueColorWrite(write: () => Promise<boolean>): void {
         this.pendingColorWrite = write;
         if (this.colorWriteTimer !== null) this.win.clearTimeout(this.colorWriteTimer);
         this.colorWriteTimer = this.win.setTimeout(() => {

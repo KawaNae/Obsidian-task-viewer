@@ -492,7 +492,7 @@ export class TaskApi {
         const line = TaskLineClassifier.formatPrefix(statusChar) + TaskLineClassifier.joinContent(content, dateBlock);
 
         const insertedLine = await this.writeService.createTask(params.file, line, params.heading);
-        if (insertedLine < 0) throw new TaskApiError(`Task could not be written to: ${params.file}`);
+        if (insertedLine === null) throw new TaskApiError(`Task could not be written to: ${params.file}`);
 
         const created = this.readService.getTaskByFileLine(params.file, insertedLine);
         if (!created) throw new TaskApiError('Task was created but could not be found after scan');
