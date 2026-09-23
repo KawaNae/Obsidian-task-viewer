@@ -94,10 +94,11 @@ export class TaskLineClassifier {
 
     /**
      * Whether `status` is a character a checkbox can hold (`STATUS_CHAR_SOURCE`):
-     * one written there makes a line that reads back as a task.
+     * one written there makes a line that reads back as a task. Takes what an
+     * API caller passed as is: `RegExp.test` would turn `5` into `'5'`.
      */
-    static isStatusChar(status: string): boolean {
-        return this.STATUS_CHAR_REGEX.test(status);
+    static isStatusChar(status: unknown): status is string {
+        return typeof status === 'string' && this.STATUS_CHAR_REGEX.test(status);
     }
 
     /** Boolean-only check — avoids object allocation on hot paths. */
