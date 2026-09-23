@@ -1,4 +1,4 @@
-import { collectFlowLineIndicesInFile, flowLineTail } from '../flow/FlowLineScanner';
+import { collectFlowLineIndicesInFile, flowLineTail } from '../parsing/utils/FlowLineScanner';
 import { collectGenBlocks } from '../parsing/gen/GenBlockCollector';
 import { Outline } from '../parsing/utils/Outline';
 

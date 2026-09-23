@@ -1,5 +1,5 @@
 import { CodeFenceTracker } from '../../../utils/CodeFenceTracker';
-import { FLOW_MARKER, matchFlowLine } from '../../flow/FlowLineScanner';
+import { FLOW_MARKER, matchFlowLine } from '../utils/FlowLineScanner';
 import { parseFlowCells } from '../../flow/FlowParser';
 import type { StaticType } from '../../lang/functions';
 import type { GenCellTypes } from './GenBodyParser';

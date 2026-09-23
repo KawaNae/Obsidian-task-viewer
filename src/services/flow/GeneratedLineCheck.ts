@@ -2,7 +2,7 @@ import { type Diagnostic, error } from '../lang/Diagnostic';
 import { childStatusWarning, parentStatusWarning } from '../parsing/gen/GenGeneratedStatusCheck';
 import { TaskLineClassifier } from '../parsing/utils/TaskLineClassifier';
 import { Outline } from '../parsing/utils/Outline';
-import { FLOW_MARKER } from './FlowLineScanner';
+import { FLOW_MARKER } from '../parsing/utils/FlowLineScanner';
 
 /**
  * The verdict on one generated line: the text to write, or the reason it
