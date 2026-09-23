@@ -453,7 +453,7 @@ export class TaskApi {
         assertParams(params, CREATE_SCHEMA, 'create');
 
         const statusChar = params.status || ' ';
-        if (statusChar.length !== 1 || hasLineBreak(statusChar)) throw new TaskApiError(`status must be a single character other than a line break, got: ${JSON.stringify(statusChar)}`);
+        if (!TaskLineClassifier.isStatusChar(statusChar)) throw new TaskApiError(`status must be a single character a checkbox can hold (not a line break, U+2028 or U+2029), got: ${JSON.stringify(statusChar)}`);
 
         if (hasLineBreak(params.content)) throw new TaskApiError('content must not contain line breaks (\\r or \\n)');
 
@@ -516,7 +516,7 @@ export class TaskApi {
         }
         if (params.status !== undefined) {
             const sc = params.status === 'none' ? ' ' : params.status;
-            if (sc.length !== 1 || hasLineBreak(sc)) throw new TaskApiError(`status must be a single character other than a line break, or "none", got: ${JSON.stringify(params.status)}`);
+            if (!TaskLineClassifier.isStatusChar(sc)) throw new TaskApiError(`status must be a single character a checkbox can hold (not a line break, U+2028 or U+2029), or "none", got: ${JSON.stringify(params.status)}`);
             updates.statusChar = sc;
         }
 
