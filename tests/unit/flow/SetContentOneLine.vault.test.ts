@@ -1,6 +1,6 @@
 import { describe, it, expect, afterEach, vi } from 'vitest';
 import { Notice } from 'obsidian';
-import { vaultSession, type VaultSession } from '../helpers/vaultSession';
+import { openVault, type VaultSession } from '../helpers/vaultSession';
 
 /**
  * A flow's `set content` that yields several lines stops the fire with a
@@ -22,10 +22,9 @@ afterEach(() => {
 });
 
 async function open(lines: string[]): Promise<{ contents: Map<string, string>; session: VaultSession }> {
-    const contents = new Map([[FILE, lines.join('\n')]]);
-    live = vaultSession(contents);
-    await live.scanAll();
-    return { contents, session: live };
+    const opened = await openVault(lines);
+    live = opened.session;
+    return opened;
 }
 
 describe('set content with a line break in its value', () => {

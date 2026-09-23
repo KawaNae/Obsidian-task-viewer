@@ -1,6 +1,6 @@
 import { describe, it, expect, afterEach, vi } from 'vitest';
 import { Notice } from 'obsidian';
-import { vaultSession, type VaultSession } from '../helpers/vaultSession';
+import { openVault, vaultSession, type VaultSession } from '../helpers/vaultSession';
 import { t } from '../../../src/i18n';
 
 /**
@@ -31,10 +31,9 @@ afterEach(() => {
 });
 
 async function open(files: Record<string, string[]>): Promise<{ contents: Map<string, string>; session: VaultSession }> {
-    const contents = new Map(Object.entries(files).map(([path, lines]) => [path, lines.join('\n')]));
-    live = vaultSession(contents);
-    await live.scanAll();
-    return { contents, session: live };
+    const opened = await openVault(files);
+    live = opened.session;
+    return opened;
 }
 
 function idOf(session: VaultSession, content: string): string {

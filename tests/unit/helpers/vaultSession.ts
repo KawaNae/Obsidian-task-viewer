@@ -223,4 +223,26 @@ export function vaultSession(contents: Map<string, string>) {
     };
 }
 
+/** The note a session opens when it is given one text or one list of lines. */
+export const NOTE = 'note.md';
+
+/**
+ * A session over `files`, scanned once. One text or one list of lines is
+ * `NOTE`; a record names each file and gives its text or its lines.
+ * The caller disposes the session.
+ */
+export async function openVault(
+    files: string | string[] | Record<string, string | string[]>,
+): Promise<{ contents: Map<string, string>; session: VaultSession }> {
+    const text = (content: string | string[]) => (typeof content === 'string' ? content : content.join('\n'));
+    const contents = new Map<string, string>(
+        typeof files === 'string' || Array.isArray(files)
+            ? [[NOTE, text(files)]]
+            : Object.entries(files).map(([path, content]) => [path, text(content)]),
+    );
+    const session = vaultSession(contents);
+    await session.scanAll();
+    return { contents, session };
+}
+
 export type VaultSession = ReturnType<typeof vaultSession>;

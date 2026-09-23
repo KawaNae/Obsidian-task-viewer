@@ -1,7 +1,7 @@
 import { describe, it, expect, afterEach } from 'vitest';
 import { readFileSync, readdirSync, statSync } from 'fs';
 import { join, relative } from 'path';
-import { vaultSession, makeFile, type VaultSession } from '../helpers/vaultSession';
+import { openVault, makeFile, type VaultSession } from '../helpers/vaultSession';
 import { processLines, replaceWhole } from '../../../src/utils/FileLines';
 import { HeadingInserter } from '../../../src/utils/HeadingInserter';
 import { plannedOn } from '../../../src/services/persistence/TaskRefs';
@@ -29,8 +29,7 @@ afterEach(() => {
 });
 
 async function open(text: string): Promise<VaultSession> {
-    live = vaultSession(new Map([[FILE, text]]));
-    await live.scanAll();
+    live = (await openVault(text)).session;
     live.index.setDraggingFile(FILE);
     return live;
 }

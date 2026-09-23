@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach } from 'vitest';
-import { vaultSession, type VaultSession } from '../helpers/vaultSession';
+import { openVault, type VaultSession } from '../helpers/vaultSession';
 
 /**
  * Whether a note has rows at all hangs on a frontmatter key (`tv-ignore`),
@@ -21,9 +21,9 @@ afterEach(() => {
 });
 
 async function open(lines: string[]): Promise<VaultSession> {
-    contents = new Map([[FILE, lines.join('\n')]]);
-    live = vaultSession(contents);
-    await live.scanAll();
+    const opened = await openVault(lines);
+    contents = opened.contents;
+    live = opened.session;
     return live;
 }
 

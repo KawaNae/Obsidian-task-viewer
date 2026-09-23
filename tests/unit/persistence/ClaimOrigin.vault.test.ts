@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach } from 'vitest';
-import { vaultSession, type VaultSession } from '../helpers/vaultSession';
+import { openVault, type VaultSession } from '../helpers/vaultSession';
 import { plannedOn } from '../../../src/services/persistence/TaskRefs';
 import type { Task } from '../../../src/types';
 
@@ -20,8 +20,7 @@ afterEach(() => {
 });
 
 async function open(files: Record<string, string>): Promise<VaultSession> {
-    live = vaultSession(new Map(Object.entries(files)));
-    await live.scanAll();
+    live = (await openVault(files)).session;
     return live;
 }
 

@@ -1,6 +1,6 @@
 import { describe, it, expect, afterEach, beforeEach } from 'vitest';
 import { Notice } from 'obsidian';
-import { vaultSession, type VaultSession } from '../helpers/vaultSession';
+import { openVault, type VaultSession } from '../helpers/vaultSession';
 
 /**
  * A task's subtree goes on past a blank line inside it (論点4), for the
@@ -27,10 +27,9 @@ afterEach(() => {
 });
 
 async function open(files: Record<string, string[]>): Promise<{ contents: Map<string, string>; session: VaultSession }> {
-    const contents = new Map(Object.entries(files).map(([path, lines]) => [path, lines.join('\n')]));
-    live = vaultSession(contents);
-    await live.scanAll();
-    return { contents, session: live };
+    const opened = await openVault(files);
+    live = opened.session;
+    return opened;
 }
 
 function idOf(session: VaultSession, content: string, file = FILE): string {
