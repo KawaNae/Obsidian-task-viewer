@@ -1,4 +1,4 @@
-import { describe, it, expect, afterEach, beforeEach, vi } from 'vitest';
+import { describe, it, expect, afterEach, beforeEach } from 'vitest';
 import { Notice } from 'obsidian';
 import { vaultSession, type VaultSession } from '../helpers/vaultSession';
 import { t } from '../../../src/i18n';
@@ -36,15 +36,6 @@ async function open(lines: string[]): Promise<{ contents: Map<string, string>; s
     return { contents, session: live };
 }
 
-async function flowSettled(session: VaultSession): Promise<void> {
-    const executor = (session.index as unknown as { commandExecutor: { isProcessing: boolean; taskQueue: unknown[] } }).commandExecutor;
-    await vi.waitFor(() => {
-        expect(executor.isProcessing).toBe(false);
-        expect(executor.taskQueue).toHaveLength(0);
-    });
-    await session.settle(FILE);
-}
-
 function tasksWorded(session: VaultSession, content: string) {
     return session.index.getTasks().filter(task => task.file === FILE && task.content === content);
 }
@@ -52,7 +43,7 @@ function tasksWorded(session: VaultSession, content: string) {
 async function fire(session: VaultSession): Promise<void> {
     const [row] = tasksWorded(session, '対象');
     expect(await session.index.updateTask(row.id, { statusChar: 'x' })).toBe(true);
-    await flowSettled(session);
+    await session.flowSettled(FILE);
 }
 
 const ROW = '- [ ] 対象 @2026-09-21 ==> every mon';
@@ -115,7 +106,7 @@ describe('a next instance with nowhere in the body to go', () => {
         const [row] = tasksWorded(session, '対象');
 
         expect(await session.index.updateTask(row.id, { statusChar: 'x' })).toBe(true);
-        await flowSettled(session);
+        await session.flowSettled(FILE);
 
         const checked = before!.replace('  - [ ] 対象', '  - [x] 対象');
         expect(contents.get(FILE)).toBe(checked);

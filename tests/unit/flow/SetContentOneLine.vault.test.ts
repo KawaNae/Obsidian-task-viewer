@@ -28,20 +28,14 @@ async function open(lines: string[]): Promise<{ contents: Map<string, string>; s
     return { contents, session: live };
 }
 
-function executor(session: VaultSession) {
-    return (session.index as unknown as {
-        commandExecutor: { handleTaskCompletion(task: unknown): Promise<void>; isProcessing: boolean };
-    }).commandExecutor;
-}
-
 describe('set content with a line break in its value', () => {
     it('stops a completion fire with a notice, the command left in place', async () => {
         const note = ['# note', '- [x] A @2026-09-21', '\t- ==> every 1d setContent("x\\ny")', ''];
         const { contents, session } = await open(note);
         const task = session.index.getTasks().find(t => t.content === 'A')!;
 
-        await executor(session).handleTaskCompletion(task);
-        await vi.waitFor(() => expect(executor(session).isProcessing).toBe(false));
+        await session.executor.handleTaskCompletion(task);
+        await vi.waitFor(() => expect(session.executor.isProcessing).toBe(false));
 
         expect(contents.get(FILE)).toBe(note.join('\n'));
         expect(Notice.messages).toHaveLength(1);

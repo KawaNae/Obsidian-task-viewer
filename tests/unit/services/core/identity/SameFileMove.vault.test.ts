@@ -1,4 +1,4 @@
-import { describe, it, expect, afterEach, vi } from 'vitest';
+import { describe, it, expect, afterEach } from 'vitest';
 import { Notice } from 'obsidian';
 import { vaultSession, type VaultSession } from '../../../helpers/vaultSession';
 
@@ -23,15 +23,6 @@ afterEach(() => {
     live = undefined;
     Notice.messages.length = 0;
 });
-
-async function flowSettled(session: VaultSession): Promise<void> {
-    const executor = (session.index as unknown as { commandExecutor: { isProcessing: boolean; taskQueue: unknown[] } }).commandExecutor;
-    await vi.waitFor(() => {
-        expect(executor.isProcessing).toBe(false);
-        expect(executor.taskQueue).toHaveLength(0);
-    });
-    await session.settle(FILE);
-}
 
 function rowsOf(session: VaultSession): Array<{ id: string; content: string }> {
     return session.index.getTasks()
@@ -59,7 +50,7 @@ describe.each(COMMANDS)('%s within the same file', (_name, command) => {
         const kept = before.filter(row => row.content.startsWith('行')).map(row => row.id);
 
         expect(await live.index.updateTask(moving, { statusChar: 'x' })).toBe(true);
-        await flowSettled(live);
+        await live.flowSettled(FILE);
 
         const lines = contents.get(FILE)!.split('\n');
         // The note still ends with its own terminator, so the moved rows land
