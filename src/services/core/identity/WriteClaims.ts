@@ -394,17 +394,16 @@ export class WriteClaims {
      * Add a write to the file's chain, and answer the handle that takes it
      * back.
      *
-     * Taking it back removes this link and nothing else. The chain may have
-     * grown since — two writes to one file can be in flight at once — and what
-     * a later write left is still true: a later mark still says the file was
-     * changed in a way nobody described, and putting back the state from
+     * Whether the write landed is not decided here: the write's caller
+     * decides it once (`processOrFail`), and takes back only a write not
+     * known to have landed, before any later write of ours to the file files
+     * (`WriteReceipt.withdraw`). What it takes back is our newest link on the
+     * file, so no later record of ours was built on it. Taking it back removes
+     * this link and nothing else: an outside mark since still says the file
+     * was changed in a way nobody described, and putting back the state from
      * before this call would paper over it with a state older than the file.
-     *
-     * Two things follow. A described link a later described link was built on
-     * stays: that one fitted the file only because this write's content was
-     * there, so this write landed whatever its caller was told. And a link
-     * that is removed gives the previous described link back the rows it
-     * handed on to it.
+     * A link that is removed gives the previous described link back the rows
+     * it handed on to it.
      */
     private append(path: string, link: Link & { foreign?: undefined }): () => void {
         const chain = this.chainOf(path);
@@ -443,9 +442,6 @@ export class WriteClaims {
                 unawait();
                 return;
             }
-            // A later write of ours built on this one: it landed.
-            const next = chain.links.slice(at + 1).find(later => !isForeign(later));
-            if (next && next.content !== null) return;
             chain.links.splice(at, 1);
             unawait();
             if (stripped && chain.links.includes(stripped.link) && newestDescribed(chain.links) === stripped.link) {

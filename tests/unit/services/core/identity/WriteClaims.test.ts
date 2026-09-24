@@ -636,15 +636,6 @@ describe('changes counted against our writes (I1)', () => {
         expect(claims.peek(FILE).links).toEqual(['foreign']);
     });
 
-    it('a write another built on landed: taking it back keeps it waiting', () => {
-        const claims = claimsWith([], ONE);
-        const first = claims.claim(FILE, ONE, TWO, edits, 'user');
-        claims.noteChange(FILE);
-        claims.claim(FILE, TWO, ['- [x] A', 'x', ''], [{ kind: 'inserted', at: 1, count: 1 }], 'user');
-        first.withdraw();
-        expect(claims.peek(FILE)).toMatchObject({ links: ['record', 'record'], awaiting: 1 });
-    });
-
     it('a delete or rename drops what was waiting', () => {
         const claims = claimsWith();
         claims.claim(FILE, ONE, TWO, edits, 'user');
