@@ -154,7 +154,8 @@ export interface LineDraft {
      * its own, and a report in which one line still stands in two places is
      * not one a file could follow (see {@link replayEdits}). A carried line
      * that reads other than its source is reported rewritten with it, from
-     * here, so the text a carry changes is always accounted for.
+     * here, so the text a carry changes is always accounted for. A block is
+     * carried lines or new ones, not both (`UnfollowableDraft`).
      */
     put(spot: Spot, block: readonly PlacedLine[]): void;
 }
@@ -189,29 +190,23 @@ export function draftOver(lines: string[]): {
         put: (spot, given) => {
             const block = Block.at(given, spot.indent);
             block.forEach(line => oneLine(line.text));
+            // A block is new lines or carried ones, not both.
+            const carried = block.length > 0 && block[0].from !== undefined;
+            if (block.some(line => (line.from !== undefined) !== carried)) {
+                throw new UnfollowableDraft('a block put mixes carried lines with new ones');
+            }
             // The parent as a line of the lines handed in or of a block, so
             // the check finds it wherever the edits after this one leave it.
-            const parent = spot.parent === null ? null : writtenLines(handed, reported, placedBy)![spot.parent];
+            let parent: WrittenLine | null = null;
+            if (spot.parent !== null) {
+                const written = writtenLines(handed, reported, placedBy);
+                if (written === null) throw new UnfollowableDraft('a put follows a report no file could follow');
+                parent = written[spot.parent];
+            }
             const id = puts.length;
             puts.push({ parent, lines: block.map(({ kind, under }) => ({ kind, under })) });
-            // Runs of new lines and of carried ones, each put and reported in
-            // turn. A source at or past the spot has moved down by the lines
-            // put before it.
-            let offset = 0;
-            while (offset < block.length) {
-                const carried = block[offset].from !== undefined;
-                let end = offset;
-                while (end < block.length && (block[end].from !== undefined) === carried) end++;
-                const run = block.slice(offset, end);
-                const at = spot.at + offset;
-                if (carried) {
-                    const moved = run.map(line => ({ from: line.from! >= spot.at ? line.from! + offset : line.from!, text: line.text }));
-                    edits.carry(at, moved, { id, offset });
-                } else {
-                    edits.insert(at, run.map(line => line.text), { id, offset });
-                }
-                offset = end;
-            }
+            if (carried) edits.carry(spot.at, block.map(line => ({ from: line.from!, text: line.text })), { id, offset: 0 });
+            else edits.insert(spot.at, block.map(line => line.text), { id, offset: 0 });
         },
     };
     return { draft, reported, puts, placedBy };
@@ -230,6 +225,18 @@ export class LineBreakInLine extends Error {
     constructor(text: string) {
         super(`a line holds a line break: ${JSON.stringify(text.length > 80 ? text.slice(0, 80) + '…' : text)}`);
         this.name = 'LineBreakInLine';
+    }
+}
+
+/**
+ * A draft was asked for what its report cannot say: a block of carried lines
+ * and new ones together, or a put after edits no file could follow. A
+ * caller's bug, told as one by `processLines`, as a {@link LineBreakInLine} is.
+ */
+export class UnfollowableDraft extends Error {
+    constructor(what: string) {
+        super(what);
+        this.name = 'UnfollowableDraft';
     }
 }
 
@@ -505,7 +512,8 @@ export interface NamedRow {
 
 /**
  * What one `processLines` callback is handed besides its draft: where its
- * target stands, and the way to give the write up.
+ * target stands. A write is given up only when `row` answers null, so the
+ * refusal and whom it is about are answered here, in one place.
  *
  * `row` is the one way a write takes a line. A row is named with what the
  * write was planned from, or it is a line the editor pointed at with the text
@@ -534,8 +542,6 @@ export interface WriteSession {
      * account for the lines it returns.
      */
     row(target: NamedRow | EditorLine): number | null;
-    /** Give the write up: nothing is written, and the refusal is told once it is over. */
-    refuse(reason: RefusalReason, subject: string): false;
 }
 
 /**
@@ -727,8 +733,7 @@ function explains(
  * names its target with what it was planned from, `locate` answers where that
  * target stands in these lines, and the lines there have to read as the plan
  * read them (`WriteSession.row`). A write whose target has no line gives up
- * through `session.refuse`,
- * and the refusal is handed to the channel once `vault.process` is over —
+ * when `row` answers null, and the refusal is handed to the channel once `vault.process` is over —
  * once, however many times Obsidian ran the callback. With no channel there is
  * nobody to ask, and every target is `gone`: the index that would answer has
  * been taken down.
@@ -859,7 +864,6 @@ export async function processLines(
                 if (now === null) { refuse({ kind: 'gone' }, subject); return null; }
                 return now;
             },
-            refuse,
         };
         // A caller's bug, not the user's: a development build throws so the
         // bug is seen, a release build leaves the file as it was and refuses.
@@ -874,7 +878,7 @@ export async function processLines(
         try {
             next = edit(draft, eol, session) ? lines : null;
         } catch (error) {
-            if (!(error instanceof LineBreakInLine)) throw error;
+            if (!(error instanceof LineBreakInLine) && !(error instanceof UnfollowableDraft)) throw error;
             // The input should have been refused where it came in
             // (`TaskApi`), not written with a line the report cannot count.
             return callerBug(error.message, { kind: 'failed' });
@@ -889,10 +893,9 @@ export async function processLines(
         }
         if (unsound !== null) return callerBug(`a coordinate was carried across this write's edits, but ${unsound}`, { kind: 'changed' });
         if (next === null) {
-            // Every way a callback gives a write up says why (`refuse`,
-            // or `row` answering null). One that just returns false has
-            // not, and would leave its caller a write neither made nor
-            // refused.
+            // A callback gives a write up by `row` answering null, which
+            // says why. One that just returns false has not, and would
+            // leave its caller a write neither made nor refused.
             return refused === null ? callerBug('a write was given up without a reason', { kind: 'failed' }) : content;
         }
 
