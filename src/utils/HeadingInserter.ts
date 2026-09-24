@@ -1,5 +1,4 @@
 import { type App, TFile } from 'obsidian';
-import { CodeFenceTracker } from './CodeFenceTracker';
 import { fileGone, processLines, type LineDraft, type WriteAt, type WriteChannel } from './FileLines';
 import { Outline } from '../services/parsing/utils/Outline';
 import { Placement } from '../services/persistence/utils/Placement';
@@ -43,11 +42,10 @@ export class HeadingInserter {
         // at the start of its line — an indented `## Tasks` is a line of the
         // task above it, and one inside the frontmatter is YAML.
         const bodyStart = Outline.bodyStart(out);
-        const fenceTracker = new CodeFenceTracker();
+        const outline = Outline.read(out);
         let headerIndex = -1;
-        for (let i = 0; i < out.length; i++) {
-            const fenced = fenceTracker.feed(out[i]);
-            if (fenced || i < bodyStart) continue;
+        for (let i = bodyStart; i < out.length; i++) {
+            if (outline.inCode(i)) continue;
             if (out[i].trimEnd() === fullHeader) {
                 headerIndex = i;
                 break;

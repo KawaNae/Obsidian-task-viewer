@@ -1,4 +1,4 @@
-import { CodeFenceTracker, type FenceScan } from '../../../utils/CodeFenceTracker';
+import { Outline, type OutlineReading } from '../utils/Outline';
 import { type Diagnostic, error, warning } from '../../lang/Diagnostic';
 
 /** Language tag that marks a generation block. */
@@ -78,33 +78,44 @@ export interface GenBlockScan {
     diagnostics: LocatedDiagnostic[];
 }
 
+
 /**
  * Collect the `tv-gen` blocks of one file.
  *
- * Only document-level fences are collected. A fence indented under a task
- * is a fence in the subtree reading (CodeFenceTracker.subtreeMask) but not
- * at document level — CommonMark stops recognizing a delimiter at four
- * spaces of indentation — and its body would land in the parent task's
- * child lines and be drawn on the card. Those are reported instead of
- * collected, so a block that does not work says why.
+ * Only fences at the top of the note are collected. A fence that stands in
+ * a list item (indented under a task) is that item's content: its body
+ * would land in the parent task's child lines and be drawn on the card.
+ * Those are reported instead of collected, so a block that does not work
+ * says why.
  *
- * Openers come from CodeFenceTracker.scan, never from a pattern of our
- * own: only that walk knows a delimiter written inside a wider fence is
- * quoted content. A note explaining the notation wraps its samples in an
- * outer fence, and its examples must not become real blocks.
+ * The fences come from the note's one reading (`Outline.read`), never from
+ * a pattern of our own: only that reading knows a delimiter written inside a
+ * wider fence is quoted content. A note explaining the notation wraps its
+ * samples in an outer fence, and its examples must not become real blocks.
  *
- * `scan` may be passed in by a caller that already walked the same lines
- * (the editor extension needs the membership mask anyway).
+ * `outline` may be passed in by a caller that already read the same lines.
  */
-export function collectGenBlocks(lines: readonly string[], scan?: FenceScan): GenBlockScan {
-    const { fenced, opens } = scan ?? CodeFenceTracker.scan(lines);
+export function collectGenBlocks(lines: readonly string[], outline: OutlineReading = Outline.read(lines)): GenBlockScan {
     const blocks = new Map<string, GenBlock>();
     const diagnostics: LocatedDiagnostic[] = [];
 
     const wholeLine = (index: number) => ({ start: 0, end: lines[index].length });
 
-    for (const open of opens) {
+    for (const open of outline.fences) {
         const [tag, ...rest] = open.info.split(/\s+/);
+
+        if (outline.ownerOf(open.line) !== null) {
+            if (tag === GEN_LANGUAGE_TAG) {
+                diagnostics.push({
+                    ...warning('gen.indented-block',
+                        'An indented block is not collected — move it to the top level of the file',
+                        { start: open.from, end: lines[open.line].length }),
+                    line: open.line,
+                });
+            }
+            continue;
+        }
+
         if (tag !== GEN_LANGUAGE_TAG) {
             if (tag.startsWith(OWNED_TAG_PREFIX)) {
                 diagnostics.push({
@@ -157,33 +168,6 @@ export function collectGenBlocks(lines: readonly string[], scan?: FenceScan): Ge
         });
     }
 
-    diagnostics.push(...indentedBlockDiagnostics(lines, fenced));
     diagnostics.sort((a, b) => a.line - b.line);
     return { blocks, diagnostics };
-}
-
-/**
- * Lines that read as a `tv-gen` opener once dedented, but sit outside every
- * document-level fence — i.e. indented under a task.
- *
- * The second condition is what keeps the samples of a note explaining the
- * notation quiet: a delimiter quoted inside a wider fence IS inside a
- * fence, so it never reaches this warning.
- */
-function indentedBlockDiagnostics(lines: readonly string[], fenced: boolean[]): LocatedDiagnostic[] {
-    const result: LocatedDiagnostic[] = [];
-    for (let i = 0; i < lines.length; i++) {
-        if (fenced[i]) continue;
-        const trimmed = lines[i].trimStart();
-        if (trimmed === lines[i]) continue; // not indented: a real opener or prose
-        const m = trimmed.match(/^(?:`{3,}|~{3,})\s*(\S+)/);
-        if (!m || m[1] !== GEN_LANGUAGE_TAG) continue;
-        result.push({
-            ...warning('gen.indented-block',
-                'An indented block is not collected — move it to the top level of the file',
-                { start: lines[i].length - trimmed.length, end: lines[i].length }),
-            line: i,
-        });
-    }
-    return result;
 }

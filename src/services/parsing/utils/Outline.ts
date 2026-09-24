@@ -168,6 +168,8 @@ export interface OutlineFence {
     info: string;
     /** The column the opening delimiter stands at. */
     column: number;
+    /** The index in its line of the opening delimiter's first character. */
+    from: number;
 }
 
 /**
@@ -316,8 +318,8 @@ function readOutline(lines: readonly string[], start: number): OutlineReading {
             || THEMATIC_BREAK_RE.test(text)
             || itemStart(text, col) !== null);
     };
-    const openFence = (i: number, open: FenceDelimiter, column: number) => {
-        const block: OutlineFence = { line: i, close: null, end: i + 1, info: open.info, column };
+    const openFence = (i: number, open: FenceDelimiter, column: number, rest: string) => {
+        const block: OutlineFence = { line: i, close: null, end: i + 1, info: open.info, column, from: lines[i].length - rest.length };
         fences.push(block);
         fence = { open, depth: stack.length, block };
         codes[i] = true;
@@ -386,7 +388,7 @@ function readOutline(lines: readonly string[], start: number): OutlineReading {
         const open = CodeFenceTracker.opening(text);
         if (open) {
             holds(i);
-            openFence(i, open, col);
+            openFence(i, open, col, text);
             continue;
         }
 
@@ -398,7 +400,7 @@ function readOutline(lines: readonly string[], start: number): OutlineReading {
             stack.push({ item, last: i });
             owners[i] = i;
             const inner = started.rest === '' ? null : CodeFenceTracker.opening(started.rest);
-            if (inner) openFence(i, inner, started.contentColumn);
+            if (inner) openFence(i, inner, started.contentColumn, started.rest);
             else leaf = started.rest === '' ? 'none' : 'paragraph';
             continue;
         }
