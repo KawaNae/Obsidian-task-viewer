@@ -1,123 +1,55 @@
 import { describe, it, expect } from 'vitest';
 import { CodeFenceTracker } from '../../../src/utils/CodeFenceTracker';
 
-describe('CodeFenceTracker.mask', () => {
-    it('marks the delimiters and everything between them', () => {
-        expect(CodeFenceTracker.mask([
-            'prose',
-            '```',
-            'code',
-            '```',
-            'prose',
-        ])).toEqual([false, true, true, true, false]);
+describe('CodeFenceTracker.opening', () => {
+    it('reads the character, the length and the trimmed info string', () => {
+        expect(CodeFenceTracker.opening('```  tv-gen  週報  ')).toEqual({ char: '`', length: 3, info: 'tv-gen  週報' });
+        expect(CodeFenceTracker.opening('~~~~')).toEqual({ char: '~', length: 4, info: '' });
     });
 
-    it('accepts up to 3 leading spaces (CommonMark)', () => {
-        expect(CodeFenceTracker.mask(['   ```', 'code', '   ```'])).toEqual([true, true, true]);
-    });
-
-    it('does not open on a 4-space indent (that is an indented code block)', () => {
-        expect(CodeFenceTracker.mask(['    ```', 'code'])).toEqual([false, false]);
-    });
-
-    it('closes only on the same char with at least the same length', () => {
-        expect(CodeFenceTracker.mask([
-            '````',
-            '```',      // shorter: still inside
-            'code',
-            '````',
-        ])).toEqual([true, true, true, true]);
+    it('is null for fewer than three', () => {
+        expect(CodeFenceTracker.opening('``')).toBeNull();
     });
 
     it('rejects a backtick fence whose info string contains a backtick', () => {
-        expect(CodeFenceTracker.mask(['``` a`b', 'prose'])).toEqual([false, false]);
-    });
-
-    it('handles tilde fences', () => {
-        expect(CodeFenceTracker.mask(['~~~', 'code', '~~~', 'prose']))
-            .toEqual([true, true, true, false]);
+        expect(CodeFenceTracker.opening('``` a`b')).toBeNull();
+        expect(CodeFenceTracker.opening('~~~ a`b')).not.toBeNull();
     });
 });
 
-describe('CodeFenceTracker.subtreeMask', () => {
-    it('sees a fence indented under a list item', () => {
-        expect(CodeFenceTracker.subtreeMask([
-            '    ```markdown',
-            '    - [ ] fenced',
-            '    ```',
-        ])).toEqual([true, true, true]);
+describe('CodeFenceTracker.closes', () => {
+    const open = CodeFenceTracker.opening('````')!;
+
+    it('closes on the same character with at least the same length', () => {
+        expect(CodeFenceTracker.closes('````', open)).toBe(true);
+        expect(CodeFenceTracker.closes('`````  ', open)).toBe(true);
+    });
+
+    it('does not close on a shorter run, another character or an info string', () => {
+        expect(CodeFenceTracker.closes('```', open)).toBe(false);
+        expect(CodeFenceTracker.closes('~~~~', open)).toBe(false);
+        expect(CodeFenceTracker.closes('```` js', open)).toBe(false);
     });
 });
 
-describe('CodeFenceTracker.scan', () => {
-    it('reports the opening line, the closing line and the info string', () => {
-        const { opens } = CodeFenceTracker.scan([
-            'prose',
-            '```tv-gen 週報の手順',
-            '- [ ] 資料集め',
-            '```',
-        ]);
-        expect(opens).toEqual([{ line: 1, close: 3, info: 'tv-gen 週報の手順' }]);
+describe('CodeFenceTracker feed', () => {
+    const fed = (lines: string[]) => {
+        const tracker = new CodeFenceTracker();
+        return lines.map(line => tracker.feed(line));
+    };
+
+    it('marks the delimiters and everything between them', () => {
+        expect(fed(['prose', '```', 'code', '```', 'prose'])).toEqual([false, true, true, true, false]);
     });
 
-    it('trims the info string', () => {
-        expect(CodeFenceTracker.scan(['```  tv-gen  週報  ', 'x', '```']).opens[0].info)
-            .toBe('tv-gen  週報');
+    it('accepts up to 3 leading spaces, and not 4', () => {
+        expect(fed(['   ```', 'code', '   ```'])).toEqual([true, true, true]);
+        expect(fed(['    ```', 'code'])).toEqual([false, false]);
     });
 
-    it('reports an empty info string when there is none', () => {
-        expect(CodeFenceTracker.scan(['```', 'x', '```']).opens[0].info).toBe('');
-    });
-
-    it('does NOT report a delimiter quoted inside a wider fence', () => {
-        // The shape every note explaining the notation has: an outer fence
-        // wrapping a sample that itself contains a fence.
-        const { opens } = CodeFenceTracker.scan([
-            '`````markdown',
-            '```tv-gen 週報の手順',
-            '- [ ] 資料集め',
-            '```',
-            '`````',
-        ]);
-        expect(opens).toEqual([{ line: 0, close: 4, info: 'markdown' }]);
-    });
-
-    it('reports close as null when the fence never closes', () => {
-        const { opens, fenced } = CodeFenceTracker.scan([
-            'prose',
-            '```tv-gen 週報',
-            '- [ ] 資料集め',
-        ]);
-        expect(opens).toEqual([{ line: 1, close: null, info: 'tv-gen 週報' }]);
-        // Everything after an unterminated opener is fence content.
-        expect(fenced).toEqual([false, true, true]);
-    });
-
-    it('reports several blocks in document order', () => {
-        const { opens } = CodeFenceTracker.scan([
-            '```tv-gen 朝',
-            '- [ ] ストレッチ',
-            '```',
-            'prose',
-            '~~~tv-gen 夜',
-            '- [ ] 片付け',
-            '~~~',
-        ]);
-        expect(opens.map(o => [o.line, o.close, o.info]))
-            .toEqual([[0, 2, 'tv-gen 朝'], [4, 6, 'tv-gen 夜']]);
-    });
-
-    it('reports no opener for an indented block (document-level reading)', () => {
-        expect(CodeFenceTracker.scan([
-            '- [ ] task',
-            '    ```tv-gen 手順',
-            '    - [ ] a',
-            '    ```',
-        ]).opens).toEqual([]);
-    });
-
-    it('is the source of mask: fenced matches mask exactly', () => {
-        const lines = ['a', '```x', 'b', '```', 'c', '~~~', 'd'];
-        expect(CodeFenceTracker.scan(lines).fenced).toEqual(CodeFenceTracker.mask(lines));
+    it('stays inside a fence that never closes', () => {
+        const tracker = new CodeFenceTracker();
+        ['```', 'code'].forEach(line => tracker.feed(line));
+        expect(tracker.isInside()).toBe(true);
     });
 });

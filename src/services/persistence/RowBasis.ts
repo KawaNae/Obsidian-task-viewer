@@ -21,7 +21,7 @@ export interface RowBasis {
     commands?: readonly string[];
     /**
      * The row and every line of its subtree, verbatim, for an operation that
-     * takes them away or carries them (`Outline.subtreeEnd`).
+     * takes them away or carries them (`OutlineReading.subtreeEnd`).
      */
     subtree?: readonly string[];
     /**

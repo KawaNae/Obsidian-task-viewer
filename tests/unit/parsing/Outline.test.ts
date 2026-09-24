@@ -87,14 +87,16 @@ describe('a note that mixes tabs and spaces', () => {
     });
 });
 
-describe('Outline.subtreeEnd', () => {
+describe('OutlineReading.subtreeEnd', () => {
+    const subtreeEnd = (lines: string[], row: number) => Outline.read(lines).subtreeEnd(row);
+
     it('goes past a blank line to a deeper line, and stops before the blank lines after', () => {
         const lines = ['- [ ] a', '\t- b', '', '\t- c', '', '', '- [ ] d'];
-        expect(Outline.subtreeEnd(lines, 0)).toBe(4);
+        expect(subtreeEnd(lines, 0)).toBe(4);
     });
 
     it('is the line after the row when nothing below is deeper', () => {
-        expect(Outline.subtreeEnd(['- [ ] a', '', '- [ ] b'], 0)).toBe(1);
+        expect(subtreeEnd(['- [ ] a', '', '- [ ] b'], 0)).toBe(1);
     });
 
     // (Obsidian, measurement.md q8) `code` at column 0 goes on the fence
@@ -102,17 +104,13 @@ describe('Outline.subtreeEnd', () => {
     // its own, which ends T and its fence.
     it('takes a shallow line in its fence, and ends at a delimiter at column 0 (Obsidian, measurement.md q8)', () => {
         const lines = ['- [ ] T', '', '  ```js', 'code', '```', '- [ ] U'];
-        expect(Outline.subtreeEnd(lines, 0)).toBe(4);
+        expect(subtreeEnd(lines, 0)).toBe(4);
     });
 
-    it('reads by depth alone when a fence opened inside it never closes', () => {
+    it('ends a fence opened inside it that never closes with the item', () => {
         // Taking the fence would take the rest of the note.
         const lines = ['- [ ] T', '', '  ```js', '  code', '- [ ] U', 'more'];
-        expect(Outline.subtreeEnd(lines, 0)).toBe(4);
-    });
-
-    it('stops at the limit', () => {
-        expect(Outline.subtreeEnd(['- [ ] a', '\t- b', '\t- c'], 0, 2)).toBe(2);
+        expect(subtreeEnd(lines, 0)).toBe(4);
     });
 });
 
@@ -171,8 +169,22 @@ describe('the write and the parser agree on every subtree', () => {
         ['a blank line and then a shallower line', ['- [ ] a', '\t- [ ] b', '', 'text', '\t- [ ] c', '']],
         ['a heading after a blank line', ['- [ ] a', '\t- [ ] b', '', '# h', '\t- [ ] c', '']],
         ['a fence closed at column 0 below a blank line', ['- [ ] a', '\t- [ ] b', '', '  ```', 'x', '```', '- [ ] c', '']],
-        // A `# comment` in a fence is code, not a section heading.
+        // (Obsidian, measurement.md q11) `# x` at column 0 is a heading: it
+        // ends T and its fence, and the delimiter after it opens a fence
+        // that holds C and U.
         ['a heading-like line in a fence under a task', ['- [ ] T', '  ```', '# x', '  ```', '\t- [ ] C', '- [ ] U', '']],
+        ['a tab-indented fence under a task', ['- [ ] T', '\t```js', '\t- [ ] x', '\t```', '\t- [ ] C', '- [ ] U', '']],
+        // (Obsidian, measurement.md q8) six columns in is T's paragraph going
+        // on, not a fence: `- [ ] x` is text too.
+        ['a fence indented four columns past the content', ['- [ ] T', '      ```', '      - [ ] x', '      ```', '    - [ ] C', '- [ ] U', '']],
+        // (Obsidian, measurement.md q2)
+        ['a fence that never closes at the end of a subtree, and a sibling (R5)', ['- [ ] root', '    ```', '    body', '- [ ] sibling', '']],
+        // (Obsidian, measurement.md q1)
+        ['a fence that takes a line at column 0 (BK1)', ['- [ ] task', '    ```', 'shallow at column 0', '    ```', '- [ ] sibling', '']],
+        // (Obsidian, measurement.md q5)
+        ['a U+3000-led and an NBSP-led line between a parent and its tab child', ['- [ ] P', '　memo', '\t- [ ] c', '- [ ] Q', ' memo', '\t- [ ] d', '']],
+        // (Obsidian, measurement.md q5, q9)
+        ['`-[ ] x` between a parent and its tab child', ['- [ ] P', '-[ ] x', '\t- [ ] c', '- [ ] Q', '']],
     ];
 
     for (const [name, lines] of SHAPES) {
