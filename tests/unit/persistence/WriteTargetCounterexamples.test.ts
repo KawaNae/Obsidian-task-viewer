@@ -692,7 +692,7 @@ describe('F2-counter4: the file back at the content the ledger recorded, names m
         const scan = await gatedScan(bench);
         const renamed = { ...y, content: 'A', originalText: '- [ ] A' };
         expect((await bench.writer.updateTaskInFile(plannedOn(y), renamed)).written).toBe(true);
-        expect(await bench.writer.deleteTaskFromFile(plannedOn(x, { subtree: true }))).toBe(true);
+        expect((await bench.writer.deleteTaskFromFile(plannedOn(x, { subtree: true }))).written).toBe(true);
         scan.release();
         await scan.done;
         bench.edit(['- [ ] A', '- [ ] B']);

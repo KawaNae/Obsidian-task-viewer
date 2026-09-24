@@ -83,10 +83,14 @@ export class Outline {
      *   generation blocks (`RowBasis.readsAsPlanned`); the text a timer
      *   finds its task by (`TimerTaskResolver`); a write's check that a line
      *   still reads what it read — the editor's line, a coordinate carried
-     *   across the write's own edits, a line a carry moved (`FileLines`)
+     *   across the write's own edits, a line a carry moved (`FileLines`);
+     *   a known state's rows read on its lines (`reproduces`,
+     *   `WriteClaims.fits`) and a row a write rewrote (`WriteClaims.claim`);
+     *   the depth the check of a ladder's pairs weighs as place
+     *   (`IdentityMatcher`)
      * - `UP_TO_INDENT`: the weaker check `ON_RECORD`
-     *   (`TaskScanner.onRecord`); a match checked against our last write
-     *   (`TaskScanner.againstLastWrite`)
+     *   (`TaskScanner.onRecord`); the words the check of a ladder's pairs
+     *   calls the same text (`IdentityMatcher`)
      *
      * A comparison of lines not in the table picks one of the two and joins
      * it; one that needs a third relation is a question for the outline, not

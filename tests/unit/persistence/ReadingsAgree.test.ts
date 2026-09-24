@@ -23,7 +23,7 @@ describe('K2: two known states with the read\'s content', () => {
         const bench = await writeBench(['- [ ] A', '- [ ] B']);
         const x = bench.taskAt(0);
         const y = bench.taskAt(1);
-        expect(await bench.writer.deleteTaskFromFile(plannedOn(x))).toBe(true);
+        expect((await bench.writer.deleteTaskFromFile(plannedOn(x))).written).toBe(true);
         expect((await bench.writer.updateTaskInFile(plannedOn(y), { ...y, content: 'B2', originalText: '- [ ] B2' })).written).toBe(true);
         const renamed: Task = { ...y, line: 0, content: 'B2', originalText: '- [ ] B2' };
         expect((await bench.writer.updateTaskInFile(plannedOn(renamed), { ...renamed, content: 'B', originalText: '- [ ] B' })).written).toBe(true);
@@ -39,7 +39,7 @@ describe('K2: two known states with the read\'s content', () => {
         const bench = await writeBench(['- [ ] T', '']);
         const original = bench.taskAt(0);
         await bench.writer.appendTaskToFile(FILE, '- [ ] T');
-        expect(await bench.writer.deleteTaskFromFile(plannedOn(original))).toBe(true);
+        expect((await bench.writer.deleteTaskFromFile(plannedOn(original))).written).toBe(true);
         expect(bench.lines()).toEqual(['- [ ] T', '']);
         // A write is handed the file after every write of ours has landed, so
         // these lines are the second write's: the original is gone. A scan
@@ -58,7 +58,7 @@ describe('K2: two known states with the read\'s content', () => {
         const kou = bench.taskAt(0);
         const original = bench.taskAt(1);
         await bench.writer.appendTaskToFile(FILE, '- [ ] T');
-        expect(await bench.writer.deleteTaskFromFile(plannedOn(original))).toBe(true);
+        expect((await bench.writer.deleteTaskFromFile(plannedOn(original))).written).toBe(true);
         expect(bench.lines()).toEqual(['- [ ] 甲', '- [ ] T', '']);
         await bench.scan();
         expect(bench.taskAt(0).id).toBe(kou.id);

@@ -4,6 +4,7 @@ import { fingerprintOf } from './IdentityFingerprint';
 import type { Reading } from './IdentityHints';
 import { reproduces } from './IdentityHints';
 import type { LedgerEntry } from './IdentityLedger';
+import { Outline } from '../../parsing/utils/Outline';
 
 export interface MatchResult {
     /** Provisional (parse-time) ID → runtime ID. Covers every task passed in. */
@@ -441,7 +442,7 @@ function evidenceBetween(
                     place: entryPrior === null
                         ? taskPrior === null
                         : taskPrior !== null && pairedWith.get(taskPrior) === entryPrior,
-                    depth: entry.fingerprint.originalText === fingerprints.get(task)!.originalText,
+                    depth: Outline.VERBATIM.holds(entry.fingerprint.originalText, fingerprints.get(task)!.originalText),
                 };
             };
 
@@ -706,12 +707,12 @@ function blockIdKey(fingerprint: Fingerprint): string | null {
 }
 
 function originalTextKey(fingerprint: Fingerprint): string {
-    return JSON.stringify([fingerprint.parserId, fingerprint.originalText]);
+    return JSON.stringify([fingerprint.parserId, Outline.VERBATIM.key(fingerprint.originalText)]);
 }
 
 /** The text up to its indentation. */
 function textKey(fingerprint: Fingerprint): string {
-    return JSON.stringify([fingerprint.parserId, fingerprint.originalText.trimStart()]);
+    return JSON.stringify([fingerprint.parserId, Outline.UP_TO_INDENT.key(fingerprint.originalText)]);
 }
 
 function contentDateKey(fingerprint: Fingerprint): string {

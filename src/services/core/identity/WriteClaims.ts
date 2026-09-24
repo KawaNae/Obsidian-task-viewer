@@ -4,6 +4,7 @@ import type { LedgerEntry } from './IdentityLedger';
 import { ledgerRowsOf, matchFile, matchWithoutRepeatedIds } from './IdentityMatcher';
 import { replayEdits, type LineEdit, type WriteOrigin } from '../../../utils/FileLines';
 import { contentKeyOf, type ContentKey } from './ContentKey';
+import { Outline } from '../../parsing/utils/Outline';
 
 /**
  * A row of a file as a write left it: which line, what it reads, and whose
@@ -332,7 +333,7 @@ export class WriteClaims {
             if (carried) {
                 rows.push({ runtimeId: carried.runtimeId, created: carried.created, text: task.originalText, line: task.line, parserId: task.parserId });
                 nameOf.set(task, carried.runtimeId);
-                if (carried.text !== task.originalText) wrote.set(carried.runtimeId, task.originalText);
+                if (!Outline.VERBATIM.holds(carried.text, task.originalText)) wrote.set(carried.runtimeId, task.originalText);
                 if (carried.parserId !== undefined && carried.parserId !== task.parserId) crossed.add(carried.runtimeId);
                 continue;
             }
@@ -908,7 +909,7 @@ function newestDescribed(links: readonly Link[]): Described | undefined {
 function fits(rows: readonly ClaimBase[], lines: readonly string[]): boolean {
     for (const row of rows) {
         if (row.line < 0 || row.line >= lines.length) return false;
-        if (lines[row.line] !== row.text) return false;
+        if (!Outline.VERBATIM.holds(lines[row.line], row.text)) return false;
     }
     return true;
 }

@@ -1,5 +1,6 @@
 import type { Task } from '../../../types';
 import type { LedgerEntry } from './IdentityLedger';
+import { Outline } from '../../parsing/utils/Outline';
 
 /**
  * What a scan knows about the states a file may be in when it reads it, and
@@ -90,7 +91,7 @@ export function reproduces(
     const spoken = new Set<string>();
 
     for (let i = 0; i < rows.length; i++) {
-        if (rows[i].text !== tasks[i].originalText) return false;
+        if (!Outline.VERBATIM.holds(rows[i].text, tasks[i].originalText)) return false;
 
         const runtimeId = rows[i].runtimeId;
         // One row, one line. A state that puts the same identity on two lines
