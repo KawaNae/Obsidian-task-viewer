@@ -401,12 +401,10 @@ describe('IDs held across a delete', () => {
         expect(next).not.toBe(fired);
     });
 
-    it('a child that outlives its parent keeps the identity it had', async () => {
-        // The editor's menu deletes one line by its coordinate, so a parent can
-        // go while its child stays. The child is the same row it was, one line
-        // higher — which is exactly what the claim says, and nothing more.
-        // Two spaces, not a tab: a tab left at the top of the note is
-        // indented code (Obsidian, measurement.md q10), and the orphan would be no task.
+    it('a row below a subtree the editor\'s menu deletes keeps the identity it had', async () => {
+        // The editor's menu deletes a line with its subtree, as a card's delete
+        // does (P1): the child goes with its parent. The row below is the same
+        // row it was, two lines higher — which is exactly what the claim says.
         const contents = new Map([[FILE, [
             '- [ ] 親 @2026-09-21',
             '  - [ ] 子 @2026-09-21 ^tv-child',
@@ -420,14 +418,12 @@ describe('IDs held across a delete', () => {
         await live.index.deleteLine(FILE, { line: 0, text: '- [ ] 親 @2026-09-21' });
         await live.settle(FILE);
 
-        // `taskLines` only reads flush-left rows, so the orphan is checked here
-        // against the file itself: it is still there, still indented.
         expect(contents.get(FILE)!.split('\n')).toEqual([
-            '  - [ ] 子 @2026-09-21 ^tv-child',
             '- [ ] 下の行 @2026-09-21',
             '',
         ]);
-        expect(idsInFileOrder(live)).toEqual([child, below]);
+        expect(idsInFileOrder(live)).toEqual([below]);
         expect(live.index.getTask(parent)).toBeUndefined();
+        expect(live.index.getTask(child)).toBeUndefined();
     });
 });

@@ -352,7 +352,9 @@ export class FlowExecutor {
                 ? t('notice.moveOriginGone')
                 : refused.reason.kind === 'unplaceable'
                     ? t('notice.moveOriginUnplaceable')
-                    : t('notice.moveOriginChanged');
+                    : refused.reason.kind === 'disturbs'
+                        ? t('notice.moveOriginDisturbs')
+                        : t('notice.moveOriginChanged');
         new Notice(t('notice.moveOriginKept', { dest: fileName(destPath), reason, subject: refused.subject }));
     }
 

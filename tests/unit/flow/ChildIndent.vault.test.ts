@@ -68,7 +68,9 @@ describe.each(NOT_A_CHILD)('a line of the subtree %s', (_name, line, unit) => {
         expect(await session.index.insertChildTask(taskWorded(session, 'T').id, '- [ ] c')).toBe(true);
         await session.settle(FILE);
 
-        expect(contents.get(FILE)!.split('\n').slice(0, 3)).toEqual(['# note', '- [ ] T', `${unit}- [ ] c`]);
+        // Past the task's text that goes on, which a child put above it would
+        // take in as its own (P1).
+        expect(contents.get(FILE)!.split('\n').slice(0, 4)).toEqual(['# note', '- [ ] T', line, `${unit}- [ ] c`]);
         expect(taskWorded(session, 'c').parentId).toBe(taskWorded(session, 'T').id);
     });
 

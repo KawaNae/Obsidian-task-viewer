@@ -1,6 +1,6 @@
 import { ChildLineClassifier } from '../../parsing/utils/ChildLineClassifier';
 import { TaskLineClassifier } from '../../parsing/utils/TaskLineClassifier';
-import { FileOperations } from './FileOperations';
+import { Block, Placement } from './Placement';
 import type { PropertyOp } from '../PropertyUpdatePlanner';
 import type { LineDraft } from '../../../utils/FileLines';
 import { INDENT_SOURCE, Outline } from '../../parsing/utils/Outline';
@@ -50,24 +50,17 @@ export class ChildPropertyLineEditor {
      *
      * ここが触る行はどれもタスク行より下なので、呼び口が先に書き換えた
      * タスク行の座標は動かない。変更はすべて draft を通るので、3経路とも
-     * そのまま申告になる。
-     *
-     * @returns false when taking out a line to delete would change another
-     * line (`OutlineReading.canTakeOut`);
-     * the caller refuses the whole write.
+     * そのまま申告になる。行を足す位置は `Placement` が答え、足した行と
+     * 消した行のあとで、ほかの行が変わらないかは書き込みの検査
+     * （`Outline.check`）が答える。変わるなら書き込み全体が拒否される。
      */
-    static applyOps(draft: LineDraft, taskLineIdx: number, ops: PropertyOp[]): boolean {
+    static applyOps(draft: LineDraft, taskLineIdx: number, ops: PropertyOp[]): void {
         const lines = draft.lines;
         for (const op of ops) {
             const ownLines = this.findOwnPropertyLines(lines, taskLineIdx);
             const matching = ownLines.filter(l => l.key === op.key);
 
             if (op.op === 'delete') {
-                // Not taken out when a line below it would read as something
-                // else without it, or a task, command or property below it
-                // would stand elsewhere (`canTakeOut`).
-                const outline = Outline.read(lines);
-                if (!outline.canTakeOut(matching.map(l => l.lineIdx), line => ChildLineClassifier.carriesMeaning(line))) return false;
                 // 逆順に消すので、各 lineIdx はその行が立っていた座標のまま。
                 for (let i = matching.length - 1; i >= 0; i--) {
                     draft.splice(matching[i].lineIdx, 1);
@@ -95,25 +88,15 @@ export class ChildPropertyLineEditor {
             }
 
             // 新規挿入（ルールA: 正準位置）: 既存の own プロパティ行があれば
-            // その最後の直後（宣言塊を保つ・インデント踏襲）、なければ
-            // タスク行直下 first child。インデントは既存子行の表現を踏襲する
-            // （タブ固定にするとスペース系ファイルで tab/スペース混在になり、
-            // 文字数ベースのインデント正規化が剥がし残りを起こす）
-            let insertIdx: number;
-            let indent: string;
-            if (ownLines.length > 0) {
-                const last = ownLines[ownLines.length - 1];
-                // Past the last one's subtree: a line of its own below it
-                // stays its line, not the new one's.
-                insertIdx = Outline.read(lines).subtreeEnd(last.lineIdx);
-                indent = Outline.indentOf(lines[last.lineIdx]);
-            } else {
-                insertIdx = taskLineIdx + 1;
-                indent = FileOperations.resolveChildIndent(lines, taskLineIdx);
-            }
-            draft.splice(insertIdx, 0, `${indent}- ${op.key}:: ${this.formatValue(op.value, null)}`);
+            // その最後の兄弟として部分木の後ろ（宣言塊を保つ・インデント踏襲。
+            // その行の下の行はその行のまま）、なければタスクの最初の子
+            // （タスクの本文の続きの行の後ろ）。インデントは既存子行の表現を
+            // 踏襲する（`FileOperations.resolveChildIndent`）。
+            const spot = ownLines.length > 0
+                ? Placement.afterSubtree(lines, ownLines[ownLines.length - 1].lineIdx)
+                : Placement.firstChild(lines, taskLineIdx);
+            draft.put(spot, Block.line(`${spot.indent}- ${op.key}:: ${this.formatValue(op.value, null)}`));
         }
-        return true;
     }
 
     /**

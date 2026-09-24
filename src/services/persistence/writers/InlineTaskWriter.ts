@@ -4,8 +4,7 @@ import { TaskParser } from '../../parsing/TaskParser';
 import { collectFlowLineIndices, collectFlowLineIndicesInFile } from '../../parsing/utils/FlowLineScanner';
 import { FileOperations } from '../utils/FileOperations';
 import { ChildPropertyLineEditor } from '../utils/ChildPropertyLineEditor';
-import { ChildLineClassifier } from '../../parsing/utils/ChildLineClassifier';
-import { Placement } from '../utils/Placement';
+import { Block, Placement, type PlacedLine } from '../utils/Placement';
 import type { PropertyOp } from '../PropertyUpdatePlanner';
 import { renderFlowInstance } from '../FlowInstanceLines';
 import {
@@ -49,7 +48,7 @@ export class InlineTaskWriter {
         const file = this.app.vault.getAbstractFileByPath(target.file);
         if (!(file instanceof TFile)) return this.refusedGone(target, 'user');
 
-        return processLines(this.app, file, this.writes?.for(target.file, 'user'), (draft, _eol, { row, refuse }) => {
+        return processLines(this.app, file, this.writes?.for(target.file, 'user'), (draft, _eol, { row }) => {
             const currentLine = row(target);
             if (currentLine === null) return false;
 
@@ -69,9 +68,7 @@ export class InlineTaskWriter {
             // 子プロパティ行（- key:: value）の更新は同一 process 内で
             // 連続適用する（別 process だと originalText 失効と行番号
             // シフトが競合するため、タスク行と子行は1原子書き込み）。
-            if (childOps.length > 0 && !ChildPropertyLineEditor.applyOps(draft, currentLine, childOps)) {
-                return refuse({ kind: 'unplaceable' }, target.subject);
-            }
+            ChildPropertyLineEditor.applyOps(draft, currentLine, childOps);
 
             return true;
         });
@@ -104,13 +101,15 @@ export class InlineTaskWriter {
     }
 
     /**
-     * Insert one line below a coordinate, whatever that line is.
+     * Put `newContent` in as the next sibling of the line at a coordinate:
+     * past its subtree, at its indentation (`Placement.afterSubtree`).
      *
      * The editor's menu duplicates a task through here, so the line written is
-     * usually a copy of the line above it, word for word. Two rows a file
-     * cannot tell apart is the shape the claim exists for: the write knows
-     * which of them it made, and says so, where a reader comparing text has
-     * nothing to go on but the order they appear in.
+     * usually a copy of the line above it, word for word. Put just below it,
+     * the copy took the line's children for its own (P1's counterexample 5).
+     * Two rows a file cannot tell apart is the shape the claim exists for: the
+     * write knows which of them it made, and says so, where a reader comparing
+     * text has nothing to go on but the order they appear in.
      */
     async insertLineAfterLine(filePath: string, at: EditorLine, newContent: string): Promise<WriteOutcome> {
         const file = this.app.vault.getAbstractFileByPath(filePath);
@@ -119,19 +118,20 @@ export class InlineTaskWriter {
         return processLines(this.app, file, this.writes?.for(filePath, 'user'), (draft, _eol, { row }) => {
             const lineNumber = row(at);
             if (lineNumber === null) return false;
-            draft.splice(lineNumber + 1, 0, newContent);
+            const spot = Placement.afterSubtree(draft.lines, lineNumber);
+            draft.put(spot, Block.line(spot.indent + Outline.dedent(newContent)));
             return true;
         });
     }
 
     /**
-     * Delete one line by its coordinate, whatever that line is.
+     * Take the line at a coordinate away with its subtree, as a card's
+     * delete takes a task (the user's decision, 2026-09-24).
      *
-     * The claim says a line went away and nothing else. It cannot say more:
-     * this path is reached from the editor's context menu on a raw checkbox,
-     * so the line is not necessarily a task, and the lines under it are left
-     * where they are. A child that outlives its parent here keeps the identity
-     * it had — it is the same line, one row higher.
+     * This path is reached from the editor's context menu on a raw checkbox,
+     * so the line is not necessarily a task. It used to take the one line
+     * and leave the lines under it, and a property or `==>` line under it
+     * went on the task above.
      */
     async deleteLine(filePath: string, at: EditorLine): Promise<WriteOutcome> {
         const file = this.app.vault.getAbstractFileByPath(filePath);
@@ -140,7 +140,8 @@ export class InlineTaskWriter {
         return processLines(this.app, file, this.writes?.for(filePath, 'user'), (draft, _eol, { row }) => {
             const lineNumber = row(at);
             if (lineNumber === null) return false;
-            draft.splice(lineNumber, 1);
+            const { childrenLines } = this.fileOps.collectChildrenFromLines(draft.lines, lineNumber);
+            draft.splice(lineNumber, 1 + childrenLines.length);
             return true;
         });
     }
@@ -207,52 +208,44 @@ export class InlineTaskWriter {
         const channel = told && opts.tellRefusal === false ? { ...told, refused: () => { } } : told;
         if (!(file instanceof TFile)) return fileGone(channel, target.file, target.subject);
 
-        return processLines(this.app, file, channel, (draft, _eol, { row, refuse }) => {
+        return processLines(this.app, file, channel, (draft, _eol, { row }) => {
             // Asked before any op, so the plan is checked against the lines as
             // they were handed in — and checked at all, whatever the ops are.
             if (row(target) === null) return false;
             for (const op of ops) {
                 const line = row(target);
                 if (line === null) return false;
-                if (!this.applyOp(draft, line, op)) {
-                    return refuse({ kind: 'unplaceable' }, target.subject);
-                }
+                this.applyOp(draft, line, op);
             }
             return true;
         });
     }
 
     /**
-     * Apply one op to the row at `line`. False when the op's lines have
-     * nowhere in the body to go: the write is then refused whole, and the
-     * ops before this one are not written either.
+     * Apply one op to the row at `line`. Whether the lines it puts in read
+     * as put, and every other line as it did, is asked of the whole write
+     * once every op is applied (`processLines`): refused, none of the ops is
+     * written.
      */
-    private applyOp(draft: LineDraft, line: number, op: TaskOp): boolean {
+    private applyOp(draft: LineDraft, line: number, op: TaskOp): void {
         const lines = draft.lines;
         switch (op.kind) {
             case 'insert-instance': {
-                const at = Placement.groupHead(lines, line);
-                if (at === null) return false;
-                const rendered = renderFlowInstance(this.fileOps, lines, line, op.insert);
-                draft.splice(at, 0, ...rendered);
-                return true;
+                draft.put(Placement.groupHead(lines, line), renderFlowInstance(this.fileOps, lines, line, op.insert));
+                return;
             }
             case 'strip-flow': {
                 // Every flow line is below the row (the scan starts past it
                 // and stops at the first line that is not a descendant), so
-                // taking them out leaves the row where it is. Not when a line
-                // below would read as something else without them, or a task,
-                // command or property would stand elsewhere (`canTakeOut`).
-                const outline = Outline.read(lines);
-                const flowIndices = collectFlowLineIndices(outline, line);
-                if (!outline.canTakeOut(flowIndices, text => ChildLineClassifier.carriesMeaning(text))) return false;
+                // taking them out leaves the row where it is.
+                const flowIndices = collectFlowLineIndicesInFile(lines, line);
                 for (let i = flowIndices.length - 1; i >= 0; i--) {
                     draft.splice(flowIndices[i], 1);
                 }
                 const indent = Outline.indentOf(lines[line]);
                 // Losing `==>` rewrites the text; the row is the one that fired.
                 draft.rewrite(line, indent + Outline.dedent(op.text));
-                return true;
+                return;
             }
             case 'move-to-end': {
                 // The row and what goes with it are carried to the end — where
@@ -260,24 +253,15 @@ export class InlineTaskWriter {
                 // them — and then its whole subtree is taken away from where
                 // it was. Everything is read before either: carrying to the
                 // end leaves every line above it where it is.
-                const at = Placement.end(lines);
-                if (at === null) return false;
-                const [head, ...rest] = splitLines(op.text).lines;
-                const children = this.childrenToCarry(lines, line);
-                if (children === null) return false;
                 const { childrenLines } = this.fileOps.collectChildrenFromLines(lines, line);
-                draft.carry(at, [{ from: line, text: head }]);
-                // A line past the row's first is one the archive wrote, not
-                // one that was here.
-                if (rest.length > 0) draft.splice(at + 1, 0, ...rest);
-                draft.carry(at + 1 + rest.length, children);
+                draft.put(Placement.end(lines), this.carriedWith(lines, line, op.text, true));
                 draft.splice(line, 1 + childrenLines.length);
-                return true;
+                return;
             }
             case 'remove': {
                 const { childrenLines } = this.fileOps.collectChildrenFromLines(lines, line);
                 draft.splice(line, 1 + childrenLines.length);
-                return true;
+                return;
             }
         }
     }
@@ -294,15 +278,12 @@ export class InlineTaskWriter {
         const file = this.app.vault.getAbstractFileByPath(task.file);
         if (!(file instanceof TFile)) return fileGone(this.writes?.for(task.file, 'user'), task.file, subjectOf(task));
 
-        return processLines(this.app, file, this.writes?.for(task.file, 'user'), (draft, _eol, { row, refuse }) => {
-            const lines = draft.lines;
+        return processLines(this.app, file, this.writes?.for(task.file, 'user'), (draft, _eol, { row }) => {
             const currentLine = row(recordedOn(task));
             if (currentLine === null) return false;
 
-            const indent = FileOperations.resolveChildIndent(lines, currentLine);
-            const insertIndex = Placement.afterSubtree(lines, currentLine);
-            if (insertIndex === null) return refuse({ kind: 'unplaceable' }, subjectOf(task));
-            draft.splice(insertIndex, 0, indent + Outline.dedent(lineBody));
+            const spot = Placement.lastChild(draft.lines, currentLine);
+            draft.put(spot, Block.line(spot.indent + Outline.dedent(lineBody)));
 
             return true;
         });
@@ -333,17 +314,15 @@ export class InlineTaskWriter {
         const file = this.app.vault.getAbstractFileByPath(task.file);
         if (!(file instanceof TFile)) return fileGone(this.writes?.for(task.file, 'user'), task.file, subjectOf(task));
 
-        return processLines(this.app, file, this.writes?.for(task.file, 'user'), (draft, _eol, { row, refuse }) => {
+        return processLines(this.app, file, this.writes?.for(task.file, 'user'), (draft, _eol, { row }) => {
             const lines = draft.lines;
             const currentLine = row(recordedOn(task));
             if (currentLine === null) return false;
 
-            const indent = Outline.indentOf(lines[currentLine]);
-            const insertIndex = opts.afterCompletedRun
+            const spot = opts.afterCompletedRun
                 ? Placement.afterCompletedRun(lines, currentLine)
                 : Placement.afterSubtree(lines, currentLine);
-            if (insertIndex === null) return refuse({ kind: 'unplaceable' }, subjectOf(task));
-            draft.splice(insertIndex, 0, indent + Outline.dedent(lineBody));
+            draft.put(spot, Block.line(spot.indent + Outline.dedent(lineBody)));
 
             return true;
         });
@@ -360,17 +339,13 @@ export class InlineTaskWriter {
         const file = this.app.vault.getAbstractFileByPath(task.file);
         if (!(file instanceof TFile)) return fileGone(this.writes?.for(task.file, 'user'), task.file, subjectOf(task));
 
-        return processLines(this.app, file, this.writes?.for(task.file, 'user'), (draft, _eol, { row, refuse }) => {
-            const lines = draft.lines;
+        return processLines(this.app, file, this.writes?.for(task.file, 'user'), (draft, _eol, { row }) => {
             const currentLine = row(recordedOn(task));
             if (currentLine === null) return false;
 
-            const indent = FileOperations.resolveChildIndent(lines, currentLine);
-
-            // Insert directly after the task line (as first child)
-            const insertIndex = Placement.firstChild(lines, currentLine);
-            if (insertIndex === null) return refuse({ kind: 'unplaceable' }, subjectOf(task));
-            draft.splice(insertIndex, 0, indent + Outline.dedent(lineBody));
+            // Directly below the task line, past its own text that goes on.
+            const spot = Placement.firstChild(draft.lines, currentLine);
+            draft.put(spot, Block.line(spot.indent + Outline.dedent(lineBody)));
 
             return true;
         });
@@ -385,14 +360,22 @@ export class InlineTaskWriter {
      * with. A claim would say what the ledger's silence already says.
      */
     async appendTaskToFile(filePath: string, content: string, origin: WriteOrigin): Promise<WriteAt> {
+        // The appended text is built with LF; splitting it here lets the file's
+        // own terminator go back between every line, its own included. The
+        // lines are to read as they read by themselves.
+        return this.appendBlock(filePath, Block.read(splitLines(content).lines), origin);
+    }
+
+    /** Append `block` to the note, or make the note of it (see {@link appendTaskToFile}). */
+    private async appendBlock(filePath: string, block: readonly PlacedLine[], origin: WriteOrigin): Promise<WriteAt> {
         const file = this.app.vault.getAbstractFileByPath(filePath);
-        const subject = splitLines(content).lines[0].trim();
+        const subject = block[0].text.trim();
         const channel = this.writes?.for(filePath, origin);
 
         if (!file) {
             const created = await createFile(this.app, filePath, channel, subject, async () => {
                 await this.fileOps.ensureDirectoryExists(filePath);
-                return content;
+                return block.map(line => line.text).join('\n');
             });
             return created.written ? { ...created, line: 0 } : created;
         }
@@ -400,50 +383,42 @@ export class InlineTaskWriter {
         // A folder by that name: there is no note to append to.
         if (!(file instanceof TFile)) return fileGone(channel, filePath, subject);
 
-        // The appended text is built with LF; splitting it here lets the file's
-        // own terminator go back between every line, its own included.
         let inserted = -1;
-        const outcome = await processLines(this.app, file, channel, (draft, _eol, { refuse }) => {
-            const at = Placement.end(draft.lines);
-            if (at === null) return refuse({ kind: 'unplaceable' }, subject);
-            draft.splice(at, 0, ...splitLines(content).lines);
-            inserted = at;
+        const outcome = await processLines(this.app, file, channel, (draft) => {
+            const spot = Placement.end(draft.lines);
+            draft.put(spot, block);
+            inserted = spot.at;
             return true;
         });
         return outcome.written ? { ...outcome, line: inserted } : outcome;
     }
 
     /**
-     * Collect the task's children from `lines`, strip block IDs, and re-indent
-     * them relative to the parent. Returns the children lines ready to append.
-     * Shared by both the same-file (atomic) and cross-file paths of
-     * `appendTaskWithChildren` so the collection logic lives in one place.
+     * The row, written as `head`, and the lines of its subtree that go with
+     * it on a move: to read, once written, as they read under the row
+     * (`Block.of`). The row is written at the top of where it goes (`format`
+     * writes no indentation), and each line of its subtree as far past it as
+     * it stood (`Outline.shiftIndent`), its block ID taken off. Shared by the
+     * move within one file, which carries the lines (`carried`), and the move
+     * to another, which writes them anew.
      *
-     * Each comes with the index of the line it is made from: a move within one
-     * file carries them rather than copying them (see `LineEdits.carry`).
+     * The task's own direct `- ==>` flow lines are consumed by the fire and
+     * do not travel to the archive. Descendant tasks' flow lines are NOT
+     * direct (structural-parent rule) and stay as templates. A line that
+     * stood under one of them has lost its item: a task, command or property
+     * there is not written (`Outline.check`).
      */
-    private childrenToCarry(lines: readonly string[], currentLine: number): Array<{ from: number; text: string }> | null {
-
-        // Parent's original indentation prefix (preserves tabs/spaces)
+    private carriedWith(lines: readonly string[], currentLine: number, head: string, carried: boolean): PlacedLine[] {
         const parentIndent = Outline.indentOf(lines[currentLine]);
-        // The task's own direct `- ==>` flow lines are consumed by the fire —
-        // they must not travel to the archive. Descendant tasks' flow lines
-        // are NOT direct (structural-parent rule) and stay as templates.
-        // Not left behind when a line below would read as something else
-        // without them, or a task, command or property would stand elsewhere:
-        // null, and the move is refused (`canTakeOut`).
         const outline = Outline.read(lines);
-        const flowIndices = collectFlowLineIndices(outline, currentLine);
-        if (!outline.canTakeOut(flowIndices, text => ChildLineClassifier.carriesMeaning(text))) return null;
-        const flowAbs = new Set(flowIndices);
-        const { childrenLines } = this.fileOps.collectChildrenFromLines(lines, currentLine);
-        const kept = childrenLines
-            .map((text, i) => ({ from: currentLine + 1 + i, text }))
-            .filter(child => !flowAbs.has(child.from));
-        const cleaned = this.fileOps.stripBlockIds(kept.map(child => child.text));
-        // The row is written at the top of where it goes (`format` writes
-        // no indentation), and each child as far past it as it stood.
-        return kept.map((child, i) => ({ from: child.from, text: Outline.shiftIndent(cleaned[i], parentIndent, '') }));
+        const flowAbs = new Set(collectFlowLineIndices(outline, currentLine));
+        const rows = [currentLine];
+        for (let row = currentLine + 1; row < outline.subtreeEnd(currentLine); row++) {
+            if (!flowAbs.has(row)) rows.push(row);
+        }
+        const texts = [head, ...this.fileOps.stripBlockIds(rows.slice(1).map(row => lines[row]))
+            .map(text => Outline.shiftIndent(text, parentIndent, ''))];
+        return Block.of(outline, rows, texts, carried);
     }
 
     /**
@@ -495,16 +470,10 @@ export class InlineTaskWriter {
             channel?.refused({ file: source.file, reason, subject: source.subject });
             return null;
         }
-        const carried = this.childrenToCarry(sourceLines, located.line);
-        if (carried === null) {
-            channel?.refused({ file: source.file, reason: { kind: 'unplaceable' }, subject: source.subject });
-            return null;
-        }
-        const children = carried.map(child => child.text);
+        const block = this.carriedWith(sourceLines, located.line, content, false);
         const { childrenLines } = this.fileOps.collectChildrenFromLines(sourceLines, located.line);
 
-        const fullContent = [content, ...children].join('\n');
-        if (!(await this.appendTaskToFile(destPath, fullContent, 'flow')).written) return null;
+        if (!(await this.appendBlock(destPath, block, 'flow')).written) return null;
         return sourceLines.slice(located.line, located.line + 1 + childrenLines.length);
     }
 }

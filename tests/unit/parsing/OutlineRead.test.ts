@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { Outline, type OutlineReading } from '../../../src/services/parsing/utils/Outline';
+import { Outline, type OutlineReading, type WrittenLine } from '../../../src/services/parsing/utils/Outline';
 import { ChildLineClassifier } from '../../../src/services/parsing/utils/ChildLineClassifier';
 
 /**
@@ -182,19 +182,27 @@ describe('OutlineReading', () => {
 
     const meaningful = (line: string) => ChildLineClassifier.carriesMeaning(line);
 
+    /** Whether taking `rows` out of the note leaves the rest as it was (`Outline.check`). */
+    function takesOut(reading: OutlineReading, rows: number[]): boolean {
+        const gone = new Set(rows);
+        const kept = reading.lines.map((_, i) => i).filter(i => !gone.has(i));
+        const written: WrittenLine[] = kept.map(from => ({ kind: 'kept', from }));
+        return Outline.check(reading, Outline.read(kept.map(i => reading.lines[i])), written, [], meaningful) === 'sound';
+    }
+
     it('takes a line out only when every other line reads as the same kind without it', () => {
         const outline = Outline.read(['- [ ] T', '\t- memo:: a', '\t\t- [ ] sub', '\t- k:: v', 'lazy', '\t- [ ] c']);
         // sub is too deep for T without memo: a paragraph line, no item.
-        expect(outline.canTakeOut([1], meaningful)).toBe(false);
+        expect(takesOut(outline, [1])).toBe(false);
         // `lazy` goes on sub's paragraph instead: a paragraph line either way.
-        expect(outline.canTakeOut([3], meaningful)).toBe(true);
-        expect(outline.canTakeOut([5], meaningful)).toBe(true);
+        expect(takesOut(outline, [3])).toBe(true);
+        expect(takesOut(outline, [5])).toBe(true);
         // A child that still reaches an item changes parent: T's own, or a
         // sibling's, and a command or a property would work for that task
         // (the third L2 counterexample run).
         for (const child of ['    - [ ] sub', '    - ==> every tue', '    - k:: v', '    - [[link]]']) {
-            expect(Outline.read(['- [ ] T', '  - memo:: a', child]).canTakeOut([1], meaningful), child).toBe(false);
-            expect(Outline.read(['- [ ] T', '  - [ ] B', '  - memo:: a', child]).canTakeOut([2], meaningful), child).toBe(false);
+            expect(takesOut(Outline.read(['- [ ] T', '  - memo:: a', child]), [1]), child).toBe(false);
+            expect(takesOut(Outline.read(['- [ ] T', '  - [ ] B', '  - memo:: a', child]), [2]), child).toBe(false);
         }
     });
 
@@ -202,13 +210,13 @@ describe('OutlineReading', () => {
         // The note goes under T: nothing the plugin reads changes (the
         // fourth L2 counterexample run, U1 and U2), and a task under the note
         // keeps its parent and its task above.
-        expect(Outline.read(['- [ ] T', '  - ==> every mon', '    - why weekly']).canTakeOut([1], meaningful)).toBe(true);
-        expect(Outline.read(['- [ ] T', '  - memo:: a', '    - detail', '      - [ ] sub']).canTakeOut([1], meaningful)).toBe(true);
+        expect(takesOut(Outline.read(['- [ ] T', '  - ==> every mon', '    - why weekly']), [1])).toBe(true);
+        expect(takesOut(Outline.read(['- [ ] T', '  - memo:: a', '    - detail', '      - [ ] sub']), [1])).toBe(true);
         // The note goes under B, and sub, still under the note, would be B's.
         const underSibling = Outline.read(['- [ ] T', '\t- [ ] B', '\t- memo:: a', '\t\t- note', '\t\t\t- [ ] sub']);
         expect(underSibling.item(3)!.parent).toBe(2);
-        expect(underSibling.canTakeOut([2], meaningful)).toBe(false);
-        expect(Outline.read(['- [ ] T', '\t- [ ] B', '\t- memo:: a', '\t\t- note']).canTakeOut([2], meaningful)).toBe(true);
+        expect(takesOut(underSibling, [2])).toBe(false);
+        expect(takesOut(Outline.read(['- [ ] T', '\t- [ ] B', '\t- memo:: a', '\t\t- note']), [2])).toBe(true);
     });
 
     it('does not take a line out when a fence below it would be indented code without it', () => {
@@ -220,13 +228,13 @@ describe('OutlineReading', () => {
         const outline = Outline.read(fence);
         expect(outline.fences).toHaveLength(1);
         expect(Outline.read(fence.filter((_, i) => i !== 1)).fences).toEqual([]);
-        expect(outline.canTakeOut([1], meaningful)).toBe(false);
+        expect(takesOut(outline, [1])).toBe(false);
         // And the other way: indented code in memo that would be a fence in
         // C, whose content starts at column 7.
         const indented = ['- [ ] T', '  -    [ ] C', '  - memo:: a', '', '        ```js', '        x', '        ```'];
         expect(Outline.read(indented).fences).toEqual([]);
         expect(Outline.read(indented.filter((_, i) => i !== 2)).fences).toHaveLength(1);
-        expect(Outline.read(indented).canTakeOut([2], meaningful)).toBe(false);
+        expect(takesOut(Outline.read(indented), [2])).toBe(false);
     });
 });
 

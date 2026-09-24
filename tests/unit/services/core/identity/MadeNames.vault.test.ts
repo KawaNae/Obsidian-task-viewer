@@ -1,6 +1,7 @@
 import { describe, it, expect, afterEach } from 'vitest';
 import { openVault, makeFile, type VaultSession } from '../../../helpers/vaultSession';
 import { processLines } from '../../../../../src/utils/FileLines';
+import { Block } from '../../../../../src/services/persistence/utils/Placement';
 
 /**
  * A write answers the names of the rows it made, and they are the names the
@@ -34,7 +35,7 @@ describe('the rows a write made', () => {
 
         const outcome = await processLines(session.app, makeFile(FILE), channel(session), (draft) => {
             // Two rows, and a line between them that is not one.
-            draft.splice(2, 0, '- [ ] 新1 @2026-09-21', 'メモ', '\t- [ ] 新2');
+            draft.put({ at: 2, parent: null, indent: '' }, Block.read(['- [ ] 新1 @2026-09-21', 'メモ', '\t- [ ] 新2']));
             return true;
         });
         await session.settle(FILE);
@@ -64,7 +65,7 @@ describe('the rows a write made', () => {
         contents.set(FILE, ['- [ ] 外', '- [ ] 上', ''].join('\n'));
 
         const outcome = await processLines(session.app, makeFile(FILE), channel(session), (draft) => {
-            draft.splice(2, 0, '- [ ] 新');
+            draft.put({ at: 2, parent: null, indent: '' }, Block.read(['- [ ] 新']));
             return true;
         });
         await session.settle(FILE);
@@ -88,7 +89,7 @@ describe('a made name, once the file has moved on without it', () => {
         session.index.setDraggingFile(FILE);
 
         const outcome = await processLines(session.app, makeFile(FILE), channel(session), (draft) => {
-            draft.splice(2, 0, '- [ ] 新 @2026-09-21');
+            draft.put({ at: 2, parent: null, indent: '' }, Block.read(['- [ ] 新 @2026-09-21']));
             return true;
         });
         const [made] = outcome.made;

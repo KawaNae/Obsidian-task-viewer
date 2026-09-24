@@ -23,8 +23,9 @@ function heading_harness(initial: string) {
 describe('TaskRepository.insertLineUnderHeading', () => {
     it('delegates to the shared heading-write op and returns insertedLine', async () => {
         const h = heading_harness('## Tasks\nexisting');
+        // Past the paragraph under the heading, which a line put above it would take in (P1).
         const at = await h.repo.insertLineUnderHeading('note.md', '- [ ] child', 'Tasks', 2);
-        expect(at.written && at.line).toBe(1);
-        expect(h.text().split('\n')[1]).toBe('- [ ] child');
+        expect(at.written && at.line).toBe(2);
+        expect(h.text().split('\n')).toEqual(['## Tasks', 'existing', '- [ ] child']);
     });
 });

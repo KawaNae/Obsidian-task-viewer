@@ -1,8 +1,10 @@
 import { TFile, type App } from 'obsidian';
 import { logError, logWarn } from '../log/log';
 import { LINE_BREAK, holdsLineBreak } from './LineBreak';
-import { Outline } from '../services/parsing/utils/Outline';
+import { Outline, type OutlineReading, type PutBlock, type WrittenLine } from '../services/parsing/utils/Outline';
+import { ChildLineClassifier } from '../services/parsing/utils/ChildLineClassifier';
 import { ON_RECORD, readsAsPlanned, subtreeAt, type OnRecord, type RowBasis } from '../services/persistence/RowBasis';
+import type { PlacedLine, Spot } from '../services/persistence/utils/Placement';
 
 /**
  * A file's line terminator. Obsidian writes LF, but notes arrive with CRLF
@@ -78,6 +80,18 @@ export type LineEdit =
     | { kind: 'carried'; at: number; from: number[] };
 
 /**
+ * Lines a `LineDraft.put` put in: the first of them is line `offset` of the
+ * write's `id`th block. Kept beside the report, by the edit that put them in,
+ * for the write's own check (`Outline.check`): the report says what became
+ * of the lines, and is what the index is told; which block a line came from
+ * is the write's business.
+ */
+export interface PutAt {
+    id: number;
+    offset: number;
+}
+
+/**
  * The lines a write is handed, and the only way it has to change them.
  *
  * Every change goes through here and is reported as it is made, so what the
@@ -122,23 +136,24 @@ export interface LineDraft {
     /** Make the line at `at` read `text`; it is the same task it was. */
     rewrite(at: number, text: string): void;
     /**
-     * Put in at `at` lines that are lines already here, moved: each item is
-     * the line now standing at `from` (before this call), to read `text`
-     * where it lands.
+     * Put `block` in at `spot` (`Placement`): the one way a write adds a line
+     * below the frontmatter. Each line says how it is to read once written,
+     * and the write is made only if it does and every other line reads as it
+     * did (`Outline.check`, in `processLines`). A line spliced into the body
+     * without a block is a bug in the write.
      *
-     * A splice cannot say this. Every line it puts in is a new line, so a
-     * write that moves a row by splicing it in below and away from above
-     * reports the row gone and a new one made — which is how a move within
-     * one file came to lose its task's identity. The carry says which line
-     * the moved one is, and the claim hands it that line's name.
-     *
-     * The source is left where it is; taking it away is a splice of its own,
-     * and a report in which one line still stands in two places is not one a
-     * file could follow (see {@link replayEdits}). A carried line that reads
-     * other than its source is reported rewritten with it, from here, so the
-     * text a carry changes is always accounted for.
+     * A line with `from` is the line now standing there (before this call),
+     * moved, to read its `text` where it lands. A splice cannot say this:
+     * every line it puts in is a new line, so a write that moves a row by
+     * splicing it in below and away from above reports the row gone and a new
+     * one made — which is how a move within one file came to lose its task's
+     * identity. The source is left where it is; taking it away is a splice of
+     * its own, and a report in which one line still stands in two places is
+     * not one a file could follow (see {@link replayEdits}). A carried line
+     * that reads other than its source is reported rewritten with it, from
+     * here, so the text a carry changes is always accounted for.
      */
-    carry(at: number, items: ReadonlyArray<{ from: number; text: string }>): void;
+    put(spot: Spot, block: readonly PlacedLine[]): void;
 }
 
 /**
@@ -148,8 +163,15 @@ export interface LineDraft {
  * test builds it over the lines it passes in, so both run the same arithmetic
  * instead of a copy of it.
  */
-export function draftOver(lines: string[]): { draft: LineDraft; reported: LineEdit[] } {
-    const { edits, reported } = recordEdits(lines);
+export function draftOver(lines: string[]): {
+    draft: LineDraft;
+    reported: LineEdit[];
+    puts: PutBlock[];
+    placedBy: ReadonlyMap<LineEdit, PutAt>;
+} {
+    const { edits, reported, placedBy } = recordEdits(lines);
+    const handed = lines.length;
+    const puts: PutBlock[] = [];
     const draft: LineDraft = {
         lines,
         splice: (at, deleteCount, ...items) => {
@@ -161,12 +183,35 @@ export function draftOver(lines: string[]): { draft: LineDraft; reported: LineEd
             lines[at] = text;
             edits.replaced(at);
         },
-        carry: (at, items) => {
-            items.forEach(item => oneLine(item.text));
-            edits.carry(at, items);
+        put: (spot, block) => {
+            block.forEach(line => oneLine(line.text));
+            // The parent as a line of the lines handed in or of a block, so
+            // the check finds it wherever the edits after this one leave it.
+            const parent = spot.parent === null ? null
+                : writtenLines(handed, reported, placedBy)?.[spot.parent] ?? { kind: 'loose' as const };
+            const id = puts.length;
+            puts.push({ parent, lines: block.map(({ kind, under }) => ({ kind, under })) });
+            // Runs of new lines and of carried ones, each put and reported in
+            // turn. A source at or past the spot has moved down by the lines
+            // put before it.
+            let offset = 0;
+            while (offset < block.length) {
+                const carried = block[offset].from !== undefined;
+                let end = offset;
+                while (end < block.length && (block[end].from !== undefined) === carried) end++;
+                const run = block.slice(offset, end);
+                const at = spot.at + offset;
+                if (carried) {
+                    const moved = run.map(line => ({ from: line.from! >= spot.at ? line.from! + offset : line.from!, text: line.text }));
+                    edits.carry(at, moved, { id, offset });
+                } else {
+                    edits.insert(at, run.map(line => line.text), { id, offset });
+                }
+                offset = end;
+            }
         },
     };
-    return { draft, reported };
+    return { draft, reported, puts, placedBy };
 }
 
 /**
@@ -213,6 +258,8 @@ interface LineEdits {
     splice(at: number, deleteCount: number, ...items: string[]): void;
     /** The line at `at` reads something else now, and is the same task. */
     replaced(at: number): void;
+    /** Insert `items` at `at`: lines of a block, the first its line `put.offset`. */
+    insert(at: number, items: string[], put: PutAt): void;
     /**
      * Put in at `at` lines that are lines already here, moved: each item is
      * the line now standing at `from` (before this call), to read `text`
@@ -230,12 +277,13 @@ interface LineEdits {
      * other than its source is reported {@link replaced} with it, from here,
      * so the text a carry changes is always accounted for.
      */
-    carry(at: number, items: ReadonlyArray<{ from: number; text: string }>): void;
+    carry(at: number, items: ReadonlyArray<{ from: number; text: string }>, put: PutAt): void;
 }
 
 /** The arithmetic under {@link draftOver}: each change, and what it reported. */
-function recordEdits(lines: string[]): { edits: LineEdits; reported: LineEdit[] } {
+function recordEdits(lines: string[]): { edits: LineEdits; reported: LineEdit[]; placedBy: Map<LineEdit, PutAt> } {
     const reported: LineEdit[] = [];
+    const placedBy = new Map<LineEdit, PutAt>();
     const edits: LineEdits = {
         splice: (at, deleteCount, ...items) => {
             // What the splice did, not what it was asked to do. `splice`
@@ -252,19 +300,29 @@ function recordEdits(lines: string[]): { edits: LineEdits; reported: LineEdit[] 
             }
         },
         replaced: (at) => { reported.push({ kind: 'replaced', at }); },
-        carry: (at, items) => {
+        insert: (at, items, put) => {
+            if (items.length === 0) return;
+            const start = spliceStart(lines.length, at);
+            lines.splice(at, 0, ...items);
+            const edit: LineEdit = { kind: 'inserted', at: start, count: items.length };
+            reported.push(edit);
+            placedBy.set(edit, put);
+        },
+        carry: (at, items, put) => {
             if (items.length === 0) return;
             const start = spliceStart(lines.length, at);
             // Read before the splice: a source at or past `start` moves with it.
             const sources = items.map(item => lines[item.from]);
             lines.splice(at, 0, ...items.map(item => item.text));
-            reported.push({ kind: 'carried', at: start, from: items.map(item => item.from) });
+            const edit: LineEdit = { kind: 'carried', at: start, from: items.map(item => item.from) };
+            reported.push(edit);
+            placedBy.set(edit, put);
             items.forEach((item, i) => {
                 if (!Outline.VERBATIM.holds(item.text, sources[i])) reported.push({ kind: 'replaced', at: start + i });
             });
         },
     };
-    return { edits, reported };
+    return { edits, reported, placedBy };
 }
 
 /** Where `Array.prototype.splice` starts, given what it was passed. */
@@ -391,15 +449,18 @@ export interface EditorLine {
 /**
  * Why a write was not made: its target was one of `count` rows nothing tells
  * apart, it is on no line of the file, the line the caller pointed at no
- * longer reads what the caller saw there, what it would write has nowhere
- * in the body to go (see `Placement`), or the write itself failed — it threw,
- * or the file could not be read or written.
+ * longer reads what the caller saw there, a line it would put in would not
+ * read as meant where it goes (`unplaceable`), writing it would change what
+ * another line is or which item it stands in (`disturbs`; both are
+ * `Outline.check`), or the write itself failed — it threw, or the file could
+ * not be read or written.
  */
 export type RefusalReason =
     | { kind: 'ambiguous'; count: number }
     | { kind: 'gone' }
     | { kind: 'changed' }
     | { kind: 'unplaceable' }
+    | { kind: 'disturbs' }
     | { kind: 'failed' };
 
 /** A write that was not made, as it is told to whoever reports it. */
@@ -530,6 +591,8 @@ export interface LineOrigins {
     origin: Array<number | null>;
     /** For each line now, whether the write said it rewrote it. */
     rewritten: boolean[];
+    /** For each line now, the block and the line of it a `put` put there, or null. */
+    placed: Array<PutAt | null>;
 }
 
 /**
@@ -538,11 +601,19 @@ export interface LineOrigins {
  * Answers null when the report does not describe anything a file could do —
  * an index outside the file, a removal running past the end, a line that ends
  * up standing in two places. Callers treat that the same as no report at all.
+ * `placedBy` says which edits put in lines of a block (`LineDraft.put`).
  */
-export function replayEdits(beforeLength: number, edits: readonly LineEdit[]): LineOrigins | null {
+export function replayEdits(
+    beforeLength: number,
+    edits: readonly LineEdit[],
+    placedBy: ReadonlyMap<LineEdit, PutAt> = new Map(),
+): LineOrigins | null {
     const origin: Array<number | null> = [];
     for (let i = 0; i < beforeLength; i++) origin.push(i);
     const rewritten = new Array<boolean>(beforeLength).fill(false);
+    const placed = new Array<PutAt | null>(beforeLength).fill(null);
+    const putLines = (put: PutAt | undefined, count: number) =>
+        Array.from({ length: count }, (_, i) => (put ? { id: put.id, offset: put.offset + i } : null));
 
     for (const edit of edits) {
         if (!Number.isInteger(edit.at) || edit.at < 0) return null;
@@ -557,6 +628,7 @@ export function replayEdits(beforeLength: number, edits: readonly LineEdit[]): L
                 const fresh = new Array<number | null>(edit.count).fill(null);
                 origin.splice(edit.at, 0, ...fresh);
                 rewritten.splice(edit.at, 0, ...new Array<boolean>(edit.count).fill(false));
+                placed.splice(edit.at, 0, ...putLines(placedBy.get(edit), edit.count));
                 break;
             }
             case 'removed':
@@ -564,12 +636,14 @@ export function replayEdits(beforeLength: number, edits: readonly LineEdit[]): L
                 if (edit.at + edit.count > origin.length) return null;
                 origin.splice(edit.at, edit.count);
                 rewritten.splice(edit.at, edit.count);
+                placed.splice(edit.at, edit.count);
                 break;
             case 'carried': {
                 if (edit.at > origin.length) return null;
                 if (!edit.from.every(from => Number.isInteger(from) && from >= 0 && from < origin.length)) return null;
                 origin.splice(edit.at, 0, ...edit.from.map(from => origin[from]));
                 rewritten.splice(edit.at, 0, ...edit.from.map(from => rewritten[from]));
+                placed.splice(edit.at, 0, ...putLines(placedBy.get(edit), edit.from.length));
                 break;
             }
         }
@@ -585,7 +659,26 @@ export function replayEdits(beforeLength: number, edits: readonly LineEdit[]): L
         seen.add(from);
     }
 
-    return { origin, rewritten };
+    return { origin, rewritten, placed };
+}
+
+/**
+ * Where each line of a write's result came from, as `Outline.check` asks it:
+ * put in by a block, kept from the lines handed in, or spliced in loose. Null
+ * when the report does not describe anything a file could do.
+ */
+function writtenLines(
+    beforeLength: number,
+    edits: readonly LineEdit[],
+    placedBy: ReadonlyMap<LineEdit, PutAt>,
+): WrittenLine[] | null {
+    const replayed = replayEdits(beforeLength, edits, placedBy);
+    if (!replayed) return null;
+    return replayed.origin.map((from, k): WrittenLine => {
+        const put = replayed.placed[k];
+        if (put) return { kind: 'placed', put: put.id, offset: put.offset };
+        return from === null ? { kind: 'loose' } : { kind: 'kept', from };
+    });
 }
 
 /**
@@ -639,12 +732,15 @@ function explains(
  *
  * Every change `edit` makes goes through the {@link LineDraft} it is handed,
  * which reports it, and that report is what lets the next scan know which
- * line is which. A report that does not account for the file it produced is
- * logged and dropped, and the sink is told the write could not say what it
- * did (see {@link WriteSink}): every write that changes the file leaves a
- * claim or that mark, never nothing. The write itself still lands — the
- * report is bookkeeping, and losing a user's edit over bookkeeping would be
- * the worse failure by far.
+ * line is which. It is also what the write is checked by: the lines it put
+ * in have to read as put, and every other line as it did (`Outline.check`);
+ * else nothing is written, and the write is refused as `unplaceable` or
+ * `disturbs`. A report no file could follow is a bug in the write and is
+ * not written either (see `BrokenWrite`). A report that follows but does not
+ * account for every line it left unreported is logged and dropped, and the
+ * sink is told the write could not say what it did (see {@link WriteSink}):
+ * every write that changes the file leaves a claim or that mark, never
+ * nothing.
  *
  * Anything a write owes the rest of the plugin belongs on the written branch
  * only. A claim left behind by a write that never happened would be weighed by
@@ -691,7 +787,7 @@ export async function processLines(
         const before = [...lines];
         // Over `lines` itself: every change the write makes, it makes to
         // this array through the draft, and the draft reports it.
-        const { draft, reported } = draftOver(lines);
+        const { draft, reported, puts, placedBy } = draftOver(lines);
         const refuse = (reason: RefusalReason, subject: string): false => {
             refused = { file: file.path, reason, subject };
             return false;
@@ -789,9 +885,31 @@ export async function processLines(
             // refused.
             return refused === null ? callerBug('a write was given up without a reason', { kind: 'failed' }) : content;
         }
+
+        // Every write is held to what it says it did, the same way: the
+        // lines it put in read as put, and every other line as it did
+        // (`Outline.check`). A write that changed nothing is not asked.
+        let readings: { read: OutlineReading; left: OutlineReading } | undefined;
+        if (reported.length > 0) {
+            const written = writtenLines(before.length, reported, placedBy);
+            if (written === null || written.length !== next.length) {
+                return callerBug('its report does not account for the lines it wrote', { kind: 'failed' });
+            }
+            // The reading of the lines as written is the note's next
+            // reading, once the write lands; read here once, for the check
+            // and for the rows the write leaves.
+            readings = { read: Outline.read(before), left: Outline.read(next) };
+            const check = Outline.check(readings.read, readings.left, written, puts, line => ChildLineClassifier.carriesMeaning(line));
+            if (check === 'loose') return callerBug('a line was spliced into the body without a place (`LineDraft.put`)', { kind: 'failed' });
+            if (check !== 'sound') {
+                const put = written.findIndex(line => line.kind === 'placed');
+                refuse({ kind: check }, lastSubject || (put >= 0 ? next[put].trim() : file.path));
+                return content;
+            }
+        }
         refused = null;
 
-        rows = rowsLeft(before, reported, next, named);
+        rows = rowsLeft(before, reported, next, named, readings);
         // The mark the note opened with, put back where it was.
         const rebuilt = (bom ? BOM : '') + joinLines(next, eol);
 
@@ -981,12 +1099,13 @@ function rowsLeft(
     edits: readonly LineEdit[],
     after: readonly string[],
     named: ReadonlyMap<string, number>,
+    readings: { read: OutlineReading; left: OutlineReading } | undefined,
 ): Map<string, RowLines> {
     const rows = new Map<string, RowLines>();
     const replayed = replayEdits(before.length, edits);
     if (!replayed) return rows;
-    const read = Outline.read(before);
-    const left = Outline.read(after);
+    const read = readings?.read ?? Outline.read(before);
+    const left = readings?.left ?? Outline.read(after);
     for (const [runtimeId, line] of named) {
         const now = replayed.origin.indexOf(line);
         if (now >= 0) rows.set(runtimeId, { read: subtreeAt(read, line), left: subtreeAt(left, now) });
