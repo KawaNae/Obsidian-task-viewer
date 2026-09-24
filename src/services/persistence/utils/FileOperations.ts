@@ -90,7 +90,7 @@ export class FileOperations {
         except: ReadonlySet<number> = new Set(),
     ): string {
         const first = FileOperations.firstChildIndent(lines, taskLineIndex, except)
-            ?? FileOperations.firstChildIndent(lines, taskLineIndex);
+            ?? (except.size > 0 ? FileOperations.firstChildIndent(lines, taskLineIndex) : null);
         const sample = first === null ? null
             : Outline.shiftedIndent(first, Outline.indentOf(lines[taskLineIndex]), Outline.indentOf(parent));
         return Outline.childIndent(parent, sample, FileOperations.detectIndentUnit(lines));

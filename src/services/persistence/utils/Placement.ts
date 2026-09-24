@@ -90,15 +90,13 @@ export class Placement {
 
     /** Where a first child of `row` goes: just below it, past its own text that goes on. */
     static firstChild(lines: readonly string[], row: number, head: string): Spot {
-        const indent = FileOperations.resolveChildIndent(lines, row);
-        return this.settle(Outline.read(lines), row + 1, row, head, () => indent);
+        return this.sibling(Outline.read(lines), row + 1, row, head);
     }
 
     /** Where a last child of `row` goes: just past its subtree. */
     static lastChild(lines: readonly string[], row: number, head: string): Spot {
         const outline = Outline.read(lines);
-        const indent = FileOperations.resolveChildIndent(lines, row);
-        return this.settle(outline, outline.subtreeEnd(row), row, head, () => indent);
+        return this.sibling(outline, outline.subtreeEnd(row), row, head);
     }
 
     /**
@@ -145,7 +143,10 @@ export class Placement {
         return this.sibling(Outline.read(lines), heading + 1, null, head);
     }
 
-    /** At `at` or past what a line there takes in, a sibling under `parent`, at a sibling's indentation. */
+    /**
+     * At `at` or past what a line there takes in, a line under `parent`, at
+     * a sibling's indentation: a child is a sibling of the children there.
+     */
     private static sibling(outline: OutlineReading, at: number, parent: number | null, head: string): Spot {
         return this.settle(outline, at, parent, head, spot => this.siblingIndent(outline, parent, spot));
     }
@@ -182,7 +183,8 @@ export class Placement {
      * in up to the first item of the note among it — an item it would make
      * its child stays where it stands, and the write's check refuses the
      * line put above it. `indentAt` answers the indentation the line takes
-     * at each place it is tried.
+     * at each place it is tried. Only `head` is tried: a line of the block
+     * below it that takes in more is refused by the write's check.
      */
     private static settle(
         outline: OutlineReading,
