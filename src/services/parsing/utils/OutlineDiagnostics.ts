@@ -43,5 +43,5 @@ export function outlineDiagnostics(outline: OutlineReading): LocatedDiagnostic[]
             line: fence.line,
         });
     }
-    return diagnostics.sort((a, b) => a.line - b.line);
+    return diagnostics;
 }

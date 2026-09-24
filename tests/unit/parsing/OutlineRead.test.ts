@@ -274,6 +274,16 @@ describe('OutlineReading.fences', () => {
         expect(codeOf(indented)).toBe('11');
     });
 
+    it('closes up to three columns past the content column of its item, and not four', () => {
+        const three = Outline.read(['- [ ] T', '  ```', '  x', '     ```', '  y']);
+        expect(three.fences.map(fence => [fence.line, fence.close])).toEqual([[1, 3]]);
+        expect(codeOf(three)).toBe('01110');
+        // Four past, the delimiter is the code's content.
+        const four = Outline.read(['- [ ] T', '  ```', '  x', '      ```', '  y']);
+        expect(four.fences.map(fence => [fence.line, fence.close])).toEqual([[1, null]]);
+        expect(codeOf(four)).toBe('01111');
+    });
+
     it('rejects a backtick fence whose info string contains a backtick', () => {
         const outline = Outline.read(['``` a`b', 'prose']);
         expect(outline.fences).toEqual([]);

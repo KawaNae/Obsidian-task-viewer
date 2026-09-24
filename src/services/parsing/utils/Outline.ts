@@ -260,7 +260,7 @@ export class OutlineReading {
          * reading view draws the quote, and the lines below it, inside the
          * item. The editor warns on these lines (`OutlineDiagnostics`).
          */
-        readonly quotesClosingItems: readonly number[] = [],
+        readonly quotesClosingItems: readonly number[],
     ) {}
 
     /**
@@ -355,26 +355,30 @@ function widthFrom(text: string, from: number): number {
 }
 
 const MARKER_RE = new RegExp(`^${LIST_BULLET_SOURCE}`);
-const ORDERED_START_RE = /^(\d+)[.)]/;
 const QUOTE_RE = /^>/;
-const EMPTY_QUOTE_RE = /^>[ \t]*$/;
+const QUOTE_MARKER_RE = /^>[ \t]?/;
 const SETEXT_UNDERLINE_RE = /^(?:=+|-+)[ \t]*$/;
 const GAP_RE = /^[ \t]*/;
 const HEADING_RE = /^#{1,6}(?:[ \t]|$)/;
 const THEMATIC_BREAK_RE = /^(?:(?:-[ \t]*){3,}|(?:\*[ \t]*){3,}|(?:_[ \t]*){3,})$/;
 
-/** Where an item's content starts, and what follows its marker. */
+/** An item a line opens (`itemStart`). */
 interface ItemStart {
+    /** The column its content starts at. */
     contentColumn: number;
+    /** What follows the marker and its gap. */
     rest: string;
+    /** Whether `rest` is indented code: five columns of gap or more. */
+    restIsCode: boolean;
+    /** The number an ordered item starts at; null for a bullet. */
+    start: number | null;
 }
 
 /**
  * The item a line opens when its indentation leaves it `text` at column
- * `col`: the column its content starts at, and what follows the marker.
- * CommonMark: a marker, then a space or a tab or the end of the line; up to
- * four columns of gap put the content after the gap, five or more put it one
- * column after the marker (the rest is indented code).
+ * `col`. CommonMark: a marker, then a space or a tab or the end of the line;
+ * up to four columns of gap put the content after the gap, five or more put
+ * it one column after the marker (the rest is indented code).
  */
 function itemStart(text: string, col: number): ItemStart | null {
     if (THEMATIC_BREAK_RE.test(text)) return null;
@@ -386,8 +390,28 @@ function itemStart(text: string, col: number): ItemStart | null {
     const markerEnd = col + marker[0].length;
     const rest = after.slice(gap.length);
     const gapWidth = widthFrom(gap, markerEnd);
-    const contentColumn = rest === '' || gapWidth > 4 ? markerEnd + 1 : markerEnd + gapWidth;
-    return { contentColumn, rest };
+    const restIsCode = rest !== '' && gapWidth > 4;
+    const contentColumn = rest === '' || restIsCode ? markerEnd + 1 : markerEnd + gapWidth;
+    const start = /^\d/.test(marker[0]) ? Number.parseInt(marker[0], 10) : null;
+    return { contentColumn, rest, restIsCode, start };
+}
+
+/**
+ * The block a line reading `text` (its indentation off) leaves open for the
+ * lines below to go on lazily: a paragraph, a quote's paragraph, or nothing
+ * (a heading, a thematic break, a fence, an empty item or quote, indented
+ * code). An item or a quote leaves what its own content leaves.
+ */
+function leafOf(text: string): 'paragraph' | 'quote' | 'none' {
+    if (text === '' || HEADING_RE.test(text) || THEMATIC_BREAK_RE.test(text) || CodeFenceTracker.opening(text) !== null) return 'none';
+    if (QUOTE_RE.test(text)) {
+        const inner = text.replace(QUOTE_MARKER_RE, '');
+        if (Outline.depthOf(inner) >= 4) return 'none';
+        return leafOf(Outline.dedent(inner)) === 'none' ? 'none' : 'quote';
+    }
+    const started = itemStart(text, 0);
+    if (started) return started.restIsCode ? 'none' : leafOf(started.rest);
+    return 'paragraph';
 }
 
 /**
@@ -417,9 +441,9 @@ function itemStart(text: string, col: number): ItemStart | null {
  *   spaces is blank
  *
  * The reading is CommonMark's but where the reading view and Live Preview
- * both part from it the same way: the fence going on over shallower lines
- * (`stages\l2-blocks\measurement.md`). The blank lines of NBSP and U+3000
- * are Obsidian's reading too, measured in `listItems` and the reading view.
+ * both part from it the same way, in a task, a parent or a subtree: the
+ * fence going on over shallower lines, and the blank lines of NBSP and
+ * U+3000 (`stages\l2-blocks\measurement.md`, `stages\l3-indent\report.md`).
  * Where only one view parts from CommonMark, the outline reads CommonMark,
  * and the editor warns on the two shapes where the views show another
  * subtree than the one the plugin writes (`OutlineDiagnostics`). The rules
@@ -481,8 +505,7 @@ function readOutline(lines: readonly string[], start: number): OutlineReading {
         if (QUOTE_RE.test(text) || startsLeafOrItem(text, null)) return true;
         if (started === null) return false;
         if (!direct) return true;
-        const ordered = ORDERED_START_RE.exec(text);
-        return started.rest !== '' && (ordered === null || Number(ordered[1]) === 1);
+        return started.rest !== '' && (started.start === null || started.start === 1);
     };
     const openFence = (i: number, open: FenceDelimiter, column: number, rest: string) => {
         const block: OutlineFence = {
@@ -520,11 +543,10 @@ function readOutline(lines: readonly string[], start: number): OutlineReading {
 
         if (fence) {
             if (matched >= fence.depth) {
-                const base = fence.depth > 0 ? stack[fence.depth - 1].item.contentColumn : 0;
                 codes[i] = true;
                 holds(i);
                 fence.block.end = i + 1;
-                if (col - base <= 3 && CodeFenceTracker.closes(text, fence.open)) {
+                if (withinReach(col, fence.depth) && CodeFenceTracker.closes(text, fence.open)) {
                     fence.block.close = i;
                     fence = null;
                 }
@@ -559,8 +581,7 @@ function readOutline(lines: readonly string[], start: number): OutlineReading {
                 continue;
             }
         }
-        const base = matched > 0 ? stack[matched - 1].item.contentColumn : 0;
-        const shallow = col - base <= 3;
+        const shallow = withinReach(col, matched);
         if (shallow && lazyAllowed && matched < stack.length && QUOTE_RE.test(text)) quotesClosingItems.push(i);
         closeTo(matched);
 
@@ -586,14 +607,12 @@ function readOutline(lines: readonly string[], start: number): OutlineReading {
             owners[i] = i;
             const inner = started.rest === '' ? null : CodeFenceTracker.opening(started.rest);
             if (inner) openFence(i, inner, started.contentColumn, started.rest);
-            else leaf = started.rest === '' ? 'none' : 'paragraph';
+            else leaf = started.restIsCode ? 'none' : leafOf(started.rest);
             continue;
         }
 
         holds(i);
-        leaf = HEADING_RE.test(text) || THEMATIC_BREAK_RE.test(text) || EMPTY_QUOTE_RE.test(text) ? 'none'
-            : QUOTE_RE.test(text) ? 'quote'
-            : 'paragraph';
+        leaf = leafOf(text);
     }
     closeTo(0);
 
