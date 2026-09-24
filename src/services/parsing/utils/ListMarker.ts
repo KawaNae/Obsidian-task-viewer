@@ -1,11 +1,13 @@
 /**
  * Shared bullet-marker fragment for markdown list items: `-`, `*`, `+`, or
- * an ordered marker of one to nine digits (`1.`/`1)`; CommonMark). Interpolate
- * into a larger regex rather than writing the pattern out again — every
- * parser that recognizes a list line, the outline's items included, needs the
- * same definition of "bullet".
+ * an ordered marker of any number of digits (`1.`/`1)`). Obsidian 1.12.4
+ * reads `1234567890. [ ] x` as a task in `listItems` and draws a checkbox for
+ * it in the reading view, past CommonMark's nine digits (the L2 gate).
+ * Interpolate into a larger regex rather than writing the pattern out again —
+ * every parser that recognizes a list line, the outline's items included,
+ * needs the same definition of "bullet".
  */
-export const LIST_BULLET_SOURCE = '(?:[-*+]|\\d{1,9}[.)])';
+export const LIST_BULLET_SOURCE = '(?:[-*+]|\\d+[.)])';
 
 /**
  * The two characters Markdown structure is spaced with, as a regex fragment:
