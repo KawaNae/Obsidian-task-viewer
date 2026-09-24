@@ -148,7 +148,7 @@ describe('FileOperations', () => {
 
         it('collects deeply nested children', () => {
             // Under a root: a tab at the top of a note is indented code
-            // (HYPOTHESIS L2 q4), and opens no item.
+            // (Obsidian, measurement.md q10), and opens no item.
             const lines = [
                 '- [ ] root',
                 '\t- [ ] parent',

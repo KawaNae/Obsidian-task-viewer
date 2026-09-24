@@ -186,7 +186,7 @@ describe('insertSiblingAfterTask afterCompletedRun', () => {
         expect(text.split('\n')).toEqual([first, NEW_SESSION, prose]);
     });
 
-    it('goes past a paragraph line right below the row, which is the row\'s (HYPOTHESIS L2 q5)', async () => {
+    it('goes past a paragraph line right below the row, which is the row\'s (Obsidian, measurement.md q5)', async () => {
         // A line at column 0 with no blank line above goes on the row's
         // paragraph (a lazy continuation): it is in the row's item.
         const prose = 'ここから先はメモ';

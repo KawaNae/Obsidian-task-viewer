@@ -82,7 +82,7 @@ describe('deleteTaskFromFile removes the whole subtree', () => {
 
     it('leaves a sibling at the same depth untouched', async () => {
         // Under a root: a tab at the top of a note is indented code
-        // (HYPOTHESIS L2 q4), and would hold no task.
+        // (Obsidian, measurement.md q10), and would hold no task.
         const h = await writeBench([
             '- [ ] root',
             '\t- [ ] parent @2026-08-15',
@@ -318,7 +318,7 @@ describe('a move within the file carries the subtree', () => {
 
     it('strips the prefix when the parent was itself indented', async () => {
         // Under a root: a tab at the top of a note is indented code
-        // (HYPOTHESIS L2 q4), and would hold no task.
+        // (Obsidian, measurement.md q10), and would hold no task.
         const h = await writeBench([
             '- [ ] root',
             '\t- [ ] parent @2026-08-15',
@@ -430,7 +430,7 @@ describe('mixed indentation is read by the width it shows at', () => {
     it('does not treat a 4-space line under a tab parent as a descendant', async () => {
         // A tab and four spaces are one depth: the space line is a sibling.
         // Under a root: a tab at the top of a note is indented code
-        // (HYPOTHESIS L2 q4), and would hold no task.
+        // (Obsidian, measurement.md q10), and would hold no task.
         const h = await writeBench([
             '- [ ] root',
             '\t- [ ] parent @2026-08-15',
@@ -450,7 +450,7 @@ describe('mixed indentation is read by the width it shows at', () => {
     it('does not treat a tab child of a 4-space parent as a descendant', async () => {
         // The mirror image, which counting characters already read this way.
         // Under a root: four spaces at the top of a note are indented code
-        // (HYPOTHESIS L2 q4), and would hold no task.
+        // (Obsidian, measurement.md q10), and would hold no task.
         const h = await writeBench([
             '- [ ] root',
             '    - [ ] parent @2026-08-15',

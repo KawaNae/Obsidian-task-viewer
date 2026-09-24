@@ -112,16 +112,17 @@ describe('a next instance with nowhere in the body to go', () => {
         expect(Notice.messages).toEqual([t('notice.writeTargetUnplaceable', { subject: '対象' })]);
     });
 
-    it('has no row when the fence it stood below ends with the item it opened in (HYPOTHESIS L2 q1)', async () => {
-        // The fence opens in Q's item; `\tx` ends Q and the fence with it and
-        // goes on as P's paragraph, which the row, eight columns in, goes on
-        // too. Under the old depth reading the row was a task whose group
-        // line was in the fence, and its next instance was refused.
+    it('is refused when the line its group is under is inside a fence in the parent\'s subtree', async () => {
+        // The fence is indented under P, so only the reading within P's
+        // subtree sees it; the first line shallower than the row is in it.
         const note = ['# note', '- [ ] P', '\t- [ ] Q', '\t\t```', '\tx', '\t\t```', `\t\t${ROW}`, ''];
-        const { session } = await open(note);
+        const { contents, session } = await open(note);
+        const before = contents.get(FILE)!;
 
-        expect(tasksWorded(session, '対象')).toEqual([]);
-        expect(session.index.getTasks().map(task => task.content)).toEqual(['P', 'Q']);
+        await fire(session);
+
+        expect(contents.get(FILE)).toBe(before.replace('\t\t- [ ] 対象', '\t\t- [x] 対象'));
+        expect(Notice.messages).toEqual([t('notice.writeTargetUnplaceable', { subject: '対象' })]);
     });
 
     it('refuses a copy that would carry a fence it never closes above the original', async () => {

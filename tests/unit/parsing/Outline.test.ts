@@ -97,12 +97,12 @@ describe('Outline.subtreeEnd', () => {
         expect(Outline.subtreeEnd(['- [ ] a', '', '- [ ] b'], 0)).toBe(1);
     });
 
-    // (HYPOTHESIS L2 q1) A fence goes on only while the item it opened in
-    // does: `code` at column 0 ends T and the fence with it, and the closing
-    // line left at column 0 opens a fence of its own.
-    it('ends a fence opened inside it where the item ends (HYPOTHESIS L2 q1)', () => {
+    // (Obsidian, measurement.md q8) `code` at column 0 goes on the fence
+    // opened in T, and T with it; the delimiter at column 0 opens a fence of
+    // its own, which ends T and its fence.
+    it('takes a shallow line in its fence, and ends at a delimiter at column 0 (Obsidian, measurement.md q8)', () => {
         const lines = ['- [ ] T', '', '  ```js', 'code', '```', '- [ ] U'];
-        expect(Outline.subtreeEnd(lines, 0)).toBe(3);
+        expect(Outline.subtreeEnd(lines, 0)).toBe(4);
     });
 
     it('reads by depth alone when a fence opened inside it never closes', () => {
@@ -138,9 +138,9 @@ describe('a child below a blank line', () => {
         expect(p.childLines.map(line => line.text.trim())).toEqual(['', 'memo of p']);
     });
 
-    // (HYPOTHESIS L2 q5) With no blank line between, `memo of p` goes on the
+    // (Obsidian, measurement.md q5) With no blank line between, `memo of p` goes on the
     // paragraph `memo of c` opened (a lazy continuation), so it is c's.
-    it('takes a shallower line right below it as its paragraph going on (HYPOTHESIS L2 q5)', () => {
+    it('takes a shallower line right below it as its paragraph going on (Obsidian, measurement.md q5)', () => {
         const lines = ['- [ ] p', '\t- [ ] c', '', '\t\tmemo of c', '\tmemo of p', ''];
         const parsed = FileParsePipeline.parse('note.md', [...lines], DEFAULT_SETTINGS);
         if (parsed.ignored) throw new Error('ignored');

@@ -130,12 +130,12 @@ describe('FlowLineScanner', () => {
             expect(collectFlowLineIndices(Outline.read(lines), 1)).toEqual([2]);
         });
 
-        it('takes no line with no gap after its bullet (HYPOTHESIS L2 q9)', () => {
+        it('takes no line with no gap after its bullet (Obsidian, measurement.md q9)', () => {
             // `-==>` opens no list item: it goes on the task's paragraph.
             expect(collectFlowLineIndicesInFile(['- [ ] task', '\t-==> every mon'], 0)).toEqual([]);
         });
 
-        it('takes no line indented four columns past the task\'s content (HYPOTHESIS L2 q4)', () => {
+        it('takes no line indented four columns past the task\'s content (Obsidian, measurement.md q4)', () => {
             // Six spaces under `- [ ] ` is the paragraph going on, not an item.
             expect(collectFlowLineIndicesInFile(['- [ ] task', '      - ==> every mon'], 0)).toEqual([]);
         });

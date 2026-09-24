@@ -17,7 +17,7 @@ import { SPACE_OR_TAB_SOURCE } from './ListMarker';
 export const INDENT_SOURCE = `${SPACE_OR_TAB_SOURCE}*`;
 
 const INDENT_RE = new RegExp(`^${INDENT_SOURCE}`);
-const BLANK_RE = new RegExp(`^${INDENT_SOURCE}$`);
+const BLANK_RE = /^[ 	 　]*$/;
 
 /**
  * A way two lines of a note can be the same line: two lines stand in it when
@@ -104,7 +104,11 @@ export class Outline {
      */
     static readonly UP_TO_INDENT: LineRelation = relation(line => Outline.dedent(line));
 
-    /** A line with nothing on it but tabs and spaces: the only blank line. */
+    /**
+     * A blank line: nothing on it but spaces, tabs, no-break spaces and
+     * full-width spaces. Obsidian reads a line of the last two as blank too,
+     * though it does not indent with them (`stages\l2-blocks\measurement.md`).
+     */
     static isBlank(line: string): boolean {
         return BLANK_RE.test(line);
     }
@@ -257,15 +261,21 @@ function itemStart(text: string, col: number): { contentColumn: number; rest: st
  *   blank lines; a line that goes on a paragraph (a lazy continuation) goes
  *   on the item too, however shallow
  * - a fence opens up to three columns past the content column of the item it
- *   stands in, goes on only while that item does, and ends with it when it
- *   has no closing line
+ *   stands in, and goes on over the lines indented that far. A shallower
+ *   line goes on the fence too, and the item with it, the way a lazy line
+ *   goes on a paragraph; what ends both is a line that starts a block of its
+ *   own (an item, a fence, a heading, a thematic break) or a shallower line
+ *   after a blank one. A fence with no closing line ends there too
  * - four columns or more past the content column is a paragraph going on, or
  *   indented code
+ * - a line of nothing but spaces, tabs, no-break spaces and full-width
+ *   spaces is blank
  *
- * HYPOTHESIS (L2): whether Obsidian reads items and fences this way is
- * measured in the L2 stage (`stages\l2-blocks\design.md`, questions 1-9).
- * R0 saw `listItems` carry an item past a shallow line inside its fence
- * (BK1), which these rules do not. The rules live here and nowhere else.
+ * The fence going on over shallower lines and the blank lines of NBSP and
+ * U+3000 are where Obsidian 1.12.4 parts from CommonMark: its `listItems`
+ * and its reading view agree on both, in every shape measured
+ * (`stages\l2-blocks\measurement.md`), and the outline reads what the note
+ * shows. The rules live here and nowhere else.
  */
 function readOutline(lines: readonly string[], start: number): OutlineReading {
     const items = new Map<number, OutlineItem>();
@@ -280,6 +290,7 @@ function readOutline(lines: readonly string[], start: number): OutlineReading {
     let leaf: 'paragraph' | 'indented' | 'none' = 'none';
     type OpenFence = { open: FenceDelimiter; depth: number; block: OutlineFence };
     let fence = null as OpenFence | null;
+    let afterBlank = false;
 
     const innermost = () => (stack.length > 0 ? stack[stack.length - 1].item.line : null);
     const holds = (i: number) => {
@@ -292,6 +303,18 @@ function readOutline(lines: readonly string[], start: number): OutlineReading {
             frame.item.end = frame.last + 1;
         }
         if (fence && fence.depth > depth) fence = null;
+    };
+    // Whether a line at column `col` reading `text` starts a block of its own
+    // in the item `matched` deep: a fence, a heading, a thematic break or an
+    // item, up to three columns past that item's content column. Such a line
+    // is never a lazy one.
+    const startsBlock = (col: number, text: string, matched: number) => {
+        const base = matched > 0 ? stack[matched - 1].item.contentColumn : 0;
+        return col - base <= 3 && (
+            CodeFenceTracker.opening(text) !== null
+            || HEADING_RE.test(text)
+            || THEMATIC_BREAK_RE.test(text)
+            || itemStart(text, col) !== null);
     };
     const openFence = (i: number, open: FenceDelimiter, column: number) => {
         const block: OutlineFence = { line: i, close: null, end: i + 1, info: open.info, column };
@@ -307,8 +330,11 @@ function readOutline(lines: readonly string[], start: number): OutlineReading {
             owners[i] = innermost();
             if (fence) codes[i] = true;
             if (leaf === 'paragraph') leaf = 'none';
+            afterBlank = true;
             continue;
         }
+        const lazyAllowed = !afterBlank;
+        afterBlank = false;
 
         const col = Outline.depthOf(line);
         const text = Outline.dedent(line);
@@ -327,18 +353,22 @@ function readOutline(lines: readonly string[], start: number): OutlineReading {
                 }
                 continue;
             }
+            // A shallower line goes on the fence as a lazy line goes on a
+            // paragraph, and the item with it — unless it starts a block of
+            // its own, or a blank line stands before it.
+            if (lazyAllowed && !startsBlock(col, text, matched)) {
+                codes[i] = true;
+                holds(i);
+                fence.block.end = i + 1;
+                continue;
+            }
             // The item the fence stands in ends here, and the fence with it.
             fence = null;
         }
 
         const base = matched > 0 ? stack[matched - 1].item.contentColumn : 0;
         const shallow = col - base <= 3;
-        const startsBlock = shallow && (
-            CodeFenceTracker.opening(text) !== null
-            || HEADING_RE.test(text)
-            || THEMATIC_BREAK_RE.test(text)
-            || itemStart(text, col) !== null);
-        if (matched < stack.length && leaf === 'paragraph' && !startsBlock) {
+        if (matched < stack.length && leaf === 'paragraph' && !startsBlock(col, text, matched)) {
             holds(i);
             continue;
         }
