@@ -261,7 +261,19 @@ export class OutlineReading {
          * item. The editor warns on these lines (`OutlineDiagnostics`).
          */
         readonly quotesClosingItems: readonly number[],
+        private readonly continuations: readonly boolean[],
     ) {}
+
+    /**
+     * Whether `line` goes on the paragraph open above it: CommonMark's
+     * paragraph continuation text, a lazy line included, or the line of `=`
+     * or `-` that ends it as a heading's underline. Not a line that
+     * interrupts it. `- [ ] P` / `  2. T` has `  2. T` go on P's text, and
+     * `- [ ] P` / `  -` has `  -` underline it.
+     */
+    goesOnParagraph(line: number): boolean {
+        return this.continuations[line] ?? false;
+    }
 
     /**
      * What `line` is, as a write is held to it: in the frontmatter, blank,
@@ -456,6 +468,7 @@ function readOutline(lines: readonly string[], start: number): OutlineReading {
     const fences: OutlineFence[] = [];
 
     const quotesClosingItems: number[] = [];
+    const continuations: boolean[] = new Array(lines.length).fill(false);
 
     type Frame = { item: OutlineItem; last: number };
     const stack: Frame[] = [];
@@ -573,11 +586,13 @@ function readOutline(lines: readonly string[], start: number): OutlineReading {
             const direct = leaf === 'paragraph' && matched === stack.length;
             if (direct && withinReach(col, matched) && SETEXT_UNDERLINE_RE.test(text)) {
                 holds(i);
+                continuations[i] = true;
                 leaf = 'none';
                 continue;
             }
             if (!interrupts(col, text, started, matched, direct)) {
                 holds(i);
+                continuations[i] = true;
                 continue;
             }
         }
@@ -616,5 +631,5 @@ function readOutline(lines: readonly string[], start: number): OutlineReading {
     }
     closeTo(0);
 
-    return new OutlineReading(lines, items, owners, codes, fences, start, quotesClosingItems);
+    return new OutlineReading(lines, items, owners, codes, fences, start, quotesClosingItems, continuations);
 }
