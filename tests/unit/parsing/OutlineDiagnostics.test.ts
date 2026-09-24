@@ -22,7 +22,7 @@ const QUOTE_IN_ITEM_ON_READING_VIEW: Record<string, number> = {
     'F-quote': 1, 'F-callout': 1, 'F-callout-c': 1, 'F-s3-18255': 2, 'F-quote-sib': 1, 'F-quote-tab': 1,
     'F-quote-nosp': 1, 'F-quote-after-child': 2, 'F-quote-para': 2, 'F-quote-lazy': 1,
     'H-quote-blank-c2': 1, 'H-quote-deep': 2,
-    'X-quote-deep-lazy': 1, 'X-quote-empty': 1,
+    'X-quote-deep-lazy': 1, 'X-quote-empty': 1, 'X-quote-then-ord2': 1,
 };
 
 describe('outlineDiagnostics: a quote that ends an item', () => {
