@@ -2,6 +2,11 @@ import { describe, it, expect, vi } from 'vitest';
 import { TFile } from 'obsidian';
 import { vaultSession, makeFile } from './vaultSession';
 import type { Task } from '../../../src/types';
+import { freezeDate } from './fakeDate';
+
+// Frozen so `==> every mon` on `@2026-09-21` lands on the `@2026-09-28` these
+// tests hard-code, no matter which day the suite runs.
+freezeDate(new Date(2026, 8, 25, 12, 0, 0));
 
 /**
  * A flow's own writes do not fire again (structure.md, 「自己書き込みの判定と

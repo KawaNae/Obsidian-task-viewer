@@ -3,6 +3,11 @@ import { Notice } from 'obsidian';
 import { openVault, type VaultSession } from '../../../helpers/vaultSession';
 import { t } from '../../../../../src/i18n';
 import type { TaskRepository } from '../../../../../src/services/persistence/TaskRepository';
+import { freezeDate } from '../../../helpers/fakeDate';
+
+// Frozen so `==> every mon` on `@2026-09-21` lands on the `@2026-09-28` these
+// tests hard-code, no matter which day the suite runs.
+freezeDate(new Date(2026, 8, 25, 12, 0, 0));
 
 /**
  * The twelve writes that used to find their line with `findTaskLineNumber`,
