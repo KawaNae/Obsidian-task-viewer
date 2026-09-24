@@ -919,15 +919,15 @@ export class TaskIndex {
 //   enableDayPlanner    — toggles DayPlanner parser in the chain
 //   enableTasksPlugin   — toggles TasksPlugin parser in the chain
 //   tasksPluginMapping  — emoji-to-field mapping for TasksPlugin parser
-//   statusDefinitions   — which status chars count as complete. No longer read by the
-//                         parse (the completion detector that read it is gone, stage X);
-//                         kept so a change still re-reads the vault as before
+//
+// Not statusDefinitions: which status chars count as complete is read where a
+// completion is answered and where a view draws, never by the parse, so a
+// change to it needs only the notify.
 export function computeParseFingerprint(settings: TaskViewerSettings): string {
     return JSON.stringify([
         settings.scopeKeys,
         settings.enableDayPlanner,
         settings.enableTasksPlugin,
         settings.tasksPluginMapping,
-        settings.statusDefinitions,
     ]);
 }
