@@ -120,6 +120,25 @@ describe('a move to another file, completed in the editor', () => {
         expect(Notice.messages).toEqual([]);
     });
 
+    it('takes the original away when a row above it fired in the same transaction', async () => {
+        // The row above puts its next instance at the head of the group, above
+        // the moving row: the moving row is found where the whole write left it.
+        const { contents, editor } = await open({
+            [FILE]: ['# note', '- [ ] A @2026-09-21 ==> every mon', '- [ ] B @2026-09-21 ==> move([[other]])', '- [ ] U', ''],
+            [OTHER]: ['# other', ''],
+        });
+
+        editor.change([
+            { from: editor.at(1, 3), to: editor.at(1, 4), insert: 'x' },
+            { from: editor.at(2, 3), to: editor.at(2, 4), insert: 'x' },
+        ], 'input.type');
+        await editor.settled();
+
+        expect(contents.get(OTHER)).toBe(['# other', '- [x] B @2026-09-21', ''].join('\n'));
+        expect(editor.lines()).toEqual(['# note', '- [ ] A @2026-09-28 ==> every mon', '- [x] A @2026-09-21', '- [ ] U', '']);
+        expect(Notice.messages).toEqual([]);
+    });
+
     it('takes the original where the editor has carried it, past a line typed above', async () => {
         const { contents, editor } = await open({
             [FILE]: ['# note', '- [ ] T @2026-09-21 ==> move([[other]])', '- [ ] U', ''],

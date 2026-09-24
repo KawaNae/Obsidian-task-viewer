@@ -150,13 +150,16 @@ export function fireFilter(host: EditorFireHost): Extension {
         // What the rows' fires owe once the transaction is made.
         const effects: StateEffect<Away>[] = [];
         const replayed = replayEdits(edited.before.length, edited.edits);
-        for (const fire of fires) {
+        for (const [i, fire] of fires.entries()) {
             const planned = fire.planned();
             if (planned?.kind === 'failed') queueMicrotask(() => host.didNotFire(planned));
             const pending = fire.away();
             if (!pending) continue;
-            // The row as the fire planned it, where the whole write leaves it.
-            const line = replayed ? replayed.origin.indexOf(pending.source.line) : -1;
+            // The row where the whole write leaves it. Not the line the fire
+            // planned it on: that is in the lines the rows before it had
+            // already written to, and the write's report is of the lines
+            // before all of them, where the row is the one the transaction completed.
+            const line = replayed ? replayed.origin.indexOf(rows[i].line) : -1;
             if (line < 0) {
                 logWarn(`[FlowFire] ${path}: a move's row is not where the write left it; not moved`);
                 continue;
