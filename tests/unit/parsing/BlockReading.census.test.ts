@@ -34,11 +34,6 @@ const IDIOMS: Array<{ name: string; test: (line: string) => boolean }> = [
 /** A line that may stay, by its file and a piece of its text, and why. */
 const ALLOWED: Array<{ file: string; contains: string; reason: string }> = [
     {
-        file: 'services/persistence/utils/Placement.ts',
-        contains: 'new CodeFenceTracker()',
-        reason: 'closesItsFences reads a block to be written on its own; a later L2 step decides whether it goes',
-    },
-    {
         file: 'services/parsing/tree/DocumentTreeBuilder.ts',
         contains: 'Outline.depthOf(line) !== 0',
         reason: 'a section property is a line at column 0: a point check of one line, not a walk',

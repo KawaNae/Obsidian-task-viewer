@@ -51,7 +51,7 @@ export class TaskCloner {
         const file = this.app.vault.getAbstractFileByPath(target.file);
         if (!(file instanceof TFile)) return fileGone(this.writes?.for(target.file, 'user'), target.file, target.subject);
 
-        return processLines(this.app, file, this.writes?.for(target.file, 'user'), (draft, _eol, { row, refuse }) => {
+        return processLines(this.app, file, this.writes?.for(target.file, 'user'), (draft, _eol, { row }) => {
             const lines = draft.lines;
             const idx = row(target);
             if (idx === null) return false;
@@ -63,8 +63,8 @@ export class TaskCloner {
                 parents.push(this.shiftInlineDates(cleanParent, offset));
             }
 
-            return this.spliceCopies(draft, idx, parents, idx)
-                || refuse({ kind: 'unplaceable' }, target.subject);
+            this.spliceCopies(draft, idx, parents, idx);
+            return true;
         });
     }
 
@@ -101,8 +101,8 @@ export class TaskCloner {
                     () => this.fileOps.stripBlockIds([lines[idx]])[0])
                 : copies.lines.map(l => indent + Outline.dedent(l));
 
-            return this.spliceCopies(draft, idx, parents, at)
-                || refuse({ kind: 'unplaceable' }, target.subject);
+            this.spliceCopies(draft, idx, parents, at);
+            return true;
         });
     }
 
@@ -117,15 +117,16 @@ export class TaskCloner {
      * both duplication paths. `insertIndex` is where the copies go: the
      * task's own line to go before it, or `Placement.afterSubtree` to follow it.
      *
-     * @returns true; false, and nothing spliced, when the
-     * copies would leave a fence open (`Placement.closesItsFences`).
+     * A fence among the children that never closes ends with the copy's item,
+     * as it ended with the original's (`Outline.read`): below a copy stands
+     * the original's own line, or whatever stood below the original.
      */
     private spliceCopies(
         draft: LineDraft,
         taskLine: number,
         parentLines: string[],
         insertIndex: number,
-    ): boolean {
+    ): void {
         const lines = draft.lines;
         const { childrenLines } = this.fileOps.collectChildrenFromLines(lines, taskLine);
         const cleanedChildren = this.fileOps.stripBlockIds(childrenLines);
@@ -134,7 +135,6 @@ export class TaskCloner {
         for (const parent of parentLines) {
             linesToInsert.push(parent, ...cleanedChildren);
         }
-        if (!Placement.closesItsFences(linesToInsert)) return false;
 
         // Through `edits` rather than beside it: the copy is worded exactly
         // like the line it copies, so a position off by one would read the same
@@ -144,8 +144,6 @@ export class TaskCloner {
         // copied children can hold anything, a fence among them — and the index
         // answers it by parsing what was written.
         draft.splice(insertIndex, 0, ...linesToInsert);
-
-        return true;
     }
 
     /**

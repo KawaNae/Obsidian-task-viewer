@@ -144,20 +144,73 @@ describe('a next instance with nowhere in the body to go', () => {
         expect(Notice.messages).toEqual([]);
     });
 
-    it('refuses a copy that would carry a fence it never closes above the original', async () => {
-        // The subtree's fence never closes, so the subtree is read by depth
-        // alone; a copy of it put above T would fence T and everything after.
-        const note = ['# note', '- [ ] T @2026-09-21', '  ```', '- [ ] U', '- [ ] V', ''];
-        const { contents, session } = await open(note);
-        const before = contents.get(FILE)!;
-        const [row] = session.index.getTasks().filter(task => task.content === 'T');
+    describe('a copy of a subtree whose fence never closes (BK3)', () => {
+        // A fence in an item ends with the item (`Outline.read`), and what
+        // ends the item is a line that starts a block of its own. A copy is
+        // an item, and what follows it is the original's own line (a copy
+        // put above) or what followed the original (a copy put after): each
+        // ends the copy's fence as it ended the original's. The copy used to
+        // be refused, when a fence that never closed ran on to the end.
+        async function duplicated(note: string[], options?: { dayOffset: number; count?: number }) {
+            const { contents, session } = await open(note);
+            const [row] = tasksWorded(session, note[1].slice(6).split(' @')[0]);
+            expect(await session.index.duplicateTask(row.id, options)).toBe(true);
+            await session.settle(FILE);
+            expect(Notice.messages).toEqual([]);
+            const tasks = session.index.getTasks().filter(task => task.file === FILE);
+            return {
+                lines: contents.get(FILE)!.split('\n'),
+                tasks: tasks.map(task => [task.line, task.content, task.startDate || null]),
+                original: session.index.getTask(row.id),
+            };
+        }
 
-        await session.index.duplicateTask(row.id, { dayOffset: 1 });
-        await session.settle(FILE);
+        it('writes copies above the original, which stays a task with its ID, and the rows below too', async () => {
+            const { lines, tasks, original } = await duplicated(
+                ['# note', '- [ ] T @2026-09-21', '  ```', '- [ ] U', '- [ ] V', ''], { dayOffset: 1, count: 2 });
 
-        expect(contents.get(FILE)).toBe(before);
-        expect(session.index.getTask(row.id)?.content).toBe('T');
-        expect(Notice.messages).toEqual([t('notice.writeTargetUnplaceable', { subject: 'T' })]);
+            expect(lines).toEqual([
+                '# note',
+                '- [ ] T @2026-09-23', '  ```',
+                '- [ ] T @2026-09-22', '  ```',
+                '- [ ] T @2026-09-21', '  ```',
+                '- [ ] U', '- [ ] V', '',
+            ]);
+            expect(tasks).toEqual([
+                [1, 'T', '2026-09-23'], [3, 'T', '2026-09-22'], [5, 'T', '2026-09-21'], [7, 'U', null], [8, 'V', null],
+            ]);
+            expect(original?.line).toBe(5);
+        });
+
+        it('writes a copy above the original when the fence is a child\'s and a shallow line goes on it', async () => {
+            const { lines, tasks, original } = await duplicated(
+                ['# note', '- [ ] T @2026-09-21', '    - [ ] c', '      ```', 'x', '- [ ] U', ''], { dayOffset: 1 });
+
+            expect(lines).toEqual([
+                '# note',
+                '- [ ] T @2026-09-22', '    - [ ] c', '      ```', 'x',
+                '- [ ] T @2026-09-21', '    - [ ] c', '      ```', 'x',
+                '- [ ] U', '',
+            ]);
+            expect(tasks.map(([line, content]) => [line, content])).toEqual([
+                [1, 'T'], [2, 'c'], [5, 'T'], [6, 'c'], [9, 'U'],
+            ]);
+            expect(original?.line).toBe(5);
+        });
+
+        it('writes a copy after the subtree, before the sibling that ends the fence (R5)', async () => {
+            const { lines, tasks, original } = await duplicated(
+                ['# note', '- [ ] root', '    ```', '    body', '- [ ] sibling', '']);
+
+            expect(lines).toEqual([
+                '# note',
+                '- [ ] root', '    ```', '    body',
+                '- [ ] root', '    ```', '    body',
+                '- [ ] sibling', '',
+            ]);
+            expect(tasks.map(([line, content]) => [line, content])).toEqual([[1, 'root'], [4, 'root'], [7, 'sibling']]);
+            expect(original?.line).toBe(1);
+        });
     });
 
     it('refuses a move to the end of a note that ends inside a fence that never closes', async () => {
