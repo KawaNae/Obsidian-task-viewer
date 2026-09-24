@@ -12,7 +12,7 @@ export class FileOperations {
 
     /**
      * The lines of the task's subtree below its own line, as the parser reads
-     * them (`Outline.subtreeEnd`): blank lines between them included, the
+     * them (`OutlineReading.subtreeEnd`): blank lines between them included, the
      * blank lines after the last of them not. `taskIndent` is the task's depth.
      */
     collectChildrenFromLines(lines: readonly string[], taskLineIndex: number): {
@@ -20,7 +20,7 @@ export class FileOperations {
         taskIndent: number;
     } {
         const taskIndent = Outline.depthOf(lines[taskLineIndex]);
-        const childrenLines = lines.slice(taskLineIndex + 1, Outline.subtreeEnd(lines, taskLineIndex));
+        const childrenLines = lines.slice(taskLineIndex + 1, Outline.read(lines).subtreeEnd(taskLineIndex));
         return { childrenLines, taskIndent };
     }
 
@@ -61,7 +61,7 @@ export class FileOperations {
      * the first line of its subtree that is not blank.
      */
     static firstChildIndent(lines: readonly string[], taskLineIndex: number): string | null {
-        const end = Outline.subtreeEnd(lines, taskLineIndex);
+        const end = Outline.read(lines).subtreeEnd(taskLineIndex);
         for (let j = taskLineIndex + 1; j < end; j++) {
             if (lines[j].trim() !== '') return Outline.indentOf(lines[j]);
         }

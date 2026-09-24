@@ -123,14 +123,6 @@ export class Outline {
     }
 
     /**
-     * The index just past `row`'s subtree, or `limit`: the end of the list
-     * item `row` opens, the blank lines at its very end left out.
-     */
-    static subtreeEnd(lines: readonly string[], row: number, limit: number = lines.length): number {
-        return Math.min(this.read(lines).subtreeEnd(row), limit);
-    }
-
-    /**
      * The index of the body's first line: past the frontmatter when the note
      * opens with one, 0 otherwise. A `---` on the first line that nothing
      * closes opens no frontmatter.

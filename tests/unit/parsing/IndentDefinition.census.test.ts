@@ -10,8 +10,8 @@ import { join, relative } from 'path';
  * the index and the writes read one note two ways.
  *
  * This walks the source for the idioms those copies were written in. The
- * only ones left are the fence readings, which dedent a line before looking
- * for a fence and belong to the block reading (stage L2).
+ * fence readings that dedented a line before looking for a fence are gone:
+ * they read the outline now (stage L2, `BlockReading.census.test.ts`).
  */
 
 const SRC = join(__dirname, '../../../src');
@@ -24,11 +24,7 @@ const IDIOMS: Array<{ name: string; test: (line: string) => boolean }> = [
 ];
 
 /** Where an idiom may stay, and why. */
-const ALLOWED: Record<string, string> = {
-    'services/parsing/gen/GenBlockCollector.ts': 'fence reading (L2)',
-    'services/persistence/utils/Placement.ts': 'fence reading (L2)',
-    'utils/CodeFenceTracker.ts': 'fence reading (L2)',
-};
+const ALLOWED: Record<string, string> = {};
 
 function sources(dir: string): string[] {
     return readdirSync(dir).flatMap(name => {
@@ -39,7 +35,7 @@ function sources(dir: string): string[] {
 }
 
 describe('one definition of indentation', () => {
-    it('leaves no reading of a line\'s indentation of its own outside the fence readings', () => {
+    it('leaves no reading of a line\'s indentation of its own', () => {
         const found: string[] = [];
         for (const path of sources(SRC)) {
             const file = relative(SRC, path).split('\\').join('/');

@@ -171,7 +171,7 @@ export interface Task {
     originalText: string;
     /**
      * The row's line and every line of its subtree, verbatim, as the parse
-     * read them (`Outline.subtreeEnd`). What a delete or a move takes away is
+     * read them (`OutlineReading.subtreeEnd`). What a delete or a move takes away is
      * planned from this, and the write checks the file still reads so (see
      * `RowBasis.subtree`). Absent on a task no file was parsed for.
      */

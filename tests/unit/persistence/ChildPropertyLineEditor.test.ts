@@ -52,7 +52,7 @@ describe('ChildPropertyLineEditor', () => {
     });
 
     describe('a property line below a blank line inside the children', () => {
-        // The parser reads it as the task's property (Outline.subtreeEnd); an
+        // The parser reads it as the task's property (OutlineReading.subtreeEnd); an
         // edit that did not would add a second declaration of the key.
         const lines = () => [
             '- [ ] task @2026-07-18T10:00',
