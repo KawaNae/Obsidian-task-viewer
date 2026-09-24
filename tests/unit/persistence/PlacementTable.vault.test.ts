@@ -373,3 +373,95 @@ describe('a delete (deleteTask), held to the same check', () => {
         expect(Notice.messages).toEqual([t('notice.writeDisturbs', { subject: 't' })]);
     });
 });
+
+describe('the two readings L3 made CommonMark\'s: a quote after an item, an ordered line in a paragraph', () => {
+    // `> quote` ends T (G): T's subtree is its own line, and c is at the top.
+    const QUOTE = ['# n', '- [ ] T', '> quote', '  - [ ] c', ''];
+
+    it('deletes a task a quote ends as its own line, and leaves the quote and the line below', async () => {
+        const { contents, session } = await open(QUOTE);
+        expect(parents(session)).toEqual([['T', null], ['c', null]]);
+
+        await session.index.deleteTask(only(session, 'T').id);
+        await session.settle(FILE);
+
+        expect(lines(contents)).toEqual(['# n', '> quote', '  - [ ] c', '']);
+        expect(parents(session)).toEqual([['c', null]]);
+    });
+
+    it('copies a task a quote ends without the quote, and puts the copy above it', async () => {
+        const { contents, session } = await open(QUOTE);
+
+        expect(await session.index.duplicateTask(only(session, 'T').id)).toBe(true);
+        await session.settle(FILE);
+
+        expect(lines(contents)).toEqual(['# n', '- [ ] T', '- [ ] T', '> quote', '  - [ ] c', '']);
+        expect(parents(session)).toEqual([['T', null], ['T', null], ['c', null]]);
+    });
+
+    it('puts a child of a task a quote ends above the quote', async () => {
+        const { contents, session } = await open(QUOTE);
+
+        expect(await session.index.appendChildTask(only(session, 'T').id, '- [ ] n')).toBe(true);
+        await session.settle(FILE);
+
+        expect(lines(contents)).toEqual(['# n', '- [ ] T', '    - [ ] n', '> quote', '  - [ ] c', '']);
+        expect(parents(session)).toEqual([['T', null], ['n', 'T'], ['c', null]]);
+    });
+
+    it('copies s3#18255 in place, the empty item underlining t2 going with it', async () => {
+        const { contents, session } = await open(['# n', '- [ ] t2', '  -', '> text', '  -  [ ] t8', '']);
+        expect(parents(session)).toEqual([['t2', null], ['t8', null]]);
+
+        expect(await session.index.duplicateTask(only(session, 't2').id)).toBe(true);
+        await session.settle(FILE);
+
+        expect(lines(contents)).toEqual(['# n', '- [ ] t2', '  -', '- [ ] t2', '  -', '> text', '  -  [ ] t8', '']);
+        expect(parents(session)).toEqual([['t2', null], ['t2', null], ['t8', null]]);
+    });
+
+    // `  2. [ ] T` goes on P's text: no task, and c is P's child.
+    const ORDERED = ['# n', '- [ ] P', '  2. [ ] T', '  - [ ] c', ''];
+
+    it('reads an ordered line not starting at 1 in a task\'s text as the text, not a task', async () => {
+        const { session } = await open(ORDERED);
+        expect(parents(session)).toEqual([['P', null], ['c', 'P']]);
+    });
+
+    it('puts a last child past the subtree of a task whose text goes on as an ordered line', async () => {
+        const { contents, session } = await open(ORDERED);
+
+        expect(await session.index.appendChildTask(only(session, 'P').id, '- [ ] l')).toBe(true);
+        await session.settle(FILE);
+
+        expect(lines(contents)).toEqual(['# n', '- [ ] P', '  2. [ ] T', '  - [ ] c', '  - [ ] l', '']);
+        expect(parents(session)).toEqual([['P', null], ['c', 'P'], ['l', 'P']]);
+    });
+
+    it('writes no first child above the ordered line, which the child would make an item, and says why', async () => {
+        // A line put between P and `  2. [ ] T` ends P's paragraph, and the
+        // ordered line after it opens an item: the check refuses the write.
+        const { contents, session } = await open(ORDERED);
+        const before = contents.get(FILE);
+
+        expect(await session.index.insertChildTask(only(session, 'P').id, '- [ ] f')).toBe(false);
+        await session.settle(FILE);
+
+        expect(contents.get(FILE)).toBe(before);
+        expect(Notice.messages).toEqual([t('notice.writeDisturbs', { subject: 'P' })]);
+    });
+
+    it('deletes and copies the ordered line with the task whose text it is', async () => {
+        const { contents, session } = await open(ORDERED);
+
+        expect(await session.index.duplicateTask(only(session, 'P').id)).toBe(true);
+        await session.settle(FILE);
+        expect(lines(contents)).toEqual(['# n', '- [ ] P', '  2. [ ] T', '  - [ ] c', '- [ ] P', '  2. [ ] T', '  - [ ] c', '']);
+
+        const [first] = session.index.getTasks().filter(task => task.content === 'P').sort((a, b) => a.line - b.line);
+        await session.index.deleteTask(first.id);
+        await session.settle(FILE);
+        expect(lines(contents)).toEqual(['# n', '- [ ] P', '  2. [ ] T', '  - [ ] c', '']);
+        expect(parents(session)).toEqual([['P', null], ['c', 'P']]);
+    });
+});
