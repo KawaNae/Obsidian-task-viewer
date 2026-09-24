@@ -115,15 +115,24 @@ export class TaskLineClassifier {
     }
 
     /**
-     * A task line's list marker with the gap after it, as the line has them
-     * (`- `, `-\t`, `10.  `); `- ` for a line that is no task. A line written
-     * over a task line keeps them: the gap sets the item's content column, and
-     * a child reaches the item by it (under `-\t[ ] T`, a child two spaces past
-     * a tab is the task's; under `- [ ] T` it goes on T's paragraph).
+     * A task line's list marker with the gap after it, the gap as wide as it
+     * is on the line and made of spaces (`- `, `10.  `; `-\t` at column 0 is
+     * `-   `); `- ` for a line that is no task. A line written over a task
+     * line keeps them: the gap sets the item's content column, and a child
+     * reaches the item by it (under `-\t[ ] T`, a child two spaces past a tab
+     * is the task's; under `- [ ] T` it goes on T's paragraph).
+     *
+     * Spaces, as a tab's width is the column it stands at: a line moved to
+     * another indentation keeps its content as far past its marker, and a
+     * child moved with it stays its child (the fifth L2 counterexample run).
+     * One to four columns: a task line's gap either way.
      */
     static extractMarker(line: string): string {
         const task = this.classify(line);
-        return task ? task.prefix.slice(task.indent.length, -1) : '- ';
+        if (!task) return '- ';
+        const marker = task.prefix.slice(task.indent.length, -1).trimEnd();
+        const gapStart = task.indent.length + marker.length;
+        return marker + ' '.repeat(Outline.widthWithin(line, gapStart, task.prefix.length - 1));
     }
 
     /** Build the `- [x] ` prefix for a given status char, indent, and marker with its gap. */
