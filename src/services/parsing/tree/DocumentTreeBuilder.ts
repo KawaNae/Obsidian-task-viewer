@@ -256,7 +256,7 @@ export class DocumentTreeBuilder {
             while (i < rangeEnd) {
                 if (section.heading && i === section.heading.line) { i++; continue; }
                 if (TaskLineClassifier.opensTask(outline, i)) {
-                    const taskBlock = this.collectBlock(allLines, outline, i, rangeEnd);
+                    const taskBlock = this.collectBlock(allLines, outline, i);
                     blocks.push(taskBlock);
                     i = taskBlock.line + 1 + taskBlock.childRawLines.length;
                 } else {
@@ -289,18 +289,18 @@ export class DocumentTreeBuilder {
 
     /**
      * The task block at absolute line `row`: the task line and its subtree
-     * as the outline reads it (`OutlineReading.subtreeEnd`), no further than
-     * `limit` (the section's range), and the task blocks directly under it —
-     * the tasks in the subtree with no task between.
+     * as the outline reads it (`OutlineReading.subtreeEnd`), and the task
+     * blocks directly under it — the tasks in the subtree with no task
+     * between. No subtree runs past its section: a section opens on a heading
+     * at column 0 outside code, and the outline closes every item there.
      */
     private static collectBlock(
         allLines: string[],
         outline: OutlineReading,
         row: number,
-        limit: number
     ): TaskBlock {
         const rawLine = allLines[row];
-        const end = Math.min(outline.subtreeEnd(row), limit);
+        const end = outline.subtreeEnd(row);
         const childRawLines = allLines.slice(row + 1, end);
         const childLineNumbers: number[] = [];
         for (let i = row + 1; i < end; i++) childLineNumbers.push(i);
@@ -313,7 +313,7 @@ export class DocumentTreeBuilder {
         let i = row + 1;
         while (i < end) {
             if (TaskLineClassifier.opensTask(outline, i)) {
-                const childBlock = this.collectBlock(allLines, outline, i, end);
+                const childBlock = this.collectBlock(allLines, outline, i);
                 childTaskBlocks.push(childBlock);
                 i += 1 + childBlock.childRawLines.length;
             } else {
