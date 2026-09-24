@@ -153,6 +153,18 @@ describe('Placement.firstChild', () => {
         expect(Placement.firstChild(['- [ ] a', '  ```', '  x', '  ```'], 0, '- [ ] n').at).toBe(1);
         expect(Placement.firstChild(['- [ ] a', 'text', '  - b'], 0, '- [ ] n').at).toBe(2);
     });
+
+    it('is past the lines that go on the row\'s paragraph, and its underline, not past a block of its own (L3)', () => {
+        // An empty item and an ordered one not starting at 1 go on the text;
+        // a lone `-` underlines it. Each would open an item below a child.
+        expect(Placement.firstChild(['- [ ] a', '  2. [ ] u', '- [ ] b'], 0, '- [ ] n').at).toBe(2);
+        expect(Placement.firstChild(['- [ ] a', '  *', '- [ ] b'], 0, '- [ ] n').at).toBe(2);
+        expect(Placement.firstChild(['- [ ] a', '  -', '- [ ] b'], 0, '- [ ] n').at).toBe(2);
+        expect(Placement.lastChild(['- [ ] a', '  1.', '- [ ] b'], 0, '- [ ] n').at).toBe(2);
+        // A quote and a heading end the text: the child goes above them.
+        expect(Placement.firstChild(['- [ ] a', '  > q', '- [ ] b'], 0, '- [ ] n').at).toBe(1);
+        expect(Placement.firstChild(['- [ ] a', '  # h', '- [ ] b'], 0, '- [ ] n').at).toBe(1);
+    });
 });
 
 describe('Placement.lastChild', () => {
