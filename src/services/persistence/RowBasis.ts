@@ -59,7 +59,7 @@ export type OnRecord = typeof ON_RECORD;
  * written after the index read the row.
  */
 export function readsAsPlanned(lines: readonly string[], line: number, basis: RowBasis): boolean {
-    if (lines[line] !== basis.text) return false;
+    if (!Outline.VERBATIM.holds(lines[line], basis.text)) return false;
     if (basis.commands) {
         const commands = collectFlowLineIndicesInFile(lines, line).map(i => flowLineTail(lines[i]));
         if (commands.length !== basis.commands.length) return false;
