@@ -52,7 +52,17 @@ function lines(contents: Map<string, string>): string[] {
     return contents.get(FILE)!.split('\n');
 }
 
-describe('the editor\'s duplicate (insertLineAfterLine, afterSubtree)', () => {
+describe('the editor\'s duplicate (insertLineAfterLine, copyOf)', () => {
+    it('is spelled as the row it copies, not as the sibling below it', async () => {
+        const { contents, session } = await open(['# n', '- [ ] P', '\t- [ ] T', '    - [ ] V', '']);
+
+        expect(await session.index.insertLineAfterLine(FILE, { line: 2, text: '\t- [ ] T' }, '\t- [ ] T')).toBe(true);
+        await session.settle(FILE);
+
+        expect(lines(contents)).toEqual(['# n', '- [ ] P', '\t- [ ] T', '\t- [ ] T', '    - [ ] V', '']);
+        expect(parents(session)).toEqual([['P', null], ['T', 'P'], ['T', 'P'], ['V', 'P']]);
+    });
+
     it('goes past the row\'s subtree, so the row keeps its children (counterexample 5)', async () => {
         const { contents, session } = await open(['# n', '- [ ] P', '\t- [ ] T', '      - [ ] c', '- [ ] U', '']);
         expect(parents(session)).toEqual([['P', null], ['T', 'P'], ['c', 'T'], ['U', null]]);
@@ -67,7 +77,7 @@ describe('the editor\'s duplicate (insertLineAfterLine, afterSubtree)', () => {
     });
 });
 
-describe('the day-shifted duplicate (duplicateInlineTask, before)', () => {
+describe('the day-shifted duplicate (duplicateInlineTask, copyOf)', () => {
     it('goes above the row, a copy of its subtree, and the row keeps its children', async () => {
         const { contents, session } = await open(['# n', '- [ ] P', '    - [ ] T @2026-09-21', '\t    - [ ] c', '- [ ] U', '']);
         expect(parents(session)).toEqual([['P', null], ['T', 'P'], ['c', 'T'], ['U', null]]);
@@ -82,7 +92,19 @@ describe('the day-shifted duplicate (duplicateInlineTask, before)', () => {
     });
 });
 
-describe('the in-place duplicate (duplicateInlineTaskInPlace, afterSubtree)', () => {
+describe('the in-place duplicate (duplicateInlineTaskInPlace, copyOf)', () => {
+    // The third run's a: spelled as U, the copy would lose its copied child.
+    it('is spelled as the row it copies, so the copied child stays the copy\'s', async () => {
+        const { contents, session } = await open(['# n', '-\t[ ] T', '\t- [ ] c', '   - [ ] U', '']);
+        expect(parents(session)).toEqual([['T', null], ['c', 'T'], ['U', null]]);
+
+        expect(await session.index.duplicateTask(only(session, 'T').id)).toBe(true);
+        await session.settle(FILE);
+
+        expect(lines(contents)).toEqual(['# n', '-\t[ ] T', '\t- [ ] c', '-\t[ ] T', '\t- [ ] c', '   - [ ] U', '']);
+        expect(parents(session)).toEqual([['T', null], ['c', 'T'], ['T', null], ['c', 'T'], ['U', null]]);
+    });
+
     it('goes past the subtree, before the sibling that ends the row\'s fence', async () => {
         const { contents, session } = await open(['# n', '- [ ] T', '  ```', '  code', '- [ ] U', '']);
 
@@ -195,6 +217,19 @@ describe('a last child (insertLineAfterTask, lastChild)', () => {
 });
 
 describe('a sibling (insertSiblingAfterTask, afterSubtree and afterCompletedRun)', () => {
+    // The first run's B1: a new line, spelled as the item next to it. At
+    // T's spelling, `- ` at the top, it would take U in.
+    it('is spelled as the sibling below it, not as the row', async () => {
+        const { contents, session } = await open(['# n', '1. [ ] T', '  - [ ] U', '']);
+        expect(parents(session)).toEqual([['T', null], ['U', null]]);
+
+        expect(await session.index.insertSiblingAfterTask(only(session, 'T').id, '- [x] rec')).toBe(true);
+        await session.settle(FILE);
+
+        expect(lines(contents)).toEqual(['# n', '1. [ ] T', '  - [x] rec', '  - [ ] U', '']);
+        expect(parents(session)).toEqual([['T', null], ['rec', null], ['U', null]]);
+    });
+
     it('goes past the completed run, at the indentation of the last of it', async () => {
         const { contents, session } = await open(['# n', '- [ ] P', '\t- [ ] T', '    - [x] r1', '\t\t- note', '- [ ] U', '']);
 

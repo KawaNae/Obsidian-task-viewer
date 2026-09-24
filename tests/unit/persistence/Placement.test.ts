@@ -203,6 +203,7 @@ describe('the spot\'s parent and indentation', () => {
     it('takes for a new line the spelling of the item it goes above, else of the one it goes below; for a copy, the row\'s', () => {
         const lines = ['- [ ] P', '\t- [ ] a', '    - [ ] b', '- [ ] q'];
         expect(Placement.afterSubtree(lines, 1, '- [ ] n')).toEqual({ at: 2, parent: 0, indent: '    ' });
+        expect(Placement.afterCompletedRun(lines, 1, '- [ ] n')).toEqual({ at: 2, parent: 0, indent: '    ' });
         expect(Placement.groupHead(lines, 2, '- [ ] n')).toEqual({ at: 1, parent: 0, indent: '\t' });
         expect(Placement.lastChild(lines, 0, '- [ ] n')).toEqual({ at: 3, parent: 0, indent: '    ' });
         expect(Placement.afterSubtree(lines, 2, '- [ ] n')).toEqual({ at: 3, parent: 0, indent: '    ' });
