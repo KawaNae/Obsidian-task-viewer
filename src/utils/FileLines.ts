@@ -898,7 +898,9 @@ export async function processLines(
 
         // Every write is held to what it says it did, the same way: the
         // lines it put in read as put, and every other line as it did
-        // (`checkWrite`). A write that changed nothing is not asked.
+        // (`checkWrite`). A write that reported nothing is not asked: one
+        // that changed lines behind the draft is written with the chain
+        // marked broken (W1's contract, `ChainMarks.vault.test.ts`).
         let readings: { read: OutlineReading; left: OutlineReading } | undefined;
         if (reported.length > 0) {
             const written = writtenLines(before.length, reported, placedBy);
