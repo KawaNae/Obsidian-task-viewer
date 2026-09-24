@@ -1,6 +1,7 @@
 import { collectFlowLineIndicesInFile, formatFlowLine } from '../parsing/utils/FlowLineScanner';
 import { FileOperations } from './utils/FileOperations';
 import { Outline } from '../parsing/utils/Outline';
+import { TaskLineClassifier } from '../parsing/utils/TaskLineClassifier';
 import { Block, type PlacedLine } from './utils/Placement';
 
 /**
@@ -47,8 +48,9 @@ export function flowInstanceHead(insert: FlowInstanceInsert): string {
  * to read once written (`checkWrite`), and touches nothing. The instance
  * is a sibling of the row that fired: its first line stands under the spot's
  * parent, its `==>` lines under it, a generated child under the line one
- * depth up. It is written where the row stands, at the row's indentation;
- * the put carries it to the spot's (`Block.at`).
+ * depth up. It is written where the row stands, at the row's indentation and
+ * spelled with the row's marker and gap (`spelledAsFired`); the put carries
+ * it to the spot's indentation (`Block.at`).
  * Both the plain insert and the insert-and-remove of a deletion fire render
  * through here, so the two paths cannot drift into writing different lines for
  * the same effect — which is the whole reason this is not a method on the
@@ -64,30 +66,48 @@ export function renderFlowInstance(
     currentLine: number,
     insert: FlowInstanceInsert,
 ): PlacedLine[] {
-    const indent = Outline.indentOf(lines[currentLine]);
+    const head = spelledAsFired(lines[currentLine], flowInstanceHead(insert));
     return insert.kind === 'recurrence'
-        ? renderRecurrence(lines, currentLine, indent, insert.content, insert.flowLines)
-        : renderGenerated(lines, currentLine, indent, insert.parentLine, insert.flowLines, insert.children);
+        ? renderRecurrence(lines, currentLine, head, insert.flowLines)
+        : renderGenerated(lines, currentLine, head, insert.flowLines, insert.children);
 }
 
 /**
- * The next instance of a recurrence, indented like the line that fired.
+ * The next instance's first line, spelled as the row that fired: at its
+ * indentation, with its list marker and the gap after it
+ * (`TaskLineClassifier.extractMarker`), and the rest as `head` reads. The
+ * instance is written from a task that has no line of its own, so `head`
+ * opens with `- ` whatever the row wrote (L2's H2): `*`, `+` and `1)` came
+ * back as `- `, and a row whose content opens far from its marker
+ * (`10.   [ ] T`) got a next instance whose content opens two columns in.
+ * Spelled as the row, the instance opens its content where the row did, and
+ * reads as the row's sibling does. A head that is no task line is written as
+ * it is, at the row's indentation.
+ */
+function spelledAsFired(fired: string, head: string): string {
+    const indent = Outline.indentOf(fired);
+    const task = TaskLineClassifier.classify(head);
+    if (!task) return indent + Outline.dedent(head);
+    return indent + TaskLineClassifier.extractMarker(fired) + '[' + task.statusChar + task.suffix;
+}
+
+/**
+ * The next instance of a recurrence, spelled like the line that fired
+ * (`newParentLine`).
  *
  * Its `==>` lines are children of the line written, not of the one that
- * fired: the two can open their content at different columns (`10.   [ ] T`
- * is written back as `- [ ] T`, L2's H2), and indented for the one that
- * fired they would be a paragraph under the one written, the series cut off.
- * The spelling is taken from the fired row's children, its own `==>` lines
- * last, being the ones the fire consumes (`FileOperations.resolveChildIndent`).
+ * fired: were the two to open their content at different columns, indented
+ * for the one that fired they would be a paragraph under the one written, the
+ * series cut off. The spelling is taken from the fired row's children, its
+ * own `==>` lines last, being the ones the fire consumes
+ * (`FileOperations.resolveChildIndent`).
  */
 function renderRecurrence(
     lines: readonly string[],
     currentLine: number,
-    indent: string,
-    content: string,
+    newParentLine: string,
     flowLines: string[],
 ): PlacedLine[] {
-    const newParentLine = indent + Outline.dedent(content);
 
     const flowAbs = new Set(collectFlowLineIndicesInFile(lines, currentLine));
     const childIndent = FileOperations.resolveChildIndent(lines, currentLine, newParentLine, flowAbs);
@@ -102,7 +122,7 @@ function renderRecurrence(
  * The next instance as a generation block wrote it.
  *
  * Indentation is resolved from the file, not from the caller. The parent is a
- * sibling of the task that fired, written at its indentation. Each
+ * sibling of the task that fired, spelled as it (`head`). Each
  * child is a child of the line above it one `depth` up (the parent for a
  * depth of 1), indented as a child of the fired task would be under that line
  * (`FileOperations.resolveChildIndent`) — so a subtree keeps one spelling, and
@@ -111,15 +131,13 @@ function renderRecurrence(
 function renderGenerated(
     lines: readonly string[],
     currentLine: number,
-    indent: string,
-    parentLine: string,
+    head: string,
     flowLines: string[],
     children: GeneratedChild[],
 ): PlacedLine[] {
     const flowAbs = new Set(collectFlowLineIndicesInFile(lines, currentLine));
     const under = (line: string) => FileOperations.resolveChildIndent(lines, currentLine, line, flowAbs);
 
-    const head = indent + Outline.dedent(parentLine);
     const block: PlacedLine[] = [
         { text: head, kind: 'item', under: 'spot' },
         ...flowLines.map((raw): PlacedLine => ({ text: formatFlowLine(under(head), raw), kind: 'item', under: 0 })),

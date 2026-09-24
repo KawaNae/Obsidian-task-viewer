@@ -169,13 +169,13 @@ describe('a property line (ChildPropertyLineEditor.applyOps)', () => {
 });
 
 describe('the next instance (insert-instance, groupHead)', () => {
-    it('writes the command a child of the line written, so the series goes on (the `==>` half of H2)', async () => {
+    it('writes the next instance spelled as the row, its command its child, so the series goes on (H2)', async () => {
         const { contents, session } = await open(['# n', '1.    [ ] 対象 @2026-09-21', '      - ==> every mon', '']);
 
         expect(await session.index.updateTask(only(session, '対象').id, { statusChar: 'x' })).toBe(true);
         await session.flowSettled(FILE);
 
-        expect(lines(contents)).toEqual(['# n', '- [ ] 対象 @2026-09-28', '    - ==> every mon', '1.    [x] 対象 @2026-09-21', '']);
+        expect(lines(contents)).toEqual(['# n', '1.    [ ] 対象 @2026-09-28', '      - ==> every mon', '1.    [x] 対象 @2026-09-21', '']);
         const next = session.index.getTasks().find(task => task.line === 1)!;
         expect(next.flow?.program).toBeTruthy();
         expect(Notice.messages).toEqual([]);
