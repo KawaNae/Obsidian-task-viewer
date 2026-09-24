@@ -226,11 +226,12 @@ describe('a next instance put at a sibling spelled apart from the row that fired
         // R is four spaces in, its group's head A a tab: both P's children.
         const lines = ['- [ ] P', '\t- [x] A', '    - [ ] R ==> every mon', '      - ==> every mon', ''];
         const block = renderFlowInstance(new FileOperations({} as App), lines, 2, { kind: 'recurrence', content: '- [ ] R', flowLines: ['every mon'] });
-        const after = [...lines];
         const spot = Placement.groupHead(lines, 2, '- [ ] R');
         expect(spot).toEqual({ at: 1, parent: 0, indent: '\t' });
-        const check = checked(after, (draft) => draft.put(spot, block));
+        const check = checked(lines, (draft) => draft.put(spot, block));
         expect(check).toBe('sound');
-        expect(after.slice(1, 3)).toEqual(['	- [ ] R', '	  - ==> every mon']);
+        const written = [...lines];
+        draftOver(written).draft.put(spot, block);
+        expect(written.slice(1, 3)).toEqual(['	- [ ] R', '	  - ==> every mon']);
     });
 });
