@@ -7,65 +7,8 @@ const ops = new FileOperations({} as App);
 
 describe('FileOperations', () => {
 
-    // ── getChildIndent (static) ──
-    describe('getChildIndent', () => {
-        it('adds tab when parent uses tabs', () => {
-            expect(FileOperations.getChildIndent('\t- [ ] task')).toBe('\t\t');
-        });
-
-        it('adds 4 spaces when parent uses spaces', () => {
-            expect(FileOperations.getChildIndent('    - [ ] task')).toBe('        ');
-        });
-
-        it('adds 4 spaces when parent has no indent', () => {
-            expect(FileOperations.getChildIndent('- [ ] task')).toBe('    ');
-        });
-
-        it('adds tab for nested tab parent', () => {
-            expect(FileOperations.getChildIndent('\t\t- [ ] deep')).toBe('\t\t\t');
-        });
-    });
-
-    // ── getIndentUnit (static) ──
-    describe('getIndentUnit', () => {
-        it('reads a tab unit from a tab-indented line', () => {
-            expect(FileOperations.getIndentUnit('\t- [ ] task')).toBe('\t');
-        });
-
-        it('reads a 4-space unit from a space-indented line', () => {
-            expect(FileOperations.getIndentUnit('    - [ ] task')).toBe('    ');
-        });
-
-        it('defaults to 4 spaces when the line carries no indent', () => {
-            expect(FileOperations.getIndentUnit('- [ ] task')).toBe('    ');
-        });
-
-        it('agrees with getChildIndent', () => {
-            for (const line of ['- [ ] a', '    - [ ] a', '\t- [ ] a', '\t\t- [ ] a']) {
-                const indent = line.match(/^\s*/)![0];
-                expect(FileOperations.getChildIndent(line))
-                    .toBe(indent + FileOperations.getIndentUnit(line));
-            }
-        });
-    });
-
-    // ── adjustChildIndentation (static) ──
-    describe('adjustChildIndentation', () => {
-        it('preserves empty lines', () => {
-            const result = FileOperations.adjustChildIndentation(['', '  text'], '');
-            expect(result[0]).toBe('');
-        });
-
-        it('strips parent indent prefix and preserves deeper indent verbatim', () => {
-            const result = FileOperations.adjustChildIndentation(['        child'], '    ');
-            expect(result[0]).toBe('    child');
-        });
-
-        it('handles empty parent indent', () => {
-            const result = FileOperations.adjustChildIndentation(['    child'], '');
-            expect(result[0]).toBe('    child');
-        });
-    });
+    // A child's indentation (`Outline.childIndent`) and the columns a carried
+    // line keeps (`Outline.shiftIndent`) are the outline's: `OutlineIndent.test.ts`.
 
     // ── collectChildrenFromLines ──
     describe('collectChildrenFromLines', () => {

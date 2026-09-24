@@ -123,6 +123,57 @@ export class Outline {
     }
 
     /**
+     * The indentation a new child of the item on `parent` takes: `sample`
+     * (the indentation of a child it already has) when that lands from its
+     * content column to three columns past it, where a line opens a child;
+     * otherwise the parent's own indentation and `unit`, repeated until it
+     * reaches the content column. Short of it, a line is no child (under
+     * `100. [ ] a`, one tab is a sibling). A unit is at most four columns, so
+     * the child lands fewer than four past the content column, not in
+     * indented code.
+     *
+     * Asked of the parent's line as written, not of a reading, so a line not
+     * yet written — the next instance of a series, a generated parent — has
+     * its children indented by the same rule as a row of the note. A sample
+     * from another line (the row that fired, for its next instance) is used
+     * only where it fits; a tab sample under a space-indented parent that
+     * lands where a child opens is used as it is.
+     */
+    static childIndent(parent: string, sample: string | null, unit: string): string {
+        const content = contentColumnOf(parent);
+        if (sample !== null) {
+            const col = this.depthOf(sample);
+            if (col >= content && col <= content + 3) return sample;
+        }
+        let indent = this.indentOf(parent) + unit;
+        while (this.depthOf(indent) < content) indent += unit;
+        return indent;
+    }
+
+    /**
+     * `line`, standing under a parent indented `from`, written under one
+     * indented `to` with the columns between it and its parent kept: what a
+     * line a move carries is written as. The parent's indentation taken off
+     * as characters, when that leaves the line as many columns past the new
+     * parent as it was past the old; else the new parent's indentation and a
+     * space per column. A tab counts to the next multiple of four from where
+     * it stands, so taking a parent's characters off a line that mixes tabs
+     * and spaces can move it by other than the parent's columns — under a
+     * tab, eight spaces less one are seven, a paragraph line past the moved
+     * task's content (G3). A line shallower than its parent (a lazy one) is
+     * written at the new parent's indentation. A blank line is left as it is.
+     */
+    static shiftIndent(line: string, from: string, to: string): string {
+        if (this.isBlank(line)) return line;
+        const past = this.depthOf(line) - this.depthOf(from);
+        if (line.startsWith(from)) {
+            const shifted = to + line.slice(from.length);
+            if (this.depthOf(shifted) - this.depthOf(to) === past) return shifted;
+        }
+        return to + ' '.repeat(Math.max(past, 0)) + this.dedent(line);
+    }
+
+    /**
      * The note's list items and code blocks, read once from top to bottom.
      * Every question of where an item, a subtree or a fence begins and ends
      * is answered from here (`OutlineReading`).
@@ -144,6 +195,9 @@ export class Outline {
         return 0;
     }
 }
+
+/** What a line is to a write (`OutlineReading.kindOf`). */
+export type LineKind = 'frontmatter' | 'blank' | 'fence' | 'item-fence' | 'code' | 'item' | 'text';
 
 /** A list item as the outline reads it. */
 export interface OutlineItem {
@@ -188,7 +242,39 @@ export class OutlineReading {
         private readonly owners: readonly (number | null)[],
         private readonly codes: readonly boolean[],
         readonly fences: readonly OutlineFence[],
+        /** The index of the body's first line (`Outline.bodyStart`). */
+        readonly bodyStart: number,
     ) {}
+
+    /**
+     * What `line` is, as a write is held to it: in the frontmatter, blank,
+     * in a fenced code block (its delimiters included; `item-fence` when the
+     * line opens an item as well, `- ```js`), indented code, opening a list
+     * item, or text — a paragraph, a heading, a thematic break.
+     *
+     * Blank wherever it stands, a fence included: a blank line shows nothing,
+     * so which block holds one changes nothing the note shows, and nothing
+     * the plugin reads.
+     */
+    kindOf(line: number): LineKind {
+        if (line < this.bodyStart) return 'frontmatter';
+        if (Outline.isBlank(this.lines[line])) return 'blank';
+        if (this.fenced()[line]) return this.items.has(line) ? 'item-fence' : 'fence';
+        if (this.codes[line]) return 'code';
+        return this.items.has(line) ? 'item' : 'text';
+    }
+
+    private fencedLines: boolean[] | null = null;
+
+    /** Per line, whether a fence holds it. */
+    private fenced(): boolean[] {
+        if (this.fencedLines === null) {
+            const fenced = new Array<boolean>(this.lines.length).fill(false);
+            for (const fence of this.fences) fenced.fill(true, fence.line, fence.end);
+            this.fencedLines = fenced;
+        }
+        return this.fencedLines;
+    }
 
     /**
      * The item whose marker is on `line`, or null. A line that opens one is
@@ -279,19 +365,15 @@ export class OutlineReading {
         return kinds;
     }
 
-    /**
-     * The indentation a new child of the item `row` takes, made of the
-     * item's own and `unit`: the first that reaches the item's content
-     * column. Short of it, a line is no child (under `100. [ ] a`, one tab
-     * is a sibling). A unit is at most four columns, so the child lands
-     * fewer than four past the content column, not in indented code.
-     */
-    childIndent(row: number, unit: string): string {
-        const item = this.items.get(row);
-        let indent = Outline.indentOf(this.lines[row]) + unit;
-        while (item && Outline.depthOf(indent) < item.contentColumn) indent += unit;
-        return indent;
-    }
+}
+
+/**
+ * The column the content of the item `line` opens starts at, read from the
+ * line alone; for a line that opens none, the column its text starts at.
+ */
+function contentColumnOf(line: string): number {
+    const col = Outline.depthOf(line);
+    return itemStart(Outline.dedent(line), col)?.contentColumn ?? col;
 }
 
 /** Column width of `text` read from column `from`, a tab reaching the next multiple of four. */
@@ -483,5 +565,5 @@ function readOutline(lines: readonly string[], start: number): OutlineReading {
     }
     closeTo(0);
 
-    return new OutlineReading(lines, items, owners, codes, fences);
+    return new OutlineReading(lines, items, owners, codes, fences, start);
 }

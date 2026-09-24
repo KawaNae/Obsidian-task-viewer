@@ -61,9 +61,13 @@ export function renderFlowInstance(
 /**
  * The next instance of a recurrence, indented like the line that fired.
  *
- * 新インスタンスの flow 行インデント: 既存子行の綴りに揃え、なければタブ。
- * 直下の flow 行は発火で消費される側なので、綴りの見本としては後回しにする
- * （それしか無ければ使う）。
+ * Its `==>` lines are children of the line written, not of the one that
+ * fired: the two can open their content at different columns (`10.   [ ] T`
+ * is written back as `- [ ] T`, L2's H2), and indented for the one that
+ * fired they would be a paragraph under the one written, the series cut off.
+ * The spelling is taken from the fired row's children (its own `==>` lines
+ * last, being the ones the fire consumes) where it lands as a child of the
+ * line written (`Outline.childIndent`).
  */
 function renderRecurrence(
     lines: readonly string[],
@@ -76,9 +80,9 @@ function renderRecurrence(
     const newParentLine = originalIndent + Outline.dedent(content);
 
     const flowAbs = new Set(collectFlowLineIndicesInFile(lines, currentLine));
-    const childIndent = FileOperations.firstChildIndent(lines, currentLine, flowAbs)
-        ?? FileOperations.firstChildIndent(lines, currentLine)
-        ?? originalIndent + '\t';
+    const sample = FileOperations.firstChildIndent(lines, currentLine, flowAbs)
+        ?? FileOperations.firstChildIndent(lines, currentLine);
+    const childIndent = Outline.childIndent(newParentLine, sample, FileOperations.detectIndentUnit(lines));
 
     return [newParentLine, ...flowLines.map(raw => formatFlowLine(childIndent, raw))];
 }
@@ -87,11 +91,12 @@ function renderRecurrence(
  * The next instance as a generation block wrote it.
  *
  * Indentation is resolved from the file, not from the caller. The parent is a
- * sibling of the task that fired, so it takes that task's own indent; the
- * children take one unit per level of `depth`, where a depth of 1 means the
- * first level below the parent. The unit follows the task's existing children,
- * falling back to however the rest of the file is written — the same rule the
- * child-insert primitives use, so a subtree keeps one spelling.
+ * sibling of the task that fired, so it takes that task's own indent. Each
+ * child is a child of the line above it one `depth` up (the parent for a
+ * depth of 1), indented by the one rule for a child (`Outline.childIndent`):
+ * as far past that line as the fired task's first child is past the task,
+ * where that lands as a child, the file's unit otherwise — so a subtree keeps
+ * one spelling, and a tab and spaces mixed do not cut a child loose.
  */
 function renderGenerated(
     lines: readonly string[],
@@ -101,12 +106,26 @@ function renderGenerated(
     children: GeneratedChild[],
 ): string[] {
     const parentIndent = Outline.indentOf(lines[currentLine]);
-    const unit = FileOperations.resolveChildIndent(lines, currentLine).slice(parentIndent.length)
-        || FileOperations.detectIndentUnit(lines);
+    const unit = FileOperations.detectIndentUnit(lines);
+    const firstChild = FileOperations.resolveChildIndent(lines, currentLine);
+    // How far a child stands past its parent, as the fired task's first
+    // child is written; the file's unit where it is not written past it.
+    const step = firstChild.startsWith(parentIndent) && firstChild.length > parentIndent.length
+        ? firstChild.slice(parentIndent.length)
+        : unit;
+    const under = (line: string) => Outline.childIndent(line, Outline.indentOf(line) + step, unit);
+
+    const head = parentIndent + Outline.dedent(parentLine);
+    const written: Array<{ depth: number; text: string }> = [{ depth: 0, text: head }];
+    for (const child of children) {
+        const depth = Math.max(1, child.depth);
+        const parent = written.filter(line => line.depth < depth).pop()!;
+        written.push({ depth, text: under(parent.text) + Outline.dedent(child.body) });
+    }
 
     return [
-        parentIndent + Outline.dedent(parentLine),
-        ...flowLines.map(raw => formatFlowLine(parentIndent + unit, raw)),
-        ...children.map(c => parentIndent + unit.repeat(Math.max(1, c.depth)) + Outline.dedent(c.body)),
+        head,
+        ...flowLines.map(raw => formatFlowLine(under(head), raw)),
+        ...written.slice(1).map(line => line.text),
     ];
 }

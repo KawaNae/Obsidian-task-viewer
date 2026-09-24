@@ -103,15 +103,14 @@ describe.each(NOT_A_CHILD)('a line of the subtree %s', (_name, line, unit) => {
 });
 
 /**
- * A child a move carries is written with its indentation cut by as many
- * characters as the task's own (`FileOperations.adjustChildIndentation`), not
- * by the columns the task moved: from under a tab-indented task, eight spaces
- * lose one and land seven past the task's new row, four past its content, a
- * paragraph line (the fourth L2 counterexample run, G3, M14). Adding lines
- * goes through `Placement` in P1, which reads the lines it puts.
+ * A child a move carries keeps the columns it stood past its task
+ * (`Outline.shiftIndent`). It used to lose as many characters as the task's
+ * own indentation: from under a tab-indented task, eight spaces lost one and
+ * landed seven past the task's new row, four past its content, a paragraph
+ * line (the fourth L2 counterexample run, G3, M14).
  */
 describe('a child carried by a move to another note', () => {
-    it.fails('stays the moved task\'s child', async () => {
+    it('stays the moved task\'s child', async () => {
         const contents = new Map([
             [FILE, ['# note', '- [ ] P', '\t- [ ] X @2026-09-21 ==> move([[other]])', '        - [ ] c', ''].join('\n')],
             ['other.md', '# other\n'],
@@ -132,5 +131,42 @@ describe('a child carried by a move to another note', () => {
         const moved = session.index.getTasks().filter(task => task.file === 'other.md');
         const c = moved.find(task => task.content === 'c');
         expect(c?.parentId).toBe(moved.find(task => task.content === 'X')?.id);
+    });
+
+    // Tab and spaces mixed both ways, to another note and within the note
+    // (`move-to-end`): the child is written as many columns past the moved
+    // row as it stood past the task, in spaces where the characters cut off
+    // would not keep them.
+    it.each([
+        ['under a tab, eight spaces', '\t- [ ] X @2026-09-21 ==> move([[DEST]])', '        - [ ] c', '    - [ ] c'],
+        ['under four spaces, a tab and two spaces', '    - [ ] X @2026-09-21 ==> move([[DEST]])', '\t  - [ ] c', '  - [ ] c'],
+        ['under a tab, a tab (unchanged bytes)', '\t- [ ] X @2026-09-21 ==> move([[DEST]])', '\t\t- [ ] c', '\t- [ ] c'],
+    ])('%s: stays the child, to another note and within the note', async (_name, row, child, written) => {
+        for (const dest of ['other', 'note']) {
+            live?.dispose();
+            const contents = new Map([
+                [FILE, ['# note', '- [ ] P', row.replace('DEST', dest), child, ''].join('\n')],
+                ['other.md', '# other\n'],
+            ]);
+            live = vaultSession(contents);
+            await live.scanAll();
+            const session = live;
+
+            expect(await session.index.updateTask(taskWorded(session, 'X').id, { statusChar: 'x' })).toBe(true);
+            const executor = (session.index as unknown as { commandExecutor: { isProcessing: boolean; taskQueue: unknown[] } }).commandExecutor;
+            await vi.waitFor(() => {
+                expect(executor.isProcessing).toBe(false);
+                expect(executor.taskQueue).toHaveLength(0);
+            });
+            await session.settle(FILE);
+            await session.settle('other.md');
+
+            const target = `${dest}.md`;
+            const lines = contents.get(target)!.split('\n');
+            expect(lines.slice(-3)).toEqual(['- [x] X @2026-09-21', written, '']);
+            const moved = session.index.getTasks().filter(task => task.file === target);
+            expect(moved.find(task => task.content === 'c')?.parentId).toBe(moved.find(task => task.content === 'X')?.id);
+            expect(Notice.messages).toEqual([]);
+        }
     });
 });

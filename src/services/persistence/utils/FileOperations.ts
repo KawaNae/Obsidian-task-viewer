@@ -35,26 +35,6 @@ export class FileOperations {
     }
 
     /**
-     * One indent level, inferred from the given line's own indentation.
-     * Obsidian supports only a tab or 4 spaces, so a line already using tabs
-     * implies a tab unit; anything else — including an unindented line, where
-     * there is nothing to read — implies 4 spaces.
-     */
-    static getIndentUnit(line: string): string {
-        const indent = Outline.indentOf(line);
-        return indent.includes('\t') ? '\t' : '    ';
-    }
-
-    /**
-     * Compute the indent string for a direct child of the given parent line.
-     * Detects tabs vs spaces from the parent and adds one level.
-     */
-    static getChildIndent(parentLine: string): string {
-        const parentIndent = Outline.indentOf(parentLine);
-        return parentIndent + FileOperations.getIndentUnit(parentLine);
-    }
-
-    /**
      * The indent string of the task's first child, or null when it has none:
      * the first list item the outline reads directly under the task's own
      * item, past the lines in `except`. A line of the subtree that opens no
@@ -91,33 +71,18 @@ export class FileOperations {
      *
      * The task's existing children decide it, so a subtree keeps one spelling.
      * With no children to copy, the rest of the file decides — reading the
-     * parent line alone cannot, because a top-level task has no indentation and
-     * {@link getIndentUnit} then answers four spaces for every file, tab-written
-     * ones included. That is how the two spellings ended up in one subtree.
+     * parent line alone cannot, because a top-level task has no indentation to
+     * read a unit from. Reading it there answered four spaces for every file,
+     * tab-written ones included, and put the two spellings in one subtree.
      * The file's unit is repeated until the line reaches the task's content
-     * column (`OutlineReading.childIndent`).
+     * column (`Outline.childIndent`, the one rule for a child's indentation).
      */
     static resolveChildIndent(lines: readonly string[], taskLineIndex: number): string {
-        const own = FileOperations.firstChildIndent(lines, taskLineIndex);
-        if (own !== null) return own;
-
-        return Outline.read(lines).childIndent(taskLineIndex, FileOperations.detectIndentUnit(lines));
-    }
-
-    /**
-     * Strip the parent's indent prefix from each child line, preserving deeper
-     * indentation (tabs / spaces / mixed) exactly as written in the source.
-     */
-    static adjustChildIndentation(childLines: string[], oldParentIndent: string): string[] {
-        return childLines.map(line => {
-            if (line.trim() === '') return line;
-            if (line.startsWith(oldParentIndent)) {
-                return line.substring(oldParentIndent.length);
-            }
-            // Defensive: line indent is shorter than declared parent prefix.
-            const currentIndent = Outline.indentOf(line);
-            return line.substring(Math.min(oldParentIndent.length, currentIndent.length));
-        });
+        return Outline.childIndent(
+            lines[taskLineIndex],
+            FileOperations.firstChildIndent(lines, taskLineIndex),
+            FileOperations.detectIndentUnit(lines),
+        );
     }
 
     /**
