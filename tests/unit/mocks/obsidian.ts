@@ -81,6 +81,15 @@ export class Component {
     unload() {}
 }
 
+/** Only what the plugin's suggests read of it: the app and the open context. */
+export class EditorSuggest<T> {
+    context: { editor: any; start: { line: number; ch: number } } | null = null;
+    constructor(public app: any) { }
+    close(): void { }
+    /** Unused by the stub; present so the type parameter is read. */
+    protected value?: T;
+}
+
 export class AbstractInputSuggest {
     app: App;
     inputEl: any;
