@@ -8,7 +8,7 @@
  * (DiagnosticsExtension) all share it — do not duplicate the judgment.
  */
 
-import { LIST_BULLET_SOURCE } from './ListMarker';
+import { LIST_BULLET_SOURCE, SPACE_OR_TAB_SOURCE } from './ListMarker';
 import { INDENT_SOURCE, Outline, type OutlineReading } from './Outline';
 import { IN_LINE } from '../../../utils/LineBreak';
 
@@ -25,8 +25,13 @@ export const FLOW_MARKER = '==>';
  */
 export const FLOW_SPLIT = new RegExp(`${FLOW_MARKER}(${IN_LINE}+)`);
 
-/** `- ==> <tail>` with any list bullet. Group 1 = indent, group 2 = tail. */
-export const FLOW_LINE_RE = new RegExp(`^(${INDENT_SOURCE})${LIST_BULLET_SOURCE}\\s*==>\\s?(${IN_LINE}*)$`);
+/**
+ * `- ==> <tail>` with any list bullet. Group 1 = indent, group 2 = tail.
+ * The marker is followed by spaces and tabs as a list item's is
+ * (`Outline.read`): `-==>` and a no-break space after the marker open no
+ * item, and are no command.
+ */
+export const FLOW_LINE_RE = new RegExp(`^(${INDENT_SOURCE})${LIST_BULLET_SOURCE}${SPACE_OR_TAB_SOURCE}+==>\\s?(${IN_LINE}*)$`);
 
 export interface FlowLineMatch {
     /** Leading whitespace of the line. */

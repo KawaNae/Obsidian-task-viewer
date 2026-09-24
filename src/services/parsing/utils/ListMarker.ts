@@ -1,10 +1,11 @@
 /**
  * Shared bullet-marker fragment for markdown list items: `-`, `*`, `+`, or
- * an ordered marker (`1.`/`1)`). Interpolate into a larger regex rather than
- * writing the pattern out again — every parser that recognizes a list line
- * needs the same definition of "bullet".
+ * an ordered marker of one to nine digits (`1.`/`1)`; CommonMark). Interpolate
+ * into a larger regex rather than writing the pattern out again — every
+ * parser that recognizes a list line, the outline's items included, needs the
+ * same definition of "bullet".
  */
-export const LIST_BULLET_SOURCE = '(?:[-*+]|\\d+[.)])';
+export const LIST_BULLET_SOURCE = '(?:[-*+]|\\d{1,9}[.)])';
 
 /**
  * The two characters Markdown structure is spaced with, as a regex fragment:

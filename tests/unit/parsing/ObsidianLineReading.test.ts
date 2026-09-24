@@ -155,6 +155,15 @@ describe('line breaks, as Obsidian ends a line', () => {
         expect(ChildLineClassifier.classify('\t-\t[ ] k:: v', 0).propertyKey).toBeNull();
     });
 
+    it('reads an ordered marker of one to nine digits, as the outline reads an item (CommonMark)', () => {
+        // One definition of the marker for the task line and the outline's
+        // items; the ten-digit one was a task to the one and no item to the other.
+        expect(TaskLineClassifier.isTaskLine('123456789. [ ] x')).toBe(true);
+        expect(TaskLineClassifier.isTaskLine('1234567890. [ ] x')).toBe(false);
+        expect(Outline.read(['123456789. [ ] x']).item(0)).not.toBeNull();
+        expect(Outline.read(['1234567890. [ ] x']).item(0)).toBeNull();
+    });
+
     it('reads a task with no content and a block id as a task', () => {
         const read = parse('- [ ] ^abc\n');
         expect(read.tasks.map(task => [task.content, task.blockId])).toEqual([['', 'abc']]);

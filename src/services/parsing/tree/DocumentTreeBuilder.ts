@@ -3,6 +3,7 @@ import { ChildLineClassifier } from '../utils/ChildLineClassifier';
 import { TaskLineClassifier } from '../utils/TaskLineClassifier';
 import { IN_LINE } from '../../../utils/LineBreak';
 import { INDENT_SOURCE, Outline, type OutlineReading } from '../utils/Outline';
+import { SPACE_OR_TAB_SOURCE } from '../utils/ListMarker';
 
 /**
  * A markdown heading line: capture group 1 = `#` run, group 2 = title text.
@@ -13,7 +14,7 @@ import { INDENT_SOURCE, Outline, type OutlineReading } from '../utils/Outline';
  * group 2 swallow past the line the caller thinks it matched.
  */
 export const HEADING_REGEX = new RegExp(`^(#{1,6})\\s+(${IN_LINE}*)`);
-const PROPERTY_GROUP_HEADER = new RegExp(`^${INDENT_SOURCE}-\\s+properties::\\s*$`);
+const PROPERTY_GROUP_HEADER = new RegExp(`^${INDENT_SOURCE}-${SPACE_OR_TAB_SOURCE}+properties::\\s*$`);
 
 /**
  * Markdown ファイルの行配列からドキュメント構造ツリーを構築する。
