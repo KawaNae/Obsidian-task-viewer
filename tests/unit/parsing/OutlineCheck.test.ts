@@ -200,7 +200,7 @@ describe('a line placed past what it would take in, as the reading with it in sa
 
     it('goes past a paragraph a copy would take in below the task\'s closed fence (D1)', () => {
         const lines = ['- [ ] T', '  ```', '  x', '  ```', 'para', ''];
-        expect(put(lines, text => Placement.afterSubtree(lines, 0, text), '- [ ] T'))
+        expect(put(lines, text => Placement.copyOf(lines, 0, 'below', text), '- [ ] T'))
             .toEqual({ spot: { at: 5, parent: null, indent: '' }, check: 'sound' });
     });
 
@@ -218,11 +218,13 @@ describe('a line placed past what it would take in, as the reading with it in sa
         expect(put(lines, text => Placement.firstChild(lines, 0, text), '10. [ ] n').spot.at).toBe(1);
     });
 
-    it('takes the spelling of the row it names: a sibling of `1.` written `- ` takes U in (the first run\'s B, refused)', () => {
-        // The marker of the line written, not the spot, makes U its child.
+    it('takes for a new line the indentation of the sibling it goes above: a sibling of `1.` over a `- ` at two (the first run\'s B)', () => {
         const lines = ['1. [ ] T', '  - [ ] U'];
         expect(put(lines, text => Placement.afterSubtree(lines, 0, text), '- [x] n'))
-            .toEqual({ spot: { at: 1, parent: null, indent: '' }, check: 'disturbs' });
+            .toEqual({ spot: { at: 1, parent: null, indent: '  ' }, check: 'sound' });
+        // A copy of T is spelled as T, and reads as T does: U, not T's, stays where it stands.
+        expect(put(lines, text => Placement.copyOf(lines, 0, 'below', text), '1. [ ] T'))
+            .toEqual({ spot: { at: 1, parent: null, indent: '' }, check: 'sound' });
     });
 });
 
@@ -245,7 +247,9 @@ describe('a copy written at the spelling of the row it copies (the third run\'s 
     it('keeps the copied child a child where the sibling below is spelled apart', () => {
         const lines = ['-\t[ ] T', '\t- [ ] c', '   - [ ] U'];
         const reading = Outline.read(lines);
-        const spot = Placement.afterSubtree(lines, 0, lines[0]);
+        const spot = Placement.copyOf(lines, 0, 'below', lines[0]);
+        // A new line there is spelled as U, and takes the copied child in.
+        expect(Placement.afterSubtree(lines, 0, lines[0])).toEqual({ at: 2, parent: null, indent: '   ' });
         expect(spot).toEqual({ at: 2, parent: null, indent: '' });
         expect(checked(lines, (draft) => draft.put(spot, Block.of(reading, [0, 1], [lines[0], lines[1]])))).toBe('sound');
     });

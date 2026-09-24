@@ -102,7 +102,8 @@ export class InlineTaskWriter {
 
     /**
      * Put `newContent` in as the next sibling of the line at a coordinate:
-     * past its subtree, at its indentation (`Placement.afterSubtree`).
+     * past its subtree, spelled as that line is: the line written is a copy
+     * (`Placement.copyOf`).
      *
      * The editor's menu duplicates a task through here, so the line written is
      * usually a copy of the line above it, word for word. Put just below it,
@@ -118,7 +119,7 @@ export class InlineTaskWriter {
         return processLines(this.app, file, this.writes?.for(filePath, 'user'), (draft, _eol, { row }) => {
             const lineNumber = row(at);
             if (lineNumber === null) return false;
-            draft.put(Placement.afterSubtree(draft.lines, lineNumber, newContent), Block.line(newContent));
+            draft.put(Placement.copyOf(draft.lines, lineNumber, 'below', newContent), Block.line(newContent));
             return true;
         });
     }
@@ -288,10 +289,11 @@ export class InlineTaskWriter {
     }
 
     /**
-     * Insert `lineBody` just past the task's subtree, at the task's own
-     * indentation — the task gains a next sibling.
+     * Insert `lineBody` just past the task's subtree — the task gains a next
+     * sibling. The line is a new one, not a copy of the task: it is spelled
+     * as the item next to it is (`Placement.afterSubtree`).
      *
-     * The indentation is read from the *resolved* line rather than from
+     * The spot is read from the *resolved* lines rather than from
      * `task.originalText`, which can be stale after a shift; a sibling that
      * lands one level off would silently become a child of the wrong line.
      *
