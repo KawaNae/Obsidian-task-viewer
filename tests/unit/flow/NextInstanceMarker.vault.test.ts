@@ -1,6 +1,7 @@
-import { describe, it, expect, afterEach, beforeAll, afterAll, vi } from 'vitest';
+import { describe, it, expect, afterEach } from 'vitest';
 import { Notice } from 'obsidian';
 import { openVault, type VaultSession } from '../helpers/vaultSession';
+import { freezeDate } from '../helpers/fakeDate';
 
 /**
  * The next instance is spelled as the row that fired: its list marker and
@@ -15,13 +16,7 @@ import { openVault, type VaultSession } from '../helpers/vaultSession';
 
 // `every` lands on the first grid point after the later of today and the
 // row's date: today is held on the Friday the dates below are read from.
-beforeAll(() => {
-    vi.useFakeTimers({ toFake: ['Date'] });
-    vi.setSystemTime(new Date(2026, 8, 25, 12, 0, 0));
-});
-afterAll(() => {
-    vi.useRealTimers();
-});
+freezeDate(new Date(2026, 8, 25, 12, 0, 0));
 
 const FILE = 'note.md';
 let live: VaultSession | undefined;
