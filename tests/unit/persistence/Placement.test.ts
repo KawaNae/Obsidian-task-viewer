@@ -207,6 +207,12 @@ describe('the spot\'s parent and indentation', () => {
         expect(Placement.groupHead(['- [ ] P', '  ```', '  ```', '\t- [ ] a'], 3, '- [ ] n')).toEqual({ at: 1, parent: 0, indent: '\t' });
     });
 
+    it('puts a child next to the children there, as a sibling of theirs', () => {
+        const lines = ['- [ ] T', '\t- [ ] a', '    - [ ] b', '- [ ] U'];
+        expect(Placement.lastChild(lines, 0, '- [ ] n')).toEqual({ at: 3, parent: 0, indent: '    ' });
+        expect(Placement.firstChild(lines, 0, '- [ ] n')).toEqual({ at: 1, parent: 0, indent: '\t' });
+    });
+
     it('goes past the parent\'s own text that goes on, for the head of a group under it', () => {
         expect(Placement.groupHead(['- [ ] p', '  text', '  - [ ] a'], 2, '- [ ] n')).toEqual({ at: 2, parent: 0, indent: '  ' });
     });
