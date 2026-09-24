@@ -9,7 +9,8 @@ import type { PropertyOp } from '../PropertyUpdatePlanner';
 import { flowInstanceHead, renderFlowInstance } from '../FlowInstanceLines';
 import {
     createFile, fileGone, processLines, splitLines,
-    type EditorLine, type EditorSubtree, type LineDraft, type Refusal, type WriteAt, type WriteOrigin, type WriteOutcome,
+    type EditorLine, type EditorSubtree, type LineDraft, type NamedRow, type Refusal, type WriteAt, type WriteOrigin, type WriteOutcome,
+    type WriteSession,
 } from '../../../utils/FileLines';
 import type { WriteObserver } from '../WriteObserver';
 import { recordedOn, subjectOf, type PlannedTarget } from '../TaskRefs';
@@ -48,30 +49,12 @@ export class InlineTaskWriter {
         const file = this.app.vault.getAbstractFileByPath(target.file);
         if (!(file instanceof TFile)) return this.refusedGone(target, 'user');
 
-        return processLines(this.app, file, this.writes?.for(target.file, 'user'), (draft, _eol, { row }) => {
-            const currentLine = row(target);
-            if (currentLine === null) return false;
-
-            // Re-format line
-            const newLine = TaskParser.format(updatedTask);
-
-            // Preserve indentation if possible. An update rewrites the line
-            // and leaves it the same task — the whole point of the call is
-            // that this row is the one being changed. Done before the child
-            // ops because `applyOps` only ever touches lines below
-            // `currentLine` (its scan starts at `taskLineIdx + 1` and stops at
-            // the first line that is not a descendant), so this coordinate is
-            // still this line afterwards.
-            const originalIndent = Outline.indentOf(draft.lines[currentLine]);
-            draft.rewrite(currentLine, originalIndent + Outline.dedent(newLine));
-
-            // 子プロパティ行（- key:: value）の更新は同一 process 内で
-            // 連続適用する（別 process だと originalText 失効と行番号
-            // シフトが競合するため、タスク行と子行は1原子書き込み）。
-            ChildPropertyLineEditor.applyOps(draft, currentLine, childOps);
-
-            return true;
-        });
+        // 子プロパティ行（- key:: value）の更新は同一 process 内で
+        // 連続適用する（別 process だと originalText 失効と行番号
+        // シフトが競合するため、タスク行と子行は1原子書き込み）。
+        const update: TaskOp = { kind: 'update', text: TaskParser.format(updatedTask), childOps };
+        return processLines(this.app, file, this.writes?.for(target.file, 'user'),
+            (draft, _eol, session) => this.applyOps(draft, session, target, [update]));
     }
 
     /** Nothing written: the file is not there. Told as `gone`, like a row that is not. */
@@ -83,21 +66,12 @@ export class InlineTaskWriter {
         const file = this.app.vault.getAbstractFileByPath(filePath);
         if (!(file instanceof TFile)) return fileGone(this.writes?.for(filePath, 'user'), filePath, at.text.trim());
 
-        return processLines(this.app, file, this.writes?.for(filePath, 'user'), (draft, _eol, { row }) => {
-            const lineNumber = row(at);
-            if (lineNumber === null) return false;
-
-            // Preserve original indentation
-            const originalIndent = Outline.indentOf(draft.lines[lineNumber]);
-            const newContentTrimmed = Outline.dedent(newContent);
-
-            // The editor's own menu comes through here: a status change, and
-            // the conversion of a bare checkbox into an inline task. Both
-            // rewrite the row in place and leave it the row it was.
-            draft.rewrite(lineNumber, originalIndent + newContentTrimmed);
-
-            return true;
-        });
+        // The editor's own menu comes through here: a status change, and
+        // the conversion of a bare checkbox into an inline task. Both
+        // rewrite the row in place and leave it the row it was.
+        const update: TaskOp = { kind: 'update', text: newContent };
+        return processLines(this.app, file, this.writes?.for(filePath, 'user'),
+            (draft, _eol, session) => this.applyOps(draft, session, at, [update]));
     }
 
     /**
@@ -213,17 +187,31 @@ export class InlineTaskWriter {
         const channel = told && opts.tellRefusal === false ? { ...told, refused: () => { } } : told;
         if (!(file instanceof TFile)) return fileGone(channel, target.file, target.subject);
 
-        return processLines(this.app, file, channel, (draft, _eol, { row }) => {
-            // Asked before any op, so the plan is checked against the lines as
-            // they were handed in — and checked at all, whatever the ops are.
-            if (row(target) === null) return false;
-            for (const op of ops) {
-                const line = row(target);
-                if (line === null) return false;
-                this.applyOp(draft, line, op);
-            }
-            return true;
-        });
+        return processLines(this.app, file, channel, (draft, _eol, session) => this.applyOps(draft, session, target, ops));
+    }
+
+    /**
+     * Apply `ops` in order to the row `target` names, inside a write: the
+     * one loop every write of ops runs, to a file (`applyToTask`) or to an
+     * editor's lines (`editLines`). Answers false when the row has no line,
+     * which the session has refused with its reason.
+     *
+     * The row is asked for before any op, so the plan is checked against the
+     * lines as they were handed in — and checked at all, whatever the ops are
+     * — and again before each op, its line carried across the ops before it.
+     * A `fire` is planned where it stands, from the lines the ops before it
+     * left, and the ops it answers take its place.
+     */
+    applyOps(draft: LineDraft, session: WriteSession, target: NamedRow | EditorLine, ops: readonly TaskOp[]): boolean {
+        if (session.row(target) === null) return false;
+        const queue = [...ops];
+        for (let op = queue.shift(); op !== undefined; op = queue.shift()) {
+            const line = session.row(target);
+            if (line === null) return false;
+            if (op.kind === 'fire') queue.unshift(...op.plan(draft.lines, line));
+            else this.applyOp(draft, line, op);
+        }
+        return true;
     }
 
     /**
@@ -232,9 +220,17 @@ export class InlineTaskWriter {
      * once every op is applied (`processLines`): refused, none of the ops is
      * written.
      */
-    private applyOp(draft: LineDraft, line: number, op: TaskOp): void {
+    private applyOp(draft: LineDraft, line: number, op: Exclude<TaskOp, { kind: 'fire' }>): void {
         const lines = draft.lines;
         switch (op.kind) {
+            case 'update': {
+                // The row is the one being changed, and stays the same task.
+                // Done before the property lines, which are all below it, so
+                // the coordinate is still this line afterwards.
+                draft.rewrite(line, Outline.indentOf(lines[line]) + Outline.dedent(op.text));
+                ChildPropertyLineEditor.applyOps(draft, line, [...(op.childOps ?? [])]);
+                return;
+            }
             case 'insert-instance': {
                 draft.put(Placement.groupHead(lines, line, flowInstanceHead(op.insert)), renderFlowInstance(this.fileOps, lines, line, op.insert));
                 return;
@@ -474,10 +470,31 @@ export class InlineTaskWriter {
             channel?.refused({ file: source.file, reason, subject: source.subject });
             return null;
         }
-        const block = this.carriedWith(sourceLines, located.line, content, false);
-        const { childrenLines } = this.fileOps.collectChildrenFromLines(sourceLines, located.line);
+        const archive = this.archiveOf(sourceLines, located.line, content);
+        if (!(await this.appendArchive(destPath, archive.block))) return null;
+        return archive.subtree;
+    }
 
-        if (!(await this.appendBlock(destPath, block, 'flow')).written) return null;
-        return sourceLines.slice(located.line, located.line + 1 + childrenLines.length);
+    /**
+     * What a move to another file writes to the destination for the row at
+     * `line` of `lines`: the row as `content` and the lines of its subtree
+     * that go with it (`block`, new lines to the destination), and the row's
+     * whole subtree as `lines` hold it (`subtree`), which is what taking the
+     * original away plans from.
+     */
+    archiveOf(lines: readonly string[], line: number, content: string): { block: PlacedLine[]; subtree: string[] } {
+        const { childrenLines } = this.fileOps.collectChildrenFromLines(lines, line);
+        return {
+            block: this.carriedWith(lines, line, content, false),
+            subtree: lines.slice(line, line + 1 + childrenLines.length),
+        };
+    }
+
+    /**
+     * Append a move's archive (`archiveOf`) to `destPath`, or make the note
+     * of it: whether it was written. A refusal is told by the write layer.
+     */
+    async appendArchive(destPath: string, block: readonly PlacedLine[]): Promise<boolean> {
+        return (await this.appendBlock(destPath, block, 'flow')).written;
     }
 }

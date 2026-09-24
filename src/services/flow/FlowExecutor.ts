@@ -17,6 +17,8 @@ import { flowSource } from './FlowSegments';
 import { type FlowPlanDeps, GenerationError, planFlow } from './FlowPlanner';
 import { canTriggerFlow } from './FlowTrigger';
 import { createMomentEvalHost } from './MomentEvalHost';
+import { FileParsePipeline } from '../parsing/FileParsePipeline';
+import type { GenBlock } from '../parsing/gen/GenBlockCollector';
 import { runtimeText } from './runtimeText';
 
 /**
@@ -60,6 +62,41 @@ interface FlowQueueEntry {
     settle?: (removed: boolean) => void;
 }
 
+/**
+ * What completing one row fires, planned from the lines the completing write
+ * holds (`FlowExecutor.planFire`).
+ *
+ * - `none`: nothing fires — the row is no task that can fire, or its note is
+ *   ignored.
+ * - `failed`: the plan failed (an expression, a block). Nothing is written
+ *   for the fire, the command stays, and the caller says so once the
+ *   completion has landed (`reportDidNotFire`).
+ * - `fires`: `ops` are what the fire does to the row in the completing
+ *   write. With `away`, the row moves to another file: the completing write
+ *   does nothing more (`ops` is empty), the destination is written next,
+ *   and `away.ops` are the source's write once it has landed.
+ */
+export type FirePlan =
+    | { kind: 'none' }
+    | { kind: 'failed'; task: Task; error: EvalError | GenerationError }
+    | { kind: 'fires'; task: Task; ops: TaskOp[]; away: AwayMove | null };
+
+/** A move to another file a fire planned: where to, the row as it goes there, and what the source's write does. */
+export interface AwayMove {
+    destPath: string;
+    /** The row as the destination is to read it. */
+    content: string;
+    /** The source's write once the destination landed: the next instance, and the original taken away. */
+    ops: TaskOp[];
+}
+
+/** A `fire` op, and what its plan answered the last time a write ran it. */
+export interface FireOp {
+    op: Extract<TaskOp, { kind: 'fire' }>;
+    /** The plan of the write's last run, or null while no write has run it. */
+    planned(): FirePlan | null;
+}
+
 export class FlowExecutor {
     private taskQueue: FlowQueueEntry[] = [];
     private isProcessing = false;
@@ -80,6 +117,83 @@ export class FlowExecutor {
         this.taskQueue.push({ task, mode: 'completion' });
         // Fire and forget; the queue serializes execution.
         this.processQueue();
+    }
+
+    /**
+     * What completing the row at `line` of `lines` fires: the one place a
+     * completion's fire is planned, for the editor's transaction and for the
+     * plugin's own write alike. The caller has already answered that the
+     * operation completed the row (`completes`); this reads the lines it
+     * holds, the ones it is about to write, so there is no older copy of the
+     * row for the plan to be made from.
+     *
+     * Nothing is read unless a `==>` stands on the row or below it: a
+     * command is the row's own or its subtree's, and both are at or past the
+     * row. A condition for speed only; it never changes the answer.
+     */
+    planFire(path: string, lines: readonly string[], line: number): FirePlan {
+        let commanded = false;
+        for (let i = line; i < lines.length && !commanded; i++) commanded = lines[i].includes('==>');
+        if (!commanded) return { kind: 'none' };
+        const parsed = FileParsePipeline.parse(path, [...lines], this.getSettings());
+        if (parsed.ignored) return { kind: 'none' };
+        const task = parsed.tasks.find(candidate => candidate.line === line);
+        if (!task || !canTriggerFlow(task, this.getSettings().statusDefinitions)) return { kind: 'none' };
+        return this.planTask(task, name => parsed.genBlocks.get(name));
+    }
+
+    /**
+     * The fire of a row read as `task`, its blocks looked up by `blockNamed`:
+     * the plan, and what it does to the row, as ops.
+     */
+    planTask(task: Task, blockNamed: (name: string) => GenBlock | undefined): FirePlan {
+        const program = task.flow?.program;
+        if (!program) return { kind: 'none' };
+        logInfo(`[Flow:completion] taskId=${task.id} flow="${task.flow ? flowSource(task.flow) : ''}"`);
+        let effects: FlowEffect[];
+        try {
+            effects = planFlow(task, program, { ...this.buildDeps(), getBlock: (_file, name) => blockNamed(name) });
+        } catch (err) {
+            if (err instanceof EvalError || err instanceof GenerationError) {
+                // Runtime expression failure (e.g. unset property), or a
+                // block that cannot produce the next instance: do not fire
+                // and do not consume — the command stays for the user to
+                // fix, and the message explains why.
+                logWarn(`[FlowExecutor] Flow did not fire for ${task.id}: ${err.message}`);
+                return { kind: 'failed', task, error: err };
+            }
+            throw err;
+        }
+        const ops = effects.flatMap(effect => {
+            logInfo(`[Flow:effect] ${effect.kind} taskId=${task.id}`);
+            return this.opsFor(task, effect);
+        });
+        const away = effects.find(
+            (effect): effect is Extract<FlowEffect, { kind: 'archive-to' }> =>
+                effect.kind === 'archive-to' && effect.destPath !== task.file);
+        if (away) {
+            return { kind: 'fires', task, ops: [], away: { destPath: away.destPath, content: TaskParser.format(away.archivedTask), ops } };
+        }
+        return { kind: 'fires', task, ops, away: null };
+    }
+
+    /**
+     * A `fire` op for a write to `path` that completes a row, with what its
+     * plan answered. `vault.process` may run a write's callback more than once;
+     * what counts is the last run, the one that was written.
+     */
+    fireOp(path: string): FireOp {
+        let last: FirePlan | null = null;
+        return {
+            op: {
+                kind: 'fire',
+                plan: (lines, line) => {
+                    last = this.planFire(path, lines, line);
+                    return last.kind === 'fires' ? last.ops : [];
+                },
+            },
+            planned: () => last,
+        };
     }
 
     /**
@@ -344,7 +458,7 @@ export class FlowExecutor {
      * so. One notice, saying both — the refusal of the source's write would
      * otherwise be a second one, telling half of it.
      */
-    private reportMoveLeftCopy(task: Task, destPath: string, refused: Refusal): void {
+    reportMoveLeftCopy(task: Task, destPath: string, refused: Refusal): void {
         logWarn(`[FlowExecutor] Moved but the original could not be removed: ${task.id} (${refused.reason.kind})`);
         const reason = refused.reason.kind === 'ambiguous'
             ? t('notice.moveOriginAmbiguous', { count: refused.reason.count })
@@ -404,7 +518,7 @@ export class FlowExecutor {
      * "the flow did not fire" would leave them to work out that the delete
      * did not happen either.
      */
-    private reportDidNotFire(
+    reportDidNotFire(
         task: Task,
         err: EvalError | GenerationError,
         messageKey: 'notice.flowDidNotFire' | 'notice.flowDeleteDidNotFire' = 'notice.flowDidNotFire',

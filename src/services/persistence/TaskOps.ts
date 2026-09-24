@@ -1,4 +1,5 @@
 import type { FlowInstanceInsert } from './FlowInstanceLines';
+import type { PropertyOp } from './PropertyUpdatePlanner';
 
 /**
  * One thing an operation does to the row it names, in a write that may do
@@ -18,9 +19,19 @@ import type { FlowInstanceInsert } from './FlowInstanceLines';
  *   lines. The row and its children are carried, not copied: they are the
  *   rows they were (see `LineEdits.carry`).
  * - `remove`: the row and its children are taken out.
+ * - `update`: the row reads `text` (indentation kept from the file), and
+ *   its own property lines change by `childOps`. A card's, the API's and a
+ *   timer's rewrite of a row, and the editor menu's rewrite of a line.
+ * - `fire`: the row's flow fires. What it does is planned here, inside the
+ *   write, from the lines as the ops before it left them (`plan`, which the
+ *   flow layer hands in), and the ops it answers are applied in its place.
+ *   Only a write that completes the row carries it (`completes`): a fire is
+ *   what completing a task does, never what a later reading of it finds.
  */
 export type TaskOp =
     | { kind: 'insert-instance'; insert: FlowInstanceInsert }
     | { kind: 'strip-flow'; text: string }
     | { kind: 'move-to-end'; text: string }
-    | { kind: 'remove' };
+    | { kind: 'remove' }
+    | { kind: 'update'; text: string; childOps?: readonly PropertyOp[] }
+    | { kind: 'fire'; plan: (lines: readonly string[], line: number) => readonly TaskOp[] };
