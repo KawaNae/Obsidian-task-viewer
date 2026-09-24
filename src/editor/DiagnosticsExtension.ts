@@ -1,6 +1,7 @@
 import { Decoration, type DecorationSet, type EditorView, ViewPlugin, type ViewUpdate } from '@codemirror/view';
 import { RangeSet, type Extension, type Text } from '@codemirror/state';
-import { fenceMaskFor, fenceScanFor, outlineFor } from './EditorFenceCache';
+import { outlineFor } from './EditorOutline';
+import { flowGroupOf, flowOwnerOf } from './FlowGroup';
 import {
     collectGenBlocks,
     type LocatedDiagnostic,
@@ -17,7 +18,7 @@ import {
     segmentIndexAt,
 } from '../services/flow/FlowSegments';
 import { childCopyMigrationWarning } from '../services/flow/ChildCopyMigration';
-import { FLOW_MARKER, collectFlowLineIndices, isFlowLine, matchFlowLine } from '../services/parsing/utils/FlowLineScanner';
+import { FLOW_MARKER, isFlowLine, matchFlowLine } from '../services/parsing/utils/FlowLineScanner';
 import { diagnosticText } from '../services/flow/diagnosticText';
 import { TaskLineClassifier } from '../services/parsing/utils/TaskLineClassifier';
 import { TaskParser } from '../services/parsing/TaskParser';
@@ -27,10 +28,6 @@ import {
     inertNotationOf,
     type InertNotation,
 } from '../services/parsing/tv-inline/InertFlowDiagnostics';
-import { Outline } from '../services/parsing/utils/Outline';
-
-/** Bound for the up/down document scans around the viewport. */
-const SCAN_LIMIT = 100;
 
 /**
  * Look up `key` in `cache`, computing and storing it on a miss. The cache is
@@ -102,11 +99,11 @@ export function createDiagnosticsExtension(): Extension {
         memoize(inertCache, CACHE_CAP, lineText, () => inertNotationOf(lineText));
 
     /**
-     * Fence membership itself (and its per-doc cache) lives in
-     * EditorFenceCache, shared with every extension that must not decorate
-     * inside a fence — see that module for the OR-formula rationale. The
-     * scanner never turns a fenced line into a task or a flow segment
-     * (DocumentTreeBuilder feeds the same judgment into TaskBlock), so
+     * The note's reading (list items, subtrees, code) and its per-doc cache
+     * live in EditorOutline, shared with every extension that must not
+     * decorate what the parser does not read as notation. The scanner never
+     * turns a line in code, or a line that opens no list item, into a task
+     * or a flow segment (DocumentTreeBuilder reads the same reading), so
      * decorating one here would make the editor claim a command the file
      * does not have.
      *
@@ -133,12 +130,10 @@ export function createDiagnosticsExtension(): Extension {
         if (docCache?.doc === doc) return docCache.analysis;
         const lines: string[] = [];
         for (let n = 1; n <= doc.lines; n++) lines.push(doc.line(n).text);
-        // Fence membership itself is computed once and shared across every
-        // editor extension via EditorFenceCache — reading it here rather
-        // than rescanning keeps this analysis and TaskMenuExtension's from
-        // ever answering "is this line fenced" differently.
-        const scan = fenceScanFor(doc);
-
+        // The reading is made once and shared across every editor extension
+        // via EditorOutline — asking it here rather than reading again keeps
+        // this analysis and TaskMenuExtension's from ever answering "is this
+        // line code" differently.
         const { blocks, diagnostics } = collectGenBlocks(lines, outlineFor(doc));
         const gen = new Map<number, LocatedDiagnostic[]>();
         // A js section is several lines, so a diagnostic can span more than
@@ -177,31 +172,11 @@ export function createDiagnosticsExtension(): Extension {
     };
 
     /**
-     * Owner task line of a flow child line: its structural parent (nearest
-     * preceding non-blank line with smaller indent) when that is a task
-     * line. Flow lines nested under notes/checkbox-less structures have no
-     * owner here and get no decorations.
-     */
-    const findOwnerTaskLine = (view: EditorView, lineNumber: number): number | null => {
-        const doc = view.state.doc;
-        const flowIndent = Outline.depthOf(doc.line(lineNumber).text);
-        let steps = 0;
-        for (let n = lineNumber - 1; n >= 1 && steps < SCAN_LIMIT; n--, steps++) {
-            const text = doc.line(n).text;
-            if (text.trim() === '') continue; // a blank line does not end the children (Outline.subtreeEnd)
-            const indent = Outline.depthOf(text);
-            if (indent < flowIndent) {
-                return TaskLineClassifier.isTaskLine(text) ? n : null;
-            }
-        }
-        return null;
-    };
-
-    /**
      * Assemble the flow group rooted at a task line: segment 0 is the task
      * line's tail after `==>` ('' without a marker), followed by the direct
-     * flow child lines (ownership shared with the extractor via
-     * collectFlowLineIndices). Returns null when the task has no flow at all.
+     * flow child lines. Which lines those are, and where the child block
+     * ends, is asked of the note's one reading (`flowGroupOf`), as the
+     * parser asks it. Returns null when the task has no flow at all.
      */
     const collectGroup = (
         view: EditorView,
@@ -209,27 +184,10 @@ export function createDiagnosticsExtension(): Extension {
     ): { segments: SegmentLoc[]; childLines: string[] } | null => {
         const doc = view.state.doc;
         const rootText = doc.line(rootLineNumber).text;
-        const rootIndent = Outline.depthOf(rootText);
         const markerIdx = rootText.indexOf(FLOW_MARKER);
 
-        const window: string[] = [rootText];
-        const windowLineNumbers: number[] = [rootLineNumber];
-        for (let n = rootLineNumber + 1; n <= doc.lines && window.length <= SCAN_LIMIT; n++) {
-            const text = doc.line(n).text;
-            // A blank line does not end the children (Outline.subtreeEnd).
-            if (text.trim() !== '' && Outline.depthOf(text) <= rootIndent) break;
-            window.push(text);
-            windowLineNumbers.push(n);
-        }
-        // The blank lines after the last child are not the task's.
-        while (window.length > 1 && window[window.length - 1].trim() === '') {
-            window.pop();
-            windowLineNumbers.pop();
-        }
-
-        const flowLines = new Set(collectFlowLineIndices(outlineFor(doc), rootLineNumber - 1));
-        const flowIndices = windowLineNumbers.flatMap((n, k) => flowLines.has(n - 1) ? [k] : []);
-        if (markerIdx === -1 && flowIndices.length === 0) return null;
+        const { flowLines, childLines } = flowGroupOf(outlineFor(doc), rootLineNumber - 1);
+        if (markerIdx === -1 && flowLines.length === 0) return null;
 
         const seg0: SegmentLoc = markerIdx >= 0
             ? {
@@ -241,22 +199,18 @@ export function createDiagnosticsExtension(): Extension {
             : { lineNumber: rootLineNumber, tailStart: rootText.length, markerCol: null, raw: '' };
 
         const segments: SegmentLoc[] = [seg0];
-        for (const k of flowIndices) {
-            const text = window[k];
+        for (const line of flowLines) {
+            const text = doc.line(line + 1).text;
             const m = matchFlowLine(text);
             if (!m) continue;
             segments.push({
-                lineNumber: windowLineNumbers[k],
+                lineNumber: line + 1,
                 tailStart: m.tailStart,
                 markerCol: text.indexOf(FLOW_MARKER),
                 raw: m.tail,
             });
         }
-        // The window minus the root is the task's child block, which the
-        // migration notice weighs. It comes from here rather than from a
-        // second walk: where a child block ends is one rule, and reading it
-        // twice is how the two readings start to differ.
-        return { segments, childLines: window.slice(1) };
+        return { segments, childLines };
     };
 
     const buildDecorations = (view: EditorView): DecorationSet => {
@@ -301,16 +255,17 @@ export function createDiagnosticsExtension(): Extension {
                 }
 
                 const isTaskLine = TaskLineClassifier.isTaskLine(line.text);
+                const flowLine = !isTaskLine && isFlowLine(line.text);
+                if (!isTaskLine && !flowLine) continue;
 
-                // A fenced line is an example, not notation: the scanner
-                // parses neither its date block nor its `==>`. Checked here,
-                // once, for both halves of the extension — and only for
-                // lines that would otherwise be decorated, so the mask stays
-                // uncomputed on ordinary prose.
-                if ((isTaskLine || isFlowLine(line.text))
-                    && fenceMaskFor(view.state.doc)[line.number - 1]) {
-                    continue;
-                }
+                // A line in code is an example, and a line that opens no list
+                // item is a paragraph going on: the scanner parses neither
+                // its date block nor its `==>`. Checked here, once, for both
+                // halves of the extension — and only for lines that would
+                // otherwise be decorated, so the reading stays unmade on
+                // ordinary prose.
+                const outline = outlineFor(view.state.doc);
+                if (outline.inCode(line.number - 1) || outline.item(line.number - 1) === null) continue;
 
                 // Date-block diagnostics: strictly per-line, so they run for
                 // every visible task line — BEFORE the flow-root shortcuts
@@ -334,8 +289,9 @@ export function createDiagnosticsExtension(): Extension {
                 let rootNumber: number | null = null;
                 if (isTaskLine) {
                     rootNumber = line.number;
-                } else if (isFlowLine(line.text)) {
-                    rootNumber = findOwnerTaskLine(view, line.number);
+                } else {
+                    const owner = flowOwnerOf(outline, line.number - 1);
+                    rootNumber = owner === null ? null : owner + 1;
                 }
                 if (rootNumber === null || seenRoots.has(rootNumber)) continue;
                 seenRoots.add(rootNumber);
