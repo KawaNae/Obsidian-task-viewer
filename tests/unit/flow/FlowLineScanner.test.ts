@@ -33,6 +33,14 @@ describe('FlowLineScanner', () => {
             expect(flowLineTail('prose with ==> inside')).toBeNull();
             expect(isFlowLine('- key:: value')).toBe(false);
         });
+
+        it('rejects a line whose bullet opens no list item (Obsidian, measurement.md q9)', () => {
+            // After the bullet, a list item has spaces or tabs and nothing else.
+            expect(isFlowLine('-==> every mon')).toBe(false);
+            expect(isFlowLine('- ==> every mon')).toBe(false);
+            expect(isFlowLine('-　==> every mon')).toBe(false);
+            expect(isFlowLine('-\t==> every mon')).toBe(true);
+        });
     });
 
     describe('matchFlowLine', () => {

@@ -97,6 +97,15 @@ describe('ChildLineClassifier', () => {
             const result = ChildLineClassifier.classify('\t- [[key:: value]]', 0);
             expect(result.propertyKey).toBeNull();
         });
+
+        it('reads no property or link on a line whose bullet opens no list item (Obsidian, measurement.md q9)', () => {
+            // After the bullet, a list item has spaces or tabs and nothing else.
+            for (const gap of ['', ' ', '　']) {
+                expect(ChildLineClassifier.isPropertyLine(`\t-${gap}key:: value`)).toBe(false);
+                expect(ChildLineClassifier.classify(`\t-${gap}[[note]]`, 0).wikilinkTarget).toBeNull();
+            }
+            expect(ChildLineClassifier.isPropertyLine('\t-\tkey:: value')).toBe(true);
+        });
     });
 
     describe('collectProperties', () => {

@@ -1,5 +1,5 @@
 import { CodeFenceTracker, type FenceDelimiter } from '../../../utils/CodeFenceTracker';
-import { SPACE_OR_TAB_SOURCE } from './ListMarker';
+import { LIST_BULLET_SOURCE, SPACE_OR_TAB_SOURCE } from './ListMarker';
 
 /**
  * Indentation, as a regex fragment: the tabs and spaces a line opens with.
@@ -220,7 +220,7 @@ function widthFrom(text: string, from: number): number {
     return col - from;
 }
 
-const MARKER_RE = /^(?:[-*+]|\d{1,9}[.)])/;
+const MARKER_RE = new RegExp(`^${LIST_BULLET_SOURCE}`);
 const GAP_RE = /^[ \t]*/;
 const HEADING_RE = /^#{1,6}(?:[ \t]|$)/;
 const THEMATIC_BREAK_RE = /^(?:(?:-[ \t]*){3,}|(?:\*[ \t]*){3,}|(?:_[ \t]*){3,})$/;

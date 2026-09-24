@@ -4,6 +4,7 @@ import { FileOperations } from './FileOperations';
 import type { PropertyOp } from '../PropertyUpdatePlanner';
 import type { LineDraft } from '../../../utils/FileLines';
 import { INDENT_SOURCE, Outline } from '../../parsing/utils/Outline';
+import { SPACE_OR_TAB_SOURCE } from '../../parsing/utils/ListMarker';
 
 interface OwnPropertyLine {
     lineIdx: number;
@@ -26,7 +27,7 @@ interface OwnPropertyLine {
  */
 export class ChildPropertyLineEditor {
     /** `- key:: ` プレフィックス捕捉用（PROPERTY_LINE と同じ形状制約） */
-    private static readonly PROPERTY_PREFIX = new RegExp(`^(${INDENT_SOURCE}-\\s+[^:[\\]]+?::\\s*)`);
+    private static readonly PROPERTY_PREFIX = new RegExp(`^(${INDENT_SOURCE}-${SPACE_OR_TAB_SOURCE}+[^:[\\]]+?::\\s*)`);
 
     /**
      * タスク直下の own プロパティ行を列挙する。どの行が own かはパーサと

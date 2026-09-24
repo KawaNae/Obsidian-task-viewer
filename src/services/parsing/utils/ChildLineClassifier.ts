@@ -1,6 +1,6 @@
 import type { ChildLine, PropertyType, PropertyValue } from '../../../types';
 import { IN_LINE } from '../../../utils/LineBreak';
-import { LIST_BULLET_SOURCE } from './ListMarker';
+import { LIST_BULLET_SOURCE, SPACE_OR_TAB_SOURCE } from './ListMarker';
 import { INDENT_SOURCE, Outline, type OutlineReading } from './Outline';
 import { extractWikilinkTarget } from '../../../utils/WikilinkUtils';
 
@@ -9,15 +9,19 @@ import { extractWikilinkTarget } from '../../../utils/WikilinkUtils';
  * パース層で ChildLine を生成し、下流での regex 再実行を不要にする。
  */
 export class ChildLineClassifier {
-    /** `- [[link]]` with any list bullet. */
-    static readonly WIKILINK_CHILD = new RegExp(`^${INDENT_SOURCE}${LIST_BULLET_SOURCE}\\s+\\[\\[([^\\]]+)\\]\\]\\s*$`);
+    /**
+     * `- [[link]]` with any list bullet. Here and in `PROPERTY_LINE`, the
+     * marker is followed by spaces and tabs as a list item's is
+     * (`Outline.read`); a no-break space there opens no item.
+     */
+    static readonly WIKILINK_CHILD = new RegExp(`^${INDENT_SOURCE}${LIST_BULLET_SOURCE}${SPACE_OR_TAB_SOURCE}+\\[\\[([^\\]]+)\\]\\]\\s*$`);
     /**
      * Matches `- key:: value` (Dataview-compatible). A key holds no `[` or `]`,
      * so a checkbox line and a wikilink line are never property lines.
      * 値部は空を許す（`- key ::` は空値プロパティ）。`(.+)` にすると末尾空白の
      * 有無で認識が反転する（`- key :: ` だけマッチ）ため `(.*)` が正しい。
      */
-    static readonly PROPERTY_LINE = new RegExp(`^${INDENT_SOURCE}-\\s+([^:\\[\\]]+?)::\\s*(${IN_LINE}*)$`);
+    static readonly PROPERTY_LINE = new RegExp(`^${INDENT_SOURCE}-${SPACE_OR_TAB_SOURCE}+([^:\\[\\]]+?)::\\s*(${IN_LINE}*)$`);
 
     /**
      * 生テキスト → ChildLine に変換。
