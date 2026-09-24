@@ -82,11 +82,6 @@ describe('a command line stripped by a fire', () => {
         const sub = idOf(session, 'sub');
 
         expect(await session.index.updateTask(idOf(session, '対象'), { statusChar: 'x' })).toBe(true);
-        const executor = (session.index as unknown as { commandExecutor: { isProcessing: boolean; taskQueue: unknown[] } }).commandExecutor;
-        await vi.waitFor(() => {
-            expect(executor.isProcessing).toBe(false);
-            expect(executor.taskQueue).toHaveLength(0);
-        });
         await session.settle(FILE);
 
         expect(contents.get(FILE)).toBe(before.replace('- [ ] 対象', '- [x] 対象'));
@@ -102,11 +97,6 @@ describe('a move that leaves its command line behind', () => {
         const sub = idOf(session, 'sub');
 
         expect(await session.index.updateTask(idOf(session, 'X'), { statusChar: 'x' })).toBe(true);
-        const executor = (session.index as unknown as { commandExecutor: { isProcessing: boolean; taskQueue: unknown[] } }).commandExecutor;
-        await vi.waitFor(() => {
-            expect(executor.isProcessing).toBe(false);
-            expect(executor.taskQueue).toHaveLength(0);
-        });
         await session.settle(FILE);
 
         expect(contents.get(FILE)).toBe(before.replace('- [ ] X', '- [x] X'));
@@ -150,11 +140,6 @@ describe('a line with a note bullet below it', () => {
         const { contents, session } = await open(['# note', '- [ ] T @2026-09-21', '  - ==> every mon', '    - why weekly', '- [ ] U', '']);
 
         expect(await session.index.updateTask(idOf(session, 'T'), { statusChar: 'x' })).toBe(true);
-        const executor = (session.index as unknown as { commandExecutor: { isProcessing: boolean; taskQueue: unknown[] } }).commandExecutor;
-        await vi.waitFor(() => {
-            expect(executor.isProcessing).toBe(false);
-            expect(executor.taskQueue).toHaveLength(0);
-        });
         await session.settle(FILE);
 
         expect(contents.get(FILE)!.split('\n')).toEqual([
@@ -178,11 +163,6 @@ describe('a command line with a paragraph going on it', () => {
         const { contents, session } = await open(['# note', '- [ ] 対象 @2026-09-21', '\t- ==> every mon', 'lazy', '- [ ] U', '']);
 
         expect(await session.index.updateTask(idOf(session, '対象'), { statusChar: 'x' })).toBe(true);
-        const executor = (session.index as unknown as { commandExecutor: { isProcessing: boolean; taskQueue: unknown[] } }).commandExecutor;
-        await vi.waitFor(() => {
-            expect(executor.isProcessing).toBe(false);
-            expect(executor.taskQueue).toHaveLength(0);
-        });
         await session.settle(FILE);
 
         expect(contents.get(FILE)!.split('\n')).toEqual([

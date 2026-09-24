@@ -366,11 +366,6 @@ export class TaskScanner {
         } finally {
             this.store.endBatch();
         }
-
-        // フロー発火
-        for (const task of tasksToTrigger) {
-            await this.commandExecutor.handleTaskCompletion(task);
-        }
         return true;
     }
 

@@ -4,7 +4,9 @@ import type { DuplicateOptions, Task, TaskViewerSettings } from '../../types';
 import { isTvInline } from '../../types';
 import { TaskRepository } from '../persistence/TaskRepository';
 import { PropertyUpdatePlanner } from '../persistence/PropertyUpdatePlanner';
-import { FlowExecutor } from '../flow/FlowExecutor';
+import { FlowExecutor, type FireOp } from '../flow/FlowExecutor';
+import { completes } from '../flow/FlowTrigger';
+import type { EditorFireHost } from '../../editor/FlowFireExtension';
 import type { FlowDeleteAssessment } from '../flow/FlowDeletion';
 import { TaskStore } from './TaskStore';
 import { TaskScanner } from './TaskScanner';
@@ -21,7 +23,8 @@ import type { GenBlock } from '../parsing/gen/GenBlockCollector';
 import { FileOperations } from '../persistence/utils/FileOperations';
 import { plannedOn, subjectOf } from '../persistence/TaskRefs';
 import { logError, logInfo, logWarn } from '../../log/log';
-import type { EditorLine, EditorSubtree, Refusal, RowLines } from '../../utils/FileLines';
+import type { EditorLine, EditorSubtree, Refusal, RowLines, WriteOutcome } from '../../utils/FileLines';
+import type { TaskOp } from '../persistence/TaskOps';
 
 /**
  * TaskIndex - タスク管理の統括ファサードクラス
@@ -450,15 +453,58 @@ export class TaskIndex {
         // 空振りする。第 2 引数が書く内容、第 1 引数がどの行かを決める。
         // 子のプロパティ行も写しの値から作るので、書き換えるときは部分木も
         // 計画が読んだものになる。外から足したタグの上に写しのタグを書かない。
-        const outcome = await this.repository.updateTaskInFile(
-            plannedOn(before, { subtree: propertyOps.length > 0 }), task, propertyOps);
+        //
+        // 行を完了させる書き換えは、同じ書き込みでフローを発火させる。完了か
+        // どうかは、書き込みが照合する土台の行と書く行の対で答える
+        // （`completes`）。発火の計画は書き込みの中で、書く行から立てる。
+        const target = plannedOn(before, { subtree: propertyOps.length > 0 });
+        const { outcome, fire } = await this.writeCompleting(
+            completes(before.originalText, TaskParser.format(task), this.settings.statusDefinitions) ? task.file : null,
+            (op) => this.repository.updateTaskInFile(target, task, propertyOps, op));
 
         if (!outcome.written) {
             this.revertUnwrittenUpdate(task, taskId, before, updates);
             return false;
         }
-        this.adoptWrittenRow(task, taskId, before, outcome.rows.get(before.id));
+        this.adoptWrittenRow(task, taskId, before, outcome.rows.get(before.id), fire?.planned()?.kind === 'fires');
+        // The source's write of a move to another file names the row, as this
+        // write did, planned from the row and subtree this write left.
+        if (fire) {
+            await this.commandExecutor.settleFire(fire, (at, ops) => this.repository.applyToTask(
+                { ...target, basis: { text: at.text, subtree: at.subtree } }, ops, { tellRefusal: false }));
+        }
         return true;
+    }
+
+    /**
+     * A write that may complete a row (`completingIn`, its file; null when it
+     * does not): made with the row's fire in it, and the fire that went with
+     * it. A fire whose lines cannot be written where they go (`unplaceable`,
+     * `disturbs`) takes the completion with it, and the completion is the
+     * user's: it is then written alone, as a completion made in the editor
+     * stands when its fire is refused, and the refusal has been told.
+     */
+    private async writeCompleting(
+        completingIn: string | null,
+        write: (fire?: TaskOp) => Promise<WriteOutcome>,
+    ): Promise<{ outcome: WriteOutcome; fire: FireOp | undefined }> {
+        if (completingIn === null) return { outcome: await write(), fire: undefined };
+        const fire = this.commandExecutor.fireOp(completingIn);
+        const outcome = await write(fire.op);
+        const planned = fire.planned();
+        const placing = outcome.refused?.reason.kind === 'unplaceable' || outcome.refused?.reason.kind === 'disturbs';
+        if (outcome.written || !placing || planned?.kind !== 'fires' || planned.ops.length === 0) return { outcome, fire };
+        return { outcome: await write(), fire: undefined };
+    }
+
+    /**
+     * What a completing write to a line the editor pointed at owes once it
+     * landed (`FlowExecutor.settleFire`): the source's write to the file, at
+     * the line that write left the row on.
+     */
+    private settleFire(fire: FireOp, file: string): Promise<void> {
+        return this.commandExecutor.settleFire(fire,
+            (at, ops) => this.repository.applyToLine(file, at, ops, { tellRefusal: false }));
     }
 
     /**
@@ -527,13 +573,17 @@ export class TaskIndex {
      * with the row unseen. Otherwise the copy is left with no subtree, and a
      * delete before the scan is refused if the row has any.
      *
+     * A fire in the write consumed the row's command (`fired`): the copy
+     * holds none either, so a write before the scan does not put it back.
+     *
      * Only the copy the store still holds: a scan that has already read the
      * write has replaced it with its own reading, which is newer. The ledger is
      * not touched — only a scan writes it.
      */
-    private adoptWrittenRow(task: Task, taskId: string, before: Task, lines: RowLines | undefined): void {
+    private adoptWrittenRow(task: Task, taskId: string, before: Task, lines: RowLines | undefined, fired = false): void {
         if (!lines || this.store.getTask(taskId) !== task) return;
         task.originalText = lines.left[0];
+        if (fired) task.flow = undefined;
         const planned = before.subtreeLines;
         const unchanged = planned !== undefined && planned.length === lines.read.length
             && planned.every((line, i) => line === lines.read[i]);
@@ -779,7 +829,12 @@ export class TaskIndex {
     async updateLine(filePath: string, at: EditorLine, newContent: string): Promise<boolean> {
         if (this.refuseAfterDispose('updateLine')) return false;
         return this.withNotify(filePath, async () => {
-            const { written } = await this.repository.updateLine(filePath, at, newContent);
+            // The editor menu's status change completes a line as a card's
+            // does, and fires in the same write (see writeUpdate).
+            const { outcome: { written }, fire } = await this.writeCompleting(
+                completes(at.text, newContent, this.settings.statusDefinitions) ? filePath : null,
+                (op) => this.repository.updateLine(filePath, at, newContent, op));
+            if (written && fire) await this.settleFire(fire, filePath);
             // Nothing written: no modify, so no scan to wait for.
             if (written) await this.scanner.waitForScan(filePath);
             return written;
@@ -806,6 +861,24 @@ export class TaskIndex {
             if (written) await this.scanner.waitForScan(filePath);
             return written;
         });
+    }
+
+    /**
+     * What the editor's fire needs of this index (`flowFireExtension`): the
+     * plan, the ops, and where its refusals and the rest of a move go. After
+     * `dispose`, nothing fires.
+     */
+    editorFireHost(): EditorFireHost {
+        return {
+            active: () => !this.disposed,
+            statusDefinitions: () => this.settings.statusDefinitions,
+            fireOp: (path) => this.commandExecutor.fireOp(path),
+            applyOps: (draft, session, target, ops) => this.repository.applyOps(draft, session, target, ops),
+            refused: (refusal) => this.reportRefusal(refusal),
+            didNotFire: (plan) => this.commandExecutor.reportDidNotFire(plan.task, plan.error),
+            finishAway: (away, writeSource) => this.commandExecutor.finishAway(away, writeSource),
+            writeFile: (path, at, ops) => this.repository.applyToLine(path, at, ops, { tellRefusal: false }),
+        };
     }
 
     // ===== ヘルパー =====

@@ -106,14 +106,14 @@ describe('through the real modify handler', () => {
         }
     });
 
-    // Whether what the drag held back fires is no longer carried across the
-    // drag as one flag for the whole batch (F6): each completion answers by
-    // the write that made it, whenever the scan reads it.
+    // A completion fires in the write that made it (X), so a drag that holds
+    // back the scan holds back no fire: the completion fires once, at once,
+    // and the scan after the drag reads it without firing again.
     const WEEKLY = '- [ ] 週報 @2026-09-21 ==> every mon\n';
     const CHECKED = '- [x] 週報 @2026-09-21 ==> every mon\n';
     const FIRED = '- [ ] 週報 @2026-09-28 ==> every mon\n- [x] 週報 @2026-09-21\n';
 
-    it('fires a completion the user made during the drag once, when the drag ends', async () => {
+    it('fires a completion the user made during the drag once, in its write', async () => {
         const contents = new Map([[FILE, WEEKLY]]);
         const live = vaultSession(contents);
         try {
@@ -122,10 +122,9 @@ describe('through the real modify handler', () => {
             live.index.setDraggingFile(FILE);
             await live.index.updateTask(weekly.id, { statusChar: 'x' });
             await live.settle(FILE);
-            expect(contents.get(FILE)).toBe(CHECKED);
+            expect(contents.get(FILE)).toBe(FIRED);
 
             live.index.setDraggingFile(null);
-            await vi.waitFor(() => expect(contents.get(FILE)).toBe(FIRED));
             await live.settle(FILE);
             expect(contents.get(FILE)).toBe(FIRED);
         } finally {

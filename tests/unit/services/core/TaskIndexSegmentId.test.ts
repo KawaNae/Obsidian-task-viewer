@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { TaskIndex } from '../../../../src/services/core/TaskIndex';
 import { clearLog, getLogEntries } from '../../../../src/log/log';
 import { makeTask } from '../../helpers/makeTask';
-import type { Task } from '../../../../src/types';
+import { DEFAULT_STATUS_DEFINITIONS, type Task } from '../../../../src/types';
 
 /**
  * What `updateTask` does when a display-layer segment ID reaches it.
@@ -37,7 +37,14 @@ function buildHost(task: Task) {
             bumpRevision: vi.fn(),
             notifyListeners: vi.fn(),
         },
-        settings: { scopeKeys: {} },
+        settings: { scopeKeys: {}, statusDefinitions: DEFAULT_STATUS_DEFINITIONS },
+        // A completion fires in its write; the fire itself is not measured here.
+        commandExecutor: {
+            fireOp: () => ({ op: { kind: "fire", plan: () => [] }, planned: () => null, away: () => null }),
+            settleFire: async () => { },
+        },
+        settleFire: proto.settleFire,
+        writeCompleting: proto.writeCompleting,
         scanner: { requestScan: vi.fn(async () => { }) },
         app: { vault: { getAbstractFileByPath: () => null } },
         repository: {

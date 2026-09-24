@@ -94,11 +94,6 @@ describe.each(NOT_A_CHILD)('a line of the subtree %s', (_name, line, unit) => {
         const { contents, session } = await open(['# note', '- [ ] 対象 @2026-09-21', line, '\t- ==> every mon', '- [ ] U', '']);
 
         expect(await session.index.updateTask(taskWorded(session, '対象').id, { statusChar: 'x' })).toBe(true);
-        const executor = (session.index as unknown as { commandExecutor: { isProcessing: boolean; taskQueue: unknown[] } }).commandExecutor;
-        await vi.waitFor(() => {
-            expect(executor.isProcessing).toBe(false);
-            expect(executor.taskQueue).toHaveLength(0);
-        });
         await session.settle(FILE);
 
         const lines = contents.get(FILE)!.split('\n');
@@ -127,11 +122,6 @@ describe('a child carried by a move to another note', () => {
         const session = live;
 
         expect(await session.index.updateTask(taskWorded(session, 'X').id, { statusChar: 'x' })).toBe(true);
-        const executor = (session.index as unknown as { commandExecutor: { isProcessing: boolean; taskQueue: unknown[] } }).commandExecutor;
-        await vi.waitFor(() => {
-            expect(executor.isProcessing).toBe(false);
-            expect(executor.taskQueue).toHaveLength(0);
-        });
         await session.settle(FILE);
         await session.settle('other.md');
 
@@ -160,11 +150,6 @@ describe('a child carried by a move to another note', () => {
             const session = live;
 
             expect(await session.index.updateTask(taskWorded(session, 'X').id, { statusChar: 'x' })).toBe(true);
-            const executor = (session.index as unknown as { commandExecutor: { isProcessing: boolean; taskQueue: unknown[] } }).commandExecutor;
-            await vi.waitFor(() => {
-                expect(executor.isProcessing).toBe(false);
-                expect(executor.taskQueue).toHaveLength(0);
-            });
             await session.settle(FILE);
             await session.settle('other.md');
 
@@ -196,11 +181,6 @@ describe('a move to a note that does not exist yet', () => {
         const session = live;
 
         expect(await session.index.updateTask(taskWorded(session, 'X').id, { statusChar: 'x' })).toBe(true);
-        const executor = (session.index as unknown as { commandExecutor: { isProcessing: boolean; taskQueue: unknown[] } }).commandExecutor;
-        await vi.waitFor(() => {
-            expect(executor.isProcessing).toBe(false);
-            expect(executor.taskQueue).toHaveLength(0);
-        });
         await session.settle(FILE);
         await session.settle('fresh.md');
 

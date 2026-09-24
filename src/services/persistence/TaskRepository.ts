@@ -6,7 +6,8 @@ import { FrontmatterWriter } from './writers/FrontmatterWriter';
 import { TaskCloner, type InPlaceCopyLines } from './TaskCloner';
 import type { PropertyOp } from './PropertyUpdatePlanner';
 import { WriteObserver } from './WriteObserver';
-import type { EditorLine, EditorSubtree, WriteAt, WriteOrigin, WriteOutcome } from '../../utils/FileLines';
+import type { EditorLine, EditorSubtree, LineDraft, NamedRow, WriteAt, WriteOrigin, WriteOutcome, WriteSession } from '../../utils/FileLines';
+import type { PlacedLine } from './utils/Placement';
 import type { PlannedTarget } from './TaskRefs';
 import type { TaskOp } from './TaskOps';
 
@@ -42,12 +43,32 @@ export class TaskRepository {
     // --- Inline Task Operations ---
 
     /** @returns what became of the write, and the row as it left it (see InlineTaskWriter). */
-    async updateTaskInFile(target: PlannedTarget, updatedTask: Task, childOps: PropertyOp[] = []): Promise<WriteOutcome> {
-        return this.inlineWriter.updateTaskInFile(target, updatedTask, childOps);
+    async updateTaskInFile(target: PlannedTarget, updatedTask: Task, childOps: PropertyOp[] = [], fire?: TaskOp): Promise<WriteOutcome> {
+        return this.inlineWriter.updateTaskInFile(target, updatedTask, childOps, fire);
     }
 
-    async updateLine(filePath: string, at: EditorLine, newContent: string): Promise<WriteOutcome> {
-        return this.inlineWriter.updateLine(filePath, at, newContent);
+    async updateLine(filePath: string, at: EditorLine, newContent: string, fire?: TaskOp): Promise<WriteOutcome> {
+        return this.inlineWriter.updateLine(filePath, at, newContent, fire);
+    }
+
+    /** The one loop that applies ops to a row, inside a write (see InlineTaskWriter.applyOps). */
+    applyOps(draft: LineDraft, session: WriteSession, target: NamedRow | EditorLine, ops: readonly TaskOp[]): boolean {
+        return this.inlineWriter.applyOps(draft, session, target, ops);
+    }
+
+    /** Ops applied to the row at a coordinate, as `at` holds it (see InlineTaskWriter.applyToLine). */
+    async applyToLine(filePath: string, at: EditorSubtree, ops: readonly TaskOp[], opts: { tellRefusal?: boolean } = {}): Promise<WriteOutcome> {
+        return this.inlineWriter.applyToLine(filePath, at, ops, opts);
+    }
+
+    /** What a move to another file writes to the destination (see InlineTaskWriter.archiveOf). */
+    archiveOf(lines: readonly string[], line: number, content: string): { block: PlacedLine[]; subtree: string[] } {
+        return this.inlineWriter.archiveOf(lines, line, content);
+    }
+
+    /** Append a move's archive to the destination: whether it was written (see InlineTaskWriter.appendArchive). */
+    async appendArchive(destPath: string, block: readonly PlacedLine[]): Promise<boolean> {
+        return this.inlineWriter.appendArchive(destPath, block);
     }
 
     async insertLineAfterLine(filePath: string, at: EditorLine, newContent: string): Promise<WriteOutcome> {

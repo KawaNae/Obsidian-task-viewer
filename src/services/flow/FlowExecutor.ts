@@ -1,4 +1,4 @@
-import { type App, Notice, TFile } from 'obsidian';
+import { type App, Notice } from 'obsidian';
 import type { Task, TaskViewerSettings } from '../../types';
 import { t } from '../../i18n';
 import { DateUtils } from '../../utils/DateUtils';
@@ -12,7 +12,8 @@ import { type CreatingEffect, type FlowDeleteAssessment, assessFlowDelete, planF
 import type { FlowInstanceInsert } from '../persistence/FlowInstanceLines';
 import type { TaskOp } from '../persistence/TaskOps';
 import { plannedOn } from '../persistence/TaskRefs';
-import type { Refusal } from '../../utils/FileLines';
+import type { EditorSubtree, Refusal, WriteOutcome } from '../../utils/FileLines';
+import type { PlacedLine } from '../persistence/utils/Placement';
 import { flowSource } from './FlowSegments';
 import { type FlowPlanDeps, GenerationError, planFlow } from './FlowPlanner';
 import { canTriggerFlow } from './FlowTrigger';
@@ -22,44 +23,21 @@ import type { GenBlock } from '../parsing/gen/GenBlockCollector';
 import { runtimeText } from './runtimeText';
 
 /**
- * Flow-command runtime: queues completion events, re-resolves the task
- * against the latest scan, plans effects (pure), and interprets them
- * against TaskRepository.
- *
- * The queue is strictly sequential and awaits a rescan after each task —
- * this is load-bearing: firing consumes the command (the line is
- * rewritten), which changes the completion-detection signature. Running
- * two fires against a stale index would double-generate.
+ * Flow-command runtime: plans what completing a row fires (pure), from the
+ * lines the completing write holds, and what deleting a row with a command
+ * writes first. A completion fires from the operation that completed the row
+ * — an editor's transaction, the plugin's own write — and from nothing else:
+ * no reading of a file, a scan's or a sync's, has a way to fire.
  */
+/** The source's write of a move to another file: `ops` applied to the row at `at`. */
+export type SourceWrite = (at: EditorSubtree, ops: readonly TaskOp[]) => Promise<WriteOutcome>;
+
 /** How long one failure stays quiet after it has been shown. */
 const FAILURE_NOTICE_WINDOW_MS = 5000;
 
 /** The file as it is named in the vault, which is how a user knows it. */
 function fileName(path: string): string {
     return (path.split('/').pop() ?? path).replace(/\.md$/i, '');
-}
-
-/**
- * One entry of work, and which of the two ways of consuming a command it is.
- *
- * `completion` is a check the user ticked. `delete` is a task the user is
- * removing, having asked for its next instance to be written first. Both
- * rewrite the same line, which is why they share one queue rather than each
- * having their own.
- */
-interface FlowQueueEntry {
-    task: Task;
-    mode: 'completion' | 'delete';
-    /**
-     * Whether the task is gone, for a delete entry.
-     *
-     * A fire that could not be planned keeps the task, so the answer is not
-     * always yes, and the caller acts on it — the menu closes the panel it
-     * was deleting from.
-     */
-    removed?: boolean;
-    /** Resolved when the entry leaves the queue, for callers that wait. */
-    settle?: (removed: boolean) => void;
 }
 
 /**
@@ -95,11 +73,26 @@ export interface FireOp {
     op: Extract<TaskOp, { kind: 'fire' }>;
     /** The plan of the write's last run, or null while no write has run it. */
     planned(): FirePlan | null;
+    /** The move to another file the write's last run planned, with where the row stood, or null. */
+    away(): PendingAway | null;
+}
+
+/**
+ * A move to another file a completing write planned, made after it: the
+ * archive to append to the destination, and the source's write once it has
+ * landed, to the row as the completing write left it (`source`, its line and
+ * subtree in the lines written). Not by name: the row is where that write
+ * left it, and the source's write is made only if it still reads so.
+ */
+export interface PendingAway {
+    task: Task;
+    destPath: string;
+    archive: PlacedLine[];
+    source: EditorSubtree;
+    ops: TaskOp[];
 }
 
 export class FlowExecutor {
-    private taskQueue: FlowQueueEntry[] = [];
-    private isProcessing = false;
     private readonly host = createMomentEvalHost();
     /** Failures already shown, by task and message, with when they were shown. */
     private readonly recentFailures = new Map<string, number>();
@@ -110,14 +103,6 @@ export class FlowExecutor {
         private app: App,
         private getSettings: () => TaskViewerSettings
     ) { }
-
-    async handleTaskCompletion(task: Task): Promise<void> {
-        if (!canTriggerFlow(task, this.getSettings().statusDefinitions)) return;
-        logInfo(`[Flow:completion] taskId=${task.id} flow="${task.flow ? flowSource(task.flow) : ''}"`);
-        this.taskQueue.push({ task, mode: 'completion' });
-        // Fire and forget; the queue serializes execution.
-        this.processQueue();
-    }
 
     /**
      * What completing the row at `line` of `lines` fires: the one place a
@@ -184,16 +169,65 @@ export class FlowExecutor {
      */
     fireOp(path: string): FireOp {
         let last: FirePlan | null = null;
+        let away: PendingAway | null = null;
         return {
             op: {
                 kind: 'fire',
                 plan: (lines, line) => {
-                    last = this.planFire(path, lines, line);
-                    return last.kind === 'fires' ? last.ops : [];
+                    const plan = this.planFire(path, lines, line);
+                    last = plan;
+                    away = null;
+                    if (plan.kind !== 'fires') return [];
+                    if (plan.away) {
+                        // Nothing else of the fire is in this write, so the row
+                        // and its subtree are as it leaves them.
+                        const archive = this.repository.archiveOf(lines, line, plan.away.content);
+                        away = {
+                            task: plan.task,
+                            destPath: plan.away.destPath,
+                            archive: archive.block,
+                            source: { line, text: lines[line], subtree: archive.subtree },
+                            ops: plan.away.ops,
+                        };
+                    }
+                    return plan.ops;
                 },
             },
             planned: () => last,
+            away: () => away,
         };
+    }
+
+    /**
+     * What a completing write owes once it has landed: the notice of a fire
+     * that could not be planned, and the rest of a move to another file.
+     * `writeSource` makes the source's write (to the file, or to the editor
+     * that completed the row).
+     */
+    async settleFire(fire: FireOp, writeSource: SourceWrite): Promise<void> {
+        const planned = fire.planned();
+        if (planned?.kind === 'failed') this.reportDidNotFire(planned.task, planned.error);
+        const away = fire.away();
+        if (away) await this.finishAway(away, writeSource);
+    }
+
+    /**
+     * The rest of a move to another file, after the completion landed: the
+     * destination first — until it has landed nothing in the source is
+     * touched, so a move whose archive cannot be written leaves the row
+     * completed with its command, and says so — and then the source's write,
+     * the next instance with the original taken away. That write can still be
+     * refused, and then the task is in both files, which is told once. Handing
+     * a move from one file to the other is F8's.
+     */
+    async finishAway(away: PendingAway, writeSource: SourceWrite): Promise<void> {
+        if (!(await this.repository.appendArchive(away.destPath, away.archive))) {
+            // Told to the user by the write layer, which refused it.
+            logWarn(`[FlowExecutor] Flow did not fire, nothing written: ${away.task.id}`);
+            return;
+        }
+        const outcome = await writeSource(away.source, away.ops);
+        if (outcome.refused) this.reportMoveLeftCopy(away.task, away.destPath, outcome.refused);
     }
 
     /**
@@ -207,96 +241,24 @@ export class FlowExecutor {
     }
 
     /**
-     * Write the next instance, then remove this one.
-     *
-     * Goes through the same queue as a completion because it rewrites the
-     * same file: a fire racing the completion queue against a stale index
-     * would double-generate, which is the reason the queue exists at all.
-     * Awaited, so the caller's own rescan runs after the writes have landed.
+     * Write the next instance, then remove this one, as one write. The
+     * index runs it behind every write already asked of the row
+     * (`TaskIndex.onRow`), so it is planned from the copy the last of them
+     * left. Awaited, so the caller's own rescan runs after the write has
+     * landed.
      *
      * @returns whether the task is gone. False when the fire could not be
      * planned, which stops the delete.
      */
     async fireAndDelete(task: Task): Promise<boolean> {
         logInfo(`[Flow:delete] taskId=${task.id} flow="${task.flow ? flowSource(task.flow) : ''}"`);
-        return new Promise<boolean>(resolve => {
-            this.taskQueue.push({ task, mode: 'delete', settle: resolve });
-            this.processQueue();
-        });
-    }
-
-    private async processQueue(): Promise<void> {
-        if (this.isProcessing) return;
-        this.isProcessing = true;
-        let didExecute = false;
-
         try {
-            while (this.taskQueue.length > 0) {
-                const entry = this.taskQueue[0]; // Peek
-                try {
-                    didExecute = (await this.processEntry(entry)) || didExecute;
-                } catch (err) {
-                    logError(`[FlowExecutor] Error processing task ${entry.task.id}: ${(err as Error)?.message ?? err}`);
-                } finally {
-                    // Leaving the queue and waking the caller happen here and
-                    // nowhere else, so a throw on any road out still frees
-                    // both — a delete that never settled would hang the menu
-                    // that asked for it.
-                    this.taskQueue.shift();
-                    entry.settle?.(entry.removed === true);
-                }
-            }
-        } finally {
-            this.isProcessing = false;
-            if (didExecute) {
-                this.taskIndex.notifyImmediate();
-            }
-        }
-    }
-
-    /** @returns true when effects were applied (false = did not fire). */
-    private async processEntry(entry: FlowQueueEntry): Promise<boolean> {
-        // 1. Wait for any pending file scans (file state re-acquisition)
-        await this.taskIndex.waitForScan(entry.task.file);
-
-        // 2. The task as the index holds it now, by name. Not by its text or
-        //    its line: a row worded like it is not it, and the name is what
-        //    every write below asks after (see TaskScanner.locate). A row
-        //    edited since the completion was seen is still this row, and the
-        //    check below decides whether it still fires.
-        const currentTask = this.taskIndex.getTask(entry.task.id);
-        if (!currentTask) {
-            // Nothing to resolve is nothing to delete: the line is already
-            // gone, which is the state the caller was asking for.
-            entry.removed = entry.mode === 'delete';
+            return await this.executeDeletionFire(task);
+        } catch (err) {
+            // Answered, not thrown: the menu that asked waits on the answer.
+            logError(`[FlowExecutor] Error deleting task ${task.id}: ${(err as Error)?.message ?? err}`);
             return false;
         }
-
-        // 3. Re-check triggerability (it may have been unchecked). A delete
-        //    is not a completion and carries no status condition — the user
-        //    asked for it directly.
-        if (entry.mode === 'completion'
-            && !canTriggerFlow(currentTask, this.getSettings().statusDefinitions)) {
-            return false;
-        }
-
-        let didExecute: boolean;
-        if (entry.mode === 'delete') {
-            didExecute = await this.executeDeletionFire(currentTask);
-            // The delete path writes exactly when it removes the task, so
-            // the two answers are one.
-            entry.removed = didExecute;
-        } else {
-            didExecute = await this.executeFlow(currentTask);
-        }
-
-        // 4. Await the rescan triggered by our own writes so the next
-        //    queue entry (and completion detection) sees fresh state.
-        const file = this.app.vault.getAbstractFileByPath(currentTask.file);
-        if (file instanceof TFile) {
-            await this.taskIndex.requestScan(file);
-        }
-        return didExecute;
     }
 
     /**
@@ -381,77 +343,6 @@ export class FlowExecutor {
         };
     }
 
-    /** @returns true when effects were applied (false = did not fire). */
-    private async executeFlow(task: Task): Promise<boolean> {
-        const program = task.flow?.program;
-        if (!program) return false;
-
-        let effects: FlowEffect[];
-        const read = this.readingBlocks();
-        try {
-            effects = planFlow(task, program, read.deps);
-        } catch (err) {
-            if (err instanceof EvalError || err instanceof GenerationError) {
-                // Runtime expression failure (e.g. unset property), or a
-                // block that cannot produce the next instance: do not fire
-                // and do not consume — the command stays for the user to
-                // fix, and the message explains why.
-                logWarn(`[FlowExecutor] Flow did not fire for ${task.id}: ${err.message}`);
-                this.reportDidNotFire(task, err);
-                return false;
-            }
-            throw err;
-        }
-
-        // Everything the fire does in the row's own file is one write: all of
-        // it lands or none does, and a command is never consumed without its
-        // next instance, nor the other way round.
-        const ops = effects.flatMap(effect => {
-            logInfo(`[Flow:effect] ${effect.kind} taskId=${task.id}`);
-            return this.opsFor(task, effect);
-        });
-
-        // A move to another file is the one fire that writes two files, and
-        // two files cannot be one write. The destination goes first: until it
-        // has landed nothing in the source is touched, so a move whose row
-        // cannot be placed writes nothing anywhere. Once it has, the source's
-        // write can still be refused, and then the task is in both files —
-        // handing a move from one file to the other is F8's.
-        const away = effects.find(
-            (effect): effect is Extract<FlowEffect, { kind: 'archive-to' }> =>
-                effect.kind === 'archive-to' && effect.destPath !== task.file);
-        if (away) {
-            const planned = plannedOn(task, { commands: true, subtree: true, blocks: read.blocks });
-            const archived = await this.repository.appendTaskWithChildren(
-                away.destPath, TaskParser.format(away.archivedTask), planned);
-            if (archived === null) {
-                // Told to the user by the write layer, which refused it.
-                logWarn(`[FlowExecutor] Flow did not fire, nothing written: ${task.id}`);
-                return false;
-            }
-            // The source has to read as it did when its subtree was archived:
-            // a child edited in between would otherwise go with the removal,
-            // its edit kept nowhere.
-            const outcome = await this.repository.applyToTask(
-                { ...planned, basis: { ...planned.basis, subtree: archived } }, ops, { tellRefusal: false });
-            if (outcome.refused) this.reportMoveLeftCopy(task, away.destPath, outcome.refused);
-            return true;
-        }
-
-        // Named with what the plan was made from: the write refuses a row that
-        // no longer reads that way, rather than writing the plan over it. A
-        // move within the file carries the row's subtree, so the subtree is
-        // part of what it planned from.
-        const carries = ops.some(op => op.kind === 'move-to-end' || op.kind === 'remove');
-        const outcome = await this.repository.applyToTask(
-            plannedOn(task, { commands: true, subtree: carries, blocks: read.blocks }), ops);
-        if (!outcome.written) {
-            // Told to the user by the write layer, which refused it.
-            logWarn(`[FlowExecutor] Flow did not fire, nothing written: ${task.id}`);
-        }
-        return outcome.written;
-    }
-
     /**
      * Tell the user that a move reached its destination and left the original
      * where it was: the task is in two places now, and nothing on screen says
@@ -479,18 +370,16 @@ export class FlowExecutor {
             case 'create-generated':
                 return [{ kind: 'insert-instance', insert: this.instanceInsertFor(task, effect) }];
             case 'strip-flow':
-                // The row as the index read it, without its command. The write
-                // refuses a row, or command lines, that read otherwise now
-                // (`plannedOn`), so this is not a stale copy written over an
-                // edit made since — someone else's or a write of ours.
+                // The row without its command. A completion's fire reads the
+                // row from the lines its write holds, so this is the row as it
+                // is written; a deletion's is checked against the row it was
+                // planned from (`plannedOn`).
                 return [{ kind: 'strip-flow', text: TaskParser.format({ ...task, flow: undefined }) }];
             case 'archive-to':
-                // To another file it is written before this write (see
-                // executeFlow). Within the file it is one op: the row is
+                // To another file it is written after the completing write
+                // (see finishAway). Within the file it is one op: the row is
                 // carried to the end, so the moved row is the row that fired,
                 // and taking it from where it stood is part of the carrying.
-                // Its text is made from the index's copy on the same terms as
-                // the strip.
                 return effect.destPath === task.file
                     ? [{ kind: 'move-to-end', text: TaskParser.format(effect.archivedTask) }]
                     : [];

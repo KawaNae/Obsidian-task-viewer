@@ -32,7 +32,9 @@ export class InlineTaskWriter {
     ) { }
 
     /**
-     * Rewrite the row as `updatedTask`, and its property lines by `childOps`.
+     * Rewrite the row as `updatedTask`, and its property lines by `childOps`
+     * — and, with `fire`, fire its flow in the same write: a card's, the
+     * API's or a timer's completion of the row (`TaskIndex.writeUpdate`).
      *
      * The line is made from the index's copy, so it is written only over a
      * row that still reads as that copy (`target.basis`): a line edited since
@@ -45,7 +47,7 @@ export class InlineTaskWriter {
      * disagreeing until something else forces a rescan. `rows` holds the row
      * as it was handed in and as it was written.
      */
-    async updateTaskInFile(target: PlannedTarget, updatedTask: Task, childOps: PropertyOp[] = []): Promise<WriteOutcome> {
+    async updateTaskInFile(target: PlannedTarget, updatedTask: Task, childOps: PropertyOp[] = [], fire?: TaskOp): Promise<WriteOutcome> {
         const file = this.app.vault.getAbstractFileByPath(target.file);
         if (!(file instanceof TFile)) return this.refusedGone(target, 'user');
 
@@ -54,7 +56,7 @@ export class InlineTaskWriter {
         // シフトが競合するため、タスク行と子行は1原子書き込み）。
         const update: TaskOp = { kind: 'update', text: TaskParser.format(updatedTask), childOps };
         return processLines(this.app, file, this.writes?.for(target.file, 'user'),
-            (draft, _eol, session) => this.applyOps(draft, session, target, [update]));
+            (draft, _eol, session) => this.applyOps(draft, session, target, fire ? [update, fire] : [update]));
     }
 
     /** Nothing written: the file is not there. Told as `gone`, like a row that is not. */
@@ -62,7 +64,8 @@ export class InlineTaskWriter {
         return fileGone(this.writes?.for(target.file, origin), target.file, target.subject);
     }
 
-    async updateLine(filePath: string, at: EditorLine, newContent: string): Promise<WriteOutcome> {
+    /** Rewrite the editor's line as `newContent`, and with `fire`, fire its flow in the same write. */
+    async updateLine(filePath: string, at: EditorLine, newContent: string, fire?: TaskOp): Promise<WriteOutcome> {
         const file = this.app.vault.getAbstractFileByPath(filePath);
         if (!(file instanceof TFile)) return fileGone(this.writes?.for(filePath, 'user'), filePath, at.text.trim());
 
@@ -71,7 +74,27 @@ export class InlineTaskWriter {
         // rewrite the row in place and leave it the row it was.
         const update: TaskOp = { kind: 'update', text: newContent };
         return processLines(this.app, file, this.writes?.for(filePath, 'user'),
-            (draft, _eol, session) => this.applyOps(draft, session, at, [update]));
+            (draft, _eol, session) => this.applyOps(draft, session, at, fire ? [update, fire] : [update]));
+    }
+
+    /**
+     * Apply `ops` to the row at a coordinate, planned from the row and its
+     * subtree as `at` holds them: the source's write of a move to another
+     * file, made once the destination landed, to the row the completing
+     * write left (`FlowExecutor.finishAway`). A caller that tells a refusal
+     * in its own words has it from the outcome, as `applyToTask` does.
+     */
+    async applyToLine(
+        filePath: string,
+        at: EditorSubtree,
+        ops: readonly TaskOp[],
+        opts: { tellRefusal?: boolean } = {},
+    ): Promise<WriteOutcome> {
+        const file = this.app.vault.getAbstractFileByPath(filePath);
+        const told = this.writes?.for(filePath, 'flow');
+        const channel = told && opts.tellRefusal === false ? { ...told, refused: () => { } } : told;
+        if (!(file instanceof TFile)) return fileGone(channel, filePath, at.text.trim());
+        return processLines(this.app, file, channel, (draft, _eol, session) => this.applyOps(draft, session, at, ops));
     }
 
     /**

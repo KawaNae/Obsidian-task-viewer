@@ -74,12 +74,10 @@ describe('content holding U+2028 or U+2029', () => {
     });
 
     it('is set by a flow, and the next instance reads it back', async () => {
-        const note = ['# note', '- [x] A @2026-09-21', `\t- ==> every 1d setContent("x${LS}y")`, ''];
+        const note = ['# note', '- [ ] A @2026-09-21', `\t- ==> every 1d setContent("x${LS}y")`, ''];
         const { contents, session } = await open(note);
-        const executor = session.executor;
 
-        await executor.handleTaskCompletion(only(session, 'A'));
-        await vi.waitFor(() => expect(executor.isProcessing).toBe(false));
+        expect(await session.index.updateTask(only(session, 'A').id, { statusChar: 'x' })).toBe(true);
         await session.settle(FILE);
 
         expect(Notice.messages).toEqual([]);

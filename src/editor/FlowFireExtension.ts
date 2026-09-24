@@ -1,0 +1,273 @@
+import { EditorState, StateEffect, StateField, Transaction, type ChangeSet, type Extension, type Text, type TransactionSpec } from '@codemirror/state';
+import { ViewPlugin, type EditorView, type ViewUpdate } from '@codemirror/view';
+import { editorInfoField } from 'obsidian';
+import type { StatusDefinition } from '../types';
+import { completes, isOperation } from '../services/flow/FlowTrigger';
+import type { FireOp, FirePlan, PendingAway, SourceWrite } from '../services/flow/FlowExecutor';
+import type { TaskOp } from '../services/persistence/TaskOps';
+import {
+    editLines, replayEdits,
+    type EditorLine, type EditorSubtree, type LineDraft, type NamedRow, type Refusal, type WriteOutcome, type WriteSession,
+} from '../utils/FileLines';
+import { lineChanges } from './LineChanges';
+import { logError, logWarn } from '../log/log';
+
+/**
+ * What the editor's fire needs of the plugin: the settings' completion, the
+ * flow layer's plan, the write layer's ops, and where refusals and the rest of
+ * a completing write go. Closures, so that the editor layer imports neither
+ * the index nor the repository.
+ */
+export interface EditorFireHost {
+    /** False once the plugin has let go: nothing fires. */
+    active(): boolean;
+    statusDefinitions(): StatusDefinition[];
+    fireOp(path: string): FireOp;
+    applyOps(draft: LineDraft, session: WriteSession, target: NamedRow | EditorLine, ops: readonly TaskOp[]): boolean;
+    /** Tell the user a write was not made, and why (the index's `reportRefusal`). */
+    refused(refusal: Refusal): void;
+    /** Tell the user a fire could not be planned (`FlowExecutor.reportDidNotFire`). */
+    didNotFire(plan: Extract<FirePlan, { kind: 'failed' }>): void;
+    /** The rest of a move to another file (`FlowExecutor.finishAway`). */
+    finishAway(away: PendingAway, writeSource: SourceWrite): Promise<void>;
+    /** The source's write to the file, for an editor closed before the move got to it. */
+    writeFile(path: string, at: EditorSubtree, ops: readonly TaskOp[]): Promise<WriteOutcome>;
+}
+
+/** A row an editor transaction completed: its line in the document after it, and the text there. */
+export interface CompletedRow {
+    line: number;
+    text: string;
+}
+
+/**
+ * The rows a transaction completed: each change whose range is one line
+ * before and one line after, over a line that goes from an incomplete task to
+ * a complete one (`completes`). A line two changes touched is one row. A
+ * change over several lines completes nothing: pasting or moving a completed
+ * line is not completing it.
+ */
+export function completedRows(startDoc: Text, doc: Text, changes: ChangeSet, defs: StatusDefinition[]): CompletedRow[] {
+    const rows: CompletedRow[] = [];
+    const seen = new Set<number>();
+    changes.iterChanges((fromA, toA, fromB, toB) => {
+        const before = startDoc.lineAt(fromA);
+        const after = doc.lineAt(fromB);
+        if (startDoc.lineAt(toA).number !== before.number || doc.lineAt(toB).number !== after.number) return;
+        if (!completes(before.text, after.text, defs)) return;
+        const line = after.number - 1;
+        if (seen.has(line)) return;
+        seen.add(line);
+        rows.push({ line, text: after.text });
+    });
+    return rows;
+}
+
+/** A document's lines, as a write holds them. */
+function linesOf(doc: Text): string[] {
+    const lines: string[] = [];
+    for (let n = 1; n <= doc.lines; n++) lines.push(doc.line(n).text);
+    return lines;
+}
+
+/** Where the document's line `line` (0-based) starts. */
+function startOf(lines: readonly string[], line: number): number {
+    let offset = 0;
+    for (let i = 0; i < line; i++) offset += lines[i].length + 1;
+    return offset;
+}
+
+/**
+ * A move to another file a completion in this editor planned, waiting for its
+ * destination: `pos` is where the row's line starts, carried across every
+ * transaction since (`changes.mapPos`) — a position this editor's own
+ * transactions moved, not a guess.
+ */
+interface Away {
+    id: number;
+    path: string;
+    pos: number;
+    pending: PendingAway;
+}
+
+const addAway = StateEffect.define<Away>();
+const dropAway = StateEffect.define<number>();
+
+/** The moves this editor's completions planned and has not yet written back. */
+const awayField = StateField.define<readonly Away[]>({
+    create: () => [],
+    update(aways, tr) {
+        // Carried first: one this transaction adds already stands where it
+        // says, in the document the transaction leaves.
+        let next = tr.docChanged ? aways.map(away => ({ ...away, pos: tr.changes.mapPos(away.pos, 1) })) : aways;
+        for (const effect of tr.effects) {
+            if (effect.is(addAway)) next = [...next, effect.value];
+            else if (effect.is(dropAway)) next = next.filter(away => away.id !== effect.value);
+        }
+        return next;
+    },
+});
+
+let nextAwayId = 0;
+
+/**
+ * The fire of a completion made in the editor, in the transaction that made
+ * it (`transactionFilter`): a transaction that is an operation
+ * (`isOperation`) and completes rows (`completedRows`) has each row's fire
+ * planned from the document it leaves and written into the same transaction,
+ * so the completion and its fire are one change, and one step to undo. A
+ * transaction that is no operation — a file loaded or synced into the
+ * editor, another pane's edit shown here, an undo, a redo — fires nothing,
+ * whatever it completes.
+ *
+ * The fire goes through the one core every write of lines runs (`editLines`,
+ * with the same ops and the same checks as a write to the file), and its
+ * result is turned into changes to the document (`lineChanges`). Refused, the
+ * completion stands without its fire, and the user is told.
+ */
+export function fireFilter(host: EditorFireHost): Extension {
+    return EditorState.transactionFilter.of((tr): TransactionSpec | readonly TransactionSpec[] => {
+        if (!tr.docChanged || !isOperation(tr.annotation(Transaction.userEvent)) || !host.active()) return tr;
+        const rows = completedRows(tr.startState.doc, tr.newDoc, tr.changes, host.statusDefinitions());
+        if (rows.length === 0) return tr;
+        const path = tr.startState.field(editorInfoField, false)?.file?.path;
+        if (!path) return tr;
+
+        const lines = linesOf(tr.newDoc);
+        const fires = rows.map(() => host.fireOp(path));
+        const edited = editLines(path, lines, '\n', undefined, (draft, _eol, session) =>
+            rows.every((row, i) => host.applyOps(draft, session, { line: row.line, text: row.text }, [fires[i].op])));
+        if (!edited.written) {
+            host.refused(edited.refused);
+            return tr;
+        }
+        const changes = lineChanges(edited.before, edited.lines, edited.edits);
+        if (changes === null) {
+            logError(`[FlowFire] ${path}: a fire's write does not follow; nothing written`);
+            return tr;
+        }
+
+        // What the rows' fires owe once the transaction is made.
+        const effects: StateEffect<Away>[] = [];
+        const replayed = replayEdits(edited.before.length, edited.edits);
+        for (const fire of fires) {
+            const planned = fire.planned();
+            if (planned?.kind === 'failed') queueMicrotask(() => host.didNotFire(planned));
+            const pending = fire.away();
+            if (!pending) continue;
+            // The row as the fire planned it, where the whole write leaves it.
+            const line = replayed ? replayed.origin.indexOf(pending.source.line) : -1;
+            if (line < 0) {
+                logWarn(`[FlowFire] ${path}: a move's row is not where the write left it; not moved`);
+                continue;
+            }
+            effects.push(addAway.of({
+                id: nextAwayId++,
+                path,
+                pos: startOf(edited.lines, line),
+                pending: { ...pending, source: { ...pending.source, line } },
+            }));
+        }
+        if (changes.length === 0 && effects.length === 0) return tr;
+        return [tr, { changes, effects, sequential: true }];
+    });
+}
+
+/** What {@link AwayRunner} reads and writes of an editor. */
+export interface EditorHandle {
+    readonly state: EditorState;
+    dispatch(spec: TransactionSpec): void;
+}
+
+/**
+ * The rest of each move to another file an editor's completion planned: the
+ * destination, then the source's write to this editor, to the row where its
+ * position has been carried to. The row has to read as the completion left
+ * it: undone since, or edited, it is not taken away, and the user is told the
+ * task is now in both files. An editor closed before then is written to its
+ * file instead, at the line it was last carried to.
+ */
+export class AwayRunner {
+    private closed = false;
+    /** The editor's last state, for a move that finishes after it closed. */
+    private last: EditorState;
+
+    constructor(private readonly editor: EditorHandle, private readonly host: EditorFireHost) {
+        this.last = editor.state;
+    }
+
+    /** The moves a transaction added, started once it is made. */
+    added(transactions: readonly Transaction[], state: EditorState): Promise<void>[] {
+        this.last = state;
+        const runs: Promise<void>[] = [];
+        for (const tr of transactions) {
+            for (const effect of tr.effects) {
+                if (effect.is(addAway)) runs.push(Promise.resolve().then(() => this.run(effect.value)));
+            }
+        }
+        return runs;
+    }
+
+    close(): void {
+        this.last = this.editor.state;
+        this.closed = true;
+    }
+
+    private async run(away: Away): Promise<void> {
+        let dropped = false;
+        await this.host.finishAway(away.pending, async (_at, ops) => {
+            const outcome = await this.writeSource(away, ops);
+            dropped = !this.closed;
+            return outcome;
+        });
+        if (!dropped && !this.closed) this.editor.dispatch({ effects: dropAway.of(away.id) });
+    }
+
+    private async writeSource(away: Away, ops: readonly TaskOp[]): Promise<WriteOutcome> {
+        const state = this.closed ? this.last : this.editor.state;
+        const now = state.field(awayField, false)?.find(candidate => candidate.id === away.id);
+        const pos = now?.pos ?? away.pos;
+        const at: EditorSubtree = {
+            line: state.doc.lineAt(Math.min(pos, state.doc.length)).number - 1,
+            text: away.pending.source.text,
+            subtree: away.pending.source.subtree,
+        };
+        if (this.closed) return this.host.writeFile(away.path, at, ops);
+
+        const lines = linesOf(state.doc);
+        const edited = editLines(away.path, lines, '\n', undefined,
+            (draft, _eol, session) => this.host.applyOps(draft, session, at, ops));
+        if (!edited.written) {
+            this.editor.dispatch({ effects: dropAway.of(away.id) });
+            return { written: false, refused: edited.refused };
+        }
+        const changes = lineChanges(edited.before, edited.lines, edited.edits);
+        if (changes === null) {
+            logError(`[FlowFire] ${away.path}: a move's write does not follow; nothing written`);
+            this.editor.dispatch({ effects: dropAway.of(away.id) });
+            return { written: false, refused: { file: away.path, reason: { kind: 'failed' }, subject: at.text.trim() } };
+        }
+        this.editor.dispatch({ changes, effects: dropAway.of(away.id) });
+        return { written: true, refused: null, made: [], rows: new Map() };
+    }
+}
+
+/**
+ * The editor's fire, as one extension: the filter, the moves it leaves
+ * waiting, and the plugin that finishes them.
+ */
+export function flowFireExtension(host: EditorFireHost): Extension {
+    const runner = ViewPlugin.fromClass(class {
+        private readonly runner: AwayRunner;
+        constructor(view: EditorView) {
+            this.runner = new AwayRunner(view, host);
+        }
+        update(update: ViewUpdate): void {
+            void this.runner.added(update.transactions, update.state);
+        }
+        destroy(): void {
+            this.runner.close();
+        }
+    });
+    return [awayField, fireFilter(host), runner];
+}
