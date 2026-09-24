@@ -63,10 +63,11 @@ export class ChildPropertyLineEditor {
             const matching = ownLines.filter(l => l.key === op.key);
 
             if (op.op === 'delete') {
-                // A line with lines of its own below it is not taken out:
-                // they would read as something else (`canTakeOut`).
+                // Not taken out when a line below it would read as something
+                // else without it, or a task, command or property below it
+                // would stand elsewhere (`canTakeOut`).
                 const outline = Outline.read(lines);
-                if (!outline.canTakeOut(matching.map(l => l.lineIdx))) return false;
+                if (!outline.canTakeOut(matching.map(l => l.lineIdx), line => ChildLineClassifier.carriesMeaning(line))) return false;
                 // 逆順に消すので、各 lineIdx はその行が立っていた座標のまま。
                 for (let i = matching.length - 1; i >= 0; i--) {
                     draft.splice(matching[i].lineIdx, 1);

@@ -3,6 +3,8 @@ import { IN_LINE } from '../../../utils/LineBreak';
 import { LIST_BULLET_SOURCE, SPACE_OR_TAB_SOURCE } from './ListMarker';
 import { INDENT_SOURCE, Outline, type OutlineReading } from './Outline';
 import { extractWikilinkTarget } from '../../../utils/WikilinkUtils';
+import { FLOW_LINE_RE } from './FlowLineScanner';
+import { TaskLineClassifier } from './TaskLineClassifier';
 
 /**
  * 子行のパース・分類ユーティリティ。
@@ -49,6 +51,20 @@ export class ChildLineClassifier {
             throw new Error(`classifyLines: lines(${lines.length}) and bodyLines(${bodyLines.length}) must be parallel`);
         }
         return lines.map((text, i) => this.classify(text, bodyLines[i]));
+    }
+
+    /**
+     * Whether the plugin reads a meaning from `text` when it opens a list
+     * item: a task, a `==>` line, a property or a wikilink child. Such an
+     * item means what it does by where it stands (the task it belongs to),
+     * so a write that takes lines out must leave it standing where it was
+     * (`OutlineReading.canTakeOut`). Any other item is a note.
+     */
+    static carriesMeaning(text: string): boolean {
+        return TaskLineClassifier.isTaskLine(text)
+            || FLOW_LINE_RE.test(text)
+            || this.PROPERTY_LINE.test(text)
+            || this.WIKILINK_CHILD.test(text);
     }
 
     /**
