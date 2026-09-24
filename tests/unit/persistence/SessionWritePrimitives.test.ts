@@ -408,7 +408,7 @@ describe('completed-run walk across mixed indentation', () => {
     // same depth. Comparing raw character counts stops the walk at the first
     // sibling spelled the other way, which drops a new record into the middle of
     // the run instead of at its end.
-    it('steps over a tab-indented sibling from a space-indented anchor', async () => {
+    it('steps over a tab-indented sibling from a space-indented anchor, and takes its spelling', async () => {
         const first = '    - [x] ⏱️ rec @2026-08-13T10:00>10:30';
         const second = '\t- [x] ⏱️ rec @2026-08-13T11:00>11:30';
         const { text } = await runSiblingInsert(
@@ -418,7 +418,9 @@ describe('completed-run walk across mixed indentation', () => {
             { afterCompletedRun: true }
         );
 
-        expect(text.split('\n')).toEqual(['- [ ] parent', first, second, '    ' + NEW_SESSION]);
+        // At the indentation of the sibling it goes next to, the last of the
+        // run (P1: siblings spelled at other columns would take it under them).
+        expect(text.split('\n')).toEqual(['- [ ] parent', first, second, '\t' + NEW_SESSION]);
     });
 
     it('still stops at a genuinely shallower line', async () => {

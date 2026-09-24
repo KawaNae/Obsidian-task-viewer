@@ -428,15 +428,26 @@ export class OutlineReading {
 
     /**
      * The index past the lines from `at` that a line put at `at` would take
-     * in: in the item `owner` (null at the top), a paragraph going on and
-     * indented code. A new first child of a task goes past its text that
-     * goes on; a new line under a heading goes past the paragraph below it.
-     * A blank line, an item, a fence, a heading and a thematic break start a
-     * block of their own below the line put, and stop the run.
+     * in, the line indented `indent` and opening its content two columns
+     * past it (`- `): in the item `owner` (null at the top), a paragraph
+     * going on and indented code — and past blank lines, such a line after
+     * them indented to that content or deeper, which would go on the line
+     * put as a paragraph of its own. A new first child of a task
+     * goes past its text that goes on; a new line under a heading goes past
+     * the paragraph and the code below it. An item, a fence, a heading, a
+     * thematic break, and a line shallower than that after a blank one
+     * start a block of their own below the line put, and stop the run.
      */
-    leadEnd(at: number, owner: number | null): number {
-        while (at < this.lines.length && this.ownerOf(at) === owner && this.takenIn(at)) at++;
-        return at;
+    leadEnd(at: number, owner: number | null, indent: string): number {
+        const column = Outline.depthOf(indent) + 2;
+        let end = at;
+        for (let line = at; line < this.lines.length; line++) {
+            if (this.kindOf(line) === 'blank') continue;
+            if (this.ownerOf(line) !== owner || !this.takenIn(line)) break;
+            if (line > end && Outline.depthOf(this.lines[line]) < column) break;
+            end = line + 1;
+        }
+        return end;
     }
 
     private takenIn(line: number): boolean {

@@ -1,7 +1,7 @@
 import { collectFlowLineIndicesInFile, formatFlowLine } from '../parsing/utils/FlowLineScanner';
 import { FileOperations } from './utils/FileOperations';
 import { Outline } from '../parsing/utils/Outline';
-import { Block, type PlacedLine } from './utils/Placement';
+import { Block, type PlacedLine, type Spot } from './utils/Placement';
 
 /**
  * One generated child line, as the block described it.
@@ -57,10 +57,11 @@ export function renderFlowInstance(
     lines: readonly string[],
     currentLine: number,
     insert: FlowInstanceInsert,
+    spot: Spot,
 ): PlacedLine[] {
     return insert.kind === 'recurrence'
-        ? renderRecurrence(lines, currentLine, insert.content, insert.flowLines)
-        : renderGenerated(lines, currentLine, insert.parentLine, insert.flowLines, insert.children);
+        ? renderRecurrence(lines, currentLine, spot.indent, insert.content, insert.flowLines)
+        : renderGenerated(lines, currentLine, spot.indent, insert.parentLine, insert.flowLines, insert.children);
 }
 
 /**
@@ -77,12 +78,12 @@ export function renderFlowInstance(
 function renderRecurrence(
     lines: readonly string[],
     currentLine: number,
+    indent: string,
     content: string,
     flowLines: string[],
 ): PlacedLine[] {
-    // Re-indent the formatted line to match the original task line
-    const originalIndent = Outline.indentOf(lines[currentLine]);
-    const newParentLine = originalIndent + Outline.dedent(content);
+    // At the indentation of the sibling it goes above (`Placement.groupHead`).
+    const newParentLine = indent + Outline.dedent(content);
 
     const flowAbs = new Set(collectFlowLineIndicesInFile(lines, currentLine));
     const sample = FileOperations.firstChildIndent(lines, currentLine, flowAbs)
@@ -99,7 +100,8 @@ function renderRecurrence(
  * The next instance as a generation block wrote it.
  *
  * Indentation is resolved from the file, not from the caller. The parent is a
- * sibling of the task that fired, so it takes that task's own indent. Each
+ * sibling of the task that fired, at the indentation of the sibling it goes
+ * above (`Placement.groupHead`). Each
  * child is a child of the line above it one `depth` up (the parent for a
  * depth of 1), indented by the one rule for a child (`Outline.childIndent`):
  * as far past that line as the fired task's first child is past the task,
@@ -109,6 +111,7 @@ function renderRecurrence(
 function renderGenerated(
     lines: readonly string[],
     currentLine: number,
+    indent: string,
     parentLine: string,
     flowLines: string[],
     children: GeneratedChild[],
@@ -123,7 +126,7 @@ function renderGenerated(
         : unit;
     const under = (line: string) => Outline.childIndent(line, Outline.indentOf(line) + step, unit);
 
-    const head = parentIndent + Outline.dedent(parentLine);
+    const head = indent + Outline.dedent(parentLine);
     const block: PlacedLine[] = [
         { text: head, kind: 'item', under: 'spot' },
         ...flowLines.map((raw): PlacedLine => ({ text: formatFlowLine(under(head), raw), kind: 'item', under: 0 })),

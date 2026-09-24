@@ -231,7 +231,8 @@ export class InlineTaskWriter {
         const lines = draft.lines;
         switch (op.kind) {
             case 'insert-instance': {
-                draft.put(Placement.groupHead(lines, line), renderFlowInstance(this.fileOps, lines, line, op.insert));
+                const spot = Placement.groupHead(lines, line);
+                draft.put(spot, renderFlowInstance(this.fileOps, lines, line, op.insert, spot));
                 return;
             }
             case 'strip-flow': {
