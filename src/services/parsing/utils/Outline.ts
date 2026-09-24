@@ -218,19 +218,27 @@ export class OutlineReading {
 
     /**
      * Whether taking the lines `rows` out leaves every other line what it
-     * was: opening an item or not, code or not — asked of the reading of
-     * the lines without them. A child of a line taken out, too deep for the
-     * item above once it is gone, would be a paragraph line there, its task
-     * and ID gone. A paragraph going on a line taken out goes on the item
-     * above instead, and a child that still reaches that item becomes its
-     * child: neither changes what the index reads the line as.
+     * was, asked of the reading of the lines without them: opening an item
+     * or not, code or not, and an item under the same parent. So a line with
+     * an item under it is not taken out.
+     *
+     * A child of a line taken out, too deep for the item above once it is
+     * gone, would be a paragraph line, its task and ID gone. One that still
+     * reaches an item would change parent: a `==>` or property line would
+     * work for a task it did not belong to, a sibling's or the task's own
+     * (the third L2 counterexample run). A paragraph line may go on another
+     * item's paragraph; it is no task, command or property wherever it goes.
      */
     canTakeOut(rows: readonly number[]): boolean {
         const gone = new Set(rows);
         const kept = this.lines.map((_, i) => i).filter(i => !gone.has(i));
         const after = Outline.read(kept.map(i => this.lines[i]));
-        return kept.every((i, k) =>
-            (this.item(i) === null) === (after.item(k) === null) && this.inCode(i) === after.inCode(k));
+        const before = (k: number | null) => (k === null ? null : kept[k]);
+        return kept.every((i, k) => {
+            const item = this.item(i);
+            if ((item === null) !== (after.item(k) === null) || this.inCode(i) !== after.inCode(k)) return false;
+            return item === null || before(after.item(k)!.parent) === item.parent;
+        });
     }
 
     /**
