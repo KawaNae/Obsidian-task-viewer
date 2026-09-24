@@ -1,4 +1,3 @@
-import { CodeFenceTracker } from '../../../utils/CodeFenceTracker';
 import { Outline, type OutlineReading } from '../../parsing/utils/Outline';
 import { TaskLineClassifier } from '../../parsing/utils/TaskLineClassifier';
 
@@ -94,21 +93,6 @@ export class Placement {
     static end(lines: readonly string[]): number | null {
         const at = lines.length > 0 && lines[lines.length - 1] === '' ? lines.length - 1 : lines.length;
         return this.inBody(lines, at);
-    }
-
-    /**
-     * Whether `block`, put in as a whole, leaves no fence open behind it.
-     *
-     * A block that opens a fence it does not close — a subtree whose fence
-     * never closes, copied — fences everything below where it goes: the
-     * original it was copied from, and every task after it, read as code.
-     * Read across the whole document, the way that reading would carry on
-     * past the block; a fence within the block's own subtree ends with it.
-     */
-    static closesItsFences(block: readonly string[]): boolean {
-        const fence = new CodeFenceTracker();
-        for (const line of block) fence.feed(line);
-        return !fence.isInside();
     }
 
     /**

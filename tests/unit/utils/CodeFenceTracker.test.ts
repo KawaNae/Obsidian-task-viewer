@@ -31,25 +31,3 @@ describe('CodeFenceTracker.closes', () => {
         expect(CodeFenceTracker.closes('```` js', open)).toBe(false);
     });
 });
-
-describe('CodeFenceTracker feed', () => {
-    const fed = (lines: string[]) => {
-        const tracker = new CodeFenceTracker();
-        return lines.map(line => tracker.feed(line));
-    };
-
-    it('marks the delimiters and everything between them', () => {
-        expect(fed(['prose', '```', 'code', '```', 'prose'])).toEqual([false, true, true, true, false]);
-    });
-
-    it('accepts up to 3 leading spaces, and not 4', () => {
-        expect(fed(['   ```', 'code', '   ```'])).toEqual([true, true, true]);
-        expect(fed(['    ```', 'code'])).toEqual([false, false]);
-    });
-
-    it('stays inside a fence that never closes', () => {
-        const tracker = new CodeFenceTracker();
-        ['```', 'code'].forEach(line => tracker.feed(line));
-        expect(tracker.isInside()).toBe(true);
-    });
-});

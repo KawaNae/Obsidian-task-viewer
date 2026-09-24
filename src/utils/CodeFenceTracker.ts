@@ -4,8 +4,7 @@
  *
  * Which lines are code, and where a fence begins and ends, is the outline's
  * question (`Outline.read`), which asks these of each line at the column
- * its reading measures from. The one other reader is `Placement.closesItsFences`
- * (`feed` / `isInside`), which reads a block to be written on its own.
+ * its reading measures from.
  */
 
 /** A fence's opening delimiter: which character, how many of it, and the info string. */
@@ -17,9 +16,6 @@ export interface FenceDelimiter {
 
 const DELIMITER_RE = /^(`{3,}|~{3,})/;
 const CLOSING_RE = /^(`{3,}|~{3,})[ \t]*$/;
-
-const OPEN_RE = /^ {0,3}(`{3,}|~{3,})/;
-const CLOSE_RE = /^ {0,3}(`{3,}|~{3,})\s*$/;
 
 export class CodeFenceTracker {
     /**
@@ -40,32 +36,5 @@ export class CodeFenceTracker {
     static closes(text: string, open: FenceDelimiter): boolean {
         const m = CLOSING_RE.exec(text);
         return m !== null && m[1][0] === open.char && m[1].length >= open.length;
-    }
-
-    private fence: { char: string; length: number } | null = null;
-
-    /**
-     * Feed the next line, read from column 0. Returns true if the line
-     * belongs to a code fence (opening and closing delimiter lines included).
-     */
-    feed(line: string): boolean {
-        if (this.fence) {
-            const close = line.match(CLOSE_RE);
-            if (close && close[1][0] === this.fence.char && close[1].length >= this.fence.length) {
-                this.fence = null;
-            }
-            return true;
-        }
-        const m = line.match(OPEN_RE);
-        if (m && CodeFenceTracker.opening(line.slice(m[0].length - m[1].length))) {
-            this.fence = { char: m[1][0], length: m[1].length };
-            return true;
-        }
-        return false;
-    }
-
-    /** True while inside a fence (after the opening delimiter was fed). */
-    isInside(): boolean {
-        return this.fence !== null;
     }
 }

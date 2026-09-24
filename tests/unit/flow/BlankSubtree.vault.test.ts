@@ -130,16 +130,23 @@ describe('a fence below a blank line whose closing line is at column 0 (Obsidian
         expect(idOf(session, 'T')).toBe(t);
     });
 
-    it('refuses a copy that carries the fence it opens but never closes (closesItsFences)', async () => {
+    it('writes a copy above T whose fence T\'s own line ends, and leaves T a task with its ID', async () => {
+        // The copy carries T's fence open, with `code` going on it; T's line
+        // below starts an item and ends it, as the delimiter ended T's.
         const { contents, session } = await open({ [FILE]: NOTE });
-        const before = contents.get(FILE)!;
         const t = idOf(session, 'T');
 
-        await session.index.duplicateTask(t, { dayOffset: 1 });
+        expect(await session.index.duplicateTask(t, { dayOffset: 1 })).toBe(true);
         await session.settle(FILE);
 
-        expect(contents.get(FILE)).toBe(before);
-        expect(session.index.getTask(t)?.content).toBe('T');
+        expect(contents.get(FILE)!.split('\n')).toEqual([
+            '# note',
+            '- [ ] T @2026-09-22', '', '  ```js', 'code',
+            '- [ ] T @2026-09-21', '', '  ```js', 'code',
+            '```', '- [ ] U', '',
+        ]);
+        expect(session.index.getTasks().map(task => [task.line, task.content])).toEqual([[1, 'T'], [5, 'T']]);
+        expect(session.index.getTask(t)?.line).toBe(5);
     });
 });
 
