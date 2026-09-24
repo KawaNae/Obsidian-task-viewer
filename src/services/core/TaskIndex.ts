@@ -451,7 +451,10 @@ export class TaskIndex {
             this.revertUnwrittenUpdate(task, taskId, before, updates);
             return false;
         }
-        this.adoptWrittenRow(task, taskId, before, outcome.rows.get(before.id), fire?.planned()?.kind === 'fires');
+        // A move to another file consumes nothing in this write: the command
+        // stays on the row until the source's write takes the row away.
+        const planned = fire?.planned();
+        this.adoptWrittenRow(task, taskId, before, outcome.rows.get(before.id), planned?.kind === 'fires' && planned.away === null);
         // The source's write of a move to another file names the row, as this
         // write did, planned from the row and subtree this write left.
         if (fire) {
@@ -558,7 +561,8 @@ export class TaskIndex {
      * with the row unseen. Otherwise the copy is left with no subtree, and a
      * delete before the scan is refused if the row has any.
      *
-     * A fire in the write consumed the row's command (`fired`): the copy
+     * A fire in the write consumed the row's command (`fired`, a fire that
+     * stays in the file; a move to another file consumes it later): the copy
      * holds none either, so a write before the scan does not put it back.
      *
      * Only the copy the store still holds: a scan that has already read the
