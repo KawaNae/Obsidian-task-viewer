@@ -63,7 +63,7 @@ export class TaskCloner {
                 parents.push(this.shiftInlineDates(cleanParent, offset));
             }
 
-            this.putCopies(draft, idx, parents, Placement.before(lines, idx));
+            this.putCopies(draft, idx, parents, Placement.before(lines, idx, parents[0]));
             return true;
         });
     }
@@ -99,7 +99,7 @@ export class TaskCloner {
                     () => this.fileOps.stripBlockIds([lines[idx]])[0])
                 : copies.lines.map(l => indent + Outline.dedent(l));
 
-            this.putCopies(draft, idx, parents, Placement.afterSubtree(lines, idx));
+            this.putCopies(draft, idx, parents, Placement.afterSubtree(lines, idx, parents[0]));
             return true;
         });
     }

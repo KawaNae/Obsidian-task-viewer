@@ -137,7 +137,11 @@ export interface LineDraft {
     rewrite(at: number, text: string): void;
     /**
      * Put `block` in at `spot` (`Placement`): the one way a write adds a line
-     * below the frontmatter. Each line says how it is to read once written,
+     * below the frontmatter. The block goes at the spot's indentation: its
+     * first line (blank lines aside) at `spot.indent`, every other as far
+     * past it as it stands (`Outline.shiftIndent`), so a caller writes its
+     * lines as they stand where they come from, or with none, and never
+     * indents them for the spot. Each line says how it is to read once written,
      * and the write is made only if it does and every other line reads as it
      * did (`checkWrite`, in `processLines`). A line spliced into the body
      * without a block is a bug in the write.
@@ -183,12 +187,15 @@ export function draftOver(lines: string[]): {
             lines[at] = text;
             edits.replaced(at);
         },
-        put: (spot, block) => {
+        put: (spot, given) => {
+            // At the spot's indentation, each line as far past the first
+            // as it stands (`Outline.shiftIndent`).
+            const frame = Outline.indentOf(given.find(line => !Outline.isBlank(line.text))?.text ?? '');
+            const block = given.map(line => ({ ...line, text: Outline.shiftIndent(line.text, frame, spot.indent) }));
             block.forEach(line => oneLine(line.text));
             // The parent as a line of the lines handed in or of a block, so
             // the check finds it wherever the edits after this one leave it.
-            const parent = spot.parent === null ? null
-                : writtenLines(handed, reported, placedBy)?.[spot.parent] ?? { kind: 'loose' as const };
+            const parent = spot.parent === null ? null : writtenLines(handed, reported, placedBy)![spot.parent];
             const id = puts.length;
             puts.push({ parent, lines: block.map(({ kind, under }) => ({ kind, under })) });
             // Runs of new lines and of carried ones, each put and reported in

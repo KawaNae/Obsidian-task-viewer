@@ -92,10 +92,11 @@ export class ChildPropertyLineEditor {
             // その行の下の行はその行のまま）、なければタスクの最初の子
             // （タスクの本文の続きの行の後ろ）。インデントは既存子行の表現を
             // 踏襲する（`FileOperations.resolveChildIndent`）。
+            const line = `- ${op.key}:: ${this.formatValue(op.value, null)}`;
             const spot = ownLines.length > 0
-                ? Placement.afterSubtree(lines, ownLines[ownLines.length - 1].lineIdx)
-                : Placement.firstChild(lines, taskLineIdx);
-            draft.put(spot, Block.line(`${spot.indent}- ${op.key}:: ${this.formatValue(op.value, null)}`));
+                ? Placement.afterSubtree(lines, ownLines[ownLines.length - 1].lineIdx, line)
+                : Placement.firstChild(lines, taskLineIdx, line);
+            draft.put(spot, Block.line(line));
         }
     }
 

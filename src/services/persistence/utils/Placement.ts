@@ -32,13 +32,18 @@ export interface PlacedLine extends PlacedReading {
  *
  * The answers are read off the lines before the write, the way the parser
  * reads them (`Outline.read`): a row's group is the item it stands in, and a
- * subtree is the item's lines. Whether the lines put there read as meant — a
- * task, not code; under the item meant, not taking in the lines below — is
- * not answered here but by the reading of the lines as written
- * (`checkWrite`, in `processLines`). A line put past a fence in a list item
- * that never closes goes on the fence when it is indented as the fence's
- * content, and a line put at the end of a note whose last fence never closes
- * goes in it; the check reads both, and the write is refused.
+ * subtree is the item's lines. Each question is asked with `head`, the first
+ * line the write puts (its indentation aside: it takes the spot's), and each
+ * answer goes past the lines that line would take in, as the reading with the
+ * line in it says ({@link settle}).
+ *
+ * Whether the lines put there read as meant — a task, not code; under the
+ * item meant, not taking in the lines below — is not answered here but by the
+ * reading of the lines as written (`checkWrite`, in `processLines`). A line put
+ * past a fence in a list item that never closes goes on the fence when it is
+ * indented as the fence's content, and a line put at the end of a note whose
+ * last fence never closes goes in it; the check reads both, and the write is
+ * refused.
  */
 export class Placement {
     /**
@@ -46,65 +51,54 @@ export class Placement {
      * siblings it stands in.
      *
      * A row inside another item has its group under that item, and the head
-     * is the first line past the item's own text that goes on
-     * (`OutlineReading.leadEnd`). A row at the top has its group in the run of
-     * tasks just above it: each one a task item at the top whose subtree
-     * ends where the run below it begins. Anything else ends the run — a
-     * paragraph, a table, a `---` rule, a heading, a fence, the frontmatter's
-     * closing line, a blank line between two siblings. None of those is a
-     * task, and the next instance joins the tasks it stands among, not the
-     * text above them.
-     *
-     * The instance takes the indentation of the sibling it goes above, the
-     * group's head, as a sibling put anywhere takes its neighbour's.
+     * is the first line past the item's own text that goes on. A row at the
+     * top has its group in the run of tasks just above it: each one a task
+     * item at the top whose subtree ends where the run below it begins.
+     * Anything else ends the run — a paragraph, a table, a `---` rule, a
+     * heading, a fence, the frontmatter's closing line, a blank line between
+     * two siblings. None of those is a task, and the next instance joins the
+     * tasks it stands among, not the text above them.
      */
-    static groupHead(lines: readonly string[], row: number): Spot {
+    static groupHead(lines: readonly string[], row: number, head: string): Spot {
         const outline = Outline.read(lines);
         const parent = outline.item(row)?.parent ?? null;
-        if (parent !== null) {
-            const at = outline.leadEnd(parent + 1, parent, Outline.indentOf(lines[row]));
-            return this.sibling(outline, row, at, outline.item(at)?.parent === parent ? at : row);
-        }
+        if (parent !== null) return this.sibling(outline, parent + 1, parent, head);
 
-        const bodyStart = Outline.bodyStart(lines);
-        let head = row;
-        while (head - 1 >= bodyStart) {
+        let first = row;
+        while (first - 1 >= outline.bodyStart) {
             // The top-level item the line just above stands in.
-            let above = outline.ownerOf(head - 1);
+            let above = outline.ownerOf(first - 1);
             while (above !== null && outline.item(above)!.parent !== null) above = outline.item(above)!.parent;
-            if (above === null || outline.subtreeEnd(above) !== head) break;
+            if (above === null || outline.subtreeEnd(above) !== first) break;
             if (!TaskLineClassifier.isTaskLine(lines[above])) break;
-            head = above;
+            first = above;
         }
-        return this.sibling(outline, row, head, head);
+        return this.sibling(outline, first, null, head);
     }
 
     /** Just past `row`'s subtree, as its next sibling. */
-    static afterSubtree(lines: readonly string[], row: number): Spot {
+    static afterSubtree(lines: readonly string[], row: number, head: string): Spot {
         const outline = Outline.read(lines);
-        return this.sibling(outline, row, outline.subtreeEnd(row), row);
+        return this.sibling(outline, outline.subtreeEnd(row), outline.item(row)?.parent ?? null, head);
     }
 
     /** Just above `row`, as its sibling. */
-    static before(lines: readonly string[], row: number): Spot {
-        return this.sibling(Outline.read(lines), row, row, row);
+    static before(lines: readonly string[], row: number, head: string): Spot {
+        const outline = Outline.read(lines);
+        return this.sibling(outline, row, outline.item(row)?.parent ?? null, head);
     }
 
-    /**
-     * Where a first child of `row` goes: just below it, past its own text
-     * that goes on (`OutlineReading.leadEnd`), which a child put above would
-     * take in as its own.
-     */
-    static firstChild(lines: readonly string[], row: number): Spot {
-        const outline = Outline.read(lines);
+    /** Where a first child of `row` goes: just below it, past its own text that goes on. */
+    static firstChild(lines: readonly string[], row: number, head: string): Spot {
         const indent = FileOperations.resolveChildIndent(lines, row);
-        return { at: outline.leadEnd(row + 1, row, indent), parent: row, indent };
+        return this.settle(Outline.read(lines), row + 1, row, head, () => indent);
     }
 
     /** Where a last child of `row` goes: just past its subtree. */
-    static lastChild(lines: readonly string[], row: number): Spot {
+    static lastChild(lines: readonly string[], row: number, head: string): Spot {
         const outline = Outline.read(lines);
-        return { at: outline.subtreeEnd(row), parent: row, indent: FileOperations.resolveChildIndent(lines, row) };
+        const indent = FileOperations.resolveChildIndent(lines, row);
+        return this.settle(outline, outline.subtreeEnd(row), row, head, () => indent);
     }
 
     /**
@@ -119,7 +113,7 @@ export class Placement {
      * past a subtree that is not a completed sibling: a blank line, a line
      * that is no item in `row`'s parent, or an unfinished one.
      */
-    static afterCompletedRun(lines: readonly string[], row: number): Spot {
+    static afterCompletedRun(lines: readonly string[], row: number, head: string): Spot {
         const outline = Outline.read(lines);
         const parent = outline.item(row)?.parent ?? null;
         let last = row;
@@ -127,13 +121,14 @@ export class Placement {
             if (TaskLineClassifier.classify(lines[next.line])?.statusChar !== 'x') break;
             last = next.line;
         }
-        return this.sibling(outline, row, outline.subtreeEnd(last), last);
+        return this.sibling(outline, outline.subtreeEnd(last), parent, head);
     }
 
     /**
      * Where lines appended to the note go: after its last line, and before
      * the empty element a note that ends with a terminator splits into, so
-     * the terminator stays the note's last character.
+     * the terminator stays the note's last character. Nothing stands after
+     * it for a line put there to take in.
      */
     static end(lines: readonly string[]): Spot {
         const at = lines.length > 0 && lines[lines.length - 1] === '' ? lines.length - 1 : lines.length;
@@ -142,30 +137,72 @@ export class Placement {
 
     /**
      * Where a line under the heading on `heading` goes: just below it, past
-     * the paragraph below it (`OutlineReading.leadEnd`), at the top. At the
-     * indentation of the first item at the top below that, blank lines
-     * aside, as its sibling; unindented when none follows. A task indented
-     * under the heading stays where it stands, not under the new line.
+     * the paragraph and the code below it, at the top as a sibling of the
+     * items there. A task indented under the heading stays where it stands,
+     * not under the new line.
      */
-    static underHeading(lines: readonly string[], heading: number): Spot {
-        const outline = Outline.read(lines);
-        // Asked for a line at the top, unindented: one indented further
-        // takes in no more.
-        const at = outline.leadEnd(heading + 1, null, '');
-        let next = at;
-        while (next < lines.length && Outline.isBlank(lines[next])) next++;
-        const indent = next < lines.length && outline.item(next)?.parent === null ? Outline.indentOf(lines[next]) : '';
-        return { at, parent: null, indent };
+    static underHeading(lines: readonly string[], heading: number, head: string): Spot {
+        return this.sibling(Outline.read(lines), heading + 1, null, head);
+    }
+
+    /** At `at` or past what a line there takes in, a sibling under `parent`, at a sibling's indentation. */
+    private static sibling(outline: OutlineReading, at: number, parent: number | null, head: string): Spot {
+        return this.settle(outline, at, parent, head, spot => this.siblingIndent(outline, parent, spot));
     }
 
     /**
-     * At `at`, a sibling of `row`, at the indentation of `nextTo`: the
-     * sibling it goes next to. Siblings may be spelled apart (a tab and four
-     * spaces, two spaces and four), and a line at `row`'s own indentation
-     * past another sibling's subtree can stand under that sibling instead.
+     * The indentation a sibling under `parent` takes at `at`: that of the
+     * item it goes above (the first line from `at` that is not blank) when
+     * that is a sibling; else that of the sibling it goes below, the one
+     * whose subtree ends at `at`; else a child's of `parent`, nothing at the
+     * top. Siblings may be spelled apart (a tab and four spaces, two spaces
+     * and four); whichever it goes next to, it reads as one of them.
      */
-    private static sibling(outline: OutlineReading, row: number, at: number, nextTo: number): Spot {
-        return { at, parent: outline.item(row)?.parent ?? null, indent: Outline.indentOf(outline.lines[nextTo]) };
+    private static siblingIndent(outline: OutlineReading, parent: number | null, at: number): string {
+        const lines = outline.lines;
+        let next = at;
+        while (next < lines.length && Outline.isBlank(lines[next])) next++;
+        if (next < lines.length && outline.item(next) !== null && outline.item(next)!.parent === parent) {
+            return Outline.indentOf(lines[next]);
+        }
+        for (let up = at > 0 ? outline.ownerOf(at - 1) : null; up !== null && up !== parent; up = outline.item(up)!.parent) {
+            if (outline.item(up)!.parent !== parent) continue;
+            if (outline.subtreeEnd(up) === at) return Outline.indentOf(lines[up]);
+            break;
+        }
+        return parent === null ? '' : FileOperations.resolveChildIndent(lines, parent);
+    }
+
+    /**
+     * `at`, or past the lines from `at` that `head` put there would take in:
+     * asked of the reading with the line in it (`Outline.read`), not
+     * foretold. A line put above a task's text that goes on, a paragraph
+     * under a heading, or a fence it opens the content of takes them in as
+     * its own; below them, it takes in nothing. It goes past what it takes
+     * in up to the first item of the note among it — an item it would make
+     * its child stays where it stands, and the write's check refuses the
+     * line put above it. `indentAt` answers the indentation the line takes
+     * at each place it is tried.
+     */
+    private static settle(
+        outline: OutlineReading,
+        at: number,
+        parent: number | null,
+        head: string,
+        indentAt: (at: number) => string,
+    ): Spot {
+        const lines = outline.lines;
+        const body = Outline.dedent(head);
+        for (;;) {
+            const indent = indentAt(at);
+            const tried = Outline.read([...lines.slice(0, at), indent + body, ...lines.slice(at)]);
+            // Line `k` of the lines tried is line `k - 1` of the note.
+            const end = tried.item(at)?.end ?? at + 1;
+            let past = at;
+            for (let k = at + 1; k < end && outline.item(k - 1) === null; k++) past = k;
+            if (past === at) return { at, parent, indent };
+            at = past;
+        }
     }
 }
 

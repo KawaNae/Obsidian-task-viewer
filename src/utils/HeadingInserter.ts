@@ -53,8 +53,8 @@ export class HeadingInserter {
         }
 
         if (headerIndex !== -1) {
-            const spot = Placement.underHeading(out, headerIndex);
-            draft.put(spot, Block.line(spot.indent + Outline.dedent(line)));
+            const spot = Placement.underHeading(out, headerIndex, line);
+            draft.put(spot, Block.line(line));
             return spot.at;
         }
         // At the end, before the empty element a terminated file splits
