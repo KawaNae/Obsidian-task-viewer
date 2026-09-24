@@ -100,7 +100,8 @@ export class Placement {
 
     /** Where a first child of `row` goes: just below it, past its own text that goes on. */
     static firstChild(lines: readonly string[], row: number, head: string): Spot {
-        return this.sibling(Outline.read(lines), row + 1, row, head);
+        const outline = Outline.read(lines);
+        return this.sibling(outline, this.pastOwnText(outline, row), row, head);
     }
 
     /**
@@ -115,7 +116,21 @@ export class Placement {
         for (let k = row + 1; k < outline.subtreeEnd(row); k++) {
             if (outline.item(k)?.parent === row) last = k;
         }
-        return this.sibling(outline, last === null ? row + 1 : outline.subtreeEnd(last), row, head);
+        return this.sibling(outline, last === null ? this.pastOwnText(outline, row) : outline.subtreeEnd(last), row, head);
+    }
+
+    /**
+     * Just past the lines straight below `row` that are its own text: each
+     * one `row` stands in, and text (`kindOf`) — no item, and up to the
+     * first blank line, fence or code. A line put above them would end
+     * `row`'s text there, and what went on in it would read anew: `  1.`
+     * below `- [ ] T` goes on in T's text, and opens an item once a line
+     * stands between.
+     */
+    private static pastOwnText(outline: OutlineReading, row: number): number {
+        let at = row + 1;
+        while (at < outline.lines.length && outline.ownerOf(at) === row && outline.kindOf(at) === 'text') at++;
+        return at;
     }
 
     /**

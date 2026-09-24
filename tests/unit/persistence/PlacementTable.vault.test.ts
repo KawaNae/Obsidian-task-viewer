@@ -420,6 +420,16 @@ describe('the two readings L3 made CommonMark\'s: a quote after an item, an orde
         expect(parents(session)).toEqual([['t2', null], ['t2', null], ['t8', null]]);
     });
 
+    it('puts a child of s3#18255\'s t2 past the empty item underlining it, above the quote', async () => {
+        const { contents, session } = await open(['# n', '- [ ] t2', '  -', '> text', '  -  [ ] t8', '']);
+
+        expect(await session.index.appendChildTask(only(session, 't2').id, '- [ ] n')).toBe(true);
+        await session.settle(FILE);
+
+        expect(lines(contents)).toEqual(['# n', '- [ ] t2', '  -', '    - [ ] n', '> text', '  -  [ ] t8', '']);
+        expect(parents(session)).toEqual([['t2', null], ['n', 't2'], ['t8', null]]);
+    });
+
     // `  2. [ ] T` goes on P's text: no task, and c is P's child.
     const ORDERED = ['# n', '- [ ] P', '  2. [ ] T', '  - [ ] c', ''];
 
@@ -438,17 +448,55 @@ describe('the two readings L3 made CommonMark\'s: a quote after an item, an orde
         expect(parents(session)).toEqual([['P', null], ['c', 'P'], ['l', 'P']]);
     });
 
-    it('writes no first child above the ordered line, which the child would make an item, and says why', async () => {
-        // A line put between P and `  2. [ ] T` ends P's paragraph, and the
-        // ordered line after it opens an item: the check refuses the write.
+    it('puts a first child past the ordered line, which goes on in the task\'s text', async () => {
+        // A line put between P and `  2. [ ] T` would end P's paragraph, and
+        // the ordered line after it would open an item: the child goes below
+        // it, where P's text has ended.
         const { contents, session } = await open(ORDERED);
-        const before = contents.get(FILE);
 
-        expect(await session.index.insertChildTask(only(session, 'P').id, '- [ ] f')).toBe(false);
+        expect(await session.index.insertChildTask(only(session, 'P').id, '- [ ] f')).toBe(true);
         await session.settle(FILE);
 
-        expect(contents.get(FILE)).toBe(before);
-        expect(Notice.messages).toEqual([t('notice.writeDisturbs', { subject: 'P' })]);
+        expect(lines(contents)).toEqual(['# n', '- [ ] P', '  2. [ ] T', '  - [ ] f', '  - [ ] c', '']);
+        expect(parents(session)).toEqual([['P', null], ['f', 'P'], ['c', 'P']]);
+        expect(Notice.messages).toEqual([]);
+    });
+
+    // Each goes on in T's text, and would open an item below a line put
+    // between: a first child, a last child of a task with none, and a
+    // property all go below it.
+    describe.each(['  1.', '  2. [ ] U', '  -', '  *'])('past `%s`, T\'s text', tail => {
+        const NOTE = ['# n', '- [ ] T', tail, '- [ ] V', ''];
+
+        it('puts a first child', async () => {
+            const { contents, session } = await open(NOTE);
+
+            expect(await session.index.insertChildTask(only(session, 'T').id, '- [ ] f')).toBe(true);
+            await session.settle(FILE);
+
+            expect(lines(contents)).toEqual(['# n', '- [ ] T', tail, '    - [ ] f', '- [ ] V', '']);
+            expect(parents(session)).toEqual([['T', null], ['f', 'T'], ['V', null]]);
+        });
+
+        it('puts a last child', async () => {
+            const { contents, session } = await open(NOTE);
+
+            expect(await session.index.appendChildTask(only(session, 'T').id, '- [ ] l')).toBe(true);
+            await session.settle(FILE);
+
+            expect(lines(contents)).toEqual(['# n', '- [ ] T', tail, '    - [ ] l', '- [ ] V', '']);
+            expect(parents(session)).toEqual([['T', null], ['l', 'T'], ['V', null]]);
+        });
+
+        it('puts a property', async () => {
+            const { contents, session } = await open(NOTE);
+
+            expect(await session.index.updateTask(only(session, 'T').id, { properties: { memo: { value: 'x', type: 'string' } } } as never)).toBe(true);
+            await session.settle(FILE);
+
+            expect(lines(contents)).toEqual(['# n', '- [ ] T', tail, '    - memo:: x', '- [ ] V', '']);
+            expect(only(session, 'T').properties?.memo?.value).toBe('x');
+        });
     });
 
     it('deletes and copies the ordered line with the task whose text it is', async () => {
