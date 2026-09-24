@@ -108,14 +108,14 @@ describe('Outline.shiftIndent', () => {
 describe('renderFlowInstance: the lines a next instance is written as', () => {
     const fileOps = new FileOperations({} as App);
 
-    it('indents the `==>` line for the line written, not the one that fired (H2)', () => {
+    it('spells the next instance as the row that fired, its `==>` line its child (H2)', () => {
         // `10.   [ ] T` opens its content at column 6, and its `==>` line at
-        // six spaces is its child. The next instance is written `- [ ] T`
-        // (content at 2): six spaces under it are indented code.
+        // six spaces is its child. The next instance, handed over as
+        // `- [ ] T`, is written with the row's marker and gap, so the same
+        // six spaces are its child too.
         const lines = ['10.   [ ] T ==> next', '      - ==> every day', ''];
         const rendered = texts(renderFlowInstance(fileOps, lines, 0, { kind: 'recurrence', content: '- [ ] T', flowLines: ['every day'] }));
-        // The file's unit is four spaces (its first indented line).
-        expect(rendered).toEqual(['- [ ] T', '    - ==> every day']);
+        expect(rendered).toEqual(['10.   [ ] T', '      - ==> every day']);
         expect(parentOf(rendered, 1)).toBe(0);
     });
 
