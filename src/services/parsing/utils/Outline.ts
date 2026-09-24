@@ -64,6 +64,15 @@ export class Outline {
     }
 
     /**
+     * The columns `line`'s characters from `start` to `end` take where they
+     * stand: a tab reaches the next multiple of four from its own column, so
+     * the same tab is narrower or wider at another indentation.
+     */
+    static widthWithin(line: string, start: number, end: number): number {
+        return widthFrom(line.slice(start, end), widthFrom(line.slice(0, start), 0));
+    }
+
+    /**
      * The line's indentation as written: the tabs and spaces it opens with
      * (`INDENT_SOURCE`).
      */

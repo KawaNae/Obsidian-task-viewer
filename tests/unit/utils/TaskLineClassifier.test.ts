@@ -131,9 +131,16 @@ describe('TaskLineClassifier', () => {
         });
 
         it('keeps the gap after the marker, which sets the content column', () => {
-            expect(TaskLineClassifier.extractMarker('-\t[ ] task')).toBe('-\t');
             expect(TaskLineClassifier.extractMarker('\t-    [x] task')).toBe('-    ');
             expect(TaskLineClassifier.extractMarker('10.  [ ] task')).toBe('10.  ');
+        });
+
+        it('keeps a tab gap as the spaces it is wide where it stands', () => {
+            expect(TaskLineClassifier.extractMarker('-\t[ ] task')).toBe('-   ');
+            expect(TaskLineClassifier.extractMarker('  -\t[ ] task')).toBe('- ');
+            expect(TaskLineClassifier.extractMarker(' -\t[ ] task')).toBe('-  ');
+            expect(TaskLineClassifier.extractMarker('  1.\t[ ] task')).toBe('1.    ');
+            expect(TaskLineClassifier.extractMarker('\t+\t[ ] task')).toBe('+   ');
         });
 
         it('falls back to dash for a line that is no task', () => {
