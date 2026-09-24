@@ -108,10 +108,10 @@ export class TaskWriteService {
     }
 
     /**
-     * Insert a line as the task's next sibling, at the task's own indentation.
-     * `siblingLine` is a formatted line body without indentation — the write
-     * layer reads the indent off the file, so a shifted line cannot make the
-     * record land at the wrong depth.
+     * Insert a line as the task's next sibling, spelled as the item next to
+     * it (`Placement.afterSubtree`). `siblingLine` is a formatted line body
+     * without indentation — the write layer reads the indent off the file, so
+     * a shifted line cannot make the record land at the wrong depth.
      *
      * Pass `afterCompletedRun` to skip past the completed siblings that follow
      * the task, which is what keeps a run of session records in chronological

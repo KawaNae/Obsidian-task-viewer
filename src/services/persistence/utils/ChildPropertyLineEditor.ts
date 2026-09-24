@@ -88,10 +88,10 @@ export class ChildPropertyLineEditor {
             }
 
             // 新規挿入（ルールA: 正準位置）: 既存の own プロパティ行があれば
-            // その最後の兄弟として部分木の後ろ（宣言塊を保つ・インデント踏襲。
-            // その行の下の行はその行のまま）、なければタスクの最初の子
-            // （タスクの本文の続きの行の後ろ）。インデントは既存子行の表現を
-            // 踏襲する（`FileOperations.resolveChildIndent`）。
+            // その最後の兄弟として部分木の後ろ（宣言塊を保つ。その行の下の
+            // 行はその行のまま）、なければタスクの最初の子（タスクの本文の
+            // 続きの行の後ろ）。新しい行なので、字下げは隣の項目の綴りで、
+            // 隣に兄弟が無ければ子の字下げ（`FileOperations.resolveChildIndent`）。
             const line = `- ${op.key}:: ${this.formatValue(op.value, null)}`;
             const spot = ownLines.length > 0
                 ? Placement.afterSubtree(lines, ownLines[ownLines.length - 1].lineIdx, line)
