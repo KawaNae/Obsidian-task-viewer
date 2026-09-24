@@ -1,4 +1,4 @@
-import { describe, it, expect, afterEach, vi } from 'vitest';
+import { describe, it, expect, afterEach } from 'vitest';
 import { vaultSession, type VaultSession } from '../helpers/vaultSession';
 import { TaskLineClassifier } from '../../../src/services/parsing/utils/TaskLineClassifier';
 
@@ -21,12 +21,6 @@ function idOf(session: VaultSession, content: string): string {
     return f[0].id;
 }
 
-async function flowSettled(session: VaultSession) {
-    const executor = (session.index as unknown as { commandExecutor: { isProcessing: boolean; taskQueue: unknown[] } }).commandExecutor;
-    await vi.waitFor(() => { expect(executor.isProcessing).toBe(false); expect(executor.taskQueue).toHaveLength(0); });
-    await session.settle(FILE);
-}
-
 describe('gen child line led by U+3000 / NBSP after its indentation', () => {
     for (const [name, code] of [['U+3000', 0x3000], ['NBSP', 0xa0]] as const) {
         const lead = String.fromCharCode(code);
@@ -43,7 +37,7 @@ describe('gen child line led by U+3000 / NBSP after its indentation', () => {
             expect(live.index.getTasks().map(t => t.content)).toEqual(['target']);
 
             expect(await live.index.updateTask(idOf(live, 'target'), { statusChar: 'x' })).toBe(true);
-            await flowSettled(live);
+            await live.flowSettled(FILE);
 
             const written = contents.get(FILE)!.split(LF);
             // What the block describes is a text line; a checkbox line is not what it holds.

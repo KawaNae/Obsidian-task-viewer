@@ -1,5 +1,5 @@
-import { describe, it, expect, afterEach, vi } from 'vitest';
-import { vaultSession, type VaultSession } from '../helpers/vaultSession';
+import { describe, it, expect, afterEach } from 'vitest';
+import { openVault, type VaultSession } from '../helpers/vaultSession';
 import { TaskLineClassifier } from '../../../src/services/parsing/utils/TaskLineClassifier';
 import type { Task } from '../../../src/types';
 
@@ -17,10 +17,9 @@ let live: VaultSession | undefined;
 afterEach(() => { live?.dispose(); live = undefined; });
 
 async function open(lines: string[]): Promise<{ session: VaultSession; contents: Map<string, string> }> {
-    const contents = new Map([[FILE, lines.join(LF)]]);
-    live = vaultSession(contents);
-    await live.scanAll();
-    return { session: live, contents };
+    const opened = await openVault(lines.join(LF));
+    live = opened.session;
+    return { session: opened.session, contents: opened.contents };
 }
 
 function written(contents: Map<string, string>): string[] {
@@ -52,12 +51,6 @@ function expectIndexedBare(session: VaultSession, line: number, statusChar: stri
     expect(task.content).toBe('');
     expect(task.statusChar).toBe(statusChar);
     return task;
-}
-
-async function flowSettled(session: VaultSession): Promise<void> {
-    const executor = (session.index as unknown as { commandExecutor: { isProcessing: boolean; taskQueue: unknown[] } }).commandExecutor;
-    await vi.waitFor(() => { expect(executor.isProcessing).toBe(false); expect(executor.taskQueue).toHaveLength(0); });
-    await session.settle(FILE);
 }
 
 describe('1. an update of status or content', () => {
@@ -112,7 +105,7 @@ describe('3. a strip-flow on a task with no content and no date', () => {
         expect(task.flow).toBeDefined();
 
         expect(await session.index.updateTask(task.id, { statusChar: 'x' })).toBe(true);
-        await flowSettled(session);
+        await session.flowSettled(FILE);
 
         const lines = written(contents);
         // The next instance goes above with the command (its date is the
@@ -133,7 +126,7 @@ describe('4. a generated child line with no content', () => {
         const parent = onlyTask(session, t => t.content === '親');
 
         expect(await session.index.updateTask(parent.id, { statusChar: 'x' })).toBe(true);
-        await flowSettled(session);
+        await session.flowSettled(FILE);
 
         const lines = written(contents);
         // The block's parent line carries no date, so the instance is written as the block says.
@@ -150,7 +143,7 @@ describe('5. a generated parent line with no content', () => {
         const parent = onlyTask(session, t => t.content === '親');
 
         expect(await session.index.updateTask(parent.id, { statusChar: 'x' })).toBe(true);
-        await flowSettled(session);
+        await session.flowSettled(FILE);
 
         const lines = written(contents);
         expect(lines.slice(0, 5)).toEqual(['# note', '- [ ] ', '\t- ==> every mon use("g")', '\t- [ ] 子', '- [x] 親 @2026-09-21']);

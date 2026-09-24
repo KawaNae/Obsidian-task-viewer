@@ -1,6 +1,6 @@
 import { describe, it, expect, afterEach, vi } from 'vitest';
 import { Notice } from 'obsidian';
-import { vaultSession, type VaultSession } from '../helpers/vaultSession';
+import { openVault, type VaultSession } from '../helpers/vaultSession';
 
 /**
  * A value holding U+2028 or U+2029 goes into a note and comes back out as the
@@ -27,10 +27,9 @@ afterEach(() => {
 });
 
 async function open(lines: string[]): Promise<{ contents: Map<string, string>; session: VaultSession }> {
-    const contents = new Map([[FILE, lines.join('\n')]]);
-    live = vaultSession(contents);
-    await live.scanAll();
-    return { contents, session: live };
+    const opened = await openVault(lines);
+    live = opened.session;
+    return opened;
 }
 
 function only(session: VaultSession, content: string) {
@@ -77,9 +76,7 @@ describe('content holding U+2028 or U+2029', () => {
     it('is set by a flow, and the next instance reads it back', async () => {
         const note = ['# note', '- [x] A @2026-09-21', `\t- ==> every 1d setContent("x${LS}y")`, ''];
         const { contents, session } = await open(note);
-        const executor = (session.index as unknown as {
-            commandExecutor: { handleTaskCompletion(task: unknown): Promise<void>; isProcessing: boolean };
-        }).commandExecutor;
+        const executor = session.executor;
 
         await executor.handleTaskCompletion(only(session, 'A'));
         await vi.waitFor(() => expect(executor.isProcessing).toBe(false));
