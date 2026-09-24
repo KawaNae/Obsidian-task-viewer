@@ -1,5 +1,6 @@
 import { EditorState, StateEffect, StateField, Transaction, type ChangeSet, type Extension, type Text, type TransactionSpec } from '@codemirror/state';
 import { ViewPlugin, type EditorView, type ViewUpdate } from '@codemirror/view';
+import { isolateHistory } from '@codemirror/commands';
 import { editorInfoField } from 'obsidian';
 import type { StatusDefinition } from '../types';
 import { completes, isOperation } from '../services/flow/FlowTrigger';
@@ -120,6 +121,10 @@ let nextAwayId = 0;
  * editor, another pane's edit shown here, an undo, a redo — fires nothing,
  * whatever it completes.
  *
+ * A completion is a step of its own to undo, fire or none: the transaction is
+ * isolated in the history (`isolateHistory`), so completing rows one after
+ * another, however quickly, is undone one completion at a time.
+ *
  * Each row's fire is its own write, in the order the rows stand: planned from
  * the lines the rows before it left, where its row has been carried to, and
  * made through the one core every write of lines runs (`editLines`, with the
@@ -134,8 +139,9 @@ export function fireFilter(host: EditorFireHost): Extension {
         if (!tr.docChanged || !isOperation(tr.annotation(Transaction.userEvent)) || !host.active()) return tr;
         const rows = completedRows(tr.startState.doc, tr.newDoc, tr.changes, host.statusDefinitions());
         if (rows.length === 0) return tr;
+        const isolated: TransactionSpec = { annotations: isolateHistory.of('full') };
         const path = tr.startState.field(editorInfoField, false)?.file?.path;
-        if (!path) return tr;
+        if (!path) return [tr, isolated];
 
         const before = linesOf(tr.newDoc);
         let lines: readonly string[] = before;
@@ -173,7 +179,7 @@ export function fireFilter(host: EditorFireHost): Extension {
         const changes = lineChanges(before, lines, edits);
         if (changes === null) {
             logError(`[FlowFire] ${path}: a fire's write does not follow; nothing written`);
-            return tr;
+            return [tr, isolated];
         }
         // What the rows' moves to another file owe once the transaction is
         // made, from the row where every fire left it.
@@ -191,8 +197,8 @@ export function fireFilter(host: EditorFireHost): Extension {
                 pending: { ...pending, source: { ...pending.source, line } },
             }));
         }
-        if (changes.length === 0 && effects.length === 0) return tr;
-        return [tr, { changes, effects, sequential: true }];
+        if (changes.length === 0 && effects.length === 0) return [tr, isolated];
+        return [tr, { ...isolated, changes, effects, sequential: true }];
     });
 }
 
@@ -270,7 +276,9 @@ export class AwayRunner {
             this.editor.dispatch({ effects: dropAway.of(away.id) });
             return { written: false, refused: { file: away.path, reason: { kind: 'failed' }, subject: at.text.trim() } };
         }
-        this.editor.dispatch({ changes, effects: dropAway.of(away.id) });
+        // A step of its own to undo, whether or not the user typed since the
+        // completion: undone, the original comes back as the completion left it.
+        this.editor.dispatch({ changes, effects: dropAway.of(away.id), annotations: isolateHistory.of('full') });
         return { written: true, refused: null, made: [], rows: new Map() };
     }
 }

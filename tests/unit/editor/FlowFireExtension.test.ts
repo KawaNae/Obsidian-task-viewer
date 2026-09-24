@@ -156,6 +156,63 @@ describe('a completion with nothing to fire', () => {
     });
 });
 
+describe('undoing completions made in the editor', () => {
+    // CM6's history joins a change to the one before it when the two touch
+    // and come within half a second: today is held, so every change here
+    // comes at once, and the cases are ones whose changes touch.
+    it('undoes one completion, with its fire, at a time, however quickly they were made', async () => {
+        // Each completion checks the instance the one before it wrote.
+        const { editor } = await open({ [FILE]: ['- [ ] T @2026-09-21 ==> every mon', '- [ ] U', ''] });
+        const states = [editor.lines()];
+        for (let i = 0; i < 3; i++) {
+            editor.check(0);
+            states.push(editor.lines());
+        }
+        expect(states[3].slice(0, 4)).toEqual([
+            '- [ ] T @2026-10-12 ==> every mon', '- [x] T @2026-10-05', '- [x] T @2026-09-28', '- [x] T @2026-09-21',
+        ]);
+
+        for (let i = 2; i >= 0; i--) {
+            expect(editor.undo()).toBe(true);
+            expect(editor.lines()).toEqual(states[i]);
+        }
+        // And back, a completion at a time, firing nothing more.
+        editor.redo();
+        expect(editor.lines()).toEqual(states[1]);
+    });
+
+    it('undoes a row with no flow a completion at a time, apart from the typing that wrote it', async () => {
+        const { editor } = await open({ [FILE]: ['', ''] });
+
+        editor.change({ from: 0, insert: '- [ ] T' }, 'input.type');
+        editor.check(0);
+        editor.change({ from: editor.at(0, 7), insert: 'b' }, 'input.type');
+
+        editor.undo();
+        expect(editor.lines()).toEqual(['- [x] T', '']);
+        editor.undo();
+        expect(editor.lines()).toEqual(['- [ ] T', '']);
+        editor.undo();
+        expect(editor.lines()).toEqual(['', '']);
+    });
+
+    it('keeps a completion and its fire apart from the typing just before and after it', async () => {
+        const { editor } = await open({ [FILE]: ['', ''] });
+
+        editor.change({ from: 0, insert: '- [ ] T @2026-09-21 ==> every mon' }, 'input.type');
+        editor.check(0);
+        const completed = editor.lines();
+        expect(completed).toEqual(['- [ ] T @2026-09-28 ==> every mon', '- [x] T @2026-09-21', '']);
+        // At the end of the instance the fire wrote.
+        editor.change({ from: editor.at(0, completed[0].length), insert: 'b' }, 'input.type');
+
+        editor.undo();
+        expect(editor.lines()).toEqual(completed);
+        editor.undo();
+        expect(editor.lines()).toEqual(['- [ ] T @2026-09-21 ==> every mon', '']);
+    });
+});
+
 describe('a move to another file, completed in the editor', () => {
     it('lands the completion first, then the archive, then takes the original away in the editor', async () => {
         const { contents, editor } = await open({
@@ -223,5 +280,41 @@ describe('a move to another file, completed in the editor', () => {
         expect(Notice.messages).toEqual([t('notice.moveOriginKept', {
             dest: 'other', reason: t('notice.moveOriginChanged'), subject: '- [x] T @2026-09-21 ==> move([[other]])',
         })]);
+    });
+
+    it('undoes the original taken away as a step of its own, with nothing typed since', async () => {
+        const { editor } = await open({
+            [FILE]: ['# note', '- [ ] T @2026-09-21 ==> move([[other]])', '\t- [ ] c', '- [ ] U', ''],
+            [OTHER]: ['# other', ''],
+        });
+
+        editor.check(1);
+        const completed = editor.lines();
+        await editor.settled();
+        expect(editor.lines()).toEqual(['# note', '- [ ] U', '']);
+
+        editor.undo();
+        expect(editor.lines()).toEqual(completed);
+        editor.undo();
+        expect(editor.lines()).toEqual(['# note', '- [ ] T @2026-09-21 ==> move([[other]])', '\t- [ ] c', '- [ ] U', '']);
+    });
+
+    it('undoes the original taken away as a step of its own, with a line typed since', async () => {
+        const { editor } = await open({
+            [FILE]: ['# note', '- [ ] T @2026-09-21 ==> move([[other]])', '- [ ] U', ''],
+            [OTHER]: ['# other', ''],
+        });
+
+        editor.check(1);
+        editor.change({ from: editor.at(1), insert: 'typed\n' }, 'input.type');
+        await editor.settled();
+        expect(editor.lines()).toEqual(['# note', 'typed', '- [ ] U', '']);
+
+        editor.undo();
+        expect(editor.lines()).toEqual(['# note', 'typed', '- [x] T @2026-09-21 ==> move([[other]])', '- [ ] U', '']);
+        editor.undo();
+        expect(editor.lines()).toEqual(['# note', '- [x] T @2026-09-21 ==> move([[other]])', '- [ ] U', '']);
+        editor.undo();
+        expect(editor.lines()).toEqual(['# note', '- [ ] T @2026-09-21 ==> move([[other]])', '- [ ] U', '']);
     });
 });
