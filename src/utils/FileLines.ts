@@ -847,7 +847,7 @@ export async function processLines(
                 // the line, and the subtree when the write takes it, still
                 // read what the editor showed there.
                 const shown: RowBasis = { text: target.text, ...(target.subtree ? { subtree: target.subtree } : {}) };
-                return target.line < before.length && readsAsPlanned(before, target.line, shown) ? target.line : { kind: 'changed' };
+                return readsAsPlanned(before, target.line, shown) ? target.line : { kind: 'changed' };
             }
             const located: Located = channel ? channel.locate(before, target.ref) : { kind: 'gone' };
             if (located.kind === 'outdated') return { kind: 'changed' };
