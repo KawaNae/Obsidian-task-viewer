@@ -1,6 +1,6 @@
-import { collectFlowLineIndicesInFile, flowLineTail } from '../parsing/utils/FlowLineScanner';
+import { collectFlowLineIndices, flowLineTail } from '../parsing/utils/FlowLineScanner';
 import { collectGenBlocks } from '../parsing/gen/GenBlockCollector';
-import { Outline } from '../parsing/utils/Outline';
+import { Outline, type OutlineReading } from '../parsing/utils/Outline';
 
 /**
  * What an operation was planned from: what the plan read of the row, as the
@@ -60,12 +60,13 @@ export type OnRecord = typeof ON_RECORD;
  */
 export function readsAsPlanned(lines: readonly string[], line: number, basis: RowBasis): boolean {
     if (!Outline.VERBATIM.holds(lines[line], basis.text)) return false;
+    const outline = Outline.read(lines);
     if (basis.commands) {
-        const commands = collectFlowLineIndicesInFile(lines, line).map(i => flowLineTail(lines[i]));
+        const commands = collectFlowLineIndices(outline, line).map(i => flowLineTail(lines[i]));
         if (commands.length !== basis.commands.length) return false;
         if (commands.some((command, i) => command !== basis.commands![i])) return false;
     }
-    if (basis.subtree && !sameLines(subtreeAt(lines, line), basis.subtree)) return false;
+    if (basis.subtree && !sameLines(subtreeAt(outline, line), basis.subtree)) return false;
     if (basis.blocks) {
         const current = collectGenBlocks([...lines]).blocks;
         for (const block of basis.blocks) {
@@ -77,8 +78,8 @@ export function readsAsPlanned(lines: readonly string[], line: number, basis: Ro
 }
 
 /** The row at `line` and every line of its subtree, verbatim. */
-export function subtreeAt(lines: readonly string[], line: number): string[] {
-    return lines.slice(line, Outline.subtreeEnd(lines, line));
+export function subtreeAt(outline: OutlineReading, line: number): string[] {
+    return outline.lines.slice(line, outline.subtreeEnd(line));
 }
 
 function sameLines(a: readonly string[], b: readonly string[]): boolean {

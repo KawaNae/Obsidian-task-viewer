@@ -985,9 +985,11 @@ function rowsLeft(
     const rows = new Map<string, RowLines>();
     const replayed = replayEdits(before.length, edits);
     if (!replayed) return rows;
+    const read = Outline.read(before);
+    const left = Outline.read(after);
     for (const [runtimeId, line] of named) {
         const now = replayed.origin.indexOf(line);
-        if (now >= 0) rows.set(runtimeId, { read: subtreeAt(before, line), left: subtreeAt(after, now) });
+        if (now >= 0) rows.set(runtimeId, { read: subtreeAt(read, line), left: subtreeAt(left, now) });
     }
     return rows;
 }
