@@ -172,3 +172,35 @@ describe('a child carried by a move to another note', () => {
         }
     });
 });
+
+/**
+ * A move to a note that does not exist yet makes the note of the moved row
+ * and its children, at the top as a put at a note's end writes them
+ * (`Block.at`). Written with the row's own indentation, the row was indented
+ * code at the top of the new note, and its children with it (found on the
+ * device, 2026-09-24).
+ */
+describe('a move to a note that does not exist yet', () => {
+    it.each([
+        ['under a tab, eight spaces', '\t- [ ] X @2026-09-21 ==> move([[fresh]])', '        - [ ] c', '    - [ ] c'],
+        ['under four spaces, a tab and two spaces', '    - [ ] X @2026-09-21 ==> move([[fresh]])', '\t  - [ ] c', '  - [ ] c'],
+    ])('%s: writes the row at the top and the child under it', async (_name, row, child, written) => {
+        const contents = new Map([[FILE, ['# note', '- [ ] P', row, child, ''].join('\n')]]);
+        live = vaultSession(contents);
+        await live.scanAll();
+        const session = live;
+
+        expect(await session.index.updateTask(taskWorded(session, 'X').id, { statusChar: 'x' })).toBe(true);
+        const executor = (session.index as unknown as { commandExecutor: { isProcessing: boolean; taskQueue: unknown[] } }).commandExecutor;
+        await vi.waitFor(() => {
+            expect(executor.isProcessing).toBe(false);
+            expect(executor.taskQueue).toHaveLength(0);
+        });
+        await session.settle(FILE);
+        await session.settle('fresh.md');
+
+        expect(contents.get('fresh.md')!.split('\n')).toEqual(['- [x] X @2026-09-21', written]);
+        const moved = session.index.getTasks().filter(task => task.file === 'fresh.md');
+        expect(moved.find(task => task.content === 'c')?.parentId).toBe(moved.find(task => task.content === 'X')?.id);
+    });
+});

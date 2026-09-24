@@ -4,7 +4,7 @@ import { LINE_BREAK, holdsLineBreak } from './LineBreak';
 import { Outline, type OutlineReading } from '../services/parsing/utils/Outline';
 import { checkWrite, type PutBlock, type WrittenLine } from '../services/parsing/utils/OutlineCheck';
 import { ON_RECORD, readsAsPlanned, subtreeAt, type OnRecord, type RowBasis } from '../services/persistence/RowBasis';
-import type { PlacedLine, Spot } from '../services/persistence/utils/Placement';
+import { Block, type PlacedLine, type Spot } from '../services/persistence/utils/Placement';
 
 /**
  * A file's line terminator. Obsidian writes LF, but notes arrive with CRLF
@@ -137,9 +137,8 @@ export interface LineDraft {
     rewrite(at: number, text: string): void;
     /**
      * Put `block` in at `spot` (`Placement`): the one way a write adds a line
-     * below the frontmatter. The block goes at the spot's indentation: its
-     * first line (blank lines aside) at `spot.indent`, every other as far
-     * past it as it stands (`Outline.shiftIndent`), so a caller writes its
+     * below the frontmatter. The block goes at the spot's indentation
+     * (`Block.at`), so a caller writes its
      * lines as they stand where they come from, or with none, and never
      * indents them for the spot. Each line says how it is to read once written,
      * and the write is made only if it does and every other line reads as it
@@ -188,10 +187,7 @@ export function draftOver(lines: string[]): {
             edits.replaced(at);
         },
         put: (spot, given) => {
-            // At the spot's indentation, each line as far past the first
-            // as it stands (`Outline.shiftIndent`).
-            const frame = Outline.indentOf(given.find(line => !Outline.isBlank(line.text))?.text ?? '');
-            const block = given.map(line => ({ ...line, text: Outline.shiftIndent(line.text, frame, spot.indent) }));
+            const block = Block.at(given, spot.indent);
             block.forEach(line => oneLine(line.text));
             // The parent as a line of the lines handed in or of a block, so
             // the check finds it wherever the edits after this one leave it.
