@@ -147,13 +147,16 @@ describe('FileOperations', () => {
         });
 
         it('collects deeply nested children', () => {
+            // Under a root: a tab at the top of a note is indented code
+            // (HYPOTHESIS L2 q4), and opens no item.
             const lines = [
+                '- [ ] root',
                 '\t- [ ] parent',
                 '\t\t- [ ] child',
                 '\t\t\t- [ ] grandchild',
                 '\t- [ ] sibling',
             ];
-            const result = ops.collectChildrenFromLines(lines, 0);
+            const result = ops.collectChildrenFromLines(lines, 1);
             expect(result.childrenLines).toHaveLength(2);
             // Width, not characters: one tab is four columns.
             expect(result.taskIndent).toBe(4);

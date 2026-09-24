@@ -10,7 +10,7 @@
 
 import { CodeFenceTracker } from '../../../utils/CodeFenceTracker';
 import { LIST_BULLET_SOURCE } from './ListMarker';
-import { INDENT_SOURCE, Outline } from './Outline';
+import { INDENT_SOURCE, Outline, type OutlineReading } from './Outline';
 import { IN_LINE } from '../../../utils/LineBreak';
 
 /**
@@ -104,6 +104,23 @@ export function collectFlowLineIndices(
         ancestorIndents.push(indent);
     }
 
+    return result;
+}
+
+/**
+ * The flow child lines of the task at `taskLine`, as absolute line numbers:
+ * the list items the outline reads directly under the task's own item
+ * (`OutlineReading.item(line).parent`), not code, that are flow lines.
+ * A flow line under a child checkbox, a bare checkbox or a plain note bullet
+ * belongs to that item, not to the task.
+ */
+export function ownFlowLines(outline: OutlineReading, taskLine: number): number[] {
+    const result: number[] = [];
+    const end = outline.subtreeEnd(taskLine);
+    for (let line = taskLine + 1; line < end; line++) {
+        if (outline.item(line)?.parent !== taskLine || outline.inCode(line)) continue;
+        if (isFlowLine(outline.lines[line])) result.push(line);
+    }
     return result;
 }
 

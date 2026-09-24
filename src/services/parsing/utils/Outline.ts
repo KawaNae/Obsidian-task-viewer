@@ -1,4 +1,4 @@
-import { CodeFenceTracker } from '../../../utils/CodeFenceTracker';
+import { CodeFenceTracker, type FenceDelimiter } from '../../../utils/CodeFenceTracker';
 import { SPACE_OR_TAB_SOURCE } from './ListMarker';
 
 /**
@@ -17,6 +17,7 @@ import { SPACE_OR_TAB_SOURCE } from './ListMarker';
 export const INDENT_SOURCE = `${SPACE_OR_TAB_SOURCE}*`;
 
 const INDENT_RE = new RegExp(`^${INDENT_SOURCE}`);
+const BLANK_RE = new RegExp(`^${INDENT_SOURCE}$`);
 
 /**
  * A way two lines of a note can be the same line: two lines stand in it when
@@ -103,56 +104,26 @@ export class Outline {
      */
     static readonly UP_TO_INDENT: LineRelation = relation(line => Outline.dedent(line));
 
-    /**
-     * The index just past `row`'s subtree: the lines below it up to the first
-     * line that is no deeper than the row, or `limit`.
-     *
-     * A blank line does not end it: a deeper line below a blank one is still
-     * the row's (as it is to Markdown, where a list item's content goes on
-     * past a blank line), and a subtree that stopped at the blank left that
-     * line behind — an orphan after a delete, a child left where it was by a
-     * move. The blank lines at the very end are not the row's, though: they
-     * stand between it and whatever follows, and stay there.
-     */
-    static subtreeEnd(lines: readonly string[], row: number, limit: number = lines.length): number {
-        const depth = this.depthOf(lines[row]);
-        // A fence opened inside the subtree is the subtree's up to its closing
-        // line, whatever the depth of the lines in it: the parser reads every
-        // one of them as fenced (`CodeFenceTracker.mask`). An end in the middle
-        // of it would leave half a fence behind a delete or a move — and the
-        // closing line left alone opens a fence that swallows what follows.
-        // The row itself is outside every fence, so a tracker started below it
-        // reads the fences exactly as the whole-document reading does.
-        const fence = new CodeFenceTracker();
-        let end = row + 1;
-        for (let i = row + 1; i < limit; i++) {
-            const line = lines[i];
-            if (fence.isInside()) {
-                fence.feed(line);
-                end = i + 1;
-                continue;
-            }
-            if (line.trim() === '') continue;
-            if (this.depthOf(line) <= depth) break;
-            fence.feed(line);
-            end = i + 1;
-        }
-        // A fence that never closes runs to the end of the note, and the
-        // subtree does not go with it: taking it would take everything after.
-        // The subtree is then read by depth alone, as if there were no fence.
-        return fence.isInside() ? this.plainEnd(lines, row, depth, limit) : end;
+    /** A line with nothing on it but tabs and spaces: the only blank line. */
+    static isBlank(line: string): boolean {
+        return BLANK_RE.test(line);
     }
 
-    /** {@link subtreeEnd} read without fences. */
-    private static plainEnd(lines: readonly string[], row: number, depth: number, limit: number): number {
-        let end = row + 1;
-        for (let i = row + 1; i < limit; i++) {
-            const line = lines[i];
-            if (line.trim() === '') continue;
-            if (this.depthOf(line) <= depth) break;
-            end = i + 1;
-        }
-        return end;
+    /**
+     * The note's list items and code blocks, read once from top to bottom.
+     * Every question of where an item, a subtree or a fence begins and ends
+     * is answered from here (`OutlineReading`).
+     */
+    static read(lines: readonly string[]): OutlineReading {
+        return readOutline(lines, this.bodyStart(lines));
+    }
+
+    /**
+     * The index just past `row`'s subtree, or `limit`: the end of the list
+     * item `row` opens, the blank lines at its very end left out.
+     */
+    static subtreeEnd(lines: readonly string[], row: number, limit: number = lines.length): number {
+        return Math.min(this.read(lines).subtreeEnd(row), limit);
     }
 
     /**
@@ -167,4 +138,245 @@ export class Outline {
         }
         return 0;
     }
+}
+
+/** A list item as the outline reads it. */
+export interface OutlineItem {
+    /** The line its marker stands on. */
+    line: number;
+    /** The column its content starts at: a line indented this far or more goes on in it. */
+    contentColumn: number;
+    /** The line of the item it stands in, or null at the top. */
+    parent: number | null;
+    /** The index just past its last line that is not blank. */
+    end: number;
+}
+
+/** A fenced code block as the outline reads it. */
+export interface OutlineFence {
+    /** The line of its opening delimiter. */
+    line: number;
+    /** The line of its closing delimiter; null when it ends without one. */
+    close: number | null;
+    /** The index just past its last line. */
+    end: number;
+    /** The info string after the opening delimiter, trimmed. */
+    info: string;
+    /** The column the opening delimiter stands at. */
+    column: number;
+}
+
+/**
+ * A note read as list items and code blocks: `Outline.read`'s answer.
+ *
+ * Every line has at most one item it stands in (the innermost), and is code
+ * or is not. A subtree is an item's lines, a task's parent the item around
+ * it, a line fenced when a code block holds it — asked of this, never walked
+ * again by whoever asks.
+ */
+export class OutlineReading {
+    constructor(
+        readonly lines: readonly string[],
+        private readonly items: ReadonlyMap<number, OutlineItem>,
+        private readonly owners: readonly (number | null)[],
+        private readonly codes: readonly boolean[],
+        readonly fences: readonly OutlineFence[],
+    ) {}
+
+    /** The item whose marker is on `line`, or null. */
+    item(line: number): OutlineItem | null {
+        return this.items.get(line) ?? null;
+    }
+
+    /** The innermost item `line` stands in (itself when it opens one), or null. */
+    ownerOf(line: number): number | null {
+        return this.owners[line] ?? null;
+    }
+
+    /** Whether `line` is code: inside a code block, its delimiters included. */
+    inCode(line: number): boolean {
+        return this.codes[line] ?? false;
+    }
+
+    /** Per-line {@link inCode}. */
+    codeMask(): boolean[] {
+        return [...this.codes];
+    }
+
+    /**
+     * The index just past `row`'s subtree: the end of the item `row` opens,
+     * the blank lines at its very end left out. A blank line inside does
+     * not end it (a deeper line below a blank one is still the row's), and
+     * a code block inside ends with the item. A line that opens no item has
+     * no subtree.
+     */
+    subtreeEnd(row: number): number {
+        return this.items.get(row)?.end ?? row + 1;
+    }
+}
+
+/** Column width of `text` read from column `from`, a tab reaching the next multiple of four. */
+function widthFrom(text: string, from: number): number {
+    let col = from;
+    for (const ch of text) col = ch === '\t' ? col + 4 - (col % 4) : col + 1;
+    return col - from;
+}
+
+const MARKER_RE = /^(?:[-*+]|\d{1,9}[.)])/;
+const GAP_RE = /^[ \t]*/;
+const HEADING_RE = /^#{1,6}(?:[ \t]|$)/;
+const THEMATIC_BREAK_RE = /^(?:(?:-[ \t]*){3,}|(?:\*[ \t]*){3,}|(?:_[ \t]*){3,})$/;
+
+/**
+ * The item a line opens when its indentation leaves it `text` at column
+ * `col`: the column its content starts at, and what follows the marker.
+ * CommonMark: a marker, then a space or a tab or the end of the line; up to
+ * four columns of gap put the content after the gap, five or more put it one
+ * column after the marker (the rest is indented code).
+ */
+function itemStart(text: string, col: number): { contentColumn: number; rest: string } | null {
+    if (THEMATIC_BREAK_RE.test(text)) return null;
+    const marker = MARKER_RE.exec(text);
+    if (!marker) return null;
+    const after = text.slice(marker[0].length);
+    const gap = GAP_RE.exec(after)![0];
+    if (gap === '' && after !== '') return null;
+    const markerEnd = col + marker[0].length;
+    const rest = after.slice(gap.length);
+    const gapWidth = widthFrom(gap, markerEnd);
+    const contentColumn = rest === '' || gapWidth > 4 ? markerEnd + 1 : markerEnd + gapWidth;
+    return { contentColumn, rest };
+}
+
+/**
+ * The one reading of a note's blocks. The rules are CommonMark's container
+ * rules for list items, with the blocks the plugin reads (fences, headings,
+ * thematic breaks, paragraphs) and nothing else:
+ *
+ * - an item goes on over every line indented to its content column, and over
+ *   blank lines; a line that goes on a paragraph (a lazy continuation) goes
+ *   on the item too, however shallow
+ * - a fence opens up to three columns past the content column of the item it
+ *   stands in, goes on only while that item does, and ends with it when it
+ *   has no closing line
+ * - four columns or more past the content column is a paragraph going on, or
+ *   indented code
+ *
+ * HYPOTHESIS (L2): whether Obsidian reads items and fences this way is
+ * measured in the L2 stage (`stages\l2-blocks\design.md`, questions 1-9).
+ * R0 saw `listItems` carry an item past a shallow line inside its fence
+ * (BK1), which these rules do not. The rules live here and nowhere else.
+ */
+function readOutline(lines: readonly string[], start: number): OutlineReading {
+    const items = new Map<number, OutlineItem>();
+    const owners: (number | null)[] = new Array(lines.length).fill(null);
+    const codes: boolean[] = new Array(lines.length).fill(false);
+    const fences: OutlineFence[] = [];
+
+    type Frame = { item: OutlineItem; last: number };
+    const stack: Frame[] = [];
+    // What the innermost open block is: a paragraph a lazy line may go on,
+    // indented code a deeper line after a blank one goes on, or neither.
+    let leaf: 'paragraph' | 'indented' | 'none' = 'none';
+    type OpenFence = { open: FenceDelimiter; depth: number; block: OutlineFence };
+    let fence = null as OpenFence | null;
+
+    const innermost = () => (stack.length > 0 ? stack[stack.length - 1].item.line : null);
+    const holds = (i: number) => {
+        owners[i] = innermost();
+        for (const frame of stack) frame.last = i;
+    };
+    const closeTo = (depth: number) => {
+        while (stack.length > depth) {
+            const frame = stack.pop()!;
+            frame.item.end = frame.last + 1;
+        }
+        if (fence && fence.depth > depth) fence = null;
+    };
+    const openFence = (i: number, open: FenceDelimiter, column: number) => {
+        const block: OutlineFence = { line: i, close: null, end: i + 1, info: open.info, column };
+        fences.push(block);
+        fence = { open, depth: stack.length, block };
+        codes[i] = true;
+        leaf = 'none';
+    };
+
+    for (let i = start; i < lines.length; i++) {
+        const line = lines[i];
+        if (Outline.isBlank(line)) {
+            owners[i] = innermost();
+            if (fence) codes[i] = true;
+            if (leaf === 'paragraph') leaf = 'none';
+            continue;
+        }
+
+        const col = Outline.depthOf(line);
+        const text = Outline.dedent(line);
+        let matched = 0;
+        while (matched < stack.length && col >= stack[matched].item.contentColumn) matched++;
+
+        if (fence) {
+            if (matched >= fence.depth) {
+                const base = fence.depth > 0 ? stack[fence.depth - 1].item.contentColumn : 0;
+                codes[i] = true;
+                holds(i);
+                fence.block.end = i + 1;
+                if (col - base <= 3 && CodeFenceTracker.closes(text, fence.open)) {
+                    fence.block.close = i;
+                    fence = null;
+                }
+                continue;
+            }
+            // The item the fence stands in ends here, and the fence with it.
+            fence = null;
+        }
+
+        const base = matched > 0 ? stack[matched - 1].item.contentColumn : 0;
+        const shallow = col - base <= 3;
+        const startsBlock = shallow && (
+            CodeFenceTracker.opening(text) !== null
+            || HEADING_RE.test(text)
+            || THEMATIC_BREAK_RE.test(text)
+            || itemStart(text, col) !== null);
+        if (matched < stack.length && leaf === 'paragraph' && !startsBlock) {
+            holds(i);
+            continue;
+        }
+        closeTo(matched);
+
+        if (!shallow) {
+            if (leaf !== 'paragraph') {
+                codes[i] = true;
+                leaf = 'indented';
+            }
+            holds(i);
+            continue;
+        }
+
+        const open = CodeFenceTracker.opening(text);
+        if (open) {
+            holds(i);
+            openFence(i, open, col);
+            continue;
+        }
+
+        const started = itemStart(text, col);
+        if (started) {
+            const item: OutlineItem = { line: i, contentColumn: started.contentColumn, parent: innermost(), end: i + 1 };
+            holds(i);
+            items.set(i, item);
+            stack.push({ item, last: i });
+            owners[i] = i;
+            const inner = started.rest === '' ? null : CodeFenceTracker.opening(started.rest);
+            if (inner) openFence(i, inner, started.contentColumn);
+            else leaf = started.rest === '' ? 'none' : 'paragraph';
+            continue;
+        }
+
+        holds(i);
+        leaf = HEADING_RE.test(text) || THEMATIC_BREAK_RE.test(text) ? 'none' : 'paragraph';
+    }
+    closeTo(0);
+
+    return new OutlineReading(lines, items, owners, codes, fences);
 }

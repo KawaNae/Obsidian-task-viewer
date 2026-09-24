@@ -405,9 +405,11 @@ describe('IDs held across a delete', () => {
         // The editor's menu deletes one line by its coordinate, so a parent can
         // go while its child stays. The child is the same row it was, one line
         // higher — which is exactly what the claim says, and nothing more.
+        // Two spaces, not a tab: a tab left at the top of the note is
+        // indented code (HYPOTHESIS L2 q4), and the orphan would be no task.
         const contents = new Map([[FILE, [
             '- [ ] 親 @2026-09-21',
-            '\t- [ ] 子 @2026-09-21 ^tv-child',
+            '  - [ ] 子 @2026-09-21 ^tv-child',
             '- [ ] 下の行 @2026-09-21',
             '',
         ].join('\n')]]);
@@ -421,7 +423,7 @@ describe('IDs held across a delete', () => {
         // `taskLines` only reads flush-left rows, so the orphan is checked here
         // against the file itself: it is still there, still indented.
         expect(contents.get(FILE)!.split('\n')).toEqual([
-            '\t- [ ] 子 @2026-09-21 ^tv-child',
+            '  - [ ] 子 @2026-09-21 ^tv-child',
             '- [ ] 下の行 @2026-09-21',
             '',
         ]);

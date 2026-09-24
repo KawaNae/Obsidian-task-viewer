@@ -71,7 +71,8 @@ export class FileParsePipeline {
         }
 
         // --- ツリーパイプライン（順序契約: build → resolve → extract）---
-        const doc = DocumentTreeBuilder.build(filePath, lines, bodyStartIndex);
+        const outline = Outline.read(lines);
+        const doc = DocumentTreeBuilder.build(filePath, lines, bodyStartIndex, outline);
         SectionPropertyResolver.resolve(doc, frontmatterObj, settings.scopeKeys);
         const tasks = TreeTaskExtractor.extract(doc, {
             filePath,
@@ -82,7 +83,7 @@ export class FileParsePipeline {
         // reference per line and level, not a copy of the text.
         for (const task of tasks) {
             if (task.line >= 0 && task.line < lines.length) {
-                task.subtreeLines = lines.slice(task.line, Outline.subtreeEnd(lines, task.line));
+                task.subtreeLines = lines.slice(task.line, outline.subtreeEnd(task.line));
             }
         }
 
