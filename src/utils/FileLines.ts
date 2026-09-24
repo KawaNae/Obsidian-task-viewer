@@ -728,6 +728,203 @@ function explains(
 }
 
 /**
+ * Where a write asks for a named row: the part of a {@link WriteChannel} that
+ * {@link editLines} needs. Absent, every named row is `gone`.
+ */
+export type RowFinder = Pick<WriteChannel, 'locate' | 'onRecord'>;
+
+/**
+ * What {@link editLines} made of one set of lines: the lines as the write left
+ * them, with the report that says which line became which and the rows it
+ * named; or the refusal, and nothing written.
+ */
+export type EditedLines =
+    | {
+        written: true;
+        /** The lines as they were handed in. */
+        before: readonly string[];
+        /** The lines as the write left them. */
+        lines: readonly string[];
+        /** The draft's report: every change the write made, in order. */
+        edits: readonly LineEdit[];
+        rows: ReadonlyMap<string, RowLines>;
+    }
+    | { written: false; refused: Refusal };
+
+/** The text a write is about when it asks for `target`: a named row's subject, the editor's line. */
+function subjectOf(target: NamedRow | EditorLine): string {
+    return 'ref' in target ? target.subject : target.text.trim();
+}
+
+/**
+ * Let `edit` change `lines` through a draft, and answer what came of it,
+ * writing nothing anywhere: the one core every write of lines runs, whatever
+ * the lines are then written to (`processLines` writes them to the file).
+ *
+ * Where to write is asked of `finder`, through the session: a write names its
+ * target with what it was planned from, `locate` answers where that target
+ * stands in these lines, and the lines there have to read as the plan read
+ * them (`WriteSession.row`). A write whose target has no line gives up when
+ * `row` answers null, and the refusal is what this answers. With no `finder`,
+ * every named target is `gone`.
+ *
+ * Every change `edit` makes goes through the {@link LineDraft} it is handed,
+ * which reports it. The write is held to that report: the lines it put in
+ * have to read as put, and every other line as it did (`checkWrite`); else
+ * nothing is written, and the write is refused as `unplaceable` or
+ * `disturbs`. A report no file could follow is a bug in the write and is not
+ * written either (see `BrokenWrite`).
+ *
+ * A refusal is told by what the write is about: the subject of the row it
+ * asked for last (`NamedRow.subject`, the editor's text), else `about`, else
+ * the file. `asked` hears each subject as the write asks for its row, for a
+ * caller that has to name the write after it threw.
+ *
+ * `lines` is not changed: the draft works on a copy.
+ */
+export function editLines(
+    path: string,
+    lines: readonly string[],
+    eol: Eol,
+    finder: RowFinder | undefined,
+    edit: (draft: LineDraft, eol: Eol, session: WriteSession) => boolean,
+    subjects: { about?: string; asked?: (subject: string) => void } = {},
+): EditedLines {
+    let refused: Refusal | null = null;
+    let lastSubject = '';
+    const subject = () => lastSubject || subjects.about || path;
+
+    const before = [...lines];
+    // Every change the write makes, it makes to this array through the
+    // draft, and the draft reports it.
+    const working = [...lines];
+    const { draft, reported, puts, placedBy } = draftOver(working);
+    const refuse = (reason: RefusalReason, about: string): false => {
+        refused = { file: path, reason, subject: about };
+        return false;
+    };
+    // Each row is asked once, of the lines as they were handed in, and
+    // its basis checked there: the answer is its line, or why not.
+    const answered = new Map<string, number | RefusalReason>();
+    // Whether a coordinate was carried across this write's own edits,
+    // and whether carrying one caught the report out.
+    let carried = false;
+    let unsound: string | null = null;
+    const carry = (line: number): number | null => {
+        carried = true;
+        const replayed = replayEdits(before.length, reported);
+        if (!replayed) {
+            unsound = 'a report no file could follow';
+            return null;
+        }
+        const now = replayed.origin.indexOf(line);
+        // Taken away by this very write: the row is not on these lines.
+        if (now < 0) return null;
+        if (!replayed.rewritten[now] && !Outline.VERBATIM.holds(working[now], before[line])) {
+            unsound = `line ${line} carried to ${now} does not read what it read`;
+            return null;
+        }
+        return now;
+    };
+    const answer = (target: NamedRow | EditorLine): number | RefusalReason => {
+        if (!('ref' in target)) {
+            // The editor's line is its own coordinate, good only while
+            // the line, and the subtree when the write takes it, still
+            // read what the editor showed there.
+            const shown: RowBasis = { text: target.text, ...(target.subtree ? { subtree: target.subtree } : {}) };
+            return readsAsPlanned(before, target.line, shown) ? target.line : { kind: 'changed' };
+        }
+        const located: Located = finder ? finder.locate(before, target.ref) : { kind: 'gone' };
+        if (located.kind === 'outdated') return { kind: 'changed' };
+        if (located.kind !== 'at') return located;
+        const holds = target.basis === ON_RECORD
+            ? finder!.onRecord(before, target.ref, located.line)
+            : readsAsPlanned(before, located.line, target.basis);
+        return holds ? located.line : { kind: 'changed' };
+    };
+    // The names the write asked for, to say how it left them.
+    const named = new Map<string, number>();
+    const session: WriteSession = {
+        row: (target) => {
+            const about = subjectOf(target);
+            lastSubject = about;
+            subjects.asked?.(about);
+            const key = 'ref' in target ? target.ref.runtimeId : `editor:${target.line}`;
+            let found = answered.get(key);
+            if (found === undefined) {
+                found = answer(target);
+                answered.set(key, found);
+                if ('ref' in target && typeof found === 'number') named.set(key, found);
+            }
+            if (typeof found !== 'number') { refuse(found, about); return null; }
+            if (reported.length === 0) return found;
+            const now = carry(found);
+            if (now === null) { refuse({ kind: 'gone' }, about); return null; }
+            return now;
+        },
+    };
+    const notWritten = (): EditedLines => ({ written: false, refused: refused! });
+    // A caller's bug, not the user's: a development build throws so the
+    // bug is seen, a release build writes nothing and refuses.
+    const callerBug = (what: string, reason: RefusalReason): EditedLines => {
+        const message = `[FileLines] ${path}: ${what}; nothing written`;
+        if (__DEV__) throw new BrokenWrite(message);
+        logError(message, { notice: false });
+        refuse(reason, subject());
+        return notWritten();
+    };
+    let next: string[] | null;
+    try {
+        next = edit(draft, eol, session) ? working : null;
+    } catch (error) {
+        if (!(error instanceof LineBreakInLine) && !(error instanceof UnfollowableDraft)) throw error;
+        // The input should have been refused where it came in
+        // (`TaskApi`), not written with a line the report cannot count.
+        return callerBug(error.message, { kind: 'failed' });
+    }
+
+    // A write that took a coordinate across its own edits wrote where
+    // its report said the row had gone. If the report does not account
+    // for the lines, that coordinate is not known to be the row's, and
+    // nothing is written rather than something in the wrong place.
+    if (unsound === null && next !== null && carried && !explains(before, next, reported)) {
+        unsound = 'its report does not account for the lines it wrote';
+    }
+    if (unsound !== null) return callerBug(`a coordinate was carried across this write's edits, but ${unsound}`, { kind: 'changed' });
+    if (next === null) {
+        // A callback gives a write up by `row` answering null, which
+        // says why. One that just returns false has not, and would
+        // leave its caller a write neither made nor refused.
+        return refused === null ? callerBug('a write was given up without a reason', { kind: 'failed' }) : notWritten();
+    }
+
+    // Every write is held to what it says it did, the same way: the
+    // lines it put in read as put, and every other line as it did
+    // (`checkWrite`). A write that reported nothing is not asked: one
+    // that changed lines behind the draft is written with the chain
+    // marked broken (W1's contract, `ChainMarks.vault.test.ts`).
+    let readings: { read: OutlineReading; left: OutlineReading } | undefined;
+    if (reported.length > 0) {
+        const written = writtenLines(before.length, reported, placedBy);
+        if (written === null || written.length !== next.length) {
+            return callerBug('its report does not account for the lines it wrote', { kind: 'failed' });
+        }
+        // The reading of the lines as written is the note's next
+        // reading, once the write lands; read here once, for the check
+        // and for the rows the write leaves.
+        readings = { read: Outline.read(before), left: Outline.read(next) };
+        const check = checkWrite(readings.read, readings.left, written, puts);
+        if (check === 'loose') return callerBug('a line was spliced into the body without a place (`LineDraft.put`)', { kind: 'failed' });
+        if (check !== 'sound') {
+            refuse({ kind: check }, subject());
+            return notWritten();
+        }
+    }
+
+    return { written: true, before, lines: next, edits: reported, rows: rowsLeft(before, reported, next, named, readings) };
+}
+
+/**
  * Read a file as lines, let `edit` change them through a draft, and write them
  * back with the file's own terminator — one atomic `vault.process`.
  *
@@ -740,31 +937,19 @@ function explains(
  * The channel is not optional, though it may be absent: every caller says
  * which one its write goes to, so no write leaves it out by forgetting it.
  *
- * Where to write is asked of the `channel`, through the session: a write
- * names its target with what it was planned from, `locate` answers where that
- * target stands in these lines, and the lines there have to read as the plan
- * read them (`WriteSession.row`). A write whose target has no line gives up
- * when `row` answers null, and the refusal is handed to the channel once `vault.process` is over —
- * once, however many times Obsidian ran the callback. With no channel there is
- * nobody to ask, and every target is `gone`: the index that would answer has
- * been taken down.
+ * What the write does to the lines, and whether it is made, is
+ * {@link editLines}: where its target stands is asked of the `channel`
+ * (`WriteSession.row`), and the write is held to its draft's report
+ * (`checkWrite`). A refusal is handed to the channel once `vault.process` is
+ * over — once, however many times Obsidian ran the callback. With no channel
+ * there is nobody to ask, and every target is `gone`: the index that would
+ * answer has been taken down.
  *
- * Every change `edit` makes goes through the {@link LineDraft} it is handed,
- * which reports it, and that report is what lets the next scan know which
- * line is which. It is also what the write is checked by: the lines it put
- * in have to read as put, and every other line as it did (`checkWrite`);
- * else nothing is written, and the write is refused as `unplaceable` or
- * `disturbs`. A report no file could follow is a bug in the write and is
- * not written either (see `BrokenWrite`). A report that follows but does not
- * account for every line it left unreported is logged and dropped, and the
- * sink is told the write could not say what it did (see {@link WriteSink}):
- * every write that changes the file leaves a claim or that mark, never
- * nothing.
- *
- * A refusal is told by what the write is about, as its caller says: the
- * subject of the row it asked for last (`NamedRow.subject`, the editor's
- * text), else `about` — what a write that names no row puts in, the task it
- * creates — else the file.
+ * The report is also what lets the next scan know which line is which. A
+ * report that follows but does not account for every line it left
+ * unreported is logged and dropped, and the sink is told the write could not
+ * say what it did (see {@link WriteSink}): every write that changes the file
+ * leaves a claim or that mark, never nothing.
  *
  * Anything a write owes the rest of the plugin belongs on the written branch
  * only. A claim left behind by a write that never happened would be weighed by
@@ -808,137 +993,18 @@ export async function processLines(
         refused = null;
         made = [];
         rows = new Map();
+        lastSubject = '';
 
         const { lines, eol, bom } = splitLines(content);
-        const before = [...lines];
-        // Over `lines` itself: every change the write makes, it makes to
-        // this array through the draft, and the draft reports it.
-        const { draft, reported, puts, placedBy } = draftOver(lines);
-        const refuse = (reason: RefusalReason, subject: string): false => {
-            refused = { file: file.path, reason, subject };
-            return false;
-        };
-        // Each row is asked once, of the lines as they were handed in, and
-        // its basis checked there: the answer is its line, or why not.
-        const answered = new Map<string, number | RefusalReason>();
-        // Whether a coordinate was carried across this write's own edits,
-        // and whether carrying one caught the report out.
-        let carried = false;
-        let unsound: string | null = null;
-        const carry = (line: number): number | null => {
-            carried = true;
-            const replayed = replayEdits(before.length, reported);
-            if (!replayed) {
-                unsound = 'a report no file could follow';
-                return null;
-            }
-            const now = replayed.origin.indexOf(line);
-            // Taken away by this very write: the row is not on these lines.
-            if (now < 0) return null;
-            if (!replayed.rewritten[now] && !Outline.VERBATIM.holds(lines[now], before[line])) {
-                unsound = `line ${line} carried to ${now} does not read what it read`;
-                return null;
-            }
-            return now;
-        };
-        const answer = (target: NamedRow | EditorLine): number | RefusalReason => {
-            if (!('ref' in target)) {
-                // The editor's line is its own coordinate, good only while
-                // the line, and the subtree when the write takes it, still
-                // read what the editor showed there.
-                const shown: RowBasis = { text: target.text, ...(target.subtree ? { subtree: target.subtree } : {}) };
-                return readsAsPlanned(before, target.line, shown) ? target.line : { kind: 'changed' };
-            }
-            const located: Located = channel ? channel.locate(before, target.ref) : { kind: 'gone' };
-            if (located.kind === 'outdated') return { kind: 'changed' };
-            if (located.kind !== 'at') return located;
-            const holds = target.basis === ON_RECORD
-                ? channel!.onRecord(before, target.ref, located.line)
-                : readsAsPlanned(before, located.line, target.basis);
-            return holds ? located.line : { kind: 'changed' };
-        };
-        // The names the write asked for, to say how it left them.
-        const named = new Map<string, number>();
-        lastSubject = '';
-        const session: WriteSession = {
-            row: (target) => {
-                const subject = 'ref' in target ? target.subject : target.text.trim();
-                lastSubject = subject;
-                const key = 'ref' in target ? target.ref.runtimeId : `editor:${target.line}`;
-                let found = answered.get(key);
-                if (found === undefined) {
-                    found = answer(target);
-                    answered.set(key, found);
-                    if ('ref' in target && typeof found === 'number') named.set(key, found);
-                }
-                if (typeof found !== 'number') { refuse(found, subject); return null; }
-                if (reported.length === 0) return found;
-                const now = carry(found);
-                if (now === null) { refuse({ kind: 'gone' }, subject); return null; }
-                return now;
-            },
-        };
-        // A caller's bug, not the user's: a development build throws so the
-        // bug is seen, a release build leaves the file as it was and refuses.
-        const callerBug = (what: string, reason: RefusalReason): string => {
-            const message = `[FileLines] ${file.path}: ${what}; nothing written`;
-            if (__DEV__) throw new BrokenWrite(message);
-            logError(message, { notice: false });
-            refuse(reason, subject());
+        const edited = editLines(file.path, lines, eol, channel, edit, { about, asked: (said) => { lastSubject = said; } });
+        if (!edited.written) {
+            refused = edited.refused;
             return content;
-        };
-        let next: string[] | null;
-        try {
-            next = edit(draft, eol, session) ? lines : null;
-        } catch (error) {
-            if (!(error instanceof LineBreakInLine) && !(error instanceof UnfollowableDraft)) throw error;
-            // The input should have been refused where it came in
-            // (`TaskApi`), not written with a line the report cannot count.
-            return callerBug(error.message, { kind: 'failed' });
         }
-
-        // A write that took a coordinate across its own edits wrote where
-        // its report said the row had gone. If the report does not account
-        // for the lines, that coordinate is not known to be the row's, and
-        // nothing is written rather than something in the wrong place.
-        if (unsound === null && next !== null && carried && !explains(before, next, reported)) {
-            unsound = 'its report does not account for the lines it wrote';
-        }
-        if (unsound !== null) return callerBug(`a coordinate was carried across this write's edits, but ${unsound}`, { kind: 'changed' });
-        if (next === null) {
-            // A callback gives a write up by `row` answering null, which
-            // says why. One that just returns false has not, and would
-            // leave its caller a write neither made nor refused.
-            return refused === null ? callerBug('a write was given up without a reason', { kind: 'failed' }) : content;
-        }
-
-        // Every write is held to what it says it did, the same way: the
-        // lines it put in read as put, and every other line as it did
-        // (`checkWrite`). A write that reported nothing is not asked: one
-        // that changed lines behind the draft is written with the chain
-        // marked broken (W1's contract, `ChainMarks.vault.test.ts`).
-        let readings: { read: OutlineReading; left: OutlineReading } | undefined;
-        if (reported.length > 0) {
-            const written = writtenLines(before.length, reported, placedBy);
-            if (written === null || written.length !== next.length) {
-                return callerBug('its report does not account for the lines it wrote', { kind: 'failed' });
-            }
-            // The reading of the lines as written is the note's next
-            // reading, once the write lands; read here once, for the check
-            // and for the rows the write leaves.
-            readings = { read: Outline.read(before), left: Outline.read(next) };
-            const check = checkWrite(readings.read, readings.left, written, puts);
-            if (check === 'loose') return callerBug('a line was spliced into the body without a place (`LineDraft.put`)', { kind: 'failed' });
-            if (check !== 'sound') {
-                refuse({ kind: check }, subject());
-                return content;
-            }
-        }
-        refused = null;
-
-        rows = rowsLeft(before, reported, next, named, readings);
+        const { before, lines: next, edits: reported } = edited;
+        rows = edited.rows;
         // The mark the note opened with, put back where it was.
-        const rebuilt = (bom ? BOM : '') + joinLines(next, eol);
+        const rebuilt = (bom ? BOM : '') + joinLines([...next], eol);
 
         // A rewrite that produced the same bytes is not a write: Obsidian
         // fires no `modify` for it, so no scan follows, and a claim filed
