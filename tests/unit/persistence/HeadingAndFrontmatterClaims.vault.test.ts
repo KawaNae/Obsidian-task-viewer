@@ -115,7 +115,8 @@ describe('a line put under a heading', () => {
 
         expect(line).toBe(null);
         expect(contents.get(FILE)!).toBe(text);
-        expect(refused.map(r => r.reason.kind)).toEqual(['unplaceable']);
+        // Told in the words of the task it would have made, not the heading's.
+        expect(refused.map(r => [r.reason.kind, r.subject])).toEqual([['unplaceable', '- [ ] N']]);
     });
 });
 

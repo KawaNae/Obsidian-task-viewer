@@ -902,7 +902,8 @@ export async function processLines(
             const check = Outline.check(readings.read, readings.left, written, puts, line => ChildLineClassifier.carriesMeaning(line));
             if (check === 'loose') return callerBug('a line was spliced into the body without a place (`LineDraft.put`)', { kind: 'failed' });
             if (check !== 'sound') {
-                const put = written.findIndex(line => line.kind === 'placed');
+                // What the write was about: its row, or the first item it put in.
+                const put = written.findIndex(line => line.kind === 'placed' && puts[line.put].lines[line.offset].under !== undefined);
                 refuse({ kind: check }, lastSubject || (put >= 0 ? next[put].trim() : file.path));
                 return content;
             }
