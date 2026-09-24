@@ -441,8 +441,9 @@ export class InlineTaskWriter {
             .map((text, i) => ({ from: currentLine + 1 + i, text }))
             .filter(child => !flowAbs.has(child.from));
         const cleaned = this.fileOps.stripBlockIds(kept.map(child => child.text));
-        const adjusted = FileOperations.adjustChildIndentation(cleaned, parentIndent);
-        return kept.map((child, i) => ({ from: child.from, text: adjusted[i] }));
+        // The row is written at the top of where it goes (`format` writes
+        // no indentation), and each child as far past it as it stood.
+        return kept.map((child, i) => ({ from: child.from, text: Outline.shiftIndent(cleaned[i], parentIndent, '') }));
     }
 
     /**
