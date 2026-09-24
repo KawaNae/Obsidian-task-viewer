@@ -44,7 +44,11 @@ describe('a line put in reads as its block says, or the write is unplaceable', (
 
     it('is unplaceable where the line goes on the item\'s own fence that never closes (R5)', () => {
         const lines = ['- [ ] T', '    ```', '    code', '- [ ] U', ''];
-        expect(checked(lines, putLine(Placement.lastChild(lines, 0, '- [ ] n'), '- [ ] c'))).toBe('unplaceable');
+        // Past the fence, the line goes on it.
+        expect(checked(lines, putLine({ at: 3, parent: 0, indent: '    ' }, '- [ ] c'))).toBe('unplaceable');
+        // A last child goes at the end of the children, above the fence (R5 closed).
+        expect(Placement.lastChild(lines, 0, '- [ ] n').at).toBe(1);
+        expect(checked(lines, putLine(Placement.lastChild(lines, 0, '- [ ] n'), '- [ ] c'))).toBe('sound');
         // A sibling put there starts an item, which ends the fence.
         expect(checked(lines, putLine(Placement.afterSubtree(lines, 0, '- [ ] n'), '- [ ] c'))).toBe('sound');
     });
@@ -214,10 +218,11 @@ describe('a line placed past what it would take in, as the reading with it in sa
         expect(put(lines, text => Placement.firstChild(lines, 0, text), '10. [ ] n').spot.at).toBe(1);
     });
 
-    it('takes the indentation of the sibling it goes above: a sibling of `1.` over a `- ` at two (the first run\'s B)', () => {
+    it('takes the spelling of the row it names: a sibling of `1.` written `- ` takes U in (the first run\'s B, refused)', () => {
+        // The marker of the line written, not the spot, makes U its child.
         const lines = ['1. [ ] T', '  - [ ] U'];
         expect(put(lines, text => Placement.afterSubtree(lines, 0, text), '- [x] n'))
-            .toEqual({ spot: { at: 1, parent: null, indent: '  ' }, check: 'sound' });
+            .toEqual({ spot: { at: 1, parent: null, indent: '' }, check: 'disturbs' });
     });
 });
 
@@ -233,5 +238,15 @@ describe('a next instance put at a sibling spelled apart from the row that fired
         const written = [...lines];
         draftOver(written).draft.put(spot, block);
         expect(written.slice(1, 3)).toEqual(['	- [ ] R', '	  - ==> every mon']);
+    });
+});
+
+describe('a copy written at the spelling of the row it copies (the third run\'s a)', () => {
+    it('keeps the copied child a child where the sibling below is spelled apart', () => {
+        const lines = ['-\t[ ] T', '\t- [ ] c', '   - [ ] U'];
+        const reading = Outline.read(lines);
+        const spot = Placement.afterSubtree(lines, 0, lines[0]);
+        expect(spot).toEqual({ at: 2, parent: null, indent: '' });
+        expect(checked(lines, (draft) => draft.put(spot, Block.of(reading, [0, 1], [lines[0], lines[1]])))).toBe('sound');
     });
 });

@@ -274,8 +274,8 @@ describe('a line put past a fence in a list item that never closes', () => {
     });
 
     // Older than L2 (F4's R5, the part left): a last child of the item whose
-    // own fence never closes is indented as that item's content, and goes on
-    // the fence. The lines as written are read (P1), and the write refused.
+    // own fence never closes went past the fence, on it. P1 puts it at the
+    // end of the item's children, above its own fence, where it reads as a task.
     it('reads a last child put under the item whose own fence never closes as a task, or writes nothing (P1)', async () => {
         const { contents, session } = await open(['# note', '- [ ] T', '    ```', '    code', '- [ ] U', '']);
         const before = contents.get(FILE)!;
@@ -287,8 +287,9 @@ describe('a line put past a fence in a list item that never closes', () => {
         const written = contents.get(FILE) !== before;
         if (written) expect(tasksWorded(session, 'c')).toHaveLength(1);
         else expect(Notice.messages).toEqual([t('notice.writeTargetUnplaceable', { subject: 'T' })]);
-        // As it stands, nothing is written: no spot past the fence is the item's.
-        expect(written).toBe(false);
+        // As it stands, it is written above the fence.
+        expect(written).toBe(true);
+        expect(contents.get(FILE)!.split('\n').slice(1, 4)).toEqual(['- [ ] T', '    - [ ] c', '    ```']);
     });
 
     it('reads a task written under a heading made at the end as a task', async () => {

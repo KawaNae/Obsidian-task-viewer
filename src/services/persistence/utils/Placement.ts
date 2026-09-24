@@ -79,13 +79,13 @@ export class Placement {
     /** Just past `row`'s subtree, as its next sibling. */
     static afterSubtree(lines: readonly string[], row: number, head: string): Spot {
         const outline = Outline.read(lines);
-        return this.sibling(outline, outline.subtreeEnd(row), outline.item(row)?.parent ?? null, head);
+        return this.sibling(outline, outline.subtreeEnd(row), outline.item(row)?.parent ?? null, head, row);
     }
 
     /** Just above `row`, as its sibling. */
     static before(lines: readonly string[], row: number, head: string): Spot {
         const outline = Outline.read(lines);
-        return this.sibling(outline, row, outline.item(row)?.parent ?? null, head);
+        return this.sibling(outline, row, outline.item(row)?.parent ?? null, head, row);
     }
 
     /** Where a first child of `row` goes: just below it, past its own text that goes on. */
@@ -93,10 +93,19 @@ export class Placement {
         return this.sibling(Outline.read(lines), row + 1, row, head);
     }
 
-    /** Where a last child of `row` goes: just past its subtree. */
+    /**
+     * Where a last child of `row` goes: just past the subtree of its last
+     * child, where a first child goes when it has none. The end of the list
+     * of its children, which is not always the end of its subtree: the text,
+     * code or fence of its own below its children stays below them.
+     */
     static lastChild(lines: readonly string[], row: number, head: string): Spot {
         const outline = Outline.read(lines);
-        return this.sibling(outline, outline.subtreeEnd(row), row, head);
+        let last: number | null = null;
+        for (let k = row + 1; k < outline.subtreeEnd(row); k++) {
+            if (outline.item(k)?.parent === row) last = k;
+        }
+        return this.sibling(outline, last === null ? row + 1 : outline.subtreeEnd(last), row, head);
     }
 
     /**
@@ -119,7 +128,7 @@ export class Placement {
             if (TaskLineClassifier.classify(lines[next.line])?.statusChar !== 'x') break;
             last = next.line;
         }
-        return this.sibling(outline, outline.subtreeEnd(last), parent, head);
+        return this.sibling(outline, outline.subtreeEnd(last), parent, head, last);
     }
 
     /**
@@ -145,10 +154,16 @@ export class Placement {
 
     /**
      * At `at` or past what a line there takes in, a line under `parent`, at
-     * a sibling's indentation: a child is a sibling of the children there.
+     * a sibling's indentation: that of the row the write names (`named`),
+     * the one it copies or goes next to, spelled as it is; else that of the
+     * item next to it (`siblingIndent`). A child is a sibling of the
+     * children there.
      */
-    private static sibling(outline: OutlineReading, at: number, parent: number | null, head: string): Spot {
-        return this.settle(outline, at, parent, head, spot => this.siblingIndent(outline, parent, spot));
+    private static sibling(outline: OutlineReading, at: number, parent: number | null, head: string, named?: number): Spot {
+        const indentAt = named === undefined
+            ? (spot: number) => this.siblingIndent(outline, parent, spot)
+            : () => Outline.indentOf(outline.lines[named]);
+        return this.settle(outline, at, parent, head, indentAt);
     }
 
     /**

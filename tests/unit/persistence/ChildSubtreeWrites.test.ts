@@ -126,7 +126,7 @@ describe('insertLineAfterTask lands past the subtree', () => {
         expect(h.lines()[2]).toBe('\t- [x] record');
     });
 
-    it('steps over a fenced block rather than into it', async () => {
+    it('goes above the parent\'s own fenced block, at the end of its children, rather than into it', async () => {
         const h = await writeBench([
             '- [ ] parent @2026-08-15',
             '\t```md',
@@ -137,7 +137,8 @@ describe('insertLineAfterTask lands past the subtree', () => {
 
         await h.writer.insertLineAfterTask(h.taskAt(0), '- [x] record');
 
-        expect(h.lines()[4]).toBe('\t- [x] record');
+        expect(h.lines()[1]).toBe('\t- [x] record');
+        expect(h.lines()[2]).toBe('\t```md');
         expect(h.lines()[5]).toBe('- [ ] sibling');
     });
 });
