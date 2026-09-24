@@ -53,12 +53,17 @@ export class Placement {
      * closing line, a blank line between two siblings. None of those is a
      * task, and the next instance joins the tasks it stands among, not the
      * text above them.
+     *
+     * The instance takes the indentation of the sibling it goes above, the
+     * group's head, as a sibling put anywhere takes its neighbour's.
      */
     static groupHead(lines: readonly string[], row: number): Spot {
         const outline = Outline.read(lines);
         const parent = outline.item(row)?.parent ?? null;
-        const indent = Outline.indentOf(lines[row]);
-        if (parent !== null) return { at: outline.leadEnd(parent + 1, parent), parent, indent };
+        if (parent !== null) {
+            const at = outline.leadEnd(parent + 1, parent, Outline.indentOf(lines[row]));
+            return this.sibling(outline, row, at, outline.item(at)?.parent === parent ? at : row);
+        }
 
         const bodyStart = Outline.bodyStart(lines);
         let head = row;
@@ -70,18 +75,18 @@ export class Placement {
             if (!TaskLineClassifier.isTaskLine(lines[above])) break;
             head = above;
         }
-        return { at: head, parent: null, indent };
+        return this.sibling(outline, row, head, head);
     }
 
     /** Just past `row`'s subtree, as its next sibling. */
     static afterSubtree(lines: readonly string[], row: number): Spot {
         const outline = Outline.read(lines);
-        return this.sibling(outline, row, outline.subtreeEnd(row));
+        return this.sibling(outline, row, outline.subtreeEnd(row), row);
     }
 
     /** Just above `row`, as its sibling. */
     static before(lines: readonly string[], row: number): Spot {
-        return this.sibling(Outline.read(lines), row, row);
+        return this.sibling(Outline.read(lines), row, row, row);
     }
 
     /**
@@ -91,7 +96,8 @@ export class Placement {
      */
     static firstChild(lines: readonly string[], row: number): Spot {
         const outline = Outline.read(lines);
-        return { at: outline.leadEnd(row + 1, row), parent: row, indent: FileOperations.resolveChildIndent(lines, row) };
+        const indent = FileOperations.resolveChildIndent(lines, row);
+        return { at: outline.leadEnd(row + 1, row, indent), parent: row, indent };
     }
 
     /** Where a last child of `row` goes: just past its subtree. */
@@ -115,12 +121,12 @@ export class Placement {
     static afterCompletedRun(lines: readonly string[], row: number): Spot {
         const outline = Outline.read(lines);
         const parent = outline.item(row)?.parent ?? null;
-        let end = outline.subtreeEnd(row);
-        for (let next = outline.item(end); next !== null && next.parent === parent; next = outline.item(end)) {
-            if (TaskLineClassifier.classify(lines[end])?.statusChar !== 'x') break;
-            end = next.end;
+        let last = row;
+        for (let next = outline.item(outline.subtreeEnd(last)); next !== null && next.parent === parent; next = outline.item(outline.subtreeEnd(last))) {
+            if (TaskLineClassifier.classify(lines[next.line])?.statusChar !== 'x') break;
+            last = next.line;
         }
-        return this.sibling(outline, row, end);
+        return this.sibling(outline, row, outline.subtreeEnd(last), last);
     }
 
     /**
@@ -142,15 +148,23 @@ export class Placement {
      */
     static underHeading(lines: readonly string[], heading: number): Spot {
         const outline = Outline.read(lines);
-        const at = outline.leadEnd(heading + 1, null);
+        // Asked for a line at the top, unindented: one indented further
+        // takes in no more.
+        const at = outline.leadEnd(heading + 1, null, '');
         let next = at;
         while (next < lines.length && Outline.isBlank(lines[next])) next++;
         const indent = next < lines.length && outline.item(next)?.parent === null ? Outline.indentOf(lines[next]) : '';
         return { at, parent: null, indent };
     }
 
-    private static sibling(outline: OutlineReading, row: number, at: number): Spot {
-        return { at, parent: outline.item(row)?.parent ?? null, indent: Outline.indentOf(outline.lines[row]) };
+    /**
+     * At `at`, a sibling of `row`, at the indentation of `nextTo`: the
+     * sibling it goes next to. Siblings may be spelled apart (a tab and four
+     * spaces, two spaces and four), and a line at `row`'s own indentation
+     * past another sibling's subtree can stand under that sibling instead.
+     */
+    private static sibling(outline: OutlineReading, row: number, at: number, nextTo: number): Spot {
+        return { at, parent: outline.item(row)?.parent ?? null, indent: Outline.indentOf(outline.lines[nextTo]) };
     }
 }
 

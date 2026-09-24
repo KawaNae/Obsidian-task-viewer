@@ -195,13 +195,13 @@ describe('a last child (insertLineAfterTask, lastChild)', () => {
 });
 
 describe('a sibling (insertSiblingAfterTask, afterSubtree and afterCompletedRun)', () => {
-    it('goes past the completed run, at the row\'s indentation', async () => {
+    it('goes past the completed run, at the indentation of the last of it', async () => {
         const { contents, session } = await open(['# n', '- [ ] P', '\t- [ ] T', '    - [x] r1', '\t\t- note', '- [ ] U', '']);
 
         expect(await session.index.insertSiblingAfterTask(only(session, 'T').id, '- [x] r2', { afterCompletedRun: true })).toBe(true);
         await session.settle(FILE);
 
-        expect(lines(contents)).toEqual(['# n', '- [ ] P', '\t- [ ] T', '    - [x] r1', '\t\t- note', '\t- [x] r2', '- [ ] U', '']);
+        expect(lines(contents)).toEqual(['# n', '- [ ] P', '\t- [ ] T', '    - [x] r1', '\t\t- note', '    - [x] r2', '- [ ] U', '']);
         expect(parents(session)).toEqual([['P', null], ['T', 'P'], ['r1', 'P'], ['r2', 'P'], ['U', null]]);
     });
 
@@ -215,6 +215,72 @@ describe('a sibling (insertSiblingAfterTask, afterSubtree and afterCompletedRun)
         // sibling goes above the fence, a task.
         expect(lines(contents)).toEqual(['# n', '- [ ] T', '- [x] rec', '```', 'x', '']);
         expect(parents(session)).toEqual([['T', null], ['rec', null]]);
+    });
+});
+
+describe('siblings spelled at different columns (the P1 counterexample run\'s C)', () => {
+    it('put a record past the run at the last one\'s indentation, not under it', async () => {
+        // T and U are both P's children, four and two columns in; c is U's.
+        const { contents, session } = await open(['# n', '- [ ] P', '    - [x] T', '  - [x] U', '    - [ ] c', '']);
+        expect(parents(session)).toEqual([['P', null], ['T', 'P'], ['U', 'P'], ['c', 'U']]);
+
+        expect(await session.index.insertSiblingAfterTask(only(session, 'T').id, '- [x] N', { afterCompletedRun: true })).toBe(true);
+        await session.settle(FILE);
+
+        expect(lines(contents)).toEqual(['# n', '- [ ] P', '    - [x] T', '  - [x] U', '    - [ ] c', '  - [x] N', '']);
+        expect(parents(session)).toEqual([['P', null], ['T', 'P'], ['U', 'P'], ['c', 'U'], ['N', 'P']]);
+    });
+
+    it('put the next instance at the head of the group at the head\'s indentation', async () => {
+        const { contents, session } = await open(['# n', '- note', '1. [ ] A', '  - [ ] 対象 @2026-09-21 ==> every mon', '']);
+        expect(parents(session)).toEqual([['A', null], ['対象', null]]);
+
+        expect(await session.index.updateTask(only(session, '対象').id, { statusChar: 'x' })).toBe(true);
+        await session.flowSettled(FILE);
+
+        expect(lines(contents)).toEqual(['# n', '- note', '- [ ] 対象 @2026-09-28 ==> every mon', '1. [ ] A', '  - [x] 対象 @2026-09-21', '']);
+        expect(Notice.messages).toEqual([]);
+    });
+});
+
+describe('text past a blank line that a line put above would take in (the P1 counterexample run\'s A)', () => {
+    it('puts a first child past the task\'s code below a blank line', async () => {
+        const { contents, session } = await open(['# n', '- [ ] T', '', '\t\tcode', '- [ ] U', '']);
+
+        expect(await session.index.insertChildTask(only(session, 'T').id, '- [ ] c')).toBe(true);
+        await session.settle(FILE);
+
+        expect(lines(contents)).toEqual(['# n', '- [ ] T', '', '\t\tcode', '\t- [ ] c', '- [ ] U', '']);
+        expect(parents(session)).toEqual([['T', null], ['c', 'T'], ['U', null]]);
+    });
+
+    it('puts a line under a heading past the code below a blank line', async () => {
+        const { contents, session } = await open(['## H', '', '    code', '- [ ] A', '']);
+
+        expect(await session.index.createTask(FILE, '- [ ] N', 'H')).not.toBeNull();
+        await session.settle(FILE);
+
+        expect(lines(contents)).toEqual(['## H', '', '    code', '- [ ] N', '- [ ] A', '']);
+    });
+
+    it('puts the next instance under its parent past the parent\'s second paragraph, so the series goes on', async () => {
+        const { contents, session } = await open(['# n', '- [ ] P', '', '    desc', '  - [ ] 対象 @2026-09-21 ==> every mon', '']);
+
+        expect(await session.index.updateTask(only(session, '対象').id, { statusChar: 'x' })).toBe(true);
+        await session.flowSettled(FILE);
+
+        expect(lines(contents)).toEqual(['# n', '- [ ] P', '', '    desc', '  - [ ] 対象 @2026-09-28 ==> every mon', '  - [x] 対象 @2026-09-21', '']);
+        expect(Notice.messages).toEqual([]);
+    });
+
+    it('stops before a blank line past which the text is shallower than the line put', async () => {
+        const { contents, session } = await open(['# n', '- [ ] T', '', '  para', '']);
+
+        expect(await session.index.insertChildTask(only(session, 'T').id, '- [ ] c')).toBe(true);
+        await session.settle(FILE);
+
+        // The file's unit is four spaces (its first indented line).
+        expect(lines(contents)).toEqual(['# n', '- [ ] T', '    - [ ] c', '', '  para', '']);
     });
 });
 
