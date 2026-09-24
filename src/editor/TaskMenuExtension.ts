@@ -17,7 +17,7 @@ import { TaskLineClassifier } from '../services/parsing/utils/TaskLineClassifier
 import { getTaskNotation } from '../services/filter/parserTaxonomy';
 import { t } from '../i18n';
 import { editorCm } from '../utils/editorCm';
-import { fenceMaskFor } from './EditorFenceCache';
+import { outlineFor } from './EditorOutline';
 
 const taskIndexChanged = StateEffect.define<void>();
 const settingsChanged = StateEffect.define<void>();
@@ -145,20 +145,19 @@ export function createTaskMenuExtension(
 
         const widgets: { from: number; deco: Decoration }[] = [];
         const seen = new Set<number>();
-        // A checkbox line inside a code fence is example text, not a task —
-        // DocumentTreeBuilder already excludes it from the parsed tree via
-        // the same mask; this scan is independent of that tree (see the
-        // TaskLineClassifier import above), so it needs its own check.
-        const fenceMask = fenceMaskFor(view.state.doc);
+        // A checkbox line in code, or one that opens no list item, is text,
+        // not a task — DocumentTreeBuilder reads it so from the same reading;
+        // this scan is independent of that tree (see the TaskLineClassifier
+        // import above), so it asks the reading itself.
+        const outline = outlineFor(view.state.doc);
 
         for (const { from, to } of view.visibleRanges) {
             let pos = from;
             while (pos <= to) {
                 const line = view.state.doc.lineAt(pos);
                 const lineNumber = line.number - 1; // CM6 is 1-based, Task.line is 0-based
-                const lineText = view.state.doc.sliceString(line.from, line.to);
 
-                if (!fenceMask[lineNumber] && TaskLineClassifier.isTaskLine(lineText) && !seen.has(line.number)) {
+                if (TaskLineClassifier.opensTask(outline, lineNumber) && !seen.has(line.number)) {
                     seen.add(line.number);
                     let show = true;
                     if (needsFilter && filePath) {

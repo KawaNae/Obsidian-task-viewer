@@ -1,6 +1,6 @@
 import { IN_LINE } from '../../../utils/LineBreak';
 import { CHECKBOX_GAP_SOURCE, LIST_BULLET_SOURCE, MARKER_GAP_SOURCE, STATUS_CHAR_SOURCE } from './ListMarker';
-import { INDENT_SOURCE, Outline } from './Outline';
+import { INDENT_SOURCE, Outline, type OutlineReading } from './Outline';
 
 export interface TaskLineMatch {
     /** Leading whitespace */
@@ -103,6 +103,16 @@ export class TaskLineClassifier {
     /** Boolean-only check — avoids object allocation on hot paths. */
     static isTaskLine(line: string): boolean {
         return this.TASK_LINE_REGEX.test(line);
+    }
+
+    /**
+     * Whether line `line` of the note is a task line as the parser reads the
+     * note: it opens a list item the outline reads, is not code, and is a
+     * task line. A checkbox the outline reads as a paragraph going on, or as
+     * code, is text.
+     */
+    static opensTask(outline: OutlineReading, line: number): boolean {
+        return outline.item(line) !== null && !outline.inCode(line) && this.isTaskLine(outline.lines[line]);
     }
 
     /** Extract the list marker (`-`, `*`, `+`, `1.`, etc.) from a line. Returns `-` if not found. */

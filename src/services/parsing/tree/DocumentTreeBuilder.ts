@@ -156,15 +156,6 @@ export class DocumentTreeBuilder {
     }
 
     /**
-     * Whether line `i` opens a task block: it opens a list item the outline
-     * reads, is not code, and is a task line (`TaskLineClassifier`). A
-     * checkbox the outline reads as a paragraph going on, or as code, is text.
-     */
-    private static opensTaskBlock(allLines: string[], outline: OutlineReading, i: number): boolean {
-        return outline.item(i) !== null && !outline.inCode(i) && TaskLineClassifier.isTaskLine(allLines[i]);
-    }
-
-    /**
      * セクションの lead area からプロパティを収集する。
      *
      * Lead area = ヘッダー直後（または暗黙ルートの先頭）〜 最初のタスク行直前。
@@ -239,7 +230,7 @@ export class DocumentTreeBuilder {
         for (const [rangeStart, rangeEnd] of ownRanges) {
             for (let i = rangeStart; i < rangeEnd; i++) {
                 if (section.heading && i === section.heading.line) continue;
-                if (this.opensTaskBlock(allLines, outline, i)) {
+                if (TaskLineClassifier.opensTask(outline, i)) {
                     return leadLines;
                 }
                 leadLines.push(i);
@@ -263,7 +254,7 @@ export class DocumentTreeBuilder {
             let i = rangeStart;
             while (i < rangeEnd) {
                 if (section.heading && i === section.heading.line) { i++; continue; }
-                if (this.opensTaskBlock(allLines, outline, i)) {
+                if (TaskLineClassifier.opensTask(outline, i)) {
                     const taskBlock = this.collectBlock(allLines, outline, i, rangeEnd);
                     blocks.push(taskBlock);
                     i = taskBlock.line + 1 + taskBlock.childRawLines.length;
@@ -321,7 +312,7 @@ export class DocumentTreeBuilder {
         const childTaskBlocks: TaskBlock[] = [];
         let i = row + 1;
         while (i < end) {
-            if (this.opensTaskBlock(allLines, outline, i)) {
+            if (TaskLineClassifier.opensTask(outline, i)) {
                 const childBlock = this.collectBlock(allLines, outline, i, end);
                 childTaskBlocks.push(childBlock);
                 i += 1 + childBlock.childRawLines.length;
