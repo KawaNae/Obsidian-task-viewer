@@ -216,6 +216,26 @@ describe('a card\'s completion', () => {
 
         expect(note.fired).toEqual([]);
     });
+
+    it('keeps the command of a move to another file that has not landed, for a write before the scan', async () => {
+        // The completing write of a move to another file consumes nothing:
+        // its command stays on the row until the source's write takes the row
+        // away. The destination refused here, the row stays with it, and the
+        // copy has to say so, or the next card's write drops the command.
+        const note = await open(['# note', '- [ ] T @2026-09-21 ==> move([[other]])', '- [ ] U', '']);
+        const repository = (note.session.index as unknown as { repository: { appendArchive: () => Promise<boolean> } }).repository;
+        repository.appendArchive = async () => false;
+        const id = note.idOf('T');
+        note.session.index.setDraggingFile(FILE);
+
+        expect(await note.session.index.updateTask(id, { statusChar: 'x' })).toBe(true);
+        expect(await note.session.index.updateTask(id, { content: 'T2' })).toBe(true);
+
+        expect(note.fired).toEqual(['T']);
+        expect(note.contents.get(FILE)!.split('\n')).toEqual([
+            '# note', '- [x] T2 @2026-09-21 ==> move([[other]])', '- [ ] U', '',
+        ]);
+    });
 });
 
 describe('a move within the note, completed in the editor', () => {
