@@ -373,7 +373,8 @@ export class InlineTaskWriter {
         if (!file) {
             const created = await createFile(this.app, filePath, channel, subject, async () => {
                 await this.fileOps.ensureDirectoryExists(filePath);
-                return block.map(line => line.text).join('\n');
+                // At the top of the note, as a put at its end would write it.
+                return Block.at(block, '').map(line => line.text).join('\n');
             });
             return created.written ? { ...created, line: 0 } : created;
         }

@@ -222,6 +222,17 @@ export const Block = {
         });
     },
 
+    /**
+     * `block` written at `indent`: its first line there, every other as far
+     * past it as it stands past the first (`Outline.shiftIndent`). What a
+     * put writes at its spot (`LineDraft.put`), and a note made of a block
+     * writes at the top.
+     */
+    at(block: readonly PlacedLine[], indent: string): PlacedLine[] {
+        const frame = block.length > 0 ? Outline.indentOf(block[0].text) : '';
+        return block.map(line => ({ ...line, text: Outline.shiftIndent(line.text, frame, indent) }));
+    },
+
     /** One line, read by itself as {@link read} reads, its indentation aside: it goes at the spot's indentation. */
     line(text: string): PlacedLine[] {
         return [{ ...Block.read([Outline.dedent(text)])[0], text }];
