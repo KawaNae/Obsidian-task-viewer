@@ -16,6 +16,13 @@ import { TaskLineClassifier } from '../../parsing/utils/TaskLineClassifier';
  * The frontmatter, the list items and the fences are read the way the parser
  * reads them (`Outline.read`), so "inside the body" means what the index will
  * read as the body, and a row's group is the item it stands in.
+ *
+ * The answers are read before the write, and hold for a line that starts a
+ * block of its own: an item, or a heading. Every write that splices at one
+ * puts such a line first — a task line, which `TaskParser.format` always
+ * writes, a copy of one, or a heading below a blank line. A line of any other
+ * kind put past a fence in a list item that never closes would go on the
+ * fence (`Outline.read`); checking the lines as written is P1's.
  */
 export class Placement {
     /**
