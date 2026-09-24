@@ -181,6 +181,19 @@ describe('FileOperations', () => {
             expect(FileOperations.resolveChildIndent(lines, 1)).toBe('\t\t');
         });
 
+        it('carries the first child under a line written in the task\'s place, as far past it as it stands past the task', () => {
+            // The next instance of a tab row, written at four spaces: its
+            // child is a tab past the four spaces, as the tab row's is past the tab.
+            const lines = ['- [ ] P', '\t- [ ] T', '\t\t- [ ] c'];
+            expect(FileOperations.resolveChildIndent(lines, 1, '    - [ ] T')).toBe('    \t');
+        });
+
+        it('takes the sample from the children the write keeps, and from the others where it keeps none', () => {
+            const lines = ['- [ ] T', '\t- ==> every mon', '  - [ ] c'];
+            expect(FileOperations.resolveChildIndent(lines, 0, lines[0], new Set([1]))).toBe('  ');
+            expect(FileOperations.resolveChildIndent(['- [ ] T', '\t- ==> every mon'], 0, '- [ ] T', new Set([1]))).toBe('\t');
+        });
+
         it('does not treat a line past a blank as a child', () => {
             const lines = ['- [ ] parent', '', '    - [ ] not a child'];
             // Nothing indented before the blank, so the file's own unit decides.
