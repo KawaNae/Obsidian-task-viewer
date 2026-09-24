@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { TFile } from 'obsidian';
-import { BrokenWrite, LineBreakInLine, draftOver, joinLines, processLines, replayEdits, splitLines } from '../../../src/utils/FileLines';
+import { BrokenWrite, LineBreakInLine, UnfollowableDraft, draftOver, joinLines, processLines, replayEdits, splitLines } from '../../../src/utils/FileLines';
 import type { LineEdit, Located, NamedRow, Refusal, TaskRef, WriteChannel } from '../../../src/utils/FileLines';
 import { holdsLineBreak } from '../../../src/utils/LineBreak';
 import { Block } from '../../../src/services/persistence/utils/Placement';
@@ -291,6 +291,19 @@ describe('processLines', () => {
         expect(log.standing()).toEqual([]);
     });
 
+    it('tells a put the report cannot follow as the caller\'s bug, and writes nothing', async () => {
+        const h = harness('- [ ] a\n- [ ] b\n');
+        const log = writeSink();
+
+        await expect(processLines(h.app, h.file, log.channel, (draft) => {
+            draft.put({ at: 2, parent: null, indent: '' }, [{ from: 1, text: '- [ ] b', kind: 'item', under: 'spot' }]);
+            draft.put({ at: 1, parent: 0, indent: '  ' }, Block.line('- [ ] c'));
+            return true;
+        })).rejects.toThrow(BrokenWrite);
+        expect(h.text()).toBe('- [ ] a\n- [ ] b\n');
+        expect(log.standing()).toEqual([]);
+    });
+
     it('reads a run of reports in the order they were made', async () => {
         // Each one is in the line numbers of its own moment, so an insert
         // shifts what the next one is talking about.
@@ -560,9 +573,9 @@ describe('processLines', () => {
     it('leaves the file byte-identical when the edit declines', async () => {
         const original = '- [ ] a\r\n- [ ] b\n';
         const h = harness(original);
-        const outcome = await processLines(h.app, h.file, undefined, (_draft, _eol, { refuse }) => refuse({ kind: 'unplaceable' }, 'a'));
+        const outcome = await processLines(h.app, h.file, undefined, (_draft, _eol, { row }) => row({ line: 0, text: '- [ ] z' }) !== null);
 
-        expect(outcome).toEqual({ written: false, refused: { file: 'note.md', reason: { kind: 'unplaceable' }, subject: 'a' } });
+        expect(outcome).toEqual({ written: false, refused: { file: 'note.md', reason: { kind: 'changed' }, subject: '- [ ] z' } });
         // Not even the mixed terminators are unified: a write that could not be
         // placed must leave no trace, or Obsidian fires a modify for it and a
         // rescan follows a change nobody made.
@@ -646,9 +659,9 @@ describe('processLines: asking where a row stands, and giving up', () => {
         const log = writeSink();
 
         const outcome = await processLines(h.app, h.file, log.channel, (_draft, _eol, session) =>
-            session.refuse({ kind: 'changed' }, '- [ ] a'));
+            session.row({ line: 0, text: '- [ ] b' }) !== null);
 
-        const refusal = { file: 'note.md', reason: { kind: 'changed' }, subject: '- [ ] a' };
+        const refusal = { file: 'note.md', reason: { kind: 'changed' }, subject: '- [ ] b' };
         expect(outcome).toEqual({ written: false, refused: refusal });
         expect(log.refusals).toEqual([refusal]);
         expect(h.text()).toBe('- [ ] a\n');
@@ -661,10 +674,10 @@ describe('processLines: asking where a row stands, and giving up', () => {
         const log = writeSink();
 
         const outcome = await processLines(h.app, h.file, log.channel, (_draft, _eol, session) =>
-            session.refuse({ kind: 'changed' }, '- [ ] a'));
+            session.row({ line: 0, text: '- [ ] b' }) !== null);
 
         expect(h.calls()).toBe(2);
-        expect(log.refusals).toEqual([{ file: 'note.md', reason: { kind: 'changed' }, subject: '- [ ] a' }]);
+        expect(log.refusals).toEqual([{ file: 'note.md', reason: { kind: 'changed' }, subject: '- [ ] b' }]);
         expect(outcome.refused).toEqual(log.refusals[0]);
     });
 
@@ -677,7 +690,7 @@ describe('processLines: asking where a row stands, and giving up', () => {
 
         const outcome = await processLines(h.app, h.file, log.channel, (draft, _eol, session) => {
             run++;
-            if (run === 1) return session.refuse({ kind: 'gone' }, 'a');
+            if (run === 1) return session.row({ line: 0, text: '- [ ] b' }) !== null;
             draft.rewrite(0, '- [x] a');
             return true;
         });
@@ -894,19 +907,36 @@ describe('LineEdits.carry', () => {
         expect(reported.some(edit => edit.kind === 'replaced')).toBe(false);
     });
 
-    it('carries the line it names when a new line is put before it in the same block', () => {
-        // The source stands past the spot, so the new line put first moves
-        // it down by one (the mutation run's 7b).
+    it('carries a block past the spot to where the report says', () => {
         const lines = ['a', 'b', 'c', 'd'];
         const { draft, reported, placedBy } = draftOver(lines);
 
-        draft.put({ at: 1, parent: null, indent: '' }, [{ text: 'new', kind: 'text' }, { from: 3, text: 'd', kind: 'text' }]);
-        draft.splice(5, 1);
+        draft.put({ at: 1, parent: null, indent: '' }, [{ from: 3, text: 'd', kind: 'text' }]);
+        draft.splice(4, 1);
 
-        expect(lines).toEqual(['a', 'new', 'd', 'b', 'c']);
+        expect(lines).toEqual(['a', 'd', 'b', 'c']);
         const replayed = replayEdits(4, reported, placedBy);
-        expect(replayed?.origin).toEqual([0, null, 3, 1, 2]);
-        expect(replayed?.placed).toEqual([null, { id: 0, offset: 0 }, { id: 0, offset: 1 }, null, null]);
+        expect(replayed?.origin).toEqual([0, 3, 1, 2]);
+        expect(replayed?.placed).toEqual([null, { id: 0, offset: 0 }, null, null]);
+    });
+
+    it('takes no block of carried lines and new ones together', () => {
+        const lines = ['a', 'b', 'c', 'd'];
+        const { draft, reported } = draftOver(lines);
+
+        expect(() => draft.put({ at: 1, parent: null, indent: '' }, [{ text: 'new', kind: 'text' }, { from: 3, text: 'd', kind: 'text' }]))
+            .toThrow(UnfollowableDraft);
+        expect(lines).toEqual(['a', 'b', 'c', 'd']);
+        expect(reported).toEqual([]);
+    });
+
+    it('takes no put under a parent after a report no file could follow', () => {
+        // The source still stands: one line in two places.
+        const lines = ['- a', 'row'];
+        const { draft } = draftOver(lines);
+        draft.put({ at: 2, parent: null, indent: '' }, [{ from: 1, text: 'row', kind: 'text' }]);
+
+        expect(() => draft.put({ at: 1, parent: 0, indent: '  ' }, Block.line('- b'))).toThrow(UnfollowableDraft);
     });
 
     it('is not a report a file could follow while the source still stands', () => {
