@@ -99,7 +99,7 @@ export class HeadingInserter {
         const outcome = await processLines(app, file, channel, (draft) => {
             inserted = HeadingInserter.insertUnderHeading(draft, line, header, headerLevel);
             return true;
-        });
+        }, line.trim());
         return outcome.written ? { ...outcome, line: inserted } : outcome;
     }
 }

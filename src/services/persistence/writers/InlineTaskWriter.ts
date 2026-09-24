@@ -387,7 +387,7 @@ export class InlineTaskWriter {
             draft.put(spot, block);
             inserted = spot.at;
             return true;
-        });
+        }, subject);
         return outcome.written ? { ...outcome, line: inserted } : outcome;
     }
 

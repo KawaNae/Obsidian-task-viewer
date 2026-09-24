@@ -749,6 +749,11 @@ function explains(
  * every write that changes the file leaves a claim or that mark, never
  * nothing.
  *
+ * A refusal is told by what the write is about, as its caller says: the
+ * subject of the row it asked for last (`NamedRow.subject`, the editor's
+ * text), else `about` — what a write that names no row puts in, the task it
+ * creates — else the file.
+ *
  * Anything a write owes the rest of the plugin belongs on the written branch
  * only. A claim left behind by a write that never happened would be weighed by
  * the next scan of that file against something else entirely.
@@ -758,6 +763,7 @@ export async function processLines(
     file: TFile,
     channel: WriteChannel | undefined,
     edit: (draft: LineDraft, eol: Eol, session: WriteSession) => boolean,
+    about?: string,
 ): Promise<WriteOutcome> {
     let refused: Refusal | null = null;
     let made: readonly MadeRow[] = [];
@@ -768,8 +774,9 @@ export async function processLines(
     const withdrawals: Array<() => void> = [];
     // What the write is about, for a refusal said after the callback is over.
     let lastSubject = '';
+    const subject = () => lastSubject || about || file.path;
 
-    const threw = await processOrFail(app, file, channel, withdrawals, attempt, () => lastSubject || file.path);
+    const threw = await processOrFail(app, file, channel, withdrawals, attempt, subject);
     if (threw) return threw;
 
     // Set inside the callback, which the compiler does not follow.
@@ -864,7 +871,7 @@ export async function processLines(
             const message = `[FileLines] ${file.path}: ${what}; nothing written`;
             if (__DEV__) throw new BrokenWrite(message);
             logError(message, { notice: false });
-            refuse(reason, lastSubject || file.path);
+            refuse(reason, subject());
             return content;
         };
         let next: string[] | null;
@@ -909,9 +916,7 @@ export async function processLines(
             const check = checkWrite(readings.read, readings.left, written, puts);
             if (check === 'loose') return callerBug('a line was spliced into the body without a place (`LineDraft.put`)', { kind: 'failed' });
             if (check !== 'sound') {
-                // What the write was about: its row, or the first item it put in.
-                const put = written.findIndex(line => line.kind === 'placed' && puts[line.put].lines[line.offset].under !== undefined);
-                refuse({ kind: check }, lastSubject || (put >= 0 ? next[put].trim() : file.path));
+                refuse({ kind: check }, subject());
                 return content;
             }
         }
