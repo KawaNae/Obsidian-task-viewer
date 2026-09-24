@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeAll, afterAll } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { FlowExecutor } from '../../../src/services/flow/FlowExecutor';
 import { parseFlowSegments, singleLineFlow } from '../../../src/services/flow/FlowSegments';
 import { collectGenBlocks, type GenBlock } from '../../../src/services/parsing/gen/GenBlockCollector';
@@ -13,18 +13,12 @@ import { DEFAULT_SETTINGS, type Task } from '../../../src/types';
 import { heldTasks } from '../helpers/heldTasks';
 import { makeTask } from '../helpers/makeTask';
 import { writeBench } from '../helpers/writeBench';
+import { freezeDate } from '../helpers/fakeDate';
 
 // `every` lands on the first grid point after the later of today and the
 // instance's own date, so the fixtures below (anchored on 2026-08-17) only
-// read as written while "today" is not past them. Only Date is faked: the
-// executor settles through a real setTimeout in flush().
-beforeAll(() => {
-    vi.useFakeTimers({ toFake: ['Date'] });
-    vi.setSystemTime(new Date(2026, 7, 17, 12, 0, 0));
-});
-afterAll(() => {
-    vi.useRealTimers();
-});
+// read as written while "today" is not past them.
+freezeDate(new Date(2026, 7, 17, 12, 0, 0));
 
 /**
  * The seam between a `use()` flow and the block that is meant to write its
