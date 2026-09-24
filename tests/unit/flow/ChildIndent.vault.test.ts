@@ -101,3 +101,36 @@ describe.each(NOT_A_CHILD)('a line of the subtree %s', (_name, line, unit) => {
         expect(Notice.messages).toEqual([]);
     });
 });
+
+/**
+ * A child a move carries is written with its indentation cut by as many
+ * characters as the task's own (`FileOperations.adjustChildIndentation`), not
+ * by the columns the task moved: from under a tab-indented task, eight spaces
+ * lose one and land seven past the task's new row, four past its content, a
+ * paragraph line (the fourth L2 counterexample run, G3, M14). Adding lines
+ * goes through `Placement` in P1, which reads the lines it puts.
+ */
+describe('a child carried by a move to another note', () => {
+    it.fails('stays the moved task\'s child', async () => {
+        const contents = new Map([
+            [FILE, ['# note', '- [ ] P', '\t- [ ] X @2026-09-21 ==> move([[other]])', '        - [ ] c', ''].join('\n')],
+            ['other.md', '# other\n'],
+        ]);
+        live = vaultSession(contents);
+        await live.scanAll();
+        const session = live;
+
+        expect(await session.index.updateTask(taskWorded(session, 'X').id, { statusChar: 'x' })).toBe(true);
+        const executor = (session.index as unknown as { commandExecutor: { isProcessing: boolean; taskQueue: unknown[] } }).commandExecutor;
+        await vi.waitFor(() => {
+            expect(executor.isProcessing).toBe(false);
+            expect(executor.taskQueue).toHaveLength(0);
+        });
+        await session.settle(FILE);
+        await session.settle('other.md');
+
+        const moved = session.index.getTasks().filter(task => task.file === 'other.md');
+        const c = moved.find(task => task.content === 'c');
+        expect(c?.parentId).toBe(moved.find(task => task.content === 'X')?.id);
+    });
+});
