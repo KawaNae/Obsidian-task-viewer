@@ -354,11 +354,26 @@ describe('TreeTaskExtractor', () => {
                 '    desc line 1',              // line 1
                 '    - [ ] child @2026-03-25',  // line 2 (excluded)
                 '        child desc',           // line 3 (excluded)
-                '    desc line 2',              // line 4
+                '',                             // line 4
+                '    desc line 2',              // line 5
             ]);
             const parent = tasks.find(t => t.content === 'parent')!;
-            expect(parent.childLines).toHaveLength(2);
-            expect(parent.childLines.map(c => c.bodyLine)).toEqual([1, 4]);
+            expect(parent.childLines.map(c => c.bodyLine)).toEqual([1, 4, 5]);
+        });
+
+        it('子タスクの段落の直後の浅い行は子タスクの段落の続き (HYPOTHESIS L2 q5)', () => {
+            // 空行を挟まない `desc line 2` は `child desc` の段落の続き（lazy continuation）
+            const tasks = extractTasks([
+                '- [ ] parent @2026-03-24',    // line 0
+                '    desc line 1',              // line 1
+                '    - [ ] child @2026-03-25',  // line 2 (excluded)
+                '        child desc',           // line 3 (excluded)
+                '    desc line 2',              // line 4 (child's)
+            ]);
+            const parent = tasks.find(t => t.content === 'parent')!;
+            const child = tasks.find(t => t.content === 'child')!;
+            expect(parent.childLines.map(c => c.bodyLine)).toEqual([1]);
+            expect(child.childLines.map(c => c.bodyLine)).toEqual([3, 4]);
         });
 
         it('@notation なしチェックボックスは子タスクとして自分の行番号を持つ', () => {
@@ -637,7 +652,21 @@ describe('TreeTaskExtractor', () => {
             `${unit}${unit}- [ ] c`,
         ];
 
-        for (const [label, unit] of [['1スペース', ' '], ['2スペース', '  '], ['4スペース', '    '], ['8スペース', '        '], ['タブ', '\t']] as const) {
+        // (HYPOTHESIS L2 q3) 1 字下げは `- ` の内容の列（2）より浅いので、3 行とも兄弟
+        it('1スペースの3段は子でなく兄弟 (HYPOTHESIS L2 q3)', () => {
+            const tasks = extractTasks(nested(' '));
+            expect(tasks.map(t => t.content)).toEqual(['a', 'b', 'c']);
+            expect(tasks.every(t => t.parentId === undefined)).toBe(true);
+        });
+
+        // (HYPOTHESIS L2 q4) 8 字下げは内容の列 + 4 以上なので段落の続きで、タスクでない
+        it('8スペースの3段は a の段落の続き (HYPOTHESIS L2 q4)', () => {
+            const tasks = extractTasks(nested('        '));
+            expect(tasks.map(t => t.content)).toEqual(['a']);
+            expect(tasks[0].childLines.map(c => c.bodyLine)).toEqual([1, 2]);
+        });
+
+        for (const [label, unit] of [['2スペース', '  '], ['4スペース', '    '], ['タブ', '\t']] as const) {
             it(`${label}の3段ネストで、孫は子だけの子（祖父に二重登録されない）`, () => {
                 const tasks = extractTasks(nested(unit));
                 const [a, b, c] = ['a', 'b', 'c'].map(n => tasks.find(t => t.content === n)!);

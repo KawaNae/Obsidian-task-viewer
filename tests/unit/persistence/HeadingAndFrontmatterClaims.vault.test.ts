@@ -69,18 +69,38 @@ function watchRefusals(session: VaultSession): Refusal[] {
 
 describe('a line put under a heading', () => {
     it('keeps the names of the indented tasks directly under the heading (F4, F6)', async () => {
-        const session = await open(['## Tasks', '\t- [ ] A', '\t\t- [ ] B', ''].join('\n'));
+        // Two spaces: a tab under a heading is indented code
+        // (HYPOTHESIS L2 q4), and holds no task (the next test).
+        const session = await open(['## Tasks', '  - [ ] A', '\t- [ ] B', ''].join('\n'));
         const before = idByText(session);
+        expect(before.get('- [ ] A')).toBeDefined();
+        expect(before.get('- [ ] B')).toBeDefined();
         const claims = watchClaims(session);
 
         await session.index.createTask(FILE, '- [ ] N', 'Tasks');
         await session.settle(FILE);
 
-        expect(contents.get(FILE)!.split('\n')).toEqual(['## Tasks', '- [ ] N', '\t- [ ] A', '\t\t- [ ] B', '']);
+        expect(contents.get(FILE)!.split('\n')).toEqual(['## Tasks', '- [ ] N', '  - [ ] A', '\t- [ ] B', '']);
         const after = idByText(session);
         expect(after.get('- [ ] A')).toBe(before.get('- [ ] A'));
         expect(after.get('- [ ] B')).toBe(before.get('- [ ] B'));
         expect(claims.adopted).toEqual([FILE]);
+    });
+
+    it('reads a tab-indented checkbox under a heading as code, which a line put above makes a child (HYPOTHESIS L2 q4)', async () => {
+        // Four columns at the top of a section with no paragraph to go on is
+        // indented code; below `- [ ] N` the same line is N's child item.
+        const session = await open(['## Tasks', '\t- [ ] A', '\t\t- [ ] B', ''].join('\n'));
+        expect(idByText(session).size).toBe(0);
+
+        await session.index.createTask(FILE, '- [ ] N', 'Tasks');
+        await session.settle(FILE);
+
+        expect(contents.get(FILE)!.split('\n')).toEqual(['## Tasks', '- [ ] N', '\t- [ ] A', '\t\t- [ ] B', '']);
+        const tasks = session.index.getTasks().filter(task => task.file === FILE);
+        const byContent = new Map(tasks.map(task => [task.content, task]));
+        expect(byContent.get('A')?.parentId).toBe(byContent.get('N')!.id);
+        expect(byContent.get('B')?.parentId).toBe(byContent.get('A')!.id);
     });
 
     it('is refused when the heading is absent and the note ends in a fence that never closes (B5)', async () => {

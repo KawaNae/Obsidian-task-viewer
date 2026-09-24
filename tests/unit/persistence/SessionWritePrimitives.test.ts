@@ -178,12 +178,23 @@ describe('insertSiblingAfterTask afterCompletedRun', () => {
     });
 
     it('stops at a non-task line', async () => {
-        const prose = 'ここから先はメモ';
+        const prose = '- ここから先はメモ';
         const { text } = await runSiblingInsert(
             [first, prose].join('\n'), anchor, NEW_SESSION, { afterCompletedRun: true }
         );
 
         expect(text.split('\n')).toEqual([first, NEW_SESSION, prose]);
+    });
+
+    it('goes past a paragraph line right below the row, which is the row\'s (HYPOTHESIS L2 q5)', async () => {
+        // A line at column 0 with no blank line above goes on the row's
+        // paragraph (a lazy continuation): it is in the row's item.
+        const prose = 'ここから先はメモ';
+        const { text } = await runSiblingInsert(
+            [first, prose].join('\n'), anchor, NEW_SESSION, { afterCompletedRun: true }
+        );
+
+        expect(text.split('\n')).toEqual([first, prose, NEW_SESSION]);
     });
 
     it('appends at the end of the file', async () => {

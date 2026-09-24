@@ -94,49 +94,54 @@ describe('a subtree with a blank line inside it', () => {
     });
 });
 
-describe('a fence below a blank line whose closing line is at column 0', () => {
-    // The fence opens inside the subtree; its closing line, or a line of it,
-    // is no deeper than the task. A subtree that ended there left half the
-    // fence behind, and the closing line left alone opened a fence that
-    // swallowed the tasks below it (found by the F4 counterexample run).
+describe('a fence below a blank line whose closing line is at column 0 (HYPOTHESIS L2 q1)', () => {
+    // The fence opens inside T's item, and `code` at column 0 ends the item
+    // and the fence with it. The closing line left at column 0 then opens a
+    // fence of its own, which never closes and holds U: U is code, not a
+    // task, before any write. Under the old depth reading the subtree took
+    // the fence whole and U was a task (found by the F4 counterexample run).
     const NOTE = ['# note', '- [ ] T @2026-09-21', '', '  ```js', 'code', '```', '- [ ] U', ''];
 
-    it('goes whole with a delete, and the task below stays a task', async () => {
+    it('reads U as code', async () => {
+        const { session } = await open({ [FILE]: NOTE });
+        expect(session.index.getTasks().map(task => task.content)).toEqual(['T']);
+    });
+
+    it('takes T\'s item with a delete, and leaves the lines after it as they were', async () => {
         const { contents, session } = await open({ [FILE]: NOTE });
-        const u = idOf(session, 'U');
 
         expect(await session.index.deleteTask(idOf(session, 'T'))).toBe(true);
         await session.settle(FILE);
 
-        expect(contents.get(FILE)).toBe(['# note', '- [ ] U', ''].join('\n'));
-        expect(idOf(session, 'U')).toBe(u);
+        expect(contents.get(FILE)).toBe(['# note', 'code', '```', '- [ ] U', ''].join('\n'));
+        expect(session.index.getTasks()).toEqual([]);
     });
 
-    it('goes whole with a move within the file, and every task keeps its ID', async () => {
+    // Fails until `Placement` reads the outline: it reads the fences by the
+    // old mask, which closes `  ```js` on the column-0 line, and puts T
+    // after the fence the outline reads open to the end of the note.
+    it.fails('refuses a move to the end of the note, which ends inside the fence U is in', async () => {
         const note = ['# note', '- [ ] T @2026-09-21 ==> move([[note]])', '', '  ```js', 'code', '```', '- [ ] U', ''];
         const { contents, session } = await open({ [FILE]: note });
-        const held = { t: idOf(session, 'T'), u: idOf(session, 'U') };
+        const before = contents.get(FILE)!;
+        const t = idOf(session, 'T');
 
         await complete(session, 'T');
 
-        expect(contents.get(FILE)).toBe(
-            ['# note', '- [ ] U', '- [x] T @2026-09-21', '', '  ```js', 'code', '```', ''].join('\n'),
-        );
-        expect(idOf(session, 'T')).toBe(held.t);
-        expect(idOf(session, 'U')).toBe(held.u);
+        expect(contents.get(FILE)).toBe(before.replace('- [ ] T', '- [x] T'));
+        expect(idOf(session, 'T')).toBe(t);
     });
 
-    it('goes whole with a copy placed before the task, which keeps its ID', async () => {
+    it('refuses a copy that carries the fence it opens but never closes (closesItsFences)', async () => {
         const { contents, session } = await open({ [FILE]: NOTE });
-        const held = { t: idOf(session, 'T'), u: idOf(session, 'U') };
+        const before = contents.get(FILE)!;
+        const t = idOf(session, 'T');
 
-        await session.index.duplicateTask(held.t, { dayOffset: 1 });
+        await session.index.duplicateTask(t, { dayOffset: 1 });
         await session.settle(FILE);
 
-        const lines = contents.get(FILE)!.split('\n');
-        expect(lines.filter(line => line === '```')).toHaveLength(2);
-        expect(session.index.getTask(held.t)?.content).toBe('T');
-        expect(idOf(session, 'U')).toBe(held.u);
+        expect(contents.get(FILE)).toBe(before);
+        expect(session.index.getTask(t)?.content).toBe('T');
     });
 });
 

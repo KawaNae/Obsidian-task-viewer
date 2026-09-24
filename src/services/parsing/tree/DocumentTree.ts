@@ -1,4 +1,5 @@
 import type { PropertyValue } from '../../../types';
+import type { OutlineReading } from '../utils/Outline';
 
 /** 見出し情報 */
 export interface HeadingInfo {
@@ -12,6 +13,8 @@ export interface DocumentNode {
     filePath: string;
     bodyStartLine: number;          // frontmatter 終了後の行番号
     sections: SectionNode[];        // トップレベルセクション
+    /** The note's one reading of items and code blocks (`Outline.read`), by absolute line. */
+    outline: OutlineReading;
 }
 
 /** 見出しで区切られたセクション */
@@ -66,8 +69,8 @@ export interface TaskBlock {
      *
      * フェンス行は childRawLines に残る（サブツリーの本体であり、移動でも
      * verbatim に運ばれる）が、**記法として解釈してはならない**。判定は
-     * DocumentTreeBuilder が document マスクと subtree マスクの OR で 1 度
-     * だけ行い、下流（子タスク判定・フロー行収集）はこの結果を共有する。
+     * DocumentTreeBuilder がノート全体の読み（`Outline.read`）から 1 度
+     * だけ引き、下流（子タスク判定・フロー行収集）はこの結果を共有する。
      */
     childFenced: boolean[];
     childTaskBlocks: TaskBlock[];    // 再帰的な子タスクブロック
