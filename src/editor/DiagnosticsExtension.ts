@@ -23,6 +23,7 @@ import { diagnosticText } from '../services/flow/diagnosticText';
 import { TaskLineClassifier } from '../services/parsing/utils/TaskLineClassifier';
 import { TaskParser } from '../services/parsing/TaskParser';
 import { dateBlockDiagnostics } from '../services/parsing/tv-inline/DateBlockDiagnostics';
+import { outlineDiagnostics } from '../services/parsing/utils/OutlineDiagnostics';
 import {
     inertFlowDiagnostic,
     inertNotationOf,
@@ -114,7 +115,7 @@ export function createDiagnosticsExtension(): Extension {
      * both.
      */
     interface DocAnalysis {
-        /** `tv-gen` diagnostics bucketed by 0-indexed line. */
+        /** `tv-gen` and outline (`outlineDiagnostics`) diagnostics bucketed by 0-indexed line. */
         gen: Map<number, LocatedDiagnostic[]>;
         /**
          * What each run of a `tv-gen` block is, bucketed by 0-indexed line.
@@ -147,6 +148,9 @@ export function createDiagnosticsExtension(): Extension {
             }
         };
         diagnostics.forEach(bucket);
+        // Where the note's views show another subtree than the reading the
+        // parser and every write use: said on the lines, from that reading.
+        outlineDiagnostics(outlineFor(doc)).forEach(bucket);
         const cells = blocks.size > 0
             ? declaredCells(lines, outlineFor(doc))
             : undefined;

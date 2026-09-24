@@ -130,15 +130,10 @@ export function collectGenBlocks(lines: readonly string[], outline: OutlineReadi
 
         const name = rest.join(' ').trim();
 
-        if (open.close === null) {
-            diagnostics.push({
-                ...error('gen.unterminated-block',
-                    'This block is never closed, so everything below it is read as its body and the tasks written there stop appearing',
-                    wholeLine(open.line)),
-                line: open.line,
-            });
-            continue;
-        }
+        // A block that is never closed is not collected. The editor says so
+        // on its delimiter, as it does for every fence that is never closed
+        // (`outlineDiagnostics`): one question, one answer.
+        if (open.close === null) continue;
 
         if (!name) {
             diagnostics.push({
