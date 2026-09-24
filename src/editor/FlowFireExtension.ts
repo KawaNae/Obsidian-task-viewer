@@ -7,7 +7,7 @@ import type { FireOp, FirePlan, PendingAway, SourceWrite } from '../services/flo
 import type { TaskOp } from '../services/persistence/TaskOps';
 import {
     editLines, replayEdits,
-    type EditorLine, type EditorSubtree, type LineDraft, type NamedRow, type Refusal, type WriteOutcome, type WriteSession,
+    type EditorLine, type LineEdit, type EditorSubtree, type LineDraft, type NamedRow, type Refusal, type WriteOutcome, type WriteSession,
 } from '../utils/FileLines';
 import { lineChanges } from './LineChanges';
 import { logError, logWarn } from '../log/log';
@@ -120,10 +120,14 @@ let nextAwayId = 0;
  * editor, another pane's edit shown here, an undo, a redo — fires nothing,
  * whatever it completes.
  *
- * The fire goes through the one core every write of lines runs (`editLines`,
- * with the same ops and the same checks as a write to the file), and its
- * result is turned into changes to the document (`lineChanges`). Refused, the
- * completion stands without its fire, and the user is told.
+ * Each row's fire is its own write, in the order the rows stand: planned from
+ * the lines the rows before it left, where its row has been carried to, and
+ * made through the one core every write of lines runs (`editLines`, with the
+ * same ops and the same checks as a write to the file). A fire with nothing
+ * to write is not written. A fire that is refused leaves its row completed
+ * without it, and the user is told of that row; the other rows' fires stand.
+ * What the fires wrote is turned into changes to the document
+ * (`lineChanges`).
  */
 export function fireFilter(host: EditorFireHost): Extension {
     return EditorState.transactionFilter.of((tr): TransactionSpec | readonly TransactionSpec[] => {
@@ -133,33 +137,49 @@ export function fireFilter(host: EditorFireHost): Extension {
         const path = tr.startState.field(editorInfoField, false)?.file?.path;
         if (!path) return tr;
 
-        const lines = linesOf(tr.newDoc);
-        const fires = rows.map(() => host.fireOp(path));
-        const edited = editLines(path, lines, '\n', undefined, (draft, _eol, session) =>
-            rows.every((row, i) => host.applyOps(draft, session, { line: row.line, text: row.text }, [fires[i].op])));
-        if (!edited.written) {
-            host.refused(edited.refused);
-            return tr;
+        const before = linesOf(tr.newDoc);
+        let lines: readonly string[] = before;
+        const edits: LineEdit[] = [];
+        // Where the row that stood at `line` of the document stands now, past
+        // the fires already written; -1 if one of them took it away.
+        const carried = (line: number): number =>
+            edits.length === 0 ? line : replayEdits(before.length, edits)?.origin.indexOf(line) ?? -1;
+        const aways: Array<{ row: CompletedRow; pending: PendingAway }> = [];
+        for (const row of rows) {
+            const line = carried(row.line);
+            if (line < 0) {
+                logWarn(`[FlowFire] ${path}: a completed row was taken away by the fire of a row above it; not fired`);
+                continue;
+            }
+            const fire = host.fireOp(path);
+            // Planned where `applyOps` would plan it, first: from the lines
+            // the write is handed, at the row.
+            const ops = fire.op.plan(lines, line);
+            const planned = fire.planned();
+            if (planned?.kind === 'failed') queueMicrotask(() => host.didNotFire(planned));
+            const pending = fire.away();
+            if (pending) aways.push({ row, pending });
+            if (ops.length === 0) continue;
+            const edited = editLines(path, lines, '\n', undefined,
+                (draft, _eol, session) => host.applyOps(draft, session, { line, text: row.text }, ops));
+            if (!edited.written) {
+                host.refused(edited.refused);
+                continue;
+            }
+            lines = edited.lines;
+            edits.push(...edited.edits);
         }
-        const changes = lineChanges(edited.before, edited.lines, edited.edits);
+
+        const changes = lineChanges(before, lines, edits);
         if (changes === null) {
             logError(`[FlowFire] ${path}: a fire's write does not follow; nothing written`);
             return tr;
         }
-
-        // What the rows' fires owe once the transaction is made.
+        // What the rows' moves to another file owe once the transaction is
+        // made, from the row where every fire left it.
         const effects: StateEffect<Away>[] = [];
-        const replayed = replayEdits(edited.before.length, edited.edits);
-        for (const [i, fire] of fires.entries()) {
-            const planned = fire.planned();
-            if (planned?.kind === 'failed') queueMicrotask(() => host.didNotFire(planned));
-            const pending = fire.away();
-            if (!pending) continue;
-            // The row where the whole write leaves it. Not the line the fire
-            // planned it on: that is in the lines the rows before it had
-            // already written to, and the write's report is of the lines
-            // before all of them, where the row is the one the transaction completed.
-            const line = replayed ? replayed.origin.indexOf(rows[i].line) : -1;
+        for (const { row, pending } of aways) {
+            const line = carried(row.line);
             if (line < 0) {
                 logWarn(`[FlowFire] ${path}: a move's row is not where the write left it; not moved`);
                 continue;
@@ -167,7 +187,7 @@ export function fireFilter(host: EditorFireHost): Extension {
             effects.push(addAway.of({
                 id: nextAwayId++,
                 path,
-                pos: startOf(edited.lines, line),
+                pos: startOf(lines, line),
                 pending: { ...pending, source: { ...pending.source, line } },
             }));
         }

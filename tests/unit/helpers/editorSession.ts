@@ -25,7 +25,10 @@ export function editorSession(host: EditorFireHost, path: string, text: string) 
     const runner = new AwayRunner(handle, host);
 
     function apply(spec: TransactionSpec): Transaction {
-        const tr = state.update(spec);
+        return made(state.update(spec));
+    }
+
+    function made(tr: Transaction): Transaction {
         state = tr.state;
         transactions.push(tr);
         runs = [...runs, ...runner.added([tr], state)];
