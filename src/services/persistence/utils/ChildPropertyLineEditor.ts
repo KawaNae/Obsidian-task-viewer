@@ -51,14 +51,21 @@ export class ChildPropertyLineEditor {
      * ここが触る行はどれもタスク行より下なので、呼び口が先に書き換えた
      * タスク行の座標は動かない。変更はすべて draft を通るので、3経路とも
      * そのまま申告になる。
+     *
+     * @returns false when a line to delete has lines of its own below it
+     * (`OutlineReading.standsAlone`); the caller refuses the whole write.
      */
-    static applyOps(draft: LineDraft, taskLineIdx: number, ops: PropertyOp[]): void {
+    static applyOps(draft: LineDraft, taskLineIdx: number, ops: PropertyOp[]): boolean {
         const lines = draft.lines;
         for (const op of ops) {
             const ownLines = this.findOwnPropertyLines(lines, taskLineIdx);
             const matching = ownLines.filter(l => l.key === op.key);
 
             if (op.op === 'delete') {
+                // A line with lines of its own below it is not taken out:
+                // they would read as something else (`standsAlone`).
+                const outline = Outline.read(lines);
+                if (!matching.every(l => outline.standsAlone(l.lineIdx))) return false;
                 // 逆順に消すので、各 lineIdx はその行が立っていた座標のまま。
                 for (let i = matching.length - 1; i >= 0; i--) {
                     draft.splice(matching[i].lineIdx, 1);
@@ -102,6 +109,7 @@ export class ChildPropertyLineEditor {
             }
             draft.splice(insertIdx, 0, `${indent}- ${op.key}:: ${this.formatValue(op.value, null)}`);
         }
+        return true;
     }
 
     /**

@@ -211,6 +211,17 @@ export class OutlineReading {
     subtreeEnd(row: number): number {
         return this.items.get(row)?.end ?? row + 1;
     }
+
+    /**
+     * Whether `row`'s subtree is `row` alone, so that taking the line out
+     * takes nothing else with it. A line below it that goes on its item —
+     * its child, a paragraph going on — would be left standing under the
+     * item above, and read as something else there: a child too deep for
+     * that item is a paragraph line, and its task and ID are gone.
+     */
+    standsAlone(row: number): boolean {
+        return this.subtreeEnd(row) === row + 1;
+    }
 }
 
 /** Column width of `text` read from column `from`, a tab reaching the next multiple of four. */

@@ -1,7 +1,7 @@
 import { type App, TFile } from 'obsidian';
 import type { Task } from '../../../types';
 import { TaskParser } from '../../parsing/TaskParser';
-import { collectFlowLineIndicesInFile } from '../../parsing/utils/FlowLineScanner';
+import { collectFlowLineIndices, collectFlowLineIndicesInFile } from '../../parsing/utils/FlowLineScanner';
 import { FileOperations } from '../utils/FileOperations';
 import { ChildPropertyLineEditor } from '../utils/ChildPropertyLineEditor';
 import { Placement } from '../utils/Placement';
@@ -48,7 +48,7 @@ export class InlineTaskWriter {
         const file = this.app.vault.getAbstractFileByPath(target.file);
         if (!(file instanceof TFile)) return this.refusedGone(target, 'user');
 
-        return processLines(this.app, file, this.writes?.for(target.file, 'user'), (draft, _eol, { row }) => {
+        return processLines(this.app, file, this.writes?.for(target.file, 'user'), (draft, _eol, { row, refuse }) => {
             const currentLine = row(target);
             if (currentLine === null) return false;
 
@@ -68,8 +68,8 @@ export class InlineTaskWriter {
             // 子プロパティ行（- key:: value）の更新は同一 process 内で
             // 連続適用する（別 process だと originalText 失効と行番号
             // シフトが競合するため、タスク行と子行は1原子書き込み）。
-            if (childOps.length > 0) {
-                ChildPropertyLineEditor.applyOps(draft, currentLine, childOps);
+            if (childOps.length > 0 && !ChildPropertyLineEditor.applyOps(draft, currentLine, childOps)) {
+                return refuse({ kind: 'unplaceable' }, target.subject);
             }
 
             return true;
@@ -239,8 +239,11 @@ export class InlineTaskWriter {
             case 'strip-flow': {
                 // Every flow line is below the row (the scan starts past it
                 // and stops at the first line that is not a descendant), so
-                // taking them out leaves the row where it is.
-                const flowIndices = collectFlowLineIndicesInFile(lines, line);
+                // taking them out leaves the row where it is. One with lines
+                // of its own below it is not taken out (`standsAlone`).
+                const outline = Outline.read(lines);
+                const flowIndices = collectFlowLineIndices(outline, line);
+                if (!flowIndices.every(i => outline.standsAlone(i))) return false;
                 for (let i = flowIndices.length - 1; i >= 0; i--) {
                     draft.splice(flowIndices[i], 1);
                 }
