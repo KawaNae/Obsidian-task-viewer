@@ -316,8 +316,9 @@ describe('the half of a move that writes the destination', () => {
         const moving = rowsOf(live)[0];
         const claims = watchClaims(live);
 
-        await repositoryOf(live).appendTaskWithChildren(
-            'archive.md', '- [x] 移す @2026-09-21', plannedOn(live.index.getTask(moving.id)!));
+        const repository = repositoryOf(live);
+        const archive = repository.archiveOf(contents.get(FILE)!.split('\n'), 0, '- [x] 移す @2026-09-21');
+        expect(await repository.appendArchive('archive.md', archive.block)).toBe(true);
         await live.settle('archive.md');
 
         const after = rowsOf(live, 'archive.md');

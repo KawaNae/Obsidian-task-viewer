@@ -77,9 +77,9 @@ describe('the origin a claim carries', () => {
 
         const a = task(session, '- [ ] A');
         await repo.applyToTask(plannedOn(a), [{ kind: 'strip-flow', text: '- [x] A' }]);
-        const b = task(session, '- [ ] B');
-        const archived = await repo.appendTaskWithChildren(ARCHIVE, '- [x] B', plannedOn(b));
-        expect(archived).not.toBeNull();
+        // The archive a move made from the lines its completing write held.
+        const archive = repo.archiveOf(['- [x] A', '- [ ] B', ''], 1, '- [x] B');
+        expect(await repo.appendArchive(ARCHIVE, archive.block)).toBe(true);
 
         expect(seen).toEqual([[FILE, 'flow'], [ARCHIVE, 'flow']]);
     });

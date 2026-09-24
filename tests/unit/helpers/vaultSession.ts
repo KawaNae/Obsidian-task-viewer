@@ -1,4 +1,3 @@
-import { expect, vi } from 'vitest';
 import { type App, parseYaml, TFile } from 'obsidian';
 import { TaskIndex } from '../../../src/services/core/TaskIndex';
 import type { TaskScanner } from '../../../src/services/core/TaskScanner';
@@ -97,9 +96,9 @@ export function scannerOf(index: TaskIndex): TaskScanner {
  * an in-memory vault shared between sessions.
  *
  * Writes go through the real write path (`vault.process`) and the real
- * `modify` handler `TaskIndex.initialize` registers (called here): whether a completion fires is answered
- * by the scan from the writes it reads, exactly as it would be after
- * Obsidian's own `modify` event. A write that changed bytes is followed by the
+ * `modify` handler `TaskIndex.initialize` registers (called here): the scan
+ * reads the writes exactly as it would after Obsidian's own `modify` event. A
+ * completion fires in the write that made it, never from a scan. A write that changed bytes is followed by the
  * `metadataCache` `changed` event real Obsidian sends after `modify`; the scan
  * that asks for commits nothing when it reads what the last scan read
  * (`TaskScanner.rescanUnlessRead`).
@@ -158,14 +157,12 @@ export function vaultSession(contents: Map<string, string>) {
 
     const index = new TaskIndex(app as never, { ...DEFAULT_SETTINGS });
     scanner = scannerOf(index);
-    scanner.setInitializing(false);
     // Registers the real vault/metadataCache handlers `process`/`create`
     // above call into. `onLayoutReady` never runs its callback here.
     void index.initialize();
 
     const internals = index as unknown as {
         commandExecutor: FlowExecutorView;
-        editorSignal: { mark(path: string): void };
         reportRefusal(refusal: Refusal): void;
     };
     const executor = internals.commandExecutor;
@@ -199,8 +196,6 @@ export function vaultSession(contents: Map<string, string>) {
         channelOf: (file: string, origin: WriteOrigin = 'user'): WriteChannel => connected(file, origin),
         /** Tell `TaskIndex` a write was refused, as its own channel does. */
         reportRefusal: (refusal: Refusal): void => internals.reportRefusal(refusal),
-        /** The editor signals a change to `path` — a keystroke — the way the live editor does. */
-        markEditor: (path: string): void => internals.editorSignal.mark(path),
         recorder: new TimerRecorder(app as never, plugin as never, storageUtils),
         creator: new TimerCreator({} as TimerContext, storageUtils),
         fireVault: (name: string, ...args: unknown[]) => vaultHandlers.get(name)!(...args),

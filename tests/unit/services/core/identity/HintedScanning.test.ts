@@ -1,7 +1,6 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { TFile } from 'obsidian';
 import { TaskScanner } from '../../../../../src/services/core/TaskScanner';
-import { EditorSignal } from '../../../../../src/services/core/EditorSignal';
 import { TaskStore } from '../../../../../src/services/core/TaskStore';
 import { TaskValidator } from '../../../../../src/services/core/TaskValidator';
 import { HINT_TTL_MS, type ClaimedRow, type Hint } from '../../../../../src/services/core/identity/IdentityHints';
@@ -80,11 +79,9 @@ class Harness {
             },
             metadataCache: { getCache: () => null },
         };
-        const flow = { handleTaskCompletion: vi.fn(async () => {}) };
         this.scanner = new TaskScanner(
-            app as never, this.store, new TaskValidator(), new EditorSignal(), flow as never, DEFAULT_SETTINGS
+            app as never, this.store, new TaskValidator(), DEFAULT_SETTINGS
         );
-        this.scanner.setInitializing(false);
     }
 
     /** A write: the claim goes in from inside the callback, as the writer does. */
