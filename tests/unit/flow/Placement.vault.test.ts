@@ -236,3 +236,46 @@ describe('the end of a note', () => {
         expect(contents.get(FILE)).toBe(['# note', '- [ ] 下', '- [x] 対象 @2026-09-21', '\t- [ ] 子', ''].join('\n'));
     });
 });
+
+describe('a line put past a fence in a list item that never closes', () => {
+    // Q's fence never closes and `x` goes on it (Obsidian, measurement.md
+    // q14). Every write that puts a line there puts one that starts a block of
+    // its own, which ends Q's item and its fence (Placement's precondition).
+    const NOTE = ['# note', '- [ ] P', '  - [ ] Q', '    ```', 'x', ''];
+
+    async function written(write: (session: VaultSession) => Promise<unknown>) {
+        const { contents, session } = await open(NOTE);
+        await write(session);
+        await session.settle(FILE);
+        expect(Notice.messages).toEqual([]);
+        return {
+            lines: contents.get(FILE)!.split('\n'),
+            tasks: session.index.getTasks().map(task => [task.line, task.content]),
+        };
+    }
+    const idOf = (session: VaultSession, content: string) => tasksWorded(session, content)[0].id;
+
+    it('reads a sibling put past Q as a task', async () => {
+        const { lines, tasks } = await written(session => session.index.insertSiblingAfterTask(idOf(session, 'Q'), '- [x] rec'));
+        expect(lines).toEqual(['# note', '- [ ] P', '  - [ ] Q', '    ```', 'x', '  - [x] rec', '']);
+        expect(tasks).toEqual([[1, 'P'], [2, 'Q'], [5, 'rec']]);
+    });
+
+    it('reads a last child put under P as a task', async () => {
+        const { lines, tasks } = await written(session => session.index.appendChildTask(idOf(session, 'P'), '- [ ] c'));
+        expect(lines).toEqual(['# note', '- [ ] P', '  - [ ] Q', '    ```', 'x', '  - [ ] c', '']);
+        expect(tasks).toEqual([[1, 'P'], [2, 'Q'], [5, 'c']]);
+    });
+
+    it('reads a task appended to the note as a task', async () => {
+        const { lines, tasks } = await written(session => session.index.createTask(FILE, '- [ ] new'));
+        expect(lines).toEqual(['# note', '- [ ] P', '  - [ ] Q', '    ```', 'x', '- [ ] new', '']);
+        expect(tasks).toEqual([[1, 'P'], [2, 'Q'], [5, 'new']]);
+    });
+
+    it('reads a task written under a heading made at the end as a task', async () => {
+        const { lines, tasks } = await written(session => session.index.createTask(FILE, '- [ ] new', 'H'));
+        expect(lines).toEqual(['# note', '- [ ] P', '  - [ ] Q', '    ```', 'x', '', '## H', '- [ ] new', '']);
+        expect(tasks).toEqual([[1, 'P'], [2, 'Q'], [7, 'new']]);
+    });
+});
