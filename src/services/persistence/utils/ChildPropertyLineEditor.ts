@@ -1,6 +1,5 @@
 import { ChildLineClassifier } from '../../parsing/utils/ChildLineClassifier';
 import { TaskLineClassifier } from '../../parsing/utils/TaskLineClassifier';
-import { CodeFenceTracker } from '../../../utils/CodeFenceTracker';
 import { FileOperations } from './FileOperations';
 import type { PropertyOp } from '../PropertyUpdatePlanner';
 import type { LineDraft } from '../../../utils/FileLines';
@@ -30,50 +29,17 @@ export class ChildPropertyLineEditor {
     private static readonly PROPERTY_PREFIX = new RegExp(`^(${INDENT_SOURCE}-\\s+[^:[\\]]+?::\\s*)`);
 
     /**
-     * タスク直下の own プロパティ行を列挙する。
-     * 子範囲の規則は FileOperations.collectChildrenFromLines と同一
-     * （Outline.subtreeEnd。空行では終端しない）。範囲内の
-     * ネスト子タスク（checkbox 行）のブロックは own でないためスキップ
-     * （TreeTaskExtractor の除外規則の write 層版）。
+     * タスク直下の own プロパティ行を列挙する。どの行が own かはパーサと
+     * 同じ1か所（`ChildLineClassifier.ownPropertyLines`）が決める: ノート
+     * 全体の読み（`Outline.read`）でタスクの項目を親に持つ項目のうち、
+     * コードでない `- key:: value` 行。子タスクやメモの下、コードブロック
+     * の中の行は own でない。
      */
     static findOwnPropertyLines(lines: readonly string[], taskLineIdx: number): OwnPropertyLine[] {
-        const taskIndent = Outline.depthOf(lines[taskLineIdx]);
-        const result: OwnPropertyLine[] = [];
-        let skipDeeperThan: number | null = null;
-
-        // `- key:: value` written inside a fence is a sample, not a declaration.
-        // The parser never turned it into a property, so treating it as one here
-        // would let an edit to the task rewrite a line in someone's code block.
-        // The subtree reading is the one that applies: a fence under a task
-        // carries the list item's indentation, which the document-level reading
-        // cannot see.
-        const fenced = CodeFenceTracker.subtreeMask(lines.slice(taskLineIdx + 1));
-
-        const end = Outline.subtreeEnd(lines, taskLineIdx);
-        for (let j = taskLineIdx + 1; j < end; j++) {
-            const line = lines[j];
-            if (line.trim() === '') continue;
-            const indent = Outline.depthOf(line);
-            if (indent <= taskIndent) break;
-
-            if (fenced[j - taskLineIdx - 1]) continue;
-
-            if (skipDeeperThan !== null) {
-                if (indent > skipDeeperThan) continue;
-                skipDeeperThan = null;
-            }
-            if (TaskLineClassifier.isTaskLine(line)) {
-                skipDeeperThan = indent;
-                continue;
-            }
-            if (ChildLineClassifier.isPropertyLine(line)) {
-                const m = line.match(ChildLineClassifier.PROPERTY_LINE);
-                if (m) {
-                    result.push({ lineIdx: j, key: m[1].trim(), value: m[2].trim() });
-                }
-            }
-        }
-        return result;
+        return ChildLineClassifier.ownPropertyLines(Outline.read(lines), taskLineIdx).map(lineIdx => {
+            const m = lines[lineIdx].match(ChildLineClassifier.PROPERTY_LINE)!;
+            return { lineIdx, key: m[1].trim(), value: m[2].trim() };
+        });
     }
 
     /**
