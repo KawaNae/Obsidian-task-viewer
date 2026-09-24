@@ -13,7 +13,7 @@ import { SPACE_OR_TAB_SOURCE } from '../utils/ListMarker';
  * matching). Matching this against a string that can contain `\n` would let
  * group 2 swallow past the line the caller thinks it matched.
  */
-export const HEADING_REGEX = new RegExp(`^(#{1,6})\\s+(${IN_LINE}*)`);
+export const HEADING_REGEX = new RegExp(`^(#{1,6})${SPACE_OR_TAB_SOURCE}+(${IN_LINE}*)`);
 const PROPERTY_GROUP_HEADER = new RegExp(`^${INDENT_SOURCE}-${SPACE_OR_TAB_SOURCE}+properties::\\s*$`);
 
 /**
@@ -308,7 +308,6 @@ export class DocumentTreeBuilder {
         // Code lines stay in childRawLines (they are part of the subtree
         // body and must survive moves verbatim) but are never interpreted as
         // notation — neither as tasks nor as `- ==>` flow lines.
-        const childFenced = childLineNumbers.map(i => outline.inCode(i));
 
         const childTaskBlocks: TaskBlock[] = [];
         let i = row + 1;
@@ -329,7 +328,6 @@ export class DocumentTreeBuilder {
             indent: Outline.depthOf(rawLine),
             childRawLines,
             childLineNumbers,
-            childFenced,
             childTaskBlocks,
         };
     }

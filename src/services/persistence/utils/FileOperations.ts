@@ -13,15 +13,13 @@ export class FileOperations {
     /**
      * The lines of the task's subtree below its own line, as the parser reads
      * them (`OutlineReading.subtreeEnd`): blank lines between them included, the
-     * blank lines after the last of them not. `taskIndent` is the task's depth.
+     * blank lines after the last of them not.
      */
     collectChildrenFromLines(lines: readonly string[], taskLineIndex: number): {
         childrenLines: string[];
-        taskIndent: number;
     } {
-        const taskIndent = Outline.depthOf(lines[taskLineIndex]);
         const childrenLines = lines.slice(taskLineIndex + 1, Outline.read(lines).subtreeEnd(taskLineIndex));
-        return { childrenLines, taskIndent };
+        return { childrenLines };
     }
 
     /**
@@ -96,13 +94,14 @@ export class FileOperations {
      * parent line alone cannot, because a top-level task has no indentation and
      * {@link getIndentUnit} then answers four spaces for every file, tab-written
      * ones included. That is how the two spellings ended up in one subtree.
+     * The file's unit is repeated until the line reaches the task's content
+     * column (`OutlineReading.childIndent`).
      */
     static resolveChildIndent(lines: readonly string[], taskLineIndex: number): string {
         const own = FileOperations.firstChildIndent(lines, taskLineIndex);
         if (own !== null) return own;
 
-        const parentIndent = Outline.indentOf(lines[taskLineIndex]);
-        return parentIndent + FileOperations.detectIndentUnit(lines);
+        return Outline.read(lines).childIndent(taskLineIndex, FileOperations.detectIndentUnit(lines));
     }
 
     /**

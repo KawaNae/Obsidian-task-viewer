@@ -182,8 +182,9 @@ export class OutlineReading {
     ) {}
 
     /**
-     * The item whose marker is on `line`, or null. A line in code opens no
-     * item, so a line that opens one is never code.
+     * The item whose marker is on `line`, or null. A line that opens one is
+     * code only when a fence opens on it too (`- ```js`); no task, `==>` or
+     * property line does, so a reader of those asks nothing more of code.
      */
     item(line: number): OutlineItem | null {
         return this.items.get(line) ?? null;
@@ -216,14 +217,34 @@ export class OutlineReading {
     }
 
     /**
-     * Whether `row`'s subtree is `row` alone, so that taking the line out
-     * takes nothing else with it. A line below it that goes on its item —
-     * its child, a paragraph going on — would be left standing under the
-     * item above, and read as something else there: a child too deep for
-     * that item is a paragraph line, and its task and ID are gone.
+     * Whether taking the lines `rows` out leaves every other line what it
+     * was: opening an item or not, code or not — asked of the reading of
+     * the lines without them. A child of a line taken out, too deep for the
+     * item above once it is gone, would be a paragraph line there, its task
+     * and ID gone. A paragraph going on a line taken out goes on the item
+     * above instead, and a child that still reaches that item becomes its
+     * child: neither changes what the index reads the line as.
      */
-    standsAlone(row: number): boolean {
-        return this.subtreeEnd(row) === row + 1;
+    canTakeOut(rows: readonly number[]): boolean {
+        const gone = new Set(rows);
+        const kept = this.lines.map((_, i) => i).filter(i => !gone.has(i));
+        const after = Outline.read(kept.map(i => this.lines[i]));
+        return kept.every((i, k) =>
+            (this.item(i) === null) === (after.item(k) === null) && this.inCode(i) === after.inCode(k));
+    }
+
+    /**
+     * The indentation a new child of the item `row` takes, made of the
+     * item's own and `unit`: the first that reaches the item's content
+     * column. Short of it, a line is no child (under `100. [ ] a`, one tab
+     * is a sibling). A unit is at most four columns, so the child lands
+     * fewer than four past the content column, not in indented code.
+     */
+    childIndent(row: number, unit: string): string {
+        const item = this.items.get(row);
+        let indent = Outline.indentOf(this.lines[row]) + unit;
+        while (item && Outline.depthOf(indent) < item.contentColumn) indent += unit;
+        return indent;
     }
 }
 

@@ -52,8 +52,9 @@ export class ChildPropertyLineEditor {
      * タスク行の座標は動かない。変更はすべて draft を通るので、3経路とも
      * そのまま申告になる。
      *
-     * @returns false when a line to delete has lines of its own below it
-     * (`OutlineReading.standsAlone`); the caller refuses the whole write.
+     * @returns false when taking out a line to delete would change another
+     * line (`OutlineReading.canTakeOut`);
+     * the caller refuses the whole write.
      */
     static applyOps(draft: LineDraft, taskLineIdx: number, ops: PropertyOp[]): boolean {
         const lines = draft.lines;
@@ -63,9 +64,9 @@ export class ChildPropertyLineEditor {
 
             if (op.op === 'delete') {
                 // A line with lines of its own below it is not taken out:
-                // they would read as something else (`standsAlone`).
+                // they would read as something else (`canTakeOut`).
                 const outline = Outline.read(lines);
-                if (!matching.every(l => outline.standsAlone(l.lineIdx))) return false;
+                if (!outline.canTakeOut(matching.map(l => l.lineIdx))) return false;
                 // 逆順に消すので、各 lineIdx はその行が立っていた座標のまま。
                 for (let i = matching.length - 1; i >= 0; i--) {
                     draft.splice(matching[i].lineIdx, 1);
@@ -101,7 +102,9 @@ export class ChildPropertyLineEditor {
             let indent: string;
             if (ownLines.length > 0) {
                 const last = ownLines[ownLines.length - 1];
-                insertIdx = last.lineIdx + 1;
+                // Past the last one's subtree: a line of its own below it
+                // stays its line, not the new one's.
+                insertIdx = Outline.read(lines).subtreeEnd(last.lineIdx);
                 indent = Outline.indentOf(lines[last.lineIdx]);
             } else {
                 insertIdx = taskLineIdx + 1;
