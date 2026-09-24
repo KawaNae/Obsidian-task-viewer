@@ -24,7 +24,6 @@ export interface TaskLineMatch {
 export class TaskLineClassifier {
     private static readonly TASK_LINE_REGEX = new RegExp(`^(${INDENT_SOURCE})(${LIST_BULLET_SOURCE}${MARKER_GAP_SOURCE}\\[)(${STATUS_CHAR_SOURCE})(\\]${CHECKBOX_GAP_SOURCE}(${IN_LINE}*))$`);
     private static readonly STATUS_CHAR_REGEX = new RegExp(`^${STATUS_CHAR_SOURCE}$`);
-    private static readonly MARKER_REGEX = new RegExp(`^${INDENT_SOURCE}(${LIST_BULLET_SOURCE})`);
     private static readonly BLOCK_ID_REGEX = /(?:^|\s)\^([A-Za-z0-9-]+)\s*$/;
 
     /**
@@ -115,14 +114,20 @@ export class TaskLineClassifier {
         return outline.item(line) !== null && this.isTaskLine(outline.lines[line]);
     }
 
-    /** Extract the list marker (`-`, `*`, `+`, `1.`, etc.) from a line. Returns `-` if not found. */
+    /**
+     * A task line's list marker with the gap after it, as the line has them
+     * (`- `, `-\t`, `10.  `); `- ` for a line that is no task. A line written
+     * over a task line keeps them: the gap sets the item's content column, and
+     * a child reaches the item by it (under `-\t[ ] T`, a child two spaces past
+     * a tab is the task's; under `- [ ] T` it goes on T's paragraph).
+     */
     static extractMarker(line: string): string {
-        const m = line.match(this.MARKER_REGEX);
-        return m ? m[1] : '-';
+        const task = this.classify(line);
+        return task ? task.prefix.slice(task.indent.length, -1) : '- ';
     }
 
-    /** Build the `- [x] ` prefix for a given status char, indent, and marker. */
-    static formatPrefix(statusChar: string, indent: string = '', marker: string = '-'): string {
-        return `${indent}${marker} [${statusChar}] `;
+    /** Build the `- [x] ` prefix for a given status char, indent, and marker with its gap. */
+    static formatPrefix(statusChar: string, indent: string = '', marker: string = '- '): string {
+        return `${indent}${marker}[${statusChar}] `;
     }
 }

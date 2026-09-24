@@ -107,32 +107,39 @@ describe('TaskLineClassifier', () => {
 
     describe('extractMarker', () => {
         it('extracts dash', () => {
-            expect(TaskLineClassifier.extractMarker('- [ ] task')).toBe('-');
+            expect(TaskLineClassifier.extractMarker('- [ ] task')).toBe('- ');
         });
 
         it('extracts asterisk', () => {
-            expect(TaskLineClassifier.extractMarker('* [ ] task')).toBe('*');
+            expect(TaskLineClassifier.extractMarker('* [ ] task')).toBe('* ');
         });
 
         it('extracts plus', () => {
-            expect(TaskLineClassifier.extractMarker('+ [ ] task')).toBe('+');
+            expect(TaskLineClassifier.extractMarker('+ [ ] task')).toBe('+ ');
         });
 
         it('extracts numbered dot', () => {
-            expect(TaskLineClassifier.extractMarker('1. [ ] task')).toBe('1.');
+            expect(TaskLineClassifier.extractMarker('1. [ ] task')).toBe('1. ');
         });
 
         it('extracts numbered paren', () => {
-            expect(TaskLineClassifier.extractMarker('1) [ ] task')).toBe('1)');
+            expect(TaskLineClassifier.extractMarker('1) [ ] task')).toBe('1) ');
         });
 
         it('extracts from indented line', () => {
-            expect(TaskLineClassifier.extractMarker('    * [ ] task')).toBe('*');
+            expect(TaskLineClassifier.extractMarker('    * [ ] task')).toBe('* ');
         });
 
-        it('falls back to dash for unrecognized', () => {
-            expect(TaskLineClassifier.extractMarker('no marker here')).toBe('-');
-            expect(TaskLineClassifier.extractMarker('')).toBe('-');
+        it('keeps the gap after the marker, which sets the content column', () => {
+            expect(TaskLineClassifier.extractMarker('-\t[ ] task')).toBe('-\t');
+            expect(TaskLineClassifier.extractMarker('\t-    [x] task')).toBe('-    ');
+            expect(TaskLineClassifier.extractMarker('10.  [ ] task')).toBe('10.  ');
+        });
+
+        it('falls back to dash for a line that is no task', () => {
+            expect(TaskLineClassifier.extractMarker('no marker here')).toBe('- ');
+            expect(TaskLineClassifier.extractMarker('* item')).toBe('- ');
+            expect(TaskLineClassifier.extractMarker('')).toBe('- ');
         });
     });
 
@@ -142,11 +149,15 @@ describe('TaskLineClassifier', () => {
         });
 
         it('builds prefix with indent and marker', () => {
-            expect(TaskLineClassifier.formatPrefix('x', '  ', '*')).toBe('  * [x] ');
+            expect(TaskLineClassifier.formatPrefix('x', '  ', '* ')).toBe('  * [x] ');
         });
 
         it('builds prefix with numbered marker', () => {
-            expect(TaskLineClassifier.formatPrefix(' ', '', '1.')).toBe('1. [ ] ');
+            expect(TaskLineClassifier.formatPrefix(' ', '', '1. ')).toBe('1. [ ] ');
+        });
+
+        it('builds prefix with the marker gap a line had', () => {
+            expect(TaskLineClassifier.formatPrefix('x', '', '-\t')).toBe('-\t[x] ');
         });
     });
 });
