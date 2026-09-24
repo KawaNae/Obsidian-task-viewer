@@ -181,7 +181,10 @@ export class OutlineReading {
         readonly fences: readonly OutlineFence[],
     ) {}
 
-    /** The item whose marker is on `line`, or null. */
+    /**
+     * The item whose marker is on `line`, or null. A line in code opens no
+     * item, so a line that opens one is never code.
+     */
     item(line: number): OutlineItem | null {
         return this.items.get(line) ?? null;
     }

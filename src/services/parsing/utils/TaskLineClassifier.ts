@@ -112,7 +112,7 @@ export class TaskLineClassifier {
      * code, is text.
      */
     static opensTask(outline: OutlineReading, line: number): boolean {
-        return outline.item(line) !== null && !outline.inCode(line) && this.isTaskLine(outline.lines[line]);
+        return outline.item(line) !== null && this.isTaskLine(outline.lines[line]);
     }
 
     /** Extract the list marker (`-`, `*`, `+`, `1.`, etc.) from a line. Returns `-` if not found. */

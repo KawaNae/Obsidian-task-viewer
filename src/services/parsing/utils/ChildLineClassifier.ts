@@ -72,7 +72,7 @@ export class ChildLineClassifier {
         const result: number[] = [];
         const end = outline.subtreeEnd(taskLine);
         for (let line = taskLine + 1; line < end; line++) {
-            if (outline.item(line)?.parent !== taskLine || outline.inCode(line)) continue;
+            if (outline.item(line)?.parent !== taskLine) continue;
             if (this.PROPERTY_LINE.test(outline.lines[line])) result.push(line);
         }
         return result;

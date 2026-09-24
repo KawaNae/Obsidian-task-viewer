@@ -265,7 +265,7 @@ export function createDiagnosticsExtension(): Extension {
                 // otherwise be decorated, so the reading stays unmade on
                 // ordinary prose.
                 const outline = outlineFor(view.state.doc);
-                if (outline.inCode(line.number - 1) || outline.item(line.number - 1) === null) continue;
+                if (outline.item(line.number - 1) === null) continue;
 
                 // Date-block diagnostics: strictly per-line, so they run for
                 // every visible task line — BEFORE the flow-root shortcuts

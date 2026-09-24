@@ -74,7 +74,7 @@ export function collectFlowLineIndices(outline: OutlineReading, taskLine: number
     const result: number[] = [];
     const end = outline.subtreeEnd(taskLine);
     for (let line = taskLine + 1; line < end; line++) {
-        if (outline.item(line)?.parent !== taskLine || outline.inCode(line)) continue;
+        if (outline.item(line)?.parent !== taskLine) continue;
         if (isFlowLine(outline.lines[line])) result.push(line);
     }
     return result;
