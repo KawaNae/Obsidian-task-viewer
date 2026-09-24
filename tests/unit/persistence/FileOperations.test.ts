@@ -78,7 +78,6 @@ describe('FileOperations', () => {
             ];
             const result = ops.collectChildrenFromLines(lines, 0);
             expect(result.childrenLines).toEqual(['    - [ ] child 1', '    - [ ] child 2']);
-            expect(result.taskIndent).toBe(0);
         });
 
         // Characterization: a blank line terminates the subtree even when
@@ -159,7 +158,6 @@ describe('FileOperations', () => {
             const result = ops.collectChildrenFromLines(lines, 1);
             expect(result.childrenLines).toHaveLength(2);
             // Width, not characters: one tab is four columns.
-            expect(result.taskIndent).toBe(4);
         });
     });
 

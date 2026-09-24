@@ -179,9 +179,15 @@ describe('OutlineReading', () => {
         expect(five.item(1)!.parent).toBe(0);
     });
 
-    it('stands a line alone when its item holds no line past its own', () => {
+    it('takes a line out only when every other line reads as the same kind without it', () => {
         const outline = Outline.read(['- [ ] T', '\t- memo:: a', '\t\t- [ ] sub', '\t- k:: v', 'lazy', '\t- [ ] c']);
-        expect([1, 3, 5].map(i => outline.standsAlone(i))).toEqual([false, false, true]);
+        // sub is too deep for T without memo: a paragraph line, no item.
+        expect(outline.canTakeOut([1])).toBe(false);
+        // `lazy` goes on T's item instead: still a paragraph line.
+        expect(outline.canTakeOut([3])).toBe(true);
+        expect(outline.canTakeOut([5])).toBe(true);
+        // A child that still reaches the item above becomes its child.
+        expect(Outline.read(['- [ ] T', '  - memo:: a', '    - [ ] sub']).canTakeOut([1])).toBe(true);
     });
 });
 

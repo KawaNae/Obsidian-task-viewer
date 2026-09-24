@@ -64,14 +64,5 @@ export interface TaskBlock {
     indent: number;
     childRawLines: string[];         // インデントされた子行（正規化前）
     childLineNumbers: number[];      // childRawLines の absolute line numbers
-    /**
-     * childRawLines の並行配列。true = コードフェンス内の行。
-     *
-     * フェンス行は childRawLines に残る（サブツリーの本体であり、移動でも
-     * verbatim に運ばれる）が、**記法として解釈してはならない**。判定は
-     * DocumentTreeBuilder がノート全体の読み（`Outline.read`）から 1 度
-     * だけ引き、下流（子タスク判定・フロー行収集）はこの結果を共有する。
-     */
-    childFenced: boolean[];
     childTaskBlocks: TaskBlock[];    // 再帰的な子タスクブロック
 }

@@ -240,10 +240,10 @@ export class InlineTaskWriter {
                 // Every flow line is below the row (the scan starts past it
                 // and stops at the first line that is not a descendant), so
                 // taking them out leaves the row where it is. One with lines
-                // of its own below it is not taken out (`standsAlone`).
+                // of its own below it is not taken out (`canTakeOut`).
                 const outline = Outline.read(lines);
                 const flowIndices = collectFlowLineIndices(outline, line);
-                if (!flowIndices.every(i => outline.standsAlone(i))) return false;
+                if (!outline.canTakeOut(flowIndices)) return false;
                 for (let i = flowIndices.length - 1; i >= 0; i--) {
                     draft.splice(flowIndices[i], 1);
                 }
@@ -262,6 +262,7 @@ export class InlineTaskWriter {
                 if (at === null) return false;
                 const [head, ...rest] = splitLines(op.text).lines;
                 const children = this.childrenToCarry(lines, line);
+                if (children === null) return false;
                 const { childrenLines } = this.fileOps.collectChildrenFromLines(lines, line);
                 draft.carry(at, [{ from: line, text: head }]);
                 // A line past the row's first is one the archive wrote, not
@@ -419,14 +420,19 @@ export class InlineTaskWriter {
      * Each comes with the index of the line it is made from: a move within one
      * file carries them rather than copying them (see `LineEdits.carry`).
      */
-    private childrenToCarry(lines: readonly string[], currentLine: number): Array<{ from: number; text: string }> {
+    private childrenToCarry(lines: readonly string[], currentLine: number): Array<{ from: number; text: string }> | null {
 
         // Parent's original indentation prefix (preserves tabs/spaces)
         const parentIndent = Outline.indentOf(lines[currentLine]);
         // The task's own direct `- ==>` flow lines are consumed by the fire —
         // they must not travel to the archive. Descendant tasks' flow lines
         // are NOT direct (structural-parent rule) and stay as templates.
-        const flowAbs = new Set(collectFlowLineIndicesInFile(lines, currentLine));
+        // One with lines of its own below it is not left behind: null, and
+        // the move is refused (`canTakeOut`).
+        const outline = Outline.read(lines);
+        const flowIndices = collectFlowLineIndices(outline, currentLine);
+        if (!outline.canTakeOut(flowIndices)) return null;
+        const flowAbs = new Set(flowIndices);
         const { childrenLines } = this.fileOps.collectChildrenFromLines(lines, currentLine);
         const kept = childrenLines
             .map((text, i) => ({ from: currentLine + 1 + i, text }))
@@ -485,7 +491,12 @@ export class InlineTaskWriter {
             channel?.refused({ file: source.file, reason, subject: source.subject });
             return null;
         }
-        const children = this.childrenToCarry(sourceLines, located.line).map(child => child.text);
+        const carried = this.childrenToCarry(sourceLines, located.line);
+        if (carried === null) {
+            channel?.refused({ file: source.file, reason: { kind: 'unplaceable' }, subject: source.subject });
+            return null;
+        }
+        const children = carried.map(child => child.text);
         const { childrenLines } = this.fileOps.collectChildrenFromLines(sourceLines, located.line);
 
         const fullContent = [content, ...children].join('\n');
