@@ -2,6 +2,7 @@ import { describe, it, expect, vi } from 'vitest';
 import { writeBench, FILE } from '../helpers/writeBench';
 import { plannedOn } from '../../../src/services/persistence/TaskRefs';
 import { FrontmatterWriter } from '../../../src/services/persistence/writers/FrontmatterWriter';
+import { FileOperations } from '../../../src/services/persistence/utils/FileOperations';
 import { HeadingInserter } from '../../../src/utils/HeadingInserter';
 import { createFile } from '../../../src/utils/FileLines';
 
@@ -52,7 +53,7 @@ describe('a write whose file is not there', () => {
 
     it.each(['missing', 'folder'] as const)('%s: FrontmatterWriter.setKeys is refused as gone, told once', async (kind) => {
         const { b } = await benchWithout(kind);
-        const writer = new FrontmatterWriter(b.app, b.fileOps, b.writes);
+        const writer = new FrontmatterWriter(b.app, new FileOperations(b.app), b.repo.getWriteObserver());
 
         const outcome = await writer.setKeys(FILE, { color: 'red' });
 
