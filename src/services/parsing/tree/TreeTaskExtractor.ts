@@ -5,7 +5,7 @@ import { BuiltinPropertyExtractor } from './BuiltinPropertyExtractor';
 import { ChildLineClassifier } from '../utils/ChildLineClassifier';
 import { TagExtractor } from '../utils/TagExtractor';
 import { TaskParser } from '../TaskParser';
-import { flowLineTail, ownFlowLines } from '../utils/FlowLineScanner';
+import { collectFlowLineIndices, flowLineTail } from '../utils/FlowLineScanner';
 import { flowValidation, parseFlowSegments } from '../../flow/FlowSegments';
 import { Outline, type OutlineReading } from '../utils/Outline';
 
@@ -221,7 +221,7 @@ export class TreeTaskExtractor {
         if (!isTvInline(task)) return new Set();
 
         // A flow line in the block's lines is one below the block's own line.
-        const indices = ownFlowLines(outline, block.line)
+        const indices = collectFlowLineIndices(outline, block.line)
             .map(line => line - block.line - 1)
             .filter(k => k < block.childLineNumbers.length);
         if (indices.length === 0) return new Set();

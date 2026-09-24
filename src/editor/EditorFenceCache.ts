@@ -17,10 +17,12 @@
  */
 import type { Text } from '@codemirror/state';
 import { CodeFenceTracker, type FenceScan } from '../utils/CodeFenceTracker';
+import { Outline, type OutlineReading } from '../services/parsing/utils/Outline';
 
 interface FenceAnalysis {
     scan: FenceScan;
     mask: boolean[];
+    outline: OutlineReading;
 }
 
 let cache: { doc: Text; analysis: FenceAnalysis } | null = null;
@@ -35,7 +37,7 @@ function analyze(doc: Text): FenceAnalysis {
     const subtree = CodeFenceTracker.subtreeMask(lines);
     const mask = lines.map((_, i) => scan.fenced[i] || subtree[i]);
 
-    const analysis: FenceAnalysis = { scan, mask };
+    const analysis: FenceAnalysis = { scan, mask, outline: Outline.read(lines) };
     cache = { doc, analysis };
     return analysis;
 }
@@ -55,4 +57,9 @@ export function fenceMaskFor(doc: Text): boolean[] {
  */
 export function fenceScanFor(doc: Text): FenceScan {
     return analyze(doc).scan;
+}
+
+/** The document read as list items and code blocks (`Outline.read`). */
+export function outlineFor(doc: Text): OutlineReading {
+    return analyze(doc).outline;
 }

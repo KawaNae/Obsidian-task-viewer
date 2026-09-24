@@ -1,6 +1,6 @@
 import { Decoration, type DecorationSet, type EditorView, ViewPlugin, type ViewUpdate } from '@codemirror/view';
 import { RangeSet, type Extension, type Text } from '@codemirror/state';
-import { fenceMaskFor, fenceScanFor } from './EditorFenceCache';
+import { fenceMaskFor, fenceScanFor, outlineFor } from './EditorFenceCache';
 import {
     collectGenBlocks,
     type LocatedDiagnostic,
@@ -227,10 +227,8 @@ export function createDiagnosticsExtension(): Extension {
             windowLineNumbers.pop();
         }
 
-        const mask = fenceMaskFor(doc);
-        const fenced = windowLineNumbers.map(n => mask[n - 1]);
-
-        const flowIndices = collectFlowLineIndices(window, 0, fenced);
+        const flowLines = new Set(collectFlowLineIndices(outlineFor(doc), rootLineNumber - 1));
+        const flowIndices = windowLineNumbers.flatMap((n, k) => flowLines.has(n - 1) ? [k] : []);
         if (markerIdx === -1 && flowIndices.length === 0) return null;
 
         const seg0: SegmentLoc = markerIdx >= 0

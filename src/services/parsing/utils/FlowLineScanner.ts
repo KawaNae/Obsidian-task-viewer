@@ -8,7 +8,6 @@
  * (DiagnosticsExtension) all share it — do not duplicate the judgment.
  */
 
-import { CodeFenceTracker } from '../../../utils/CodeFenceTracker';
 import { LIST_BULLET_SOURCE } from './ListMarker';
 import { INDENT_SOURCE, Outline, type OutlineReading } from './Outline';
 import { IN_LINE } from '../../../utils/LineBreak';
@@ -56,65 +55,17 @@ export function isFlowLine(line: string): boolean {
 }
 
 /**
- * Indices (into `lines`) of the flow child lines owned by the task at
- * `taskLineIndex`.
+ * The flow child lines of the task at `taskLine`, as absolute line numbers.
  *
- * Ownership rule: a flow line belongs to the task iff its STRUCTURAL parent
- * is the task line — i.e. the nearest preceding non-blank line with smaller
- * indent is the task line itself. Flow lines nested under a child checkbox,
- * a bare checkbox, or a plain note bullet belong to that deeper structure
- * (checkbox owners collect them via their own scan; others leave them as
- * plain child lines).
- *
- * The scan covers the task's subtree as the parser and every write read it
- * (`Outline.subtreeEnd`): the lines deeper than the task line, blank lines
- * between them included.
- *
- * `fenced` is the parallel per-line code-fence mask. It is REQUIRED: a
- * `- ==>` written inside a fenced block is an example, not a command, and
- * every caller must answer that question the same way the checkbox scan
- * does. Callers holding whole-file lines can use
- * {@link collectFlowLineIndicesInFile}, which builds the mask itself.
+ * Ownership rule: a flow line belongs to the task iff it is a list item the
+ * outline reads directly under the task's own item
+ * (`OutlineReading.item(line).parent`), and is not code. A flow line under
+ * a child checkbox, a bare checkbox or a plain note bullet belongs to that
+ * item (a checkbox collects its own); a `- ==>` written inside a code block
+ * is an example, not a command; a line the outline reads as a paragraph
+ * going on is no item, and no command.
  */
-export function collectFlowLineIndices(
-    lines: readonly string[],
-    taskLineIndex: number,
-    fenced: boolean[],
-): number[] {
-    const taskIndent = Outline.depthOf(lines[taskLineIndex]);
-    const result: number[] = [];
-
-    // Monotonic stack of ancestor indents; depth 1 = the task line itself.
-    const ancestorIndents: number[] = [taskIndent];
-
-    const end = Outline.subtreeEnd(lines, taskLineIndex);
-    for (let j = taskLineIndex + 1; j < end; j++) {
-        const line = lines[j];
-        if (line.trim() === '') continue;
-        const indent = Outline.depthOf(line);
-        if (indent <= taskIndent) break;
-
-        while (ancestorIndents.length > 1 && ancestorIndents[ancestorIndents.length - 1] >= indent) {
-            ancestorIndents.pop();
-        }
-        const parentIsTaskLine = ancestorIndents.length === 1;
-        if (parentIsTaskLine && !fenced[j] && isFlowLine(line)) {
-            result.push(j);
-        }
-        ancestorIndents.push(indent);
-    }
-
-    return result;
-}
-
-/**
- * The flow child lines of the task at `taskLine`, as absolute line numbers:
- * the list items the outline reads directly under the task's own item
- * (`OutlineReading.item(line).parent`), not code, that are flow lines.
- * A flow line under a child checkbox, a bare checkbox or a plain note bullet
- * belongs to that item, not to the task.
- */
-export function ownFlowLines(outline: OutlineReading, taskLine: number): number[] {
+export function collectFlowLineIndices(outline: OutlineReading, taskLine: number): number[] {
     const result: number[] = [];
     const end = outline.subtreeEnd(taskLine);
     for (let line = taskLine + 1; line < end; line++) {
@@ -126,17 +77,10 @@ export function ownFlowLines(outline: OutlineReading, taskLine: number): number[
 
 /**
  * {@link collectFlowLineIndices} for callers that hold the whole file's
- * lines: builds the fence mask itself, matching DocumentTreeBuilder's
- * judgment (document-level mask OR the dedented subtree mask, since a fence
- * nested under a task carries the list item's indentation).
+ * lines and no reading of them yet: reads them (`Outline.read`).
  */
-export function collectFlowLineIndicesInFile(lines: readonly string[], taskLineIndex: number): number[] {
-    const documentMask = CodeFenceTracker.mask(lines);
-    const subtreeMask = CodeFenceTracker.subtreeMask(lines.slice(taskLineIndex + 1));
-    const fenced = lines.map((_, i) =>
-        documentMask[i] || (i > taskLineIndex && subtreeMask[i - taskLineIndex - 1])
-    );
-    return collectFlowLineIndices(lines, taskLineIndex, fenced);
+export function collectFlowLineIndicesInFile(lines: readonly string[], taskLine: number): number[] {
+    return collectFlowLineIndices(Outline.read(lines), taskLine);
 }
 
 /** Canonical physical form of a flow child line. */
