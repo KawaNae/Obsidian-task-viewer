@@ -22,13 +22,6 @@ import { FileParsePipeline } from '../parsing/FileParsePipeline';
 import type { GenBlock } from '../parsing/gen/GenBlockCollector';
 import { runtimeText } from './runtimeText';
 
-/**
- * Flow-command runtime: plans what completing a row fires (pure), from the
- * lines the completing write holds, and what deleting a row with a command
- * writes first. A completion fires from the operation that completed the row
- * — an editor's transaction, the plugin's own write — and from nothing else:
- * no reading of a file, a scan's or a sync's, has a way to fire.
- */
 /** The source's write of a move to another file: `ops` applied to the row at `at`. */
 export type SourceWrite = (at: EditorSubtree, ops: readonly TaskOp[]) => Promise<WriteOutcome>;
 
@@ -81,8 +74,12 @@ export interface FireOp {
  * A move to another file a completing write planned, made after it: the
  * archive to append to the destination, and the source's write once it has
  * landed, to the row as the completing write left it (`source`, its line and
- * subtree in the lines written). Not by name: the row is where that write
- * left it, and the source's write is made only if it still reads so.
+ * subtree in the lines written). The source's write is made only if the row
+ * still reads so. Where it looks for the row is the caller's (`SourceWrite`):
+ * an editor's completion at the line its transactions have carried `source`
+ * to, a write to a line the editor pointed at at `source.line`, and a card's
+ * completion by the row's name, as its completing write named it (to be
+ * replaced by N1, where a name lasts one reading only).
  */
 export interface PendingAway {
     task: Task;
@@ -92,6 +89,13 @@ export interface PendingAway {
     ops: TaskOp[];
 }
 
+/**
+ * Flow-command runtime: plans what completing a row fires (pure), from the
+ * lines the completing write holds, and what deleting a row with a command
+ * writes first. A completion fires from the operation that completed the row
+ * — an editor's transaction, the plugin's own write — and from nothing else:
+ * no reading of a file, a scan's or a sync's, has a way to fire.
+ */
 export class FlowExecutor {
     private readonly host = createMomentEvalHost();
     /** Failures already shown, by task and message, with when they were shown. */

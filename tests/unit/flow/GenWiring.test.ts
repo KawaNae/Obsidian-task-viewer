@@ -45,7 +45,6 @@ function makeRepository() {
         applyToTask: vi.fn().mockResolvedValue({ written: true, refused: null, made: [] }),
         insertRecurrenceForTask: vi.fn().mockResolvedValue(undefined),
         insertGeneratedInstance: vi.fn().mockResolvedValue(undefined),
-        appendTaskWithChildren: vi.fn().mockResolvedValue(undefined),
         updateTaskInFile: vi.fn().mockResolvedValue(undefined),
         stripFlow: vi.fn().mockResolvedValue(undefined),
         deleteTaskFromFile: vi.fn().mockResolvedValue(undefined),

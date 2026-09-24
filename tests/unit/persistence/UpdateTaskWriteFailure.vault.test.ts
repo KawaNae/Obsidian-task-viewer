@@ -10,12 +10,6 @@ import en from '../../../src/i18n/locales/en.json';
  * 実物の TaskIndex と書き込みの層（processLines）を通す。
  */
 
-(globalThis as unknown as { window: unknown }).window = {
-    // EditorObserver listens on window; nothing here presses keys.
-    addEventListener: () => { /* unused */ },
-    removeEventListener: () => { /* unused */ },
-};
-
 const FILE = 'notes/a.md';
 
 function isNotice(message: string, key: keyof typeof en.notice): boolean {
