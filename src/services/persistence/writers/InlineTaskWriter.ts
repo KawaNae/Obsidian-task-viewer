@@ -14,9 +14,7 @@ import {
 } from '../../../utils/FileLines';
 import type { WriteObserver } from '../WriteObserver';
 import { recordedOn, subjectOf, type PlannedTarget } from '../TaskRefs';
-import { readsAsPlanned } from '../RowBasis';
 import type { TaskOp } from '../TaskOps';
-import { logWarn } from '../../../log/log';
 import { Outline } from '../../parsing/utils/Outline';
 
 
@@ -445,65 +443,20 @@ export class InlineTaskWriter {
     }
 
     /**
-     * The half of a move to another file that writes to the destination: the
-     * row, as `content`, and its children, re-indented under it, appended to
-     * `destPath`. The children are read from the source here; the source is
-     * not written. Taking the original away is the caller's next write, to the
-     * source, and it is made only once this one has landed (see
-     * `FlowExecutor.executeFlow`). A move within one file is not this: it is
-     * one write that carries the row (`move-to-end` in {@link applyToTask}).
+     * What a move to another file writes to the destination for the row at
+     * `line` of `lines` — the lines the completing write held — the row as
+     * `content` and the lines of its subtree that go with it (`block`, new
+     * lines to the destination), and the row's whole subtree as `lines` hold
+     * it (`subtree`), which is what taking the original away plans from.
      *
      * The two files cannot be one write — Obsidian's `process` is per file —
-     * so a source edited between this read and the caller's write can leave
-     * the task in both. The caller's write is checked against the subtree
-     * answered here, so an edit in between is refused there rather than
-     * taken away unseen. Handing a move from one file to the other is F8's.
-     *
-     * The appended lines are claimed as new rows: the move drops the task's
-     * `^id` on the way (see `FlowPlanner`'s archived copy), and a row in
-     * another file is another row to the index.
-     *
-     * @returns the source row and its subtree as they read when they were
-     * archived, verbatim; null when nothing was written — the source row could
-     * not be placed or no longer reads as the move was planned from (told to
-     * the user as a refusal), or the destination is not a file.
-     */
-    async appendTaskWithChildren(
-        destPath: string,
-        content: string,
-        source: PlannedTarget,
-    ): Promise<readonly string[] | null> {
-        const sourceFile = this.app.vault.getAbstractFileByPath(source.file);
-        const channel = this.writes?.for(source.file, 'flow');
-        // The source is only read, so its target is asked of the channel
-        // directly rather than through a write, and checked against its basis
-        // the way a write's is (`WriteSession.row`). A source row that cannot
-        // be placed is not archived at all: an archive of the parent alone
-        // would lose the children once the original goes.
-        if (!(sourceFile instanceof TFile)) {
-            channel?.refused({ file: source.file, reason: { kind: 'gone' }, subject: source.subject });
-            return null;
-        }
-        const sourceLines = splitLines(await this.app.vault.read(sourceFile)).lines;
-        const located = channel ? channel.locate(sourceLines, source.ref) : { kind: 'gone' as const };
-        const unplanned = located.kind === 'at' && !readsAsPlanned(sourceLines, located.line, source.basis);
-        if (located.kind !== 'at' || unplanned) {
-            const reason = located.kind === 'at' || located.kind === 'outdated' ? { kind: 'changed' as const } : located;
-            logWarn(`[InlineTaskWriter] move source not placed: ${source.file} ${reason.kind}`);
-            channel?.refused({ file: source.file, reason, subject: source.subject });
-            return null;
-        }
-        const archive = this.archiveOf(sourceLines, located.line, content);
-        if (!(await this.appendArchive(destPath, archive.block))) return null;
-        return archive.subtree;
-    }
-
-    /**
-     * What a move to another file writes to the destination for the row at
-     * `line` of `lines`: the row as `content` and the lines of its subtree
-     * that go with it (`block`, new lines to the destination), and the row's
-     * whole subtree as `lines` hold it (`subtree`), which is what taking the
-     * original away plans from.
+     * so the destination is written first (`appendArchive`), and the source's
+     * write is made once it has landed, checked against `subtree`: a child
+     * edited in between is refused there rather than taken away unseen.
+     * Handing a move from one file to the other is F8's. The appended lines are
+     * claimed as new rows: the move drops the task's `^id` on the way (see
+     * `FlowPlanner`'s archived copy), and a row in another file is another
+     * row to the index.
      */
     archiveOf(lines: readonly string[], line: number, content: string): { block: PlacedLine[]; subtree: string[] } {
         const { childrenLines } = this.fileOps.collectChildrenFromLines(lines, line);

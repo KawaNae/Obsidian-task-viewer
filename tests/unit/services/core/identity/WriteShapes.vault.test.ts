@@ -463,9 +463,9 @@ describe('7. insertLineAsFirstChild (insertChildTask)', () => {
     });
 });
 
-// ─── 8. appendTaskWithChildren ───────────────────────────────────────
+// ─── 8. appendArchive ────────────────────────────────────────────────
 
-describe('8. appendTaskWithChildren (a move archiving its subtree)', () => {
+describe('8. appendArchive (a move archiving its subtree)', () => {
     it('A: to another file, the row and its children arrive and the original goes', async () => {
         const { contents, session } = await open({
             [FILE]: NOTE('- [ ] 対象 @2026-09-21 ==> move([[archive]])', '\t- [ ] 子 @2026-09-21'),

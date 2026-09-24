@@ -1,7 +1,5 @@
-import { vi } from 'vitest';
 import { TFile } from 'obsidian';
 import { TaskScanner } from '../../../src/services/core/TaskScanner';
-import { EditorSignal } from '../../../src/services/core/EditorSignal';
 import { TaskStore } from '../../../src/services/core/TaskStore';
 import { TaskValidator } from '../../../src/services/core/TaskValidator';
 import { InlineTaskWriter } from '../../../src/services/persistence/writers/InlineTaskWriter';
@@ -50,8 +48,6 @@ export interface WriteBench {
     readonly app: any;
     readonly contents: Map<string, string>;
     readonly scanner: TaskScanner;
-    /** The flow the scanner fires a completion into: a mock, so a test counts its calls. */
-    readonly flow: { handleTaskCompletion: ReturnType<typeof vi.fn> };
     readonly writer: InlineTaskWriter;
     readonly cloner: TaskCloner;
     readonly repo: TaskRepository;
@@ -104,11 +100,7 @@ export async function writeBench(files: string | string[] | Record<string, strin
     };
 
     const store = new TaskStore(DEFAULT_SETTINGS);
-    const flow = { handleTaskCompletion: vi.fn(async () => { }) };
-    const scanner = new TaskScanner(
-        app as never, store, new TaskValidator(), new EditorSignal(), flow as never, DEFAULT_SETTINGS,
-    );
-    scanner.setInitializing(false);
+    const scanner = new TaskScanner(app as never, store, new TaskValidator(), DEFAULT_SETTINGS);
 
     const refused: Refusal[] = [];
     const filed: Filed[] = [];
@@ -142,7 +134,6 @@ export async function writeBench(files: string | string[] | Record<string, strin
     const bench: WriteBench = {
         app,
         contents,
-        flow,
         scanner,
         writer: new InlineTaskWriter(app, fileOps, writes),
         cloner: new TaskCloner(app, fileOps, writes),

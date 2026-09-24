@@ -116,15 +116,6 @@ export class TaskRepository {
         return this.inlineWriter.appendTaskToFile(filePath, content, origin);
     }
 
-    /** @returns the source subtree archived, or null when nothing was written (see InlineTaskWriter). */
-    async appendTaskWithChildren(
-        destPath: string,
-        content: string,
-        source: PlannedTarget,
-    ): Promise<readonly string[] | null> {
-        return this.inlineWriter.appendTaskWithChildren(destPath, content, source);
-    }
-
     // --- Heading and frontmatter writes ---
 
     /** @returns 挿入した行の 0-based 行番号。ファイルが無ければ -1。 */

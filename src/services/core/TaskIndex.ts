@@ -11,8 +11,6 @@ import type { FlowDeleteAssessment } from '../flow/FlowDeletion';
 import { TaskStore } from './TaskStore';
 import { TaskScanner } from './TaskScanner';
 import { TaskValidator, type ValidationError } from './TaskValidator';
-import { EditorSignal } from './EditorSignal';
-import { EditorObserver } from './EditorObserver';
 import { PathTtlWindow } from './PathTtlWindow';
 import { NotifyCoalescer } from './NotifyCoalescer';
 import { TaskIdGenerator } from '../display/TaskIdGenerator';
@@ -28,14 +26,12 @@ import type { TaskOp } from '../persistence/TaskOps';
 
 /**
  * TaskIndex - タスク管理の統括ファサードクラス
- * 各種サービス（Store, Scanner, Validator, EditorSignal, EditorObserver）を統合
+ * 各種サービス（Store, Scanner, Validator, Repository, FlowExecutor）を統合
  */
 export class TaskIndex {
     private store: TaskStore;
     private scanner: TaskScanner;
     private validator: TaskValidator;
-    private editorSignal: EditorSignal;
-    private editorObserver: EditorObserver;
     private repository: TaskRepository;
     private commandExecutor: FlowExecutor;
     private settings: TaskViewerSettings;
@@ -74,11 +70,11 @@ export class TaskIndex {
      * it.
      *
      * Held because a subscription outlives the object that made it. An index
-     * left listening after the plugin unloads keeps its own scanner, its own
-     * completion memory and its own flow executor, and the next load adds a
-     * second set: one file change is then processed twice, and a completed
-     * command generates its next instance once per surviving listener. That is
-     * what an update without a restart used to look like.
+     * left listening after the plugin unloads keeps its own scanner and its own
+     * flow executor, and the next load adds a second set: one file change is
+     * then processed twice, and, while completions were read off the scans, a
+     * completed command generated its next instance once per surviving
+     * listener. That is what an update without a restart used to look like.
      */
     private eventRefs: { emitter: { offref(ref: EventRef): void }; ref: EventRef }[] = [];
 
@@ -89,17 +85,12 @@ export class TaskIndex {
         // サービスの初期化
         this.store = new TaskStore(settings);
         this.validator = new TaskValidator();
-        this.editorSignal = new EditorSignal();
         this.repository = new TaskRepository(app);
         // Settings getter (not a snapshot): updateSettings replaces the
         // settings object, and trigger judgment must always see the latest
         // statusDefinitions.
         this.commandExecutor = new FlowExecutor(this.repository, this, app, () => this.settings);
-        this.editorObserver = new EditorObserver(app, this.editorSignal);
-        this.scanner = new TaskScanner(
-            app, this.store, this.validator,
-            this.editorSignal, this.commandExecutor, settings
-        );
+        this.scanner = new TaskScanner(app, this.store, this.validator, settings);
         // Connected here rather than built into the repository, because the
         // scanner does not exist when the repository does — and cut on dispose,
         // so a write that outlives this index files nothing (see WriteObserver).
@@ -118,11 +109,7 @@ export class TaskIndex {
     async initialize(): Promise<void> {
         this.app.workspace.onLayoutReady(async () => {
             await this.scanner.scanVault();
-            this.scanner.setInitializing(false);
         });
-
-        // エディタ監視の開始
-        this.editorObserver.setupInteractionListeners();
 
         // Vault イベントハンドラー
         this.own(this.app.vault, this.app.vault.on('modify', async (file) => {
@@ -198,7 +185,6 @@ export class TaskIndex {
             if (this.draggingFilePath === oldPath) {
                 this.draggingFilePath = null;
             }
-            this.editorSignal.forget(oldPath);
 
             this.store.removeTasksByFile(oldPath);
             this.scanner.handleFileRenamed(oldPath, file.path);
@@ -300,15 +286,14 @@ export class TaskIndex {
      *
      * The subscriptions come first: a timer that fires after unload wastes a
      * frame, while a listener that survives it keeps a whole second pipeline
-     * alive — one that scans, detects completions and fires flow commands
-     * against the vault the next load is already working on.
+     * alive — one that scans and writes against the vault the next load is
+     * already working on.
      */
     dispose(): void {
         this.disposed = true;
         this.skippedDuringDrag = null;
         for (const { emitter, ref } of this.eventRefs) emitter.offref(ref);
         this.eventRefs = [];
-        this.editorObserver.dispose();
         this.repository.getWriteObserver().disconnect();
 
         this.notify.dispose();
@@ -930,7 +915,9 @@ export class TaskIndex {
 //   enableDayPlanner    — toggles DayPlanner parser in the chain
 //   enableTasksPlugin   — toggles TasksPlugin parser in the chain
 //   tasksPluginMapping  — emoji-to-field mapping for TasksPlugin parser
-//   statusDefinitions   — which status chars count as complete (CompletionDetector)
+//   statusDefinitions   — which status chars count as complete. No longer read by the
+//                         parse (the completion detector that read it is gone, stage X);
+//                         kept so a change still re-reads the vault as before
 export function computeParseFingerprint(settings: TaskViewerSettings): string {
     return JSON.stringify([
         settings.scopeKeys,

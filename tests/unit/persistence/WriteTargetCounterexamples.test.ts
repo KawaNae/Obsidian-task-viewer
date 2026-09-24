@@ -313,17 +313,6 @@ describe('F2-counter: flow effects', () => {
         expect(only(bench.filed).edits.some(edit => edit.kind === 'carried')).toBe(true);
     });
 
-    it('cross-file archive of a row replaced from outside (R4 shape): nothing archived, refused as changed', async () => {
-        // The source is read, not written, so `WriteSession.row` is not in the
-        // way: the move asks `locate` itself and checks its basis on its own.
-        const bench = await writeBench({ [FILE]: '- [ ] alpha\n- [ ] buy milk\n- [ ] omega', 'archive.md': '' });
-        const milk = bench.taskAt(1);
-        bench.edit(['- [ ] alpha', '- [ ] omega', '- [ ] call mom']);
-        expect(await bench.writer.appendTaskWithChildren('archive.md', '- [x] buy milk', plannedOn(milk))).toBeNull();
-        expect(bench.text('archive.md')).toBe('');
-        expect(bench.refused.map(r => r.reason.kind)).toEqual(['changed']);
-    });
-
     it('a frontmatter write, then a same-file move: it lands, the shape F2 refused as ambiguous being gone', async () => {
         // Under F2 the archive landed first and the frontmatter write came
         // between it and the delete, which then saw two rows reading `- [x] A`

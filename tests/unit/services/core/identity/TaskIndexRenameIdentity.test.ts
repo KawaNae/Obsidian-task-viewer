@@ -59,7 +59,6 @@ function setup() {
     };
     const index = new TaskIndex(app as never, { ...DEFAULT_SETTINGS });
     const scanner = scannerOf(index);
-    scanner.setInitializing(false);
     return { contents, vault, index, scanner };
 }
 

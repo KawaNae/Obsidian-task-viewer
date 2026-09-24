@@ -1,12 +1,9 @@
 import type { App, TFile } from 'obsidian';
 import { Outline } from '../parsing/utils/Outline';
-import type { Task, TaskViewerSettings } from '../../types';
+import type { TaskViewerSettings } from '../../types';
 import { FileParsePipeline } from '../parsing/FileParsePipeline';
 import type { TaskStore } from './TaskStore';
 import type { TaskValidator } from './TaskValidator';
-import type { EditorSignal } from './EditorSignal';
-import { CompletionDetector, type CompletionOrigin } from './CompletionDetector';
-import type { FlowExecutor } from '../flow/FlowExecutor';
 import { TaskIdGenerator } from '../display/TaskIdGenerator';
 import { IdentityLedger, type LedgerEntry } from './identity/IdentityLedger';
 import { HintLog } from './identity/IdentityHints';
@@ -19,17 +16,18 @@ import { logDebug, logError, logInfo } from '../../log/log';
 
 /**
  * タスクスキャナー — ファイル単位のスキャンのオーケストレーション。
- * scanFile は 5 相を順に呼ぶだけ:
+ * scanFile は 4 相を順に呼ぶだけ:
  *   parse    — FileParsePipeline（ファイル → Task[]、仮 ID。パース順序契約の所有者）
  *   identity — IdentityLedger との突き合わせで仮 ID を runtime ID に置き換える
  *   validate — バリデーション警告の収集（以降は runtime ID しか見ない）
- *   detect   — CompletionDetector（完了イベントの差分検出、署名メモリの所有者）
- *   commit   — store 更新 + ledger 置換 + フロー発火
+ *   commit   — store 更新 + ledger 置換
+ *
+ * スキャンは読むだけで、フローを発火させない。発火は完了させた操作が起こす
+ * （エディタのトランザクションと、プラグイン自身の書き込み。structure.md の
+ * 「発火の可否」）。
  */
 export class TaskScanner {
     private scanQueue: Map<string, Promise<unknown>> = new Map();
-    private completionDetector = new CompletionDetector();
-    private isInitializing = true;
     /**
      * Written only by scanFile's commit, so the store and the ledger move together.
      *
@@ -95,8 +93,6 @@ export class TaskScanner {
         private app: App,
         private store: TaskStore,
         private validator: TaskValidator,
-        private editorSignal: EditorSignal,
-        private commandExecutor: FlowExecutor,
         private settings: TaskViewerSettings
     ) { }
 
@@ -115,7 +111,6 @@ export class TaskScanner {
 
         this.store.notifyListenersStaggered();
         logInfo(`[scanVault:done] tasks=${this.store.getTasks().length}`);
-        this.isInitializing = false;
     }
 
     /**
@@ -175,7 +170,7 @@ export class TaskScanner {
     }
 
     private queue(file: TFile, unlessRead: boolean): Promise<boolean> {
-        if (!this.isInitializing) logDebug(`[queueScan] file=${file.path}`);
+        logDebug(`[queueScan] file=${file.path}`);
         // シンプルなキューメカニズム: ファイルパスごとにプロミスをチェーン
         const previousScan = this.scanQueue.get(file.path) || Promise.resolve();
 
@@ -232,7 +227,6 @@ export class TaskScanner {
 
         if (parsed.ignored) {
             this.store.removeTasksByFile(file.path);
-            this.completionDetector.clearForFile(file.path);
             // Retired for good: lifting tv-ignore later mints fresh IDs.
             this.ledger.dropFile(file.path);
             // With no rows to match against, a hint has nothing left to claim.
@@ -292,45 +286,11 @@ export class TaskScanner {
             }
         }
 
-        // --- detect ---
-        // Whether a completed row may fire (structure.md, 論点5): a row a write
-        // of ours wrote, as this read holds it, answers by whom the write was
-        // for — the user, or a flow carrying out a command, whose own writes
-        // must not fire again. A row no write of ours wrote came from an editor
-        // or from outside, and only the editor's signal tells the two apart.
-        // Every read that is not, whole, a state our own writes left takes the
-        // signal, whether or not it completes anything: that read carries the
-        // editor's save, and a signal it left standing would speak for the
-        // next change, a sync as well (see EditorSignal). A read our writes
-        // left carries no one's hand, and leaves the signal to the save.
-        const byHand = this.claims.leftByUs(file.path, readKey, before)
-            ? false
-            : this.editorSignal.take(file.path);
-        const whose = (task: Task): CompletionOrigin => {
-            const writer = this.claims.writerOf(file.path, readKey, before, task.id, task.originalText);
-            if (writer !== null) return writer;
-            return byHand ? 'user' : 'other';
-        };
-        const tasksToTrigger = this.completionDetector.detect(file.path, parsed.tasks, {
-            whose,
-            isInitializing: this.isInitializing,
-            statusDefinitions: this.settings.statusDefinitions,
-        });
-
-        // What this scan decided, which is the first question a report of a
-        // task generated twice has to answer: two scans of one change that
-        // each fired, or one scan that fired twice.
-        //
-        // A third shape — a pipeline that outlived its index and kept scanning
-        // — reads differently in the two places this line goes. The stored log
-        // cannot show it: every load of the plugin gets its own copy of this
-        // module, and only the live one's manager flushes, so the copies write
-        // where nobody reads. The console can: it belongs to the window rather
-        // than to a copy, so with verbose on, one change printing this line
-        // twice is a surviving pipeline saying so.
-        if (!this.isInitializing) {
-            logDebug(`[scan] file=${file.path} byHand=${byHand} fired=${tasksToTrigger.length} minted=${identity.minted.length} retired=${identity.retired.length}`);
-        }
+        // What this scan decided about identity. Two scans of one change,
+        // or a pipeline that outlived its index and kept scanning, print this
+        // line twice: the console belongs to the window rather than to a copy
+        // of the module, so with verbose on it shows either.
+        logDebug(`[scan] file=${file.path} minted=${identity.minted.length} retired=${identity.retired.length}`);
 
         // --- commit (batched: 1 file = 1 revision bump) ---
         // Checked before the batch opens: throwing inside it would have already
@@ -371,7 +331,7 @@ export class TaskScanner {
 
     /**
      * ファイルリネーム（md → md）時の内部状態の引き継ぎ。
-     * oldPath に紐づく scanQueue / 完了検出メモリを除去し、ledger を newPath へ再キーする。
+     * oldPath に紐づく scanQueue を除去し、ledger を newPath へ再キーする。
      *
      * 新パスの再スキャンより前に呼ぶこと。逆順だと空の ledger と突き合わせて
      * 全タスクが新発番になる。再キーは TaskHubPanel / TimerWidget が握る ID を
@@ -379,7 +339,6 @@ export class TaskScanner {
      */
     handleFileRenamed(oldPath: string, newPath: string): void {
         this.scanQueue.delete(oldPath);
-        this.completionDetector.forgetFile(oldPath);
         this.ledger.rekeyFile(oldPath, newPath, id => TaskIdGenerator.renameFile(id, oldPath, newPath));
         // Hints name runtime IDs, and a rename rewrites those, so carrying the
         // log across would leave claims about rows nothing answers to. They
@@ -392,11 +351,10 @@ export class TaskScanner {
 
     /**
      * ファイル削除（md → 非 md のリネームを含む）時の内部状態の破棄。
-     * scanQueue / 完了検出メモリ / ledger から path を除去する。
+     * scanQueue / ledger から path を除去する。
      */
     handleFileDeleted(path: string): void {
         this.scanQueue.delete(path);
-        this.completionDetector.forgetFile(path);
         this.ledger.dropFile(path);
         this.hints.dropFile(path);
         this.claims.forget(path);
@@ -588,13 +546,6 @@ export class TaskScanner {
             }
         }
         return texts;
-    }
-
-    /**
-     * 初期化状態を設定
-     */
-    setInitializing(value: boolean): void {
-        this.isInitializing = value;
     }
 
     /**

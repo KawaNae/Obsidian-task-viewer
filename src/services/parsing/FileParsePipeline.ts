@@ -27,8 +27,8 @@ export interface FileParseResult {
  *
  * build → resolve → extract mutate one shared DocumentNode in that exact
  * order; wrapping them here means callers cannot get it wrong. Pure with
- * respect to the vault: no I/O, no store access — TaskScanner owns
- * completion detection and store commits.
+ * respect to the vault: no I/O, no store access — TaskScanner owns the
+ * store commits.
  */
 export class FileParsePipeline {
     /**

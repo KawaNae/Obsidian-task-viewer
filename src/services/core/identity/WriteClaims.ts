@@ -78,13 +78,11 @@ export const MAX_CHAIN_PER_FILE = 1024;
  * {@link WriteClaims.readMark}).
  *
  * A described link also says whom the write was made for, and which rows it
- * wrote — made, or gave a new text — with the text it gave each. That is what
- * lets a scan answer, row by row, whether a completion it reads is one a write
- * of ours made and for whom (see {@link WriteClaims.writerOf}). Unlike the
- * rows, every described link keeps it: a read can be of any state in the
- * chain, and what an older write wrote is what such a read holds. A mark keeps
- * it too when the write knew it: the rows it asked for by name, and the line
- * it left each on, are the write's own knowledge, not the claim's.
+ * wrote — made, or gave a new text — with the text it gave each. A scan used
+ * to answer from them whether a completion it read was one a write of ours
+ * made, and for whom. Since stage X a completion fires from the operation
+ * that made it and no scan asks, so nothing reads them; they go with the
+ * sink in N1.
  */
 type Link =
     | { filed: number; content: ContentKey; state: LinkState | null; origin: WriteOrigin; wrote: ReadonlyMap<string, string> }
@@ -405,68 +403,6 @@ export class WriteClaims {
             case 'after':
                 return newestDescribed(chain.links)?.state?.ladder ?? ledger.rows;
         }
-    }
-
-    /**
-     * Whom the write of ours that last wrote this row, as the read holds it,
-     * was made for — or null when no write of ours the read is known to hold
-     * wrote the row, or the row reads otherwise than that write left it.
-     *
-     * Which writes a read holds comes from where it stands in the chain, the
-     * same placing {@link ladderFor} makes: an earlier or the newest write's
-     * lines hold that write and every one before it; lines changed after the
-     * newest described write hold every described write, and something else
-     * besides; the ledger's own lines, and a read past the cap, hold none that
-     * can be told.
-     *
-     * The text is what keeps "held" honest for a read that changed after our
-     * writes: a row whose line was rewritten since is not the one our write
-     * left, whoever named it. Asked only about rows a scan is deciding on, and
-     * before the scan's commit forgets the chain.
-     *
-     * @param read the key of the lines read.
-     * @param ledger the key of the content the last scan recorded.
-     */
-    writerOf(path: string, read: ContentKey, ledger: ContentKey | null, runtimeId: string, text: string): WriteOrigin | null {
-        const chain = this.chains.get(path);
-        if (!chain) return null;
-        const place = placeRead(chain, read, ledger);
-        let upTo: number;
-        switch (place.kind) {
-            case 'ledger':
-            case 'unknown':
-                return null;
-            case 'earlier':
-            case 'newest':
-                upTo = place.at;
-                break;
-            case 'after':
-                upTo = chain.links.length - 1;
-                break;
-        }
-        for (let i = upTo; i >= 0; i--) {
-            const link = chain.links[i];
-            // A mark that could not say which rows it wrote may have written
-            // this one, and may not: the rows before it cannot answer past it.
-            if (link.content === null && (!link.wrote || !link.origin)) return null;
-            const written = link.wrote!.get(runtimeId);
-            if (written === undefined) continue;
-            return written === text ? link.origin! : null;
-        }
-        return null;
-    }
-
-    /**
-     * Whether the lines read are, whole, a state a write of ours left: an
-     * earlier or the newest described write's. Such a read carries no change
-     * from anywhere else — no editor's save, no sync — so it speaks for
-     * nobody's hand (see `EditorSignal`).
-     */
-    leftByUs(path: string, read: ContentKey, ledger: ContentKey | null): boolean {
-        const chain = this.chains.get(path);
-        if (!chain) return false;
-        const place = placeRead(chain, read, ledger);
-        return place.kind === 'earlier' || place.kind === 'newest';
     }
 
     /**
