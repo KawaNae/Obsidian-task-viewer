@@ -240,8 +240,8 @@ describe('OutlineReading.fences', () => {
     it('gives the opening line, the closing line, the info string, the column and where the delimiter starts', () => {
         const outline = Outline.read(['prose', '```tv-gen 週報の手順', '- [ ] 資料集め', '```', '- ```js', '  x', '  ```']);
         expect(outline.fences).toEqual([
-            { line: 1, close: 3, end: 4, info: 'tv-gen 週報の手順', column: 0, from: 0 },
-            { line: 4, close: 6, end: 7, info: 'js', column: 2, from: 2 },
+            { line: 1, close: 3, end: 4, delimiter: '```', info: 'tv-gen 週報の手順', column: 0, from: 0 },
+            { line: 4, close: 6, end: 7, delimiter: '```', info: 'js', column: 2, from: 2 },
         ]);
     });
 
