@@ -3,6 +3,9 @@ import { Outline } from '../../../src/services/parsing/utils/Outline';
 import { checkWrite, type WrittenLine, type WriteCheck } from '../../../src/services/parsing/utils/OutlineCheck';
 import { draftOver, replayEdits, type LineDraft } from '../../../src/utils/FileLines';
 import { Block, Placement, type Spot } from '../../../src/services/persistence/utils/Placement';
+import { renderFlowInstance } from '../../../src/services/persistence/FlowInstanceLines';
+import { FileOperations } from '../../../src/services/persistence/utils/FileOperations';
+import type { App } from 'obsidian';
 
 /**
  * The one check every write is held to (`checkWrite`, run by
@@ -215,5 +218,19 @@ describe('a line placed past what it would take in, as the reading with it in sa
         const lines = ['1. [ ] T', '  - [ ] U'];
         expect(put(lines, text => Placement.afterSubtree(lines, 0, text), '- [x] n'))
             .toEqual({ spot: { at: 1, parent: null, indent: '  ' }, check: 'sound' });
+    });
+});
+
+describe('a next instance put at a sibling spelled apart from the row that fired', () => {
+    it('is written at the sibling\'s indentation, its `==>` line as far past it as it stands past the row', () => {
+        // R is four spaces in, its group's head A a tab: both P's children.
+        const lines = ['- [ ] P', '\t- [x] A', '    - [ ] R ==> every mon', '      - ==> every mon', ''];
+        const block = renderFlowInstance(new FileOperations({} as App), lines, 2, { kind: 'recurrence', content: '- [ ] R', flowLines: ['every mon'] });
+        const after = [...lines];
+        const spot = Placement.groupHead(lines, 2, '- [ ] R');
+        expect(spot).toEqual({ at: 1, parent: 0, indent: '\t' });
+        const check = checked(after, (draft) => draft.put(spot, block));
+        expect(check).toBe('sound');
+        expect(after.slice(1, 3)).toEqual(['	- [ ] R', '	  - ==> every mon']);
     });
 });
