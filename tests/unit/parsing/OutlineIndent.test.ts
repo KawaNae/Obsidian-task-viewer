@@ -111,11 +111,12 @@ describe('renderFlowInstance: the lines a next instance is written as', () => {
     it('spells the next instance as the row that fired, its `==>` line its child (H2)', () => {
         // `10.   [ ] T` opens its content at column 6, and its `==>` line at
         // six spaces is its child. The next instance, handed over as
-        // `- [ ] T`, is written with the row's marker and gap, so the same
-        // six spaces are its child too.
+        // `- [ ] T`, is written with the row's delimiter and gap, numbered 1
+        // (a marker that can interrupt a paragraph): its content opens at
+        // column 5, and the same six spaces are its child too.
         const lines = ['10.   [ ] T ==> next', '      - ==> every day', ''];
         const rendered = texts(renderFlowInstance(fileOps, lines, 0, { kind: 'recurrence', content: '- [ ] T', flowLines: ['every day'] }));
-        expect(rendered).toEqual(['10.   [ ] T', '      - ==> every day']);
+        expect(rendered).toEqual(['1.   [ ] T', '      - ==> every day']);
         expect(parentOf(rendered, 1)).toBe(0);
     });
 

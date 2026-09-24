@@ -37,10 +37,13 @@ async function complete(lines: string[], content = 'T'): Promise<{ lines: string
 }
 
 describe('the next instance keeps the marker of the row that fired', () => {
-    for (const marker of ['*', '+', '1)', '2.']) {
+    // A bullet is the row's own; an ordered row's instance is numbered 1,
+    // with the row's delimiter: the marker has to be one that can interrupt
+    // a paragraph (see the R8 cases below).
+    for (const [marker, next] of [['*', '*'], ['+', '+'], ['1)', '1)'], ['2.', '1.'], ['3)', '1)']]) {
         it(`${marker}`, async () => {
             const { lines } = await complete(['# note', `${marker} [ ] T @2026-09-21 ==> every mon`, '']);
-            expect(lines).toEqual(['# note', `${marker} [ ] T @2026-09-28 ==> every mon`, `${marker} [x] T @2026-09-21`, '']);
+            expect(lines).toEqual(['# note', `${next} [ ] T @2026-09-28 ==> every mon`, `${marker} [x] T @2026-09-21`, '']);
             expect(Notice.messages).toEqual([]);
         });
     }
@@ -48,7 +51,9 @@ describe('the next instance keeps the marker of the row that fired', () => {
     it('and the gap after it, so its commands are its children and the series goes on', async () => {
         const { lines, session } = await complete(['# note', '10.   [ ] T @2026-09-21', '      - ==> every mon', '']);
 
-        expect(lines).toEqual(['# note', '10.   [ ] T @2026-09-28', '      - ==> every mon', '10.   [x] T @2026-09-21', '']);
+        // Numbered 1, the content opens a column left of the row's; the
+        // command stays where it stood, past that column, a child still.
+        expect(lines).toEqual(['# note', '1.   [ ] T @2026-09-28', '      - ==> every mon', '10.   [x] T @2026-09-21', '']);
         const next = session.index.getTasks().find(task => task.content === 'T' && task.statusChar === ' ')!;
         expect(next.flow?.program).toBeTruthy();
     });
@@ -59,10 +64,33 @@ describe('the next instance keeps the marker of the row that fired', () => {
             '```tv-gen w', '- [ ] T', '\t- [ ] 生成子', '```', '',
         ]);
 
-        const at = lines.indexOf('10.   [ ] T');
+        const at = lines.indexOf('1.   [ ] T');
         expect(at).toBeGreaterThan(0);
         const child = session.index.getTasks().find(task => task.content === '生成子' && task.line === at + 2);
         expect(child, lines.join('\n')).toBeDefined();
         expect(child!.parentId).toBe(session.index.getTasks().find(task => task.line === at)!.id);
+    });
+});
+
+/**
+ * R8: an ordered row whose instance goes in just past the text of the item
+ * above. An ordered item that does not start at 1 cannot interrupt a
+ * paragraph, so an instance numbered as the row read as that text going on,
+ * and the write was refused: the completion stood alone, the series cut.
+ */
+describe('an ordered row whose instance goes in just past a paragraph', () => {
+    it('past the item above, at the top level', async () => {
+        const { lines } = await complete(['text0', '- [ ] A', '2. [ ] T @2026-09-21 ==> every 1d', '']);
+
+        // The head of T's group is A: the instance goes in past `text0`.
+        expect(lines).toEqual(['text0', '1. [ ] T @2026-09-26 ==> every 1d', '- [ ] A', '2. [x] T @2026-09-21', '']);
+        expect(Notice.messages).toEqual([]);
+    });
+
+    it('past the text of the parent it is nested in', async () => {
+        const { lines } = await complete(['- [ ] P', '  1. [ ] X', '  2. [ ] T @2026-09-21 ==> every 1d', '']);
+
+        expect(lines).toEqual(['- [ ] P', '  1. [ ] T @2026-09-26 ==> every 1d', '  1. [ ] X', '  2. [x] T @2026-09-21', '']);
+        expect(Notice.messages).toEqual([]);
     });
 });

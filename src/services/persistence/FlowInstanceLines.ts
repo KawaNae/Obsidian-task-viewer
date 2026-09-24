@@ -83,12 +83,22 @@ export function renderFlowInstance(
  * Spelled as the row, the instance opens its content where the row did, and
  * reads as the row's sibling does. A head that is no task line is written as
  * it is, at the row's indentation.
+ *
+ * The marker is one that can interrupt a paragraph, since the instance goes
+ * in at the head of the row's group, which can be just past the text of the
+ * item above (CommonMark: an ordered item interrupts a paragraph only when it
+ * starts at 1). So an ordered row's instance is numbered 1, with the row's
+ * delimiter and gap; a bullet is the row's own. A number shorter than the
+ * row's moves the content left of the row's; the `==>` lines and generated
+ * children stay at the columns they are resolved to under the row, as a
+ * child of an item may stand past its content column.
  */
 function spelledAsFired(fired: string, head: string): string {
     const indent = Outline.indentOf(fired);
     const task = TaskLineClassifier.classify(head);
     if (!task) return indent + Outline.dedent(head);
-    return indent + TaskLineClassifier.extractMarker(fired) + '[' + task.statusChar + task.suffix;
+    const marker = TaskLineClassifier.extractMarker(fired).replace(/^\d+(?=[.)])/, '1');
+    return indent + marker + '[' + task.statusChar + task.suffix;
 }
 
 /**
