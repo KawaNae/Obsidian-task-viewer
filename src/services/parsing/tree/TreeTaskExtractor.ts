@@ -224,10 +224,10 @@ export class TreeTaskExtractor {
     private static mergeChildFlow(task: Task, block: TaskBlock, outline: OutlineReading): Set<number> {
         if (!isTvInline(task)) return new Set();
 
-        // A flow line in the block's lines is one below the block's own line.
+        // A flow line in the block's lines is one below the block's own line;
+        // the block's lines are the row's whole subtree, so every one is there.
         const indices = collectFlowLineIndices(outline, block.line)
-            .map(line => line - block.line - 1)
-            .filter(k => k < block.childLineNumbers.length);
+            .map(line => line - block.line - 1);
         if (indices.length === 0) return new Set();
 
         const oldFlow = task.flow;
