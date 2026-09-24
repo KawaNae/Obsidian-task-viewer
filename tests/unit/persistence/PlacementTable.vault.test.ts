@@ -2,6 +2,11 @@ import { describe, it, expect, afterEach, beforeEach } from 'vitest';
 import { Notice } from 'obsidian';
 import { openVault, type VaultSession } from '../helpers/vaultSession';
 import { t } from '../../../src/i18n';
+import { freezeDate } from '../helpers/fakeDate';
+
+// Frozen so `==> every mon` on `@2026-09-21` lands on the `@2026-09-28` these
+// tests hard-code, no matter which day the suite runs.
+freezeDate(new Date(2026, 8, 25, 12, 0, 0));
 
 /**
  * Every write that adds lines, one row of the P1 table each
