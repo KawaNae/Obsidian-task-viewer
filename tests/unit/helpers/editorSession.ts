@@ -1,4 +1,5 @@
 import { EditorSelection, EditorState, Transaction, type TransactionSpec } from '@codemirror/state';
+import { history, redo, undo } from '@codemirror/commands';
 import { editorInfoField } from 'obsidian';
 import { AwayRunner, flowFireExtension, type EditorHandle, type EditorFireHost } from '../../../src/editor/FlowFireExtension';
 
@@ -9,12 +10,13 @@ import { AwayRunner, flowFireExtension, type EditorHandle, type EditorFireHost }
  * leaves waiting are run as the view's plugin runs them (`AwayRunner`).
  *
  * `host` is the index's (`TaskIndex.editorFireHost`), so a fire here plans,
- * writes and refuses as it does in the app.
+ * writes and refuses as it does in the app. The editor keeps a history, as
+ * Obsidian's does (CM6's `history`), for `undo` and `redo`.
  */
 export function editorSession(host: EditorFireHost, path: string, text: string) {
     let state = EditorState.create({
         doc: text,
-        extensions: [editorInfoField.init(() => ({ file: { path } })), flowFireExtension(host)],
+        extensions: [editorInfoField.init(() => ({ file: { path } })), history(), flowFireExtension(host)],
     });
     const transactions: Transaction[] = [];
     let runs: Promise<void>[] = [];
@@ -61,6 +63,10 @@ export function editorSession(host: EditorFireHost, path: string, text: string) 
                 ...(userEvent ? { annotations: Transaction.userEvent.of(userEvent) } : {}),
             });
         },
+        /** Ctrl+Z, as the history makes it (`undo`, marked `undo`). Whether there was a step to undo. */
+        undo: (): boolean => undo({ state, dispatch: made }),
+        /** Ctrl+Y (`redo`, marked `redo`). */
+        redo: (): boolean => redo({ state, dispatch: made }),
         /** Wait for every move a completion here left waiting. */
         settled: async (): Promise<void> => {
             while (runs.length > 0) {
