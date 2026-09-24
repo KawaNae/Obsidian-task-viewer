@@ -198,9 +198,11 @@ describe('the spot\'s parent and indentation', () => {
         expect(Placement.end(lines)).toEqual({ at: 4, parent: null, indent: '' });
     });
 
-    it('takes the spelling of the sibling it goes above, else of the one it goes below', () => {
+    it('takes the spelling of the row it names, else of the item it goes above, else of the one it goes below', () => {
         const lines = ['- [ ] P', '\t- [ ] a', '    - [ ] b', '- [ ] q'];
-        expect(Placement.afterSubtree(lines, 1, '- [ ] n')).toEqual({ at: 2, parent: 0, indent: '    ' });
+        expect(Placement.afterSubtree(lines, 1, '- [ ] n')).toEqual({ at: 2, parent: 0, indent: '\t' });
+        expect(Placement.groupHead(lines, 2, '- [ ] n')).toEqual({ at: 1, parent: 0, indent: '\t' });
+        expect(Placement.lastChild(lines, 0, '- [ ] n')).toEqual({ at: 3, parent: 0, indent: '    ' });
         expect(Placement.before(lines, 1, '- [ ] n')).toEqual({ at: 1, parent: 0, indent: '\t' });
         expect(Placement.afterSubtree(lines, 2, '- [ ] n')).toEqual({ at: 3, parent: 0, indent: '    ' });
         // With neither next to it, a child's indentation of the parent.
