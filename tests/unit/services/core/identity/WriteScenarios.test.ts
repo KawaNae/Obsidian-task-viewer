@@ -406,7 +406,7 @@ describe('IDs held across a delete', () => {
         // go while its child stays. The child is the same row it was, one line
         // higher — which is exactly what the claim says, and nothing more.
         // Two spaces, not a tab: a tab left at the top of the note is
-        // indented code (HYPOTHESIS L2 q4), and the orphan would be no task.
+        // indented code (Obsidian, measurement.md q10), and the orphan would be no task.
         const contents = new Map([[FILE, [
             '- [ ] 親 @2026-09-21',
             '  - [ ] 子 @2026-09-21 ^tv-child',

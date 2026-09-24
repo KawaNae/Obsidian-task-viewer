@@ -208,7 +208,9 @@ describe('Placement.inBody', () => {
         // within P's subtree.
         const lines = ['- item', '\t- [ ] P', '\t\t- [ ] T', '\t\t\t```', '\t\tshallow', '\t\t\t```', '\t\t- [ ] Z'];
         expect(Placement.inBody(lines, 4)).toBeNull();
-        expect(Placement.afterSubtree(lines, 2)).toBeNull();
+        // `\t\tshallow` goes on T's fence, and T with it, to the closing
+        // line (Obsidian, measurement.md q1): past T's subtree is past the fence.
+        expect(Placement.afterSubtree(lines, 2)).toBe(6);
         expect(Placement.inBody(lines, 6)).toBe(6);
     });
 

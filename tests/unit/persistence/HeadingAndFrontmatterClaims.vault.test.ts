@@ -70,7 +70,7 @@ function watchRefusals(session: VaultSession): Refusal[] {
 describe('a line put under a heading', () => {
     it('keeps the names of the indented tasks directly under the heading (F4, F6)', async () => {
         // Two spaces: a tab under a heading is indented code
-        // (HYPOTHESIS L2 q4), and holds no task (the next test).
+        // (Obsidian, measurement.md q10), and holds no task (the next test).
         const session = await open(['## Tasks', '  - [ ] A', '\t- [ ] B', ''].join('\n'));
         const before = idByText(session);
         expect(before.get('- [ ] A')).toBeDefined();
@@ -87,7 +87,7 @@ describe('a line put under a heading', () => {
         expect(claims.adopted).toEqual([FILE]);
     });
 
-    it('reads a tab-indented checkbox under a heading as code, which a line put above makes a child (HYPOTHESIS L2 q4)', async () => {
+    it('reads a tab-indented checkbox under a heading as code, which a line put above makes a child (Obsidian, measurement.md q10)', async () => {
         // Four columns at the top of a section with no paragraph to go on is
         // indented code; below `- [ ] N` the same line is N's child item.
         const session = await open(['## Tasks', '\t- [ ] A', '\t\t- [ ] B', ''].join('\n'));

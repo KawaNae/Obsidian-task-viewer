@@ -94,12 +94,13 @@ describe('a subtree with a blank line inside it', () => {
     });
 });
 
-describe('a fence below a blank line whose closing line is at column 0 (HYPOTHESIS L2 q1)', () => {
-    // The fence opens inside T's item, and `code` at column 0 ends the item
-    // and the fence with it. The closing line left at column 0 then opens a
-    // fence of its own, which never closes and holds U: U is code, not a
-    // task, before any write. Under the old depth reading the subtree took
-    // the fence whole and U was a task (found by the F4 counterexample run).
+describe('a fence below a blank line whose closing line is at column 0 (Obsidian, measurement.md q8)', () => {
+    // The fence opens inside T's item, and `code` at column 0 goes on it (and
+    // on T). The delimiter at column 0 does not close it: it starts a block
+    // of its own, which ends T and its fence and opens a fence that never
+    // closes and holds U. U is code, not a task, before any write, as
+    // Obsidian draws it. Under the old depth reading the subtree took the
+    // fence whole and U was a task (found by the F4 counterexample run).
     const NOTE = ['# note', '- [ ] T @2026-09-21', '', '  ```js', 'code', '```', '- [ ] U', ''];
 
     it('reads U as code', async () => {
@@ -113,7 +114,7 @@ describe('a fence below a blank line whose closing line is at column 0 (HYPOTHES
         expect(await session.index.deleteTask(idOf(session, 'T'))).toBe(true);
         await session.settle(FILE);
 
-        expect(contents.get(FILE)).toBe(['# note', 'code', '```', '- [ ] U', ''].join('\n'));
+        expect(contents.get(FILE)).toBe(['# note', '```', '- [ ] U', ''].join('\n'));
         expect(session.index.getTasks()).toEqual([]);
     });
 

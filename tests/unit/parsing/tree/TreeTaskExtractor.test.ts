@@ -361,7 +361,7 @@ describe('TreeTaskExtractor', () => {
             expect(parent.childLines.map(c => c.bodyLine)).toEqual([1, 4, 5]);
         });
 
-        it('子タスクの段落の直後の浅い行は子タスクの段落の続き (HYPOTHESIS L2 q5)', () => {
+        it('子タスクの段落の直後の浅い行は子タスクの段落の続き (Obsidian, measurement.md q5)', () => {
             // 空行を挟まない `desc line 2` は `child desc` の段落の続き（lazy continuation）
             const tasks = extractTasks([
                 '- [ ] parent @2026-03-24',    // line 0
@@ -652,15 +652,15 @@ describe('TreeTaskExtractor', () => {
             `${unit}${unit}- [ ] c`,
         ];
 
-        // (HYPOTHESIS L2 q3) 1 字下げは `- ` の内容の列（2）より浅いので、3 行とも兄弟
-        it('1スペースの3段は子でなく兄弟 (HYPOTHESIS L2 q3)', () => {
+        // (Obsidian, measurement.md q3) 1 字下げは `- ` の内容の列（2）より浅いので、3 行とも兄弟
+        it('1スペースの3段は子でなく兄弟 (Obsidian, measurement.md q3)', () => {
             const tasks = extractTasks(nested(' '));
             expect(tasks.map(t => t.content)).toEqual(['a', 'b', 'c']);
             expect(tasks.every(t => t.parentId === undefined)).toBe(true);
         });
 
-        // (HYPOTHESIS L2 q4) 8 字下げは内容の列 + 4 以上なので段落の続きで、タスクでない
-        it('8スペースの3段は a の段落の続き (HYPOTHESIS L2 q4)', () => {
+        // (Obsidian, measurement.md q4) 8 字下げは内容の列 + 4 以上なので段落の続きで、タスクでない
+        it('8スペースの3段は a の段落の続き (Obsidian, measurement.md q4)', () => {
             const tasks = extractTasks(nested('        '));
             expect(tasks.map(t => t.content)).toEqual(['a']);
             expect(tasks[0].childLines.map(c => c.bodyLine)).toEqual([1, 2]);
