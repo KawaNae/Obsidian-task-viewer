@@ -9,7 +9,7 @@ import type { PropertyOp } from '../PropertyUpdatePlanner';
 import { flowInstanceHead, renderFlowInstance } from '../FlowInstanceLines';
 import {
     createFile, fileGone, processLines, splitLines,
-    type EditorLine, type LineDraft, type Refusal, type WriteAt, type WriteOrigin, type WriteOutcome,
+    type EditorLine, type EditorSubtree, type LineDraft, type Refusal, type WriteAt, type WriteOrigin, type WriteOutcome,
 } from '../../../utils/FileLines';
 import type { WriteObserver } from '../WriteObserver';
 import { recordedOn, subjectOf, type PlannedTarget } from '../TaskRefs';
@@ -132,8 +132,13 @@ export class InlineTaskWriter {
      * so the line is not necessarily a task. It used to take the one line
      * and leave the lines under it, and a property or `==>` line under it
      * went on the task above.
+     *
+     * What it takes is what the editor showed when the menu was opened: the
+     * line and its subtree (`at.subtree`). A child added or rewritten since,
+     * which the user has not seen, is not taken with it: the write is refused
+     * as `changed` (`WriteSession.row`).
      */
-    async deleteLine(filePath: string, at: EditorLine): Promise<WriteOutcome> {
+    async deleteLine(filePath: string, at: EditorSubtree): Promise<WriteOutcome> {
         const file = this.app.vault.getAbstractFileByPath(filePath);
         if (!(file instanceof TFile)) return fileGone(this.writes?.for(filePath, 'user'), filePath, at.text.trim());
 

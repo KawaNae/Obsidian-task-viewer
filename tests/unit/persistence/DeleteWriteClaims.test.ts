@@ -107,7 +107,7 @@ describe('what deleteLine reports', () => {
             '- [ ] 次 @2026-09-21',
         ]);
 
-        await b.writer.deleteLine(FILE, { line: 0, text: b.lines()[0] });
+        await b.writer.deleteLine(FILE, { line: 0, text: b.lines()[0], subtree: b.lines().slice(0, 2) });
 
         expect(only(b.filed).edits).toEqual([{ kind: 'removed', at: 0, count: 2 }]);
         expect(b.lines()).toEqual(['- [ ] 次 @2026-09-21']);
@@ -123,7 +123,7 @@ describe('what deleteLine reports', () => {
         for (const at of [1, 3, 4, 6]) {
             const b = await writeBench(note);
 
-            await b.writer.deleteLine(FILE, { line: at, text: note[at] });
+            await b.writer.deleteLine(FILE, { line: at, text: note[at], subtree: [note[at]] });
 
             expect(only(b.filed).edits).toEqual([{ kind: 'removed', at, count: 1 }]);
             expect(b.lines()).toEqual(note.filter((_, i) => i !== at));
@@ -133,7 +133,7 @@ describe('what deleteLine reports', () => {
     it('files nothing when the coordinate is past the end', async () => {
         const b = await writeBench(['- [ ] 親 @2026-09-21']);
 
-        await b.writer.deleteLine(FILE, { line: 5, text: '- [ ] 親 @2026-09-21' });
+        await b.writer.deleteLine(FILE, { line: 5, text: '- [ ] 親 @2026-09-21', subtree: ['- [ ] 親 @2026-09-21'] });
 
         expect(b.filed).toEqual([]);
         expect(b.refused).toEqual([{ file: FILE, reason: { kind: 'changed' }, subject: '- [ ] 親 @2026-09-21' }]);

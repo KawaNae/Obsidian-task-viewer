@@ -343,9 +343,35 @@ describe('F2-counter: editor-driven writes', () => {
     it('deleteLine refuses when the disk line no longer reads what the editor showed', async () => {
         const bench = await writeBench(['- [ ] A', '- [ ] B']);
         bench.edit(['メモ', '- [ ] A', '- [ ] B']);
-        await bench.writer.deleteLine(FILE, { line: 1, text: '- [ ] B' });
+        await bench.writer.deleteLine(FILE, { line: 1, text: '- [ ] B', subtree: ['- [ ] B'] });
         expect(bench.lines()).toEqual(['メモ', '- [ ] A', '- [ ] B']);
         expect(bench.refused.map(r => r.reason.kind)).toEqual(['changed']);
+    });
+
+    // The editor's delete takes the subtree it showed, and only that (F5): a
+    // child the user has not seen is not taken with its parent.
+    const shown = ['- [ ] A', '\t- [ ] c', '- [ ] B'];
+    it('deleteLine refuses when a child was added under the line since the editor showed it', async () => {
+        const bench = await writeBench(shown);
+        bench.edit(['- [ ] A', '\t- [ ] c', '\t- [ ] 外で足した子', '- [ ] B']);
+        await bench.writer.deleteLine(FILE, { line: 0, text: '- [ ] A', subtree: shown.slice(0, 2) });
+        expect(bench.lines()).toEqual(['- [ ] A', '\t- [ ] c', '\t- [ ] 外で足した子', '- [ ] B']);
+        expect(bench.refused.map(r => r.reason.kind)).toEqual(['changed']);
+    });
+
+    it('deleteLine refuses when a child under the line was rewritten since the editor showed it', async () => {
+        const bench = await writeBench(shown);
+        bench.edit(['- [ ] A', '\t- [ ] c 書き換えた', '- [ ] B']);
+        await bench.writer.deleteLine(FILE, { line: 0, text: '- [ ] A', subtree: shown.slice(0, 2) });
+        expect(bench.lines()).toEqual(['- [ ] A', '\t- [ ] c 書き換えた', '- [ ] B']);
+        expect(bench.refused.map(r => r.reason.kind)).toEqual(['changed']);
+    });
+
+    it('deleteLine takes the line and the subtree the editor showed when the file still reads so', async () => {
+        const bench = await writeBench(shown);
+        await bench.writer.deleteLine(FILE, { line: 0, text: '- [ ] A', subtree: shown.slice(0, 2) });
+        expect(bench.lines()).toEqual(['- [ ] B']);
+        expect(bench.refused).toEqual([]);
     });
 
     // The pair (line, text) is all an editor write has. Over identical
@@ -356,7 +382,7 @@ describe('F2-counter: editor-driven writes', () => {
         const bench = await writeBench(['- [ ] A', '- [ ] A', '- [ ] A']);
         const ids = bench.tasks().map(t => t.id);
         // Editor showed three rows; the user deletes line 1 (the middle row).
-        await bench.writer.deleteLine(FILE, { line: 1, text: '- [ ] A' });
+        await bench.writer.deleteLine(FILE, { line: 1, text: '- [ ] A', subtree: ['- [ ] A'] });
         await bench.scan();
         expect(bench.tasks().map(t => t.id)).toEqual([ids[0], ids[2]]);
     });

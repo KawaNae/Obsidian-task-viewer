@@ -6,7 +6,7 @@ import { FrontmatterWriter } from './writers/FrontmatterWriter';
 import { TaskCloner, type InPlaceCopyLines } from './TaskCloner';
 import type { PropertyOp } from './PropertyUpdatePlanner';
 import { WriteObserver } from './WriteObserver';
-import type { EditorLine, WriteAt, WriteOrigin, WriteOutcome } from '../../utils/FileLines';
+import type { EditorLine, EditorSubtree, WriteAt, WriteOrigin, WriteOutcome } from '../../utils/FileLines';
 import type { PlannedTarget } from './TaskRefs';
 import type { TaskOp } from './TaskOps';
 
@@ -54,7 +54,7 @@ export class TaskRepository {
         return this.inlineWriter.insertLineAfterLine(filePath, at, newContent);
     }
 
-    async deleteLine(filePath: string, at: EditorLine): Promise<WriteOutcome> {
+    async deleteLine(filePath: string, at: EditorSubtree): Promise<WriteOutcome> {
         return this.inlineWriter.deleteLine(filePath, at);
     }
 

@@ -18,6 +18,7 @@ import { getTaskNotation } from '../services/filter/parserTaxonomy';
 import { t } from '../i18n';
 import { editorCm } from '../utils/editorCm';
 import { outlineFor } from './EditorOutline';
+import { subtreeAt } from '../services/persistence/RowBasis';
 
 const taskIndexChanged = StateEffect.define<void>();
 const settingsChanged = StateEffect.define<void>();
@@ -119,10 +120,14 @@ export function createTaskMenuExtension(
                 const lineText = view.state.doc.line(lineNumber + 1).text; // CM6 lines are 1-based
 
                 const at = { line: lineNumber, text: lineText };
+                // What a delete takes, as the editor shows it now: the line
+                // and its subtree. The write takes it only if the file still
+                // reads so.
+                const subtree = subtreeAt(outlineFor(view.state.doc), lineNumber);
                 const ops: CheckboxLineOps = {
                     updateLine: (content) => writeService.updateLine(filePath, at, content),
                     insertLineAfter: (content) => writeService.insertLineAfterLine(filePath, at, content),
-                    deleteLine: () => writeService.deleteLine(filePath, at),
+                    deleteLine: () => writeService.deleteLine(filePath, { ...at, subtree }),
                 };
 
                 checkboxBuilder.addFullMenu(menu, lineText, getSettings(), ops, filePath);

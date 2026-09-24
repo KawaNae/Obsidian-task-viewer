@@ -454,6 +454,17 @@ export type Located =
 export interface EditorLine {
     line: number;
     text: string;
+    /**
+     * The line and every line of its subtree as the editor showed them, for a
+     * write that takes them away (`EditorSubtree`). The write is made only if
+     * the file still reads them so, as a delete that names its row is (F5).
+     */
+    subtree?: readonly string[];
+}
+
+/** A line the editor pointed at, with the subtree it showed under it: what an editor's delete was planned from. */
+export interface EditorSubtree extends EditorLine {
+    subtree: readonly string[];
 }
 
 /**
@@ -833,8 +844,10 @@ export async function processLines(
         const answer = (target: NamedRow | EditorLine): number | RefusalReason => {
             if (!('ref' in target)) {
                 // The editor's line is its own coordinate, good only while
-                // the line still reads what the editor showed there.
-                return Outline.VERBATIM.holds(before[target.line], target.text) ? target.line : { kind: 'changed' };
+                // the line, and the subtree when the write takes it, still
+                // read what the editor showed there.
+                const shown: RowBasis = { text: target.text, ...(target.subtree ? { subtree: target.subtree } : {}) };
+                return target.line < before.length && readsAsPlanned(before, target.line, shown) ? target.line : { kind: 'changed' };
             }
             const located: Located = channel ? channel.locate(before, target.ref) : { kind: 'gone' };
             if (located.kind === 'outdated') return { kind: 'changed' };
