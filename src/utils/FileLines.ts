@@ -359,12 +359,10 @@ export interface TaskRef {
  * position. `ambiguous` when the name went to one of `count` rows no evidence
  * tells apart. `gone` when the name stands on no line of these.
  *
- * `outdated` when the match was made against a ledger older than a write of
- * ours no scan has read yet, and the line it paired does not read as that
- * write left the row — or the write could not say what it left. The pairing
- * rests on a text that has since moved, so there is no line to answer with
- * (`TaskScanner.againstLastWrite`). The user hears it as `changed`: the note
- * is not as the plugin last knew it.
+ * `outdated` when where the lines stand cannot be told: our newest write to
+ * the file could not say what it left, or the cap on what is kept dropped
+ * states the lines may be (`WriteClaims.reading`). The user hears it as
+ * `changed`: the note is not as the plugin last knew it.
  *
  * Whether the line reads as the write planned is not asked here. That is the
  * write's basis, checked once by `WriteSession.row`.
@@ -839,7 +837,7 @@ export class BrokenWrite extends Error {
  * whether the bytes reached disk. The file does: if it reads as the callback
  * left it, the write landed, and what it filed stands (null). Otherwise the
  * file never changed, so claims about it describe a state that never
- * existed; left in the log they would be matched against whatever the next
+ * existed; left in the chain of records they would be weighed against whatever the next
  * scan happens to read, and they are withdrawn.
  *
  * This is the one place that decides whether a write that filed a report
