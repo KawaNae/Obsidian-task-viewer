@@ -105,8 +105,10 @@ export class TaskScanner {
         const files = allFiles.filter(f => this.mayContainTasks(f));
         logInfo(`[scanVault] total=${allFiles.length} candidates=${files.length} skipped=${allFiles.length - files.length}`);
 
+        // Queued without a line each: the vault's scan says what it did
+        // above and below, and a line per file would bury the log.
         for (const file of files) {
-            await this.queueScan(file);
+            await this.queue(file, false);
         }
 
         this.store.notifyListenersStaggered();
@@ -150,6 +152,7 @@ export class TaskScanner {
      * スキャンをキューに追加
      */
     async queueScan(file: TFile): Promise<void> {
+        logDebug(`[queueScan] file=${file.path}`);
         await this.queue(file, false);
     }
 
@@ -166,11 +169,11 @@ export class TaskScanner {
      * window of time after a write.
      */
     async rescanUnlessRead(file: TFile): Promise<boolean> {
+        logDebug(`[queueScan] file=${file.path}`);
         return this.queue(file, true);
     }
 
     private queue(file: TFile, unlessRead: boolean): Promise<boolean> {
-        logDebug(`[queueScan] file=${file.path}`);
         // シンプルなキューメカニズム: ファイルパスごとにプロミスをチェーン
         const previousScan = this.scanQueue.get(file.path) || Promise.resolve();
 
@@ -198,7 +201,7 @@ export class TaskScanner {
     }
 
     /**
-     * ファイルをスキャンしてタスクを抽出（parse → identity → validate → detect → commit）
+     * ファイルをスキャンしてタスクを抽出（parse → identity → validate → commit）
      */
     private async scanFile(file: TFile, unlessRead: boolean): Promise<boolean> {
 

@@ -18,9 +18,6 @@ import en from '../../../src/i18n/locales/en.json';
 (globalThis as unknown as { window: unknown }).window = {
     setInterval: () => 1,
     clearInterval: () => { /* unused */ },
-    // EditorObserver listens on window; nothing here presses keys.
-    addEventListener: () => { /* unused */ },
-    removeEventListener: () => { /* unused */ },
 };
 
 const FILE = 'notes/a.md';
