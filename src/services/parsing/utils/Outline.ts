@@ -226,6 +226,8 @@ export interface OutlineFence {
     close: number | null;
     /** The index just past its last line, a blank one included: the lines `inCode` reads as its. */
     end: number;
+    /** The opening delimiter's run of backticks or tildes: what a closing line has to repeat. */
+    delimiter: string;
     /** The info string after the opening delimiter, trimmed. */
     info: string;
     /** The column the opening delimiter stands at. */
@@ -483,7 +485,10 @@ function readOutline(lines: readonly string[], start: number): OutlineReading {
         return started.rest !== '' && (ordered === null || Number(ordered[1]) === 1);
     };
     const openFence = (i: number, open: FenceDelimiter, column: number, rest: string) => {
-        const block: OutlineFence = { line: i, close: null, end: i + 1, info: open.info, column, from: lines[i].length - rest.length };
+        const block: OutlineFence = {
+            line: i, close: null, end: i + 1, info: open.info, column, from: lines[i].length - rest.length,
+            delimiter: open.char.repeat(open.length),
+        };
         fences.push(block);
         fence = { open, depth: stack.length, block };
         codes[i] = true;
