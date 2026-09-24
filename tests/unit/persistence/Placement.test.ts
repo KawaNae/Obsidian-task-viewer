@@ -128,7 +128,7 @@ describe('Placement.afterSubtree', () => {
     it('answers where the rule lands even inside a fence at the top that never closes', () => {
         // The fence at column 0 ends a and holds every line after it, b's
         // subtree and the end of the note included. A line put there reads
-        // as code, which the write's check refuses (`Outline.check`,
+        // as code, which the write's check refuses (`checkWrite`,
         // OutlineCheck.test.ts); where it lands is not refused here.
         const lines = ['- [ ] a', '```', 'x', '- [ ] b', ''];
         expect(Placement.afterSubtree(lines, 0).at).toBe(1);
@@ -252,5 +252,5 @@ describe('Placement.end', () => {
 
 // Whether a line put at a spot is in the body, and outside code, is not
 // asked here any more: it is read off the lines as written
-// (`Outline.check`, OutlineCheck.test.ts, and the shapes the old
+// (`checkWrite`, OutlineCheck.test.ts, and the shapes the old
 // `Placement.inBody` refused are there).

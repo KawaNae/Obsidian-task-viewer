@@ -407,7 +407,7 @@ export class InlineTaskWriter {
      * do not travel to the archive. Descendant tasks' flow lines are NOT
      * direct (structural-parent rule) and stay as templates. A line that
      * stood under one of them has lost its item: a task, command or property
-     * there is not written (`Outline.check`).
+     * there is not written (`checkWrite`).
      */
     private carriedWith(lines: readonly string[], currentLine: number, head: string, carried: boolean): PlacedLine[] {
         const parentIndent = Outline.indentOf(lines[currentLine]);

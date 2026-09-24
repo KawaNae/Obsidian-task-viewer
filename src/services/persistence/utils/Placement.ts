@@ -1,4 +1,5 @@
-import { Outline, type OutlineReading, type PlacedReading } from '../../parsing/utils/Outline';
+import { Outline, type OutlineReading } from '../../parsing/utils/Outline';
+import type { PlacedReading } from '../../parsing/utils/OutlineCheck';
 import { TaskLineClassifier } from '../../parsing/utils/TaskLineClassifier';
 import { FileOperations } from './FileOperations';
 
@@ -8,7 +9,7 @@ import { FileOperations } from './FileOperations';
  *
  * Position and indentation together are what a line means where it stands,
  * and the item it goes under is what the write's check holds its first line
- * to (`Outline.check`): a spot says where the line is meant to be, not only
+ * to (`checkWrite`): a spot says where the line is meant to be, not only
  * where it is spliced.
  */
 export interface Spot {
@@ -34,7 +35,7 @@ export interface PlacedLine extends PlacedReading {
  * subtree is the item's lines. Whether the lines put there read as meant — a
  * task, not code; under the item meant, not taking in the lines below — is
  * not answered here but by the reading of the lines as written
- * (`Outline.check`, in `processLines`). A line put past a fence in a list item
+ * (`checkWrite`, in `processLines`). A line put past a fence in a list item
  * that never closes goes on the fence when it is indented as the fence's
  * content, and a line put at the end of a note whose last fence never closes
  * goes in it; the check reads both, and the write is refused.
@@ -168,7 +169,7 @@ export class Placement {
     }
 }
 
-/** The lines a write puts in, each with how it is to read once written (`Outline.check`). */
+/** The lines a write puts in, each with how it is to read once written (`checkWrite`). */
 export const Block = {
     /**
      * Lines as they read by themselves: each of the kind it is in their own

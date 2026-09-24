@@ -1,8 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import { TaskCloner } from '../../../src/services/persistence/TaskCloner';
 import { draftOver, replayEdits } from '../../../src/utils/FileLines';
-import { Outline, type WrittenLine } from '../../../src/services/parsing/utils/Outline';
-import { ChildLineClassifier } from '../../../src/services/parsing/utils/ChildLineClassifier';
+import { Outline } from '../../../src/services/parsing/utils/Outline';
+import { checkWrite, type WrittenLine } from '../../../src/services/parsing/utils/OutlineCheck';
 import { FileOperations } from '../../../src/services/persistence/utils/FileOperations';
 import { Placement } from '../../../src/services/persistence/utils/Placement';
 import type { App } from 'obsidian';
@@ -47,14 +47,14 @@ function spliceAndReport(
     const { draft, reported, puts, placedBy } = draftOver(target);
     proto.putCopies.call({ fileOps }, draft, taskLine, parentLines, spot);
     // Every copy reads as the original's subtree does, and every other line
-    // as it did: the check the write is held to (`Outline.check`).
+    // as it did: the check the write is held to (`checkWrite`).
     const replayed = replayEdits(lines.length, reported, placedBy)!;
     const written = replayed.origin.map((from, k): WrittenLine => {
         const put = replayed.placed[k];
         if (put) return { kind: 'placed', put: put.id, offset: put.offset };
         return from === null ? { kind: 'loose' } : { kind: 'kept', from };
     });
-    const check = Outline.check(Outline.read(lines), Outline.read(target), written, puts, line => ChildLineClassifier.carriesMeaning(line));
+    const check = checkWrite(Outline.read(lines), Outline.read(target), written, puts);
     return { lines: target, reported, check };
 }
 

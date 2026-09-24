@@ -275,7 +275,7 @@ describe('processLines', () => {
 
     it('writes nothing when its report is not one a file could follow: the write is checked by it', async () => {
         // The report is what says which lines the write put in and which it
-        // kept (`Outline.check`). One no file could follow is a bug in the
+        // kept (`checkWrite`). One no file could follow is a bug in the
         // write, and nothing is written (P1; it used to land, the chain of
         // records marked broken).
         const h = harness('- [ ] a\n');

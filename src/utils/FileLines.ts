@@ -1,8 +1,8 @@
 import { TFile, type App } from 'obsidian';
 import { logError, logWarn } from '../log/log';
 import { LINE_BREAK, holdsLineBreak } from './LineBreak';
-import { Outline, type OutlineReading, type PutBlock, type WrittenLine } from '../services/parsing/utils/Outline';
-import { ChildLineClassifier } from '../services/parsing/utils/ChildLineClassifier';
+import { Outline, type OutlineReading } from '../services/parsing/utils/Outline';
+import { checkWrite, type PutBlock, type WrittenLine } from '../services/parsing/utils/OutlineCheck';
 import { ON_RECORD, readsAsPlanned, subtreeAt, type OnRecord, type RowBasis } from '../services/persistence/RowBasis';
 import type { PlacedLine, Spot } from '../services/persistence/utils/Placement';
 
@@ -82,7 +82,7 @@ export type LineEdit =
 /**
  * Lines a `LineDraft.put` put in: the first of them is line `offset` of the
  * write's `id`th block. Kept beside the report, by the edit that put them in,
- * for the write's own check (`Outline.check`): the report says what became
+ * for the write's own check (`checkWrite`): the report says what became
  * of the lines, and is what the index is told; which block a line came from
  * is the write's business.
  */
@@ -139,7 +139,7 @@ export interface LineDraft {
      * Put `block` in at `spot` (`Placement`): the one way a write adds a line
      * below the frontmatter. Each line says how it is to read once written,
      * and the write is made only if it does and every other line reads as it
-     * did (`Outline.check`, in `processLines`). A line spliced into the body
+     * did (`checkWrite`, in `processLines`). A line spliced into the body
      * without a block is a bug in the write.
      *
      * A line with `from` is the line now standing there (before this call),
@@ -452,7 +452,7 @@ export interface EditorLine {
  * longer reads what the caller saw there, a line it would put in would not
  * read as meant where it goes (`unplaceable`), writing it would change what
  * another line is or which item it stands in (`disturbs`; both are
- * `Outline.check`), or the write itself failed — it threw, or the file could
+ * `checkWrite`), or the write itself failed — it threw, or the file could
  * not be read or written.
  */
 export type RefusalReason =
@@ -663,7 +663,7 @@ export function replayEdits(
 }
 
 /**
- * Where each line of a write's result came from, as `Outline.check` asks it:
+ * Where each line of a write's result came from, as `checkWrite` asks it:
  * put in by a block, kept from the lines handed in, or spliced in loose. Null
  * when the report does not describe anything a file could do.
  */
@@ -733,7 +733,7 @@ function explains(
  * Every change `edit` makes goes through the {@link LineDraft} it is handed,
  * which reports it, and that report is what lets the next scan know which
  * line is which. It is also what the write is checked by: the lines it put
- * in have to read as put, and every other line as it did (`Outline.check`);
+ * in have to read as put, and every other line as it did (`checkWrite`);
  * else nothing is written, and the write is refused as `unplaceable` or
  * `disturbs`. A report no file could follow is a bug in the write and is
  * not written either (see `BrokenWrite`). A report that follows but does not
@@ -888,7 +888,7 @@ export async function processLines(
 
         // Every write is held to what it says it did, the same way: the
         // lines it put in read as put, and every other line as it did
-        // (`Outline.check`). A write that changed nothing is not asked.
+        // (`checkWrite`). A write that changed nothing is not asked.
         let readings: { read: OutlineReading; left: OutlineReading } | undefined;
         if (reported.length > 0) {
             const written = writtenLines(before.length, reported, placedBy);
@@ -899,7 +899,7 @@ export async function processLines(
             // reading, once the write lands; read here once, for the check
             // and for the rows the write leaves.
             readings = { read: Outline.read(before), left: Outline.read(next) };
-            const check = Outline.check(readings.read, readings.left, written, puts, line => ChildLineClassifier.carriesMeaning(line));
+            const check = checkWrite(readings.read, readings.left, written, puts);
             if (check === 'loose') return callerBug('a line was spliced into the body without a place (`LineDraft.put`)', { kind: 'failed' });
             if (check !== 'sound') {
                 // What the write was about: its row, or the first item it put in.

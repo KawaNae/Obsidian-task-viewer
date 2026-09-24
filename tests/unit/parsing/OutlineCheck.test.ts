@@ -1,11 +1,11 @@
 import { describe, it, expect } from 'vitest';
-import { Outline, type WrittenLine, type WriteCheck } from '../../../src/services/parsing/utils/Outline';
-import { ChildLineClassifier } from '../../../src/services/parsing/utils/ChildLineClassifier';
+import { Outline } from '../../../src/services/parsing/utils/Outline';
+import { checkWrite, type WrittenLine, type WriteCheck } from '../../../src/services/parsing/utils/OutlineCheck';
 import { draftOver, replayEdits, type LineDraft } from '../../../src/utils/FileLines';
 import { Block, Placement, type Spot } from '../../../src/services/persistence/utils/Placement';
 
 /**
- * The one check every write is held to (`Outline.check`, run by
+ * The one check every write is held to (`checkWrite`, run by
  * `processLines`), rule by rule: a line kept keeps its kind and, for an item
  * with a meaning, the items above it; a line put in reads as its block says;
  * an item put in takes in no line past its block; a line spliced into the
@@ -24,7 +24,7 @@ function checked(lines: string[], edit: (draft: LineDraft) => void): WriteCheck 
         if (put) return { kind: 'placed', put: put.id, offset: put.offset };
         return from === null ? { kind: 'loose' } : { kind: 'kept', from };
     });
-    return Outline.check(Outline.read(before), Outline.read(after), written, puts, line => ChildLineClassifier.carriesMeaning(line));
+    return checkWrite(Outline.read(before), Outline.read(after), written, puts);
 }
 
 /** One line put at `spot`, to read as it does by itself. */
