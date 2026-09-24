@@ -1,0 +1,274 @@
+import { describe, it, expect, afterEach, beforeEach } from 'vitest';
+import { Notice } from 'obsidian';
+import { openVault, type VaultSession } from '../helpers/vaultSession';
+import { t } from '../../../src/i18n';
+
+/**
+ * Every write that adds lines, one row of the P1 table each
+ * (`stages\p1-placement\design.md`): where the line goes (`Placement`), and
+ * the check the write is held to (`Outline.check`) — the line put in is a
+ * task under the item meant, outside code, and every task already there
+ * keeps its parent. Or nothing is written, and the user hears why.
+ *
+ * Each note is read back by the index. `parents` answers every task's
+ * parent by content, so a write that gave an existing task another parent,
+ * or made one no task, shows as a difference from the parents before plus
+ * the one line added.
+ */
+
+const FILE = 'note.md';
+
+let live: VaultSession | undefined;
+
+beforeEach(() => {
+    Notice.messages.length = 0;
+});
+
+afterEach(() => {
+    live?.dispose();
+    live = undefined;
+});
+
+async function open(lines: string[]): Promise<{ contents: Map<string, string>; session: VaultSession }> {
+    const opened = await openVault(lines);
+    live = opened.session;
+    return opened;
+}
+
+function only(session: VaultSession, content: string) {
+    const found = session.index.getTasks().filter(task => task.file === FILE && task.content === content);
+    expect(found, content).toHaveLength(1);
+    return found[0];
+}
+
+/** Each task's content, and its parent's (null at the top), in file order. */
+function parents(session: VaultSession): Array<[string, string | null]> {
+    const tasks = session.index.getTasks().filter(task => task.file === FILE).sort((a, b) => a.line - b.line);
+    const byId = new Map(tasks.map(task => [task.id, task]));
+    return tasks.map(task => [task.content, task.parentId ? byId.get(task.parentId)?.content ?? '?' : null]);
+}
+
+function lines(contents: Map<string, string>): string[] {
+    return contents.get(FILE)!.split('\n');
+}
+
+describe('the editor\'s duplicate (insertLineAfterLine, afterSubtree)', () => {
+    it('goes past the row\'s subtree, so the row keeps its children (counterexample 5)', async () => {
+        const { contents, session } = await open(['# n', '- [ ] P', '\t- [ ] T', '      - [ ] c', '- [ ] U', '']);
+        expect(parents(session)).toEqual([['P', null], ['T', 'P'], ['c', 'T'], ['U', null]]);
+
+        expect(await session.index.insertLineAfterLine(FILE, { line: 2, text: '\t- [ ] T' }, '\t- [ ] T')).toBe(true);
+        await session.settle(FILE);
+
+        expect(lines(contents)).toEqual(['# n', '- [ ] P', '\t- [ ] T', '      - [ ] c', '\t- [ ] T', '- [ ] U', '']);
+        expect(parents(session)).toEqual([['P', null], ['T', 'P'], ['c', 'T'], ['T', 'P'], ['U', null]]);
+        const [original] = session.index.getTasks().filter(task => task.content === 'T').sort((a, b) => a.line - b.line);
+        expect(only(session, 'c').parentId).toBe(original.id);
+    });
+});
+
+describe('the day-shifted duplicate (duplicateInlineTask, before)', () => {
+    it('goes above the row, a copy of its subtree, and the row keeps its children', async () => {
+        const { contents, session } = await open(['# n', '- [ ] P', '    - [ ] T @2026-09-21', '\t    - [ ] c', '- [ ] U', '']);
+        expect(parents(session)).toEqual([['P', null], ['T', 'P'], ['c', 'T'], ['U', null]]);
+
+        expect(await session.index.duplicateTask(only(session, 'T').id, { dayOffset: 1 })).toBe(true);
+        await session.settle(FILE);
+
+        expect(lines(contents)).toEqual([
+            '# n', '- [ ] P', '    - [ ] T @2026-09-22', '\t    - [ ] c', '    - [ ] T @2026-09-21', '\t    - [ ] c', '- [ ] U', '',
+        ]);
+        expect(parents(session)).toEqual([['P', null], ['T', 'P'], ['c', 'T'], ['T', 'P'], ['c', 'T'], ['U', null]]);
+    });
+});
+
+describe('the in-place duplicate (duplicateInlineTaskInPlace, afterSubtree)', () => {
+    it('goes past the subtree, before the sibling that ends the row\'s fence', async () => {
+        const { contents, session } = await open(['# n', '- [ ] T', '  ```', '  code', '- [ ] U', '']);
+
+        expect(await session.index.duplicateTask(only(session, 'T').id)).toBe(true);
+        await session.settle(FILE);
+
+        expect(lines(contents)).toEqual(['# n', '- [ ] T', '  ```', '  code', '- [ ] T', '  ```', '  code', '- [ ] U', '']);
+        expect(parents(session)).toEqual([['T', null], ['T', null], ['U', null]]);
+    });
+});
+
+describe('a task created under a heading (insertUnderHeading)', () => {
+    it('goes past the paragraph under the heading, which would otherwise go on the new task', async () => {
+        const { contents, session } = await open(['## H', 'some words', '- [ ] A', '']);
+
+        expect(await session.index.createTask(FILE, '- [ ] N', 'H')).not.toBeNull();
+        await session.settle(FILE);
+
+        expect(lines(contents)).toEqual(['## H', 'some words', '- [ ] N', '- [ ] A', '']);
+        expect(parents(session)).toEqual([['N', null], ['A', null]]);
+    });
+
+    it('makes the heading at the end of a note that is only frontmatter, and of an empty note', async () => {
+        for (const note of [['---', 'a: 1', '---', ''], ['']]) {
+            live?.dispose();
+            const { contents, session } = await open(note);
+
+            expect(await session.index.createTask(FILE, '- [ ] N', 'H')).not.toBeNull();
+            await session.settle(FILE);
+
+            expect(lines(contents).slice(-3)).toEqual(['## H', '- [ ] N', '']);
+            expect(parents(session)).toEqual([['N', null]]);
+        }
+    });
+});
+
+describe('a property line (ChildPropertyLineEditor.applyOps)', () => {
+    it('goes past the task\'s text that goes on, as its first child', async () => {
+        const { contents, session } = await open(['# n', '- [ ] T', 'lazy words', '- [ ] U', '']);
+
+        expect(await session.index.updateTask(only(session, 'T').id, { properties: { memo: { value: 'x', type: 'string' } } } as never)).toBe(true);
+        await session.settle(FILE);
+
+        expect(lines(contents)).toEqual(['# n', '- [ ] T', 'lazy words', '\t- memo:: x', '- [ ] U', '']);
+        expect(only(session, 'T').properties?.memo?.value).toBe('x');
+    });
+
+    it('goes past the last property\'s subtree, as its sibling, tab and spaces mixed', async () => {
+        const { contents, session } = await open(['# n', '- [ ] P', '    - [ ] T', '\t    - a:: 1', '\t      - note', '- [ ] U', '']);
+
+        expect(await session.index.updateTask(only(session, 'T').id, { properties: { a: { value: '1', type: 'number' }, b: { value: '2', type: 'number' } } } as never)).toBe(true);
+        await session.settle(FILE);
+
+        expect(lines(contents)).toEqual(['# n', '- [ ] P', '    - [ ] T', '\t    - a:: 1', '\t      - note', '\t    - b:: 2', '- [ ] U', '']);
+        expect(only(session, 'T').properties?.b?.value).toBe('2');
+    });
+});
+
+describe('the next instance (insert-instance, groupHead)', () => {
+    it('writes the command a child of the line written, so the series goes on (the `==>` half of H2)', async () => {
+        const { contents, session } = await open(['# n', '1.    [ ] 対象 @2026-09-21', '      - ==> every mon', '']);
+
+        expect(await session.index.updateTask(only(session, '対象').id, { statusChar: 'x' })).toBe(true);
+        await session.flowSettled(FILE);
+
+        expect(lines(contents)).toEqual(['# n', '- [ ] 対象 @2026-09-28', '    - ==> every mon', '1.    [x] 対象 @2026-09-21', '']);
+        const next = session.index.getTasks().find(task => task.line === 1)!;
+        expect(next.flow?.program).toBeTruthy();
+        expect(Notice.messages).toEqual([]);
+    });
+
+    it('goes under the parent past its text that goes on', async () => {
+        const { contents, session } = await open(['# n', '- [ ] P', '  words', '  - [ ] 対象 @2026-09-21 ==> every mon', '']);
+
+        expect(await session.index.updateTask(only(session, '対象').id, { statusChar: 'x' })).toBe(true);
+        await session.flowSettled(FILE);
+
+        expect(lines(contents)).toEqual(['# n', '- [ ] P', '  words', '  - [ ] 対象 @2026-09-28 ==> every mon', '  - [x] 対象 @2026-09-21', '']);
+        expect(parents(session)).toEqual([['P', null], ['対象', 'P'], ['対象', 'P']]);
+    });
+});
+
+describe('a move within the note (move-to-end, end)', () => {
+    it('writes nothing when taking the task away would put a task below under another', async () => {
+        const { contents, session } = await open(['# n', '- [x] a', ' - [ ] X @2026-09-21 ==> move([[note]])', '  1. [ ] u', '']);
+        // ` - [ ] X` stands at the top; `  1. [ ] u` is no child of it (its
+        // content is at 3). Taken away, X leaves u under a.
+        expect(parents(session)).toEqual([['a', null], ['X', null], ['u', null]]);
+        const before = contents.get(FILE);
+
+        await session.index.updateTask(only(session, 'X').id, { statusChar: 'x' });
+        await session.flowSettled(FILE);
+
+        // The completion is written; the fire's write is not.
+        expect(contents.get(FILE)).toBe(before!.replace(' - [ ] X', ' - [x] X'));
+        expect(Notice.messages).toEqual([t('notice.writeDisturbs', { subject: 'X' })]);
+    });
+});
+
+describe('a last child (insertLineAfterTask, lastChild)', () => {
+    it('goes past the subtree at the children\'s indentation', async () => {
+        const { contents, session } = await open(['# n', '- [ ] T', '  - [ ] a', '  lazy', '- [ ] U', '']);
+
+        expect(await session.index.appendChildTask(only(session, 'T').id, '- [ ] c')).toBe(true);
+        await session.settle(FILE);
+
+        expect(lines(contents)).toEqual(['# n', '- [ ] T', '  - [ ] a', '  lazy', '  - [ ] c', '- [ ] U', '']);
+        expect(parents(session)).toEqual([['T', null], ['a', 'T'], ['c', 'T'], ['U', null]]);
+    });
+});
+
+describe('a sibling (insertSiblingAfterTask, afterSubtree and afterCompletedRun)', () => {
+    it('goes past the completed run, at the row\'s indentation', async () => {
+        const { contents, session } = await open(['# n', '- [ ] P', '\t- [ ] T', '    - [x] r1', '\t\t- note', '- [ ] U', '']);
+
+        expect(await session.index.insertSiblingAfterTask(only(session, 'T').id, '- [x] r2', { afterCompletedRun: true })).toBe(true);
+        await session.settle(FILE);
+
+        expect(lines(contents)).toEqual(['# n', '- [ ] P', '\t- [ ] T', '    - [x] r1', '\t\t- note', '\t- [x] r2', '- [ ] U', '']);
+        expect(parents(session)).toEqual([['P', null], ['T', 'P'], ['r1', 'P'], ['r2', 'P'], ['U', null]]);
+    });
+
+    it('goes above a fence at the top that never closes, which ends the row', async () => {
+        const { contents, session } = await open(['# n', '- [ ] T', '```', 'x', '']);
+
+        expect(await session.index.insertSiblingAfterTask(only(session, 'T').id, '- [x] rec')).toBe(true);
+        await session.settle(FILE);
+
+        // T's subtree is its own line (the fence at column 0 ends T): the
+        // sibling goes above the fence, a task.
+        expect(lines(contents)).toEqual(['# n', '- [ ] T', '- [x] rec', '```', 'x', '']);
+        expect(parents(session)).toEqual([['T', null], ['rec', null]]);
+    });
+});
+
+describe('a first child (insertLineAsFirstChild, firstChild)', () => {
+    it('goes below the task, before its children, in an indented fence\'s item', async () => {
+        const { contents, session } = await open(['# n', '- [ ] P', '  - [ ] T', '    ```', '    x', '    ```', '- [ ] U', '']);
+
+        expect(await session.index.insertChildTask(only(session, 'T').id, '- [ ] c')).toBe(true);
+        await session.settle(FILE);
+
+        // No child item to copy: T's indentation and the file's unit (four
+        // spaces, its first indented line's).
+        expect(lines(contents)).toEqual(['# n', '- [ ] P', '  - [ ] T', '      - [ ] c', '    ```', '    x', '    ```', '- [ ] U', '']);
+        expect(parents(session)).toEqual([['P', null], ['T', 'P'], ['c', 'T'], ['U', null]]);
+    });
+});
+
+describe('an append (appendTaskToFile, end)', () => {
+    it('goes past the frontmatter of a note that is only frontmatter, and into an empty note', async () => {
+        for (const note of [['---', 'a: 1', '---', ''], ['']]) {
+            live?.dispose();
+            const { contents, session } = await open(note);
+
+            expect(await session.index.createTask(FILE, '- [ ] N')).not.toBeNull();
+            await session.settle(FILE);
+
+            expect(lines(contents).slice(-2)).toEqual(['- [ ] N', '']);
+            expect(parents(session)).toEqual([['N', null]]);
+        }
+    });
+
+    it('writes nothing into a fence at the top that never closes, and says why', async () => {
+        const { contents, session } = await open(['- [ ] A', '```', 'code', '']);
+        const before = contents.get(FILE);
+
+        expect(await session.index.createTask(FILE, '- [ ] N')).toBeNull();
+        await session.settle(FILE);
+
+        expect(contents.get(FILE)).toBe(before);
+        expect(Notice.messages).toEqual([t('notice.writeTargetUnplaceable', { subject: '- [ ] N' })]);
+    });
+});
+
+describe('a delete (deleteTask), held to the same check', () => {
+    it('writes nothing when a task below would stand under another', async () => {
+        // The P1 probe's shape B: without ` - [ ] t`, `  1. [ ] u` is a's child.
+        const { contents, session } = await open(['# n', '- [x] a', ' - [ ] t', '  1. [ ] u', '']);
+        expect(parents(session)).toEqual([['a', null], ['t', null], ['u', null]]);
+        const before = contents.get(FILE);
+
+        await session.index.deleteTask(only(session, 't').id);
+        await session.settle(FILE);
+
+        expect(contents.get(FILE)).toBe(before);
+        expect(Notice.messages).toEqual([t('notice.writeDisturbs', { subject: 't' })]);
+    });
+});
