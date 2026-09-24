@@ -1,7 +1,7 @@
 import { collectFlowLineIndicesInFile, formatFlowLine } from '../parsing/utils/FlowLineScanner';
 import { FileOperations } from './utils/FileOperations';
 import { Outline } from '../parsing/utils/Outline';
-import { Block, type PlacedLine, type Spot } from './utils/Placement';
+import { Block, type PlacedLine } from './utils/Placement';
 
 /**
  * One generated child line, as the block described it.
@@ -47,7 +47,8 @@ export function flowInstanceHead(insert: FlowInstanceInsert): string {
  * to read once written (`checkWrite`), and touches nothing. The instance
  * is a sibling of the row that fired: its first line stands under the spot's
  * parent, its `==>` lines under it, a generated child under the line one
- * depth up.
+ * depth up. It is written where the row stands, at the row's indentation;
+ * the put carries it to the spot's (`Block.at`).
  * Both the plain insert and the insert-and-remove of a deletion fire render
  * through here, so the two paths cannot drift into writing different lines for
  * the same effect — which is the whole reason this is not a method on the
@@ -62,11 +63,11 @@ export function renderFlowInstance(
     lines: readonly string[],
     currentLine: number,
     insert: FlowInstanceInsert,
-    spot: Spot,
 ): PlacedLine[] {
+    const indent = Outline.indentOf(lines[currentLine]);
     return insert.kind === 'recurrence'
-        ? renderRecurrence(lines, currentLine, spot.indent, insert.content, insert.flowLines)
-        : renderGenerated(lines, currentLine, spot.indent, insert.parentLine, insert.flowLines, insert.children);
+        ? renderRecurrence(lines, currentLine, indent, insert.content, insert.flowLines)
+        : renderGenerated(lines, currentLine, indent, insert.parentLine, insert.flowLines, insert.children);
 }
 
 /**
@@ -86,7 +87,6 @@ function renderRecurrence(
     content: string,
     flowLines: string[],
 ): PlacedLine[] {
-    // At the indentation of the sibling it goes above (`Placement.groupHead`).
     const newParentLine = indent + Outline.dedent(content);
 
     const flowAbs = new Set(collectFlowLineIndicesInFile(lines, currentLine));
@@ -102,8 +102,7 @@ function renderRecurrence(
  * The next instance as a generation block wrote it.
  *
  * Indentation is resolved from the file, not from the caller. The parent is a
- * sibling of the task that fired, at the indentation of the sibling it goes
- * above (`Placement.groupHead`). Each
+ * sibling of the task that fired, written at its indentation. Each
  * child is a child of the line above it one `depth` up (the parent for a
  * depth of 1), indented as a child of the fired task would be under that line
  * (`FileOperations.resolveChildIndent`) — so a subtree keeps one spelling, and

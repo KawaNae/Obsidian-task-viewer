@@ -113,7 +113,7 @@ describe('renderFlowInstance: the lines a next instance is written as', () => {
         // six spaces is its child. The next instance is written `- [ ] T`
         // (content at 2): six spaces under it are indented code.
         const lines = ['10.   [ ] T ==> next', '      - ==> every day', ''];
-        const rendered = texts(renderFlowInstance(fileOps, lines, 0, { kind: 'recurrence', content: '- [ ] T', flowLines: ['every day'] }, spotOf(lines, 0)));
+        const rendered = texts(renderFlowInstance(fileOps, lines, 0, { kind: 'recurrence', content: '- [ ] T', flowLines: ['every day'] }));
         // The file's unit is four spaces (its first indented line).
         expect(rendered).toEqual(['- [ ] T', '    - ==> every day']);
         expect(parentOf(rendered, 1)).toBe(0);
@@ -121,7 +121,7 @@ describe('renderFlowInstance: the lines a next instance is written as', () => {
 
     it('writes the same bytes as the row\'s children where they fit the line written', () => {
         const lines = ['- [ ] T', '  - ==> every day', ''];
-        const rendered = texts(renderFlowInstance(fileOps, lines, 0, { kind: 'recurrence', content: '- [ ] T', flowLines: ['every day'] }, spotOf(lines, 0)));
+        const rendered = texts(renderFlowInstance(fileOps, lines, 0, { kind: 'recurrence', content: '- [ ] T', flowLines: ['every day'] }));
         expect(rendered).toEqual(['- [ ] T', '  - ==> every day']);
     });
 
@@ -135,7 +135,7 @@ describe('renderFlowInstance: the lines a next instance is written as', () => {
             parentLine: '- [ ] G',
             flowLines: ['every day'],
             children: [{ depth: 1, body: '- [ ] c1' }, { depth: 2, body: '- [ ] c2' }, { depth: 1, body: '- [ ] c3' }],
-        }, spotOf(lines, 1)));
+        }));
         expect(rendered[0]).toBe('\t- [ ] G');
         expect([1, 2, 3, 4].map(line => parentOf(rendered, line))).toEqual([0, 0, 2, 0]);
     });
@@ -148,7 +148,7 @@ describe('renderFlowInstance: the lines a next instance is written as', () => {
             parentLine: '- [ ] G',
             flowLines: ['every day'],
             children: [{ depth: 1, body: '- [ ] c1' }, { depth: 2, body: '- [ ] c2' }],
-        }, spotOf(lines, 0));
+        });
         expect(texts(rendered)).toEqual(['- [ ] G', '  - ==> every day', '  - [ ] c1', '    - [ ] c2']);
     });
 
@@ -159,7 +159,7 @@ describe('renderFlowInstance: the lines a next instance is written as', () => {
             parentLine: '- [ ] G',
             flowLines: ['every day'],
             children: [{ depth: 1, body: '- [ ] c1' }, { depth: 2, body: '- [ ] c2' }, { depth: 1, body: 'text' }],
-        }, spotOf(lines, 1));
+        });
         expect(texts(rendered)).toEqual(['\t- [ ] G', '\t\t- ==> every day', '\t\t- [ ] c1', '\t\t\t- [ ] c2', '\t\ttext']);
         // Each says how it is to read: the head under the spot's parent, the
         // command and the first child under the head, the second under the
@@ -170,10 +170,6 @@ describe('renderFlowInstance: the lines a next instance is written as', () => {
     });
 });
 
-/** The spot the next instance of `row` goes to: its own indentation, as the row is its group's head here. */
-function spotOf(lines: string[], row: number) {
-    return { at: row, parent: null, indent: Outline.indentOf(lines[row]) };
-}
 
 function texts(lines: readonly { text: string }[]): string[] {
     return lines.map(line => line.text);
