@@ -83,6 +83,11 @@ describe('Outline.shiftIndent', () => {
         expect(Outline.shiftIndent('  lazy', '\t', '  ')).toBe('  lazy');
     });
 
+    it('leaves a line carried to where it stands as it is written, a lazy one included', () => {
+        expect(Outline.shiftIndent('lazy', '\t', '\t')).toBe('lazy');
+        expect(Outline.shiftIndent('  \t- c', '  ', '  ')).toBe('  \t- c');
+    });
+
     it('keeps a child a child, whatever the old and new parents are indented with', () => {
         // At most five columns, where a line under the root `- r` opens an item.
         const indents = ['', '\t', '    ', '  ', '  \t', '\t '];
