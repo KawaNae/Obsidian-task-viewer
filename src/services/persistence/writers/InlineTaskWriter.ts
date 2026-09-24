@@ -6,7 +6,7 @@ import { FileOperations } from '../utils/FileOperations';
 import { ChildPropertyLineEditor } from '../utils/ChildPropertyLineEditor';
 import { Block, Placement, type PlacedLine } from '../utils/Placement';
 import type { PropertyOp } from '../PropertyUpdatePlanner';
-import { renderFlowInstance } from '../FlowInstanceLines';
+import { flowInstanceHead, renderFlowInstance } from '../FlowInstanceLines';
 import {
     createFile, fileGone, processLines, splitLines,
     type EditorLine, type LineDraft, type Refusal, type WriteAt, type WriteOrigin, type WriteOutcome,
@@ -118,8 +118,7 @@ export class InlineTaskWriter {
         return processLines(this.app, file, this.writes?.for(filePath, 'user'), (draft, _eol, { row }) => {
             const lineNumber = row(at);
             if (lineNumber === null) return false;
-            const spot = Placement.afterSubtree(draft.lines, lineNumber);
-            draft.put(spot, Block.line(spot.indent + Outline.dedent(newContent)));
+            draft.put(Placement.afterSubtree(draft.lines, lineNumber, newContent), Block.line(newContent));
             return true;
         });
     }
@@ -231,7 +230,7 @@ export class InlineTaskWriter {
         const lines = draft.lines;
         switch (op.kind) {
             case 'insert-instance': {
-                const spot = Placement.groupHead(lines, line);
+                const spot = Placement.groupHead(lines, line, flowInstanceHead(op.insert));
                 draft.put(spot, renderFlowInstance(this.fileOps, lines, line, op.insert, spot));
                 return;
             }
@@ -283,8 +282,7 @@ export class InlineTaskWriter {
             const currentLine = row(recordedOn(task));
             if (currentLine === null) return false;
 
-            const spot = Placement.lastChild(draft.lines, currentLine);
-            draft.put(spot, Block.line(spot.indent + Outline.dedent(lineBody)));
+            draft.put(Placement.lastChild(draft.lines, currentLine, lineBody), Block.line(lineBody));
 
             return true;
         });
@@ -321,9 +319,9 @@ export class InlineTaskWriter {
             if (currentLine === null) return false;
 
             const spot = opts.afterCompletedRun
-                ? Placement.afterCompletedRun(lines, currentLine)
-                : Placement.afterSubtree(lines, currentLine);
-            draft.put(spot, Block.line(spot.indent + Outline.dedent(lineBody)));
+                ? Placement.afterCompletedRun(lines, currentLine, lineBody)
+                : Placement.afterSubtree(lines, currentLine, lineBody);
+            draft.put(spot, Block.line(lineBody));
 
             return true;
         });
@@ -345,8 +343,7 @@ export class InlineTaskWriter {
             if (currentLine === null) return false;
 
             // Directly below the task line, past its own text that goes on.
-            const spot = Placement.firstChild(draft.lines, currentLine);
-            draft.put(spot, Block.line(spot.indent + Outline.dedent(lineBody)));
+            draft.put(Placement.firstChild(draft.lines, currentLine, lineBody), Block.line(lineBody));
 
             return true;
         });
@@ -397,9 +394,9 @@ export class InlineTaskWriter {
     /**
      * The row, written as `head`, and the lines of its subtree that go with
      * it on a move: to read, once written, as they read under the row
-     * (`Block.of`). The row is written at the top of where it goes (`format`
-     * writes no indentation), and each line of its subtree as far past it as
-     * it stood (`Outline.shiftIndent`), its block ID taken off. Shared by the
+     * (`Block.of`), written as they stand, the row's own indentation before
+     * `head` (`format` writes none), each line of its subtree its block ID
+     * taken off; the put writes them at the spot (`LineDraft.put`). Shared by the
      * move within one file, which carries the lines (`carried`), and the move
      * to another, which writes them anew.
      *
@@ -410,15 +407,14 @@ export class InlineTaskWriter {
      * there is not written (`checkWrite`).
      */
     private carriedWith(lines: readonly string[], currentLine: number, head: string, carried: boolean): PlacedLine[] {
-        const parentIndent = Outline.indentOf(lines[currentLine]);
         const outline = Outline.read(lines);
         const flowAbs = new Set(collectFlowLineIndices(outline, currentLine));
         const rows = [currentLine];
         for (let row = currentLine + 1; row < outline.subtreeEnd(currentLine); row++) {
             if (!flowAbs.has(row)) rows.push(row);
         }
-        const texts = [head, ...this.fileOps.stripBlockIds(rows.slice(1).map(row => lines[row]))
-            .map(text => Outline.shiftIndent(text, parentIndent, ''))];
+        const texts = [Outline.indentOf(lines[currentLine]) + Outline.dedent(head),
+            ...this.fileOps.stripBlockIds(rows.slice(1).map(row => lines[row]))];
         return Block.of(outline, rows, texts, carried);
     }
 

@@ -35,6 +35,11 @@ export type FlowInstanceInsert =
         children: GeneratedChild[];
     };
 
+/** The first line of the next instance, the one it is placed by (`Placement.groupHead`). */
+export function flowInstanceHead(insert: FlowInstanceInsert): string {
+    return insert.kind === 'recurrence' ? insert.content : insert.parentLine;
+}
+
 /**
  * Render the next instance against the file it is going into.
  *
