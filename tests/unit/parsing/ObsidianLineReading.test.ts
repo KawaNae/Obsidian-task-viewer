@@ -155,13 +155,15 @@ describe('line breaks, as Obsidian ends a line', () => {
         expect(ChildLineClassifier.classify('\t-\t[ ] k:: v', 0).propertyKey).toBeNull();
     });
 
-    it('reads an ordered marker of one to nine digits, as the outline reads an item (CommonMark)', () => {
+    it('reads an ordered marker of any number of digits, as the outline reads an item (Obsidian)', () => {
         // One definition of the marker for the task line and the outline's
-        // items; the ten-digit one was a task to the one and no item to the other.
-        expect(TaskLineClassifier.isTaskLine('123456789. [ ] x')).toBe(true);
-        expect(TaskLineClassifier.isTaskLine('1234567890. [ ] x')).toBe(false);
-        expect(Outline.read(['123456789. [ ] x']).item(0)).not.toBeNull();
-        expect(Outline.read(['1234567890. [ ] x']).item(0)).toBeNull();
+        // items. Obsidian 1.12.4 reads the ten-digit one as a task, in
+        // `listItems` and the reading view, past CommonMark's nine (the L2 gate).
+        for (const line of ['123456789. [ ] x', '1234567890. [ ] x', '12345678901234567890) [ ] x']) {
+            expect(TaskLineClassifier.isTaskLine(line), line).toBe(true);
+            expect(Outline.read([line]).item(0), line).not.toBeNull();
+        }
+        expect(Outline.read(['1234567890. [ ] x']).item(0)!.contentColumn).toBe(12);
     });
 
     it('reads a task with no content and a block id as a task', () => {
