@@ -4,6 +4,8 @@ import {
     type LocatedDiagnostic,
     spreadOverLines,
 } from '../../../src/services/parsing/gen/GenBlockCollector';
+import { Outline } from '../../../src/services/parsing/utils/Outline';
+import { outlineDiagnostics } from '../../../src/services/parsing/utils/OutlineDiagnostics';
 
 const codes = (lines: string[]) =>
     collectGenBlocks(lines).diagnostics.map(d => [d.code, d.line]);
@@ -86,9 +88,13 @@ describe('collectGenBlocks', () => {
             expect(blocks.get('手順')!.body).toEqual(['- [ ] 先']);
         });
 
-        it('reports a block that is never closed', () => {
-            expect(codes(['prose', '```tv-gen 手順', '- [ ] a'])).toEqual([
-                ['gen.unterminated-block', 1],
+        it('does not collect a block that is never closed, and leaves saying so to the outline', () => {
+            const lines = ['prose', '```tv-gen 手順', '- [ ] a'];
+            const { blocks, diagnostics } = collectGenBlocks(lines);
+            expect(blocks.size).toBe(0);
+            expect(diagnostics).toEqual([]);
+            expect(outlineDiagnostics(Outline.read(lines)).map(d => [d.code, d.line])).toEqual([
+                ['outline.unclosed-fence', 1],
             ]);
         });
 
