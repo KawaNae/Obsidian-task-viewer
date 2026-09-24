@@ -1,6 +1,7 @@
 import { collectFlowLineIndicesInFile, formatFlowLine } from '../parsing/utils/FlowLineScanner';
 import { FileOperations } from './utils/FileOperations';
 import { Outline } from '../parsing/utils/Outline';
+import { Block, type PlacedLine } from './utils/Placement';
 
 /**
  * One generated child line, as the block described it.
@@ -37,7 +38,11 @@ export type FlowInstanceInsert =
 /**
  * Render the next instance against the file it is going into.
  *
- * Pure, and reading only: it answers the lines to write and touches nothing.
+ * Pure, and reading only: it answers the lines to write, each with how it is
+ * to read once written (`Outline.check`), and touches nothing. The instance
+ * is a sibling of the row that fired: its first line stands under the spot's
+ * parent, its `==>` lines under it, a generated child under the line one
+ * depth up.
  * Both the plain insert and the insert-and-remove of a deletion fire render
  * through here, so the two paths cannot drift into writing different lines for
  * the same effect — which is the whole reason this is not a method on the
@@ -52,7 +57,7 @@ export function renderFlowInstance(
     lines: readonly string[],
     currentLine: number,
     insert: FlowInstanceInsert,
-): string[] {
+): PlacedLine[] {
     return insert.kind === 'recurrence'
         ? renderRecurrence(lines, currentLine, insert.content, insert.flowLines)
         : renderGenerated(lines, currentLine, insert.parentLine, insert.flowLines, insert.children);
@@ -74,7 +79,7 @@ function renderRecurrence(
     currentLine: number,
     content: string,
     flowLines: string[],
-): string[] {
+): PlacedLine[] {
     // Re-indent the formatted line to match the original task line
     const originalIndent = Outline.indentOf(lines[currentLine]);
     const newParentLine = originalIndent + Outline.dedent(content);
@@ -84,7 +89,10 @@ function renderRecurrence(
         ?? FileOperations.firstChildIndent(lines, currentLine);
     const childIndent = Outline.childIndent(newParentLine, sample, FileOperations.detectIndentUnit(lines));
 
-    return [newParentLine, ...flowLines.map(raw => formatFlowLine(childIndent, raw))];
+    return [
+        { text: newParentLine, kind: 'item', under: 'spot' },
+        ...flowLines.map((raw): PlacedLine => ({ text: formatFlowLine(childIndent, raw), kind: 'item', under: 0 })),
+    ];
 }
 
 /**
@@ -104,7 +112,7 @@ function renderGenerated(
     parentLine: string,
     flowLines: string[],
     children: GeneratedChild[],
-): string[] {
+): PlacedLine[] {
     const parentIndent = Outline.indentOf(lines[currentLine]);
     const unit = FileOperations.detectIndentUnit(lines);
     const firstChild = FileOperations.resolveChildIndent(lines, currentLine);
@@ -116,16 +124,21 @@ function renderGenerated(
     const under = (line: string) => Outline.childIndent(line, Outline.indentOf(line) + step, unit);
 
     const head = parentIndent + Outline.dedent(parentLine);
-    const written: Array<{ depth: number; text: string }> = [{ depth: 0, text: head }];
+    const block: PlacedLine[] = [
+        { text: head, kind: 'item', under: 'spot' },
+        ...flowLines.map((raw): PlacedLine => ({ text: formatFlowLine(under(head), raw), kind: 'item', under: 0 })),
+    ];
+    // The parent and each child, with its depth and its line in the block.
+    const levels: Array<{ depth: number; at: number }> = [{ depth: 0, at: 0 }];
     for (const child of children) {
         const depth = Math.max(1, child.depth);
-        const parent = written.filter(line => line.depth < depth).pop()!;
-        written.push({ depth, text: under(parent.text) + Outline.dedent(child.body) });
+        const parent = levels.filter(level => level.depth < depth).pop()!;
+        const text = under(block[parent.at].text) + Outline.dedent(child.body);
+        // A child reads as its body does by itself: a list item under the
+        // line one depth up, or a line of text.
+        const [reads] = Block.line(text);
+        levels.push({ depth, at: block.length });
+        block.push({ ...reads, under: reads.under === undefined ? undefined : parent.at });
     }
-
-    return [
-        head,
-        ...flowLines.map(raw => formatFlowLine(under(head), raw)),
-        ...written.slice(1).map(line => line.text),
-    ];
+    return block;
 }

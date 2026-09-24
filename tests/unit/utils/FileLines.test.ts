@@ -3,6 +3,16 @@ import { TFile } from 'obsidian';
 import { BrokenWrite, LineBreakInLine, draftOver, joinLines, processLines, replayEdits, splitLines } from '../../../src/utils/FileLines';
 import type { LineEdit, Located, NamedRow, Refusal, TaskRef, WriteChannel } from '../../../src/utils/FileLines';
 import { holdsLineBreak } from '../../../src/utils/LineBreak';
+import { Block } from '../../../src/services/persistence/utils/Placement';
+import type { LineDraft } from '../../../src/utils/FileLines';
+
+/**
+ * Put `texts` in at `at`, at the top, each to read as it does by itself:
+ * how a write adds a line to the body (`LineDraft.put`).
+ */
+function putAt(draft: LineDraft, at: number, ...texts: string[]): void {
+    draft.put({ at, parent: null, indent: '' }, Block.read(texts));
+}
 import { ON_RECORD } from '../../../src/services/persistence/RowBasis';
 
 /**
@@ -195,7 +205,7 @@ describe('processLines', () => {
         let seen: string[] = [];
         await processLines(h.app, h.file, undefined, (draft) => {
             seen = [...draft.lines];
-            draft.splice(0, 0, '- [ ] new');
+            putAt(draft, 0, '- [ ] new');
             return true;
         });
 
@@ -263,17 +273,22 @@ describe('processLines', () => {
         expect(log.standing().map(report => report.edits)).toEqual([null]);
     });
 
-    it('drops a report whose indexes are not in the file, and marks the chain broken', async () => {
+    it('writes nothing when its report is not one a file could follow: the write is checked by it', async () => {
+        // The report is what says which lines the write put in and which it
+        // kept (`Outline.check`). One no file could follow is a bug in the
+        // write, and nothing is written (P1; it used to land, the chain of
+        // records marked broken).
         const h = harness('- [ ] a\n');
         const log = writeSink();
 
-        await processLines(h.app, h.file, log.channel, (draft) => {
+        await expect(processLines(h.app, h.file, log.channel, (draft) => {
             draft.rewrite(0, '- [x] a');
             draft.rewrite(9, '- [x] a');
             return true;
-        });
+        })).rejects.toThrow(BrokenWrite);
 
-        expect(log.standing().map(report => report.edits)).toEqual([null]);
+        expect(h.text()).toBe('- [ ] a\n');
+        expect(log.standing()).toEqual([]);
     });
 
     it('reads a run of reports in the order they were made', async () => {
@@ -283,7 +298,7 @@ describe('processLines', () => {
         const log = writeSink();
 
         await processLines(h.app, h.file, log.channel, (draft) => {
-            draft.splice(0, 0, 'new');
+            putAt(draft, 0, 'new');
             draft.rewrite(1, 'X');
             return true;
         });
@@ -385,7 +400,7 @@ describe('processLines', () => {
         const outcome = await processLines(h.app, h.file, log.channel, (draft, _eol, { row }) => {
             run++;
             row({ ref: { runtimeId: 'a' }, subject: 'a', basis: ON_RECORD });
-            draft.splice(1, 0, '- [ ] made');
+            putAt(draft, 1, '- [ ] made');
             if (run === 2) throw new Error('boom');
             return true;
         });
@@ -526,7 +541,7 @@ describe('processLines', () => {
 
         const outcome = await processLines(h.app, h.file, channel, (draft) => {
             run++;
-            draft.splice(1, 0, `- [ ] b (${run})`);
+            putAt(draft, 1, `- [ ] b (${run})`);
             return true;
         });
         expect(outcome.made).toEqual([{ line: 1, runtimeId: 'made-2' }]);
@@ -536,7 +551,7 @@ describe('processLines', () => {
         run = 0;
         const unchanged = await processLines(same.app, same.file, channel, (draft) => {
             run++;
-            if (run === 1) draft.splice(1, 0, '- [ ] b');
+            if (run === 1) putAt(draft, 1, '- [ ] b');
             return true;
         });
         expect(unchanged.made).toEqual([]);
@@ -683,7 +698,7 @@ describe('a coordinate carried across a write\'s own edits', () => {
 
         await processLines(h.app, h.file, log.channel, (draft, _eol, session) => {
             session.row(named('b'));
-            draft.splice(0, 0, 'new');
+            putAt(draft, 0, 'new');
             session.row(named('b'));
             session.row(named('b'));
             return true;
@@ -698,7 +713,7 @@ describe('a coordinate carried across a write\'s own edits', () => {
         const seen: Array<number | null> = [];
 
         await processLines(h.app, h.file, log.channel, (draft, _eol, session) => {
-            draft.splice(0, 0, 'n1', 'n2');
+            putAt(draft, 0, 'n1', 'n2');
             seen.push(session.row(named('b')));
             draft.splice(0, 3);
             seen.push(session.row(named('b')));
@@ -719,7 +734,7 @@ describe('a coordinate carried across a write\'s own edits', () => {
         const outcome = await processLines(h.app, h.file, log.channel, (draft, _eol, session) => {
             session.row(named('a'));
             session.row({ ref: { runtimeId: 'gone' }, subject: 'b', basis: ON_RECORD });
-            draft.splice(0, 0, 'new');
+            putAt(draft, 0, 'new');
             draft.splice(3, 1);
             return true;
         });
@@ -799,21 +814,24 @@ describe('LineEdits.splice', () => {
     ];
 
     for (const { name, at, del, items } of cases) {
-        it(`accounts for the file it wrote: ${name}`, async () => {
-            const h = harness('a\nb\nc\nd\n');
-            const log = writeSink();
-            const expected = ['a', 'b', 'c', 'd', ''];
+        it(`accounts for the file it wrote: ${name}`, () => {
+            const before = ['a', 'b', 'c', 'd', ''];
+            const lines = [...before];
+            const expected = [...before];
             expected.splice(at, del, ...items);
+            const { draft, reported } = draftOver(lines);
 
-            await processLines(h.app, h.file, log.channel, (draft) => {
-                draft.splice(at, del, ...items);
-                return true;
+            draft.splice(at, del, ...items);
+
+            expect(lines).toEqual(expected);
+            // Replayed over the lines as they were, the report leaves as many
+            // lines as the splice did, and every line it does not say is new
+            // or rewritten reads what it read.
+            const replayed = replayEdits(before.length, reported)!;
+            expect(replayed.origin).toHaveLength(lines.length);
+            replayed.origin.forEach((from, i) => {
+                if (from !== null && !replayed.rewritten[i]) expect(lines[i]).toBe(before[from]);
             });
-
-            expect(h.text()).toBe(expected.join('\n'));
-            // A report that does not account for the file it produced is
-            // dropped, so a report still standing is a report that was right.
-            expect(log.standing()).toHaveLength(1);
         });
     }
 
@@ -853,7 +871,7 @@ describe('LineEdits.carry', () => {
         const lines = ['a', 'row', 'child', 'b'];
         const { draft, reported } = draftOver(lines);
 
-        draft.carry(4, [{ from: 1, text: 'row, archived' }, { from: 2, text: 'child' }]);
+        draft.put({ at: 4, parent: null, indent: '' }, [{ from: 1, text: 'row, archived', kind: 'text' }, { from: 2, text: 'child', kind: 'text' }]);
         draft.splice(1, 2);
 
         expect(lines).toEqual(['a', 'b', 'row, archived', 'child']);
@@ -868,7 +886,7 @@ describe('LineEdits.carry', () => {
         const { draft, reported } = draftOver(lines);
 
         // The source stands past `at`, so the insert moves it down by one.
-        draft.carry(0, [{ from: 1, text: 'a' }]);
+        draft.put({ at: 0, parent: null, indent: '' }, [{ from: 1, text: 'a', kind: 'text' }]);
         draft.splice(2, 1);
 
         expect(lines).toEqual(['a', 'row']);
@@ -881,7 +899,7 @@ describe('LineEdits.carry', () => {
         const lines = ['a', 'row'];
         const { draft, reported } = draftOver(lines);
 
-        draft.carry(2, [{ from: 1, text: 'row' }]);
+        draft.put({ at: 2, parent: null, indent: '' }, [{ from: 1, text: 'row', kind: 'text' }]);
 
         expect(replayEdits(2, reported)).toBeNull();
     });
@@ -890,26 +908,35 @@ describe('LineEdits.carry', () => {
         const lines = ['a'];
         const { draft, reported } = draftOver(lines);
 
-        draft.carry(1, [{ from: 5, text: 'x' }]);
+        draft.put({ at: 1, parent: null, indent: '' }, [{ from: 5, text: 'x', kind: 'text' }]);
 
         expect(replayEdits(1, reported)).toBeNull();
     });
 
-    it('files a claim for a move that took its source away, and only the mark for one that did not', async () => {
+    it('files a claim for a move that took its source away, and writes nothing for one that did not', async () => {
         for (const takeAway of [true, false]) {
             const h = harness('a\nrow\nb\n');
             const log = writeSink();
 
-            await processLines(h.app, h.file, log.channel, (draft) => {
+            const write = processLines(h.app, h.file, log.channel, (draft) => {
                 draft.splice(3, 1);
-                draft.carry(3, [{ from: 1, text: 'row, moved' }]);
+                draft.put({ at: 3, parent: null, indent: '' }, [{ from: 1, text: 'row, moved', kind: 'text' }]);
                 if (takeAway) draft.splice(1, 1);
                 return true;
             });
 
-            expect(h.text()).toBe(takeAway ? 'a\nb\nrow, moved' : 'a\nrow\nb\nrow, moved');
-            expect(log.standing()).toHaveLength(1);
-            expect(log.standing()[0].edits === null).toBe(!takeAway);
+            if (takeAway) {
+                await write;
+                expect(h.text()).toBe('a\nb\nrow, moved');
+                expect(log.standing()).toHaveLength(1);
+                expect(log.standing()[0].edits).not.toBeNull();
+            } else {
+                // One line in two places is no report a file could follow,
+                // and the write is checked by its report: a bug, not written.
+                await expect(write).rejects.toThrow(BrokenWrite);
+                expect(h.text()).toBe('a\nrow\nb\n');
+                expect(log.standing()).toEqual([]);
+            }
         }
     });
 });
@@ -919,12 +946,13 @@ describe('one element, one line', () => {
     // the claim and the content key count one. The draft takes none.
     const breaks = ['a\nb', 'a\rb', 'a\r\nb', '\n'];
 
-    it.each(breaks)('the draft refuses %j through splice, rewrite and carry, and changes nothing', (text) => {
+    it.each(breaks)('the draft refuses %j through splice, rewrite and put, and changes nothing', (text) => {
         const lines = ['x', 'y'];
         const { draft, reported } = draftOver(lines);
         expect(() => draft.splice(1, 0, 'ok', text)).toThrow(LineBreakInLine);
         expect(() => draft.rewrite(0, text)).toThrow(LineBreakInLine);
-        expect(() => draft.carry(2, [{ from: 0, text }])).toThrow(LineBreakInLine);
+        expect(() => draft.put({ at: 2, parent: null, indent: '' }, [{ from: 0, text, kind: 'text' }])).toThrow(LineBreakInLine);
+        expect(() => draft.put({ at: 2, parent: null, indent: '' }, [{ text: 'ok', kind: 'text' }, { text, kind: 'text' }])).toThrow(LineBreakInLine);
         expect(lines).toEqual(['x', 'y']);
         expect(reported).toEqual([]);
     });

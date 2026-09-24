@@ -1,6 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import { TaskCloner } from '../../../src/services/persistence/TaskCloner';
-import { draftOver } from '../../../src/utils/FileLines';
+import { draftOver, replayEdits } from '../../../src/utils/FileLines';
+import { Outline, type WrittenLine } from '../../../src/services/parsing/utils/Outline';
+import { ChildLineClassifier } from '../../../src/services/parsing/utils/ChildLineClassifier';
 import { FileOperations } from '../../../src/services/persistence/utils/FileOperations';
 import { Placement } from '../../../src/services/persistence/utils/Placement';
 import type { App } from 'obsidian';
@@ -12,7 +14,7 @@ function callShiftInlineDates(line: string, dayOffset: number): string {
     return proto.shiftInlineDates.call(null, line, dayOffset);
 }
 
-// spliceCopies only reads lines and fileOps; the vault is never touched.
+// putCopies only reads lines and fileOps; the vault is never touched.
 const fileOps = new FileOperations({} as App);
 
 function callSpliceCopies(
@@ -21,7 +23,9 @@ function callSpliceCopies(
     parentLines: string[],
     position: 'before' | 'after',
 ): string[] {
-    return spliceAndReport(lines, taskLine, parentLines, position).lines;
+    const { lines: written, check } = spliceAndReport(lines, taskLine, parentLines, position);
+    expect(check).toBe('sound');
+    return written;
 }
 
 /**
@@ -39,10 +43,19 @@ function spliceAndReport(
 ) {
     const target = [...lines];
     // Where the two duplicate paths put their copies.
-    const at = position === 'before' ? taskLine : Placement.afterSubtree(target, taskLine);
-    const { draft, reported } = draftOver(target);
-    proto.spliceCopies.call({ fileOps }, draft, taskLine, parentLines, at);
-    return { lines: target, reported };
+    const spot = position === 'before' ? Placement.before(target, taskLine) : Placement.afterSubtree(target, taskLine);
+    const { draft, reported, puts, placedBy } = draftOver(target);
+    proto.putCopies.call({ fileOps }, draft, taskLine, parentLines, spot);
+    // Every copy reads as the original's subtree does, and every other line
+    // as it did: the check the write is held to (`Outline.check`).
+    const replayed = replayEdits(lines.length, reported, placedBy)!;
+    const written = replayed.origin.map((from, k): WrittenLine => {
+        const put = replayed.placed[k];
+        if (put) return { kind: 'placed', put: put.id, offset: put.offset };
+        return from === null ? { kind: 'loose' } : { kind: 'kept', from };
+    });
+    const check = Outline.check(Outline.read(lines), Outline.read(target), written, puts, line => ChildLineClassifier.carriesMeaning(line));
+    return { lines: target, reported, check };
 }
 
 // ---------------------------------------------------------------------------
@@ -83,7 +96,7 @@ describe('TaskCloner', () => {
         });
     });
 
-    describe('spliceCopies', () => {
+    describe('putCopies', () => {
         const file = [
             '# note',
             '',

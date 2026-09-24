@@ -183,6 +183,83 @@ export class Outline {
     }
 
     /**
+     * Whether a write left the note reading as it meant to, asked of the
+     * reading before the write and the reading after it: the one check every
+     * write that adds, takes out or rewrites lines is held to
+     * (`processLines`). `written` says, per line after, where it came from.
+     *
+     * - A line kept keeps its kind (`OutlineReading.kindOf`). An item kept
+     *   that the plugin reads a meaning from (`meaningful`: a task, a `==>`
+     *   line, a property, a wikilink child) keeps the items it stands in:
+     *   the line it stood under is not taken out, and the items above it are
+     *   the ones they were, the lines taken out aside. Else `disturbs`
+     * - A line put in reads as its block says: its kind, and, for an item
+     *   with a meaning, the item it stands in. Else `unplaceable`
+     * - An item put in takes in no line past its block: a paragraph line
+     *   that went on it, an item it made its child. Else `disturbs`
+     * - A line spliced in without a block is in the frontmatter. Else `loose`
+     *
+     * The first two are what a line taken out was held to (the L2 `canTakeOut`)
+     * and the two a line put in is: one question, whether the lines written
+     * are what the write says they are and every other line is what it was.
+     * The order of the answers is the order above, a bug first.
+     */
+    static check(
+        before: OutlineReading,
+        after: OutlineReading,
+        written: readonly WrittenLine[],
+        puts: readonly PutBlock[],
+        meaningful: (line: string) => boolean,
+    ): WriteCheck {
+        const same = (a: WrittenLine, b: WrittenLine) => a.kind === b.kind && (
+            a.kind === 'kept' ? a.from === (b as typeof a).from
+                : a.kind === 'placed' ? a.put === (b as typeof a).put && a.offset === (b as typeof a).offset
+                    : false);
+        const keptAt = new Map<number, number>();
+        const blockEnd = new Map<number, number>();
+        written.forEach((line, k) => {
+            if (line.kind === 'kept') keptAt.set(line.from, k);
+            if (line.kind === 'placed') blockEnd.set(line.put, k + 1);
+        });
+        const lineOf = (ref: WrittenLine) => written.findIndex(line => same(line, ref));
+
+        let found: WriteCheck = 'sound';
+        const rank: WriteCheck[] = ['sound', 'disturbs', 'unplaceable', 'loose'];
+        const fail = (check: WriteCheck) => { if (rank.indexOf(check) > rank.indexOf(found)) found = check; };
+
+        written.forEach((line, k) => {
+            if (line.kind === 'loose') {
+                if (after.kindOf(k) !== 'frontmatter') fail('loose');
+                return;
+            }
+            if (line.kind === 'placed') {
+                const reads = puts[line.put].lines[line.offset];
+                if (after.kindOf(k) !== reads.kind) return fail('unplaceable');
+                const item = after.item(k);
+                if (item === null) return;
+                if (reads.under !== undefined && meaningful(after.lines[k])) {
+                    const parent = reads.under === 'lost' ? undefined
+                        : reads.under === 'spot'
+                            ? (puts[line.put].parent === null ? null : lineOf(puts[line.put].parent!))
+                            : lineOf({ kind: 'placed', put: line.put, offset: reads.under });
+                    if (parent === undefined || parent === -1 || item.parent !== parent) return fail('unplaceable');
+                }
+                if (item.end > blockEnd.get(line.put)!) fail('disturbs');
+                return;
+            }
+            const i = line.from;
+            if (before.kindOf(i) !== after.kindOf(k)) return fail('disturbs');
+            const item = before.item(i);
+            if (item === null || !meaningful(before.lines[i])) return;
+            if (item.parent !== null && !keptAt.has(item.parent)) return fail('disturbs');
+            const above = before.itemsAbove(i).filter(row => keptAt.has(row));
+            const aboveNow = after.itemsAbove(k).map(row => written[row].kind === 'kept' ? (written[row] as { from: number }).from : -1);
+            if (above.length !== aboveNow.length || above.some((row, n) => row !== aboveNow[n])) fail('disturbs');
+        });
+        return found;
+    }
+
+    /**
      * The index of the body's first line: past the frontmatter when the note
      * opens with one, 0 otherwise. A `---` on the first line that nothing
      * closes opens no frontmatter.
@@ -198,6 +275,44 @@ export class Outline {
 
 /** What a line is to a write (`OutlineReading.kindOf`). */
 export type LineKind = 'frontmatter' | 'blank' | 'fence' | 'item-fence' | 'code' | 'item' | 'text';
+
+/**
+ * Where a line of a write's result came from: a line of the lines the write
+ * was handed (`from`, its index there), a line of the `put`th block a write
+ * put in (`offset` in it), or a line spliced in without saying where it
+ * belongs.
+ */
+export type WrittenLine =
+    | { kind: 'kept'; from: number }
+    | { kind: 'placed'; put: number; offset: number }
+    | { kind: 'loose' };
+
+/** How a line a write puts in is to read once written. */
+export interface PlacedReading {
+    kind: LineKind;
+    /**
+     * For an item, the item it is to stand in: a line of its own block (its
+     * offset there), `'spot'` for the parent the block was placed under, or
+     * `'lost'` when the line it stood under is not written with it. Asked of
+     * an item the plugin reads a meaning from, as of a line the write keeps.
+     */
+    under?: number | 'spot' | 'lost';
+}
+
+/** A block a write put in, as `Outline.check` holds it to. */
+export interface PutBlock {
+    /** The item the block was placed under, as it stood when put; null at the top. */
+    parent: WrittenLine | null;
+    lines: readonly PlacedReading[];
+}
+
+/**
+ * What `Outline.check` found of a write: `sound`; `unplaceable`, a line put
+ * in does not read as it was put; `disturbs`, a line the write kept reads
+ * otherwise; `loose`, a line was spliced into the body without saying how it
+ * is to read — a bug in the write, not in the note.
+ */
+export type WriteCheck = 'sound' | 'unplaceable' | 'disturbs' | 'loose';
 
 /** A list item as the outline reads it. */
 export interface OutlineItem {
@@ -217,7 +332,7 @@ export interface OutlineFence {
     line: number;
     /** The line of its closing delimiter; null when it ends without one. */
     close: number | null;
-    /** The index just past its last line. */
+    /** The index just past its last line, a blank one included: the lines `inCode` reads as its. */
     end: number;
     /** The info string after the opening delimiter, trimmed. */
     info: string;
@@ -312,59 +427,34 @@ export class OutlineReading {
     }
 
     /**
-     * Whether taking the lines `rows` out leaves every other line what it
-     * was, asked of the reading of the lines without them. Every line keeps
-     * its kind: opening an item or not, and fenced code, indented code or
-     * neither. An item the plugin reads a meaning from (`meaningful`: a task,
-     * a `==>` line, a property, a wikilink child) keeps its place as well:
-     * its parent is not taken out, and the items above it are the ones they
-     * were, those taken out aside.
-     *
-     * A child of a line taken out, too deep for the item above once it is
-     * gone, would be a paragraph line, its task and ID gone. One that still
-     * reaches an item would change parent: a `==>` or property line would
-     * work for a task it did not belong to, a sibling's or the task's own
-     * (the third L2 counterexample run); a task under a note bullet that
-     * went under a sibling would be the sibling's. A fence pushed four
-     * columns past its item's content would be indented code, its info
-     * string text (the fourth). A note bullet or a paragraph line may go on
-     * another item: it is no task, command or property wherever it goes.
+     * The index past the lines from `at` that a line put at `at` would take
+     * in: in the item `owner` (null at the top), a paragraph going on and
+     * indented code. A new first child of a task goes past its text that
+     * goes on; a new line under a heading goes past the paragraph below it.
+     * A blank line, an item, a fence, a heading and a thematic break start a
+     * block of their own below the line put, and stop the run.
      */
-    canTakeOut(rows: readonly number[], meaningful: (line: string) => boolean): boolean {
-        const gone = new Set(rows);
-        const kept = this.lines.map((_, i) => i).filter(i => !gone.has(i));
-        const after = Outline.read(kept.map(i => this.lines[i]));
-        const was = this.codeKinds();
-        const now = after.codeKinds();
-        return kept.every((i, k) => {
-            const item = this.item(i);
-            if ((item === null) !== (after.item(k) === null) || was[i] !== now[k]) return false;
-            if (item === null || !meaningful(this.lines[i])) return true;
-            if (item.parent !== null && gone.has(item.parent)) return false;
-            const above = this.itemsAbove(i).filter(line => !gone.has(line));
-            const aboveNow = after.itemsAbove(k).map(line => kept[line]);
-            return above.length === aboveNow.length && above.every((line, n) => line === aboveNow[n]);
-        });
+    leadEnd(at: number, owner: number | null): number {
+        while (at < this.lines.length && this.ownerOf(at) === owner && this.takenIn(at)) at++;
+        return at;
+    }
+
+    private takenIn(line: number): boolean {
+        const kind = this.kindOf(line);
+        if (kind === 'code') return true;
+        if (kind !== 'text') return false;
+        const text = Outline.dedent(this.lines[line]);
+        return !HEADING_RE.test(text) && !THEMATIC_BREAK_RE.test(text);
     }
 
     /** The items `row`'s item stands in, innermost first. */
-    private itemsAbove(row: number): number[] {
+    itemsAbove(row: number): number[] {
         const above: number[] = [];
         for (let parent = this.items.get(row)?.parent ?? null; parent !== null; parent = this.items.get(parent)?.parent ?? null) {
             above.push(parent);
         }
         return above;
     }
-
-    /** Per line, the code it is: in a fence (its delimiters included), indented, or none. */
-    private codeKinds(): ('fenced' | 'indented' | null)[] {
-        const kinds: ('fenced' | 'indented' | null)[] = this.codes.map(code => (code ? 'indented' : null));
-        for (const fence of this.fences) {
-            for (let line = fence.line; line < fence.end; line++) kinds[line] = 'fenced';
-        }
-        return kinds;
-    }
-
 }
 
 /**
@@ -485,7 +575,12 @@ function readOutline(lines: readonly string[], start: number): OutlineReading {
         const line = lines[i];
         if (Outline.isBlank(line)) {
             owners[i] = innermost();
-            if (fence) codes[i] = true;
+            // A blank line in an open fence is the fence's, whatever comes
+            // after it: code, and in the fence's range (q13).
+            if (fence) {
+                codes[i] = true;
+                fence.block.end = i + 1;
+            }
             if (leaf === 'paragraph') leaf = 'none';
             afterBlank = true;
             continue;

@@ -80,27 +80,30 @@ describe('a line put under a heading', () => {
         await session.index.createTask(FILE, '- [ ] N', 'Tasks');
         await session.settle(FILE);
 
-        expect(contents.get(FILE)!.split('\n')).toEqual(['## Tasks', '- [ ] N', '  - [ ] A', '\t- [ ] B', '']);
+        // At A's indentation, as its sibling: A is not made N's child (P1).
+        expect(contents.get(FILE)!.split('\n')).toEqual(['## Tasks', '  - [ ] N', '  - [ ] A', '\t- [ ] B', '']);
         const after = idByText(session);
         expect(after.get('- [ ] A')).toBe(before.get('- [ ] A'));
         expect(after.get('- [ ] B')).toBe(before.get('- [ ] B'));
         expect(claims.adopted).toEqual([FILE]);
+        const byContent = new Map(session.index.getTasks().filter(task => task.file === FILE).map(task => [task.content, task]));
+        expect(byContent.get('A')?.parentId).toBeUndefined();
+        expect(byContent.get('B')?.parentId).toBe(byContent.get('A')!.id);
     });
 
-    it('reads a tab-indented checkbox under a heading as code, which a line put above makes a child (Obsidian, measurement.md q10)', async () => {
+    it('reads a tab-indented checkbox under a heading as code, and puts the line past it (Obsidian, measurement.md q10)', async () => {
         // Four columns at the top of a section with no paragraph to go on is
-        // indented code; below `- [ ] N` the same line is N's child item.
+        // indented code; below `- [ ] N` the same line would be N's child
+        // item, so N goes past it (P1), and the code stays code.
         const session = await open(['## Tasks', '\t- [ ] A', '\t\t- [ ] B', ''].join('\n'));
         expect(idByText(session).size).toBe(0);
 
         await session.index.createTask(FILE, '- [ ] N', 'Tasks');
         await session.settle(FILE);
 
-        expect(contents.get(FILE)!.split('\n')).toEqual(['## Tasks', '- [ ] N', '\t- [ ] A', '\t\t- [ ] B', '']);
+        expect(contents.get(FILE)!.split('\n')).toEqual(['## Tasks', '\t- [ ] A', '\t\t- [ ] B', '- [ ] N', '']);
         const tasks = session.index.getTasks().filter(task => task.file === FILE);
-        const byContent = new Map(tasks.map(task => [task.content, task]));
-        expect(byContent.get('A')?.parentId).toBe(byContent.get('N')!.id);
-        expect(byContent.get('B')?.parentId).toBe(byContent.get('A')!.id);
+        expect(tasks.map(task => task.content)).toEqual(['N']);
     });
 
     it('is refused when the heading is absent and the note ends in a fence that never closes (B5)', async () => {

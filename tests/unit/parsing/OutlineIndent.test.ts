@@ -108,7 +108,7 @@ describe('renderFlowInstance: the lines a next instance is written as', () => {
         // six spaces is its child. The next instance is written `- [ ] T`
         // (content at 2): six spaces under it are indented code.
         const lines = ['10.   [ ] T ==> next', '      - ==> every day', ''];
-        const rendered = renderFlowInstance(fileOps, lines, 0, { kind: 'recurrence', content: '- [ ] T', flowLines: ['every day'] });
+        const rendered = texts(renderFlowInstance(fileOps, lines, 0, { kind: 'recurrence', content: '- [ ] T', flowLines: ['every day'] }));
         // The file's unit is four spaces (its first indented line).
         expect(rendered).toEqual(['- [ ] T', '    - ==> every day']);
         expect(parentOf(rendered, 1)).toBe(0);
@@ -116,31 +116,43 @@ describe('renderFlowInstance: the lines a next instance is written as', () => {
 
     it('writes the same bytes as the row\'s children where they fit the line written', () => {
         const lines = ['- [ ] T', '  - ==> every day', ''];
-        const rendered = renderFlowInstance(fileOps, lines, 0, { kind: 'recurrence', content: '- [ ] T', flowLines: ['every day'] });
+        const rendered = texts(renderFlowInstance(fileOps, lines, 0, { kind: 'recurrence', content: '- [ ] T', flowLines: ['every day'] }));
         expect(rendered).toEqual(['- [ ] T', '  - ==> every day']);
     });
 
     it('puts each generated child under the line one depth up, tab and spaces mixed', () => {
-        // The task's first child is a tab past it, the file's unit four spaces.
-        const lines = ['    - [ ] T', '\t\t- note', '- a', '    - b', ''];
-        const rendered = renderFlowInstance(fileOps, lines, 0, {
+        // T is a tab in (column 4, content at 6), its first child eight
+        // spaces: cut by T's one character, the step was seven spaces, and
+        // the children landed five past G's content, a paragraph line.
+        const lines = ['- r', '\t- [ ] T', '        - note', ''];
+        const rendered = texts(renderFlowInstance(fileOps, lines, 1, {
             kind: 'generated',
             parentLine: '- [ ] G',
             flowLines: ['every day'],
             children: [{ depth: 1, body: '- [ ] c1' }, { depth: 2, body: '- [ ] c2' }, { depth: 1, body: '- [ ] c3' }],
-        });
-        expect(rendered[0]).toBe('    - [ ] G');
+        }));
+        expect(rendered[0]).toBe('\t- [ ] G');
         expect([1, 2, 3, 4].map(line => parentOf(rendered, line))).toEqual([0, 0, 2, 0]);
     });
 
     it('writes the same bytes as before where the first child is a unit past the task', () => {
-        const lines = ['\t- [ ] T', '\t\t- note', ''];
-        const rendered = renderFlowInstance(fileOps, lines, 0, {
+        const lines = ['- r', '\t- [ ] T', '\t\t- note', ''];
+        const rendered = renderFlowInstance(fileOps, lines, 1, {
             kind: 'generated',
             parentLine: '- [ ] G',
             flowLines: ['every day'],
-            children: [{ depth: 1, body: '- [ ] c1' }, { depth: 2, body: '- [ ] c2' }],
+            children: [{ depth: 1, body: '- [ ] c1' }, { depth: 2, body: '- [ ] c2' }, { depth: 1, body: 'text' }],
         });
-        expect(rendered).toEqual(['\t- [ ] G', '\t\t- ==> every day', '\t\t- [ ] c1', '\t\t\t- [ ] c2']);
+        expect(texts(rendered)).toEqual(['\t- [ ] G', '\t\t- ==> every day', '\t\t- [ ] c1', '\t\t\t- [ ] c2', '\t\ttext']);
+        // Each says how it is to read: the head under the spot's parent, the
+        // command and the first child under the head, the second under the
+        // first, a line of text as text.
+        expect(rendered.map(line => [line.kind, line.under])).toEqual([
+            ['item', 'spot'], ['item', 0], ['item', 0], ['item', 2], ['text', undefined],
+        ]);
     });
 });
+
+function texts(lines: readonly { text: string }[]): string[] {
+    return lines.map(line => line.text);
+}

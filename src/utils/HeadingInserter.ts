@@ -1,7 +1,7 @@
 import { type App, TFile } from 'obsidian';
 import { fileGone, processLines, type LineDraft, type WriteAt, type WriteChannel } from './FileLines';
 import { Outline } from '../services/parsing/utils/Outline';
-import { Placement } from '../services/persistence/utils/Placement';
+import { Block, Placement } from '../services/persistence/utils/Placement';
 
 /**
  * Heading-based line insertion utility.
@@ -15,25 +15,25 @@ import { Placement } from '../services/persistence/utils/Placement';
 export class HeadingInserter {
     /**
      * Insert a line under a specific heading in file content.
-     * If the heading exists, inserts directly under the heading (headerIndex + 1).
-     * If the heading does not exist, creates it at the end of the file — where
-     * `Placement.end` says lines appended to the note go.
+     * If the heading exists, puts it just under the heading, past the
+     * paragraph below it, as a sibling of the first task there
+     * (`Placement.underHeading`): a task indented under the heading is not
+     * made its child. If the heading does not exist, creates it at the end of
+     * the file — where `Placement.end` says lines appended to the note go.
+     * Whether the lines read as put is the write's check (`processLines`).
      *
      * @param draft   The file's lines, as a write is handed them
      * @param line    Line to insert
      * @param header  Heading text (without # prefix)
      * @param headerLevel Number of # (e.g. 2 for ##)
-     * @returns The 0-based line number of the inserted line; null, and nothing
-     *          spliced, when the heading is absent and the note ends inside a
-     *          fence that never closes, so the heading and the line would be
-     *          written into it.
+     * @returns The 0-based line number of the inserted line
      */
     static insertUnderHeading(
         draft: LineDraft,
         line: string,
         header: string,
         headerLevel: number
-    ): number | null {
+    ): number {
         const out = draft.lines;
         const headerPrefix = '#'.repeat(headerLevel) + ' ';
         const fullHeader = headerPrefix + header;
@@ -52,34 +52,28 @@ export class HeadingInserter {
             }
         }
 
-        let insertedLine: number;
         if (headerIndex !== -1) {
-            insertedLine = headerIndex + 1;
-            draft.splice(insertedLine, 0, line);
-        } else {
-            // At the end, before the empty element a terminated file splits
-            // into, so the file still ends with its terminator. One blank line
-            // sets the new heading off from the text above it.
-            const end = Placement.end(out);
-            if (end === null) return null;
-            let at = end;
-            if (at > 0 && out[at - 1].trim() !== '') draft.splice(at++, 0, '');
-            draft.splice(at, 0, fullHeader, line);
-            insertedLine = at + 1;
+            const spot = Placement.underHeading(out, headerIndex);
+            draft.put(spot, Block.line(spot.indent + Outline.dedent(line)));
+            return spot.at;
         }
-
-        return insertedLine;
+        // At the end, before the empty element a terminated file splits
+        // into, so the file still ends with its terminator. One blank line
+        // sets the new heading off from the text above it.
+        const spot = Placement.end(out);
+        const head = spot.at > 0 && !Outline.isBlank(out[spot.at - 1]) ? [''] : [];
+        draft.put(spot, Block.read([...head, fullHeader, line]));
+        return spot.at + head.length + 1;
     }
 
     /**
      * Insert a line under a heading in the given file, via `vault.process`
-     * (atomic read-modify-write). Returns the 0-based line number of the
-     * inserted line, or -1 if the file doesn't exist or the line has nowhere
-     * in the body to go (told to the channel as `unplaceable`).
+     * (atomic read-modify-write). The outcome carries the 0-based line number
+     * of the inserted line; not written when the file doesn't exist, or the
+     * lines would not read as put (told to the channel).
      *
      * The write reports what it did like every other (see `LineDraft`), so a
-     * task already under the heading keeps its name across the insert — even
-     * when it is indented and the new line becomes its parent.
+     * task already under the heading keeps its name across the insert.
      *
      * Accepts a `TFile` directly when the caller already has one — e.g. a
      * file just created via `vault.create` may not yet resolve back through
@@ -102,10 +96,8 @@ export class HeadingInserter {
         }
 
         let inserted = -1;
-        const outcome = await processLines(app, file, channel, (draft, _eol, { refuse }) => {
-            const at = HeadingInserter.insertUnderHeading(draft, line, header, headerLevel);
-            if (at === null) return refuse({ kind: 'unplaceable' }, line.trim());
-            inserted = at;
+        const outcome = await processLines(app, file, channel, (draft) => {
+            inserted = HeadingInserter.insertUnderHeading(draft, line, header, headerLevel);
             return true;
         });
         return outcome.written ? { ...outcome, line: inserted } : outcome;

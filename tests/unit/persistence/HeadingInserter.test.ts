@@ -36,7 +36,7 @@ function insertFromText(content: string, line: string, header: string, headerLev
 describe('HeadingInserter', () => {
     describe('writeUnderHeading', () => {
         it('writes the pure-function result back through vault.process and returns insertedLine', async () => {
-            const h = harness('some text\n## Tasks\nexisting line');
+            const h = harness('some text\n## Tasks\n- [ ] existing line');
             const at = await HeadingInserter.writeUnderHeading(
                 h.app, 'note.md', undefined, '- [ ] new task', 'Tasks', 2
             );
@@ -69,7 +69,7 @@ describe('HeadingInserter', () => {
             // DailyNoteUtils.appendLineToDailyNote が createDailyNote 直後の
             // TFile を渡す経路の pin。作成直後は vault index からパスで
             // 引き直せるとは限らないため、TFile を経由しない配線が必須。
-            let content = '## Tasks\nexisting';
+            let content = '## Tasks\n- [ ] existing';
             const file = new TFile();
             const app = {
                 vault: {
@@ -88,14 +88,27 @@ describe('HeadingInserter', () => {
 
     describe('insertUnderHeading', () => {
         it('inserts under existing heading', () => {
-            const content = 'some text\n## Tasks\nexisting line';
+            const content = 'some text\n## Tasks\n- [ ] existing line';
             const result = insertFromText(content, '- [ ] new task', 'Tasks', 2);
             const lines = result.content.split('\n');
             expect(lines[0]).toBe('some text');
             expect(lines[1]).toBe('## Tasks');
             expect(lines[2]).toBe('- [ ] new task');
-            expect(lines[3]).toBe('existing line');
+            expect(lines[3]).toBe('- [ ] existing line');
             expect(result.insertedLine).toBe(2);
+        });
+
+        it('goes past the paragraph under the heading, which a line put above it would take in (P1)', () => {
+            const content = '## Tasks\npara one\npara two\n\n- [ ] a';
+            const result = insertFromText(content, '- [ ] new', 'Tasks', 2);
+            expect(result.content.split('\n')).toEqual(['## Tasks', 'para one', 'para two', '- [ ] new', '', '- [ ] a']);
+            expect(result.insertedLine).toBe(3);
+        });
+
+        it('puts the line at the indentation of the first item under the heading, as its sibling (P1)', () => {
+            const content = '## Tasks\n\n  - [ ] a\n\t- [ ] b';
+            const result = insertFromText(content, '- [ ] new', 'Tasks', 2);
+            expect(result.content.split('\n')).toEqual(['## Tasks', '  - [ ] new', '', '  - [ ] a', '\t- [ ] b']);
         });
 
         it('creates heading at EOF when not found', () => {
@@ -125,7 +138,7 @@ describe('HeadingInserter', () => {
         });
 
         it('handles level 1 heading', () => {
-            const content = '# MyHeader\ntext';
+            const content = '# MyHeader\n- [ ] text';
             const result = insertFromText(content, 'inserted', 'MyHeader', 1);
             const lines = result.content.split('\n');
             expect(lines[1]).toBe('inserted');
@@ -133,7 +146,7 @@ describe('HeadingInserter', () => {
         });
 
         it('handles level 3 heading', () => {
-            const content = '### Deep\ntext';
+            const content = '### Deep\n- [ ] text';
             const result = insertFromText(content, 'inserted', 'Deep', 3);
             const lines = result.content.split('\n');
             expect(lines[1]).toBe('inserted');
@@ -148,7 +161,7 @@ describe('HeadingInserter', () => {
         });
 
         it('matches heading exactly (not partial)', () => {
-            const content = '## TasksExtra\n## Tasks\nunder';
+            const content = '## TasksExtra\n## Tasks\n- [ ] under';
             const result = insertFromText(content, 'new', 'Tasks', 2);
             const lines = result.content.split('\n');
             // Should insert under "## Tasks" not "## TasksExtra"
@@ -157,22 +170,22 @@ describe('HeadingInserter', () => {
         });
 
         it('inserts at first match when multiple same headings', () => {
-            const content = '## Tasks\nfirst\n## Tasks\nsecond';
+            const content = '## Tasks\n- [ ] first\n## Tasks\nsecond';
             const result = insertFromText(content, 'inserted', 'Tasks', 2);
             const lines = result.content.split('\n');
             expect(lines[0]).toBe('## Tasks');
             expect(lines[1]).toBe('inserted');
-            expect(lines[2]).toBe('first');
+            expect(lines[2]).toBe('- [ ] first');
             expect(result.insertedLine).toBe(1);
         });
 
         it('ignores heading inside code fence and matches real one after it', () => {
-            const content = '```\n## Tasks\n```\n## Tasks\nunder';
+            const content = '```\n## Tasks\n```\n## Tasks\n- [ ] under';
             const result = insertFromText(content, 'inserted', 'Tasks', 2);
             const lines = result.content.split('\n');
             expect(lines[3]).toBe('## Tasks');
             expect(lines[4]).toBe('inserted');
-            expect(lines[5]).toBe('under');
+            expect(lines[5]).toBe('- [ ] under');
             expect(result.insertedLine).toBe(4);
         });
 
@@ -187,7 +200,7 @@ describe('HeadingInserter', () => {
         });
 
         it('ignores heading inside tilde fence', () => {
-            const content = '~~~\n## Tasks\n~~~\n## Tasks\nunder';
+            const content = '~~~\n## Tasks\n~~~\n## Tasks\n- [ ] under';
             const result = insertFromText(content, 'inserted', 'Tasks', 2);
             const lines = result.content.split('\n');
             expect(lines[4]).toBe('inserted');
@@ -195,7 +208,7 @@ describe('HeadingInserter', () => {
         });
 
         it('does not close a longer fence with a shorter delimiter', () => {
-            const content = '````\n```\n## Tasks\n````\n## Tasks\nunder';
+            const content = '````\n```\n## Tasks\n````\n## Tasks\n- [ ] under';
             const result = insertFromText(content, 'inserted', 'Tasks', 2);
             const lines = result.content.split('\n');
             expect(lines[4]).toBe('## Tasks');

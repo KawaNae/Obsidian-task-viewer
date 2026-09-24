@@ -100,7 +100,7 @@ describe('the origin half of a move says what it did', () => {
 });
 
 describe('what deleteLine reports', () => {
-    it('says one line went, and leaves the children where they are', async () => {
+    it('says the line and its subtree went, as a card\'s delete does (P1)', async () => {
         const b = await writeBench([
             '- [ ] 親 @2026-09-21',
             '\t- [ ] 子 @2026-09-21',
@@ -109,8 +109,8 @@ describe('what deleteLine reports', () => {
 
         await b.writer.deleteLine(FILE, { line: 0, text: b.lines()[0] });
 
-        expect(only(b.filed).edits).toEqual([{ kind: 'removed', at: 0, count: 1 }]);
-        expect(b.lines()).toEqual(['\t- [ ] 子 @2026-09-21', '- [ ] 次 @2026-09-21']);
+        expect(only(b.filed).edits).toEqual([{ kind: 'removed', at: 0, count: 2 }]);
+        expect(b.lines()).toEqual(['- [ ] 次 @2026-09-21']);
     });
 
     it('reports a line that is not a task at all', async () => {

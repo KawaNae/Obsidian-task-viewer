@@ -7,7 +7,7 @@ import { fileGone, processLines, type LineDraft, type WriteOutcome } from '../..
 import type { PlannedTarget } from './TaskRefs';
 import type { WriteObserver } from './WriteObserver';
 import { Outline } from '../parsing/utils/Outline';
-import { Placement } from './utils/Placement';
+import { Block, Placement, type Spot } from './utils/Placement';
 
 export type { GeneratedChild } from './FlowInstanceLines';
 
@@ -63,7 +63,7 @@ export class TaskCloner {
                 parents.push(this.shiftInlineDates(cleanParent, offset));
             }
 
-            this.spliceCopies(draft, idx, parents, idx);
+            this.putCopies(draft, idx, parents, Placement.before(lines, idx));
             return true;
         });
     }
@@ -88,12 +88,10 @@ export class TaskCloner {
         const file = this.app.vault.getAbstractFileByPath(target.file);
         if (!(file instanceof TFile)) return fileGone(this.writes?.for(target.file, 'user'), target.file, target.subject);
 
-        return processLines(this.app, file, this.writes?.for(target.file, 'user'), (draft, _eol, { row, refuse }) => {
+        return processLines(this.app, file, this.writes?.for(target.file, 'user'), (draft, _eol, { row }) => {
             const lines = draft.lines;
             const idx = row(target);
             if (idx === null) return false;
-            const at = Placement.afterSubtree(lines, idx);
-            if (at === null) return refuse({ kind: 'unplaceable' }, target.subject);
 
             const indent = Outline.indentOf(lines[idx]);
             const parents = copies.kind === 'verbatim'
@@ -101,7 +99,7 @@ export class TaskCloner {
                     () => this.fileOps.stripBlockIds([lines[idx]])[0])
                 : copies.lines.map(l => indent + Outline.dedent(l));
 
-            this.spliceCopies(draft, idx, parents, at);
+            this.putCopies(draft, idx, parents, Placement.afterSubtree(lines, idx));
             return true;
         });
     }
@@ -110,40 +108,32 @@ export class TaskCloner {
 
     /**
      * Put one copy per parent line into the file, each followed by the
-     * original's children with their block ids stripped.
+     * original's children with their block ids stripped: a sibling of the
+     * task, at `spot` — just above it (`Placement.before`) or just past its
+     * subtree (`Placement.afterSubtree`).
      *
      * Children travel verbatim. A child's dates are its own, not an offset
      * from its parent's, so nothing here rewrites them — the same rule in
-     * both duplication paths. `insertIndex` is where the copies go: the
-     * task's own line to go before it, or `Placement.afterSubtree` to follow it.
+     * both duplication paths. Each copy is to read as the original's subtree
+     * reads (`Block.of`), and is not written where it would not.
      *
      * A fence among the children that never closes ends with the copy's item,
      * as it ended with the original's (`Outline.read`): below a copy stands
      * the original's own line, or whatever stood below the original.
      */
-    private spliceCopies(
-        draft: LineDraft,
-        taskLine: number,
-        parentLines: string[],
-        insertIndex: number,
-    ): void {
+    private putCopies(draft: LineDraft, taskLine: number, parentLines: string[], spot: Spot): void {
         const lines = draft.lines;
-        const { childrenLines } = this.fileOps.collectChildrenFromLines(lines, taskLine);
-        const cleanedChildren = this.fileOps.stripBlockIds(childrenLines);
+        const outline = Outline.read(lines);
+        const rows: number[] = [];
+        for (let row = taskLine; row < outline.subtreeEnd(taskLine); row++) rows.push(row);
+        const cleanedChildren = this.fileOps.stripBlockIds(rows.slice(1).map(row => lines[row]));
 
-        const linesToInsert: string[] = [];
-        for (const parent of parentLines) {
-            linesToInsert.push(parent, ...cleanedChildren);
-        }
-
-        // Through `edits` rather than beside it: the copy is worded exactly
+        // Through the draft rather than beside it: the copy is worded exactly
         // like the line it copies, so a position off by one would read the same
         // and hand the original's identity to the copy. One number does both.
-        //
-        // Which of these lines are tasks is not this layer's question — the
-        // copied children can hold anything, a fence among them — and the index
-        // answers it by parsing what was written.
-        draft.splice(insertIndex, 0, ...linesToInsert);
+        // Each copy's lines stand under lines of that copy.
+        draft.put(spot, parentLines.flatMap((parent, copy) => Block.of(outline, rows, [parent, ...cleanedChildren])
+            .map(line => (typeof line.under === 'number' ? { ...line, under: line.under + copy * rows.length } : line))));
     }
 
     /**

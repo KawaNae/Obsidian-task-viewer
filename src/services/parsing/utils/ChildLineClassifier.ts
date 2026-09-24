@@ -58,7 +58,7 @@ export class ChildLineClassifier {
      * item: a task, a `==>` line, a property or a wikilink child. Such an
      * item means what it does by where it stands (the task it belongs to),
      * so a write that takes lines out must leave it standing where it was
-     * (`OutlineReading.canTakeOut`). Any other item is a note.
+     * (`Outline.check`). Any other item is a note.
      */
     static carriesMeaning(text: string): boolean {
         return TaskLineClassifier.isTaskLine(text)
