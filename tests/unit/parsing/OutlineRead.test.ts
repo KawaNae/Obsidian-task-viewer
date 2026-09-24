@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { Outline, type OutlineReading, type WrittenLine } from '../../../src/services/parsing/utils/Outline';
-import { ChildLineClassifier } from '../../../src/services/parsing/utils/ChildLineClassifier';
+import { Outline, type OutlineReading } from '../../../src/services/parsing/utils/Outline';
+import { checkWrite, type WrittenLine } from '../../../src/services/parsing/utils/OutlineCheck';
 
 /**
  * `Outline.read` against what Obsidian 1.12.4 reads of the same notes
@@ -180,14 +180,12 @@ describe('OutlineReading', () => {
         expect(five.item(1)!.parent).toBe(0);
     });
 
-    const meaningful = (line: string) => ChildLineClassifier.carriesMeaning(line);
-
-    /** Whether taking `rows` out of the note leaves the rest as it was (`Outline.check`). */
+    /** Whether taking `rows` out of the note leaves the rest as it was (`checkWrite`). */
     function takesOut(reading: OutlineReading, rows: number[]): boolean {
         const gone = new Set(rows);
         const kept = reading.lines.map((_, i) => i).filter(i => !gone.has(i));
         const written: WrittenLine[] = kept.map(from => ({ kind: 'kept', from }));
-        return Outline.check(reading, Outline.read(kept.map(i => reading.lines[i])), written, [], meaningful) === 'sound';
+        return checkWrite(reading, Outline.read(kept.map(i => reading.lines[i])), written, []) === 'sound';
     }
 
     it('takes a line out only when every other line reads as the same kind without it', () => {

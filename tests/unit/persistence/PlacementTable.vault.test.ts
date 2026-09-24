@@ -6,7 +6,7 @@ import { t } from '../../../src/i18n';
 /**
  * Every write that adds lines, one row of the P1 table each
  * (`stages\p1-placement\design.md`): where the line goes (`Placement`), and
- * the check the write is held to (`Outline.check`) — the line put in is a
+ * the check the write is held to (`checkWrite`) — the line put in is a
  * task under the item meant, outside code, and every task already there
  * keeps its parent. Or nothing is written, and the user hears why.
  *

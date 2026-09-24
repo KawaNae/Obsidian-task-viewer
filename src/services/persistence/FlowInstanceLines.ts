@@ -39,7 +39,7 @@ export type FlowInstanceInsert =
  * Render the next instance against the file it is going into.
  *
  * Pure, and reading only: it answers the lines to write, each with how it is
- * to read once written (`Outline.check`), and touches nothing. The instance
+ * to read once written (`checkWrite`), and touches nothing. The instance
  * is a sibling of the row that fired: its first line stands under the spot's
  * parent, its `==>` lines under it, a generated child under the line one
  * depth up.

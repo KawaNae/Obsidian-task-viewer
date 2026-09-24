@@ -52,7 +52,7 @@ export class ChildPropertyLineEditor {
      * タスク行の座標は動かない。変更はすべて draft を通るので、3経路とも
      * そのまま申告になる。行を足す位置は `Placement` が答え、足した行と
      * 消した行のあとで、ほかの行が変わらないかは書き込みの検査
-     * （`Outline.check`）が答える。変わるなら書き込み全体が拒否される。
+     * （`checkWrite`）が答える。変わるなら書き込み全体が拒否される。
      */
     static applyOps(draft: LineDraft, taskLineIdx: number, ops: PropertyOp[]): void {
         const lines = draft.lines;
