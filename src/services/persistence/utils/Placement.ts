@@ -120,16 +120,16 @@ export class Placement {
     }
 
     /**
-     * Just past the lines straight below `row` that are its own text: each
-     * one `row` stands in, and text (`kindOf`) — no item, and up to the
-     * first blank line, fence or code. A line put above them would end
-     * `row`'s text there, and what went on in it would read anew: `  1.`
-     * below `- [ ] T` goes on in T's text, and opens an item once a line
-     * stands between.
+     * Just past the lines straight below `row` that go on its text: the
+     * paragraph its line opens, going on (`goesOnParagraph`), up to the
+     * first line that does not. A line put above them would end `row`'s
+     * text there, and what went on in it would read anew: `  1.` below
+     * `- [ ] T` goes on in T's text, and opens an item once a line stands
+     * between.
      */
     private static pastOwnText(outline: OutlineReading, row: number): number {
         let at = row + 1;
-        while (at < outline.lines.length && outline.ownerOf(at) === row && outline.kindOf(at) === 'text') at++;
+        while (outline.goesOnParagraph(at)) at++;
         return at;
     }
 
