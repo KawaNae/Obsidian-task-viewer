@@ -71,9 +71,8 @@ export function renderFlowInstance(
  * fired: the two can open their content at different columns (`10.   [ ] T`
  * is written back as `- [ ] T`, L2's H2), and indented for the one that
  * fired they would be a paragraph under the one written, the series cut off.
- * The spelling is taken from the fired row's children (its own `==>` lines
- * last, being the ones the fire consumes) where it lands as a child of the
- * line written (`Outline.childIndent`).
+ * The spelling is taken from the fired row's children, its own `==>` lines
+ * last, being the ones the fire consumes (`FileOperations.resolveChildIndent`).
  */
 function renderRecurrence(
     lines: readonly string[],
@@ -86,9 +85,7 @@ function renderRecurrence(
     const newParentLine = indent + Outline.dedent(content);
 
     const flowAbs = new Set(collectFlowLineIndicesInFile(lines, currentLine));
-    const sample = FileOperations.firstChildIndent(lines, currentLine, flowAbs)
-        ?? FileOperations.firstChildIndent(lines, currentLine);
-    const childIndent = Outline.childIndent(newParentLine, sample, FileOperations.detectIndentUnit(lines));
+    const childIndent = FileOperations.resolveChildIndent(lines, currentLine, newParentLine, flowAbs);
 
     return [
         { text: newParentLine, kind: 'item', under: 'spot' },
@@ -103,10 +100,9 @@ function renderRecurrence(
  * sibling of the task that fired, at the indentation of the sibling it goes
  * above (`Placement.groupHead`). Each
  * child is a child of the line above it one `depth` up (the parent for a
- * depth of 1), indented by the one rule for a child (`Outline.childIndent`):
- * as far past that line as the fired task's first child is past the task,
- * where that lands as a child, the file's unit otherwise — so a subtree keeps
- * one spelling, and a tab and spaces mixed do not cut a child loose.
+ * depth of 1), indented as a child of the fired task would be under that line
+ * (`FileOperations.resolveChildIndent`) — so a subtree keeps one spelling, and
+ * a tab and spaces mixed do not cut a child loose.
  */
 function renderGenerated(
     lines: readonly string[],
@@ -116,15 +112,8 @@ function renderGenerated(
     flowLines: string[],
     children: GeneratedChild[],
 ): PlacedLine[] {
-    const parentIndent = Outline.indentOf(lines[currentLine]);
-    const unit = FileOperations.detectIndentUnit(lines);
-    const firstChild = FileOperations.resolveChildIndent(lines, currentLine);
-    // How far a child stands past its parent, as the fired task's first
-    // child is written; the file's unit where it is not written past it.
-    const step = firstChild.startsWith(parentIndent) && firstChild.length > parentIndent.length
-        ? firstChild.slice(parentIndent.length)
-        : unit;
-    const under = (line: string) => Outline.childIndent(line, Outline.indentOf(line) + step, unit);
+    const flowAbs = new Set(collectFlowLineIndicesInFile(lines, currentLine));
+    const under = (line: string) => FileOperations.resolveChildIndent(lines, currentLine, line, flowAbs);
 
     const head = indent + Outline.dedent(parentLine);
     const block: PlacedLine[] = [
