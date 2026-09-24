@@ -1,6 +1,7 @@
 import { TFile, type App } from 'obsidian';
 import { logError, logWarn } from '../log/log';
 import { LINE_BREAK, holdsLineBreak } from './LineBreak';
+import { Outline } from '../services/parsing/utils/Outline';
 import { ON_RECORD, readsAsPlanned, subtreeAt, type OnRecord, type RowBasis } from '../services/persistence/RowBasis';
 
 /**
@@ -259,7 +260,7 @@ function recordEdits(lines: string[]): { edits: LineEdits; reported: LineEdit[] 
             lines.splice(at, 0, ...items.map(item => item.text));
             reported.push({ kind: 'carried', at: start, from: items.map(item => item.from) });
             items.forEach((item, i) => {
-                if (item.text !== sources[i]) reported.push({ kind: 'replaced', at: start + i });
+                if (!Outline.VERBATIM.holds(item.text, sources[i])) reported.push({ kind: 'replaced', at: start + i });
             });
         },
     };
@@ -712,7 +713,7 @@ export async function processLines(
             const now = replayed.origin.indexOf(line);
             // Taken away by this very write: the row is not on these lines.
             if (now < 0) return null;
-            if (!replayed.rewritten[now] && lines[now] !== before[line]) {
+            if (!replayed.rewritten[now] && !Outline.VERBATIM.holds(lines[now], before[line])) {
                 unsound = `line ${line} carried to ${now} does not read what it read`;
                 return null;
             }
@@ -722,7 +723,7 @@ export async function processLines(
             if (!('ref' in target)) {
                 // The editor's line is its own coordinate, good only while
                 // the line still reads what the editor showed there.
-                return before[target.line] === target.text ? target.line : { kind: 'changed' };
+                return Outline.VERBATIM.holds(before[target.line], target.text) ? target.line : { kind: 'changed' };
             }
             const located: Located = channel ? channel.locate(before, target.ref) : { kind: 'gone' };
             if (located.kind === 'outdated') return { kind: 'changed' };

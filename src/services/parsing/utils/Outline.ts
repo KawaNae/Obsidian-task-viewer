@@ -79,11 +79,12 @@ export class Outline {
      * Two lines are compared as one of these two relations and no other, and
      * which question asks which is written here, once:
      *
-     * - `VERBATIM`: the ladder's step 2; a plan's subtree and generation
-     *   blocks (`RowBasis.readsAsPlanned`); the text a timer
-     *   finds its task by (`TimerTaskResolver`)
-     * - `UP_TO_INDENT`: a plan's row (`RowBasis.readsAsPlanned`, until W1
-     *   makes it `VERBATIM`); the weaker check `ON_RECORD`
+     * - `VERBATIM`: the ladder's step 2; a plan's row, its subtree and
+     *   generation blocks (`RowBasis.readsAsPlanned`); the text a timer
+     *   finds its task by (`TimerTaskResolver`); a write's check that a line
+     *   still reads what it read — the editor's line, a coordinate carried
+     *   across the write's own edits, a line a carry moved (`FileLines`)
+     * - `UP_TO_INDENT`: the weaker check `ON_RECORD`
      *   (`TaskScanner.onRecord`); a match checked against our last write
      *   (`TaskScanner.againstLastWrite`)
      *
