@@ -89,7 +89,7 @@ export class FileParsePipeline {
 
         // Blocks are collected from the whole file (frontmatter cannot hold a
         // fence, and a block is not a task, so the body offset is irrelevant).
-        const { blocks: genBlocks } = collectGenBlocks(lines);
+        const { blocks: genBlocks } = collectGenBlocks(lines, outline);
 
         return { ignored: false, tasks, genBlocks };
     }

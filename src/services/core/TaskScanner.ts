@@ -15,7 +15,6 @@ import { WriteClaims, type ClaimResult } from './identity/WriteClaims';
 import { contentKeyOf } from './identity/ContentKey';
 import { applyIdentity, assertDistinctRuntimeIds, assertNoProvisionalIds, assertUniqueProvisionalIds } from './identity/IdentityApplier';
 import { splitLines, type Located, type TaskRef, type WriteOrigin, type WriteSink } from '../../utils/FileLines';
-import { CodeFenceTracker } from '../../utils/CodeFenceTracker';
 import { logDebug, logError, logInfo } from '../../log/log';
 
 /**
@@ -621,10 +620,10 @@ function lineOfBlockId(lines: readonly string[], blockId: string | undefined): n
     if (!id) return null;
 
     const pattern = new RegExp(`\\s\\^${id.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s*$`);
-    const fenced = CodeFenceTracker.mask([...lines]);
+    const outline = Outline.read(lines);
     let found: number | null = null;
     for (let i = 0; i < lines.length; i++) {
-        if (fenced[i] || !pattern.test(lines[i])) continue;
+        if (outline.inCode(i) || !pattern.test(lines[i])) continue;
         if (found !== null) return null;
         found = i;
     }

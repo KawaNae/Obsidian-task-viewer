@@ -102,9 +102,12 @@ describe('Placement.groupHead', () => {
             expect(Placement.groupHead(lines, 6)).toBe(5);
         });
 
-        it('goes below the frontmatter when nothing above it is shallower', () => {
-            const lines = ['---', 'tags: a', '---', '', '    - [ ] current'];
-            expect(Placement.groupHead(lines, 4)).toBe(3);
+        it('is the row itself when it stands at the top with nothing above it but the frontmatter', () => {
+            // Two columns in under nothing is an item at the top (Obsidian,
+            // measurement.md q3; four would be indented code, q10), and a
+            // blank line ends its run.
+            const lines = ['---', 'tags: a', '---', '', '  - [ ] current'];
+            expect(Placement.groupHead(lines, 4)).toBe(4);
         });
     });
 });
@@ -115,11 +118,20 @@ describe('Placement.afterSubtree', () => {
         expect(Placement.afterSubtree(lines, 0)).toBe(4);
     });
 
-    it('is null when the subtree ends inside a fence that goes on past it', () => {
-        // The fence opens at a depth the document-level reading sees, and
-        // nothing closes it: a line put after the subtree would be code.
+    it('is past a fence in the subtree that never closes, which takes the shallow line below it (Obsidian, measurement.md q14)', () => {
+        // `after` goes on a's fence, and a with it; a sibling put past it
+        // starts an item, which ends both.
         const lines = ['- [ ] a', '  ```', '  x', 'after', ''];
-        expect(Placement.afterSubtree(lines, 0)).toBeNull();
+        expect(Placement.afterSubtree(lines, 0)).toBe(4);
+    });
+
+    it('is null when the subtree ends inside a fence at the top that never closes', () => {
+        // The fence at column 0 ends a and holds every line after it, b's
+        // subtree and the end of the note included.
+        const lines = ['- [ ] a', '```', 'x', '- [ ] b', ''];
+        expect(Placement.afterSubtree(lines, 0)).toBe(1);
+        expect(Placement.afterSubtree(lines, 3)).toBeNull();
+        expect(Placement.end(lines)).toBeNull();
     });
 });
 

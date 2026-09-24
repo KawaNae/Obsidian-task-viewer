@@ -1,5 +1,5 @@
 import { CodeFenceTracker } from '../../../utils/CodeFenceTracker';
-import { Outline } from '../../parsing/utils/Outline';
+import { Outline, type OutlineReading } from '../../parsing/utils/Outline';
 import { TaskLineClassifier } from '../../parsing/utils/TaskLineClassifier';
 
 /**
@@ -14,61 +14,46 @@ import { TaskLineClassifier } from '../../parsing/utils/TaskLineClassifier';
  * question lands outside the body, the answer is `null`, and the write does
  * not happen: a write refused is one the user hears about and can make again.
  *
- * The frontmatter and the fences are read the way the parser reads them
- * (`Outline.bodyStart`, `CodeFenceTracker.scan`), so "inside the body" means
- * what the index will read as the body.
+ * The frontmatter, the list items and the fences are read the way the parser
+ * reads them (`Outline.read`), so "inside the body" means what the index will
+ * read as the body, and a row's group is the item it stands in.
  */
 export class Placement {
     /**
      * Where the next instance of `row` goes: the head of the group of
      * siblings it stands in.
      *
-     * A row that is indented has its group under the line it is indented
-     * beneath, and the head is the line just below that one. A row that is
-     * not has its group in the run of tasks just above it: each one a task
-     * line outside any fence, at the row's depth, whose subtree ends where the
-     * run below it begins. Anything else ends the run — a paragraph, a table,
-     * a `---` rule, a heading, a fence, the frontmatter's closing line, a
-     * blank line between two siblings. None of those is a task, and the next
-     * instance joins the tasks it stands among, not the text above them.
+     * A row inside another item has its group under that item, and the head
+     * is the line just below the item's own. A row at the top has its group
+     * in the run of tasks just above it: each one a task item at the top
+     * whose subtree ends where the run below it begins. Anything else ends
+     * the run — a paragraph, a table, a `---` rule, a heading, a fence, the
+     * frontmatter's closing line, a blank line between two siblings. None of
+     * those is a task, and the next instance joins the tasks it stands among,
+     * not the text above them.
      */
     static groupHead(lines: readonly string[], row: number): number | null {
+        const outline = Outline.read(lines);
+        const parent = outline.item(row)?.parent ?? null;
+        if (parent !== null) return this.inBodyOf(outline, parent + 1);
+
         const bodyStart = Outline.bodyStart(lines);
-        const depth = Outline.depthOf(lines[row]);
-
-        if (depth > 0) {
-            // The first line above that is shallower, over any blank line:
-            // a blank line inside the parent's children does not make the
-            // top of the note their parent.
-            for (let i = row - 1; i >= bodyStart; i--) {
-                const line = lines[i];
-                if (line.trim() === '') continue;
-                if (Outline.depthOf(line) < depth) return this.inBody(lines, i + 1);
-            }
-            return this.inBody(lines, bodyStart);
-        }
-
-        const fenced = CodeFenceTracker.mask([...lines]);
         let head = row;
-        for (; ;) {
-            let above = head - 1;
-            while (above >= bodyStart
-                && (lines[above].trim() === '' || Outline.depthOf(lines[above]) > depth)) {
-                above--;
-            }
-            if (above < bodyStart) break;
-            const line = lines[above];
-            if (Outline.depthOf(line) !== depth) break;
-            if (fenced[above] || !TaskLineClassifier.isTaskLine(line)) break;
-            if (Outline.subtreeEnd(lines, above) !== head) break;
+        while (head - 1 >= bodyStart) {
+            // The top-level item the line just above stands in.
+            let above = outline.ownerOf(head - 1);
+            while (above !== null && outline.item(above)!.parent !== null) above = outline.item(above)!.parent;
+            if (above === null || outline.subtreeEnd(above) !== head) break;
+            if (!TaskLineClassifier.isTaskLine(lines[above])) break;
             head = above;
         }
-        return this.inBody(lines, head);
+        return this.inBodyOf(outline, head);
     }
 
     /** Where a line just past `row`'s subtree goes: `row` gains a next sibling there. */
     static afterSubtree(lines: readonly string[], row: number): number | null {
-        return this.inBody(lines, Outline.subtreeEnd(lines, row));
+        const outline = Outline.read(lines);
+        return this.inBodyOf(outline, outline.subtreeEnd(row));
     }
 
     /** Where a first child of `row` goes: just below it. */
@@ -85,19 +70,18 @@ export class Placement {
      * "Completed" is `[x]` and nothing else — the status character is a fact
      * the parser knows, unlike the shape of a line, which cannot be told apart
      * from something the user typed by hand. The run stops at the first line
-     * past a subtree that is not a completed sibling: a blank line, a line at
-     * another depth, or an unfinished one.
+     * past a subtree that is not a completed sibling: a blank line, a line
+     * that is no item in `row`'s parent, or an unfinished one.
      */
     static afterCompletedRun(lines: readonly string[], row: number): number | null {
-        const depth = Outline.depthOf(lines[row]);
-        let end = Outline.subtreeEnd(lines, row);
-        while (end < lines.length) {
-            const line = lines[end];
-            if (line.trim() === '' || Outline.depthOf(line) !== depth) break;
-            if (TaskLineClassifier.classify(line)?.statusChar !== 'x') break;
-            end = Outline.subtreeEnd(lines, end);
+        const outline = Outline.read(lines);
+        const parent = outline.item(row)?.parent ?? null;
+        let end = outline.subtreeEnd(row);
+        for (let next = outline.item(end); next !== null && next.parent === parent; next = outline.item(end)) {
+            if (TaskLineClassifier.classify(lines[end])?.statusChar !== 'x') break;
+            end = next.end;
         }
-        return this.inBody(lines, end);
+        return this.inBodyOf(outline, end);
     }
 
     /**
@@ -130,52 +114,28 @@ export class Placement {
     /**
      * `at`, when a line spliced in there is read as part of the body; null
      * otherwise. A line goes in above the frontmatter's end, or inside a
-     * fence — past its opening line and not past its closing one, or past
-     * the end of a fence that never closes — and is not.
-     *
-     * Fences are read both ways the parser reads them: across the whole
-     * document, and within the subtree of the root task a line stands under, where
-     * a fence carries the list item's indentation and the whole-document
-     * reading cannot see it (`CodeFenceTracker.subtreeMask`). Such a fence
-     * that never closes ends with the subtree.
+     * fence — past its opening line and before its end — and is not.
      */
     static inBody(lines: readonly string[], at: number): number | null {
-        if (at < Outline.bodyStart(lines) || at > lines.length) return null;
-        const whole = CodeFenceTracker.scan([...lines]);
-        for (const fence of whole.opens) {
-            if (at > fence.line && at <= (fence.close ?? lines.length)) return null;
-        }
-        const top = this.enclosingTask(lines, at, whole.fenced);
-        if (top !== null) {
-            const end = Outline.subtreeEnd(lines, top);
-            const subtree = CodeFenceTracker.scan(lines.slice(top + 1, end).map(line => line.trimStart()));
-            for (const fence of subtree.opens) {
-                const open = top + 1 + fence.line;
-                const close = fence.close === null ? end - 1 : top + 1 + fence.close;
-                if (at > open && at <= close) return null;
-            }
-        }
-        return at;
+        return this.inBodyOf(Outline.read(lines), at);
     }
 
     /**
-     * The task the parser reads as a root whose subtree a line put in at `at`
-     * would stand inside of, or null. The roots are found as the parser finds
-     * them: each task line outside a fence that no earlier root's subtree
-     * holds, indented or not — one under a plain bullet or a paragraph is a
-     * root too.
+     * {@link inBody} on a reading of the lines. A fence that never closes at
+     * the top of the note holds every line after its opening one, a line put
+     * at the very end included. One that never closes in a list item ends
+     * with the item (`Outline.read`); a line put just past it stands after
+     * it, as a sibling put there does (R5). A line indented as the fence's
+     * own content and put there would go on the fence — the reading before
+     * the write cannot tell, and the writes that splice there put siblings.
      */
-    private static enclosingTask(lines: readonly string[], at: number, fenced: boolean[]): number | null {
-        let i = Outline.bodyStart(lines);
-        while (i < at) {
-            if (fenced[i] || !TaskLineClassifier.isTaskLine(lines[i])) {
-                i++;
-                continue;
-            }
-            const end = Outline.subtreeEnd(lines, i);
-            if (at <= end) return i;
-            i = end;
+    private static inBodyOf(outline: OutlineReading, at: number): number | null {
+        if (at < Outline.bodyStart(outline.lines) || at > outline.lines.length) return null;
+        for (const fence of outline.fences) {
+            if (at <= fence.line) continue;
+            if (at < fence.end) return null;
+            if (fence.close === null && outline.ownerOf(fence.line) === null) return null;
         }
-        return null;
+        return at;
     }
 }

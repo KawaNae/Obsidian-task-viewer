@@ -139,7 +139,7 @@ export function createDiagnosticsExtension(): Extension {
         // ever answering "is this line fenced" differently.
         const scan = fenceScanFor(doc);
 
-        const { blocks, diagnostics } = collectGenBlocks(lines, scan);
+        const { blocks, diagnostics } = collectGenBlocks(lines, outlineFor(doc));
         const gen = new Map<number, LocatedDiagnostic[]>();
         // A js section is several lines, so a diagnostic can span more than
         // one and a mark cannot. Cut into a piece per line before bucketing,
@@ -153,7 +153,7 @@ export function createDiagnosticsExtension(): Extension {
         };
         diagnostics.forEach(bucket);
         const cells = blocks.size > 0
-            ? declaredCells(lines, fenceMaskFor(doc))
+            ? declaredCells(lines, outlineFor(doc))
             : undefined;
         const tokens = new Map<number, HighlightMark[]>();
         for (const block of blocks.values()) {

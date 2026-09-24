@@ -118,10 +118,7 @@ describe('a fence below a blank line whose closing line is at column 0 (Obsidian
         expect(session.index.getTasks()).toEqual([]);
     });
 
-    // Fails until `Placement` reads the outline: it reads the fences by the
-    // old mask, which closes `  ```js` on the column-0 line, and puts T
-    // after the fence the outline reads open to the end of the note.
-    it.fails('refuses a move to the end of the note, which ends inside the fence U is in', async () => {
+    it('refuses a move to the end of the note, which ends inside the fence U is in', async () => {
         const note = ['# note', '- [ ] T @2026-09-21 ==> move([[note]])', '', '  ```js', 'code', '```', '- [ ] U', ''];
         const { contents, session } = await open({ [FILE]: note });
         const before = contents.get(FILE)!;

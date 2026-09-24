@@ -97,9 +97,9 @@ describe('a note that opens with a byte order mark', () => {
 
 describe('a next instance with nowhere in the body to go', () => {
     it('is refused whole: nothing written, the command kept, one notice', async () => {
-        // The indented row's group is under the first shallower line above,
-        // and that line is inside the fence the row stands just below.
-        const note = ['# note', '```', 'x', '   ```', `  ${ROW}`, ''];
+        // The row's group is under the item it stands in, and the line just
+        // below that item's own is inside the fence the item opens on it.
+        const note = ['# note', '- ```', '  x', '  ```', `  ${ROW}`, ''];
         const { contents, session } = await open(note);
         const before = contents.get(FILE);
         const [row] = tasksWorded(session, '対象');
@@ -112,17 +112,36 @@ describe('a next instance with nowhere in the body to go', () => {
         expect(Notice.messages).toEqual([t('notice.writeTargetUnplaceable', { subject: '対象' })]);
     });
 
-    it('is refused when the line its group is under is inside a fence in the parent\'s subtree', async () => {
-        // The fence is indented under P, so only the reading within P's
-        // subtree sees it; the first line shallower than the row is in it.
-        const note = ['# note', '- [ ] P', '\t- [ ] Q', '\t\t```', '\tx', '\t\t```', `\t\t${ROW}`, ''];
+    it('goes at the top of its run when a fence it stands after is closed above it', async () => {
+        // Two columns in under nothing is an item at the top (Obsidian,
+        // measurement.md q3), and a closed fence above ends its run. The old
+        // depth reading took the group to be under `x`, in the fence, and
+        // refused.
+        const note = ['# note', '```', 'x', '   ```', `  ${ROW}`, ''];
         const { contents, session } = await open(note);
-        const before = contents.get(FILE)!;
 
         await fire(session);
 
-        expect(contents.get(FILE)).toBe(before.replace('\t\t- [ ] 対象', '\t\t- [x] 対象'));
-        expect(Notice.messages).toEqual([t('notice.writeTargetUnplaceable', { subject: '対象' })]);
+        expect(contents.get(FILE)).toBe(
+            ['# note', '```', 'x', '   ```', '  - [ ] 対象 @2026-09-28 ==> every mon', '  - [x] 対象 @2026-09-21', ''].join('\n'),
+        );
+        expect(Notice.messages).toEqual([]);
+    });
+
+    it('goes under the item it stands in when a fence in that item takes a shallower line (Obsidian, measurement.md q1)', async () => {
+        // `\tx` goes on Q's fence, so the row is Q's child and its group is
+        // under Q, above the fence. The old depth reading took the group to be
+        // under `\tx`, in the fence, and refused.
+        const note = ['# note', '- [ ] P', '\t- [ ] Q', '\t\t```', '\tx', '\t\t```', `\t\t${ROW}`, ''];
+        const { contents, session } = await open(note);
+
+        await fire(session);
+
+        expect(contents.get(FILE)).toBe([
+            '# note', '- [ ] P', '\t- [ ] Q', '\t\t- [ ] 対象 @2026-09-28 ==> every mon',
+            '\t\t```', '\tx', '\t\t```', '\t\t- [x] 対象 @2026-09-21', '',
+        ].join('\n'));
+        expect(Notice.messages).toEqual([]);
     });
 
     it('refuses a copy that would carry a fence it never closes above the original', async () => {

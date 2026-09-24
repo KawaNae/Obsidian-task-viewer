@@ -105,6 +105,29 @@ describe('collectGenBlocks', () => {
             expect(diagnostics[0].span).toEqual({ start: 4, end: 16 });
         });
 
+        it('reports a block that stands in a list item, however shallow, and does not collect it', () => {
+            // Two columns under `- [ ] ` is the item's content column, and a
+            // fence opened on the item's own line is in the item too.
+            const { blocks, diagnostics } = collectGenBlocks([
+                '- [ ] task',
+                '  ```tv-gen 手順',
+                '  ```',
+                '- ```tv-gen 行',
+                '  ```',
+            ]);
+            expect(blocks.size).toBe(0);
+            expect(diagnostics.map(d => [d.code, d.line, d.span.start])).toEqual([
+                ['gen.indented-block', 1, 2],
+                ['gen.indented-block', 3, 2],
+            ]);
+        });
+
+        it('collects a block indented less than four columns at the top', () => {
+            const { blocks, diagnostics } = collectGenBlocks(['prose', '', '  ```tv-gen 手順', '  - [ ] a', '  ```']);
+            expect(diagnostics).toEqual([]);
+            expect(blocks.get('手順')!.body).toEqual(['  - [ ] a']);
+        });
+
         it('reports a mistyped tv- tag', () => {
             const { diagnostics } = collectGenBlocks(['```tv-gne 手順', 'x', '```']);
             expect(diagnostics.map(d => [d.code, d.params])).toEqual([
