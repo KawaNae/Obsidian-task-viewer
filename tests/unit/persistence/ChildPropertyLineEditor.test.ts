@@ -2,6 +2,8 @@ import { describe, it, expect } from 'vitest';
 import { ChildPropertyLineEditor } from '../../../src/services/persistence/utils/ChildPropertyLineEditor';
 import { draftOver, type LineEdit } from '../../../src/utils/FileLines';
 import type { PropertyOp } from '../../../src/services/persistence/PropertyUpdatePlanner';
+import { FileParsePipeline } from '../../../src/services/parsing/FileParsePipeline';
+import { DEFAULT_SETTINGS } from '../../../src/types';
 
 /**
  * `applyOps` over a draft, the way `processLines` hands it one.
@@ -38,7 +40,7 @@ describe('ChildPropertyLineEditor', () => {
             const lines = [
                 '- [ ] task',
                 '    - [ ] child',
-                '        - key:: of-child',
+                '        - deep:: of-child',
                 '    -\t[ ] tabbed',
                 '        - key:: of-tabbed',
                 '    - key:: own',
@@ -225,6 +227,42 @@ describe('ChildPropertyLineEditor', () => {
                 '    ```',
             ]);
         });
+    });
+
+    /**
+     * The lines a property edit touches are the lines the parser read the
+     * task's properties from (`ChildLineClassifier.ownPropertyLines`), for
+     * every shape here: an edit of a line the parser does not read as the
+     * task's writes where the index says nothing is.
+     */
+    describe('the parser and the writer read one set of own property lines', () => {
+        const SHAPES: Array<[string, string[], Record<string, string>]> = [
+            ['a fence under the task', ['- [ ] task', '    ```md', '    - key:: 例', '    ```', '    - key:: 本物'], { key: '本物' }],
+            ['a tab-indented fence', ['- [ ] task', '\t```', '\t- key:: 例', '\t```', '\t- other:: 本物'], { other: '本物' }],
+            ['a property under a note bullet', ['- [ ] task', '    - note', '        - deep:: of-note', '    - key:: own'], { key: 'own' }],
+            ['a property under a child task', ['- [ ] task', '    - [ ] child', '        - deep:: of-child', '    - key:: own'], { key: 'own' }],
+            // (Obsidian, measurement.md q4) eight columns in is the task's
+            // paragraph going on, not an item: no property.
+            ['a property line in the paragraph going on', ['- [ ] task', '        - key:: deep', '    - other:: own'], { other: 'own' }],
+            ['a blank line between', ['- [ ] task', '    - [ ] child', '', '    - key:: own', ''], { key: 'own' }],
+            ['a fence at column 0 that holds a property line', ['- [ ] task', '```', '- key:: 例', '```'], {}],
+        ];
+
+        for (const [name, lines, expected] of SHAPES) {
+            it(name, () => {
+                const parsed = FileParsePipeline.parse('note.md', [...lines], DEFAULT_SETTINGS);
+                if (parsed.ignored) throw new Error('ignored');
+                const task = parsed.tasks.find(candidate => candidate.line === 0)!;
+                const written = Object.fromEntries(
+                    ChildPropertyLineEditor.findOwnPropertyLines(lines, 0).map(line => [line.key, line.value]),
+                );
+                const read = Object.fromEntries(
+                    Object.entries(task.properties).map(([key, value]) => [key, value.value]),
+                );
+                expect(read).toEqual(written);
+                expect(written).toEqual(expected);
+            });
+        }
     });
 
     describe('applyOps: 申告', () => {

@@ -159,7 +159,11 @@ export class TreeTaskExtractor {
         }
 
         // 子行プロパティを収集
-        const rawProps = ChildLineClassifier.collectProperties(task.childLines);
+        // 自分のプロパティ行だけ（writer が編集する行と同じ集合）
+        const ownProperty = new Set(ChildLineClassifier.ownPropertyLines(ctx.outline, block.line));
+        const rawProps = ChildLineClassifier.collectProperties(
+            task.childLines.filter(line => ownProperty.has(line.bodyLine)),
+        );
 
         // 組み込みプロパティを専用フィールドに分離
         const extracted = BuiltinPropertyExtractor.extract(rawProps, ctx.scopeKeys);

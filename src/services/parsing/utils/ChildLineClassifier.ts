@@ -1,7 +1,7 @@
 import type { ChildLine, PropertyType, PropertyValue } from '../../../types';
 import { IN_LINE } from '../../../utils/LineBreak';
 import { LIST_BULLET_SOURCE } from './ListMarker';
-import { INDENT_SOURCE, Outline } from './Outline';
+import { INDENT_SOURCE, Outline, type OutlineReading } from './Outline';
 import { extractWikilinkTarget } from '../../../utils/WikilinkUtils';
 
 /**
@@ -53,6 +53,25 @@ export class ChildLineClassifier {
      */
     static isPropertyLine(text: string): boolean {
         return this.PROPERTY_LINE.test(text);
+    }
+
+    /**
+     * The task's own property lines, as absolute line numbers: the list items
+     * the outline reads directly under the task's item, not code, that are
+     * `- key:: value` lines. A property line under a child task, under a
+     * note bullet, in a code block, or in a paragraph going on is not the
+     * task's. The parser reads the task's properties from these lines and
+     * the writer edits these lines (`ChildPropertyLineEditor`), so the two
+     * are one set.
+     */
+    static ownPropertyLines(outline: OutlineReading, taskLine: number): number[] {
+        const result: number[] = [];
+        const end = outline.subtreeEnd(taskLine);
+        for (let line = taskLine + 1; line < end; line++) {
+            if (outline.item(line)?.parent !== taskLine || outline.inCode(line)) continue;
+            if (this.PROPERTY_LINE.test(outline.lines[line])) result.push(line);
+        }
+        return result;
     }
 
     /** childLines から properties を集約 */
