@@ -183,11 +183,16 @@ describe('OutlineReading', () => {
         const outline = Outline.read(['- [ ] T', '\t- memo:: a', '\t\t- [ ] sub', '\t- k:: v', 'lazy', '\t- [ ] c']);
         // sub is too deep for T without memo: a paragraph line, no item.
         expect(outline.canTakeOut([1])).toBe(false);
-        // `lazy` goes on T's item instead: still a paragraph line.
+        // `lazy` goes on sub's paragraph instead: a paragraph line either way.
         expect(outline.canTakeOut([3])).toBe(true);
         expect(outline.canTakeOut([5])).toBe(true);
-        // A child that still reaches the item above becomes its child.
-        expect(Outline.read(['- [ ] T', '  - memo:: a', '    - [ ] sub']).canTakeOut([1])).toBe(true);
+        // A child that still reaches an item changes parent: T's own, or a
+        // sibling's, and a command or a property would work for that task
+        // (the third L2 counterexample run).
+        for (const child of ['    - [ ] sub', '    - ==> every tue', '    - k:: v']) {
+            expect(Outline.read(['- [ ] T', '  - memo:: a', child]).canTakeOut([1]), child).toBe(false);
+            expect(Outline.read(['- [ ] T', '  - [ ] B', '  - memo:: a', child]).canTakeOut([2]), child).toBe(false);
+        }
     });
 });
 
