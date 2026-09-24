@@ -135,6 +135,18 @@ describe('renderFlowInstance: the lines a next instance is written as', () => {
         expect([1, 2, 3, 4].map(line => parentOf(rendered, line))).toEqual([0, 0, 2, 0]);
     });
 
+    it('keeps the step of the task\'s own children where it is not the file\'s unit', () => {
+        // Children two spaces in; the file's unit reads four (the mutation run's 8f).
+        const lines = ['- [ ] T', '  - note', ''];
+        const rendered = renderFlowInstance(fileOps, lines, 0, {
+            kind: 'generated',
+            parentLine: '- [ ] G',
+            flowLines: ['every day'],
+            children: [{ depth: 1, body: '- [ ] c1' }, { depth: 2, body: '- [ ] c2' }],
+        });
+        expect(texts(rendered)).toEqual(['- [ ] G', '  - ==> every day', '  - [ ] c1', '    - [ ] c2']);
+    });
+
     it('writes the same bytes as before where the first child is a unit past the task', () => {
         const lines = ['- r', '\t- [ ] T', '\t\t- note', ''];
         const rendered = renderFlowInstance(fileOps, lines, 1, {

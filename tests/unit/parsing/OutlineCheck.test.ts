@@ -76,6 +76,19 @@ describe('a line put in reads as its block says, or the write is unplaceable', (
         expect(checked(lines, (draft) => draft.put(Placement.afterSubtree(lines, 0), Block.of(reading, [0, 1], ['- [ ] T', '  c'])))).toBe('unplaceable');
     });
 
+    it('lets a note bullet that lost its item go where it lands: it is no task, command or property', () => {
+        // The mutation run's 1h: the parent of a put item is asked only of
+        // one the plugin reads a meaning from.
+        const lines = ['- [ ] T', '  - ==> every mon', '    - note', ''];
+        const reading = Outline.read(lines);
+        const block = Block.of(reading, [0, 2], ['- [x] T', '    - note'], true);
+        expect(block.map(line => line.under)).toEqual(['spot', 'lost']);
+        expect(checked(lines, (draft) => {
+            draft.put(Placement.end(lines), block);
+            draft.splice(0, 3);
+        })).toBe('sound');
+    });
+
     it('holds a carried line to the reading it had, its lost parent included', () => {
         // T's `==>` line is not carried; the task under it has lost its item.
         const lines = ['- [ ] T', '  - ==> every mon', '    - [ ] sub', ''];
