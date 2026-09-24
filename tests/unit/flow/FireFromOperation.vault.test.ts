@@ -1,7 +1,8 @@
-import { describe, it, expect, afterEach, beforeEach, beforeAll, afterAll, vi } from 'vitest';
+import { describe, it, expect, afterEach, beforeEach } from 'vitest';
 import { Notice } from 'obsidian';
 import { openVault, makeFile, type VaultSession } from '../helpers/vaultSession';
 import { editorSession, type EditorSession } from '../helpers/editorSession';
+import { freezeDate } from '../helpers/fakeDate';
 
 /**
  * A completion fires from the operation that completed it, once, and from
@@ -16,13 +17,7 @@ import { editorSession, type EditorSession } from '../helpers/editorSession';
 
 // `every` lands on the first grid point after the later of today and the
 // row's date: today is held on the Friday the dates below are read from.
-beforeAll(() => {
-    vi.useFakeTimers({ toFake: ['Date'] });
-    vi.setSystemTime(new Date(2026, 8, 25, 12, 0, 0));
-});
-afterAll(() => {
-    vi.useRealTimers();
-});
+freezeDate(new Date(2026, 8, 25, 12, 0, 0));
 
 const FILE = 'note.md';
 

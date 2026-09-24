@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeAll, afterAll, afterEach } from 'vitest';
+import { describe, it, expect, vi, afterEach } from 'vitest';
 import { FlowExecutor } from '../../../src/services/flow/FlowExecutor';
 import { FileParsePipeline } from '../../../src/services/parsing/FileParsePipeline';
 import { FileOperations } from '../../../src/services/persistence/utils/FileOperations';
@@ -6,15 +6,10 @@ import { InlineTaskWriter } from '../../../src/services/persistence/writers/Inli
 import type { TaskOp } from '../../../src/services/persistence/TaskOps';
 import { editLines } from '../../../src/utils/FileLines';
 import { DEFAULT_SETTINGS } from '../../../src/types';
+import { freezeDate } from '../helpers/fakeDate';
 
 // `every 1d` lands on the day after the later of today and the row's date.
-beforeAll(() => {
-    vi.useFakeTimers({ toFake: ['Date'] });
-    vi.setSystemTime(new Date(2026, 7, 17, 12, 0, 0));
-});
-afterAll(() => {
-    vi.useRealTimers();
-});
+freezeDate(new Date(2026, 7, 17, 12, 0, 0));
 afterEach(() => {
     vi.restoreAllMocks();
 });

@@ -1,7 +1,8 @@
-import { describe, it, expect, afterEach, beforeAll, afterAll, vi } from 'vitest';
+import { describe, it, expect, afterEach } from 'vitest';
 import { Notice } from 'obsidian';
 import { openVault, vaultSession, type VaultSession } from '../helpers/vaultSession';
 import { t } from '../../../src/i18n';
+import { freezeDate } from '../helpers/fakeDate';
 
 /**
  * A fire does not write a plan made from a copy the file has moved on from.
@@ -25,13 +26,7 @@ import { t } from '../../../src/i18n';
 
 // `every` lands on the first grid point after the later of today and the
 // row's date: today is held on the Friday the dates below are read from.
-beforeAll(() => {
-    vi.useFakeTimers({ toFake: ['Date'] });
-    vi.setSystemTime(new Date(2026, 8, 25, 12, 0, 0));
-});
-afterAll(() => {
-    vi.useRealTimers();
-});
+freezeDate(new Date(2026, 8, 25, 12, 0, 0));
 
 const FILE = 'note.md';
 const OTHER = 'other.md';
