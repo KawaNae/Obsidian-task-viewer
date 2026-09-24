@@ -4,6 +4,7 @@ import { TaskParser } from '../../parsing/TaskParser';
 import { collectFlowLineIndices, collectFlowLineIndicesInFile } from '../../parsing/utils/FlowLineScanner';
 import { FileOperations } from '../utils/FileOperations';
 import { ChildPropertyLineEditor } from '../utils/ChildPropertyLineEditor';
+import { ChildLineClassifier } from '../../parsing/utils/ChildLineClassifier';
 import { Placement } from '../utils/Placement';
 import type { PropertyOp } from '../PropertyUpdatePlanner';
 import { renderFlowInstance } from '../FlowInstanceLines';
@@ -239,11 +240,12 @@ export class InlineTaskWriter {
             case 'strip-flow': {
                 // Every flow line is below the row (the scan starts past it
                 // and stops at the first line that is not a descendant), so
-                // taking them out leaves the row where it is. One with lines
-                // of its own below it is not taken out (`canTakeOut`).
+                // taking them out leaves the row where it is. Not when a line
+                // below would read as something else without them, or a task,
+                // command or property would stand elsewhere (`canTakeOut`).
                 const outline = Outline.read(lines);
                 const flowIndices = collectFlowLineIndices(outline, line);
-                if (!outline.canTakeOut(flowIndices)) return false;
+                if (!outline.canTakeOut(flowIndices, text => ChildLineClassifier.carriesMeaning(text))) return false;
                 for (let i = flowIndices.length - 1; i >= 0; i--) {
                     draft.splice(flowIndices[i], 1);
                 }
@@ -427,11 +429,12 @@ export class InlineTaskWriter {
         // The task's own direct `- ==>` flow lines are consumed by the fire —
         // they must not travel to the archive. Descendant tasks' flow lines
         // are NOT direct (structural-parent rule) and stay as templates.
-        // One with lines of its own below it is not left behind: null, and
-        // the move is refused (`canTakeOut`).
+        // Not left behind when a line below would read as something else
+        // without them, or a task, command or property would stand elsewhere:
+        // null, and the move is refused (`canTakeOut`).
         const outline = Outline.read(lines);
         const flowIndices = collectFlowLineIndices(outline, currentLine);
-        if (!outline.canTakeOut(flowIndices)) return null;
+        if (!outline.canTakeOut(flowIndices, text => ChildLineClassifier.carriesMeaning(text))) return null;
         const flowAbs = new Set(flowIndices);
         const { childrenLines } = this.fileOps.collectChildrenFromLines(lines, currentLine);
         const kept = childrenLines

@@ -137,6 +137,37 @@ describe('a child written under a task with no children', () => {
     });
 });
 
+describe('a line with a note bullet below it', () => {
+    // The note goes under the task: no task, command or property changes
+    // (the fourth L2 counterexample run, U1 and U2). Refused, the series
+    // stopped when a `==>` line had a word of explanation under it.
+    it('is stripped by a fire, and the series goes on', async () => {
+        const { contents, session } = await open(['# note', '- [ ] T @2026-09-21', '  - ==> every mon', '    - why weekly', '- [ ] U', '']);
+
+        expect(await session.index.updateTask(idOf(session, 'T'), { statusChar: 'x' })).toBe(true);
+        const executor = (session.index as unknown as { commandExecutor: { isProcessing: boolean; taskQueue: unknown[] } }).commandExecutor;
+        await vi.waitFor(() => {
+            expect(executor.isProcessing).toBe(false);
+            expect(executor.taskQueue).toHaveLength(0);
+        });
+        await session.settle(FILE);
+
+        expect(contents.get(FILE)!.split('\n')).toEqual([
+            '# note', '- [ ] T @2026-09-28', '  - ==> every mon', '- [x] T @2026-09-21', '    - why weekly', '- [ ] U', '',
+        ]);
+        expect(Notice.messages).toEqual([]);
+    });
+
+    it('is deleted as a property line, the note going under the task', async () => {
+        const { contents, session } = await open(['# note', '- [ ] T', '  - memo:: a', '    - detail', '- [ ] U', '']);
+
+        await deleteMemo(session);
+
+        expect(contents.get(FILE)!.split('\n')).toEqual(['# note', '- [ ] T', '    - detail', '- [ ] U', '']);
+        expect(Notice.messages).toEqual([]);
+    });
+});
+
 describe('a command line with a paragraph going on it', () => {
     it('is stripped by a fire, the paragraph going on the task instead', async () => {
         const { contents, session } = await open(['# note', '- [ ] 対象 @2026-09-21', '\t- ==> every mon', 'lazy', '- [ ] U', '']);

@@ -218,27 +218,56 @@ export class OutlineReading {
 
     /**
      * Whether taking the lines `rows` out leaves every other line what it
-     * was, asked of the reading of the lines without them: opening an item
-     * or not, code or not, and an item under the same parent. So a line with
-     * an item under it is not taken out.
+     * was, asked of the reading of the lines without them. Every line keeps
+     * its kind: opening an item or not, and fenced code, indented code or
+     * neither. An item the plugin reads a meaning from (`meaningful`: a task,
+     * a `==>` line, a property, a wikilink child) keeps its place as well:
+     * its parent is not taken out, and the items above it are the ones they
+     * were, those taken out aside.
      *
      * A child of a line taken out, too deep for the item above once it is
      * gone, would be a paragraph line, its task and ID gone. One that still
      * reaches an item would change parent: a `==>` or property line would
      * work for a task it did not belong to, a sibling's or the task's own
-     * (the third L2 counterexample run). A paragraph line may go on another
-     * item's paragraph; it is no task, command or property wherever it goes.
+     * (the third L2 counterexample run); a task under a note bullet that
+     * went under a sibling would be the sibling's. A fence pushed four
+     * columns past its item's content would be indented code, its info
+     * string text (the fourth). A note bullet or a paragraph line may go on
+     * another item: it is no task, command or property wherever it goes.
      */
-    canTakeOut(rows: readonly number[]): boolean {
+    canTakeOut(rows: readonly number[], meaningful: (line: string) => boolean): boolean {
         const gone = new Set(rows);
         const kept = this.lines.map((_, i) => i).filter(i => !gone.has(i));
         const after = Outline.read(kept.map(i => this.lines[i]));
-        const before = (k: number | null) => (k === null ? null : kept[k]);
+        const was = this.codeKinds();
+        const now = after.codeKinds();
         return kept.every((i, k) => {
             const item = this.item(i);
-            if ((item === null) !== (after.item(k) === null) || this.inCode(i) !== after.inCode(k)) return false;
-            return item === null || before(after.item(k)!.parent) === item.parent;
+            if ((item === null) !== (after.item(k) === null) || was[i] !== now[k]) return false;
+            if (item === null || !meaningful(this.lines[i])) return true;
+            if (item.parent !== null && gone.has(item.parent)) return false;
+            const above = this.itemsAbove(i).filter(line => !gone.has(line));
+            const aboveNow = after.itemsAbove(k).map(line => kept[line]);
+            return above.length === aboveNow.length && above.every((line, n) => line === aboveNow[n]);
         });
+    }
+
+    /** The items `row`'s item stands in, innermost first. */
+    private itemsAbove(row: number): number[] {
+        const above: number[] = [];
+        for (let parent = this.items.get(row)?.parent ?? null; parent !== null; parent = this.items.get(parent)?.parent ?? null) {
+            above.push(parent);
+        }
+        return above;
+    }
+
+    /** Per line, the code it is: in a fence (its delimiters included), indented, or none. */
+    private codeKinds(): ('fenced' | 'indented' | null)[] {
+        const kinds: ('fenced' | 'indented' | null)[] = this.codes.map(code => (code ? 'indented' : null));
+        for (const fence of this.fences) {
+            for (let line = fence.line; line < fence.end; line++) kinds[line] = 'fenced';
+        }
+        return kinds;
     }
 
     /**
