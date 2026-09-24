@@ -894,6 +894,21 @@ describe('LineEdits.carry', () => {
         expect(reported.some(edit => edit.kind === 'replaced')).toBe(false);
     });
 
+    it('carries the line it names when a new line is put before it in the same block', () => {
+        // The source stands past the spot, so the new line put first moves
+        // it down by one (the mutation run's 7b).
+        const lines = ['a', 'b', 'c', 'd'];
+        const { draft, reported, placedBy } = draftOver(lines);
+
+        draft.put({ at: 1, parent: null, indent: '' }, [{ text: 'new', kind: 'text' }, { from: 3, text: 'd', kind: 'text' }]);
+        draft.splice(5, 1);
+
+        expect(lines).toEqual(['a', 'new', 'd', 'b', 'c']);
+        const replayed = replayEdits(4, reported, placedBy);
+        expect(replayed?.origin).toEqual([0, null, 3, 1, 2]);
+        expect(replayed?.placed).toEqual([null, { id: 0, offset: 0 }, { id: 0, offset: 1 }, null, null]);
+    });
+
     it('is not a report a file could follow while the source still stands', () => {
         // One line in two places would give one name to two rows.
         const lines = ['a', 'row'];
