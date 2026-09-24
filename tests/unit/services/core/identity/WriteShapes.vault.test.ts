@@ -22,12 +22,11 @@ freezeDate(new Date(2026, 8, 25, 12, 0, 0));
  * - B: a line is written above the target by something else just before the
  *   write, with no scan in between. The write still lands on its own row.
  *
- * Flow effects run inside the executor, after the completion scan. The
- * effects of a fire in its own file (the next instance, then the strip, the
- * removal or the move to the end) are one write, `applyToTask`; their B puts
- * the outside edit between that scan and that one write, by wrapping it. A
- * move to another file writes the destination first (`appendTaskWithChildren`)
- * and then the source's one write, and its B wraps the one it targets.
+ * A fire is made in the write that completes its row: the check, the next
+ * instance and the strip, the removal or the move to the end are one write,
+ * `updateTaskInFile`, and its B puts the outside edit just before it. A move
+ * to another file then writes the destination (`appendArchive`) and then the
+ * source's one write (`applyToTask`), and its B wraps the one it targets.
  *
  * The last block is the note whose rows read alike: after an outside edit,
  * the row named cannot be told from its twin, and the write is refused with
@@ -198,14 +197,14 @@ describe('2. stripFlow (a completion consuming its command)', () => {
     });
 
     it('B: a line written above just before the fire\'s write does not move the strip off the row', async () => {
-        // The fire is one write, so the outside line lands before both the
-        // next instance and the strip. It is a sibling at the head of the
-        // fired row's group, so the next instance goes in above it; the strip
-        // still rewrites the row that fired.
+        // The fire is in the completing write, so the outside line lands
+        // before the check, the next instance and the strip. It is a sibling
+        // at the head of the fired row's group, so the next instance goes in
+        // above it; the strip still rewrites the row that fired.
         const { contents, session } = await open({ [FILE]: NOTE('- [ ] 対象 @2026-09-21 ==> every mon') });
         const held = { above: idOf(session, '上'), target: idOf(session, '対象'), below: idOf(session, '下') };
 
-        editBefore(session, 'applyToTask', () => writeOutside(contents, 1));
+        editBefore(session, 'updateTaskInFile', () => writeOutside(contents, 1));
         await check(session, held.target);
         await session.flowSettled(FILE);
 
@@ -507,7 +506,7 @@ describe('8. appendTaskWithChildren (a move archiving its subtree)', () => {
         });
         const held = { above: idOf(session, '上'), below: idOf(session, '下') };
 
-        editBefore(session, 'appendTaskWithChildren', () => writeOutside(contents, 1));
+        editBefore(session, 'appendArchive', () => writeOutside(contents, 1));
         await check(session, idOf(session, '対象'));
         await session.flowSettled(FILE, ARCHIVE);
 
@@ -525,8 +524,8 @@ describe('8. appendTaskWithChildren (a move archiving its subtree)', () => {
         });
         const held = { above: idOf(session, '上'), below: idOf(session, '下'), target: idOf(session, '対象'), child: idOf(session, '子') };
 
-        // A move within one file is one write (applyToTask).
-        editBefore(session, 'applyToTask', () => writeOutside(contents, 1));
+        // A move within one file is in the completing write.
+        editBefore(session, 'updateTaskInFile', () => writeOutside(contents, 1));
         await check(session, idOf(session, '対象'));
         await session.flowSettled(FILE);
 
@@ -658,12 +657,12 @@ describe('11. insertRecurrenceForTask (create-next)', () => {
     });
 
     it('B: a line written above just before the fire\'s write does not move the insert off the group', async () => {
-        // The outside line is a sibling at the head of the group when the one
-        // write reads the file, so the next instance goes in above it.
+        // The outside line is a sibling at the head of the group when the
+        // completing write reads the file, so the next instance goes in above it.
         const { contents, session } = await open({ [FILE]: NOTE('- [ ] 対象 @2026-09-21', '\t- ==> every mon') });
         const held = { above: idOf(session, '上'), target: idOf(session, '対象'), below: idOf(session, '下') };
 
-        editBefore(session, 'applyToTask', () => writeOutside(contents, 1));
+        editBefore(session, 'updateTaskInFile', () => writeOutside(contents, 1));
         await check(session, held.target);
         await session.flowSettled(FILE);
 
@@ -715,13 +714,13 @@ describe('12. insertGeneratedInstance (create-generated)', () => {
     });
 
     it('B: a line written above just before the fire\'s write does not move the insert off the group', async () => {
-        // As in 11: the outside line heads the group when the one write reads
-        // the file, and the block's instance goes in above it.
+        // As in 11: the outside line heads the group when the completing write
+        // reads the file, and the block's instance goes in above it.
         const { contents, session } = await open({ [FILE]: SOURCE() });
         const held = { above: idOf(session, '上'), target: idOf(session, '対象'), below: idOf(session, '下') };
         const child = idOf(session, '元の子');
 
-        editBefore(session, 'applyToTask', () => writeOutside(contents, 1));
+        editBefore(session, 'updateTaskInFile', () => writeOutside(contents, 1));
         await check(session, held.target);
         await session.flowSettled(FILE);
 
@@ -784,13 +783,13 @@ describe('twins after an outside edit: refused, with one notice', () => {
     // the queue, any order where the scan commits first does the same.
     // Handed to I1 (`guessed`).
     it.fails('a flow fire (create-next, then strip-flow) writes nothing — fails: a scan that commits guessed twins before the fire (pre-W1, I1)', async () => {
-        // The check itself lands: the twins differ once one of them is `[x]`.
-        // The outside edit then checks the other twin too and writes a line
-        // above, so by the time the fire writes, the two read alike again.
+        // The outside edit, just before the completing write, checks the
+        // other twin and writes a line above; the check and its fire are one
+        // write, made against two rows that read alike.
         const { contents, session } = await open({ [FILE]: TWINS('- [ ] 子 @2026-09-21 ==> every mon') });
         const second = rows(session)[2].id;
 
-        editBefore(session, 'applyToTask', () => {
+        editBefore(session, 'updateTaskInFile', () => {
             contents.set(FILE, contents.get(FILE)!.replace('\t- [ ] 子', '\t- [x] 子'));
             writeOutside(contents, 1);
         });

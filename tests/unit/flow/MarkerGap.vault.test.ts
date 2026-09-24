@@ -40,11 +40,6 @@ function taskWorded(session: VaultSession, content: string) {
 
 async function complete(session: VaultSession, content: string): Promise<void> {
     expect(await session.index.updateTask(taskWorded(session, content).id, { statusChar: 'x' })).toBe(true);
-    const executor = (session.index as unknown as { commandExecutor: { isProcessing: boolean; taskQueue: unknown[] } }).commandExecutor;
-    await vi.waitFor(() => {
-        expect(executor.isProcessing).toBe(false);
-        expect(executor.taskQueue).toHaveLength(0);
-    });
     await session.settle(FILE);
 }
 
@@ -122,11 +117,6 @@ describe('a task moved to another indentation', () => {
     async function completeIn(session: VaultSession, content: string, files: string[]): Promise<void> {
         const task = session.index.getTasks().find(each => each.content === content)!;
         expect(await session.index.updateTask(task.id, { statusChar: 'x' })).toBe(true);
-        const executor = (session.index as unknown as { commandExecutor: { isProcessing: boolean; taskQueue: unknown[] } }).commandExecutor;
-        await vi.waitFor(() => {
-            expect(executor.isProcessing).toBe(false);
-            expect(executor.taskQueue).toHaveLength(0);
-        });
         for (const file of files) await session.settle(file);
     }
 

@@ -9,15 +9,16 @@ import type { GeneratedChild } from '../persistence/TaskCloner';
  * ORDER: the planner emits effects in the order
  *   create-next / create-generated → archive-to → strip-flow / delete-original
  * and the interpreter keeps it, as the order of the ops of one write (see
- * FlowExecutor.executeFlow and InlineTaskWriter.applyToTask). Everything a
- * fire does in the row's own file is that one write: the row is located once,
+ * FlowExecutor.planTask and InlineTaskWriter.applyOps). Everything a fire
+ * does in the row's own file is the write that completed the row: the row is
+ * located once,
  * and each op after the first takes its line from that answer carried across
  * the splices before it. The next instance goes in at the head of the sibling
  * group, so the row it came from moves down under it and is still the row the
  * later ops are about; nothing searches the file for the row a second time.
- * The one exception is a move to another file, which cannot be one write: the
- * archive is written to the destination first, and only once it has landed is
- * the source's one write made.
+ * The one exception is a move to another file, which cannot be one write:
+ * the completion lands first, then the archive is written to the destination,
+ * and only once it has landed is the source's write made (`finishAway`).
  *
  * The order used to protect more than it does. When each effect was a write
  * of its own that found the row by its text, the row stayed findable only for

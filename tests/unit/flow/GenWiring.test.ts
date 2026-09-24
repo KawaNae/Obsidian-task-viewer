@@ -10,7 +10,7 @@ import type { TaskOp } from '../../../src/services/persistence/TaskOps';
 import type { FlowInstanceInsert } from '../../../src/services/persistence/FlowInstanceLines';
 import { plannedOn } from '../../../src/services/persistence/TaskRefs';
 import { DEFAULT_SETTINGS, type Task } from '../../../src/types';
-import { heldTasks } from '../helpers/heldTasks';
+import { completing } from '../helpers/completing';
 import { makeTask } from '../helpers/makeTask';
 import { writeBench } from '../helpers/writeBench';
 import { freezeDate } from '../helpers/fakeDate';
@@ -83,20 +83,16 @@ function makeExecutor(
     repository: ReturnType<typeof makeRepository>,
     blocks: Record<string, GenBlock> = {},
 ) {
-    const tasks = heldTasks();
     const taskIndex = {
-        waitForScan: vi.fn().mockResolvedValue(undefined),
-        getTask: tasks.getTask,
-        requestScan: vi.fn().mockResolvedValue(undefined),
-        notifyImmediate: vi.fn(),
+        getTask: vi.fn(() => undefined),
         getGenBlock: vi.fn((_file: string, name: string) => blocks[name]),
     };
-    const executor = tasks.hold(new FlowExecutor(
+    const executor = completing(new FlowExecutor(
         repository as unknown as TaskRepository,
         taskIndex as unknown as TaskIndex,
         app as never,
         () => DEFAULT_SETTINGS
-    ));
+    ), repository, blocks);
     return { executor, taskIndex };
 }
 
@@ -126,7 +122,7 @@ describe('a use() flow writes what its block describes', () => {
         const repository = makeRepository();
         const { executor } = makeExecutor(repository, { 週報: WEEKLY });
 
-        await executor.handleTaskCompletion(firedTask('every mon use("週報")'));
+        await executor.complete(firedTask('every mon use("週報")'));
         await flush();
 
         expect(repository.applyToTask).toHaveBeenCalledTimes(1);
@@ -142,7 +138,7 @@ describe('a use() flow writes what its block describes', () => {
         const repository = makeRepository();
         const { executor } = makeExecutor(repository, { 週報: WEEKLY });
 
-        await executor.handleTaskCompletion(firedTask('every mon use("週報")'));
+        await executor.complete(firedTask('every mon use("週報")'));
         await flush();
 
         const { children } = generatedOf(repository);
@@ -158,7 +154,7 @@ describe('a use() flow writes what its block describes', () => {
         const repository = makeRepository();
         const { executor } = makeExecutor(repository, { 週報: WEEKLY });
 
-        await executor.handleTaskCompletion(firedTask('every mon use("週報")'));
+        await executor.complete(firedTask('every mon use("週報")'));
         await flush();
 
         const { parentLine } = generatedOf(repository);
@@ -169,7 +165,7 @@ describe('a use() flow writes what its block describes', () => {
         const repository = makeRepository();
         const { executor } = makeExecutor(repository, { 週報: WEEKLY });
 
-        await executor.handleTaskCompletion(firedTask('every mon use("週報")'));
+        await executor.complete(firedTask('every mon use("週報")'));
         await flush();
 
         const { parentLine } = generatedOf(repository);
@@ -184,7 +180,7 @@ describe('a use() flow writes what its block describes', () => {
         const raws = ['every mon', 'use("週報")'];
         const { program, diagnostics } = parseFlowSegments(raws);
 
-        await executor.handleTaskCompletion(firedTask('every mon', {
+        await executor.complete(firedTask('every mon', {
             flow: {
                 raw: raws[0],
                 childSegments: [{ raw: raws[1], bodyLine: 1 }],
@@ -207,7 +203,7 @@ describe('a use() flow writes what its block describes', () => {
             朝: block('朝', ['\t- [ ] ストレッチ']),
         });
 
-        await executor.handleTaskCompletion(firedTask('every mon use("朝")'));
+        await executor.complete(firedTask('every mon use("朝")'));
         await flush();
 
         const { parentLine, children } = generatedOf(repository);
@@ -223,7 +219,7 @@ describe('a use() flow writes what its block describes', () => {
         const repository = makeRepository();
         const { executor } = makeExecutor(repository, { 週報: WEEKLY });
 
-        await executor.handleTaskCompletion(firedTask('every mon x1 use("週報")'));
+        await executor.complete(firedTask('every mon x1 use("週報")'));
         await flush();
 
         const { parentLine, flowLines, children } = generatedOf(repository);
@@ -245,7 +241,7 @@ describe('a use() flow writes what its block describes', () => {
             週報: block('週報', ['\t${["- [ ] 資料集め"]}', '- [ ] 週報 @${start}']),
         });
 
-        await executor.handleTaskCompletion(firedTask('every mon use("週報")'));
+        await executor.complete(firedTask('every mon use("週報")'));
         await flush();
 
         const { parentLine, children } = generatedOf(repository);
@@ -261,7 +257,7 @@ describe('a use() flow writes what its block describes', () => {
             週報: block('週報', ['- [x] 週報 @${start}']),
         });
 
-        await executor.handleTaskCompletion(firedTask('every mon use("週報")'));
+        await executor.complete(firedTask('every mon use("週報")'));
         await flush();
 
         const { parentLine } = generatedOf(repository);
@@ -274,7 +270,7 @@ describe('a fire that cannot generate writes nothing and keeps its command', () 
         const repository = makeRepository();
         const { executor } = makeExecutor(repository, blocks);
 
-        await executor.handleTaskCompletion(firedTask(src));
+        await executor.complete(firedTask(src));
         await flush();
 
         expect(repository.applyToTask).not.toHaveBeenCalled();
@@ -337,7 +333,7 @@ describe('a fire that generates nothing still consumes its command', () => {
         const repository = makeRepository();
         const { executor } = makeExecutor(repository, {});
 
-        await executor.handleTaskCompletion(
+        await executor.complete(
             firedTask('every mon until(2026-08-18) use("存在しない")'));
         await flush();
 

@@ -8,7 +8,7 @@ import { TaskRepository } from '../../../src/services/persistence/TaskRepository
 import type { TaskOp } from '../../../src/services/persistence/TaskOps';
 import type { FlowInstanceInsert } from '../../../src/services/persistence/FlowInstanceLines';
 import { DEFAULT_SETTINGS, type Task } from '../../../src/types';
-import { heldTasks } from '../helpers/heldTasks';
+import { completing } from '../helpers/completing';
 import { freezeDate } from '../helpers/fakeDate';
 
 // `every` lands on the first grid point after the later of today and the
@@ -66,20 +66,16 @@ function block(name: string, body: string[]): GenBlock {
 }
 
 function makeExecutor(repository: ReturnType<typeof makeRepository>, blocks: Record<string, GenBlock>) {
-    const tasks = heldTasks();
     const taskIndex = {
-        waitForScan: vi.fn().mockResolvedValue(undefined),
-        getTask: tasks.getTask,
-        requestScan: vi.fn().mockResolvedValue(undefined),
-        notifyImmediate: vi.fn(),
+        getTask: vi.fn(() => undefined),
         getGenBlock: vi.fn((_file: string, name: string) => blocks[name]),
     };
-    return tasks.hold(new FlowExecutor(
+    return completing(new FlowExecutor(
         repository as unknown as TaskRepository,
         taskIndex as unknown as TaskIndex,
         app as never,
         () => DEFAULT_SETTINGS
-    ));
+    ), repository, blocks);
 }
 
 async function flush() {
@@ -105,7 +101,7 @@ async function fire(line: string, blocks: Record<string, GenBlock>): Promise<Wri
     const repository = makeRepository();
     const task = TaskParser.parse(line, FILE, 0);
     expect(task, `the line has to read back as a task: ${line}`).not.toBeNull();
-    await makeExecutor(repository, blocks).handleTaskCompletion({ ...task!, statusChar: 'x' });
+    await makeExecutor(repository, blocks).complete({ ...task!, statusChar: 'x' });
     await flush();
 
     const insert = insertOf(repository);
@@ -190,7 +186,7 @@ describe('a cell travels from one generation to the next', () => {
         // まま次インスタンスへ運ばれる。
         const repository = makeRepository();
         const task = TaskParser.parse('- [x] 週報 @2026-08-17 ==> every mon state(n: 3)', FILE, 0)!;
-        await makeExecutor(repository, {}).handleTaskCompletion({ ...task, statusChar: 'x' });
+        await makeExecutor(repository, {}).complete({ ...task, statusChar: 'x' });
         await flush();
 
         const insert = insertOf(repository);
@@ -206,7 +202,7 @@ describe('a cell travels from one generation to the next', () => {
 
         const repository = makeRepository();
         const task = TaskParser.parse('- [x] 週報 第3回 @2026-08-17', FILE, 0)!;
-        await makeExecutor(repository, COUNTER).handleTaskCompletion({
+        await makeExecutor(repository, COUNTER).complete({
             ...task,
             statusChar: 'x',
             flow: {
@@ -242,7 +238,7 @@ describe('a value that cannot be written back stops the fire', () => {
         const task = TaskParser.parse(
             '- [x] 週報 第3回 @2026-08-17 ==> every mon state(n: 3) use("週報")', FILE, 0)!;
         await makeExecutor(repository, { 週報: block('週報', body) })
-            .handleTaskCompletion({ ...task, statusChar: 'x' });
+            .complete({ ...task, statusChar: 'x' });
         await flush();
 
         // 2 相のまま: 何も書かれず、コマンドも消費されない。

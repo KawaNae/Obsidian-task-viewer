@@ -9,7 +9,7 @@ import { TaskRepository } from '../../../src/services/persistence/TaskRepository
 import type { TaskOp } from '../../../src/services/persistence/TaskOps';
 import type { FlowInstanceInsert } from '../../../src/services/persistence/FlowInstanceLines';
 import { DEFAULT_SETTINGS, type Task } from '../../../src/types';
-import { heldTasks } from '../helpers/heldTasks';
+import { completing } from '../helpers/completing';
 
 /**
  * The ceilings an evaluation stops at.
@@ -156,20 +156,16 @@ function insertOf(repository: ReturnType<typeof makeRepository>): FlowInstanceIn
 }
 
 function makeExecutor(repository: ReturnType<typeof makeRepository>) {
-    const tasks = heldTasks();
     const taskIndex = {
-        waitForScan: vi.fn().mockResolvedValue(undefined),
-        getTask: tasks.getTask,
-        requestScan: vi.fn().mockResolvedValue(undefined),
-        notifyImmediate: vi.fn(),
+        getTask: vi.fn(() => undefined),
         getGenBlock: vi.fn(() => undefined),
     };
-    return tasks.hold(new FlowExecutor(
+    return completing(new FlowExecutor(
         repository as unknown as TaskRepository,
         taskIndex as unknown as TaskIndex,
         app as never,
         () => DEFAULT_SETTINGS
-    ));
+    ), repository);
 }
 
 const app = { vault: { getAbstractFileByPath: () => null } };
@@ -179,7 +175,7 @@ const flush = () => new Promise(resolve => setTimeout(resolve, 0));
 async function fire(line: string): Promise<string | null> {
     const repository = makeRepository();
     const task = TaskParser.parse(line, FILE, 0);
-    await makeExecutor(repository).handleTaskCompletion({ ...task!, statusChar: 'x' });
+    await makeExecutor(repository).complete({ ...task!, statusChar: 'x' });
     await flush();
     const insert = insertOf(repository);
     if (insert !== undefined && insert.kind !== 'recurrence') throw new Error('the fire inserts no recurrence');

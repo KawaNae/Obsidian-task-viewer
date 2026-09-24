@@ -1,4 +1,4 @@
-import { describe, it, expect, afterEach, vi } from 'vitest';
+import { describe, it, expect, afterEach } from 'vitest';
 import { Notice } from 'obsidian';
 import { openVault, type VaultSession } from '../helpers/vaultSession';
 
@@ -29,14 +29,15 @@ async function open(lines: string[]): Promise<{ contents: Map<string, string>; s
 
 describe('set content with a line break in its value', () => {
     it('stops a completion fire with a notice, the command left in place', async () => {
-        const note = ['# note', '- [x] A @2026-09-21', '\t- ==> every 1d setContent("x\\ny")', ''];
+        const note = ['# note', '- [ ] A @2026-09-21', '\t- ==> every 1d setContent("x\\ny")', ''];
         const { contents, session } = await open(note);
         const task = session.index.getTasks().find(t => t.content === 'A')!;
 
-        await session.executor.handleTaskCompletion(task);
-        await vi.waitFor(() => expect(session.executor.isProcessing).toBe(false));
+        // The completion is written; its fire is not, and says why.
+        expect(await session.index.updateTask(task.id, { statusChar: 'x' })).toBe(true);
+        await session.settle(FILE);
 
-        expect(contents.get(FILE)).toBe(note.join('\n'));
+        expect(contents.get(FILE)).toBe(note.join('\n').replace('- [ ] A', '- [x] A'));
         expect(Notice.messages).toHaveLength(1);
         expect(Notice.messages[0]).toContain('several lines');
     });

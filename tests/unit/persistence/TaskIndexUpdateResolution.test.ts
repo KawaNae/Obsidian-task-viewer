@@ -2,7 +2,7 @@ import { describe, it, expect, vi } from 'vitest';
 import { Notice } from 'obsidian';
 import { TaskIndex } from '../../../src/services/core/TaskIndex';
 import { makeTask } from '../helpers/makeTask';
-import type { Task } from '../../../src/types';
+import { DEFAULT_STATUS_DEFINITIONS, type Task } from '../../../src/types';
 
 /**
  * Which values updateTask uses to find the line, and what it does when the
@@ -21,7 +21,14 @@ function buildHost(task: Task, written = true) {
             bumpRevision: vi.fn(),
             notifyListeners: vi.fn(),
         },
-        settings: { scopeKeys: {} },
+        settings: { scopeKeys: {}, statusDefinitions: DEFAULT_STATUS_DEFINITIONS },
+        // A completion fires in its write; the fire itself is not measured here.
+        commandExecutor: {
+            fireOp: () => ({ op: { kind: "fire", plan: () => [] }, planned: () => null, away: () => null }),
+            settleFire: async () => { },
+        },
+        settleFire: proto.settleFire,
+        writeCompleting: proto.writeCompleting,
         scanner: { requestScan: vi.fn(async () => {}) },
         app: { vault: { getAbstractFileByPath: () => null } },
         repository: {

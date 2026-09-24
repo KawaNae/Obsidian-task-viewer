@@ -8,7 +8,7 @@ import { TimerCreator } from '../../../src/timer/TimerCreator';
 import type { TimerContext } from '../../../src/timer/TimerContext';
 import type { TimerStorageUtils } from '../../../src/timer/TimerStorageUtils';
 import { DEFAULT_SETTINGS } from '../../../src/types';
-import type { Task } from '../../../src/types';
+import type { FlowExecutor } from '../../../src/services/flow/FlowExecutor';
 import { splitLines } from '../../../src/utils/FileLines';
 import type { Refusal, WriteChannel, WriteOrigin } from '../../../src/utils/FileLines';
 
@@ -78,12 +78,8 @@ function computeCache(content: string): VaultCache {
  * here, so a change to a private name is a change to this file.
  */
 
-/** What a test reads of the index's flow executor. */
-export interface FlowExecutorView {
-    isProcessing: boolean;
-    taskQueue: unknown[];
-    handleTaskCompletion(task: Task): Promise<void>;
-}
+/** The index's flow executor, whose `planFire` a test wraps to count fires. */
+export type FlowExecutorView = FlowExecutor;
 
 /** What a test reads of the scanner's write ledger. */
 export interface ClaimsView {
@@ -193,7 +189,7 @@ export function vaultSession(contents: Map<string, string>) {
         app: app as unknown as App,
         index,
         scanner,
-        /** The flow executor: whether it is busy, its queue, the completion it is handed. */
+        /** The flow executor, whose `planFire` plans every completion's fire. */
         executor,
         /** The scanner's private scan entry, which a test wraps to see its answers. */
         scannerPrivates: scanner as unknown as { rescanUnlessRead: (file: TFile) => Promise<boolean> },
@@ -211,14 +207,11 @@ export function vaultSession(contents: Map<string, string>) {
         scanAll: () => scanner!.scanVault(),
         settle: (path: string) => index.waitForScan(path),
         /**
-         * Wait until the flow executor has nothing running or queued, then
-         * until the scan of each `path` has finished.
+         * Wait until the scan of each `path` has finished. A fire is made in
+         * the write that completed its row, so by the time that write is back
+         * there is nothing of it left to wait for but the scans it started.
          */
         flowSettled: async (...paths: string[]): Promise<void> => {
-            await vi.waitFor(() => {
-                expect(executor.isProcessing).toBe(false);
-                expect(executor.taskQueue).toHaveLength(0);
-            });
             for (const path of paths) await index.waitForScan(path);
         },
         dispose: () => index.dispose(),

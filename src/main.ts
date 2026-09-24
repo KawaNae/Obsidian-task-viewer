@@ -44,6 +44,7 @@ import { OverdueWatcher } from './services/display/OverdueWatcher';
 import { TaskHubPanel, type TaskHubPanelOptions } from './modals/hub/TaskHubPanel';
 import { createTaskMenuExtension } from './editor/TaskMenuExtension';
 import { createDiagnosticsExtension } from './editor/DiagnosticsExtension';
+import { flowFireExtension } from './editor/FlowFireExtension';
 import { createGenBlockPreview } from './editor/GenBlockPreview';
 import { GEN_LANGUAGE_TAG } from './services/parsing/gen/GenBlockCollector';
 import { registerCliHandlers } from './cli/CliRegistrar';
@@ -344,6 +345,10 @@ export default class TaskViewerPlugin extends Plugin {
         this.registerEditorExtension(taskMenuResult.extension);
         this.taskMenuCleanup = taskMenuResult.cleanup;
         this.taskMenuNotifySettingsChanged = taskMenuResult.notifySettingsChanged;
+
+        // A completion made in the editor fires its flow in the transaction
+        // that made it; nothing else in the editor fires.
+        this.registerEditorExtension(flowFireExtension(this.taskIndex.editorFireHost()));
 
         // Wavy-underline diagnostics for `==>` flow commands and `@date`
         // blocks. Pure re-parse of visible lines — no TaskIndex.
