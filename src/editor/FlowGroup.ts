@@ -17,7 +17,7 @@ import { TaskLineClassifier } from '../services/parsing/utils/TaskLineClassifier
  */
 export function flowOwnerOf(outline: OutlineReading, line: number): number | null {
     const parent = outline.item(line)?.parent ?? null;
-    if (parent === null || outline.inCode(line) || !TaskLineClassifier.opensTask(outline, parent)) return null;
+    if (parent === null || !TaskLineClassifier.opensTask(outline, parent)) return null;
     return parent;
 }
 

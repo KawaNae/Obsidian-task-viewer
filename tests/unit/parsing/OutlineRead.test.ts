@@ -157,6 +157,32 @@ describe('OutlineReading', () => {
         const outline = Outline.read(['text', '- [ ] a']);
         expect(outline.subtreeEnd(0)).toBe(1);
     });
+
+    it('opens no item on a line in code, in every shape measured', () => {
+        // The readers that ask for an item under a task ask nothing more of
+        // code (ownPropertyLines, collectFlowLineIndices, opensTask).
+        for (const shape of MEASURED) {
+            const outline = Outline.read(shape.lines);
+            const both = shape.lines.map((_, i) => i).filter(i => outline.item(i) !== null && outline.inCode(i));
+            expect(both, shape.name).toEqual([]);
+        }
+    });
+
+    it('puts the content after a gap of four columns, and one column past the marker after five', () => {
+        // CommonMark: five columns or more after the marker is indented code
+        // in the item, and its content starts one column past the marker.
+        const four = Outline.read(['-    a', '     child']);
+        expect(four.item(0)!.contentColumn).toBe(5);
+        expect(four.ownerOf(1)).toBe(0);
+        const five = Outline.read(['-     a', '  - [ ] b']);
+        expect(five.item(0)!.contentColumn).toBe(2);
+        expect(five.item(1)!.parent).toBe(0);
+    });
+
+    it('stands a line alone when its item holds no line past its own', () => {
+        const outline = Outline.read(['- [ ] T', '\t- memo:: a', '\t\t- [ ] sub', '\t- k:: v', 'lazy', '\t- [ ] c']);
+        expect([1, 3, 5].map(i => outline.standsAlone(i))).toEqual([false, false, true]);
+    });
 });
 
 describe('OutlineReading.fences', () => {
