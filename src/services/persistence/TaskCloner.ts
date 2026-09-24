@@ -63,7 +63,7 @@ export class TaskCloner {
                 parents.push(this.shiftInlineDates(cleanParent, offset));
             }
 
-            this.putCopies(draft, idx, parents, Placement.before(lines, idx, parents[0]));
+            this.putCopies(draft, idx, parents, Placement.copyOf(lines, idx, 'above', parents[0]));
             return true;
         });
     }
@@ -99,7 +99,7 @@ export class TaskCloner {
                     () => this.fileOps.stripBlockIds([lines[idx]])[0])
                 : copies.lines.map(l => indent + Outline.dedent(l));
 
-            this.putCopies(draft, idx, parents, Placement.afterSubtree(lines, idx, parents[0]));
+            this.putCopies(draft, idx, parents, Placement.copyOf(lines, idx, 'below', parents[0]));
             return true;
         });
     }
@@ -109,8 +109,8 @@ export class TaskCloner {
     /**
      * Put one copy per parent line into the file, each followed by the
      * original's children with their block ids stripped: a sibling of the
-     * task, at `spot` — just above it (`Placement.before`) or just past its
-     * subtree (`Placement.afterSubtree`).
+     * task, at `spot` — just above it or just past its subtree, spelled as
+     * the task is (`Placement.copyOf`).
      *
      * Children travel verbatim. A child's dates are its own, not an offset
      * from its parent's, so nothing here rewrites them — the same rule in

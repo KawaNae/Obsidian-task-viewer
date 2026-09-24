@@ -43,7 +43,7 @@ function spliceAndReport(
 ) {
     const target = [...lines];
     // Where the two duplicate paths put their copies.
-    const spot = position === 'before' ? Placement.before(target, taskLine, '- [ ] n') : Placement.afterSubtree(target, taskLine, '- [ ] n');
+    const spot = Placement.copyOf(target, taskLine, position === 'before' ? 'above' : 'below', '- [ ] n');
     const { draft, reported, puts, placedBy } = draftOver(target);
     proto.putCopies.call({ fileOps }, draft, taskLine, parentLines, spot);
     // Every copy reads as the original's subtree does, and every other line

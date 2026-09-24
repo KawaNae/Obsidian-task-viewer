@@ -76,16 +76,26 @@ export class Placement {
         return this.sibling(outline, first, null, head);
     }
 
-    /** Just past `row`'s subtree, as its next sibling. */
+    /** Just past `row`'s subtree, a new line as its next sibling. */
     static afterSubtree(lines: readonly string[], row: number, head: string): Spot {
         const outline = Outline.read(lines);
-        return this.sibling(outline, outline.subtreeEnd(row), outline.item(row)?.parent ?? null, head, row);
+        return this.sibling(outline, outline.subtreeEnd(row), outline.item(row)?.parent ?? null, head);
     }
 
-    /** Just above `row`, as its sibling. */
-    static before(lines: readonly string[], row: number, head: string): Spot {
+    /**
+     * Where a copy of `row` goes: its sibling, just above it (`'above'`) or
+     * just past its subtree (`'below'`), spelled as `row` is. A copy is
+     * written as the row it copies, so that it and the children copied with
+     * it read as the row's do; a new line is written as the item next to it
+     * is ({@link siblingIndent}). Which of the two a write puts is the
+     * caller's to say, by the question it asks: this is the one that takes
+     * the row's spelling.
+     */
+    static copyOf(lines: readonly string[], row: number, side: 'above' | 'below', head: string): Spot {
         const outline = Outline.read(lines);
-        return this.sibling(outline, row, outline.item(row)?.parent ?? null, head, row);
+        const at = side === 'above' ? row : outline.subtreeEnd(row);
+        const indent = Outline.indentOf(lines[row]);
+        return this.settle(outline, at, outline.item(row)?.parent ?? null, head, () => indent);
     }
 
     /** Where a first child of `row` goes: just below it, past its own text that goes on. */
@@ -128,7 +138,7 @@ export class Placement {
             if (TaskLineClassifier.classify(lines[next.line])?.statusChar !== 'x') break;
             last = next.line;
         }
-        return this.sibling(outline, outline.subtreeEnd(last), parent, head, last);
+        return this.sibling(outline, outline.subtreeEnd(last), parent, head);
     }
 
     /**
@@ -153,17 +163,12 @@ export class Placement {
     }
 
     /**
-     * At `at` or past what a line there takes in, a line under `parent`, at
-     * a sibling's indentation: that of the row the write names (`named`),
-     * the one it copies or goes next to, spelled as it is; else that of the
-     * item next to it (`siblingIndent`). A child is a sibling of the
-     * children there.
+     * At `at` or past what a line there takes in, a new line under `parent`,
+     * spelled as the item next to it is (`siblingIndent`). A child is a
+     * sibling of the children there.
      */
-    private static sibling(outline: OutlineReading, at: number, parent: number | null, head: string, named?: number): Spot {
-        const indentAt = named === undefined
-            ? (spot: number) => this.siblingIndent(outline, parent, spot)
-            : () => Outline.indentOf(outline.lines[named]);
-        return this.settle(outline, at, parent, head, indentAt);
+    private static sibling(outline: OutlineReading, at: number, parent: number | null, head: string): Spot {
+        return this.settle(outline, at, parent, head, spot => this.siblingIndent(outline, parent, spot));
     }
 
     /**

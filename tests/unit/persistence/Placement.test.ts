@@ -163,9 +163,11 @@ describe('Placement.lastChild', () => {
     });
 });
 
-describe('Placement.before', () => {
-    it('is the row\'s own line, as its sibling', () => {
-        expect(Placement.before(['- [ ] p', '\t- [ ] a', '\t\t- c'], 1, '- [ ] n')).toEqual({ at: 1, parent: 0, indent: '\t' });
+describe('Placement.copyOf', () => {
+    it('is the row\'s own line above it, or just past its subtree, as its sibling', () => {
+        const lines = ['- [ ] p', '\t- [ ] a', '\t\t- c', '- [ ] q'];
+        expect(Placement.copyOf(lines, 1, 'above', '- [ ] n')).toEqual({ at: 1, parent: 0, indent: '\t' });
+        expect(Placement.copyOf(lines, 1, 'below', '- [ ] n')).toEqual({ at: 3, parent: 0, indent: '\t' });
     });
 });
 
@@ -198,13 +200,15 @@ describe('the spot\'s parent and indentation', () => {
         expect(Placement.end(lines)).toEqual({ at: 4, parent: null, indent: '' });
     });
 
-    it('takes the spelling of the row it names, else of the item it goes above, else of the one it goes below', () => {
+    it('takes for a new line the spelling of the item it goes above, else of the one it goes below; for a copy, the row\'s', () => {
         const lines = ['- [ ] P', '\t- [ ] a', '    - [ ] b', '- [ ] q'];
-        expect(Placement.afterSubtree(lines, 1, '- [ ] n')).toEqual({ at: 2, parent: 0, indent: '\t' });
+        expect(Placement.afterSubtree(lines, 1, '- [ ] n')).toEqual({ at: 2, parent: 0, indent: '    ' });
         expect(Placement.groupHead(lines, 2, '- [ ] n')).toEqual({ at: 1, parent: 0, indent: '\t' });
         expect(Placement.lastChild(lines, 0, '- [ ] n')).toEqual({ at: 3, parent: 0, indent: '    ' });
-        expect(Placement.before(lines, 1, '- [ ] n')).toEqual({ at: 1, parent: 0, indent: '\t' });
         expect(Placement.afterSubtree(lines, 2, '- [ ] n')).toEqual({ at: 3, parent: 0, indent: '    ' });
+        // A copy is written as the row it copies, whatever stands next to it.
+        expect(Placement.copyOf(lines, 1, 'below', '- [ ] n')).toEqual({ at: 2, parent: 0, indent: '\t' });
+        expect(Placement.copyOf(lines, 2, 'above', '- [ ] n')).toEqual({ at: 2, parent: 0, indent: '    ' });
         // With neither next to it, a child's indentation of the parent.
         expect(Placement.groupHead(['- [ ] P', '  ```', '  ```', '\t- [ ] a'], 3, '- [ ] n')).toEqual({ at: 1, parent: 0, indent: '\t' });
     });
