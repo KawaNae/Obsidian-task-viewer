@@ -54,7 +54,7 @@ export function renderFlowInstance(
     insert: FlowInstanceInsert,
 ): string[] {
     return insert.kind === 'recurrence'
-        ? renderRecurrence(fileOps, lines, currentLine, insert.content, insert.flowLines)
+        ? renderRecurrence(lines, currentLine, insert.content, insert.flowLines)
         : renderGenerated(lines, currentLine, insert.parentLine, insert.flowLines, insert.children);
 }
 
@@ -66,7 +66,6 @@ export function renderFlowInstance(
  * （それしか無ければ使う）。
  */
 function renderRecurrence(
-    fileOps: FileOperations,
     lines: readonly string[],
     currentLine: number,
     content: string,
@@ -77,15 +76,8 @@ function renderRecurrence(
     const newParentLine = originalIndent + Outline.dedent(content);
 
     const flowAbs = new Set(collectFlowLineIndicesInFile(lines, currentLine));
-    const { childrenLines } = fileOps.collectChildrenFromLines(lines, currentLine);
-    const ordinaryChildren = childrenLines.filter((_, i) => !flowAbs.has(currentLine + 1 + i));
-
-    const firstIndent = (children: string[]) => {
-        const first = children.find(l => l.trim() !== '');
-        return first === undefined ? undefined : Outline.indentOf(first);
-    };
-    const childIndent = firstIndent(ordinaryChildren)
-        ?? firstIndent(childrenLines)
+    const childIndent = FileOperations.firstChildIndent(lines, currentLine, flowAbs)
+        ?? FileOperations.firstChildIndent(lines, currentLine)
         ?? originalIndent + '\t';
 
     return [newParentLine, ...flowLines.map(raw => formatFlowLine(childIndent, raw))];

@@ -58,12 +58,20 @@ export class FileOperations {
 
     /**
      * The indent string of the task's first child, or null when it has none:
-     * the first line of its subtree that is not blank.
+     * the first list item the outline reads directly under the task's own
+     * item, past the lines in `except`. A line of the subtree that opens no
+     * item — a paragraph going on at any depth, indented code — is no child,
+     * and a line written at its indentation would be none either.
      */
-    static firstChildIndent(lines: readonly string[], taskLineIndex: number): string | null {
-        const end = Outline.read(lines).subtreeEnd(taskLineIndex);
+    static firstChildIndent(
+        lines: readonly string[],
+        taskLineIndex: number,
+        except: ReadonlySet<number> = new Set(),
+    ): string | null {
+        const outline = Outline.read(lines);
+        const end = outline.subtreeEnd(taskLineIndex);
         for (let j = taskLineIndex + 1; j < end; j++) {
-            if (lines[j].trim() !== '') return Outline.indentOf(lines[j]);
+            if (outline.item(j)?.parent === taskLineIndex && !except.has(j)) return Outline.indentOf(lines[j]);
         }
         return null;
     }
