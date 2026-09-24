@@ -415,7 +415,7 @@ describe('IDs held across a delete', () => {
         await live.scanAll();
         const [parent, child, below] = idsInFileOrder(live);
 
-        await live.index.deleteLine(FILE, { line: 0, text: '- [ ] 親 @2026-09-21' });
+        await live.index.deleteLine(FILE, { line: 0, text: '- [ ] 親 @2026-09-21', subtree: ['- [ ] 親 @2026-09-21', '  - [ ] 子 @2026-09-21 ^tv-child'] });
         await live.settle(FILE);
 
         expect(contents.get(FILE)!.split('\n')).toEqual([

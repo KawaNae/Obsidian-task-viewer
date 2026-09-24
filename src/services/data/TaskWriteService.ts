@@ -1,5 +1,5 @@
 import type { TFile } from 'obsidian';
-import type { EditorLine, WriteChannel } from '../../utils/FileLines';
+import type { EditorLine, EditorSubtree, WriteChannel } from '../../utils/FileLines';
 import type { DuplicateOptions, Task } from '../../types';
 import type { TaskIndex } from '../core/TaskIndex';
 import type { FlowDeleteAssessment } from '../flow/FlowDeletion';
@@ -144,7 +144,7 @@ export class TaskWriteService {
         return this.taskIndex.insertLineAfterLine(filePath, at, newContent);
     }
 
-    async deleteLine(filePath: string, at: EditorLine): Promise<boolean> {
+    async deleteLine(filePath: string, at: EditorSubtree): Promise<boolean> {
         return this.taskIndex.deleteLine(filePath, at);
     }
 

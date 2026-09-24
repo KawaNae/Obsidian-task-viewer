@@ -21,7 +21,7 @@ import type { GenBlock } from '../parsing/gen/GenBlockCollector';
 import { FileOperations } from '../persistence/utils/FileOperations';
 import { plannedOn, subjectOf } from '../persistence/TaskRefs';
 import { logError, logInfo, logWarn } from '../../log/log';
-import type { EditorLine, Refusal, RowLines } from '../../utils/FileLines';
+import type { EditorLine, EditorSubtree, Refusal, RowLines } from '../../utils/FileLines';
 
 /**
  * TaskIndex - タスク管理の統括ファサードクラス
@@ -798,7 +798,7 @@ export class TaskIndex {
     }
 
     /** @returns whether the line was written. */
-    async deleteLine(filePath: string, at: EditorLine): Promise<boolean> {
+    async deleteLine(filePath: string, at: EditorSubtree): Promise<boolean> {
         if (this.refuseAfterDispose('deleteLine')) return false;
         return this.withNotify(filePath, async () => {
             const { written } = await this.repository.deleteLine(filePath, at);

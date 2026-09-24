@@ -129,7 +129,7 @@ describe('every write of ours leaves a record or the mark', () => {
         ['appendTaskToFile', async (s: VaultSession) => { await s.index.getRepository().appendTaskToFile(FILE, '- [ ] C'); }],
         ['updateLine (editor)', async (s: VaultSession) => { await s.index.getRepository().updateLine(FILE, { line: 0, text: '- [ ] A' }, '- [x] A'); }],
         ['insertLineAfterLine (editor)', async (s: VaultSession) => { await s.index.getRepository().insertLineAfterLine(FILE, { line: 0, text: '- [ ] A' }, '- [ ] A'); }],
-        ['deleteLine (editor)', async (s: VaultSession) => { await s.index.getRepository().deleteLine(FILE, { line: 2, text: '- [ ] B' }); }],
+        ['deleteLine (editor)', async (s: VaultSession) => { await s.index.getRepository().deleteLine(FILE, { line: 2, text: '- [ ] B', subtree: ['- [ ] B'] }); }],
         ['applyToTask (flow)', async (s: VaultSession) => {
             await s.index.getRepository().applyToTask(plannedOn(task(s, '- [ ] B')), [{ kind: 'remove' }]);
         }],
