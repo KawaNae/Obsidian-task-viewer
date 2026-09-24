@@ -161,16 +161,23 @@ export class Outline {
      * and spaces can move it by other than the parent's columns — under a
      * tab, eight spaces less one are seven, a paragraph line past the moved
      * task's content (G3). A line shallower than its parent (a lazy one) is
-     * written at the new parent's indentation. A blank line is left as it is.
+     * written at the new parent's indentation. A blank line is left as it is,
+     * and so is a line carried to where it stands (`from` and `to` the same).
      */
     static shiftIndent(line: string, from: string, to: string): string {
         if (this.isBlank(line)) return line;
-        const past = this.depthOf(line) - this.depthOf(from);
-        if (line.startsWith(from)) {
-            const shifted = to + line.slice(from.length);
+        return this.shiftedIndent(this.indentOf(line), from, to) + this.dedent(line);
+    }
+
+    /** The indentation `indent` becomes, carried from under `from` to under `to` ({@link shiftIndent}). */
+    static shiftedIndent(indent: string, from: string, to: string): string {
+        if (from === to) return indent;
+        const past = this.depthOf(indent) - this.depthOf(from);
+        if (indent.startsWith(from)) {
+            const shifted = to + indent.slice(from.length);
             if (this.depthOf(shifted) - this.depthOf(to) === past) return shifted;
         }
-        return to + ' '.repeat(Math.max(past, 0)) + this.dedent(line);
+        return to + ' '.repeat(Math.max(past, 0));
     }
 
     /**

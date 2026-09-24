@@ -67,22 +67,33 @@ export class FileOperations {
     }
 
     /**
-     * The indent to give a new child of the task at `taskLineIndex`.
+     * The indent to give a new child of the task at `taskLineIndex`, the
+     * child going under `parent`: the task's own line, or a line not yet
+     * written in its place — the next instance of a series, a generated
+     * parent or child — whose children are to be spelled as the task's are.
      *
-     * The task's existing children decide it, so a subtree keeps one spelling.
-     * With no children to copy, the rest of the file decides — reading the
-     * parent line alone cannot, because a top-level task has no indentation to
-     * read a unit from. Reading it there answered four spaces for every file,
-     * tab-written ones included, and put the two spellings in one subtree.
-     * The file's unit is repeated until the line reaches the task's content
-     * column (`Outline.childIndent`, the one rule for a child's indentation).
+     * The task's existing children decide it, so a subtree keeps one spelling:
+     * its first child, past the lines in `except` (the ones the write takes
+     * away) where it has another, carried under `parent` as far past it as it
+     * stood past the task (`Outline.shiftedIndent`). With no children to copy,
+     * the rest of the file decides — reading the parent line alone cannot,
+     * because a top-level task has no indentation to read a unit from. Reading
+     * it there answered four spaces for every file, tab-written ones included,
+     * and put the two spellings in one subtree. The file's unit is repeated
+     * until the line reaches the parent's content column (`Outline.childIndent`,
+     * the one rule for a child's indentation).
      */
-    static resolveChildIndent(lines: readonly string[], taskLineIndex: number): string {
-        return Outline.childIndent(
-            lines[taskLineIndex],
-            FileOperations.firstChildIndent(lines, taskLineIndex),
-            FileOperations.detectIndentUnit(lines),
-        );
+    static resolveChildIndent(
+        lines: readonly string[],
+        taskLineIndex: number,
+        parent: string = lines[taskLineIndex],
+        except: ReadonlySet<number> = new Set(),
+    ): string {
+        const first = FileOperations.firstChildIndent(lines, taskLineIndex, except)
+            ?? FileOperations.firstChildIndent(lines, taskLineIndex);
+        const sample = first === null ? null
+            : Outline.shiftedIndent(first, Outline.indentOf(lines[taskLineIndex]), Outline.indentOf(parent));
+        return Outline.childIndent(parent, sample, FileOperations.detectIndentUnit(lines));
     }
 
     /**
