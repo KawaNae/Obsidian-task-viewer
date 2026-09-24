@@ -752,8 +752,8 @@ export class TaskIndex {
     }
 
     /**
-     * Insert a line as the task's next sibling — same indentation, just past
-     * its subtree. Session records after the first one live beside the record
+     * Insert a line as the task's next sibling, just past its subtree, spelled
+     * as the item next to it. Session records after the first one live beside the record
      * before them, not under it, so the log stays flat.
      */
     async insertSiblingAfterTask(
