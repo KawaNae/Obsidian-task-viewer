@@ -251,6 +251,14 @@ export class OutlineReading {
         readonly fences: readonly OutlineFence[],
         /** The index of the body's first line (`Outline.bodyStart`). */
         readonly bodyStart: number,
+        /**
+         * The `>` lines that closed an item: a quote straight after an item's
+         * lines, with no blank line between, shallower than its content
+         * column. CommonMark and Live Preview close the item there; the
+         * reading view draws the quote, and the lines below it, inside the
+         * item. The editor warns on these lines (`OutlineDiagnostics`).
+         */
+        readonly quotesClosingItems: readonly number[] = [],
     ) {}
 
     /**
@@ -345,9 +353,19 @@ function widthFrom(text: string, from: number): number {
 }
 
 const MARKER_RE = new RegExp(`^${LIST_BULLET_SOURCE}`);
+const ORDERED_START_RE = /^(\d+)[.)]/;
+const QUOTE_RE = /^>/;
+const EMPTY_QUOTE_RE = /^>[ \t]*$/;
+const SETEXT_UNDERLINE_RE = /^(?:=+|-+)[ \t]*$/;
 const GAP_RE = /^[ \t]*/;
 const HEADING_RE = /^#{1,6}(?:[ \t]|$)/;
 const THEMATIC_BREAK_RE = /^(?:(?:-[ \t]*){3,}|(?:\*[ \t]*){3,}|(?:_[ \t]*){3,})$/;
+
+/** Where an item's content starts, and what follows its marker. */
+interface ItemStart {
+    contentColumn: number;
+    rest: string;
+}
 
 /**
  * The item a line opens when its indentation leaves it `text` at column
@@ -356,7 +374,7 @@ const THEMATIC_BREAK_RE = /^(?:(?:-[ \t]*){3,}|(?:\*[ \t]*){3,}|(?:_[ \t]*){3,})
  * four columns of gap put the content after the gap, five or more put it one
  * column after the marker (the rest is indented code).
  */
-function itemStart(text: string, col: number): { contentColumn: number; rest: string } | null {
+function itemStart(text: string, col: number): ItemStart | null {
     if (THEMATIC_BREAK_RE.test(text)) return null;
     const marker = MARKER_RE.exec(text);
     if (!marker) return null;
@@ -378,6 +396,13 @@ function itemStart(text: string, col: number): { contentColumn: number; rest: st
  * - an item goes on over every line indented to its content column, and over
  *   blank lines; a line that goes on a paragraph (a lazy continuation) goes
  *   on the item too, however shallow
+ * - a line goes on the open paragraph unless it interrupts it: a fence, a
+ *   heading, a thematic break, a `>` or an item. In the paragraph's own
+ *   item, an empty item and an ordered one not starting at 1 do not
+ *   interrupt (`- [ ] P` / `  2. T` is P's text), and a line of `=` or `-`
+ *   alone ends the paragraph as a heading's underline. A `>` ends the items
+ *   it is shallower than, and the lines after it go on the quote, not the
+ *   item
  * - a fence opens up to three columns past the content column of the item it
  *   stands in, and goes on over the lines indented that far. A shallower
  *   line goes on the fence too, and the item with it, the way a lazy line
@@ -389,11 +414,14 @@ function itemStart(text: string, col: number): { contentColumn: number; rest: st
  * - a line of nothing but spaces, tabs, no-break spaces and full-width
  *   spaces is blank
  *
- * The fence going on over shallower lines and the blank lines of NBSP and
- * U+3000 are where Obsidian 1.12.4 parts from CommonMark: its `listItems`
- * and its reading view agree on both, in every shape measured
- * (`stages\l2-blocks\measurement.md`), and the outline reads what the note
- * shows. The rules live here and nowhere else.
+ * The reading is CommonMark's but where the reading view and Live Preview
+ * both part from it the same way: the fence going on over shallower lines
+ * (`stages\l2-blocks\measurement.md`). The blank lines of NBSP and U+3000
+ * are Obsidian's reading too, measured in `listItems` and the reading view.
+ * Where only one view parts from CommonMark, the outline reads CommonMark,
+ * and the editor warns on the two shapes where the views show another
+ * subtree than the one the plugin writes (`OutlineDiagnostics`). The rules
+ * live here and nowhere else.
  */
 function readOutline(lines: readonly string[], start: number): OutlineReading {
     const items = new Map<number, OutlineItem>();
@@ -401,11 +429,14 @@ function readOutline(lines: readonly string[], start: number): OutlineReading {
     const codes: boolean[] = new Array(lines.length).fill(false);
     const fences: OutlineFence[] = [];
 
+    const quotesClosingItems: number[] = [];
+
     type Frame = { item: OutlineItem; last: number };
     const stack: Frame[] = [];
-    // What the innermost open block is: a paragraph a lazy line may go on,
-    // indented code a deeper line after a blank one goes on, or neither.
-    let leaf: 'paragraph' | 'indented' | 'none' = 'none';
+    // What the innermost open block is: a paragraph a lazy line may go on
+    // (`quote` when it is a quote's), indented code a deeper line after a
+    // blank one goes on, or neither.
+    let leaf: 'paragraph' | 'quote' | 'indented' | 'none' = 'none';
     type OpenFence = { open: FenceDelimiter; depth: number; block: OutlineFence };
     let fence = null as OpenFence | null;
     let afterBlank = false;
@@ -422,17 +453,34 @@ function readOutline(lines: readonly string[], start: number): OutlineReading {
         }
         if (fence && fence.depth > depth) fence = null;
     };
-    // Whether a line at column `col` reading `text` starts a block of its own
-    // in the item `matched` deep: a fence, a heading, a thematic break or an
-    // item, up to three columns past that item's content column. Such a line
-    // is never a lazy one.
-    const startsBlock = (col: number, text: string, matched: number) => {
-        const base = matched > 0 ? stack[matched - 1].item.contentColumn : 0;
-        return col - base <= 3 && (
-            CodeFenceTracker.opening(text) !== null
-            || HEADING_RE.test(text)
-            || THEMATIC_BREAK_RE.test(text)
-            || itemStart(text, col) !== null);
+    // Two questions of a line at column `col` reading `text`, which opens
+    // the item `started` (or none), in the item `matched` deep. Both look
+    // only as far as three columns past that item's content column: deeper,
+    // a line starts nothing.
+    const withinReach = (col: number, matched: number) =>
+        col - (matched > 0 ? stack[matched - 1].item.contentColumn : 0) <= 3;
+    const startsLeafOrItem = (text: string, started: ItemStart | null) =>
+        CodeFenceTracker.opening(text) !== null
+        || HEADING_RE.test(text)
+        || THEMATIC_BREAK_RE.test(text)
+        || started !== null;
+    // Whether the line ends an open fence that it would otherwise go on
+    // lazily: a fence, a heading, a thematic break or an item. A `>` does
+    // not (L2, q16) — the one place the outline keeps from CommonMark.
+    const startsBlock = (col: number, text: string, started: ItemStart | null, matched: number) =>
+        withinReach(col, matched) && startsLeafOrItem(text, started);
+    // Whether the line interrupts the open paragraph, which it would
+    // otherwise go on (CommonMark's paragraph continuation text): the
+    // blocks above and a `>`. An item interrupts from where a lazy line
+    // stands; in the paragraph's own item (`direct`), an empty item and an
+    // ordered one that does not start at 1 do not, and go on the paragraph.
+    const interrupts = (col: number, text: string, started: ItemStart | null, matched: number, direct: boolean) => {
+        if (!withinReach(col, matched)) return false;
+        if (QUOTE_RE.test(text) || startsLeafOrItem(text, null)) return true;
+        if (started === null) return false;
+        if (!direct) return true;
+        const ordered = ORDERED_START_RE.exec(text);
+        return started.rest !== '' && (ordered === null || Number(ordered[1]) === 1);
     };
     const openFence = (i: number, open: FenceDelimiter, column: number, rest: string) => {
         const block: OutlineFence = { line: i, close: null, end: i + 1, info: open.info, column, from: lines[i].length - rest.length };
@@ -452,7 +500,7 @@ function readOutline(lines: readonly string[], start: number): OutlineReading {
                 codes[i] = true;
                 fence.block.end = i + 1;
             }
-            if (leaf === 'paragraph') leaf = 'none';
+            if (leaf === 'paragraph' || leaf === 'quote') leaf = 'none';
             afterBlank = true;
             continue;
         }
@@ -461,6 +509,7 @@ function readOutline(lines: readonly string[], start: number): OutlineReading {
 
         const col = Outline.depthOf(line);
         const text = Outline.dedent(line);
+        const started = itemStart(text, col);
         let matched = 0;
         while (matched < stack.length && col >= stack[matched].item.contentColumn) matched++;
 
@@ -479,7 +528,7 @@ function readOutline(lines: readonly string[], start: number): OutlineReading {
             // A shallower line goes on the fence as a lazy line goes on a
             // paragraph, and the item with it — unless it starts a block of
             // its own, or a blank line stands before it.
-            if (lazyAllowed && !startsBlock(col, text, matched)) {
+            if (lazyAllowed && !startsBlock(col, text, started, matched)) {
                 codes[i] = true;
                 holds(i);
                 fence.block.end = i + 1;
@@ -489,19 +538,30 @@ function readOutline(lines: readonly string[], start: number): OutlineReading {
             fence = null;
         }
 
+        // A paragraph goes on over every line that does not interrupt it:
+        // in the item it stands in, or lazily from shallower, and a quote's
+        // paragraph lazily over a line with no `>`. In its own item, a line
+        // of `=` or `-` alone underlines it as a heading, and ends it.
+        if (leaf !== 'none' && leaf !== 'indented') {
+            const direct = leaf === 'paragraph' && matched === stack.length;
+            if (direct && withinReach(col, matched) && SETEXT_UNDERLINE_RE.test(text)) {
+                holds(i);
+                leaf = 'none';
+                continue;
+            }
+            if (!interrupts(col, text, started, matched, direct)) {
+                holds(i);
+                continue;
+            }
+        }
         const base = matched > 0 ? stack[matched - 1].item.contentColumn : 0;
         const shallow = col - base <= 3;
-        if (matched < stack.length && leaf === 'paragraph' && !startsBlock(col, text, matched)) {
-            holds(i);
-            continue;
-        }
+        if (shallow && lazyAllowed && matched < stack.length && QUOTE_RE.test(text)) quotesClosingItems.push(i);
         closeTo(matched);
 
         if (!shallow) {
-            if (leaf !== 'paragraph') {
-                codes[i] = true;
-                leaf = 'indented';
-            }
+            codes[i] = true;
+            leaf = 'indented';
             holds(i);
             continue;
         }
@@ -513,7 +573,6 @@ function readOutline(lines: readonly string[], start: number): OutlineReading {
             continue;
         }
 
-        const started = itemStart(text, col);
         if (started) {
             const item: OutlineItem = { line: i, contentColumn: started.contentColumn, parent: innermost(), end: i + 1 };
             holds(i);
@@ -527,9 +586,11 @@ function readOutline(lines: readonly string[], start: number): OutlineReading {
         }
 
         holds(i);
-        leaf = HEADING_RE.test(text) || THEMATIC_BREAK_RE.test(text) ? 'none' : 'paragraph';
+        leaf = HEADING_RE.test(text) || THEMATIC_BREAK_RE.test(text) || EMPTY_QUOTE_RE.test(text) ? 'none'
+            : QUOTE_RE.test(text) ? 'quote'
+            : 'paragraph';
     }
     closeTo(0);
 
-    return new OutlineReading(lines, items, owners, codes, fences, start);
+    return new OutlineReading(lines, items, owners, codes, fences, start, quotesClosingItems);
 }
