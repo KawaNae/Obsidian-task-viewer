@@ -5,7 +5,6 @@ import { TimerRenderer } from '../../../src/timer/TimerRenderer';
 import type { TimerContext } from '../../../src/timer/TimerContext';
 import type { TimerContentBinding } from '../../../src/timer/TimerContentBinding';
 import type { CountupTimer, IntervalTimer, PendingRecord, TimerInstance } from '../../../src/timer/TimerInstance';
-import type { TimerStorageUtils } from '../../../src/timer/TimerStorageUtils';
 import { t } from '../../../src/i18n';
 
 /**
@@ -56,7 +55,7 @@ function build(opts: { flushOk?: boolean; recordOk?: boolean } = {}) {
         ensureContainer: () => ({}) as HTMLElement, destroyContainer: () => { },
         getPinState: () => 'pinned' as const, togglePin: () => { }, shouldShowPinBadge: () => false,
     } as unknown as TimerContext;
-    const creator = new TimerCreator(ctx, { isAutoManagedTimerTargetId: () => false } as unknown as TimerStorageUtils);
+    const creator = new TimerCreator(ctx);
     const lifecycle = new TimerLifecycle(ctx, creator);
     const renderer = new TimerRenderer(ctx, lifecycle, creator, {} as TimerContentBinding);
     const controls = (timer: TimerInstance): string[] => {

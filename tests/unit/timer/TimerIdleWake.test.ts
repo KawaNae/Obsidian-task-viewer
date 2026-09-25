@@ -3,7 +3,6 @@ import { TimerCreator } from '../../../src/timer/TimerCreator';
 import { TimerLifecycle } from '../../../src/timer/TimerLifecycle';
 import { IDLE_TIMER_ID, type TimerContext } from '../../../src/timer/TimerContext';
 import type { CountupTimer, TimerInstance } from '../../../src/timer/TimerInstance';
-import type { TimerStorageUtils } from '../../../src/timer/TimerStorageUtils';
 
 /**
  * idle タイマー（次タスク提案）は「走行中のタイマーが 1 本も無い」ときに出る。
@@ -40,7 +39,7 @@ function build() {
         togglePin: () => { /* unused */ },
         shouldShowPinBadge: () => false,
     };
-    const creator = new TimerCreator(ctx, { isAutoManagedTimerTargetId: () => false } as unknown as TimerStorageUtils);
+    const creator = new TimerCreator(ctx);
     return { ctx, lifecycle: new TimerLifecycle(ctx, creator) };
 }
 

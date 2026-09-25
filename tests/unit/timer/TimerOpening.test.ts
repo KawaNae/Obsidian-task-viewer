@@ -33,8 +33,10 @@ const storageUtils = {
     vaultFingerprint: 'vault-fp',
     getStorageKey: () => KEY,
     getStorageKeyForVersion: (v: number) => `task-viewer.active-timers.v${v}:vault-fp`,
-    isAutoManagedTimerTargetId: () => true,
 } as unknown as TimerStorageUtils;
+
+/** 保存の `opening` が書こうとしている行の錨。 */
+const tailOf = (opening: unknown): unknown => (opening as { tail?: unknown } | null | undefined)?.tail;
 
 function saved(): Record<string, unknown> | undefined {
     const raw = store.get(KEY);
@@ -57,7 +59,7 @@ function pluginOver(s: VaultSession) {
         ensureContainer: () => ({}) as HTMLElement, destroyContainer: () => { },
         getPinState: () => 'pinned' as const, togglePin: () => { }, shouldShowPinBadge: () => false,
     } as unknown as TimerContext;
-    const creator = new TimerCreator(ctx, storageUtils);
+    const creator = new TimerCreator(ctx);
     const lifecycle = new TimerLifecycle(ctx, creator);
     const persistence = new TimerPersistence(ctx, creator, lifecycle, storageUtils);
     s.onPersist(() => persistence.persistTimersToStorage());
@@ -107,9 +109,9 @@ describe('the line a timer is about to write is saved as its opening, and become
         expect(await s.recorder.writeStart(timer)).toBe(true);
         await s.settle(FILE);
 
-        expect(typeof atWrite?.opening).toBe('string');
+        expect(typeof tailOf(atWrite?.opening)).toBe('string');
         expect(atWrite?.tailRecordBlockId).toBeUndefined();
-        expect(timer.tailRecordBlockId).toBe(atWrite?.opening);
+        expect(timer.tailRecordBlockId).toBe(tailOf(atWrite?.opening));
         expect(timer.opening).toBeNull();
         expect(contents.get(FILE)).toContain(`^${timer.tailRecordBlockId}`);
         s.dispose();
@@ -140,7 +142,7 @@ describe('the line a timer is about to write is saved as its opening, and become
         expect(atWrite?.runState).toBe('suspended');
         expect(atWrite?.isRunning).toBe(false);
         expect(atWrite?.saved?.runState).toBe('suspended');
-        const opening = atWrite?.saved?.opening;
+        const opening = tailOf(atWrite?.saved?.opening);
         expect(typeof opening).toBe('string');
         expect(opening).not.toBe(firstTail);
 
@@ -164,7 +166,7 @@ describe('the line a timer is about to write is saved as its opening, and become
         first.s.dispose();
         // 行は書けたが、書けたあとの保存の前に落ちた。
         store.set(KEY, atWrite!);
-        const opening = (JSON.parse(atWrite!) as { timers: { opening: string }[] }).timers[0].opening;
+        const opening = (JSON.parse(atWrite!) as { timers: { opening: { tail: string } }[] }).timers[0].opening.tail;
         expect(contents.get(FILE)).toContain(`^${opening}`);
 
         const s = vaultSession(contents);
@@ -172,12 +174,16 @@ describe('the line a timer is about to write is saved as its opening, and become
         const p = pluginOver(s);
         p.persistence.restoreTimersFromStorage();
         const timer = [...p.ctx.timers.values()].find(t => t.taskId !== '__idle__')!;
-        expect(timer.opening).toBe(opening);
+        expect(timer.opening?.tail).toBe(opening);
         expect(timer.tailRecordBlockId).toBeUndefined();
 
         p.changed();
         await vi.waitFor(() => expect(timer.tailRecordBlockId).toBe(opening));
         expect(timer.opening).toBeNull();
+        // 書けた書き込みが付けた錨（1 本目の行と対象の行）も、書き込みの記録から当たる。
+        expect(timer.timerTargetId).toMatch(/^tv-t-/);
+        expect(contents.get(FILE)).toContain(`対象 @2026-09-21 ^${timer.timerTargetId}`);
+        expect([...timer.ownedAnchors].sort()).toEqual([opening, timer.timerTargetId].sort());
         expect(saved()?.tailRecordBlockId).toBe(opening);
         expect(saved()?.opening).toBeNull();
         s.dispose();

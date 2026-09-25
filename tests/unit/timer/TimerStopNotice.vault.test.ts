@@ -4,7 +4,6 @@ import { TimerCreator } from '../../../src/timer/TimerCreator';
 import { TimerLifecycle } from '../../../src/timer/TimerLifecycle';
 import type { TimerContext } from '../../../src/timer/TimerContext';
 import type { TimerInstance, TimerRecordMode } from '../../../src/timer/TimerInstance';
-import type { TimerStorageUtils } from '../../../src/timer/TimerStorageUtils';
 import { vaultSession, type VaultSession } from '../helpers/vaultSession';
 import en from '../../../src/i18n/locales/en.json';
 
@@ -52,7 +51,7 @@ function lifecycleOver(s: VaultSession) {
         togglePin: () => { /* unused */ },
         shouldShowPinBadge: () => false,
     } as unknown as TimerContext;
-    const creator = new TimerCreator(ctx, { isAutoManagedTimerTargetId: () => false } as unknown as TimerStorageUtils);
+    const creator = new TimerCreator(ctx);
     return { ctx, lifecycle: new TimerLifecycle(ctx, creator) };
 }
 

@@ -38,7 +38,6 @@ const storageUtils = {
     vaultFingerprint: 'vault-fp',
     getStorageKey: () => keyFor(STORAGE_VERSION),
     getStorageKeyForVersion: (v: number) => keyFor(v),
-    isAutoManagedTimerTargetId: () => true,
 } as unknown as TimerStorageUtils;
 
 /** 保存に在るタイマー（1 本だけ）。 */
@@ -66,7 +65,7 @@ function pluginOver(s: VaultSession) {
     // interval の tick が走行中の行の end を見に行く。ここでは書き足さない。
     (s.recorder as unknown as { plugin: Record<string, unknown> }).plugin.getTaskReadService =
         () => ({ getDisplayTask: () => undefined });
-    const creator = new TimerCreator(ctx, storageUtils);
+    const creator = new TimerCreator(ctx);
     const lifecycle = new TimerLifecycle(ctx, creator);
     const persistence = new TimerPersistence(ctx, creator, lifecycle, storageUtils);
     const renderer = new TimerRenderer(ctx, lifecycle, creator, {} as TimerContentBinding);

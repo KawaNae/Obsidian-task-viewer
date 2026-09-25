@@ -3,10 +3,7 @@
  */
 
 import { type App, FileSystemAdapter } from 'obsidian';
-import {
-    generateTimerTargetId,
-    isTimerTargetId
-} from '../utils/TimerTargetIdUtils';
+import { generateTimerTargetId } from '../utils/TimerTargetIdUtils';
 /**
  * v7: 記録待ち（pendingRecord）を足し、対象と尻尾を錨だけで引く形にした。
  * ストレージキーにバージョンが入るので、旧い版の状態は読まずに捨てる（移し替えは
@@ -48,10 +45,6 @@ export class TimerStorageUtils {
 
     generateTimerTargetId(): string {
         return generateTimerTargetId();
-    }
-
-    isAutoManagedTimerTargetId(timerTargetId?: string): boolean {
-        return isTimerTargetId(timerTargetId);
     }
 
     // ─── Device / Vault ───────────────────────────────────────

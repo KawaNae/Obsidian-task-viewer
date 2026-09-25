@@ -4,7 +4,6 @@ import { TimerCreator } from '../../../src/timer/TimerCreator';
 import { TimerLifecycle } from '../../../src/timer/TimerLifecycle';
 import type { TimerContext } from '../../../src/timer/TimerContext';
 import type { CountupTimer, TimerInstance, TimerRecordMode } from '../../../src/timer/TimerInstance';
-import type { TimerStorageUtils } from '../../../src/timer/TimerStorageUtils';
 import { vaultSession, type VaultSession } from '../helpers/vaultSession';
 
 /**
@@ -30,7 +29,7 @@ function lifecycleOver(s: VaultSession) {
         ensureContainer: () => ({}) as HTMLElement, destroyContainer: () => { },
         getPinState: () => 'pinned' as const, togglePin: () => { }, shouldShowPinBadge: () => false,
     } as unknown as TimerContext;
-    const lifecycle = new TimerLifecycle(ctx, new TimerCreator(ctx, { isAutoManagedTimerTargetId: () => false } as unknown as TimerStorageUtils));
+    const lifecycle = new TimerLifecycle(ctx, new TimerCreator(ctx));
     return { ctx, lifecycle, closed };
 }
 

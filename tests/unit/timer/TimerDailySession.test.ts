@@ -76,7 +76,7 @@ function makeHarness(): Harness {
         generateTimerTargetId: () => `tv-t-${++idSeq}`,
     } as unknown as TimerStorageUtils;
 
-    return { recorder: new TimerRecorder({} as App, plugin, storageUtils, () => { /* unused */ }), appended, siblings, tasks };
+    return { recorder: new TimerRecorder({} as App, plugin, storageUtils, () => { /* unused */ }, () => []), appended, siblings, tasks };
 }
 
 function makeDailyTimer(overrides: Partial<TimerInstance> = {}): TimerInstance {
@@ -100,6 +100,7 @@ function makeDailyTimer(overrides: Partial<TimerInstance> = {}): TimerInstance {
         taskColor: '',
         timerType: 'countup',
         elapsedTime: 0,
+        ownedAnchors: [],
         opening: null,
         ...overrides,
     } as TimerInstance;

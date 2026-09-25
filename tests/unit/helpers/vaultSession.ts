@@ -5,6 +5,7 @@ import { TaskWriteService } from '../../../src/services/data/TaskWriteService';
 import { TimerRecorder } from '../../../src/timer/TimerRecorder';
 import { TimerCreator } from '../../../src/timer/TimerCreator';
 import type { TimerContext } from '../../../src/timer/TimerContext';
+import type { TimerInstance } from '../../../src/timer/TimerInstance';
 import type { TimerStorageUtils } from '../../../src/timer/TimerStorageUtils';
 import { DEFAULT_SETTINGS } from '../../../src/types';
 import type { FlowExecutor } from '../../../src/services/flow/FlowExecutor';
@@ -173,9 +174,10 @@ export function vaultSession(contents: Map<string, string>) {
     let n = 0;
     // What the recorder calls to save the timers before it writes a line.
     let persist = (): void => { };
+    // The timers the recorder sees open, when it decides whether it may take an anchor off.
+    let openTimers = (): Iterable<TimerInstance> => [];
     const storageUtils = {
         generateTimerTargetId: () => `tv-t-test${++n}`,
-        isAutoManagedTimerTargetId: () => true,
     } as unknown as TimerStorageUtils;
     const plugin = {
         settings: { ...DEFAULT_SETTINGS },
@@ -196,10 +198,12 @@ export function vaultSession(contents: Map<string, string>) {
         channelOf: (file: string): WriteChannel => connected(file),
         /** Tell `TaskIndex` a write was refused, as its own channel does. */
         reportRefusal: (refusal: Refusal): void => internals.reportRefusal(refusal),
-        recorder: new TimerRecorder(app as never, plugin as never, storageUtils, () => persist()),
+        recorder: new TimerRecorder(app as never, plugin as never, storageUtils, () => persist(), () => openTimers()),
         /** Save the timers as the plugin does when the recorder asks, before it writes a line. */
         onPersist: (fn: () => void): void => { persist = fn; },
-        creator: new TimerCreator({} as TimerContext, storageUtils),
+        /** The open timers the recorder sees, as the widget's own map. */
+        onOpenTimers: (fn: () => Iterable<TimerInstance>): void => { openTimers = fn; },
+        creator: new TimerCreator({} as TimerContext),
         fireVault: (name: string, ...args: unknown[]) => vaultHandlers.get(name)!(...args),
         scanAll: () => scanner!.scanVault(),
         /**

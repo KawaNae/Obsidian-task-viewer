@@ -35,7 +35,8 @@ async function timerOn(contents: Map<string, string>, over: Partial<TimerInstanc
         recordMode: 'child',
         autoStart: true,
     });
-    Object.assign(timer, over);
+    // 開始の書き込みが書けたあと: 対象の錨はタイマーに移っている。
+    Object.assign(timer, { timerTargetId: target.anchor, ...over });
     first.dispose();
     return JSON.parse(JSON.stringify(timer)) as TimerInstance;
 }

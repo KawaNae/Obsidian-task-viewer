@@ -3,7 +3,6 @@ import { TimerCreator } from '../../../src/timer/TimerCreator';
 import { TimerLifecycle } from '../../../src/timer/TimerLifecycle';
 import { IDLE_TIMER_ID, type TimerContext } from '../../../src/timer/TimerContext';
 import { getTimerElapsedSeconds, type CountdownTimer, type CountupTimer, type IntervalTimer, type PendingRecord, type TimerInstance } from '../../../src/timer/TimerInstance';
-import type { TimerStorageUtils } from '../../../src/timer/TimerStorageUtils';
 
 /**
  * 4 出口（⏸ 中断 / ▶ 再開 / ■ 終了 / ✕ 破棄）の遷移。
@@ -71,7 +70,7 @@ function build() {
         shouldShowPinBadge: () => false,
     };
 
-    const creator = new TimerCreator(ctx, { isAutoManagedTimerTargetId: () => false } as unknown as TimerStorageUtils);
+    const creator = new TimerCreator(ctx);
     const lifecycle = new TimerLifecycle(ctx, creator);
     return { ctx, lifecycle, calls, results, persistedCount: () => persisted, renderedCount: () => rendered };
 }
@@ -96,6 +95,7 @@ function startCountup(ctx: TimerContext, overrides: Partial<CountupTimer> = {}):
         parserId: 'tv-inline',
         taskColor: '',
         pendingRecord: null,
+        ownedAnchors: [],
         opening: null,
         timerType: 'countup',
         elapsedTime: 600,
@@ -129,6 +129,7 @@ function startInterval(ctx: TimerContext, overrides: Partial<IntervalTimer> = {}
         parserId: 'tv-inline',
         taskColor: '',
         pendingRecord: null,
+        ownedAnchors: [],
         opening: null,
         timerType: 'interval',
         intervalSource: 'pomodoro',

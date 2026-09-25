@@ -35,7 +35,6 @@ const storageUtils = {
     vaultFingerprint: VAULT,
     getStorageKey: () => keyFor(STORAGE_VERSION),
     getStorageKeyForVersion: (v: number) => keyFor(v),
-    isAutoManagedTimerTargetId: () => false,
 } as unknown as TimerStorageUtils;
 
 function makeCtx(): TimerContext {
@@ -67,7 +66,7 @@ function makeCtx(): TimerContext {
 
 function build() {
     const ctx = makeCtx();
-    const creator = new TimerCreator(ctx, storageUtils);
+    const creator = new TimerCreator(ctx);
     const lifecycle = new TimerLifecycle(ctx, creator);
     const persistence = new TimerPersistence(ctx, creator, lifecycle, storageUtils);
     return { ctx, creator, lifecycle, persistence };
@@ -93,6 +92,7 @@ function makeCountup(overrides: Partial<CountupTimer> = {}): CountupTimer {
         parserId: 'tv-inline',
         taskColor: '',
         pendingRecord: null,
+        ownedAnchors: [],
         opening: null,
         timerType: 'countup',
         elapsedTime: 60,
