@@ -5,11 +5,14 @@ import {
 } from '../services/data/EffectiveProperties';
 import { serializeFlow } from '../services/flow/FlowSerializer';
 import { flowRaws } from '../services/flow/FlowSegments';
+import { apiIdOf, type TaskLookup } from './TaskIds';
 
 // ── Field extractors ──
 
-const FIELD_EXTRACTORS: Record<string, (task: DisplayTask) => unknown> = {
-    id:          t => t.id,
+// Every ID goes out through `apiIdOf`: the row's own, its parent's and its
+// children's alike, so no ID of one shape reaches a caller in another.
+const FIELD_EXTRACTORS: Record<string, (task: DisplayTask, lookup: TaskLookup) => unknown> = {
+    id:          (t, lookup) => apiIdOf(t.id, lookup),
     file:        t => t.file,
     line:        t => t.line,
     content:     t => t.content,
@@ -21,8 +24,8 @@ const FIELD_EXTRACTORS: Record<string, (task: DisplayTask) => unknown> = {
     due:         t => t.due ?? null,
     tags:        t => getEffectiveTags(t),
     parserId:    t => t.parserId,
-    parentId:    t => t.parentId ?? null,
-    childIds:    t => t.childIds,
+    parentId:    (t, lookup) => (t.parentId === undefined ? null : apiIdOf(t.parentId, lookup)),
+    childIds:    (t, lookup) => t.childIds.map(id => apiIdOf(id, lookup)),
     color:       t => getEffectiveColor(t) ?? null,
     linestyle:   t => getEffectiveLinestyle(t) ?? null,
     effectiveStartDate: t => t.effectiveStartDate || null,
@@ -82,17 +85,18 @@ function computeDurationMinutes(task: DisplayTask): number | null {
 
 // ── Record extraction (for CLI field selection) ──
 
-export function taskToRecord(task: DisplayTask, fields: string[]): Record<string, unknown> {
+export function taskToRecord(task: DisplayTask, fields: string[], lookup: TaskLookup): Record<string, unknown> {
     const record: Record<string, unknown> = {};
     for (const field of fields) {
         const extractor = FIELD_EXTRACTORS[field];
-        record[field] = extractor ? extractor(task) : null;
+        record[field] = extractor ? extractor(task, lookup) : null;
     }
     return record;
 }
 
 // ── Full normalization (for API) ──
 
-export function normalizeTask(task: DisplayTask): NormalizedTask {
-    return taskToRecord(task, ALL_FIELD_NAMES) as unknown as NormalizedTask;
+/** `lookup` finds a row by its name, to give its ID (`apiIdOf`). */
+export function normalizeTask(task: DisplayTask, lookup: TaskLookup): NormalizedTask {
+    return taskToRecord(task, ALL_FIELD_NAMES, lookup) as unknown as NormalizedTask;
 }
