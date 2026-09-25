@@ -112,7 +112,8 @@ export async function writeBench(files: string | string[] | Record<string, strin
             scanner.landed(path, landing);
         },
         refused: refusal => { refused.push(refusal); },
-        follow: (from, line, now) => scanner.followLine(path, from, line, now),
+        follow: (read, line, now) => scanner.followLine(path, read, line, now),
+        reading: () => scanner.readingOf(path),
     });
 
     const repo = new TaskRepository(app);

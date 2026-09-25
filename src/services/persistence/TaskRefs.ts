@@ -1,6 +1,6 @@
 import type { Task } from '../../types';
 import { onRecord, type OnRecord, type RowBasis } from './RowBasis';
-import type { ContentKey } from '../core/ContentKey';
+import type { ReadingId } from '../core/Reading';
 import { TaskIdGenerator } from '../display/TaskIdGenerator';
 
 /** How a refused write names what it was about, to the user. */
@@ -16,17 +16,18 @@ export function subjectOf(task: Task): string {
  * reads that way there (see `WriteSession.row`). Nothing looks for the row
  * anywhere else.
  *
- * `read` is the key of that content, which the copy's name carries
- * (`TaskIdGenerator.nameOf`): the line counts only there, or where our own
- * writes carried it (`NamedRow.read`). Undefined for a copy that has no such
- * name, whose line is taken on its basis alone.
+ * `read` is the reading the copy was made in, which its name carries
+ * (`TaskIdGenerator.nameOf`): the line counts only while the file reads as
+ * that reading did, or where our own writes from it carried the line
+ * (`NamedRow.read`). Undefined for a copy that has no such name, whose line
+ * is taken on its basis alone.
  */
 export interface PlannedTarget {
     file: string;
     line: number;
     subject: string;
     basis: RowBasis;
-    read: ContentKey | undefined;
+    read: ReadingId | undefined;
 }
 
 /** What {@link plannedOn} is told the plan read, besides the row's line. */
@@ -48,7 +49,7 @@ export function plannedOn(task: Task, reads: PlanReads = {}): PlannedTarget {
         file: task.file,
         line: task.line,
         subject: subjectOf(task),
-        read: TaskIdGenerator.readName(task.id)?.content,
+        read: TaskIdGenerator.readName(task.id)?.reading,
         basis: {
             text: task.originalText,
             ...(reads.commands ? { commands: (task.flow?.childSegments ?? []).map(segment => segment.raw) } : {}),
