@@ -219,3 +219,25 @@ describe('a name given before a write of ours', () => {
         expect(session.index.getTask(b)).toBeUndefined();
     });
 });
+
+describe('a name given before writes of ours to the file being dragged', () => {
+    // While a file is dragged, what our writes leave is not committed
+    // (`TaskIndex.landed`); the numbers they give are numbers all the same.
+
+    it('is followed to its row across writes that bring the file back to its content, and a write after them', async () => {
+        const { contents, session } = await open(['- [ ] A', '- [ ] A', '- [ ] B', '']);
+        const [r1, r2, b] = ids(session);
+        session.index.setDraggingFile(FILE);
+
+        expect(await session.index.deleteTask(r1)).toBe(true);
+        expect(await session.index.duplicateTask(r2)).toBe(true);
+        expect(contents.get(FILE)).toBe(['- [ ] A', '- [ ] A', '- [ ] B', ''].join('\n'));
+        // Handed the content the file was given in: the write starts from the
+        // reading our two writes left, not from the one the names are of.
+        expect(await session.index.updateTask(b, { statusChar: 'x' })).toBe(true);
+
+        // The row is on line 0; the copy on line 1, where it stood.
+        expect(await session.index.updateTask(r2, { content: 'A2' })).toBe(true);
+        expect(contents.get(FILE)).toBe(['- [ ] A2', '- [ ] A', '- [x] B', ''].join('\n'));
+    });
+});

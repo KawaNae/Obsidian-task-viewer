@@ -1,4 +1,4 @@
-import { replayEdits, type LineEdit, type ReadMark } from '../../utils/FileLines';
+import { replayEdits, type LineEdit } from '../../utils/FileLines';
 import type { ContentKey } from './ContentKey';
 
 /**
@@ -18,8 +18,6 @@ interface Link {
 export interface Walked {
     /** The reading the last of the writes left: `n + 1` of that write. */
     n: number;
-    /** That reading's content, as the write left it. */
-    key: ContentKey;
     line: number;
 }
 
@@ -39,9 +37,8 @@ export interface Walked {
  * readings are not the same rows. A file's links run unbroken from reading to
  * reading: a write whose report did not account for its lines, or one handed
  * a content the links do not end in (a change nobody reported came between),
- * drops what came before. The last link's reading may not be committed yet —
- * a file being dragged, or a scan that got there first — so it is the caller
- * who asks whether the file still reads as the links left it (`walk`). Each
+ * drops what came before. Whether the links end in the reading the file's
+ * last number was given to is the caller's to ask (`TaskScanner.carry`). Each
  * link holds a write's report, a few edits, so no bound is put on how many a
  * file holds between outside changes.
  */
@@ -49,30 +46,21 @@ export class WriteLinks {
     private readonly links = new Map<string, Link[]>();
 
     /**
-     * A write of ours landed in `path`: handed `from` of `length` lines, it
-     * left `to`, as `edits` report, or with no report it can follow (null).
-     * `handed` is the reading the index had made of the file when the write
-     * was handed its lines.
-     *
-     * Answers the number of the reading the write left: one past the reading
-     * it was handed — the index's, or the one the last link left when that is
-     * what the write was handed — or, when the write was handed a content
-     * neither is, one past the index's reading.
+     * A write of ours landed in `path`: handed reading `n`, of content `from`
+     * and `length` lines, it left `to`, reading `n + 1`, as `edits` report.
+     * With no reading it was handed (null: a change nobody reported came between)
+     * or no report it can follow, what came before is dropped.
      */
-    wrote(path: string, handed: ReadMark, from: ContentKey, to: ContentKey, length: number, edits: readonly LineEdit[] | null): number {
-        const chain = this.links.get(path) ?? [];
-        const last = chain[chain.length - 1];
-        let n: number | null = null;
-        if (handed.key === from) n = handed.n;
-        else if (last !== undefined && last.to === from && last.n + 1 >= handed.n) n = last.n + 1;
+    wrote(path: string, n: number | null, from: ContentKey, to: ContentKey, length: number, edits: readonly LineEdit[] | null): void {
         if (n === null || edits === null) {
             this.links.delete(path);
-            return (n ?? handed.n) + 1;
+            return;
         }
+        const chain = this.links.get(path) ?? [];
+        const last = chain[chain.length - 1];
         const link: Link = { n, from, to, length, edits };
         const unbroken = last !== undefined && last.n + 1 === n && last.to === from;
         this.links.set(path, unbroken ? [...chain, link] : [link]);
-        return n + 1;
     }
 
     /** Forget `path`'s links: the file was renamed, deleted, or read as ignored. */
@@ -82,7 +70,7 @@ export class WriteLinks {
 
     /**
      * Where line `line` of reading `n` of `path` stands after our writes from
-     * it: the reading the last of them left, its content, and the line. Null
+     * it: the reading the last of them left, and the line. Null
      * when no write of ours was handed reading `n`, or one took the line away.
      */
     walk(path: string, n: number, line: number): Walked | null {
@@ -97,6 +85,6 @@ export class WriteLinks {
             if (at < 0) return null;
         }
         const end = chain[chain.length - 1];
-        return { n: end.n + 1, key: end.to, line: at };
+        return { n: end.n + 1, line: at };
     }
 }

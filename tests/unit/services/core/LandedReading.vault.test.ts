@@ -2,6 +2,7 @@ import { describe, it, expect, afterEach, vi } from 'vitest';
 import { Notice, TFile } from 'obsidian';
 import { openVault, makeFile, type VaultSession } from '../../helpers/vaultSession';
 import { FileParsePipeline } from '../../../../src/services/parsing/FileParsePipeline';
+import { contentKeyOf } from '../../../../src/services/core/ContentKey';
 
 /**
  * N1: a write of ours that landed is the index's next reading of the file
@@ -133,5 +134,43 @@ describe('a scan that read the file before our write and commits after it', () =
         const b = taskNamed(session, 'B');
         expect(b.line).toBe(4);
         expect(b.originalText).toBe('- [x] B');
+    });
+});
+
+describe('a write of ours that lands after a scan read what came after it', () => {
+    it('is late, and commits nothing: the index keeps the later reading', async () => {
+        const { contents, session } = await open(['- [ ] A', '']);
+        const handed = session.scanner.readingOf(FILE);
+
+        // Something else changed the file after the write, and a scan read it
+        // before the write was told it landed.
+        contents.set(FILE, ['- [ ] Z', ''].join('\n'));
+        expect(await session.scanner.queueScan(makeFile(FILE))).toBe(true);
+
+        const before = ['- [ ] A', ''];
+        const landed = session.scanner.landed(FILE, {
+            before, lines: ['- [x] A', ''], edits: [], reading: null,
+            handed: { n: handed.n, key: contentKeyOf(before) },
+        });
+        expect(landed).toBe(false);
+        expect(session.index.getTasks().map(task => task.content)).toEqual(['Z']);
+    });
+});
+
+describe('writes of ours to rows of one file, asked all at once', () => {
+    it('land one after another, each after the one before it: a name from before them all is followed across them', async () => {
+        const { contents, session } = await open(['- [ ] A', '- [ ] B', '- [ ] C', '- [ ] D', '']);
+        const [a, b, c, d] = ['A', 'B', 'C', 'D'].map(content => taskNamed(session, content).id);
+        session.holdScans();
+
+        expect(await Promise.all([
+            session.index.updateTask(a, { statusChar: 'x' }),
+            session.index.duplicateTask(b),
+            session.index.updateTask(c, { statusChar: 'x' }),
+        ])).toEqual([true, true, true]);
+
+        expect(await session.index.updateTask(d, { statusChar: 'x' })).toBe(true);
+        expect(contents.get(FILE)).toBe(['- [x] A', '- [ ] B', '- [ ] B', '- [x] C', '- [x] D', ''].join('\n'));
+        expect(Notice.messages).toEqual([]);
     });
 });
