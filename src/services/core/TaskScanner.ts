@@ -192,17 +192,23 @@ export class TaskScanner {
      * reported, and what came before is not followed across it. What it left
      * is a number given, committed or not (`commit`: the file being dragged
      * is not), and it is late like any other reading: a scan that read the
-     * file after the write and got its number first has read what it left,
-     * or something after it.
+     * file after the write got its number first.
+     *
+     * The write left reading `n` only if reading `n` is its lines: the number
+     * is given here, or the late scan that took it read what the write left.
+     * A scan that read an edit from outside took the number for other lines,
+     * and a row the write carried to a line of its own lines is not the row on
+     * that line of the scan's: nothing is followed across the write.
      */
     landed(path: string, landing: Landing, commit = true): boolean {
         const { handed } = landing;
         const last = this.readingOf(path);
         const from = contentKeyOf(landing.before);
         const to = contentKeyOf(landing.lines);
-        const start = handed.key === from ? handed.n : null;
+        const n = handed.n + 1;
+        const left = n > last.n || (n === last.n && last.key === to);
+        const start = left && handed.key === from ? handed.n : null;
         this.links.wrote(path, start, from, to, landing.before.length, landing.edits);
-        const n = (start ?? handed.n) + 1;
         if (n <= last.n) return false;
         this.numbers.set(path, { n, key: to });
         if (!commit) return false;

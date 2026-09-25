@@ -155,6 +155,52 @@ describe('a write of ours that lands after a scan read what came after it', () =
         expect(landed).toBe(false);
         expect(session.index.getTasks().map(task => task.content)).toEqual(['Z']);
     });
+
+    it('leaves no name from before it to follow into what the scan read: the write left no reading the index holds', async () => {
+        const { contents, session } = await open(['- [ ] A', '- [ ] B', '']);
+        const b = taskNamed(session, 'B').id;
+        const handed = session.scanner.readingOf(FILE);
+
+        // An edit from outside put a line above A and B, and a scan read it
+        // before the write was told it landed: the scan's reading took the
+        // number the write's would have.
+        const outside = ['- [ ] Z', '- [ ] A', '- [ ] B', ''].join('\n');
+        contents.set(FILE, outside);
+        expect(await session.scanner.queueScan(makeFile(FILE))).toBe(true);
+
+        const before = ['- [ ] A', '- [ ] B', ''];
+        expect(session.scanner.landed(FILE, {
+            before, lines: ['- [x] A', '- [ ] B', ''], edits: [], reading: null,
+            handed: { n: handed.n, key: contentKeyOf(before) },
+        })).toBe(false);
+
+        // B's name from before the write names no row of the scan's reading:
+        // its line there is A's.
+        expect(session.index.getTask(b)).toBeUndefined();
+        expect(await session.index.updateTask(b, { statusChar: 'x' })).toBe(false);
+        expect(contents.get(FILE)).toBe(outside);
+    });
+
+    it('is followed into the scan\'s reading when the scan read what the write left', async () => {
+        const { contents, session } = await open(['- [ ] A', '- [ ] B', '']);
+        const b = taskNamed(session, 'B').id;
+        const handed = session.scanner.readingOf(FILE);
+
+        // The write's own modify was read before the write was told it landed.
+        const left = ['- [x] A', '- [ ] B', ''];
+        contents.set(FILE, left.join('\n'));
+        expect(await session.scanner.queueScan(makeFile(FILE))).toBe(true);
+
+        const before = ['- [ ] A', '- [ ] B', ''];
+        expect(session.scanner.landed(FILE, {
+            before, lines: left, edits: [], reading: null,
+            handed: { n: handed.n, key: contentKeyOf(before) },
+        })).toBe(false);
+
+        expect(session.index.getTask(b)?.content).toBe('B');
+        expect(await session.index.updateTask(b, { statusChar: 'x' })).toBe(true);
+        expect(contents.get(FILE)).toBe(['- [x] A', '- [x] B', ''].join('\n'));
+    });
 });
 
 describe('writes of ours to rows of one file, asked all at once', () => {
