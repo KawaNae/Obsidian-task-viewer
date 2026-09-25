@@ -343,16 +343,21 @@ function spliceStart(length: number, at: number): number {
 }
 
 /**
- * A line the editor pointed at: its number, and the text the editor showed on
- * it. The one place a write takes a coordinate from outside — the editor's
- * cursor is not a row the index knows — so the coordinate travels with the
- * text that says whether it still holds. The editor's buffer and the file on
- * disk part ways while an edit is unsaved; where they have, the text no longer
- * matches and nothing is written.
+ * A line the editor pointed at: its number, the text the editor showed on it,
+ * and the content it was taken in. The one place a write takes a coordinate
+ * from outside — the editor's cursor is not a row the index knows.
+ *
+ * A coordinate in the editor holds only in the content it was taken in: an
+ * unsaved line above, or an edit from outside, can bring a twin onto its
+ * number, and the twin reads as the text did. So the write is made only in
+ * lines whose key is `key` (`WriteSession.row`), whether they are the
+ * editor's or the file's, and there only if the line still reads `text`.
  */
 export interface EditorLine {
     line: number;
     text: string;
+    /** The key of the content `line` is a coordinate in: the editor's document when the line was taken. */
+    key: ContentKey;
     /**
      * The line and every line of its subtree as the editor showed them, for a
      * write that takes them away (`EditorSubtree`). The write is made only if
@@ -501,8 +506,8 @@ export interface NamedRow {
  *
  * `row` is the one way a write takes a line. A row is named with what the
  * write was planned from, or it is a line the editor pointed at with the text
- * the editor showed there; either way, the line is handed out only if the
- * lines read as that. So every write that takes a line checks it once, and the
+ * the editor showed there and the content it was taken in; either way, the
+ * line is handed out only if the lines read as that. So every write that takes a line checks it once, and the
  * same check, and no write writes a plan over an edit the plan never saw.
  */
 export interface WriteSession {
@@ -783,6 +788,12 @@ export function editLines(
         // the row, or what the editor showed there. A line past the end
         // reads as nothing.
         let { line } = target;
+        // A line the editor pointed at counts only in the content it was
+        // taken in: in any other, a line reading as its text may be its twin.
+        if (!('basis' in target)) {
+            handed ??= contentKeyOf(before);
+            if (target.key !== handed) return { kind: 'changed' };
+        }
         // A timer's insert (`OnRecord`) names no reading and is taken on its basis alone, until F9 looks timers up by their anchor.
         if ('basis' in target && !isOnRecord(target.basis)) {
             // A row the index read counts only while the file reads as its

@@ -11,6 +11,8 @@ import {
     type EditorLine, type LineEdit, type EditorSubtree, type LineDraft, type NamedRow, type Refusal, type WriteOutcome, type WriteSession,
 } from '../utils/FileLines';
 import { lineChanges } from './LineChanges';
+import { keyOf, linesOf } from './EditorDoc';
+import { contentKeyOf } from '../services/core/ContentKey';
 import { logError, logWarn } from '../log/log';
 
 /**
@@ -64,13 +66,6 @@ export function completedRows(startDoc: Text, doc: Text, changes: ChangeSet, def
     return rows;
 }
 
-/** A document's lines, as a write holds them. */
-function linesOf(doc: Text): string[] {
-    const lines: string[] = [];
-    for (let n = 1; n <= doc.lines; n++) lines.push(doc.line(n).text);
-    return lines;
-}
-
 /** Where the document's line `line` (0-based) starts. */
 function startOf(lines: readonly string[], line: number): number {
     let offset = 0;
@@ -80,18 +75,31 @@ function startOf(lines: readonly string[], line: number): number {
 
 /**
  * A move to another file a completion in this editor planned, waiting for its
- * destination: `pos` is where the row's line starts, carried across every
- * transaction since (`changes.mapPos`) — a position this editor's own
- * transactions moved, not a guess.
+ * destination: `pos` is where the row's line starts in `doc`, carried across
+ * every transaction of this editor's own since (`changes.mapPos`) — a
+ * position the editor moved, not a guess.
+ *
+ * The position counts only in `doc`, the content it was carried into. A
+ * change shown from outside (`set`: a write to the file, ours or another
+ * app's) is Obsidian's diff of two contents, which cannot tell twins apart:
+ * carried across it, a position can land on the row's twin. So neither it
+ * nor anything after it is followed, and the source's write, made in another
+ * content, is refused (`EditorLine.key`).
  */
 interface Away {
     id: number;
     path: string;
     pos: number;
+    doc: Text;
     pending: PendingAway;
 }
 
-const addAway = StateEffect.define<Away>();
+/** Whether a transaction carries a move's position: one this editor made to the content the position counts in. */
+function follows(away: Away, tr: Transaction): boolean {
+    return away.doc === tr.startState.doc && !tr.isUserEvent('set');
+}
+
+const addAway = StateEffect.define<Omit<Away, 'doc'>>();
 const dropAway = StateEffect.define<number>();
 
 /** The moves this editor's completions planned and has not yet written back. */
@@ -100,9 +108,11 @@ const awayField = StateField.define<readonly Away[]>({
     update(aways, tr) {
         // Carried first: one this transaction adds already stands where it
         // says, in the document the transaction leaves.
-        let next = tr.docChanged ? aways.map(away => ({ ...away, pos: tr.changes.mapPos(away.pos, 1) })) : aways;
+        let next = tr.docChanged
+            ? aways.map(away => (follows(away, tr) ? { ...away, pos: tr.changes.mapPos(away.pos, 1), doc: tr.newDoc } : away))
+            : aways;
         for (const effect of tr.effects) {
-            if (effect.is(addAway)) next = [...next, effect.value];
+            if (effect.is(addAway)) next = [...next, { ...effect.value, doc: tr.newDoc }];
             else if (effect.is(dropAway)) next = next.filter(away => away.id !== effect.value);
         }
         return next;
@@ -167,7 +177,7 @@ export function fireFilter(host: EditorFireHost): Extension {
             if (pending) aways.push({ row, pending });
             if (ops.length === 0) continue;
             const edited = editLines(path, lines, '\n',
-                (draft, _eol, session) => host.applyOps(draft, session, { line, text: row.text }, ops));
+                (draft, _eol, session) => host.applyOps(draft, session, { line, text: row.text, key: contentKeyOf(lines) }, ops));
             if (!edited.written) {
                 host.refused(edited.refused);
                 continue;
@@ -183,7 +193,7 @@ export function fireFilter(host: EditorFireHost): Extension {
         }
         // What the rows' moves to another file owe once the transaction is
         // made, from the row where every fire left it.
-        const effects: StateEffect<Away>[] = [];
+        const effects: StateEffect<Omit<Away, 'doc'>>[] = [];
         for (const { row, pending } of aways) {
             const line = carried(row.line);
             if (line < 0) {
@@ -194,7 +204,7 @@ export function fireFilter(host: EditorFireHost): Extension {
                 id: nextAwayId++,
                 path,
                 pos: startOf(lines, line),
-                pending: { ...pending, source: { ...pending.source, line } },
+                pending: { ...pending, source: { ...pending.source, line, key: contentKeyOf(lines) } },
             }));
         }
         if (changes.length === 0 && effects.length === 0) return [tr, isolated];
@@ -211,10 +221,12 @@ export interface EditorHandle {
 /**
  * The rest of each move to another file an editor's completion planned: the
  * destination, then the source's write to this editor, to the row where its
- * position has been carried to. The row has to read as the completion left
- * it: undone since, or edited, it is not taken away, and the user is told the
- * task is now in both files. An editor closed before then is written to its
- * file instead, at the line it was last carried to.
+ * position has been carried to, in the content it was carried into (`Away`).
+ * The editor has to read as that content, and the row as the completion left
+ * it: undone since, or edited, it is not taken away; shown a change from
+ * outside since, nothing is. Either way the user is told the task is now in
+ * both files. An editor closed before then is written to its file instead,
+ * at the line it was last carried to, if the file reads as that content.
  */
 export class AwayRunner {
     private closed = false;
@@ -242,7 +254,7 @@ export class AwayRunner {
         this.closed = true;
     }
 
-    private async run(away: Away): Promise<void> {
+    private async run(away: Omit<Away, 'doc'>): Promise<void> {
         let dropped = false;
         await this.host.finishAway(away.pending, async (_at, ops) => {
             const outcome = await this.writeSource(away, ops);
@@ -252,14 +264,19 @@ export class AwayRunner {
         if (!dropped && !this.closed) this.editor.dispatch({ effects: dropAway.of(away.id) });
     }
 
-    private async writeSource(away: Away, ops: readonly TaskOp[]): Promise<WriteOutcome> {
+    private async writeSource(away: Omit<Away, 'doc'>, ops: readonly TaskOp[]): Promise<WriteOutcome> {
         const state = this.closed ? this.last : this.editor.state;
         const now = state.field(awayField, false)?.find(candidate => candidate.id === away.id);
-        const pos = now?.pos ?? away.pos;
+        if (!now) {
+            // The editor was handed another state (another note shown in it):
+            // the position counts in none of its content.
+            return { written: false, refused: { file: away.path, reason: { kind: 'changed' }, subject: away.pending.source.text.trim() } };
+        }
         const at: EditorSubtree = {
-            line: state.doc.lineAt(Math.min(pos, state.doc.length)).number - 1,
+            line: now.doc.lineAt(Math.min(now.pos, now.doc.length)).number - 1,
             text: away.pending.source.text,
             subtree: away.pending.source.subtree,
+            key: keyOf(now.doc),
         };
         if (this.closed) return this.host.writeFile(away.path, at, ops);
 

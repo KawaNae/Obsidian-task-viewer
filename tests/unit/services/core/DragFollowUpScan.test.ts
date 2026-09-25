@@ -201,7 +201,7 @@ describe('writes after dispose', () => {
             withNotify: vi.fn(),
         });
 
-        await proto.writeLine.call(closed, FILE, { line: 0, text: '- [ ] x' }, [{ kind: 'update', text: '- [x] x' }]);
+        await proto.writeLine.call(closed, FILE, { line: 0, text: '- [ ] x', key: '' }, [{ kind: 'update', text: '- [x] x' }]);
         await proto.appendChildTask.call(closed, 'id', '- [ ] x');
 
         expect(closed.withNotify).not.toHaveBeenCalled();

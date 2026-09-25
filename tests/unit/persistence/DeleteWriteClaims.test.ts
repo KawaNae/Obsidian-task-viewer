@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+import { contentKeyOf } from '../../../src/services/core/ContentKey';
 import { writeBench, FILE, type Filed } from '../helpers/writeBench';
 import { plannedOn } from '../../../src/services/persistence/TaskRefs';
 
@@ -107,7 +108,7 @@ describe('what the editor menu delete reports (applyToLine, remove)', () => {
             '- [ ] 次 @2026-09-21',
         ]);
 
-        await b.writer.applyToLine(FILE, { line: 0, text: b.lines()[0], subtree: b.lines().slice(0, 2) }, [{ kind: 'remove' }]);
+        await b.writer.applyToLine(FILE, { line: 0, text: b.lines()[0], subtree: b.lines().slice(0, 2), key: contentKeyOf(b.lines()) }, [{ kind: 'remove' }]);
 
         expect(only(b.filed).edits).toEqual([{ kind: 'removed', at: 0, count: 2 }]);
         expect(b.lines()).toEqual(['- [ ] 次 @2026-09-21']);
@@ -123,7 +124,7 @@ describe('what the editor menu delete reports (applyToLine, remove)', () => {
         for (const at of [1, 3, 4, 6]) {
             const b = await writeBench(note);
 
-            await b.writer.applyToLine(FILE, { line: at, text: note[at], subtree: [note[at]] }, [{ kind: 'remove' }]);
+            await b.writer.applyToLine(FILE, { line: at, text: note[at], subtree: [note[at]], key: contentKeyOf(note) }, [{ kind: 'remove' }]);
 
             expect(only(b.filed).edits).toEqual([{ kind: 'removed', at, count: 1 }]);
             expect(b.lines()).toEqual(note.filter((_, i) => i !== at));
@@ -133,7 +134,7 @@ describe('what the editor menu delete reports (applyToLine, remove)', () => {
     it('files nothing when the coordinate is past the end', async () => {
         const b = await writeBench(['- [ ] 親 @2026-09-21']);
 
-        await b.writer.applyToLine(FILE, { line: 5, text: '- [ ] 親 @2026-09-21', subtree: ['- [ ] 親 @2026-09-21'] }, [{ kind: 'remove' }]);
+        await b.writer.applyToLine(FILE, { line: 5, text: '- [ ] 親 @2026-09-21', subtree: ['- [ ] 親 @2026-09-21'], key: contentKeyOf(b.lines()) }, [{ kind: 'remove' }]);
 
         expect(b.filed).toEqual([]);
         expect(b.refused).toEqual([{ file: FILE, reason: { kind: 'changed' }, subject: '- [ ] 親 @2026-09-21' }]);

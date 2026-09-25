@@ -1,4 +1,5 @@
 import { describe, it, expect, afterEach, beforeEach } from 'vitest';
+import { contentKeyOf } from '../../../src/services/core/ContentKey';
 import { Notice } from 'obsidian';
 import { openVault, makeFile, type VaultSession } from '../helpers/vaultSession';
 import { editorSession, type EditorSession } from '../helpers/editorSession';
@@ -252,7 +253,7 @@ describe('the editor menu\'s rewrite of a line', () => {
     it('fires once when it completes the line, in the same write', async () => {
         const note = await open(['# note', WEEKLY, '']);
 
-        expect(await note.session.index.writeLine(FILE, { line: 1, text: WEEKLY }, [{ kind: 'update', text: WEEKLY.replace('[ ]', '[x]') }])).toBe(true);
+        expect(await note.session.index.writeLine(FILE, { line: 1, text: WEEKLY, key: contentKeyOf(['# note', WEEKLY, '']) }, [{ kind: 'update', text: WEEKLY.replace('[ ]', '[x]') }])).toBe(true);
 
         expect(note.writes()).toBe(1);
         expect(note.fired).toEqual(['週報']);
@@ -263,7 +264,7 @@ describe('the editor menu\'s rewrite of a line', () => {
         const checked = WEEKLY.replace('[ ]', '[x]');
         const note = await open(['# note', checked, '']);
 
-        expect(await note.session.index.writeLine(FILE, { line: 1, text: checked }, [{ kind: 'update', text: checked.replace('[x]', '[-]') }])).toBe(true);
+        expect(await note.session.index.writeLine(FILE, { line: 1, text: checked, key: contentKeyOf(['# note', checked, '']) }, [{ kind: 'update', text: checked.replace('[x]', '[-]') }])).toBe(true);
 
         expect(note.fired).toEqual([]);
     });
