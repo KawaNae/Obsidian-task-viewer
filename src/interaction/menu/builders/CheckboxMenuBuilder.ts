@@ -85,13 +85,19 @@ export class CheckboxMenuBuilder {
         });
     }
 
+    /**
+     * The copy goes in without the line's `^id`, as every other duplicate
+     * does (`DuplicateShift`): two lines with one `^id` would anchor neither
+     * (`Task.anchor`), and the original would lose its lasting ID.
+     */
     private addDuplicateItem(menu: Menu, lineText: string, ops: CheckboxLineOps): void {
+        const copy = TaskLineClassifier.extractLineBlockId(lineText).text;
         menu.addItem((item) => {
             item.setTitle(t('menu.duplicate'))
                 .setIcon('copy')
                 .onClick(async () => {
                     menu.close();
-                    await ops.insertLineAfter(lineText);
+                    await ops.insertLineAfter(copy);
                 });
         });
     }
