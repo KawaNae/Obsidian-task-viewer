@@ -855,18 +855,20 @@ export class TaskIndex {
     /**
      * Apply `ops` to the row at a line the editor pointed at, in the file:
      * the editor menu's write, when the editor it was opened in no longer
-     * shows the file. A rewrite that completes the line (`completes`, from
-     * the line the editor showed) fires in the same write, as a card's does
-     * (see writeUpdate).
+     * shows the file (`shows`). A rewrite that completes the line — an
+     * `update` whose text `completes` the line the editor showed — fires in
+     * the same write, as a card's does (see writeUpdate), its `fire` the last
+     * op of the write.
      *
      * @returns whether the line was written.
      */
     async writeLine(filePath: string, at: EditorLine, ops: readonly TaskOp[]): Promise<boolean> {
         if (this.refuseAfterDispose('writeLine')) return false;
         return this.withNotify(filePath, async () => {
-            const update = ops.length === 1 && ops[0].kind === 'update' ? ops[0] : null;
+            const defs = this.settings.statusDefinitions;
+            const completing = ops.some(op => op.kind === 'update' && completes(at.text, op.text, defs));
             const { outcome: { written }, fire } = await this.writeCompleting(
-                update && completes(at.text, update.text, this.settings.statusDefinitions) ? filePath : null,
+                completing ? filePath : null,
                 (op) => this.repository.applyToLine(filePath, at, op ? [...ops, op] : ops));
             if (written && fire) await this.settleFire(fire, filePath);
             return written;
