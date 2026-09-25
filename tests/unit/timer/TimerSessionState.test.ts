@@ -93,6 +93,7 @@ function makeCountup(overrides: Partial<CountupTimer> = {}): CountupTimer {
         parserId: 'tv-inline',
         taskColor: '',
         pendingRecord: null,
+        opening: null,
         timerType: 'countup',
         elapsedTime: 60,
         ...overrides,

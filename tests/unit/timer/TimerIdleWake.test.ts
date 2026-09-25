@@ -1,4 +1,4 @@
-import { describe, expect, it, beforeEach } from 'vitest';
+import { describe, expect, it, beforeEach, vi } from 'vitest';
 import { TimerCreator } from '../../../src/timer/TimerCreator';
 import { TimerLifecycle } from '../../../src/timer/TimerLifecycle';
 import { IDLE_TIMER_ID, type TimerContext } from '../../../src/timer/TimerContext';
@@ -22,7 +22,7 @@ function build() {
         recorder: {
             recordSessionEnd: async () => true,
             createChildAtStart: async () => undefined,
-            startNextSession: async () => ({ written: true }),
+            startNextSession: async () => true,
             discardRunningPlaceholder: async () => { /* unused */ },
         } as unknown as TimerContext['recorder'],
         plugin: { settings: { pomodoroWorkMinutes: 25, pomodoroBreakMinutes: 5 } } as unknown as TimerContext['plugin'],
@@ -120,6 +120,9 @@ describe('idle wake', () => {
         expect(h.ctx.timers.has(IDLE_TIMER_ID)).toBe(true);
 
         h.lifecycle.resumeSession(timer);
+        // 再開は書けてから走行に移る。往復（busy）が済むまで待つ。
+        const busy = (h.lifecycle as unknown as { busy: Set<string> }).busy;
+        await vi.waitFor(() => expect(busy.has(timer.id)).toBe(false));
         expect(h.ctx.timers.has(IDLE_TIMER_ID)).toBe(false);
     });
 });

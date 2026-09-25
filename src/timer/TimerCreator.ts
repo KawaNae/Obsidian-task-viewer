@@ -54,6 +54,7 @@ export class TimerCreator {
             sessionCount: 0,
             recordedElapsedTime: 0,
             pendingRecord: null,
+            opening: null,
             isExpanded: true,
             intervalId: null,
             recordMode: config.recordMode ?? 'child',

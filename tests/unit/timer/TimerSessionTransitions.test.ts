@@ -96,6 +96,7 @@ function startCountup(ctx: TimerContext, overrides: Partial<CountupTimer> = {}):
         parserId: 'tv-inline',
         taskColor: '',
         pendingRecord: null,
+        opening: null,
         timerType: 'countup',
         elapsedTime: 600,
         recordedChildTaskId: 'tv-inline:notes/a.md:ln:4',
@@ -105,6 +106,8 @@ function startCountup(ctx: TimerContext, overrides: Partial<CountupTimer> = {}):
     ctx.timers.set(timer.id, timer);
     return timer;
 }
+
+const busyOf = (lifecycle: TimerLifecycle) => (lifecycle as unknown as { busy: Set<string> }).busy;
 
 function startInterval(ctx: TimerContext, overrides: Partial<IntervalTimer> = {}): IntervalTimer {
     const timer: IntervalTimer = {
@@ -126,6 +129,7 @@ function startInterval(ctx: TimerContext, overrides: Partial<IntervalTimer> = {}
         parserId: 'tv-inline',
         taskColor: '',
         pendingRecord: null,
+        opening: null,
         timerType: 'interval',
         intervalSource: 'pomodoro',
         groups: [{
@@ -202,6 +206,9 @@ describe('resume', () => {
         const totalAfterFirst = timer.recordedElapsedTime;
 
         h.lifecycle.resumeSession(timer);
+        // 再開は書けてから走行に移る。往復（busy）の間は中断のまま。
+        expect(timer.runState).toBe('suspended');
+        await vi.waitFor(() => expect(busyOf(h.lifecycle).has(timer.id)).toBe(false));
 
         expect(timer.runState).toBe('running');
         expect(timer.isRunning).toBe(true);
@@ -232,6 +239,7 @@ describe('resume', () => {
         await h.lifecycle.suspendTimer(countdown as unknown as TimerInstance);
 
         h.lifecycle.resumeSession(countdown as unknown as TimerInstance);
+        await vi.waitFor(() => expect(busyOf(h.lifecycle).has((countdown as unknown as TimerInstance).id)).toBe(false));
 
         expect(countdown.timeRemaining).toBe(1500);
         expect(countdown.elapsedTime).toBe(0);
