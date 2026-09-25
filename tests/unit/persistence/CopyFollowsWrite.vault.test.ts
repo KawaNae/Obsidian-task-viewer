@@ -40,7 +40,7 @@ describe('after a card\'s update, before any scan', () => {
     it('lets a second update through', async () => {
         const { contents, session } = await open(['# note', '- [ ] A @2026-09-21', '']);
         const id = idOf(session, 'A');
-        session.index.setDraggingFile(FILE);
+        session.holdScans();
 
         expect(await session.index.updateTask(id, { content: 'A2' })).toBe(true);
         expect(await session.index.updateTask(id, { statusChar: 'x' })).toBe(true);
@@ -52,7 +52,7 @@ describe('after a card\'s update, before any scan', () => {
     it('lets a deletion fire through', async () => {
         const { contents, session } = await open(['# note', '- [ ] A @2026-09-21', '\t- ==> every 1d', '']);
         const id = idOf(session, 'A');
-        session.index.setDraggingFile(FILE);
+        session.holdScans();
 
         expect(await session.index.updateTask(id, { content: 'A2' })).toBe(true);
         expect(await session.index.deleteTask(id, { fireFlow: true })).toBe(true);
@@ -68,7 +68,7 @@ describe('after a card\'s update, before any scan', () => {
     it('lets a delete through after an update that rewrote a property line', async () => {
         const { contents, session } = await open(['# note', '- [ ] A @2026-09-21', '\t- memo:: old', '- [ ] Z', '']);
         const id = idOf(session, 'A');
-        session.index.setDraggingFile(FILE);
+        session.holdScans();
 
         expect(await session.index.updateTask(id, { properties: { memo: { value: 'new', type: 'string' } } } as never)).toBe(true);
         expect(contents.get(FILE)).toContain('\t- memo:: new');
@@ -80,7 +80,7 @@ describe('after a card\'s update, before any scan', () => {
     it('still refuses what the update did not write: an edit from outside after it', async () => {
         const { contents, session } = await open(['# note', '- [ ] A @2026-09-21', '']);
         const id = idOf(session, 'A');
-        session.index.setDraggingFile(FILE);
+        session.holdScans();
 
         expect(await session.index.updateTask(id, { content: 'A2' })).toBe(true);
         const edited = ['# note', '- [ ] A2 書き足し @2026-09-21', ''].join('\n');
@@ -91,40 +91,27 @@ describe('after a card\'s update, before any scan', () => {
     });
 });
 
-describe('a subtree the update did not plan from is not taken into the copy', () => {
-    // Found by the F5 counterexample run. A card's update plans from the row's
-    // line only, so a child written in from outside since the scan does not
-    // stop it. Taking the subtree the write left into the copy would make that
-    // child part of what the next delete plans from, and it would go with the
-    // row. A `^id` makes `locate` answer at once, so nothing else stands in
-    // the way of that delete.
+describe('a subtree written in from outside before the update', () => {
+    // Found by the F5 counterexample run, when the copy was brought up to the
+    // write by hand: a card's update plans from the row's line only, so a
+    // child written in from outside since the scan does not stop it. Since
+    // N1 the lines the update left are taken in as the file's next reading
+    // (`TaskIndex.landed`), the child with them, as a scan of the file would
+    // take it in: the copy shows it, and the delete that follows takes it.
     const ROW = '- [ ] A @2026-09-21 ^keep';
 
-    it('refuses the delete that follows, as it refuses one with no update before it', async () => {
+    it('is read with the update, and the delete that follows takes it with the row', async () => {
         const { contents, session } = await open(['# note', ROW, '- [ ] Z', '']);
         const id = idOf(session, 'A');
-        session.index.setDraggingFile(FILE);
+        session.holdScans();
         contents.set(FILE, ['# note', ROW, '\t- [ ] 外から足した子', '- [ ] Z', ''].join('\n'));
 
         expect(await session.index.updateTask(id, { statusChar: 'x' })).toBe(true);
-        const afterUpdate = contents.get(FILE);
-        expect(afterUpdate).toBe(['# note', '- [x] A @2026-09-21 ^keep', '\t- [ ] 外から足した子', '- [ ] Z', ''].join('\n'));
+        expect(contents.get(FILE)).toBe(['# note', '- [x] A @2026-09-21 ^keep', '\t- [ ] 外から足した子', '- [ ] Z', ''].join('\n'));
+        expect(session.index.getTask(id)?.subtreeLines).toEqual(['- [x] A @2026-09-21 ^keep', '\t- [ ] 外から足した子']);
 
-        expect(await session.index.deleteTask(id)).toBe(false);
-        expect(contents.get(FILE)).toBe(afterUpdate);
-    });
-
-    it('refuses the deletion fire that follows', async () => {
-        const { contents, session } = await open(['# note', ROW, '\t- ==> every 1d', '- [ ] Z', '']);
-        const id = idOf(session, 'A');
-        session.index.setDraggingFile(FILE);
-        contents.set(FILE, ['# note', ROW, '\t- ==> every 1d', '\t- 外から足したメモ', '- [ ] Z', ''].join('\n'));
-
-        expect(await session.index.updateTask(id, { content: 'A2' })).toBe(true);
-        const afterUpdate = contents.get(FILE);
-
-        expect(await session.index.deleteTask(id, { fireFlow: true })).toBe(false);
-        expect(contents.get(FILE)).toBe(afterUpdate);
+        expect(await session.index.deleteTask(id)).toBe(true);
+        expect(contents.get(FILE)).toBe(['# note', '- [ ] Z', ''].join('\n'));
     });
 });
 
@@ -152,7 +139,7 @@ describe('writes asked of one row before the one before them is back', () => {
     it('lands a rename and a check asked back to back, and a delete asked after them', async () => {
         const { contents, session } = await open(['# note', '- [ ] A @2026-09-21', '- [ ] Z', '']);
         const id = idOf(session, 'A');
-        session.index.setDraggingFile(FILE);
+        session.holdScans();
 
         const done = await Promise.all([
             session.index.updateTask(id, { content: 'A2' }),
@@ -169,7 +156,7 @@ describe('writes asked of one row before the one before them is back', () => {
     it('lands a delete asked while an update of the row is still being written', async () => {
         const { contents, session } = await open(['# note', '- [ ] A @2026-09-21', '- [ ] Z', '']);
         const id = idOf(session, 'A');
-        session.index.setDraggingFile(FILE);
+        session.holdScans();
 
         const done = await Promise.all([
             session.index.updateTask(id, { content: 'A2' }),
@@ -192,7 +179,7 @@ describe('an update that rewrites property lines plans from them', () => {
         const { contents, session } = await open(['# note', '- [ ] A @2026-09-21', '\t- tags:: #a', '']);
         const id = idOf(session, 'A');
         const task = session.index.getTask(id)!;
-        session.index.setDraggingFile(FILE);
+        session.holdScans();
         const edited = ['# note', '- [ ] A @2026-09-21', '\t- tags:: #a #b', ''].join('\n');
         contents.set(FILE, edited);
 

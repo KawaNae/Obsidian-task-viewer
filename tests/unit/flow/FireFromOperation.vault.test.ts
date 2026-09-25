@@ -221,7 +221,7 @@ describe('a card\'s completion', () => {
         const repository = (note.session.index as unknown as { repository: { appendArchive: () => Promise<boolean> } }).repository;
         repository.appendArchive = async () => false;
         const id = note.idOf('T');
-        note.session.index.setDraggingFile(FILE);
+        note.session.holdScans();
 
         expect(await note.session.index.updateTask(id, { statusChar: 'x' })).toBe(true);
         expect(await note.session.index.updateTask(id, { content: 'T2' })).toBe(true);

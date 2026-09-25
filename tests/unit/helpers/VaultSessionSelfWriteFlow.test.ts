@@ -63,9 +63,9 @@ describe("vaultSession: a flow's own writes", () => {
             const settled = contents.get(FILE);
 
             const scanner = session.scannerPrivates;
-            const original = scanner.rescanUnlessRead.bind(scanner);
+            const original = scanner.queueScan.bind(scanner);
             const answers: Promise<boolean>[] = [];
-            scanner.rescanUnlessRead = (f: TFile) => { const answer = original(f); answers.push(answer); return answer; };
+            scanner.queueScan = (f: TFile) => { const answer = original(f); answers.push(answer); return answer; };
             session.fireVault('changed', makeFile(FILE));
             await vi.advanceTimersByTimeAsync(50);
 
@@ -82,7 +82,7 @@ describe("vaultSession: a flow's own writes", () => {
         await session.scanAll();
         contents.set(FILE, ['- [ ] 週報 @2026-09-21 ==> every mon', '- [ ] 新しい', ''].join('\n'));
         const scanner = session.scannerPrivates;
-        expect(await scanner.rescanUnlessRead(makeFile(FILE))).toBe(true);
+        expect(await scanner.queueScan(makeFile(FILE))).toBe(true);
         expect(session.index.getTasks().map(t => t.content)).toContain('新しい');
     });
 });

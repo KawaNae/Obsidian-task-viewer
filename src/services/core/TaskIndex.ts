@@ -21,7 +21,7 @@ import type { GenBlock } from '../parsing/gen/GenBlockCollector';
 import { FileOperations } from '../persistence/utils/FileOperations';
 import { plannedOn, subjectOf } from '../persistence/TaskRefs';
 import { logError, logInfo, logWarn } from '../../log/log';
-import type { EditorLine, EditorSubtree, Refusal, RowLines, WriteOutcome } from '../../utils/FileLines';
+import type { EditorLine, EditorSubtree, Landing, Refusal, WriteOutcome } from '../../utils/FileLines';
 import type { TaskOp } from '../persistence/TaskOps';
 
 /**
@@ -96,6 +96,7 @@ export class TaskIndex {
         // so a write that outlives this index files nothing (see WriteObserver).
         this.repository.getWriteObserver().connect((path, origin) => ({
             sink: this.scanner.writeSink(path, origin),
+            landed: landing => this.landed(path, landing),
             refused: refusal => this.reportRefusal(refusal),
         }));
     }
@@ -156,8 +157,8 @@ export class TaskIndex {
                 // the file's `modify` already had scanned — ours, someone
                 // else's, or the drag's own commit read when the drag ended.
                 // The scan answers that by content and skips the commit and the
-                // notify when there is nothing new (see rescanUnlessRead).
-                void this.scanner.rescanUnlessRead(file).then(committed => {
+                // notify when there is nothing new (see TaskScanner.queueScan).
+                void this.scanner.queueScan(file).then(committed => {
                     if (committed) this.notify.schedule();
                 });
             }
@@ -207,6 +208,20 @@ export class TaskIndex {
         if (!this.disposed) return false;
         logWarn(`[TaskIndex] refused after dispose: ${operation}`);
         return true;
+    }
+
+    /**
+     * A write of ours landed in `path`: the index reads what it left now,
+     * rather than when the scan its `modify` starts gets there, so the next
+     * operation plans from the file as it is. Skipped for the file being
+     * dragged, as that file's scans are, and read when the drag ends.
+     */
+    private landed(path: string, landing: Landing): void {
+        if (this.draggingFilePath === path) {
+            this.skippedDuringDrag = path;
+            return;
+        }
+        if (this.scanner.landed(path, landing)) this.notify.schedule();
     }
 
     /** Read the file back into the store, then notify. */
@@ -449,10 +464,6 @@ export class TaskIndex {
             this.revertUnwrittenUpdate(task, taskId, before, updates);
             return false;
         }
-        // A move to another file consumes nothing in this write: the command
-        // stays on the row until the source's write takes the row away.
-        const planned = fire?.planned();
-        this.adoptWrittenRow(task, taskId, before, outcome.rows.get(target.line), planned?.kind === 'fires' && planned.away === null);
         // The source's write of a move to another file takes the row at the
         // line this write left it on, planned from the row and subtree it left.
         if (fire) {
@@ -519,8 +530,8 @@ export class TaskIndex {
      * Run `op` once every write already asked of this row has finished.
      *
      * A write that names a row is planned from the index's copy of it
-     * (`plannedOn`), and a card's update brings the copy up to what it wrote
-     * only when its write is back (`adoptWrittenRow`). A second write asked
+     * (`plannedOn`), and the index takes in what a write left only once it has
+     * landed (`landed`). A second write asked
      * before then — a checkbox clicked twice, which does not wait for the
      * first — would plan from the copy the first write has already moved on
      * from, and be refused against our own write. In order, each is planned
@@ -538,44 +549,6 @@ export class TaskIndex {
         const settled = () => { if (queue.get(taskId) === next) queue.delete(taskId); };
         next.then(settled, settled);
         return next;
-    }
-
-    /**
-     * Bring the copy of a row a card's update wrote up to the lines the write
-     * left, before any scan reads them.
-     *
-     * The next write to this row is planned from the copy (`plannedOn`), and
-     * the copy's fields already say what the update wrote — `Object.assign`
-     * put them there before the line was made from them. Only the line, its
-     * number and the subtree, which the scan reads, would still say what was there before, so
-     * a second update or a deletion fire in the moment before the scan would
-     * be refused against our own write. The write knows what it left.
-     *
-     * The line and its number always: the update was planned from it, and the write checked
-     * the file still read so. The subtree only when the write found it as the
-     * copy has it. The update did not plan from the subtree, so a line written
-     * into it from outside since the scan was not checked — taken into the
-     * copy, it would become part of what the next delete plans from, and go
-     * with the row unseen. Otherwise the copy is left with no subtree, and a
-     * delete before the scan is refused if the row has any.
-     *
-     * A fire in the write consumed the row's command (`fired`, a fire that
-     * stays in the file; a move to another file consumes it later): the copy
-     * holds none either, so a write before the scan does not put it back.
-     *
-     * Only the copy the store still holds: a scan that has already read the
-     * write has replaced it with its own reading, which is newer. The ledger is
-     * not touched — only a scan writes it.
-     */
-    private adoptWrittenRow(task: Task, taskId: string, before: Task, lines: RowLines | undefined, fired = false): void {
-        if (!lines || this.store.getTask(taskId) !== task) return;
-        task.line = lines.at;
-        task.originalText = lines.left[0];
-        if (fired) task.flow = undefined;
-        const planned = before.subtreeLines;
-        const unchanged = planned !== undefined && planned.length === lines.read.length
-            && planned.every((line, i) => line === lines.read[i]);
-        task.subtreeLines = unchanged ? lines.left : undefined;
     }
 
     /**

@@ -365,18 +365,15 @@ describe('a guess by position one level up', () => {
 
 describe('two own writes trade the texts of two rows, then an unreported change', () => {
     // S2: X and Y trade `[ ] A` and `[x] A` by our own writes, no scan in
-    // between. X's copy is brought up to what its write left, as the index
-    // does (`TaskIndex.updateTask`).
+    // between. X's copy is the index's once its write landed (`landed`).
     const traded = async (): Promise<{ bench: WriteBench; x: Task }> => {
         const bench = await writeBench(['- [ ] A', '- [x] A']);
         const x = bench.taskAt(0);
         const y = bench.taskAt(1);
-        const wrote = await bench.writer.updateTaskInFile(plannedOn(x), checked(x));
-        expect(wrote.written).toBe(true);
+        expect((await bench.writer.updateTaskInFile(plannedOn(x), checked(x))).written).toBe(true);
         expect((await bench.writer.updateTaskInFile(plannedOn(y), { ...y, statusChar: ' ' })).written).toBe(true);
         expect(bench.lines()).toEqual(['- [x] A', '- [ ] A']);
-        const left = wrote.rows.get(x.line)!;
-        return { bench, x: { ...checked(x), line: left.at, originalText: left.left[0], subtreeLines: left.left } };
+        return { bench, x: bench.taskAt(0) };
     };
 
     it('S2a: after the plugin\'s own frontmatter write moved the rows, a delete of X from its copy is refused', async () => {

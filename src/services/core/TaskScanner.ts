@@ -10,7 +10,9 @@ import { matchFile, matchWithoutRepeatedIds } from './identity/IdentityMatcher';
 import { WriteClaims, type ClaimResult } from './identity/WriteClaims';
 import { contentKeyOf } from './ContentKey';
 import { applyIdentity, assertDistinctRuntimeIds, assertNoProvisionalIds, assertUniqueProvisionalIds } from './identity/IdentityApplier';
-import { splitLines, type WriteOrigin, type WriteSink } from '../../utils/FileLines';
+import { splitLines, type Landing, type WriteOrigin, type WriteSink } from '../../utils/FileLines';
+import type { OutlineReading } from '../parsing/utils/Outline';
+import type { ContentKey } from './ContentKey';
 import { logDebug, logError, logInfo } from '../../log/log';
 
 /**
@@ -27,6 +29,15 @@ import { logDebug, logError, logInfo } from '../../log/log';
  */
 export class TaskScanner {
     private scanQueue: Map<string, Promise<unknown>> = new Map();
+
+    /**
+     * The key of the content each file's last committed reading read — a
+     * scan's, or a write's that landed (`landed`). A reading of the same
+     * content parses to what the index holds, so it is not committed again:
+     * the one condition under which a read is skipped. Dropped when the
+     * settings change what a parse makes of the same lines (`forgetReads`).
+     */
+    private committed = new Map<string, ContentKey>();
     /**
      * Written only by scanFile's commit, so the store and the ledger move together.
      *
@@ -100,6 +111,8 @@ export class TaskScanner {
      */
     async scanVault(): Promise<void> {
         this.validator.clearErrors();
+        // Every file is read again from here on, whatever it read last.
+        this.committed.clear();
         const allFiles = this.app.vault.getMarkdownFiles();
         const files = allFiles.filter(f => this.mayContainTasks(f));
         logInfo(`[scanVault] total=${allFiles.length} candidates=${files.length} skipped=${allFiles.length - files.length}`);
@@ -107,7 +120,7 @@ export class TaskScanner {
         // Queued without a line each: the vault's scan says what it did
         // above and below, and a line per file would bury the log.
         for (const file of files) {
-            await this.queue(file, false);
+            await this.queue(file);
         }
 
         this.store.notifyListenersStaggered();
@@ -141,44 +154,38 @@ export class TaskScanner {
     }
 
     /**
-     * 外部から呼ばれるスキャンリクエスト
+     * Read the file again, whatever it read last: for a caller that has
+     * reason to think the index parts from the file (an update that was not
+     * written and put its values back).
      */
     async requestScan(file: TFile): Promise<void> {
-        return this.queueScan(file);
+        this.committed.delete(file.path);
+        await this.queueScan(file);
     }
 
     /**
-     * スキャンをキューに追加
-     */
-    async queueScan(file: TFile): Promise<void> {
-        logDebug(`[queueScan] file=${file.path}`);
-        await this.queue(file, false);
-    }
-
-    /**
-     * Scan the file unless what it reads is what the last scan read, and say
-     * whether it committed.
+     * Scan the file unless what it reads is what the last reading committed
+     * read, and say whether it committed.
      *
-     * For a change event that may only echo a write the file's own `modify`
-     * already had scanned (`metadataCache`'s `changed` comes after every
-     * write, ours or not). Content the ledger recorded, with no write of ours
-     * on record past it and no claim waiting, parses to what the index holds:
-     * the parse reads the content's own frontmatter, not the cache. So the
-     * question "was this already read" is the content's to answer, not a
-     * window of time after a write.
+     * Every change event comes here: a `modify`, and the `metadataCache`
+     * `changed` after it, ours or not. Most echo a content the index already
+     * holds — the one a write of ours landed (`landed`), or the one the
+     * `modify` before it read — and the parse reads the content's own
+     * frontmatter, not the cache. So "was this already read" is the content's
+     * to answer, not a window of time after a write.
      */
-    async rescanUnlessRead(file: TFile): Promise<boolean> {
+    queueScan(file: TFile): Promise<boolean> {
         logDebug(`[queueScan] file=${file.path}`);
-        return this.queue(file, true);
+        return this.queue(file);
     }
 
-    private queue(file: TFile, unlessRead: boolean): Promise<boolean> {
+    private queue(file: TFile): Promise<boolean> {
         // シンプルなキューメカニズム: ファイルパスごとにプロミスをチェーン
         const previousScan = this.scanQueue.get(file.path) || Promise.resolve();
 
         const currentScan = previousScan.then(async () => {
             try {
-                return await this.scanFile(file, unlessRead);
+                return await this.scanFile(file);
             } catch (error) {
                 logError(`Error scanning file ${file.path}: ${(error as Error)?.message ?? error}`);
                 return false;
@@ -200,9 +207,27 @@ export class TaskScanner {
     }
 
     /**
+     * A write of ours landed in `path`, leaving `landing.lines`: take them in
+     * as the file's next reading, now, without waiting for the scan its
+     * `modify` starts — which then reads the same content and commits
+     * nothing. Whether it committed.
+     *
+     * The lines are what the file holds: `processOrFail` answered that the
+     * write landed, and nothing is read that the write did not leave. A scan
+     * that read the file before this write and commits after it puts an older
+     * reading back; the `modify` this write caused reads the file again after
+     * it, and commits this content once more. In between, a write planned
+     * from the older copy is checked against the file and refused where it
+     * reads otherwise, never written on the wrong line.
+     */
+    landed(path: string, landing: Landing): boolean {
+        return this.commitRead(path, [...landing.lines], this.claims.readMark(), landing.reading ?? undefined);
+    }
+
+    /**
      * ファイルをスキャンしてタスクを抽出（parse → identity → validate → commit）
      */
-    private async scanFile(file: TFile, unlessRead: boolean): Promise<boolean> {
+    private async scanFile(file: TFile): Promise<boolean> {
 
         // Everything from here to the match below is synchronous, so the claims
         // this scan weighs are, near enough, the ones filed by the time the read
@@ -215,17 +240,22 @@ export class TaskScanner {
         const readMark = this.claims.readMark();
         const content = await this.app.vault.read(file);
         const { lines } = splitLines(content);
+        return this.commitRead(file.path, lines, readMark);
+    }
+
+    /**
+     * Commit one reading of `path`, `lines`, unless it is of the content the
+     * last committed reading read. `readMark` is the claims' mark taken before
+     * the lines were read; `reading` a reading of these lines already made.
+     */
+    private commitRead(path: string, lines: string[], readMark: number, reading?: OutlineReading): boolean {
+        const file = { path };
         const readKey = contentKeyOf(lines);
-        if (unlessRead
-            && readKey === this.ledger.contentFor(file.path)
-            && this.claims.lastWrite(file.path) === undefined
-            && this.hints.peekFor(file.path, Date.now()).length === 0) {
-            return false;
-        }
+        if (this.committed.get(path) === readKey) return false;
         this.validator.clearErrorsForFile(file.path);
 
         // --- parse ---
-        const parsed = FileParsePipeline.parse(file.path, lines, this.settings);
+        const parsed = FileParsePipeline.parse(file.path, lines, this.settings, reading);
 
         if (parsed.ignored) {
             this.store.removeTasksByFile(file.path);
@@ -234,6 +264,7 @@ export class TaskScanner {
             // With no rows to match against, a hint has nothing left to claim.
             this.hints.dropFile(file.path);
             this.claims.forget(file.path);
+            this.committed.set(file.path, readKey);
             return true;
         }
 
@@ -325,6 +356,7 @@ export class TaskScanner {
             // A write this read may not have seen is still kept, for `locate` to
             // know the ledger is older than it (`WriteClaims.lastWrite`).
             this.claims.forget(file.path, { readMark, read: readKey, ledger: before });
+            this.committed.set(file.path, readKey);
         } finally {
             this.store.endBatch();
         }
@@ -341,6 +373,8 @@ export class TaskScanner {
      */
     handleFileRenamed(oldPath: string, newPath: string): void {
         this.scanQueue.delete(oldPath);
+        this.committed.delete(oldPath);
+        this.committed.delete(newPath);
         this.ledger.rekeyFile(oldPath, newPath, id => TaskIdGenerator.renameFile(id, oldPath, newPath));
         // Hints name runtime IDs, and a rename rewrites those, so carrying the
         // log across would leave claims about rows nothing answers to. They
@@ -357,6 +391,7 @@ export class TaskScanner {
      */
     handleFileDeleted(path: string): void {
         this.scanQueue.delete(path);
+        this.committed.delete(path);
         this.ledger.dropFile(path);
         this.hints.dropFile(path);
         this.claims.forget(path);
