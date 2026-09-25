@@ -102,12 +102,12 @@ describe('extendRunningSession', () => {
         expect(floor).toBeGreaterThan(Date.now());
     });
 
-    it('書き足しが書けなければ門を進めない（次の見直しでまた書く）', async () => {
+    it('書き足しが書けなくても次の見直しの時刻を返す（門は予定で、end はファイルから読み直す）', async () => {
         const h = makeHarness(new Date(Date.now() - 60_000), false);
         const floor = await h.recorder.extendRunningSession(runningTimer());
 
         expect(h.updates).toHaveLength(1);
-        expect(floor).toBeUndefined();
+        expect(floor).toBeGreaterThan(Date.now());
     });
 
     it('書き足す end は現在より未来', async () => {
