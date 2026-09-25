@@ -366,16 +366,14 @@ export interface EditorSubtree extends EditorLine {
 }
 
 /**
- * Why a write was not made: its target was one of `count` rows nothing tells
- * apart, it is on no line of the file, the line the caller pointed at no
- * longer reads what the caller saw there, a line it would put in would not
+ * Why a write was not made: its target is on no line of the file, the line
+ * the caller pointed at no longer reads what the caller saw there, a line it would put in would not
  * read as meant where it goes (`unplaceable`), writing it would change what
  * another line is or which item it stands in (`disturbs`; both are
  * `checkWrite`), or the write itself failed — it threw, or the file could
  * not be read or written.
  */
 export type RefusalReason =
-    | { kind: 'ambiguous'; count: number }
     | { kind: 'gone' }
     | { kind: 'changed' }
     | { kind: 'unplaceable' }

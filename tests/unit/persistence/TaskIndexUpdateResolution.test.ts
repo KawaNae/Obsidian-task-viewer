@@ -183,7 +183,6 @@ describe('updateTask: the answer', () => {
 describe('reportRefusal', () => {
     it('raises one notice per refusal, naming what the write was about', () => {
         for (const reason of [
-            { kind: 'ambiguous', count: 2 },
             { kind: 'gone' },
             { kind: 'changed' },
         ] as const) {

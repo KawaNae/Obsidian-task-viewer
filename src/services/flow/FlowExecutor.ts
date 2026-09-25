@@ -355,15 +355,13 @@ export class FlowExecutor {
      */
     reportMoveLeftCopy(task: Task, destPath: string, refused: Refusal): void {
         logWarn(`[FlowExecutor] Moved but the original could not be removed: ${task.id} (${refused.reason.kind})`);
-        const reason = refused.reason.kind === 'ambiguous'
-            ? t('notice.moveOriginAmbiguous', { count: refused.reason.count })
-            : refused.reason.kind === 'gone'
-                ? t('notice.moveOriginGone')
-                : refused.reason.kind === 'unplaceable'
-                    ? t('notice.moveOriginUnplaceable')
-                    : refused.reason.kind === 'disturbs'
-                        ? t('notice.moveOriginDisturbs')
-                        : t('notice.moveOriginChanged');
+        const reason = refused.reason.kind === 'gone'
+            ? t('notice.moveOriginGone')
+            : refused.reason.kind === 'unplaceable'
+                ? t('notice.moveOriginUnplaceable')
+                : refused.reason.kind === 'disturbs'
+                    ? t('notice.moveOriginDisturbs')
+                    : t('notice.moveOriginChanged');
         new Notice(t('notice.moveOriginKept', { dest: fileName(destPath), reason, subject: refused.subject }));
     }
 
