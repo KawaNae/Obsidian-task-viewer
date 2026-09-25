@@ -8,6 +8,7 @@ import { contentKeyOf, type ContentKey } from './ContentKey';
 import { WriteLinks } from './WriteLinks';
 import { splitLines, type Landing } from '../../utils/FileLines';
 import type { OutlineReading } from '../parsing/utils/Outline';
+import { TaskLineClassifier } from '../parsing/utils/TaskLineClassifier';
 import { logDebug, logError, logInfo } from '../../log/log';
 
 /**
@@ -230,6 +231,7 @@ export class TaskScanner {
         // Right after parse, so nothing downstream — validator included — ever
         // sees a provisional ID.
         nameRows(parsed.tasks, file.path, readKey);
+        anchorRows(parsed.tasks, lines);
 
         // --- validate ---
         for (const task of parsed.tasks) {
@@ -314,5 +316,21 @@ function nameRows(tasks: Task[], path: string, content: ContentKey): void {
         task.id = rename(task.id);
         if (task.parentId !== undefined) task.parentId = rename(task.parentId);
         task.childIds = task.childIds.map(rename);
+    }
+}
+
+/**
+ * Give a row its anchor (`Task.anchor`): the `^id` on its line, when no other
+ * line of the reading carries that `^id`. Every line is counted, a task's or
+ * not and whichever parser reads it, so an `^id` Obsidian would resolve to
+ * two places anchors neither.
+ */
+function anchorRows(tasks: Task[], lines: readonly string[]): void {
+    const count = new Map<string, number>();
+    const ids = lines.map(line => TaskLineClassifier.extractLineBlockId(line).blockId);
+    for (const id of ids) if (id !== undefined) count.set(id, (count.get(id) ?? 0) + 1);
+    for (const task of tasks) {
+        const id = ids[task.line];
+        if (id !== undefined && count.get(id) === 1) task.anchor = id;
     }
 }

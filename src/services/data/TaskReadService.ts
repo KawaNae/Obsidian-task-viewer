@@ -63,6 +63,11 @@ export class TaskReadService {
         return this.taskIndex.getTaskByFileLine(filePath, line);
     }
 
+    /** The row a file's `^id` anchors now (`TaskIndex.getTaskByAnchor`). Primary use: the API's IDs. */
+    getTaskByAnchor(filePath: string, anchor: string): Task | undefined {
+        return this.taskIndex.getTaskByAnchor(filePath, anchor);
+    }
+
     /**
      * Ordered ChildEntry[] for a task. Source of truth for the renderer.
      *
