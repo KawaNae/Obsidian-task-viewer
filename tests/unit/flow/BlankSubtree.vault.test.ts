@@ -60,9 +60,9 @@ describe('a subtree with a blank line inside it', () => {
         expect(contents.get(FILE)).toBe(
             ['# note', '- [ ] 下', '- [x] 対象 @2026-09-21', '\t- [ ] 子1', '', '\t- [ ] 子2', ''].join('\n'),
         );
-        expect(idOf(session, '対象')).toBe(held.target);
-        expect(idOf(session, '子1')).toBe(held.first);
-        expect(idOf(session, '子2')).toBe(held.second);
+        expect(session.index.getTask(held.target)?.id).toBe(idOf(session, '対象'));
+        expect(session.index.getTask(held.first)?.id).toBe(idOf(session, '子1'));
+        expect(session.index.getTask(held.second)?.id).toBe(idOf(session, '子2'));
         expect(Notice.messages).toEqual([]);
     });
 
@@ -132,7 +132,7 @@ describe('a fence below a blank line whose closing line is at column 0 (Obsidian
         await complete(session, 'T');
 
         expect(contents.get(FILE)).toBe(before.replace('- [ ] T', '- [x] T'));
-        expect(idOf(session, 'T')).toBe(t);
+        expect(session.index.getTask(t)?.id).toBe(idOf(session, 'T'));
     });
 
     it('writes a copy above T whose fence T\'s own line ends, and leaves T a task with its ID', async () => {

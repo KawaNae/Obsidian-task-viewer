@@ -146,35 +146,31 @@ function harness(initial: string, opts: {
     return { app, file, text: () => content, calls: () => calls };
 }
 
-/** One report that reached the sink. */
+/** What one write that landed handed the channel. */
 interface Reported {
     before: readonly string[];
     after: readonly string[];
-    /** Null for a write that changed the file and could not say how: the mark. */
+    /** Null for a write that changed the file and could not say how. */
     edits: readonly LineEdit[] | null;
 }
 
 /**
- * Stands in for the index's side of a write: every report handed over can be
- * taken back, and `standing` is what would still be waiting for the next scan.
- * `refusals` is every refusal the channel was told.
+ * Stands in for the index's side of a write: `standing` is every write that
+ * landed, as it handed over what it left; `refusals` every refusal the
+ * channel was told.
  */
 function writeSink() {
     const reports: Reported[] = [];
-    const live = new Set<number>();
     const refusals: Refusal[] = [];
     const channel: WriteChannel = {
-        sink: (before, after, edits) => {
-            const at = reports.length;
-            reports.push({ before: [...before], after: [...after], edits: edits && [...edits] });
-            live.add(at);
-            return { withdraw: () => { live.delete(at); }, made: [] };
+        landed: (landing) => {
+            reports.push({ before: [...landing.before], after: [...landing.lines], edits: landing.edits && [...landing.edits] });
         },
         refused: (refusal) => { refusals.push(refusal); },
     };
     return {
         channel,
-        standing: (): Reported[] => [...live].map(at => reports[at]),
+        standing: (): Reported[] => [...reports],
         refusals,
     };
 }
@@ -473,11 +469,7 @@ describe('processLines', () => {
             const events: string[] = [];
             let filed = 0;
             const channel: WriteChannel = {
-                sink: () => {
-                    const n = ++filed;
-                    events.push(`file ${n}`);
-                    return { withdraw: () => { events.push(`withdraw ${n}`); }, made: [] };
-                },
+                landed: (landing) => { ++filed; events.push(`landed ${landing.lines[0]}`); },
                 refused: () => { },
             };
             const write = (text: string) => processLines(app, file, channel, (draft) => {
@@ -496,7 +488,7 @@ describe('processLines', () => {
 
             expect((await first).written).toBe(true);
             expect((await second).written).toBe(true);
-            expect(r.events).toEqual(['file 1', 'file 2']);
+            expect(r.events).toEqual(['landed - [x] a', 'landed - [x] a!']);
             expect(r.text()).toBe('- [x] a!\n');
         });
 
@@ -509,7 +501,7 @@ describe('processLines', () => {
 
             expect((await first).written).toBe(false);
             expect((await second).written).toBe(true);
-            expect(r.events).toEqual(['file 1', 'withdraw 1', 'file 2']);
+            expect(r.events).toEqual(['landed - [x] a!']);
         });
     });
 
@@ -949,7 +941,7 @@ describe('LineEdits.carry', () => {
         expect(replayEdits(1, reported)).toBeNull();
     });
 
-    it('files a claim for a move that took its source away, and writes nothing for one that did not', async () => {
+    it('lands a move that took its source away, with its report, and writes nothing for one that did not', async () => {
         for (const takeAway of [true, false]) {
             const h = harness('a\nrow\nb\n');
             const log = writeSink();

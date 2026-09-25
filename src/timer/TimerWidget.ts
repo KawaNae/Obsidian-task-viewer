@@ -15,7 +15,6 @@ import type {
 } from './TimerInstance';
 import { isDailyTimer } from './TimerInstance';
 import { TimerRecorder } from './TimerRecorder';
-import { TaskIdGenerator } from '../services/display/TaskIdGenerator';
 import { TimerStorageUtils } from './TimerStorageUtils';
 import { decideTimerStartMode, type TimerStartChoice } from './TimerStartMode';
 import type { Task } from '../types';
@@ -299,12 +298,6 @@ export class TimerWidget implements TimerContext {
         for (const timer of this.timers.values()) {
             if (timer.taskFile === oldPath) {
                 timer.taskFile = newPath;
-                changed = true;
-            }
-
-            const renamedTaskId = TaskIdGenerator.renameFile(timer.taskId, oldPath, newPath);
-            if (renamedTaskId !== timer.taskId) {
-                timer.taskId = renamedTaskId;
                 changed = true;
             }
         }

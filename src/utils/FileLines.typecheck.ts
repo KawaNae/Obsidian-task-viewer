@@ -1,6 +1,5 @@
 import type { App, TFile } from 'obsidian';
 import { processLines, type WriteChannel } from './FileLines';
-import type { WriteObserver } from '../services/persistence/WriteObserver';
 import type { TaskRepository } from '../services/persistence/TaskRepository';
 import type { PlannedTarget } from '../services/persistence/TaskRefs';
 import type { Task } from '../types';
@@ -16,7 +15,7 @@ import type { Task } from '../types';
  * without the change being reported: the lines can only be changed through
  * the draft, which reports every change as it makes it.
  */
-export function writeSignatureChecks(app: App, file: TFile, channel: WriteChannel | undefined, writes: WriteObserver): void {
+export function writeSignatureChecks(app: App, file: TFile, channel: WriteChannel | undefined): void {
     // A line assigned past the draft would be an edit nobody heard of.
     void processLines(app, file, channel, (draft) => {
         // @ts-expect-error the lines are read-only to the write
@@ -29,15 +28,10 @@ export function writeSignatureChecks(app: App, file: TFile, channel: WriteChanne
     // @ts-expect-error the callback answers yes or no, not with lines
     void processLines(app, file, channel, (draft) => [...draft.lines]);
 
-    // Leaving the channel out would leave out the report with it, so every
+    // Leaving the channel out would leave out what the write left with it, so every
     // write names one, even when there is none to name.
     // @ts-expect-error the channel is not optional
     void processLines(app, file, () => true);
-
-    // A write says whom it was made for — the user or a flow — so the claim
-    // it files can say so too.
-    // @ts-expect-error the origin is not optional
-    void writes.for('note.md');
 }
 
 /**

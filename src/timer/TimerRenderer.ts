@@ -368,7 +368,7 @@ export class TimerRenderer {
         // デイリーノート起点は対象タスクを持たない（id は `daily-<date>`）。
         if (isDailyTimer(timer)) return;
 
-        // 復元直後の taskId は前セッションの runtime ID で何も指さない。
+        // 復元直後の taskId は、内容が変わっていれば何も指さない（名前は読みの内容から作る）。
         // resolver で引けたら書き戻し、名前と色の追随を再開する。
         const { task, rewritten } = refreshTimerTask(timer, this.ctx.plugin.getTaskIndex(), this.resolver);
         if (rewritten) this.ctx.persistTimersToStorage();

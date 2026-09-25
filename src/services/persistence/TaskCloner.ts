@@ -3,9 +3,8 @@ import type { DuplicateOptions } from '../../types';
 import { DateUtils } from '../../utils/DateUtils';
 import { logWarn } from '../../log/log';
 import { FileOperations } from './utils/FileOperations';
-import { fileGone, processLines, type LineDraft, type WriteOutcome } from '../../utils/FileLines';
+import { fileGone, processLines, type LineDraft, type WriteChannels, type WriteOutcome } from '../../utils/FileLines';
 import type { PlannedTarget } from './TaskRefs';
-import type { WriteObserver } from './WriteObserver';
 import { Outline } from '../parsing/utils/Outline';
 import { Block, Placement, type Spot } from './utils/Placement';
 
@@ -31,7 +30,7 @@ export class TaskCloner {
     constructor(
         private app: App,
         private fileOps: FileOperations,
-        private writes?: WriteObserver,
+        private channelOf: WriteChannels = () => undefined,
     ) { }
 
     /**
@@ -49,9 +48,9 @@ export class TaskCloner {
         const { dayOffset = 0, count = 1 } = options ?? {};
 
         const file = this.app.vault.getAbstractFileByPath(target.file);
-        if (!(file instanceof TFile)) return fileGone(this.writes?.for(target.file, 'user'), target.file, target.subject);
+        if (!(file instanceof TFile)) return fileGone(this.channelOf(target.file), target.file, target.subject);
 
-        return processLines(this.app, file, this.writes?.for(target.file, 'user'), (draft, _eol, { row }) => {
+        return processLines(this.app, file, this.channelOf(target.file), (draft, _eol, { row }) => {
             const lines = draft.lines;
             const idx = row(target);
             if (idx === null) return false;
@@ -86,9 +85,9 @@ export class TaskCloner {
      */
     async duplicateInlineTaskInPlace(target: PlannedTarget, copies: InPlaceCopyLines): Promise<WriteOutcome> {
         const file = this.app.vault.getAbstractFileByPath(target.file);
-        if (!(file instanceof TFile)) return fileGone(this.writes?.for(target.file, 'user'), target.file, target.subject);
+        if (!(file instanceof TFile)) return fileGone(this.channelOf(target.file), target.file, target.subject);
 
-        return processLines(this.app, file, this.writes?.for(target.file, 'user'), (draft, _eol, { row }) => {
+        return processLines(this.app, file, this.channelOf(target.file), (draft, _eol, { row }) => {
             const lines = draft.lines;
             const idx = row(target);
             if (idx === null) return false;

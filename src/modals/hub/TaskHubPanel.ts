@@ -1,4 +1,4 @@
-import { type App, TFile, type EventRef } from 'obsidian';
+import type { App } from 'obsidian';
 import { t } from '../../i18n';
 import type { Task } from '../../types';
 import type { PluginContext } from '../../PluginContext';
@@ -8,7 +8,6 @@ import type { MenuHandler } from '../../interaction/menu/MenuHandler';
 import type { TaskReadService } from '../../services/data/TaskReadService';
 import type { TaskWriteService } from '../../services/data/TaskWriteService';
 import { toDisplayTask, getOriginalTaskId } from '../../services/display/DisplayTaskConverter';
-import { TaskIdGenerator } from '../../services/display/TaskIdGenerator';
 import { getEffectiveColor, getEffectiveLinestyle } from '../../services/data/EffectiveProperties';
 import { PopoverStack } from '../../views/sharedUI/PopoverStack';
 import { OverlayShell } from '../../views/sharedUI/OverlayShell';
@@ -47,7 +46,6 @@ export class TaskHubPanel {
     private previewEl: HTMLElement | null = null;
     private form: TaskHubForm | null = null;
     private unsubscribe: (() => void) | null = null;
-    private renameRef: EventRef | null = null;
 
     constructor(
         private app: App,
@@ -116,14 +114,6 @@ export class TaskHubPanel {
                 this.form?.setMissing();
             }
         });
-
-        this.renameRef = this.app.vault.on('rename', (file, oldPath) => {
-            if (!(file instanceof TFile) || file.extension !== 'md') return;
-            const newId = TaskIdGenerator.renameFile(this.task.id, oldPath, file.path);
-            if (newId === this.task.id) return;
-            this.task = { ...this.task, id: newId, file: file.path };
-            this.form?.handleFileRename(newId, file.path);
-        });
     }
 
     private async renderPreview(): Promise<void> {
@@ -157,10 +147,6 @@ export class TaskHubPanel {
 
         this.unsubscribe?.();
         this.unsubscribe = null;
-        if (this.renameRef) {
-            this.app.vault.offref(this.renameRef);
-            this.renameRef = null;
-        }
         if (this.previewEl) this.deps.taskRenderer.disposeInside(this.previewEl);
         this.previewEl = null;
         this.form = null;

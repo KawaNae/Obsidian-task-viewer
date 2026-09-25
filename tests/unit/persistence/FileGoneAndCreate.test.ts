@@ -53,7 +53,7 @@ describe('a write whose file is not there', () => {
 
     it.each(['missing', 'folder'] as const)('%s: FrontmatterWriter.setKeys is refused as gone, told once', async (kind) => {
         const { b } = await benchWithout(kind);
-        const writer = new FrontmatterWriter(b.app, new FileOperations(b.app), b.repo.getWriteObserver());
+        const writer = new FrontmatterWriter(b.app, new FileOperations(b.app), (path) => b.repo.channelOf(path));
 
         const outcome = await writer.setKeys(FILE, { color: 'red' });
 

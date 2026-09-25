@@ -8,7 +8,7 @@ import { TaskRepository } from '../../../src/services/persistence/TaskRepository
 import { FileOperations } from '../../../src/services/persistence/utils/FileOperations';
 import { DEFAULT_SETTINGS } from '../../../src/types';
 import type { Task } from '../../../src/types';
-import type { LineEdit, Refusal, WriteChannel, WriteOrigin } from '../../../src/utils/FileLines';
+import type { LineEdit, Refusal, WriteChannel } from '../../../src/utils/FileLines';
 
 /**
  * A vault in memory with a real `TaskScanner` over it, and the write layer
@@ -37,7 +37,7 @@ export function makeFile(path: string): TFile {
     return file;
 }
 
-/** One report a write handed the sink, as it was handed. */
+/** What one write that landed handed the channel. */
 export interface Filed {
     file: string;
     before: string[];
@@ -55,7 +55,7 @@ export interface WriteBench {
     readonly repo: TaskRepository;
     /** Every write given up, in order, as the channel was told it. */
     readonly refused: Refusal[];
-    /** The reports the sink holds now: a withdrawn one is taken off again. */
+    /** What every write that landed left, in order. */
     readonly filed: Filed[];
     /** The channel a write to `path` is handed. */
     channel(path?: string): WriteChannel;
@@ -106,30 +106,17 @@ export async function writeBench(files: string | string[] | Record<string, strin
 
     const refused: Refusal[] = [];
     const filed: Filed[] = [];
-    const channel = (path: string, origin: WriteOrigin = 'user'): WriteChannel => {
-        const sink = scanner.writeSink(path, origin);
-        return {
-            sink: (before, after, edits, named) => {
-                const entry: Filed = { file: path, before: [...before], after: [...after], edits: edits ? [...edits] : null };
-                filed.push(entry);
-                const receipt = sink(before, after, edits, named);
-                return {
-                    withdraw: () => {
-                        const at = filed.indexOf(entry);
-                        if (at >= 0) filed.splice(at, 1);
-                        receipt.withdraw();
-                    },
-                    made: receipt.made,
-                };
-            },
-            landed: landing => { scanner.landed(path, landing); },
-            refused: refusal => { refused.push(refusal); },
-        };
-    };
+    const channel = (path: string): WriteChannel => ({
+        landed: landing => {
+            filed.push({ file: path, before: [...landing.before], after: [...landing.lines], edits: landing.edits ? [...landing.edits] : null });
+            scanner.landed(path, landing);
+        },
+        refused: refusal => { refused.push(refusal); },
+    });
 
     const repo = new TaskRepository(app);
-    const writes = repo.getWriteObserver();
-    writes.connect(channel);
+    repo.connect(channel);
+    const writes = (path: string) => repo.channelOf(path);
     const fileOps = new FileOperations(app);
 
     const bench: WriteBench = {

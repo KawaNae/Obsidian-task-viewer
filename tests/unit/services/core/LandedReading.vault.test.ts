@@ -53,12 +53,12 @@ describe('what a write left, before any scan', () => {
         const held = session.holdScans();
 
         expect(await session.index.updateTask(taskNamed(session, 'A').id, { statusChar: 'x' })).toBe(true);
-        const landed = parse.mock.calls.length;
-        expect(parse.mock.calls.filter(call => call[1].join('\n') === '# note\n- [x] A\n- [ ] B\n')).toHaveLength(landed);
+        expect(parse).toHaveBeenCalledTimes(1);
+        expect(parse.mock.calls[0][1]).toEqual(['# note', '- [x] A', '- [ ] B', '']);
 
         await held.release();
         await session.settle(FILE);
-        expect(parse).toHaveBeenCalledTimes(landed);
+        expect(parse).toHaveBeenCalledTimes(1);
         expect(await session.scanner.queueScan(makeFile(FILE))).toBe(false);
     });
 

@@ -3,9 +3,9 @@ import { openVault, type VaultSession } from '../helpers/vaultSession';
 
 /**
  * Whether a note has rows at all hangs on a frontmatter key (`tv-ignore`),
- * and so does what every row inherits (dates). A write's record, a write's
- * `locate` and the scan that follows read the key off the lines they hold
- * (F5b), not out of metadataCache,
+ * and so does what every row inherits (dates). The reading a write lands and
+ * the scan that follows read the key off the lines they hold, not out of
+ * metadataCache,
  * which describes the file at some other moment: inside the write it is the
  * file before the write, and at the scan a `modify` starts Obsidian may not
  * have re-read it yet.
@@ -33,29 +33,15 @@ function idsByText(session: VaultSession): Map<string, string> {
         .map(task => [task.originalText.trim(), task.id]));
 }
 
-/** How many claims the scans adopted, counted on the log (see HeadingAndFrontmatterClaims). */
-function watchAdoptions(session: VaultSession): { adopted: number } {
-    const log = session.scanner.getHintLog() as unknown as { settle: (file: string, consumed: number) => void };
-    const seen = { adopted: 0 };
-    const settle = log.settle.bind(log);
-    log.settle = (file, consumed) => {
-        if (consumed > 0) seen.adopted++;
-        settle(file, consumed);
-    };
-    return seen;
-}
-
 describe('a write that lifts tv-ignore', () => {
-    it('the record reads the note as tasks, and the scan adopts it', async () => {
+    it('lands a reading of the note as tasks, before any scan', async () => {
         const session = await open(['---', 'tv-ignore: true', '---', '- [ ] A @2026-09-21', '']);
         expect(idsByText(session).size).toBe(0);
-        const seen = watchAdoptions(session);
+        session.holdScans();
 
         await session.index.getRepository().setFrontmatterKeys(FILE, { 'tv-ignore': null });
-        await session.settle(FILE);
 
         expect(idsByText(session).has('- [ ] A @2026-09-21')).toBe(true);
-        expect(seen.adopted).toBe(1);
     });
 });
 

@@ -50,7 +50,8 @@ describe('content holding U+2028 or U+2029', () => {
 
             expect(contents.get(FILE)!.split('\n')[1]).toBe(`- [ ] A${sep}B @2026-09-21 ==> every 1d`);
             const read = only(session, value);
-            expect(read.id).toBe(id);
+            // The name the update was asked by follows the row across it.
+            expect(session.index.getTask(id)?.id).toBe(read.id);
             expect(read.flow?.program).toBeTruthy();
 
             // And it stays a task a later write finds, whose command still
@@ -59,8 +60,9 @@ describe('content holding U+2028 or U+2029', () => {
             await vi.waitFor(() => expect(session.index.getTasks().filter(task => task.content === value)).toHaveLength(2));
             await session.settle(FILE);
             const rows = session.index.getTasks().filter(task => task.content === value);
-            expect(rows.find(task => task.id === id)?.statusChar).toBe('x');
-            expect(rows.find(task => task.id !== id)?.statusChar).toBe(' ');
+            const done = session.index.getTask(id);
+            expect(done?.statusChar).toBe('x');
+            expect(rows.find(task => task.id !== done?.id)?.statusChar).toBe(' ');
         });
     }
 

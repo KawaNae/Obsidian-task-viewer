@@ -85,6 +85,15 @@ function idOf(session: VaultSession, content: string, path = FILE): string {
     return found[0].id;
 }
 
+/**
+ * The current ID each of `ids` follows to, in order — `session.index.getTask`
+ * carries a name held before the plugin's own write across it to the row's
+ * name now, and answers undefined for a row the write took away or a name
+ * from before an edit that was not the plugin's own.
+ */
+const followed = (session: VaultSession, ids: string[]): Array<string | undefined> =>
+    ids.map(id => session.index.getTask(id)?.id);
+
 /** Something other than the plugin writes a line into the file. No scan runs. */
 function writeOutside(contents: Map<string, string>, at: number, line = OUTSIDE, path = FILE): void {
     const lines = contents.get(path)!.split('\n');
@@ -113,7 +122,7 @@ const NOTE = (...target: string[]) => ['# note', '- [ ] 上 @2026-09-21', ...tar
 // ─── 1. updateTaskInFile ─────────────────────────────────────────────
 
 describe('1. updateTaskInFile', () => {
-    it('A: a check rewrites the row and every row keeps its ID', async () => {
+    it('A: a check rewrites the row and every name held before the write follows its row', async () => {
         const { contents, session } = await open({ [FILE]: NOTE('- [ ] 対象 @2026-09-21') });
         const before = rows(session);
 
@@ -121,11 +130,11 @@ describe('1. updateTaskInFile', () => {
         await session.settle(FILE);
 
         expect(contents.get(FILE)).toBe(NOTE('- [x] 対象 @2026-09-21').join('\n'));
-        expect(rows(session).map(row => row.id)).toEqual(before.map(row => row.id));
+        expect(followed(session, before.map(row => row.id))).toEqual(rows(session).map(row => row.id));
         expect(Notice.messages).toEqual([]);
     });
 
-    it('A: an update with a child property line writes both, and the row below keeps its ID', async () => {
+    it('A: an update with a child property line writes both, and the name held for the row below follows it', async () => {
         const { contents, session } = await open({ [FILE]: NOTE('- [ ] 対象 @2026-09-21') });
         const before = rows(session);
 
@@ -133,11 +142,11 @@ describe('1. updateTaskInFile', () => {
         await session.settle(FILE);
 
         expect(contents.get(FILE)).toBe(NOTE('- [ ] 対象 @2026-09-21', '\t- tv-color:: ff0000').join('\n'));
-        expect(rows(session).map(row => row.id)).toEqual(before.map(row => row.id));
+        expect(followed(session, before.map(row => row.id))).toEqual(rows(session).map(row => row.id));
         expect(Notice.messages).toEqual([]);
     });
 
-    it('A: a drag commit rewrites the times, and the scan the drag held back keeps every ID', async () => {
+    it('A: a drag commit rewrites the times, and the scan the drag held back lets every held name follow its row', async () => {
         const { contents, session } = await open({ [FILE]: NOTE('- [ ] 対象 @2026-09-21T10:00>11:00') });
         const before = rows(session);
         const target = idOf(session, '対象');
@@ -149,7 +158,7 @@ describe('1. updateTaskInFile', () => {
         await session.settle(FILE);
 
         expect(contents.get(FILE)).toBe(NOTE('- [ ] 対象 @2026-09-21T12:00>13:00').join('\n'));
-        expect(rows(session).map(row => row.id)).toEqual(before.map(row => row.id));
+        expect(followed(session, before.map(row => row.id))).toEqual(rows(session).map(row => row.id));
         expect(Notice.messages).toEqual([]);
     });
 
@@ -181,7 +190,7 @@ describe('1. updateTaskInFile', () => {
 // ─── 2. stripFlow ────────────────────────────────────────────────────
 
 describe('2. stripFlow (a completion consuming its command)', () => {
-    it('A: the fired row loses its command and keeps its ID', async () => {
+    it('A: the fired row loses its command and the name held for it follows the row', async () => {
         const { contents, session } = await open({ [FILE]: NOTE('- [ ] 対象 @2026-09-21 ==> every mon') });
         const held = { above: idOf(session, '上'), target: idOf(session, '対象'), below: idOf(session, '下') };
 
@@ -197,8 +206,8 @@ describe('2. stripFlow (a completion consuming its command)', () => {
             '',
         ].join('\n'));
         const after = rows(session);
-        expect(after.map(row => row.id).slice(1)).toEqual([held.above, held.target, held.below]);
-        expect(Object.values(held)).not.toContain(after[0].id);
+        expect(after.map(row => row.id).slice(1)).toEqual(followed(session, [held.above, held.target, held.below]));
+        expect(followed(session, Object.values(held))).not.toContain(after[0].id);
         expect(Notice.messages).toEqual([]);
     });
 
@@ -224,7 +233,7 @@ describe('2. stripFlow (a completion consuming its command)', () => {
 // ─── 3. deleteTaskFromFile ───────────────────────────────────────────
 
 describe('3. deleteTaskFromFile', () => {
-    it('A: a delete takes the row and its children, and the rows around keep their IDs', async () => {
+    it('A: a delete takes the row and its children, and the names held for the rows around follow them', async () => {
         const { contents, session } = await open({ [FILE]: NOTE('- [ ] 対象 @2026-09-21', '\t- [ ] 子 @2026-09-21') });
         const held = { above: idOf(session, '上'), below: idOf(session, '下') };
 
@@ -232,7 +241,7 @@ describe('3. deleteTaskFromFile', () => {
         await session.settle(FILE);
 
         expect(contents.get(FILE)).toBe(NOTE().join('\n'));
-        expect(rows(session).map(row => row.id)).toEqual([held.above, held.below]);
+        expect(rows(session).map(row => row.id)).toEqual(followed(session, [held.above, held.below]));
         expect(Notice.messages).toEqual([]);
     });
 
@@ -259,7 +268,7 @@ describe('3. deleteTaskFromFile', () => {
         await session.flowSettled(FILE, ARCHIVE);
 
         expect(contents.get(FILE)).toBe(NOTE().join('\n'));
-        expect(rows(session).map(row => row.id)).toEqual([held.above, held.below]);
+        expect(rows(session).map(row => row.id)).toEqual(followed(session, [held.above, held.below]));
         expect(Notice.messages).toEqual([]);
     });
 
@@ -291,7 +300,7 @@ describe('3. deleteTaskFromFile', () => {
 // ─── 4. a deletion fire (applyToTask) ────────────────────────────────
 
 describe('4. a deletion fire (the instance and the removal, one applyToTask)', () => {
-    it('A: the next instance goes in, the fired row goes, the rows around keep their IDs', async () => {
+    it('A: the next instance goes in, the fired row goes, and the names held for the rows around follow them', async () => {
         const { contents, session } = await open({ [FILE]: NOTE('- [ ] 対象 @2026-09-21 ==> every mon') });
         const held = { above: idOf(session, '上'), target: idOf(session, '対象'), below: idOf(session, '下') };
 
@@ -302,8 +311,8 @@ describe('4. a deletion fire (the instance and the removal, one applyToTask)', (
             '# note', '- [ ] 対象 @2026-09-28 ==> every mon', '- [ ] 上 @2026-09-21', '- [ ] 下 @2026-09-21', '',
         ].join('\n'));
         const after = rows(session).map(row => row.id);
-        expect(after.slice(1)).toEqual([held.above, held.below]);
-        expect(after[0]).not.toBe(held.target);
+        expect(after.slice(1)).toEqual(followed(session, [held.above, held.below]));
+        expect(followed(session, Object.values(held))).not.toContain(after[0]);
         expect(session.index.getTask(held.target)).toBeUndefined();
         expect(Notice.messages).toEqual([]);
     });
@@ -326,7 +335,7 @@ describe('4. a deletion fire (the instance and the removal, one applyToTask)', (
 // ─── 5. insertLineAfterTask ──────────────────────────────────────────
 
 describe('5. insertLineAfterTask (appendChildTask)', () => {
-    it('A: the line goes in as the last child, and the rows keep their IDs', async () => {
+    it('A: the line goes in as the last child, and the names held before the write follow the rows', async () => {
         const { contents, session } = await open({ [FILE]: NOTE('- [ ] 対象 @2026-09-21', '\t- [ ] 子 @2026-09-21') });
         const before = rows(session).map(row => row.id);
 
@@ -335,8 +344,8 @@ describe('5. insertLineAfterTask (appendChildTask)', () => {
 
         expect(contents.get(FILE)).toBe(NOTE('- [ ] 対象 @2026-09-21', '\t- [ ] 子 @2026-09-21', '\t- [ ] 追加 @2026-09-21').join('\n'));
         const after = rows(session).map(row => row.id);
-        expect([after[0], after[1], after[2], after[4]]).toEqual(before);
-        expect(before).not.toContain(after[3]);
+        expect([after[0], after[1], after[2], after[4]]).toEqual(followed(session, before));
+        expect(followed(session, before)).not.toContain(after[3]);
         expect(Notice.messages).toEqual([]);
     });
 
@@ -356,7 +365,7 @@ describe('5. insertLineAfterTask (appendChildTask)', () => {
 // ─── 6. insertSiblingAfterTask ───────────────────────────────────────
 
 describe('6. insertSiblingAfterTask (timer records)', () => {
-    it('A: the line goes in past the subtree, and the rows keep their IDs', async () => {
+    it('A: the line goes in past the subtree, and the names held before the write follow the rows', async () => {
         const { contents, session } = await open({ [FILE]: NOTE('- [ ] 対象 @2026-09-21', '\t- [ ] 子 @2026-09-21') });
         const before = rows(session).map(row => row.id);
 
@@ -366,7 +375,7 @@ describe('6. insertSiblingAfterTask (timer records)', () => {
         expect(at).toBe(true);
         expect(contents.get(FILE)).toBe(NOTE('- [ ] 対象 @2026-09-21', '\t- [ ] 子 @2026-09-21', '- [ ] 記録 @2026-09-21').join('\n'));
         const after = rows(session).map(row => row.id);
-        expect([after[0], after[1], after[2], after[4]]).toEqual(before);
+        expect([after[0], after[1], after[2], after[4]]).toEqual(followed(session, before));
         expect(Notice.messages).toEqual([]);
     });
 
@@ -381,7 +390,7 @@ describe('6. insertSiblingAfterTask (timer records)', () => {
         expect(at).toBe(true);
         expect(contents.get(FILE)).toBe(NOTE(...target, '- [ ] 記録 @2026-09-21T13:00').join('\n'));
         const after = rows(session).map(row => row.id);
-        expect([...after.slice(0, 4), after[5]]).toEqual(before);
+        expect([...after.slice(0, 4), after[5]]).toEqual(followed(session, before));
         expect(Notice.messages).toEqual([]);
     });
 
@@ -416,7 +425,7 @@ describe('6. insertSiblingAfterTask (timer records)', () => {
 // ─── 7. insertLineAsFirstChild ───────────────────────────────────────
 
 describe('7. insertLineAsFirstChild (insertChildTask)', () => {
-    it('A: the line goes in as the first child, and the rows keep their IDs', async () => {
+    it('A: the line goes in as the first child, and the names held before the write follow the rows', async () => {
         const { contents, session } = await open({ [FILE]: NOTE('- [ ] 対象 @2026-09-21', '\t- [ ] 子 @2026-09-21') });
         const before = rows(session).map(row => row.id);
 
@@ -425,7 +434,7 @@ describe('7. insertLineAsFirstChild (insertChildTask)', () => {
 
         expect(contents.get(FILE)).toBe(NOTE('- [ ] 対象 @2026-09-21', '\t- [ ] 先頭 @2026-09-21', '\t- [ ] 子 @2026-09-21').join('\n'));
         const after = rows(session).map(row => row.id);
-        expect([after[0], after[1], after[3], after[4]]).toEqual(before);
+        expect([after[0], after[1], after[3], after[4]]).toEqual(followed(session, before));
         expect(Notice.messages).toEqual([]);
     });
 
@@ -460,7 +469,7 @@ describe('8. appendArchive (a move archiving its subtree)', () => {
         expect(Notice.messages).toEqual([]);
     });
 
-    it('A: within the same file, the subtree goes to the end and every row keeps its ID, the moved ones too', async () => {
+    it('A: within the same file, the subtree goes to the end and every name held before the write follows its row, the moved ones too', async () => {
         const { contents, session } = await open({
             [FILE]: NOTE('- [ ] 対象 @2026-09-21 ==> move([[note]])', '\t- [ ] 子 @2026-09-21'),
         });
@@ -474,7 +483,7 @@ describe('8. appendArchive (a move archiving its subtree)', () => {
         expect(contents.get(FILE)).toBe([
             '# note', '- [ ] 上 @2026-09-21', '- [ ] 下 @2026-09-21', '- [x] 対象 @2026-09-21', '\t- [ ] 子 @2026-09-21', '',
         ].join('\n'));
-        expect(rows(session).map(row => row.id)).toEqual([held.above, held.below, held.target, held.child]);
+        expect(rows(session).map(row => row.id)).toEqual(followed(session, [held.above, held.below, held.target, held.child]));
         expect(Notice.messages).toEqual([]);
     });
 
@@ -543,7 +552,7 @@ describe('8. a move to another file whose source is refused after the archive', 
 describe('9. duplicateInlineTask (a copy on another day)', () => {
     const TARGET = ['- [ ] 対象 @2026-09-21T10:00>11:00 ^blk', '\t- [ ] 子 @2026-09-21'];
 
-    it('A: the copy goes above, and the original and its child keep their IDs', async () => {
+    it('A: the copy goes above, and the names held for the original and its child follow them', async () => {
         const { contents, session } = await open({ [FILE]: NOTE(...TARGET) });
         const before = rows(session).map(row => row.id);
 
@@ -552,9 +561,9 @@ describe('9. duplicateInlineTask (a copy on another day)', () => {
 
         expect(contents.get(FILE)).toBe(NOTE('- [ ] 対象 @2026-09-22T10:00>11:00', '\t- [ ] 子 @2026-09-21', ...TARGET).join('\n'));
         const after = rows(session).map(row => row.id);
-        expect([after[0], after[3], after[4], after[5]]).toEqual(before);
-        expect(before).not.toContain(after[1]);
-        expect(before).not.toContain(after[2]);
+        expect([after[0], after[3], after[4], after[5]]).toEqual(followed(session, before));
+        expect(followed(session, before)).not.toContain(after[1]);
+        expect(followed(session, before)).not.toContain(after[2]);
         expect(Notice.messages).toEqual([]);
     });
 
@@ -577,7 +586,7 @@ describe('9. duplicateInlineTask (a copy on another day)', () => {
 describe('10. duplicateInlineTaskInPlace (a copy that continues)', () => {
     const TARGET = ['- [ ] 対象 @2026-09-21T10:00>11:00', '\t- [ ] 子 @2026-09-21'];
 
-    it('A: the copy goes after the subtree, and the original keeps its ID', async () => {
+    it('A: the copy goes after the subtree, and the name held for the original follows it', async () => {
         const { contents, session } = await open({ [FILE]: NOTE(...TARGET) });
         const before = rows(session).map(row => row.id);
 
@@ -586,7 +595,7 @@ describe('10. duplicateInlineTaskInPlace (a copy that continues)', () => {
 
         expect(contents.get(FILE)).toBe(NOTE(...TARGET, '- [ ] 対象 @2026-09-21T11:00>12:00', '\t- [ ] 子 @2026-09-21').join('\n'));
         const after = rows(session).map(row => row.id);
-        expect([after[0], after[1], after[2], after[5]]).toEqual(before);
+        expect([after[0], after[1], after[2], after[5]]).toEqual(followed(session, before));
         expect(Notice.messages).toEqual([]);
     });
 
@@ -624,7 +633,7 @@ describe('11. insertRecurrenceForTask (create-next)', () => {
             '',
         ].join('\n'));
         const after = rows(session).map(row => row.id);
-        expect(after.slice(1)).toEqual([held.above, held.target, held.below]);
+        expect(after.slice(1)).toEqual(followed(session, [held.above, held.target, held.below]));
         expect(Notice.messages).toEqual([]);
     });
 
@@ -670,7 +679,7 @@ describe('12. insertGeneratedInstance (create-generated)', () => {
             ...GEN,
         ].join('\n'));
         const after = rows(session).map(row => row.id);
-        expect(after.slice(2)).toEqual([held.above, held.target, child, held.below]);
+        expect(after.slice(2)).toEqual(followed(session, [held.above, held.target, child, held.below]));
         expect(Notice.messages).toEqual([]);
     });
 

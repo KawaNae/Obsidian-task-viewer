@@ -45,7 +45,7 @@ function buildHost(task: Task) {
         },
         settleFire: proto.settleFire,
         writeCompleting: proto.writeCompleting,
-        scanner: { requestScan: vi.fn(async () => { }) },
+        scanner: { requestScan: vi.fn(async () => {}), follow: () => null },
         app: { vault: { getAbstractFileByPath: () => null } },
         repository: {
             updateTaskInFile: vi.fn(async () => ({ written: true, refused: null, made: [], rows: new Map() })),
@@ -55,6 +55,7 @@ function buildHost(task: Task) {
         adoptWrittenRow: proto.adoptWrittenRow,
         onRow: proto.onRow,
         copyForWrite: proto.copyForWrite,
+        getTask: proto.getTask,
         reportRefusal: vi.fn(),
         writeUpdate: proto.writeUpdate,
         // The dispose guard every write goes through; this index is open.
