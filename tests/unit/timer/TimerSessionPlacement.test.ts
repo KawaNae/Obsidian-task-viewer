@@ -38,6 +38,7 @@ function makeHarness(options: { tail?: Task | undefined; siblingFails?: boolean 
 
     const target = makeTask({
         id: TARGET_ID, file: 'notes/a.md', line: 2, content: '設計', statusChar: ' ',
+        blockId: 'tv-t-target-anchor', anchor: 'tv-t-target-anchor',
     });
     const tail = 'tail' in options
         ? options.tail
@@ -98,7 +99,10 @@ function makeHarness(options: { tail?: Task | undefined; siblingFails?: boolean 
         }),
     } as unknown as TaskViewerPlugin;
 
-    const storageUtils = { generateTimerTargetId: () => NEW_BLOCK_ID } as unknown as TimerStorageUtils;
+    const storageUtils = {
+        generateTimerTargetId: () => NEW_BLOCK_ID,
+        isAutoManagedTimerTargetId: (id: string) => id.startsWith('tv-t-'),
+    } as unknown as TimerStorageUtils;
     const recorder = new TimerRecorder({} as App, plugin, storageUtils);
 
     return { recorder, siblingInserts, childInserts, updates, deletes };
@@ -111,6 +115,7 @@ function makeTimer(overrides: Partial<TimerInstance> = {}): TimerInstance {
         taskName: '設計',
         taskOriginalText: '- [ ] 設計',
         taskFile: 'notes/a.md',
+        timerTargetId: 'tv-t-target-anchor',
         startTimeMs: 0,
         pausedElapsedTime: 600,
         phase: 'work',
@@ -166,7 +171,7 @@ describe('startNextSession: the next record sits beside the last one', () => {
         const manual = makeHarness({
             tail: makeTask({
                 id: TAIL_ID, file: 'notes/a.md', line: 3, content: '⏱️ 設計',
-                statusChar: 'x', startTime: '11:05', endTime: '13:02', blockId: 'my-reference',
+                statusChar: 'x', startTime: '11:05', endTime: '13:02', blockId: 'my-reference', anchor: 'my-reference',
             }),
         });
         const timer = makeTimer({ tailRecordBlockId: 'my-reference' });
@@ -191,16 +196,17 @@ describe('startNextSession: the next record sits beside the last one', () => {
         expect(orphaned.siblingInserts).toHaveLength(0);
     });
 
-    it('lets a self-mode timer fall back to its own task row', async () => {
-        // self は 1 本目のレコードが対象タスク行そのもの。^id を失っていても
-        // そこが尻尾なので、隣に並べてよい。
+    it('puts session 2 of a self-mode timer beside its own task row, whose anchor is its tail', async () => {
+        // self は 1 本目のレコードが対象タスク行そのもの。開始の書き込みで尻尾を
+        // 対象の錨に置くので、隣に並べる。対象の錨は外さない（走っている間は残る）。
         const h2 = makeHarness({ tail: undefined });
-        const timer = makeTimer({ tailRecordBlockId: undefined });
+        const timer = makeTimer({ recordMode: 'self', tailRecordBlockId: 'tv-t-target-anchor' });
 
         await h2.recorder.startNextSession(timer);
 
         expect(h2.siblingInserts).toHaveLength(1);
         expect(h2.siblingInserts[0].taskId).toBe(TARGET_ID);
+        expect(timer.timerTargetId).toBe('tv-t-target-anchor');
     });
 
     it('writes nowhere else when the sibling write was not made', async () => {

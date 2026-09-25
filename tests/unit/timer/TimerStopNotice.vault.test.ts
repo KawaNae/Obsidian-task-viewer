@@ -68,7 +68,7 @@ async function start(s: VaultSession, recordMode: TimerRecordMode): Promise<Time
         recordMode,
         autoStart: true,
     });
-    if (recordMode === 'child') await s.recorder.createChildAtStart(timer);
+    await s.recorder.writeStart(timer);
     await s.settle(FILE);
     timer.startTimeMs = Date.now() - 60_000;
     return timer;

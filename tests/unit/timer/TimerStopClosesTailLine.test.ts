@@ -97,7 +97,7 @@ describe('a stop closes the session line the tail names, though the scan has not
     for (const mode of ['child', 'self'] as const) {
         it(`${mode}, session 2: ⏸ closes the resumed line, and the records are 09:00>09:10 then 09:20>09:30`, async () => {
             const { s, contents, timer, lifecycle } = await sessionAt9(mode);
-            if (mode === 'child') await s.recorder.createChildAtStart(timer);
+            await s.recorder.writeStart(timer);
             await s.settle(FILE);
             timer.startTimeMs = Date.now();
             vi.setSystemTime(at(9, 10));

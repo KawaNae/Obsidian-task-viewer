@@ -46,7 +46,7 @@ async function runningTimer(mode: TimerRecordMode) {
         taskId: target.id, taskName: target.content, taskFile: target.file, taskOriginalText: target.originalText,
         timerType: 'countup', recordMode: mode, autoStart: true,
     }) as CountupTimer;
-    if (mode === 'child') await s.recorder.createChildAtStart(timer);
+    await s.recorder.writeStart(timer);
     await s.settle(FILE);
     const h = lifecycleOver(s);
     h.ctx.timers.set(timer.id, timer);

@@ -67,6 +67,7 @@ function makeTimer(overrides: Partial<TimerInstance> = {}): TimerInstance {
         taskName: 'parent',
         taskOriginalText: '- [ ] parent',
         taskFile: 'notes/a.md',
+        timerTargetId: 'tv-timer-anchor',
         startTimeMs: 0,
         pausedElapsedTime: 600,
         phase: 'work',

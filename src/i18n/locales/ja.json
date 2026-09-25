@@ -664,6 +664,7 @@
     "flowDidNotFire": "フローは発火しませんでした: {{reason}}（{{file}}）",
     "flowDeleteDidNotFire": "フローが発火しなかったため、タスクは削除されませんでした: {{reason}}（{{file}}）",
     "timerTargetNotFound": "タイマーターゲットタスクが見つかりません。削除、移動、またはリネームされた可能性があります。",
+    "timerTargetIdShared": "この行の ^{{id}} はほかの行にもあります。タイマーは対象の行を引けないので、始めません。",
     "timerTargetReadOnly": "このタスクは読み取り専用の形式です。タイマーの記録を書き込めません。",
     "writeTargetGone": "対象のタスクが見つからないため、書き込みませんでした: {{subject}}",
     "writeTargetChanged": "ノートの内容が変わっているため、書き込みませんでした。もう一度操作してください: {{subject}}",

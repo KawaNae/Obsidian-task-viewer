@@ -56,8 +56,8 @@ async function suspendedAfterFirst(mode: TimerRecordMode) {
         taskId: target.id, taskName: target.content, taskFile: target.file, taskOriginalText: target.originalText,
         timerType: 'countup', recordMode: mode, autoStart: true,
     }) as CountupTimer;
+    await s.recorder.writeStart(timer);
     if (mode === 'child') {
-        await s.recorder.createChildAtStart(timer);
         // 1 本目の行を書けた時点で、尻尾はその行。
         expect(timer.tailRecordBlockId).toBeDefined();
         expect(contents.get(FILE)).toContain(`^${timer.tailRecordBlockId}`);
@@ -219,7 +219,7 @@ describe('a resume whose line cannot be written stays suspended', () => {
 });
 
 describe('resolveTailRecord: the target row is the tail of a self timer in its first session only', () => {
-    it('falls to the target row while session 1 runs and while it is suspended, not while session 2 runs', async () => {
+    it('the target row is the tail right after the start write; a resumed session 2 moves the tail off it', async () => {
         const contents = new Map([[FILE, ['- [ ] 対象 @2026-09-21', ''].join('\n')]]);
         const s = vaultSession(contents);
         await s.scanAll();
@@ -228,24 +228,28 @@ describe('resolveTailRecord: the target row is the tail of a self timer in its f
             taskId: target.id, taskName: target.content, taskFile: target.file, taskOriginalText: target.originalText,
             timerType: 'countup', recordMode: 'self', autoStart: true,
         });
-        // 行がまだスキャンに見えていない尻尾（何も引けない）。
-        timer.tailRecordBlockId = 'tv-missing';
 
-        timer.sessionCount = 0;
-        timer.runState = 'running';
+        // self の 1 本目は開始の書き込みで対象の錨がそのまま尻尾になる。
+        expect(await s.recorder.writeStart(timer)).toBe(true);
+        await s.settle(FILE);
+        const anchor = timer.timerTargetId!;
+        expect(timer.tailRecordBlockId).toBe(anchor);
         expect(s.recorder.resolveTailRecord(timer)?.content).toBe('対象');
 
+        // 中断中もまだ対象の行が尻尾（記録していないので動かない）。
         timer.sessionCount = 1;
         timer.runState = 'suspended';
         expect(s.recorder.resolveTailRecord(timer)?.content).toBe('対象');
 
-        timer.sessionCount = 1;
+        // 再開（2 本目）で尻尾は新しい行へ移り、対象の行はもう尻尾ではない。
+        expect(await s.recorder.startNextSession(timer)).toBe(true);
+        await s.settle(FILE);
         timer.runState = 'running';
-        expect(s.recorder.resolveTailRecord(timer)).toBeUndefined();
 
-        timer.sessionCount = 2;
-        timer.runState = 'suspended';
-        expect(s.recorder.resolveTailRecord(timer)).toBeUndefined();
+        expect(timer.tailRecordBlockId).not.toBe(anchor);
+        // 名前は対象タスクから継ぐので同じ「対象」だが、行そのものはもう対象行ではない。
+        expect(s.recorder.resolveTailRecord(timer)?.id).not.toBe(target.id);
+        expect(s.recorder.resolveTailRecord(timer)?.blockId).not.toBe(anchor);
         s.dispose();
     });
 });

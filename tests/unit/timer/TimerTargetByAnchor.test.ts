@@ -106,6 +106,22 @@ describe('a timer does not write where it cannot name the row by its anchor', ()
         expect(contents.get(FILE)).toBe(before);
     });
 
+    it('a timer without a target anchor finds no target, not even by the name it was started with', async () => {
+        const contents = new Map([[FILE, ['- [ ] 対象 @2026-09-21', ''].join('\n')]]);
+        const s = vaultSession(contents);
+        await s.scanAll();
+        const target = s.index.getTasks().find(task => task.content === '対象')!;
+        const timer = s.creator.createTimer({
+            taskId: target.id, taskName: target.content, taskFile: target.file, taskOriginalText: target.originalText,
+            timerType: 'countup', recordMode: 'child', autoStart: true,
+        });
+        const before = contents.get(FILE);
+
+        expect(s.recorder.resolveTarget(timer)).toBeUndefined();
+        expect(await record(s, timer)).toBe(false);
+        expect(contents.get(FILE)).toBe(before);
+    });
+
     it('a tail ^id that two rows carry: neither is closed as the running line', async () => {
         const contents = new Map([[FILE, [
             '- [ ] 対象 @2026-09-21 ^tv-t-a1',
