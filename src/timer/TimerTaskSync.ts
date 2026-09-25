@@ -18,6 +18,9 @@ export interface TimerTaskRefresh {
  * text, and writing that answer back is what lets the name and colour follow
  * the task again. The direct lookup stays the fast path: this runs on every
  * tick, and the resolver walks every task in the vault.
+ *
+ * A name lasts one reading of its file. One given before a write of ours is
+ * followed to the row's name now (`getTask`), and the timer takes it over.
  */
 export function refreshTimerTask(
     timer: SyncedTimer,
@@ -25,7 +28,12 @@ export function refreshTimerTask(
     resolver: Pick<TimerTaskResolver, 'resolveTvInline'>
 ): TimerTaskRefresh {
     const byId = index.getTask(timer.taskId);
-    if (byId) return { task: byId, rewritten: false };
+    if (byId && byId.id === timer.taskId) return { task: byId, rewritten: false };
+    if (byId) {
+        timer.taskId = byId.id;
+        timer.taskFile = byId.file;
+        return { task: byId, rewritten: true };
+    }
 
     const resolved = resolver.resolveTvInline(timer);
     if (!resolved) return { task: undefined, rewritten: false };
