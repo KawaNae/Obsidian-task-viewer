@@ -113,18 +113,18 @@ describe('daily note timers own a running line too', () => {
         const h = makeHarness();
         const timer = makeDailyTimer();
 
-        const sessionId = await h.recorder.createChildAtStart(timer);
+        const written = await h.recorder.writeStart(timer);
 
         expect(h.appended).toHaveLength(1);
         expect(h.appended[0]).toMatch(/^- \[ \]/);
-        expect(sessionId).toBeDefined();
+        expect(written).toBe(true);
     });
 
     it('adopts the written line as the tail and remembers the note path', async () => {
         const h = makeHarness();
         const timer = makeDailyTimer();
 
-        await h.recorder.createChildAtStart(timer);
+        await h.recorder.writeStart(timer);
 
         // パスを覚えないと、尻尾の解決（ファイルで絞る）も兄弟挿入も相手を見失う。
         expect(timer.taskFile).toBe(DAILY_PATH);
@@ -134,7 +134,7 @@ describe('daily note timers own a running line too', () => {
 
     it('starts the line unnamed instead of inheriting the date', async () => {
         const h = makeHarness();
-        await h.recorder.createChildAtStart(makeDailyTimer());
+        await h.recorder.writeStart(makeDailyTimer());
 
         // taskName は日付。継ぐと「2026-08-17 を 25 分やった」という記録になる。
         expect(h.appended[0]).toMatch(/^- \[ \]\s+@/);
@@ -142,7 +142,7 @@ describe('daily note timers own a running line too', () => {
 
     it('carries the draft into the line when one was typed before the write landed', async () => {
         const h = makeHarness();
-        await h.recorder.createChildAtStart(makeDailyTimer({ pendingContent: '資料集め' }));
+        await h.recorder.writeStart(makeDailyTimer({ pendingContent: '資料集め' }));
 
         expect(h.appended[0]).toContain('資料集め');
     });
@@ -152,7 +152,7 @@ describe('daily note timers own a running line too', () => {
         // 直前のレコードが名前の出どころになる（毎回打ち直させない）。
         const h = makeHarness();
         const timer = makeDailyTimer({ pendingContent: '資料集め' });
-        await h.recorder.createChildAtStart(timer);
+        await h.recorder.writeStart(timer);
 
         await h.recorder.startNextSession(timer);
 
@@ -162,7 +162,7 @@ describe('daily note timers own a running line too', () => {
     it('puts the second session next to the first, not under the heading again', async () => {
         const h = makeHarness();
         const timer = makeDailyTimer();
-        await h.recorder.createChildAtStart(timer);
+        await h.recorder.writeStart(timer);
 
         await h.recorder.startNextSession(timer);
 

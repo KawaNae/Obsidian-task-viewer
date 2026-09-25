@@ -226,12 +226,12 @@ describe('startNextSession: the next record sits beside the last one', () => {
     });
 });
 
-describe('startContinuationSession: continuing a completed task', () => {
+describe('writeStart, sibling: continuing a completed task', () => {
     it('sends the record past the run of completed siblings', async () => {
         const h = makeHarness();
         const timer = makeTimer({ recordMode: 'sibling', tailRecordBlockId: undefined });
 
-        await h.recorder.startContinuationSession(timer);
+        await h.recorder.writeStart(timer);
 
         expect(h.siblingInserts).toHaveLength(1);
         expect(h.siblingInserts[0].taskId).toBe(TARGET_ID);

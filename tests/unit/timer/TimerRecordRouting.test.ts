@@ -8,7 +8,7 @@ import { makeTask } from '../helpers/makeTask';
 
 /**
  * child モードでは開始時に placeholder の子タスクが 1 行書かれる
- * (`createChildAtStart`)。停止時はその行を更新するだけで、新しい行を足しては
+ * (`writeStart`)。停止時はその行を更新するだけで、新しい行を足しては
  * ならない — **1 セッション = 1 行**。
  *
  * countdown / interval の停止は `addCountdownRecord` / `addIntervalRecord` を
@@ -178,7 +178,8 @@ describe('recordSessionEnd: one session writes one line', () => {
     });
 
     it('self mode updates the task itself and writes no child line', async () => {
-        const timer = makeTimer({ recordMode: 'self', tailRecordBlockId: undefined });
+        // 1 本目の self は、開始の書き込みで尻尾を対象の錨に置いている。
+        const timer = makeTimer({ recordMode: 'self', tailRecordBlockId: 'tv-timer-anchor' });
         await h.recorder.recordSessionEnd(timer, recordFor(timer));
         expect(h.inserted).toHaveLength(0);
         expect(h.updates).toHaveLength(1);
@@ -224,7 +225,7 @@ describe('recordSessionEnd: one session writes one line', () => {
         // 対象を引き直せない（実機で「再開しても記録されない」として現れた）。
         // 自動生成 id の掃除はタイマーを閉じるときに行う。
         const timer = makeTimer({
-            recordMode: 'self', ownedAnchors: ['tv-timer-anchor'],
+            recordMode: 'self', tailRecordBlockId: 'tv-timer-anchor', ownedAnchors: ['tv-timer-anchor'],
         });
         await h.recorder.recordSessionEnd(timer, recordFor(timer));
         expect(h.updates[0].updates.blockId).toBe('tv-timer-anchor');

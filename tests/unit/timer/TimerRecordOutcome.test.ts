@@ -141,7 +141,8 @@ const paths: {
     { name: 'countdown record', timer: COUNTDOWN, write: 'insert', success: 'countdownRecorded' },
     { name: 'interval record', timer: INTERVAL, write: 'insert', success: 'kindRecorded' },
     { name: 'the running line (updateChildAtEnd)', timer: { tailRecordBlockId: 'tv-timer-1' }, write: 'update', success: 'kindRecorded' },
-    { name: 'self (updateTaskDirectly)', timer: { recordMode: 'self' }, write: 'update', success: 'taskUpdated' },
+    // self の 1 本目: 開始の書き込みで尻尾を対象の錨に置いている。
+    { name: 'self (updateTaskDirectly)', timer: { recordMode: 'self', tailRecordBlockId: 'tv-timer-anchor' }, write: 'update', success: 'taskUpdated' },
 ];
 
 describe('recordSessionEnd answers whether the record was written', () => {
@@ -170,13 +171,13 @@ describe('recordSessionEnd answers whether the record was written', () => {
         expect(isNotice(Notice.messages[0], success)).toBe(true);
     });
 
-    it('self does not take the running line as the tail when the write was refused', async () => {
+    it('self: a refused write leaves the tail on the target row', async () => {
         const h = makeHarness({ updateResult: false });
-        const timer = makeTimer({ recordMode: 'self' });
+        const timer = makeTimer({ recordMode: 'self', tailRecordBlockId: 'tv-timer-anchor' });
 
         await h.recorder.recordSessionEnd(timer, recordFor(timer));
 
-        expect(timer.tailRecordBlockId).toBeUndefined();
+        expect(timer.tailRecordBlockId).toBe('tv-timer-anchor');
     });
 });
 
@@ -212,7 +213,7 @@ describe('the target cannot be resolved', () => {
 
     it.each([
         { name: 'child record', timer: {} },
-        { name: 'self', timer: { recordMode: 'self' } as Partial<TimerInstance> },
+        { name: 'self', timer: { recordMode: 'self', tailRecordBlockId: 'tv-timer-anchor' } as Partial<TimerInstance> },
     ])('$name: says the target was not found, once, and answers false', async ({ timer }) => {
         const h = makeHarness({ resolvable: false });
         const built = makeTimer(timer);

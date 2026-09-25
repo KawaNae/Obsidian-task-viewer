@@ -8,11 +8,12 @@ import { vaultSession, type VaultSession } from '../helpers/vaultSession';
 
 /**
  * 停止は尻尾（tailRecordBlockId）が指すセッションの行を閉じる
- * （TimerRecorder.addSessionRecord）。
+ * （TimerRecorder.recordSessionEnd）。
  *
- * セッションの行は書けたが、書いた直後のスキャンがまだその行の id を返さなかった
- * （recordedChildTaskId が無い）とき、以前の停止は開いた行の横に記録を1行足した。
- * 開いた行は残り、1 セッションが 2 行になった（並びも逆）。
+ * 尻尾は書き込みが書けたときに移り、停止はその錨で行を引いて閉じる。以前は書いた
+ * あとにスキャンで行の id を引き直し、引けなかったときの停止は開いた行の横に記録を
+ * 1行足した。開いた行は残り、
+ * 1 セッションが 2 行になった（並びも逆）。
  */
 (globalThis as unknown as { window: unknown }).window = {
     setInterval: () => 1, clearInterval: () => { },
@@ -50,11 +51,6 @@ async function sessionAt9(mode: TimerRecordMode) {
     return { s, contents, timer, ...h };
 }
 
-/** 次に書くセッションの行を、書いた直後のスキャンが引けなかった形にする。 */
-function scanMissesNextSessionLine(s: VaultSession) {
-    return vi.spyOn(s.recorder, 'findSessionTaskId').mockResolvedValueOnce(undefined);
-}
-
 async function settleAll(s: VaultSession) {
     await new Promise(r => setTimeout(r, 0));
     await s.settle(FILE);
@@ -65,18 +61,15 @@ const records = (text: string) => [...text.matchAll(/@2026-09-21T(\d\d:\d\d)>(\d
 /** 開始時刻だけを持つ、開いたままのセッションの行。 */
 const openLines = (text: string) => text.split('\n').filter(l => /@2026-09-21T\d\d:\d\d(?!>)/.test(l));
 
-describe('a stop closes the session line the tail names, though the scan has not given its id yet', () => {
+describe('a stop closes the session line the tail names', () => {
     afterEach(() => vi.useRealTimers());
 
     it('child, session 1: ■ closes the line written at start, and there is one line', async () => {
         const { s, contents, timer, lifecycle, ctx } = await sessionAt9('child');
-        const miss = scanMissesNextSessionLine(s);
-        await s.recorder.createChildAtStart(timer);
+        // 書けた時点で尻尾はその行の錨。
+        expect(await s.recorder.writeStart(timer)).toBe(true);
+        expect(openLines(contents.get(FILE)!)).toEqual([expect.stringContaining(`^${timer.tailRecordBlockId}`)]);
         await s.settle(FILE);
-        expect(miss).toHaveBeenCalled();
-        // 行は書けているが、タイマーはまだその id を持っていない。
-        expect(timer.recordedChildTaskId).toBeUndefined();
-        expect(openLines(contents.get(FILE)!)).toHaveLength(1);
 
         timer.startTimeMs = Date.now();
         vi.setSystemTime(at(9, 10));
@@ -105,15 +98,12 @@ describe('a stop closes the session line the tail names, though the scan has not
             expect(records(contents.get(FILE)!)).toEqual(['09:00>09:10']);
 
             vi.setSystemTime(at(9, 20));
-            const miss = scanMissesNextSessionLine(s);
             const firstTail = timer.tailRecordBlockId;
+            // 再開の行が書けた時点で、尻尾は新しい行。
             lifecycle.resumeSession(timer);
-            await vi.waitFor(() => expect(miss).toHaveBeenCalled());
-            await settleAll(s);
-            expect(timer.runState).toBe('running');
-            // 再開の行は書けたが、タイマーはまだその id を持っていない。尻尾は新しい行。
-            expect(timer.recordedChildTaskId).toBeUndefined();
+            await vi.waitFor(() => expect(timer.runState).toBe('running'));
             expect(timer.tailRecordBlockId).not.toBe(firstTail);
+            await settleAll(s);
             expect(openLines(contents.get(FILE)!)).toHaveLength(1);
 
             vi.setSystemTime(at(9, 30));

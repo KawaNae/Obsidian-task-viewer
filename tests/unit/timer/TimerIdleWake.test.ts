@@ -20,7 +20,6 @@ function build() {
         timers: new Map<string, TimerInstance>(),
         recorder: {
             recordSessionEnd: async () => true,
-            createChildAtStart: async () => undefined,
             startNextSession: async () => true,
             discardRunningPlaceholder: async () => { /* unused */ },
         } as unknown as TimerContext['recorder'],
