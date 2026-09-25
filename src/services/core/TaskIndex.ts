@@ -23,6 +23,7 @@ import { plannedOn, recordedOn, subjectOf } from '../persistence/TaskRefs';
 import { logError, logInfo, logWarn } from '../../log/log';
 import type { EditorLine, Landing, Refusal, WriteOutcome } from '../../utils/FileLines';
 import type { TaskOp } from '../persistence/TaskOps';
+import type { ContentKey } from './ContentKey';
 
 /**
  * TaskIndex - タスク管理の統括ファサードクラス
@@ -367,6 +368,18 @@ export class TaskIndex {
         return this.getTasks().find(t =>
             t.file === filePath && t.line === line
         );
+    }
+
+    /**
+     * The task on line `line` of content `key`: a line an editor shows, in
+     * the content it shows. Looked up only when the index's last reading of
+     * the file is that content; null when it is another, since a line number
+     * counts in nothing but the content it is in. Undefined when no task
+     * stands on the line.
+     */
+    taskAtEditorLine(filePath: string, line: number, key: ContentKey): Task | undefined | null {
+        if (this.scanner.readingOf(filePath).key !== key) return null;
+        return this.getTaskByFileLine(filePath, line);
     }
 
     getTaskLineNumbersForFile(filePath: string): Set<number> {
