@@ -177,6 +177,14 @@ export interface Task {
      */
     subtreeLines?: readonly string[];
     blockId?: string;
+    /**
+     * The `^id` on the row's line, when no other line of the file carries
+     * that `^id` — every line counted, whatever reads it. The one name of a
+     * row that outlives a reading: the index finds the row it anchors in any
+     * later reading (`TaskIndex.getTaskByAnchor`). Set by the scan; absent
+     * when the line has no `^id` or shares it.
+     */
+    anchor?: string;
     timerTargetId?: string;
 
     /**

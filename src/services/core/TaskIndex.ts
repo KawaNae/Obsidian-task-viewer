@@ -341,6 +341,20 @@ export class TaskIndex {
     }
 
     /**
+     * The index's copy of the row `anchor` anchors in `filePath` now
+     * (`Task.anchor`), or undefined when no row of the file's last reading
+     * carries that `^id` alone. The one place an anchor is looked up.
+     *
+     * An anchor outlives readings, a name does not: what comes back is the
+     * copy of the last reading, under that reading's name. A write to it goes
+     * by that name, and so through the one check every write passes
+     * (`WriteSession.row`): a file that changed since the reading refuses it.
+     */
+    getTaskByAnchor(filePath: string, anchor: string): Task | undefined {
+        return this.getTasks().find(t => t.file === filePath && t.anchor === anchor);
+    }
+
+    /**
      * A generation block by name. Resolution is file-local: a command
      * reaches only the blocks of the file it is written in.
      */
