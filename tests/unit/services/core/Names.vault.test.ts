@@ -241,3 +241,15 @@ describe('a name given before writes of ours to the file being dragged', () => {
         expect(contents.get(FILE)).toBe(['- [ ] A2', '- [ ] A', '- [x] B', ''].join('\n'));
     });
 });
+
+describe('a copy of a row whose target names no reading', () => {
+    it('is not written, though its line reads as it did: nothing says which reading the line is of', async () => {
+        const { contents, session } = await open(['- [ ] A', '']);
+        const held = session.index.getTask(idOf(session, 'A'))!;
+        const target = { ...plannedOn(held), read: undefined };
+
+        const written = await session.index.getRepository().updateTaskInFile(target, { ...held, statusChar: 'x', originalText: '- [x] A' });
+        expect(written.refused?.reason).toEqual({ kind: 'changed' });
+        expect(contents.get(FILE)).toBe(['- [ ] A', ''].join('\n'));
+    });
+});

@@ -158,7 +158,8 @@ interface Reported {
 /**
  * Stands in for the index's side of a write: `standing` is every write that
  * landed, as it handed over what it left; `refusals` every refusal the
- * channel was told.
+ * channel was told. The file reads as the reading a row names (`named`), so
+ * its line stands where it was.
  */
 function writeSink() {
     const reports: Reported[] = [];
@@ -168,6 +169,7 @@ function writeSink() {
             reports.push({ before: [...landing.before], after: [...landing.lines], edits: landing.edits && [...landing.edits] });
         },
         refused: (refusal) => { refusals.push(refusal); },
+        follow: (_read, line) => line,
     });
     return {
         channel,
@@ -579,8 +581,8 @@ describe('processLines', () => {
     });
 });
 
-/** A row named on `line`, planned from a line that reads `text`. */
-const named = (line: number, text: string, subject = text): NamedRow => ({ line, subject, basis: { text } });
+/** A row named on `line` of the reading the file reads as, planned from a line that reads `text`. */
+const named = (line: number, text: string, subject = text): NamedRow => ({ line, subject, basis: { text }, read: 'test.1' });
 
 describe('processLines: asking where a row stands, and giving up', () => {
 
@@ -650,6 +652,25 @@ describe('processLines: asking where a row stands, and giving up', () => {
         expect(h.text()).toBe('- [ ] a\n');
     });
 
+    it('refuses a row planned from a copy that names no reading, though its line reads as its basis', async () => {
+        const h = harness('- [ ] a\n');
+        const log = writeSink();
+        const { read: _read, ...unread } = named(0, '- [ ] a', 'a');
+
+        const outcome = await processLines(h.app, h.file, log.channel, (draft, _eol, session) => {
+            const at = session.row(unread);
+            if (at === null) return false;
+            draft.rewrite(at, '- [x] a');
+            return true;
+        });
+
+        expect(outcome).toEqual({
+            written: false,
+            refused: { file: 'note.md', reason: { kind: 'changed' }, subject: 'a' },
+        });
+        expect(h.text()).toBe('- [ ] a\n');
+    });
+
     it('tells the channel of a refusal exactly once', async () => {
         const h = harness('- [ ] a\n');
         const log = writeSink();
@@ -706,7 +727,7 @@ describe('a coordinate carried across a write\'s own edits', () => {
         const b = named(1, '- [ ] b', 'b');
         const seen: Array<number | null> = [];
 
-        await processLines(h.app, h.file, undefined, (draft, _eol, session) => {
+        await processLines(h.app, h.file, writeSink().channel, (draft, _eol, session) => {
             seen.push(session.row(b));
             putAt(draft, 0, 'new');
             seen.push(session.row(b));
