@@ -33,7 +33,7 @@ export class TimerMenuBuilder {
             taskColor: getEffectiveColor(task) ?? '',
             recordMode: 'self' as const,
             parserId: task.parserId,
-            timerTargetId: task.timerTargetId ?? task.blockId,
+            timerTargetId: task.anchor,
             autoStart: true,
         };
 

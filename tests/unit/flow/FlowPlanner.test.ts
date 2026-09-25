@@ -95,7 +95,7 @@ describe('FlowPlanner', () => {
 
         it('resets per-instance identity', () => {
             const { newTask } = createNextOf(plan('at(today + 1d)', {
-                startDate: '2026-07-01', blockId: 'abc', timerTargetId: undefined,
+                startDate: '2026-07-01', blockId: 'abc',
                 statusChar: 'x', originalText: '- [x] Test task @2026-07-01 ==> at(today + 1d) ^abc',
             }));
             expect(newTask.statusChar).toBe(' ');

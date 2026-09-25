@@ -14,7 +14,6 @@ import { TaskParser } from '../services/parsing/TaskParser';
 import type { Task } from '../types';
 import { createTempTask } from '../services/data/createTempTask';
 import { TimeFormatter } from '../utils/TimeFormatter';
-import { TimerTaskResolver } from './TimerTaskResolver';
 import { isTimerTargetId } from '../utils/TimerTargetIdUtils';
 import { type TimerIcon, getTimerIcon, splitTimerIcon, withTimerIcon } from '../utils/TimerIcons';
 import { decideLazyEnd } from './TimerLazyEnd';
@@ -22,7 +21,6 @@ import type { TimerStorageUtils } from './TimerStorageUtils';
 import { logInfo, logWarn } from '../log/log';
 
 export class TimerRecorder {
-    private resolver: TimerTaskResolver;
     private storageUtils: TimerStorageUtils;
 
     constructor(
@@ -30,7 +28,6 @@ export class TimerRecorder {
         private plugin: PluginContext,
         storageUtils: TimerStorageUtils
     ) {
-        this.resolver = new TimerTaskResolver(plugin);
         this.storageUtils = storageUtils;
     }
 
@@ -132,7 +129,7 @@ export class TimerRecorder {
      * 呼び出し側は widget を閉じず、計測を残す。
      */
     async recordSessionEnd(timer: TimerInstance): Promise<boolean> {
-        if (!timer.recordedChildTaskId && timer.recordMode === 'self' && timer.sessionCount === 0) {
+        if (timer.recordMode === 'self' && timer.sessionCount === 0) {
             return this.updateTaskDirectly(timer);
         }
         return this.addSessionRecord(timer);
@@ -140,12 +137,12 @@ export class TimerRecorder {
 
     /**
      * Record for stopwatch-style modes; idle is intentionally ignored.
-     * If a child task was created at start (recordedChildTaskId), update it instead.
+     * If a session line was written (the tail), update it instead.
      */
     async addSessionRecord(timer: TimerInstance): Promise<boolean> {
         // 走行中の尻尾は今のセッションの行（書く前に移し、書けなければ戻す）。
         // 行は書けたがスキャンがまだ id を返していなくても、閉じる相手はその行。
-        if (timer.recordedChildTaskId || timer.tailRecordBlockId) {
+        if (timer.tailRecordBlockId) {
             return this.updateChildAtEnd(timer);
         }
         switch (timer.timerType) {
@@ -171,19 +168,11 @@ export class TimerRecorder {
     async updateTaskStartTime(timer: TimerInstance): Promise<void> {
         const now = new Date();
         const taskIndex = this.plugin.getTaskIndex();
-        const task = this.resolver.resolveTvInline(timer);
+        const task = this.resolveTarget(timer);
 
         if (!task) {
-            // 開始時の書き込みが落ちるとセッションを丸ごと失う。黙って戻ると
-            // ユーザーは計測を終えるまで気づけないので、書き込めない形式だと
-            // 分かっている場合はその場で伝える。行を見失っただけの場合は
-            // 再スキャンで直ることがあるのでログに留める。
-            const reason = this.resolver.explainFailure(timer);
-            if (reason === 'read-only') {
-                new Notice(t('notice.timerTargetReadOnly'));
-            } else {
-                logWarn(`[TimerRecorder] start-time write skipped: timer target not resolved (${describeTimerAnchor(timer)})`);
-            }
+            // 読み取り専用の形式は開始の前に止めている（TimerWidget.startTimer）。
+            logWarn(`[TimerRecorder] start-time write skipped: timer target not resolved (${describeTimerAnchor(timer)})`);
             return;
         }
 
@@ -326,7 +315,7 @@ export class TimerRecorder {
             return filePath;
         }
         if (!(await this.insertChildRecord(timer, line))) return null;
-        return this.resolver.resolveTvInline(timer)?.file ?? timer.taskFile;
+        return this.resolveTarget(timer)?.file ?? timer.taskFile;
     }
 
     /**
@@ -370,7 +359,6 @@ export class TimerRecorder {
             return undefined;
         }
 
-        timer.recordedChildTaskId = sessionTaskId;
         // 新しい行に走り始めたので、end 書き足しの門は引き直す。
         timer.lazyEndFloorMs = undefined;
         return sessionTaskId;
@@ -381,17 +369,15 @@ export class TimerRecorder {
      */
     private async updateChildAtEnd(timer: TimerInstance): Promise<boolean> {
         const taskIndex = this.plugin.getTaskIndex();
-        // id の直引きではなく尻尾アンカーで引く。task id はセッション限りなので、
-        // リロードを挟むと永続化された recordedChildTaskId は何も指さない。
+        // 尻尾の錨で引く。task id は 1 回の読みの中だけの名前で、リロードを
+        // 挟むと何も指さない。
         const child = this.resolveRecordedSession(timer);
-        if (child) timer.recordedChildTaskId = child.id;
 
         if (!child) {
             // Fallback: child was deleted, create a new record. Said once, by
             // the record's own notice: what the user needs to hear is whether
             // the session was recorded, not which line took it.
             logWarn(`[TimerRecorder] updateChildAtEnd: running line not found, adding a record instead (${describeTimerAnchor(timer)})`);
-            timer.recordedChildTaskId = undefined;
             switch (timer.timerType) {
                 case 'countup': return this.addCountupRecord(timer);
                 case 'countdown': return this.addCountdownRecord(timer);
@@ -429,23 +415,12 @@ export class TimerRecorder {
     }
 
     /**
-     * 対象を引けなかったことを、原因に応じた文言で伝える。
-     *
-     * 読み取り専用の形式（day-planner / tasks-plugin）は最初から書き込めない。
-     * 「削除、移動、またはリネームされた可能性」と言うと、実際には在る行を
-     * 探しに行かせることになる。
-     *
-     * 開始時の {@link updateTaskStartTime} は not-found を黙って見送るが、ここは
-     * 原因を問わず伝える。失うものが違うためで、非対称は意図したもの — 開始時の
-     * 書き込みが落ちても計測は続き、停止時の記録で回収できる。停止時に落ちると
-     * 計測そのものが消える。
+     * 対象を引けなかったことを伝える。読み取り専用の形式は開始の前に止めて
+     * いるので（TimerWidget.startTimer）、ここに来るのは行を見失ったときだけ。
      */
     private noticeResolveFailure(timer: TimerInstance, site: string): void {
-        const reason = this.resolver.explainFailure(timer);
-        logWarn(`[TimerRecorder] ${site}: timer target ${reason} (${describeTimerAnchor(timer)})`);
-        new Notice(t(reason === 'read-only'
-            ? 'notice.timerTargetReadOnly'
-            : 'notice.timerTargetNotFound'));
+        logWarn(`[TimerRecorder] ${site}: timer target not found (${describeTimerAnchor(timer)})`);
+        new Notice(t('notice.timerTargetNotFound'));
     }
 
     /**
@@ -499,17 +474,31 @@ export class TimerRecorder {
         return 'Timer';
     }
 
+    /**
+     * タイマーの対象の行。対象の錨（`timerTargetId`）で引く — 錨はファイルで
+     * 1 つだけの `^id` なので、読み直しをまたいでも同じ行を指し、双子も重複も
+     * 引かない（`TaskIndex.getTaskByAnchor`）。
+     *
+     * 錨を持たない対象（child / sibling の開始は対象の行に `^id` を付けない）は、
+     * 開始のときに渡された名前で引く。名前は 1 回の読みの中だけのものなので、
+     * 再読み込みのあとは何も指さない。
+     */
+    resolveTarget(timer: TimerInstance): Task | undefined {
+        const index = this.plugin.getTaskIndex();
+        if (timer.timerTargetId) return index.getTaskByAnchor(timer.taskFile, timer.timerTargetId);
+        return index.getTask(timer.taskId);
+    }
+
     /** タイマーのアンカーが指す行（1 回目のレコード / 対象タスク）を引く。 */
     private resolveAnchorTask(timer: TimerInstance): Task | undefined {
-        return this.resolver.resolveTvInline(timer);
+        return this.resolveTarget(timer);
     }
 
     /**
      * タイマーが最後に書いたレコード行（＝ 尻尾）。
      *
-     * 正は尻尾アンカー `tailRecordBlockId` — 行番号ベースの task id はユーザーの
+     * 尻尾の錨 `tailRecordBlockId` で引く — 行番号ベースの task id はユーザーの
      * 編集やリロードで腐るのに対し、`^id` はファイルに書いてあるものが正になる。
-     * 引けなければ task id のキャッシュへ落ちる。
      *
      * 最後の砦は self モードに限る。self は 1 本目のレコードが対象タスク行その
      * ものなので対象アンカーが尻尾を兼ねるが、child / sibling の対象は**器**で
@@ -536,22 +525,8 @@ export class TimerRecorder {
      * 落ちると、1 本目のレコードの終了時刻を上書きしてしまう。
      */
     private resolveRecordedSession(timer: TimerInstance): Task | undefined {
-        const taskIndex = this.plugin.getTaskIndex();
-
-        if (timer.tailRecordBlockId) {
-            const byBlockId = taskIndex.getTasks().find(task =>
-                task.blockId === timer.tailRecordBlockId
-                && (!timer.taskFile || task.file === timer.taskFile)
-            );
-            if (byBlockId) return byBlockId;
-        }
-
-        if (timer.recordedChildTaskId) {
-            const byId = taskIndex.getTask(timer.recordedChildTaskId);
-            if (byId) return byId;
-        }
-
-        return undefined;
+        if (!timer.tailRecordBlockId) return undefined;
+        return this.plugin.getTaskIndex().getTaskByAnchor(timer.taskFile, timer.tailRecordBlockId);
     }
 
     /**
@@ -568,7 +543,7 @@ export class TimerRecorder {
      */
     async startNextSession(timer: TimerInstance): Promise<boolean> {
         const tail = this.resolveTailRecord(timer);
-        const previous = { tailRecordBlockId: timer.tailRecordBlockId, recordedChildTaskId: timer.recordedChildTaskId };
+        const previous = timer.tailRecordBlockId;
 
         const { line, blockId } = this.buildSessionPlaceholder(timer);
         // 書く前に尻尾を新しい行へ移す。走行中の尻尾は今のセッションの行で、
@@ -576,7 +551,6 @@ export class TimerRecorder {
         // end の書き足しも名前の書き込みも待つ — 書き終えた記録へ走行中の
         // end や名前を書かせないため。
         timer.tailRecordBlockId = blockId;
-        timer.recordedChildTaskId = undefined;
 
         const written = tail
             ? await this.plugin.getTaskWriteService().insertSiblingAfterTask(tail.id, line)
@@ -584,8 +558,7 @@ export class TimerRecorder {
         if (!written) {
             // 書けなかった。理由は書き込みの層が1回だけ通知済み。再開そのものを
             // 取り消すので（TimerLifecycle.resumeSession）、尻尾も戻す。
-            timer.tailRecordBlockId = previous.tailRecordBlockId;
-            timer.recordedChildTaskId = previous.recordedChildTaskId;
+            timer.tailRecordBlockId = previous;
             return false;
         }
         timer.lazyEndFloorMs = undefined;
@@ -659,7 +632,6 @@ export class TimerRecorder {
 
         const tail = this.resolveTailRecord(timer);
         timer.tailRecordBlockId = undefined;
-        timer.recordedChildTaskId = undefined;
 
         if (!tail || tail.blockId !== blockId) return;
 
@@ -688,7 +660,7 @@ export class TimerRecorder {
 
         if (timer.taskId) {
             const taskIndex = this.plugin.getTaskIndex();
-            const task = this.resolver.resolveTvInline(timer);
+            const task = this.resolveTarget(timer);
 
             if (!task) {
                 this.noticeResolveFailure(timer, 'updateTaskDirectly (self stop, not recorded)');
@@ -717,7 +689,6 @@ export class TimerRecorder {
 
             // この行が最初のレコード＝尻尾。次の再開はここの隣に並ぶ。
             timer.tailRecordBlockId = task.blockId;
-            timer.recordedChildTaskId = task.id;
         }
 
         const icon = this.getTimerIcon(timer);
@@ -738,7 +709,7 @@ export class TimerRecorder {
             return (await this.addTimerRecordToDailyNote(dailyDateOf(timer), formattedLine)) !== null;
         }
 
-        const resolvedTask = this.resolver.resolveTvInline(timer);
+        const resolvedTask = this.resolveTarget(timer);
 
         if (!resolvedTask) {
             this.noticeResolveFailure(timer, 'insertChildRecord (not recorded)');

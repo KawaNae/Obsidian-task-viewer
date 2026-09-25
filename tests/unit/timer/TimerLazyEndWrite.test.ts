@@ -23,10 +23,11 @@ function makeHarness(effectiveEnd: Date) {
     const updates: { id: string; updates: Record<string, unknown> }[] = [];
 
     const parent = makeTask({ id: PARENT_ID, file: 'notes/a.md', content: 'parent' });
-    const child = makeTask({ id: CHILD_ID, file: 'notes/a.md', content: 'parent', blockId: 'tv-timer-1' });
+    const child = makeTask({ id: CHILD_ID, file: 'notes/a.md', content: 'parent', blockId: 'tv-timer-1', anchor: 'tv-timer-1' });
 
     const taskIndex = {
         getTask: (id: string) => (id === CHILD_ID ? child : id === PARENT_ID ? parent : undefined),
+        getTaskByAnchor: (file: string, anchor: string) => [parent, child].find(t => t.file === file && t.anchor === anchor),
         getTasks: () => [parent, child],
         updateTask: async (id: string, u: Record<string, unknown>) => { updates.push({ id, updates: u }); },
         waitForScan: async () => { /* unused */ },
@@ -50,9 +51,6 @@ function makeHarness(effectiveEnd: Date) {
         {} as App, plugin,
         { generateTimerTargetId: () => 'tv-timer-2' } as unknown as TimerStorageUtils
     );
-    (recorder as unknown as { resolver: { resolveTvInline: () => unknown } }).resolver = {
-        resolveTvInline: () => parent,
-    };
 
     return { recorder, updates };
 }
@@ -65,7 +63,6 @@ function runningTimer(): TimerInstance {
         taskFile: 'notes/a.md',
         taskOriginalText: '- [ ] parent',
         tailRecordBlockId: 'tv-timer-1',
-        recordedChildTaskId: CHILD_ID,
         startTimeMs: Date.now(),
         pausedElapsedTime: 0,
         phase: 'work',

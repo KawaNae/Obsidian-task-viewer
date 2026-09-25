@@ -48,11 +48,13 @@ function makeHarness(): Harness {
             file: DAILY_PATH,
             content,
             blockId,
+            anchor: blockId,
         }));
     }
 
     const taskIndex = {
         getTask: (id: string) => tasks.find(t => t.id === id),
+        getTaskByAnchor: (file: string, anchor: string) => tasks.find(t => t.file === file && t.anchor === anchor),
         getTasks: () => tasks,
         updateTask: async () => { /* 記録の書き込みは測らない */ },
         waitForScan: async () => { /* 書き込みと同時に載せている */ },

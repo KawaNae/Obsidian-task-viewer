@@ -102,12 +102,19 @@ describe('TimerTargetManager: putting the target `^id` on', () => {
     function harness(updateResult: boolean) {
         let target = makeTask({ id: TARGET_ID, file: FILE, line: 3, content: 'target', originalText: '- [ ] target' });
         const updateTask = vi.fn(async (_id: string, u: { blockId?: string }) => {
-            // A write that lands is on the line, as the next scan reads it.
-            if (updateResult) target = { ...target, blockId: u.blockId, originalText: `- [ ] target ^${u.blockId}` };
+            // A write that lands is on the line, as the next scan reads it —
+            // and, being the file's only ^id, becomes the row's anchor too.
+            if (updateResult) target = { ...target, blockId: u.blockId, anchor: u.blockId, originalText: `- [ ] target ^${u.blockId}` };
             return updateResult;
         });
         const waitForScan = vi.fn(async () => { /* the scan is done */ });
-        const taskIndex = { getTasks: () => [target], updateTask, waitForScan };
+        const taskIndex = {
+            getTasks: () => [target],
+            getTask: (id: string) => (id === target.id ? target : undefined),
+            getTaskByAnchor: (file: string, anchor: string) => (target.file === file && target.anchor === anchor ? target : undefined),
+            updateTask,
+            waitForScan,
+        };
         const persist = vi.fn();
         const timer = makeTimer();
         const ctx = {
@@ -120,7 +127,6 @@ describe('TimerTargetManager: putting the target `^id` on', () => {
             isAutoManagedTimerTargetId: (id: string) => id.startsWith('tv-t-'),
         } as unknown as TimerStorageUtils;
         const manager = new TimerTargetManager(ctx, storageUtils);
-        (manager as unknown as { resolver: unknown }).resolver = { resolveTvInline: () => target };
         return { manager, timer, updateTask, waitForScan, persist };
     }
 

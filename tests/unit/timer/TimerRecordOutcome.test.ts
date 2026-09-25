@@ -40,16 +40,20 @@ function makeHarness(options: Options = {}) {
     const inserted: string[] = [];
     const updates: { id: string; updates: Record<string, unknown> }[] = [];
     const childExists = options.childExists !== false;
+    const resolvable = options.resolvable !== false;
 
-    const parent = makeTask({ id: PARENT_ID, file: 'notes/a.md', line: 2, content: 'parent', blockId: 'tv-timer-anchor' });
-    const child = makeTask({ id: CHILD_ID, file: 'notes/a.md', line: 3, content: '', blockId: 'tv-timer-1' });
+    const parent = makeTask({ id: PARENT_ID, file: 'notes/a.md', line: 2, content: 'parent', blockId: 'tv-timer-anchor', anchor: 'tv-timer-anchor' });
+    const child = makeTask({ id: CHILD_ID, file: 'notes/a.md', line: 3, content: '', blockId: 'tv-timer-1', anchor: 'tv-timer-1' });
+    const visible = childExists ? [parent, child] : [parent];
 
     const taskIndex = {
         getTask: (id: string) => {
             if (id === CHILD_ID) return childExists ? child : undefined;
-            return id === PARENT_ID ? parent : undefined;
+            if (id === PARENT_ID) return resolvable ? parent : undefined;
+            return undefined;
         },
-        getTasks: () => (childExists ? [parent, child] : [parent]),
+        getTaskByAnchor: (file: string, anchor: string) => visible.find(t => t.file === file && t.anchor === anchor),
+        getTasks: () => visible,
         getTaskByFileLine: () => parent,
         updateTask: async (id: string, u: Record<string, unknown>) => {
             updates.push({ id, updates: u });
@@ -71,11 +75,6 @@ function makeHarness(options: Options = {}) {
 
     const storageUtils = { generateTimerTargetId: () => 'tv-timer-2' } as unknown as TimerStorageUtils;
     const recorder = new TimerRecorder({} as App, plugin, storageUtils);
-    const resolvable = options.resolvable !== false;
-    (recorder as unknown as { resolver: unknown }).resolver = {
-        resolveTvInline: () => (resolvable ? parent : undefined),
-        explainFailure: () => 'not-found',
-    };
 
     return { recorder, inserted, updates };
 }
@@ -129,7 +128,7 @@ const paths: {
     { name: 'countup child record', timer: {}, write: 'insert', success: 'timerRecorded' },
     { name: 'countdown record', timer: COUNTDOWN, write: 'insert', success: 'countdownRecorded' },
     { name: 'interval record', timer: INTERVAL, write: 'insert', success: 'kindRecorded' },
-    { name: 'the running line (updateChildAtEnd)', timer: { recordedChildTaskId: CHILD_ID }, write: 'update', success: 'kindRecorded' },
+    { name: 'the running line (updateChildAtEnd)', timer: { tailRecordBlockId: 'tv-timer-1' }, write: 'update', success: 'kindRecorded' },
     { name: 'self (updateTaskDirectly)', timer: { recordMode: 'self' }, write: 'update', success: 'taskUpdated' },
 ];
 
@@ -163,7 +162,6 @@ describe('recordSessionEnd answers whether the record was written', () => {
 
         await h.recorder.recordSessionEnd(timer);
 
-        expect(timer.recordedChildTaskId).toBeUndefined();
         expect(timer.tailRecordBlockId).toBeUndefined();
     });
 });
@@ -174,7 +172,7 @@ describe('the running line was lost: a record is added instead', () => {
     it('says only that it was recorded, once', async () => {
         const h = makeHarness({ childExists: false });
 
-        const recorded = await h.recorder.recordSessionEnd(makeTimer({ recordedChildTaskId: CHILD_ID }));
+        const recorded = await h.recorder.recordSessionEnd(makeTimer({ tailRecordBlockId: 'tv-timer-1' }));
 
         expect(recorded).toBe(true);
         expect(h.inserted).toHaveLength(1);
@@ -185,7 +183,7 @@ describe('the running line was lost: a record is added instead', () => {
     it('says nothing of success when the added record was not written', async () => {
         const h = makeHarness({ childExists: false, insertResult: false });
 
-        const recorded = await h.recorder.recordSessionEnd(makeTimer({ recordedChildTaskId: CHILD_ID }));
+        const recorded = await h.recorder.recordSessionEnd(makeTimer({ tailRecordBlockId: 'tv-timer-1' }));
 
         expect(recorded).toBe(false);
         expect(h.inserted).toHaveLength(1);

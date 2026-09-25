@@ -76,7 +76,7 @@ export class TaskActionsMenuBuilder {
                 taskColor: getEffectiveColor(task) ?? '',
                 recordMode: 'child' as const,
                 parserId: task.parserId,
-                timerTargetId: task.timerTargetId ?? task.blockId,
+                timerTargetId: task.anchor,
                 autoStart: false,
             };
 

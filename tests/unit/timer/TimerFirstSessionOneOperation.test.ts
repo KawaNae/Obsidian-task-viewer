@@ -66,7 +66,10 @@ async function settleAll(s: VaultSession) {
 
 /** 1 本目の往復が済むまで待つ（行を書き、その id を引き受けた）。 */
 async function firstLineAdopted(s: VaultSession, timer: TimerInstance) {
-    await vi.waitFor(() => expect(timer.recordedChildTaskId).toBeDefined());
+    await vi.waitFor(() => {
+        expect(timer.tailRecordBlockId).toBeDefined();
+        expect(s.index.getTaskByAnchor(timer.taskFile, timer.tailRecordBlockId!)).toBeDefined();
+    });
     await settleAll(s);
 }
 

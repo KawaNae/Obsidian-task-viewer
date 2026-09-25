@@ -43,7 +43,7 @@ function makeHarness(options: { tail?: Task | undefined; siblingFails?: boolean 
         ? options.tail
         : makeTask({
             id: TAIL_ID, file: 'notes/a.md', line: 3, content: '⏱️ 設計',
-            statusChar: 'x', startTime: '11:05', endTime: '13:02', blockId: 'tv-t-old5678',
+            statusChar: 'x', startTime: '11:05', endTime: '13:02', blockId: 'tv-t-old5678', anchor: 'tv-t-old5678',
         });
 
     // 書き込みが成功したら、その行はスキャン後に index から引けるようになる。
@@ -51,12 +51,13 @@ function makeHarness(options: { tail?: Task | undefined; siblingFails?: boolean 
     const appearWritten = (blockId: string) => {
         tasks.push(makeTask({
             id: NEW_SESSION_ID, file: 'notes/a.md', line: 4, content: '設計',
-            statusChar: ' ', startTime: '14:01', blockId,
+            statusChar: ' ', startTime: '14:01', blockId, anchor: blockId,
         }));
     };
 
     const taskIndex = {
         getTask: (id: string) => tasks.find(task => task.id === id),
+        getTaskByAnchor: (file: string, anchor: string) => tasks.find(task => task.file === file && task.anchor === anchor),
         getTasks: () => tasks,
         updateTask: async (id: string, u: Record<string, unknown>) => {
             updates.push({ id, updates: u });
@@ -87,11 +88,6 @@ function makeHarness(options: { tail?: Task | undefined; siblingFails?: boolean 
     const storageUtils = { generateTimerTargetId: () => NEW_BLOCK_ID } as unknown as TimerStorageUtils;
     const recorder = new TimerRecorder({} as App, plugin, storageUtils);
 
-    // resolver は index を舐めて対象を引く。テストでは対象タスクに固定する。
-    (recorder as unknown as { resolver: { resolveTvInline: () => unknown } }).resolver = {
-        resolveTvInline: () => target,
-    };
-
     return { recorder, siblingInserts, childInserts, updates, deletes };
 }
 
@@ -117,7 +113,6 @@ function makeTimer(overrides: Partial<TimerInstance> = {}): TimerInstance {
         timerType: 'countup',
         elapsedTime: 0,
         tailRecordBlockId: 'tv-t-old5678',
-        recordedChildTaskId: TAIL_ID,
         ...overrides,
     } as TimerInstance;
 }
@@ -136,7 +131,8 @@ describe('startNextSession: the next record sits beside the last one', () => {
         expect(h.siblingInserts[0].opts.afterCompletedRun).toBeUndefined();
         expect(h.childInserts).toHaveLength(0);
         expect(written).toBe(true);
-        expect(timer.recordedChildTaskId).toBe(NEW_SESSION_ID);
+        // 新しい行が書けて、スキャンが引き直せる状態まで進んだ（採用が完了した）。
+        expect(h.recorder.resolveTailRecord(timer)?.id).toBe(NEW_SESSION_ID);
     });
 
     it('carries the record name over instead of leaving the line unnamed', async () => {
@@ -171,7 +167,7 @@ describe('startNextSession: the next record sits beside the last one', () => {
     it('falls back to a child insert when a child-mode timer loses its tail', async () => {
         const orphaned = makeHarness({ tail: undefined });
         const timer = makeTimer({
-            recordMode: 'child', tailRecordBlockId: undefined, recordedChildTaskId: undefined,
+            recordMode: 'child', tailRecordBlockId: undefined,
         });
 
         await orphaned.recorder.startNextSession(timer);
@@ -186,7 +182,7 @@ describe('startNextSession: the next record sits beside the last one', () => {
         // self は 1 本目のレコードが対象タスク行そのもの。^id を失っていても
         // そこが尻尾なので、隣に並べてよい。
         const h2 = makeHarness({ tail: undefined });
-        const timer = makeTimer({ tailRecordBlockId: undefined, recordedChildTaskId: undefined });
+        const timer = makeTimer({ tailRecordBlockId: undefined });
 
         await h2.recorder.startNextSession(timer);
 
@@ -202,18 +198,17 @@ describe('startNextSession: the next record sits beside the last one', () => {
         // so the tail is left as it was: the last record, not a running line.
         const failing = makeHarness({ siblingFails: true });
         const timer = makeTimer();
-        const before = { tail: timer.tailRecordBlockId, id: timer.recordedChildTaskId };
+        const before = { tail: timer.tailRecordBlockId };
         expect(await failing.recorder.startNextSession(timer)).toBe(false);
         expect(failing.childInserts).toHaveLength(0);
         expect(timer.tailRecordBlockId).toBe(before.tail);
-        expect(timer.recordedChildTaskId).toBe(before.id);
     });
 });
 
 describe('startContinuationSession: continuing a completed task', () => {
     it('sends the record past the run of completed siblings', async () => {
         const h = makeHarness();
-        const timer = makeTimer({ recordMode: 'sibling', tailRecordBlockId: undefined, recordedChildTaskId: undefined });
+        const timer = makeTimer({ recordMode: 'sibling', tailRecordBlockId: undefined });
 
         await h.recorder.startContinuationSession(timer);
 
@@ -231,7 +226,6 @@ describe('discardRunningPlaceholder: ✕ leaves no half-open line behind', () =>
             runState: 'running',
             isRunning: true,
             tailRecordBlockId: NEW_BLOCK_ID,
-            recordedChildTaskId: NEW_SESSION_ID,
         });
     }
 
@@ -264,7 +258,7 @@ describe('discardRunningPlaceholder: ✕ leaves no half-open line behind', () =>
     it('does nothing when the timer never opened a line (self mode, first session)', async () => {
         const h = makeHarness();
         await h.recorder.discardRunningPlaceholder(makeTimer({
-            runState: 'running', tailRecordBlockId: undefined, recordedChildTaskId: undefined,
+            runState: 'running', tailRecordBlockId: undefined,
         }));
 
         expect(h.deletes).toHaveLength(0);

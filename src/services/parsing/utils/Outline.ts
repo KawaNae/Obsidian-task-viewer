@@ -90,8 +90,7 @@ export class Outline {
      * which question asks which is written here, once:
      *
      * - `VERBATIM`: a plan's row, its subtree and
-     *   generation blocks (`RowBasis.readsAsPlanned`); the text a timer
-     *   finds its task by (`TimerTaskResolver`); a write's check that a line
+     *   generation blocks (`RowBasis.readsAsPlanned`); a write's check that a line
      *   still reads what it read — the editor's line, a coordinate carried
      *   across the write's own edits, a line a carry moved (`FileLines`)
      * - `UP_TO_INDENT`: the timer's weaker check (`RowBasis.OnRecord`)

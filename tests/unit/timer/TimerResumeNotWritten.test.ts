@@ -122,7 +122,6 @@ describe('a resume whose line cannot be written stays suspended', () => {
                 recordedElapsedTime: timer.recordedElapsedTime,
                 sessionCount: timer.sessionCount,
                 tail: timer.tailRecordBlockId,
-                childId: timer.recordedChildTaskId,
             };
 
             vi.setSystemTime(at(9, 20));
@@ -141,7 +140,6 @@ describe('a resume whose line cannot be written stays suspended', () => {
             expect(timer.recordedElapsedTime).toBe(before.recordedElapsedTime);
             expect(timer.sessionCount).toBe(before.sessionCount);
             expect(timer.tailRecordBlockId).toBe(before.tail);
-            expect(timer.recordedChildTaskId).toBe(before.childId);
             expect(contents.get(FILE)).toBe(afterFirst);
             s.dispose();
         });
@@ -149,7 +147,6 @@ describe('a resume whose line cannot be written stays suspended', () => {
         it(`${mode}: ▶ again writes the line, and session 2's end and name go to it, not to 09:00>09:10`, async () => {
             const { s, contents, timer, lifecycle, flushName } = await suspendedAfterFirst(mode);
             const firstTail = timer.tailRecordBlockId;
-            const firstChildId = timer.recordedChildTaskId;
 
             vi.setSystemTime(at(9, 20));
             failNextWrites(s, 1);
@@ -165,8 +162,6 @@ describe('a resume whose line cannot be written stays suspended', () => {
             // 尻尾は新しい行へ移った。
             expect(timer.tailRecordBlockId).toBeDefined();
             expect(timer.tailRecordBlockId).not.toBe(firstTail);
-            expect(timer.recordedChildTaskId).toBeDefined();
-            expect(timer.recordedChildTaskId).not.toBe(firstChildId);
 
             // 走行中（2本目）: end の書き足しと名前の書き込み。
             withReadService(s);
@@ -235,7 +230,6 @@ describe('resolveTailRecord: the target row is the tail of a self timer in its f
         });
         // 行がまだスキャンに見えていない尻尾（何も引けない）。
         timer.tailRecordBlockId = 'tv-missing';
-        timer.recordedChildTaskId = undefined;
 
         timer.sessionCount = 0;
         timer.runState = 'running';
