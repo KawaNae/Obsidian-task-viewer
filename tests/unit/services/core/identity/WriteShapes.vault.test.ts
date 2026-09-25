@@ -33,13 +33,11 @@ freezeDate(new Date(2026, 8, 25, 12, 0, 0));
  * destination still lands, and the source's write is the one refused, so the
  * task ends up in both files — told once (`moveOriginKept`), not twice.
  *
- * The last block is the note whose rows read alike. After an outside edit,
- * a coordinate has no identity of its own: if the line it names now reads as
- * something other than the basis, the write is refused (`changed`); if a
- * twin has moved onto it and reads exactly as the basis did, the write lands
- * there anyway, since nothing distinguishes the two. Only when the ambiguity
- * is in the read itself (two rows reading alike before any outside edit) is
- * the write refused as `ambiguous`.
+ * The last block is the note whose rows read alike. A twin moved onto the
+ * coordinate by an outside edit reads exactly as the basis did, and nothing
+ * on the line distinguishes the two. The coordinate counts only in the
+ * content the copy was read in (`NamedRow.read`), so the write is refused
+ * (`changed`) until a scan has read the file.
  */
 
 const FILE = 'note.md';
@@ -702,53 +700,39 @@ describe('12. insertGeneratedInstance (create-generated)', () => {
 
 describe('twins after an outside edit: refused, with one notice', () => {
     const TWINS = (twin: string) => ['# note', '- [ ] 親 @2026-09-21', `\t${twin}`, `\t${twin}`, '- [ ] 下 @2026-09-21', ''];
-    const ambiguous = (subject: string) => t('notice.writeTargetAmbiguous', { count: '2', subject });
 
-    // A coordinate has no identity of its own: once the outside edit shifts a
-    // twin onto the target's line, that line reads exactly as the target's
-    // basis did (the twins are alike), so the write lands there rather than
-    // being refused — nothing distinguishes the copy now standing on the
-    // coordinate from the one that stood there before.
-    it('updateTaskInFile lands on the coordinate: the twin now reading there is written', async () => {
+    // Once the outside edit shifts a twin onto the target's line, that line
+    // reads exactly as the target's basis did (the twins are alike). Nothing
+    // on the line tells them apart; the content does, and the copy was not
+    // read in this one (`NamedRow.read`). So the write is refused until a
+    // scan has read the file (2026-09-25).
+    it('updateTaskInFile is refused, though the twin now on the coordinate reads as the basis', async () => {
         const { contents, session } = await open({ [FILE]: TWINS('- [ ] 子 @2026-09-21') });
         const second = rows(session)[2].id;
 
         writeOutside(contents, 1);
-        expect(await session.index.updateTask(second, { statusChar: 'x' })).toBe(true);
+        const edited = contents.get(FILE);
+        expect(await session.index.updateTask(second, { statusChar: 'x' })).toBe(false);
         await session.settle(FILE);
 
-        expect(contents.get(FILE)).toBe([
-            '# note', OUTSIDE, '- [ ] 親 @2026-09-21',
-            '\t- [x] 子 @2026-09-21', '\t- [ ] 子 @2026-09-21',
-            '- [ ] 下 @2026-09-21', '',
-        ].join('\n'));
-        expect(Notice.messages).toEqual([]);
+        expect(contents.get(FILE)).toBe(edited);
+        expect(Notice.messages).toEqual([changed('子')]);
     });
 
-    it('deleteTaskFromFile lands on the coordinate: the twin now reading there is deleted', async () => {
+    it('deleteTaskFromFile is refused, though the twin now on the coordinate reads as the basis', async () => {
         const { contents, session } = await open({ [FILE]: TWINS('- [ ] 子 @2026-09-21') });
         const second = rows(session)[2].id;
 
         writeOutside(contents, 1);
-        expect(await session.index.deleteTask(second)).toBe(true);
+        const edited = contents.get(FILE);
+        expect(await session.index.deleteTask(second)).toBe(false);
         await session.settle(FILE);
 
-        expect(contents.get(FILE)).toBe([
-            '# note', OUTSIDE, '- [ ] 親 @2026-09-21',
-            '\t- [ ] 子 @2026-09-21',
-            '- [ ] 下 @2026-09-21', '',
-        ].join('\n'));
-        expect(Notice.messages).toEqual([]);
+        expect(contents.get(FILE)).toBe(edited);
+        expect(Notice.messages).toEqual([changed('子')]);
     });
 
-    // Fails, and was there before W1: the scan of the outside edit commits
-    // before the fire writes, giving the twins the names the ladder guessed
-    // by position, and the fire's `locate` takes them at step 2. The bench
-    // now hands one TFile per note, as Obsidian does, so the fire queues
-    // behind the check (`processOrFail`) and that scan lands first; without
-    // the queue, any order where the scan commits first does the same.
-    // Handed to I1 (`guessed`).
-    it.fails('a flow fire (create-next, then strip-flow) writes nothing — fails: a scan that commits guessed twins before the fire (pre-W1, I1)', async () => {
+    it('a flow fire (create-next, then strip-flow) writes nothing, and says so once', async () => {
         // The outside edit, just before the completing write, checks the
         // other twin and writes a line above; the check and its fire are one
         // write, made against two rows that read alike.
@@ -759,16 +743,14 @@ describe('twins after an outside edit: refused, with one notice', () => {
             contents.set(FILE, contents.get(FILE)!.replace('\t- [ ] 子', '\t- [x] 子'));
             writeOutside(contents, 1);
         });
-        await check(session, second);
+        expect(await session.index.updateTask(second, { statusChar: 'x' })).toBe(false);
         await session.flowSettled(FILE);
 
         expect(contents.get(FILE)).toBe([
             '# note', OUTSIDE, '- [ ] 親 @2026-09-21',
-            '\t- [x] 子 @2026-09-21 ==> every mon', '\t- [x] 子 @2026-09-21 ==> every mon',
+            '\t- [x] 子 @2026-09-21 ==> every mon', '\t- [ ] 子 @2026-09-21 ==> every mon',
             '- [ ] 下 @2026-09-21', '',
         ].join('\n'));
-        // The fire (create-next and strip-flow) is one write, refused once,
-        // and it says so once.
-        expect(Notice.messages).toEqual([ambiguous('子')]);
+        expect(Notice.messages).toEqual([changed('子')]);
     });
 });

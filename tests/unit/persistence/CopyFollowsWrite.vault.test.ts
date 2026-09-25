@@ -93,26 +93,25 @@ describe('after a card\'s update, before any scan', () => {
 
 describe('a subtree written in from outside before the update', () => {
     // Found by the F5 counterexample run, when the copy was brought up to the
-    // write by hand: a card's update plans from the row's line only, so a
-    // child written in from outside since the scan does not stop it. Since
-    // N1 the lines the update left are taken in as the file's next reading
-    // (`TaskIndex.landed`), the child with them, as a scan of the file would
-    // take it in: the copy shows it, and the delete that follows takes it.
-    // The name from before the outside edit does not follow the row across
-    // it (only our own writes are followed): the copy is taken anew.
+    // write by hand: a card's update planned from the row's line only, so a
+    // child written in from outside since the scan did not stop it. Since N1
+    // the copy counts only in the content it was read in (`NamedRow.read`):
+    // the update is refused, and has the file read again. The copy that
+    // reading gives shows the child, and the delete planned from it takes it.
     const ROW = '- [ ] A @2026-09-21 ^keep';
 
-    it('is read with the update, and the delete that follows takes it with the row', async () => {
+    it('refuses the update; once read, the delete that follows takes it with the row', async () => {
         const { contents, session } = await open(['# note', ROW, '- [ ] Z', '']);
         const id = idOf(session, 'A');
-        session.holdScans();
-        contents.set(FILE, ['# note', ROW, '\t- [ ] 外から足した子', '- [ ] Z', ''].join('\n'));
+        const edited = ['# note', ROW, '\t- [ ] 外から足した子', '- [ ] Z', ''].join('\n');
+        contents.set(FILE, edited);
 
-        expect(await session.index.updateTask(id, { statusChar: 'x' })).toBe(true);
-        expect(contents.get(FILE)).toBe(['# note', '- [x] A @2026-09-21 ^keep', '\t- [ ] 外から足した子', '- [ ] Z', ''].join('\n'));
+        expect(await session.index.updateTask(id, { statusChar: 'x' })).toBe(false);
+        expect(contents.get(FILE)).toBe(edited);
+        await session.settle(FILE);
         expect(session.index.getTask(id)).toBeUndefined();
         const now = idOf(session, 'A');
-        expect(session.index.getTask(now)?.subtreeLines).toEqual(['- [x] A @2026-09-21 ^keep', '\t- [ ] 外から足した子']);
+        expect(session.index.getTask(now)?.subtreeLines).toEqual([ROW, '\t- [ ] 外から足した子']);
 
         expect(await session.index.deleteTask(now)).toBe(true);
         expect(contents.get(FILE)).toBe(['# note', '- [ ] Z', ''].join('\n'));

@@ -9,8 +9,10 @@ import { plannedOn } from '../../../src/services/persistence/TaskRefs';
  * A write takes its row by the line the index's copy stands on, and only if
  * the line there still reads as the copy (`WriteSession.row`). Nothing looks
  * for the row anywhere else: not by its name, not by its `^id`, not by the
- * first line that reads like it (2026-09-24). So after an edit from outside
- * that moved the row, the write is refused until a scan has read the file.
+ * first line that reads like it (2026-09-24). And the line counts only in the
+ * content the copy was read in, or one our own writes led it to
+ * (`NamedRow.read`): after any edit from outside, the write is refused until
+ * a scan has read the file, however the copy's line reads.
  *
  * Every case reads the file first, then lets something other than the plugin
  * change it, then writes from the copy the scan read.
@@ -82,27 +84,26 @@ describe('a row an edit from outside moved', () => {
     });
 });
 
-describe('a line that reads as the copy on the copy\'s line', () => {
-    it('is written when only lines below it changed', async () => {
-        const { bench, written } = await checkAfterEdit(
-            ['- [ ] 設計 @2026-08-15', 'メモ'],
-            0,
-            ['- [ ] 設計 @2026-08-15', 'メモ 書き足し', '- [ ] 別'],
-        );
+describe('a line that reads as the copy on the copy\'s line, in content the copy was not read in', () => {
+    it('is refused though only lines below it changed', async () => {
+        const after = ['- [ ] 設計 @2026-08-15', 'メモ 書き足し', '- [ ] 別'];
+        const { bench, written } = await checkAfterEdit(['- [ ] 設計 @2026-08-15', 'メモ'], 0, after);
 
-        expect(written).toBe(true);
-        expect(bench.lines()).toEqual(['- [x] 設計 @2026-08-15', 'メモ 書き足し', '- [ ] 別']);
+        expect(written).toBe(false);
+        expect(bench.lines()).toEqual(after);
+        expect(bench.refused).toEqual([{ file: FILE, reason: { kind: 'changed' }, subject: '設計' }]);
     });
 
-    it('is written though it is the twin of the row that was read there', async () => {
-        // Nothing in the file tells two rows that read the same apart, and no
-        // name lasts past the read (2026-09-24): the line the copy stands on
-        // reads as the copy, which is all the write was planned from.
+    it('is refused when it is the twin of the row that was read there', async () => {
+        // Nothing on the line tells two rows that read the same apart: the
+        // twin moved onto the copy's line reads as the copy. Only the content
+        // does, and it is not the one the copy was read in (2026-09-25).
         const same = ['- [ ] 別 @2026-08-14', '- [ ] 読書 @2026-08-14', '- [ ] 読書 @2026-08-14'];
         const { bench, written } = await checkAfterEdit(same, 2, ['メモ', ...same]);
 
-        expect(written).toBe(true);
-        expect(bench.lines()).toEqual(['メモ', same[0], '- [x] 読書 @2026-08-14', same[2]]);
+        expect(written).toBe(false);
+        expect(bench.lines()).toEqual(['メモ', ...same]);
+        expect(bench.refused).toEqual([{ file: FILE, reason: { kind: 'changed' }, subject: '読書' }]);
     });
 });
 

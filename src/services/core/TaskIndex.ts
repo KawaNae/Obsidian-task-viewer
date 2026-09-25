@@ -97,6 +97,7 @@ export class TaskIndex {
         this.repository.connect((path) => ({
             landed: landing => this.landed(path, landing),
             refused: refusal => this.reportRefusal(refusal),
+            follow: (from, line, now) => this.scanner.followLine(path, from, line, now),
         }));
     }
 
@@ -475,11 +476,12 @@ export class TaskIndex {
             this.revertUnwrittenUpdate(task, taskId, before, updates);
             return false;
         }
-        // The source's write of a move to another file takes the row at the
-        // line this write left it on, planned from the row and subtree it left.
+        // The source's write of a move to another file takes the row this
+        // write was planned on, carried across this write to where it left it
+        // (`NamedRow.read`), planned from the row and subtree it left.
         if (fire) {
             await this.commandExecutor.settleFire(fire, (at, ops) => this.repository.applyToTask(
-                { ...target, line: at.line, basis: { text: at.text, subtree: at.subtree } }, ops, { tellRefusal: false }));
+                { ...target, basis: { text: at.text, subtree: at.subtree } }, ops, { tellRefusal: false }));
         }
         return true;
     }

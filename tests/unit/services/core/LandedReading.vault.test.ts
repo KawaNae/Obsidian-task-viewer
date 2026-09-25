@@ -88,7 +88,7 @@ describe('what a write left, before any scan', () => {
 });
 
 describe('a scan that read the file before our write and commits after it', () => {
-    it('puts the older reading back until the write\'s own scan reads the file again; a write in between is refused, not misplaced', async () => {
+    it('puts the older reading back until the write\'s own scan reads the file again; a write in between is carried across ours, not misplaced', async () => {
         const { contents, session } = await open(['# note', '- [ ] A @2026-09-21', '\t- ==> every 1d', '- [ ] B', '']);
         const a = taskNamed(session, 'A');
 
@@ -119,17 +119,20 @@ describe('a scan that read the file before our write and commits after it', () =
         const stale = taskNamed(session, 'B');
         expect(stale.line).toBe(3);
 
-        // Planned from that copy, the write finds line 3 reading otherwise.
-        expect(await session.index.updateTask(stale.id, { statusChar: 'x' })).toBe(false);
-        expect(contents.get(FILE)).toBe(written);
-        expect(Notice.messages).toHaveLength(1);
+        // Planned from that copy, read in the content before our write: only
+        // our write came between, and its report carries line 3 to line 4,
+        // where B is. Line 3 itself is never written.
+        expect(await session.index.updateTask(stale.id, { statusChar: 'x' })).toBe(true);
+        const lines = written!.split('\n');
+        lines[4] = '- [x] B';
+        expect(contents.get(FILE)).toBe(lines.join('\n'));
+        expect(Notice.messages).toEqual([]);
 
-        // The write's own events read the file again, and the index catches up.
+        // The writes' own events read the file again, and the index catches up.
         await held.release();
         await session.settle(FILE);
         const b = taskNamed(session, 'B');
         expect(b.line).toBe(4);
-        expect(await session.index.updateTask(b.id, { statusChar: 'x' })).toBe(true);
-        expect(contents.get(FILE)!.split('\n')[4]).toBe('- [x] B');
+        expect(b.originalText).toBe('- [x] B');
     });
 });

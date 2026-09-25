@@ -16,10 +16,12 @@ import { freezeDate } from '../helpers/fakeDate';
  * now, whole, with one notice.
  *
  * A completion's fire has no copy to be stale: it is planned inside the write
- * that completes the row, from the lines that write holds (stage X). So a
- * command, a block or a child edited from outside before any scan read it is
- * fired as the file says it now, and what the older copy said is never
- * written. What can still go stale is a move to another file, whose source is
+ * that completes the row, from the lines that write holds (stage X). A card's
+ * completion over a file edited from outside before any scan read it is not
+ * made at all: the copy it names was read in content the file has moved on
+ * from (`NamedRow.read`). It is refused with one notice, and once the scan
+ * has read the file, the command, the block or the child is fired as the
+ * file says it now; what the older copy said is never written. What can still go stale is a move to another file, whose source is
  * written after its destination: a child edited in between is not taken away
  * unseen (CE3).
  */
@@ -59,13 +61,28 @@ async function check(session: VaultSession, id: string, ...files: string[]): Pro
 
 const CHANGED = t('notice.writeTargetChanged', { subject: 'A' });
 
+/**
+ * A card's completion of A over a file edited from outside that no scan has
+ * read: refused, nothing written, one notice. The refusal has the file read
+ * again; the answer is A's id in that reading.
+ */
+async function refusedUntilScanned(contents: Map<string, string>, session: VaultSession, id: string): Promise<string> {
+    const edited = contents.get(FILE);
+    expect(await session.index.updateTask(id, { statusChar: 'x' })).toBe(false);
+    expect(contents.get(FILE)).toBe(edited);
+    expect(Notice.messages).toEqual([CHANGED]);
+    Notice.messages.length = 0;
+    await session.settle(FILE);
+    return idOf(session, 'A');
+}
+
 describe('CE2: a command line edited from outside, before any scan read it', () => {
-    it('a completion fires the command as the file says it now', async () => {
+    it('a completion is refused until a scan, then fires the command as the file says it now', async () => {
         const { contents, session } = await open({ [FILE]: ['# note', '- [ ] A @2026-09-21', '\t- ==> every 1d', ''] });
         const id = idOf(session, 'A');
         contents.set(FILE, contents.get(FILE)!.replace('every 1d', 'every 7d'));
 
-        await check(session, id);
+        await check(session, await refusedUntilScanned(contents, session, id));
 
         expect(contents.get(FILE)).toBe(['# note', '- [ ] A @2026-09-28', '\t- ==> every 7d', '- [x] A @2026-09-21', ''].join('\n'));
         expect(Notice.messages).toEqual([]);
@@ -83,7 +100,7 @@ describe('CE2: a command line edited from outside, before any scan read it', () 
         expect(Notice.messages).toEqual([CHANGED]);
     });
 
-    it('a move goes where the command names now', async () => {
+    it('a move is refused until a scan, then goes where the command names now', async () => {
         const { contents, session } = await open({
             [FILE]: ['# note', '- [ ] A @2026-09-21', '\t- ==> move([[note]])', '\t- [ ] c', '- [ ] Z', ''],
             [OTHER]: ['# other', ''],
@@ -91,7 +108,7 @@ describe('CE2: a command line edited from outside, before any scan read it', () 
         const id = idOf(session, 'A');
         contents.set(FILE, contents.get(FILE)!.replace('move([[note]])', 'move([[other]])'));
 
-        await check(session, id, OTHER);
+        await check(session, await refusedUntilScanned(contents, session, id), OTHER);
 
         expect(contents.get(FILE)).toBe(['# note', '- [ ] Z', ''].join('\n'));
         expect(contents.get(OTHER)).toBe(['# other', '- [x] A @2026-09-21', '\t- [ ] c', ''].join('\n'));
@@ -142,14 +159,14 @@ describe('CX1: a generation block edited from outside, before any scan read it',
         '```tv-gen w', '- [ ] A ${dates}', '\t- [ ] old child', '```', '',
     ];
 
-    it('a completion writes the block as it reads now', async () => {
+    it('a completion is refused until a scan, then writes the block as it reads now', async () => {
         const { contents, session } = await open({
             [FILE]: ['# note', '- [ ] A @2026-09-21', '\t- ==> every mon use("w")', ...NOTE.slice(1)],
         });
         const id = idOf(session, 'A');
         contents.set(FILE, contents.get(FILE)!.replace('old child', 'new child'));
 
-        await check(session, id);
+        await check(session, await refusedUntilScanned(contents, session, id));
 
         const lines = contents.get(FILE)!.split('\n');
         expect(lines.filter(line => line === '\t- [ ] new child')).toHaveLength(2);
@@ -190,17 +207,17 @@ describe('F5: a subtree changed from outside, before any scan read it', () => {
     // with it. A deletion plans from its copy, so the subtree is part of what
     // it planned from, and a line that joined it since would otherwise go
     // with it unseen (F4's last out-of-scope shape). A completion's move is
-    // planned from the lines it is written over, and carries the subtree they
-    // hold.
+    // planned from the lines it is written over, once a scan has read them,
+    // and carries the subtree they hold.
 
-    it('a move within the file carries the child as the file holds it', async () => {
+    it('a move within the file is refused until a scan, then carries the child as the file holds it', async () => {
         const { contents, session } = await open({
             [FILE]: ['# note', '- [ ] A @2026-09-21', '\t- ==> move([[note]])', '\t- [ ] 子', '- [ ] Z', ''],
         });
         const id = idOf(session, 'A');
         contents.set(FILE, contents.get(FILE)!.replace('\t- [ ] 子', '\t- [ ] 子 書き足し'));
 
-        await check(session, id);
+        await check(session, await refusedUntilScanned(contents, session, id));
 
         expect(contents.get(FILE)).toBe(['# note', '- [ ] Z', '- [x] A @2026-09-21', '\t- [ ] 子 書き足し', ''].join('\n'));
         expect(Notice.messages).toEqual([]);
