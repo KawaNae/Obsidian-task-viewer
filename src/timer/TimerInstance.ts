@@ -59,6 +59,19 @@ export type TimerRunState = 'running' | 'suspended';
  */
 export type TimerRecordMode = 'child' | 'self' | 'sibling';
 
+/**
+ * 止めた走行の記録。出口を押した時点で固定し、書けるまで変えない。
+ *
+ * - `endMs`   … 記録の終わり（出口を押した時刻、interval の満了ではその時刻）
+ * - `seconds` … 記録の長さ（止めた時点の経過）
+ * - `then`    … 書けたあとの行き先。⏸ は中断、■ は閉じる。押し直した出口が決める
+ */
+export interface PendingRecord {
+    endMs: number;
+    seconds: number;
+    then: 'suspend' | 'close';
+}
+
 export interface TimerBase {
     id: string;
     taskId: string;
@@ -114,11 +127,13 @@ export interface TimerBase {
      */
     pendingContent?: string;
     /**
-     * 記録を書く出口を押した時刻。記録を書けずに widget が残ったとき、次に押した
-     * 記録もこの時刻で終わる（押し直すまでの待ちを記録の幅に入れない）。記録を
-     * 書けたときと、走行を再開したときに消す。
+     * 止めたが記録していない走行（記録待ち）。無ければ null。
+     *
+     * 出口を押すと計測をここに固定して保存し、それから書く。書けたら `then` へ
+     * 進んで null に戻す。書けなければそのまま残り、再読み込みもまたぐ。やり直しは
+     * 固定した時刻と長さで書く（{@link TimerLifecycle}）。
      */
-    stoppedAtMs?: number;
+    pendingRecord: PendingRecord | null;
     recordMode: TimerRecordMode;
     /** Always a current {@link ParserId}; legacy persisted values are normalized at load. */
     parserId: ParserId;

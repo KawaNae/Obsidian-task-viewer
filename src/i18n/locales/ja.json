@@ -596,6 +596,7 @@
     "suspend": "中断",
     "finish": "終了",
     "suspended": "中断中",
+    "unrecorded": "未記録",
     "startOnCompletedTitle": "このタスクは完了済みです",
     "startOnCompletedMessage": "「{{task}}」の記録の隣に新しいタスクを足しますか？それともこのタスクに記録し直しますか？",
     "continueSession": "続きを開始",

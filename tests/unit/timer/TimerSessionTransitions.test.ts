@@ -2,7 +2,7 @@ import { describe, expect, it, beforeEach, afterEach, vi } from 'vitest';
 import { TimerCreator } from '../../../src/timer/TimerCreator';
 import { TimerLifecycle } from '../../../src/timer/TimerLifecycle';
 import { IDLE_TIMER_ID, type TimerContext } from '../../../src/timer/TimerContext';
-import { getTimerElapsedSeconds, type CountdownTimer, type CountupTimer, type IntervalTimer, type TimerInstance } from '../../../src/timer/TimerInstance';
+import { getTimerElapsedSeconds, type CountdownTimer, type CountupTimer, type IntervalTimer, type PendingRecord, type TimerInstance } from '../../../src/timer/TimerInstance';
 import type { TimerStorageUtils } from '../../../src/timer/TimerStorageUtils';
 
 /**
@@ -25,8 +25,8 @@ interface RecorderCalls {
     startNextSession: number;
     discardRunningPlaceholder: number;
     order: string[];
-    /** 記録のたびに、記録が終わりとする時刻（`stoppedAtMs`）。 */
-    stoppedAt: Array<number | undefined>;
+    /** 記録のたびに、固定した記録（`pendingRecord`）が終わりとする時刻。 */
+    stoppedAt: number[];
 }
 
 /** 書き込みの成否。既定は「書けた」。テストが途中で書き換えて失敗を起こす。 */
@@ -39,10 +39,10 @@ function build() {
     const calls: RecorderCalls = { recordSessionEnd: 0, createChildAtStart: 0, startNextSession: 0, discardRunningPlaceholder: 0, order: [], stoppedAt: [] };
     const results: WriteResults = { flush: true, record: true };
     const recorder = {
-        recordSessionEnd: async (timer: TimerInstance) => {
+        recordSessionEnd: async (timer: TimerInstance, record: PendingRecord) => {
             calls.recordSessionEnd++;
             calls.order.push('record');
-            calls.stoppedAt.push(timer.stoppedAtMs);
+            calls.stoppedAt.push(record.endMs);
             return results.record;
         },
         createChildAtStart: async () => { calls.createChildAtStart++; calls.order.push('placeholder'); return 'tv-inline:notes/a.md:ln:4'; },
@@ -95,6 +95,7 @@ function startCountup(ctx: TimerContext, overrides: Partial<CountupTimer> = {}):
         recordMode: 'self',
         parserId: 'tv-inline',
         taskColor: '',
+        pendingRecord: null,
         timerType: 'countup',
         elapsedTime: 600,
         recordedChildTaskId: 'tv-inline:notes/a.md:ln:4',
@@ -124,6 +125,7 @@ function startInterval(ctx: TimerContext, overrides: Partial<IntervalTimer> = {}
         recordMode: 'child',
         parserId: 'tv-inline',
         taskColor: '',
+        pendingRecord: null,
         timerType: 'interval',
         intervalSource: 'pomodoro',
         groups: [{
@@ -449,17 +451,7 @@ describe('an exit whose record was not written', () => {
             expect(h.ctx.timers.has(timer.id)).toBe(false);
             // 押し直した記録も、最初に押した時刻で終わる。待った 120 秒は記録の幅に入らない。
             expect(h.calls.stoppedAt).toEqual([T0, T0]);
-            expect(timer.stoppedAtMs).toBeUndefined();
-        });
-
-        it('forgets the stop time once the run is resumed instead of recorded', async () => {
-            const timer = startInterval(h.ctx, { isRunning: true, phase: 'work' });
-            h.results.record = false;
-            await h.lifecycle.stopIntervalTimer(timer);
-            expect(timer.stoppedAtMs).toBe(T0);
-
-            h.lifecycle.resumeTimer(timer);
-            expect(timer.stoppedAtMs).toBeUndefined();
+            expect(timer.pendingRecord).toBeNull();
         });
     });
 
@@ -595,63 +587,74 @@ describe('an exit whose record was not written', () => {
 
 /**
  * 記録を書けずに一時停止のまま残った走行か。✕ はこれが真なら確認を挟む。
+ *
+ * `holdsUnrecordedRun` は無くなり、状態は `timer.pendingRecord` が直接持つ
+ * （null なら無い）。ヒューリスティック（phase や pausedElapsedTime から推測）
+ * は無くなったので、ここでは実際に記録を失敗させて pendingRecord が立つことを
+ * 見る。組み立てただけの静的な形からの推測は前提が消えている。
  */
-describe('holdsUnrecordedRun', () => {
+describe('pendingRecord: a run held after a failed exit', () => {
     let h: ReturnType<typeof build>;
     beforeEach(() => { h = build(); intervals.length = 0; });
 
-    it('is true for a countup whose finish could not be recorded', async () => {
+    it('is set for a countup whose finish could not be recorded', async () => {
         const timer = startCountup(h.ctx);
         h.results.record = false;
         await h.lifecycle.finishTimer(timer);
-        expect(h.lifecycle.holdsUnrecordedRun(timer)).toBe(true);
+        expect(timer.pendingRecord).not.toBeNull();
     });
 
-    it('is true for a countdown whose suspend could not be recorded', async () => {
+    it('is set for a countdown whose suspend could not be recorded', async () => {
         const timer = startCountup(h.ctx) as unknown as CountdownTimer;
         (timer as unknown as { timerType: string }).timerType = 'countdown';
         timer.totalTime = 1500;
         timer.timeRemaining = 900;
         h.results.record = false;
         await h.lifecycle.suspendTimer(timer as unknown as TimerInstance);
-        expect(h.lifecycle.holdsUnrecordedRun(timer as unknown as TimerInstance)).toBe(true);
+        expect((timer as unknown as TimerInstance).pendingRecord).not.toBeNull();
     });
 
-    it('is true for an interval whose stop could not be recorded', async () => {
+    it('is set for an interval whose stop could not be recorded', async () => {
         const timer = startInterval(h.ctx);
         h.results.record = false;
         await h.lifecycle.stopIntervalTimer(timer);
-        expect(h.lifecycle.holdsUnrecordedRun(timer)).toBe(true);
+        expect(timer.pendingRecord).not.toBeNull();
     });
 
-    it('is false while suspended', () => {
+    it('is null while suspended', () => {
         const timer = startCountup(h.ctx, { runState: 'suspended', isRunning: false, pausedElapsedTime: 600 });
-        expect(h.lifecycle.holdsUnrecordedRun(timer)).toBe(false);
+        expect(timer.pendingRecord).toBeNull();
     });
 
-    it('is false while running', () => {
-        expect(h.lifecycle.holdsUnrecordedRun(startCountup(h.ctx))).toBe(false);
-        expect(h.lifecycle.holdsUnrecordedRun(startInterval(h.ctx))).toBe(false);
+    it('is null while running', () => {
+        expect(startCountup(h.ctx).pendingRecord).toBeNull();
+        expect(startInterval(h.ctx).pendingRecord).toBeNull();
     });
 
-    it('is false before anything was measured', () => {
+    it('is null before anything was measured', () => {
         const timer = startCountup(h.ctx, { isRunning: false, pausedElapsedTime: 0 });
-        expect(h.lifecycle.holdsUnrecordedRun(timer)).toBe(false);
+        expect(timer.pendingRecord).toBeNull();
     });
 
-    it('is false for an interval paused into prepare, which is running', () => {
+    it('is null for an interval paused into prepare, which is running', () => {
         const timer = startInterval(h.ctx, { isRunning: true, phase: 'prepare' });
-        expect(h.lifecycle.holdsUnrecordedRun(timer)).toBe(false);
+        expect(timer.pendingRecord).toBeNull();
     });
 
-    it('is true for an interval stopped in prepare whose record was not written', () => {
-        // A stop from prepare leaves it not running; only a stop that could
-        // not be recorded leaves the widget there.
-        const timer = startInterval(h.ctx, { isRunning: false, phase: 'prepare' });
-        expect(h.lifecycle.holdsUnrecordedRun(timer)).toBe(true);
+    it('is set for an interval stopped in prepare whose record could not be written', async () => {
+        const timer = startInterval(h.ctx);
+        h.lifecycle.pauseIntervalToPrepare(timer);
+        h.results.record = false;
+
+        await h.lifecycle.stopIntervalTimer(timer);
+
+        expect(timer.phase).toBe('prepare');
+        expect(timer.isRunning).toBe(false);
+        expect(timer.pendingRecord).not.toBeNull();
+        expect(h.ctx.timers.has(timer.id)).toBe(true);
     });
 
-    it('is true for a countdown stopped past zero, whose phase went idle', async () => {
+    it('is set for a countdown stopped past zero, whose phase went idle', async () => {
         // Pausing past zero sets the phase to 'idle' (pauseTimer), so the close
         // button's idle branch must not take this run away unasked.
         const countdown = startCountup(h.ctx) as unknown as CountdownTimer;
@@ -662,6 +665,6 @@ describe('holdsUnrecordedRun', () => {
         await h.lifecycle.finishTimer(countdown as unknown as TimerInstance);
 
         expect(countdown.phase).toBe('idle');
-        expect(h.lifecycle.holdsUnrecordedRun(countdown as unknown as TimerInstance)).toBe(true);
+        expect((countdown as unknown as TimerInstance).pendingRecord).not.toBeNull();
     });
 });

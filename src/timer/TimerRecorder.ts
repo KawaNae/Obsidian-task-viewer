@@ -7,7 +7,7 @@
 import { type App, Notice } from 'obsidian';
 import { t } from '../i18n';
 import type { PluginContext } from '../PluginContext';
-import { type TimerInstance, dailyDateOf, describeTimerAnchor, getTimerElapsedSeconds, isDailyTimer } from './TimerInstance';
+import { type PendingRecord, type TimerInstance, dailyDateOf, describeTimerAnchor, isDailyTimer } from './TimerInstance';
 import { DailyNoteUtils } from '../utils/DailyNoteUtils';
 import { DateUtils } from '../utils/DateUtils';
 import { TaskParser } from '../services/parsing/TaskParser';
@@ -37,17 +37,12 @@ export class TimerRecorder {
         this.storageUtils = storageUtils;
     }
 
-    /** When the session ended: the first press of the exit that records it, or now. */
-    private stoppedAt(timer: TimerInstance): Date {
-        return new Date(timer.stoppedAtMs ?? Date.now());
-    }
-
     /**
      * Record a completed Countup timer session.
      */
-    async addCountupRecord(timer: TimerInstance): Promise<boolean> {
-        const elapsedSeconds = getTimerElapsedSeconds(timer);
-        const endTime = this.stoppedAt(timer);
+    async addCountupRecord(timer: TimerInstance, record: PendingRecord): Promise<boolean> {
+        const elapsedSeconds = record.seconds;
+        const endTime = new Date(record.endMs);
         const startTime = new Date(endTime.getTime() - elapsedSeconds * 1000);
 
         const icon = this.getTimerIcon(timer);
@@ -68,9 +63,9 @@ export class TimerRecorder {
     /**
      * Record a completed Countdown timer session.
      */
-    async addCountdownRecord(timer: TimerInstance): Promise<boolean> {
-        const elapsedSeconds = getTimerElapsedSeconds(timer);
-        const endTime = this.stoppedAt(timer);
+    async addCountdownRecord(timer: TimerInstance, record: PendingRecord): Promise<boolean> {
+        const elapsedSeconds = record.seconds;
+        const endTime = new Date(record.endMs);
         const startTime = new Date(endTime.getTime() - elapsedSeconds * 1000);
 
         const icon = this.getTimerIcon(timer);
@@ -92,9 +87,9 @@ export class TimerRecorder {
      * Record a completed Interval timer session.
      * Pomodoro-origin intervals are recorded with 🍅 label.
      */
-    async addIntervalRecord(timer: TimerInstance): Promise<boolean> {
-        const elapsedSeconds = getTimerElapsedSeconds(timer);
-        const endTime = this.stoppedAt(timer);
+    async addIntervalRecord(timer: TimerInstance, record: PendingRecord): Promise<boolean> {
+        const elapsedSeconds = record.seconds;
+        const endTime = new Date(record.endMs);
         const startTime = new Date(endTime.getTime() - elapsedSeconds * 1000);
 
         const isPomodoroSource = timer.timerType === 'interval' && timer.intervalSource === 'pomodoro';
@@ -130,34 +125,38 @@ export class TimerRecorder {
      * 開始時に作った placeholder が更新されず 1 セッションが 2 行になる。停止経路は
      * 必ずこれを呼ぶこと。
      *
+     * 時刻と長さは止めたときに固定した `record` のもので、押し直しても変わらない。
+     * 書く前にそのファイルのスキャンを 1 回待つ — 外の書き込みのすぐあとは、読みが
+     * 追いつくまで照合が拒否するため（錨で引いた行を読みの鍵まで照合する）。
+     *
      * @returns 記録を書けたか（記録するものが無い idle は書けたと答える）。書けな
      * かったときは、その理由を1回だけ通知済みで、成功の通知は出していない。
-     * 呼び出し側は widget を閉じず、計測を残す。
+     * 呼び出し側は記録待ちのまま残す。
      */
-    async recordSessionEnd(timer: TimerInstance): Promise<boolean> {
+    async recordSessionEnd(timer: TimerInstance, record: PendingRecord): Promise<boolean> {
+        if (timer.taskFile) await this.plugin.getTaskIndex().waitForScan(timer.taskFile);
         if (timer.recordMode === 'self' && timer.sessionCount === 0) {
-            return this.updateTaskDirectly(timer);
+            return this.updateTaskDirectly(timer, record);
         }
-        return this.addSessionRecord(timer);
+        return this.addSessionRecord(timer, record);
     }
 
     /**
      * Record for stopwatch-style modes; idle is intentionally ignored.
      * If a session line was written (the tail), update it instead.
      */
-    async addSessionRecord(timer: TimerInstance): Promise<boolean> {
-        // 走行中の尻尾は今のセッションの行（書く前に移し、書けなければ戻す）。
-        // 行は書けたがスキャンがまだ id を返していなくても、閉じる相手はその行。
+    async addSessionRecord(timer: TimerInstance, record: PendingRecord): Promise<boolean> {
+        // 走行中の尻尾は今のセッションの行。
         if (timer.tailRecordBlockId) {
-            return this.updateChildAtEnd(timer);
+            return this.updateChildAtEnd(timer, record);
         }
         switch (timer.timerType) {
             case 'countup':
-                return this.addCountupRecord(timer);
+                return this.addCountupRecord(timer, record);
             case 'countdown':
-                return this.addCountdownRecord(timer);
+                return this.addCountdownRecord(timer, record);
             case 'interval':
-                return this.addIntervalRecord(timer);
+                return this.addIntervalRecord(timer, record);
             case 'idle':
                 // No record for idle yet: nothing to write, nothing lost.
                 return true;
@@ -429,7 +428,7 @@ export class TimerRecorder {
     /**
      * Update the child task created at timer start with end time and completion.
      */
-    private async updateChildAtEnd(timer: TimerInstance): Promise<boolean> {
+    private async updateChildAtEnd(timer: TimerInstance, record: PendingRecord): Promise<boolean> {
         const taskIndex = this.plugin.getTaskIndex();
         // 尻尾の錨で引く。task id は 1 回の読みの中だけの名前で、リロードを
         // 挟むと何も指さない。
@@ -441,15 +440,15 @@ export class TimerRecorder {
             // the session was recorded, not which line took it.
             logWarn(`[TimerRecorder] updateChildAtEnd: running line not found, adding a record instead (${describeTimerAnchor(timer)})`);
             switch (timer.timerType) {
-                case 'countup': return this.addCountupRecord(timer);
-                case 'countdown': return this.addCountdownRecord(timer);
-                case 'interval': return this.addIntervalRecord(timer);
+                case 'countup': return this.addCountupRecord(timer, record);
+                case 'countdown': return this.addCountdownRecord(timer, record);
+                case 'interval': return this.addIntervalRecord(timer, record);
                 default: return true;
             }
         }
 
-        const elapsedSeconds = getTimerElapsedSeconds(timer);
-        const endTime = this.stoppedAt(timer);
+        const elapsedSeconds = record.seconds;
+        const endTime = new Date(record.endMs);
 
         const icon = this.getTimerIcon(timer);
         // 名前は対象タスクから継ぐので、既にアイコン付きの行（完了済みレコードの
@@ -675,9 +674,9 @@ export class TimerRecorder {
      * Update the task's start/end times directly (for 'self' recordMode).
      * This converts the task to SE-Timed type.
      */
-    async updateTaskDirectly(timer: TimerInstance): Promise<boolean> {
-        const elapsedSeconds = getTimerElapsedSeconds(timer);
-        const endTime = this.stoppedAt(timer);
+    async updateTaskDirectly(timer: TimerInstance, record: PendingRecord): Promise<boolean> {
+        const elapsedSeconds = record.seconds;
+        const endTime = new Date(record.endMs);
         const startTime = new Date(endTime.getTime() - elapsedSeconds * 1000);
 
         const startDateStr = this.formatDate(startTime);

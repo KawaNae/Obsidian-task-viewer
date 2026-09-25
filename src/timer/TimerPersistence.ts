@@ -6,6 +6,7 @@ import type { ParserId } from '../types';
 import type {
     IntervalGroup,
     IntervalTimer,
+    PendingRecord,
     TimerInstance,
     TimerPhase,
     TimerRecordMode,
@@ -31,32 +32,21 @@ import { Notice } from 'obsidian';
 import { t } from '../i18n';
 import { logError, logInfo } from '../log/log';
 
-/**
- * Map legacy parserId values (pre-rename) to current ones. Persisted timer
- * state may contain old strings from earlier plugin versions; normalize on
- * read so downstream code can rely on the current vocabulary.
- *
- * Migration is one-way and idempotent — once read and re-saved, persisted
- * data uses the new values. Safe to remove this table after a few releases.
- */
-const PARSER_ID_MIGRATION: Record<string, ParserId> = {
-    'at-notation': 'tv-inline',
-    'plain': 'tv-inline',
-};
-
-/**
- * Parsers a restored timer may name. `tv-file` (and its older name
- * `frontmatter`) is not one: frontmatter makes no task any more, so such a
- * timer falls back to `tv-inline`, fails to resolve, and is closed with one
- * notice by dropTimersWithMissingAnchor.
- */
+/** Parsers a saved timer may name. Anything else is not a timer this version saved. */
 const CURRENT_PARSER_IDS: ReadonlySet<ParserId> = new Set(['tv-inline', 'tasks-plugin', 'day-planner']);
 
-function normalizeParserId(value: string | undefined): ParserId {
-    if (!value) return 'tv-inline';
-    const migrated = PARSER_ID_MIGRATION[value];
-    if (migrated) return migrated;
-    return CURRENT_PARSER_IDS.has(value as ParserId) ? (value as ParserId) : 'tv-inline';
+function isParserId(value: unknown): value is ParserId {
+    return CURRENT_PARSER_IDS.has(value as ParserId);
+}
+
+/** 保存に在る記録待ち。無いか形の崩れたものは、この版が保存したタイマーではない。 */
+function isPendingRecordOrNull(value: unknown): value is PendingRecord | null {
+    if (value === null) return true;
+    if (!value || typeof value !== 'object') return false;
+    const record = value as Partial<PendingRecord>;
+    return typeof record.endMs === 'number'
+        && typeof record.seconds === 'number'
+        && (record.then === 'suspend' || record.then === 'close');
 }
 
 export interface PersistedTimer {
@@ -77,8 +67,7 @@ export interface PersistedTimer {
     recordedElapsedTime?: number;
     isExpanded: boolean;
     pendingContent?: string;
-    /** v0.51.0 以前の下書き。読むときだけ拾う（書き出しは pendingContent）。 */
-    customLabel?: string;
+    pendingRecord: PendingRecord | null;
     /**
      * 保存するのは実行時の種別だけ。`TimerStartConfig` の `'pomodoro'` は
      * 開始時の便宜値で、`TimerInstance` になった時点で `interval` に化けている。
@@ -275,6 +264,7 @@ export class TimerPersistence {
             recordedElapsedTime: timer.recordedElapsedTime,
             isExpanded: timer.isExpanded,
             pendingContent: timer.pendingContent,
+            pendingRecord: timer.pendingRecord,
             timerType: timer.timerType,
             recordMode: timer.recordMode,
             parserId: timer.parserId,
@@ -324,6 +314,9 @@ export class TimerPersistence {
         if (!this.lifecycle.isIdleTimer(taskId) && !isDailyTimer({ taskId }) && !TaskIdGenerator.parse(taskId)) {
             return null;
         }
+        if (!isPendingRecordOrNull(persisted.pendingRecord) || !isParserId(persisted.parserId)) {
+            return null;
+        }
 
         const phase = (persisted.phase ?? 'idle') as TimerPhase;
         const common = {
@@ -347,11 +340,10 @@ export class TimerPersistence {
             recordedElapsedTime: persisted.recordedElapsedTime ?? 0,
             isExpanded: persisted.isExpanded !== false,
             intervalId: null,
-            // v0.51.0 以前の customLabel は下書きとして引き継ぐ。書き先の行がある
-            // なら次の書き出しで消える。
-            pendingContent: persisted.pendingContent ?? persisted.customLabel ?? undefined,
+            pendingContent: persisted.pendingContent,
+            pendingRecord: persisted.pendingRecord,
             recordMode: persisted.recordMode || 'child',
-            parserId: normalizeParserId(persisted.parserId),
+            parserId: persisted.parserId,
             taskColor: persisted.taskColor || ''
         };
 
@@ -386,7 +378,8 @@ export class TimerPersistence {
                 if (!segment) {
                     return null;
                 }
-                if (intervalTimer.segmentTimeRemaining <= 0) {
+                // 満了の記録待ちは残り 0 のまま（固定した時間で見せる）。
+                if (intervalTimer.segmentTimeRemaining <= 0 && !intervalTimer.pendingRecord) {
                     intervalTimer.segmentTimeRemaining = segment.durationSeconds;
                 }
                 return intervalTimer;
@@ -413,6 +406,8 @@ export class TimerPersistence {
     // ─── Reconciliation ──────────────────────────────────────
 
     private reconcileRestoredTimer(timer: TimerInstance): void {
+        // 記録待ちは止めたときに固定した姿のまま。閉じていた間の時間は積まない。
+        if (timer.pendingRecord) return;
         if (timer.runState === 'suspended') {
             // 中断中 = 記録済み・再開待ち。閉じていた間の時間は次のセッションに
             // 属さないので経過を積まない。表示は recordedElapsedTime の静的値。

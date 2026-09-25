@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach, vi } from 'vitest';
-import type { TimerInstance } from '../../../src/timer/TimerInstance';
+import { getTimerElapsedSeconds, type TimerInstance } from '../../../src/timer/TimerInstance';
 import { vaultSession, type VaultSession } from '../helpers/vaultSession';
 
 /**
@@ -50,7 +50,11 @@ async function reload(contents: Map<string, string>): Promise<VaultSession> {
 }
 
 async function record(s: VaultSession, timer: TimerInstance): Promise<boolean> {
-    const written = await s.recorder.recordSessionEnd(timer);
+    const written = await s.recorder.recordSessionEnd(timer, {
+        endMs: Date.now(),
+        seconds: getTimerElapsedSeconds(timer),
+        then: 'close',
+    });
     await s.settle(FILE);
     return written;
 }

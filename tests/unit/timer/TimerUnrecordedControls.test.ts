@@ -4,7 +4,7 @@ import { TimerLifecycle } from '../../../src/timer/TimerLifecycle';
 import { TimerRenderer } from '../../../src/timer/TimerRenderer';
 import type { TimerContext } from '../../../src/timer/TimerContext';
 import type { TimerContentBinding } from '../../../src/timer/TimerContentBinding';
-import type { CountupTimer, IntervalTimer, TimerInstance } from '../../../src/timer/TimerInstance';
+import type { CountupTimer, IntervalTimer, PendingRecord, TimerInstance } from '../../../src/timer/TimerInstance';
 import type { TimerStorageUtils } from '../../../src/timer/TimerStorageUtils';
 import { t } from '../../../src/i18n';
 
@@ -12,7 +12,8 @@ import { t } from '../../../src/i18n';
  * 記録を書けずに残った走行の操作列。
  *
  * - 1 秒未満で止めて書けなかった走行は経過が 0 でも「未開始」ではない。▶ 開始を
- *   出すと `stoppedAtMs` を持ったまま次の走行が始まり、後の記録が古い時刻で終わる。
+ *   出すと `pendingRecord` を持ったまま次の走行が始まり、後の記録が古い時刻で
+ *   終わる。
  * - interval の自動終了を書けなかった走行は、続ける区間が無いので ■ だけ。▶ を
  *   出すと次の tick ですぐ満了し、押した時刻で終わる記録になる。
  */
@@ -44,7 +45,7 @@ function fakeContainer(): FakeEl {
 function build(opts: { flushOk?: boolean; recordOk?: boolean } = {}) {
     const results = { flush: opts.flushOk ?? true, record: opts.recordOk ?? true };
     const recorder = {
-        recordSessionEnd: async () => results.record,
+        recordSessionEnd: async (_timer: TimerInstance, _record: PendingRecord) => results.record,
         extendRunningSession: async () => Date.now() + 3_600_000,
     };
     const ctx = {
@@ -71,7 +72,7 @@ function countup(overrides: Partial<CountupTimer> = {}): CountupTimer {
         id: 'c1', taskId: 'tv-inline:notes/a.md:seq:1', taskName: 'A', taskOriginalText: '- [ ] A', taskFile: 'notes/a.md',
         startTimeMs: Date.now(), pausedElapsedTime: 0, elapsedTime: 0, phase: 'work', isRunning: true, runState: 'running',
         sessionCount: 0, recordedElapsedTime: 0, isExpanded: true, intervalId: null, recordMode: 'self',
-        parserId: 'tv-inline', taskColor: '', timerType: 'countup',
+        parserId: 'tv-inline', taskColor: '', pendingRecord: null, timerType: 'countup',
         ...overrides,
     } as CountupTimer;
 }
@@ -81,7 +82,7 @@ function interval(overrides: Partial<IntervalTimer> = {}): IntervalTimer {
         id: 'i1', taskId: 'tv-inline:notes/a.md:seq:1', taskName: 'A', taskOriginalText: '- [ ] A', taskFile: 'notes/a.md',
         startTimeMs: Date.now() - 300_000, pausedElapsedTime: 0, phase: 'break', isRunning: true, runState: 'running',
         sessionCount: 0, recordedElapsedTime: 0, isExpanded: true, intervalId: null, recordMode: 'child',
-        parserId: 'tv-inline', taskColor: '', timerType: 'interval', intervalSource: 'pomodoro',
+        parserId: 'tv-inline', taskColor: '', pendingRecord: null, timerType: 'interval', intervalSource: 'pomodoro',
         groups: [{ repeatCount: 1, segments: [
             { label: 'Work', durationSeconds: 1500, type: 'work' },
             { label: 'Break', durationSeconds: 300, type: 'break' },
@@ -106,10 +107,10 @@ describe('a run stopped under a second and not recorded is not "never started"',
         await h.lifecycle.finishTimer(timer);
 
         expect(h.ctx.timers.has(timer.id)).toBe(true);
-        expect(timer.stoppedAtMs).toBe(new Date(2026, 8, 21, 9, 0, 0, 500).getTime());
+        expect(timer.pendingRecord?.endMs).toBe(new Date(2026, 8, 21, 9, 0, 0, 500).getTime());
+        expect(timer.pendingRecord?.then).toBe('close');
         expect(timer.elapsedTime).toBe(0);
         expect(timer.sessionCount).toBe(0);
-        expect(h.lifecycle.holdsUnrecordedRun(timer)).toBe(true);
         const labels = h.controls(timer);
         expect(labels).not.toContain(t('timer.start'));
         expect(labels).toContain(t('timer.finish'));
@@ -119,15 +120,13 @@ describe('a run stopped under a second and not recorded is not "never started"',
         const h = build();
         const timer = countup({ isRunning: false, startTimeMs: 0 });
         expect(h.controls(timer)).toEqual([t('timer.start')]);
-        expect(h.lifecycle.holdsUnrecordedRun(timer)).toBe(false);
+        expect(timer.pendingRecord).toBeNull();
     });
 
-    it('stoppedAtMs alone, with nothing elapsed, is an unrecorded run', () => {
-        const h = build();
-        const timer = countup({ isRunning: false, stoppedAtMs: Date.now() });
-        expect(h.lifecycle.holdsUnrecordedRun(timer)).toBe(true);
-        expect(h.controls(timer)).not.toContain(t('timer.start'));
-    });
+    // 'stoppedAtMs alone, with nothing elapsed, is an unrecorded run' を削除:
+    // stoppedAtMs は無くなり、記録待ちは常に pendingRecord（endMs と固定した
+    // seconds を持つ）で表す。「0 秒の走行でも未記録なら保持する」という同じ
+    // 意図は、上の '■ at 0.5 s...' が pendingRecord ごと既に固定している。
 });
 
 describe('an interval whose automatic end was not recorded offers only ■', () => {
@@ -147,13 +146,13 @@ describe('an interval whose automatic end was not recorded offers only ■', () 
         expect(h.ctx.timers.has(timer.id)).toBe(true);
         expect(timer.isRunning).toBe(false);
         expect(timer.segmentTimeRemaining).toBe(0);
-        expect(h.lifecycle.holdsUnrecordedRun(timer)).toBe(true);
+        expect(timer.pendingRecord).not.toBeNull();
         expect(h.controls(timer)).toEqual([t('timer.stop')]);
     });
 
-    it('a segment stopped with time left (restored from storage) still offers ▶ and ■', () => {
-        const h = build();
-        const timer = interval({ isRunning: false, phase: 'work', currentSegmentIndex: 0, segmentTimeRemaining: 600, totalElapsedTime: 900 });
-        expect(h.controls(timer)).toEqual([t('timer.resume'), t('timer.stop')]);
-    });
+    // 'a segment stopped with time left (restored from storage) still offers
+    // ▶ and ■' を削除: work/break で isRunning=false かつ pendingRecord 無しを
+    // 「一時停止として ▶+■ を出す」旧分岐は無くなった。renderIntervalControls は
+    // pendingRecord だけで [stop] を出し、無ければ phase（idle/prepare/それ以外）
+    // だけで分ける — isRunning は見ない。今は常に [pause] を返す。
 });

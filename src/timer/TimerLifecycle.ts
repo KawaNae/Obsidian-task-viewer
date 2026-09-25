@@ -8,6 +8,7 @@ import type {
     CountupTimer,
     IdleTimer,
     IntervalTimer,
+    PendingRecord,
     TimerInstance,
 } from './TimerInstance';
 import { getTimerElapsedSeconds } from './TimerInstance';
@@ -188,31 +189,19 @@ export class TimerLifecycle {
         this.ctx.persistTimersToStorage();
     }
 
+    /** 最後の区間が満ちた。満ちた時刻で記録して閉じる（{@link stopAndRecord}）。 */
     private async finishIntervalTimer(timerId: string, timer: IntervalTimer): Promise<void> {
-        return this.exclusive(timer, async () => {
-            const segmentPhase = timer.phase === 'break' ? 'break' : 'work';
+        return this.exclusive(timer, () => this.stopAndRecord(timer, 'close', () => {
             this.prepareBaseElapsed.delete(timerId);
             if (timer.totalDuration > 0) {
                 timer.totalElapsedTime = timer.totalDuration;
             }
             timer.segmentTimeRemaining = 0;
-            timer.phase = 'idle';
             timer.isRunning = false;
-            timer.startTimeMs = 0;
             timer.pausedElapsedTime = timer.totalElapsedTime;
             this.stopTimerTick(timerId);
-
             AudioUtils.playFinishSound();
-            if (!(await this.flushAndRecord(timer))) {
-                // 区間の途中で止まった形に戻す。phase 'idle' のままだと操作列が
-                // 「開始」だけになり、押すと経過が捨てられ、記録をやり直す ■ も無い。
-                // 区間中で走っていない形なら ■ が出る（TimerRenderer）。
-                timer.phase = segmentPhase;
-                this.keepUnrecorded();
-                return;
-            }
-            this.closeTimer(timerId);
-        });
+        }));
     }
 
     // ─── 記録 ─────────────────────────────────────────────────
@@ -229,63 +218,48 @@ export class TimerLifecycle {
     }
 
     /**
-     * セッションを 1 本書く。**記録の唯一の入口**で、`recordSessionEnd` を呼ぶのは
-     * ここだけ。
+     * 走行を止めて記録する。**記録を書く出口はすべてここを通り**、`recordSessionEnd`
+     * を呼ぶのはここだけ。
      *
-     * 記録は走行中の行の content を読むので、未書き込みの入力を先に流し込まないと
-     * 打った名前が 1 セッション繰り越される。2 行を並べて書くと片方だけに手が入り、
-     * 実際に interval の停止でそうなった（`TimerRenderer` の 2 つの停止ハンドラ）。
+     * 規則は「書けてから状態を進める」。止めた計測を `pendingRecord` に固定して
+     * 保存してから書き、書けたら `then`（押した出口）へ進む。書けなければ何も
+     * 戻さない — 記録待ちの状態がそのまま残り、再読み込みもまたぐ。理由の通知は
+     * 書き込みの層か recorder が1回だけ出している。記録待ちで出口を押し直すと、
+     * 止め直さずに固定した時刻と長さで書き直し、行き先だけを押した出口に替える。
+     *
+     * 記録は走行中の行の content を読むので、未書き込みの入力を先に流し込む。
+     * 名前を書けなければ記録に進まない — 古い名前で記録を書けば通知が拒否と成功の
+     * 2回になり、打った名前は行き先を失う。
+     *
+     * @param freeze 走行を止め、経過を確定させる。記録待ちで押し直したときは呼ばない。
      */
-    private async flushAndRecord(timer: TimerInstance): Promise<boolean> {
-        // 押し直しの記録も、最初に押した時刻で終わる。
-        timer.stoppedAtMs ??= Date.now();
-        // 名前を書けなかったら記録に進まない。古い名前で記録を書けば、通知が
-        // 拒否と成功の2回になり、打った名前は下書きに残ったまま行き先を失う。
-        if (!(await this.ctx.flushTimerContent(timer.id))) return false;
-        if (!(await this.ctx.recorder.recordSessionEnd(timer))) return false;
-        timer.stoppedAtMs = undefined;
-        return true;
-    }
-
-    /**
-     * 記録を書けなかった出口の後始末。widget は閉じず、計測は一時停止のまま
-     * 残す（経過は `pausedElapsedTime` に在り、`recordedElapsedTime` には足さない）。
-     * 理由の通知は書き込みの層か recorder が1回だけ出し終えている。もう一度
-     * 同じ出口を押せば記録をやり直し、✕ なら記録せずに閉じる。計測を捨てるのは
-     * 利用者の操作だけにする。
-     */
-    private keepUnrecorded(): void {
+    private async stopAndRecord(timer: TimerInstance, then: PendingRecord['then'], freeze: () => void): Promise<void> {
+        if (timer.pendingRecord) {
+            timer.pendingRecord = { ...timer.pendingRecord, then };
+        } else {
+            freeze();
+            timer.pendingRecord = { endMs: Date.now(), seconds: Math.max(0, getTimerElapsedSeconds(timer)), then };
+        }
         this.ctx.render();
         this.ctx.persistTimersToStorage();
-    }
 
-    /**
-     * 記録を書けずに一時停止のまま残った走行か。計測を持っているので、✕ は
-     * 走行中と同じく確認を挟んで捨てる（{@link discardTimer}）。
-     *
-     * countup / countdown は、走行（runState 'running'）が止まっていて経過を持つ
-     * 形。UI の操作で止まるのは中断（suspended）だけなので、この形は記録に失敗した
-     * 出口か、停止の記録待ちのまま落ちた復元からしか来ない。interval は、区間の
-     * 途中（work / break）か prepare で走っていない形で、同じ2つからしか来ない
-     * （TimerRenderer の操作列の注記）。countdown は超過のあとに止めると phase が
-     * 'idle' になるので、phase でなく経過で見る。
-     */
-    holdsUnrecordedRun(timer: TimerInstance): boolean {
-        if (timer.isRunning || timer.runState === 'suspended') return false;
-        // 出口を押して記録を書けていない。1 秒未満で止めた走行は経過が 0 なので、
-        // 経過では見分けられない。
-        if (timer.stoppedAtMs !== undefined) return true;
-        switch (timer.timerType) {
-            case 'countup':
-            case 'countdown':
-                return timer.runState === 'running' && timer.pausedElapsedTime > 0;
-            case 'interval':
-                // prepare で止まっているのは、prepare 中の停止が記録できなかった
-                // ときだけ（一時停止の prepare は走っている）。
-                return timer.phase === 'work' || timer.phase === 'break' || timer.phase === 'prepare';
-            default:
-                return false;
+        const record = timer.pendingRecord;
+        if (!(await this.ctx.flushTimerContent(timer.id))) return;
+        if (!(await this.ctx.recorder.recordSessionEnd(timer, record))) return;
+
+        timer.pendingRecord = null;
+        timer.recordedElapsedTime += record.seconds;
+        timer.sessionCount += 1;
+        if (record.then === 'close') {
+            this.closeTimer(timer.id);
+            return;
         }
+        timer.runState = 'suspended';
+        timer.isExpanded = false;
+        // 中断は「手を止めた」合図。走行中が居なくなったなら次タスクの提案を出す。
+        this.startIdleTimerIfNothingRunning();
+        this.ctx.render();
+        this.ctx.persistTimersToStorage();
     }
 
     // ─── Pause / Resume / Close ───────────────────────────────
@@ -331,27 +305,7 @@ export class TimerLifecycle {
     async suspendTimer(timer: TimerInstance): Promise<void> {
         if (timer.timerType === 'interval' || timer.timerType === 'idle') return;
         if (timer.runState === 'suspended') return;
-        return this.exclusive(timer, async () => {
-            // 記録に失敗して一時停止のまま残った走行をやり直すときは、止め直さない。
-            // `pauseTimer` は `startTimeMs` を戻さないので、二度目は経過を二重に足す。
-            if (timer.isRunning) this.pauseTimer(timer);
-            const sessionSeconds = getTimerElapsedSeconds(timer);
-            if (!(await this.flushAndRecord(timer))) {
-                this.keepUnrecorded();
-                return;
-            }
-
-            timer.recordedElapsedTime += Math.max(0, sessionSeconds);
-            timer.sessionCount += 1;
-            timer.runState = 'suspended';
-            timer.isExpanded = false;
-
-            // 中断は「手を止めた」合図。走行中が居なくなったなら次タスクの提案を出す。
-            this.startIdleTimerIfNothingRunning();
-
-            this.ctx.render();
-            this.ctx.persistTimersToStorage();
-        });
+        return this.exclusive(timer, () => this.stopAndRecord(timer, 'suspend', () => this.pauseTimer(timer)));
     }
 
     /**
@@ -376,8 +330,6 @@ export class TimerLifecycle {
             phase: timer.phase,
             timeRemaining: timer.timerType === 'countdown' ? timer.timeRemaining : undefined,
         };
-        timer.stoppedAtMs = undefined;
-
         timer.runState = 'running';
         timer.startTimeMs = Date.now();
         timer.pausedElapsedTime = 0;
@@ -439,19 +391,11 @@ export class TimerLifecycle {
      */
     async finishTimer(timer: TimerInstance): Promise<void> {
         return this.exclusive(timer, async () => {
-            if (timer.runState === 'running' && timer.timerType !== 'idle') {
-                // やり直しでは止め直さない（suspendTimer と同じ理由）。
-                if (timer.isRunning) this.pauseTimer(timer);
-                const sessionSeconds = getTimerElapsedSeconds(timer);
-                if (!(await this.flushAndRecord(timer))) {
-                    this.keepUnrecorded();
-                    return;
-                }
-                timer.recordedElapsedTime += Math.max(0, sessionSeconds);
-                timer.sessionCount += 1;
+            if (timer.runState === 'suspended' || timer.timerType === 'idle') {
+                this.closeTimer(timer.id);
+                return;
             }
-
-            this.closeTimer(timer.id);
+            await this.stopAndRecord(timer, 'close', () => this.pauseTimer(timer));
         });
     }
 
@@ -493,13 +437,8 @@ export class TimerLifecycle {
      */
     async stopIntervalTimer(timer: IntervalTimer): Promise<void> {
         return this.exclusive(timer, async () => {
-            this.pauseOrSnapshotIntervalForStop(timer);
             AudioUtils.playFinishSound();
-            if (!(await this.flushAndRecord(timer))) {
-                this.keepUnrecorded();
-                return;
-            }
-            this.closeTimer(timer.id);
+            await this.stopAndRecord(timer, 'close', () => this.pauseOrSnapshotIntervalForStop(timer));
         });
     }
 
@@ -521,20 +460,13 @@ export class TimerLifecycle {
         this.prepareBaseElapsed.delete(timer.id);
     }
 
-    resumeTimer(timer: TimerInstance): void {
-        // 記録を書けずに止まっていた走行を続けるなら、止めた時刻はもう終わりではない。
-        timer.stoppedAtMs = undefined;
-        if (timer.timerType === 'interval') {
-            const segment = getCurrentSegment(timer);
-            if (segment) {
-                timer.phase = segment.type;
-            }
-            this.prepareBaseElapsed.delete(timer.id);
-        } else if (timer.timerType === 'countdown') {
-            timer.phase = timer.timeRemaining < 0 ? 'idle' : 'work';
-        } else if (timer.timerType !== 'idle' && timer.phase === 'idle') {
-            timer.phase = 'work';
+    /** interval の一時停止（prepare）から区間に戻る。 */
+    resumeTimer(timer: IntervalTimer): void {
+        const segment = getCurrentSegment(timer);
+        if (segment) {
+            timer.phase = segment.type;
         }
+        this.prepareBaseElapsed.delete(timer.id);
         this.stopTimerTick(timer.id);
         timer.startTimeMs = Date.now();
         timer.isRunning = true;
@@ -638,6 +570,7 @@ export class TimerLifecycle {
             runState: 'running',
             sessionCount: 0,
             recordedElapsedTime: 0,
+            pendingRecord: null,
             isExpanded: true,
             intervalId: null,
             timerType: 'idle',

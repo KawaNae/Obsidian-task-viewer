@@ -1,6 +1,11 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import type { TimerInstance, TimerRecordMode } from '../../../src/timer/TimerInstance';
+import { getTimerElapsedSeconds, type PendingRecord, type TimerInstance, type TimerRecordMode } from '../../../src/timer/TimerInstance';
 import { makeFile, vaultSession, type VaultSession } from '../helpers/vaultSession';
+
+/** 止めた時点で固定する記録: 旧コードの `stoppedAtMs ?? Date.now()` 相当。 */
+function recordFor(timer: TimerInstance): PendingRecord {
+    return { endMs: Date.now(), seconds: getTimerElapsedSeconds(timer), then: 'close' };
+}
 
 /**
  * Stopping a timer after a reload writes into the session line it started.
@@ -95,7 +100,7 @@ describe('stopping a timer after a reload', () => {
         expect(second.index.getTask(restored.taskId)).toBeUndefined();
 
         restored.startTimeMs = Date.now() - 60_000;
-        await second.recorder.recordSessionEnd(restored);
+        await second.recorder.recordSessionEnd(restored, recordFor(restored));
         await second.settle(FILE);
 
         const after = lines(contents);
@@ -120,7 +125,7 @@ describe('stopping a timer after a reload', () => {
         timer.taskFile = renamed;          // what TimerWidget.handleFileRename does
         timer.taskId = timer.taskId.replace(FILE, renamed);
 
-        await live.recorder.recordSessionEnd(timer);
+        await live.recorder.recordSessionEnd(timer, recordFor(timer));
         await live.index.waitForScan(renamed);
 
         const after = contents.get(renamed)!.split('\n').filter(line => line.trim() !== '');

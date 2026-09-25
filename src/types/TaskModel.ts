@@ -89,10 +89,6 @@ export type ChildEntry =
  * Identifier of the parser that produced a task.
  *
  * Every task is a line in a note, read by one of these three parsers.
- * Legacy persisted values (`'at-notation'`, `'plain'`) are migrated at load
- * time by `TimerPersistence.normalizeParserId`; `'tv-file'` and `'frontmatter'`
- * named the file task, which no longer exists, and fall back to `'tv-inline'`
- * there. None of them appears on a live Task.
  */
 export type ParserId = 'tv-inline' | 'tasks-plugin' | 'day-planner';
 

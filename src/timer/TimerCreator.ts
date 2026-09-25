@@ -53,6 +53,7 @@ export class TimerCreator {
             runState: 'running' as TimerRunState,
             sessionCount: 0,
             recordedElapsedTime: 0,
+            pendingRecord: null,
             isExpanded: true,
             intervalId: null,
             recordMode: config.recordMode ?? 'child',

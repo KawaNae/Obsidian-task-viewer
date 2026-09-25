@@ -1,7 +1,7 @@
 import { describe, expect, it, beforeEach } from 'vitest';
 import { Notice, type App } from 'obsidian';
 import { TimerRecorder } from '../../../src/timer/TimerRecorder';
-import type { TimerInstance } from '../../../src/timer/TimerInstance';
+import { getTimerElapsedSeconds, type PendingRecord, type TimerInstance } from '../../../src/timer/TimerInstance';
 import type { TimerStorageUtils } from '../../../src/timer/TimerStorageUtils';
 import type TaskViewerPlugin from '../../../src/main';
 import { makeTask } from '../helpers/makeTask';
@@ -102,10 +102,16 @@ function makeTimer(overrides: Partial<TimerInstance> = {}): TimerInstance {
         recordMode: 'child',
         parserId: 'tv-inline',
         taskColor: '',
+        pendingRecord: null,
         timerType: 'countup',
         elapsedTime: 600,
         ...overrides,
     } as TimerInstance;
+}
+
+/** 止めた時点で固定する記録: 経過は timer の値をそのまま使う。 */
+function recordFor(timer: TimerInstance, then: PendingRecord['then'] = 'close'): PendingRecord {
+    return { endMs: Date.now(), seconds: getTimerElapsedSeconds(timer), then };
 }
 
 const INTERVAL: Partial<TimerInstance> = {
@@ -141,8 +147,9 @@ describe('recordSessionEnd answers whether the record was written', () => {
 
     it.each(paths)('$name: not written → false, no success notice', async ({ timer, write }) => {
         const h = makeHarness(write === 'insert' ? { insertResult: false } : { updateResult: false });
+        const built = makeTimer(timer);
 
-        const recorded = await h.recorder.recordSessionEnd(makeTimer(timer));
+        const recorded = await h.recorder.recordSessionEnd(built, recordFor(built));
 
         expect(recorded).toBe(false);
         expect(write === 'insert' ? h.inserted : h.updates).toHaveLength(1);
@@ -151,8 +158,9 @@ describe('recordSessionEnd answers whether the record was written', () => {
 
     it.each(paths)('$name: written → true, one success notice', async ({ timer, write, success }) => {
         const h = makeHarness();
+        const built = makeTimer(timer);
 
-        const recorded = await h.recorder.recordSessionEnd(makeTimer(timer));
+        const recorded = await h.recorder.recordSessionEnd(built, recordFor(built));
 
         expect(recorded).toBe(true);
         expect(write === 'insert' ? h.inserted : h.updates).toHaveLength(1);
@@ -164,7 +172,7 @@ describe('recordSessionEnd answers whether the record was written', () => {
         const h = makeHarness({ updateResult: false });
         const timer = makeTimer({ recordMode: 'self' });
 
-        await h.recorder.recordSessionEnd(timer);
+        await h.recorder.recordSessionEnd(timer, recordFor(timer));
 
         expect(timer.tailRecordBlockId).toBeUndefined();
     });
@@ -175,8 +183,9 @@ describe('the running line was lost: a record is added instead', () => {
 
     it('says only that it was recorded, once', async () => {
         const h = makeHarness({ childExists: false });
+        const timer = makeTimer({ tailRecordBlockId: 'tv-timer-1' });
 
-        const recorded = await h.recorder.recordSessionEnd(makeTimer({ tailRecordBlockId: 'tv-timer-1' }));
+        const recorded = await h.recorder.recordSessionEnd(timer, recordFor(timer));
 
         expect(recorded).toBe(true);
         expect(h.inserted).toHaveLength(1);
@@ -186,8 +195,9 @@ describe('the running line was lost: a record is added instead', () => {
 
     it('says nothing of success when the added record was not written', async () => {
         const h = makeHarness({ childExists: false, insertResult: false });
+        const timer = makeTimer({ tailRecordBlockId: 'tv-timer-1' });
 
-        const recorded = await h.recorder.recordSessionEnd(makeTimer({ tailRecordBlockId: 'tv-timer-1' }));
+        const recorded = await h.recorder.recordSessionEnd(timer, recordFor(timer));
 
         expect(recorded).toBe(false);
         expect(h.inserted).toHaveLength(1);
@@ -203,8 +213,9 @@ describe('the target cannot be resolved', () => {
         { name: 'self', timer: { recordMode: 'self' } as Partial<TimerInstance> },
     ])('$name: says the target was not found, once, and answers false', async ({ timer }) => {
         const h = makeHarness({ resolvable: false });
+        const built = makeTimer(timer);
 
-        const recorded = await h.recorder.recordSessionEnd(makeTimer(timer));
+        const recorded = await h.recorder.recordSessionEnd(built, recordFor(built));
 
         expect(recorded).toBe(false);
         expect(h.inserted).toHaveLength(0);

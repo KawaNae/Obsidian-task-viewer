@@ -596,6 +596,7 @@
     "suspend": "Suspend",
     "finish": "End",
     "suspended": "Suspended",
+    "unrecorded": "Not recorded",
     "startOnCompletedTitle": "This task is already completed",
     "startOnCompletedMessage": "Add a new task next to the record of \"{{task}}\", or record over this task again?",
     "continueSession": "Continue",

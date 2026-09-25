@@ -1,7 +1,12 @@
 import { describe, it, expect, afterEach, vi } from 'vitest';
 import { Notice } from 'obsidian';
-import type { TimerInstance, TimerRecordMode } from '../../../src/timer/TimerInstance';
+import { getTimerElapsedSeconds, type PendingRecord, type TimerInstance, type TimerRecordMode } from '../../../src/timer/TimerInstance';
 import { vaultSession, type VaultSession } from '../helpers/vaultSession';
+
+/** 止めた時点で固定する記録: 旧コードの `stoppedAtMs ?? Date.now()` 相当。 */
+function recordFor(timer: TimerInstance): PendingRecord {
+    return { endMs: Date.now(), seconds: getTimerElapsedSeconds(timer), then: 'close' };
+}
 
 /**
  * A timer runs on its target's anchor: the start write puts a `^id` on the
@@ -113,7 +118,7 @@ describe('the target is found by its anchor after a reload', () => {
         vi.setSystemTime(Date.now() + 5_000);
         const next = vaultSession(contents);
         await next.scanAll();
-        expect(await next.recorder.recordSessionEnd(saved)).toBe(true);
+        expect(await next.recorder.recordSessionEnd(saved, recordFor(saved))).toBe(true);
         await next.settle(FILE);
 
         const after = lines(contents);
