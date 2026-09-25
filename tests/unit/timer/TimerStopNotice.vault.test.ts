@@ -111,7 +111,7 @@ describe('one press of ■ says one thing', () => {
         await lifecycle.finishTimer(timer);
 
         expect(Notice.messages, Notice.messages.join(' | ')).toHaveLength(1);
-        expect(isNotice(Notice.messages[0], 'writeTargetGone'), Notice.messages[0]).toBe(true);
+        expect(isNotice(Notice.messages[0], 'writeTargetChanged'), Notice.messages[0]).toBe(true);
         // widget は残り、計測も残る。
         expect(ctx.timers.has(timer.id)).toBe(true);
         expect(timer.sessionCount).toBe(0);

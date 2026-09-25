@@ -34,21 +34,39 @@ export interface RowBasis {
 
 /**
  * The basis of a write that stays on the weaker comparison until stage F9:
- * the row's line has to read as some text the plugin has on record for it —
- * as the last scan read it, as a write of ours left it, or as a pending claim
- * says — rather than as the index's copy reads it.
+ * the row's line has to read as the index's copy of it, its indentation
+ * aside, rather than verbatim.
  *
  * The timer's three inserts only (`InlineTaskWriter.insertLineAfterTask`,
  * `insertSiblingAfterTask`, `insertLineAsFirstChild`) — the last of which is
  * also how a child is added from a card's menu or the API. A timer that is
  * stopped writes its record and closes whatever the write answers
- * (`TimerLifecycle.finishTimer`), so a write refused in the moment between a
- * write of ours and the scan that reads it would lose the measurement, not
- * just wait for the scan. Taking the answer is F9's. None of the three
- * rewrites the row it names: each puts a new line beside it.
+ * (`TimerLifecycle.finishTimer`), so a write refused where a row was only
+ * moved under another would lose the measurement, not just wait for the
+ * scan. Taking the answer is F9's. None of the three rewrites the row it
+ * names: each puts a new line beside it.
  */
+export interface OnRecord {
+    kind: typeof ON_RECORD;
+    /** The row's line as the index's copy holds it. */
+    text: string;
+}
+
 export const ON_RECORD = 'on-record' as const;
-export type OnRecord = typeof ON_RECORD;
+
+/** The weaker basis for a row whose copy reads `text` (see {@link OnRecord}). */
+export function onRecord(text: string): OnRecord {
+    return { kind: ON_RECORD, text };
+}
+
+export function isOnRecord(basis: RowBasis | OnRecord): basis is OnRecord {
+    return 'kind' in basis && basis.kind === ON_RECORD;
+}
+
+/** Whether the row at `line` reads as its copy, its indentation aside (see {@link OnRecord}). */
+export function readsAsRecorded(lines: readonly string[], line: number, basis: OnRecord): boolean {
+    return Outline.UP_TO_INDENT.holds(lines[line], basis.text);
+}
 
 /**
  * Whether the row at `line` still reads as the operation's plan read it.

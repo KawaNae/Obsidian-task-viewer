@@ -237,21 +237,6 @@ describe('the chain past its cap, across a scan that read before the loss', () =
     });
 });
 
-describe('a write, where no partner is safe', () => {
-    it('is refused as outdated past the chain\'s cap', async () => {
-        const { bench, x } = await traded(['- [ ] Z']);
-        let z = bench.taskAt(2);
-        for (let i = 0; i < MAX_CHAIN_PER_FILE; i++) {
-            const next = { ...z, statusChar: i % 2 === 0 ? 'x' : ' ' };
-            expect((await bench.writer.updateTaskInFile(plannedOn(z), next)).written).toBe(true);
-            z = { ...next, originalText: bench.lines()[2] };
-        }
-        bench.edit([...bench.lines(), 'メモ']);
-        const lines = bench.lines();
-        expect(bench.scanner.locate(FILE, lines, { runtimeId: x.id })).toEqual({ kind: 'outdated' });
-    });
-});
-
 /** A scan that takes its read mark now and reads the file as it is when released. */
 async function lateRead(bench: WriteBench): Promise<{ release: () => void; done: Promise<void> }> {
     let reading!: () => void;
@@ -297,13 +282,6 @@ describe('a scan that read after a write filed past its read mark', () => {
         await bench.scan();
         expect(bench.taskAt(0).id).toBe(x.id);
         expect(bench.taskAt(1).id).toBe(y.id);
-    });
-
-    it('a write on X does not land on Y\'s line', async () => {
-        const { bench, x } = await setup();
-        expect(bench.scanner.locate(FILE, bench.lines(), { runtimeId: x.id })).not.toEqual({ kind: 'at', line: 1 });
-        await bench.writer.deleteTaskFromFile(plannedOn(x));
-        expect(bench.lines()).not.toEqual(['- [x] A', '- [ ] Z']);
     });
 });
 

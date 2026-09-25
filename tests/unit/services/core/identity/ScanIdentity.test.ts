@@ -4,7 +4,6 @@ import { TaskScanner } from '../../../../../src/services/core/TaskScanner';
 import { TaskStore } from '../../../../../src/services/core/TaskStore';
 import { TaskValidator } from '../../../../../src/services/core/TaskValidator';
 import { TaskIdGenerator } from '../../../../../src/services/display/TaskIdGenerator';
-import { refOf } from '../../../../../src/services/persistence/TaskRefs';
 import { DEFAULT_SETTINGS } from '../../../../../src/types';
 import type { Task } from '../../../../../src/types';
 
@@ -418,12 +417,6 @@ describe('scan identity — duplicated block IDs', () => {
         expect(h.tasks()).toHaveLength(2);
         expect(first.id).not.toBe(second.id);
         expectConsistentTree(h.store);
-
-        // A write asks the scanner where its row stands. The ^id names two
-        // lines and proves nothing; the file is the one the scan read, and
-        // each name is answered with the line it was read from.
-        expect(h.scanner.locate('a.md', lines, refOf(second))).toEqual({ kind: 'at', line: 1 });
-        expect(h.scanner.locate('a.md', lines, refOf(first))).toEqual({ kind: 'at', line: 0 });
     });
 
     it('keeps both IDs when a line is inserted above them', async () => {

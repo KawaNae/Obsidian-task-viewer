@@ -166,7 +166,7 @@ export function fireFilter(host: EditorFireHost): Extension {
             const pending = fire.away();
             if (pending) aways.push({ row, pending });
             if (ops.length === 0) continue;
-            const edited = editLines(path, lines, '\n', undefined,
+            const edited = editLines(path, lines, '\n',
                 (draft, _eol, session) => host.applyOps(draft, session, { line, text: row.text }, ops));
             if (!edited.written) {
                 host.refused(edited.refused);
@@ -264,7 +264,7 @@ export class AwayRunner {
         if (this.closed) return this.host.writeFile(away.path, at, ops);
 
         const lines = linesOf(state.doc);
-        const edited = editLines(away.path, lines, '\n', undefined,
+        const edited = editLines(away.path, lines, '\n',
             (draft, _eol, session) => this.host.applyOps(draft, session, at, ops));
         if (!edited.written) {
             this.editor.dispatch({ effects: dropAway.of(away.id) });

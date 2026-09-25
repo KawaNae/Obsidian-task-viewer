@@ -183,7 +183,7 @@ export class InlineTaskWriter {
      * only because the line just written read differently from the one that
      * fired: held by value, not by construction. Here the row is located once,
      * every effect after the first takes its line from that answer carried
-     * across the splices before it (see `WriteSession.locate`), and nothing
+     * across the splices before it (see `WriteSession.row`), and nothing
      * searches the file a second time.
      *
      * One write also settles what the separate ones could not: either every

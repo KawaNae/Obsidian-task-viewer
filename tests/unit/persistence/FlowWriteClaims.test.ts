@@ -100,7 +100,7 @@ describe('what the next instance reports', () => {
 
         expect(b.filed).toEqual([]);
         expect(b.lines()).toEqual(['- [ ] 別のタスク', '']);
-        expect(b.refused).toEqual([{ file: FILE, reason: { kind: 'gone' }, subject: 'ポモドーロ' }]);
+        expect(b.refused).toEqual([{ file: FILE, reason: { kind: 'changed' }, subject: 'ポモドーロ' }]);
     });
 });
 
@@ -205,7 +205,7 @@ describe('what an update reports', () => {
         expect(written).toBe(false);
         expect(b.filed).toEqual([]);
         expect(b.lines()).toEqual(['- [ ] 別のタスク', '']);
-        expect(b.refused).toEqual([{ file: FILE, reason: { kind: 'gone' }, subject: 'ポモドーロ' }]);
+        expect(b.refused).toEqual([{ file: FILE, reason: { kind: 'changed' }, subject: 'ポモドーロ' }]);
     });
 
     describe('with child property ops', () => {
@@ -289,11 +289,10 @@ describe('what an update reports', () => {
             expect(b.lines()).toEqual([TASK, DONE, '']);
         });
 
-        it('writes neither twin when nothing tells them apart', async () => {
+        it('writes neither twin once the line it was read on reads otherwise', async () => {
             // The task was read below another row, and something else has since
-            // moved it up beside its twin. Nothing but position pairs the two
-            // rows with the two lines, and a write used to land on the first
-            // line with the same text. It is refused instead.
+            // moved it up beside its twin. The line it was read on now reads the
+            // other row, and nothing looks for it by its text: refused.
             const b = await writeBench([TASK, '- [ ] 別のタスク', TASK, ''].join('\n'));
             const task = b.taskAt(2);
             b.edit([TASK, TASK, '- [ ] 別のタスク', ''].join('\n'));
@@ -302,7 +301,7 @@ describe('what an update reports', () => {
             expect(written).toBe(false);
             expect(b.filed).toEqual([]);
             expect(b.lines()).toEqual([TASK, TASK, '- [ ] 別のタスク', '']);
-            expect(b.refused).toEqual([{ file: FILE, reason: { kind: 'ambiguous', count: 2 }, subject: 'ポモドーロ' }]);
+            expect(b.refused).toEqual([{ file: FILE, reason: { kind: 'changed' }, subject: 'ポモドーロ' }]);
         });
     });
 });

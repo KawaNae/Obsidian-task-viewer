@@ -142,6 +142,6 @@ describe('deletion fire: which line the delete takes', () => {
 
         expect(removed).toBe(false);
         expect(h.lines().join('\n')).toBe(before);
-        expect(h.refused).toEqual([{ file: FILE, reason: { kind: 'gone' }, subject: '週報' }]);
+        expect(h.refused).toEqual([{ file: FILE, reason: { kind: 'changed' }, subject: '週報' }]);
     });
 });

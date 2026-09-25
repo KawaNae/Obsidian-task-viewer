@@ -170,7 +170,7 @@ describe('a generated-instance insert writes nothing it cannot place', () => {
         );
 
         expect(h.lines()).toEqual([before]);
-        expect(h.refused).toEqual([{ file: FILE, reason: { kind: 'gone' }, subject: '消えたタスク' }]);
+        expect(h.refused).toEqual([{ file: FILE, reason: { kind: 'changed' }, subject: '消えたタスク' }]);
     });
 
     it('writes only the parent when there is nothing else', async () => {

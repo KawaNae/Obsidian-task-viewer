@@ -1,7 +1,6 @@
 import { describe, it, expect, afterEach } from 'vitest';
 import { openVault, type VaultSession } from '../helpers/vaultSession';
 import type { Refusal } from '../../../src/utils/FileLines';
-import { plannedOn } from '../../../src/services/persistence/TaskRefs';
 
 /**
  * The two writes that used to report nothing — a key set in the frontmatter,
@@ -133,18 +132,5 @@ describe('a key set in the frontmatter', () => {
         const after = session.index.getTasks().sort((a, b) => a.line - b.line).map(task => task.id);
         expect(after).toEqual(before);
         expect(claims.adopted).toEqual([FILE]);
-    });
-
-    it('leaves a record the next write builds its claim on, before any scan', async () => {
-        // F1's regression: after an unreported write the ledger no longer fit
-        // the file, so the next write could claim nothing until a scan came.
-        const session = await open(['- [ ] A', '- [ ] B', ''].join('\n'));
-        const claims = watchClaims(session);
-        const [a] = session.index.getTasks().sort((x, y) => x.line - y.line);
-
-        session.index.setDraggingFile(FILE); // hold the scans off
-        await session.index.getRepository().setFrontmatterKeys(FILE, { 'tv-color': 'ff0000' });
-        expect((await session.index.getRepository().updateTaskInFile(plannedOn(a), { ...a, statusChar: 'x' })).written).toBe(true);
-        expect(claims.filed).toEqual([FILE, FILE]);
     });
 });

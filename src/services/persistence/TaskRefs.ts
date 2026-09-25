@@ -1,16 +1,5 @@
 import type { Task } from '../../types';
-import type { TaskRef } from '../../utils/FileLines';
-import { ON_RECORD, type OnRecord, type RowBasis } from './RowBasis';
-
-/**
- * What a write names its target by. The task is the index's copy of the row
- * as the last scan read it; of that copy, only the name and the `^id` say
- * which row is meant. Its line and text say where the row *was*, and a write
- * does not take a coordinate from there (see `TaskScanner.locate`).
- */
-export function refOf(task: Task): TaskRef {
-    return task.blockId ? { runtimeId: task.id, blockId: task.blockId } : { runtimeId: task.id };
-}
+import { onRecord, type OnRecord, type RowBasis } from './RowBasis';
 
 /** How a refused write names what it was about, to the user. */
 export function subjectOf(task: Task): string {
@@ -18,15 +7,16 @@ export function subjectOf(task: Task): string {
 }
 
 /**
- * A row as the index hands it to a write: the file it is in, its name, what to
- * call it if the write has to be refused, and what the operation was planned
- * from. No line travels with it, and nothing to search the file by: the name
- * says which row, and the basis only says whether that row still reads as the
- * plan read it (see `WriteSession.row`).
+ * A row as the index hands it to a write: the file it is in, the line the
+ * index's copy of it stands on, what to call it if the write has to be
+ * refused, and what the operation was planned from. The line is a coordinate
+ * in the content the index last read; the basis says whether the file still
+ * reads that way there (see `WriteSession.row`). Nothing looks for the row
+ * anywhere else.
  */
 export interface PlannedTarget {
     file: string;
-    ref: TaskRef;
+    line: number;
     subject: string;
     basis: RowBasis;
 }
@@ -48,7 +38,7 @@ export interface PlanReads {
 export function plannedOn(task: Task, reads: PlanReads = {}): PlannedTarget {
     return {
         file: task.file,
-        ref: refOf(task),
+        line: task.line,
         subject: subjectOf(task),
         basis: {
             text: task.originalText,
@@ -64,15 +54,15 @@ export function plannedOn(task: Task, reads: PlanReads = {}): PlannedTarget {
 
 /**
  * The target of a timer's insert, which stays on the weaker comparison until
- * stage F9 (see {@link ON_RECORD}).
+ * stage F9 (see {@link OnRecord}).
  */
 export interface RecordedTarget {
     file: string;
-    ref: TaskRef;
+    line: number;
     subject: string;
     basis: OnRecord;
 }
 
 export function recordedOn(task: Task): RecordedTarget {
-    return { file: task.file, ref: refOf(task), subject: subjectOf(task), basis: ON_RECORD };
+    return { file: task.file, line: task.line, subject: subjectOf(task), basis: onRecord(task.originalText) };
 }

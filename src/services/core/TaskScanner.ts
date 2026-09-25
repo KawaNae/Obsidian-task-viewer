@@ -1,5 +1,4 @@
 import type { App, TFile } from 'obsidian';
-import { Outline } from '../parsing/utils/Outline';
 import type { TaskViewerSettings } from '../../types';
 import { FileParsePipeline } from '../parsing/FileParsePipeline';
 import type { TaskStore } from './TaskStore';
@@ -11,7 +10,7 @@ import { matchFile, matchWithoutRepeatedIds } from './identity/IdentityMatcher';
 import { WriteClaims, type ClaimResult } from './identity/WriteClaims';
 import { contentKeyOf } from './ContentKey';
 import { applyIdentity, assertDistinctRuntimeIds, assertNoProvisionalIds, assertUniqueProvisionalIds } from './identity/IdentityApplier';
-import { splitLines, type Located, type TaskRef, type WriteOrigin, type WriteSink } from '../../utils/FileLines';
+import { splitLines, type WriteOrigin, type WriteSink } from '../../utils/FileLines';
 import { logDebug, logError, logInfo } from '../../log/log';
 
 /**
@@ -409,172 +408,9 @@ export class TaskScanner {
     }
 
     /**
-     * Where the row a write names stands in the lines that write was handed.
-     *
-     * The upstream half of identity: the question a scan answers for a whole
-     * file, asked for one name and without writing anything down. The ledger
-     * and the claim log are read, never changed — only a scan writes them —
-     * so asking twice, or asking and then not writing, leaves no trace.
-     *
-     * A coordinate comes out of three things and nothing else:
-     *
-     * 1. the row's `^id`, when it names exactly one line outside a fence —
-     *    the one piece of evidence that outlives every edit;
-     * 2. a content on record (`WriteClaims.stateFor`): the lines read, whole,
-     *    as the last write left them or the last scan read them, so the rows
-     *    recorded for that content stand where they were recorded — no parse;
-     * 3. otherwise the match a scan of these lines would make, as the scan
-     *    makes it: the pending claims weighed against the ledger, and with
-     *    none adopted, the ladder paired against the newest state known to be
-     *    older than these lines (`WriteClaims.ladderFor`). The name has to
-     *    come out paired with one line on evidence: a pair the ladder chose by
-     *    position among identical rows is `ambiguous`, because writing on a
-     *    guess is worse than not writing. Where no partner is safe (the
-     *    chain's cap has dropped states), the answer is `outdated`.
-     *
-     * What never comes out of here is the line a task held when it was last
-     * scanned, or the first line that reads like it. Neither says anything
-     * about the lines in hand.
-     *
-     * A name the ledger has not heard of — a row a write made, not yet scanned
-     * (the names a write answers as `made`) — is found through 2, or through 3
-     * when a pending claim is adopted or when the ladder pairs against the
-     * state the write left (lines that changed after it). On lines where the
-     * next scan would hand the name to no row it is `gone`, and that is the
-     * answer, not a gap: this function answers what that scan would decide.
-     * Answering with the one line that reads like the row would part from the
-     * scan, and on text alone, the weakest evidence there is: an outside edit
-     * that took the made row away and wrote another line in its words would
-     * have this write land on that line.
-     *
-     * Found through 1 or 3, the line may read differently from anything on
-     * record for the row — the ladder pairs a row whose text or dates changed,
-     * and a `^id` holds across any edit. That is still the row. Whether it
-     * still reads as the write planned is the write's question, not this
-     * one's (see `WriteSession.row`).
-     */
-    locate(path: string, lines: readonly string[], ref: TaskRef): Located {
-        const byBlockId = lineOfBlockId(lines, ref.blockId);
-        if (byBlockId !== null) return { kind: 'at', line: byBlockId };
-
-        const recorded = this.claims.stateFor(path, lines);
-        if (recorded !== null) {
-            const row = recorded.find(candidate => candidate.runtimeId === ref.runtimeId);
-            return row ? { kind: 'at', line: row.line } : { kind: 'gone' };
-        }
-
-        const parsed = FileParsePipeline.parse(path, [...lines], this.settings);
-        if (parsed.ignored) return { kind: 'gone' };
-
-        const previous = this.ledger.snapshotFor(path);
-        const before = this.ledger.contentFor(path);
-        const read = contentKeyOf(lines);
-        // The partner the next scan of these lines would pair against. None
-        // is safe past the chain's cap, and a write would rather not write.
-        const ladder = this.claims.ladderFor(path, read, { content: before, rows: previous });
-        if (ladder === null) return { kind: 'outdated' };
-        // Names for the rows nothing pairs. They leave this function with
-        // nothing but a comparison against `ref`, which none of them can equal.
-        let unnamed = 0;
-        const { result } = matchWithoutRepeatedIds(
-            hints => matchFile(previous, parsed.tasks, () => `locate:unnamed:${++unnamed}`, hints, ladder),
-            {
-                pending: this.hints.peekFor(path, Date.now()),
-                before,
-                read,
-            },
-        );
-
-        const among = result.guessed.get(ref.runtimeId);
-        if (among !== undefined) return { kind: 'ambiguous', count: among };
-        const at = parsed.tasks.find(task => result.mapping.get(task.id) === ref.runtimeId);
-        if (!at) return { kind: 'gone' };
-        return this.againstLastWrite(path, lines, at.line, ref) ?? { kind: 'at', line: at.line };
-    }
-
-    /**
-     * Whether the row's line at `line` reads as some text the plugin has on
-     * record for the row: as the last scan read it, as the last write left it,
-     * or as a pending claim says. The weaker comparison the timer's inserts
-     * keep until F9 (`RowBasis.ON_RECORD`).
-     */
-    onRecord(path: string, lines: readonly string[], ref: TaskRef, line: number): boolean {
-        return this.recordedTexts(path, ref.runtimeId).has(Outline.UP_TO_INDENT.key(lines[line]));
-    }
-
-    /**
-     * A match made while a write of ours has landed that no committed scan
-     * has read, checked against what that write left. A scan that read the
-     * file before the write and committed after it does not count: its ledger
-     * is older than the write all the same (`WriteClaims.lastWrite`).
-     *
-     * The ladder pairs by the texts the ledger holds, and the ledger is known
-     * to be older than our last write (see `WriteClaims.stateFor`). A row that
-     * write changed is looked for under the text it no longer has, and one
-     * whose text it handed to another row comes out on that row's line. What
-     * the write left is the newest record there is, so the line has to read as
-     * the target's text there, and as no other row's — else the pairing rests
-     * on a text that has since moved, and the answer is `outdated`. A write
-     * that could not say what it left leaves nothing to check against, and the
-     * answer is `outdated` as well.
-     *
-     * Null when there is nothing to object to.
-     */
-    private againstLastWrite(path: string, lines: readonly string[], line: number, ref: TaskRef): Located | null {
-        const last = this.claims.lastWrite(path);
-        if (last === undefined) return null;
-        const holders = last.rows?.filter(row => Outline.UP_TO_INDENT.holds(row.text, lines[line])) ?? [];
-        if (!holders.some(row => row.runtimeId === ref.runtimeId)) return { kind: 'outdated' };
-        if (holders.length > 1) return { kind: 'ambiguous', count: holders.length };
-        return null;
-    }
-
-    /**
-     * Every text the plugin has on record for one row: as the last scan read
-     * it, as the last write left it, and as each pending claim says it reads.
-     * Without the indentation, which places the row in the tree and is read
-     * off the file by every write that needs it: a row moved under another is
-     * not a row whose text changed.
-     */
-    private recordedTexts(path: string, runtimeId: string): Set<string> {
-        const texts = new Set<string>();
-        const entry = this.ledger.get(runtimeId);
-        if (entry && entry.file === path) texts.add(Outline.UP_TO_INDENT.key(entry.fingerprint.originalText));
-        for (const row of this.claims.lastWrite(path)?.rows ?? []) {
-            if (row.runtimeId === runtimeId) texts.add(Outline.UP_TO_INDENT.key(row.text));
-        }
-        for (const pending of this.hints.peekFor(path, Date.now())) {
-            for (const row of pending.hint.rows) {
-                if (row.runtimeId === runtimeId) texts.add(Outline.UP_TO_INDENT.key(row.text));
-            }
-        }
-        return texts;
-    }
-
-    /**
      * 設定を更新
      */
     updateSettings(settings: TaskViewerSettings): void {
         this.settings = settings;
     }
-}
-
-/**
- * The one line outside a fence that carries this `^id`, or null when there is
- * none or more than one. A `^id` copied along with its line names two rows,
- * and proves nothing about either — the same rule as the ladder's first rung.
- */
-function lineOfBlockId(lines: readonly string[], blockId: string | undefined): number | null {
-    const id = blockId?.trim();
-    if (!id) return null;
-
-    const pattern = new RegExp(`\\s\\^${id.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s*$`);
-    const outline = Outline.read(lines);
-    let found: number | null = null;
-    for (let i = 0; i < lines.length; i++) {
-        if (outline.inCode(i) || !pattern.test(lines[i])) continue;
-        if (found !== null) return null;
-        found = i;
-    }
-    return found;
 }

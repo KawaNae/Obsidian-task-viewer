@@ -2,7 +2,7 @@ import type { App, TFile } from 'obsidian';
 import { processLines, type WriteChannel } from './FileLines';
 import type { WriteObserver } from '../services/persistence/WriteObserver';
 import type { TaskRepository } from '../services/persistence/TaskRepository';
-import { refOf, type PlannedTarget } from '../services/persistence/TaskRefs';
+import type { PlannedTarget } from '../services/persistence/TaskRefs';
 import type { Task } from '../types';
 
 /**
@@ -50,18 +50,18 @@ export function rowSignatureChecks(
     app: App, file: TFile, channel: WriteChannel | undefined, task: Task, repository: TaskRepository,
 ): void {
     void processLines(app, file, channel, (_draft, _eol, session) => {
-        // A name alone is not a row to write on: the basis goes with it.
+        // A coordinate alone is not a row to write on: the basis goes with it.
         // @ts-expect-error a row is named with its basis
-        session.row({ ref: refOf(task), subject: 'x' });
+        session.row({ line: task.line, subject: 'x' });
         // Nor is there a way round the check to the bare coordinate.
         // @ts-expect-error the session answers rows, not locations
-        session.locate(refOf(task));
+        session.locate(task.line);
         return false;
     });
 
     // A target without what it was planned from does not exist.
     // @ts-expect-error the basis is not optional
-    const unplanned: PlannedTarget = { file: task.file, ref: refOf(task), subject: 'x' };
+    const unplanned: PlannedTarget = { file: task.file, line: task.line, subject: 'x' };
     void unplanned;
 
     // The index's copy is not a target: an update, a delete and a duplicate are
