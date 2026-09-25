@@ -7,6 +7,7 @@ import { toDisplayTask } from '../services/display/DisplayTaskConverter';
 import { splitTasks } from '../services/display/TaskSplitter';
 import { categorizeTasksByDate } from '../services/display/TaskDateCategorizer';
 import { normalizeTask } from './TaskNormalizer';
+import { apiIdOf, readApiId, type TaskLookup } from './TaskIds';
 import { TaskSorter } from '../services/sort/TaskSorter';
 import type { SortState, SortProperty } from '../services/sort/SortTypes';
 import { DateUtils } from '../utils/DateUtils';
@@ -82,6 +83,17 @@ Vocabulary
   Unknown parameter keys are errors (with a did-you-mean suggestion) —
   they are never silently ignored. Params documented as comma-separated
   strings (status, tag, color, type) also accept string arrays.
+
+Task IDs
+--------
+  id, parentId and childIds take one of two shapes:
+    path#^id  for a line whose ^id no other line of the file carries.
+              It lasts across edits from outside and reloads.
+    a name    for any other line: a receipt for one reading of the file.
+              It lasts until the file changes outside the plugin. Do not
+              store it; list the tasks again. Give a task a ^id to keep
+              its ID.
+  update returns the task as written: a name comes back as its new ID.
 
 Methods
 -------
@@ -243,13 +255,13 @@ Examples
   api.today({ sort: [{ property: 'startDate', direction: 'asc' }] });
 
   // Get a specific task
-  api.get({ id: 'tv-inline:daily/2026-03-15.md:seq:5' });
+  api.get({ id: 'daily/2026-03-15.md#^review' });
 
   // Duplicate a task, shifting dates by 1 day
-  await api.duplicate({ id: 'tv-inline:daily/2026-03-15.md:seq:5', dayOffset: 1 });
+  await api.duplicate({ id: 'daily/2026-03-15.md#^review', dayOffset: 1 });
 
   // Duplicate a task 3 times (no date shift)
-  await api.duplicate({ id: 'tv-inline:daily/2026-03-15.md:seq:5', count: 3 });
+  await api.duplicate({ id: 'daily/2026-03-15.md#^review', count: 3 });
 
   // List tasks in a date range (window bounds accept presets too)
   await api.tasksForDateRange({ from: '2026-03-01', to: '2026-03-31' });
@@ -266,7 +278,7 @@ Examples
   await api.categorizedTasksForDateRange({ from: '2026-03-23', to: '2026-03-29' });
 
   // Insert a child task
-  await api.insertChildTask({ parentId: 'tv-inline:daily/2026-03-15.md:seq:5', content: 'Sub-task' });
+  await api.insertChildTask({ parentId: 'daily/2026-03-15.md#^review', content: 'Sub-task' });
 
   // Get visual day boundary setting
   api.getStartHour();
@@ -355,6 +367,33 @@ export class TaskApi {
         this.writeService = plugin.getTaskWriteService();
     }
 
+    private readonly lookup: TaskLookup = (name) => this.readService.getTask(name);
+
+    /** A task as the API hands it out, its IDs included (`apiIdOf`). */
+    private readonly out = (task: DisplayTask): NormalizedTask => normalizeTask(task, this.lookup);
+
+    /**
+     * The index's copy of the row an ID the API took names (`readApiId`),
+     * or a `TaskApiError` saying why there is none. Every ID the API takes
+     * comes here.
+     *
+     * An anchored ID finds its row in the file's last reading; a name finds
+     * its row only in the reading that gave it, or across writes of ours
+     * since. Either way the write goes by the copy's name, through the check
+     * every write passes: a file changed since its last reading refuses it.
+     */
+    private rowOf(id: string): Task {
+        const read = readApiId(id);
+        if (read.kind === 'anchor') {
+            const task = this.readService.getTaskByAnchor(read.file, read.anchor);
+            if (!task) throw new TaskApiError(`Task not found: ${id} (no line of ${read.file} carries ^${read.anchor} alone)`);
+            return task;
+        }
+        const task = this.readService.getTask(read.name);
+        if (!task) throw new TaskApiError(`Task not found: ${id} (an ID without a ^id lasts only until its file changes; list the tasks again)`);
+        return task;
+    }
+
     /**
      * List tasks with optional filters, sort, and pagination.
      */
@@ -392,7 +431,7 @@ export class TaskApi {
             count: paged.length,
             truncated: paged.length < total,
             limit: resolvedLimit,
-            tasks: paged.map(normalizeTask),
+            tasks: paged.map(this.out),
         };
     }
 
@@ -433,7 +472,7 @@ export class TaskApi {
             count: paged.length,
             truncated: paged.length < total,
             limit: resolvedLimit,
-            tasks: paged.map(normalizeTask),
+            tasks: paged.map(this.out),
         };
     }
 
@@ -443,9 +482,9 @@ export class TaskApi {
     get(params: GetParams): NormalizedTask {
         assertParams(params, GET_SCHEMA, 'get');
 
-        const dt = this.readService.getDisplayTask(params.id);
+        const dt = this.readService.getDisplayTask(this.rowOf(params.id).id);
         if (!dt) throw new TaskApiError(`Task not found: ${params.id}`);
-        return normalizeTask(dt);
+        return this.out(dt);
     }
 
     /**
@@ -497,7 +536,7 @@ export class TaskApi {
         const created = this.readService.getTaskByFileLine(params.file, insertedLine);
         if (!created) throw new TaskApiError('Task was created but could not be found after scan');
 
-        return { task: normalizeTask(toDisplayTask(created, this.plugin.settings.startHour, (id) => this.readService.getTask(id))) };
+        return { task: this.out(toDisplayTask(created, this.plugin.settings.startHour, this.lookup)) };
     }
 
     /**
@@ -506,8 +545,7 @@ export class TaskApi {
     async update(params: UpdateParams): Promise<MutationResult> {
         assertParams(params, UPDATE_SCHEMA, 'update');
 
-        const task = this.readService.getTask(params.id);
-        if (!task) throw new TaskApiError(`Task not found: ${params.id}`);
+        const task = this.rowOf(params.id);
         if (task.isReadOnly) throw new TaskApiError(`Task ${params.id} is read-only (parserId=${task.parserId})`);
 
         const updates: Partial<Task> = {};
@@ -557,13 +595,16 @@ export class TaskApi {
         // A write that could not be placed leaves the index reverted to the
         // former values, so reading the task back would describe a change that
         // never reached the file and report it as a success.
-        const written = await this.writeService.updateTask(params.id, updates);
+        const written = await this.writeService.updateTask(task.id, updates);
         if (!written) throw new TaskApiError(`Task could not be written: ${params.id}`);
 
-        const updated = this.readService.getTask(params.id);
+        // The row's name now: our write moved its file on, and the name is
+        // followed across it (`TaskIndex.getTask`). An unanchored row's ID
+        // changes with it.
+        const updated = this.readService.getTask(task.id);
         if (!updated) throw new TaskApiError(`Task not found after update: ${params.id}`);
 
-        return { task: normalizeTask(toDisplayTask(updated, this.plugin.settings.startHour, (id) => this.readService.getTask(id))) };
+        return { task: this.out(toDisplayTask(updated, this.plugin.settings.startHour, this.lookup)) };
     }
 
     /**
@@ -572,11 +613,10 @@ export class TaskApi {
     async delete(params: DeleteParams): Promise<DeleteResult> {
         assertParams(params, DELETE_SCHEMA, 'delete');
 
-        const task = this.readService.getTask(params.id);
-        if (!task) throw new TaskApiError(`Task not found: ${params.id}`);
+        const task = this.rowOf(params.id);
         if (task.isReadOnly) throw new TaskApiError(`Task ${params.id} is read-only (parserId=${task.parserId})`);
 
-        const removed = await this.writeService.deleteTask(params.id);
+        const removed = await this.writeService.deleteTask(task.id);
         if (!removed) throw new TaskApiError(`Task could not be deleted: ${params.id}`);
         return { deleted: params.id };
     }
@@ -600,8 +640,7 @@ export class TaskApi {
      */
     async duplicate(params: DuplicateParams): Promise<DuplicateResult> {
         assertParams(params, DUPLICATE_SCHEMA, 'duplicate');
-        const task = this.readService.getTask(params.id);
-        if (!task) throw new TaskApiError(`Task not found: ${params.id}`);
+        const task = this.rowOf(params.id);
         if (task.isReadOnly) throw new TaskApiError(`Task ${params.id} is read-only (parserId=${task.parserId})`);
         if (params.dayOffset !== undefined) {
             if (typeof params.dayOffset !== 'number' || isNaN(params.dayOffset)) throw new TaskApiError('dayOffset must be a number');
@@ -611,7 +650,7 @@ export class TaskApi {
             if (!Number.isInteger(params.count)) throw new TaskApiError('count must be a whole number');
             if (params.count < 1) throw new TaskApiError('count must be at least 1');
         }
-        const written = await this.writeService.duplicateTask(params.id, {
+        const written = await this.writeService.duplicateTask(task.id, {
             dayOffset: params.dayOffset,
             count: params.count,
         });
@@ -637,7 +676,7 @@ export class TaskApi {
             count: paged.length,
             truncated: paged.length < total,
             limit: resolvedLimit,
-            tasks: paged.map(normalizeTask),
+            tasks: paged.map(this.out),
         };
     }
 
@@ -657,9 +696,9 @@ export class TaskApi {
         const result: CategorizedTasksForDateRangeResult = {};
         for (const [date, cats] of map) {
             result[date] = {
-                allDay: cats.allDay.map(normalizeTask),
-                timed: cats.timed.map(normalizeTask),
-                dueOnly: cats.dueOnly.map(normalizeTask),
+                allDay: cats.allDay.map(this.out),
+                timed: cats.timed.map(this.out),
+                dueOnly: cats.dueOnly.map(this.out),
             };
         }
         return result;
@@ -671,10 +710,9 @@ export class TaskApi {
     async insertChildTask(params: InsertChildTaskParams): Promise<InsertChildTaskResult> {
         assertParams(params, INSERT_CHILD_TASK_SCHEMA, 'insertChildTask');
         if (hasLineBreak(params.content)) throw new TaskApiError('content must not contain line breaks (\\r or \\n)');
-        const task = this.readService.getTask(params.parentId);
-        if (!task) throw new TaskApiError(`Task not found: ${params.parentId}`);
+        const task = this.rowOf(params.parentId);
         if (task.isReadOnly) throw new TaskApiError(`Task ${params.parentId} is read-only (parserId=${task.parserId})`);
-        const written = await this.writeService.insertChildTask(params.parentId, TaskParser.format(createTempTask({ id: 'api-child', content: params.content })));
+        const written = await this.writeService.insertChildTask(task.id, TaskParser.format(createTempTask({ id: 'api-child', content: params.content })));
         if (!written) throw new TaskApiError(`Child task could not be written under: ${params.parentId}`);
         return { parentId: params.parentId };
     }
@@ -731,7 +769,8 @@ export class TaskApi {
      * Subscribe to task changes. Returns an unsubscribe function.
      */
     onChange(callback: (taskId?: string) => void): () => void {
-        return this.readService.onChange(callback);
+        // The ID given is the API's (`apiIdOf`), like every other it hands out.
+        return this.readService.onChange(taskId => callback(taskId === undefined ? undefined : apiIdOf(taskId, this.lookup)));
     }
 
     /**

@@ -17,6 +17,22 @@ const api = app.plugins.plugins['obsidian-task-viewer'].api;
 - 未知のパラメータキーはエラーになります（近いキー名の候補を提示します）。サイレントに無視されることはありません
 - `filter` / `filterFile` で渡す FilterState も境界で検証され、未知の property や不正な operator はエラーになります
 
+## タスク ID
+
+`id`、`parentId`、`childIds` と、`onChange` に渡る ID は、行ごとに次のどちらかの形をとります。
+
+| 形 | 付く行 | 使える間 |
+|----|--------|----------|
+| `パス#^id`（例: `DailyNotes/2026-03-15.md#^review`） | 行末に `^id` があり、同じ `^id` の行がそのファイルに他に無い行 | その `^id` がファイルでその行だけにある間。外での編集や再起動をまたいで使えます |
+| 読みの名前（例: `tv-inline:DailyNotes/2026-03-15.md:n:4:…`） | それ以外の行 | ファイルがプラグインの外で変わるまで |
+
+- 読みの名前は、一覧を取ったときの一時的な受け取り証です。保存して後で使わないでください。使う前に `list` などで取り直してください
+- ID を長く保ちたいタスクには、行末に `^id` を付けてください（例: `- [ ] Weekly review ^review`）
+- `update` は書いたあとのタスクを返します。読みの名前の行では、返った `id` が次に使う ID です
+- 書き込みは、プラグインが最後に読んだ内容とファイルが一致するときだけ行います。ファイルが外で変わり、プラグインがまだ読み直していない間は、`パス#^id` でも `could not be written` のエラーになります。少し待ってからやり直してください
+- 見つからない ID は `TaskApiError` になります。`パス#^id` では `no line of <パス> carries ^<id> alone`、読みの名前では `an ID without a ^id lasts only until its file changes; list the tasks again` と理由を添えます
+- ID の形は v0.57.0 で変わりました。以前の版の ID（`…:seq:5` など）は使えません
+
 ## メソッド一覧
 
 | メソッド | 説明 | 同期/非同期 |
