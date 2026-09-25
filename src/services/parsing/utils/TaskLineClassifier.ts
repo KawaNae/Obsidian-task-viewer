@@ -2,6 +2,9 @@ import { IN_LINE } from '../../../utils/LineBreak';
 import { CHECKBOX_GAP_SOURCE, LIST_BULLET_SOURCE, MARKER_GAP_SOURCE, STATUS_CHAR_SOURCE } from './ListMarker';
 import { INDENT_SOURCE, Outline, type OutlineReading } from './Outline';
 
+/** The characters of a `^id` (Obsidian's block ID), for a pattern that holds one. */
+export const BLOCK_ID_SOURCE = '[A-Za-z0-9-]+';
+
 export interface TaskLineMatch {
     /** Leading whitespace */
     indent: string;
@@ -24,7 +27,7 @@ export interface TaskLineMatch {
 export class TaskLineClassifier {
     private static readonly TASK_LINE_REGEX = new RegExp(`^(${INDENT_SOURCE})(${LIST_BULLET_SOURCE}${MARKER_GAP_SOURCE}\\[)(${STATUS_CHAR_SOURCE})(\\]${CHECKBOX_GAP_SOURCE}(${IN_LINE}*))$`);
     private static readonly STATUS_CHAR_REGEX = new RegExp(`^${STATUS_CHAR_SOURCE}$`);
-    private static readonly BLOCK_ID_REGEX = /(?:^|\s)\^([A-Za-z0-9-]+)\s*$/;
+    private static readonly BLOCK_ID_REGEX = new RegExp(String.raw`(?:^|\s)\^(${BLOCK_ID_SOURCE})\s*$`);
 
     /**
      * Strip a trailing `^block-id` from a line's content. The single

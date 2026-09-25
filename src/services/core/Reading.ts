@@ -14,7 +14,10 @@
  */
 export type ReadingId = string;
 
-const READING = /^([0-9a-z]+)\.(\d+)$/;
+/** How a reading's ID is spelt (`readingId`), for a pattern that holds one. */
+export const READING_ID_SOURCE = String.raw`[0-9a-z]+\.\d+`;
+
+const READING = new RegExp(`^${READING_ID_SOURCE}$`);
 
 let sessions = 0;
 
@@ -30,6 +33,7 @@ export function readingId(session: string, n: number): ReadingId {
 
 /** What a reading's ID says, or null for a string of another shape. */
 export function readReading(id: string): { session: string; n: number } | null {
-    const match = id.match(READING);
-    return match ? { session: match[1], n: Number(match[2]) } : null;
+    if (!READING.test(id)) return null;
+    const dot = id.indexOf('.');
+    return { session: id.slice(0, dot), n: Number(id.slice(dot + 1)) };
 }

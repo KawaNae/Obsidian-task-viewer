@@ -1,5 +1,5 @@
 import type { ParserId } from '../../types';
-import type { ReadingId } from '../core/Reading';
+import { READING_ID_SOURCE, type ReadingId } from '../core/Reading';
 
 export interface ParsedTaskId {
     parserId: string;
@@ -17,8 +17,8 @@ export interface ParsedSegmentId {
 // the restore guard (TimerPersistence.fromPersistedTimer) drops any ID `parse`
 // rejects. `prov:` is left out on purpose: a provisional ID that leaked should
 // fail to parse.
-const TASK_ID_REGEX = /^([^:]+):(.+):(n:[0-9a-z]+\.\d+:\d+|blk:[^:]+|tid:[^:]+|seq:\d+|ln:\d+|fm-root)$/;
-const NAME_ANCHOR_REGEX = /^n:([0-9a-z]+\.\d+):(\d+)$/;
+const TASK_ID_REGEX = new RegExp(String.raw`^([^:]+):(.+):(n:${READING_ID_SOURCE}:\d+|blk:[^:]+|tid:[^:]+|seq:\d+|ln:\d+|fm-root)$`);
+const NAME_ANCHOR_REGEX = new RegExp(String.raw`^n:(${READING_ID_SOURCE}):(\d+)$`);
 const SEGMENT_ID_REGEX = /^(.*)##seg:(\d{4}-\d{2}-\d{2})$/;
 
 export class TaskIdGenerator {
