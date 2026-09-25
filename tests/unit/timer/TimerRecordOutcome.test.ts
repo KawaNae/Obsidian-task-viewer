@@ -52,7 +52,10 @@ function makeHarness(options: Options = {}) {
             if (id === PARENT_ID) return resolvable ? parent : undefined;
             return undefined;
         },
-        getTaskByAnchor: (file: string, anchor: string) => visible.find(t => t.file === file && t.anchor === anchor),
+        getTaskByAnchor: (file: string, anchor: string) => {
+            if (anchor === 'tv-timer-anchor' && !resolvable) return undefined;
+            return visible.find(t => t.file === file && t.anchor === anchor);
+        },
         getTasks: () => visible,
         getTaskByFileLine: () => parent,
         updateTask: async (id: string, u: Record<string, unknown>) => {
@@ -86,6 +89,7 @@ function makeTimer(overrides: Partial<TimerInstance> = {}): TimerInstance {
         taskName: 'parent',
         taskOriginalText: '- [ ] parent',
         taskFile: 'notes/a.md',
+        timerTargetId: 'tv-timer-anchor',
         startTimeMs: 0,
         pausedElapsedTime: 600,
         phase: 'work',

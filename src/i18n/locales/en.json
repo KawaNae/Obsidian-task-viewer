@@ -664,6 +664,7 @@
     "flowDidNotFire": "Flow did not fire: {{reason}} ({{file}})",
     "flowDeleteDidNotFire": "The flow did not fire, so the task was not deleted: {{reason}} ({{file}})",
     "timerTargetNotFound": "Timer target task was not found. It may have been deleted, moved, or renamed.",
+    "timerTargetIdShared": "Another line carries this line's ^{{id}} too. The timer could not find its task again, so it did not start.",
     "timerTargetReadOnly": "This task's format is read-only. The timer cannot write records to it.",
     "writeTargetGone": "The task could not be found, so nothing was written: {{subject}}",
     "writeTargetChanged": "The note has changed since it was last read, so nothing was written. Please try again: {{subject}}",
