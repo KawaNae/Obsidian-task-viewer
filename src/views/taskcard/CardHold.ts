@@ -69,3 +69,20 @@ export function holdCard(
 export function heldBy(card: HTMLElement): CardHold | undefined {
     return holds.get(card);
 }
+
+/**
+ * Something the user did changed what the card `el` is in shows, ahead of
+ * any draw: a box ticked, a list opened. The card's signature
+ * (`computeContentSignature`) no longer says what it shows, so it is
+ * dropped, and the next draw draws the card anew — also when the card is
+ * kept for another row that shows what the signature said (a twin's), which
+ * would otherwise be shown with the change. Every handler that changes a
+ * card's DOM calls this.
+ */
+export function touchCard(el: Element): void {
+    for (let at: HTMLElement | null = el as HTMLElement; at; at = at.parentElement) {
+        if (!holds.has(at)) continue;
+        delete at.dataset.contentSig;
+        return;
+    }
+}
