@@ -37,14 +37,16 @@ export interface RowBasis {
  * the row's line has to read as the index's copy of it, its indentation
  * aside, rather than verbatim.
  *
- * The timer's three inserts only (`InlineTaskWriter.insertLineAfterTask`,
- * `insertSiblingAfterTask`, `insertLineAsFirstChild`) — the last of which is
- * also how a child is added from a card's menu or the API. A timer that is
+ * A timer's record only, as the index asks for it
+ * (`TaskIndex.recordChildTask`, `insertSiblingAfterTask`): a child added
+ * from a card's menu, the API or the CLI goes through the same writer inserts
+ * planned from the copy (`TaskRefs.InsertTarget`), and so is checked against
+ * the reading its name was read in. A timer that is
  * stopped writes its record and closes whatever the write answers
  * (`TimerLifecycle.finishTimer`), so a write refused where a row was only
  * moved under another would lose the measurement, not just wait for the
- * scan. Taking the answer is F9's. None of the three rewrites the row it
- * names: each puts a new line beside it.
+ * scan. Taking the answer is F9's. The record rewrites no row: it puts a new
+ * line beside the one it names.
  */
 export interface OnRecord {
     kind: typeof ON_RECORD;

@@ -99,6 +99,16 @@ export class TaskWriteService {
     }
 
     /**
+     * A timer's record at the head of the row's children, on the weaker check
+     * the timer keeps until F9 (`TaskIndex.recordChildTask`).
+     *
+     * @returns whether the record was written.
+     */
+    async recordChildTask(parentTaskId: string, childLine: string): Promise<boolean> {
+        return this.taskIndex.recordChildTask(this.resolveTaskId(parentTaskId), childLine);
+    }
+
+    /**
      * Append a child at the *end* of the parent's subtree. Session records are
      * a log, so they must accumulate in chronological order — insertChildTask
      * inserts at the head and would read backwards.

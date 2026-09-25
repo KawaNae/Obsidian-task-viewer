@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { plannedOn } from '../../../src/services/persistence/TaskRefs';
+import { plannedOn, recordedOn } from '../../../src/services/persistence/TaskRefs';
 import type { Task } from '../../../src/types';
 import { writeBench, FILE, type WriteBench } from '../helpers/writeBench';
 
@@ -107,7 +107,7 @@ describe('insertLineAfterTask lands past the subtree', () => {
             '- [ ] sibling',
         ].join('\n'));
 
-        await h.writer.insertLineAfterTask(h.taskAt(0), '- [x] record');
+        await h.writer.insertLineAfterTask(plannedOn(h.taskAt(0)), '- [x] record');
 
         expect(h.lines()[3]).toBe('\t- [x] record');
         expect(h.lines()[4]).toBe('- [ ] sibling');
@@ -121,7 +121,7 @@ describe('insertLineAfterTask lands past the subtree', () => {
             '- [ ] sibling',
         ].join('\n'));
 
-        await h.writer.insertLineAfterTask(h.taskAt(0), '- [x] record');
+        await h.writer.insertLineAfterTask(plannedOn(h.taskAt(0)), '- [x] record');
 
         expect(h.lines()[2]).toBe('\t- [x] record');
     });
@@ -135,7 +135,7 @@ describe('insertLineAfterTask lands past the subtree', () => {
             '- [ ] sibling',
         ].join('\n'));
 
-        await h.writer.insertLineAfterTask(h.taskAt(0), '- [x] record');
+        await h.writer.insertLineAfterTask(plannedOn(h.taskAt(0)), '- [x] record');
 
         expect(h.lines()[1]).toBe('\t- [x] record');
         expect(h.lines()[2]).toBe('\t```md');
@@ -154,7 +154,7 @@ describe('insertSiblingAfterTask walks whole subtrees', () => {
             '- [ ] next',
         ].join('\n'));
 
-        await h.writer.insertSiblingAfterTask(h.taskAt(0), '- [ ] ⏱️ rec @2026-08-15T11:00');
+        await h.writer.insertSiblingAfterTask(recordedOn(h.taskAt(0)), '- [ ] ⏱️ rec @2026-08-15T11:00');
 
         expect(h.lines()[2]).toBe('- [ ] ⏱️ rec @2026-08-15T11:00');
         expect(h.lines()[3]).toBe('- [ ] next');
@@ -171,7 +171,7 @@ describe('insertSiblingAfterTask walks whole subtrees', () => {
         ].join('\n'));
 
         await h.writer.insertSiblingAfterTask(
-            h.taskAt(0), '- [ ] ⏱️ rec @2026-08-15T12:00', { afterCompletedRun: true }
+            recordedOn(h.taskAt(0)), '- [ ] ⏱️ rec @2026-08-15T12:00', { afterCompletedRun: true }
         );
 
         expect(h.lines()[4]).toBe('- [ ] ⏱️ rec @2026-08-15T12:00');
@@ -183,7 +183,7 @@ describe('insertSiblingAfterTask walks whole subtrees', () => {
     it('writes the new record as the sibling below it is spelled (P1\'s B1)', async () => {
         const h = await writeBench(['1. [ ] T @2026-08-15', '  - [ ] U'].join('\n'));
 
-        const { written } = await h.writer.insertSiblingAfterTask(h.taskAt(0), '- [x] ⏱️ rec @2026-08-15T11:00>11:30');
+        const { written } = await h.writer.insertSiblingAfterTask(recordedOn(h.taskAt(0)), '- [x] ⏱️ rec @2026-08-15T11:00>11:30');
 
         expect(written).toBe(true);
         expect(h.lines()).toEqual(['1. [ ] T @2026-08-15', '  - [x] ⏱️ rec @2026-08-15T11:00>11:30', '  - [ ] U']);

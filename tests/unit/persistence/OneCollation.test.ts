@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { writeBench, FILE } from '../helpers/writeBench';
-import { plannedOn } from '../../../src/services/persistence/TaskRefs';
+import { plannedOn, recordedOn } from '../../../src/services/persistence/TaskRefs';
 import type { Task } from '../../../src/types';
 
 /**
@@ -62,7 +62,7 @@ describe('after the editor\'s menu rewrote a row, before any scan', () => {
         // text: the copy is what it compares with (`RowBasis.OnRecord`).
         const { bench, task } = await afterMenu();
 
-        expect((await bench.writer.insertLineAsFirstChild(task, '- [x] ⏱️ 記録')).written).toBe(false);
+        expect((await bench.writer.insertLineAsFirstChild(recordedOn(task), '- [x] ⏱️ 記録')).written).toBe(false);
         expect(bench.lines()).toEqual([TICKED, '']);
         expect(bench.refused.map(r => r.reason.kind)).toEqual(['changed']);
     });
@@ -74,7 +74,7 @@ describe('after the editor\'s menu rewrote a row, before any scan', () => {
         const task = bench.taskAt(1);
         bench.edit(['- [ ] P', `\t${ROW}`, '']);
 
-        expect((await bench.writer.insertLineAsFirstChild(task, '- [x] ⏱️ 記録')).written).toBe(true);
+        expect((await bench.writer.insertLineAsFirstChild(recordedOn(task), '- [x] ⏱️ 記録')).written).toBe(true);
         expect(bench.lines()).toEqual(['- [ ] P', `\t${ROW}`, '\t\t- [x] ⏱️ 記録', '']);
     });
 
@@ -86,7 +86,7 @@ describe('after the editor\'s menu rewrote a row, before any scan', () => {
         const milk = bench.taskAt(1);
         bench.edit(['- [ ] alpha', '- [ ] omega', '- [ ] call mom']);
 
-        expect((await bench.writer.insertLineAsFirstChild(milk, '- [x] ⏱️ 記録')).written).toBe(false);
+        expect((await bench.writer.insertLineAsFirstChild(recordedOn(milk), '- [x] ⏱️ 記録')).written).toBe(false);
         expect(bench.lines()).toEqual(['- [ ] alpha', '- [ ] omega', '- [ ] call mom']);
         expect(bench.refused.map(r => r.reason.kind)).toEqual(['changed']);
     });

@@ -71,7 +71,7 @@ function makeHarness(options: { tail?: Task | undefined; siblingFails?: boolean 
         settings: { pomodoroWorkMinutes: 25, pomodoroBreakMinutes: 5 },
         getTaskIndex: () => taskIndex,
         getTaskWriteService: () => ({
-            insertChildTask: async (_parentId: string, line: string) => {
+            recordChildTask: async (_parentId: string, line: string) => {
                 childInserts.push(line);
                 appearWritten(NEW_BLOCK_ID);
             },

@@ -19,7 +19,7 @@ import { toDisplayTask } from '../display/DisplayTaskConverter';
 import { planInPlaceCopies } from '../persistence/DuplicateShift';
 import type { GenBlock } from '../parsing/gen/GenBlockCollector';
 import { FileOperations } from '../persistence/utils/FileOperations';
-import { plannedOn, subjectOf } from '../persistence/TaskRefs';
+import { plannedOn, recordedOn, subjectOf } from '../persistence/TaskRefs';
 import { logError, logInfo, logWarn } from '../../log/log';
 import type { EditorLine, EditorSubtree, Landing, Refusal, WriteOutcome } from '../../utils/FileLines';
 import type { TaskOp } from '../persistence/TaskOps';
@@ -738,7 +738,14 @@ export class TaskIndex {
         });
     }
 
-    /** @returns whether the child line was written. */
+    /**
+     * Add a child at the head of the row's children: from a card's menu, the
+     * API or the CLI. Planned from the index's copy of the row
+     * (`plannedOn`), so written only where the row the name was read in
+     * stands, as every write that names a row is.
+     *
+     * @returns whether the child line was written.
+     */
     async insertChildTask(parentTaskId: string, childLine: string): Promise<boolean> {
         if (this.refuseAfterDispose('insertChildTask')) return false;
         const task = this.copyForWrite(parentTaskId, undefined);
@@ -754,7 +761,7 @@ export class TaskIndex {
             // インデントは書き込み層が既存子行から決める（親行だけからは
             // トップレベルのとき 4 スペース固定になり、タブ書きのファイルに
             // スペースが混ざる）。
-            const { written } = await this.repository.insertLineAsFirstChild(task, childLine);
+            const { written } = await this.repository.insertLineAsFirstChild(plannedOn(task), childLine);
             if (!written) {
                 logWarn(`[TaskIndex] child insert was not written: parentId=${parentTaskId}`);
             }
@@ -764,9 +771,31 @@ export class TaskIndex {
     }
 
     /**
+     * A timer's record at the head of the row's children
+     * (`TimerRecorder.insertChildRecord`), on the weaker check
+     * (`recordedOn`) the timer's inserts keep until F9: a record refused
+     * where the row was only indented would lose the measurement. Anything
+     * other than a timer's record adds a child with {@link insertChildTask}.
+     *
+     * @returns whether the record was written.
+     */
+    async recordChildTask(parentTaskId: string, childLine: string): Promise<boolean> {
+        if (this.refuseAfterDispose('recordChildTask')) return false;
+        const task = this.copyForWrite(parentTaskId, undefined);
+        if (!task) return false;
+        if (task.isReadOnly) return false;
+        return this.withNotify(task.file, async () => {
+            logInfo(`[recordChildTask] parentId=${parentTaskId}`);
+            const { written } = await this.repository.insertLineAsFirstChild(recordedOn(task), childLine);
+            return written;
+        });
+    }
+
+    /**
      * Append a child at the end of the parent's subtree, in contrast to
      * insertChildTask's head insertion. Session records accumulate over time,
-     * so head insertion would print the log backwards.
+     * so head insertion would print the log backwards. Planned from the
+     * index's copy of the row, as {@link insertChildTask} is.
      */
     /** @returns whether the child line was written. */
     async appendChildTask(parentTaskId: string, childLine: string): Promise<boolean> {
@@ -778,7 +807,7 @@ export class TaskIndex {
             logInfo(`[appendChildTask] parentId=${parentTaskId}`);
 
 
-            const { written } = await this.repository.insertLineAfterTask(task, childLine);
+            const { written } = await this.repository.insertLineAfterTask(plannedOn(task), childLine);
 
             return written;
         });
@@ -788,6 +817,9 @@ export class TaskIndex {
      * Insert a line as the task's next sibling, just past its subtree, spelled
      * as the item next to it. Session records after the first one live beside the record
      * before them, not under it, so the log stays flat.
+     *
+     * A timer's record only (`TimerRecorder`), on the weaker check it keeps
+     * until F9, as {@link recordChildTask} is.
      */
     async insertSiblingAfterTask(
         taskId: string,
@@ -801,7 +833,7 @@ export class TaskIndex {
         return this.withNotify(task.file, async () => {
             logInfo(`[insertSiblingAfterTask] taskId=${taskId}`);
 
-            const { written } = await this.repository.insertSiblingAfterTask(task, siblingLine, opts);
+            const { written } = await this.repository.insertSiblingAfterTask(recordedOn(task), siblingLine, opts);
 
             return written;
         });

@@ -60,7 +60,7 @@ describe('a write whose row the index no longer holds is told once, as gone', ()
         s.dispose();
     });
 
-    for (const op of ['insertChildTask', 'appendChildTask', 'insertSiblingAfterTask'] as const) {
+    for (const op of ['insertChildTask', 'recordChildTask', 'appendChildTask', 'insertSiblingAfterTask'] as const) {
         it(`${op} under a row that is gone: refused with one notice, nothing written`, async () => {
             const { s, contents, id } = await session();
             await s.index.deleteTask(id);
