@@ -252,7 +252,7 @@ describe('the editor menu\'s rewrite of a line', () => {
     it('fires once when it completes the line, in the same write', async () => {
         const note = await open(['# note', WEEKLY, '']);
 
-        expect(await note.session.index.updateLine(FILE, { line: 1, text: WEEKLY }, WEEKLY.replace('[ ]', '[x]'))).toBe(true);
+        expect(await note.session.index.writeLine(FILE, { line: 1, text: WEEKLY }, [{ kind: 'update', text: WEEKLY.replace('[ ]', '[x]') }])).toBe(true);
 
         expect(note.writes()).toBe(1);
         expect(note.fired).toEqual(['週報']);
@@ -263,7 +263,7 @@ describe('the editor menu\'s rewrite of a line', () => {
         const checked = WEEKLY.replace('[ ]', '[x]');
         const note = await open(['# note', checked, '']);
 
-        expect(await note.session.index.updateLine(FILE, { line: 1, text: checked }, checked.replace('[x]', '[-]'))).toBe(true);
+        expect(await note.session.index.writeLine(FILE, { line: 1, text: checked }, [{ kind: 'update', text: checked.replace('[x]', '[-]') }])).toBe(true);
 
         expect(note.fired).toEqual([]);
     });

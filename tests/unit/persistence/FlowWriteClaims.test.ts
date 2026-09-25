@@ -307,12 +307,12 @@ describe('what an update reports', () => {
 });
 
 describe('what the editor menu\'s line edit reports', () => {
-    // `updateLine` takes a path and a line number rather than a task: it is
+    // `applyToLine` takes a path and a line number rather than a task: it is
     // the editor's own right-click menu (TaskMenuExtension.ts:122), where a
     // status change and the conversion of a bare checkbox both come through.
     it('names the line it rewrote', async () => {
         const b = await writeBench([TASK, ''].join('\n'));
-        await b.writer.updateLine(FILE, { line: 0, text: TASK }, DONE);
+        await b.writer.applyToLine(FILE, { line: 0, text: TASK }, [{ kind: 'update', text: DONE }]);
 
         expect(only(b.filed).edits).toEqual([{ kind: 'replaced', at: 0 }]);
         expect(b.lines()).toEqual([DONE, '']);
@@ -322,7 +322,7 @@ describe('what the editor menu\'s line edit reports', () => {
         // Here the line number is the editor's own, so there is no ambiguity
         // to resolve — and the claim carries that certainty to the scan.
         const b = await writeBench([TASK, TASK, ''].join('\n'));
-        await b.writer.updateLine(FILE, { line: 1, text: TASK }, DONE);
+        await b.writer.applyToLine(FILE, { line: 1, text: TASK }, [{ kind: 'update', text: DONE }]);
 
         expect(only(b.filed).edits).toEqual([{ kind: 'replaced', at: 1 }]);
         expect(b.lines()).toEqual([TASK, DONE, '']);
@@ -330,7 +330,7 @@ describe('what the editor menu\'s line edit reports', () => {
 
     it('says nothing when the line is past the end of the file', async () => {
         const b = await writeBench([TASK, ''].join('\n'));
-        await b.writer.updateLine(FILE, { line: 9, text: TASK }, DONE);
+        await b.writer.applyToLine(FILE, { line: 9, text: TASK }, [{ kind: 'update', text: DONE }]);
 
         expect(b.filed).toEqual([]);
         expect(b.lines()).toEqual([TASK, '']);
@@ -339,7 +339,7 @@ describe('what the editor menu\'s line edit reports', () => {
 
     it('says nothing when the line no longer reads what the editor showed', async () => {
         const b = await writeBench([TASK, ''].join('\n'));
-        await b.writer.updateLine(FILE, { line: 0, text: '- [ ] 別のタスク' }, DONE);
+        await b.writer.applyToLine(FILE, { line: 0, text: '- [ ] 別のタスク' }, [{ kind: 'update', text: DONE }]);
 
         expect(b.filed).toEqual([]);
         expect(b.lines()).toEqual([TASK, '']);

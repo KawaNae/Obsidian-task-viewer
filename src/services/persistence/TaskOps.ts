@@ -19,6 +19,9 @@ import type { PropertyOp } from './PropertyUpdatePlanner';
  *   lines. The row and its children are carried, not copied: they are the
  *   rows they were (see `LineEdits.carry`).
  * - `remove`: the row and its children are taken out.
+ * - `copy`: `text` goes in as the row's next sibling, past its subtree,
+ *   spelled as the row is (`Placement.copyOf`): the editor menu's duplicate
+ *   of a line.
  * - `update`: the row reads `text` (indentation kept from the file), and
  *   its own property lines change by `childOps`. A card's, the API's and a
  *   timer's rewrite of a row, and the editor menu's rewrite of a line.
@@ -33,5 +36,6 @@ export type TaskOp =
     | { kind: 'strip-flow'; text: string }
     | { kind: 'move-to-end'; text: string }
     | { kind: 'remove' }
+    | { kind: 'copy'; text: string }
     | { kind: 'update'; text: string; childOps?: readonly PropertyOp[] }
     | { kind: 'fire'; plan: (lines: readonly string[], line: number) => readonly TaskOp[] };

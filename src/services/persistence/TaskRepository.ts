@@ -5,7 +5,7 @@ import { InlineTaskWriter } from './writers/InlineTaskWriter';
 import { FrontmatterWriter } from './writers/FrontmatterWriter';
 import { TaskCloner, type InPlaceCopyLines } from './TaskCloner';
 import type { PropertyOp } from './PropertyUpdatePlanner';
-import type { EditorLine, EditorSubtree, LineDraft, NamedRow, WriteAt, WriteChannel, WriteOutcome, WriteSession } from '../../utils/FileLines';
+import type { EditorLine, LineDraft, NamedRow, WriteAt, WriteChannel, WriteOutcome, WriteSession } from '../../utils/FileLines';
 import type { PlacedLine } from './utils/Placement';
 import type { InsertTarget, PlannedTarget } from './TaskRefs';
 import type { TaskOp } from './TaskOps';
@@ -58,17 +58,13 @@ export class TaskRepository {
         return this.inlineWriter.updateTaskInFile(target, updatedTask, childOps, fire);
     }
 
-    async updateLine(filePath: string, at: EditorLine, newContent: string, fire?: TaskOp): Promise<WriteOutcome> {
-        return this.inlineWriter.updateLine(filePath, at, newContent, fire);
-    }
-
     /** The one loop that applies ops to a row, inside a write (see InlineTaskWriter.applyOps). */
     applyOps(draft: LineDraft, session: WriteSession, target: NamedRow | EditorLine, ops: readonly TaskOp[]): boolean {
         return this.inlineWriter.applyOps(draft, session, target, ops);
     }
 
-    /** Ops applied to the row at a coordinate, as `at` holds it (see InlineTaskWriter.applyToLine). */
-    async applyToLine(filePath: string, at: EditorSubtree, ops: readonly TaskOp[], opts: { tellRefusal?: boolean } = {}): Promise<WriteOutcome> {
+    /** Ops applied to the row at a line the editor pointed at, as `at` holds it (see InlineTaskWriter.applyToLine). */
+    async applyToLine(filePath: string, at: EditorLine, ops: readonly TaskOp[], opts: { tellRefusal?: boolean } = {}): Promise<WriteOutcome> {
         return this.inlineWriter.applyToLine(filePath, at, ops, opts);
     }
 
@@ -80,14 +76,6 @@ export class TaskRepository {
     /** Append a move's archive to the destination: whether it was written (see InlineTaskWriter.appendArchive). */
     async appendArchive(destPath: string, block: readonly PlacedLine[]): Promise<boolean> {
         return this.inlineWriter.appendArchive(destPath, block);
-    }
-
-    async insertLineAfterLine(filePath: string, at: EditorLine, newContent: string): Promise<WriteOutcome> {
-        return this.inlineWriter.insertLineAfterLine(filePath, at, newContent);
-    }
-
-    async deleteLine(filePath: string, at: EditorSubtree): Promise<WriteOutcome> {
-        return this.inlineWriter.deleteLine(filePath, at);
     }
 
     /** @returns whether the task's lines were removed (see InlineTaskWriter). */
