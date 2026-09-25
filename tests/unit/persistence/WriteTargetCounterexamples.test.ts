@@ -183,7 +183,7 @@ describe('own writes and outside edits interleaved', () => {
         expect(bench.refused.map(r => r.reason.kind)).toEqual(['changed']);
     });
 
-    it('a scan that read before the write and committed after it: the next write from its reading is refused, not misplaced', async () => {
+    it('a scan that read before the write and committed after it: the next write still finds the second of two identical rows', async () => {
         const bench = await writeBench(['- [ ] 読書', '- [ ] 読書', '- [ ] other']);
         const y = bench.taskAt(1);
         const other = bench.taskAt(2);
@@ -193,11 +193,9 @@ describe('own writes and outside edits interleaved', () => {
         scan.release();
         await scan.done;
 
-        // The late scan's reading is of the content before our write, which
-        // the file no longer reads as.
         const written = (await bench.writer.updateTaskInFile(plannedOn(bench.taskAt(1)), checked(y))).written;
-        expect(written).toBe(false);
-        expect(bench.lines()).toEqual(['- [ ] 読書', '- [ ] 読書', '- [x] other']);
+        expect(written).toBe(true);
+        expect(bench.lines()).toEqual(['- [ ] 読書', '- [x] 読書', '- [x] other']);
     });
 });
 
