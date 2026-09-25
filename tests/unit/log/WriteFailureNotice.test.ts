@@ -1,7 +1,8 @@
 import { describe, it, expect, afterEach } from 'vitest';
 import { TFile } from 'obsidian';
 import { initLog, logError } from '../../../src/log/log';
-import { processLines, type Refusal, type WriteChannel } from '../../../src/utils/FileLines';
+import { processLines, type Refusal } from '../../../src/utils/FileLines';
+import { channelDouble } from '../helpers/channelDouble';
 
 /**
  * A write that failed is told once, by its refusal (`TaskIndex.reportRefusal`).
@@ -23,11 +24,7 @@ function failingWrite() {
         },
     } as never;
     const refusals: Refusal[] = [];
-    const channel: WriteChannel = {
-        locate: () => ({ kind: 'gone' }),
-        onRecord: () => true,
-        refused: (refusal) => { refusals.push(refusal); },
-    };
+    const channel = channelDouble({ refused: (refusal) => { refusals.push(refusal); } });
     return { app, file, channel, refusals };
 }
 

@@ -401,24 +401,23 @@ export interface WriteChannel {
      * A write changed the file and landed: `landing.lines` is what the file
      * holds now. Told once per write, after `vault.process` is over, and only
      * when it landed (`processOrFail`) — so what it hands over is not a guess
-     * about the file but one reading of it. Absent where nobody reads it.
+     * about the file but one reading of it.
      */
-    landed?(landing: Landing): void;
+    landed(landing: Landing): void;
     refused(refusal: Refusal): void;
     /**
      * Where line `line` of reading `read` stands in content `now`, the one the
      * write was handed: the line itself when `read` is the index's reading and
      * the file still reads as it did, the line our own writes carried it to
      * when only they came between; null when anything else did, or one of
-     * ours took the line away. Absent where nobody keeps the readings (see
-     * `WriteLinks`), and then no row a reading named is written.
+     * ours took the line away (see `WriteLinks`).
      */
-    follow?(read: ReadingId, line: number, now: ContentKey): number | null;
+    follow(read: ReadingId, line: number, now: ContentKey): number | null;
     /**
      * The index's last reading of the file, asked as the write is handed the
      * lines: which reading the write starts from (`Landing.handed`).
      */
-    reading?(): ReadMark;
+    reading(): ReadMark;
 }
 
 /**
@@ -459,9 +458,9 @@ export interface Landing {
     /**
      * The index's last reading of the file when the write was handed `before`
      * (`WriteChannel.reading`): what says which reading the write left, and
-     * whether one committed since makes it late. Null without a channel.
+     * whether one given since makes it late.
      */
-    handed: ReadMark | null;
+    handed: ReadMark;
 }
 
 /**
@@ -936,7 +935,7 @@ export async function processLines(
     }
     // Set inside the callback too.
     const landed = landing as Landing | null;
-    if (landed !== null) channel?.landed?.(landed);
+    if (landed !== null) channel?.landed(landed);
     return { written: true, refused: null };
 
     /** One run of the callback: the content to write, or the content as it was. */
@@ -947,13 +946,13 @@ export async function processLines(
         landing = null;
         lastSubject = '';
         // Asked with the lines in hand: the reading the write starts from.
-        const handed = channel?.reading?.() ?? null;
+        const handed = channel?.reading();
 
         const { lines, eol, bom } = splitLines(content);
         const edited = editLines(file.path, lines, eol, edit, {
             about,
             asked: (said) => { lastSubject = said; },
-            follow: channel?.follow ? (read, line, now) => channel.follow!(read, line, now) : undefined,
+            follow: channel ? (read, line, now) => channel.follow(read, line, now) : undefined,
         });
         if (!edited.written) {
             refused = edited.refused;
@@ -972,7 +971,8 @@ export async function processLines(
             if (!accounted) {
                 logError(`[FileLines] ${file.path}: a write's report does not account for the lines it wrote; landed without it`);
             }
-            landing = { before, lines: next, edits: accounted ? reported : null, reading: edited.reading, handed };
+            // Handed to nobody without a channel.
+            if (handed) landing = { before, lines: next, edits: accounted ? reported : null, reading: edited.reading, handed };
         }
 
         return rebuilt;
@@ -1091,12 +1091,12 @@ export async function createFile(
     content: () => string | Promise<string>,
 ): Promise<WriteRefused | (WriteMade & { file: TFile })> {
     let asked: string | null = null;
-    let handed: ReadMark | null = null;
+    let handed: ReadMark | undefined;
     try {
         asked = await content();
-        handed = channel?.reading?.() ?? null;
+        handed = channel?.reading();
         const file = await app.vault.create(path, asked);
-        channel?.landed?.({ before: [], lines: splitLines(asked).lines, edits: null, reading: null, handed });
+        if (channel && handed) channel.landed({ before: [], lines: splitLines(asked).lines, edits: null, reading: null, handed });
         return { written: true, refused: null, file };
     } catch (error) {
         const made = app.vault.getAbstractFileByPath(path);
@@ -1104,7 +1104,7 @@ export async function createFile(
             return writeFailed(channel, path, subject, error);
         }
         logWarn(`[FileLines] ${path}: creating the note reported a failure, but it reads as written; kept: ${String(error)}`);
-        channel?.landed?.({ before: [], lines: splitLines(asked).lines, edits: null, reading: null, handed });
+        if (channel && handed) channel.landed({ before: [], lines: splitLines(asked).lines, edits: null, reading: null, handed });
         return { written: true, refused: null, file: made };
     }
 }
@@ -1138,12 +1138,12 @@ export async function replaceWhole(
     const threw = await processOrFail(app, file, channel, (current) => {
         landing = null;
         if (current === content) return current;
-        landing = { before: splitLines(current).lines, lines: splitLines(content).lines, edits: null, reading: null, handed: channel?.reading?.() ?? null };
+        if (channel) landing = { before: splitLines(current).lines, lines: splitLines(content).lines, edits: null, reading: null, handed: channel.reading() };
         return content;
     }, () => file.path);
     if (threw) return threw;
     // Set inside the callback, which the compiler does not follow.
     const landed = landing as Landing | null;
-    if (landed !== null) channel?.landed?.(landed);
+    if (landed !== null) channel?.landed(landed);
     return { written: true, refused: null };
 }
