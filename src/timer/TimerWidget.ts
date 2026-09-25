@@ -53,6 +53,8 @@ export class TimerWidget implements TimerContext {
     private contentBinding: TimerContentBinding;
     private persistence: TimerPersistence;
     private observer: TimerWidgetWindowObserver | null = null;
+    /** 索引の変化の購読を解く。{@link activate} で結び、{@link destroy} で解く。 */
+    private unwatchIndex: (() => void) | null = null;
 
     constructor(app: App, plugin: PluginContext & EventRegistrar) {
         this.app = app;
@@ -72,12 +74,16 @@ export class TimerWidget implements TimerContext {
      * Wire up window observation and restore persisted timers. Must be called
      * after `workspace.onLayoutReady` so the observer can resolve which window
      * currently holds the active leaf.
+     *
+     * widget の表示（名前欄、名前、色）は索引の読みから作るので、索引が変わる
+     * たびに描き直す。tick は時間の表示だけを進める。
      */
     activate(): void {
         logInfo('[Timer:activate]');
         if (this.observer) return;
         this.observer = new TimerWidgetWindowObserver(this.app, this.plugin, this);
         this.observer.start();
+        this.unwatchIndex = this.plugin.getTaskReadService().onChange(() => this.renderer.refreshFromIndex());
         this.persistence.restoreTimersFromStorage();
     }
 
@@ -284,6 +290,8 @@ export class TimerWidget implements TimerContext {
     }
 
     destroy(): void {
+        this.unwatchIndex?.();
+        this.unwatchIndex = null;
         for (const [timerId] of this.timers) {
             this.lifecycle.stopTimerTick(timerId);
         }

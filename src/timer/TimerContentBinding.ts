@@ -82,7 +82,7 @@ export class TimerContentBinding {
     }
 
     /**
-     * md 側の変化を入力欄へ返す。tick 経路から呼ぶ。
+     * md 側の変化を入力欄へ返す。索引が変わるたびに呼ぶ（TimerRenderer.refreshFromIndex）。
      *
      * 打鍵中（フォーカス中）と未書き込みの入力があるときは見送る — どちらも
      * ユーザーが今書いている値を、古い md の値で上書きすることになる。

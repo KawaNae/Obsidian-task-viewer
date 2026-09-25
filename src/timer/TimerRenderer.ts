@@ -345,9 +345,23 @@ export class TimerRenderer {
         }
     }
 
-    private updateTimerDisplay(itemEl: HTMLElement, timer: TimerInstance): void {
-        this.syncTimerTaskInfo(itemEl, timer);
+    /**
+     * 索引が変わったときに、各 widget の名前欄と名前と色を索引の読みから合わせ
+     * 直す（{@link syncTimerTaskInfo}）。走っていない widget には tick が来ない
+     * ので、読みの変化はここから届く — 復元の描画は最初のスキャンの前に走り、
+     * そのときの名前欄は空になる。
+     */
+    refreshFromIndex(): void {
+        if (this.ctx.timers.size === 0) return;
+        const container = this.ctx.ensureContainer();
+        for (const [timerId, timer] of this.ctx.timers) {
+            const itemEl = container.querySelector(`[data-timer-id="${timerId}"]`) as HTMLElement | null;
+            if (itemEl) this.syncTimerTaskInfo(itemEl, timer);
+        }
+    }
 
+    /** tick の描き直し: 時間の表示だけを進める。名前は索引の変化で合わせる（{@link refreshFromIndex}）。 */
+    private updateTimerDisplay(itemEl: HTMLElement, timer: TimerInstance): void {
         const headerTime = itemEl.querySelector('[data-time-display="header"]') as HTMLElement;
         if (headerTime) {
             headerTime.setText(this.getTimerDisplayText(timer));
@@ -359,8 +373,8 @@ export class TimerRenderer {
     private syncTimerTaskInfo(itemEl: HTMLElement, timer: TimerInstance): void {
         if (this.lifecycle.isIdleTimer(timer.id)) return;
 
-        // 入力欄は md 側の変化に追随する（打鍵中と未書き込みの入力があるときは
-        // binding が見送る）。デイリーノート起点でも尻尾があれば同じ扱い。
+        // 入力欄は索引の読み（尻尾の行）に追随する（打鍵中と未書き込みの入力が
+        // あるときは binding が見送る）。デイリーノート起点でも尻尾があれば同じ扱い。
         const inputEl = itemEl.querySelector('.timer-widget__title-input') as HTMLTextAreaElement | null;
         if (inputEl) this.contentBinding.syncFromFile(timer, inputEl);
 
