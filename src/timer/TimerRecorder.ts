@@ -64,9 +64,7 @@ export class TimerRecorder {
             this.formatDate(endTime),
             this.formatTime(endTime)
         );
-        const formattedLine = TaskParser.format(taskObj);
-
-        if (!(await this.insertChildRecord(timer, formattedLine))) return false;
+        if (!(await this.writeRecordLine(timer, taskObj))) return false;
         new Notice(t('notice.timerRecorded', { icon, duration: TimeFormatter.formatSeconds(elapsedSeconds) }));
         return true;
     }
@@ -87,9 +85,7 @@ export class TimerRecorder {
             this.formatDate(endTime),
             this.formatTime(endTime)
         );
-        const formattedLine = TaskParser.format(taskObj);
-
-        if (!(await this.insertChildRecord(timer, formattedLine))) return false;
+        if (!(await this.writeRecordLine(timer, taskObj))) return false;
         new Notice(t('notice.countdownRecorded', { icon, duration: TimeFormatter.formatSeconds(elapsedSeconds) }));
         return true;
     }
@@ -113,9 +109,7 @@ export class TimerRecorder {
             this.formatDate(endTime),
             this.formatTime(endTime)
         );
-        const formattedLine = TaskParser.format(taskObj);
-
-        if (!(await this.insertChildRecord(timer, formattedLine))) return false;
+        if (!(await this.writeRecordLine(timer, taskObj))) return false;
         const kind = isPomodoroSource ? 'Pomodoro' : 'Interval';
         new Notice(t('notice.kindRecorded', { icon, kind, duration: TimeFormatter.formatSeconds(elapsedSeconds) }));
         return true;
@@ -431,7 +425,8 @@ export class TimerRecorder {
     }
 
     /**
-     * セッション行を対象タスクの子として書く。書けなければ理由は1回だけ通知済み。
+     * 行を対象タスクの先頭の子として書く（錨で対象を引く）。書けなければ理由は
+     * 1回だけ通知済み。
      *
      * デイリーノート起点は器になるタスクが無いので、設定の見出しの下へ行を直接置く。
      * 書いた後にノートのパスを `taskFile` へ引き取るのが要点で、これで尻尾の解決
@@ -443,7 +438,12 @@ export class TimerRecorder {
             if (filePath) timer.taskFile = filePath;
             return filePath !== null;
         }
-        return this.insertChildRecord(timer, line);
+        const target = this.resolveTarget(timer);
+        if (!target) {
+            this.noticeResolveFailure(timer, 'writeChildLine (not written)');
+            return false;
+        }
+        return this.plugin.getTaskWriteService().insertRecord(target.id, line, 'firstChild');
     }
 
     /**
@@ -779,26 +779,16 @@ export class TimerRecorder {
     }
 
     /**
-     * Insert a child record line for the given timer.
-     * The target is resolved with timerTargetId first.
+     * 尻尾を引けないときの予備の記録（{@link addCountupRecord} 系）。タイマーが書く
+     * ほかの行と同じく、錨を付けて {@link writeOpening} を通し、書けたらそれが尻尾に
+     * なる — 次の ▶ はその隣に並ぶ。置き場所は対象の先頭の子（{@link writeChildLine}）。
+     *
+     * @returns whether the record was written. Not written has been told to the user, once.
      */
-    /** @returns whether the record was written. Not written has been told to the user, once. */
-    private async insertChildRecord(timer: TimerInstance, formattedLine: string): Promise<boolean> {
-        // デイリーノートには器になるタスクが無いので見出しの下へ直接置く。開始時の
-        // 1 本目は {@link createDailyLineAtStart} が通り、ここへ来るのは尻尾を
-        // 見失ったときのフォールバック（1 行だけ足して記録を落とさない）。
-        if (isDailyTimer(timer)) {
-            return (await this.addTimerRecordToDailyNote(dailyDateOf(timer), formattedLine)) !== null;
-        }
-
-        const resolvedTask = this.resolveTarget(timer);
-
-        if (!resolvedTask) {
-            this.noticeResolveFailure(timer, 'insertChildRecord (not recorded)');
-            return false;
-        }
-
-        return this.plugin.getTaskWriteService().insertRecord(resolvedTask.id, formattedLine, 'firstChild');
+    private async writeRecordLine(timer: TimerInstance, record: Task): Promise<boolean> {
+        const anchor = this.storageUtils.generateTimerTargetId();
+        const line = TaskParser.format({ ...record, blockId: anchor });
+        return this.writeOpening(timer, this.opening(timer, anchor, { puts: [anchor] }), () => this.writeChildLine(timer, line));
     }
 
     /**
