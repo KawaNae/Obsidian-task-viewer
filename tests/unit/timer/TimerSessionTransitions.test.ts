@@ -20,7 +20,6 @@ const intervals: number[] = [];
 
 interface RecorderCalls {
     recordSessionEnd: number;
-    createChildAtStart: number;
     startNextSession: number;
     discardRunningPlaceholder: number;
     order: string[];
@@ -35,7 +34,7 @@ interface WriteResults {
 }
 
 function build() {
-    const calls: RecorderCalls = { recordSessionEnd: 0, createChildAtStart: 0, startNextSession: 0, discardRunningPlaceholder: 0, order: [], stoppedAt: [] };
+    const calls: RecorderCalls = { recordSessionEnd: 0, startNextSession: 0, discardRunningPlaceholder: 0, order: [], stoppedAt: [] };
     const results: WriteResults = { flush: true, record: true };
     const recorder = {
         recordSessionEnd: async (timer: TimerInstance, record: PendingRecord) => {
@@ -44,7 +43,6 @@ function build() {
             calls.stoppedAt.push(record.endMs);
             return results.record;
         },
-        createChildAtStart: async () => { calls.createChildAtStart++; calls.order.push('placeholder'); return 'tv-inline:notes/a.md:ln:4'; },
         startNextSession: async () => { calls.startNextSession++; calls.order.push('nextSession'); return true; },
         discardRunningPlaceholder: async () => { calls.discardRunningPlaceholder++; calls.order.push('discard'); },
     };

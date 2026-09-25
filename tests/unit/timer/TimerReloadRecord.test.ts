@@ -50,11 +50,8 @@ async function startTimer(
         recordMode,
         autoStart: true,
     });
-    const sessionId = recordMode === 'child'
-        ? await first.recorder.createChildAtStart(timer)
-        : await first.recorder.startContinuationSession(timer);
+    expect(await first.recorder.writeStart(timer)).toBe(true);
     await first.settle(FILE);
-    expect(sessionId).toBeDefined();
     expect(timer.tailRecordBlockId).toBeDefined();
     return timer;
 }

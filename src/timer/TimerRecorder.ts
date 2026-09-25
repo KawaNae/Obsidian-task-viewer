@@ -116,15 +116,16 @@ export class TimerRecorder {
     }
 
     /**
-     * ストップ時の記録の **唯一の入口**。「今どの行に走っているか」で書き先を選ぶ。
+     * ストップ時の記録の **唯一の入口**。書き先は尻尾（最後に書いた行）で選ぶ。
      *
-     *   走行中の行がある     → その行を閉じる（開始時に書いた placeholder）
-     *   self の 1 本目       → 対象タスク行そのものをレコードに変形する
-     *   それ以外             → レコードを 1 行足す（フォールバック）
+     *   尻尾が対象の行そのもの → 対象の行をレコードに変形する（self の 1 本目）
+     *   尻尾が自分で書いた行   → その行を閉じる（開始か再開で書いた走行中の行）
+     *   尻尾を引けない         → レコードを 1 行足す（予備の記録。それが尻尾になる）
      *
-     * `recordMode` を先に見てはいけない。self モードでも 2 本目以降は自分で書いた
+     * `recordMode` や回数では選ばない。self モードでも 2 本目以降は自分で書いた
      * 兄弟レコードに走っており、対象タスク行はもう 1 本目のレコードとして確定して
-     * いる — そこへ書き戻すと最初のセッションが上書きされて消える。
+     * いる — そこへ書き戻すと最初のセッションが上書きされて消える。どの行に走って
+     * いるかを言うのは尻尾だけである。
      *
      * ここを通さずに `addCountdownRecord` / `addIntervalRecord` を直接呼ぶと、
      * 開始時に作った placeholder が更新されず 1 セッションが 2 行になる。停止経路は
@@ -140,20 +141,19 @@ export class TimerRecorder {
      */
     async recordSessionEnd(timer: TimerInstance, record: PendingRecord): Promise<boolean> {
         if (timer.taskFile) await this.plugin.getTaskIndex().waitForScan(timer.taskFile);
-        if (timer.recordMode === 'self' && timer.sessionCount === 0) {
-            return this.updateTaskDirectly(timer, record);
-        }
-        return this.addSessionRecord(timer, record);
+        const tail = this.resolveTailRecord(timer);
+        if (!tail) return this.addRecord(timer, record);
+        if (timer.tailRecordBlockId === timer.timerTargetId) return this.updateTaskDirectly(timer, tail, record);
+        return this.updateChildAtEnd(timer, tail, record);
     }
 
     /**
-     * Record for stopwatch-style modes; idle is intentionally ignored.
-     * If a session line was written (the tail), update it instead.
+     * 尻尾を引けないときの予備の記録。idle は記録しない（書くものも失うものも無い）。
+     * 言うのは記録の通知の1回だけ — 利用者に要るのは記録できたかで、どの行が受けたかではない。
      */
-    async addSessionRecord(timer: TimerInstance, record: PendingRecord): Promise<boolean> {
-        // 走行中の尻尾は今のセッションの行。
+    private async addRecord(timer: TimerInstance, record: PendingRecord): Promise<boolean> {
         if (timer.tailRecordBlockId) {
-            return this.updateChildAtEnd(timer, record);
+            logWarn(`[TimerRecorder] recordSessionEnd: running line not found, adding a record instead (${describeTimerAnchor(timer)})`);
         }
         switch (timer.timerType) {
             case 'countup':
@@ -182,13 +182,13 @@ export class TimerRecorder {
      * @returns 書けたか。書けなければタイマーは始めない。理由は1回だけ通知済み。
      */
     async writeStart(timer: TimerInstance): Promise<boolean> {
-        if (isDailyTimer(timer)) return this.createChildAtStart(timer);
+        if (isDailyTimer(timer)) return this.writeFirstLine(timer, undefined, line => this.writeChildLine(timer, line));
         const start = this.startTarget(timer);
         if (!start) return false;
         switch (timer.recordMode) {
             case 'self': return this.startOnTarget(timer, start);
-            case 'sibling': return this.startContinuationSession(timer, start);
-            default: return this.createChildAtStart(timer, start);
+            case 'sibling': return this.startLine(timer, start, 'afterCompletedRun');
+            default: return this.startLine(timer, start, 'firstChild');
         }
     }
 
@@ -290,11 +290,15 @@ export class TimerRecorder {
         return written;
     }
 
-    /** 書けた書き込みの錨の姿をタイマーに当てる。 */
+    /**
+     * 書けた書き込みの錨の姿をタイマーに当てる。新しい行に走り始めたので、end の
+     * 書き足しの門（`lazyEndFloorMs`）も引き直す。
+     */
     private apply(timer: TimerInstance, next: Opening): void {
         timer.tailRecordBlockId = next.tail;
         timer.timerTargetId = next.target ?? undefined;
         timer.ownedAnchors = next.owned;
+        timer.lazyEndFloorMs = undefined;
     }
 
     /**
@@ -360,7 +364,7 @@ export class TimerRecorder {
      *
      * 開始時刻だけを持つ未完了行で、`blockId` は書き込んだ後に「どの行が今の
      * セッションか」を引き直すための目印（＝ 尻尾アンカー）。セッション行の形は
-     * ここが唯一の持ち主で、子として挿す経路（{@link createChildAtStart}）と
+     * ここが唯一の持ち主で、1 本目を挿す経路（{@link startLine}）と
      * 兄弟に挿す経路（{@link startNextSession}）が同じ行を使う。
      *
      * 名前は**対象タスクの名前を継ぐ**。セッションは同じ作業の分割であって別物
@@ -384,27 +388,20 @@ export class TimerRecorder {
     }
 
     /**
-     * 書き込んだセッション行を blockId で引き直す。スキャンの完了を待ってから
-     * 探すので、呼び出し側は書き込み直後にそのまま呼んでよい。
-     */
-    async findSessionTaskId(filePath: string, blockId: string): Promise<string | undefined> {
-        const taskIndex = this.plugin.getTaskIndex();
-        await taskIndex.waitForScan(filePath);
-        return taskIndex.getTaskByAnchor(filePath, blockId)?.id;
-    }
-
-    /**
-     * child の開始: 1 本目のセッション行を対象の子の先頭に書く。対象の行に錨を
-     * 付けるなら同じ書き込みで。デイリーノート起点は見出しの下に書く。
+     * child と sibling の開始: 1 本目のセッション行を `place` に書く（child は対象の
+     * 子の先頭、sibling は完了済みの連なりの末尾）。対象の行に錨を付けるなら同じ
+     * 書き込みで。
+     *
+     * sibling は `[x]` のタスクから「続きを開始」したときの 1 本目で、起点の行その
+     * ものは触らない（既に完了した事実）。どこまでが「連続する完了済み」かは index
+     * のスナップショットではなくファイルの生の行を見ないと決まらないので、位置決めは
+     * 書き込み層の `afterCompletedRun` が担う。
      *
      * @returns 書けたか。書けなければ理由は1回だけ通知済み。
      */
-    async createChildAtStart(timer: TimerInstance, start?: StartTarget): Promise<boolean> {
-        if (isDailyTimer(timer)) return this.writeFirstLine(timer, undefined, line => this.writeChildLine(timer, line));
-        const target = start ?? this.startTarget(timer);
-        if (!target) return false;
-        return this.writeFirstLine(timer, target, line =>
-            this.plugin.getTaskWriteService().insertRecord(target.task.id, line, 'firstChild', target.rowId));
+    private startLine(timer: TimerInstance, start: StartTarget, place: 'firstChild' | 'afterCompletedRun'): Promise<boolean> {
+        return this.writeFirstLine(timer, start, line =>
+            this.plugin.getTaskWriteService().insertRecord(start.task.id, line, place, start.rowId));
     }
 
     /**
@@ -419,9 +416,7 @@ export class TimerRecorder {
     ): Promise<boolean> {
         const { line, blockId } = this.buildSessionPlaceholder(timer);
         const puts = start?.rowId ? [blockId, start.rowId] : [blockId];
-        if (!(await this.writeOpening(timer, this.opening(timer, blockId, { target: start?.target, puts }), () => write(line)))) return false;
-        await this.adoptWrittenSession(timer, timer.taskFile, blockId);
-        return true;
+        return this.writeOpening(timer, this.opening(timer, blockId, { target: start?.target, puts }), () => write(line));
     }
 
     /**
@@ -447,64 +442,10 @@ export class TimerRecorder {
     }
 
     /**
-     * `[x]` のタスクから「続きを開始」したときの 1 本目。
-     *
-     * 起点の行そのものは触らず（既に完了した事実。錨を付けるときだけ同じ書き込みで
-     * 付ける）、**その行から連続する完了済み兄弟の末尾**に新しいセッション行を置く。
-     * 位置決めは書き込み層の `afterCompletedRun` が担う — どこまでが「連続する
-     * 完了済み」かは index のスナップショットではなくファイルの生の行を見ないと
-     * 決まらないため。
+     * 走行中の行（尻尾、錨で引いた `child`）を、終わりの時刻と完了で閉じる。
      */
-    async startContinuationSession(timer: TimerInstance, start?: StartTarget): Promise<boolean> {
-        const target = start ?? this.startTarget(timer);
-        if (!target) return false;
-        return this.writeFirstLine(timer, target, line =>
-            this.plugin.getTaskWriteService().insertRecord(target.task.id, line, 'afterCompletedRun', target.rowId));
-    }
-
-    /**
-     * 書けたセッション行の task id を引き、走行中の行として引き受ける。
-     *
-     * 尻尾アンカーは書けた時点で {@link writeOpening} が移している。行は書けているので、
-     * スキャンがまだ引けなくても、引けた時点で `^id` がその行を指す。
-     */
-    private async adoptWrittenSession(
-        timer: TimerInstance,
-        filePath: string,
-        blockId: string,
-    ): Promise<string | undefined> {
-        const sessionTaskId = await this.findSessionTaskId(filePath, blockId);
-        if (!sessionTaskId) {
-            logWarn(`[TimerRecorder] session line ${blockId} written but not found by the scan yet (${describeTimerAnchor(timer)})`);
-            return undefined;
-        }
-
-        // 新しい行に走り始めたので、end 書き足しの門は引き直す。
-        timer.lazyEndFloorMs = undefined;
-        return sessionTaskId;
-    }
-
-    /**
-     * Update the child task created at timer start with end time and completion.
-     */
-    private async updateChildAtEnd(timer: TimerInstance, record: PendingRecord): Promise<boolean> {
+    private async updateChildAtEnd(timer: TimerInstance, child: Task, record: PendingRecord): Promise<boolean> {
         const taskIndex = this.plugin.getTaskIndex();
-        // 尻尾の錨で引く。task id は 1 回の読みの中だけの名前で、リロードを
-        // 挟むと何も指さない。
-        const child = this.resolveTailRecord(timer);
-
-        if (!child) {
-            // Fallback: child was deleted, create a new record. Said once, by
-            // the record's own notice: what the user needs to hear is whether
-            // the session was recorded, not which line took it.
-            logWarn(`[TimerRecorder] updateChildAtEnd: running line not found, adding a record instead (${describeTimerAnchor(timer)})`);
-            switch (timer.timerType) {
-                case 'countup': return this.addCountupRecord(timer, record);
-                case 'countdown': return this.addCountdownRecord(timer, record);
-                case 'interval': return this.addIntervalRecord(timer, record);
-                default: return true;
-            }
-        }
 
         const elapsedSeconds = record.seconds;
         const endTime = new Date(record.endMs);
@@ -640,15 +581,9 @@ export class TimerRecorder {
         const releases = !!tail && this.mayTakeOff(timer, timer.tailRecordBlockId!, [timer.timerTargetId]);
         const next = this.opening(timer, blockId, { puts: [blockId], takesOff: releases ? timer.tailRecordBlockId : undefined });
         // 書けなければ、理由は書き込みの層が1回だけ通知済みで、尻尾は動かない。
-        const written = await this.writeOpening(timer, next, () => tail
+        return this.writeOpening(timer, next, () => tail
             ? this.plugin.getTaskWriteService().insertRecord(tail.id, line, 'afterSubtree', releases ? null : undefined)
             : this.writeChildLine(timer, line));
-        if (!written) return false;
-        timer.lazyEndFloorMs = undefined;
-
-        const file = tail?.file ?? timer.taskFile;
-        await this.adoptWrittenSession(timer, file, blockId);
-        return true;
     }
 
     /**
@@ -727,53 +662,33 @@ export class TimerRecorder {
     }
 
     /**
-     * Update the task's start/end times directly (for 'self' recordMode).
-     * This converts the task to SE-Timed type.
+     * self の 1 本目: 尻尾である対象の行（錨で引いた `task`）を、記録の開始と終わりと
+     * 完了に書き換える。This converts the task to SE-Timed type.
      */
-    async updateTaskDirectly(timer: TimerInstance, record: PendingRecord): Promise<boolean> {
+    private async updateTaskDirectly(timer: TimerInstance, task: Task, record: PendingRecord): Promise<boolean> {
         const elapsedSeconds = record.seconds;
         const endTime = new Date(record.endMs);
         const startTime = new Date(endTime.getTime() - elapsedSeconds * 1000);
-
-        const startDateStr = this.formatDate(startTime);
-        const startTimeStr = this.formatTime(startTime);
-        const endDateStr = this.formatDate(endTime);
-        const endTimeStr = this.formatTime(endTime);
-
-        if (timer.taskId) {
-            const taskIndex = this.plugin.getTaskIndex();
-            const task = this.resolveTarget(timer);
-
-            if (!task) {
-                this.noticeResolveFailure(timer, 'updateTaskDirectly (self stop, not recorded)');
-                return false;
-            }
-
-            const icon = this.getTimerIcon(timer);
-
-            const updates: Partial<Task> = {
-                startDate: startDateStr,
-                startTime: startTimeStr,
-                endDate: endDateStr,
-                endTime: endTimeStr,
-                statusChar: 'x',
-                // blockId は**残す**。この行は self モードのレコードであると同時に
-                // 尻尾でもあり、中断→再開の次セッションはこの id でしか隣を
-                // 決められない（記録で content も日時も変わるため、originalText /
-                // 内容一致では解決できなくなる）。自動生成 id は再開時か widget を
-                // 閉じるときに外れる。ユーザーの手動 blockId はもとより保持。
-                blockId: task.blockId,
-                content: withTimerIcon(icon, task.content.trim()),
-            };
-
-            // 書けなかったときは、書き込みの層が理由を1回だけ通知済み。
-            if (!(await taskIndex.updateTask(task.id, updates))) return false;
-
-            // この行が最初のレコード＝尻尾。次の再開はここの隣に並ぶ。
-            timer.tailRecordBlockId = task.blockId;
-        }
-
         const icon = this.getTimerIcon(timer);
+
+        const updates: Partial<Task> = {
+            startDate: this.formatDate(startTime),
+            startTime: this.formatTime(startTime),
+            endDate: this.formatDate(endTime),
+            endTime: this.formatTime(endTime),
+            statusChar: 'x',
+            // blockId は**残す**。この行は self モードのレコードであると同時に
+            // 尻尾でもあり、中断→再開の次セッションはこの id でしか隣を
+            // 決められない（記録で content も日時も変わるため、originalText /
+            // 内容一致では解決できなくなる）。自分で付けた id は widget を
+            // 閉じるときに外れる。ユーザーの手動 blockId はもとより保持。
+            blockId: task.blockId,
+            content: withTimerIcon(icon, task.content.trim()),
+        };
+
+        // 書けなかったときは、書き込みの層が理由を1回だけ通知済み。
+        if (!(await this.plugin.getTaskIndex().updateTask(task.id, updates))) return false;
+
         new Notice(t('notice.taskUpdated', { icon, duration: TimeFormatter.formatSeconds(elapsedSeconds) }));
         return true;
     }

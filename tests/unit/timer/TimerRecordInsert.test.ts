@@ -57,7 +57,7 @@ describe('the next session line and the release of the last one are one write', 
     it('▶ writes the line beside the tail and takes the tail\'s ^id off in the same write', async () => {
         const contents = new Map([[FILE, ['- [ ] 対象 @2026-09-21', '- [ ] 下 @2026-09-21', ''].join('\n')]]);
         const { s, timer } = await childTimer(contents);
-        await s.recorder.createChildAtStart(timer);
+        await s.recorder.writeStart(timer);
         await s.settle(FILE);
         const first = timer.tailRecordBlockId!;
         expect(contents.get(FILE)).toContain(`^${first}`);
