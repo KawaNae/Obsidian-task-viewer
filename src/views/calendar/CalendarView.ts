@@ -869,11 +869,6 @@ export class CalendarView extends ItemView {
         if (entry.continuesAfter) el.addClass('task-card--split-continues-after');
 
         el.dataset.id = entry.segmentId;
-        if (entry.continuesBefore || entry.continuesAfter) {
-            el.dataset.splitOriginalId = (entry.task as DisplayTask).originalTaskId || entry.task.id;
-        } else {
-            delete el.dataset.splitOriginalId;
-        }
 
         this.applyCalendarGridPosition(el, entry, colOffset);
 
@@ -887,7 +882,6 @@ export class CalendarView extends ItemView {
      */
     private decorateCalendarCell(el: HTMLElement, entry: GridTaskEntry, colOffset: number): void {
         el.dataset.id = entry.task.id;
-        delete el.dataset.splitOriginalId;
 
         this.applyCalendarGridPosition(el, entry, colOffset);
 

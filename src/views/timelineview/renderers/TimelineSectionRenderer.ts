@@ -104,12 +104,6 @@ export class TimelineSectionRenderer {
         // Reset + apply split-segment variant classes (idempotent).
         TaskStyling.applySplitClasses(el, task);
 
-        if (task.isSplit && task.originalTaskId) {
-            el.dataset.splitOriginalId = task.originalTaskId;
-        } else {
-            delete el.dataset.splitOriginalId;
-        }
-
         el.dataset.id = task.id;
 
         TaskStyling.applyTaskColor(el, getEffectiveColor(task) ?? null);

@@ -513,7 +513,7 @@ describe('a drag from a handle', () => {
         const getTask = vi.fn(() => undefined);
         const router = new DragRouter({ readService: { getTask } } as never, {} as never, new FakeEl() as never);
         const card = new FakeEl('div', 'task-card');
-        card.dataset.id = NOW.parent;
+        holdCard(card as unknown as HTMLElement, makeTask({ id: NOW.parent }) as DisplayTask, 'k', []);
         const handle = card.createDiv('task-card__handle').createDiv('task-card__handle-btn');
 
         router.handle({ target: handle } as never);
@@ -526,7 +526,7 @@ describe('the handles', () => {
     it('leave a kept card that is no longer the selected task\'s', () => {
         const container = new FakeEl('div');
         const card = container.createDiv('task-card');
-        card.dataset.id = NOW.parent;
+        holdCard(card as unknown as HTMLElement, makeTask({ id: NOW.parent }) as DisplayTask, 'k', []);
         card.createDiv('task-card__handle');
         const handles = new HandleManager(container as unknown as HTMLElement, { getTask: () => undefined, getStartHour: () => 0 });
 
