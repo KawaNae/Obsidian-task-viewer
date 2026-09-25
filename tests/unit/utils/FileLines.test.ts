@@ -1,7 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import { TFile } from 'obsidian';
 import { BrokenWrite, LineBreakInLine, UnfollowableDraft, draftOver, joinLines, processLines, replayEdits, splitLines } from '../../../src/utils/FileLines';
-import type { Landing, LineEdit, NamedRow, Refusal, WriteChannel } from '../../../src/utils/FileLines';
+import type { Landing, LineEdit, NamedRow, Refusal } from '../../../src/utils/FileLines';
+import { channelDouble } from '../helpers/channelDouble';
 import { holdsLineBreak } from '../../../src/utils/LineBreak';
 import { Block } from '../../../src/services/persistence/utils/Placement';
 import type { LineDraft } from '../../../src/utils/FileLines';
@@ -162,12 +163,12 @@ interface Reported {
 function writeSink() {
     const reports: Reported[] = [];
     const refusals: Refusal[] = [];
-    const channel: WriteChannel = {
+    const channel = channelDouble({
         landed: (landing) => {
             reports.push({ before: [...landing.before], after: [...landing.lines], edits: landing.edits && [...landing.edits] });
         },
         refused: (refusal) => { refusals.push(refusal); },
-    };
+    });
     return {
         channel,
         standing: (): Reported[] => [...reports],
@@ -468,10 +469,9 @@ describe('processLines', () => {
             } as never;
             const events: string[] = [];
             let filed = 0;
-            const channel: WriteChannel = {
+            const channel = channelDouble({
                 landed: (landing) => { ++filed; events.push(`landed ${landing.lines[0]}`); },
-                refused: () => { },
-            };
+            });
             const write = (text: string) => processLines(app, file, channel, (draft) => {
                 draft.rewrite(0, text);
                 return true;
@@ -525,7 +525,7 @@ describe('processLines', () => {
     it('hands the channel what the last attempt left, once, and nothing when that attempt changed nothing', async () => {
         const h = harness('- [ ] a\n', { callbackRuns: 2 });
         const landings: Landing[] = [];
-        const channel: WriteChannel = { landed: (landing) => { landings.push(landing); }, refused: () => { } };
+        const channel = channelDouble({ landed: (landing) => { landings.push(landing); } });
         let run = 0;
 
         await processLines(h.app, h.file, channel, (draft) => {
@@ -555,7 +555,7 @@ describe('processLines', () => {
         for (const failWrite of ['lost', 'landed'] as const) {
             const h = harness('- [ ] a\n', { failWrite });
             const landings: Landing[] = [];
-            const channel: WriteChannel = { landed: (landing) => { landings.push(landing); }, refused: () => { } };
+            const channel = channelDouble({ landed: (landing) => { landings.push(landing); } });
 
             const outcome = await processLines(h.app, h.file, channel, (draft) => {
                 draft.rewrite(0, '- [x] a');

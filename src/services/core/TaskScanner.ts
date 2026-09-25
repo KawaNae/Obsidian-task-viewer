@@ -196,8 +196,8 @@ export class TaskScanner {
      * or something after it.
      */
     landed(path: string, landing: Landing, commit = true): boolean {
+        const { handed } = landing;
         const last = this.readingOf(path);
-        const handed = landing.handed ?? last;
         const from = contentKeyOf(landing.before);
         const to = contentKeyOf(landing.lines);
         const start = handed.key === from ? handed.n : null;
