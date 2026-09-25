@@ -145,17 +145,11 @@ export class AllDaySectionRenderer {
         if (entry.continuesBefore) el.addClass('task-card--split-continues-before');
         if (entry.continuesAfter) el.addClass('task-card--split-continues-after');
 
-        // split segment は base task の id とは別の segment id を持つため、
-        // selection 照合 (HandleManager) には base id (`originalTaskId`) を
-        // `dataset.splitOriginalId` として併せて公開する。これがないと
-        // segment cards に `.is-selected` も handles も attach されない。
+        // A split segment's id is not its task's: the selection holds the
+        // task's (`originalTaskId`), which the handles find on the card's
+        // hold (`CardHold.name`).
         const originalTaskId = getOriginalTaskId(task);
         el.dataset.id = task.id;
-        if (entry.continuesBefore || entry.continuesAfter) {
-            el.dataset.splitOriginalId = originalTaskId;
-        } else {
-            delete el.dataset.splitOriginalId;
-        }
         el.toggleClass('is-selected', originalTaskId === this.handleManager.getSelectedTaskId());
 
         TaskStyling.applyTaskColor(el, getEffectiveColor(dt) ?? null);

@@ -1,5 +1,6 @@
 import type { DragContext, DragStrategy } from './DragStrategy';
 import type { DragSession } from './DragSession';
+import { heldBy } from '../../views/taskcard/CardHold';
 import { TimelineMoveGesture } from './strategies/timeline/TimelineMoveGesture';
 import { TimelineResizeGesture } from './strategies/timeline/TimelineResizeGesture';
 import { GridMoveGesture } from './strategies/grid/GridMoveGesture';
@@ -40,11 +41,11 @@ export class DragRouter {
         const handle = target.closest('.task-card__handle-btn') as HTMLElement | null;
         const isFromHandle = handle !== null;
 
-        // The task is the one the card was last drawn from, read now: the
-        // view puts its name on the card on every draw, and a card (with the
-        // handles in it) is kept across readings that rename the task.
+        // The task is the one the card was last drawn from, read now from its
+        // hold: a card (with the handles in it) is kept across readings that
+        // rename the task (`CardHold`).
         const taskEl = target.closest('.task-card') as HTMLElement | null;
-        const taskId = taskEl ? (taskEl.dataset.splitOriginalId || taskEl.dataset.id || null) : null;
+        const taskId = taskEl ? (heldBy(taskEl)?.name ?? null) : null;
 
         if (!taskEl || !taskId) return;
 

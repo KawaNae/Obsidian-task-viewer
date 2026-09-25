@@ -4,6 +4,7 @@ import type { Task } from '../../../types';
 import { materializeRawDates, NO_TASK_LOOKUP, toDisplayTask } from '../../../services/display/DisplayTaskConverter';
 import { getTaskDateRange } from '../../../services/display/VisualDateRange';
 import type { DragPlan } from '../DragPlan';
+import { heldBy } from '../../../views/taskcard/CardHold';
 
 /**
  * ドラッグストラテジーの基底クラス。
@@ -219,10 +220,9 @@ export abstract class BaseDragStrategy implements DragStrategy {
      * they can be hidden together with the grabbed element.
      */
     protected collectSplitSiblings(context: DragContext, originalId: string): HTMLElement[] {
-        const selector = `.task-card[data-id="${originalId}"], .task-card[data-split-original-id="${originalId}"]`;
         const siblings: HTMLElement[] = [];
-        context.container.querySelectorAll(selector).forEach(segment => {
-            if (segment instanceof HTMLElement && !segment.closest('.tv-sidebar__pinned-lists')) {
+        context.container.querySelectorAll('.task-card').forEach(segment => {
+            if (segment instanceof HTMLElement && heldBy(segment)?.name === originalId && !segment.closest('.tv-sidebar__pinned-lists')) {
                 siblings.push(segment);
             }
         });
@@ -232,8 +232,8 @@ export abstract class BaseDragStrategy implements DragStrategy {
     /** AllDay の due-arrow 位置更新 (Calendar では .due-arrow が無いので no-op)。Grid 系 Gesture 専用。 */
     protected updateArrowPosition(taskEndGridLine: number): void {
         if (!this.isAllDay) return;
-        if (!this.dragEl?.dataset.id || !this.container) return;
-        const taskId = this.dragEl.dataset.id;
+        const taskId = this.dragEl ? heldBy(this.dragEl)?.task.id : undefined;
+        if (!taskId || !this.container) return;
         const arrow = this.container.querySelector(`.due-arrow[data-task-id="${taskId}"]`) as HTMLElement;
         if (arrow) {
             arrow.style.gridColumnStart = taskEndGridLine.toString();
