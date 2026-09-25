@@ -28,8 +28,6 @@ import {
 import type { TimerLifecycle } from './TimerLifecycle';
 import type { TimerStorageUtils } from './TimerStorageUtils';
 import { TaskIdGenerator } from '../services/display/TaskIdGenerator';
-import { Notice } from 'obsidian';
-import { t } from '../i18n';
 import { logError, logInfo } from '../log/log';
 
 /** Parsers a saved timer may name. Anything else is not a timer this version saved. */
@@ -198,15 +196,16 @@ export class TimerPersistence {
     }
 
     /**
-     * 復元したタイマーを、**最初の onChange を待ってから**ファイルと突き合わせる。
-     * 書く途中で落ちたタイマーの `opening` を錨で引いて答え（尻尾にするか消すか）、
-     * アンカー先タスクがまだ存在するかを検証する。
+     * 書く途中で落ちたタイマーの `opening` に、**最初の onChange を待ってから**
+     * ファイルで答える（錨で引いて尻尾にするか消すか）。
      *
      * 復元は layout-ready 直後に走るので、その時点では初回スキャンが終わって
-     * おらず index は空でありうる。そこで判定すると生きているタイマーを全部
-     * 壊す。`waitForScan` はキュー済みのスキャンしか待たないので当てにならず、
-     * 「最初の変更通知が来た ＝ スキャンがタスクを流し始めた」を合図にする。
-     * 通知が来なければ何も壊さない（保守的側に倒す）。
+     * おらず index は空でありうる。`waitForScan` はキュー済みのスキャンしか待た
+     * ないので当てにならず、「最初の変更通知が来た ＝ スキャンがタスクを流し
+     * 始めた」を合図にする。
+     *
+     * 対象を引けないだけでは閉じない。計測は widget に残り、記録しようとして
+     * 引けなければ記録待ちになって通知が1回出る。閉じるのは利用者だけ。
      */
     private scheduleRestoredCheck(): void {
         const readService = this.ctx.plugin.getTaskReadService();
@@ -216,7 +215,6 @@ export class TimerPersistence {
             done = true;
             unsubscribe();
             void this.adoptOpenings();
-            this.dropTimersWithMissingAnchor();
         });
     }
 
@@ -227,22 +225,6 @@ export class TimerPersistence {
             if (await this.ctx.recorder.adoptOpening(timer)) changed = true;
         }
         if (changed) this.ctx.persistTimersToStorage();
-    }
-
-    private dropTimersWithMissingAnchor(): void {
-        for (const [timerId, timer] of [...this.ctx.timers]) {
-            if (this.lifecycle.isIdleTimer(timerId)) continue;
-            // デイリーノート起点は対象タスクを持たない。引けないのが正常なので、
-            // ここで閉じると復元のたびに生きているタイマーを壊す。
-            if (isDailyTimer(timer)) continue;
-
-            const task = this.ctx.recorder.resolveTarget(timer);
-            if (task) continue;
-
-            logInfo(`[Timer:anchorMissing] timerId=${timerId} taskId=${timer.taskId}`);
-            new Notice(t('notice.timerTargetNotFound'));
-            this.lifecycle.closeTimer(timerId);
-        }
     }
 
     /**
