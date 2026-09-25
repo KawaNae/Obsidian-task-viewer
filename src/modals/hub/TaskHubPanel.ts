@@ -129,7 +129,7 @@ export class TaskHubPanel {
         TaskStyling.applyReadOnly(card, this.task);
 
         const closePanel = () => this.close();
-        this.deps.menuHandler.addTaskContextMenu(card, this.task, {
+        this.deps.menuHandler.addTaskContextMenu(card, {
             onDestructiveAction: closePanel,
             onOpenPropertiesFocus: (field) => this.form?.focusField(field),
         });

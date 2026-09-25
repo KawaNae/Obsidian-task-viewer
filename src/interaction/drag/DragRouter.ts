@@ -38,28 +38,13 @@ export class DragRouter {
         if (target.closest('.tv-sidebar__pinned-lists')) return;
 
         const handle = target.closest('.task-card__handle-btn') as HTMLElement | null;
-        let taskEl: HTMLElement | null = null;
-        let taskId: string | null = null;
-        let isFromHandle = false;
+        const isFromHandle = handle !== null;
 
-        if (handle) {
-            isFromHandle = true;
-            taskId = handle.dataset.taskId || null;
-            if (taskId) {
-                taskEl = handle.closest('.task-card') as HTMLElement;
-                if (!taskEl) {
-                    taskEl = this.container.querySelector(`.task-card[data-id="${taskId}"]`) as HTMLElement;
-                }
-                if (taskEl && taskEl.dataset.splitOriginalId) {
-                    taskId = taskEl.dataset.splitOriginalId;
-                }
-            }
-        } else {
-            taskEl = target.closest('.task-card') as HTMLElement;
-            if (taskEl) {
-                taskId = taskEl.dataset.splitOriginalId || taskEl.dataset.id || null;
-            }
-        }
+        // The task is the one the card was last drawn from, read now: the
+        // view puts its name on the card on every draw, and a card (with the
+        // handles in it) is kept across readings that rename the task.
+        const taskEl = target.closest('.task-card') as HTMLElement | null;
+        const taskId = taskEl ? (taskEl.dataset.splitOriginalId || taskEl.dataset.id || null) : null;
 
         if (!taskEl || !taskId) return;
 

@@ -1,14 +1,14 @@
 import { describe, it, expect, vi } from 'vitest';
-import { computeContentSignature, TaskCardRenderer } from '../../../src/views/taskcard/TaskCardRenderer';
+import { TaskCardRenderer } from '../../../src/views/taskcard/TaskCardRenderer';
 import { HandleManager } from '../../../src/views/sharedUI/handles/HandleManager';
 import { refreshTimerTask } from '../../../src/timer/TimerTaskSync';
 import { TaskIdGenerator } from '../../../src/services/display/TaskIdGenerator';
 import { makeTask } from '../helpers/makeTask';
-import type { DisplayTask, Task, TaskViewerSettings } from '../../../src/types';
+import type { Task } from '../../../src/types';
 
 /**
- * What holds a task's name across a render: a card, the selection, an
- * expanded card, a timer.
+ * What holds a task's name across a render: the selection, an expanded
+ * card, a timer. A card holds none (`CardHold.test.ts`).
  *
  * A name lasts one reading of its file. After a write of ours, `getTask`
  * follows a name from before it to the row's name now, and the copy it
@@ -23,23 +23,6 @@ const NOW = 'tv-inline:a.md:n:2:4:28:0000000000000002';
 function following(task: Task) {
     return { getTask: vi.fn((id: string) => (id === OLD || id === NOW ? task : undefined)) };
 }
-
-describe('a card kept across a reading', () => {
-    it('is drawn again when only its name changed, so its handlers do not hold the old one', () => {
-        const settings = {
-            startHour: 0, childCollapseThreshold: 5, enableCardFileLink: true,
-            statusDefinitions: [{ char: ' ', label: 'Todo', isComplete: false }],
-        } as unknown as TaskViewerSettings;
-        const task = (id: string) => ({
-            ...makeTask({ id, file: 'a.md', content: 'A' }),
-            effectiveStartDate: '2026-09-25', childEntries: [],
-        }) as unknown as DisplayTask;
-        const sig = (id: string) => computeContentSignature(
-            task(id), settings, { cardInstanceId: 'c' } as never, '', 'none', false, false, { getTask: () => undefined } as never);
-
-        expect(sig(OLD)).not.toBe(sig(NOW));
-    });
-});
 
 describe('the selection', () => {
     /** A view with no cards drawn: the selection is asked, nothing is decorated. */

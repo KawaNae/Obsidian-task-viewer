@@ -24,7 +24,7 @@ export class GridHandleStrategy implements HandleStrategy {
     /** 箱内 2 帯 (resize / move) が成立する最小カード高。= 2 × --handle-size */
     private static readonly HANDLES_OUT_THRESHOLD = 48;
 
-    render(taskEl: HTMLElement, taskId: string, _task: Task, _startHour: number): void {
+    render(taskEl: HTMLElement, _task: Task, _startHour: number): void {
         taskEl.classList.toggle(
             'task-card--handles-out',
             taskEl.offsetHeight < GridHandleStrategy.HANDLES_OUT_THRESHOLD,
@@ -38,14 +38,14 @@ export class GridHandleStrategy implements HandleStrategy {
 
         // 左端 segment: resize-left / move-bottom-left
         if (!continuesBefore) {
-            HandleRenderer.createResize(taskEl, taskId, 'left', '↔');
-            HandleRenderer.createMove(taskEl, taskId, 'bottom-left');
+            HandleRenderer.createResize(taskEl, 'left', '↔');
+            HandleRenderer.createMove(taskEl, 'bottom-left');
         }
 
         // 右端 segment: resize-right / move-bottom-right
         if (!continuesAfter) {
-            HandleRenderer.createResize(taskEl, taskId, 'right', '↔');
-            HandleRenderer.createMove(taskEl, taskId, 'bottom-right');
+            HandleRenderer.createResize(taskEl, 'right', '↔');
+            HandleRenderer.createMove(taskEl, 'bottom-right');
         }
     }
 }

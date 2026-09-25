@@ -109,7 +109,7 @@ export class AllDaySectionRenderer {
     ): void {
         const { task } = entry;
         const cardInstanceId = `${this.viewId}::allday::${entry.segmentId}`;
-        const reused = reconciler.acquire(cardInstanceId);
+        const reused = reconciler.acquire(cardInstanceId, task);
         const el = reused ?? container.createDiv('task-card task-card--allday');
         markHandleSurface(el, 'grid');
         if (reused) container.appendChild(reused);
@@ -123,7 +123,7 @@ export class AllDaySectionRenderer {
             topRight: { mode: 'none' },
             compact: true,
         });
-        if (!reused) this.menuHandler.addTaskContextMenu(el, task);
+        if (!reused) this.menuHandler.addTaskContextMenu(el);
     }
 
     /**

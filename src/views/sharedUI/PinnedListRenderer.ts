@@ -366,7 +366,7 @@ export class PinnedListRenderer {
             : { mode: 'none' as const };
         tasks.forEach(task => {
             const cardInstanceId = `${viewId}::pl-${listId}::${task.id}`;
-            const reused = reconciler?.acquire(cardInstanceId);
+            const reused = reconciler?.acquire(cardInstanceId, task);
             const card = reused ?? body.createDiv('task-card');
             if (reused) body.appendChild(reused);
 
@@ -375,7 +375,7 @@ export class PinnedListRenderer {
                 cardInstanceId,
                 topRight,
             });
-            if (!reused) this.menuHandler.addTaskContextMenu(card, task);
+            if (!reused) this.menuHandler.addTaskContextMenu(card);
         });
     }
 
