@@ -147,9 +147,9 @@ export function createTaskMenuExtension(
                 // read so.
                 const subtree = subtreeAt(outlineFor(view.state.doc), lineNumber);
                 // Written in this editor while it shows the note, as the
-                // user's own edit is; to the file once it does not.
+                // user's own edit is; to the file once it does not (`shows`).
                 const write = (target: EditorLine, ops: readonly TaskOp[]) =>
-                    writeEditorLine(view.dom.isConnected ? view : null, filePath, target, ops, lineHost);
+                    writeEditorLine(view, filePath, target, ops, lineHost);
                 const ops: CheckboxLineOps = {
                     updateLine: (content) => write(at, [{ kind: 'update', text: content }]),
                     insertLineAfter: (content) => write(at, [{ kind: 'copy', text: content }]),
