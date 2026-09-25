@@ -183,3 +183,41 @@ describe('the line a timer is about to write is saved as its opening, and become
         s.dispose();
     });
 });
+
+describe('a restored timer whose target cannot be found is kept, not closed', () => {
+    beforeEach(() => {
+        store.clear();
+        vi.useFakeTimers({ toFake: ['Date'] });
+        vi.setSystemTime(at(9, 0));
+    });
+    afterEach(() => vi.useRealTimers());
+
+    it('the target row is gone after a reload: the widget stays, and ■ still closes the running line', async () => {
+        const contents = notes();
+        const first = await started(contents);
+        expect(await first.s.recorder.writeStart(first.timer)).toBe(true);
+        await first.s.settle(FILE);
+        first.timer.startTimeMs = Date.now();
+        first.persistence.persistTimersToStorage();
+        first.s.dispose();
+        // 外で対象の行が消された（走行中の行は残り、字下げが外れる）。
+        contents.set(FILE, contents.get(FILE)!.split('\n').slice(1).map(l => l.trimStart()).join('\n'));
+
+        const s = vaultSession(contents);
+        await s.scanAll();
+        const p = pluginOver(s);
+        p.persistence.restoreTimersFromStorage();
+        const timer = [...p.ctx.timers.values()].find(t => t.taskId !== '__idle__')!;
+        p.changed();
+        await new Promise(r => setTimeout(r, 0));
+        await s.settle(FILE);
+        expect(p.ctx.timers.has(timer.id)).toBe(true);
+
+        vi.setSystemTime(at(9, 10));
+        await p.lifecycle.finishTimer(timer);
+        await s.settle(FILE);
+        expect(contents.get(FILE)).toMatch(/- \[x\] .*@2026-09-21T09:00>09:10/);
+        expect(p.ctx.timers.has(timer.id)).toBe(false);
+        s.dispose();
+    });
+});
