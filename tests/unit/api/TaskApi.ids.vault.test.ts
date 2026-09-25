@@ -119,7 +119,7 @@ describe('a name the API handed out', () => {
         await session.scanner.queueScan(makeFile(FILE));
 
         await expect(api.update({ id, status: 'x' })).rejects.toThrow(
-            `Task not found: ${id} (an ID without a ^id lasts only until its file changes; list the tasks again)`);
+            `Task not found: ${id} (an ID without a ^id lasts only until its file changes or the plugin reloads; list the tasks again)`);
         expect(contents.get(FILE)).toBe(['メモ', '- [ ] A', ''].join('\n'));
     });
 

@@ -9,8 +9,9 @@ import { TaskIdGenerator } from '../services/display/TaskIdGenerator';
  *   line of the file carries). It lasts across edits from outside and
  *   reloads, as long as the line keeps its `^id` alone.
  * - The row's name otherwise: a receipt for one reading of the file. It lasts
- *   until the file changes other than by a write of ours, and is not to be
- *   stored.
+ *   until the file changes other than by a write of ours, or the index is
+ *   loaded again — a file that comes back to the content it had is read
+ *   again, not the reading it was — and is not to be stored.
  *
  * `apiIdOf` gives every ID the API hands out, `id`, `parentId` and
  * `childIds` alike; `readApiId` reads every ID it takes. Nothing else in the
@@ -26,7 +27,7 @@ export type ApiTaskId =
     | { kind: 'name'; name: string };
 
 // The last `#^` of the ID: a path may hold `#`, an `^id` holds neither `#`
-// nor `^`. A name never ends so — it ends in its content's key.
+// nor `^`. A name never ends so — it ends in its reading and line.
 const ANCHOR_ID = /^(.+)#\^([A-Za-z0-9-]+)$/;
 
 /**

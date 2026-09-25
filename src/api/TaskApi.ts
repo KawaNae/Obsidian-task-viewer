@@ -90,9 +90,10 @@ Task IDs
     path#^id  for a line whose ^id no other line of the file carries.
               It lasts across edits from outside and reloads.
     a name    for any other line: a receipt for one reading of the file.
-              It lasts until the file changes outside the plugin. Do not
-              store it; list the tasks again. Give a task a ^id to keep
-              its ID.
+              It lasts until the file changes outside the plugin or the
+              plugin reloads, even when the file comes back to what it
+              was. Do not store it; list the tasks again. Give a task a
+              ^id to keep its ID.
   update returns the task as written: a name comes back as its new ID.
 
 Methods
@@ -390,7 +391,7 @@ export class TaskApi {
             return task;
         }
         const task = this.readService.getTask(read.name);
-        if (!task) throw new TaskApiError(`Task not found: ${id} (an ID without a ^id lasts only until its file changes; list the tasks again)`);
+        if (!task) throw new TaskApiError(`Task not found: ${id} (an ID without a ^id lasts only until its file changes or the plugin reloads; list the tasks again)`);
         return task;
     }
 
