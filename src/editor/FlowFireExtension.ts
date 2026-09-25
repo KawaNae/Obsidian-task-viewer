@@ -193,7 +193,8 @@ export function fireFilter(host: EditorFireHost): Extension {
             return [tr, isolated];
         }
         // What the rows' moves to another file owe once the transaction is
-        // made, from the row where every fire left it.
+        // made, from the row where every fire left it. Its line and content
+        // are the position's (`AwayRunner`), not `pending.source`'s.
         const effects: StateEffect<Omit<Away, 'doc'>>[] = [];
         for (const { row, pending } of aways) {
             const line = carried(row.line);
@@ -205,7 +206,7 @@ export function fireFilter(host: EditorFireHost): Extension {
                 id: nextAwayId++,
                 path,
                 pos: startOf(lines, line),
-                pending: { ...pending, source: { ...pending.source, line, key: contentKeyOf(lines) } },
+                pending,
             }));
         }
         if (changes.length === 0 && effects.length === 0) return [tr, isolated];
