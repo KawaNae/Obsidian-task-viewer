@@ -12,30 +12,47 @@ freezeDate(new Date(2026, 8, 25, 12, 0, 0));
 /**
  * The twelve writes that used to find their line with `findTaskLineNumber`,
  * each driven from its public entry over the real index and the real scan,
- * now that they name their target and ask `TaskScanner.locate` where it
- * stands.
+ * now that a write names its target by `task.line` plus a basis (the row's
+ * text, and for some ops its subtree) and `WriteSession.row` checks that
+ * coordinate still reads as the basis before it writes anything there.
  *
  * Every shape is run twice:
  * - A: an ordinary note (no two rows read alike). The write lands as expected,
  *   no notice is raised, and the scan that follows keeps every row's ID —
  *   including the rows the write moved.
  * - B: a line is written above the target by something else just before the
- *   write, with no scan in between. The write still lands on its own row.
+ *   write, with no scan in between. That shifts the target's coordinate onto
+ *   a line that no longer reads as the basis, so nothing is written and the
+ *   write is refused (reason `changed`), told once.
  *
  * A fire is made in the write that completes its row: the check, the next
  * instance and the strip, the removal or the move to the end are one write,
  * `updateTaskInFile`, and its B puts the outside edit just before it. A move
  * to another file then writes the destination (`appendArchive`) and then the
- * source's one write (`applyToTask`), and its B wraps the one it targets.
+ * source's one write (`applyToTask`), and its B wraps the one it targets: the
+ * destination still lands, and the source's write is the one refused, so the
+ * task ends up in both files — told once (`moveOriginKept`), not twice.
  *
- * The last block is the note whose rows read alike: after an outside edit,
- * the row named cannot be told from its twin, and the write is refused with
- * one notice rather than landing on either.
+ * The last block is the note whose rows read alike. After an outside edit,
+ * a coordinate has no identity of its own: if the line it names now reads as
+ * something other than the basis, the write is refused (`changed`); if a
+ * twin has moved onto it and reads exactly as the basis did, the write lands
+ * there anyway, since nothing distinguishes the two. Only when the ambiguity
+ * is in the read itself (two rows reading alike before any outside edit) is
+ * the write refused as `ambiguous`.
  */
 
 const FILE = 'note.md';
 const ARCHIVE = 'archive.md';
 const OUTSIDE = '- [ ] 外部 @2026-09-21';
+
+/** The notice a write tells once its target's coordinate no longer reads as its basis. */
+const changed = (subject: string) => t('notice.writeTargetChanged', { subject });
+
+/** The notice a move-away tells once the destination has landed but the source's write was refused as `changed`. */
+const movedButKept = (subject: string) => t('notice.moveOriginKept', {
+    dest: 'archive', reason: t('notice.moveOriginChanged'), subject,
+});
 
 let live: VaultSession | undefined;
 
@@ -136,39 +153,28 @@ describe('1. updateTaskInFile', () => {
         expect(Notice.messages).toEqual([]);
     });
 
-    it('B: a check after a line was written above lands on the target', async () => {
+    it('B: a check after a line was written above from outside: nothing written, one `changed`', async () => {
         const { contents, session } = await open({ [FILE]: NOTE('- [ ] 対象 @2026-09-21') });
-        const before = rows(session);
 
         writeOutside(contents, 1);
-        await check(session, idOf(session, '対象'));
+        const edited = contents.get(FILE);
+        expect(await session.index.updateTask(idOf(session, '対象'), { statusChar: 'x' })).toBe(false);
         await session.settle(FILE);
 
-        const expected = NOTE('- [x] 対象 @2026-09-21');
-        expected.splice(1, 0, OUTSIDE);
-        expect(contents.get(FILE)).toBe(expected.join('\n'));
-        const after = rows(session);
-        expect(after.map(row => row.key)).toEqual([
-            ' |外部|2026-09-21', ' |上|2026-09-21', 'x|対象|2026-09-21', ' |下|2026-09-21',
-        ]);
-        expect(after.slice(1).map(row => row.id)).toEqual(before.map(row => row.id));
-        expect(before.map(row => row.id)).not.toContain(after[0].id);
-        expect(Notice.messages).toEqual([]);
+        expect(contents.get(FILE)).toBe(edited);
+        expect(Notice.messages).toEqual([changed('対象')]);
     });
 
-    it('B: a child property update after a line was written above lands under the target', async () => {
+    it('B: a child property update after a line was written above from outside: nothing written, one `changed`', async () => {
         const { contents, session } = await open({ [FILE]: NOTE('- [ ] 対象 @2026-09-21') });
-        const before = rows(session);
 
         writeOutside(contents, 1);
-        expect(await session.index.updateTask(idOf(session, '対象'), { color: 'ff0000' })).toBe(true);
+        const edited = contents.get(FILE);
+        expect(await session.index.updateTask(idOf(session, '対象'), { color: 'ff0000' })).toBe(false);
         await session.settle(FILE);
 
-        const expected = NOTE('- [ ] 対象 @2026-09-21', '\t- tv-color:: ff0000');
-        expected.splice(1, 0, OUTSIDE);
-        expect(contents.get(FILE)).toBe(expected.join('\n'));
-        expect(rows(session).slice(1).map(row => row.id)).toEqual(before.map(row => row.id));
-        expect(Notice.messages).toEqual([]);
+        expect(contents.get(FILE)).toBe(edited);
+        expect(Notice.messages).toEqual([changed('対象')]);
     });
 });
 
@@ -196,31 +202,22 @@ describe('2. stripFlow (a completion consuming its command)', () => {
         expect(Notice.messages).toEqual([]);
     });
 
-    it('B: a line written above just before the fire\'s write does not move the strip off the row', async () => {
+    it('B: a line written above from outside just before the completing write: nothing written, one `changed`', async () => {
         // The fire is in the completing write, so the outside line lands
-        // before the check, the next instance and the strip. It is a sibling
-        // at the head of the fired row's group, so the next instance goes in
-        // above it; the strip still rewrites the row that fired.
+        // right before it, on the target's own coordinate: the completing
+        // write reads a line it does not recognize as the row's basis and
+        // gives up before the check, the next instance or the strip land.
         const { contents, session } = await open({ [FILE]: NOTE('- [ ] 対象 @2026-09-21 ==> every mon') });
-        const held = { above: idOf(session, '上'), target: idOf(session, '対象'), below: idOf(session, '下') };
+        const held = { target: idOf(session, '対象') };
 
         editBefore(session, 'updateTaskInFile', () => writeOutside(contents, 1));
-        await check(session, held.target);
+        expect(await session.index.updateTask(held.target, { statusChar: 'x' })).toBe(false);
         await session.flowSettled(FILE);
 
-        expect(contents.get(FILE)).toBe([
-            '# note',
-            '- [ ] 対象 @2026-09-28 ==> every mon',
-            OUTSIDE,
-            '- [ ] 上 @2026-09-21',
-            '- [x] 対象 @2026-09-21',
-            '- [ ] 下 @2026-09-21',
-            '',
-        ].join('\n'));
-        const after = rows(session);
-        expect(after.map(row => row.id).slice(2)).toEqual([held.above, held.target, held.below]);
-        expect(Object.values(held)).not.toContain(after[0].id);
-        expect(Notice.messages).toEqual([]);
+        const expected = NOTE('- [ ] 対象 @2026-09-21 ==> every mon');
+        expected.splice(1, 0, OUTSIDE);
+        expect(contents.get(FILE)).toBe(expected.join('\n'));
+        expect(Notice.messages).toEqual([changed('対象')]);
     });
 });
 
@@ -239,19 +236,16 @@ describe('3. deleteTaskFromFile', () => {
         expect(Notice.messages).toEqual([]);
     });
 
-    it('B: a delete after a line was written above takes the target, not the line above it', async () => {
+    it('B: a delete after a line was written above from outside: nothing written, one `changed`', async () => {
         const { contents, session } = await open({ [FILE]: NOTE('- [ ] 対象 @2026-09-21', '\t- [ ] 子 @2026-09-21') });
-        const held = { above: idOf(session, '上'), below: idOf(session, '下') };
 
         writeOutside(contents, 1);
-        expect(await session.index.deleteTask(idOf(session, '対象'))).toBe(true);
+        const edited = contents.get(FILE);
+        expect(await session.index.deleteTask(idOf(session, '対象'))).toBe(false);
         await session.settle(FILE);
 
-        const expected = NOTE();
-        expected.splice(1, 0, OUTSIDE);
-        expect(contents.get(FILE)).toBe(expected.join('\n'));
-        expect(rows(session).map(row => row.id).slice(1)).toEqual([held.above, held.below]);
-        expect(Notice.messages).toEqual([]);
+        expect(contents.get(FILE)).toBe(edited);
+        expect(Notice.messages).toEqual([changed('対象')]);
     });
 
     it('A: a move to another file takes the original away (delete-original)', async () => {
@@ -269,24 +263,28 @@ describe('3. deleteTaskFromFile', () => {
         expect(Notice.messages).toEqual([]);
     });
 
-    it('B: a line written above between the archive and the removal of the original does not move the removal', async () => {
+    it('B: a line written above from outside between the archive and the removal: source not written, told once', async () => {
         const { contents, session } = await open({
             [FILE]: NOTE('- [ ] 対象 @2026-09-21 ==> move([[archive]])', '\t- [ ] 子 @2026-09-21'),
             [ARCHIVE]: ['# archive', ''],
         });
-        const held = { above: idOf(session, '上'), below: idOf(session, '下') };
 
-        // The removal of the original is the source's one write (applyToTask).
+        // The completing write checks the row in place, command and all
+        // (F8's own write); only then does the flow append the archive and,
+        // as the source's one write, remove the original (applyToTask). The
+        // outside edit lands between the archive and that removal, shifting
+        // the checked row's coordinate onto a line that no longer reads as
+        // it: the removal is refused, and the task ends up in both files,
+        // told once rather than as a second, separate refusal.
         editBefore(session, 'applyToTask', () => writeOutside(contents, 1));
         await check(session, idOf(session, '対象'));
         await session.flowSettled(FILE, ARCHIVE);
 
-        const expected = NOTE();
+        const expected = NOTE('- [x] 対象 @2026-09-21 ==> move([[archive]])', '\t- [ ] 子 @2026-09-21');
         expected.splice(1, 0, OUTSIDE);
         expect(contents.get(FILE)).toBe(expected.join('\n'));
         expect(contents.get(ARCHIVE)).toBe(['# archive', '- [x] 対象 @2026-09-21', '\t- [ ] 子 @2026-09-21', ''].join('\n'));
-        expect(rows(session).map(row => row.id).slice(1)).toEqual([held.above, held.below]);
-        expect(Notice.messages).toEqual([]);
+        expect(Notice.messages).toEqual([movedButKept('対象')]);
     });
 });
 
@@ -310,21 +308,18 @@ describe('4. a deletion fire (the instance and the removal, one applyToTask)', (
         expect(Notice.messages).toEqual([]);
     });
 
-    it('B: a line written above before the fire does not move it', async () => {
+    it('B: a line written above from outside before the fire: nothing written, one `changed`', async () => {
         const { contents, session } = await open({ [FILE]: NOTE('- [ ] 対象 @2026-09-21 ==> every mon') });
-        const held = { above: idOf(session, '上'), target: idOf(session, '対象'), below: idOf(session, '下') };
+        const held = { target: idOf(session, '対象') };
 
         writeOutside(contents, 1);
-        expect(await session.index.deleteTask(held.target, { fireFlow: true })).toBe(true);
+        const edited = contents.get(FILE);
+        expect(await session.index.deleteTask(held.target, { fireFlow: true })).toBe(false);
         await session.flowSettled(FILE);
 
-        expect(contents.get(FILE)).toBe([
-            '# note', '- [ ] 対象 @2026-09-28 ==> every mon', OUTSIDE, '- [ ] 上 @2026-09-21', '- [ ] 下 @2026-09-21', '',
-        ].join('\n'));
-        const after = rows(session).map(row => row.id);
-        expect(after.slice(2)).toEqual([held.above, held.below]);
-        expect(session.index.getTask(held.target)).toBeUndefined();
-        expect(Notice.messages).toEqual([]);
+        expect(contents.get(FILE)).toBe(edited);
+        expect(session.index.getTask(held.target)).toBeDefined();
+        expect(Notice.messages).toEqual([changed('対象')]);
     });
 });
 
@@ -345,20 +340,16 @@ describe('5. insertLineAfterTask (appendChildTask)', () => {
         expect(Notice.messages).toEqual([]);
     });
 
-    it('B: after a line was written above, the child still goes under the target', async () => {
+    it('B: a line written above from outside: nothing written, one `changed`', async () => {
         const { contents, session } = await open({ [FILE]: NOTE('- [ ] 対象 @2026-09-21', '\t- [ ] 子 @2026-09-21') });
-        const before = rows(session).map(row => row.id);
 
         writeOutside(contents, 1);
-        await session.index.appendChildTask(idOf(session, '対象'), '- [ ] 追加 @2026-09-21');
+        const edited = contents.get(FILE);
+        expect(await session.index.appendChildTask(idOf(session, '対象'), '- [ ] 追加 @2026-09-21')).toBe(false);
         await session.settle(FILE);
 
-        const expected = NOTE('- [ ] 対象 @2026-09-21', '\t- [ ] 子 @2026-09-21', '\t- [ ] 追加 @2026-09-21');
-        expected.splice(1, 0, OUTSIDE);
-        expect(contents.get(FILE)).toBe(expected.join('\n'));
-        const after = rows(session).map(row => row.id);
-        expect([after[1], after[2], after[3], after[5]]).toEqual(before);
-        expect(Notice.messages).toEqual([]);
+        expect(contents.get(FILE)).toBe(edited);
+        expect(Notice.messages).toEqual([changed('対象')]);
     });
 });
 
@@ -394,39 +385,31 @@ describe('6. insertSiblingAfterTask (timer records)', () => {
         expect(Notice.messages).toEqual([]);
     });
 
-    it('B: after a line was written above, the sibling still follows the target', async () => {
+    it('B: a line written above from outside: nothing written, one `changed`', async () => {
         const { contents, session } = await open({ [FILE]: NOTE('- [ ] 対象 @2026-09-21', '\t- [ ] 子 @2026-09-21') });
-        const before = rows(session).map(row => row.id);
 
         writeOutside(contents, 1);
+        const edited = contents.get(FILE);
         const at = await session.index.insertSiblingAfterTask(idOf(session, '対象'), '- [ ] 記録 @2026-09-21');
         await session.settle(FILE);
 
-        expect(at).toBe(true);
-        const expected = NOTE('- [ ] 対象 @2026-09-21', '\t- [ ] 子 @2026-09-21', '- [ ] 記録 @2026-09-21');
-        expected.splice(1, 0, OUTSIDE);
-        expect(contents.get(FILE)).toBe(expected.join('\n'));
-        const after = rows(session).map(row => row.id);
-        expect([after[1], after[2], after[3], after[5]]).toEqual(before);
-        expect(Notice.messages).toEqual([]);
+        expect(at).toBe(false);
+        expect(contents.get(FILE)).toBe(edited);
+        expect(Notice.messages).toEqual([changed('対象')]);
     });
 
-    it('B: afterCompletedRun after a line was written above still ends the run', async () => {
+    it('B: afterCompletedRun with a line written above from outside: nothing written, one `changed`', async () => {
         const target = ['- [ ] 対象 @2026-09-21T10:00>11:00', '- [x] 済1 @2026-09-21T11:00>12:00', '- [x] 済2 @2026-09-21T12:00>13:00'];
         const { contents, session } = await open({ [FILE]: NOTE(...target) });
-        const before = rows(session).map(row => row.id);
 
         writeOutside(contents, 1);
+        const edited = contents.get(FILE);
         const at = await session.index.insertSiblingAfterTask(idOf(session, '対象'), '- [ ] 記録 @2026-09-21T13:00', { afterCompletedRun: true });
         await session.settle(FILE);
 
-        expect(at).toBe(true);
-        const expected = NOTE(...target, '- [ ] 記録 @2026-09-21T13:00');
-        expected.splice(1, 0, OUTSIDE);
-        expect(contents.get(FILE)).toBe(expected.join('\n'));
-        const after = rows(session).map(row => row.id);
-        expect([...after.slice(1, 5), after[6]]).toEqual(before);
-        expect(Notice.messages).toEqual([]);
+        expect(at).toBe(false);
+        expect(contents.get(FILE)).toBe(edited);
+        expect(Notice.messages).toEqual([changed('対象')]);
     });
 });
 
@@ -446,20 +429,16 @@ describe('7. insertLineAsFirstChild (insertChildTask)', () => {
         expect(Notice.messages).toEqual([]);
     });
 
-    it('B: after a line was written above, the child still goes under the target', async () => {
+    it('B: a line written above from outside: nothing written, one `changed`', async () => {
         const { contents, session } = await open({ [FILE]: NOTE('- [ ] 対象 @2026-09-21', '\t- [ ] 子 @2026-09-21') });
-        const before = rows(session).map(row => row.id);
 
         writeOutside(contents, 1);
-        expect(await session.index.insertChildTask(idOf(session, '対象'), '- [ ] 先頭 @2026-09-21')).toBe(true);
+        const edited = contents.get(FILE);
+        expect(await session.index.insertChildTask(idOf(session, '対象'), '- [ ] 先頭 @2026-09-21')).toBe(false);
         await session.settle(FILE);
 
-        const expected = NOTE('- [ ] 対象 @2026-09-21', '\t- [ ] 先頭 @2026-09-21', '\t- [ ] 子 @2026-09-21');
-        expected.splice(1, 0, OUTSIDE);
-        expect(contents.get(FILE)).toBe(expected.join('\n'));
-        const after = rows(session).map(row => row.id);
-        expect([after[1], after[2], after[4], after[5]]).toEqual(before);
-        expect(Notice.messages).toEqual([]);
+        expect(contents.get(FILE)).toBe(edited);
+        expect(Notice.messages).toEqual([changed('対象')]);
     });
 });
 
@@ -499,41 +478,41 @@ describe('8. appendArchive (a move archiving its subtree)', () => {
         expect(Notice.messages).toEqual([]);
     });
 
-    it('B: to another file, a line written above the source before the archive does not change which children go', async () => {
+    it('B: to another file, a line written above the source between the archive and the removal: source not written, told once', async () => {
         const { contents, session } = await open({
             [FILE]: NOTE('- [ ] 対象 @2026-09-21 ==> move([[archive]])', '\t- [ ] 子 @2026-09-21'),
             [ARCHIVE]: ['# archive', ''],
         });
-        const held = { above: idOf(session, '上'), below: idOf(session, '下') };
 
+        // The completing write checks the row in FILE first; the outside
+        // edit lands on the source before the archive write, but the archive
+        // write only touches ARCHIVE — it is the source's own write, right
+        // after, that reads the source's shifted coordinate and is refused.
         editBefore(session, 'appendArchive', () => writeOutside(contents, 1));
         await check(session, idOf(session, '対象'));
         await session.flowSettled(FILE, ARCHIVE);
 
         expect(contents.get(ARCHIVE)).toBe(['# archive', '- [x] 対象 @2026-09-21', '\t- [ ] 子 @2026-09-21', ''].join('\n'));
-        const expected = NOTE();
+        const expected = NOTE('- [x] 対象 @2026-09-21 ==> move([[archive]])', '\t- [ ] 子 @2026-09-21');
         expected.splice(1, 0, OUTSIDE);
         expect(contents.get(FILE)).toBe(expected.join('\n'));
-        expect(rows(session).map(row => row.id).slice(1)).toEqual([held.above, held.below]);
-        expect(Notice.messages).toEqual([]);
+        expect(Notice.messages).toEqual([movedButKept('対象')]);
     });
 
-    it('B: within the same file, a line written above before the archive does not change which children go', async () => {
+    it('B: within the same file, a line written above from outside before the archive: nothing written, one `changed`', async () => {
         const { contents, session } = await open({
             [FILE]: NOTE('- [ ] 対象 @2026-09-21 ==> move([[note]])', '\t- [ ] 子 @2026-09-21'),
         });
-        const held = { above: idOf(session, '上'), below: idOf(session, '下'), target: idOf(session, '対象'), child: idOf(session, '子') };
 
         // A move within one file is in the completing write.
         editBefore(session, 'updateTaskInFile', () => writeOutside(contents, 1));
-        await check(session, idOf(session, '対象'));
+        expect(await session.index.updateTask(idOf(session, '対象'), { statusChar: 'x' })).toBe(false);
         await session.flowSettled(FILE);
 
-        expect(contents.get(FILE)).toBe([
-            '# note', OUTSIDE, '- [ ] 上 @2026-09-21', '- [ ] 下 @2026-09-21', '- [x] 対象 @2026-09-21', '\t- [ ] 子 @2026-09-21', '',
-        ].join('\n'));
-        expect(rows(session).map(row => row.id).slice(1)).toEqual([held.above, held.below, held.target, held.child]);
-        expect(Notice.messages).toEqual([]);
+        const expected = NOTE('- [ ] 対象 @2026-09-21 ==> move([[note]])', '\t- [ ] 子 @2026-09-21');
+        expected.splice(1, 0, OUTSIDE);
+        expect(contents.get(FILE)).toBe(expected.join('\n'));
+        expect(Notice.messages).toEqual([changed('対象')]);
     });
 });
 
@@ -579,21 +558,17 @@ describe('9. duplicateInlineTask (a copy on another day)', () => {
         expect(Notice.messages).toEqual([]);
     });
 
-    it('B: after a line was written above, the copy still goes above the target', async () => {
+    it('B: a line written above from outside: nothing written, one `changed`', async () => {
         const { contents, session } = await open({ [FILE]: NOTE(...TARGET.map(line => line.replace(' ^blk', ''))) });
         const before = rows(session).map(row => row.id);
 
         writeOutside(contents, 1);
-        expect(await session.index.duplicateTask(before[1], { dayOffset: 1 })).toBe(true);
+        const edited = contents.get(FILE);
+        expect(await session.index.duplicateTask(before[1], { dayOffset: 1 })).toBe(false);
         await session.settle(FILE);
 
-        const expected = NOTE('- [ ] 対象 @2026-09-22T10:00>11:00', '\t- [ ] 子 @2026-09-21',
-            '- [ ] 対象 @2026-09-21T10:00>11:00', '\t- [ ] 子 @2026-09-21');
-        expected.splice(1, 0, OUTSIDE);
-        expect(contents.get(FILE)).toBe(expected.join('\n'));
-        const after = rows(session).map(row => row.id);
-        expect([after[1], after[4], after[5], after[6]]).toEqual(before);
-        expect(Notice.messages).toEqual([]);
+        expect(contents.get(FILE)).toBe(edited);
+        expect(Notice.messages).toEqual([changed('対象')]);
     });
 });
 
@@ -615,20 +590,17 @@ describe('10. duplicateInlineTaskInPlace (a copy that continues)', () => {
         expect(Notice.messages).toEqual([]);
     });
 
-    it('B: after a line was written above, the copy still follows the target', async () => {
+    it('B: a line written above from outside: nothing written, one `changed`', async () => {
         const { contents, session } = await open({ [FILE]: NOTE(...TARGET) });
         const before = rows(session).map(row => row.id);
 
         writeOutside(contents, 1);
-        expect(await session.index.duplicateTask(before[1])).toBe(true);
+        const edited = contents.get(FILE);
+        expect(await session.index.duplicateTask(before[1])).toBe(false);
         await session.settle(FILE);
 
-        const expected = NOTE(...TARGET, '- [ ] 対象 @2026-09-21T11:00>12:00', '\t- [ ] 子 @2026-09-21');
-        expected.splice(1, 0, OUTSIDE);
-        expect(contents.get(FILE)).toBe(expected.join('\n'));
-        const after = rows(session).map(row => row.id);
-        expect([after[1], after[2], after[3], after[6]]).toEqual(before);
-        expect(Notice.messages).toEqual([]);
+        expect(contents.get(FILE)).toBe(edited);
+        expect(Notice.messages).toEqual([changed('対象')]);
     });
 });
 
@@ -656,29 +628,18 @@ describe('11. insertRecurrenceForTask (create-next)', () => {
         expect(Notice.messages).toEqual([]);
     });
 
-    it('B: a line written above just before the fire\'s write does not move the insert off the group', async () => {
-        // The outside line is a sibling at the head of the group when the
-        // completing write reads the file, so the next instance goes in above it.
+    it('B: a line written above from outside just before the completing write: nothing written, one `changed`', async () => {
         const { contents, session } = await open({ [FILE]: NOTE('- [ ] 対象 @2026-09-21', '\t- ==> every mon') });
-        const held = { above: idOf(session, '上'), target: idOf(session, '対象'), below: idOf(session, '下') };
+        const held = { target: idOf(session, '対象') };
 
         editBefore(session, 'updateTaskInFile', () => writeOutside(contents, 1));
-        await check(session, held.target);
+        expect(await session.index.updateTask(held.target, { statusChar: 'x' })).toBe(false);
         await session.flowSettled(FILE);
 
-        expect(contents.get(FILE)).toBe([
-            '# note',
-            '- [ ] 対象 @2026-09-28',
-            '\t- ==> every mon',
-            OUTSIDE,
-            '- [ ] 上 @2026-09-21',
-            '- [x] 対象 @2026-09-21',
-            '- [ ] 下 @2026-09-21',
-            '',
-        ].join('\n'));
-        const after = rows(session).map(row => row.id);
-        expect(after.slice(2)).toEqual([held.above, held.target, held.below]);
-        expect(Notice.messages).toEqual([]);
+        const expected = NOTE('- [ ] 対象 @2026-09-21', '\t- ==> every mon');
+        expected.splice(1, 0, OUTSIDE);
+        expect(contents.get(FILE)).toBe(expected.join('\n'));
+        expect(Notice.messages).toEqual([changed('対象')]);
     });
 });
 
@@ -713,33 +674,18 @@ describe('12. insertGeneratedInstance (create-generated)', () => {
         expect(Notice.messages).toEqual([]);
     });
 
-    it('B: a line written above just before the fire\'s write does not move the insert off the group', async () => {
-        // As in 11: the outside line heads the group when the completing write
-        // reads the file, and the block's instance goes in above it.
+    it('B: a line written above from outside just before the completing write: nothing written, one `changed`', async () => {
         const { contents, session } = await open({ [FILE]: SOURCE() });
-        const held = { above: idOf(session, '上'), target: idOf(session, '対象'), below: idOf(session, '下') };
-        const child = idOf(session, '元の子');
+        const held = { target: idOf(session, '対象') };
 
         editBefore(session, 'updateTaskInFile', () => writeOutside(contents, 1));
-        await check(session, held.target);
+        expect(await session.index.updateTask(held.target, { statusChar: 'x' })).toBe(false);
         await session.flowSettled(FILE);
 
-        expect(contents.get(FILE)).toBe([
-            '# note',
-            '- [ ] 対象',
-            '\t- ==> every mon use("週報")',
-            '\t- [ ] 生成子',
-            OUTSIDE,
-            '- [ ] 上 @2026-09-21',
-            '- [x] 対象 @2026-09-21',
-            '\t- [ ] 元の子',
-            '- [ ] 下 @2026-09-21',
-            '',
-            ...GEN,
-        ].join('\n'));
-        const after = rows(session).map(row => row.id);
-        expect(after.slice(3)).toEqual([held.above, held.target, child, held.below]);
-        expect(Notice.messages).toEqual([]);
+        const expected = SOURCE();
+        expected.splice(1, 0, OUTSIDE);
+        expect(contents.get(FILE)).toBe(expected.join('\n'));
+        expect(Notice.messages).toEqual([changed('対象')]);
     });
 });
 
@@ -749,30 +695,41 @@ describe('twins after an outside edit: refused, with one notice', () => {
     const TWINS = (twin: string) => ['# note', '- [ ] 親 @2026-09-21', `\t${twin}`, `\t${twin}`, '- [ ] 下 @2026-09-21', ''];
     const ambiguous = (subject: string) => t('notice.writeTargetAmbiguous', { count: '2', subject });
 
-    it('updateTaskInFile writes nothing', async () => {
+    // A coordinate has no identity of its own: once the outside edit shifts a
+    // twin onto the target's line, that line reads exactly as the target's
+    // basis did (the twins are alike), so the write lands there rather than
+    // being refused — nothing distinguishes the copy now standing on the
+    // coordinate from the one that stood there before.
+    it('updateTaskInFile lands on the coordinate: the twin now reading there is written', async () => {
         const { contents, session } = await open({ [FILE]: TWINS('- [ ] 子 @2026-09-21') });
         const second = rows(session)[2].id;
 
         writeOutside(contents, 1);
-        const edited = contents.get(FILE);
-        expect(await session.index.updateTask(second, { statusChar: 'x' })).toBe(false);
+        expect(await session.index.updateTask(second, { statusChar: 'x' })).toBe(true);
         await session.settle(FILE);
 
-        expect(contents.get(FILE)).toBe(edited);
-        expect(Notice.messages).toEqual([ambiguous('子')]);
+        expect(contents.get(FILE)).toBe([
+            '# note', OUTSIDE, '- [ ] 親 @2026-09-21',
+            '\t- [x] 子 @2026-09-21', '\t- [ ] 子 @2026-09-21',
+            '- [ ] 下 @2026-09-21', '',
+        ].join('\n'));
+        expect(Notice.messages).toEqual([]);
     });
 
-    it('deleteTaskFromFile writes nothing', async () => {
+    it('deleteTaskFromFile lands on the coordinate: the twin now reading there is deleted', async () => {
         const { contents, session } = await open({ [FILE]: TWINS('- [ ] 子 @2026-09-21') });
         const second = rows(session)[2].id;
 
         writeOutside(contents, 1);
-        const edited = contents.get(FILE);
-        expect(await session.index.deleteTask(second)).toBe(false);
+        expect(await session.index.deleteTask(second)).toBe(true);
         await session.settle(FILE);
 
-        expect(contents.get(FILE)).toBe(edited);
-        expect(Notice.messages).toEqual([ambiguous('子')]);
+        expect(contents.get(FILE)).toBe([
+            '# note', OUTSIDE, '- [ ] 親 @2026-09-21',
+            '\t- [ ] 子 @2026-09-21',
+            '- [ ] 下 @2026-09-21', '',
+        ].join('\n'));
+        expect(Notice.messages).toEqual([]);
     });
 
     // Fails, and was there before W1: the scan of the outside edit commits

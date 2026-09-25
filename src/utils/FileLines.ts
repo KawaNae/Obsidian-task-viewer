@@ -3,7 +3,7 @@ import { logError, logWarn } from '../log/log';
 import { LINE_BREAK, holdsLineBreak } from './LineBreak';
 import { Outline, type OutlineReading } from '../services/parsing/utils/Outline';
 import { checkWrite, type PutBlock, type WrittenLine } from '../services/parsing/utils/OutlineCheck';
-import { ON_RECORD, readsAsPlanned, subtreeAt, type OnRecord, type RowBasis } from '../services/persistence/RowBasis';
+import { isOnRecord, readsAsPlanned, readsAsRecorded, subtreeAt, type OnRecord, type RowBasis } from '../services/persistence/RowBasis';
 import { Block, type PlacedLine, type Spot } from '../services/persistence/utils/Placement';
 
 /**
@@ -408,42 +408,6 @@ export type WriteSink = (
 ) => WriteReceipt;
 
 /**
- * What a write names its target by: the row's runtime ID, and the `^id` the
- * row carries when the user wrote one. Not a line number — a line number is a
- * coordinate in some content, and the write does not know which content that
- * was.
- */
-export interface TaskRef {
-    runtimeId: string;
-    blockId?: string;
-}
-
-/**
- * Where a named row stands in the lines a write was handed.
- *
- * `at` only when the line is known: the row's `^id` names exactly one line,
- * the lines are a content the plugin has on record, or matching them against
- * the last scan paired the name with one line on evidence rather than on
- * position. `ambiguous` when the name went to one of `count` rows no evidence
- * tells apart. `gone` when the name stands on no line of these.
- *
- * `outdated` when the match was made against a ledger older than a write of
- * ours no scan has read yet, and the line it paired does not read as that
- * write left the row — or the write could not say what it left. The pairing
- * rests on a text that has since moved, so there is no line to answer with
- * (`TaskScanner.againstLastWrite`). The user hears it as `changed`: the note
- * is not as the plugin last knew it.
- *
- * Whether the line reads as the write planned is not asked here. That is the
- * write's basis, checked once by `WriteSession.row`.
- */
-export type Located =
-    | { kind: 'at'; line: number }
-    | { kind: 'ambiguous'; count: number }
-    | { kind: 'gone' }
-    | { kind: 'outdated' };
-
-/**
  * A line the editor pointed at: its number, and the text the editor showed on
  * it. The one place a write takes a coordinate from outside — the editor's
  * cursor is not a row the index knows — so the coordinate travels with the
@@ -494,7 +458,7 @@ export interface Refusal {
 
 /**
  * What a write to one file is handed by the index: where to report what it
- * did, where to ask for its target, and where to say it gave up.
+ * did, and where to say it gave up.
  *
  * Closures rather than an import, so that the write layer never depends on
  * identity (see `WriteObserver`).
@@ -502,21 +466,21 @@ export interface Refusal {
 export interface WriteChannel {
     /** Absent where nobody takes a report: no write of the plugin's leaves it out. */
     sink?: WriteSink;
-    locate(lines: readonly string[], ref: TaskRef): Located;
-    /**
-     * Whether the row's line at `line` reads as some text the plugin has on
-     * record for the row — the weaker comparison {@link ON_RECORD} keeps.
-     */
-    onRecord(lines: readonly string[], ref: TaskRef, line: number): boolean;
     refused(refusal: Refusal): void;
 }
 
 /**
- * A row a write names, and what the write was planned from: the basis the
- * lines have to read as for the write to be made there (see `RowBasis`).
+ * A row a write names: the line the index's copy of it stands on, and what
+ * the write was planned from — the basis the lines have to read as, on that
+ * line, for the write to be made there (see `RowBasis`).
+ *
+ * The line is a coordinate in the content the index last read. The basis is
+ * what says whether the lines handed to the write are still that content
+ * where it matters: a line moved or rewritten since reads otherwise there,
+ * and nothing is written. Nothing looks for the row anywhere else.
  */
 export interface NamedRow {
-    ref: TaskRef;
+    line: number;
     subject: string;
     basis: RowBasis | OnRecord;
 }
@@ -538,8 +502,7 @@ export interface WriteSession {
      * refused, and the callback returns false.
      *
      * The first question about a row is put to the lines as they were handed
-     * in: that is the one content the plugin can have on record, so it is the
-     * one where a name can be looked for and a basis checked. Asked again, the
+     * in: its line there has to read as its basis. Asked again, the
      * answer is carried across the edits this write has reported since, and
      * across nothing else — every line the write moved, it moved through its
      * draft, and the report is the whole of what happened to the lines in
@@ -588,17 +551,19 @@ export interface WriteMade {
      */
     made: readonly MadeRow[];
     /**
-     * For each row the write named and left standing, by runtime ID: the row
-     * and its subtree as the write was handed them and as it left them. What
-     * the index holds of a row it had the write make from its copy can be
-     * brought up to the file from here, before any scan reads it. Empty when
-     * nothing was written.
+     * For each row the write named and left standing, by the line it was
+     * named on: the row and its subtree as the write was handed them and as
+     * it left them, and the line it left the row on. What the index holds of
+     * a row it had the write make from its copy can be brought up to the file
+     * from here, before any scan reads it. Empty when nothing was written.
      */
-    rows: ReadonlyMap<string, RowLines>;
+    rows: ReadonlyMap<number, RowLines>;
 }
 
 /** A row's line and every line of its subtree, before and after one write. */
 export interface RowLines {
+    /** The line the write left the row on. */
+    at: number;
     /** As the write was handed them — what the file held, whatever the plan read. */
     read: readonly string[];
     /** As the write left them. */
@@ -728,12 +693,6 @@ function explains(
 }
 
 /**
- * Where a write asks for a named row: the part of a {@link WriteChannel} that
- * {@link editLines} needs. Absent, every named row is `gone`.
- */
-export type RowFinder = Pick<WriteChannel, 'locate' | 'onRecord'>;
-
-/**
  * What {@link editLines} made of one set of lines: the lines as the write left
  * them, with the report that says which line became which and the rows it
  * named; or the refusal, and nothing written.
@@ -747,13 +706,13 @@ export type EditedLines =
         lines: readonly string[];
         /** The draft's report: every change the write made, in order. */
         edits: readonly LineEdit[];
-        rows: ReadonlyMap<string, RowLines>;
+        rows: ReadonlyMap<number, RowLines>;
     }
     | { written: false; refused: Refusal };
 
 /** The text a write is about when it asks for `target`: a named row's subject, the editor's line. */
 function subjectOf(target: NamedRow | EditorLine): string {
-    return 'ref' in target ? target.subject : target.text.trim();
+    return 'basis' in target ? target.subject : target.text.trim();
 }
 
 /**
@@ -761,12 +720,11 @@ function subjectOf(target: NamedRow | EditorLine): string {
  * writing nothing anywhere: the one core every write of lines runs, whatever
  * the lines are then written to (`processLines` writes them to the file).
  *
- * Where to write is asked of `finder`, through the session: a write names its
- * target with what it was planned from, `locate` answers where that target
- * stands in these lines, and the lines there have to read as the plan read
- * them (`WriteSession.row`). A write whose target has no line gives up when
- * `row` answers null, and the refusal is what this answers. With no `finder`,
- * every named target is `gone`.
+ * Where to write is asked through the session: a write names its target by
+ * the line it was planned on and what it was planned from, and the lines
+ * there have to read as the plan read them (`WriteSession.row`). A write
+ * whose target does not read so gives up when `row` answers null, and the
+ * refusal is what this answers.
  *
  * Every change `edit` makes goes through the {@link LineDraft} it is handed,
  * which reports it. The write is held to that report: the lines it put in
@@ -786,7 +744,6 @@ export function editLines(
     path: string,
     lines: readonly string[],
     eol: Eol,
-    finder: RowFinder | undefined,
     edit: (draft: LineDraft, eol: Eol, session: WriteSession) => boolean,
     subjects: { about?: string; asked?: (subject: string) => void } = {},
 ): EditedLines {
@@ -803,9 +760,9 @@ export function editLines(
         refused = { file: path, reason, subject: about };
         return false;
     };
-    // Each row is asked once, of the lines as they were handed in, and
+    // Each target is asked once, of the lines as they were handed in, and
     // its basis checked there: the answer is its line, or why not.
-    const answered = new Map<string, number | RefusalReason>();
+    const answered = new Map<NamedRow | EditorLine, number | RefusalReason>();
     // Whether a coordinate was carried across this write's own edits,
     // and whether carrying one caught the report out.
     let carried = false;
@@ -827,34 +784,36 @@ export function editLines(
         return now;
     };
     const answer = (target: NamedRow | EditorLine): number | RefusalReason => {
-        if (!('ref' in target)) {
-            // The editor's line is its own coordinate, good only while
-            // the line, and the subtree when the write takes it, still
-            // read what the editor showed there.
+        // A coordinate in some content, good only while the lines there
+        // still read as the write was planned from: the index's copy of
+        // the row, or what the editor showed there. A line past the end
+        // reads as nothing.
+        const { line } = target;
+        if (!Number.isInteger(line) || line < 0 || line >= before.length) return { kind: 'changed' };
+        let holds: boolean;
+        if (!('basis' in target)) {
             const shown: RowBasis = { text: target.text, ...(target.subtree ? { subtree: target.subtree } : {}) };
-            return readsAsPlanned(before, target.line, shown) ? target.line : { kind: 'changed' };
+            holds = readsAsPlanned(before, line, shown);
+        } else if (isOnRecord(target.basis)) {
+            holds = readsAsRecorded(before, line, target.basis);
+        } else {
+            holds = readsAsPlanned(before, line, target.basis);
         }
-        const located: Located = finder ? finder.locate(before, target.ref) : { kind: 'gone' };
-        if (located.kind === 'outdated') return { kind: 'changed' };
-        if (located.kind !== 'at') return located;
-        const holds = target.basis === ON_RECORD
-            ? finder!.onRecord(before, target.ref, located.line)
-            : readsAsPlanned(before, located.line, target.basis);
-        return holds ? located.line : { kind: 'changed' };
+        return holds ? line : { kind: 'changed' };
     };
-    // The names the write asked for, to say how it left them.
-    const named = new Map<string, number>();
+    // The rows the write asked for, by the line each was named on, to say
+    // how it left them.
+    const named = new Set<number>();
     const session: WriteSession = {
         row: (target) => {
             const about = subjectOf(target);
             lastSubject = about;
             subjects.asked?.(about);
-            const key = 'ref' in target ? target.ref.runtimeId : `editor:${target.line}`;
-            let found = answered.get(key);
+            let found = answered.get(target);
             if (found === undefined) {
                 found = answer(target);
-                answered.set(key, found);
-                if ('ref' in target && typeof found === 'number') named.set(key, found);
+                answered.set(target, found);
+                if ('basis' in target && typeof found === 'number') named.add(found);
             }
             if (typeof found !== 'number') { refuse(found, about); return null; }
             if (reported.length === 0) return found;
@@ -964,7 +923,7 @@ export async function processLines(
 ): Promise<WriteOutcome> {
     let refused: Refusal | null = null;
     let made: readonly MadeRow[] = [];
-    let rows: ReadonlyMap<string, RowLines> = new Map();
+    let rows: ReadonlyMap<number, RowLines> = new Map();
     const sink = channel?.sink;
     // A list rather than one slot: `vault.process` may run the callback again,
     // and everything filed has to be withdrawable.
@@ -996,7 +955,7 @@ export async function processLines(
         lastSubject = '';
 
         const { lines, eol, bom } = splitLines(content);
-        const edited = editLines(file.path, lines, eol, channel, edit, { about, asked: (said) => { lastSubject = said; } });
+        const edited = editLines(file.path, lines, eol, edit, { about, asked: (said) => { lastSubject = said; } });
         if (!edited.written) {
             refused = edited.refused;
             return content;
@@ -1178,10 +1137,10 @@ async function readsAs(app: App, file: TFile, content: string): Promise<boolean>
 }
 
 /** The line each named row was left on, for the rows the write gave a new text. */
-function rewrittenBy(rows: ReadonlyMap<string, RowLines>): Map<string, string> {
+function rewrittenBy(rows: ReadonlyMap<number, RowLines>): Map<string, string> {
     const left = new Map<string, string>();
-    for (const [runtimeId, lines] of rows) {
-        if (lines.left.length > 0 && lines.left[0] !== lines.read[0]) left.set(runtimeId, lines.left[0]);
+    for (const [line, lines] of rows) {
+        if (lines.left.length > 0 && lines.left[0] !== lines.read[0]) left.set(String(line), lines.left[0]);
     }
     return left;
 }
@@ -1191,17 +1150,17 @@ function rowsLeft(
     before: readonly string[],
     edits: readonly LineEdit[],
     after: readonly string[],
-    named: ReadonlyMap<string, number>,
+    named: ReadonlySet<number>,
     readings: { read: OutlineReading; left: OutlineReading } | undefined,
-): Map<string, RowLines> {
-    const rows = new Map<string, RowLines>();
+): Map<number, RowLines> {
+    const rows = new Map<number, RowLines>();
     const replayed = replayEdits(before.length, edits);
     if (!replayed) return rows;
     const read = readings?.read ?? Outline.read(before);
     const left = readings?.left ?? Outline.read(after);
-    for (const [runtimeId, line] of named) {
+    for (const line of named) {
         const now = replayed.origin.indexOf(line);
-        if (now >= 0) rows.set(runtimeId, { read: subtreeAt(read, line), left: subtreeAt(left, now) });
+        if (now >= 0) rows.set(line, { at: now, read: subtreeAt(read, line), left: subtreeAt(left, now) });
     }
     return rows;
 }

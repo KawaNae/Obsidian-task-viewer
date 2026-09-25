@@ -100,7 +100,6 @@ describe('a made name, once the file has moved on without it', () => {
         // Something else writes a line above, before any scan reads the file.
         const edited = ['# note', '- [ ] 外 @2026-09-21', '- [ ] 上 @2026-09-21', '- [ ] 新 @2026-09-21', ''];
         contents.set(FILE, edited.join('\n'));
-        expect(session.scanner.locate(FILE, edited, { runtimeId: made.runtimeId })).toEqual({ kind: 'at', line: 3 });
 
         session.index.setDraggingFile(null);
         await session.settle(FILE);

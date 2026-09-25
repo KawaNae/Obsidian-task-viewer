@@ -63,9 +63,9 @@ describe('updateTask: which task resolves the line', () => {
         });
 
         const [target, toWrite] = host.repository.updateTaskInFile.mock.calls[0];
-        // By its name, with the line as the index read it: the file still
+        // By its line, with the text as the index read it: the file still
         // says 10:00, so that is what the write has to find there.
-        expect(target.ref).toEqual({ runtimeId: task.id });
+        expect(target.line).toBe(task.line);
         expect(target.basis).toEqual({ text: '- [ ] ⏱️ 設計 @2026-08-14T10:00' });
         // The line is rewritten from the updated values.
         expect(toWrite.startTime).toBe('11:00');
@@ -205,23 +205,25 @@ describe('reportRefusal', () => {
 describe('updateTask: the copy follows the write', () => {
     const LEFT = ['- [x] x @T11:00', '    - key:: v'];
 
-    function hostLeaving(task: Task, left: readonly string[] | undefined, read: readonly string[] = task.subtreeLines ?? []) {
+    function hostLeaving(task: Task, left: readonly string[] | undefined, read: readonly string[] = task.subtreeLines ?? [], at = 0) {
         const host = buildHost(task);
         host.repository.updateTaskInFile = vi.fn(async () => ({
-            written: true, refused: null, made: [], rows: new Map(left ? [[task.id, { read, left }]] : []),
+            written: true, refused: null, made: [], rows: new Map(left ? [[task.line, { at: task.line + at, read, left }]] : []),
         })) as never;
         return host;
     }
 
     const SCANNED = ['- [ ] x @T10:00', '    - key:: v'];
 
-    it('takes the row\'s line and subtree from what the write left', async () => {
+    it('takes the row\'s line number, line and subtree from what the write left', async () => {
         const task = makeTask({ content: 'x', startTime: '10:00', originalText: SCANNED[0], subtreeLines: SCANNED });
+        const line = task.line;
 
-        await proto.updateTask.call(hostLeaving(task, LEFT, SCANNED), task.id, { startTime: '11:00', statusChar: 'x' });
+        await proto.updateTask.call(hostLeaving(task, LEFT, SCANNED, 2), task.id, { startTime: '11:00', statusChar: 'x' });
 
         expect(task.originalText).toBe('- [x] x @T11:00');
         expect(task.subtreeLines).toEqual(LEFT);
+        expect(task.line).toBe(line + 2);
     });
 
     it('takes the line but not a subtree the write found other than the copy has it', async () => {

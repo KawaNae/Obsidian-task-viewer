@@ -48,13 +48,14 @@ describe('insertSiblingAfterTask', () => {
     });
 
     it('reads the indent off the file rather than from the stored line', async () => {
-        // The task moved under a parent since it was indexed. Taking the indent
-        // from originalText would put the record back at top level, silently
-        // pulling it out of the parent it belongs to.
+        // The task was indented under the line above it since it was indexed,
+        // on the line it was read on. Taking the indent from originalText
+        // would put the record back at top level, silently pulling it out of
+        // the parent it belongs to.
         const read = '- [x] ⏱️ task A @2026-08-13T09:00>2026-08-13T10:00';
         const anchor = '    - [x] ⏱️ task A @2026-08-13T09:00>2026-08-13T10:00';
         const { text } = await runSiblingInsert(
-            [read, '- [ ] parent'].join('\n'), 0,
+            ['- [ ] parent', read].join('\n'), 1,
             NEW_SESSION, {},
             ['- [ ] parent', anchor].join('\n'),
         );
@@ -93,7 +94,7 @@ describe('insertSiblingAfterTask', () => {
 
         expect(text).toBe(other);
         expect(index.written).toBe(false);
-        expect(refused).toEqual([{ file: FILE, reason: { kind: 'gone' }, subject: 'task A' }]);
+        expect(refused).toEqual([{ file: FILE, reason: { kind: 'changed' }, subject: 'task A' }]);
     });
 });
 

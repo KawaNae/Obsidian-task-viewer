@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { TFile } from 'obsidian';
 import { BrokenWrite, LineBreakInLine, UnfollowableDraft, draftOver, joinLines, processLines, replayEdits, splitLines } from '../../../src/utils/FileLines';
-import type { LineEdit, Located, NamedRow, Refusal, TaskRef, WriteChannel } from '../../../src/utils/FileLines';
+import type { LineEdit, NamedRow, Refusal, WriteChannel } from '../../../src/utils/FileLines';
 import { holdsLineBreak } from '../../../src/utils/LineBreak';
 import { Block } from '../../../src/services/persistence/utils/Placement';
 import type { LineDraft } from '../../../src/utils/FileLines';
@@ -13,7 +13,6 @@ import type { LineDraft } from '../../../src/utils/FileLines';
 function putAt(draft: LineDraft, at: number, ...texts: string[]): void {
     draft.put({ at, parent: null, indent: '' }, Block.read(texts));
 }
-import { ON_RECORD } from '../../../src/services/persistence/RowBasis';
 
 /**
  * The one place that decides what a line is and how the file gets put back
@@ -158,13 +157,11 @@ interface Reported {
 /**
  * Stands in for the index's side of a write: every report handed over can be
  * taken back, and `standing` is what would still be waiting for the next scan.
- * `asked` is every question the write put to `locate`, answered by `answer`;
  * `refusals` is every refusal the channel was told.
  */
-function writeSink(answer: (lines: readonly string[], ref: TaskRef) => Located = () => ({ kind: 'gone' })) {
+function writeSink() {
     const reports: Reported[] = [];
     const live = new Set<number>();
-    const asked: Array<{ lines: string[]; ref: TaskRef }> = [];
     const refusals: Refusal[] = [];
     const channel: WriteChannel = {
         sink: (before, after, edits) => {
@@ -173,17 +170,11 @@ function writeSink(answer: (lines: readonly string[], ref: TaskRef) => Located =
             live.add(at);
             return { withdraw: () => { live.delete(at); }, made: [] };
         },
-        locate: (lines, ref) => {
-            asked.push({ lines: [...lines], ref });
-            return answer(lines, ref);
-        },
-        onRecord: () => true,
         refused: (refusal) => { refusals.push(refusal); },
     };
     return {
         channel,
         standing: (): Reported[] => [...live].map(at => reports[at]),
-        asked,
         refusals,
     };
 }
@@ -407,12 +398,12 @@ describe('processLines', () => {
         // A write's own code failing is not a reason to leave the caller
         // without an answer: the card that asked for it puts its value back.
         const h = harness('- [ ] a\n- [ ] b\n', { callbackRuns: 2 });
-        const log = writeSink(() => ({ kind: 'at', line: 0 }));
+        const log = writeSink();
         let run = 0;
 
         const outcome = await processLines(h.app, h.file, log.channel, (draft, _eol, { row }) => {
             run++;
-            row({ ref: { runtimeId: 'a' }, subject: 'a', basis: ON_RECORD });
+            row(named(0, '- [ ] a', 'a'));
             putAt(draft, 1, '- [ ] made');
             if (run === 2) throw new Error('boom');
             return true;
@@ -487,8 +478,6 @@ describe('processLines', () => {
                     events.push(`file ${n}`);
                     return { withdraw: () => { events.push(`withdraw ${n}`); }, made: [] };
                 },
-                locate: () => ({ kind: 'gone' }),
-                onRecord: () => true,
                 refused: () => { },
             };
             const write = (text: string) => processLines(app, file, channel, (draft) => {
@@ -546,8 +535,6 @@ describe('processLines', () => {
         let filed = 0;
         const channel: WriteChannel = {
             sink: () => ({ withdraw: () => { }, made: [{ line: 1, runtimeId: `made-${++filed}` }] }),
-            locate: () => ({ kind: 'gone' }),
-            onRecord: () => true,
             refused: () => { },
         };
         let run = 0;
@@ -583,25 +570,23 @@ describe('processLines', () => {
     });
 });
 
-const REF: TaskRef = { runtimeId: 'tv-inline:note.md:1' };
-/** The row `REF` names, on a basis the stand-in channel always vouches for. */
-const named = (subject: string): NamedRow => ({ ref: REF, subject, basis: ON_RECORD });
+/** A row named on `line`, planned from a line that reads `text`. */
+const named = (line: number, text: string, subject = text): NamedRow => ({ line, subject, basis: { text } });
 
 describe('processLines: asking where a row stands, and giving up', () => {
 
-    it('asks the channel about the lines as they were handed in', async () => {
+    it('writes a named row on its line when the line reads as its basis', async () => {
         const h = harness('- [ ] a\r\n- [ ] b\r\n');
-        const log = writeSink(() => ({ kind: 'at', line: 1 }));
+        const log = writeSink();
 
         const outcome = await processLines(h.app, h.file, log.channel, (draft, _eol, session) => {
-            const at = session.row(named('b'));
+            const at = session.row(named(1, '- [ ] b', 'b'));
             if (at === null) return false;
             draft.rewrite(at, '- [x] b');
             return true;
         });
 
-        expect(log.asked).toEqual([{ lines: ['- [ ] a', '- [ ] b', ''], ref: REF }]);
-        expect(outcome).toEqual({ written: true, refused: null, made: [], rows: new Map([[REF.runtimeId, { read: ['- [ ] b'], left: ['- [x] b'] }]]) });
+        expect(outcome).toEqual({ written: true, refused: null, made: [], rows: new Map([[1, { at: 1, read: ['- [ ] b'], left: ['- [x] b'] }]]) });
         expect(h.text()).toBe('- [ ] a\r\n- [x] b\r\n');
         expect(log.refusals).toEqual([]);
     });
@@ -623,33 +608,35 @@ describe('processLines: asking where a row stands, and giving up', () => {
         expect(h.text()).toBe('- [ ] a\nX\n- [x] b\n- [ ] b\n');
     });
 
-    it('refuses through row when the channel has no line to give', async () => {
-        const h = harness('- [ ] a\n');
-        const log = writeSink(() => ({ kind: 'ambiguous', count: 2 }));
+    it('refuses through row when the named row\'s line reads otherwise than its basis', async () => {
+        // The row that was read there is not looked for anywhere else, even
+        // where a line reads as it (the second line here).
+        const h = harness('- [ ] a\n- [ ] b\n');
+        const log = writeSink();
 
         const outcome = await processLines(h.app, h.file, log.channel, (draft, _eol, session) => {
-            const at = session.row(named('a'));
+            const at = session.row(named(0, '- [ ] b', 'b'));
             if (at === null) return false;
-            draft.rewrite(at, '- [x] a');
+            draft.rewrite(at, '- [x] b');
             return true;
         });
 
-        const refusal = { file: 'note.md', reason: { kind: 'ambiguous', count: 2 }, subject: 'a' };
+        const refusal = { file: 'note.md', reason: { kind: 'changed' }, subject: 'b' };
         expect(outcome).toEqual({ written: false, refused: refusal });
         expect(log.refusals).toEqual([refusal]);
-        expect(h.text()).toBe('- [ ] a\n');
+        expect(h.text()).toBe('- [ ] a\n- [ ] b\n');
     });
 
-    it('finds every target gone when there is no channel to ask', async () => {
+    it('refuses a named row whose line is past the end of the file', async () => {
         const h = harness('- [ ] a\n');
 
         const outcome = await processLines(h.app, h.file, undefined, (_draft, _eol, session) => {
-            return session.row(named('a')) !== null;
+            return session.row(named(3, '- [ ] a', 'a')) !== null;
         });
 
         expect(outcome).toEqual({
             written: false,
-            refused: { file: 'note.md', reason: { kind: 'gone' }, subject: 'a' },
+            refused: { file: 'note.md', reason: { kind: 'changed' }, subject: 'a' },
         });
         expect(h.text()).toBe('- [ ] a\n');
     });
@@ -703,36 +690,38 @@ describe('processLines: asking where a row stands, and giving up', () => {
 });
 
 describe('a coordinate carried across a write\'s own edits', () => {
-    const at = (line: number): Located => ({ kind: 'at', line });
-
-    it('asks the channel once per name, about the lines as they were handed in', async () => {
+    it('checks a target once, against the lines as they were handed in', async () => {
+        // Asked again after the write put a line above, the target is not
+        // checked on the lines as they stand, where its line reads another.
         const h = harness('- [ ] a\n- [ ] b\n');
-        const log = writeSink(() => at(1));
+        const b = named(1, '- [ ] b', 'b');
+        const seen: Array<number | null> = [];
 
-        await processLines(h.app, h.file, log.channel, (draft, _eol, session) => {
-            session.row(named('b'));
+        await processLines(h.app, h.file, undefined, (draft, _eol, session) => {
+            seen.push(session.row(b));
             putAt(draft, 0, 'new');
-            session.row(named('b'));
-            session.row(named('b'));
+            seen.push(session.row(b));
+            seen.push(session.row(b));
             return true;
         });
 
-        expect(log.asked).toEqual([{ lines: ['- [ ] a', '- [ ] b', ''], ref: REF }]);
+        expect(seen).toEqual([1, 2, 2]);
     });
 
     it('follows the row down past lines the write put above it, and up past lines it took away', async () => {
         const h = harness('x\ny\n- [ ] b\nz\n');
-        const log = writeSink(() => at(2));
+        const log = writeSink();
+        const b = named(2, '- [ ] b', 'b');
         const seen: Array<number | null> = [];
 
         await processLines(h.app, h.file, log.channel, (draft, _eol, session) => {
             putAt(draft, 0, 'n1', 'n2');
-            seen.push(session.row(named('b')));
+            seen.push(session.row(b));
             draft.splice(0, 3);
-            seen.push(session.row(named('b')));
+            seen.push(session.row(b));
             // Below the row: it stays where it is.
             draft.splice(2, 1);
-            seen.push(session.row(named('b')));
+            seen.push(session.row(b));
             return true;
         });
 
@@ -742,30 +731,31 @@ describe('a coordinate carried across a write\'s own edits', () => {
 
     it('says how it left each row it named, where the row ended up, and nothing of one it took away', async () => {
         const h = harness('- [ ] a\n\t- child\n- [ ] b\n');
-        const log = writeSink((_lines, ref) => (ref.runtimeId === 'gone' ? at(2) : at(0)));
+        const log = writeSink();
 
         const outcome = await processLines(h.app, h.file, log.channel, (draft, _eol, session) => {
-            session.row(named('a'));
-            session.row({ ref: { runtimeId: 'gone' }, subject: 'b', basis: ON_RECORD });
+            session.row(named(0, '- [ ] a', 'a'));
+            session.row(named(2, '- [ ] b', 'b'));
             putAt(draft, 0, 'new');
             draft.splice(3, 1);
             return true;
         });
 
-        expect(outcome.rows).toEqual(new Map([[REF.runtimeId, { read: ['- [ ] a', '\t- child'], left: ['- [ ] a', '\t- child'] }]]));
+        expect(outcome.rows).toEqual(new Map([[0, { at: 1, read: ['- [ ] a', '\t- child'], left: ['- [ ] a', '\t- child'] }]]));
         expect(h.text()).toBe('new\n- [ ] a\n\t- child\n');
     });
 
     it('keeps a row the write rewrote, and loses one it took away', async () => {
         const h = harness('- [ ] a\n- [ ] b\n');
-        const log = writeSink(() => at(0));
+        const log = writeSink();
+        const a = named(0, '- [ ] a', 'a');
         const seen: Array<number | null> = [];
 
         await processLines(h.app, h.file, log.channel, (draft, _eol, session) => {
             draft.rewrite(0, '- [x] a');
-            seen.push(session.row(named('a')));
+            seen.push(session.row(a));
             draft.splice(0, 1);
-            return session.row(named('a')) !== null;
+            return session.row(a) !== null;
         });
 
         expect(seen).toEqual([0]);
@@ -775,7 +765,7 @@ describe('a coordinate carried across a write\'s own edits', () => {
 
     it('refuses the write when a splice went round the report and moved the row', async () => {
         const h = harness('- [ ] a\n- [ ] b\n');
-        const log = writeSink(() => at(1));
+        const log = writeSink();
 
         await expect(processLines(h.app, h.file, log.channel, (draft, _eol, session) => {
             draft.splice(0, 0, 'reported');
@@ -783,7 +773,7 @@ describe('a coordinate carried across a write\'s own edits', () => {
             // without going through `splice`, to simulate an edit that never
             // reported itself.
             (draft.lines as string[]).splice(0, 0, 'not reported');
-            session.row(named('b'));
+            session.row(named(1, '- [ ] b', 'b'));
             return true;
         })).rejects.toThrow('does not read what it read');
         expect(h.text()).toBe('- [ ] a\n- [ ] b\n');
@@ -793,12 +783,12 @@ describe('a coordinate carried across a write\'s own edits', () => {
         // Twins: the line the carried coordinate lands on reads like the row,
         // so only the report's account of the whole file can say it moved.
         const h = harness('- [ ] a\n- [ ] a\n- [ ] a\n');
-        const log = writeSink(() => at(1));
+        const log = writeSink();
 
         await expect(processLines(h.app, h.file, log.channel, (draft, _eol, session) => {
             draft.splice(3, 0, 'reported');
             (draft.lines as string[]).splice(0, 1);
-            const line = session.row(named('a'));
+            const line = session.row(named(1, '- [ ] a', 'a'));
             if (line === null) return false;
             draft.rewrite(line, '- [x] a');
             return true;

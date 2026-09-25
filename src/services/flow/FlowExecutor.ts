@@ -77,9 +77,9 @@ export interface FireOp {
  * subtree in the lines written). The source's write is made only if the row
  * still reads so. Where it looks for the row is the caller's (`SourceWrite`):
  * an editor's completion at the line its transactions have carried `source`
- * to, a write to a line the editor pointed at at `source.line`, and a card's
- * completion by the row's name, as its completing write named it (to be
- * replaced by N1, where a name lasts one reading only).
+ * to, and a write to a line the editor pointed at or a card's completion at
+ * `source.line`, the line the completing write left the row on. A line
+ * written above it from outside in between refuses the source's write.
  */
 export interface PendingAway {
     task: Task;

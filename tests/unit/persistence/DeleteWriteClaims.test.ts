@@ -68,7 +68,7 @@ describe('what deleteTaskFromFile reports', () => {
         expect(removed.written).toBe(false);
         expect(b.filed).toEqual([]);
         expect(b.lines()).toEqual(['# note', '- [ ] 別のタスク @2026-09-21']);
-        expect(b.refused).toEqual([{ file: FILE, reason: { kind: 'gone' }, subject: '親' }]);
+        expect(b.refused).toEqual([{ file: FILE, reason: { kind: 'changed' }, subject: '親' }]);
     });
 });
 

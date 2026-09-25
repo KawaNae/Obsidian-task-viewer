@@ -25,7 +25,7 @@ const writer = new InlineTaskWriter(app as never, new FileOperations(app as neve
 
 /** The lines a write of `ops` to the row at `line` leaves, with nothing written anywhere. */
 function written(lines: readonly string[], line: number, ops: readonly TaskOp[]): readonly string[] | null {
-    const edited = editLines(FILE, lines, '\n', undefined,
+    const edited = editLines(FILE, lines, '\n',
         (draft, _eol, session) => writer.applyOps(draft, session, { line, text: lines[line] }, ops));
     return edited.written ? edited.lines : null;
 }

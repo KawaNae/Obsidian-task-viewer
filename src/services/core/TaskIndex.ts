@@ -96,8 +96,6 @@ export class TaskIndex {
         // so a write that outlives this index files nothing (see WriteObserver).
         this.repository.getWriteObserver().connect((path, origin) => ({
             sink: this.scanner.writeSink(path, origin),
-            locate: (lines, ref) => this.scanner.locate(path, lines, ref),
-            onRecord: (lines, ref, line) => this.scanner.onRecord(path, lines, ref, line),
             refused: refusal => this.reportRefusal(refusal),
         }));
     }
@@ -454,12 +452,12 @@ export class TaskIndex {
         // A move to another file consumes nothing in this write: the command
         // stays on the row until the source's write takes the row away.
         const planned = fire?.planned();
-        this.adoptWrittenRow(task, taskId, before, outcome.rows.get(before.id), planned?.kind === 'fires' && planned.away === null);
-        // The source's write of a move to another file names the row, as this
-        // write did, planned from the row and subtree this write left.
+        this.adoptWrittenRow(task, taskId, before, outcome.rows.get(target.line), planned?.kind === 'fires' && planned.away === null);
+        // The source's write of a move to another file takes the row at the
+        // line this write left it on, planned from the row and subtree it left.
         if (fire) {
             await this.commandExecutor.settleFire(fire, (at, ops) => this.repository.applyToTask(
-                { ...target, basis: { text: at.text, subtree: at.subtree } }, ops, { tellRefusal: false }));
+                { ...target, line: at.line, basis: { text: at.text, subtree: at.subtree } }, ops, { tellRefusal: false }));
         }
         return true;
     }
@@ -548,12 +546,12 @@ export class TaskIndex {
      *
      * The next write to this row is planned from the copy (`plannedOn`), and
      * the copy's fields already say what the update wrote — `Object.assign`
-     * put them there before the line was made from them. Only the line and the
-     * subtree, which the scan reads, would still say what was there before, so
+     * put them there before the line was made from them. Only the line, its
+     * number and the subtree, which the scan reads, would still say what was there before, so
      * a second update or a deletion fire in the moment before the scan would
      * be refused against our own write. The write knows what it left.
      *
-     * The line always: the update was planned from it, and the write checked
+     * The line and its number always: the update was planned from it, and the write checked
      * the file still read so. The subtree only when the write found it as the
      * copy has it. The update did not plan from the subtree, so a line written
      * into it from outside since the scan was not checked — taken into the
@@ -571,6 +569,7 @@ export class TaskIndex {
      */
     private adoptWrittenRow(task: Task, taskId: string, before: Task, lines: RowLines | undefined, fired = false): void {
         if (!lines || this.store.getTask(taskId) !== task) return;
+        task.line = lines.at;
         task.originalText = lines.left[0];
         if (fired) task.flow = undefined;
         const planned = before.subtreeLines;

@@ -57,13 +57,25 @@ describe('after the editor\'s menu rewrote a row, before any scan', () => {
         expect(bench.refused.map(r => r.reason.kind)).toEqual(['changed', 'changed']);
     });
 
-    it('still lets a timer write its record: the row reads as the menu\'s write left it', async () => {
-        // The timer's inserts keep the weaker comparison until F9: a record
-        // refused here would be a measurement lost (`RowBasis.ON_RECORD`).
+    it('refuses a timer\'s record made from the copy as well: the row reads otherwise than the copy', async () => {
+        // The timer's weaker comparison sets the indentation aside, not the
+        // text: the copy is what it compares with (`RowBasis.OnRecord`).
         const { bench, task } = await afterMenu();
 
+        expect((await bench.writer.insertLineAsFirstChild(task, '- [x] ⏱️ 記録')).written).toBe(false);
+        expect(bench.lines()).toEqual([TICKED, '']);
+        expect(bench.refused.map(r => r.reason.kind)).toEqual(['changed']);
+    });
+
+    it('lets a timer write its record on a row only indented since the scan', async () => {
+        // The timer's inserts keep the weaker comparison until F9: a record
+        // refused here would be a measurement lost (`RowBasis.OnRecord`).
+        const bench = await writeBench(['- [ ] P', ROW, '']);
+        const task = bench.taskAt(1);
+        bench.edit(['- [ ] P', `\t${ROW}`, '']);
+
         expect((await bench.writer.insertLineAsFirstChild(task, '- [x] ⏱️ 記録')).written).toBe(true);
-        expect(bench.lines()).toEqual([TICKED, '\t- [x] ⏱️ 記録', '']);
+        expect(bench.lines()).toEqual(['- [ ] P', `\t${ROW}`, '\t\t- [x] ⏱️ 記録', '']);
     });
 
     it('refuses a timer\'s record on a row rewritten from outside, which no record reads', async () => {
@@ -179,7 +191,8 @@ describe('what an update leaves', () => {
 
         const outcome = await bench.writer.updateTaskInFile(plannedOn(a), checked(a));
 
-        expect(outcome.rows.get(a.id)).toEqual({
+        expect(outcome.rows.get(a.line)).toEqual({
+            at: 0,
             read: ['- [ ] A', '    - key:: v'],
             left: ['- [x] A', '    - key:: v'],
         });
