@@ -272,6 +272,28 @@ describe('the editor menu\'s rewrite of a line, written to the file when the edi
 
         expect(note.fired).toEqual([]);
     });
+
+    it('moves the line to another file, and takes the original away in the file, when the editor closed before the menu wrote', async () => {
+        // The source's write is made at the line the completing write left
+        // the row on, in the content it left (`fireOp`'s `source.key`): right
+        // only while the fire is the last op of that write.
+        const lines = ['# note', '- [ ] T @2026-09-21 ==> move([[other]])', '\t- [ ] c', '- [ ] U', ''];
+        const { contents, session } = await openVault({ [FILE]: lines, 'other.md': ['# other', ''] });
+        live = session;
+        const editor = editorSession(session.index.editorFireHost(), FILE, lines.join('\n'));
+        const at = { line: 1, text: lines[1], key: keyOf(editor.state.doc) };
+        editor.close();
+
+        expect(await writeEditorLine(editor.handle, FILE, at, [{ kind: 'update', text: lines[1].replace('[ ]', '[x]') }], {
+            ...session.index.editorFireHost(),
+            writeLine: (path: string, line: EditorLine, ops: readonly TaskOp[]) => session.index.writeLine(path, line, ops),
+        })).toBe(true);
+
+        expect(contents.get('other.md')).toBe(['# other', '- [x] T @2026-09-21', '\t- [ ] c', ''].join('\n'));
+        expect(contents.get(FILE)).toBe(['# note', '- [ ] U', ''].join('\n'));
+        expect(editor.lines()).toEqual(lines);
+        expect(Notice.messages).toEqual([]);
+    });
 });
 
 describe('the editor menu\'s rewrite of a line, in the editor', () => {
