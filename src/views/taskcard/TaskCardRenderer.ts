@@ -191,9 +191,7 @@ export class TaskCardRenderer extends Component {
         for (const key of this.expandedTaskIds) {
             if (!key.startsWith(scope)) continue;
             const held = key.slice(scope.length);
-            const segment = TaskIdGenerator.parseSegmentId(held);
-            const base = readService.getTask(segment ? segment.baseId : held)?.id;
-            const now = base && segment ? TaskIdGenerator.makeSegmentId(base, segment.segmentDate) : base;
+            const now = TaskIdGenerator.mapRow(held, row => readService.getTask(row)?.id);
             if (now !== taskId) continue;
             this.expandedTaskIds.delete(key);
             this.expandedTaskIds.add(cardInstanceId);
