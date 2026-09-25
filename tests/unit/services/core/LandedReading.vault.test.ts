@@ -88,7 +88,7 @@ describe('what a write left, before any scan', () => {
 });
 
 describe('a scan that read the file before our write and commits after it', () => {
-    it('puts the older reading back until the write\'s own scan reads the file again; a write in between is refused, not misplaced', async () => {
+    it('is late, and commits nothing: the index keeps what the write left, and a write in between lands', async () => {
         const { contents, session } = await open(['# note', '- [ ] A @2026-09-21', '\t- ==> every 1d', '- [ ] B', '']);
         const a = taskNamed(session, 'A');
 
@@ -113,24 +113,25 @@ describe('a scan that read the file before our write and commits after it', () =
         const written = contents.get(FILE);
         expect(taskNamed(session, 'B').line).toBe(4);
 
-        // The late scan commits what it read before the write: a reading of
-        // its own, which no write of ours leads from.
+        // The late scan read the file before the write: a later reading, the
+        // write's, is in, so what it read is not.
+        const landedB = taskNamed(session, 'B');
         release();
-        expect(await late).toBe(true);
-        const stale = taskNamed(session, 'B');
-        expect(stale.line).toBe(3);
+        expect(await late).toBe(false);
+        expect(taskNamed(session, 'B')).toBe(landedB);
+        expect(landedB.line).toBe(4);
 
-        // Planned from that copy: the file does not read as its reading did.
-        // Line 3 is not written.
-        expect(await session.index.updateTask(stale.id, { statusChar: 'x' })).toBe(false);
-        expect(contents.get(FILE)).toBe(written);
+        expect(await session.index.updateTask(landedB.id, { statusChar: 'x' })).toBe(true);
+        const lines = written!.split('\n');
+        lines[4] = '- [x] B';
+        expect(contents.get(FILE)).toBe(lines.join('\n'));
+        expect(Notice.messages).toEqual([]);
 
-        // The writes' own events read the file again, and the index catches up.
+        // The writes' own events read the file again, and find it read.
         await held.release();
         await session.settle(FILE);
         const b = taskNamed(session, 'B');
         expect(b.line).toBe(4);
-        expect(await session.index.updateTask(b.id, { statusChar: 'x' })).toBe(true);
-        expect(taskNamed(session, 'B').originalText).toBe('- [x] B');
+        expect(b.originalText).toBe('- [x] B');
     });
 });

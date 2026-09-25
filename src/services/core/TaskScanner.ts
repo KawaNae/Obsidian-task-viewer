@@ -45,6 +45,9 @@ export class TaskScanner {
     /**
      * The number of each file's last committed reading, kept when the file
      * is renamed or deleted, so that no number is given twice in a session.
+     * A reading is committed only if no reading after the one it started from
+     * is: one that read the file before a later reading was committed is late,
+     * and what it read is older than what the index holds (`commitRead`).
      */
     private numbers = new Map<string, number>();
 
@@ -180,17 +183,17 @@ export class TaskScanner {
      * nothing. Whether it committed.
      *
      * The lines are what the file holds: `processOrFail` answered that the
-     * write landed, and nothing is read that the write did not leave. A scan
-     * that read the file before this write and commits after it puts an older
-     * reading back; the `modify` this write caused reads the file again after
-     * it. In between, a write planned from the older reading is refused where
-     * the file does not read as that reading did.
+     * write landed, and nothing is read that the write did not leave. The
+     * write is the reading after the one it was handed (`WriteLinks.wrote`),
+     * and it is late like any other reading: a scan that read the file after
+     * the write and committed before this call has read what it left, or
+     * something after it.
      */
     landed(path: string, landing: Landing, commit = true): boolean {
         const handed = landing.handed ?? this.readingOf(path);
-        this.links.wrote(path, handed, contentKeyOf(landing.before), contentKeyOf(landing.lines), landing.before.length, landing.edits);
+        const n = this.links.wrote(path, handed, contentKeyOf(landing.before), contentKeyOf(landing.lines), landing.before.length, landing.edits);
         if (!commit) return false;
-        return this.commitRead(path, [...landing.lines], landing.reading ?? undefined);
+        return this.commitRead(path, [...landing.lines], n - 1, landing.reading ?? undefined);
     }
 
     /**
@@ -231,27 +234,33 @@ export class TaskScanner {
      * ファイルをスキャンしてタスクを抽出（parse → identity → validate → commit）
      */
     private async scanFile(file: TFile): Promise<boolean> {
+        // Before the read: a reading committed while it is under way may be
+        // of a content after the one it gets.
+        const after = this.numbers.get(file.path) ?? 0;
         const content = await this.app.vault.read(file);
         const { lines } = splitLines(content);
-        return this.commitRead(file.path, lines);
+        return this.commitRead(file.path, lines, after);
     }
 
     /**
-     * Commit one reading of `path`, `lines`, as the file's next reading,
-     * unless it is of the content the last committed reading read. `reading`
-     * is a reading of these lines already made.
+     * Commit one reading of `path`, `lines`, begun when reading `after` was
+     * the file's last, as the reading after it. Not committed when it is
+     * late — a reading after `after` is committed already, of the file as it
+     * was then or later — or when it is of the content the last committed
+     * reading read. `reading` is a reading of these lines already made.
      *
      * A file to be read again whatever it read (`stale`) that reads as its
      * last reading did is that reading, parsed again: it keeps its number, and
      * its rows their names. No reading came between, so no write of ours did.
      */
-    private commitRead(path: string, lines: string[], reading?: OutlineReading): boolean {
+    private commitRead(path: string, lines: string[], after: number, reading?: OutlineReading): boolean {
         const file = { path };
+        if ((this.numbers.get(path) ?? 0) > after) return false;
         const readKey = contentKeyOf(lines);
         const last = this.readings.get(path);
         const again = last?.key === readKey;
         if (again && !this.stale.has(path)) return false;
-        const n = again ? last.n : (this.numbers.get(path) ?? 0) + 1;
+        const n = again ? last.n : after + 1;
         this.validator.clearErrorsForFile(file.path);
 
         // --- parse ---
