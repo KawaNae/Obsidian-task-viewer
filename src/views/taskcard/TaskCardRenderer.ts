@@ -42,10 +42,22 @@ import { CheckboxWiring } from './CheckboxWiring';
 import type { MenuPresenter } from '../../interaction/menu/MenuPresenter';
 import { TaskLinkInteractionManager } from './TaskLinkInteractionManager';
 import { bindTapIntents } from '../../interaction/tap/TapIntent';
-import type { TaskCardLinkRuntime } from './types';
+import type { ChildRenderItem, TaskCardLinkRuntime } from './types';
 import { getEffectiveMask } from '../../services/data/EffectiveProperties';
 import { TaskIdGenerator } from '../../services/display/TaskIdGenerator';
+import { holdCard, type CardHold } from './CardHold';
 
+/**
+ * What a card shows, to tell whether a kept card can stay as it is drawn.
+ *
+ * Everything the card shows is in it, and nothing else: not the task's name,
+ * which changes with every reading of its file while the card shows the same
+ * thing. What the card acts on is held apart and put in on every draw
+ * (`CardHold`), so a card kept across a reading acts on the task it shows.
+ *
+ * @param children the card's child items, as `ChildItemBuilder` builds them
+ *   (the drawn lines of the children and their children, with their notation)
+ */
 export function computeContentSignature(
     task: DisplayTask,
     settings: TaskViewerSettings,
@@ -54,15 +66,14 @@ export function computeContentSignature(
     overdueLevel: OverdueLevel,
     maskMode: boolean,
     isExpanded: boolean,
-    readService: TaskReadService,
+    children: readonly ChildRenderItem[],
 ): string {
-    const childSig = task.childEntries.map(e => {
-        if (e.kind === 'task') {
-            const child = readService.getTask(e.taskId);
-            return `t:${e.taskId}:${child?.statusChar ?? '?'}:${child?.content ?? ''}`;
-        }
-        return `l:${e.line.text}`;
-    });
+    const childSig = children.map(item => [
+        item.isCheckbox ? 1 : 0,
+        item.markdown,
+        item.notation ?? '',
+        item.propertyKey ?? '',
+    ]);
 
     // JSON.stringify: field values are escaped, so no separator can collide
     // with content, and the result never contains raw control characters.
@@ -70,14 +81,12 @@ export function computeContentSignature(
     // (html-to-image's SVG foreignObject export) reject XML-invalid chars
     // like \x00, so the serialized form must stay XML-safe.
     return JSON.stringify([
-        // The card's handlers hold the task's name, which lasts one reading
-        // of its file: a card kept across a reading would act on a name the
-        // row no longer has (`CheckboxWiring`).
-        task.id,
         task.statusChar,
         task.content,
         task.file,
         task.parserId,
+        // A child's time-only notation is shown with the parent's own date.
+        task.startDate ?? '',
         task.effectiveStartDate,
         task.effectiveStartTime ?? '',
         task.effectiveEndDate ?? '',
@@ -93,7 +102,9 @@ export function computeContentSignature(
         // for as long as the task is not edited.
         overdueLevel,
         options.compact ? '1' : '0',
+        options.context ?? '',
         maskMode ? '1' : '0',
+        maskMode ? (getEffectiveMask(task) ?? '') : '',
         isExpanded ? '1' : '0',
         settings.startHour,
         settings.childCollapseThreshold,
@@ -221,6 +232,14 @@ export class TaskCardRenderer extends Component {
         const enableLinks = isHubPreview || settings.enableCardFileLink;
         const onNavigate = options.hooks?.onNavigate;
 
+        // What the card shows of its children, and the names behind them. A
+        // compact card shows only their count, which the items still decide.
+        const children = task.childEntries.length > 0
+            ? this.childItemBuilder.buildChildItems(task, '')
+            : [];
+        // Every draw puts the task it draws in the hold, whether or not the
+        // card is drawn anew: a kept card acts on the task it shows.
+        const hold = holdCard(container, task, cardInstanceId, children.map(item => item.handler?.taskId ?? null));
         container.dataset.cardInstanceId = cardInstanceId;
 
         if (isHubPreview) {
@@ -236,8 +255,7 @@ export class TaskCardRenderer extends Component {
         );
         const sig = computeContentSignature(
             task, settings, options, topRightResolved, overdueLevel,
-            this.getMaskMode(), isExpanded,
-            this.childItemBuilder.getReadService(),
+            this.getMaskMode(), isExpanded, children,
         );
 
         if (container.dataset.contentSig === sig) {
@@ -270,11 +288,11 @@ export class TaskCardRenderer extends Component {
                 onDoubleTap: (x, y) => {
                     const action = this.getDoubleTapAction();
                     if (action === 'menu') {
-                        this.onContextMenu?.(task, x, y);
+                        this.onContextMenu?.(hold.task, x, y);
                     } else if (action === 'open') {
-                        this.onOpenInEditor?.(task);
+                        this.onOpenInEditor?.(hold.task);
                     } else {
-                        this.onDetailClick?.(task);
+                        this.onDetailClick?.(hold.task);
                     }
                 },
             }, {
@@ -315,13 +333,13 @@ export class TaskCardRenderer extends Component {
                 countLabelSpan.setText(`${this.getChildOverdueIcon(task, settings)}${completed}/${total}`);
             }
         } else if (task.childEntries.length > 0) {
-            await this.renderInlineChildren(contentContainer, task, cardComp, settings, parentMarkdown, cardInstanceId, forceExpand);
+            await this.renderInlineChildren(contentContainer, task, children, hold, cardComp, settings, parentMarkdown, forceExpand);
         } else {
             await MarkdownRenderer.render(this.app, parentMarkdown, contentContainer, task.file, cardComp);
         }
 
         this.bindInternalLinks(contentContainer, task.file, enableLinks, onNavigate);
-        this.bindParentCheckbox(contentContainer, task.originalTaskId ?? task.id, settings, task.isReadOnly);
+        this.bindParentCheckbox(contentContainer, hold, settings, task.isReadOnly);
 
         // Apply mask last so it overlays whatever child/inline renderer produced.
         // Detail modal opts out — the user explicitly asked to inspect this task.
@@ -487,20 +505,22 @@ export class TaskCardRenderer extends Component {
     private async renderInlineChildren(
         contentContainer: HTMLElement,
         task: DisplayTask,
+        items: ChildRenderItem[],
+        hold: CardHold,
         component: Component,
         settings: TaskViewerSettings,
         parentMarkdown: string,
-        cardInstanceId: string,
         forceExpand = false
     ): Promise<void> {
-        const items = this.childItemBuilder.buildChildItems(task, '');
+        const nameAt = (index: number) => hold.childAt(index);
         if (!forceExpand && items.length >= settings.childCollapseThreshold) {
             await MarkdownRenderer.render(this.app, parentMarkdown, contentContainer, task.file, component);
             await this.childSectionRenderer.renderCollapsed(
                 contentContainer,
                 items,
+                nameAt,
                 this.expandedTaskIds,
-                cardInstanceId,
+                () => hold.cardInstanceId,
                 task.file,
                 component,
                 settings,
@@ -510,11 +530,13 @@ export class TaskCardRenderer extends Component {
             return;
         }
 
-        const indentedItems = this.childItemBuilder.buildChildItems(task, '    ');
+        // Under the parent's line, each item goes one level in.
+        const indentedItems = items.map(item => ({ ...item, markdown: '    ' + item.markdown }));
         await this.childSectionRenderer.renderParentWithChildren(
             contentContainer,
             parentMarkdown,
             indentedItems,
+            nameAt,
             task.file,
             component,
             settings,
@@ -532,13 +554,13 @@ export class TaskCardRenderer extends Component {
 
     private bindParentCheckbox(
         contentContainer: HTMLElement,
-        taskId: string,
+        hold: CardHold,
         settings: TaskViewerSettings,
         readOnly?: boolean
     ): void {
         const mainCheckbox = contentContainer.querySelector(':scope > ul > li > input[type="checkbox"]');
         if (mainCheckbox) {
-            this.checkboxWiring.wireParentCheckbox(mainCheckbox, taskId, settings, readOnly);
+            this.checkboxWiring.wireParentCheckbox(mainCheckbox, () => hold.name, settings, readOnly);
         }
     }
 

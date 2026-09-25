@@ -102,7 +102,7 @@ export class ScheduleTaskRenderer {
 
         const scope = flowCard ? 'flow' : 'section';
         const cardInstanceId = `schedule::${scope}::${task.id}`;
-        const reused = reconciler.acquire(cardInstanceId);
+        const reused = reconciler.acquire(cardInstanceId, task);
         const card = reused ?? wrapper.createDiv('task-card');
         if (reused) wrapper.appendChild(reused);
 
@@ -111,7 +111,7 @@ export class ScheduleTaskRenderer {
             ? { cardInstanceId, topRight: { mode: 'time' as const } }
             : { cardInstanceId, topRight: { mode: 'time' as const }, compact: true };
         await this.taskRenderer.render(card, task, this.getSettings(), options);
-        if (!reused) this.menuHandler.addTaskContextMenu(card, task);
+        if (!reused) this.menuHandler.addTaskContextMenu(card);
     }
 
     /**

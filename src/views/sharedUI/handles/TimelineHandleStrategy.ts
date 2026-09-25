@@ -15,7 +15,7 @@ import type { HandleStrategy } from './HandleStrategy';
  * - touching bottom: split-continues-after、または終了時刻が startHour:00 ちょうど
  */
 export class TimelineHandleStrategy implements HandleStrategy {
-    render(taskEl: HTMLElement, taskId: string, task: Task, startHour: number): void {
+    render(taskEl: HTMLElement, task: Task, startHour: number): void {
         const isSplitTail = taskEl.classList.contains('task-card--split-continues-before');
         const isSplitHead = taskEl.classList.contains('task-card--split-continues-after');
 
@@ -33,14 +33,14 @@ export class TimelineHandleStrategy implements HandleStrategy {
 
         // 上端 boundary 以外: resize-top + move-top-right
         if (!isTouchingTop) {
-            HandleRenderer.createResize(taskEl, taskId, 'top', '↕');
-            HandleRenderer.createMove(taskEl, taskId, 'top-right');
+            HandleRenderer.createResize(taskEl, 'top', '↕');
+            HandleRenderer.createMove(taskEl, 'top-right');
         }
 
         // 下端 boundary 以外: resize-bottom + move-bottom-right
         if (!isTouchingBottom) {
-            HandleRenderer.createResize(taskEl, taskId, 'bottom', '↕');
-            HandleRenderer.createMove(taskEl, taskId, 'bottom-right');
+            HandleRenderer.createResize(taskEl, 'bottom', '↕');
+            HandleRenderer.createMove(taskEl, 'bottom-right');
         }
     }
 }

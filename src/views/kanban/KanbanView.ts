@@ -393,7 +393,7 @@ export class KanbanView extends ItemView {
             : { mode: 'none' as const };
         for (const task of tasks) {
             const cardInstanceId = `kanban::cell-${listId}::${task.id}`;
-            const reused = reconciler?.acquire(cardInstanceId);
+            const reused = reconciler?.acquire(cardInstanceId, task);
             const card = reused ?? body.createDiv('task-card');
             if (reused) body.appendChild(reused);
 
@@ -402,7 +402,7 @@ export class KanbanView extends ItemView {
                 cardInstanceId,
                 topRight,
             });
-            if (!reused) this.menuHandler.addTaskContextMenu(card, task);
+            if (!reused) this.menuHandler.addTaskContextMenu(card);
         }
     }
 

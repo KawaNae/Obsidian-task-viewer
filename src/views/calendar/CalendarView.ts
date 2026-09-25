@@ -827,7 +827,7 @@ export class CalendarView extends ItemView {
     ): Promise<void> {
         if (entry.useBarVariant) {
             const cardInstanceId = `${VIEW_ID}::lane-multi::${entry.segmentId}`;
-            const reused = reconciler.acquire(cardInstanceId);
+            const reused = reconciler.acquire(cardInstanceId, entry.task);
             const barEl = reused ?? weekRow.createDiv('task-card task-card--multi-day');
             markHandleSurface(barEl, 'grid');
             if (reused) weekRow.appendChild(reused);
@@ -838,12 +838,12 @@ export class CalendarView extends ItemView {
                 topRight: { mode: 'none' },
                 compact: true,
             });
-            if (!reused) this.menuHandler.addTaskContextMenu(barEl, entry.task);
+            if (!reused) this.menuHandler.addTaskContextMenu(barEl);
             return;
         }
 
         const cardInstanceId = `${VIEW_ID}::lane::${entry.task.id}`;
-        const reused = reconciler.acquire(cardInstanceId);
+        const reused = reconciler.acquire(cardInstanceId, entry.task);
         const card = reused ?? weekRow.createDiv('task-card');
         markHandleSurface(card, 'grid');
         if (reused) weekRow.appendChild(reused);
@@ -854,7 +854,7 @@ export class CalendarView extends ItemView {
             topRight: { mode: 'time' },
             compact: true,
         });
-        if (!reused) this.menuHandler.addTaskContextMenu(card, entry.task);
+        if (!reused) this.menuHandler.addTaskContextMenu(card);
     }
 
     /**

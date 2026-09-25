@@ -81,6 +81,10 @@ export class HandleManager implements SelectionHost {
             const isSelected = !!taskId
                 && (htmlEl.dataset.id === taskId || htmlEl.dataset.splitOriginalId === taskId);
             el.toggleClass('is-selected', isSelected);
+            // A card is kept across readings that rename its task. One that
+            // had the handles and is no longer the selected task's (its file
+            // was changed by another hand) gives them up.
+            if (!isSelected) this.clearHandles(htmlEl);
         });
 
         if (taskId) {
@@ -96,13 +100,17 @@ export class HandleManager implements SelectionHost {
         taskCards.forEach(el => {
             const htmlEl = el as HTMLElement;
             if (htmlEl.dataset.id === taskId || htmlEl.dataset.splitOriginalId === taskId) {
-                // handles-out は GridHandleStrategy が render 時に付ける
-                // 選択スコープの class なので、handle と同時に掃除する
-                htmlEl.classList.remove('task-card--handles-out');
-                const handles = htmlEl.querySelectorAll('.task-card__handle');
-                handles.forEach(h => h.remove());
+                this.clearHandles(htmlEl);
             }
         });
+    }
+
+    private clearHandles(taskEl: HTMLElement): void {
+        // handles-out は GridHandleStrategy が render 時に付ける
+        // 選択スコープの class なので、handle と同時に掃除する
+        taskEl.classList.remove('task-card--handles-out');
+        const handles = taskEl.querySelectorAll('.task-card__handle');
+        handles.forEach(h => h.remove());
     }
 
     /**
@@ -132,7 +140,7 @@ export class HandleManager implements SelectionHost {
             existingHandles.forEach(h => h.remove());
 
             const strategy = this.pickStrategy(taskEl);
-            strategy.render(taskEl, taskId, task, startHour);
+            strategy.render(taskEl, task, startHour);
         });
     }
 

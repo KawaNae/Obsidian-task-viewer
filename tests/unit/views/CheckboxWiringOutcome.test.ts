@@ -73,7 +73,7 @@ describe('parent checkbox', () => {
     it('puts the tick back when the write was not made', async () => {
         const { wiring, calls } = wiringAnswering(false);
         const box = new FakeCheckbox(new FakeAttrs());
-        wiring.wireParentCheckbox(box as unknown as Element, 'parent-1', settings);
+        wiring.wireParentCheckbox(box as unknown as Element, () => 'parent-1', settings);
 
         box.click();
         expect(box.checked).toBe(true);
@@ -86,7 +86,7 @@ describe('parent checkbox', () => {
     it('keeps the tick when the write was made', async () => {
         const { wiring } = wiringAnswering(true);
         const box = new FakeCheckbox(new FakeAttrs());
-        wiring.wireParentCheckbox(box as unknown as Element, 'parent-1', settings);
+        wiring.wireParentCheckbox(box as unknown as Element, () => 'parent-1', settings);
 
         box.click();
         await settle();
@@ -97,7 +97,7 @@ describe('parent checkbox', () => {
     it('leaves a box that is no longer on the page alone', async () => {
         const { wiring } = wiringAnswering(false);
         const box = new FakeCheckbox(new FakeAttrs());
-        wiring.wireParentCheckbox(box as unknown as Element, 'parent-1', settings);
+        wiring.wireParentCheckbox(box as unknown as Element, () => 'parent-1', settings);
 
         box.click();
         box.isConnected = false;
@@ -111,7 +111,7 @@ describe('child checkbox', () => {
     it('puts checked and data-task back when ticking was not written', async () => {
         const { wiring, calls } = wiringAnswering(false);
         const { box, li, container, items } = childBox({ checked: false });
-        wiring.wireChildCheckboxes(container, items, settings);
+        wiring.wireChildCheckboxes(container, items, settings, () => 'child-1');
 
         box.click();
         expect(box.getAttribute('data-task')).toBe('x');
@@ -126,7 +126,7 @@ describe('child checkbox', () => {
     it('puts a custom status back when unticking was not written', async () => {
         const { wiring } = wiringAnswering(false);
         const { box, li, container, items } = childBox({ checked: true, dataTask: '/' });
-        wiring.wireChildCheckboxes(container, items, settings);
+        wiring.wireChildCheckboxes(container, items, settings, () => 'child-1');
 
         box.click();
         expect(box.getAttribute('data-task')).toBeNull();
@@ -140,7 +140,7 @@ describe('child checkbox', () => {
     it('keeps the new state when the write was made', async () => {
         const { wiring } = wiringAnswering(true);
         const { box, li, container, items } = childBox({ checked: false });
-        wiring.wireChildCheckboxes(container, items, settings);
+        wiring.wireChildCheckboxes(container, items, settings, () => 'child-1');
 
         box.click();
         await settle();

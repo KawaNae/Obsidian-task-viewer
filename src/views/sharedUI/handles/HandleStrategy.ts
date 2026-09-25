@@ -8,5 +8,5 @@ import type { Task } from '../../../types';
  * DOM 生成は `HandleRenderer` の static helper を共通利用する。
  */
 export interface HandleStrategy {
-    render(taskEl: HTMLElement, taskId: string, task: Task, startHour: number): void;
+    render(taskEl: HTMLElement, task: Task, startHour: number): void;
 }

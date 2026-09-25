@@ -14,6 +14,7 @@ import { ValidationMenuBuilder } from './builders/ValidationMenuBuilder';
 import { toDisplayTask, getOriginalTaskId } from '../../services/display/DisplayTaskConverter';
 import type { TaskHubFocusField } from '../../modals/hub/TaskHubForm';
 import { t } from '../../i18n';
+import { heldBy } from '../../views/taskcard/CardHold';
 
 export type TaskMenuHooks = {
     /** Invoked after a destructive action (open in editor / convert to file / delete). */
@@ -89,17 +90,23 @@ export class MenuHandler {
     }
 
     /**
-     * Add context menu to task element
+     * Add context menu to a task card. The menu is for the task the card was
+     * last drawn from, asked when it opens (`CardHold`): the card is kept
+     * across readings of its file that rename the task.
      */
-    addTaskContextMenu(el: HTMLElement, task: Task, hooks?: TaskMenuHooks) {
-        if (this.boundCards.has(el)) return;
-        this.boundCards.add(el);
-        TouchLongPressBinder.bind(el, {
+    addTaskContextMenu(card: HTMLElement, hooks?: TaskMenuHooks) {
+        if (this.boundCards.has(card)) return;
+        this.boundCards.add(card);
+        const show = (x: number, y: number) => {
+            const held = heldBy(card);
+            if (held) this.showContextMenu(x, y, held.task, hooks);
+        };
+        TouchLongPressBinder.bind(card, {
             getThreshold: () => this.plugin.settings.longPressThreshold,
-            onLongPress: (x, y) => this.showContextMenu(x, y, task, hooks),
+            onLongPress: show,
             onContextMenu: (e) => {
                 e.stopPropagation();
-                this.showContextMenu(e.clientX, e.clientY, task, hooks);
+                show(e.clientX, e.clientY);
             },
         });
     }

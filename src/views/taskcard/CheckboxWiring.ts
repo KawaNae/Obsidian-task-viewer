@@ -8,6 +8,9 @@ import { buildStatusOptions, createStatusTitle } from '../../constants/statusOpt
  * Wires checkbox interactions for parent and child items.
  *
  * Every checkbox, parent or child, is a task and writes through updateTask.
+ * A box is kept while its card shows the same thing, across readings of the
+ * file that rename its task, so a handler never holds the name: it asks for
+ * it when it writes (`CardHold`).
  */
 export class CheckboxWiring {
     constructor(
@@ -15,41 +18,28 @@ export class CheckboxWiring {
         private menuPresenter: MenuPresenter
     ) {}
 
+    /**
+     * @param nameAt the name behind the item at an index of `items`, asked
+     *   when a box is used
+     */
     wireChildCheckboxes(
         container: HTMLElement,
         items: ChildRenderItem[],
-        settings: TaskViewerSettings
+        settings: TaskViewerSettings,
+        nameAt: (index: number) => string | undefined
     ): void {
-        this.wireChildCheckboxesWithOffset(container, items, settings, 0);
+        this.wireChildCheckboxesWithOffset(container, items, settings, 0, nameAt);
     }
 
+    /** @param nameOf the name of the card's task, asked when the box is used */
     wireParentCheckbox(
         checkbox: Element,
-        taskId: string,
+        nameOf: () => string,
         settings: TaskViewerSettings,
         readOnly = false
     ): void {
         if (readOnly) return;
-        checkbox.addEventListener('click', () => {
-            const input = checkbox as HTMLInputElement;
-            const isChecked = input.checked;
-            const newStatusChar = isChecked ? 'x' : ' ';
-            void this.writeService.updateTask(taskId, { statusChar: newStatusChar }).then(written => {
-                if (!written) this.putBack(input, !isChecked, null);
-            });
-        });
-        checkbox.addEventListener('pointerdown', (e) => e.stopPropagation());
-
-        if (!settings.enableStatusMenu) return;
-
-        checkbox.addEventListener('contextmenu', (e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            this.showStatusMenu(e as MouseEvent, settings, async (statusChar) => {
-                await this.writeService.updateTask(taskId, { statusChar });
-            });
-        });
-        checkbox.addEventListener('touchstart', (e) => e.stopPropagation(), { passive: true });
+        this.wireTaskCheckbox(checkbox, nameOf, settings, false);
     }
 
     /**
@@ -59,7 +49,8 @@ export class CheckboxWiring {
         container: HTMLElement,
         items: ChildRenderItem[],
         settings: TaskViewerSettings,
-        checkboxOffset: number
+        checkboxOffset: number,
+        nameAt: (index: number) => string | undefined
     ): void {
         const checkboxes = container.querySelectorAll('input[type="checkbox"]');
         let checkboxIndex = 0;
@@ -72,25 +63,35 @@ export class CheckboxWiring {
             if (domIndex >= checkboxes.length) break;
 
             const checkbox = checkboxes[domIndex];
-            const handler = items[i].handler;
-            if (!handler) continue;
+            if (!items[i].handler) continue;
 
-            this.wireTaskCheckbox(checkbox, handler.taskId, settings);
+            const index = i;
+            this.wireTaskCheckbox(checkbox, () => nameAt(index), settings, true);
         }
     }
 
+    /**
+     * @param child whether the box is a child item's, whose `data-task` the
+     *   click sets ahead of the write (a parent box's is drawn from the task)
+     */
     private wireTaskCheckbox(
         checkbox: Element,
-        taskId: string,
-        settings: TaskViewerSettings
+        nameOf: () => string | undefined,
+        settings: TaskViewerSettings,
+        child: boolean
     ): void {
         checkbox.addEventListener('click', () => {
             const input = checkbox as HTMLInputElement;
             const isChecked = input.checked;
             const newStatusChar = isChecked ? 'x' : ' ';
-            const previousChar = input.getAttribute('data-task') ?? ' ';
-            this.updateCheckboxDataTask(input, newStatusChar);
-            void this.writeService.updateTask(taskId, { statusChar: newStatusChar }).then(written => {
+            const previousChar = child ? (input.getAttribute('data-task') ?? ' ') : null;
+            if (child) this.updateCheckboxDataTask(input, newStatusChar);
+            const name = nameOf();
+            if (name === undefined) {
+                this.putBack(input, !isChecked, previousChar);
+                return;
+            }
+            void this.writeService.updateTask(name, { statusChar: newStatusChar }).then(written => {
                 if (!written) this.putBack(input, !isChecked, previousChar);
             });
         });
@@ -102,7 +103,9 @@ export class CheckboxWiring {
             e.preventDefault();
             e.stopPropagation();
             this.showStatusMenu(e as MouseEvent, settings, async (statusChar) => {
-                await this.writeService.updateTask(taskId, { statusChar });
+                const name = nameOf();
+                if (name === undefined) return;
+                await this.writeService.updateTask(name, { statusChar });
             });
         });
         checkbox.addEventListener('touchstart', (e) => e.stopPropagation(), { passive: true });

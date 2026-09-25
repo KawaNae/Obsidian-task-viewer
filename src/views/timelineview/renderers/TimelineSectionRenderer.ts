@@ -52,7 +52,7 @@ export class TimelineSectionRenderer {
             if (!task.effectiveStartTime) return;
 
             const cardInstanceId = `${this.viewId}::lane-${date}::${task.id}`;
-            const reused = reconciler.acquire(cardInstanceId);
+            const reused = reconciler.acquire(cardInstanceId, task);
             const el = reused ?? container.createDiv('task-card');
             markHandleSurface(el, 'timeline');
             if (reused) container.appendChild(reused);
@@ -66,7 +66,7 @@ export class TimelineSectionRenderer {
             // addTaskContextMenu is idempotent (WeakSet-guarded) so re-calling
             // on a reused element is a no-op, but skip the call to keep the
             // hot path tight.
-            if (!reused) this.menuHandler.addTaskContextMenu(el, task);
+            if (!reused) this.menuHandler.addTaskContextMenu(el);
         });
 
         if (renderOptions.showSunTimes) {
