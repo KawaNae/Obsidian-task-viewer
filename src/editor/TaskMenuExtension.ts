@@ -125,9 +125,9 @@ export function createTaskMenuExtension(
                 // reads so.
                 const subtree = subtreeAt(outlineFor(view.state.doc), lineNumber);
                 const ops: CheckboxLineOps = {
-                    updateLine: (content) => writeService.updateLine(filePath, at, content),
-                    insertLineAfter: (content) => writeService.insertLineAfterLine(filePath, at, content),
-                    deleteLine: () => writeService.deleteLine(filePath, { ...at, subtree }),
+                    updateLine: (content) => writeService.writeLine(filePath, at, [{ kind: 'update', text: content }]),
+                    insertLineAfter: (content) => writeService.writeLine(filePath, at, [{ kind: 'copy', text: content }]),
+                    deleteLine: () => writeService.writeLine(filePath, { ...at, subtree }, [{ kind: 'remove' }]),
                 };
 
                 checkboxBuilder.addFullMenu(menu, lineText, getSettings(), ops, filePath);

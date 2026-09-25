@@ -21,7 +21,7 @@ import type { GenBlock } from '../parsing/gen/GenBlockCollector';
 import { FileOperations } from '../persistence/utils/FileOperations';
 import { plannedOn, recordedOn, subjectOf } from '../persistence/TaskRefs';
 import { logError, logInfo, logWarn } from '../../log/log';
-import type { EditorLine, EditorSubtree, Landing, Refusal, WriteOutcome } from '../../utils/FileLines';
+import type { EditorLine, Landing, Refusal, WriteOutcome } from '../../utils/FileLines';
 import type { TaskOp } from '../persistence/TaskOps';
 
 /**
@@ -839,34 +839,23 @@ export class TaskIndex {
         });
     }
 
-    /** @returns whether the line was written. */
-    async updateLine(filePath: string, at: EditorLine, newContent: string): Promise<boolean> {
-        if (this.refuseAfterDispose('updateLine')) return false;
+    /**
+     * Apply `ops` to the row at a line the editor pointed at, in the file:
+     * the editor menu's write, when the editor it was opened in no longer
+     * shows the file. A rewrite that completes the line (`completes`, from
+     * the line the editor showed) fires in the same write, as a card's does
+     * (see writeUpdate).
+     *
+     * @returns whether the line was written.
+     */
+    async writeLine(filePath: string, at: EditorLine, ops: readonly TaskOp[]): Promise<boolean> {
+        if (this.refuseAfterDispose('writeLine')) return false;
         return this.withNotify(filePath, async () => {
-            // The editor menu's status change completes a line as a card's
-            // does, and fires in the same write (see writeUpdate).
+            const update = ops.length === 1 && ops[0].kind === 'update' ? ops[0] : null;
             const { outcome: { written }, fire } = await this.writeCompleting(
-                completes(at.text, newContent, this.settings.statusDefinitions) ? filePath : null,
-                (op) => this.repository.updateLine(filePath, at, newContent, op));
+                update && completes(at.text, update.text, this.settings.statusDefinitions) ? filePath : null,
+                (op) => this.repository.applyToLine(filePath, at, op ? [...ops, op] : ops));
             if (written && fire) await this.settleFire(fire, filePath);
-            return written;
-        });
-    }
-
-    /** @returns whether the line was written. */
-    async insertLineAfterLine(filePath: string, at: EditorLine, newContent: string): Promise<boolean> {
-        if (this.refuseAfterDispose('insertLineAfterLine')) return false;
-        return this.withNotify(filePath, async () => {
-            const { written } = await this.repository.insertLineAfterLine(filePath, at, newContent);
-            return written;
-        });
-    }
-
-    /** @returns whether the line was written. */
-    async deleteLine(filePath: string, at: EditorSubtree): Promise<boolean> {
-        if (this.refuseAfterDispose('deleteLine')) return false;
-        return this.withNotify(filePath, async () => {
-            const { written } = await this.repository.deleteLine(filePath, at);
             return written;
         });
     }

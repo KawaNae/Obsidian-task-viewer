@@ -8,7 +8,7 @@ import { openVault, type VaultSession } from '../helpers/vaultSession';
  *
  * The editor's menu points at a line by the editor's line number and text
  * (`EditorLine`), and the write checks that text on the same line of the
- * file on disk (`InlineTaskWriter.updateLine`). An unsaved line put in above
+ * file on disk (`InlineTaskWriter.applyToLine`). An unsaved line put in above
  * moves the editor's lines one down from the disk's; when the disk's line
  * there is a twin of the one the editor showed, it reads as the editor's did
  * and the check passes. The check by the content a copy was read in
@@ -38,7 +38,7 @@ describe('the editor menu, on one of two twin lines, with an unsaved line above 
         // yet, and its menu is opened on its line 1: the disk's line 0.
         const shown = { line: 1, text: '- [ ] 読書' };
 
-        expect(await session.index.updateLine(FILE, shown, '- [x] 読書')).toBe(true);
+        expect(await session.index.writeLine(FILE, shown, [{ kind: 'update', text: '- [x] 読書' }])).toBe(true);
         // The disk's line 1, the twin below the one the editor pointed at.
         expect(contents.get(FILE)).toBe(['- [ ] 読書', '- [x] 読書', ''].join('\n'));
     });

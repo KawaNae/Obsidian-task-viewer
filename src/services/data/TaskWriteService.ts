@@ -1,5 +1,6 @@
 import type { TFile } from 'obsidian';
-import type { EditorLine, EditorSubtree, WriteChannel } from '../../utils/FileLines';
+import type { EditorLine, WriteChannel } from '../../utils/FileLines';
+import type { TaskOp } from '../persistence/TaskOps';
 import type { DuplicateOptions, Task } from '../../types';
 import type { TaskIndex } from '../core/TaskIndex';
 import type { FlowDeleteAssessment } from '../flow/FlowDeletion';
@@ -139,23 +140,11 @@ export class TaskWriteService {
         return this.taskIndex.insertSiblingAfterTask(this.resolveTaskId(taskId), siblingLine, opts);
     }
 
-    // ===== Line-level operations =====
-    //
-    // updateLine / insertLineAfterLine / deleteLine operate on raw (file, line)
-    // pairs. They are appropriate when the caller has direct knowledge of the
-    // line via the editor cursor (e.g. TaskMenuExtension) or another trusted
-    // source.
+    // ===== A line the editor pointed at =====
 
-    async updateLine(filePath: string, at: EditorLine, newContent: string): Promise<boolean> {
-        return this.taskIndex.updateLine(filePath, at, newContent);
-    }
-
-    async insertLineAfterLine(filePath: string, at: EditorLine, newContent: string): Promise<boolean> {
-        return this.taskIndex.insertLineAfterLine(filePath, at, newContent);
-    }
-
-    async deleteLine(filePath: string, at: EditorSubtree): Promise<boolean> {
-        return this.taskIndex.deleteLine(filePath, at);
+    /** @returns whether `ops` were written to the row at `at`, in the file (see TaskIndex.writeLine). */
+    async writeLine(filePath: string, at: EditorLine, ops: readonly TaskOp[]): Promise<boolean> {
+        return this.taskIndex.writeLine(filePath, at, ops);
     }
 
     // ===== Frontmatter key writes (Task を介さない書き込み) =====

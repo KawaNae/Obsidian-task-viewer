@@ -9,7 +9,7 @@ import type { PropertyOp } from '../PropertyUpdatePlanner';
 import { flowInstanceHead, renderFlowInstance } from '../FlowInstanceLines';
 import {
     createFile, fileGone, processLines, splitLines,
-    type EditorLine, type EditorSubtree, type LineDraft, type NamedRow, type Refusal, type WriteAt, type WriteChannels, type WriteOutcome,
+    type EditorLine, type LineDraft, type NamedRow, type Refusal, type WriteAt, type WriteChannels, type WriteOutcome,
     type WriteSession,
 } from '../../../utils/FileLines';
 import type { InsertTarget, PlannedTarget } from '../TaskRefs';
@@ -61,29 +61,18 @@ export class InlineTaskWriter {
         return fileGone(this.channelOf(target.file), target.file, target.subject);
     }
 
-    /** Rewrite the editor's line as `newContent`, and with `fire`, fire its flow in the same write. */
-    async updateLine(filePath: string, at: EditorLine, newContent: string, fire?: TaskOp): Promise<WriteOutcome> {
-        const file = this.app.vault.getAbstractFileByPath(filePath);
-        if (!(file instanceof TFile)) return fileGone(this.channelOf(filePath), filePath, at.text.trim());
-
-        // The editor's own menu comes through here: a status change, and
-        // the conversion of a bare checkbox into an inline task. Both
-        // rewrite the row in place and leave it the row it was.
-        const update: TaskOp = { kind: 'update', text: newContent };
-        return processLines(this.app, file, this.channelOf(filePath),
-            (draft, _eol, session) => this.applyOps(draft, session, at, fire ? [update, fire] : [update]));
-    }
-
     /**
-     * Apply `ops` to the row at a coordinate, planned from the row and its
-     * subtree as `at` holds them: the source's write of a move to another
-     * file, made once the destination landed, to the row the completing
-     * write left (`FlowExecutor.finishAway`). A caller that tells a refusal
-     * in its own words has it from the outcome, as `applyToTask` does.
+     * Apply `ops` to the row at a line the editor pointed at, planned from the
+     * row, and its subtree when `at` holds one: the editor menu's write, when
+     * the editor it was opened in no longer shows the file, and the source's
+     * write of a move to another file, made once the destination landed, to
+     * the row the completing write left (`FlowExecutor.finishAway`). A caller
+     * that tells a refusal in its own words has it from the outcome, as
+     * `applyToTask` does.
      */
     async applyToLine(
         filePath: string,
-        at: EditorSubtree,
+        at: EditorLine,
         ops: readonly TaskOp[],
         opts: { tellRefusal?: boolean } = {},
     ): Promise<WriteOutcome> {
@@ -92,56 +81,6 @@ export class InlineTaskWriter {
         const channel = told && opts.tellRefusal === false ? { ...told, refused: () => { } } : told;
         if (!(file instanceof TFile)) return fileGone(channel, filePath, at.text.trim());
         return processLines(this.app, file, channel, (draft, _eol, session) => this.applyOps(draft, session, at, ops));
-    }
-
-    /**
-     * Put `newContent` in as the next sibling of the line at a coordinate:
-     * past its subtree, spelled as that line is: the line written is a copy
-     * (`Placement.copyOf`).
-     *
-     * The editor's menu duplicates a task through here, so the line written is
-     * usually a copy of the line above it, word for word. Put just below it,
-     * the copy took the line's children for its own (P1's counterexample 5).
-     * Two rows a file cannot tell apart: the write knows which of them it
-     * made, and its report says so (`LineDraft.put`).
-     */
-    async insertLineAfterLine(filePath: string, at: EditorLine, newContent: string): Promise<WriteOutcome> {
-        const file = this.app.vault.getAbstractFileByPath(filePath);
-        if (!(file instanceof TFile)) return fileGone(this.channelOf(filePath), filePath, at.text.trim());
-
-        return processLines(this.app, file, this.channelOf(filePath), (draft, _eol, { row }) => {
-            const lineNumber = row(at);
-            if (lineNumber === null) return false;
-            draft.put(Placement.copyOf(draft.lines, lineNumber, 'below', newContent), Block.line(newContent));
-            return true;
-        });
-    }
-
-    /**
-     * Take the line at a coordinate away with its subtree, as a card's
-     * delete takes a task (the user's decision, 2026-09-24).
-     *
-     * This path is reached from the editor's context menu on a raw checkbox,
-     * so the line is not necessarily a task. It used to take the one line
-     * and leave the lines under it, and a property or `==>` line under it
-     * went on the task above.
-     *
-     * What it takes is what the editor showed when the menu was opened: the
-     * line and its subtree (`at.subtree`). A child added or rewritten since,
-     * which the user has not seen, is not taken with it: the write is refused
-     * as `changed` (`WriteSession.row`).
-     */
-    async deleteLine(filePath: string, at: EditorSubtree): Promise<WriteOutcome> {
-        const file = this.app.vault.getAbstractFileByPath(filePath);
-        if (!(file instanceof TFile)) return fileGone(this.channelOf(filePath), filePath, at.text.trim());
-
-        return processLines(this.app, file, this.channelOf(filePath), (draft, _eol, { row }) => {
-            const lineNumber = row(at);
-            if (lineNumber === null) return false;
-            const { childrenLines } = this.fileOps.collectChildrenFromLines(draft.lines, lineNumber);
-            draft.splice(lineNumber, 1 + childrenLines.length);
-            return true;
-        });
     }
 
     /**
@@ -281,6 +220,14 @@ export class InlineTaskWriter {
             case 'remove': {
                 const { childrenLines } = this.fileOps.collectChildrenFromLines(lines, line);
                 draft.splice(line, 1 + childrenLines.length);
+                return;
+            }
+            case 'copy': {
+                // Usually a copy of the row, word for word. Put just below
+                // it, the copy took the row's children for its own (P1's
+                // counterexample 5): it goes past the subtree, and the
+                // report says which of the two rows the write made.
+                draft.put(Placement.copyOf(lines, line, 'below', op.text), Block.line(op.text));
                 return;
             }
         }
