@@ -32,12 +32,11 @@ function buildHost(task: Task, written = true) {
         scanner: { requestScan: vi.fn(async () => {}) },
         app: { vault: { getAbstractFileByPath: () => null } },
         repository: {
-            updateTaskInFile: vi.fn(async () => ({ written, refused: null, made: [], rows: new Map() })),
+            updateTaskInFile: vi.fn(async () => ({ written, refused: null })),
         },
         draggingFilePath: null,
         // The revert lives on the prototype; the host stands in for `this`.
         revertUnwrittenUpdate: proto.revertUnwrittenUpdate,
-        adoptWrittenRow: proto.adoptWrittenRow,
         onRow: proto.onRow,
         writeUpdate: proto.writeUpdate,
         // The dispose guard every write goes through; this index is open.
@@ -194,72 +193,5 @@ describe('reportRefusal', () => {
             expect(Notice.messages).toHaveLength(1);
             expect(Notice.messages[0]).toContain('週報');
         }
-    });
-});
-
-/**
- * The copy a card's update wrote is brought up to the lines the write left, so
- * the next write planned from it — a second update, a deletion fire — is not
- * refused against our own write before the scan reads it (stage F5).
- */
-describe('updateTask: the copy follows the write', () => {
-    const LEFT = ['- [x] x @T11:00', '    - key:: v'];
-
-    function hostLeaving(task: Task, left: readonly string[] | undefined, read: readonly string[] = task.subtreeLines ?? [], at = 0) {
-        const host = buildHost(task);
-        host.repository.updateTaskInFile = vi.fn(async () => ({
-            written: true, refused: null, made: [], rows: new Map(left ? [[task.line, { at: task.line + at, read, left }]] : []),
-        })) as never;
-        return host;
-    }
-
-    const SCANNED = ['- [ ] x @T10:00', '    - key:: v'];
-
-    it('takes the row\'s line number, line and subtree from what the write left', async () => {
-        const task = makeTask({ content: 'x', startTime: '10:00', originalText: SCANNED[0], subtreeLines: SCANNED });
-        const line = task.line;
-
-        await proto.updateTask.call(hostLeaving(task, LEFT, SCANNED, 2), task.id, { startTime: '11:00', statusChar: 'x' });
-
-        expect(task.originalText).toBe('- [x] x @T11:00');
-        expect(task.subtreeLines).toEqual(LEFT);
-        expect(task.line).toBe(line + 2);
-    });
-
-    it('takes the line but not a subtree the write found other than the copy has it', async () => {
-        // A child written in from outside since the scan: the update did not
-        // plan from the subtree and did not check it, so the next delete must
-        // not come to plan from it either.
-        const task = makeTask({ content: 'x', startTime: '10:00', originalText: SCANNED[0], subtreeLines: SCANNED });
-        const found = [...SCANNED, '    - [ ] 外から足した子'];
-
-        await proto.updateTask.call(
-            hostLeaving(task, ['- [x] x @T11:00', ...found.slice(1)], found), task.id, { startTime: '11:00', statusChar: 'x' });
-
-        expect(task.originalText).toBe('- [x] x @T11:00');
-        expect(task.subtreeLines).toBeUndefined();
-    });
-
-    it('leaves a copy the store no longer holds alone: a scan has read the write', async () => {
-        const task = makeTask({ content: 'x', startTime: '10:00', originalText: '- [ ] x @T10:00' });
-        const host = hostLeaving(task, LEFT);
-        const replaced = { ...task };
-        let calls = 0;
-        // The first lookup finds the task; by the time the write is back, the
-        // scan has put its own reading in the store.
-        host.store.getTask = (() => (calls++ === 0 ? task : replaced)) as never;
-
-        await proto.updateTask.call(host, task.id, { startTime: '11:00' });
-
-        expect(task.originalText).toBe('- [ ] x @T10:00');
-    });
-
-    it('leaves the copy as it was when the write did not land', async () => {
-        const task = makeTask({ content: 'x', startTime: '10:00', originalText: '- [ ] x @T10:00' });
-
-        await proto.updateTask.call(buildHost(task, false), task.id, { startTime: '11:00' });
-
-        expect(task.originalText).toBe('- [ ] x @T10:00');
-        expect(task.subtreeLines).toBeUndefined();
     });
 });

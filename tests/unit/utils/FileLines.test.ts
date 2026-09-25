@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { TFile } from 'obsidian';
 import { BrokenWrite, LineBreakInLine, UnfollowableDraft, draftOver, joinLines, processLines, replayEdits, splitLines } from '../../../src/utils/FileLines';
-import type { LineEdit, NamedRow, Refusal, WriteChannel } from '../../../src/utils/FileLines';
+import type { Landing, LineEdit, NamedRow, Refusal, WriteChannel } from '../../../src/utils/FileLines';
 import { holdsLineBreak } from '../../../src/utils/LineBreak';
 import { Block } from '../../../src/services/persistence/utils/Placement';
 import type { LineDraft } from '../../../src/utils/FileLines';
@@ -530,31 +530,48 @@ describe('processLines', () => {
         expect(h.text()).toBe('- [x] a\n');
     });
 
-    it('answers the rows the last attempt made, and none when that attempt claimed nothing', async () => {
+    it('hands the channel what the last attempt left, once, and nothing when that attempt changed nothing', async () => {
         const h = harness('- [ ] a\n', { callbackRuns: 2 });
-        let filed = 0;
-        const channel: WriteChannel = {
-            sink: () => ({ withdraw: () => { }, made: [{ line: 1, runtimeId: `made-${++filed}` }] }),
-            refused: () => { },
-        };
+        const landings: Landing[] = [];
+        const channel: WriteChannel = { landed: (landing) => { landings.push(landing); }, refused: () => { } };
         let run = 0;
 
-        const outcome = await processLines(h.app, h.file, channel, (draft) => {
+        await processLines(h.app, h.file, channel, (draft) => {
             run++;
             putAt(draft, 1, `- [ ] b (${run})`);
             return true;
         });
-        expect(outcome.made).toEqual([{ line: 1, runtimeId: 'made-2' }]);
+        expect(landings).toHaveLength(1);
+        expect(landings[0].before).toEqual(['- [ ] a', '- [ ] b (1)', '']);
+        expect(landings[0].lines).toEqual(splitLines(h.text()).lines);
+        expect(landings[0].edits).toEqual([{ kind: 'inserted', at: 1, count: 1 }]);
+        expect(landings[0].reading?.lines).toEqual(landings[0].lines);
 
-        // The second attempt changes nothing, so it files nothing and names nothing.
+        // The second attempt changes nothing, so nothing landed.
         const same = harness('- [ ] a\n', { callbackRuns: 2 });
+        landings.length = 0;
         run = 0;
-        const unchanged = await processLines(same.app, same.file, channel, (draft) => {
+        await processLines(same.app, same.file, channel, (draft) => {
             run++;
             if (run === 1) putAt(draft, 1, '- [ ] b');
             return true;
         });
-        expect(unchanged.made).toEqual([]);
+        expect(landings).toEqual([]);
+    });
+
+    it('hands the channel nothing for a write that did not land, and what one that landed and failed left', async () => {
+        for (const failWrite of ['lost', 'landed'] as const) {
+            const h = harness('- [ ] a\n', { failWrite });
+            const landings: Landing[] = [];
+            const channel: WriteChannel = { landed: (landing) => { landings.push(landing); }, refused: () => { } };
+
+            const outcome = await processLines(h.app, h.file, channel, (draft) => {
+                draft.rewrite(0, '- [x] a');
+                return true;
+            });
+            expect(outcome.written).toBe(failWrite === 'landed');
+            expect(landings.map(landing => landing.lines)).toEqual(failWrite === 'landed' ? [['- [x] a', '']] : []);
+        }
     });
 
     it('leaves the file byte-identical when the edit declines', async () => {
@@ -586,7 +603,7 @@ describe('processLines: asking where a row stands, and giving up', () => {
             return true;
         });
 
-        expect(outcome).toEqual({ written: true, refused: null, made: [], rows: new Map([[1, { at: 1, read: ['- [ ] b'], left: ['- [x] b'] }]]) });
+        expect(outcome).toEqual({ written: true, refused: null });
         expect(h.text()).toBe('- [ ] a\r\n- [x] b\r\n');
         expect(log.refusals).toEqual([]);
     });
@@ -682,7 +699,7 @@ describe('processLines: asking where a row stands, and giving up', () => {
             return true;
         });
 
-        expect(outcome).toEqual({ written: true, refused: null, made: [], rows: new Map() });
+        expect(outcome).toEqual({ written: true, refused: null });
         expect(log.refusals).toEqual([]);
         expect(h.text()).toBe('- [x] a\n');
     });
@@ -727,22 +744,6 @@ describe('a coordinate carried across a write\'s own edits', () => {
 
         expect(seen).toEqual([4, 1, 1]);
         expect(h.text()).toBe('y\n- [ ] b\n');
-    });
-
-    it('says how it left each row it named, where the row ended up, and nothing of one it took away', async () => {
-        const h = harness('- [ ] a\n\t- child\n- [ ] b\n');
-        const log = writeSink();
-
-        const outcome = await processLines(h.app, h.file, log.channel, (draft, _eol, session) => {
-            session.row(named(0, '- [ ] a', 'a'));
-            session.row(named(2, '- [ ] b', 'b'));
-            putAt(draft, 0, 'new');
-            draft.splice(3, 1);
-            return true;
-        });
-
-        expect(outcome.rows).toEqual(new Map([[0, { at: 1, read: ['- [ ] a', '\t- child'], left: ['- [ ] a', '\t- child'] }]]));
-        expect(h.text()).toBe('new\n- [ ] a\n\t- child\n');
     });
 
     it('keeps a row the write rewrote, and loses one it took away', async () => {

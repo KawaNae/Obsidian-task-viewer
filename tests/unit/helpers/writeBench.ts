@@ -12,16 +12,18 @@ import type { LineEdit, Refusal, WriteChannel, WriteOrigin } from '../../../src/
 
 /**
  * A vault in memory with a real `TaskScanner` over it, and the write layer
- * connected to that scanner the way `TaskIndex` connects it: a write asks the
- * scanner where its target stands (`locate`), files its report with it
- * (`writeSink`), and hands its refusals to {@link WriteBench.refused}.
+ * connected to that scanner the way `TaskIndex` connects it: a write files its
+ * report with it (`writeSink`), hands what it left once it landed to it
+ * (`landed`), and hands its refusals to {@link WriteBench.refused}.
  *
- * A write names its target, and only a row the scanner has read can be named.
- * So a test scans the file first and hands the writer a task from the index
+ * A write takes its target by the index's copy of it. So a test scans the
+ * file first and hands the writer a task from the index
  * ({@link WriteBench.taskAt}), not one built by hand.
  *
  * `vault.process` rewrites the content and nothing else: no scan follows a
- * write unless the test asks for one ({@link WriteBench.scan}).
+ * write unless the test asks for one ({@link WriteBench.scan}). What a write
+ * left is in the index all the same, as it is in the plugin; a copy taken
+ * before the write is still the copy it was.
  */
 
 export const FILE = 'note.md';
@@ -120,8 +122,7 @@ export async function writeBench(files: string | string[] | Record<string, strin
                     made: receipt.made,
                 };
             },
-            locate: (lines, ref) => scanner.locate(path, lines, ref),
-            onRecord: (lines, ref, line) => scanner.onRecord(path, lines, ref, line),
+            landed: landing => { scanner.landed(path, landing); },
             refused: refusal => { refused.push(refusal); },
         };
     };

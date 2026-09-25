@@ -185,27 +185,22 @@ describe('an operation that takes the row away plans from its subtree', () => {
 });
 
 describe('what an update leaves', () => {
-    it('answers the row and its subtree as the write left them', async () => {
+    it('is the index\'s next reading of the file, before any scan', async () => {
         const bench = await writeBench(['- [ ] A', '    - key:: v', '- [ ] B', '']);
         const a = bench.taskAt(0);
 
-        const outcome = await bench.writer.updateTaskInFile(plannedOn(a), checked(a));
+        expect((await bench.writer.updateTaskInFile(plannedOn(a), checked(a))).written).toBe(true);
 
-        expect(outcome.rows.get(a.line)).toEqual({
-            at: 0,
-            read: ['- [ ] A', '    - key:: v'],
-            left: ['- [x] A', '    - key:: v'],
-        });
+        expect(bench.taskAt(0).originalText).toBe('- [x] A');
+        expect(bench.taskAt(0).subtreeLines).toEqual(['- [x] A', '    - key:: v']);
     });
 
-    it('answers nothing when nothing was written', async () => {
+    it('is nothing when nothing was written', async () => {
         const bench = await writeBench(['- [ ] A', '']);
         const a = bench.taskAt(0);
         bench.edit(['- [ ] A edited', '']);
 
-        const outcome = await bench.writer.updateTaskInFile(plannedOn(a), checked(a));
-
-        expect(outcome.written).toBe(false);
-        expect(outcome).not.toHaveProperty('rows');
+        expect((await bench.writer.updateTaskInFile(plannedOn(a), checked(a))).written).toBe(false);
+        expect(bench.taskAt(0).originalText).toBe('- [ ] A');
     });
 });

@@ -119,16 +119,15 @@ describe('a line edited from outside since the index read it', () => {
         expect(bench.refused).toEqual([{ file: FILE, reason: { kind: 'changed' }, subject: '- [ ]  @2026-08-15' }]);
     });
 
-    it('is written from a copy brought up to the plugin\'s own change', async () => {
+    it('is written from the index\'s copy of the plugin\'s own change, before any scan', async () => {
         const bench = await writeBench(['- [ ] 設計 @2026-08-15']);
         const task = bench.taskAt(0);
         const first = await bench.writer.updateTaskInFile(plannedOn(task), { ...task, content: '設計書' });
         expect(first.written).toBe(true);
 
-        // The copy brought up to the line the update wrote, as the index does
-        // (`TaskIndex.updateTask`).
-        const left = first.rows.get(task.line)!;
-        const copy = { ...task, content: '設計書', line: left.at, originalText: left.left[0] };
+        // The index read what the update left once it landed (`landed`).
+        const copy = bench.taskAt(0);
+        expect(copy.originalText).toBe('- [ ] 設計書 @2026-08-15');
         expect((await bench.writer.updateTaskInFile(plannedOn(copy), checked(copy))).written).toBe(true);
         expect(bench.lines()).toEqual(['- [x] 設計書 @2026-08-15']);
     });

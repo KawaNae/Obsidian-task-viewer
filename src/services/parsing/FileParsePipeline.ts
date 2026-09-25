@@ -2,7 +2,7 @@ import { parseYaml } from 'obsidian';
 import type { Task, TaskViewerSettings } from '../../types';
 import { collectGenBlocks, type GenBlock } from './gen/GenBlockCollector';
 import { DocumentTreeBuilder } from './tree/DocumentTreeBuilder';
-import { Outline } from './utils/Outline';
+import { Outline, type OutlineReading } from './utils/Outline';
 import { SectionPropertyResolver } from './tree/SectionPropertyResolver';
 import { TreeTaskExtractor } from './tree/TreeTaskExtractor';
 
@@ -37,17 +37,20 @@ export class FileParsePipeline {
      * `vault.process` it is the file before the write, and when the scan
      * a `modify` starts reads, Obsidian has not re-read it yet — while the
      * scan the `changed` that follows asks for does nothing when it reads what
-     * the last scan read (`TaskScanner.rescanUnlessRead`). A frontmatter key
-     * decides whether the note
-     * has rows at all (`tv-ignore`) and what every row inherits (dates,
-     * which the ladder compares), so a write's record, a write's `locate` and
-     * the scan that follows have to read the same lines the same way, which
-     * only the lines themselves allow.
+     * the last scan read. A frontmatter key decides whether the note has
+     * rows at all (`tv-ignore`) and what every row inherits (dates), so the
+     * reading a write lands and the scan that follows have to read the same
+     * lines the same way, which only the lines themselves allow.
+     *
+     * `reading` is a reading of these very lines someone already made (a
+     * write's check, `processLines`), taken instead of reading them again.
+     * One of other lines is not taken.
      */
     static parse(
         filePath: string,
         lines: string[],
-        settings: TaskViewerSettings
+        settings: TaskViewerSettings,
+        reading?: OutlineReading,
     ): FileParseResult {
         // --- Frontmatter境界検出 ---
         // The same reading a write takes of where the body begins
@@ -71,7 +74,7 @@ export class FileParsePipeline {
         }
 
         // --- ツリーパイプライン（順序契約: build → resolve → extract）---
-        const outline = Outline.read(lines);
+        const outline = reading && sameLines(reading.lines, lines) ? reading : Outline.read(lines);
         const doc = DocumentTreeBuilder.build(filePath, lines, bodyStartIndex, outline);
         SectionPropertyResolver.resolve(doc, frontmatterObj, settings.scopeKeys);
         const tasks = TreeTaskExtractor.extract(doc, {
@@ -141,4 +144,12 @@ export class FileParsePipeline {
             || normalized === 'on'
             || normalized === '1';
     }
+}
+
+/** Whether two arrays hold the same lines, one by one. */
+function sameLines(a: readonly string[], b: readonly string[]): boolean {
+    if (a === b) return true;
+    if (a.length !== b.length) return false;
+    for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) return false;
+    return true;
 }

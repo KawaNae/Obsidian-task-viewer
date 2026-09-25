@@ -297,7 +297,6 @@ describe('the half of a move that writes the destination', () => {
         await live.settle(FILE);
 
         expect(outcome.written).toBe(true);
-        expect(outcome.made).toEqual([]);
         expect(contents.get(FILE)!.split('\n')).toEqual([
             '- [ ] 見張り @2026-09-21', '- [x] 移す', '',
         ]);

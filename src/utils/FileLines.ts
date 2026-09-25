@@ -466,7 +466,30 @@ export interface Refusal {
 export interface WriteChannel {
     /** Absent where nobody takes a report: no write of the plugin's leaves it out. */
     sink?: WriteSink;
+    /**
+     * A write changed the file and landed: `landing.lines` is what the file
+     * holds now. Told once per write, after `vault.process` is over, and only
+     * when it landed (`processOrFail`) — so what it hands over is not a guess
+     * about the file but one reading of it. Absent where nobody reads it.
+     */
+    landed?(landing: Landing): void;
     refused(refusal: Refusal): void;
+}
+
+/** What a write that landed left in the file (see {@link WriteChannel.landed}). */
+export interface Landing {
+    /** The lines as the write was handed them. */
+    before: readonly string[];
+    /** The lines as the write left them: what the file reads now. */
+    lines: readonly string[];
+    /**
+     * The draft's report, when it accounts for every line it left (see
+     * {@link explains}); null for a write that could not say how it changed
+     * the lines, or that replaced them whole.
+     */
+    edits: readonly LineEdit[] | null;
+    /** The reading of `lines` the write's own check made, or null when it made none. */
+    reading: OutlineReading | null;
 }
 
 /**
@@ -543,31 +566,6 @@ export interface WriteMade {
     /** The callback said to write, whether or not the lines differed. */
     written: true;
     refused: null;
-    /**
-     * The rows the write made, by the names the next scan gives them if it
-     * adopts this write's claim. Empty when the write claimed nothing (see
-     * {@link WriteReceipt.made}); the names of a claim no scan adopts go
-     * with it, and are never given to any line.
-     */
-    made: readonly MadeRow[];
-    /**
-     * For each row the write named and left standing, by the line it was
-     * named on: the row and its subtree as the write was handed them and as
-     * it left them, and the line it left the row on. What the index holds of
-     * a row it had the write make from its copy can be brought up to the file
-     * from here, before any scan reads it. Empty when nothing was written.
-     */
-    rows: ReadonlyMap<number, RowLines>;
-}
-
-/** A row's line and every line of its subtree, before and after one write. */
-export interface RowLines {
-    /** The line the write left the row on. */
-    at: number;
-    /** As the write was handed them — what the file held, whatever the plan read. */
-    read: readonly string[];
-    /** As the write left them. */
-    left: readonly string[];
 }
 
 /** Where each line of the file came from, once a write's report is replayed. */
@@ -706,7 +704,8 @@ export type EditedLines =
         lines: readonly string[];
         /** The draft's report: every change the write made, in order. */
         edits: readonly LineEdit[];
-        rows: ReadonlyMap<number, RowLines>;
+        /** The reading of `lines` the write's check made, or null when it made none. */
+        reading: OutlineReading | null;
     }
     | { written: false; refused: Refusal };
 
@@ -801,9 +800,6 @@ export function editLines(
         }
         return holds ? line : { kind: 'changed' };
     };
-    // The rows the write asked for, by the line each was named on, to say
-    // how it left them.
-    const named = new Set<number>();
     const session: WriteSession = {
         row: (target) => {
             const about = subjectOf(target);
@@ -813,7 +809,6 @@ export function editLines(
             if (found === undefined) {
                 found = answer(target);
                 answered.set(target, found);
-                if ('basis' in target && typeof found === 'number') named.add(found);
             }
             if (typeof found !== 'number') { refuse(found, about); return null; }
             if (reported.length === 0) return found;
@@ -880,7 +875,7 @@ export function editLines(
         }
     }
 
-    return { written: true, before, lines: next, edits: reported, rows: rowsLeft(before, reported, next, named, readings) };
+    return { written: true, before, lines: next, edits: reported, reading: readings?.left ?? null };
 }
 
 /**
@@ -922,8 +917,9 @@ export async function processLines(
     about?: string,
 ): Promise<WriteOutcome> {
     let refused: Refusal | null = null;
-    let made: readonly MadeRow[] = [];
-    let rows: ReadonlyMap<number, RowLines> = new Map();
+    // What the write left, when it changed the file: handed to the channel
+    // once it is known to have landed.
+    let landing: Landing | null = null;
     const sink = channel?.sink;
     // A list rather than one slot: `vault.process` may run the callback again,
     // and everything filed has to be withdrawable.
@@ -941,7 +937,10 @@ export async function processLines(
         channel?.refused(outcome);
         return { written: false, refused: outcome };
     }
-    return { written: true, refused: null, made, rows };
+    // Set inside the callback too.
+    const landed = landing as Landing | null;
+    if (landed !== null) channel?.landed?.(landed);
+    return { written: true, refused: null };
 
     /** One run of the callback: the content to write, or the content as it was. */
     function attempt(content: string): string {
@@ -950,8 +949,7 @@ export async function processLines(
         // reached disk, so they go before this attempt files its own.
         for (const withdraw of withdrawals.splice(0)) withdraw();
         refused = null;
-        made = [];
-        rows = new Map();
+        landing = null;
         lastSubject = '';
 
         const { lines, eol, bom } = splitLines(content);
@@ -961,7 +959,6 @@ export async function processLines(
             return content;
         }
         const { before, lines: next, edits: reported } = edited;
-        rows = edited.rows;
         // The mark the note opened with, put back where it was.
         const rebuilt = (bom ? BOM : '') + joinLines([...next], eol);
 
@@ -975,14 +972,13 @@ export async function processLines(
         // `vault.process` resolves, so a claim raised afterwards is too late
         // for it. Filing early means filing before the write is known to
         // have succeeded, which is what the withdrawal below is for.
-        if (sink && rebuilt !== content) {
+        if (rebuilt !== content) {
             const accounted = explains(before, next, reported);
             if (!accounted) {
                 logError(`[FileLines] ${file.path}: a write's report does not account for the lines it wrote; no claim filed, the chain of records marked broken`);
             }
-            const receipt = sink(before, next, accounted ? reported : null, accounted ? rewrittenBy(rows) : null);
-            withdrawals.push(receipt.withdraw);
-            made = receipt.made;
+            if (sink) withdrawals.push(sink(before, next, accounted ? reported : null, accounted ? new Map() : null).withdraw);
+            landing = { before, lines: next, edits: accounted ? reported : null, reading: edited.reading };
         }
 
         return rebuilt;
@@ -1115,14 +1111,16 @@ export async function createFile(
     try {
         asked = await content();
         const file = await app.vault.create(path, asked);
-        return { written: true, refused: null, made: [], rows: new Map(), file };
+        channel?.landed?.({ before: [], lines: splitLines(asked).lines, edits: null, reading: null });
+        return { written: true, refused: null, file };
     } catch (error) {
         const made = app.vault.getAbstractFileByPath(path);
         if (!(asked !== null && made instanceof TFile && await readsAs(app, made, asked))) {
             return writeFailed(channel, path, subject, error);
         }
         logWarn(`[FileLines] ${path}: creating the note reported a failure, but it reads as written; kept: ${String(error)}`);
-        return { written: true, refused: null, made: [], rows: new Map(), file: made };
+        channel?.landed?.({ before: [], lines: splitLines(asked).lines, edits: null, reading: null });
+        return { written: true, refused: null, file: made };
     }
 }
 
@@ -1134,35 +1132,6 @@ async function readsAs(app: App, file: TFile, content: string): Promise<boolean>
     } catch {
         return false;
     }
-}
-
-/** The line each named row was left on, for the rows the write gave a new text. */
-function rewrittenBy(rows: ReadonlyMap<number, RowLines>): Map<string, string> {
-    const left = new Map<string, string>();
-    for (const [line, lines] of rows) {
-        if (lines.left.length > 0 && lines.left[0] !== lines.read[0]) left.set(String(line), lines.left[0]);
-    }
-    return left;
-}
-
-/** Each named row still standing once the write is done: its subtree before and after. */
-function rowsLeft(
-    before: readonly string[],
-    edits: readonly LineEdit[],
-    after: readonly string[],
-    named: ReadonlySet<number>,
-    readings: { read: OutlineReading; left: OutlineReading } | undefined,
-): Map<number, RowLines> {
-    const rows = new Map<number, RowLines>();
-    const replayed = replayEdits(before.length, edits);
-    if (!replayed) return rows;
-    const read = readings?.read ?? Outline.read(before);
-    const left = readings?.left ?? Outline.read(after);
-    for (const line of named) {
-        const now = replayed.origin.indexOf(line);
-        if (now >= 0) rows.set(line, { at: now, read: subtreeAt(read, line), left: subtreeAt(left, now) });
-    }
-    return rows;
 }
 
 /**
@@ -1183,12 +1152,21 @@ export async function replaceWhole(
     content: string,
 ): Promise<WriteOutcome> {
     const withdrawals: Array<() => void> = [];
+    let landing: Landing | null = null;
     const threw = await processOrFail(app, file, channel, withdrawals, (current) => {
         for (const withdraw of withdrawals.splice(0)) withdraw();
+        landing = null;
         if (current === content) return current;
+        const before = splitLines(current).lines;
+        const lines = splitLines(content).lines;
         const sink = channel?.sink;
-        if (sink) withdrawals.push(sink(splitLines(current).lines, splitLines(content).lines, null, null).withdraw);
+        if (sink) withdrawals.push(sink(before, lines, null, null).withdraw);
+        landing = { before, lines, edits: null, reading: null };
         return content;
     }, () => file.path);
-    return threw ?? { written: true, refused: null, made: [], rows: new Map() };
+    if (threw) return threw;
+    // Set inside the callback, which the compiler does not follow.
+    const landed = landing as Landing | null;
+    if (landed !== null) channel?.landed?.(landed);
+    return { written: true, refused: null };
 }

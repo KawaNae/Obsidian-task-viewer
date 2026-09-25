@@ -279,7 +279,7 @@ export class AwayRunner {
         // A step of its own to undo, whether or not the user typed since the
         // completion: undone, the original comes back as the completion left it.
         this.editor.dispatch({ changes, effects: dropAway.of(away.id), annotations: isolateHistory.of('full') });
-        return { written: true, refused: null, made: [], rows: new Map() };
+        return { written: true, refused: null };
     }
 }
 

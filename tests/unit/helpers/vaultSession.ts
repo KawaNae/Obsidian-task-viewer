@@ -101,7 +101,7 @@ export function scannerOf(index: TaskIndex): TaskScanner {
  * completion fires in the write that made it, never from a scan. A write that changed bytes is followed by the
  * `metadataCache` `changed` event real Obsidian sends after `modify`; the scan
  * that asks for commits nothing when it reads what the last scan read
- * (`TaskScanner.rescanUnlessRead`).
+ * (`TaskScanner.queueScan`).
  *
  * A second `vaultSession` over the same `contents` is a reload: a new index,
  * a new ledger, new runtime IDs.
@@ -114,6 +114,14 @@ export function vaultSession(contents: Map<string, string>) {
     // object (`processOrFail`): the same path answers the same file.
     const held = new Map<string, TFile>();
     const fileAt = (path: string): TFile => held.get(path) ?? held.set(path, makeFile(path)).get(path)!;
+    // While set, a write's change events wait here instead of reaching the
+    // index: the scan a write's `modify` starts has not come yet.
+    let heldEvents: TFile[] | null = null;
+    const fireChanged = async (file: TFile) => {
+        await (vaultHandlers.get('modify') as (f: TFile) => Promise<void>)(file);
+        const changed = vaultHandlers.get('changed') as ((f: TFile) => void) | undefined;
+        if (changed) changed(file);
+    };
     const app = {
         vault: {
             on: (name: string, fn: (...args: unknown[]) => unknown) => { vaultHandlers.set(name, fn); return {}; },
@@ -129,9 +137,8 @@ export function vaultSession(contents: Map<string, string>) {
                 // identity hints included, which wait for a scan that the real
                 // vault would never send.
                 if (next !== before) {
-                    await (vaultHandlers.get('modify') as (f: TFile) => Promise<void>)(file);
-                    const changed = vaultHandlers.get('changed') as ((f: TFile) => void) | undefined;
-                    if (changed) changed(file);
+                    if (heldEvents) heldEvents.push(file);
+                    else await fireChanged(file);
                 }
                 return next;
             },
@@ -189,7 +196,7 @@ export function vaultSession(contents: Map<string, string>) {
         /** The flow executor, whose `planFire` plans every completion's fire. */
         executor,
         /** The scanner's private scan entry, which a test wraps to see its answers. */
-        scannerPrivates: scanner as unknown as { rescanUnlessRead: (file: TFile) => Promise<boolean> },
+        scannerPrivates: scanner as unknown as { queueScan: (file: TFile) => Promise<boolean> },
         /** The scanner's write ledger. */
         claims: (scanner as unknown as { claims: ClaimsView }).claims,
         /** The channel `TaskIndex` gave a write to `file`, even after a test has connected another. */
@@ -200,6 +207,20 @@ export function vaultSession(contents: Map<string, string>) {
         creator: new TimerCreator({} as TimerContext, storageUtils),
         fireVault: (name: string, ...args: unknown[]) => vaultHandlers.get(name)!(...args),
         scanAll: () => scanner!.scanVault(),
+        /**
+         * Hold every write's change events until `release`, which sends them
+         * in order: the moment between a write landing and the scan it starts.
+         */
+        holdScans: (): { release: () => Promise<void> } => {
+            heldEvents = [];
+            return {
+                release: async () => {
+                    const events = heldEvents ?? [];
+                    heldEvents = null;
+                    for (const file of events) await fireChanged(file);
+                },
+            };
+        },
         settle: (path: string) => index.waitForScan(path),
         /**
          * Wait until the scan of each `path` has finished. A fire is made in
