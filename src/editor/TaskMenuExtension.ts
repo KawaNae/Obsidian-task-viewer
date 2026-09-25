@@ -1,6 +1,6 @@
 import { ViewPlugin, type ViewUpdate, Decoration, WidgetType, type EditorView, type DecorationSet } from '@codemirror/view';
 import { StateEffect, RangeSet, type Extension } from '@codemirror/state';
-import { editorInfoField, setIcon, MarkdownView } from 'obsidian';
+import { editorInfoField, setIcon, MarkdownView, Notice } from 'obsidian';
 import type { App } from 'obsidian';
 import type { TaskReadService } from '../services/data/TaskReadService';
 import type { TaskViewerSettings } from '../types';
@@ -20,6 +20,8 @@ import { outlineFor } from './EditorOutline';
 import { subtreeAt } from '../services/persistence/RowBasis';
 import { keyOf } from './EditorDoc';
 import { writeEditorLine, type EditorLineHost } from './EditorWrite';
+import { taskShownAt, type ShownTaskLookup } from './ShownTask';
+import type { ContentKey } from '../services/core/ContentKey';
 import type { EditorLine } from '../utils/FileLines';
 import type { TaskOp } from '../services/persistence/TaskOps';
 
@@ -86,14 +88,30 @@ export function createTaskMenuExtension(
     openTaskHub: TaskHubOpener
 ): TaskMenuExtensionResult {
 
-    const showMenu = (view: EditorView, lineNumber: number, btnEl: HTMLElement) => {
+    const lookup: ShownTaskLookup = {
+        taskAtEditorLine: (path, line, key) => readService.taskAtEditorLine(path, line, key),
+        readShown: async (editor) => {
+            const info = editor.state.field(editorInfoField, false);
+            if (info instanceof MarkdownView) await info.save();
+            if (info?.file) await readService.readNow(info.file);
+        },
+    };
+
+    const showMenu = async (view: EditorView, lineNumber: number, btnEl: HTMLElement) => {
         const info = view.state.field(editorInfoField);
         const filePath = info?.file?.path;
         if (!filePath) return;
-
-        const task = readService.getTaskByFileLine(filePath, lineNumber);
-        const isTaskviewerTask = !!task && getTaskNotation(task.parserId) === 'taskviewer';
+        // Where the button is now: the scan below may draw it again.
         const rect = btnEl.getBoundingClientRect();
+
+        // The task on the line in what the editor shows, not on the same
+        // number of what the index last read.
+        const task = await taskShownAt(view, filePath, lineNumber, lookup);
+        if (task === null) {
+            new Notice(t('notice.editorMenuNotRead'));
+            return;
+        }
+        const isTaskviewerTask = !!task && getTaskNotation(task.parserId) === 'taskviewer';
 
         menuPresenter.present((menu) => {
             if (isTaskviewerTask && task) {
@@ -163,6 +181,8 @@ export function createTaskMenuExtension(
         // this scan is independent of that tree (see the TaskLineClassifier
         // import above), so it asks the reading itself.
         const outline = outlineFor(view.state.doc);
+        // The key of what the editor shows, made once and only if asked.
+        let key: ContentKey | undefined;
 
         for (const { from, to } of view.visibleRanges) {
             let pos = from;
@@ -174,7 +194,10 @@ export function createTaskMenuExtension(
                     seen.add(line.number);
                     let show = true;
                     if (needsFilter && filePath) {
-                        const found = readService.getTaskByFileLine(filePath, lineNumber);
+                        // Not read yet in what the editor shows: a checkbox
+                        // until the scan's change draws the buttons again.
+                        key ??= keyOf(view.state.doc);
+                        const found = readService.taskAtEditorLine(filePath, lineNumber, key) ?? undefined;
                         const isTaskviewerTask = !!found && getTaskNotation(found.parserId) === 'taskviewer';
                         show = isTaskviewerTask ? settings.editorMenuForTasks : settings.editorMenuForCheckboxes;
                     }
