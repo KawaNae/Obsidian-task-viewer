@@ -1,5 +1,6 @@
 import type { Task } from '../types';
 import { TaskIdGenerator } from '../services/display/TaskIdGenerator';
+import { BLOCK_ID_SOURCE } from '../services/parsing/utils/TaskLineClassifier';
 
 /**
  * The public API's and the CLI's task IDs (the names and IDs decision,
@@ -28,7 +29,7 @@ export type ApiTaskId =
 
 // The last `#^` of the ID: a path may hold `#`, an `^id` holds neither `#`
 // nor `^`. A name never ends so — it ends in its reading and line.
-const ANCHOR_ID = /^(.+)#\^([A-Za-z0-9-]+)$/;
+const ANCHOR_ID = new RegExp(String.raw`^(.+)#\^(${BLOCK_ID_SOURCE})$`);
 
 /**
  * The ID the API hands out for the row `name` names: `path#^id` when the
