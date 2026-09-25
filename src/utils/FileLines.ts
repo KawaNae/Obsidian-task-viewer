@@ -3,7 +3,7 @@ import { logError, logWarn } from '../log/log';
 import { LINE_BREAK, holdsLineBreak } from './LineBreak';
 import { Outline, type OutlineReading } from '../services/parsing/utils/Outline';
 import { checkWrite, type PutBlock, type WrittenLine } from '../services/parsing/utils/OutlineCheck';
-import { isOnRecord, readsAsPlanned, readsAsRecorded, subtreeAt, type OnRecord, type RowBasis } from '../services/persistence/RowBasis';
+import { readsAsPlanned, subtreeAt, type RowBasis } from '../services/persistence/RowBasis';
 import { Block, type PlacedLine, type Spot } from '../services/persistence/utils/Placement';
 import { contentKeyOf, type ContentKey } from '../services/core/ContentKey';
 import type { ReadingId } from '../services/core/Reading';
@@ -490,11 +490,10 @@ export interface Landing {
 export interface NamedRow {
     line: number;
     subject: string;
-    basis: RowBasis | OnRecord;
+    basis: RowBasis;
     /**
-     * The reading `line` is a coordinate in. A row planned on its basis
-     * (`RowBasis`) without one is not written; only a timer's insert
-     * (`OnRecord`) goes without it, until F9.
+     * The reading `line` is a coordinate in. A row without one is not
+     * written.
      */
     read?: ReadingId;
 }
@@ -794,8 +793,7 @@ export function editLines(
             handed ??= contentKeyOf(before);
             if (target.key !== handed) return { kind: 'changed' };
         }
-        // A timer's insert (`OnRecord`) names no reading and is taken on its basis alone, until F9 looks timers up by their anchor.
-        if ('basis' in target && !isOnRecord(target.basis)) {
+        if ('basis' in target) {
             // A row the index read counts only while the file reads as its
             // reading did, or carried across our own writes from there: in
             // any other content, a line reading as its basis may be its twin.
@@ -811,8 +809,6 @@ export function editLines(
         if (!('basis' in target)) {
             const shown: RowBasis = { text: target.text, ...(target.subtree ? { subtree: target.subtree } : {}) };
             holds = readsAsPlanned(before, line, shown);
-        } else if (isOnRecord(target.basis)) {
-            holds = readsAsRecorded(before, line, target.basis);
         } else {
             holds = readsAsPlanned(before, line, target.basis);
         }

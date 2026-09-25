@@ -60,14 +60,21 @@ describe('a write whose row the index no longer holds is told once, as gone', ()
         s.dispose();
     });
 
-    for (const op of ['insertChildTask', 'recordChildTask', 'appendChildTask', 'insertSiblingAfterTask'] as const) {
-        it(`${op} under a row that is gone: refused with one notice, nothing written`, async () => {
+    const ops = [
+        { name: 'insertChildTask', call: (s: Awaited<ReturnType<typeof session>>['s'], id: string) => s.index.insertChildTask(id, '- [ ] 子') },
+        { name: 'insertRecord (firstChild)', call: (s: Awaited<ReturnType<typeof session>>['s'], id: string) => s.index.insertRecord(id, '- [ ] 子', 'firstChild') },
+        { name: 'appendChildTask', call: (s: Awaited<ReturnType<typeof session>>['s'], id: string) => s.index.appendChildTask(id, '- [ ] 子') },
+        { name: 'insertRecord (afterSubtree)', call: (s: Awaited<ReturnType<typeof session>>['s'], id: string) => s.index.insertRecord(id, '- [ ] 子', 'afterSubtree') },
+    ] as const;
+
+    for (const { name, call } of ops) {
+        it(`${name} under a row that is gone: refused with one notice, nothing written`, async () => {
             const { s, contents, id } = await session();
             await s.index.deleteTask(id);
             await s.settle(FILE);
             const before = contents.get(FILE);
             Notice.messages.length = 0;
-            expect(await s.index[op](id, '- [ ] 子')).toBe(false);
+            expect(await call(s, id)).toBe(false);
             // The store never held it here: the note is named, not the internal id.
             expect(Notice.messages).toEqual([gone(FILE)]);
             expect(contents.get(FILE)).toBe(before);

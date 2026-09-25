@@ -72,13 +72,26 @@ function makeHarness(options: { tail?: Task | undefined; siblingFails?: boolean 
         settings: { pomodoroWorkMinutes: 25, pomodoroBreakMinutes: 5 },
         getTaskIndex: () => taskIndex,
         getTaskWriteService: () => ({
-            recordChildTask: async (_parentId: string, line: string) => {
-                childInserts.push(line);
-                appearWritten(NEW_BLOCK_ID);
-            },
-            insertSiblingAfterTask: async (taskId: string, line: string, opts = {}) => {
+            insertRecord: async (
+                taskId: string,
+                line: string,
+                place: 'firstChild' | 'afterSubtree' | 'afterCompletedRun',
+                rowId?: string | null,
+            ) => {
+                if (place === 'firstChild') {
+                    childInserts.push(line);
+                    appearWritten(NEW_BLOCK_ID);
+                    return;
+                }
                 if (options.siblingFails) return false;
-                siblingInserts.push({ taskId, line, opts });
+                // `rowId === null` takes the `^id` off the row it names, in the
+                // same write as the insert (the old separate release update).
+                if (rowId === null) {
+                    updates.push({ id: taskId, updates: { blockId: undefined } });
+                    const released = tasks.find(t => t.id === taskId);
+                    if (released) released.blockId = undefined;
+                }
+                siblingInserts.push({ taskId, line, opts: { afterCompletedRun: place === 'afterCompletedRun' ? true : undefined } });
                 appearWritten(NEW_BLOCK_ID);
                 return true;
             },

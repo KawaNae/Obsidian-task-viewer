@@ -19,10 +19,10 @@ import { toDisplayTask } from '../display/DisplayTaskConverter';
 import { planInPlaceCopies } from '../persistence/DuplicateShift';
 import type { GenBlock } from '../parsing/gen/GenBlockCollector';
 import { FileOperations } from '../persistence/utils/FileOperations';
-import { plannedOn, recordedOn, subjectOf } from '../persistence/TaskRefs';
+import { plannedOn, subjectOf } from '../persistence/TaskRefs';
 import { logError, logInfo, logWarn } from '../../log/log';
 import type { EditorLine, Landing, Refusal, WriteOutcome } from '../../utils/FileLines';
-import type { TaskOp } from '../persistence/TaskOps';
+import type { InsertPlace, TaskOp } from '../persistence/TaskOps';
 import type { ContentKey } from './ContentKey';
 
 /**
@@ -784,22 +784,33 @@ export class TaskIndex {
     }
 
     /**
-     * A timer's record at the head of the row's children
-     * (`TimerRecorder.insertChildRecord`), on the weaker check
-     * (`recordedOn`) the timer's inserts keep until F9: a record refused
-     * where the row was only indented would lose the measurement. Anything
-     * other than a timer's record adds a child with {@link insertChildTask}.
+     * A timer's line put in beside the row, where `place` says (`TaskOp`
+     * `insert`): its first session line or a record at the head of the row's
+     * children, the next session beside the last one, the first session of a
+     * continued run past the completed siblings. The one insert every timer
+     * line takes. Planned from the index's copy of the row (`plannedOn`), so
+     * written only where the row the name was read in stands, as every write
+     * that names a row is (`WriteSession.row`): a timer finds the row by its
+     * anchor (`getTaskByAnchor`) and writes by the name that answers.
      *
-     * @returns whether the record was written.
+     * `rowId`, when given, rewrites the row's own `^id` in the same write: a
+     * string puts it on (the target's anchor, on the first session line), null
+     * takes it off (the last session's, once the next one is beside it). Both
+     * land or neither does.
+     *
+     * @returns whether the line was written.
      */
-    async recordChildTask(parentTaskId: string, childLine: string): Promise<boolean> {
-        if (this.refuseAfterDispose('recordChildTask')) return false;
-        const task = this.copyForWrite(parentTaskId, undefined);
+    async insertRecord(taskId: string, line: string, place: InsertPlace, rowId?: string | null): Promise<boolean> {
+        if (this.refuseAfterDispose('insertRecord')) return false;
+        const task = this.copyForWrite(taskId, undefined);
         if (!task) return false;
         if (task.isReadOnly) return false;
         return this.withNotify(task.file, async () => {
-            logInfo(`[recordChildTask] parentId=${parentTaskId}`);
-            const { written } = await this.repository.insertLineAsFirstChild(recordedOn(task), childLine);
+            logInfo(`[insertRecord] taskId=${taskId} place=${place}${rowId === undefined ? '' : ` rowId=${rowId ?? '(off)'}`}`);
+            const ops: TaskOp[] = [];
+            if (rowId !== undefined) ops.push({ kind: 'update', text: TaskParser.format({ ...task, blockId: rowId ?? undefined }) });
+            ops.push({ kind: 'insert', place, text: line });
+            const { written } = await this.repository.applyToTask(plannedOn(task), ops);
             return written;
         });
     }
@@ -821,32 +832,6 @@ export class TaskIndex {
 
 
             const { written } = await this.repository.insertLineAfterTask(plannedOn(task), childLine);
-
-            return written;
-        });
-    }
-
-    /**
-     * Insert a line as the task's next sibling, just past its subtree, spelled
-     * as the item next to it. Session records after the first one live beside the record
-     * before them, not under it, so the log stays flat.
-     *
-     * A timer's record only (`TimerRecorder`), on the weaker check it keeps
-     * until F9, as {@link recordChildTask} is.
-     */
-    async insertSiblingAfterTask(
-        taskId: string,
-        siblingLine: string,
-        opts: { afterCompletedRun?: boolean } = {}
-    ): Promise<boolean> {
-        if (this.refuseAfterDispose('insertSiblingAfterTask')) return false;
-        const task = this.copyForWrite(taskId, undefined);
-        if (!task) return false;
-        if (task.isReadOnly) return false;
-        return this.withNotify(task.file, async () => {
-            logInfo(`[insertSiblingAfterTask] taskId=${taskId}`);
-
-            const { written } = await this.repository.insertSiblingAfterTask(recordedOn(task), siblingLine, opts);
 
             return written;
         });

@@ -86,29 +86,20 @@ export class Outline {
     }
 
     /*
-     * Two lines are compared as one of these two relations and no other, and
-     * which question asks which is written here, once:
+     * Two lines are compared as this relation and no other, and which
+     * questions ask it is written here, once:
      *
      * - `VERBATIM`: a plan's row, its subtree and
      *   generation blocks (`RowBasis.readsAsPlanned`); a write's check that a line
      *   still reads what it read — the editor's line, a coordinate carried
      *   across the write's own edits, a line a carry moved (`FileLines`)
-     * - `UP_TO_INDENT`: the timer's weaker check (`RowBasis.OnRecord`)
      *
-     * A comparison of lines not in the table picks one of the two and joins
-     * it; one that needs a third relation is a question for the outline, not
-     * for its caller.
+     * A comparison of lines not in the table joins it; one that needs
+     * another relation is a question for the outline, not for its caller.
      */
 
     /** The same line, character for character, indentation included. */
     static readonly VERBATIM: LineRelation = relation(line => line);
-
-    /**
-     * The same line but for its indentation: what it reads wherever it stands
-     * in the tree ({@link dedent}). A row moved under another is this to what
-     * it was.
-     */
-    static readonly UP_TO_INDENT: LineRelation = relation(line => Outline.dedent(line));
 
     /**
      * A blank line: nothing on it but spaces, tabs, no-break spaces and

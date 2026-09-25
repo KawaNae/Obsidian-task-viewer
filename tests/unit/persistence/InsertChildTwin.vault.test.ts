@@ -11,8 +11,8 @@ import { openVault, type VaultSession } from '../helpers/vaultSession';
  * A child added from a card's menu, the API or the CLI is written only where
  * the row the name was read in stands (the twins decision of 2026-09-25
  * 10:42): the check `WriteSession.row` makes of every write planned from the
- * index's copy (`plannedOn`), the reading's key included. The weaker check
- * (`OnRecord`) is the timer's alone, until F9.
+ * index's copy (`plannedOn`), the reading's key included. A timer's record
+ * takes the same check.
  *
  * The case is two twin rows and an edit from outside that the scan has not
  * read yet: a line put in above them brings the first twin onto the line the
@@ -140,9 +140,10 @@ describe('a child appended at the end of a row\'s children', () => {
     });
 });
 
-describe('a timer\'s record (the weaker check, until F9)', () => {
-    // A record refused where the row was only indented would lose the
-    // measurement (`RowBasis.OnRecord`): the timer's two inserts keep it.
+describe('a timer\'s record (the same check as every write)', () => {
+    // A timer's record now takes the same check as every write: a row only
+    // indented since the scan is refused, the same as any other row that
+    // changed since the reading.
     const INDENTED = ['- [ ] P', '\t- [ ] T', ''].join('\n');
 
     async function indentedSinceTheScan() {
@@ -152,15 +153,15 @@ describe('a timer\'s record (the weaker check, until F9)', () => {
         return { contents, session, task };
     }
 
-    it('is written as a first child on a row only indented since the scan', async () => {
+    it('is refused as a first child on a row only indented since the scan', async () => {
         const { contents, session, task } = await indentedSinceTheScan();
-        expect(await session.index.recordChildTask(task.id, '- [x] rec')).toBe(true);
-        expect(contents.get(FILE)).toBe(['- [ ] P', '\t- [ ] T', '\t\t- [x] rec', ''].join('\n'));
+        expect(await session.index.insertRecord(task.id, '- [x] rec', 'firstChild')).toBe(false);
+        expect(contents.get(FILE)).toBe(INDENTED);
     });
 
-    it('is written as a next sibling on a row only indented since the scan', async () => {
+    it('is refused as a next sibling on a row only indented since the scan', async () => {
         const { contents, session, task } = await indentedSinceTheScan();
-        expect(await session.index.insertSiblingAfterTask(task.id, '- [x] rec')).toBe(true);
-        expect(contents.get(FILE)).toBe(['- [ ] P', '\t- [ ] T', '\t- [x] rec', ''].join('\n'));
+        expect(await session.index.insertRecord(task.id, '- [x] rec', 'afterSubtree')).toBe(false);
+        expect(contents.get(FILE)).toBe(INDENTED);
     });
 });

@@ -50,7 +50,7 @@ function makeHarness(options: { childExists?: boolean; childContent?: string } =
         settings: { pomodoroWorkMinutes: 25, pomodoroBreakMinutes: 5 },
         getTaskIndex: () => taskIndex,
         getTaskWriteService: () => ({
-            recordChildTask: async (_parentId: string, line: string) => { inserted.push(line); return true; },
+            insertRecord: async (_parentId: string, line: string, _place: string) => { inserted.push(line); return true; },
         }),
     } as unknown as TaskViewerPlugin;
 
