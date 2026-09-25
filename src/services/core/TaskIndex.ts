@@ -646,7 +646,6 @@ export class TaskIndex {
                 }
             }
 
-            await this.scanner.waitForScan(task.file);
             return removed;
         });
     }
@@ -673,7 +672,6 @@ export class TaskIndex {
                 logWarn(`[TaskIndex] duplicate was not written: id=${taskId}`);
             }
 
-            await this.scanner.waitForScan(task.file);
             return written;
         });
     }
@@ -719,11 +717,9 @@ export class TaskIndex {
             const outcome = heading
                 ? await this.repository.insertLineUnderHeading(filePath, taskLine, heading, 2)
                 : await this.repository.appendTaskToFile(filePath, taskLine);
-            // Nothing written: no modify, so no scan to wait for.
-            if (!outcome.written) return null;
-
-            await this.scanner.waitForScan(filePath);
-            return outcome.line;
+            // What the write left is in the index once it landed (`landed`):
+            // the caller finds the row on its line without waiting for a scan.
+            return outcome.written ? outcome.line : null;
         });
     }
 
@@ -748,7 +744,6 @@ export class TaskIndex {
                 logWarn(`[TaskIndex] child insert was not written: parentId=${parentTaskId}`);
             }
 
-            await this.scanner.waitForScan(task.file);
             return written;
         });
     }
@@ -770,7 +765,6 @@ export class TaskIndex {
 
             const { written } = await this.repository.insertLineAfterTask(task, childLine);
 
-            await this.scanner.waitForScan(task.file);
             return written;
         });
     }
@@ -793,7 +787,6 @@ export class TaskIndex {
             logInfo(`[insertSiblingAfterTask] taskId=${taskId}`);
 
             const { written } = await this.repository.insertSiblingAfterTask(task, siblingLine, opts);
-            await this.scanner.waitForScan(task.file);
 
             return written;
         });
@@ -809,8 +802,6 @@ export class TaskIndex {
                 completes(at.text, newContent, this.settings.statusDefinitions) ? filePath : null,
                 (op) => this.repository.updateLine(filePath, at, newContent, op));
             if (written && fire) await this.settleFire(fire, filePath);
-            // Nothing written: no modify, so no scan to wait for.
-            if (written) await this.scanner.waitForScan(filePath);
             return written;
         });
     }
@@ -820,8 +811,6 @@ export class TaskIndex {
         if (this.refuseAfterDispose('insertLineAfterLine')) return false;
         return this.withNotify(filePath, async () => {
             const { written } = await this.repository.insertLineAfterLine(filePath, at, newContent);
-            // Nothing written: no modify, so no scan to wait for.
-            if (written) await this.scanner.waitForScan(filePath);
             return written;
         });
     }
@@ -831,8 +820,6 @@ export class TaskIndex {
         if (this.refuseAfterDispose('deleteLine')) return false;
         return this.withNotify(filePath, async () => {
             const { written } = await this.repository.deleteLine(filePath, at);
-            // Nothing written: no modify, so no scan to wait for.
-            if (written) await this.scanner.waitForScan(filePath);
             return written;
         });
     }
@@ -865,11 +852,8 @@ export class TaskIndex {
      */
     private reportRefusal(refusal: Refusal): void {
         const { reason, subject, file } = refusal;
-        logWarn(`[TaskIndex] write refused: file=${file} reason=${reason.kind}${reason.kind === 'ambiguous' ? ` count=${reason.count}` : ''} subject=${subject}`);
+        logWarn(`[TaskIndex] write refused: file=${file} reason=${reason.kind} subject=${subject}`);
         switch (reason.kind) {
-            case 'ambiguous':
-                new Notice(t('notice.writeTargetAmbiguous', { count: String(reason.count), subject }));
-                return;
             case 'gone':
                 new Notice(t('notice.writeTargetGone', { subject }));
                 return;
