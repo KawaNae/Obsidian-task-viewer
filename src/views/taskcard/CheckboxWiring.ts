@@ -3,6 +3,7 @@ import type { TaskWriteService } from '../../services/data/TaskWriteService';
 import type { MenuPresenter } from '../../interaction/menu/MenuPresenter';
 import type { ChildRenderItem } from './types';
 import { buildStatusOptions, createStatusTitle } from '../../constants/statusOptions';
+import { touchCard } from './CardHold';
 
 /**
  * Wires checkbox interactions for parent and child items.
@@ -81,6 +82,8 @@ export class CheckboxWiring {
         child: boolean
     ): void {
         checkbox.addEventListener('click', () => {
+            // The click has changed the box already.
+            touchCard(checkbox);
             const input = checkbox as HTMLInputElement;
             const isChecked = input.checked;
             const newStatusChar = isChecked ? 'x' : ' ';

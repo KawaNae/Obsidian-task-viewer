@@ -4,6 +4,7 @@ import type { TaskReadService } from '../../services/data/TaskReadService';
 import type { ChildRenderItem } from './types';
 import type { CheckboxWiring } from './CheckboxWiring';
 import { NotationUtils } from './NotationUtils';
+import { touchCard } from './CardHold';
 import { t } from '../../i18n';
 
 export type ChildMenuCallback = (taskId: string, x: number, y: number) => void;
@@ -81,6 +82,7 @@ export class ChildSectionRenderer {
 
         toggle.addEventListener('click', (e) => {
             e.stopPropagation();
+            touchCard(toggle);
             const isCollapsed = toggle.dataset.collapsed === 'true';
             if (isCollapsed) {
                 toggle.dataset.collapsed = 'false';

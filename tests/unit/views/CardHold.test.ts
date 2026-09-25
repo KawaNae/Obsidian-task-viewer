@@ -429,6 +429,48 @@ describe('a card kept across a reading', () => {
     });
 });
 
+describe('a card whose DOM a user\'s action changed', () => {
+    // The card is drawn next for a row that shows what it showed before the
+    // action — a twin that took the card, or the row whose write did not
+    // land yet — so its signature is the same. It is drawn anew all the same.
+
+    it('is drawn anew after its box was ticked', async () => {
+        const s = setup();
+        await s.draw(OLD);
+        const box = s.card.querySelectorAll('input[type="checkbox"]')[0];
+        box.checked = true;
+        box.fire('click');
+        await settle();
+
+        await s.draw(OLD);
+        expect(s.card.querySelectorAll('input[type="checkbox"]')[0].checked).toBe(false);
+    });
+
+    it('is drawn anew after a child\'s box was ticked', async () => {
+        const s = setup();
+        await s.draw(OLD);
+        const box = s.card.querySelectorAll('input[type="checkbox"]')[1];
+        box.checked = true;
+        box.fire('click');
+        await settle();
+
+        await s.draw(OLD);
+        expect(s.card.querySelectorAll('input[type="checkbox"]')[1].checked).toBe(false);
+    });
+
+    it('is drawn anew after its children were opened', async () => {
+        const s = setup(settingsWith({ childCollapseThreshold: 1 }));
+        await s.draw(OLD);
+        s.card.querySelector('.task-card__children-toggle')!.fire('click');
+        expect(s.card.querySelector('.task-card__children')!.hasClass('task-card__children--expanded')).toBe(true);
+
+        // The next reading's key is not the one opened, and the index does
+        // not follow the old name to it: the card is drawn closed.
+        await s.draw(NOW);
+        expect(s.card.querySelector('.task-card__children')!.hasClass('task-card__children--collapsed')).toBe(true);
+    });
+});
+
 describe('the card\'s context menu', () => {
     it('opens for the task of the card\'s latest draw', () => {
         const handler = Object.create(MenuHandler.prototype) as MenuHandler;
