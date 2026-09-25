@@ -185,7 +185,6 @@ export interface Task {
      * when the line has no `^id` or shares it.
      */
     anchor?: string;
-    timerTargetId?: string;
 
     /**
      * Raw tags: the task's own declaration only (content `#tags` + own

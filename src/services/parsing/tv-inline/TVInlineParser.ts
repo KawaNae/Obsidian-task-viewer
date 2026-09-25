@@ -4,7 +4,6 @@ import { flowValidation, singleLineFlow } from '../../flow/FlowSegments';
 import { FLOW_SPLIT } from '../utils/FlowLineScanner';
 import { createBaseTask } from '../TaskFactory';
 import type { LeafParserStrategy } from '../strategies/ParserStrategy';
-import { isTimerTargetId } from '../../../utils/TimerTargetIdUtils';
 import { TaskIdGenerator } from '../../display/TaskIdGenerator';
 import { TagExtractor } from '../utils/TagExtractor';
 import { parseDateTimeField } from '../utils/DateTimeFieldParser';
@@ -47,7 +46,6 @@ export class TVInlineParser implements LeafParserStrategy {
 
         // 1. The trailing block ID (^id) is the content's last part
         const { text: body, blockId } = TaskLineClassifier.extractBlockId(classified.rawContent);
-        const timerTargetId = blockId && isTimerTargetId(blockId) ? blockId : undefined;
 
         // Split flow commands (==>)
         const flowSplit = body.split(FLOW_SPLIT);
@@ -123,7 +121,6 @@ export class TVInlineParser implements LeafParserStrategy {
             flow,
             tags: TagExtractor.fromContent(content.trim()),
             blockId,
-            timerTargetId,
             validation,
         });
     }

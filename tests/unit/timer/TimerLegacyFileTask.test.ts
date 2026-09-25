@@ -45,17 +45,23 @@ const storageUtils = {
 function build() {
     let fireChange: () => void = () => { throw new Error('no onChange subscriber'); };
     const closed: string[] = [];
+    const plugin = {
+        settings: { pomodoroWorkMinutes: 25, pomodoroBreakMinutes: 5 },
+        getTaskReadService: () => ({
+            onChange: (cb: () => void) => { fireChange = cb; return () => { /* unsubscribed */ }; },
+        }),
+        // The scan has run: the note's checkboxes are there, the file task is not.
+        getTaskIndex: () => ({ getTasks: () => [], getTask: () => undefined, getTaskByAnchor: () => undefined }),
+    } as unknown as TimerContext['plugin'];
     const ctx = {
         timers: new Map<string, TimerInstance>(),
-        recorder: {} as TimerContext['recorder'],
-        plugin: {
-            settings: { pomodoroWorkMinutes: 25, pomodoroBreakMinutes: 5 },
-            getTaskReadService: () => ({
-                onChange: (cb: () => void) => { fireChange = cb; return () => { /* unsubscribed */ }; },
-            }),
-            // The scan has run: the note's checkboxes are there, the file task is not.
-            getTaskIndex: () => ({ getTasks: () => [], getTask: () => undefined }),
-        } as unknown as TimerContext['plugin'],
+        recorder: {
+            resolveTarget: (timer: TimerInstance) => {
+                const index = plugin.getTaskIndex();
+                return timer.timerTargetId ? index.getTaskByAnchor(timer.taskFile, timer.timerTargetId) : index.getTask(timer.taskId);
+            },
+        } as unknown as TimerContext['recorder'],
+        plugin,
         app: {} as TimerContext['app'],
         startTimer: () => { /* unused */ },
         render: () => { /* unused */ },

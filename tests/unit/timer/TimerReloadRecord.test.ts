@@ -5,15 +5,15 @@ import { makeFile, vaultSession, type VaultSession } from '../helpers/vaultSessi
 /**
  * Stopping a timer after a reload writes into the session line it started.
  *
- * Runtime task IDs live for one session. A timer persists the ID of its
- * session line (`recordedChildTaskId`), so after a reload that ID names nothing
- * — and the stop path used to look it up directly, miss, announce "child task
- * not found" and write a second record, leaving the placeholder `[ ]` behind.
- * Worse, with a counter restarting at 1 the stale ID could name a *different*
- * task in the new session, and the stop overwrote that task's line. Two fixes
- * are pinned: runtime IDs are seeded from the clock so a previous session's ID
- * names nothing, and the stop resolves its line by the session line's own `^id`
- * (`tailRecordBlockId`), which survives the reload because it is in the file.
+ * Runtime task IDs live for one session, so after a reload a persisted one
+ * names nothing — and the stop path used to look one up directly, miss,
+ * announce "child task not found" and write a second record, leaving the
+ * placeholder `[ ]` behind. Worse, with a counter restarting at 1 a stale ID
+ * could name a *different* task in the new session, and the stop overwrote
+ * that task's line. Two fixes are pinned: runtime IDs are seeded from the
+ * clock so a previous session's ID names nothing, and the stop resolves its
+ * line by the session line's own `^id` (`tailRecordBlockId`), which survives
+ * the reload because it is in the file.
  *
  * Each "session" here is a fresh TaskIndex over the same file contents, so the
  * reload gets a new ledger and new `seq:` numbers, exactly like the plugin.
@@ -85,7 +85,6 @@ describe('stopping a timer after a reload', () => {
         const before = lines(contents);
         const placeholder = before.find(line => line.includes(`^${timer.tailRecordBlockId}`))!;
         expect(placeholder).toMatch(placeholderShape);
-        const staleId = timer.recordedChildTaskId;
 
         // Reload: a new index, a new session of readings (N1: a name is one
         // reading's, and the session keeps the next index's numbers apart).
@@ -93,7 +92,6 @@ describe('stopping a timer after a reload', () => {
         await second.scanAll();
         const restored = persisted(timer);
         // A previous session's ID names nothing — never a different task.
-        expect(second.index.getTask(staleId!)).toBeUndefined();
         expect(second.index.getTask(restored.taskId)).toBeUndefined();
 
         restored.startTimeMs = Date.now() - 60_000;
@@ -106,15 +104,14 @@ describe('stopping a timer after a reload', () => {
         expect(record).toMatch(/- \[x\] /);
     });
 
-    // The tail anchor is looked up within `timer.taskFile`, which the widget's
-    // rename handler rewrites. That alone finds the record after a rename — the
-    // rewrite of `recordedChildTaskId` is not what carries it.
-    it('finds the record after a rename even when recordedChildTaskId still names the old path', async () => {
+    // The tail anchor (`tailRecordBlockId`) is looked up within `timer.taskFile`,
+    // which the widget's rename handler rewrites. That alone finds the record
+    // after a rename.
+    it('finds the record after a rename', async () => {
         const contents = new Map([[FILE, ['- [ ] 対象 @2026-09-21', '- [ ] 下のタスク @2026-09-21', ''].join('\n')]]);
         const live = session(contents);
         await live.scanAll();
         const timer = await startTimer(live, 'child');
-        const staleId = timer.recordedChildTaskId!;
 
         const renamed = 'notes/renamed.md';
         contents.set(renamed, contents.get(FILE)!);
@@ -122,7 +119,6 @@ describe('stopping a timer after a reload', () => {
         await live.fireVault('rename', makeFile(renamed), FILE);
         timer.taskFile = renamed;          // what TimerWidget.handleFileRename does
         timer.taskId = timer.taskId.replace(FILE, renamed);
-        expect(timer.recordedChildTaskId).toBe(staleId);
 
         await live.recorder.recordSessionEnd(timer);
         await live.index.waitForScan(renamed);

@@ -134,7 +134,7 @@ export function planFlow(task: Task, program: FlowProgram, deps: FlowPlanDeps): 
     if (program.move) {
         const target = evalExpr(program.move.target, preCtx);
         const destPath = normalizeDestination(target);
-        const archivedTask: Task = { ...task, flow: undefined, blockId: undefined, timerTargetId: undefined };
+        const archivedTask: Task = { ...task, flow: undefined, blockId: undefined };
         effects.push({ kind: 'archive-to', destPath, archivedTask });
         effects.push({ kind: 'delete-original', destPath });
     } else {
@@ -354,7 +354,6 @@ function buildNextTask(task: Task, anchor: DateAnchor | null, next: NextOccurren
         originalText: '',
         childLines: [],
         blockId: undefined,
-        timerTargetId: undefined,
         // タイマーのアイコンは記法に準ずる目印なので次インスタンスへ持ち越さない。
         // 一覧の単一情報源は TimerIcons — ここに直接書くと、付ける側に足した
         // アイコンが剥がす側から漏れる（`🔁` が実際に漏れていた）。

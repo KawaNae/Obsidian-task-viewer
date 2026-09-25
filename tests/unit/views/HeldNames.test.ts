@@ -85,11 +85,9 @@ describe('an expanded card', () => {
 describe('a timer', () => {
     it('takes the name the index answers for the one it holds, and says it was rewritten', () => {
         const task = makeTask({ id: NOW, file: 'a.md' });
-        const timer = { taskId: OLD, taskFile: 'a.md', taskOriginalText: '- [ ] A', timerTargetId: undefined };
-        const resolver = { resolveTvInline: vi.fn() };
+        const timer = { taskId: OLD, taskFile: 'a.md', timerTargetId: undefined };
 
-        expect(refreshTimerTask(timer as never, following(task), resolver)).toEqual({ task, rewritten: true });
+        expect(refreshTimerTask(timer as never, following(task) as never)).toEqual({ task, rewritten: true });
         expect(timer.taskId).toBe(NOW);
-        expect(resolver.resolveTvInline).not.toHaveBeenCalled();
     });
 });
