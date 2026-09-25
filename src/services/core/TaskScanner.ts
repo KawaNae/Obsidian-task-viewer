@@ -6,7 +6,8 @@ import type { Task, TaskViewerSettings } from '../../types';
 import { TaskIdGenerator } from '../display/TaskIdGenerator';
 import { contentKeyOf, type ContentKey } from './ContentKey';
 import { WriteLinks } from './WriteLinks';
-import { splitLines, type Landing } from '../../utils/FileLines';
+import { newSession, readReading, readingId, type ReadingId } from './Reading';
+import { splitLines, type Landing, type ReadMark } from '../../utils/FileLines';
 import type { OutlineReading } from '../parsing/utils/Outline';
 import { TaskLineClassifier } from '../parsing/utils/TaskLineClassifier';
 import { logDebug, logError, logInfo } from '../../log/log';
@@ -15,7 +16,7 @@ import { logDebug, logError, logInfo } from '../../log/log';
  * タスクスキャナー — ファイル単位の読みのオーケストレーション。
  * 1 回の読みは 4 相を順に呼ぶだけ:
  *   parse    — FileParsePipeline（ファイル → Task[]、仮 ID。パース順序契約の所有者）
- *   name     — 仮 ID を、この読みの中の名前（パス、内容の鍵、行）に置き換える
+ *   name     — 仮 ID を、この読みの中の名前（パス、読みの番号、行）に置き換える
  *   validate — バリデーション警告の収集（以降は名前しか見ない）
  *   commit   — store 更新
  *
@@ -30,15 +31,30 @@ import { logDebug, logError, logInfo } from '../../log/log';
 export class TaskScanner {
     private scanQueue: Map<string, Promise<unknown>> = new Map();
 
+    /** This index's readings, apart from any other's (`ReadingId`). */
+    private readonly session = newSession();
+
     /**
-     * The key of the content each file's last committed reading read — a
-     * scan's, or a write's that landed (`landed`). A reading of the same
-     * content parses to what the index holds, so it is not committed again:
-     * the one condition under which a read is skipped. Cleared when the vault
-     * is read whole (`scanVault`), as it is when the settings change what a
-     * parse makes of the same lines.
+     * Each file's last committed reading — a scan's, or a write's that landed
+     * (`landed`): its number, and the key of the content it read. A reading
+     * of the same content parses to what the index holds, so it is not
+     * committed again, and takes no number.
      */
-    private committed = new Map<string, ContentKey>();
+    private readings = new Map<string, { n: number; key: ContentKey }>();
+
+    /**
+     * The number of each file's last committed reading, kept when the file
+     * is renamed or deleted, so that no number is given twice in a session.
+     */
+    private numbers = new Map<string, number>();
+
+    /**
+     * Files to be read again even if their content is the one their last
+     * reading read: every file when the vault is read whole (`scanVault`), as
+     * it is when the settings change what a parse makes of the same lines,
+     * and a file a caller asks for (`requestScan`).
+     */
+    private stale = new Set<string>();
 
     /** Our own writes to each file, to follow a name across them (`follow`). */
     private links = new WriteLinks();
@@ -55,7 +71,7 @@ export class TaskScanner {
     async scanVault(): Promise<void> {
         this.validator.clearErrors();
         // Every file is read again from here on, whatever it read last.
-        this.committed.clear();
+        for (const path of this.readings.keys()) this.stale.add(path);
         const allFiles = this.app.vault.getMarkdownFiles();
         const files = allFiles.filter(f => this.mayContainTasks(f));
         logInfo(`[scanVault] total=${allFiles.length} candidates=${files.length} skipped=${allFiles.length - files.length}`);
@@ -102,7 +118,7 @@ export class TaskScanner {
      * written and put its values back).
      */
     async requestScan(file: TFile): Promise<void> {
-        this.committed.delete(file.path);
+        this.stale.add(file.path);
         await this.queueScan(file);
     }
 
@@ -150,6 +166,14 @@ export class TaskScanner {
     }
 
     /**
+     * The index's last reading of `path`, as a write is handed the file
+     * (`WriteChannel.reading`).
+     */
+    readingOf(path: string): ReadMark {
+        return { n: this.numbers.get(path) ?? 0, key: this.readings.get(path)?.key };
+    }
+
+    /**
      * A write of ours landed in `path`, leaving `landing.lines`: take them in
      * as the file's next reading, now, without waiting for the scan its
      * `modify` starts — which then reads the same content and commits
@@ -159,42 +183,48 @@ export class TaskScanner {
      * write landed, and nothing is read that the write did not leave. A scan
      * that read the file before this write and commits after it puts an older
      * reading back; the `modify` this write caused reads the file again after
-     * it, and commits this content once more. In between, a write planned
-     * from the older copy is checked against the file and refused where it
-     * reads otherwise, never written on the wrong line.
+     * it. In between, a write planned from the older reading is refused where
+     * the file does not read as that reading did.
      */
     landed(path: string, landing: Landing, commit = true): boolean {
-        const to = contentKeyOf(landing.lines);
-        this.links.wrote(path, contentKeyOf(landing.before), to, landing.before.length, landing.edits);
-        // Read already, by the scan the write's own `modify` started.
-        if (!commit || this.committed.get(path) === to) return false;
+        const handed = landing.handed ?? this.readingOf(path);
+        this.links.wrote(path, handed, contentKeyOf(landing.before), contentKeyOf(landing.lines), landing.before.length, landing.edits);
+        if (!commit) return false;
         return this.commitRead(path, [...landing.lines], landing.reading ?? undefined);
     }
 
     /**
-     * Where line `line` of content `from` of `path` stands in content `now`,
-     * when only writes of ours led from one to the other (`WriteLinks.follow`):
-     * what a write asks of a row read in content the file has moved on from
-     * (`WriteChannel.follow`).
+     * Where line `line` of reading `read` of `path` stands in content `now`:
+     * the line itself when `read` is the index's last reading and `now` is
+     * its content, the line our own writes from `read` carried it to when
+     * `now` is what they left (`WriteLinks.walk`), else null. What a write
+     * asks of a row read in some reading (`WriteChannel.follow`).
      */
-    followLine(path: string, from: ContentKey, line: number, now: ContentKey): number | null {
-        return this.links.follow(path, from, line, now);
+    followLine(path: string, read: ReadingId, line: number, now: ContentKey): number | null {
+        const reading = readReading(read);
+        if (!reading || reading.session !== this.session) return null;
+        const walked = this.links.walk(path, reading.n, line);
+        if (walked) return walked.key === now ? walked.line : null;
+        const last = this.readings.get(path);
+        return last?.n === reading.n && last.key === now ? line : null;
     }
 
     /**
-     * The name the row `name` names has now, when a write of ours moved on
-     * from the content that name was given in: followed across the writes'
-     * reports (`WriteLinks`) to the content the index last read. Null when
-     * it names no row now — a write took the row away, or the file changed
+     * The name the row `name` names has now, when writes of ours led on from
+     * the reading that name was given in to the index's last reading of the
+     * file: followed across the writes' reports (`WriteLinks`). Null when it
+     * names no row now — a write took the row away, or the file was read
      * some other way since.
      */
     follow(name: string): string | null {
         const read = TaskIdGenerator.readName(name);
-        if (!read) return null;
-        const content = this.committed.get(read.filePath);
-        if (content === undefined) return null;
-        const line = this.links.follow(read.filePath, read.content, read.line, content);
-        return line === null ? null : TaskIdGenerator.nameOf(read.parserId as Task['parserId'], read.filePath, line, content);
+        const reading = read ? readReading(read.reading) : null;
+        if (!read || !reading || reading.session !== this.session) return null;
+        const last = this.readings.get(read.filePath);
+        if (last === undefined) return null;
+        const walked = this.links.walk(read.filePath, reading.n, read.line);
+        if (!walked || walked.n !== last.n || walked.key !== last.key) return null;
+        return TaskIdGenerator.nameOf(read.parserId as Task['parserId'], read.filePath, walked.line, readingId(this.session, last.n));
     }
 
     /**
@@ -207,14 +237,21 @@ export class TaskScanner {
     }
 
     /**
-     * Commit one reading of `path`, `lines`, unless it is of the content the
-     * last committed reading read. `reading` is a reading of these lines
-     * already made.
+     * Commit one reading of `path`, `lines`, as the file's next reading,
+     * unless it is of the content the last committed reading read. `reading`
+     * is a reading of these lines already made.
+     *
+     * A file to be read again whatever it read (`stale`) that reads as its
+     * last reading did is that reading, parsed again: it keeps its number, and
+     * its rows their names. No reading came between, so no write of ours did.
      */
     private commitRead(path: string, lines: string[], reading?: OutlineReading): boolean {
         const file = { path };
         const readKey = contentKeyOf(lines);
-        if (this.committed.get(path) === readKey) return false;
+        const last = this.readings.get(path);
+        const again = last?.key === readKey;
+        if (again && !this.stale.has(path)) return false;
+        const n = again ? last.n : (this.numbers.get(path) ?? 0) + 1;
         this.validator.clearErrorsForFile(file.path);
 
         // --- parse ---
@@ -223,14 +260,14 @@ export class TaskScanner {
         if (parsed.ignored) {
             this.store.removeTasksByFile(file.path);
             this.links.drop(file.path);
-            this.committed.set(file.path, readKey);
+            this.readRead(file.path, n, readKey);
             return true;
         }
 
         // --- name ---
         // Right after parse, so nothing downstream — validator included — ever
         // sees a provisional ID.
-        nameRows(parsed.tasks, file.path, readKey);
+        nameRows(parsed.tasks, file.path, readingId(this.session, n));
         anchorRows(parsed.tasks, lines);
 
         // --- validate ---
@@ -264,11 +301,18 @@ export class TaskScanner {
             this.store.setGenBlocks(file.path, parsed.genBlocks);
 
             // Last, so a store write that throws leaves the file to be read again.
-            this.committed.set(file.path, readKey);
+            this.readRead(file.path, n, readKey);
         } finally {
             this.store.endBatch();
         }
         return true;
+    }
+
+    /** Reading `n` of `path`, of content `key`, is committed. */
+    private readRead(path: string, n: number, key: ContentKey): void {
+        this.readings.set(path, { n, key });
+        this.numbers.set(path, n);
+        this.stale.delete(path);
     }
 
     /**
@@ -278,7 +322,8 @@ export class TaskScanner {
     handleFileRenamed(oldPath: string, newPath: string): void {
         this.scanQueue.delete(oldPath);
         for (const path of [oldPath, newPath]) {
-            this.committed.delete(path);
+            this.readings.delete(path);
+            this.stale.delete(path);
             this.links.drop(path);
         }
     }
@@ -289,7 +334,8 @@ export class TaskScanner {
      */
     handleFileDeleted(path: string): void {
         this.scanQueue.delete(path);
-        this.committed.delete(path);
+        this.readings.delete(path);
+        this.stale.delete(path);
         this.links.drop(path);
     }
 
@@ -308,9 +354,9 @@ export class TaskScanner {
  * line, and so is a name, so one reading's names are as distinct as its
  * lines.
  */
-function nameRows(tasks: Task[], path: string, content: ContentKey): void {
+function nameRows(tasks: Task[], path: string, reading: ReadingId): void {
     const names = new Map<string, string>();
-    for (const task of tasks) names.set(task.id, TaskIdGenerator.nameOf(task.parserId, path, task.line, content));
+    for (const task of tasks) names.set(task.id, TaskIdGenerator.nameOf(task.parserId, path, task.line, reading));
     const rename = (id: string) => names.get(id) ?? id;
     for (const task of tasks) {
         task.id = rename(task.id);

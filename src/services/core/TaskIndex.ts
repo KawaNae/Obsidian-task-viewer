@@ -97,7 +97,8 @@ export class TaskIndex {
         this.repository.connect((path) => ({
             landed: landing => this.landed(path, landing),
             refused: refusal => this.reportRefusal(refusal),
-            follow: (from, line, now) => this.scanner.followLine(path, from, line, now),
+            follow: (read, line, now) => this.scanner.followLine(path, read, line, now),
+            reading: () => this.scanner.readingOf(path),
         }));
     }
 

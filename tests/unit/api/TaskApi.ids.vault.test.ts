@@ -5,7 +5,7 @@ import { TaskApiError } from '../../../src/api/TaskApiTypes';
 import { readApiId } from '../../../src/api/TaskIds';
 import { TaskReadService } from '../../../src/services/data/TaskReadService';
 import { TaskWriteService } from '../../../src/services/data/TaskWriteService';
-import { openVault, makeFile, type VaultSession } from '../helpers/vaultSession';
+import { openVault, makeFile, vaultSession, type VaultSession } from '../helpers/vaultSession';
 
 /**
  * The API's and the CLI's task IDs (the names and IDs decision, 2026-09-25).
@@ -29,13 +29,17 @@ afterEach(() => {
 async function open(lines: string[]) {
     const { contents, session } = await openVault(lines);
     live.push(session);
+    return { contents, session, api: apiOver(session) };
+}
+
+function apiOver(session: VaultSession): TaskApi {
     const plugin = {
         app: session.app,
         settings: { startHour: 0 },
         getTaskReadService: () => new TaskReadService(session.index, 0),
         getTaskWriteService: () => new TaskWriteService(session.index),
     };
-    return { contents, session, api: new TaskApi(plugin as never) };
+    return new TaskApi(plugin as never);
 }
 
 async function listed(api: TaskApi) {
@@ -133,11 +137,52 @@ describe('a name the API handed out', () => {
     });
 });
 
+describe('an ID without a ^id, after our writes brought the file back to a content it had', () => {
+    it('goes to its row, not to the copy on its old line: delete the first twin, duplicate the second', async () => {
+        const { contents, api } = await open(['- [ ] A', '- [ ] A', '']);
+        const [r1, r2] = (await api.list()).tasks.map(task => task.id);
+
+        await api.delete({ id: r1 });
+        await api.duplicate({ id: r2 });
+        expect(contents.get(FILE)).toBe(['- [ ] A', '- [ ] A', ''].join('\n'));
+
+        await api.update({ id: r2, content: 'A2' });
+        expect(contents.get(FILE)).toBe(['- [ ] A2', '- [ ] A', ''].join('\n'));
+    });
+
+    it('is refused once the row is gone, though a copy of it stands on its line: duplicate, delete, update', async () => {
+        const { contents, api } = await open(['- [ ] B', '- [ ] other', '']);
+        const id = (await listed(api)).get('B')!.id;
+
+        await api.duplicate({ id });
+        await api.delete({ id });
+        const back = contents.get(FILE);
+        expect(back).toBe(['- [ ] B', '- [ ] other', ''].join('\n'));
+
+        await expect(api.update({ id, status: 'x' })).rejects.toThrow(TaskApiError);
+        expect(contents.get(FILE)).toBe(back);
+    });
+
+    it('names nothing after a reload, the content the same', async () => {
+        const { contents, api } = await open(['- [ ] A', '']);
+        const id = (await api.list()).tasks[0].id;
+        const before = contents.get(FILE);
+
+        const reloaded = vaultSession(contents);
+        live.push(reloaded);
+        await reloaded.scanAll();
+        const again = apiOver(reloaded);
+        expect((await again.list()).tasks[0].id).not.toBe(id);
+        await expect(again.update({ id, status: 'x' })).rejects.toThrow(TaskApiError);
+        expect(contents.get(FILE)).toBe(before);
+    });
+});
+
 describe('readApiId', () => {
     it('tells the two shapes apart, taking the last #^ of a path that holds #', () => {
         expect(readApiId('a#b.md#^x-1')).toEqual({ kind: 'anchor', file: 'a#b.md', anchor: 'x-1' });
-        expect(readApiId('tv-inline:note.md:n:0:3:22:c6477a343e9a5b57')).toEqual({
-            kind: 'name', name: 'tv-inline:note.md:n:0:3:22:c6477a343e9a5b57',
+        expect(readApiId('tv-inline:note.md:n:mugdzal02.3:0')).toEqual({
+            kind: 'name', name: 'tv-inline:note.md:n:mugdzal02.3:0',
         });
     });
 });

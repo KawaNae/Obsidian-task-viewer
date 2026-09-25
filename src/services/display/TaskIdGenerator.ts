@@ -1,5 +1,5 @@
 import type { ParserId } from '../../types';
-import type { ContentKey } from '../core/ContentKey';
+import type { ReadingId } from '../core/Reading';
 
 export interface ParsedTaskId {
     parserId: string;
@@ -17,8 +17,8 @@ export interface ParsedSegmentId {
 // the restore guard (TimerPersistence.fromPersistedTimer) drops any ID `parse`
 // rejects. `prov:` is left out on purpose: a provisional ID that leaked should
 // fail to parse.
-const TASK_ID_REGEX = /^([^:]+):(.+):(n:\d+:\d+:\d+:[0-9a-f]{16}|blk:[^:]+|tid:[^:]+|seq:\d+|ln:\d+|fm-root)$/;
-const NAME_ANCHOR_REGEX = /^n:(\d+):(\d+:\d+:[0-9a-f]{16})$/;
+const TASK_ID_REGEX = /^([^:]+):(.+):(n:[0-9a-z]+\.\d+:\d+|blk:[^:]+|tid:[^:]+|seq:\d+|ln:\d+|fm-root)$/;
+const NAME_ANCHOR_REGEX = /^n:([0-9a-z]+\.\d+):(\d+)$/;
 const SEGMENT_ID_REGEX = /^(.*)##seg:(\d{4}-\d{2}-\d{2})$/;
 
 export class TaskIdGenerator {
@@ -39,26 +39,29 @@ export class TaskIdGenerator {
     }
 
     /**
-     * The name a reading gives the row on `line` of the content `content` of
-     * `filePath`: the path, the content's key and the line.
+     * The name reading `reading` of `filePath` gives the row on `line`: which
+     * reading, and which line of it.
      *
-     * One reading holds one row per line, so a name picks one row of it. The
-     * same content read again gives every row the same name, so a `modify`
-     * that changed nothing, or a reload, leaves the names as they were. Any
-     * change to the file changes every name in it: a name is never carried to
-     * another reading, where the line it points at could hold another row.
+     * One reading holds one row per line, so a name picks one row of it, and
+     * no two readings share a number (`ReadingId`), so no name is given
+     * twice — not even when a write of ours brings the file back to a content
+     * it had. A content read again that the last reading read takes no new
+     * number, so a `modify` that changed nothing leaves the names as they
+     * were. Any other reading of the file gives every row in it a new name: a
+     * name is never carried to another reading, where the line it points at
+     * could hold another row.
      */
-    static nameOf(parserId: ParserId, filePath: string, line: number, content: ContentKey): string {
-        return this.generate(parserId, filePath, `n:${line}:${content}`);
+    static nameOf(parserId: ParserId, filePath: string, line: number, reading: ReadingId): string {
+        return this.generate(parserId, filePath, `n:${reading}:${line}`);
     }
 
     /** What a name says (`nameOf`), or null for an ID of any other shape. */
-    static readName(id: string): { parserId: string; filePath: string; line: number; content: ContentKey } | null {
+    static readName(id: string): { parserId: string; filePath: string; reading: ReadingId; line: number } | null {
         const parsed = this.parse(id);
         if (!parsed) return null;
         const match = parsed.anchor.match(NAME_ANCHOR_REGEX);
         if (!match) return null;
-        return { parserId: parsed.parserId, filePath: parsed.filePath, line: Number(match[1]), content: match[2] };
+        return { parserId: parsed.parserId, filePath: parsed.filePath, reading: match[1], line: Number(match[2]) };
     }
 
     static parse(id: string): ParsedTaskId | null {

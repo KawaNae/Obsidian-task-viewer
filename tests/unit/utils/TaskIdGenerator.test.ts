@@ -79,15 +79,15 @@ describe('TaskIdGenerator', () => {
     });
 
     describe('names (nameOf / readName)', () => {
-        const KEY = '3:12:0123456789abcdef';
+        const READING = 'mugdzal02.3';
 
-        it('is the path, the line and the key of the content read', () => {
-            expect(TaskIdGenerator.nameOf('tv-inline', 'a/b.md', 4, KEY)).toBe(`tv-inline:a/b.md:n:4:${KEY}`);
+        it('is the path, the reading and the line', () => {
+            expect(TaskIdGenerator.nameOf('tv-inline', 'a/b.md', 4, READING)).toBe(`tv-inline:a/b.md:n:${READING}:4`);
         });
 
         it('reads back what it says, a path holding a colon too', () => {
-            const name = TaskIdGenerator.nameOf('tv-inline', 'a:b.md', 4, KEY);
-            expect(TaskIdGenerator.readName(name)).toEqual({ parserId: 'tv-inline', filePath: 'a:b.md', line: 4, content: KEY });
+            const name = TaskIdGenerator.nameOf('tv-inline', 'a:b.md', 4, READING);
+            expect(TaskIdGenerator.readName(name)).toEqual({ parserId: 'tv-inline', filePath: 'a:b.md', reading: READING, line: 4 });
             expect(TaskIdGenerator.parse(name)?.filePath).toBe('a:b.md');
         });
 

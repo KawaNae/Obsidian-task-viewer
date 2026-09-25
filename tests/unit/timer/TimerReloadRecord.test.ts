@@ -87,13 +87,13 @@ describe('stopping a timer after a reload', () => {
         expect(placeholder).toMatch(placeholderShape);
         const staleId = timer.recordedChildTaskId;
 
-        // Reload: a new index reads the same content, and gives every row
-        // the name it had (N1: a name is the path, the content and the line).
+        // Reload: a new index, a new session of readings (N1: a name is one
+        // reading's, and the session keeps the next index's numbers apart).
         const second = laterSession(contents);
         await second.scanAll();
         const restored = persisted(timer);
-        expect(second.index.getTask(staleId!)?.blockId).toBe(timer.tailRecordBlockId);
-        // The target's name is from before the placeholder went in: another content.
+        // A previous session's ID names nothing — never a different task.
+        expect(second.index.getTask(staleId!)).toBeUndefined();
         expect(second.index.getTask(restored.taskId)).toBeUndefined();
 
         restored.startTimeMs = Date.now() - 60_000;

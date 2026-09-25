@@ -1,11 +1,12 @@
 import { describe, it, expect, afterEach } from 'vitest';
 import { Notice } from 'obsidian';
 import { openVault, makeFile, vaultSession, type VaultSession } from '../../helpers/vaultSession';
+import { plannedOn } from '../../../../src/services/persistence/TaskRefs';
 
 /**
- * N1: a name lasts one reading of its file (the path, the content's key, the
- * line). The index never pairs a reading with the one before it. A name given
- * before a write of ours is followed across the write's report
+ * N1: a name lasts one reading of its file (the path, the reading's number,
+ * the line). The index never pairs a reading with the one before it. A name
+ * given before a write of ours is followed across the write's report
  * (`TaskIndex.getTask`); one given before any other change names nothing.
  */
 
@@ -44,18 +45,27 @@ describe('a reading\'s names', () => {
         expect(new Set(names).size).toBe(4);
     });
 
-    it('stay as they were across a modify that changed nothing, and across a reload', async () => {
-        const { contents, session } = await open(['# note', '- [ ] A', '- [ ] B', '']);
+    it('stay as they were across a modify that changed nothing, and across a read the index asks for of the same content', async () => {
+        const { session } = await open(['# note', '- [ ] A', '- [ ] B', '']);
         const before = ids(session);
 
         session.fireVault('modify', makeFile(FILE));
         await session.settle(FILE);
         expect(ids(session)).toEqual(before);
 
+        await session.scanner.requestScan(makeFile(FILE));
+        expect(ids(session)).toEqual(before);
+    });
+
+    it('are not the next index\'s: after a reload, one of the same content names nothing', async () => {
+        const { contents, session } = await open(['# note', '- [ ] A', '- [ ] B', '']);
+        const before = ids(session);
+
         const reloaded = vaultSession(contents);
         live.push(reloaded);
         await reloaded.scanAll();
-        expect(ids(reloaded)).toEqual(before);
+        expect(ids(reloaded).filter(id => before.includes(id))).toEqual([]);
+        expect(before.map(id => reloaded.index.getTask(id))).toEqual([undefined, undefined]);
     });
 
     it('all change with any change to the file, a line no task stands on included', async () => {
@@ -68,6 +78,84 @@ describe('a reading\'s names', () => {
         expect(after.filter(id => before.includes(id))).toEqual([]);
         // Nothing from before the change is followed to anything.
         expect(before.map(id => session.index.getTask(id))).toEqual([undefined, undefined]);
+    });
+});
+
+describe('a name given before our writes brought the file back to a content it had', () => {
+    // The walk of stage N1 found these: a name made of the content's key
+    // named the same line of both readings, and the store answered it before
+    // the writes' reports were followed (`TaskIndex.getTask`).
+
+    it('is followed to its row, not to the copy on its old line: delete the first twin, duplicate the second', async () => {
+        const { contents, session } = await open(['- [ ] A', '- [ ] A', '']);
+        const [r1, r2] = ids(session);
+        session.holdScans();
+
+        expect(await session.index.deleteTask(r1)).toBe(true);
+        expect(await session.index.duplicateTask(r2)).toBe(true);
+        expect(contents.get(FILE)).toBe(['- [ ] A', '- [ ] A', ''].join('\n'));
+
+        // Neither name is one of this reading's: the store does not answer them.
+        expect(ids(session).filter(id => id === r1 || id === r2)).toEqual([]);
+        expect(session.index.getTask(r1)).toBeUndefined();
+        const now = session.index.getTask(r2);
+        expect(now?.line).toBe(0);
+
+        expect(await session.index.updateTask(r2, { content: 'A2' })).toBe(true);
+        expect(contents.get(FILE)).toBe(['- [ ] A2', '- [ ] A', ''].join('\n'));
+    });
+
+    it('names nothing once our write took its row away, though a copy of it stands on its line: duplicate, delete, update', async () => {
+        const { contents, session } = await open(['- [ ] B', '- [ ] other', '']);
+        const b = idOf(session, 'B');
+        session.holdScans();
+
+        expect(await session.index.duplicateTask(b)).toBe(true);
+        expect(await session.index.deleteTask(b)).toBe(true);
+        const back = contents.get(FILE);
+        expect(back).toBe(['- [ ] B', '- [ ] other', ''].join('\n'));
+
+        expect(session.index.getTask(b)).toBeUndefined();
+        expect(await session.index.updateTask(b, { statusChar: 'x' })).toBe(false);
+        expect(contents.get(FILE)).toBe(back);
+    });
+
+    it('is not written on its old line from a copy made before the writes, which the file reads as again', async () => {
+        const { contents, session } = await open(['- [ ] A', '- [ ] A', '']);
+        const [r1, r2] = ids(session);
+        const held = session.index.getTask(r2)!;
+        session.holdScans();
+
+        expect(await session.index.deleteTask(r1)).toBe(true);
+        expect(await session.index.duplicateTask(r2)).toBe(true);
+
+        // The copy's line 1 reads as it did, in a content that reads as it
+        // did: only the reading tells the rows apart. Carried across the two
+        // writes, the row is on line 0.
+        const written = await session.index.getRepository().updateTaskInFile(plannedOn(held), { ...held, content: 'A2', originalText: '- [ ] A2' });
+        expect(written.written).toBe(true);
+        expect(contents.get(FILE)).toBe(['- [ ] A2', '- [ ] A', ''].join('\n'));
+    });
+});
+
+describe('a name given before edits from outside brought the file back to the content it was given in', () => {
+    it('names nothing, and a copy made then is not written: the file came back, the reading did not', async () => {
+        const { contents, session } = await open(['- [ ] A', '- [ ] A', '']);
+        const [, r2] = ids(session);
+        const held = session.index.getTask(r2)!;
+        const first = contents.get(FILE)!;
+
+        // Two edits from outside, each read: the second puts the first content back.
+        contents.set(FILE, ['- [ ] A', ''].join('\n'));
+        await session.scanner.queueScan(makeFile(FILE));
+        contents.set(FILE, first);
+        await session.scanner.queueScan(makeFile(FILE));
+
+        expect(session.index.getTask(r2)).toBeUndefined();
+        expect(await session.index.updateTask(r2, { statusChar: 'x' })).toBe(false);
+        const written = await session.index.getRepository().updateTaskInFile(plannedOn(held), { ...held, statusChar: 'x', originalText: '- [x] A' });
+        expect(written.written).toBe(false);
+        expect(contents.get(FILE)).toBe(first);
     });
 });
 

@@ -6,6 +6,7 @@ import { checkWrite, type PutBlock, type WrittenLine } from '../services/parsing
 import { isOnRecord, readsAsPlanned, readsAsRecorded, subtreeAt, type OnRecord, type RowBasis } from '../services/persistence/RowBasis';
 import { Block, type PlacedLine, type Spot } from '../services/persistence/utils/Placement';
 import { contentKeyOf, type ContentKey } from '../services/core/ContentKey';
+import type { ReadingId } from '../services/core/Reading';
 
 /**
  * A file's line terminator. Obsidian writes LF, but notes arrive with CRLF
@@ -405,12 +406,28 @@ export interface WriteChannel {
     landed?(landing: Landing): void;
     refused(refusal: Refusal): void;
     /**
-     * Where line `line` of content `from` stands in content `now`, the one the
-     * write was handed, when only writes of ours came between the two: null
-     * when anything else did, or one of ours took the line away. Absent where
-     * nobody keeps our writes (see `WriteLinks`).
+     * Where line `line` of reading `read` stands in content `now`, the one the
+     * write was handed: the line itself when `read` is the index's reading and
+     * the file still reads as it did, the line our own writes carried it to
+     * when only they came between; null when anything else did, or one of
+     * ours took the line away. Absent where nobody keeps the readings (see
+     * `WriteLinks`), and then no row a reading named is written.
      */
-    follow?(from: ContentKey, line: number, now: ContentKey): number | null;
+    follow?(read: ReadingId, line: number, now: ContentKey): number | null;
+    /**
+     * The index's last reading of the file, asked as the write is handed the
+     * lines: which reading the write starts from (`Landing.handed`).
+     */
+    reading?(): ReadMark;
+}
+
+/**
+ * The index's last reading of a file (`WriteChannel.reading`): its number, and
+ * the key of its content — undefined when the file has none read now.
+ */
+export interface ReadMark {
+    n: number;
+    key: ContentKey | undefined;
 }
 
 /**
@@ -439,6 +456,12 @@ export interface Landing {
     edits: readonly LineEdit[] | null;
     /** The reading of `lines` the write's own check made, or null when it made none. */
     reading: OutlineReading | null;
+    /**
+     * The index's last reading of the file when the write was handed `before`
+     * (`WriteChannel.reading`): what says which reading the write left, and
+     * whether one committed since makes it late. Null without a channel.
+     */
+    handed: ReadMark | null;
 }
 
 /**
@@ -453,9 +476,11 @@ export interface Landing {
  *
  * The basis cannot tell two rows that read the same apart: an edit from
  * outside can move a row's twin onto its line. So a row the index read names
- * the content it read (`read`), and its line counts only in that content, or
- * in one our own writes led it to, across which the line is carried
- * ({@link WriteChannel.follow}). In any other content the row is not written,
+ * the reading it was read in (`read`), and its line counts only while the
+ * file reads as that reading did, or as our own writes from it left it,
+ * across which the line is carried ({@link WriteChannel.follow}). A content
+ * the file had before is not that reading: a write of ours can bring it back
+ * with other rows on its lines. In any other content the row is not written,
  * however its line reads, until the index has read the file again.
  */
 export interface NamedRow {
@@ -463,11 +488,10 @@ export interface NamedRow {
     subject: string;
     basis: RowBasis | OnRecord;
     /**
-     * The key of the content `line` is a coordinate in; absent for a row
-     * whose line is taken on its basis alone (a timer's insert until F9, the
-     * API's ID).
+     * The reading `line` is a coordinate in; absent for a row whose line is
+     * taken on its basis alone (a timer's insert until F9).
      */
-    read?: ContentKey;
+    read?: ReadingId;
 }
 
 /**
@@ -698,9 +722,9 @@ function subjectOf(target: NamedRow | EditorLine): string {
  * the file. `asked` hears each subject as the write asks for its row, for a
  * caller that has to name the write after it threw.
  *
- * A row that names the content it was read in (`NamedRow.read`) is taken in
- * these lines only if they are that content, or `subjects.follow` carries its
- * line from that content to these (the write's channel, `WriteChannel.follow`).
+ * A row that names the reading it was read in (`NamedRow.read`) is taken in
+ * these lines only where `subjects.follow` finds its line in them (the write's
+ * channel, `WriteChannel.follow`); without it, not at all.
  *
  * `lines` is not changed: the draft works on a copy.
  */
@@ -712,7 +736,7 @@ export function editLines(
     subjects: {
         about?: string;
         asked?: (subject: string) => void;
-        follow?: (from: ContentKey, line: number, now: ContentKey) => number | null;
+        follow?: (read: ReadingId, line: number, now: ContentKey) => number | null;
     } = {},
 ): EditedLines {
     let refused: Refusal | null = null;
@@ -760,15 +784,13 @@ export function editLines(
         // reads as nothing.
         let { line } = target;
         if ('basis' in target && target.read !== undefined) {
-            // A row the index read counts only in the content it was read
-            // in, or carried across our own writes from there: in any other,
-            // a line reading as its basis may be its twin.
+            // A row the index read counts only while the file reads as its
+            // reading did, or carried across our own writes from there: in
+            // any other content, a line reading as its basis may be its twin.
             handed ??= contentKeyOf(before);
-            if (target.read !== handed) {
-                const carried = subjects.follow?.(target.read, line, handed) ?? null;
-                if (carried === null) return { kind: 'changed' };
-                line = carried;
-            }
+            const found = subjects.follow?.(target.read, line, handed) ?? null;
+            if (found === null) return { kind: 'changed' };
+            line = found;
         }
         if (!Number.isInteger(line) || line < 0 || line >= before.length) return { kind: 'changed' };
         let holds: boolean;
@@ -924,12 +946,14 @@ export async function processLines(
         refused = null;
         landing = null;
         lastSubject = '';
+        // Asked with the lines in hand: the reading the write starts from.
+        const handed = channel?.reading?.() ?? null;
 
         const { lines, eol, bom } = splitLines(content);
         const edited = editLines(file.path, lines, eol, edit, {
             about,
             asked: (said) => { lastSubject = said; },
-            follow: channel?.follow ? (from, line, now) => channel.follow!(from, line, now) : undefined,
+            follow: channel?.follow ? (read, line, now) => channel.follow!(read, line, now) : undefined,
         });
         if (!edited.written) {
             refused = edited.refused;
@@ -948,7 +972,7 @@ export async function processLines(
             if (!accounted) {
                 logError(`[FileLines] ${file.path}: a write's report does not account for the lines it wrote; landed without it`);
             }
-            landing = { before, lines: next, edits: accounted ? reported : null, reading: edited.reading };
+            landing = { before, lines: next, edits: accounted ? reported : null, reading: edited.reading, handed };
         }
 
         return rebuilt;
@@ -1067,10 +1091,12 @@ export async function createFile(
     content: () => string | Promise<string>,
 ): Promise<WriteRefused | (WriteMade & { file: TFile })> {
     let asked: string | null = null;
+    let handed: ReadMark | null = null;
     try {
         asked = await content();
+        handed = channel?.reading?.() ?? null;
         const file = await app.vault.create(path, asked);
-        channel?.landed?.({ before: [], lines: splitLines(asked).lines, edits: null, reading: null });
+        channel?.landed?.({ before: [], lines: splitLines(asked).lines, edits: null, reading: null, handed });
         return { written: true, refused: null, file };
     } catch (error) {
         const made = app.vault.getAbstractFileByPath(path);
@@ -1078,7 +1104,7 @@ export async function createFile(
             return writeFailed(channel, path, subject, error);
         }
         logWarn(`[FileLines] ${path}: creating the note reported a failure, but it reads as written; kept: ${String(error)}`);
-        channel?.landed?.({ before: [], lines: splitLines(asked).lines, edits: null, reading: null });
+        channel?.landed?.({ before: [], lines: splitLines(asked).lines, edits: null, reading: null, handed });
         return { written: true, refused: null, file: made };
     }
 }
@@ -1112,7 +1138,7 @@ export async function replaceWhole(
     const threw = await processOrFail(app, file, channel, (current) => {
         landing = null;
         if (current === content) return current;
-        landing = { before: splitLines(current).lines, lines: splitLines(content).lines, edits: null, reading: null };
+        landing = { before: splitLines(current).lines, lines: splitLines(content).lines, edits: null, reading: null, handed: channel?.reading?.() ?? null };
         return content;
     }, () => file.path);
     if (threw) return threw;
