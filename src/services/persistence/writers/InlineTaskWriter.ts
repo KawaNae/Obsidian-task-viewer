@@ -12,7 +12,7 @@ import {
     type EditorLine, type LineDraft, type NamedRow, type Refusal, type WriteAt, type WriteChannels, type WriteOutcome,
     type WriteSession,
 } from '../../../utils/FileLines';
-import type { InsertTarget, PlannedTarget } from '../TaskRefs';
+import type { PlannedTarget } from '../TaskRefs';
 import type { TaskOp } from '../TaskOps';
 import { Outline } from '../../parsing/utils/Outline';
 
@@ -222,6 +222,11 @@ export class InlineTaskWriter {
                 draft.splice(line, 1 + childrenLines.length);
                 return;
             }
+            case 'insert': {
+                // A new line beside the row, spelled as the item next to it.
+                draft.put(Placement[op.place](lines, line, op.text), Block.line(op.text));
+                return;
+            }
             case 'copy': {
                 // Usually a copy of the row, word for word. Put just below
                 // it, the copy took the row's children for its own (P1's
@@ -241,7 +246,7 @@ export class InlineTaskWriter {
      * deriving the unit from the parent line alone, which returns four spaces
      * for any top-level task and so mixed spaces into tab-written files.
      */
-    async insertLineAfterTask(target: InsertTarget, lineBody: string): Promise<WriteOutcome> {
+    async insertLineAfterTask(target: PlannedTarget, lineBody: string): Promise<WriteOutcome> {
         const file = this.app.vault.getAbstractFileByPath(target.file);
         if (!(file instanceof TFile)) return fileGone(this.channelOf(target.file), target.file, target.subject);
 
@@ -256,55 +261,13 @@ export class InlineTaskWriter {
     }
 
     /**
-     * Insert `lineBody` just past the task's subtree — the task gains a next
-     * sibling. The line is a new one, not a copy of the task: it is spelled
-     * as the item next to it is (`Placement.afterSubtree`).
-     *
-     * The spot is read from the *resolved* lines rather than from
-     * `task.originalText`, which can be stale after a shift; a sibling that
-     * lands one level off would silently become a child of the wrong line.
-     *
-     * With `opts.afterCompletedRun`, the insert moves past the completed
-     * siblings that directly follow the task (see `Placement.afterCompletedRun`) so a
-     * new session record joins the end of a chronological run instead of
-     * splitting it. Deciding *where* belongs here rather than in the caller
-     * because the answer needs the file's own lines, and reading them outside
-     * this `vault.process` would reintroduce the gap between "what the index
-     * last saw" and "what the file holds now".
-     *
-     */
-    async insertSiblingAfterTask(
-        target: InsertTarget,
-        lineBody: string,
-        opts: { afterCompletedRun?: boolean } = {}
-    ): Promise<WriteOutcome> {
-        const file = this.app.vault.getAbstractFileByPath(target.file);
-        if (!(file instanceof TFile)) return fileGone(this.channelOf(target.file), target.file, target.subject);
-
-        return processLines(this.app, file, this.channelOf(target.file), (draft, _eol, { row }) => {
-            const lines = draft.lines;
-            const currentLine = row(target);
-            if (currentLine === null) return false;
-
-            const spot = opts.afterCompletedRun
-                ? Placement.afterCompletedRun(lines, currentLine, lineBody)
-                : Placement.afterSubtree(lines, currentLine, lineBody);
-            draft.put(spot, Block.line(lineBody));
-
-            return true;
-        });
-    }
-
-    /**
      * Insert `lineBody` as the first child of a task (right after the task line):
-     * a child added from a card's menu, the API or the CLI, and a timer's
-     * record that should appear at the top of children. The target says how
-     * the row is checked (`InsertTarget`).
+     * a child added from a card's menu, the API or the CLI.
      *
      * As with {@link insertLineAfterTask}, the indent is resolved here from the
      * task's existing children rather than supplied by the caller.
      */
-    async insertLineAsFirstChild(target: InsertTarget, lineBody: string): Promise<WriteOutcome> {
+    async insertLineAsFirstChild(target: PlannedTarget, lineBody: string): Promise<WriteOutcome> {
         const file = this.app.vault.getAbstractFileByPath(target.file);
         if (!(file instanceof TFile)) return fileGone(this.channelOf(target.file), target.file, target.subject);
 

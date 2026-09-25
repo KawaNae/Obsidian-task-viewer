@@ -51,12 +51,11 @@ describe('one definition of indentation', () => {
     });
 });
 
-describe('two relations between lines', () => {
+describe('one relation between lines', () => {
     /**
-     * Two lines are compared as one of `Outline`'s two relations (`VERBATIM`,
-     * `UP_TO_INDENT`), and "the same but for the indentation" has one
-     * implementation: `UP_TO_INDENT`. A comparison or a lookup made of
-     * dedented lines by hand is a second one, which can drift from it.
+     * Two lines are compared as `Outline.VERBATIM` and no other relation. A
+     * comparison or a lookup made of dedented lines by hand is a second
+     * relation, which the outline does not answer for.
      */
     it('leaves no comparison of dedented lines outside Outline', () => {
         const byHand = /dedent\(.*([!=]==|\.has\(|\.get\()|([!=]==|\.has\(|\.get\().*dedent\(/;

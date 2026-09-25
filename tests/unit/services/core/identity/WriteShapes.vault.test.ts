@@ -367,7 +367,7 @@ describe('6. insertSiblingAfterTask (timer records)', () => {
         const { contents, session } = await open({ [FILE]: NOTE('- [ ] 対象 @2026-09-21', '\t- [ ] 子 @2026-09-21') });
         const before = rows(session).map(row => row.id);
 
-        const at = await session.index.insertSiblingAfterTask(idOf(session, '対象'), '- [ ] 記録 @2026-09-21');
+        const at = await session.index.insertRecord(idOf(session, '対象'), '- [ ] 記録 @2026-09-21', 'afterSubtree');
         await session.settle(FILE);
 
         expect(at).toBe(true);
@@ -382,7 +382,7 @@ describe('6. insertSiblingAfterTask (timer records)', () => {
         const { contents, session } = await open({ [FILE]: NOTE(...target) });
         const before = rows(session).map(row => row.id);
 
-        const at = await session.index.insertSiblingAfterTask(idOf(session, '対象'), '- [ ] 記録 @2026-09-21T13:00', { afterCompletedRun: true });
+        const at = await session.index.insertRecord(idOf(session, '対象'), '- [ ] 記録 @2026-09-21T13:00', 'afterCompletedRun');
         await session.settle(FILE);
 
         expect(at).toBe(true);
@@ -397,7 +397,7 @@ describe('6. insertSiblingAfterTask (timer records)', () => {
 
         writeOutside(contents, 1);
         const edited = contents.get(FILE);
-        const at = await session.index.insertSiblingAfterTask(idOf(session, '対象'), '- [ ] 記録 @2026-09-21');
+        const at = await session.index.insertRecord(idOf(session, '対象'), '- [ ] 記録 @2026-09-21', 'afterSubtree');
         await session.settle(FILE);
 
         expect(at).toBe(false);
@@ -411,7 +411,7 @@ describe('6. insertSiblingAfterTask (timer records)', () => {
 
         writeOutside(contents, 1);
         const edited = contents.get(FILE);
-        const at = await session.index.insertSiblingAfterTask(idOf(session, '対象'), '- [ ] 記録 @2026-09-21T13:00', { afterCompletedRun: true });
+        const at = await session.index.insertRecord(idOf(session, '対象'), '- [ ] 記録 @2026-09-21T13:00', 'afterCompletedRun');
         await session.settle(FILE);
 
         expect(at).toBe(false);

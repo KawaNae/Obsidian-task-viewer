@@ -229,7 +229,7 @@ describe('a sibling (insertSiblingAfterTask, afterSubtree and afterCompletedRun)
         const { contents, session } = await open(['# n', '1. [ ] T', '  - [ ] U', '']);
         expect(parents(session)).toEqual([['T', null], ['U', null]]);
 
-        expect(await session.index.insertSiblingAfterTask(only(session, 'T').id, '- [x] rec')).toBe(true);
+        expect(await session.index.insertRecord(only(session, 'T').id, '- [x] rec', 'afterSubtree')).toBe(true);
         await session.settle(FILE);
 
         expect(lines(contents)).toEqual(['# n', '1. [ ] T', '  - [x] rec', '  - [ ] U', '']);
@@ -239,7 +239,7 @@ describe('a sibling (insertSiblingAfterTask, afterSubtree and afterCompletedRun)
     it('goes past the completed run, at the indentation of the last of it', async () => {
         const { contents, session } = await open(['# n', '- [ ] P', '\t- [ ] T', '    - [x] r1', '\t\t- note', '- [ ] U', '']);
 
-        expect(await session.index.insertSiblingAfterTask(only(session, 'T').id, '- [x] r2', { afterCompletedRun: true })).toBe(true);
+        expect(await session.index.insertRecord(only(session, 'T').id, '- [x] r2', 'afterCompletedRun')).toBe(true);
         await session.settle(FILE);
 
         expect(lines(contents)).toEqual(['# n', '- [ ] P', '\t- [ ] T', '    - [x] r1', '\t\t- note', '    - [x] r2', '- [ ] U', '']);
@@ -249,7 +249,7 @@ describe('a sibling (insertSiblingAfterTask, afterSubtree and afterCompletedRun)
     it('goes above a fence at the top that never closes, which ends the row', async () => {
         const { contents, session } = await open(['# n', '- [ ] T', '```', 'x', '']);
 
-        expect(await session.index.insertSiblingAfterTask(only(session, 'T').id, '- [x] rec')).toBe(true);
+        expect(await session.index.insertRecord(only(session, 'T').id, '- [x] rec', 'afterSubtree')).toBe(true);
         await session.settle(FILE);
 
         // T's subtree is its own line (the fence at column 0 ends T): the
@@ -265,7 +265,7 @@ describe('siblings spelled at different columns (the P1 counterexample run\'s C)
         const { contents, session } = await open(['# n', '- [ ] P', '    - [x] T', '  - [x] U', '    - [ ] c', '']);
         expect(parents(session)).toEqual([['P', null], ['T', 'P'], ['U', 'P'], ['c', 'U']]);
 
-        expect(await session.index.insertSiblingAfterTask(only(session, 'T').id, '- [x] N', { afterCompletedRun: true })).toBe(true);
+        expect(await session.index.insertRecord(only(session, 'T').id, '- [x] N', 'afterCompletedRun')).toBe(true);
         await session.settle(FILE);
 
         expect(lines(contents)).toEqual(['# n', '- [ ] P', '    - [x] T', '  - [x] U', '    - [ ] c', '  - [x] N', '']);

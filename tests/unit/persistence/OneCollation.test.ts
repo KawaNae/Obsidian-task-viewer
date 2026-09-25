@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { contentKeyOf } from '../../../src/services/core/ContentKey';
 import { writeBench, FILE } from '../helpers/writeBench';
-import { plannedOn, recordedOn } from '../../../src/services/persistence/TaskRefs';
+import { plannedOn } from '../../../src/services/persistence/TaskRefs';
 import type { Task } from '../../../src/types';
 
 /**
@@ -59,35 +59,38 @@ describe('after the editor\'s menu rewrote a row, before any scan', () => {
     });
 
     it('refuses a timer\'s record made from the copy as well: the row reads otherwise than the copy', async () => {
-        // The timer's weaker comparison sets the indentation aside, not the
-        // text: the copy is what it compares with (`RowBasis.OnRecord`).
         const { bench, task } = await afterMenu();
 
-        expect((await bench.writer.insertLineAsFirstChild(recordedOn(task), '- [x] ⏱️ 記録')).written).toBe(false);
+        expect((await bench.writer.applyToTask(plannedOn(task), [
+            { kind: 'insert', place: 'firstChild', text: '- [x] ⏱️ 記録' },
+        ])).written).toBe(false);
         expect(bench.lines()).toEqual([TICKED, '']);
         expect(bench.refused.map(r => r.reason.kind)).toEqual(['changed']);
     });
 
-    it('lets a timer write its record on a row only indented since the scan', async () => {
-        // The timer's inserts keep the weaker comparison until F9: a record
-        // refused here would be a measurement lost (`RowBasis.OnRecord`).
+    it('refuses a timer\'s record on a row only indented since the scan', async () => {
+        // A timer's record now takes the same check as every write: a row
+        // that changed since the reading — even only indented — is refused.
         const bench = await writeBench(['- [ ] P', ROW, '']);
         const task = bench.taskAt(1);
         bench.edit(['- [ ] P', `\t${ROW}`, '']);
 
-        expect((await bench.writer.insertLineAsFirstChild(recordedOn(task), '- [x] ⏱️ 記録')).written).toBe(true);
-        expect(bench.lines()).toEqual(['- [ ] P', `\t${ROW}`, '\t\t- [x] ⏱️ 記録', '']);
+        const outcome = await bench.writer.applyToTask(plannedOn(task), [
+            { kind: 'insert', place: 'firstChild', text: '- [x] ⏱️ 記録' },
+        ]);
+        expect(outcome.written).toBe(false);
+        expect(bench.lines()).toEqual(['- [ ] P', `\t${ROW}`, '']);
+        expect(bench.refused.map(r => r.reason.kind)).toEqual(['changed']);
     });
 
     it('refuses a timer\'s record on a row rewritten from outside, which no record reads', async () => {
-        // The weaker comparison still compares: an undated row the ladder
-        // pairs one-against-one with a line written from outside (R4) is not
-        // on record for it.
         const bench = await writeBench(['- [ ] alpha', '- [ ] buy milk', '- [ ] omega']);
         const milk = bench.taskAt(1);
         bench.edit(['- [ ] alpha', '- [ ] omega', '- [ ] call mom']);
 
-        expect((await bench.writer.insertLineAsFirstChild(recordedOn(milk), '- [x] ⏱️ 記録')).written).toBe(false);
+        expect((await bench.writer.applyToTask(plannedOn(milk), [
+            { kind: 'insert', place: 'firstChild', text: '- [x] ⏱️ 記録' },
+        ])).written).toBe(false);
         expect(bench.lines()).toEqual(['- [ ] alpha', '- [ ] omega', '- [ ] call mom']);
         expect(bench.refused.map(r => r.reason.kind)).toEqual(['changed']);
     });

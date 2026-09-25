@@ -8,18 +8,9 @@ describe('Outline line relations', () => {
         expect(Outline.VERBATIM.holds('- [ ] a', '- [ ] a ')).toBe(false);
     });
 
-    it('UP_TO_INDENT holds for lines that differ in their indentation alone', () => {
-        expect(Outline.UP_TO_INDENT.holds('\t- [ ] a', '    - [ ] a')).toBe(true);
-        expect(Outline.UP_TO_INDENT.holds('- [ ] a', '\t\t- [ ] a')).toBe(true);
-        expect(Outline.UP_TO_INDENT.holds('- [ ] a', '- [ ] b')).toBe(false);
-        // A full-width or a no-break space is no indentation (R0)
-        expect(Outline.UP_TO_INDENT.holds('　- [ ] a', '- [ ] a')).toBe(false);
-        expect(Outline.UP_TO_INDENT.holds(' - [ ] a', '- [ ] a')).toBe(false);
-    });
-
     it('holds exactly when the keys are equal', () => {
         const lines = ['- [ ] a', '\t- [ ] a', '    - [ ] a', '- [ ] b', '　- [ ] a', ''];
-        for (const relation of [Outline.VERBATIM, Outline.UP_TO_INDENT]) {
+        for (const relation of [Outline.VERBATIM]) {
             for (const a of lines) {
                 for (const b of lines) {
                     expect(relation.holds(a, b)).toBe(relation.key(a) === relation.key(b));

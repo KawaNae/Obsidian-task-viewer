@@ -1,5 +1,5 @@
 import type { Task } from '../../types';
-import { onRecord, type OnRecord, type RowBasis } from './RowBasis';
+import type { RowBasis } from './RowBasis';
 import type { ReadingId } from '../core/Reading';
 import { TaskIdGenerator } from '../display/TaskIdGenerator';
 
@@ -61,28 +61,3 @@ export function plannedOn(task: Task, reads: PlanReads = {}): PlannedTarget {
         },
     };
 }
-
-/**
- * The target of a timer's insert, which stays on the weaker comparison until
- * stage F9 (see {@link OnRecord}). Nothing else writes on it: a timer's
- * record is asked for through the index's own methods for it
- * (`TaskIndex.recordChildTask`, `insertSiblingAfterTask`).
- */
-export interface RecordedTarget {
-    file: string;
-    line: number;
-    subject: string;
-    basis: OnRecord;
-}
-
-export function recordedOn(task: Task): RecordedTarget {
-    return { file: task.file, line: task.line, subject: subjectOf(task), basis: onRecord(task.originalText) };
-}
-
-/**
- * The row a new line is put beside (`InlineTaskWriter.insertLineAsFirstChild`
- * and the other inserts): planned from the index's copy, as every write that
- * names a row is, or recorded, the timer's until F9. The caller that asks for
- * the line says which; the writer checks the one it is handed.
- */
-export type InsertTarget = PlannedTarget | RecordedTarget;

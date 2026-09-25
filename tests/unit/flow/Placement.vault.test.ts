@@ -261,7 +261,7 @@ describe('a line put past a fence in a list item that never closes', () => {
     const idOf = (session: VaultSession, content: string) => tasksWorded(session, content)[0].id;
 
     it('reads a sibling put past Q as a task', async () => {
-        const { lines, tasks } = await written(session => session.index.insertSiblingAfterTask(idOf(session, 'Q'), '- [x] rec'));
+        const { lines, tasks } = await written(session => session.index.insertRecord(idOf(session, 'Q'), '- [x] rec', 'afterSubtree'));
         expect(lines).toEqual(['# note', '- [ ] P', '  - [ ] Q', '    ```', 'x', '  - [x] rec', '']);
         expect(tasks).toEqual([[1, 'P'], [2, 'Q'], [5, 'rec']]);
     });

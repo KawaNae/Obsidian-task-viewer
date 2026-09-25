@@ -1,6 +1,6 @@
 import type { TFile } from 'obsidian';
 import type { EditorLine, WriteChannel } from '../../utils/FileLines';
-import type { TaskOp } from '../persistence/TaskOps';
+import type { InsertPlace, TaskOp } from '../persistence/TaskOps';
 import type { DuplicateOptions, Task } from '../../types';
 import type { TaskIndex } from '../core/TaskIndex';
 import type { FlowDeleteAssessment } from '../flow/FlowDeletion';
@@ -100,16 +100,6 @@ export class TaskWriteService {
     }
 
     /**
-     * A timer's record at the head of the row's children, on the weaker check
-     * the timer keeps until F9 (`TaskIndex.recordChildTask`).
-     *
-     * @returns whether the record was written.
-     */
-    async recordChildTask(parentTaskId: string, childLine: string): Promise<boolean> {
-        return this.taskIndex.recordChildTask(this.resolveTaskId(parentTaskId), childLine);
-    }
-
-    /**
      * Append a child at the *end* of the parent's subtree. Session records are
      * a log, so they must accumulate in chronological order — insertChildTask
      * inserts at the head and would read backwards.
@@ -119,25 +109,14 @@ export class TaskWriteService {
     }
 
     /**
-     * Insert a line as the task's next sibling, spelled as the item next to
-     * it (`Placement.afterSubtree`). `siblingLine` is a formatted line body
-     * without indentation — the write layer reads the indent off the file, so
-     * a shifted line cannot make the record land at the wrong depth.
+     * A timer's line beside the row, where `place` says, and the row's own
+     * `^id` put on or taken off in the same write (`TaskIndex.insertRecord`).
      *
-     * Pass `afterCompletedRun` to skip past the completed siblings that follow
-     * the task, which is what keeps a run of session records in chronological
-     * order when the timer resumes from an earlier one. Completion means `[x]`
-     * and nothing else.
-     *
-     * Returns whether the line was written. Not written: an unknown or
+     * @returns whether the line was written. Not written: an unknown or
      * read-only task, or a write that was refused (and told the user why).
      */
-    async insertSiblingAfterTask(
-        taskId: string,
-        siblingLine: string,
-        opts: { afterCompletedRun?: boolean } = {}
-    ): Promise<boolean> {
-        return this.taskIndex.insertSiblingAfterTask(this.resolveTaskId(taskId), siblingLine, opts);
+    async insertRecord(taskId: string, line: string, place: InsertPlace, rowId?: string | null): Promise<boolean> {
+        return this.taskIndex.insertRecord(this.resolveTaskId(taskId), line, place, rowId);
     }
 
     // ===== A line the editor pointed at =====

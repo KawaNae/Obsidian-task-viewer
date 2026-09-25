@@ -3,7 +3,7 @@ import { TaskIndex } from '../../../src/services/core/TaskIndex';
 import { TaskWriteService } from '../../../src/services/data/TaskWriteService';
 import { makeTask } from '../helpers/makeTask';
 import { writeBench, FILE } from '../helpers/writeBench';
-import { plannedOn, recordedOn } from '../../../src/services/persistence/TaskRefs';
+import { plannedOn } from '../../../src/services/persistence/TaskRefs';
 import type { Refusal, WriteOutcome } from '../../../src/utils/FileLines';
 import type { Task } from '../../../src/types';
 
@@ -26,11 +26,13 @@ async function runSiblingInsert(
     lineBody: string,
     opts: { afterCompletedRun?: boolean } = {},
     now?: string,
-): Promise<{ text: string; index: number; refused: Refusal[] }> {
+): Promise<{ text: string; index: WriteOutcome; refused: Refusal[] }> {
     const bench = await writeBench(fileText);
     const task = bench.taskAt(line);
     if (now !== undefined) bench.edit(now);
-    const index = await bench.writer.insertSiblingAfterTask(recordedOn(task), lineBody, opts);
+    const index = await bench.writer.applyToTask(plannedOn(task), [
+        { kind: 'insert', place: opts.afterCompletedRun ? 'afterCompletedRun' : 'afterSubtree', text: lineBody },
+    ]);
     return { text: bench.text(), index, refused: bench.refused };
 }
 
@@ -48,20 +50,20 @@ describe('insertSiblingAfterTask', () => {
         expect(index.written).toBe(true);
     });
 
-    it('reads the indent off the file rather than from the stored line', async () => {
-        // The task was indented under the line above it since it was indexed,
-        // on the line it was read on. Taking the indent from originalText
-        // would put the record back at top level, silently pulling it out of
-        // the parent it belongs to.
+    it('refuses a record on a row only indented since it was indexed', async () => {
+        // A record now takes the same check as every write: a row that
+        // changed since the reading — even only indented — is refused, the
+        // record not silently pulled back to the depth `originalText` held.
         const read = '- [x] ⏱️ task A @2026-08-13T09:00>2026-08-13T10:00';
         const anchor = '    - [x] ⏱️ task A @2026-08-13T09:00>2026-08-13T10:00';
-        const { text } = await runSiblingInsert(
+        const { text, index } = await runSiblingInsert(
             ['- [ ] parent', read].join('\n'), 1,
             NEW_SESSION, {},
             ['- [ ] parent', anchor].join('\n'),
         );
 
-        expect(text.split('\n')).toEqual(['- [ ] parent', anchor, `    ${NEW_SESSION}`]);
+        expect(index.written).toBe(false);
+        expect(text.split('\n')).toEqual(['- [ ] parent', anchor]);
     });
 
     it('preserves a tab-indented vault\'s style', async () => {
@@ -220,7 +222,7 @@ function buildIndexHost(task: Task | undefined) {
         repository: {
             insertLineAsFirstChild: vi.fn(async () => MADE),
             insertLineAfterTask: vi.fn(async () => MADE),
-            insertSiblingAfterTask: vi.fn(async () => MADE),
+            applyToTask: vi.fn(async () => MADE),
         },
         withNotify: vi.fn(async (_file: string, fn: () => Promise<unknown>) => await fn()),
         // The dispose guard every write goes through; this index is open.
@@ -282,16 +284,17 @@ describe('TaskIndex child insertion', () => {
     });
 });
 
-describe('TaskIndex.insertSiblingAfterTask', () => {
-    it('routes to the repository, passing the options through untouched', async () => {
+describe('TaskIndex.insertRecord', () => {
+    it('routes to the repository, passing the place through untouched', async () => {
         const host = buildIndexHost(makeTask({ originalText: '- [x] ⏱️ task A @2026-08-13T09:00' }));
-        const line = await proto.insertSiblingAfterTask.call(
-            host, 'tv-inline:note.md:ln:1', NEW_SESSION, { afterCompletedRun: true }
+        const line = await proto.insertRecord.call(
+            host, 'tv-inline:note.md:ln:1', NEW_SESSION, 'afterCompletedRun'
         );
 
-        expect(host.repository.insertSiblingAfterTask).toHaveBeenCalledTimes(1);
-        expect(host.repository.insertSiblingAfterTask.mock.calls[0][1]).toBe(NEW_SESSION);
-        expect(host.repository.insertSiblingAfterTask.mock.calls[0][2]).toEqual({ afterCompletedRun: true });
+        expect(host.repository.applyToTask).toHaveBeenCalledTimes(1);
+        expect(host.repository.applyToTask.mock.calls[0][1]).toEqual([
+            { kind: 'insert', place: 'afterCompletedRun', text: NEW_SESSION },
+        ]);
         expect(line).toBe(true);
     });
 
@@ -299,21 +302,23 @@ describe('TaskIndex.insertSiblingAfterTask', () => {
     // the depth off the file, so nothing here should prepend one.
     it('hands the line body over unindented', async () => {
         const host = buildIndexHost(makeTask({ originalText: '\t- [x] ⏱️ task A' }));
-        await proto.insertSiblingAfterTask.call(host, 'tv-inline:note.md:ln:1', NEW_SESSION);
+        await proto.insertRecord.call(host, 'tv-inline:note.md:ln:1', NEW_SESSION, 'afterSubtree');
 
-        expect(host.repository.insertSiblingAfterTask.mock.calls[0][1]).toBe(NEW_SESSION);
+        expect(host.repository.applyToTask.mock.calls[0][1]).toEqual([
+            { kind: 'insert', place: 'afterSubtree', text: NEW_SESSION },
+        ]);
     });
 
     it('is a no-op for read-only and unknown tasks', async () => {
         const readOnly = buildIndexHost(makeTask({ isReadOnly: true, parserId: 'tasks-plugin' }));
-        expect(await proto.insertSiblingAfterTask.call(readOnly, 'x', NEW_SESSION)).toBe(false);
+        expect(await proto.insertRecord.call(readOnly, 'x', NEW_SESSION, 'afterSubtree')).toBe(false);
 
         const unknown = buildIndexHost(undefined);
-        expect(await proto.insertSiblingAfterTask.call(unknown, 'missing', NEW_SESSION)).toBe(false);
+        expect(await proto.insertRecord.call(unknown, 'missing', NEW_SESSION, 'afterSubtree')).toBe(false);
 
         for (const host of [readOnly, unknown]) {
             expect(host.withNotify).not.toHaveBeenCalled();
-            expect(host.repository.insertSiblingAfterTask).not.toHaveBeenCalled();
+            expect(host.repository.applyToTask).not.toHaveBeenCalled();
         }
     });
 });
@@ -334,19 +339,19 @@ describe('TaskWriteService delegation', () => {
         expect(idx.appendChildTask).toHaveBeenCalledWith('p', '- [x] session');
     });
 
-    it('insertSiblingAfterTask reaches the index and returns whether it wrote', async () => {
-        const { idx, svc } = serviceWith({ insertSiblingAfterTask: vi.fn(async () => true) });
+    it('insertRecord reaches the index and returns whether it wrote', async () => {
+        const { idx, svc } = serviceWith({ insertRecord: vi.fn(async () => true) });
 
-        const written = await svc.insertSiblingAfterTask('p', NEW_SESSION, { afterCompletedRun: true });
-        expect(idx.insertSiblingAfterTask).toHaveBeenCalledWith('p', NEW_SESSION, { afterCompletedRun: true });
+        const written = await svc.insertRecord('p', NEW_SESSION, 'afterCompletedRun');
+        expect(idx.insertRecord).toHaveBeenCalledWith('p', NEW_SESSION, 'afterCompletedRun', undefined);
         expect(written).toBe(true);
     });
 
-    it('insertSiblingAfterTask defaults to no run-skipping', async () => {
-        const { idx, svc } = serviceWith({ insertSiblingAfterTask: vi.fn(async () => false) });
+    it('insertRecord passes rowId through as undefined when it is not given', async () => {
+        const { idx, svc } = serviceWith({ insertRecord: vi.fn(async () => false) });
 
-        await svc.insertSiblingAfterTask('p', NEW_SESSION);
-        expect(idx.insertSiblingAfterTask).toHaveBeenCalledWith('p', NEW_SESSION, {});
+        await svc.insertRecord('p', NEW_SESSION, 'afterSubtree');
+        expect(idx.insertRecord).toHaveBeenCalledWith('p', NEW_SESSION, 'afterSubtree', undefined);
     });
 });
 
