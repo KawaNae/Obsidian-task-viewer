@@ -3,7 +3,6 @@ import { StateEffect, RangeSet, type Extension } from '@codemirror/state';
 import { editorInfoField, setIcon, MarkdownView } from 'obsidian';
 import type { App } from 'obsidian';
 import type { TaskReadService } from '../services/data/TaskReadService';
-import type { TaskWriteService } from '../services/data/TaskWriteService';
 import type { TaskViewerSettings } from '../types';
 import { toDisplayTask } from '../services/display/DisplayTaskConverter';
 import type { PropertiesMenuBuilder } from '../interaction/menu/builders/PropertiesMenuBuilder';
@@ -20,6 +19,9 @@ import { editorCm } from '../utils/editorCm';
 import { outlineFor } from './EditorOutline';
 import { subtreeAt } from '../services/persistence/RowBasis';
 import { keyOf } from './EditorDoc';
+import { writeEditorLine, type EditorLineHost } from './EditorWrite';
+import type { EditorLine } from '../utils/FileLines';
+import type { TaskOp } from '../services/persistence/TaskOps';
 
 const taskIndexChanged = StateEffect.define<void>();
 const settingsChanged = StateEffect.define<void>();
@@ -73,7 +75,7 @@ export interface TaskMenuExtensionResult {
 export function createTaskMenuExtension(
     app: App,
     readService: TaskReadService,
-    writeService: TaskWriteService,
+    lineHost: EditorLineHost,
     propertiesBuilder: PropertiesMenuBuilder,
     timerBuilder: TimerMenuBuilder,
     actionsBuilder: TaskActionsMenuBuilder,
@@ -123,13 +125,17 @@ export function createTaskMenuExtension(
                 // The line holds only in the content the menu was opened in.
                 const at = { line: lineNumber, text: lineText, key: keyOf(view.state.doc) };
                 // What a delete takes, as the editor shows it now: the line
-                // and its subtree. The write takes it only if the file still
-                // reads so.
+                // and its subtree. The write takes it only if they still
+                // read so.
                 const subtree = subtreeAt(outlineFor(view.state.doc), lineNumber);
+                // Written in this editor while it shows the note, as the
+                // user's own edit is; to the file once it does not.
+                const write = (target: EditorLine, ops: readonly TaskOp[]) =>
+                    writeEditorLine(view.dom.isConnected ? view : null, filePath, target, ops, lineHost);
                 const ops: CheckboxLineOps = {
-                    updateLine: (content) => writeService.writeLine(filePath, at, [{ kind: 'update', text: content }]),
-                    insertLineAfter: (content) => writeService.writeLine(filePath, at, [{ kind: 'copy', text: content }]),
-                    deleteLine: () => writeService.writeLine(filePath, { ...at, subtree }, [{ kind: 'remove' }]),
+                    updateLine: (content) => write(at, [{ kind: 'update', text: content }]),
+                    insertLineAfter: (content) => write(at, [{ kind: 'copy', text: content }]),
+                    deleteLine: () => write({ ...at, subtree }, [{ kind: 'remove' }]),
                 };
 
                 checkboxBuilder.addFullMenu(menu, lineText, getSettings(), ops, filePath);

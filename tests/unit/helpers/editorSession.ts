@@ -42,6 +42,8 @@ export function editorSession(host: EditorFireHost, path: string, text: string) 
 
     return {
         get state() { return state; },
+        /** The editor as a write to it takes it (`EditorHandle`): what the menu writes through. */
+        handle,
         /** Every transaction made, the plugin's included. */
         transactions,
         /** The document's text. */

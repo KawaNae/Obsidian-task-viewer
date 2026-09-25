@@ -1,5 +1,9 @@
 import { describe, it, expect, afterEach, beforeEach } from 'vitest';
 import { contentKeyOf } from '../../../src/services/core/ContentKey';
+import { keyOf } from '../../../src/editor/EditorDoc';
+import { writeEditorLine } from '../../../src/editor/EditorWrite';
+import type { EditorLine } from '../../../src/utils/FileLines';
+import type { TaskOp } from '../../../src/services/persistence/TaskOps';
 import { Notice } from 'obsidian';
 import { openVault, makeFile, type VaultSession } from '../helpers/vaultSession';
 import { editorSession, type EditorSession } from '../helpers/editorSession';
@@ -249,7 +253,7 @@ describe('a move within the note, completed in the editor', () => {
     });
 });
 
-describe('the editor menu\'s rewrite of a line', () => {
+describe('the editor menu\'s rewrite of a line, written to the file when the editor no longer shows it', () => {
     it('fires once when it completes the line, in the same write', async () => {
         const note = await open(['# note', WEEKLY, '']);
 
@@ -267,6 +271,38 @@ describe('the editor menu\'s rewrite of a line', () => {
         expect(await note.session.index.writeLine(FILE, { line: 1, text: checked, key: contentKeyOf(['# note', checked, '']) }, [{ kind: 'update', text: checked.replace('[x]', '[-]') }])).toBe(true);
 
         expect(note.fired).toEqual([]);
+    });
+});
+
+describe('the editor menu\'s rewrite of a line, in the editor', () => {
+    const host = (session: VaultSession) => ({
+        ...session.index.editorFireHost(),
+        writeLine: (path: string, at: EditorLine, ops: readonly TaskOp[]) => session.index.writeLine(path, at, ops),
+    });
+
+    it('fires once, in the transaction the menu made, a step of its own to undo, and writes nothing to the file', async () => {
+        const note = await open(['# note', WEEKLY, '']);
+        const at = { line: 1, text: WEEKLY, key: keyOf(note.editor.state.doc) };
+
+        expect(await writeEditorLine(note.editor.handle, FILE, at, [{ kind: 'update', text: WEEKLY.replace('[ ]', '[x]') }], host(note.session))).toBe(true);
+
+        expect(note.fired).toEqual(['週報']);
+        expect(note.writes()).toBe(0);
+        expect(note.editor.transactions).toHaveLength(1);
+        expect(note.editor.lines()).toEqual(['# note', '- [ ] 週報 @2026-09-28 ==> every mon', '- [x] 週報 @2026-09-21', '']);
+        note.editor.undo();
+        expect(note.editor.lines()).toEqual(['# note', WEEKLY, '']);
+    });
+
+    it('fires nothing when the line it rewrites was complete already', async () => {
+        const checked = WEEKLY.replace('[ ]', '[x]');
+        const note = await open(['# note', checked, '']);
+        const at = { line: 1, text: checked, key: keyOf(note.editor.state.doc) };
+
+        expect(await writeEditorLine(note.editor.handle, FILE, at, [{ kind: 'update', text: checked.replace('[x]', '[-]') }], host(note.session))).toBe(true);
+
+        expect(note.fired).toEqual([]);
+        expect(note.editor.lines()).toEqual(['# note', checked.replace('[x]', '[-]'), '']);
     });
 });
 
