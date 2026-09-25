@@ -100,7 +100,7 @@ describe('a name given before a write of ours', () => {
     });
 
     it('names nothing once our write took the row away', async () => {
-        const { session } = await open(['# note', '- [ ] A', '- [ ] B', '']);
+        const { session } = await open(['- [ ] Z', '- [ ] A', '- [ ] B', '']);
         const a = idOf(session, 'A');
         expect(await session.index.deleteTask(a)).toBe(true);
         expect(session.index.getTask(a)).toBeUndefined();
