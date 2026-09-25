@@ -334,7 +334,8 @@ export class TimerRecorder {
      * で終わる規則はそちらが持っており、ここで再現すると二重管理になる。明示 end
      * を持つ行も同じ経路で扱えるのはその副産物である。
      *
-     * @returns 次に見直す時刻（ミリ秒）。行を引けなかったときは undefined。
+     * @returns 次に見直す時刻（ミリ秒）。行を引けなかったときと、書き足しが書け
+     * なかったときは undefined。
      */
     async extendRunningSession(timer: TimerInstance): Promise<number | undefined> {
         const target = this.resolveTailRecord(timer);
@@ -352,11 +353,12 @@ export class TimerRecorder {
         if (decision.kind === 'hold') return decision.floorMs;
 
         const end = new Date(decision.endMs);
-        await this.plugin.getTaskIndex().updateTask(target.id, {
+        const written = await this.plugin.getTaskIndex().updateTask(target.id, {
             endDate: this.formatDate(end),
             endTime: this.formatTime(end),
         });
-        return decision.endMs;
+        // 書けなければ門を進めない。行の end は古いままなので、次の見直しでまた書く。
+        return written ? decision.endMs : undefined;
     }
 
     /**
