@@ -487,8 +487,9 @@ export interface NamedRow {
     subject: string;
     basis: RowBasis | OnRecord;
     /**
-     * The reading `line` is a coordinate in; absent for a row whose line is
-     * taken on its basis alone (a timer's insert until F9).
+     * The reading `line` is a coordinate in. A row planned on its basis
+     * (`RowBasis`) without one is not written; only a timer's insert
+     * (`OnRecord`) goes without it, until F9.
      */
     read?: ReadingId;
 }
@@ -782,10 +783,13 @@ export function editLines(
         // the row, or what the editor showed there. A line past the end
         // reads as nothing.
         let { line } = target;
-        if ('basis' in target && target.read !== undefined) {
+        // A timer's insert (`OnRecord`) names no reading and is taken on its basis alone, until F9 looks timers up by their anchor.
+        if ('basis' in target && !isOnRecord(target.basis)) {
             // A row the index read counts only while the file reads as its
             // reading did, or carried across our own writes from there: in
             // any other content, a line reading as its basis may be its twin.
+            // A copy that names no reading is not one the index read.
+            if (target.read === undefined) return { kind: 'changed' };
             handed ??= contentKeyOf(before);
             const found = subjects.follow?.(target.read, line, handed) ?? null;
             if (found === null) return { kind: 'changed' };

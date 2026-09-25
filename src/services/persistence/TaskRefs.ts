@@ -19,8 +19,8 @@ export function subjectOf(task: Task): string {
  * `read` is the reading the copy was made in, which its name carries
  * (`TaskIdGenerator.nameOf`): the line counts only while the file reads as
  * that reading did, or where our own writes from it carried the line
- * (`NamedRow.read`). Undefined for a copy that has no such name, whose line
- * is taken on its basis alone.
+ * (`NamedRow.read`). Undefined for a copy that has no such name, which is
+ * not written.
  */
 export interface PlannedTarget {
     file: string;
