@@ -392,3 +392,42 @@ describe('a move to another file, when the editor and its row part ways before t
         expect(Notice.messages).toEqual([kept(ROW)]);
     });
 });
+
+describe('a move to another file, when the tab is given another note before the original is taken', () => {
+    // The editor or the file is answered as the menu answers it (`shows`):
+    // the editor while it shows the note, the file once it does not. Either
+    // way the row is taken only in the content its position counts in.
+    const LINES = ['# note', '- [ ] T @2026-09-21 ==> move([[other]])', '- [ ] U', ''];
+
+    it('takes the original away in the file while the tab shows another note', async () => {
+        const { contents, editor } = await open({ [FILE]: LINES, [OTHER]: ['# other', ''] });
+
+        editor.check(1);
+        // Saved as the tab leaves the note.
+        contents.set(FILE, editor.text());
+        editor.show('elsewhere.md', '# elsewhere\n');
+        await editor.settled();
+
+        expect(contents.get(OTHER)).toBe(['# other', '- [x] T @2026-09-21', ''].join('\n'));
+        expect(contents.get(FILE)).toBe(['# note', '- [ ] U', ''].join('\n'));
+        expect(editor.lines()).toEqual(['# elsewhere', '']);
+        expect(Notice.messages).toEqual([]);
+    });
+
+    it('takes the original away in the editor once the tab shows the note again, as it read', async () => {
+        const { contents, editor } = await open({ [FILE]: LINES, [OTHER]: ['# other', ''] });
+
+        editor.check(1);
+        const completed = editor.text();
+        contents.set(FILE, completed);
+        editor.show('elsewhere.md', '# elsewhere\n');
+        editor.show(FILE, completed);
+        await editor.settled();
+
+        expect(contents.get(OTHER)).toBe(['# other', '- [x] T @2026-09-21', ''].join('\n'));
+        expect(editor.lines()).toEqual(['# note', '- [ ] U', '']);
+        // The editor saves it, as it saves what the user typed.
+        expect(contents.get(FILE)).toBe(completed);
+        expect(Notice.messages).toEqual([]);
+    });
+});

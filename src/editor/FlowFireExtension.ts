@@ -12,7 +12,7 @@ import {
 } from '../utils/FileLines';
 import { lineChanges } from './LineChanges';
 import { keyOf, linesOf } from './EditorDoc';
-import { writeInEditor, type EditorHandle } from './EditorWrite';
+import { shows, writeInEditor, type EditorHandle } from './EditorWrite';
 import { contentKeyOf } from '../services/core/ContentKey';
 import { logError, logWarn } from '../log/log';
 
@@ -222,12 +222,14 @@ export type { EditorHandle } from './EditorWrite';
  * The editor has to read as that content, and the row as the completion left
  * it: undone since, or edited, it is not taken away; shown a change from
  * outside since, nothing is. Either way the user is told the task is now in
- * both files. An editor closed before then is written to its file instead,
- * at the line it was last carried to, if the file reads as that content.
+ * both files. An editor that no longer shows the note by then (`shows`:
+ * closed, or showing another) has the write made to the file instead, at the
+ * line the row was last carried to, if the file reads as that content.
  */
 export class AwayRunner {
+    /** The plugin has let go of the editor: its state, and the moves in it, are `last`. */
     private closed = false;
-    /** The editor's last state, for a move that finishes after it closed. */
+    /** The editor's state as the plugin last held it, for a move that finishes after the plugin let go of it. */
     private last: EditorState;
 
     constructor(private readonly editor: EditorHandle, private readonly host: EditorFireHost) {
@@ -254,20 +256,25 @@ export class AwayRunner {
     private async run(away: Omit<Away, 'doc'>): Promise<void> {
         let dropped = false;
         await this.host.finishAway(away.pending, async (_at, ops) => {
-            const outcome = await this.writeSource(away, ops);
-            dropped = !this.closed;
-            return outcome;
+            const written = await this.writeSource(away, ops);
+            dropped = written.inEditor;
+            return written.outcome;
         });
         if (!dropped && !this.closed) this.editor.dispatch({ effects: dropAway.of(away.id) });
     }
 
-    private async writeSource(away: Omit<Away, 'doc'>, ops: readonly TaskOp[]): Promise<WriteOutcome> {
+    /** The source's write, and whether it was made in the editor, which then let go of the move. */
+    private async writeSource(away: Omit<Away, 'doc'>, ops: readonly TaskOp[]): Promise<{ outcome: WriteOutcome; inEditor: boolean }> {
         const state = this.closed ? this.last : this.editor.state;
         const now = state.field(awayField, false)?.find(candidate => candidate.id === away.id);
         if (!now) {
-            // The editor was handed another state (another note shown in it):
-            // the position counts in none of its content.
-            return { written: false, refused: { file: away.path, reason: { kind: 'changed' }, subject: away.pending.source.text.trim() } };
+            // The state holds no such move (the plugin let go of the editor
+            // and was given it again, reloaded): the position counts in none
+            // of its content.
+            return {
+                outcome: { written: false, refused: { file: away.path, reason: { kind: 'changed' }, subject: away.pending.source.text.trim() } },
+                inEditor: false,
+            };
         }
         const at: EditorSubtree = {
             line: now.doc.lineAt(Math.min(now.pos, now.doc.length)).number - 1,
@@ -275,13 +282,13 @@ export class AwayRunner {
             subtree: away.pending.source.subtree,
             key: keyOf(now.doc),
         };
-        if (this.closed) return this.host.writeFile(away.path, at, ops);
+        if (!shows(this.editor, away.path)) return { outcome: await this.host.writeFile(away.path, at, ops), inEditor: false };
 
         // A step of its own to undo, whether or not the user typed since the
         // completion: undone, the original comes back as the completion left it.
         const outcome = writeInEditor(this.editor, away.path, at, ops, this.host.applyOps, [dropAway.of(away.id)]);
         if (!outcome.written) this.editor.dispatch({ effects: dropAway.of(away.id) });
-        return outcome;
+        return { outcome, inEditor: true };
     }
 }
 

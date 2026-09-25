@@ -10,7 +10,21 @@ import { logError } from '../log/log';
 /** What a write to an editor reads and writes of it. */
 export interface EditorHandle {
     readonly state: EditorState;
+    /** The editor's element: out of the document once the editor is closed. */
+    readonly dom: { readonly isConnected: boolean };
     dispatch(spec: TransactionSpec): void;
+}
+
+/**
+ * Whether `editor` shows the note `path`: it is still open, and the note in
+ * it is that one. The one answer to "the editor or the file" for every write
+ * of a line the editor pointed at, the menu's (`writeEditorLine`) and a
+ * move's source (`AwayRunner`): in the editor while it shows the note, to the
+ * file once it does not (closed, or showing another note). Either way the
+ * line holds only in the content it was taken in (`EditorLine.key`).
+ */
+export function shows(editor: EditorHandle, path: string): boolean {
+    return editor.dom.isConnected && editor.state.field(editorInfoField, false)?.file?.path === path;
 }
 
 /** The one loop that applies ops to a row inside a write (`InlineTaskWriter.applyOps`). */
@@ -69,20 +83,18 @@ export interface EditorLineHost {
  * written, and the user is told.
  *
  * Written in the editor, it reaches the file as the user's typing does, when
- * the editor saves. `editor` is null when the menu's editor is gone.
+ * the editor saves.
  *
  * @returns whether the line was written.
  */
 export async function writeEditorLine(
-    editor: EditorHandle | null,
+    editor: EditorHandle,
     path: string,
     at: EditorLine,
     ops: readonly TaskOp[],
     host: EditorLineHost,
 ): Promise<boolean> {
-    if (editor === null || editor.state.field(editorInfoField, false)?.file?.path !== path) {
-        return host.writeLine(path, at, ops);
-    }
+    if (!shows(editor, path)) return host.writeLine(path, at, ops);
     const outcome = writeInEditor(editor, path, at, ops, host.applyOps);
     if (outcome.refused) host.refused(outcome.refused);
     return outcome.written;

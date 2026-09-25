@@ -14,17 +14,20 @@ import { AwayRunner, flowFireExtension, type EditorHandle, type EditorFireHost }
  * Obsidian's does (CM6's `history`), for `undo` and `redo`.
  */
 export function editorSession(host: EditorFireHost, path: string, text: string) {
-    let state = EditorState.create({
-        doc: text,
-        extensions: [editorInfoField.init(() => ({ file: { path } })), history(), flowFireExtension(host)],
+    const stateOf = (note: string, doc: string) => EditorState.create({
+        doc,
+        extensions: [editorInfoField.init(() => ({ file: { path: note } })), history(), flowFireExtension(host)],
     });
+    let state = stateOf(path, text);
+    let connected = true;
     const transactions: Transaction[] = [];
     let runs: Promise<void>[] = [];
     const handle: EditorHandle = {
         get state() { return state; },
+        dom: { get isConnected() { return connected; } },
         dispatch: (spec: TransactionSpec) => apply(spec),
     };
-    const runner = new AwayRunner(handle, host);
+    let runner = new AwayRunner(handle, host);
 
     function apply(spec: TransactionSpec): Transaction {
         return made(state.update(spec));
@@ -77,8 +80,25 @@ export function editorSession(host: EditorFireHost, path: string, text: string) 
                 await Promise.all(pending);
             }
         },
-        /** The editor closes: a move that finishes after it is written to the file. */
-        close: () => runner.close(),
+        /**
+         * The editor closes, as Obsidian closes it: the plugin let go of its
+         * state, then its element leaves the document. A move that finishes
+         * after it is written to the file.
+         */
+        close: () => {
+            runner.close();
+            connected = false;
+        },
+        /**
+         * The editor is given the note `note`, as Obsidian gives a tab
+         * another note: a state of its own (`setState`), the plugin let go of
+         * the one before and started again on the new one.
+         */
+        show: (note: string, doc: string) => {
+            runner.close();
+            state = stateOf(note, doc);
+            runner = new AwayRunner(handle, host);
+        },
     };
 }
 
