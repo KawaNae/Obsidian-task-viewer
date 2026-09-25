@@ -334,8 +334,13 @@ export class TimerRecorder {
      * で終わる規則はそちらが持っており、ここで再現すると二重管理になる。明示 end
      * を持つ行も同じ経路で扱えるのはその副産物である。
      *
-     * @returns 次に見直す時刻（ミリ秒）。行を引けなかったときと、書き足しが書け
-     * なかったときは undefined。
+     * 書き足しが書けなかったときも、決めた次の見直しの時刻を返す。それはメモリの
+     * 上だけの「次にいつ見直すか」の予定で、状態ではない。end の真の値は見直す
+     * たびにファイル（実効 end）から読み直すので、書けなかった書き足しは次の
+     * 見直しで古い end を読んでまた書き、何も失われない。書けるまで門を開けて
+     * おくと、拒否が続く間は毎 tick 書き直して毎回通知が出る。
+     *
+     * @returns 次に見直す時刻（ミリ秒）。行を引けなかったときだけ undefined。
      */
     async extendRunningSession(timer: TimerInstance): Promise<number | undefined> {
         const target = this.resolveTailRecord(timer);
@@ -353,12 +358,13 @@ export class TimerRecorder {
         if (decision.kind === 'hold') return decision.floorMs;
 
         const end = new Date(decision.endMs);
-        const written = await this.plugin.getTaskIndex().updateTask(target.id, {
+        // 書けたかは問わない。書けなければ行の end は古いままで、次の見直しで
+        // それを読んでまた書く。拒否の通知は書き込みの層が出す。
+        await this.plugin.getTaskIndex().updateTask(target.id, {
             endDate: this.formatDate(end),
             endTime: this.formatTime(end),
         });
-        // 書けなければ門を進めない。行の end は古いままなので、次の見直しでまた書く。
-        return written ? decision.endMs : undefined;
+        return decision.endMs;
     }
 
     /**

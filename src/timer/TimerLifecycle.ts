@@ -79,6 +79,10 @@ export class TimerLifecycle {
      * 実効 end を過ぎるまでは何もしない — 毎秒の tick でインデックスを引かない
      * ための門で、判断そのものは recorder が持つ。書き込みは非同期なので、
      * 返る前の tick が二重に走らないよう実行中の id を握っておく。
+     *
+     * 門（lazyEndFloorMs）はメモリの上だけの「次にいつ見直すか」の予定で、
+     * 状態ではない。end の真の値は見直すたびにファイルから読み直すので、書き足し
+     * が書けたかにかかわらず、recorder が決めた次の見直しの時刻へ進める。
      */
     private maybeExtendSessionEnd(timer: TimerInstance): void {
         if (timer.timerType === 'idle') return;
@@ -91,7 +95,7 @@ export class TimerLifecycle {
         this.extending.add(timer.id);
         void this.ctx.recorder.extendRunningSession(timer)
             .then((nextFloorMs) => {
-                // 引けなかったときは門を開けたままにして次の tick で再試行する。
+                // 行を引けなかったときだけ門を開けたままにして次の tick で再試行する。
                 if (nextFloorMs !== undefined) timer.lazyEndFloorMs = nextFloorMs;
             })
             .finally(() => this.extending.delete(timer.id));
