@@ -9,7 +9,7 @@ import { DEFAULT_SETTINGS } from '../../../../../src/types';
 import type { Task } from '../../../../../src/types';
 import type { LineEdit } from '../../../../../src/utils/FileLines';
 import { makeTask } from '../../../helpers/makeTask';
-import { contentKeyOf } from '../../../../../src/services/core/identity/ContentKey';
+import { contentKeyOf } from '../../../../../src/services/core/ContentKey';
 
 /**
  * Claims through the real scanner: raised by a write, weighed against what the

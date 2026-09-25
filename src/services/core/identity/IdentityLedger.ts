@@ -1,5 +1,5 @@
 import type { Fingerprint } from './IdentityFingerprint';
-import type { ContentKey } from './ContentKey';
+import type { ContentKey } from '../ContentKey';
 
 /**
  * What the ledger remembers about one task from the previous scan.

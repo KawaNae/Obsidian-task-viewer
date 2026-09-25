@@ -1,6 +1,6 @@
 import type { Task } from '../../../types';
 import type { LedgerEntry } from './IdentityLedger';
-import type { ContentKey } from './ContentKey';
+import type { ContentKey } from '../ContentKey';
 import type { WriteOrigin } from '../../../utils/FileLines';
 
 /**

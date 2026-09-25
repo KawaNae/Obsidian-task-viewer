@@ -8,7 +8,7 @@ import { describe, it, expect, vi } from 'vitest';
  * are checked on their text as well, and these tests pin that second check —
  * nothing else can, because a real collision cannot be produced on purpose.
  */
-vi.mock('../../../../../src/services/core/identity/ContentKey', () => ({
+vi.mock('../../../../../src/services/core/ContentKey', () => ({
     contentKeyOf: () => 'collides',
 }));
 

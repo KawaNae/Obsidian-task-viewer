@@ -3,7 +3,7 @@ import type { Hint } from './IdentityHints';
 import type { LedgerEntry } from './IdentityLedger';
 import { ledgerRowsOf } from './IdentityMatcher';
 import { replayEdits, type LineEdit, type WriteOrigin } from '../../../utils/FileLines';
-import { contentKeyOf, type ContentKey } from './ContentKey';
+import { contentKeyOf, type ContentKey } from '../ContentKey';
 
 /**
  * A row of a file as a write left it: which line, what it reads, and whose

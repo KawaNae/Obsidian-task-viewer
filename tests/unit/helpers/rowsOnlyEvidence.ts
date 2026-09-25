@@ -1,4 +1,4 @@
-import { contentKeyOf, type ContentKey } from '../../../src/services/core/identity/ContentKey';
+import { contentKeyOf, type ContentKey } from '../../../src/services/core/ContentKey';
 import type { Hint, HintEvidence, PendingHint } from '../../../src/services/core/identity/IdentityHints';
 import type { LedgerEntry } from '../../../src/services/core/identity/IdentityLedger';
 import type { Task } from '../../../src/types';
