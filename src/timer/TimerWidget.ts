@@ -60,7 +60,7 @@ export class TimerWidget implements TimerContext {
         this.app = app;
         this.plugin = plugin;
         this.storageUtils = new TimerStorageUtils(app);
-        this.recorder = new TimerRecorder(app, plugin, this.storageUtils);
+        this.recorder = new TimerRecorder(app, plugin, this.storageUtils, () => this.persistTimersToStorage());
         this.creator = new TimerCreator(this, this.storageUtils);
         this.lifecycle = new TimerLifecycle(this, this.creator);
         // 値を書き換えた直後にオートグローを掛け直す（input 時 / syncFromFile 時）。
@@ -197,7 +197,8 @@ export class TimerWidget implements TimerContext {
      *
      * 開始の書き込み（{@link TimerRecorder.writeStart}）は対象の行に錨も置く。
      * 書けなければタイマーは始めない — widget を閉じ、理由の通知は書き込みの層か
-     * recorder が1回だけ出している。保存は書けてから。
+     * recorder が1回だけ出している。書く前に、書こうとしている錨（`opening`）を
+     * recorder が保存する。
      */
     private startTimerNow(config: TimerStartConfig): void {
         const timer = this.creator.createTimer(config);

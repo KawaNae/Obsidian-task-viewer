@@ -134,6 +134,12 @@ export interface TimerBase {
      * 固定した時刻と長さで書く（{@link TimerLifecycle}）。
      */
     pendingRecord: PendingRecord | null;
+    /**
+     * これから書く行の錨（`^id`）。行を書く前に保存し、書けたら尻尾
+     * （{@link TimerBase.tailRecordBlockId}）へ移して null に戻す。書く途中で
+     * 再読み込みされたら、この錨で行を引いて、在れば尻尾にする。無ければ null。
+     */
+    opening: string | null;
     recordMode: TimerRecordMode;
     /** Always a current {@link ParserId}; legacy persisted values are normalized at load. */
     parserId: ParserId;

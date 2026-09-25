@@ -171,6 +171,8 @@ export function vaultSession(contents: Map<string, string>) {
     const connected = (index.getRepository() as unknown as { channels: (file: string) => WriteChannel }).channels;
 
     let n = 0;
+    // What the recorder calls to save the timers before it writes a line.
+    let persist = (): void => { };
     const storageUtils = {
         generateTimerTargetId: () => `tv-t-test${++n}`,
         isAutoManagedTimerTargetId: () => true,
@@ -194,7 +196,9 @@ export function vaultSession(contents: Map<string, string>) {
         channelOf: (file: string): WriteChannel => connected(file),
         /** Tell `TaskIndex` a write was refused, as its own channel does. */
         reportRefusal: (refusal: Refusal): void => internals.reportRefusal(refusal),
-        recorder: new TimerRecorder(app as never, plugin as never, storageUtils),
+        recorder: new TimerRecorder(app as never, plugin as never, storageUtils, () => persist()),
+        /** Save the timers as the plugin does when the recorder asks, before it writes a line. */
+        onPersist: (fn: () => void): void => { persist = fn; },
         creator: new TimerCreator({} as TimerContext, storageUtils),
         fireVault: (name: string, ...args: unknown[]) => vaultHandlers.get(name)!(...args),
         scanAll: () => scanner!.scanVault(),

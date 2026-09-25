@@ -103,7 +103,7 @@ function makeHarness(options: { tail?: Task | undefined; siblingFails?: boolean 
         generateTimerTargetId: () => NEW_BLOCK_ID,
         isAutoManagedTimerTargetId: (id: string) => id.startsWith('tv-t-'),
     } as unknown as TimerStorageUtils;
-    const recorder = new TimerRecorder({} as App, plugin, storageUtils);
+    const recorder = new TimerRecorder({} as App, plugin, storageUtils, () => { /* unused */ });
 
     return { recorder, siblingInserts, childInserts, updates, deletes };
 }
@@ -131,6 +131,7 @@ function makeTimer(overrides: Partial<TimerInstance> = {}): TimerInstance {
         timerType: 'countup',
         elapsedTime: 0,
         tailRecordBlockId: 'tv-t-old5678',
+        opening: null,
         ...overrides,
     } as TimerInstance;
 }

@@ -29,10 +29,15 @@ interface StartTarget {
 export class TimerRecorder {
     private storageUtils: TimerStorageUtils;
 
+    /**
+     * @param persist タイマーを保存する。行を書く前に、書こうとしている錨
+     * （`opening`）を残すために呼ぶ。
+     */
     constructor(
         private app: App,
         private plugin: PluginContext,
-        storageUtils: TimerStorageUtils
+        storageUtils: TimerStorageUtils,
+        private persist: () => void,
     ) {
         this.storageUtils = storageUtils;
     }
@@ -255,8 +260,43 @@ export class TimerRecorder {
         }
         if (rowId) updates.blockId = rowId;
 
-        if (!(await this.plugin.getTaskIndex().updateTask(task.id, updates))) return false;
-        timer.tailRecordBlockId = timer.timerTargetId;
+        return this.writeOpening(timer, timer.timerTargetId!,
+            () => this.plugin.getTaskIndex().updateTask(task.id, updates));
+    }
+
+    /**
+     * 行を書く。書く前に、その行に付く錨 `anchor` を `opening` として保存し、
+     * 書けたら尻尾へ移す。書けなければ尻尾は動かない。書く途中で再読み込み
+     * されても、保存の `opening` を錨で引けば書けたかが分かる（{@link adoptOpening}）。
+     * 書けたあとの保存は呼び出し側が持つ。
+     */
+    private async writeOpening(timer: TimerInstance, anchor: string, write: () => Promise<boolean>): Promise<boolean> {
+        timer.opening = anchor;
+        this.persist();
+        const written = await write();
+        timer.opening = null;
+        if (written) timer.tailRecordBlockId = anchor;
+        return written;
+    }
+
+    /**
+     * 再読み込みのあと、保存に残った `opening` に答える。錨で行を引けたら、その
+     * 書き込みは届いている — 尻尾にする。引けなければ届いていない。どちらでも
+     * `opening` は消す。推定でなく、ファイルに在る `^id` で答える。
+     *
+     * @returns タイマーを変えたか。
+     */
+    async adoptOpening(timer: TimerInstance): Promise<boolean> {
+        const opening = timer.opening;
+        if (!opening) return false;
+        const taskIndex = this.plugin.getTaskIndex();
+        if (timer.taskFile) await taskIndex.waitForScan(timer.taskFile);
+        if (taskIndex.getTaskByAnchor(timer.taskFile, opening)) {
+            timer.tailRecordBlockId = opening;
+        } else {
+            logInfo(`[TimerRecorder] adoptOpening: ${opening} is not in ${timer.taskFile || '-'}, the write did not land (${describeTimerAnchor(timer)})`);
+        }
+        timer.opening = null;
         return true;
     }
 
@@ -309,8 +349,8 @@ export class TimerRecorder {
      * ではないので、レコードが無名（アイコンだけ）になると後から読めない。
      * デイリーノート起点だけは継ぐ相手が無く、空名で始めて widget で付けさせる。
      */
-    buildSessionPlaceholder(timer: TimerInstance): { line: string; blockId: string } {
-        const now = new Date();
+    buildSessionPlaceholder(timer: TimerInstance, startMs = Date.now()): { line: string; blockId: string } {
+        const now = new Date(startMs);
         const blockId = this.storageUtils.generateTimerTargetId();
 
         const taskObj = this.createTaskObject(
@@ -345,45 +385,35 @@ export class TimerRecorder {
         if (isDailyTimer(timer)) return this.writeFirstLine(timer, line => this.writeChildLine(timer, line));
         const target = start ?? this.startTarget(timer);
         if (!target) return false;
-        return this.writeFirstLine(timer, async line =>
-            (await this.plugin.getTaskWriteService().insertRecord(target.task.id, line, 'firstChild', target.rowId))
-                ? target.task.file : null);
+        return this.writeFirstLine(timer, line =>
+            this.plugin.getTaskWriteService().insertRecord(target.task.id, line, 'firstChild', target.rowId));
     }
 
     /**
      * 1 本目のセッション行を `write` で書き、書けたら尻尾として引き受ける。
-     * `write` は書いたファイルを返し、書けなければ null。
+     * 書いたファイルは `taskFile`（開始で対象の行のファイル、デイリーノートは書いたノート）。
      */
-    private async writeFirstLine(timer: TimerInstance, write: (line: string) => Promise<string | null>): Promise<boolean> {
+    private async writeFirstLine(timer: TimerInstance, write: (line: string) => Promise<boolean>): Promise<boolean> {
         const { line, blockId } = this.buildSessionPlaceholder(timer);
-        // 尻尾は書く前に新しい行へ移す（startNextSession と同じ）。
-        const previous = timer.tailRecordBlockId;
-        timer.tailRecordBlockId = blockId;
-        const file = await write(line);
-        if (file === null) {
-            timer.tailRecordBlockId = previous;
-            return false;
-        }
-        await this.adoptWrittenSession(timer, file, blockId);
+        if (!(await this.writeOpening(timer, blockId, () => write(line)))) return false;
+        await this.adoptWrittenSession(timer, timer.taskFile, blockId);
         return true;
     }
 
     /**
-     * セッション行を対象タスクの子として書き、書いたファイルを返す。書けなければ
-     * null で、理由は1回だけ通知済み。
+     * セッション行を対象タスクの子として書く。書けなければ理由は1回だけ通知済み。
      *
      * デイリーノート起点は器になるタスクが無いので、設定の見出しの下へ行を直接置く。
      * 書いた後にノートのパスを `taskFile` へ引き取るのが要点で、これで尻尾の解決
      * （ファイルで絞る）と 2 本目以降の兄弟挿入が通常タスクと同じ経路に乗る。
      */
-    private async writeChildLine(timer: TimerInstance, line: string): Promise<string | null> {
+    private async writeChildLine(timer: TimerInstance, line: string): Promise<boolean> {
         if (isDailyTimer(timer)) {
             const filePath = await this.addTimerRecordToDailyNote(dailyDateOf(timer), line);
             if (filePath) timer.taskFile = filePath;
-            return filePath;
+            return filePath !== null;
         }
-        if (!(await this.insertChildRecord(timer, line))) return null;
-        return timer.taskFile;
+        return this.insertChildRecord(timer, line);
     }
 
     /**
@@ -398,15 +428,14 @@ export class TimerRecorder {
     async startContinuationSession(timer: TimerInstance, start?: StartTarget): Promise<boolean> {
         const target = start ?? this.startTarget(timer);
         if (!target) return false;
-        return this.writeFirstLine(timer, async line =>
-            (await this.plugin.getTaskWriteService().insertRecord(target.task.id, line, 'afterCompletedRun', target.rowId))
-                ? target.task.file : null);
+        return this.writeFirstLine(timer, line =>
+            this.plugin.getTaskWriteService().insertRecord(target.task.id, line, 'afterCompletedRun', target.rowId));
     }
 
     /**
      * 書けたセッション行の task id を引き、走行中の行として引き受ける。
      *
-     * 尻尾アンカーは書けた時点で呼び出し側が移している。行は書けているので、
+     * 尻尾アンカーは書けた時点で {@link writeOpening} が移している。行は書けているので、
      * スキャンがまだ引けなくても、引けた時点で `^id` がその行を指す。
      */
     private async adoptWrittenSession(
@@ -571,30 +600,19 @@ export class TimerRecorder {
      * 最後の枝はフォールバックでもある: レコード行をユーザーが消して尻尾を失って
      * も、記録そのものは落とさない。
      */
-    async startNextSession(timer: TimerInstance): Promise<boolean> {
+    async startNextSession(timer: TimerInstance, startMs = Date.now()): Promise<boolean> {
         const tail = this.resolveTailRecord(timer);
-        const previous = timer.tailRecordBlockId;
-
-        const { line, blockId } = this.buildSessionPlaceholder(timer);
-        // 書く前に尻尾を新しい行へ移す。走行中の尻尾は今のセッションの行で、
-        // 前のセッションの記録ではない。行がスキャンに見えるまでは何も引けず、
-        // end の書き足しも名前の書き込みも待つ — 書き終えた記録へ走行中の
-        // end や名前を書かせないため。
-        timer.tailRecordBlockId = blockId;
+        const { line, blockId } = this.buildSessionPlaceholder(timer, startMs);
 
         // 尻尾は 1 個。前の行の自動 `^id` は、新しい行と同じ書き込みで外す。
         // 対象の錨は外さない（self の 1 本目の記録は対象の行そのもの）: 対象の
         // 行には走っている間ずっと錨があり、閉じるときに片付ける。
         const releases = !!tail?.blockId && isTimerTargetId(tail.blockId) && tail.blockId !== timer.timerTargetId;
-        const written = tail
-            ? await this.plugin.getTaskWriteService().insertRecord(tail.id, line, 'afterSubtree', releases ? null : undefined)
-            : await this.writeChildLine(timer, line);
-        if (!written) {
-            // 書けなかった。理由は書き込みの層が1回だけ通知済み。再開そのものを
-            // 取り消すので（TimerLifecycle.resumeSession）、尻尾も戻す。
-            timer.tailRecordBlockId = previous;
-            return false;
-        }
+        // 書けなければ、理由は書き込みの層が1回だけ通知済みで、尻尾は動かない。
+        const written = await this.writeOpening(timer, blockId, () => tail
+            ? this.plugin.getTaskWriteService().insertRecord(tail.id, line, 'afterSubtree', releases ? null : undefined)
+            : this.writeChildLine(timer, line));
+        if (!written) return false;
         timer.lazyEndFloorMs = undefined;
 
         const file = tail?.file ?? timer.taskFile;

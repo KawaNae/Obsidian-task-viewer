@@ -87,8 +87,6 @@ export class TimerLifecycle {
         const floor = timer.lazyEndFloorMs;
         if (floor !== undefined && Date.now() < floor) return;
         if (this.extending.has(timer.id)) return;
-        // 再開の往復中は、尻尾がまだ前のセッションの記録を指していることがある。
-        if (this.busy.has(timer.id)) return;
 
         this.extending.add(timer.id);
         void this.ctx.recorder.extendRunningSession(timer)
@@ -320,64 +318,41 @@ export class TimerLifecycle {
      */
     resumeSession(timer: TimerInstance): void {
         if (timer.runState !== 'suspended') return;
-        if (this.busy.has(timer.id)) return;
-        // 行を書けなかったときに戻す中断の姿。
-        const suspended = {
-            startTimeMs: timer.startTimeMs,
-            pausedElapsedTime: timer.pausedElapsedTime,
-            elapsedTime: 'elapsedTime' in timer ? timer.elapsedTime : undefined,
-            isExpanded: timer.isExpanded,
-            phase: timer.phase,
-            timeRemaining: timer.timerType === 'countdown' ? timer.timeRemaining : undefined,
-        };
-        timer.runState = 'running';
-        timer.startTimeMs = Date.now();
-        timer.pausedElapsedTime = 0;
-        timer.isRunning = true;
-        timer.isExpanded = true;
-
-        if (timer.timerType === 'countup') {
-            timer.elapsedTime = 0;
-        } else if (timer.timerType === 'countdown') {
-            timer.elapsedTime = 0;
-            timer.timeRemaining = timer.totalTime;
-            timer.phase = 'work';
-        }
-
-        this.stopIdleTimer();
-        this.startTimerTicker(timer.id);
-        AudioUtils.playStartSound();
-
+        const pressedAt = Date.now();
+        // 行を書けてから走り出す。往復の間は中断のまま（出口も ▶ も busy が捨てる）。
         // 書き先（尻尾の兄弟 / フォールバックの子）の判断は recorder が持つ。
-        // 保存は再開が決まってから。往復の途中で落ちても、保存に残るのは中断の姿。
         void this.exclusive(timer, async () => {
             // 中断中に打たれた入力は直前のレコード宛。新しい行を挿す前に流し込む。
             const began = await this.ctx.flushTimerContent(timer.id)
-                && await this.ctx.recorder.startNextSession(timer);
+                && await this.ctx.recorder.startNextSession(timer, pressedAt);
             if (!began) {
-                // 名前か走行中の行を書けなかった。理由は1回だけ通知済み。再開を
-                // 取り消し、中断に戻す — 行の無い走行は、書き終えた記録を走行中と
-                // 取り違える元になる。もう一度 ▶ を押せば書き直す。
-                this.stopTimerTick(timer.id);
-                timer.runState = 'suspended';
-                timer.isRunning = false;
-                timer.startTimeMs = suspended.startTimeMs;
-                timer.pausedElapsedTime = suspended.pausedElapsedTime;
-                if ('elapsedTime' in timer) timer.elapsedTime = suspended.elapsedTime!;
-                timer.isExpanded = suspended.isExpanded;
-                timer.phase = suspended.phase;
-                if (timer.timerType === 'countdown') timer.timeRemaining = suspended.timeRemaining!;
-                this.startIdleTimerIfNothingRunning();
+                // 名前か走行中の行を書けなかった。理由は1回だけ通知済み。中断のまま
+                // 残る — もう一度 ▶ を押せば書き直す。
                 this.ctx.render();
                 this.ctx.persistTimersToStorage();
                 return;
             }
-            // 挿入の往復中に打たれた分は、尻尾が移った今の行が受け取る。
-            await this.ctx.flushTimerContent(timer.id);
-            this.ctx.persistTimersToStorage();
-        });
 
-        this.ctx.render();
+            timer.runState = 'running';
+            timer.startTimeMs = pressedAt;
+            timer.pausedElapsedTime = 0;
+            timer.isRunning = true;
+            timer.isExpanded = true;
+            if (timer.timerType === 'countup') {
+                timer.elapsedTime = 0;
+            } else if (timer.timerType === 'countdown') {
+                timer.elapsedTime = 0;
+                timer.timeRemaining = timer.totalTime;
+                timer.phase = 'work';
+            }
+            this.stopIdleTimer();
+            this.startTimerTicker(timer.id);
+            AudioUtils.playStartSound();
+            this.ctx.render();
+            this.ctx.persistTimersToStorage();
+            // 往復の間に打たれた分は、新しいセッションの行が受け取る。
+            await this.ctx.flushTimerContent(timer.id);
+        });
     }
 
     /**
@@ -571,6 +546,7 @@ export class TimerLifecycle {
             sessionCount: 0,
             recordedElapsedTime: 0,
             pendingRecord: null,
+            opening: null,
             isExpanded: true,
             intervalId: null,
             timerType: 'idle',
