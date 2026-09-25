@@ -17,6 +17,7 @@ import type { PlacedLine } from '../persistence/utils/Placement';
 import { flowSource } from './FlowSegments';
 import { type FlowPlanDeps, GenerationError, planFlow } from './FlowPlanner';
 import { canTriggerFlow } from './FlowTrigger';
+import { contentKeyOf } from '../core/ContentKey';
 import { createMomentEvalHost } from './MomentEvalHost';
 import { FileParsePipeline } from '../parsing/FileParsePipeline';
 import type { GenBlock } from '../parsing/gen/GenBlockCollector';
@@ -183,14 +184,17 @@ export class FlowExecutor {
                     away = null;
                     if (plan.kind !== 'fires') return [];
                     if (plan.away) {
-                        // Nothing else of the fire is in this write, so the row
-                        // and its subtree are as it leaves them.
+                        // Nothing else of the fire is in this write, and a
+                        // fire is the last op of the write that completes the
+                        // row: the row, its subtree and the lines are as it
+                        // leaves them. The source's write is made only in
+                        // that content (`EditorLine.key`).
                         const archive = this.repository.archiveOf(lines, line, plan.away.content);
                         away = {
                             task: plan.task,
                             destPath: plan.away.destPath,
                             archive: archive.block,
-                            source: { line, text: lines[line], subtree: archive.subtree },
+                            source: { line, text: lines[line], subtree: archive.subtree, key: contentKeyOf(lines) },
                             ops: plan.away.ops,
                         };
                     }

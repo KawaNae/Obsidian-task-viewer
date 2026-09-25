@@ -1,4 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
+import { contentKeyOf } from '../../../src/services/core/ContentKey';
 import { writeBench, FILE } from '../helpers/writeBench';
 import { plannedOn } from '../../../src/services/persistence/TaskRefs';
 import { FrontmatterWriter } from '../../../src/services/persistence/writers/FrontmatterWriter';
@@ -33,7 +34,7 @@ describe('a write whose file is not there', () => {
     it.each(['missing', 'folder'] as const)('%s: a write to the line the editor pointed at is refused as gone, told once', async (kind) => {
         const { b } = await benchWithout(kind);
 
-        const outcome = await b.writer.applyToLine(FILE, { line: 1, text: TASK }, [{ kind: 'update', text: '- [x] 消える @2026-09-21' }]);
+        const outcome = await b.writer.applyToLine(FILE, { line: 1, text: TASK, key: contentKeyOf([]) }, [{ kind: 'update', text: '- [x] 消える @2026-09-21' }]);
 
         expect(outcome.written).toBe(false);
         expect(outcome.refused?.reason).toEqual({ kind: 'gone' });

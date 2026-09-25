@@ -318,3 +318,77 @@ describe('a move to another file, completed in the editor', () => {
         expect(editor.lines()).toEqual(['# note', '- [ ] T @2026-09-21 ==> move([[other]])', '- [ ] U', '']);
     });
 });
+
+describe('a move to another file, when the editor and its row part ways before the original is taken', () => {
+    // The row's position counts only in the content the editor's own
+    // transactions carried it through. A change shown from outside (`set`:
+    // a write of ours to the file, another app's) is Obsidian's diff of two
+    // contents, which cannot tell twins apart: the original is not taken.
+    const kept = (subject: string) => t('notice.moveOriginKept', {
+        dest: 'other', reason: t('notice.moveOriginChanged'), subject,
+    });
+
+    it('leaves the twin when the row was taken away from outside, and the diff says its twin went', async () => {
+        const ROW = '- [x] T @2026-09-21 ==> move([[other]])';
+        const { contents, editor } = await open({
+            [FILE]: ['# note', '- [ ] T @2026-09-21 ==> move([[other]])', ROW, '- [ ] R', ''],
+            [OTHER]: ['# other', ''],
+        });
+
+        editor.check(1);
+        // Line 1 taken away from outside, shown as its twin below going: the
+        // two read the same, so a diff keeps the first and takes the second.
+        editor.change({ from: editor.at(2), to: editor.at(3) }, 'set');
+        expect(editor.lines()).toEqual(['# note', ROW, '- [ ] R', '']);
+        await editor.settled();
+
+        expect(contents.get(OTHER)).toBe(['# other', '- [x] T @2026-09-21', ''].join('\n'));
+        expect(editor.lines()).toEqual(['# note', ROW, '- [ ] R', '']);
+        expect(Notice.messages).toEqual([kept(ROW)]);
+    });
+
+    it('leaves the original when a write of ours was shown in the editor first (the review\'s hole 3)', async () => {
+        const ROW = '    - [x] A @2026-09-21 ==> move([[other]])';
+        const { editor } = await open({
+            [FILE]: ['- [ ] Q', '    - [ ] A @2026-09-21 ==> move([[other]])', '- [ ] P', ROW, ''],
+            [OTHER]: ['# other', ''],
+        });
+
+        editor.check(1);
+        // A card completes Q, and the file's new content is shown here.
+        editor.change({ from: editor.at(0, 3), to: editor.at(0, 4), insert: 'x' }, 'set');
+        await editor.settled();
+
+        expect(editor.lines()).toEqual(['- [x] Q', ROW, '- [ ] P', ROW, '']);
+        expect(Notice.messages).toEqual([kept(ROW.trim())]);
+    });
+
+    it('leaves the twin when the editor closed and the file was edited from outside before the original was taken', async () => {
+        const ROW = '- [x] T @2026-09-21 ==> move([[other]])';
+        const opened = await openVault({
+            [FILE]: ['# note', '- [ ] T @2026-09-21 ==> move([[other]])', ROW, ''],
+            [OTHER]: ['# other', ''],
+        });
+        live = opened.session;
+        const host = opened.session.index.editorFireHost();
+        const { contents } = opened;
+        const edited = ['# note', ROW, ''].join('\n');
+        const editor = editorSession({
+            ...host,
+            // The completion saved, and line 1 taken away from outside, just
+            // before the original's write.
+            finishAway: (away, writeSource) => host.finishAway(away, (at, ops) => {
+                contents.set(FILE, edited);
+                return writeSource(at, ops);
+            }),
+        }, FILE, contents.get(FILE)!);
+
+        editor.check(1);
+        contents.set(FILE, editor.text());
+        editor.close();
+        await editor.settled();
+
+        expect(contents.get(FILE)).toBe(edited);
+        expect(Notice.messages).toEqual([kept(ROW)]);
+    });
+});

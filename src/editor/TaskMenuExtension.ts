@@ -19,6 +19,7 @@ import { t } from '../i18n';
 import { editorCm } from '../utils/editorCm';
 import { outlineFor } from './EditorOutline';
 import { subtreeAt } from '../services/persistence/RowBasis';
+import { keyOf } from './EditorDoc';
 
 const taskIndexChanged = StateEffect.define<void>();
 const settingsChanged = StateEffect.define<void>();
@@ -119,7 +120,8 @@ export function createTaskMenuExtension(
                 // status + basic actions, writing through CheckboxLineOps preserves the original notation.
                 const lineText = view.state.doc.line(lineNumber + 1).text; // CM6 lines are 1-based
 
-                const at = { line: lineNumber, text: lineText };
+                // The line holds only in the content the menu was opened in.
+                const at = { line: lineNumber, text: lineText, key: keyOf(view.state.doc) };
                 // What a delete takes, as the editor shows it now: the line
                 // and its subtree. The write takes it only if the file still
                 // reads so.

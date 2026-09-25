@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
+import { contentKeyOf } from '../../../src/services/core/ContentKey';
 import { FlowExecutor } from '../../../src/services/flow/FlowExecutor';
 import { FileParsePipeline } from '../../../src/services/parsing/FileParsePipeline';
 import { FileOperations } from '../../../src/services/persistence/utils/FileOperations';
@@ -26,7 +27,7 @@ const writer = new InlineTaskWriter(app as never, new FileOperations(app as neve
 /** The lines a write of `ops` to the row at `line` leaves, with nothing written anywhere. */
 function written(lines: readonly string[], line: number, ops: readonly TaskOp[]): readonly string[] | null {
     const edited = editLines(FILE, lines, '\n',
-        (draft, _eol, session) => writer.applyOps(draft, session, { line, text: lines[line] }, ops));
+        (draft, _eol, session) => writer.applyOps(draft, session, { line, text: lines[line], key: contentKeyOf(lines) }, ops));
     return edited.written ? edited.lines : null;
 }
 
