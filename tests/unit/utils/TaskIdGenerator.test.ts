@@ -13,17 +13,16 @@ describe('TaskIdGenerator', () => {
             expect(TaskIdGenerator.provisionalId('tv-inline', 'a.md', 5)).toBe('tv-inline:a.md:prov:5');
         });
 
-        it('is never runtime-shaped and never parses', () => {
+        it('never parses', () => {
             const id = TaskIdGenerator.provisionalId('tasks-plugin', 'a.md', 0);
-            expect(TaskIdGenerator.isRuntimeId(id)).toBe(false);
             expect(TaskIdGenerator.parse(id)).toBeNull();
         });
     });
 
     describe('legacy anchors', () => {
-        // Timers persisted before the ledger carry these; the restore guard
+        // Timers persisted by earlier versions carry these; the restore guard
         // drops any task ID parse rejects.
-        it.each(['ln:3', 'blk:abc', 'tid:tv-t-1'])('still parses %s', anchor => {
+        it.each(['ln:3', 'blk:abc', 'tid:tv-t-1', 'seq:7'])('still parses %s', anchor => {
             expect(TaskIdGenerator.parse(`tv-inline:a.md:${anchor}`)?.anchor).toBe(anchor);
         });
     });
@@ -79,53 +78,22 @@ describe('TaskIdGenerator', () => {
         });
     });
 
-    describe('renameFile', () => {
-        it('renames matching file path in ID', () => {
-            const id = 'tv-inline:old/path.md:blk:abc';
-            const result = TaskIdGenerator.renameFile(id, 'old/path.md', 'new/path.md');
-            expect(result).toBe('tv-inline:new/path.md:blk:abc');
+    describe('names (nameOf / readName)', () => {
+        const KEY = '3:12:0123456789abcdef';
+
+        it('is the path, the line and the key of the content read', () => {
+            expect(TaskIdGenerator.nameOf('tv-inline', 'a/b.md', 4, KEY)).toBe(`tv-inline:a/b.md:n:4:${KEY}`);
         });
 
-        it('preserves non-matching ID', () => {
-            const id = 'tv-inline:other.md:blk:abc';
-            const result = TaskIdGenerator.renameFile(id, 'old/path.md', 'new/path.md');
-            expect(result).toBe(id);
+        it('reads back what it says, a path holding a colon too', () => {
+            const name = TaskIdGenerator.nameOf('tv-inline', 'a:b.md', 4, KEY);
+            expect(TaskIdGenerator.readName(name)).toEqual({ parserId: 'tv-inline', filePath: 'a:b.md', line: 4, content: KEY });
+            expect(TaskIdGenerator.parse(name)?.filePath).toBe('a:b.md');
         });
 
-        it('renames segment ID base', () => {
-            const id = 'tv-inline:old.md:blk:abc##seg:2026-03-11';
-            const result = TaskIdGenerator.renameFile(id, 'old.md', 'new.md');
-            expect(result).toBe('tv-inline:new.md:blk:abc##seg:2026-03-11');
-        });
-
-        it('renames a runtime seq ID, keeping its number', () => {
-            const result = TaskIdGenerator.renameFile('tv-inline:old.md:seq:12', 'old.md', 'new.md');
-            expect(result).toBe('tv-inline:new.md:seq:12');
-        });
-    });
-
-    describe('runtime IDs (seq:)', () => {
-        it('parses a seq anchor', () => {
-            expect(TaskIdGenerator.parse('tv-inline:a/b.md:seq:7'))
-                .toEqual({ parserId: 'tv-inline', filePath: 'a/b.md', anchor: 'seq:7' });
-        });
-
-        it('mints parserId:file:seq:n from the counter', () => {
-            let n = 0;
-            const next = () => ++n;
-            const task = { id: 'tv-inline:a.md:ln:3', parserId: 'tv-inline' as const, file: 'a.md' };
-            expect(TaskIdGenerator.mintRuntimeId(task, next)).toBe('tv-inline:a.md:seq:1');
-            expect(TaskIdGenerator.mintRuntimeId(task, next)).toBe('tv-inline:a.md:seq:2');
-        });
-
-        it('accepts only seq as runtime-shaped', () => {
-            expect(TaskIdGenerator.isRuntimeId('tv-inline:a.md:seq:1')).toBe(true);
-            // Persisted by earlier versions: still parses, never committed.
-            expect(TaskIdGenerator.isRuntimeId('tv-file:a.md:fm-root')).toBe(false);
-            expect(TaskIdGenerator.isRuntimeId('tv-inline:a.md:ln:1')).toBe(false);
-            expect(TaskIdGenerator.isRuntimeId('tv-inline:a.md:blk:abc')).toBe(false);
-            expect(TaskIdGenerator.isRuntimeId('tv-inline:a.md:tid:xyz')).toBe(false);
-            expect(TaskIdGenerator.isRuntimeId('not-an-id')).toBe(false);
+        it('reads nothing of an ID of another shape', () => {
+            expect(TaskIdGenerator.readName('tv-inline:a.md:seq:7')).toBeNull();
+            expect(TaskIdGenerator.readName('not-an-id')).toBeNull();
         });
     });
 });

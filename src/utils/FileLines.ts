@@ -107,11 +107,10 @@ export interface PutAt {
  * made from the file can tell them apart: the lines come out identical either
  * way. Only the writer knows which it meant, and both mistakes cost something.
  * Saying {@link rewrite} where a line was really torn down and rebuilt hands a
- * new task the old one's identity. Splicing a line away and a new one in where
- * it was only rewritten calls a row that is still there new, and the hub or the
- * selection holding it loses its task — the ladder would have kept it by
- * matching the text. So `rewrite` means: this line still belongs to the same
- * task as before.
+ * new task the old one's name (`WriteLinks`). Splicing a line away and a new
+ * one in where it was only rewritten calls a row that is still there new, and
+ * the hub or the selection holding its name loses its task. So `rewrite`
+ * means: this line still belongs to the same task as before.
  */
 export interface LineDraft {
     /** The lines as they stand now, after every change made so far. */
@@ -217,7 +216,7 @@ export function draftOver(lines: string[]): {
  *
  * One element of the array is one line of the file. An element holding a
  * break is written as two lines while every count made of the array — the
- * report, the claim, the content key — says one, so the file and everything
+ * report, the reading the write lands, the content key — says one, so the file and everything
  * said about it part from that line on. Nothing is written instead (see
  * `processLines`).
  */
@@ -279,7 +278,7 @@ interface LineEdits {
      * write that moves a row by splicing it in below and away from above
      * reports the row gone and a new one made — which is how a move within
      * one file came to lose its task's identity. The carry says which line
-     * the moved one is, and the claim hands it that line's name.
+     * the moved one is.
      *
      * The source is left where it is; taking it away is a splice of its own,
      * and a report in which one line still stands in two places is not one a
@@ -341,72 +340,6 @@ function spliceStart(length: number, at: number): number {
     return n < 0 ? Math.max(length + n, 0) : Math.min(n, length);
 }
 
-/** A row a write brought into being, and the name it was given there. */
-export interface MadeRow {
-    /** Where it stands in the lines the write left. */
-    line: number;
-    runtimeId: string;
-}
-
-/** What filing a report left: a handle that takes it back, and the rows it named. */
-export interface WriteReceipt {
-    /**
-     * Called when the write this report describes is not known to have
-     * landed: its callback ran again, or the write failed and the file does
-     * not read as it was left. A write that returned, or failed with the file
-     * reading as it was left, never calls it. One that landed and failed, with
-     * an edit from outside before the file was read back, is not told from
-     * one that did not land, and calls it: the report is lost, never wrongly
-     * kept. Called at most once, and before any later write of ours to the
-     * same file files a report — so what it takes back is always our newest
-     * report on that file.
-     */
-    withdraw: () => void;
-    /**
-     * The rows the report named on the spot. Empty when nothing was claimed —
-     * a name is only worth handing out when the scan that adopts the claim
-     * gives the row that same one.
-     */
-    made: readonly MadeRow[];
-}
-
-/**
- * Who a write was made for: the user, through the UI, the editor's menu, the
- * API or a timer; or a flow, carrying out a command's effects. A claim carries
- * it, so that a scan which adopts the claim knows whether the completion it
- * reads there came from the user or from a flow's own write — the question
- * whether a completion may fire (`structure.md`, 論点5). Stage F5 only fills
- * it in; nothing reads it yet.
- */
-export type WriteOrigin = 'user' | 'flow';
-
-/**
- * Where a write's report goes: every write that changed the file, once.
- *
- * `edits` is null when the write changed the file and cannot say how — its
- * report does not account for the lines it wrote, or it replaced the file
- * whole. That is not the same as saying nothing: it is the mark that the
- * chain of records broke here, so that nothing on record for the file is
- * taken as describing it until a scan has read it again (see
- * `WriteClaims`). A write of ours that changed the file and left neither a
- * claim nor this mark would leave the last record looking current.
- *
- * `named` holds the rows the write asked for by name and gave a new text,
- * each with the line it left the row on — known to the write whatever the
- * claim makes of it. Not a row it only found, to write beside it: a claim
- * counts the rows a write made or rewrote, and this says the same. Null when
- * the report does not account for the lines, which is not the same answer as
- * a write that rewrote no named row. A write whose claim cannot be built (its
- * lines are no state on record) still says which rows it wrote, and for whom,
- * which is what a completion it made answers to.
- */
-export type WriteSink = (
-    before: readonly string[],
-    after: readonly string[],
-    edits: readonly LineEdit[] | null,
-    named: ReadonlyMap<string, string> | null,
-) => WriteReceipt;
-
 /**
  * A line the editor pointed at: its number, and the text the editor showed on
  * it. The one place a write takes a coordinate from outside — the editor's
@@ -457,15 +390,13 @@ export interface Refusal {
 }
 
 /**
- * What a write to one file is handed by the index: where to report what it
- * did, and where to say it gave up.
+ * What a write to one file is handed by the index: where to hand what it left
+ * once it landed, and where to say it gave up.
  *
  * Closures rather than an import, so that the write layer never depends on
- * identity (see `WriteObserver`).
+ * the index (see {@link WriteChannels}).
  */
 export interface WriteChannel {
-    /** Absent where nobody takes a report: no write of the plugin's leaves it out. */
-    sink?: WriteSink;
     /**
      * A write changed the file and landed: `landing.lines` is what the file
      * holds now. Told once per write, after `vault.process` is over, and only
@@ -475,6 +406,18 @@ export interface WriteChannel {
     landed?(landing: Landing): void;
     refused(refusal: Refusal): void;
 }
+
+/**
+ * Where the writers get the channel for a write to `file`: undefined while
+ * nothing is listening.
+ *
+ * Handed in as a function rather than imported, and cut by the index that
+ * connected it when it is taken down (`TaskRepository.disconnect`): a plugin
+ * that reloads without a restart can leave a previous index alive for a while
+ * (#165), and a write that outlives its index lands nothing in it and finds
+ * nobody to tell.
+ */
+export type WriteChannels = (file: string) => WriteChannel | undefined;
 
 /** What a write that landed left in the file (see {@link WriteChannel.landed}). */
 export interface Landing {
@@ -633,8 +576,7 @@ export function replayEdits(
     }
 
     // A carry leaves its source standing until the write takes it away. One
-    // that is never taken away would give one line's name to two, and a claim
-    // built on that would hand the moved row's identity to its copy as well.
+    // that is never taken away would leave one line standing in two places.
     const seen = new Set<number>();
     for (const from of origin) {
         if (from === null) continue;
@@ -899,15 +841,12 @@ export function editLines(
  * there is nobody to ask, and every target is `gone`: the index that would
  * answer has been taken down.
  *
- * The report is also what lets the next scan know which line is which. A
- * report that follows but does not account for every line it left
- * unreported is logged and dropped, and the sink is told the write could not
- * say what it did (see {@link WriteSink}): every write that changes the file
- * leaves a claim or that mark, never nothing.
- *
- * Anything a write owes the rest of the plugin belongs on the written branch
- * only. A claim left behind by a write that never happened would be weighed by
- * the next scan of that file against something else entirely.
+ * What the write left is handed to the channel once it landed
+ * ({@link WriteChannel.landed}), with its report when the report accounts for
+ * every line it left unreported; one that does not is logged and handed over
+ * as null. Anything a write owes the rest of the plugin belongs on the
+ * written branch only, and after `vault.process`: a write that never landed
+ * leaves nothing behind.
  */
 export async function processLines(
     app: App,
@@ -920,15 +859,11 @@ export async function processLines(
     // What the write left, when it changed the file: handed to the channel
     // once it is known to have landed.
     let landing: Landing | null = null;
-    const sink = channel?.sink;
-    // A list rather than one slot: `vault.process` may run the callback again,
-    // and everything filed has to be withdrawable.
-    const withdrawals: Array<() => void> = [];
     // What the write is about, for a refusal said after the callback is over.
     let lastSubject = '';
     const subject = () => lastSubject || about || file.path;
 
-    const threw = await processOrFail(app, file, channel, withdrawals, attempt, subject);
+    const threw = await processOrFail(app, file, channel, attempt, subject);
     if (threw) return threw;
 
     // Set inside the callback, which the compiler does not follow.
@@ -945,9 +880,7 @@ export async function processLines(
     /** One run of the callback: the content to write, or the content as it was. */
     function attempt(content: string): string {
         // Obsidian may run the callback again (it retries on a conflicting
-        // write). The previous attempt's claims describe a file that never
-        // reached disk, so they go before this attempt files its own.
-        for (const withdraw of withdrawals.splice(0)) withdraw();
+        // write). Only the last attempt is the one written.
         refused = null;
         landing = null;
         lastSubject = '';
@@ -963,21 +896,14 @@ export async function processLines(
         const rebuilt = (bom ? BOM : '') + joinLines([...next], eol);
 
         // A rewrite that produced the same bytes is not a write: Obsidian
-        // fires no `modify` for it, so no scan follows, and a claim filed
-        // here would wait for a scan that never comes. The caller still
-        // hears `true` — the line was found, which is what it asked.
-        //
-        // Claims are handed over here rather than after the `await` on
-        // purpose: the scan this write triggers starts reading before
-        // `vault.process` resolves, so a claim raised afterwards is too late
-        // for it. Filing early means filing before the write is known to
-        // have succeeded, which is what the withdrawal below is for.
+        // fires no `modify` for it, and there is nothing new to read. The
+        // caller still hears `true` — the line was found, which is what it
+        // asked.
         if (rebuilt !== content) {
             const accounted = explains(before, next, reported);
             if (!accounted) {
-                logError(`[FileLines] ${file.path}: a write's report does not account for the lines it wrote; no claim filed, the chain of records marked broken`);
+                logError(`[FileLines] ${file.path}: a write's report does not account for the lines it wrote; landed without it`);
             }
-            if (sink) withdrawals.push(sink(before, next, accounted ? reported : null, accounted ? new Map() : null).withdraw);
             landing = { before, lines: next, edits: accounted ? reported : null, reading: edited.reading };
         }
 
@@ -1003,27 +929,22 @@ export class BrokenWrite extends Error {
  *
  * Obsidian can fail after the callback, and a failure there does not say
  * whether the bytes reached disk. The file does: if it reads as the callback
- * left it, the write landed, and what it filed stands (null). Otherwise the
- * file never changed, so claims about it describe a state that never
- * existed; left in the log they would be matched against whatever the next
- * scan happens to read, and they are withdrawn.
+ * left it, the write landed (null). Otherwise the file never changed.
  *
- * This is the one place that decides whether a write that filed a report
- * landed, and a withdrawal is how the rest of the plugin hears that it did not (see
- * {@link WriteReceipt.withdraw}). The file only answers for this write while
- * no other write of ours has touched it since, so writes to one file run here
- * one at a time, the reading back included.
+ * This is the one place that decides whether a write landed, and so whether
+ * what it left is handed on ({@link WriteChannel.landed}). The file only
+ * answers for this write while no other write of ours has touched it since,
+ * so writes to one file run here one at a time, the reading back included.
  */
 function processOrFail(
     app: App,
     file: TFile,
     channel: WriteChannel | undefined,
-    withdrawals: Array<() => void>,
     attempt: (content: string) => string,
     subject: () => string,
 ): Promise<WriteRefused | null> {
     const ahead = inLine.get(file);
-    const run = () => processAndSettle(app, file, channel, withdrawals, attempt, subject);
+    const run = () => processAndSettle(app, file, channel, attempt, subject);
     // Nothing ahead: start now, as a write did before there was a line.
     const mine = ahead ? ahead.then(run) : run();
     const settled = mine.then(() => undefined, () => undefined);
@@ -1041,7 +962,6 @@ async function processAndSettle(
     app: App,
     file: TFile,
     channel: WriteChannel | undefined,
-    withdrawals: Array<() => void>,
     attempt: (content: string) => string,
     subject: () => string,
 ): Promise<WriteRefused | null> {
@@ -1057,15 +977,11 @@ async function processAndSettle(
         return null;
     } catch (error) {
         // A development build's report of a caller's bug: seen, not absorbed.
-        if (error instanceof BrokenWrite) {
-            for (const withdraw of withdrawals) withdraw();
-            throw error;
-        }
+        if (error instanceof BrokenWrite) throw error;
         if (handedBack !== null && await readsAs(app, file, handedBack)) {
             logWarn(`[FileLines] ${file.path}: the write reported a failure, but the file reads as written; kept: ${String(error)}`);
             return null;
         }
-        for (const withdraw of withdrawals) withdraw();
         return writeFailed(channel, file.path, subject(), error);
     }
 }
@@ -1096,9 +1012,8 @@ export function fileGone(channel: WriteChannel | undefined, file: string, subjec
  * As with `processLines`, a failure that left the note in place reading as
  * asked is a write that landed.
  *
- * Nothing is filed: a note that did not exist has nothing in the ledger, and
- * a claim would say what the ledger's silence already says. So these writes
- * do not queue with the ones that file (see {@link processOrFail}).
+ * These writes do not queue with the ones to notes already there (see
+ * {@link processOrFail}): there was no note for another write to change.
  */
 export async function createFile(
     app: App,
@@ -1139,11 +1054,9 @@ async function readsAs(app: App, file: TFile, content: string): Promise<boolean>
  * that builds the file from scratch rather than editing its lines (a saved
  * template).
  *
- * Such a write cannot say which line became which, and a report that every
- * line went and new ones came would call any row in the new content new,
- * where the ladder could have told it by its text. So it claims nothing and
- * marks the chain of records broken instead (see {@link WriteSink}). A write
- * that changes nothing is no write, as in {@link processLines}.
+ * Such a write cannot say which line became which, so it lands with no
+ * report. A write that changes nothing is no write, as in
+ * {@link processLines}.
  */
 export async function replaceWhole(
     app: App,
@@ -1151,17 +1064,11 @@ export async function replaceWhole(
     channel: WriteChannel | undefined,
     content: string,
 ): Promise<WriteOutcome> {
-    const withdrawals: Array<() => void> = [];
     let landing: Landing | null = null;
-    const threw = await processOrFail(app, file, channel, withdrawals, (current) => {
-        for (const withdraw of withdrawals.splice(0)) withdraw();
+    const threw = await processOrFail(app, file, channel, (current) => {
         landing = null;
         if (current === content) return current;
-        const before = splitLines(current).lines;
-        const lines = splitLines(content).lines;
-        const sink = channel?.sink;
-        if (sink) withdrawals.push(sink(before, lines, null, null).withdraw);
-        landing = { before, lines, edits: null, reading: null };
+        landing = { before: splitLines(current).lines, lines: splitLines(content).lines, edits: null, reading: null };
         return content;
     }, () => file.path);
     if (threw) return threw;

@@ -215,7 +215,7 @@ const MADE = { written: true, refused: null, made: [], rows: new Map() } as cons
 function buildIndexHost(task: Task | undefined) {
     return {
         store: { getTask: () => task },
-        scanner: { waitForScan: vi.fn(async () => {}) },
+        scanner: { waitForScan: vi.fn(async () => {}), follow: () => null },
         repository: {
             insertLineAsFirstChild: vi.fn(async () => MADE),
             insertLineAfterTask: vi.fn(async () => MADE),
@@ -227,6 +227,7 @@ function buildIndexHost(task: Task | undefined) {
         refuseAfterDispose: proto.refuseAfterDispose,
 
         copyForWrite: proto.copyForWrite,
+        getTask: proto.getTask,
 
         reportRefusal: () => { /* the notice is not measured here */ },
     };

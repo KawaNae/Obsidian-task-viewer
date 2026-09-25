@@ -5,8 +5,7 @@ import { InlineTaskWriter } from './writers/InlineTaskWriter';
 import { FrontmatterWriter } from './writers/FrontmatterWriter';
 import { TaskCloner, type InPlaceCopyLines } from './TaskCloner';
 import type { PropertyOp } from './PropertyUpdatePlanner';
-import { WriteObserver } from './WriteObserver';
-import type { EditorLine, EditorSubtree, LineDraft, NamedRow, WriteAt, WriteOrigin, WriteOutcome, WriteSession } from '../../utils/FileLines';
+import type { EditorLine, EditorSubtree, LineDraft, NamedRow, WriteAt, WriteChannel, WriteOutcome, WriteSession } from '../../utils/FileLines';
 import type { PlacedLine } from './utils/Placement';
 import type { PlannedTarget } from './TaskRefs';
 import type { TaskOp } from './TaskOps';
@@ -21,23 +20,35 @@ export class TaskRepository {
     private frontmatterWriter: FrontmatterWriter;
     private cloner: TaskCloner;
     /**
-     * Where the writers say what they did to a file's lines. Handed out here
-     * and connected by the index once its scanner exists (see WriteObserver).
+     * Where the writers hand what they left and say what they gave up: the
+     * channel the index connected, or null before it has and once it has cut
+     * it (see `WriteChannels`).
      */
-    private readonly writes = new WriteObserver();
+    private channels: ((file: string) => WriteChannel) | null = null;
 
     constructor(
         private app: App,
     ) {
         this.fileOps = new FileOperations(app);
-        this.inlineWriter = new InlineTaskWriter(app, this.fileOps, this.writes);
-        this.frontmatterWriter = new FrontmatterWriter(app, this.fileOps, this.writes);
-        this.cloner = new TaskCloner(app, this.fileOps, this.writes);
+        const channelOf = (file: string) => this.channelOf(file);
+        this.inlineWriter = new InlineTaskWriter(app, this.fileOps, channelOf);
+        this.frontmatterWriter = new FrontmatterWriter(app, this.fileOps, channelOf);
+        this.cloner = new TaskCloner(app, this.fileOps, channelOf);
     }
 
-    /** @internal For the index to connect and, on dispose, to cut. */
-    getWriteObserver(): WriteObserver {
-        return this.writes;
+    /** @internal For the index to connect once its scanner exists. */
+    connect(channels: (file: string) => WriteChannel): void {
+        this.channels = channels;
+    }
+
+    /** @internal For the index to cut on dispose: a write after it lands nothing and tells nobody. */
+    disconnect(): void {
+        this.channels = null;
+    }
+
+    /** The channel for a write to `file`, or undefined while nothing is connected. */
+    channelOf(file: string): WriteChannel | undefined {
+        return this.channels?.(file);
     }
 
     // --- Inline Task Operations ---
@@ -112,8 +123,8 @@ export class TaskRepository {
         return this.inlineWriter.insertLineAsFirstChild(task, lineContent);
     }
 
-    async appendTaskToFile(filePath: string, content: string, origin: WriteOrigin): Promise<WriteAt> {
-        return this.inlineWriter.appendTaskToFile(filePath, content, origin);
+    async appendTaskToFile(filePath: string, content: string): Promise<WriteAt> {
+        return this.inlineWriter.appendTaskToFile(filePath, content);
     }
 
     // --- Heading and frontmatter writes ---

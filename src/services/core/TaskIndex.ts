@@ -93,9 +93,8 @@ export class TaskIndex {
         this.scanner = new TaskScanner(app, this.store, this.validator, settings);
         // Connected here rather than built into the repository, because the
         // scanner does not exist when the repository does — and cut on dispose,
-        // so a write that outlives this index files nothing (see WriteObserver).
-        this.repository.getWriteObserver().connect((path, origin) => ({
-            sink: this.scanner.writeSink(path, origin),
+        // so a write that outlives this index lands nothing in it (see WriteChannels).
+        this.repository.connect((path) => ({
             landed: landing => this.landed(path, landing),
             refused: refusal => this.reportRefusal(refusal),
         }));
@@ -213,15 +212,14 @@ export class TaskIndex {
     /**
      * A write of ours landed in `path`: the index reads what it left now,
      * rather than when the scan its `modify` starts gets there, so the next
-     * operation plans from the file as it is. Skipped for the file being
-     * dragged, as that file's scans are, and read when the drag ends.
+     * operation plans from the file as it is. Not read for the file being
+     * dragged, as that file's scans are not, and read when the drag ends; the
+     * write's report is kept all the same, to follow names across it.
      */
     private landed(path: string, landing: Landing): void {
-        if (this.draggingFilePath === path) {
-            this.skippedDuringDrag = path;
-            return;
-        }
-        if (this.scanner.landed(path, landing)) this.notify.schedule();
+        const dragging = this.draggingFilePath === path;
+        if (dragging) this.skippedDuringDrag = path;
+        if (this.scanner.landed(path, landing, !dragging)) this.notify.schedule();
     }
 
     /** Read the file back into the store, then notify. */
@@ -252,9 +250,8 @@ export class TaskIndex {
      * 終了時（null）には、その間に飛ばした変更を読み直す。ドラッグ確定の
      * 書き込みもここに含まれる: `DragSession.handleUp` は commit を待ってから
      * rAF でこのフラグを下ろすので、確定の modify は必ず飛ばされる側に入る。
-     * 読み直さないと ledger が前回のまま残り、そのタスクを握っていたハブや
-     * 選択が、後の無関係な再スキャンで外れる。外から書き換えられた場合は
-     * ストアの値自体が古いまま残る。
+     * 読み直さないと、ストアはドラッグ前の読みのまま残る。外から書き換え
+     * られた場合も同じである。
      */
     setDraggingFile(filePath: string | null): void {
         this.draggingFilePath = filePath;
@@ -307,7 +304,7 @@ export class TaskIndex {
         this.skippedDuringDrag = null;
         for (const { emitter, ref } of this.eventRefs) emitter.offref(ref);
         this.eventRefs = [];
-        this.repository.getWriteObserver().disconnect();
+        this.repository.disconnect();
 
         this.notify.dispose();
         this.apiWrites.dispose();
@@ -324,8 +321,22 @@ export class TaskIndex {
         return this.store.getTasks();
     }
 
+    /**
+     * The index's copy of the row `taskId` names, or undefined when it names
+     * none now.
+     *
+     * A name lasts one reading of its file. One given before a write of ours
+     * is followed across that write's report to the row's name now
+     * (`TaskScanner.follow`), so the copy that comes back may carry another
+     * name than the one asked for: whoever holds the name takes the new one
+     * from it. A name from before a change that was not ours names nothing.
+     * This is the one place a name is followed.
+     */
     getTask(taskId: string): Task | undefined {
-        return this.store.getTask(taskId);
+        const held = this.store.getTask(taskId);
+        if (held) return held;
+        const now = this.scanner.follow(taskId);
+        return now === null ? undefined : this.store.getTask(now);
     }
 
     /**
@@ -414,7 +425,7 @@ export class TaskIndex {
         }
 
         const id = taskId;
-        const known = this.store.getTask(id);
+        const known = this.getTask(id);
         return this.onRow(id, () => this.writeUpdate(id, updates, known));
     }
 
@@ -512,7 +523,7 @@ export class TaskIndex {
      * asked for, to say which row it was.
      */
     private copyForWrite(taskId: string, known: Task | undefined): Task | undefined {
-        const task = this.store.getTask(taskId);
+        const task = this.getTask(taskId);
         if (task) return task;
         logWarn(`[TaskIndex] write to a row the index no longer holds: id=${taskId}`);
         // A row the caller named but the store never held here: say which
@@ -592,7 +603,7 @@ export class TaskIndex {
      * writing anything. The delete menu asks before it decides what to offer.
      */
     assessFlowDelete(taskId: string): FlowDeleteAssessment {
-        const task = this.store.getTask(taskId);
+        const task = this.getTask(taskId);
         if (!task) return { outlook: { kind: 'nothing' }, descendantFlows: 0 };
         return this.commandExecutor.assessDeletion(task);
     }
@@ -607,7 +618,7 @@ export class TaskIndex {
      */
     async deleteTask(taskId: string, options: { fireFlow?: boolean } = {}): Promise<boolean> {
         if (this.refuseAfterDispose('deleteTask')) return false;
-        const known = this.store.getTask(taskId);
+        const known = this.getTask(taskId);
         return this.onRow(taskId, () => this.writeDelete(taskId, options, known));
     }
 
@@ -641,7 +652,7 @@ export class TaskIndex {
     /** @returns whether the copy was written. */
     async duplicateTask(taskId: string, options?: DuplicateOptions): Promise<boolean> {
         if (this.refuseAfterDispose('duplicateTask')) return false;
-        const known = this.store.getTask(taskId);
+        const known = this.getTask(taskId);
         return this.onRow(taskId, async () => {
             const task = this.copyForWrite(taskId, known);
             if (!task) return false;
@@ -705,7 +716,7 @@ export class TaskIndex {
 
             const outcome = heading
                 ? await this.repository.insertLineUnderHeading(filePath, taskLine, heading, 2)
-                : await this.repository.appendTaskToFile(filePath, taskLine, 'user');
+                : await this.repository.appendTaskToFile(filePath, taskLine);
             // Nothing written: no modify, so no scan to wait for.
             if (!outcome.written) return null;
 

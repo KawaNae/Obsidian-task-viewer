@@ -9,7 +9,7 @@ import type { TimerStorageUtils } from '../../../src/timer/TimerStorageUtils';
 import { DEFAULT_SETTINGS } from '../../../src/types';
 import type { FlowExecutor } from '../../../src/services/flow/FlowExecutor';
 import { splitLines } from '../../../src/utils/FileLines';
-import type { Refusal, WriteChannel, WriteOrigin } from '../../../src/utils/FileLines';
+import type { Refusal, WriteChannel } from '../../../src/utils/FileLines';
 
 export function makeFile(path: string): TFile {
     const file = new TFile();
@@ -174,8 +174,7 @@ export function vaultSession(contents: Map<string, string>) {
     };
     const executor = internals.commandExecutor;
     // The channel `TaskIndex` connected, taken before a test connects another.
-    const observer = index.getRepository().getWriteObserver();
-    const connected = (observer as unknown as { resolve: (file: string, origin: WriteOrigin) => WriteChannel }).resolve;
+    const connected = (index.getRepository() as unknown as { channels: (file: string) => WriteChannel }).channels;
 
     let n = 0;
     const storageUtils = {
@@ -200,7 +199,7 @@ export function vaultSession(contents: Map<string, string>) {
         /** The scanner's write ledger. */
         claims: (scanner as unknown as { claims: ClaimsView }).claims,
         /** The channel `TaskIndex` gave a write to `file`, even after a test has connected another. */
-        channelOf: (file: string, origin: WriteOrigin = 'user'): WriteChannel => connected(file, origin),
+        channelOf: (file: string): WriteChannel => connected(file),
         /** Tell `TaskIndex` a write was refused, as its own channel does. */
         reportRefusal: (refusal: Refusal): void => internals.reportRefusal(refusal),
         recorder: new TimerRecorder(app as never, plugin as never, storageUtils),

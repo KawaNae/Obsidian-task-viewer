@@ -98,6 +98,8 @@ describe('a subtree written in from outside before the update', () => {
     // N1 the lines the update left are taken in as the file's next reading
     // (`TaskIndex.landed`), the child with them, as a scan of the file would
     // take it in: the copy shows it, and the delete that follows takes it.
+    // The name from before the outside edit does not follow the row across
+    // it (only our own writes are followed): the copy is taken anew.
     const ROW = '- [ ] A @2026-09-21 ^keep';
 
     it('is read with the update, and the delete that follows takes it with the row', async () => {
@@ -108,9 +110,11 @@ describe('a subtree written in from outside before the update', () => {
 
         expect(await session.index.updateTask(id, { statusChar: 'x' })).toBe(true);
         expect(contents.get(FILE)).toBe(['# note', '- [x] A @2026-09-21 ^keep', '\t- [ ] 外から足した子', '- [ ] Z', ''].join('\n'));
-        expect(session.index.getTask(id)?.subtreeLines).toEqual(['- [x] A @2026-09-21 ^keep', '\t- [ ] 外から足した子']);
+        expect(session.index.getTask(id)).toBeUndefined();
+        const now = idOf(session, 'A');
+        expect(session.index.getTask(now)?.subtreeLines).toEqual(['- [x] A @2026-09-21 ^keep', '\t- [ ] 外から足した子']);
 
-        expect(await session.index.deleteTask(id)).toBe(true);
+        expect(await session.index.deleteTask(now)).toBe(true);
         expect(contents.get(FILE)).toBe(['# note', '- [ ] Z', ''].join('\n'));
     });
 });

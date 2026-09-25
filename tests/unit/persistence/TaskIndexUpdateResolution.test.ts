@@ -29,7 +29,7 @@ function buildHost(task: Task, written = true) {
         },
         settleFire: proto.settleFire,
         writeCompleting: proto.writeCompleting,
-        scanner: { requestScan: vi.fn(async () => {}) },
+        scanner: { requestScan: vi.fn(async () => {}), follow: () => null },
         app: { vault: { getAbstractFileByPath: () => null } },
         repository: {
             updateTaskInFile: vi.fn(async () => ({ written, refused: null })),
@@ -44,6 +44,7 @@ function buildHost(task: Task, written = true) {
         refuseAfterDispose: proto.refuseAfterDispose,
 
         copyForWrite: proto.copyForWrite,
+        getTask: proto.getTask,
 
         reportRefusal: () => { /* the notice is not measured here */ },
     };
