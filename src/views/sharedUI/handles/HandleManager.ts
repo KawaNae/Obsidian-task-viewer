@@ -34,8 +34,17 @@ export class HandleManager implements SelectionHost {
 
     /**
      * Gets the currently selected task ID.
+     *
+     * A name lasts one reading of its file. One given before a write of ours
+     * is followed to the row's name now (`getTask`), and the selection takes
+     * it over; one from before a change that was not ours names nothing, and
+     * is kept as it is, selecting no card.
      */
     getSelectedTaskId(): string | null {
+        const held = this.selectedTaskId;
+        if (held === null) return null;
+        const now = this.deps.getTask(held)?.id;
+        if (now !== undefined && now !== held) this.selectedTaskId = now;
         return this.selectedTaskId;
     }
 
@@ -61,7 +70,7 @@ export class HandleManager implements SelectionHost {
      * selection state on fresh DOM.
      */
     reapplySelectionClass(): void {
-        const taskId = this.selectedTaskId;
+        const taskId = this.getSelectedTaskId();
         const taskCards = this.getMainTaskCards();
         // Selection is a pure class toggle. The z-index overlay lives in CSS
         // (.task-card.is-selected → --z-task-card-selected !important), so the

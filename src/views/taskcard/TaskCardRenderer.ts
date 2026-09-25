@@ -44,6 +44,7 @@ import { TaskLinkInteractionManager } from './TaskLinkInteractionManager';
 import { bindTapIntents } from '../../interaction/tap/TapIntent';
 import type { TaskCardLinkRuntime } from './types';
 import { getEffectiveMask } from '../../services/data/EffectiveProperties';
+import { TaskIdGenerator } from '../../services/display/TaskIdGenerator';
 
 export function computeContentSignature(
     task: DisplayTask,
@@ -69,6 +70,10 @@ export function computeContentSignature(
     // (html-to-image's SVG foreignObject export) reject XML-invalid chars
     // like \x00, so the serialized form must stay XML-safe.
     return JSON.stringify([
+        // The card's handlers hold the task's name, which lasts one reading
+        // of its file: a card kept across a reading would act on a name the
+        // row no longer has (`CheckboxWiring`).
+        task.id,
         task.statusChar,
         task.content,
         task.file,
@@ -159,6 +164,33 @@ export class TaskCardRenderer extends Component {
         this.childSectionRenderer.setChildMenuCallback(cb);
     }
 
+    /**
+     * Whether the card `cardInstanceId`, drawing the task `taskId`, was left
+     * expanded. A key ends in the name the task had when it was expanded, and
+     * a name lasts one reading of its file: one given before a write of ours
+     * is followed to the row's name now (`getTask`), and the key is taken
+     * over by this card. One from before a change that was not ours names
+     * nothing, and the card is drawn collapsed.
+     */
+    private isExpanded(cardInstanceId: string, taskId: string): boolean {
+        if (this.expandedTaskIds.has(cardInstanceId)) return true;
+        if (!cardInstanceId.endsWith(taskId)) return false;
+        const scope = cardInstanceId.slice(0, cardInstanceId.length - taskId.length);
+        const readService = this.childItemBuilder.getReadService();
+        for (const key of this.expandedTaskIds) {
+            if (!key.startsWith(scope)) continue;
+            const held = key.slice(scope.length);
+            const segment = TaskIdGenerator.parseSegmentId(held);
+            const base = readService.getTask(segment ? segment.baseId : held)?.id;
+            const now = base && segment ? TaskIdGenerator.makeSegmentId(base, segment.segmentDate) : base;
+            if (now !== taskId) continue;
+            this.expandedTaskIds.delete(key);
+            this.expandedTaskIds.add(cardInstanceId);
+            return true;
+        }
+        return false;
+    }
+
     setDetailCallback(cb: (task: Task) => void): void {
         this.onDetailClick = cb;
     }
@@ -197,7 +229,7 @@ export class TaskCardRenderer extends Component {
 
         // Compute content signature for render skip
         const topRightResolved = this.resolveTopRightString(task, settings, topRight);
-        const isExpanded = this.expandedTaskIds.has(cardInstanceId);
+        const isExpanded = this.isExpanded(cardInstanceId, task.id);
         const overdueLevel = getOverdueLevel(
             task, settings.startHour, settings.statusDefinitions,
             this.childItemBuilder.getReadService(),
