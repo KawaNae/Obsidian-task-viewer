@@ -9,7 +9,7 @@ import { IdentityLedger, type LedgerEntry } from './identity/IdentityLedger';
 import { HintLog } from './identity/IdentityHints';
 import { matchFile, matchWithoutRepeatedIds } from './identity/IdentityMatcher';
 import { WriteClaims, type ClaimResult } from './identity/WriteClaims';
-import { contentKeyOf } from './identity/ContentKey';
+import { contentKeyOf } from './ContentKey';
 import { applyIdentity, assertDistinctRuntimeIds, assertNoProvisionalIds, assertUniqueProvisionalIds } from './identity/IdentityApplier';
 import { splitLines, type Located, type TaskRef, type WriteOrigin, type WriteSink } from '../../utils/FileLines';
 import { logDebug, logError, logInfo } from '../../log/log';

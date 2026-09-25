@@ -3,7 +3,7 @@ import { WriteClaims, type ClaimBase } from '../../../../../src/services/core/id
 import { FileParsePipeline } from '../../../../../src/services/parsing/FileParsePipeline';
 import { DEFAULT_SETTINGS } from '../../../../../src/types';
 import type { LineEdit } from '../../../../../src/utils/FileLines';
-import { contentKeyOf } from '../../../../../src/services/core/identity/ContentKey';
+import { contentKeyOf } from '../../../../../src/services/core/ContentKey';
 
 /**
  * What a write reports about lines, turned into what the next scan is told
