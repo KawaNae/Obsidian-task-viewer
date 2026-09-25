@@ -19,7 +19,7 @@ const pad = (n: number) => String(n).padStart(2, '0');
 const dateOf = (d: Date) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 const timeOf = (d: Date) => `${pad(d.getHours())}:${pad(d.getMinutes())}`;
 
-function makeHarness(effectiveEnd: Date) {
+function makeHarness(effectiveEnd: Date, written = true) {
     const updates: { id: string; updates: Record<string, unknown> }[] = [];
 
     const parent = makeTask({ id: PARENT_ID, file: 'notes/a.md', content: 'parent' });
@@ -29,7 +29,7 @@ function makeHarness(effectiveEnd: Date) {
         getTask: (id: string) => (id === CHILD_ID ? child : id === PARENT_ID ? parent : undefined),
         getTaskByAnchor: (file: string, anchor: string) => [parent, child].find(t => t.file === file && t.anchor === anchor),
         getTasks: () => [parent, child],
-        updateTask: async (id: string, u: Record<string, unknown>) => { updates.push({ id, updates: u }); },
+        updateTask: async (id: string, u: Record<string, unknown>) => { updates.push({ id, updates: u }); return written; },
         waitForScan: async () => { /* unused */ },
     };
 
@@ -100,6 +100,14 @@ describe('extendRunningSession', () => {
         expect(h.updates[0].updates).toHaveProperty('endDate');
         expect(h.updates[0].updates).toHaveProperty('endTime');
         expect(floor).toBeGreaterThan(Date.now());
+    });
+
+    it('書き足しが書けなければ門を進めない（次の見直しでまた書く）', async () => {
+        const h = makeHarness(new Date(Date.now() - 60_000), false);
+        const floor = await h.recorder.extendRunningSession(runningTimer());
+
+        expect(h.updates).toHaveLength(1);
+        expect(floor).toBeUndefined();
     });
 
     it('書き足す end は現在より未来', async () => {
