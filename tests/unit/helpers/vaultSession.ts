@@ -80,12 +80,6 @@ function computeCache(content: string): VaultCache {
 /** The index's flow executor, whose `planFire` a test wraps to count fires. */
 export type FlowExecutorView = FlowExecutor;
 
-/** What a test reads of the scanner's write ledger. */
-export interface ClaimsView {
-    lastWrite(path: string): { rows: readonly unknown[] | null } | undefined;
-    claim: (...args: unknown[]) => unknown;
-}
-
 /** The scanner a `TaskIndex` built, for a test that makes its own index. */
 export function scannerOf(index: TaskIndex): TaskScanner {
     return (index as unknown as { scanner: TaskScanner }).scanner;
@@ -104,7 +98,7 @@ export function scannerOf(index: TaskIndex): TaskScanner {
  * (`TaskScanner.queueScan`).
  *
  * A second `vaultSession` over the same `contents` is a reload: a new index,
- * a new ledger, new runtime IDs.
+ * a new session of readings, new names.
  */
 export function vaultSession(contents: Map<string, string>) {
     let scanner: TaskScanner | undefined;
@@ -196,8 +190,6 @@ export function vaultSession(contents: Map<string, string>) {
         executor,
         /** The scanner's private scan entry, which a test wraps to see its answers. */
         scannerPrivates: scanner as unknown as { queueScan: (file: TFile) => Promise<boolean> },
-        /** The scanner's write ledger. */
-        claims: (scanner as unknown as { claims: ClaimsView }).claims,
         /** The channel `TaskIndex` gave a write to `file`, even after a test has connected another. */
         channelOf: (file: string): WriteChannel => connected(file),
         /** Tell `TaskIndex` a write was refused, as its own channel does. */

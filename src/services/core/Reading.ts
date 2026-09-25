@@ -2,9 +2,10 @@
  * Which reading of a file a name was given in: the index's session and the
  * reading's number among that file's readings.
  *
- * A file's readings are numbered as they are committed, one after another,
- * and a content read again that the last reading already read is not
- * committed, so it takes no number. Two readings of one content — a write of
+ * A file's readings are numbered one after another as a scan reads the file
+ * or a write of ours leaves it — the one to the file being dragged too, which
+ * is not committed until the drag ends — and a content read again that the
+ * reading with the last number read takes no new number. Two readings of one content — a write of
  * ours that brought the file back to what it was — are two numbers, where the
  * content's key could not tell them apart. The session keeps the numbers of
  * one index from meeting those of the next (a reload starts again from 1).
