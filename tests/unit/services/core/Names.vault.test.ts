@@ -122,10 +122,12 @@ describe('a name given before a write of ours', () => {
         const a = idOf(session, 'A');
         const b = idOf(session, 'B');
         session.holdScans();
-        // Below both rows: the next write is still made, on the file as it is now.
         contents.set(FILE, ['# note', '- [ ] A', '- [ ] B', 'メモ', ''].join('\n'));
 
-        expect(await session.index.updateTask(a, { statusChar: 'x' })).toBe(true);
+        // A write that names no row is made on the file as it is now. (One
+        // that names a row read before the change is not: `NamedRow.read`.)
+        expect((await session.index.getRepository().setFrontmatterKeys(FILE, { color: 'red' })).written).toBe(true);
+        expect(session.index.getTask(a)).toBeUndefined();
         expect(session.index.getTask(b)).toBeUndefined();
     });
 });

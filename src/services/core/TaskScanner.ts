@@ -171,6 +171,16 @@ export class TaskScanner {
     }
 
     /**
+     * Where line `line` of content `from` of `path` stands in content `now`,
+     * when only writes of ours led from one to the other (`WriteLinks.follow`):
+     * what a write asks of a row read in content the file has moved on from
+     * (`WriteChannel.follow`).
+     */
+    followLine(path: string, from: ContentKey, line: number, now: ContentKey): number | null {
+        return this.links.follow(path, from, line, now);
+    }
+
+    /**
      * The name the row `name` names has now, when a write of ours moved on
      * from the content that name was given in: followed across the writes'
      * reports (`WriteLinks`) to the content the index last read. Null when

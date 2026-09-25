@@ -5,6 +5,7 @@ import { Outline, type OutlineReading } from '../services/parsing/utils/Outline'
 import { checkWrite, type PutBlock, type WrittenLine } from '../services/parsing/utils/OutlineCheck';
 import { isOnRecord, readsAsPlanned, readsAsRecorded, subtreeAt, type OnRecord, type RowBasis } from '../services/persistence/RowBasis';
 import { Block, type PlacedLine, type Spot } from '../services/persistence/utils/Placement';
+import { contentKeyOf, type ContentKey } from '../services/core/ContentKey';
 
 /**
  * A file's line terminator. Obsidian writes LF, but notes arrive with CRLF
@@ -405,6 +406,13 @@ export interface WriteChannel {
      */
     landed?(landing: Landing): void;
     refused(refusal: Refusal): void;
+    /**
+     * Where line `line` of content `from` stands in content `now`, the one the
+     * write was handed, when only writes of ours came between the two: null
+     * when anything else did, or one of ours took the line away. Absent where
+     * nobody keeps our writes (see `WriteLinks`).
+     */
+    follow?(from: ContentKey, line: number, now: ContentKey): number | null;
 }
 
 /**
@@ -444,11 +452,24 @@ export interface Landing {
  * what says whether the lines handed to the write are still that content
  * where it matters: a line moved or rewritten since reads otherwise there,
  * and nothing is written. Nothing looks for the row anywhere else.
+ *
+ * The basis cannot tell two rows that read the same apart: an edit from
+ * outside can move a row's twin onto its line. So a row the index read names
+ * the content it read (`read`), and its line counts only in that content, or
+ * in one our own writes led it to, across which the line is carried
+ * ({@link WriteChannel.follow}). In any other content the row is not written,
+ * however its line reads, until the index has read the file again.
  */
 export interface NamedRow {
     line: number;
     subject: string;
     basis: RowBasis | OnRecord;
+    /**
+     * The key of the content `line` is a coordinate in; absent for a row
+     * whose line is taken on its basis alone (a timer's insert until F9, the
+     * API's ID).
+     */
+    read?: ContentKey;
 }
 
 /**
@@ -679,6 +700,10 @@ function subjectOf(target: NamedRow | EditorLine): string {
  * the file. `asked` hears each subject as the write asks for its row, for a
  * caller that has to name the write after it threw.
  *
+ * A row that names the content it was read in (`NamedRow.read`) is taken in
+ * these lines only if they are that content, or `subjects.follow` carries its
+ * line from that content to these (the write's channel, `WriteChannel.follow`).
+ *
  * `lines` is not changed: the draft works on a copy.
  */
 export function editLines(
@@ -686,7 +711,11 @@ export function editLines(
     lines: readonly string[],
     eol: Eol,
     edit: (draft: LineDraft, eol: Eol, session: WriteSession) => boolean,
-    subjects: { about?: string; asked?: (subject: string) => void } = {},
+    subjects: {
+        about?: string;
+        asked?: (subject: string) => void;
+        follow?: (from: ContentKey, line: number, now: ContentKey) => number | null;
+    } = {},
 ): EditedLines {
     let refused: Refusal | null = null;
     let lastSubject = '';
@@ -724,12 +753,25 @@ export function editLines(
         }
         return now;
     };
+    // The key of the lines as handed in, made once and only if a row asks.
+    let handed: ContentKey | null = null;
     const answer = (target: NamedRow | EditorLine): number | RefusalReason => {
         // A coordinate in some content, good only while the lines there
         // still read as the write was planned from: the index's copy of
         // the row, or what the editor showed there. A line past the end
         // reads as nothing.
-        const { line } = target;
+        let { line } = target;
+        if ('basis' in target && target.read !== undefined) {
+            // A row the index read counts only in the content it was read
+            // in, or carried across our own writes from there: in any other,
+            // a line reading as its basis may be its twin.
+            handed ??= contentKeyOf(before);
+            if (target.read !== handed) {
+                const carried = subjects.follow?.(target.read, line, handed) ?? null;
+                if (carried === null) return { kind: 'changed' };
+                line = carried;
+            }
+        }
         if (!Number.isInteger(line) || line < 0 || line >= before.length) return { kind: 'changed' };
         let holds: boolean;
         if (!('basis' in target)) {
@@ -886,7 +928,11 @@ export async function processLines(
         lastSubject = '';
 
         const { lines, eol, bom } = splitLines(content);
-        const edited = editLines(file.path, lines, eol, edit, { about, asked: (said) => { lastSubject = said; } });
+        const edited = editLines(file.path, lines, eol, edit, {
+            about,
+            asked: (said) => { lastSubject = said; },
+            follow: channel?.follow ? (from, line, now) => channel.follow!(from, line, now) : undefined,
+        });
         if (!edited.written) {
             refused = edited.refused;
             return content;
