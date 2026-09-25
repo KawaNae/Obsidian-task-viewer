@@ -3,7 +3,6 @@ import { TimerCreator } from '../../../src/timer/TimerCreator';
 import { TimerLifecycle } from '../../../src/timer/TimerLifecycle';
 import { IDLE_TIMER_ID, type TimerContext } from '../../../src/timer/TimerContext';
 import type { TimerInstance } from '../../../src/timer/TimerInstance';
-import type { TimerStorageUtils } from '../../../src/timer/TimerStorageUtils';
 
 /**
  * タイマーの同一性は **タスクから独立**していなければならない。
@@ -49,10 +48,6 @@ function makeCtx(): TimerContext & { renders: number } {
     return ctx;
 }
 
-const storageUtils = {
-    isAutoManagedTimerTargetId: () => false,
-} as unknown as TimerStorageUtils;
-
 const TASK_ID = 'tv-inline:notes/a.md:ln:3';
 const RENAMED_TASK_ID = 'tv-inline:notes/renamed.md:ln:3';
 
@@ -63,7 +58,7 @@ describe('timer identity', () => {
 
     beforeEach(() => {
         ctx = makeCtx();
-        creator = new TimerCreator(ctx, storageUtils);
+        creator = new TimerCreator(ctx);
         lifecycle = new TimerLifecycle(ctx, creator);
     });
 
@@ -117,6 +112,8 @@ describe('timer identity', () => {
         const timer = creator.createTimer({
             taskId: TASK_ID, taskName: 'A', timerType: 'countup', timerTargetId: 'tv-timer-1',
         });
+        // 対象の錨は開始の書き込みが書けてから決まる。
+        timer.timerTargetId = 'tv-timer-1';
         ctx.timers.set(timer.id, timer);
 
         expect(lifecycle.hasActiveTimerForTask('tv-inline:other.md:ln:9', 'tv-timer-1')).toBe(true);

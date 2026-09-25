@@ -77,7 +77,7 @@ function makeHarness(options: Options = {}) {
     } as unknown as TaskViewerPlugin;
 
     const storageUtils = { generateTimerTargetId: () => 'tv-timer-2' } as unknown as TimerStorageUtils;
-    const recorder = new TimerRecorder({} as App, plugin, storageUtils);
+    const recorder = new TimerRecorder({} as App, plugin, storageUtils, () => { /* unused */ }, () => []);
 
     return { recorder, inserted, updates };
 }
@@ -103,6 +103,8 @@ function makeTimer(overrides: Partial<TimerInstance> = {}): TimerInstance {
         parserId: 'tv-inline',
         taskColor: '',
         pendingRecord: null,
+        opening: null,
+        ownedAnchors: [],
         timerType: 'countup',
         elapsedTime: 600,
         ...overrides,

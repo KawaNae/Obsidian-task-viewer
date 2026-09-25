@@ -49,7 +49,8 @@ function makeHarness(effectiveEnd: Date) {
 
     const recorder = new TimerRecorder(
         {} as App, plugin,
-        { generateTimerTargetId: () => 'tv-timer-2' } as unknown as TimerStorageUtils
+        { generateTimerTargetId: () => 'tv-timer-2' } as unknown as TimerStorageUtils,
+        () => { /* unused */ }, () => [],
     );
 
     return { recorder, updates };

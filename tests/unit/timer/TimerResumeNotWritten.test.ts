@@ -5,7 +5,6 @@ import { TimerLifecycle } from '../../../src/timer/TimerLifecycle';
 import { TimerContentBinding } from '../../../src/timer/TimerContentBinding';
 import type { TimerContext } from '../../../src/timer/TimerContext';
 import type { CountupTimer, TimerInstance, TimerRecordMode } from '../../../src/timer/TimerInstance';
-import type { TimerStorageUtils } from '../../../src/timer/TimerStorageUtils';
 import { vaultSession, type VaultSession } from '../helpers/vaultSession';
 
 /**
@@ -40,7 +39,7 @@ function lifecycleOver(s: VaultSession) {
     } as unknown as TimerContext).flush(timer);
     (ctx as unknown as { flushTimerContent: (id: string) => Promise<boolean> }).flushTimerContent =
         async (id: string) => flushName(ctx.timers.get(id)!);
-    const lifecycle = new TimerLifecycle(ctx, new TimerCreator(ctx, { isAutoManagedTimerTargetId: () => false } as unknown as TimerStorageUtils));
+    const lifecycle = new TimerLifecycle(ctx, new TimerCreator(ctx));
     return { ctx, lifecycle, flushName };
 }
 

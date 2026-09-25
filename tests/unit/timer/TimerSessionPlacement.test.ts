@@ -13,7 +13,7 @@ import { makeTask } from '../helpers/makeTask';
  *
  * ここで押さえるのは 3 点:
  *   - 再開は尻尾の隣に書き、`^id` を新しい行へ引き渡す（尻尾は常に 1 個）
- *   - 引き渡すのは自動生成 id だけ。ユーザーの blockId は触らない
+ *   - 外すのは自分の書き込みで付けた id だけ。ユーザーの blockId は触らない
  *   - 尻尾を見失っても記録は落とさない（子として書くフォールバック）
  */
 
@@ -101,9 +101,8 @@ function makeHarness(options: { tail?: Task | undefined; siblingFails?: boolean 
 
     const storageUtils = {
         generateTimerTargetId: () => NEW_BLOCK_ID,
-        isAutoManagedTimerTargetId: (id: string) => id.startsWith('tv-t-'),
     } as unknown as TimerStorageUtils;
-    const recorder = new TimerRecorder({} as App, plugin, storageUtils, () => { /* unused */ });
+    const recorder = new TimerRecorder({} as App, plugin, storageUtils, () => { /* unused */ }, () => []);
 
     return { recorder, siblingInserts, childInserts, updates, deletes };
 }
@@ -131,6 +130,8 @@ function makeTimer(overrides: Partial<TimerInstance> = {}): TimerInstance {
         timerType: 'countup',
         elapsedTime: 0,
         tailRecordBlockId: 'tv-t-old5678',
+        // 尻尾の行の錨は、このタイマーが書いた行に付けたもの。
+        ownedAnchors: ['tv-t-old5678'],
         opening: null,
         ...overrides,
     } as TimerInstance;
@@ -246,6 +247,7 @@ describe('discardRunningPlaceholder: ✕ leaves no half-open line behind', () =>
             runState: 'running',
             isRunning: true,
             tailRecordBlockId: NEW_BLOCK_ID,
+            ownedAnchors: [NEW_BLOCK_ID],
         });
     }
 
@@ -258,7 +260,6 @@ describe('discardRunningPlaceholder: ✕ leaves no half-open line behind', () =>
         await h.recorder.discardRunningPlaceholder(timer);
 
         expect(h.deletes).toEqual([NEW_SESSION_ID]);
-        expect(timer.tailRecordBlockId).toBeUndefined();
     });
 
     it('keeps a line the user has since edited, and only takes the marker off', async () => {
@@ -286,15 +287,14 @@ describe('discardRunningPlaceholder: ✕ leaves no half-open line behind', () =>
     });
 });
 
-describe('clearTailRecordId: closing the widget leaves no auto ID in the note', () => {
-    it('strips the auto ID off the tail record', async () => {
+describe('releaseAnchors: closing the widget takes off the ids its writes put on', () => {
+    it('takes the id off the tail record', async () => {
         const h = makeHarness();
         const timer = makeTimer();
 
-        await h.recorder.clearTailRecordId(timer);
+        await h.recorder.releaseAnchors(timer);
 
         expect(h.updates).toEqual([{ id: TAIL_ID, updates: { blockId: undefined } }]);
-        expect(timer.tailRecordBlockId).toBeUndefined();
     });
 
     it('keeps a hand-written block ID', async () => {
@@ -305,7 +305,7 @@ describe('clearTailRecordId: closing the widget leaves no auto ID in the note', 
             }),
         });
 
-        await manual.recorder.clearTailRecordId(makeTimer({ tailRecordBlockId: 'my-reference' }));
+        await manual.recorder.releaseAnchors(makeTimer({ tailRecordBlockId: 'my-reference' }));
 
         expect(manual.updates).toHaveLength(0);
     });
