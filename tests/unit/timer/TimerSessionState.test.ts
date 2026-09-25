@@ -92,6 +92,7 @@ function makeCountup(overrides: Partial<CountupTimer> = {}): CountupTimer {
         recordMode: 'child',
         parserId: 'tv-inline',
         taskColor: '',
+        pendingRecord: null,
         timerType: 'countup',
         elapsedTime: 60,
         ...overrides,
@@ -108,7 +109,7 @@ describe('session state persistence', () => {
 
         const payload = JSON.parse(store.get(keyFor(STORAGE_VERSION))!);
         expect(payload.version).toBe(STORAGE_VERSION);
-        expect(STORAGE_VERSION).toBe(6);
+        expect(STORAGE_VERSION).toBe(7);
     });
 
     it('round-trips runState, sessionCount and recordedElapsedTime', () => {
@@ -167,44 +168,18 @@ describe('session state persistence', () => {
         expect(intervals).toHaveLength(1);
     });
 
-    it('defaults missing session fields when reading older payloads', () => {
-        const legacy = {
-            version: STORAGE_VERSION,
-            ownerDeviceId: DEVICE,
-            vaultFingerprint: VAULT,
-            updatedAtMs: Date.now(),
-            timers: [{
-                id: 'timer-9',
-                taskId: 'tv-inline:notes/a.md:ln:3',
-                taskName: 'A',
-                taskOriginalText: '- [ ] A',
-                taskFile: 'notes/a.md',
-                startTimeMs: 0,
-                pausedElapsedTime: 30,
-                isRunning: false,
-                isExpanded: true,
-                timerType: 'countup',
-                recordMode: 'child',
-                parserId: 'tv-inline',
-                elapsedTime: 30,
-            }],
-        };
-        store.set(keyFor(STORAGE_VERSION), JSON.stringify(legacy));
+    // 'defaults missing session fields when reading older payloads' を削除:
+    // pendingRecord を持たない保存は厳密な形チェックで読まれなくなり、その
+    // 「読まれない」こと自体は TimerPendingRecord.test.ts の
+    // 'a saved timer without pendingRecord is not read' が既に固定している。
 
-        const b = build();
-        b.persistence.restoreTimersFromStorage();
-        const restored = b.ctx.timers.get('timer-9')!;
-
-        expect(restored.runState).toBe('running');
-        expect(restored.sessionCount).toBe(0);
-        expect(restored.recordedElapsedTime).toBe(0);
-    });
-
-    it('drops the obsolete v5 key on restore', () => {
+    it('drops the obsolete v5 and v6 keys on restore', () => {
         store.set(keyFor(5), '{"version":5}');
+        store.set(keyFor(6), '{"version":6}');
         const b = build();
         b.persistence.restoreTimersFromStorage();
         expect(store.has(keyFor(5))).toBe(false);
+        expect(store.has(keyFor(6))).toBe(false);
     });
 
     it('holds the invariant: suspended implies the ticker is stopped', () => {

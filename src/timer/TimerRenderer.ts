@@ -143,7 +143,9 @@ export class TimerRenderer {
                 fileSpan.setText(fileName);
             }
 
-            if (timer.runState === 'suspended') {
+            if (timer.pendingRecord) {
+                header.createSpan({ cls: 'timer-widget__state-badge', text: t('timer.unrecorded') });
+            } else if (timer.runState === 'suspended') {
                 header.createSpan({ cls: 'timer-widget__state-badge', text: t('timer.suspended') });
             }
 
@@ -193,17 +195,17 @@ export class TimerRenderer {
             setIcon(closeBtn, 'x');
             closeBtn.onclick = () => {
                 // 中断中は記録済み＝失うものが無いので確認なしで閉じる。
-                // 走行中は 2-tap 確認（走行分は記録せず捨てる）。記録を書けずに
-                // 止まったまま残った走行も、計測を持つので走行中と同じに扱う。
-                if (timer.runState === 'suspended'
-                    || (!timer.isRunning && !this.lifecycle.holdsUnrecordedRun(timer))) {
+                // 走行中は 2-tap 確認（走行分は記録せず捨てる）。記録待ちも
+                // 計測を持つので走行中と同じに扱う。
+                const holdsRun = timer.pendingRecord !== null;
+                if (timer.runState === 'suspended' || (!timer.isRunning && !holdsRun)) {
                     this.clearCloseConfirmTimer(timerId);
                     this.lifecycle.closeTimer(timerId);
                     return;
                 }
                 // Idle timers close without confirmation, but ignore accidental clicks
                 // right after the idle timer spawns (e.g. double-clicking a previous close)
-                if (timer.phase === 'idle' && !this.lifecycle.holdsUnrecordedRun(timer)) {
+                if (timer.phase === 'idle' && !holdsRun) {
                     if (Date.now() - timer.startTimeMs < 500) return;
                     this.clearCloseConfirmTimer(timerId);
                     this.lifecycle.closeTimer(timerId);
@@ -486,18 +488,14 @@ export class TimerRenderer {
      *
      *   未開始   … [▶ 開始]（まだセッションが 1 つも無い状態。出口ではない）
      *   走行中   … [⏸ 中断][■ 終了]
+     *   記録待ち … [⏸ 中断][■ 終了]（固定した記録を書き直す。押した方が行き先）
      *   中断中   … [▶ 再開][■ 終了]
      *
      * interval は現行の Pause(prepare)/Stop を維持するので、ここには来ない。
      */
     private renderSessionControls(container: HTMLElement, timer: CountupTimer | CountdownTimer): void {
-        const neverStarted = !timer.isRunning
-            && timer.runState === 'running'
-            && timer.sessionCount === 0
-            && timer.elapsedTime === 0
-            // 1 秒未満で止めて記録を書けなかった走行は、経過が 0 でも未開始ではない。
-            // 「開始」を出すと、止めた時刻を持ったまま次の走行が始まる。
-            && timer.stoppedAtMs === undefined;
+        // 走行の側で止まっているのは、まだ始めていないときと記録待ちだけ。
+        const neverStarted = !timer.isRunning && timer.runState === 'running' && !timer.pendingRecord;
 
         if (neverStarted) {
             this.addWidgetButton(container, 'primary', 'play', t('timer.start'), () => {
@@ -548,6 +546,14 @@ export class TimerRenderer {
     }
 
     private renderIntervalControls(container: HTMLElement, timer: IntervalTimer): void {
+        // 記録待ち: 固定した記録を ■ で書き直す。続ける区間は無いので ▶ は出さない。
+        if (timer.pendingRecord) {
+            this.addWidgetButton(container, 'secondary', 'square', t('timer.stop'), () => {
+                void this.lifecycle.stopIntervalTimer(timer);
+            });
+            return;
+        }
+
         if (timer.phase === 'idle') {
             this.addWidgetButton(container, 'primary', 'play', t('timer.start'), () => {
                 const segment = getCurrentSegment(timer);
@@ -576,29 +582,12 @@ export class TimerRenderer {
             return;
         }
 
-        if (timer.isRunning) {
-            this.addWidgetButton(container, 'secondary', 'pause', t('timer.pause'), () => {
-                this.lifecycle.pauseIntervalToPrepare(timer);
-                AudioUtils.playPauseSound();
-                this.render();
-                this.ctx.persistTimersToStorage();
-            });
-            return;
-        }
-
-        // 区間中（work / break）で走っていない状態。UI 操作では作れない
-        // （一時停止は必ず prepare に入る）が、停止の記録待ちのまま Obsidian が
-        // 落ちると localStorage にこの形が残り、復元でここに来る。操作列が無いと
-        // 記録も終了もできなくなるので、prepare と同じ 2 つを出す。自動終了の
-        // 記録を書けずに残った走行は、続ける区間が無いので ■ だけにする。再開すると
-        // 次の tick ですぐ満了し、押した時刻で終わる記録になる。
-        if (timer.segmentTimeRemaining > 0) {
-            this.addWidgetButton(container, 'primary', 'play', t('timer.resume'), () => {
-                this.lifecycle.resumeTimer(timer);
-            });
-        }
-        this.addWidgetButton(container, 'secondary', 'square', t('timer.stop'), () => {
-            void this.lifecycle.stopIntervalTimer(timer);
+        // 区間中（work / break）は走っている。止まるのは一時停止（prepare）か記録待ちだけ。
+        this.addWidgetButton(container, 'secondary', 'pause', t('timer.pause'), () => {
+            this.lifecycle.pauseIntervalToPrepare(timer);
+            AudioUtils.playPauseSound();
+            this.render();
+            this.ctx.persistTimersToStorage();
         });
     }
 

@@ -8,13 +8,13 @@ import {
     isTimerTargetId
 } from '../utils/TimerTargetIdUtils';
 /**
- * v6: runState / sessionCount / recordedElapsedTime を追加（セッション状態機械）。
- * ストレージキーにバージョンが入るので、v5 の状態は読まれない。restore 時に
- * 旧キーを掃除する（放置すると localStorage に残り続ける）。
+ * v7: 記録待ち（pendingRecord）を足し、対象と尻尾を錨だけで引く形にした。
+ * ストレージキーにバージョンが入るので、旧い版の状態は読まずに捨てる（移し替えは
+ * しない）。restore 時に旧キーを掃除する（放置すると localStorage に残り続ける）。
  */
-export const STORAGE_VERSION = 6;
+export const STORAGE_VERSION = 7;
 /** 掃除対象の旧バージョン。 */
-export const OBSOLETE_STORAGE_VERSIONS = [5];
+export const OBSOLETE_STORAGE_VERSIONS = [5, 6];
 export const STORAGE_KEY_PREFIX = 'task-viewer.active-timers';
 export const DEVICE_ID_KEY = 'task-viewer.device-id.v1';
 

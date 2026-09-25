@@ -1,6 +1,6 @@
 import { describe, expect, it, beforeEach } from 'vitest';
 import { TimerRecorder } from '../../../src/timer/TimerRecorder';
-import type { TimerInstance } from '../../../src/timer/TimerInstance';
+import { getTimerElapsedSeconds, type PendingRecord, type TimerInstance } from '../../../src/timer/TimerInstance';
 import type { TimerStorageUtils } from '../../../src/timer/TimerStorageUtils';
 import type TaskViewerPlugin from '../../../src/main';
 import type { App } from 'obsidian';
@@ -84,8 +84,14 @@ function makeTimer(overrides: Partial<TimerInstance> = {}): TimerInstance {
         timerType: 'countup',
         elapsedTime: 600,
         tailRecordBlockId: 'tv-timer-1',
+        pendingRecord: null,
         ...overrides,
     } as TimerInstance;
+}
+
+/** 止めた時点で固定する記録: 経過は timer の値をそのまま使う。 */
+function recordFor(timer: TimerInstance, then: PendingRecord['then'] = 'close'): PendingRecord {
+    return { endMs: Date.now(), seconds: getTimerElapsedSeconds(timer), then };
 }
 
 describe('recordSessionEnd: one session writes one line', () => {
@@ -93,7 +99,8 @@ describe('recordSessionEnd: one session writes one line', () => {
     beforeEach(() => { h = makeHarness(); });
 
     it('countup updates the placeholder instead of inserting a second line', async () => {
-        await h.recorder.recordSessionEnd(makeTimer());
+        const timer = makeTimer();
+        await h.recorder.recordSessionEnd(timer, recordFor(timer));
         expect(h.inserted).toHaveLength(0);
         expect(h.updates).toHaveLength(1);
         expect(h.updates[0].id).toBe(CHILD_ID);
@@ -102,7 +109,7 @@ describe('recordSessionEnd: one session writes one line', () => {
 
     it('countdown updates the placeholder instead of inserting a second line', async () => {
         const timer = makeTimer({ timerType: 'countdown', timeRemaining: 0, totalTime: 600 } as Partial<TimerInstance>);
-        await h.recorder.recordSessionEnd(timer);
+        await h.recorder.recordSessionEnd(timer, recordFor(timer));
         expect(h.inserted).toHaveLength(0);
         expect(h.updates).toHaveLength(1);
     });
@@ -119,14 +126,15 @@ describe('recordSessionEnd: one session writes one line', () => {
             totalElapsedTime: 600,
             totalDuration: 600,
         } as Partial<TimerInstance>);
-        await h.recorder.recordSessionEnd(timer);
+        await h.recorder.recordSessionEnd(timer, recordFor(timer));
         expect(h.inserted).toHaveLength(0);
         expect(h.updates).toHaveLength(1);
     });
 
     it('falls back to inserting a record when the placeholder was deleted', async () => {
         const gone = makeHarness({ childExists: false });
-        await gone.recorder.recordSessionEnd(makeTimer());
+        const timer = makeTimer();
+        await gone.recorder.recordSessionEnd(timer, recordFor(timer));
         expect(gone.inserted).toHaveLength(1);
         expect(gone.updates).toHaveLength(0);
     });
@@ -136,13 +144,15 @@ describe('recordSessionEnd: one session writes one line', () => {
         // だけが下書きしか見ておらず、名前を失った「⏱️」だけのレコードを書いて
         // いた（move 発火中の停止で実機観測）。
         const gone = makeHarness({ childExists: false });
-        await gone.recorder.recordSessionEnd(makeTimer());
+        const timer = makeTimer();
+        await gone.recorder.recordSessionEnd(timer, recordFor(timer));
         expect(gone.inserted[0]).toContain('⏱️ parent');
     });
 
     it('the fallback record prefers an explicit label over the task name', async () => {
         const gone = makeHarness({ childExists: false });
-        await gone.recorder.recordSessionEnd(makeTimer({ pendingContent: '資料集め' }));
+        const timer = makeTimer({ pendingContent: '資料集め' });
+        await gone.recorder.recordSessionEnd(timer, recordFor(timer));
         expect(gone.inserted[0]).toContain('⏱️ 資料集め');
         expect(gone.inserted[0]).not.toContain('parent');
     });
@@ -151,7 +161,7 @@ describe('recordSessionEnd: one session writes one line', () => {
         const gone = makeHarness({ childExists: false });
         const timer = makeTimer();
         const placeholder = gone.recorder.buildSessionPlaceholder(timer).line;
-        await gone.recorder.recordSessionEnd(timer);
+        await gone.recorder.recordSessionEnd(timer, recordFor(timer));
 
         // 走行中の行とフォールバックのレコードは同じ名前を名乗る。
         expect(placeholder).toContain('parent');
@@ -159,13 +169,15 @@ describe('recordSessionEnd: one session writes one line', () => {
     });
 
     it('inserts a single record when no placeholder was created', async () => {
-        await h.recorder.recordSessionEnd(makeTimer({ tailRecordBlockId: undefined }));
+        const timer = makeTimer({ tailRecordBlockId: undefined });
+        await h.recorder.recordSessionEnd(timer, recordFor(timer));
         expect(h.inserted).toHaveLength(1);
         expect(h.updates).toHaveLength(0);
     });
 
     it('self mode updates the task itself and writes no child line', async () => {
-        await h.recorder.recordSessionEnd(makeTimer({ recordMode: 'self', tailRecordBlockId: undefined }));
+        const timer = makeTimer({ recordMode: 'self', tailRecordBlockId: undefined });
+        await h.recorder.recordSessionEnd(timer, recordFor(timer));
         expect(h.inserted).toHaveLength(0);
         expect(h.updates).toHaveLength(1);
         expect(h.updates[0].id).toBe(PARENT_ID);
@@ -176,7 +188,8 @@ describe('recordSessionEnd: one session writes one line', () => {
         // レコードの名前は対象タスクから継ぐので、完了済みレコードの「続き」を
         // 始めると起点の名前が「⏱️ …」で始まる。そこへもう一度付けない。
         const iconed = makeHarness({ childContent: '⏱️ 完了済み記録' });
-        await iconed.recorder.recordSessionEnd(makeTimer());
+        const timer = makeTimer();
+        await iconed.recorder.recordSessionEnd(timer, recordFor(timer));
 
         expect(iconed.updates[0].updates.content).toBe('⏱️ 完了済み記録');
     });
@@ -185,7 +198,8 @@ describe('recordSessionEnd: one session writes one line', () => {
         // 2 本目以降の self は自分で書いた兄弟レコードに走っている。recordMode を
         // 先に見て対象タスク行へ書き戻すと、1 本目のレコードが上書きされて消える
         // （実機で「再開して終了すると最初のセッションが消える」として現れた）。
-        await h.recorder.recordSessionEnd(makeTimer({ recordMode: 'self', sessionCount: 1 }));
+        const timer = makeTimer({ recordMode: 'self', sessionCount: 1 });
+        await h.recorder.recordSessionEnd(timer, recordFor(timer));
 
         expect(h.updates).toHaveLength(1);
         expect(h.updates[0].id).toBe(CHILD_ID);
@@ -193,9 +207,10 @@ describe('recordSessionEnd: one session writes one line', () => {
     });
 
     it('self mode adds a record line when a later session lost its own line', async () => {
-        await h.recorder.recordSessionEnd(makeTimer({
+        const timer = makeTimer({
             recordMode: 'self', sessionCount: 1, tailRecordBlockId: undefined,
-        }));
+        });
+        await h.recorder.recordSessionEnd(timer, recordFor(timer));
 
         // 走行中の行を見失ってもタスク行には戻らない。記録を 1 行足して救う。
         expect(h.inserted).toHaveLength(1);
@@ -206,9 +221,10 @@ describe('recordSessionEnd: one session writes one line', () => {
         // 記録で content も日時も書き換わるため、id を落とすと再開後のセッションが
         // 対象を引き直せない（実機で「再開しても記録されない」として現れた）。
         // 自動生成 id の掃除はタイマーを閉じるときに行う。
-        await h.recorder.recordSessionEnd(makeTimer({
+        const timer = makeTimer({
             recordMode: 'self', autoGeneratedTargetId: true,
-        }));
+        });
+        await h.recorder.recordSessionEnd(timer, recordFor(timer));
         expect(h.updates[0].updates.blockId).toBe('tv-timer-anchor');
     });
 });
@@ -249,7 +265,7 @@ describe('stop paths do not bypass recordSessionEnd', () => {
         expect(source.match(/recorder\.recordSessionEnd\(/g)).toHaveLength(1);
         // 名前を書けなければ記録に進まず、書けたら直後に記録する。
         expect(source).toMatch(
-            /if \(!\(await this\.ctx\.flushTimerContent\(timer\.id\)\)\) return false;\s*\n\s*if \(!\(await this\.ctx\.recorder\.recordSessionEnd\(timer\)\)\) return false;/
+            /if \(!\(await this\.ctx\.flushTimerContent\(timer\.id\)\)\) return;\s*\n\s*if \(!\(await this\.ctx\.recorder\.recordSessionEnd\(timer, record\)\)\) return;/
         );
     });
 });

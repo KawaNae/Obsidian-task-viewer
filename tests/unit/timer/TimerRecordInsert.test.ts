@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import type { TimerInstance } from '../../../src/timer/TimerInstance';
+import { getTimerElapsedSeconds, type TimerInstance } from '../../../src/timer/TimerInstance';
 import { vaultSession, type VaultSession } from '../helpers/vaultSession';
 
 /**
@@ -30,7 +30,11 @@ describe('a record is checked against the reading its row was read in', () => {
         const edited = ['- [ ] 対象 @2026-09-21', '- [ ] 対象 @2026-09-21', '- [ ] 下 @2026-09-21', ''].join('\n');
         contents.set(FILE, edited);
 
-        expect(await s.recorder.recordSessionEnd(timer)).toBe(false);
+        expect(await s.recorder.recordSessionEnd(timer, {
+            endMs: Date.now(),
+            seconds: getTimerElapsedSeconds(timer),
+            then: 'close',
+        })).toBe(false);
         expect(contents.get(FILE)).toBe(edited);
     });
 
@@ -40,7 +44,11 @@ describe('a record is checked against the reading its row was read in', () => {
         const edited = ['- [ ] 親', '    - [ ] 対象 @2026-09-21', ''].join('\n');
         contents.set(FILE, edited);
 
-        expect(await s.recorder.recordSessionEnd(timer)).toBe(false);
+        expect(await s.recorder.recordSessionEnd(timer, {
+            endMs: Date.now(),
+            seconds: getTimerElapsedSeconds(timer),
+            then: 'close',
+        })).toBe(false);
         expect(contents.get(FILE)).toBe(edited);
     });
 });
