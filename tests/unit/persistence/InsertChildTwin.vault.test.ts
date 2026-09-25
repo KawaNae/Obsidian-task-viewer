@@ -139,3 +139,28 @@ describe('a child appended at the end of a row\'s children', () => {
         expect(contents.get(FILE)).toBe(EDITED);
     });
 });
+
+describe('a timer\'s record (the weaker check, until F9)', () => {
+    // A record refused where the row was only indented would lose the
+    // measurement (`RowBasis.OnRecord`): the timer's two inserts keep it.
+    const INDENTED = ['- [ ] P', '\t- [ ] T', ''].join('\n');
+
+    async function indentedSinceTheScan() {
+        const { contents, session } = await open(['- [ ] P', '- [ ] T', '']);
+        const task = session.index.getTasks().find(row => row.content === 'T')!;
+        contents.set(FILE, INDENTED);
+        return { contents, session, task };
+    }
+
+    it('is written as a first child on a row only indented since the scan', async () => {
+        const { contents, session, task } = await indentedSinceTheScan();
+        expect(await session.index.recordChildTask(task.id, '- [x] rec')).toBe(true);
+        expect(contents.get(FILE)).toBe(['- [ ] P', '\t- [ ] T', '\t\t- [x] rec', ''].join('\n'));
+    });
+
+    it('is written as a next sibling on a row only indented since the scan', async () => {
+        const { contents, session, task } = await indentedSinceTheScan();
+        expect(await session.index.insertSiblingAfterTask(task.id, '- [x] rec')).toBe(true);
+        expect(contents.get(FILE)).toBe(['- [ ] P', '\t- [ ] T', '\t- [x] rec', ''].join('\n'));
+    });
+});
