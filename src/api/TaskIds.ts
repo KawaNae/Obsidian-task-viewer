@@ -37,10 +37,10 @@ const ANCHOR_ID = /^(.+)#\^([A-Za-z0-9-]+)$/;
  * its row's ID.
  */
 export function apiIdOf(name: string, lookup: TaskLookup): string {
-    const segment = TaskIdGenerator.parseSegmentId(name);
-    if (segment) return TaskIdGenerator.makeSegmentId(apiIdOf(segment.baseId, lookup), segment.segmentDate);
-    const task = lookup(name);
-    return task?.anchor !== undefined ? `${task.file}#^${task.anchor}` : name;
+    return TaskIdGenerator.mapRow(name, row => {
+        const task = lookup(row);
+        return task?.anchor !== undefined ? `${task.file}#^${task.anchor}` : row;
+    });
 }
 
 /** Which shape an ID the API took has (`apiIdOf`). */

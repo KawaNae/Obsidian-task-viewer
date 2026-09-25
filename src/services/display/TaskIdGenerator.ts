@@ -81,6 +81,19 @@ export class TaskIdGenerator {
         return `${baseId}##seg:${segmentDate}`;
     }
 
+    /**
+     * `id` with the ID of its row put through `map`: a segment of a row split
+     * at the day boundary keeps its suffix after what `map` answers for its
+     * row; undefined when `map` answers undefined. The one place a segment's
+     * ID is taken apart to answer for its row's.
+     */
+    static mapRow<R extends string | undefined>(id: string, map: (rowId: string) => R): R {
+        const segment = this.parseSegmentId(id);
+        if (!segment) return map(id);
+        const row = map(segment.baseId);
+        return (row === undefined ? row : this.makeSegmentId(row, segment.segmentDate)) as R;
+    }
+
     static parseSegmentId(id: string): ParsedSegmentId | null {
         const match = id.match(SEGMENT_ID_REGEX);
         if (!match) {
