@@ -12,6 +12,7 @@ import {
 } from '../utils/FileLines';
 import { lineChanges } from './LineChanges';
 import { keyOf, linesOf } from './EditorDoc';
+import { writeInEditor, type EditorHandle } from './EditorWrite';
 import { contentKeyOf } from '../services/core/ContentKey';
 import { logError, logWarn } from '../log/log';
 
@@ -212,11 +213,7 @@ export function fireFilter(host: EditorFireHost): Extension {
     });
 }
 
-/** What {@link AwayRunner} reads and writes of an editor. */
-export interface EditorHandle {
-    readonly state: EditorState;
-    dispatch(spec: TransactionSpec): void;
-}
+export type { EditorHandle } from './EditorWrite';
 
 /**
  * The rest of each move to another file an editor's completion planned: the
@@ -280,23 +277,11 @@ export class AwayRunner {
         };
         if (this.closed) return this.host.writeFile(away.path, at, ops);
 
-        const lines = linesOf(state.doc);
-        const edited = editLines(away.path, lines, '\n',
-            (draft, _eol, session) => this.host.applyOps(draft, session, at, ops));
-        if (!edited.written) {
-            this.editor.dispatch({ effects: dropAway.of(away.id) });
-            return { written: false, refused: edited.refused };
-        }
-        const changes = lineChanges(edited.before, edited.lines, edited.edits);
-        if (changes === null) {
-            logError(`[FlowFire] ${away.path}: a move's write does not follow; nothing written`);
-            this.editor.dispatch({ effects: dropAway.of(away.id) });
-            return { written: false, refused: { file: away.path, reason: { kind: 'failed' }, subject: at.text.trim() } };
-        }
         // A step of its own to undo, whether or not the user typed since the
         // completion: undone, the original comes back as the completion left it.
-        this.editor.dispatch({ changes, effects: dropAway.of(away.id), annotations: isolateHistory.of('full') });
-        return { written: true, refused: null };
+        const outcome = writeInEditor(this.editor, away.path, at, ops, this.host.applyOps, [dropAway.of(away.id)]);
+        if (!outcome.written) this.editor.dispatch({ effects: dropAway.of(away.id) });
+        return outcome;
     }
 }
 
