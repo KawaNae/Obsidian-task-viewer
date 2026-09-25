@@ -62,7 +62,7 @@ function makeHarness(options: Options = {}) {
         settings: { pomodoroWorkMinutes: 25, pomodoroBreakMinutes: 5 },
         getTaskIndex: () => taskIndex,
         getTaskWriteService: () => ({
-            insertChildTask: async (_parentId: string, line: string) => {
+            recordChildTask: async (_parentId: string, line: string) => {
                 inserted.push(line);
                 return options.insertResult ?? true;
             },

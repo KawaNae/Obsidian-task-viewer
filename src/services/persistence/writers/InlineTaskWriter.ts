@@ -12,7 +12,7 @@ import {
     type EditorLine, type EditorSubtree, type LineDraft, type NamedRow, type Refusal, type WriteAt, type WriteChannels, type WriteOutcome,
     type WriteSession,
 } from '../../../utils/FileLines';
-import { recordedOn, subjectOf, type PlannedTarget } from '../TaskRefs';
+import type { InsertTarget, PlannedTarget } from '../TaskRefs';
 import type { TaskOp } from '../TaskOps';
 import { Outline } from '../../parsing/utils/Outline';
 
@@ -294,12 +294,12 @@ export class InlineTaskWriter {
      * deriving the unit from the parent line alone, which returns four spaces
      * for any top-level task and so mixed spaces into tab-written files.
      */
-    async insertLineAfterTask(task: Task, lineBody: string): Promise<WriteOutcome> {
-        const file = this.app.vault.getAbstractFileByPath(task.file);
-        if (!(file instanceof TFile)) return fileGone(this.channelOf(task.file), task.file, subjectOf(task));
+    async insertLineAfterTask(target: InsertTarget, lineBody: string): Promise<WriteOutcome> {
+        const file = this.app.vault.getAbstractFileByPath(target.file);
+        if (!(file instanceof TFile)) return fileGone(this.channelOf(target.file), target.file, target.subject);
 
-        return processLines(this.app, file, this.channelOf(task.file), (draft, _eol, { row }) => {
-            const currentLine = row(recordedOn(task));
+        return processLines(this.app, file, this.channelOf(target.file), (draft, _eol, { row }) => {
+            const currentLine = row(target);
             if (currentLine === null) return false;
 
             draft.put(Placement.lastChild(draft.lines, currentLine, lineBody), Block.line(lineBody));
@@ -327,16 +327,16 @@ export class InlineTaskWriter {
      *
      */
     async insertSiblingAfterTask(
-        task: Task,
+        target: InsertTarget,
         lineBody: string,
         opts: { afterCompletedRun?: boolean } = {}
     ): Promise<WriteOutcome> {
-        const file = this.app.vault.getAbstractFileByPath(task.file);
-        if (!(file instanceof TFile)) return fileGone(this.channelOf(task.file), task.file, subjectOf(task));
+        const file = this.app.vault.getAbstractFileByPath(target.file);
+        if (!(file instanceof TFile)) return fileGone(this.channelOf(target.file), target.file, target.subject);
 
-        return processLines(this.app, file, this.channelOf(task.file), (draft, _eol, { row }) => {
+        return processLines(this.app, file, this.channelOf(target.file), (draft, _eol, { row }) => {
             const lines = draft.lines;
-            const currentLine = row(recordedOn(task));
+            const currentLine = row(target);
             if (currentLine === null) return false;
 
             const spot = opts.afterCompletedRun
@@ -349,18 +349,20 @@ export class InlineTaskWriter {
     }
 
     /**
-     * Insert `lineBody` as the first child of a task (right after the task line).
-     * Used for timer/pomodoro records that should appear at the top of children.
+     * Insert `lineBody` as the first child of a task (right after the task line):
+     * a child added from a card's menu, the API or the CLI, and a timer's
+     * record that should appear at the top of children. The target says how
+     * the row is checked (`InsertTarget`).
      *
      * As with {@link insertLineAfterTask}, the indent is resolved here from the
      * task's existing children rather than supplied by the caller.
      */
-    async insertLineAsFirstChild(task: Task, lineBody: string): Promise<WriteOutcome> {
-        const file = this.app.vault.getAbstractFileByPath(task.file);
-        if (!(file instanceof TFile)) return fileGone(this.channelOf(task.file), task.file, subjectOf(task));
+    async insertLineAsFirstChild(target: InsertTarget, lineBody: string): Promise<WriteOutcome> {
+        const file = this.app.vault.getAbstractFileByPath(target.file);
+        if (!(file instanceof TFile)) return fileGone(this.channelOf(target.file), target.file, target.subject);
 
-        return processLines(this.app, file, this.channelOf(task.file), (draft, _eol, { row }) => {
-            const currentLine = row(recordedOn(task));
+        return processLines(this.app, file, this.channelOf(target.file), (draft, _eol, { row }) => {
+            const currentLine = row(target);
             if (currentLine === null) return false;
 
             // Directly below the task line, past its own text that goes on.

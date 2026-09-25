@@ -3,6 +3,7 @@ import { TaskIndex } from '../../../src/services/core/TaskIndex';
 import { TaskWriteService } from '../../../src/services/data/TaskWriteService';
 import { makeTask } from '../helpers/makeTask';
 import { writeBench, FILE } from '../helpers/writeBench';
+import { plannedOn, recordedOn } from '../../../src/services/persistence/TaskRefs';
 import type { Refusal, WriteOutcome } from '../../../src/utils/FileLines';
 import type { Task } from '../../../src/types';
 
@@ -29,7 +30,7 @@ async function runSiblingInsert(
     const bench = await writeBench(fileText);
     const task = bench.taskAt(line);
     if (now !== undefined) bench.edit(now);
-    const index = await bench.writer.insertSiblingAfterTask(task, lineBody, opts);
+    const index = await bench.writer.insertSiblingAfterTask(recordedOn(task), lineBody, opts);
     return { text: bench.text(), index, refused: bench.refused };
 }
 
@@ -359,8 +360,8 @@ async function runChildInsert(
     const bench = await writeBench(fileText);
     const task = bench.taskAt(line);
     const index = mode === 'first'
-        ? await bench.writer.insertLineAsFirstChild(task, lineBody)
-        : await bench.writer.insertLineAfterTask(task, lineBody);
+        ? await bench.writer.insertLineAsFirstChild(plannedOn(task), lineBody)
+        : await bench.writer.insertLineAfterTask(plannedOn(task), lineBody);
     return { text: bench.text(), index };
 }
 

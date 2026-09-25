@@ -745,7 +745,7 @@ export class TimerRecorder {
             return false;
         }
 
-        return this.plugin.getTaskWriteService().insertChildTask(resolvedTask.id, formattedLine);
+        return this.plugin.getTaskWriteService().recordChildTask(resolvedTask.id, formattedLine);
     }
 
     /**

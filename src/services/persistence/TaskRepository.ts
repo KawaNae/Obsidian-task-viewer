@@ -7,7 +7,7 @@ import { TaskCloner, type InPlaceCopyLines } from './TaskCloner';
 import type { PropertyOp } from './PropertyUpdatePlanner';
 import type { EditorLine, EditorSubtree, LineDraft, NamedRow, WriteAt, WriteChannel, WriteOutcome, WriteSession } from '../../utils/FileLines';
 import type { PlacedLine } from './utils/Placement';
-import type { PlannedTarget } from './TaskRefs';
+import type { InsertTarget, PlannedTarget } from './TaskRefs';
 import type { TaskOp } from './TaskOps';
 
 /**
@@ -107,20 +107,20 @@ export class TaskRepository {
         return this.inlineWriter.applyToTask(target, ops, opts);
     }
 
-    async insertLineAfterTask(task: Task, lineContent: string): Promise<WriteOutcome> {
-        return this.inlineWriter.insertLineAfterTask(task, lineContent);
+    async insertLineAfterTask(target: InsertTarget, lineContent: string): Promise<WriteOutcome> {
+        return this.inlineWriter.insertLineAfterTask(target, lineContent);
     }
 
     async insertSiblingAfterTask(
-        task: Task,
+        target: InsertTarget,
         lineBody: string,
         opts: { afterCompletedRun?: boolean } = {}
     ): Promise<WriteOutcome> {
-        return this.inlineWriter.insertSiblingAfterTask(task, lineBody, opts);
+        return this.inlineWriter.insertSiblingAfterTask(target, lineBody, opts);
     }
 
-    async insertLineAsFirstChild(task: Task, lineContent: string): Promise<WriteOutcome> {
-        return this.inlineWriter.insertLineAsFirstChild(task, lineContent);
+    async insertLineAsFirstChild(target: InsertTarget, lineContent: string): Promise<WriteOutcome> {
+        return this.inlineWriter.insertLineAsFirstChild(target, lineContent);
     }
 
     async appendTaskToFile(filePath: string, content: string): Promise<WriteAt> {
