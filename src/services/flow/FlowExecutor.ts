@@ -286,7 +286,7 @@ export class FlowExecutor {
     }
 
     /**
-     * The same next instance {@link applyEffect} would write, handed over as
+     * The same next instance {@link opsFor} would write, handed over as
      * lines-to-be rather than written on the spot.
      *
      * The two paths read one effect the same way — a recurrence is formatted
