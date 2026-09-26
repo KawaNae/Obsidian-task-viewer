@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { Outline } from '../../../src/services/parsing/utils/Outline';
-import { checkWrite, type WrittenLine, type WriteCheck } from '../../../src/services/parsing/utils/OutlineCheck';
+import { checkWrite, type WrittenLine, type WriteCheck, type WriteFinding } from '../../../src/services/parsing/utils/OutlineCheck';
 import { draftOver, replayEdits, type LineDraft } from '../../../src/utils/FileLines';
 import { Block, Placement, type Spot } from '../../../src/services/persistence/utils/Placement';
 import { renderFlowInstance } from '../../../src/services/persistence/FlowInstanceLines';
@@ -15,8 +15,8 @@ import type { App } from 'obsidian';
  * body without a block is a bug.
  */
 
-/** What the check says of `edit` made to `lines`, through the same draft `processLines` hands a write. */
-function checked(lines: string[], edit: (draft: LineDraft) => void): WriteCheck {
+/** What the check finds of `edit` made to `lines`, through the same draft `processLines` hands a write. */
+function found(lines: string[], edit: (draft: LineDraft) => void): WriteFinding {
     const before = [...lines];
     const after = [...lines];
     const { draft, reported, puts, placedBy } = draftOver(after);
@@ -29,6 +29,9 @@ function checked(lines: string[], edit: (draft: LineDraft) => void): WriteCheck 
     });
     return checkWrite(Outline.read(before), Outline.read(after), written, puts);
 }
+
+/** What the check says of `edit` made to `lines`. */
+const checked = (lines: string[], edit: (draft: LineDraft) => void): WriteCheck => found(lines, edit).check;
 
 /** One line put at `spot`, to read as it does by itself. */
 const putLine = (spot: Spot, text: string) => (draft: LineDraft) => draft.put(spot, Block.line(spot.indent + text));
@@ -131,6 +134,21 @@ describe('a line kept keeps its kind, and a task its items above, or the write d
         const lines = ['- [ ] T', '  ```', '  x', '  ```', 'after'];
         // A fence opener put in as text makes the rest code.
         expect(checked(lines, (draft) => draft.put({ at: 4, parent: null, indent: '' }, Block.read(['```'])))).toBe('disturbs');
+    });
+
+    it('names the line, as handed, that opens the fence a refused line reads in when that fence never closes', () => {
+        // On the item's own fence, and at the end of a note whose fence at the top never closes.
+        const item = ['- [ ] T', '    ```', '    code', '- [ ] U', ''];
+        expect(found(item, putLine({ at: 3, parent: 0, indent: '    ' }, '- [ ] c'))).toEqual({ check: 'unplaceable', fence: 1 });
+        const top = ['text', '```', 'code', ''];
+        expect(found(top, putLine(Placement.end(Outline.read(top)), '- [ ] n'))).toEqual({ check: 'unplaceable', fence: 1 });
+        // A fence that closes, or one the write itself opens, is none the note has open.
+        const closed = ['text', '```', 'code', '```', '', 'text'];
+        expect(found(closed, putLine({ at: 2, parent: null, indent: '' }, '- [ ] n'))).toEqual({ check: 'unplaceable', fence: null });
+        const lines = ['- [ ] T', '  ```', '  x', '  ```', 'after'];
+        expect(found(lines, (draft) => draft.put({ at: 4, parent: null, indent: '' }, Block.read(['```'])))).toEqual({ check: 'disturbs', fence: null });
+        // A sound write names none.
+        expect(found(item, putLine(Placement.lastChild(Outline.read(item), 0, '- [ ] n'), '- [ ] c'))).toEqual({ check: 'sound', fence: null });
     });
 
     it('leaves a blank line blank wherever it stands: taking a fence\'s blank line out of it disturbs nothing (q13)', () => {

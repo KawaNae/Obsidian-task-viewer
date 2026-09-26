@@ -845,10 +845,14 @@ export class TaskIndex {
                 new Notice(t('notice.writeTargetChanged', { subject }));
                 return;
             case 'unplaceable':
-                new Notice(t('notice.writeTargetUnplaceable', { subject }));
+                new Notice(reason.fence === null
+                    ? t('notice.writeTargetUnplaceable', { subject })
+                    : t('notice.writeTargetUnplaceableInFence', { line: reason.fence + 1, subject }));
                 return;
             case 'disturbs':
-                new Notice(t('notice.writeDisturbs', { subject }));
+                new Notice(reason.fence === null
+                    ? t('notice.writeDisturbs', { subject })
+                    : t('notice.writeDisturbsInFence', { line: reason.fence + 1, subject }));
                 return;
             case 'failed':
                 new Notice(t('notice.writeFailed', { subject }));
@@ -873,8 +877,8 @@ function refusalReason(reason: Refusal['reason']): string {
     switch (reason.kind) {
         case 'gone': return t('notice.refusedGone');
         case 'changed': return t('notice.refusedChanged');
-        case 'unplaceable': return t('notice.refusedUnplaceable');
-        case 'disturbs': return t('notice.refusedDisturbs');
+        case 'unplaceable': return reason.fence === null ? t('notice.refusedUnplaceable') : t('notice.refusedUnplaceableInFence', { line: reason.fence + 1 });
+        case 'disturbs': return reason.fence === null ? t('notice.refusedDisturbs') : t('notice.refusedDisturbsInFence', { line: reason.fence + 1 });
         case 'failed': return t('notice.refusedFailed');
     }
 }

@@ -69,6 +69,6 @@ describe('editLines', () => {
             draft.rewrite(at, 'a');
             return true;
         }, { about: 'the task' });
-        expect(edited).toEqual({ written: false, refused: { file: 'n.md', reason: { kind: 'disturbs' }, subject: '- [ ] a' } });
+        expect(edited).toEqual({ written: false, refused: { file: 'n.md', reason: { kind: 'disturbs', fence: null }, subject: '- [ ] a' } });
     });
 });

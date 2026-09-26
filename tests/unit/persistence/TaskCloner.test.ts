@@ -54,7 +54,7 @@ function spliceAndReport(
         if (put) return { kind: 'placed', put: put.id, offset: put.offset };
         return from === null ? { kind: 'loose' } : { kind: 'kept', from };
     });
-    const check = checkWrite(Outline.read(lines), Outline.read(target), written, puts);
+    const { check } = checkWrite(Outline.read(lines), Outline.read(target), written, puts);
     return { lines: target, reported, check };
 }
 

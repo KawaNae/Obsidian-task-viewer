@@ -40,6 +40,18 @@ export interface PutBlock {
 export type WriteCheck = 'sound' | 'unplaceable' | 'disturbs' | 'loose';
 
 /**
+ * What {@link checkWrite} found, and where: `fence` is the line, of the lines
+ * before the write, that opens a fence which never closes when the line the
+ * answer is about reads inside it once written: what the note can be mended
+ * at for the write to go through. Null for any other answer, and for a fence
+ * the write itself opened.
+ */
+export interface WriteFinding {
+    check: WriteCheck;
+    fence: number | null;
+}
+
+/**
  * Whether a write left the note reading as it meant to, asked of the reading
  * before the write and the reading after it (`Outline.read`): the one check
  * every write that adds, takes out or rewrites lines is held to
@@ -69,14 +81,14 @@ export type WriteCheck = 'sound' | 'unplaceable' | 'disturbs' | 'loose';
  *
  * Where several fail, the answer is the first of `loose`, `unplaceable`,
  * `disturbs`: a bug in the write, then the lines it put in, then the lines it
- * kept.
+ * kept. The line it is about is the first that failed so.
  */
 export function checkWrite(
     before: OutlineReading,
     after: OutlineReading,
     written: readonly WrittenLine[],
     puts: readonly PutBlock[],
-): WriteCheck {
+): WriteFinding {
     const meaningful = (line: string) => ChildLineClassifier.carriesMeaning(line);
     const same = (a: WrittenLine, b: WrittenLine) => a.kind === b.kind && (
         a.kind === 'kept' ? a.from === (b as typeof a).from
@@ -91,17 +103,20 @@ export function checkWrite(
     const lineOf = (ref: WrittenLine) => written.findIndex(line => same(line, ref));
 
     let found: WriteCheck = 'sound';
+    let at = -1;
     const rank: WriteCheck[] = ['sound', 'disturbs', 'unplaceable', 'loose'];
-    const fail = (check: WriteCheck) => { if (rank.indexOf(check) > rank.indexOf(found)) found = check; };
+    const fail = (check: WriteCheck, k: number) => {
+        if (rank.indexOf(check) > rank.indexOf(found)) { found = check; at = k; }
+    };
 
     written.forEach((line, k) => {
         if (line.kind === 'loose') {
-            if (after.kindOf(k) !== 'frontmatter') fail('loose');
+            if (after.kindOf(k) !== 'frontmatter') fail('loose', k);
             return;
         }
         if (line.kind === 'placed') {
             const reads = puts[line.put].lines[line.offset];
-            if (after.kindOf(k) !== reads.kind) return fail('unplaceable');
+            if (after.kindOf(k) !== reads.kind) return fail('unplaceable', k);
             const item = after.item(k);
             if (item === null) return;
             if (reads.under !== undefined && meaningful(after.lines[k])) {
@@ -109,19 +124,22 @@ export function checkWrite(
                     : reads.under === 'spot'
                         ? (puts[line.put].parent === null ? null : lineOf(puts[line.put].parent!))
                         : lineOf({ kind: 'placed', put: line.put, offset: reads.under });
-                if (parent === undefined || parent === -1 || item.parent !== parent) return fail('unplaceable');
+                if (parent === undefined || parent === -1 || item.parent !== parent) return fail('unplaceable', k);
             }
-            if (item.end > blockEnd.get(line.put)!) fail('disturbs');
+            if (item.end > blockEnd.get(line.put)!) fail('disturbs', k);
             return;
         }
         const i = line.from;
-        if (before.kindOf(i) !== after.kindOf(k)) return fail('disturbs');
+        if (before.kindOf(i) !== after.kindOf(k)) return fail('disturbs', k);
         const item = before.item(i);
         if (item === null || !meaningful(before.lines[i])) return;
-        if (item.parent !== null && !keptAt.has(item.parent)) return fail('disturbs');
+        if (item.parent !== null && !keptAt.has(item.parent)) return fail('disturbs', k);
         const above = before.itemsAbove(i).filter(row => keptAt.has(row));
         const aboveNow = after.itemsAbove(k).map(row => written[row].kind === 'kept' ? (written[row] as { from: number }).from : -1);
-        if (above.length !== aboveNow.length || above.some((row, n) => row !== aboveNow[n])) fail('disturbs');
+        if (above.length !== aboveNow.length || above.some((row, n) => row !== aboveNow[n])) fail('disturbs', k);
     });
-    return found;
+    const open = found === 'sound' ? undefined
+        : after.fences.find(fence => fence.close === null && fence.line < at && at < fence.end);
+    const opener = open === undefined ? undefined : written[open.line];
+    return { check: found, fence: opener?.kind === 'kept' ? opener.from : null };
 }
