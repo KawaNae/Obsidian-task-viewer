@@ -24,8 +24,8 @@ function buildHost(task: Task, written = true) {
         settings: { scopeKeys: {}, statusDefinitions: DEFAULT_STATUS_DEFINITIONS },
         // A completion fires in its write; the fire itself is not measured here.
         commandExecutor: {
-            fireOp: () => ({ op: { kind: "fire", plan: () => [] }, planned: () => null }),
-            reportUnfired: () => { },
+            fireOp: () => ({ op: { kind: "fire", plan: () => [] }, planned: () => null, writes: () => false }),
+            reportNotRun: () => { },
         },
         writeCompleting: proto.writeCompleting,
         scanner: { requestScan: vi.fn(async () => {}), follow: () => null, holds: () => false },

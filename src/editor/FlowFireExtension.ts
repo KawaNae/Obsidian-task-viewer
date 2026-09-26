@@ -3,7 +3,7 @@ import { isolateHistory } from '@codemirror/commands';
 import { editorInfoField } from 'obsidian';
 import type { StatusDefinition } from '../types';
 import { completes, isOperation } from '../services/flow/FlowTrigger';
-import type { FireOp, FirePlan } from '../services/flow/FlowExecutor';
+import type { FireOp, NotRun } from '../services/flow/FlowExecutor';
 import type { TaskOp } from '../services/persistence/TaskOps';
 import {
     editLines, replayEdits,
@@ -27,10 +27,8 @@ export interface EditorFireHost {
     applyOps(draft: LineDraft, session: WriteSession, target: NamedRow | EditorLine, ops: readonly TaskOp[]): boolean;
     /** Tell the user a write was not made, and why (the index's `reportRefusal`): the editor menu's write. */
     refused(refusal: Refusal): void;
-    /** Tell the user a row's fire was not written, and why: the row stays completed (the index's `reportFireRefusal`). */
-    fireRefused(refusal: Refusal): void;
-    /** Tell the user a fire could not be planned (`FlowExecutor.reportDidNotFire`). */
-    didNotFire(plan: Extract<FirePlan, { kind: 'failed' }>): void;
+    /** Tell the user a completed row's flow was not run, and why: the row stays completed (`FlowExecutor.reportNotRun`). */
+    notRun(why: NotRun): void;
 }
 
 /** A row an editor transaction completed: its line in the document after it, and the text there. */
@@ -112,7 +110,7 @@ export function fireFilter(host: EditorFireHost): Extension {
             // the write is handed, at the row.
             const ops = fire.op.plan(lines, line);
             const planned = fire.planned();
-            if (planned?.kind === 'failed') queueMicrotask(() => host.didNotFire(planned));
+            if (planned?.kind === 'failed') queueMicrotask(() => host.notRun(planned));
             // The completion is in the document already, and stands whatever
             // comes of its fire (`CompletionFire`).
             if (!fire.writes()) continue;
@@ -124,7 +122,7 @@ export function fireFilter(host: EditorFireHost): Extension {
             const edited = editLines(path, lines, '\n',
                 (draft, _eol, session) => host.applyOps(draft, session, { line, text: lines[line], key: contentKeyOf(lines) }, ops));
             if (!edited.written) {
-                host.fireRefused(edited.refused);
+                host.notRun({ kind: 'refused', refusal: edited.refused });
                 continue;
             }
             lines = edited.lines;

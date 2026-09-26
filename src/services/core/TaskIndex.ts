@@ -469,9 +469,9 @@ export class TaskIndex {
      * A write that may complete a row (`completingIn`, its file; null when it
      * does not), made with the row's fire in it: whether it was written. A
      * write refused with a fire that writes lines is made without it in the
-     * same attempt (`CompletionFire.writes`), and the user is told the flow
-     * was not run; a fire that could not be planned is told once the
-     * completion landed.
+     * same attempt (`CompletionFire.writes`). Once the completion landed, the
+     * user is told if its flow was not run: the fire's write was refused, or
+     * its plan failed (`FlowExecutor.reportNotRun`).
      */
     private async writeCompleting(
         completingIn: string | null,
@@ -481,8 +481,9 @@ export class TaskIndex {
         const fire = this.commandExecutor.fireOp(completingIn);
         const outcome = await write(fire);
         if (!outcome.written) return false;
-        if (outcome.insteadOf) this.reportFireRefusal(outcome.insteadOf);
-        else this.commandExecutor.reportUnfired(fire);
+        const planned = fire.planned();
+        if (outcome.insteadOf) this.commandExecutor.reportNotRun({ kind: 'refused', refusal: outcome.insteadOf });
+        else if (planned?.kind === 'failed') this.commandExecutor.reportNotRun(planned);
         return true;
     }
 
@@ -762,8 +763,7 @@ export class TaskIndex {
             fireOp: (path) => this.commandExecutor.fireOp(path),
             applyOps: (draft, session, target, ops) => this.repository.applyOps(draft, session, target, ops),
             refused: (refusal) => this.reportRefusal(refusal),
-            fireRefused: (refusal) => this.reportFireRefusal(refusal),
-            didNotFire: (plan) => this.commandExecutor.reportDidNotFire(plan.task, plan.error),
+            notRun: (why) => this.commandExecutor.reportNotRun(why),
         };
     }
 
@@ -801,27 +801,6 @@ export class TaskIndex {
         }
     }
 
-    /**
-     * Tell the user a completion was written without its fire, and why: the
-     * fire's write was refused (`CompletionFire.writes`, the editor's fire).
-     */
-    private reportFireRefusal(refusal: Refusal): void {
-        const { reason, subject, file } = refusal;
-        logWarn(`[TaskIndex] fire refused, completion written: file=${file} reason=${reason.kind} subject=${subject}`);
-        new Notice(t('notice.flowNotRun', { reason: refusalReason(reason), subject }));
-    }
-
-}
-
-/** Why a write was refused, as a clause the notice of a fire not run gives (`notice.flowNotRun`). */
-function refusalReason(reason: Refusal['reason']): string {
-    switch (reason.kind) {
-        case 'gone': return t('notice.refusedGone');
-        case 'changed': return t('notice.refusedChanged');
-        case 'unplaceable': return reason.fence === null ? t('notice.refusedUnplaceable') : t('notice.refusedUnplaceableInFence', { line: reason.fence + 1 });
-        case 'disturbs': return reason.fence === null ? t('notice.refusedDisturbs') : t('notice.refusedDisturbsInFence', { line: reason.fence + 1 });
-        case 'failed': return t('notice.refusedFailed');
-    }
 }
 
 // ── Parse-affecting settings fingerprint ──

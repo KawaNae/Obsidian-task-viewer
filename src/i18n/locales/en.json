@@ -662,7 +662,6 @@
     "countdownRecorded": "{{icon}} Countdown recorded! ({{duration}})",
     "kindRecorded": "{{icon}} {{kind}} recorded! ({{duration}})",
     "taskUpdated": "{{icon}} Task updated! ({{duration}})",
-    "flowDidNotFire": "Flow did not fire: {{reason}} ({{file}})",
     "flowDeleteDidNotFire": "The flow did not fire, so the task was not deleted: {{reason}} ({{file}})",
     "flowNotRun": "The task was completed, but its flow was not run: {{reason}} ({{subject}})",
     "refusedGone": "the task could not be found",
