@@ -143,7 +143,6 @@ function makeRepository() {
         insertGeneratedInstance: vi.fn().mockResolvedValue(undefined),
         updateTaskInFile: vi.fn().mockResolvedValue(undefined),
         stripFlow: vi.fn().mockResolvedValue(undefined),
-        deleteTaskFromFile: vi.fn().mockResolvedValue(undefined),
     };
 }
 

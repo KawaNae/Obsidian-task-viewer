@@ -50,7 +50,7 @@ describe('nested rows that read the same', () => {
         const bench = await writeBench(before);
         const c2 = bench.taskAt(4);
         bench.edit(['メモ', ...before]);
-        expect((await bench.writer.deleteTaskFromFile(plannedOn(c2, { subtree: true }))).written).toBe(false);
+        expect((await bench.writer.applyToTask(plannedOn(c2, { subtree: true }), [{ kind: 'remove' }])).written).toBe(false);
         expect(bench.lines()).toEqual(['メモ', ...before]);
         expect(bench.refused.map(r => r.reason.kind)).toEqual(['changed']);
     });
@@ -67,7 +67,7 @@ describe('nested rows that read the same', () => {
             '- [ ] P2',
         ];
         bench.edit(moved);
-        const { written } = await bench.writer.deleteTaskFromFile(plannedOn(c2, { subtree: true }));
+        const { written } = await bench.writer.applyToTask(plannedOn(c2, { subtree: true }), [{ kind: 'remove' }]);
 
         expect(written).toBe(false);
         expect(bench.lines()).toEqual(moved);
@@ -83,7 +83,7 @@ describe('a row replaced from outside', () => {
         const bench = await writeBench(before);
         const milk = bench.taskAt(1);
         bench.edit(['- [ ] alpha', '- [ ] omega', '- [ ] call mom']);
-        const { written } = await bench.writer.deleteTaskFromFile(plannedOn(milk, { subtree: true }));
+        const { written } = await bench.writer.applyToTask(plannedOn(milk, { subtree: true }), [{ kind: 'remove' }]);
 
         expect(written).toBe(false);
         expect(bench.lines()).toEqual(['- [ ] alpha', '- [ ] omega', '- [ ] call mom']);
@@ -209,7 +209,7 @@ describe('^id', () => {
         const stale = bench.taskAt(0);
         bench.edit(['- [ ] A', 'text ^a']);
         await bench.scan();
-        const { written } = await bench.writer.deleteTaskFromFile(plannedOn(stale, { subtree: true }));
+        const { written } = await bench.writer.applyToTask(plannedOn(stale, { subtree: true }), [{ kind: 'remove' }]);
 
         expect(written).toBe(false);
         expect(bench.lines()).toEqual(['- [ ] A', 'text ^a']);
@@ -344,7 +344,7 @@ describe('a guess by position one level up', () => {
         const c1 = bench.taskAt(1);
         const swapped = ['- [ ] p', '\t- [ ] c', '\t\t- [ ] g2', '- [ ] p', '\t- [ ] c', '\t\t- [ ] g1'];
         bench.edit(swapped);
-        expect((await bench.writer.deleteTaskFromFile(plannedOn(c1, { subtree: true }))).written).toBe(false);
+        expect((await bench.writer.applyToTask(plannedOn(c1, { subtree: true }), [{ kind: 'remove' }])).written).toBe(false);
         expect(bench.lines()).toEqual(swapped);
         expect(bench.refused.map(r => r.reason.kind)).toEqual(['changed']);
     });
@@ -353,7 +353,7 @@ describe('a guess by position one level up', () => {
         const bench = await writeBench(before);
         const c1 = bench.taskAt(1);
         bench.edit(before.slice(3));
-        expect((await bench.writer.deleteTaskFromFile(plannedOn(c1, { subtree: true }))).written).toBe(false);
+        expect((await bench.writer.applyToTask(plannedOn(c1, { subtree: true }), [{ kind: 'remove' }])).written).toBe(false);
         expect(bench.lines()).toEqual(before.slice(3));
         expect(bench.refused.map(r => r.reason.kind)).toEqual(['changed']);
     });
@@ -399,7 +399,7 @@ describe('two own writes trade the texts of two rows, then an unreported change'
         const after = bench.lines();
         const row = after.indexOf('- [x] A');
         expect(row).toBeGreaterThan(0);
-        expect((await bench.writer.deleteTaskFromFile(plannedOn(x, { subtree: true }))).written).toBe(true);
+        expect((await bench.writer.applyToTask(plannedOn(x, { subtree: true }), [{ kind: 'remove' }])).written).toBe(true);
         expect(bench.lines()).toEqual(after.filter((_, i) => i !== row));
         expect(bench.refused).toEqual([]);
     });
@@ -408,7 +408,7 @@ describe('two own writes trade the texts of two rows, then an unreported change'
         const { bench, x } = await traded();
         const edited = ['- [x] A', '- [ ] A', 'メモ'];
         bench.edit(edited);
-        expect((await bench.writer.deleteTaskFromFile(plannedOn(x, { subtree: true }))).written).toBe(false);
+        expect((await bench.writer.applyToTask(plannedOn(x, { subtree: true }), [{ kind: 'remove' }])).written).toBe(false);
         expect(bench.lines()).toEqual(edited);
         expect(bench.refused.map(r => r.reason.kind)).toEqual(['changed']);
     });
@@ -421,13 +421,13 @@ describe('two own writes trade the texts of two rows, then an unreported change'
         await bench.writer.updateTaskInFile(plannedOn(y), { ...y, content: 'A', originalText: '- [ ] A' });
         expect(bench.lines()).toEqual(['- [ ] B', '- [ ] A']);
         bench.edit(['- [ ] B', '- [ ] A', 'メモ']);
-        expect((await bench.writer.deleteTaskFromFile(plannedOn(x, { subtree: true }))).written).toBe(false);
+        expect((await bench.writer.applyToTask(plannedOn(x, { subtree: true }), [{ kind: 'remove' }])).written).toBe(false);
         expect(bench.lines()).toEqual(['- [ ] B', '- [ ] A', 'メモ']);
     });
 
     it('with nothing else changed, the same writes land', async () => {
         const { bench, x } = await traded();
-        expect((await bench.writer.deleteTaskFromFile(plannedOn(x, { subtree: true }))).written).toBe(true);
+        expect((await bench.writer.applyToTask(plannedOn(x, { subtree: true }), [{ kind: 'remove' }])).written).toBe(true);
         expect(bench.lines()).toEqual(['- [ ] A']);
     });
 });

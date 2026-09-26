@@ -47,7 +47,6 @@ function makeRepository() {
         insertGeneratedInstance: vi.fn().mockResolvedValue(undefined),
         updateTaskInFile: vi.fn().mockResolvedValue(undefined),
         stripFlow: vi.fn().mockResolvedValue(undefined),
-        deleteTaskFromFile: vi.fn().mockResolvedValue(undefined),
     };
 }
 
@@ -276,7 +275,6 @@ describe('a fire that cannot generate writes nothing and keeps its command', () 
         expect(repository.insertGeneratedInstance).not.toHaveBeenCalled();
         expect(repository.insertRecurrenceForTask).not.toHaveBeenCalled();
         expect(repository.stripFlow).not.toHaveBeenCalled();
-        expect(repository.deleteTaskFromFile).not.toHaveBeenCalled();
     };
 
     it('when no block answers to the name', async () => {

@@ -67,11 +67,6 @@ export class TaskRepository {
         return this.inlineWriter.applyToLine(filePath, at, ops, opts);
     }
 
-    /** @returns whether the task's lines were removed (see InlineTaskWriter). */
-    async deleteTaskFromFile(target: PlannedTarget): Promise<WriteOutcome> {
-        return this.inlineWriter.deleteTaskFromFile(target);
-    }
-
     /**
      * Everything one operation does to one row, as one write
      * (see {@link InlineTaskWriter.applyToTask}).

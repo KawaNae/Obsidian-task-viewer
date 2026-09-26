@@ -616,7 +616,9 @@ export class TaskIndex {
             if (options.fireFlow && isTvInline(task)) {
                 removed = await this.commandExecutor.fireAndDelete(task);
             } else {
-                removed = (await this.repository.deleteTaskFromFile(plannedOn(task, { subtree: true }))).written;
+                // The row and the subtree the index read (`plannedOn`): a line
+                // written into the subtree since is not taken with it.
+                removed = (await this.repository.applyToTask(plannedOn(task, { subtree: true }), [{ kind: 'remove' }])).written;
                 if (!removed) {
                     // Nothing was written, so no rescan follows and the store
                     // still holds a task the file also still holds. They agree,

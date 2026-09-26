@@ -19,7 +19,7 @@ function only(filed: Filed[]): Filed {
     return filed[0];
 }
 
-describe('what deleteTaskFromFile reports', () => {
+describe('what a remove reports', () => {
     const parent = '- [ ] 親 @2026-09-21';
 
     it('says the task line and its children went, as one removal', async () => {
@@ -31,7 +31,7 @@ describe('what deleteTaskFromFile reports', () => {
             '- [ ] 次の親 @2026-09-21',
         ]);
 
-        const removed = await b.writer.deleteTaskFromFile(plannedOn(b.taskAt(1), { subtree: true }));
+        const removed = await b.writer.applyToTask(plannedOn(b.taskAt(1), { subtree: true }), [{ kind: 'remove' }]);
 
         expect(removed.written).toBe(true);
         expect(only(b.filed).edits).toEqual([{ kind: 'removed', at: 1, count: 3 }]);
@@ -52,7 +52,7 @@ describe('what deleteTaskFromFile reports', () => {
             '- [ ] 次のタスク',
         ]);
 
-        await b.writer.deleteTaskFromFile(plannedOn(b.taskAt(0), { subtree: true }));
+        await b.writer.applyToTask(plannedOn(b.taskAt(0), { subtree: true }), [{ kind: 'remove' }]);
 
         expect(only(b.filed).edits).toEqual([{ kind: 'removed', at: 0, count: 4 }]);
         expect(b.lines()).toEqual(['', '- [ ] 次のタスク']);
@@ -64,7 +64,7 @@ describe('what deleteTaskFromFile reports', () => {
         const task = b.taskAt(1);
         b.edit(['# note', '- [ ] 別のタスク @2026-09-21']);
 
-        const removed = await b.writer.deleteTaskFromFile(plannedOn(task, { subtree: true }));
+        const removed = await b.writer.applyToTask(plannedOn(task, { subtree: true }), [{ kind: 'remove' }]);
 
         expect(removed.written).toBe(false);
         expect(b.filed).toEqual([]);

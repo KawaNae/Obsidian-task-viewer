@@ -42,10 +42,10 @@ describe('a write whose file is not there', () => {
         expect(b.filed).toEqual([]);
     });
 
-    it.each(['missing', 'folder'] as const)('%s: deleteTaskFromFile is refused as gone, told once', async (kind) => {
+    it.each(['missing', 'folder'] as const)('%s: a remove is refused as gone, told once', async (kind) => {
         const { b, task } = await benchWithout(kind);
 
-        const outcome = await b.writer.deleteTaskFromFile(plannedOn(task, { subtree: true }));
+        const outcome = await b.writer.applyToTask(plannedOn(task, { subtree: true }), [{ kind: 'remove' }]);
 
         expect(outcome.written).toBe(false);
         expect(outcome.refused?.reason).toEqual({ kind: 'gone' });
