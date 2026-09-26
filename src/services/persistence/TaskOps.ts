@@ -1,6 +1,5 @@
 import type { FlowInstanceInsert } from './FlowInstanceLines';
 import type { PropertyOp } from './PropertyUpdatePlanner';
-import type { Refusal } from './FileLines';
 
 /**
  * One thing an operation does to the row it names, in a write that may do
@@ -56,12 +55,18 @@ export type TaskOp =
     | { kind: 'fire'; plan: (lines: readonly string[], line: number) => readonly TaskOp[] };
 
 /**
- * The fire of a write that completes a row, and which refusals of the write
- * with it leave the completion to be written without it (`processLines`'s
- * `instead`): the flow layer's answer, handed in with the op
- * (`FlowExecutor.fireOp`).
+ * The fire of a write that completes a row, handed in with the op by the flow
+ * layer (`FlowExecutor.fireOp`).
+ *
+ * The completion is the user's and the fire follows from it, so a fire that
+ * writes lines never takes the completion down with it: a write refused with
+ * the fire in it, whatever it was refused for, is tried without it
+ * (`processLines`'s `instead`), as the editor writes the fire apart from the
+ * completion it follows (`FlowFireExtension`). A refusal of the completion's
+ * own is met again without the fire, and nothing is written.
  */
 export interface CompletionFire {
     op: Extract<TaskOp, { kind: 'fire' }>;
-    givesWay(refused: Refusal): boolean;
+    /** Whether the fire, as the write's last run planned it, writes lines. */
+    writes(): boolean;
 }

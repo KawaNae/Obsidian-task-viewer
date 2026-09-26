@@ -113,7 +113,9 @@ export function fireFilter(host: EditorFireHost): Extension {
             const ops = fire.op.plan(lines, line);
             const planned = fire.planned();
             if (planned?.kind === 'failed') queueMicrotask(() => host.didNotFire(planned));
-            if (ops.length === 0) continue;
+            // The completion is in the document already, and stands whatever
+            // comes of its fire (`CompletionFire`).
+            if (!fire.writes()) continue;
             // The row is named by the line our own writes' map says it is
             // (`replayEdits`), read as those writes left it: whatever a fire
             // above did to it (a move carrying it re-indented, say) is ours,

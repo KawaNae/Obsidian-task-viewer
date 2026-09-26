@@ -32,8 +32,8 @@ export class InlineTaskWriter {
      * Rewrite the row as `updatedTask`, and its property lines by `childOps`
      * — and, with `fire`, fire its flow in the same write: a card's, the
      * API's or a timer's completion of the row (`TaskIndex.writeUpdate`).
-     * A fire that gives way (`CompletionFire.givesWay`) leaves the rewrite
-     * written alone, in the same attempt.
+     * A write refused with a fire that writes lines leaves the rewrite
+     * written alone, in the same attempt (`CompletionFire.writes`).
      *
      * The line is made from the index's copy, so it is written only over a
      * row that still reads as that copy (`target.basis`): a line edited since
@@ -59,9 +59,9 @@ export class InlineTaskWriter {
 
     /**
      * Apply `ops` to the row `target` names, as one write, with `fire` after
-     * them when a fire goes with them: the completion is written alone when
-     * the write with the fire is refused as the fire gives way to
-     * (`CompletionFire.givesWay`), in the same attempt.
+     * them when a fire goes with them: when the write with the fire is
+     * refused, whatever for, and the fire writes lines, the ops are tried
+     * without it in the same attempt (`CompletionFire.writes`).
      */
     private writeOps(
         file: TFile,
@@ -72,7 +72,7 @@ export class InlineTaskWriter {
     ): Promise<WriteOutcome> {
         const edit = (all: readonly TaskOp[]): DraftEdit => (draft, _eol, session) => this.applyOps(draft, session, target, all);
         if (!fire) return processLines(this.app, file, channel, edit(ops));
-        return processLines(this.app, file, channel, edit([...ops, fire.op]), undefined, { when: fire.givesWay, edit: edit(ops) });
+        return processLines(this.app, file, channel, edit([...ops, fire.op]), undefined, { when: () => fire.writes(), edit: edit(ops) });
     }
 
     /** Nothing written: the file is not there. Told as `gone`, like a row that is not. */
