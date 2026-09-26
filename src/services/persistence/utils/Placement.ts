@@ -269,9 +269,10 @@ export class Placement {
      * foretold. A line put above a task's text that goes on, a paragraph
      * under a heading, or a fence it opens the content of takes them in as
      * its own; below them, it takes in nothing. It goes past what it takes
-     * in up to the first item of the note among it — an item it would make
-     * its child stays where it stands, and the write's check refuses the
-     * line put above it. `indentAt` answers the indentation the line takes
+     * in up to the first item or heading of the note among it — an item it
+     * would make its child, or a heading it would make its text, stays where
+     * it stands, and the write's check refuses the line put above it: a
+     * heading is a bound as an item is (`OutlineReading.kindOf`). `indentAt` answers the indentation the line takes
      * at each place it is tried. Only `head` is tried: a line of the block
      * below it that takes in more is refused by the write's check.
      */
@@ -290,7 +291,7 @@ export class Placement {
             // Line `k` of the lines tried is line `k - 1` of the note.
             const end = tried.item(at)?.end ?? at + 1;
             let past = at;
-            for (let k = at + 1; k < end && outline.item(k - 1) === null; k++) past = k;
+            for (let k = at + 1; k < end && outline.item(k - 1) === null && outline.kindOf(k - 1) !== 'heading'; k++) past = k;
             if (past === at) return { at, parent, indent };
             at = past;
         }

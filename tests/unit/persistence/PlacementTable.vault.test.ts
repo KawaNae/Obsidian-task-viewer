@@ -133,6 +133,23 @@ describe('a task created under a heading (insertUnderHeading)', () => {
         expect(parents(session)).toEqual([['N', null], ['A', null]]);
     });
 
+    // A heading is a bound, as for a move to a heading's section (F8's R1):
+    // the new task goes past no heading, and leaves each one reading as it did.
+    it.each([
+        ['an indented heading', ['## H', '   ## Next', '- [x] b']],
+        ['a setext heading', ['## H', 'Next', '----']],
+    ])('is refused when %s stands just below the heading, which it would take in', async (_name, note) => {
+        const { contents, session } = await open([...note, '']);
+        const before = contents.get(FILE)!;
+
+        expect(await session.index.createTask(FILE, '- [ ] N', 'H')).toBeNull();
+        await session.settle(FILE);
+
+        expect(contents.get(FILE)).toBe(before);
+        expect(Notice.messages).toHaveLength(1);
+        expect(Notice.messages[0]).toMatch(/heading/);
+    });
+
     it('makes the heading at the end of a note that is only frontmatter, and of an empty note', async () => {
         for (const note of [['---', 'a: 1', '---', ''], ['']]) {
             live?.dispose();
