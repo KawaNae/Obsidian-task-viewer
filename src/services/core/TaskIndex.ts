@@ -468,9 +468,10 @@ export class TaskIndex {
     /**
      * A write that may complete a row (`completingIn`, its file; null when it
      * does not), made with the row's fire in it: whether it was written. A
-     * fire that gives way leaves the completion written alone in the same
-     * write (`FireOp.givesWay`), and the user is told the flow was not run;
-     * a fire that could not be planned is told once the completion landed.
+     * write refused with a fire that writes lines is made without it in the
+     * same attempt (`CompletionFire.writes`), and the user is told the flow
+     * was not run; a fire that could not be planned is told once the
+     * completion landed.
      */
     private async writeCompleting(
         completingIn: string | null,
@@ -802,7 +803,7 @@ export class TaskIndex {
 
     /**
      * Tell the user a completion was written without its fire, and why: the
-     * fire's lines were refused (`FireOp.givesWay`, the editor's fire).
+     * fire's write was refused (`CompletionFire.writes`, the editor's fire).
      */
     private reportFireRefusal(refusal: Refusal): void {
         const { reason, subject, file } = refusal;

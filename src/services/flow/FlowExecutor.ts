@@ -72,7 +72,7 @@ export type FirePlan =
 
 /**
  * A `fire` op, what its plan answered the last time a write ran it, and
- * which refusals of that write leave the completion to be written alone.
+ * whether that plan writes lines (`CompletionFire.writes`).
  */
 export interface FireOp extends CompletionFire {
     /** The plan of the write's last run, or null while no write has run it. */
@@ -185,14 +185,9 @@ export class FlowExecutor {
                 },
             },
             planned: () => last,
-            // Lines of the fire that cannot be written where they go take the
-            // completion with them, and the completion is the user's: it is
-            // written alone, as one made in the editor stands when its fire
-            // is refused. Any other refusal is the completion's own.
-            givesWay: (refused) => {
-                const placing = refused.reason.kind === 'unplaceable' || refused.reason.kind === 'disturbs';
+            writes: () => {
                 const planned = last as FirePlan | null;
-                return placing && planned?.kind === 'fires' && planned.ops.length > 0;
+                return planned?.kind === 'fires' && planned.ops.length > 0;
             },
         };
     }
