@@ -686,7 +686,7 @@ function explains(
     for (let i = 0; i < after.length; i++) {
         const from = replayed.origin[i];
         if (from === null || replayed.rewritten[i]) continue;
-        if (before[from] !== after[i]) return false;
+        if (!Outline.VERBATIM.holds(after[i], before[from])) return false;
     }
 
     return true;
@@ -706,6 +706,8 @@ export type EditedLines =
         lines: readonly string[];
         /** The draft's report: every change the write made, in order. */
         edits: readonly LineEdit[];
+        /** Whether the report accounts for every line the write left unreported (`explains`). */
+        accounted: boolean;
         /** The reading of `lines` the write's check made, or null when it made none. */
         reading: OutlineReading | null;
     }
@@ -873,8 +875,10 @@ export function editLines(
     // its report said the row had gone. If the report does not account
     // for the lines, that coordinate is not known to be the row's, and
     // nothing is written rather than something in the wrong place.
-    if (unsound === null && next !== null && carried && !explains(before, next, reported)) {
-        unsound = 'its report does not account for the lines it wrote';
+    let accounted: boolean | undefined;
+    if (unsound === null && next !== null && carried) {
+        accounted = explains(before, next, reported);
+        if (!accounted) unsound = 'its report does not account for the lines it wrote';
     }
     if (unsound !== null) return callerBug(`a coordinate was carried across this write's edits, but ${unsound}`, { kind: 'changed' });
     if (next === null) {
@@ -907,7 +911,8 @@ export function editLines(
         }
     }
 
-    return { written: true, before, lines: next, edits: reported, reading: readings?.left ?? null };
+    accounted ??= explains(before, next, reported);
+    return { written: true, before, lines: next, edits: reported, accounted, reading: readings?.left ?? null };
 }
 
 /**
@@ -987,7 +992,7 @@ export async function processLines(
             refused = edited.refused;
             return content;
         }
-        const { before, lines: next, edits: reported } = edited;
+        const { before, lines: next, edits: reported, accounted } = edited;
         // The mark the note opened with, put back where it was.
         const rebuilt = (bom ? BOM : '') + joinLines([...next], eol);
 
@@ -996,7 +1001,6 @@ export async function processLines(
         // caller still hears `true` — the line was found, which is what it
         // asked.
         if (rebuilt !== content) {
-            const accounted = explains(before, next, reported);
             if (!accounted) {
                 logError(`[FileLines] ${file.path}: a write's report does not account for the lines it wrote; landed without it`);
             }
