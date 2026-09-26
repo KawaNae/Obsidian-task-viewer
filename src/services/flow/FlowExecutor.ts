@@ -244,13 +244,8 @@ export class FlowExecutor {
      * goes ahead.
      *
      * What the fire writes and what the delete takes away are one write (see
-     * {@link TaskRepository.applyToTask}). They used to be two, and the second
-     * one resolved the original by its text after the first had written a line
-     * worded exactly like it — which is how a delete came to take the instance
-     * it had just created, leaving the file as it started and the task still
-     * on the page. One write also settles the outcome the two of them could
-     * not: an instance can no longer be left standing beside an original that
-     * would not go.
+     * {@link TaskRepository.applyToTask}): an instance is never left standing
+     * beside an original that did not go.
      *
      * @returns whether the task is gone. A fire that could not be planned
      * answers no and writes nothing. A line that could not be resolved answers
