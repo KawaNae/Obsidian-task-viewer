@@ -249,28 +249,6 @@ export class InlineTaskWriter {
     }
 
     /**
-     * Append `lineBody` as the task's last child.
-     *
-     * `lineBody` carries no indentation: the depth is read off the file here,
-     * from the children the task already has. Letting the caller prefix it meant
-     * deriving the unit from the parent line alone, which returns four spaces
-     * for any top-level task and so mixed spaces into tab-written files.
-     */
-    async insertLineAfterTask(target: PlannedTarget, lineBody: string): Promise<WriteOutcome> {
-        const file = this.app.vault.getAbstractFileByPath(target.file);
-        if (!(file instanceof TFile)) return fileGone(this.channelOf(target.file), target.file, target.subject);
-
-        return processLines(this.app, file, this.channelOf(target.file), (draft, _eol, { row }) => {
-            const currentLine = row(target);
-            if (currentLine === null) return false;
-
-            draft.put(Placement.lastChild(draft.reading(), currentLine, lineBody), Block.line(lineBody));
-
-            return true;
-        });
-    }
-
-    /**
      * @returns the outcome.
      *
      * A note that does not exist yet is made of what the append writes to an

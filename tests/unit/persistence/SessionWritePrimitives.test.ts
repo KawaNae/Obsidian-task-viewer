@@ -220,7 +220,6 @@ function buildIndexHost(task: Task | undefined) {
         store: { getTask: () => task },
         scanner: { waitForScan: vi.fn(async () => {}), follow: () => null },
         repository: {
-            insertLineAfterTask: vi.fn(async () => MADE),
             applyToTask: vi.fn(async () => MADE),
         },
         withNotify: vi.fn(async (_file: string, fn: () => Promise<unknown>) => await fn()),
@@ -238,23 +237,11 @@ function buildIndexHost(task: Task | undefined) {
 const proto = TaskIndex.prototype as any;
 
 describe('TaskIndex child insertion', () => {
-    it('appendChildTask inserts at the end of the subtree, not the head', async () => {
-        const host = buildIndexHost(makeTask({ originalText: '\t- [ ] parent' }));
-        await proto.appendChildTask.call(host, 'tv-inline:note.md:ln:1', '- [x] session');
-
-        expect(host.repository.insertLineAfterTask).toHaveBeenCalledTimes(1);
-        expect(host.repository.applyToTask).not.toHaveBeenCalled();
-        // The body is passed through unindented: the depth is resolved by the
-        // write layer, which can see the children the task already has.
-        expect(host.repository.insertLineAfterTask.mock.calls[0][1]).toBe('- [x] session');
-    });
-
     it('insertLine puts a first child at the head', async () => {
         const host = buildIndexHost(makeTask({ originalText: '- [ ] parent' }));
         await proto.insertLine.call(host, 'tv-inline:note.md:ln:1', '- [ ] child', 'firstChild');
 
         expect(host.repository.applyToTask.mock.calls[0][1]).toEqual([{ kind: 'insert', place: 'firstChild', text: '- [ ] child' }]);
-        expect(host.repository.insertLineAfterTask).not.toHaveBeenCalled();
     });
 
     // Tasks / dayPlanner tasks are parsed read-only. TaskApi rejects writes to
@@ -267,18 +254,9 @@ describe('TaskIndex child insertion', () => {
         expect(host.repository.applyToTask).not.toHaveBeenCalled();
     });
 
-    it('appendChildTask is a no-op for a read-only task', async () => {
-        const host = buildIndexHost(makeTask({ isReadOnly: true, parserId: 'day-planner' }));
-        await proto.appendChildTask.call(host, 'tv-inline:note.md:ln:1', '- [x] session');
-
-        expect(host.withNotify).not.toHaveBeenCalled();
-        expect(host.repository.insertLineAfterTask).not.toHaveBeenCalled();
-    });
-
-    it('both are no-ops when the task is unknown', async () => {
+    it('insertLine is a no-op when the task is unknown', async () => {
         const host = buildIndexHost(undefined);
         await proto.insertLine.call(host, 'missing', '- [ ] child', 'firstChild');
-        await proto.appendChildTask.call(host, 'missing', '- [x] session');
         expect(host.withNotify).not.toHaveBeenCalled();
     });
 });
@@ -331,13 +309,6 @@ describe('TaskWriteService delegation', () => {
         return { idx, svc: new TaskWriteService(idx) };
     }
 
-    it('appendChildTask reaches the index with the resolved id', async () => {
-        const { idx, svc } = serviceWith({ appendChildTask: vi.fn(async () => {}) });
-
-        await svc.appendChildTask('p', '- [x] session');
-        expect(idx.appendChildTask).toHaveBeenCalledWith('p', '- [x] session');
-    });
-
     it('insertLine reaches the index and returns whether it wrote', async () => {
         const { idx, svc } = serviceWith({ insertLine: vi.fn(async () => true) });
 
@@ -359,13 +330,10 @@ async function runChildInsert(
     fileText: string,
     line: number,
     lineBody: string,
-    mode: 'first' | 'after'
 ): Promise<{ text: string; index: WriteOutcome }> {
     const bench = await writeBench(fileText);
     const task = bench.taskAt(line);
-    const index = mode === 'first'
-        ? await bench.writer.applyToTask(plannedOn(task), [{ kind: 'insert', place: 'firstChild', text: lineBody }])
-        : await bench.writer.insertLineAfterTask(plannedOn(task), lineBody);
+    const index = await bench.writer.applyToTask(plannedOn(task), [{ kind: 'insert', place: 'firstChild', text: lineBody }]);
     return { text: bench.text(), index };
 }
 
@@ -375,16 +343,16 @@ describe('child inserts take their indent from the file', () => {
 
     it('follows an existing tab-indented child', async () => {
         const { text } = await runChildInsert(
-            [parent, '\t- [ ] existing'].join('\n'), 0, RECORD, 'after'
+            [parent, '\t- [ ] existing'].join('\n'), 0, RECORD
         );
-        expect(text.split('\n')).toEqual([parent, '\t- [ ] existing', '\t' + RECORD]);
+        expect(text.split('\n')).toEqual([parent, '\t' + RECORD, '\t- [ ] existing']);
     });
 
     it('follows an existing space-indented child', async () => {
         const { text } = await runChildInsert(
-            [parent, '    - [ ] existing'].join('\n'), 0, RECORD, 'after'
+            [parent, '    - [ ] existing'].join('\n'), 0, RECORD
         );
-        expect(text.split('\n')).toEqual([parent, '    - [ ] existing', '    ' + RECORD]);
+        expect(text.split('\n')).toEqual([parent, '    ' + RECORD, '    - [ ] existing']);
     });
 
     it('falls back to how the rest of the file is written', async () => {
@@ -392,21 +360,21 @@ describe('child inserts take their indent from the file', () => {
         // the unit from the top-level parent line alone would answer 4 spaces.
         const { text } = await runChildInsert(
             [parent, '- [ ] other', '\t- [ ] other child'].join('\n'),
-            0, RECORD, 'first'
+            0, RECORD
         );
         expect(text.split('\n')[1]).toBe('\t' + RECORD);
     });
 
     it('uses a tab when the file has no indentation to read', async () => {
-        const { text } = await runChildInsert(parent, 0, RECORD, 'first');
+        const { text } = await runChildInsert(parent, 0, RECORD);
         expect(text.split('\n')[1]).toBe('\t' + RECORD);
     });
 
     it('ignores indentation supplied by the caller', async () => {
         const { text } = await runChildInsert(
-            [parent, '\t- [ ] existing'].join('\n'), 0, '        ' + RECORD, 'after'
+            [parent, '\t- [ ] existing'].join('\n'), 0, '        ' + RECORD
         );
-        expect(text.split('\n')[2]).toBe('\t' + RECORD);
+        expect(text.split('\n')[1]).toBe('\t' + RECORD);
     });
 });
 

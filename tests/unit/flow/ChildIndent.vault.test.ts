@@ -54,16 +54,6 @@ const NOT_A_CHILD = [
 describe.each(NOT_A_CHILD)('a line of the subtree %s', (_name, line, unit) => {
     const NOTE = ['# note', '- [ ] T', line, '- [ ] U', ''];
 
-    it('lends no indentation to a last child', async () => {
-        const { contents, session } = await open(NOTE);
-
-        await session.index.appendChildTask(taskWorded(session, 'T').id, '- [ ] c');
-        await session.settle(FILE);
-
-        expect(contents.get(FILE)!.split('\n')).toEqual(['# note', '- [ ] T', line, `${unit}- [ ] c`, '- [ ] U', '']);
-        expect(taskWorded(session, 'c').parentId).toBe(taskWorded(session, 'T').id);
-    });
-
     it('lends no indentation to a first child', async () => {
         const { contents, session } = await open(NOTE);
 

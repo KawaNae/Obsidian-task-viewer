@@ -96,53 +96,6 @@ describe('a remove takes the whole subtree', () => {
     });
 });
 
-// ── insert position: the extent decides where "after the subtree" is ──
-
-describe('insertLineAfterTask lands past the subtree', () => {
-    it('goes after the deepest descendant', async () => {
-        const h = await writeBench([
-            '- [ ] parent @2026-08-15',
-            '\t- [ ] child',
-            '\t\t- [ ] grandchild',
-            '- [ ] sibling',
-        ].join('\n'));
-
-        await h.writer.insertLineAfterTask(plannedOn(h.taskAt(0)), '- [x] record');
-
-        expect(h.lines()[3]).toBe('\t- [x] record');
-        expect(h.lines()[4]).toBe('- [ ] sibling');
-    });
-
-    it('does not count trailing blank lines as part of the subtree', async () => {
-        const h = await writeBench([
-            '- [ ] parent @2026-08-15',
-            '\t- [ ] child',
-            '',
-            '- [ ] sibling',
-        ].join('\n'));
-
-        await h.writer.insertLineAfterTask(plannedOn(h.taskAt(0)), '- [x] record');
-
-        expect(h.lines()[2]).toBe('\t- [x] record');
-    });
-
-    it('goes above the parent\'s own fenced block, at the end of its children, rather than into it', async () => {
-        const h = await writeBench([
-            '- [ ] parent @2026-08-15',
-            '\t```md',
-            '\t- [ ] looks like a task',
-            '\t```',
-            '- [ ] sibling',
-        ].join('\n'));
-
-        await h.writer.insertLineAfterTask(plannedOn(h.taskAt(0)), '- [x] record');
-
-        expect(h.lines()[1]).toBe('\t- [x] record');
-        expect(h.lines()[2]).toBe('\t```md');
-        expect(h.lines()[5]).toBe('- [ ] sibling');
-    });
-});
-
 // ── sibling insert: the extent is walked repeatedly, once per completed run ──
 
 describe('insertSiblingAfterTask walks whole subtrees', () => {

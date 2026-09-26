@@ -265,26 +265,20 @@ describe('a line put past a fence in a list item that never closes', () => {
         expect(tasks).toEqual([[1, 'P'], [2, 'Q'], [5, 'rec']]);
     });
 
-    it('reads a last child put under P as a task', async () => {
-        const { lines, tasks } = await written(session => session.index.appendChildTask(idOf(session, 'P'), '- [ ] c'));
-        expect(lines).toEqual(['# note', '- [ ] P', '  - [ ] Q', '    ```', 'x', '  - [ ] c', '']);
-        expect(tasks).toEqual([[1, 'P'], [2, 'Q'], [5, 'c']]);
-    });
-
     it('reads a task appended to the note as a task', async () => {
         const { lines, tasks } = await written(session => session.index.createTask(FILE, '- [ ] new'));
         expect(lines).toEqual(['# note', '- [ ] P', '  - [ ] Q', '    ```', 'x', '- [ ] new', '']);
         expect(tasks).toEqual([[1, 'P'], [2, 'Q'], [5, 'new']]);
     });
 
-    // Older than L2 (F4's R5, the part left): a last child of the item whose
-    // own fence never closes went past the fence, on it. P1 puts it at the
-    // end of the item's children, above its own fence, where it reads as a task.
-    it('reads a last child put under the item whose own fence never closes as a task, or writes nothing (P1)', async () => {
+    // Older than L2 (F4's R5, the part left): a child of the item whose own
+    // fence never closes went past the fence, on it. P1 puts it above the
+    // item's own fence, where it reads as a task.
+    it('reads a child put under the item whose own fence never closes as a task, or writes nothing (P1)', async () => {
         const { contents, session } = await open(['# note', '- [ ] T', '    ```', '    code', '- [ ] U', '']);
         const before = contents.get(FILE)!;
 
-        await session.index.appendChildTask(tasksWorded(session, 'T')[0].id, '- [ ] c');
+        await session.index.insertLine(tasksWorded(session, 'T')[0].id, '- [ ] c', 'firstChild');
         await session.settle(FILE);
 
         // Either the child is a task, or nothing is written and the user hears why.

@@ -282,36 +282,6 @@ describe('4. a deletion fire (the instance and the removal, one applyToTask)', (
     });
 });
 
-// ─── 5. insertLineAfterTask ──────────────────────────────────────────
-
-describe('5. insertLineAfterTask (appendChildTask)', () => {
-    it('A: the line goes in as the last child, and the names held before the write follow the rows', async () => {
-        const { contents, session } = await open({ [FILE]: NOTE('- [ ] 対象 @2026-09-21', '\t- [ ] 子 @2026-09-21') });
-        const before = rows(session).map(row => row.id);
-
-        await session.index.appendChildTask(idOf(session, '対象'), '- [ ] 追加 @2026-09-21');
-        await session.settle(FILE);
-
-        expect(contents.get(FILE)).toBe(NOTE('- [ ] 対象 @2026-09-21', '\t- [ ] 子 @2026-09-21', '\t- [ ] 追加 @2026-09-21').join('\n'));
-        const after = rows(session).map(row => row.id);
-        expect([after[0], after[1], after[2], after[4]]).toEqual(followed(session, before));
-        expect(followed(session, before)).not.toContain(after[3]);
-        expect(Notice.messages).toEqual([]);
-    });
-
-    it('B: a line written above from outside: nothing written, one `changed`', async () => {
-        const { contents, session } = await open({ [FILE]: NOTE('- [ ] 対象 @2026-09-21', '\t- [ ] 子 @2026-09-21') });
-
-        writeOutside(contents, 1);
-        const edited = contents.get(FILE);
-        expect(await session.index.appendChildTask(idOf(session, '対象'), '- [ ] 追加 @2026-09-21')).toBe(false);
-        await session.settle(FILE);
-
-        expect(contents.get(FILE)).toBe(edited);
-        expect(Notice.messages).toEqual([changed('対象')]);
-    });
-});
-
 // ─── 6. insertSiblingAfterTask ───────────────────────────────────────
 
 describe('6. insertSiblingAfterTask (timer records)', () => {

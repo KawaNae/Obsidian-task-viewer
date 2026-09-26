@@ -79,10 +79,6 @@ export class TaskRepository {
         return this.inlineWriter.applyToTask(target, ops, opts);
     }
 
-    async insertLineAfterTask(target: PlannedTarget, lineContent: string): Promise<WriteOutcome> {
-        return this.inlineWriter.insertLineAfterTask(target, lineContent);
-    }
-
     async appendTaskToFile(filePath: string, content: string): Promise<WriteAt> {
         return this.inlineWriter.appendTaskToFile(filePath, content);
     }

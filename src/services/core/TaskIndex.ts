@@ -729,28 +729,6 @@ export class TaskIndex {
     }
 
     /**
-     * Append a child at the end of the parent's subtree, in contrast to
-     * {@link insertLine}'s head insertion. Session records accumulate over
-     * time, so head insertion would print the log backwards. Planned from the
-     * index's copy of the row, as {@link insertLine} is.
-     */
-    /** @returns whether the child line was written. */
-    async appendChildTask(parentTaskId: string, childLine: string): Promise<boolean> {
-        if (this.refuseAfterDispose('appendChildTask')) return false;
-        const task = this.copyForWrite(parentTaskId, undefined);
-        if (!task) return false;
-        if (task.isReadOnly) return false;
-        return this.withNotify(task.file, async () => {
-            logInfo(`[appendChildTask] parentId=${parentTaskId}`);
-
-
-            const { written } = await this.repository.insertLineAfterTask(plannedOn(task), childLine);
-
-            return written;
-        });
-    }
-
-    /**
      * Apply `ops` to the row at a line the editor pointed at, in the file:
      * the editor menu's write, when the editor it was opened in no longer
      * shows the file (`shows`). A rewrite that completes the line — an

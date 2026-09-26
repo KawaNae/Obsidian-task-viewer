@@ -161,18 +161,10 @@ describe('Placement.firstChild', () => {
         expect(Placement.firstChild(Outline.read(['- [ ] a', '  2. [ ] u', '- [ ] b']), 0, '- [ ] n').at).toBe(2);
         expect(Placement.firstChild(Outline.read(['- [ ] a', '  *', '- [ ] b']), 0, '- [ ] n').at).toBe(2);
         expect(Placement.firstChild(Outline.read(['- [ ] a', '  -', '- [ ] b']), 0, '- [ ] n').at).toBe(2);
-        expect(Placement.lastChild(Outline.read(['- [ ] a', '  1.', '- [ ] b']), 0, '- [ ] n').at).toBe(2);
+        expect(Placement.firstChild(Outline.read(['- [ ] a', '  1.', '- [ ] b']), 0, '- [ ] n').at).toBe(2);
         // A quote and a heading end the text: the child goes above them.
         expect(Placement.firstChild(Outline.read(['- [ ] a', '  > q', '- [ ] b']), 0, '- [ ] n').at).toBe(1);
         expect(Placement.firstChild(Outline.read(['- [ ] a', '  # h', '- [ ] b']), 0, '- [ ] n').at).toBe(1);
-    });
-});
-
-describe('Placement.lastChild', () => {
-    it('is past the row\'s subtree, under the row, at its children\'s indentation', () => {
-        expect(Placement.lastChild(Outline.read(['- [ ] a', '  - b', '    - c', '- [ ] d']), 0, '- [ ] n')).toEqual({ at: 3, parent: 0, indent: '  ' });
-        // No child to copy: the file's unit, to the row's content column.
-        expect(Placement.lastChild(Outline.read(['100. [ ] a', '- x', '\t- y']), 0, '- [ ] n')).toEqual({ at: 1, parent: 0, indent: '\t\t' });
     });
 });
 
@@ -218,7 +210,6 @@ describe('the spot\'s parent and indentation', () => {
         expect(Placement.afterSubtree(Outline.read(lines), 1, '- [ ] n')).toEqual({ at: 2, parent: 0, indent: '    ' });
         expect(Placement.afterCompletedRun(Outline.read(lines), 1, '- [ ] n')).toEqual({ at: 2, parent: 0, indent: '    ' });
         expect(Placement.groupHead(Outline.read(lines), 2, '- [ ] n')).toEqual({ at: 1, parent: 0, indent: '\t' });
-        expect(Placement.lastChild(Outline.read(lines), 0, '- [ ] n')).toEqual({ at: 3, parent: 0, indent: '    ' });
         expect(Placement.afterSubtree(Outline.read(lines), 2, '- [ ] n')).toEqual({ at: 3, parent: 0, indent: '    ' });
         // A copy is written as the row it copies, whatever stands next to it.
         expect(Placement.copyOf(Outline.read(lines), 1, 'below', '- [ ] n')).toEqual({ at: 2, parent: 0, indent: '\t' });
@@ -229,7 +220,6 @@ describe('the spot\'s parent and indentation', () => {
 
     it('puts a child next to the children there, as a sibling of theirs', () => {
         const lines = ['- [ ] T', '\t- [ ] a', '    - [ ] b', '- [ ] U'];
-        expect(Placement.lastChild(Outline.read(lines), 0, '- [ ] n')).toEqual({ at: 3, parent: 0, indent: '    ' });
         expect(Placement.firstChild(Outline.read(lines), 0, '- [ ] n')).toEqual({ at: 1, parent: 0, indent: '\t' });
     });
 
