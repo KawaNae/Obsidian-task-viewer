@@ -11,12 +11,13 @@
 
 import { type App, TFile, TFolder, normalizePath } from 'obsidian';
 import type { ViewTemplate } from '../../types';
-import { createFile, replaceWhole, type WriteChannel } from '../../utils/FileLines';
+import { createFile, replaceWhole } from '../../utils/FileLines';
+import type { TaskWriteService } from '../data/TaskWriteService';
 
 export class ViewTemplateWriter {
     constructor(
         private app: App,
-        private channelFor: (path: string) => WriteChannel | undefined,
+        private writeService: TaskWriteService,
     ) {}
 
     /**
@@ -36,10 +37,10 @@ export class ViewTemplateWriter {
         if (existing instanceof TFile) {
             // 全体上書き。どの行がどの行になったかは言えないので、申告の
             // 代わりに連鎖が切れた印を残す（replaceWhole）。
-            const { written } = await replaceWhole(this.app, existing, this.channelFor(filePath), content);
+            const { written } = await replaceWhole(this.app, existing, this.writeService.writeChannel(filePath), content);
             return written ? existing : null;
         }
-        const created = await createFile(this.app, filePath, this.channelFor(filePath), template.name, async () => {
+        const created = await createFile(this.app, filePath, this.writeService.writeChannel(filePath), template.name, async () => {
             await this.ensureFolder(folderPath);
             return content;
         });

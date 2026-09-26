@@ -2,6 +2,9 @@ import { describe, it, expect, vi, afterEach } from 'vitest';
 import { TFile } from 'obsidian';
 import { DailyNoteUtils } from '../../../src/utils/DailyNoteUtils';
 import { HeadingInserter } from '../../../src/utils/HeadingInserter';
+import type { TaskWriteService } from '../../../src/services/data/TaskWriteService';
+
+const noChannel = { writeChannel: () => undefined } as unknown as TaskWriteService;
 
 /**
  * appendLineToDailyNote が createDailyNote 直後の TFile を writeUnderHeading に
@@ -28,7 +31,7 @@ describe('DailyNoteUtils.appendLineToDailyNote', () => {
 
         const spy = vi.spyOn(HeadingInserter, 'writeUnderHeading').mockResolvedValue({ written: true, refused: null, made: [], rows: [], line: 1 });
 
-        const path = await DailyNoteUtils.appendLineToDailyNote(app, new Date(), '- [ ] task', 'Log', 2, () => undefined);
+        const path = await DailyNoteUtils.appendLineToDailyNote(app, new Date(), '- [ ] task', 'Log', 2, noChannel);
 
         expect(spy).toHaveBeenCalledTimes(1);
         const fileArg = spy.mock.calls[0][1];
