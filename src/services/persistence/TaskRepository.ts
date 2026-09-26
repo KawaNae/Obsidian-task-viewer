@@ -7,7 +7,7 @@ import { TaskCloner, type InPlaceCopyLines } from './TaskCloner';
 import type { PropertyOp } from './PropertyUpdatePlanner';
 import type { EditorLine, LineDraft, NamedRow, WriteAt, WriteChannel, WriteOutcome, WriteSession } from '../../utils/FileLines';
 import type { PlannedTarget } from './TaskRefs';
-import type { TaskOp } from './TaskOps';
+import type { CompletionFire, TaskOp } from './TaskOps';
 
 /**
  * TaskRepository - タスクのファイル操作を統括するファサードクラス
@@ -53,7 +53,7 @@ export class TaskRepository {
     // --- Inline Task Operations ---
 
     /** @returns what became of the write, and the row as it left it (see InlineTaskWriter). */
-    async updateTaskInFile(target: PlannedTarget, updatedTask: Task, childOps: PropertyOp[] = [], fire?: TaskOp): Promise<WriteOutcome> {
+    async updateTaskInFile(target: PlannedTarget, updatedTask: Task, childOps: PropertyOp[] = [], fire?: CompletionFire): Promise<WriteOutcome> {
         return this.inlineWriter.updateTaskInFile(target, updatedTask, childOps, fire);
     }
 
@@ -63,7 +63,7 @@ export class TaskRepository {
     }
 
     /** Ops applied to the row at a line the editor pointed at, as `at` holds it (see InlineTaskWriter.applyToLine). */
-    async applyToLine(filePath: string, at: EditorLine, ops: readonly TaskOp[], opts: { tellRefusal?: boolean } = {}): Promise<WriteOutcome> {
+    async applyToLine(filePath: string, at: EditorLine, ops: readonly TaskOp[], opts: { tellRefusal?: boolean; fire?: CompletionFire } = {}): Promise<WriteOutcome> {
         return this.inlineWriter.applyToLine(filePath, at, ops, opts);
     }
 

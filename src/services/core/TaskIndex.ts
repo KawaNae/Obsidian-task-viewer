@@ -465,37 +465,35 @@ export class TaskIndex {
         // どうかは、書き込みが照合する土台の行と書く行の対で答える
         // （`completes`）。発火の計画は書き込みの中で、書く行から立てる。
         const target = plannedOn(before, { subtree: propertyOps.length > 0 });
-        const { outcome, fire } = await this.writeCompleting(
+        const written = await this.writeCompleting(
             completes(before.originalText, TaskParser.format(task), this.settings.statusDefinitions) ? task.file : null,
-            (op) => this.repository.updateTaskInFile(target, task, propertyOps, op));
+            (fire) => this.repository.updateTaskInFile(target, task, propertyOps, fire));
 
-        if (!outcome.written) {
+        if (!written) {
             this.revertUnwrittenUpdate(task, taskId, before, updates);
             return false;
         }
-        if (fire) this.commandExecutor.reportUnfired(fire);
         return true;
     }
 
     /**
      * A write that may complete a row (`completingIn`, its file; null when it
-     * does not): made with the row's fire in it, and the fire that went with
-     * it. A fire whose lines cannot be written where they go (`unplaceable`,
-     * `disturbs`) takes the completion with it, and the completion is the
-     * user's: it is then written alone, as a completion made in the editor
-     * stands when its fire is refused, and the refusal has been told.
+     * does not), made with the row's fire in it: whether it was written. A
+     * fire that gives way leaves the completion written alone in the same
+     * write (`FireOp.givesWay`), and the user is told the fire's refusal;
+     * a fire that could not be planned is told once the completion landed.
      */
     private async writeCompleting(
         completingIn: string | null,
-        write: (fire?: TaskOp) => Promise<WriteOutcome>,
-    ): Promise<{ outcome: WriteOutcome; fire: FireOp | undefined }> {
-        if (completingIn === null) return { outcome: await write(), fire: undefined };
+        write: (fire?: FireOp) => Promise<WriteOutcome>,
+    ): Promise<boolean> {
+        if (completingIn === null) return (await write()).written;
         const fire = this.commandExecutor.fireOp(completingIn);
-        const outcome = await write(fire.op);
-        const planned = fire.planned();
-        const placing = outcome.refused?.reason.kind === 'unplaceable' || outcome.refused?.reason.kind === 'disturbs';
-        if (outcome.written || !placing || planned?.kind !== 'fires' || planned.ops.length === 0) return { outcome, fire };
-        return { outcome: await write(), fire: undefined };
+        const outcome = await write(fire);
+        if (!outcome.written) return false;
+        if (outcome.insteadOf) this.reportRefusal(outcome.insteadOf);
+        else this.commandExecutor.reportUnfired(fire);
+        return true;
     }
 
     /**
@@ -805,11 +803,9 @@ export class TaskIndex {
         return this.withNotify(filePath, async () => {
             const defs = this.settings.statusDefinitions;
             const completing = ops.some(op => op.kind === 'update' && completes(at.text, op.text, defs));
-            const { outcome: { written }, fire } = await this.writeCompleting(
+            return this.writeCompleting(
                 completing ? filePath : null,
-                (op) => this.repository.applyToLine(filePath, at, op ? [...ops, op] : ops));
-            if (written && fire) this.commandExecutor.reportUnfired(fire);
-            return written;
+                (fire) => this.repository.applyToLine(filePath, at, ops, { fire }));
         });
     }
 

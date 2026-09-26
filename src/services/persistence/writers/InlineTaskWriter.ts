@@ -9,11 +9,11 @@ import type { PropertyOp } from '../PropertyUpdatePlanner';
 import { flowInstanceHead, renderFlowInstance } from '../FlowInstanceLines';
 import {
     UnfollowableDraft, createFile, fileGone, processLines, splitLines,
-    type EditorLine, type LineDraft, type NamedRow, type Refusal, type WriteAt, type WriteChannels, type WriteOutcome,
-    type WriteSession,
+    type DraftEdit, type EditorLine, type LineDraft, type NamedRow, type Refusal, type WriteAt, type WriteChannel,
+    type WriteChannels, type WriteOutcome, type WriteSession,
 } from '../../../utils/FileLines';
 import type { PlannedTarget } from '../TaskRefs';
-import type { MoveDestination, TaskOp } from '../TaskOps';
+import type { CompletionFire, MoveDestination, TaskOp } from '../TaskOps';
 import { Outline, type OutlineReading } from '../../parsing/utils/Outline';
 
 
@@ -32,6 +32,8 @@ export class InlineTaskWriter {
      * Rewrite the row as `updatedTask`, and its property lines by `childOps`
      * — and, with `fire`, fire its flow in the same write: a card's, the
      * API's or a timer's completion of the row (`TaskIndex.writeUpdate`).
+     * A fire that gives way (`CompletionFire.givesWay`) leaves the rewrite
+     * written alone, in the same attempt.
      *
      * The line is made from the index's copy, so it is written only over a
      * row that still reads as that copy (`target.basis`): a line edited since
@@ -44,7 +46,7 @@ export class InlineTaskWriter {
      * disagreeing until something else forces a rescan. `rows` holds the row
      * as it was handed in and as it was written.
      */
-    async updateTaskInFile(target: PlannedTarget, updatedTask: Task, childOps: PropertyOp[] = [], fire?: TaskOp): Promise<WriteOutcome> {
+    async updateTaskInFile(target: PlannedTarget, updatedTask: Task, childOps: PropertyOp[] = [], fire?: CompletionFire): Promise<WriteOutcome> {
         const file = this.app.vault.getAbstractFileByPath(target.file);
         if (!(file instanceof TFile)) return this.refusedGone(target);
 
@@ -52,8 +54,25 @@ export class InlineTaskWriter {
         // 連続適用する（別 process だと originalText 失効と行番号
         // シフトが競合するため、タスク行と子行は1原子書き込み）。
         const update: TaskOp = { kind: 'update', text: TaskParser.format(updatedTask), childOps };
-        return processLines(this.app, file, this.channelOf(target.file),
-            (draft, _eol, session) => this.applyOps(draft, session, target, fire ? [update, fire] : [update]));
+        return this.writeOps(file, this.channelOf(target.file), target, [update], fire);
+    }
+
+    /**
+     * Apply `ops` to the row `target` names, as one write, with `fire` after
+     * them when a fire goes with them: the completion is written alone when
+     * the write with the fire is refused as the fire gives way to
+     * (`CompletionFire.givesWay`), in the same attempt.
+     */
+    private writeOps(
+        file: TFile,
+        channel: WriteChannel | undefined,
+        target: NamedRow | EditorLine,
+        ops: readonly TaskOp[],
+        fire: CompletionFire | undefined,
+    ): Promise<WriteOutcome> {
+        const edit = (all: readonly TaskOp[]): DraftEdit => (draft, _eol, session) => this.applyOps(draft, session, target, all);
+        if (!fire) return processLines(this.app, file, channel, edit(ops));
+        return processLines(this.app, file, channel, edit([...ops, fire.op]), undefined, { when: fire.givesWay, edit: edit(ops) });
     }
 
     /** Nothing written: the file is not there. Told as `gone`, like a row that is not. */
@@ -64,7 +83,8 @@ export class InlineTaskWriter {
     /**
      * Apply `ops` to the row at a line the editor pointed at, planned from the
      * row, and its subtree when `at` holds one: the editor menu's write, when
-     * the editor it was opened in no longer shows the file. A caller that
+     * the editor it was opened in no longer shows the file, with `opts.fire`
+     * when it completes the line (see {@link updateTaskInFile}). A caller that
      * tells a refusal in its own words has it from the outcome, as
      * `applyToTask` does.
      */
@@ -72,13 +92,13 @@ export class InlineTaskWriter {
         filePath: string,
         at: EditorLine,
         ops: readonly TaskOp[],
-        opts: { tellRefusal?: boolean } = {},
+        opts: { tellRefusal?: boolean; fire?: CompletionFire } = {},
     ): Promise<WriteOutcome> {
         const file = this.app.vault.getAbstractFileByPath(filePath);
         const told = this.channelOf(filePath);
         const channel = told && opts.tellRefusal === false ? { ...told, refused: () => { } } : told;
         if (!(file instanceof TFile)) return fileGone(channel, filePath, at.text.trim());
-        return processLines(this.app, file, channel, (draft, _eol, session) => this.applyOps(draft, session, at, ops));
+        return this.writeOps(file, channel, at, ops, opts.fire);
     }
 
     /**
