@@ -18,6 +18,13 @@ freezeDate(new Date(2026, 8, 25, 12, 0, 0));
  * outline after the ops before it changed the lines, writes what those ops
  * write one attempt each; and an update reads the lines once before and once
  * after.
+ *
+ * Only the move and the property lines ask `Placement` past a change that
+ * reads apart from the lines as handed; a reading kept past a change fails
+ * those two. The completion and the record ask it after a rewrite of the row
+ * alone, which reads as the row did, and a next instance's place is read at
+ * and above the row, where the update's property lines never go: they pin
+ * that the shared reading answers as before, not that it is dropped.
  */
 
 const FILE = 'note.md';
@@ -78,9 +85,12 @@ describe('a write of several ops, read once while its lines are as handed', () =
         expect(lines).toEqual(['# note', '- [ ] T ^tv-t-1', '\t- [x] rec', '\t- [ ] c', '- [ ] U', '']);
     });
 
-    it('moves a completed row to a heading, as op by op', async () => {
-        const note = ['# note', '- [ ] T @2026-09-21 ==> move([[#Done]])', '\t- [ ] c', '- [ ] U', '## Done', '- [x] old', ''];
-        await sameEitherWay(note, 1, (s) => [{ kind: 'update', text: '- [x] T @2026-09-21 ==> move([[#Done]])' }, fire(s)]);
+    it('moves a completed row to a heading below the next instance it put, as op by op', async () => {
+        // The next instance goes above the row, so the heading the move
+        // asks for stands a line further down than in the lines as handed.
+        const note = ['# note', '- [ ] T @2026-09-21 ==> +1d move([[#Done]])', '\t- [ ] c', '- [ ] U', '## Done', '- [x] old', ''];
+        const lines = await sameEitherWay(note, 1, (s) => [{ kind: 'update', text: '- [x] T @2026-09-21 ==> +1d move([[#Done]])' }, fire(s)]);
+        expect(lines).toEqual(['# note', '- [ ] T @2026-09-22 ==> +1d move([[#Done]])', '- [ ] U', '## Done', '- [x] old', '- [x] T @2026-09-21', '\t- [ ] c', '']);
     });
 
     it('puts a second property line below the first it put, as op by op', async () => {
