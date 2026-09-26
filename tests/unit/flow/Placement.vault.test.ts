@@ -227,7 +227,8 @@ describe('a next instance with nowhere in the body to go', () => {
         await fire(session);
 
         expect(contents.get(FILE)).toBe(before.replace('- [ ] 対象', '- [x] 対象'));
-        expect(Notice.messages).toEqual([t('notice.flowNotRun', { reason: t('notice.refusedUnplaceable'), subject: '対象' })]);
+        // The notice names the fence: the line that opens it, as the note stands.
+        expect(Notice.messages).toEqual([t('notice.flowNotRun', { reason: t('notice.refusedUnplaceableInFence', { line: 4 }), subject: '対象' })]);
     });
 });
 

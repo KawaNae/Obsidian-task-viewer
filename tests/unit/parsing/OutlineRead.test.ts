@@ -185,7 +185,7 @@ describe('OutlineReading', () => {
         const gone = new Set(rows);
         const kept = reading.lines.map((_, i) => i).filter(i => !gone.has(i));
         const written: WrittenLine[] = kept.map(from => ({ kind: 'kept', from }));
-        return checkWrite(reading, Outline.read(kept.map(i => reading.lines[i])), written, []) === 'sound';
+        return checkWrite(reading, Outline.read(kept.map(i => reading.lines[i])), written, []).check === 'sound';
     }
 
     it('takes a line out only when every other line reads as the same kind without it', () => {

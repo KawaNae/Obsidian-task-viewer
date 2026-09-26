@@ -389,14 +389,15 @@ export interface EditorLine {
  * the caller pointed at no longer reads what the caller saw there, a line it would put in would not
  * read as meant where it goes (`unplaceable`), writing it would change what
  * another line is or which item it stands in (`disturbs`; both are
- * `checkWrite`), or the write itself failed — it threw, or the file could
- * not be read or written.
+ * `checkWrite`, and name the fence that never closes when that is where the
+ * line reads: `WriteFinding.fence`), or the write itself failed — it threw,
+ * or the file could not be read or written.
  */
 export type RefusalReason =
     | { kind: 'gone' }
     | { kind: 'changed' }
-    | { kind: 'unplaceable' }
-    | { kind: 'disturbs' }
+    | { kind: 'unplaceable'; fence: number | null }
+    | { kind: 'disturbs'; fence: number | null }
     | { kind: 'failed' };
 
 /** A write that was not made, as it is told to whoever reports it. */
@@ -925,10 +926,10 @@ export function editLines(
         // reading, once the write lands; read here once, for the check
         // and for the rows the write leaves.
         readings = { read: readBefore(), left: Outline.read(next) };
-        const check = checkWrite(readings.read, readings.left, written, puts);
+        const { check, fence } = checkWrite(readings.read, readings.left, written, puts);
         if (check === 'loose') return callerBug('a line was spliced into the body without a place (`LineDraft.put`)', { kind: 'failed' });
         if (check !== 'sound') {
-            refuse({ kind: check }, subject());
+            refuse({ kind: check, fence }, subject());
             return notWritten();
         }
     }

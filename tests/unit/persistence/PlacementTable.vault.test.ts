@@ -378,7 +378,7 @@ describe('an append (appendTaskToFile, end)', () => {
         await session.settle(FILE);
 
         expect(contents.get(FILE)).toBe(before);
-        expect(Notice.messages).toEqual([t('notice.writeTargetUnplaceable', { subject: '- [ ] N' })]);
+        expect(Notice.messages).toEqual([t('notice.writeTargetUnplaceableInFence', { line: 2, subject: '- [ ] N' })]);
     });
 });
 

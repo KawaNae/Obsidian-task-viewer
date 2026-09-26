@@ -336,7 +336,7 @@ describe('processLines', () => {
 
         await processLines(h.app, h.file, log.channel, (draft, _eol, { refuse }) => {
             draft.rewrite(0, draft.lines[0]);
-            return refuse({ kind: 'unplaceable' }, 'a');
+            return refuse({ kind: 'unplaceable', fence: null }, 'a');
         });
 
         expect(log.standing()).toEqual([]);
