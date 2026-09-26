@@ -552,21 +552,3 @@ function fileName(path: string): string {
     const base = path.split('/').pop() ?? path;
     return base.replace(/\.md$/i, '');
 }
-
-// ---------------------------------------------------------------------------
-// move destination
-// ---------------------------------------------------------------------------
-
-/**
- * Normalize a move() target into a vault path: sanitize Windows-invalid
- * characters per segment and ensure the .md extension (ported from the
- * legacy MoveCommand).
- */
-export function normalizeDestination(target: Value): string {
-    let dest = target.type === 'link' ? target.target : valueToDisplay(target);
-    dest = dest.replace(/^\[\[/, '').replace(/\]\]$/, '').trim();
-    dest = dest.replace(/\\/g, '/');
-    dest = dest.split('/').map(segment => segment.replace(/[<>:"|?*#]/g, '_')).join('/');
-    if (!dest.toLowerCase().endsWith('.md')) dest += '.md';
-    return dest;
-}

@@ -12,20 +12,15 @@ import { type CreatingEffect, type FlowDeleteAssessment, assessFlowDelete, planF
 import type { FlowInstanceInsert } from '../persistence/FlowInstanceLines';
 import type { TaskOp } from '../persistence/TaskOps';
 import { plannedOn } from '../persistence/TaskRefs';
-import type { EditorSubtree, Refusal, WriteOutcome } from '../../utils/FileLines';
-import { type PlacedLine, Placement } from '../persistence/utils/Placement';
+import { Placement } from '../persistence/utils/Placement';
 import type { MoveTarget } from './FlowAst';
 import { flowSource } from './FlowSegments';
 import { type FlowPlanDeps, GenerationError, planFlow } from './FlowPlanner';
 import { canTriggerFlow } from './FlowTrigger';
-import { contentKeyOf } from '../core/ContentKey';
 import { createMomentEvalHost } from './MomentEvalHost';
 import { FileParsePipeline } from '../parsing/FileParsePipeline';
 import type { GenBlock } from '../parsing/gen/GenBlockCollector';
 import { runtimeText } from './runtimeText';
-
-/** The source's write of a move to another file: `ops` applied to the row at `at`. */
-export type SourceWrite = (at: EditorSubtree, ops: readonly TaskOp[]) => Promise<WriteOutcome>;
 
 /**
  * Why a move to `to` cannot be made in `lines`, or null when it can: it names
@@ -63,54 +58,22 @@ function fileName(path: string): string {
  *
  * - `none`: nothing fires — the row is no task that can fire, or its note is
  *   ignored.
- * - `failed`: the plan failed (an expression, a block). Nothing is written
- *   for the fire, the command stays, and the caller says so once the
- *   completion has landed (`reportDidNotFire`).
+ * - `failed`: the plan failed (an expression, a block, a move's
+ *   destination). Nothing is written for the fire, the command stays, and
+ *   the caller says so once the completion has landed (`reportDidNotFire`).
  * - `fires`: `ops` are what the fire does to the row in the completing
- *   write. With `away`, the row moves to another file: the completing write
- *   does nothing more (`ops` is empty), the destination is written next,
- *   and `away.ops` are the source's write once it has landed.
+ *   write.
  */
 export type FirePlan =
     | { kind: 'none' }
     | { kind: 'failed'; task: Task; error: EvalError | GenerationError }
-    | { kind: 'fires'; task: Task; ops: TaskOp[]; away: AwayMove | null };
-
-/** A move to another file a fire planned: where to, the row as it goes there, and what the source's write does. */
-export interface AwayMove {
-    destPath: string;
-    /** The row as the destination is to read it. */
-    content: string;
-    /** The source's write once the destination landed: the next instance, and the original taken away. */
-    ops: TaskOp[];
-}
+    | { kind: 'fires'; task: Task; ops: TaskOp[] };
 
 /** A `fire` op, and what its plan answered the last time a write ran it. */
 export interface FireOp {
     op: Extract<TaskOp, { kind: 'fire' }>;
     /** The plan of the write's last run, or null while no write has run it. */
     planned(): FirePlan | null;
-    /** The move to another file the write's last run planned, with where the row stood, or null. */
-    away(): PendingAway | null;
-}
-
-/**
- * A move to another file a completing write planned, made after it: the
- * archive to append to the destination, and the source's write once it has
- * landed, to the row as the completing write left it (`source`, its line and
- * subtree in the lines written). The source's write is made only if the row
- * still reads so. Where it looks for the row is the caller's (`SourceWrite`):
- * an editor's completion at the line its transactions have carried `source`
- * to, and a write to a line the editor pointed at or a card's completion at
- * `source.line`, the line the completing write left the row on. A line
- * written above it from outside in between refuses the source's write.
- */
-export interface PendingAway {
-    task: Task;
-    destPath: string;
-    archive: PlacedLine[];
-    source: EditorSubtree;
-    ops: TaskOp[];
 }
 
 /**
@@ -193,7 +156,7 @@ export class FlowExecutor {
             logInfo(`[Flow:effect] ${effect.kind} taskId=${task.id}`);
             return this.opsFor(task, effect);
         });
-        return { kind: 'fires', task, ops, away: null };
+        return { kind: 'fires', task, ops };
     }
 
     /**
@@ -203,68 +166,23 @@ export class FlowExecutor {
      */
     fireOp(path: string): FireOp {
         let last: FirePlan | null = null;
-        let away: PendingAway | null = null;
         return {
             op: {
                 kind: 'fire',
                 plan: (lines, line) => {
                     const plan = this.planFire(path, lines, line);
                     last = plan;
-                    away = null;
-                    if (plan.kind !== 'fires') return [];
-                    if (plan.away) {
-                        // Nothing else of the fire is in this write, and a
-                        // fire is the last op of the write that completes the
-                        // row: the row, its subtree and the lines are as it
-                        // leaves them. The source's write is made only in
-                        // that content (`EditorLine.key`).
-                        const archive = this.repository.archiveOf(lines, line, plan.away.content);
-                        away = {
-                            task: plan.task,
-                            destPath: plan.away.destPath,
-                            archive: archive.block,
-                            source: { line, text: lines[line], subtree: archive.subtree, key: contentKeyOf(lines) },
-                            ops: plan.away.ops,
-                        };
-                    }
-                    return plan.ops;
+                    return plan.kind === 'fires' ? plan.ops : [];
                 },
             },
             planned: () => last,
-            away: () => away,
         };
     }
 
-    /**
-     * What a completing write owes once it has landed: the notice of a fire
-     * that could not be planned, and the rest of a move to another file.
-     * `writeSource` makes the source's write (to the file, or to the editor
-     * that completed the row).
-     */
-    async settleFire(fire: FireOp, writeSource: SourceWrite): Promise<void> {
+    /** What a completing write owes once it has landed: the notice of a fire that could not be planned. */
+    reportUnfired(fire: FireOp): void {
         const planned = fire.planned();
         if (planned?.kind === 'failed') this.reportDidNotFire(planned.task, planned.error);
-        const away = fire.away();
-        if (away) await this.finishAway(away, writeSource);
-    }
-
-    /**
-     * The rest of a move to another file, after the completion landed: the
-     * destination first — until it has landed nothing in the source is
-     * touched, so a move whose archive cannot be written leaves the row
-     * completed with its command, and says so — and then the source's write,
-     * the next instance with the original taken away. That write can still be
-     * refused, and then the task is in both files, which is told once. Handing
-     * a move from one file to the other is F8's.
-     */
-    async finishAway(away: PendingAway, writeSource: SourceWrite): Promise<void> {
-        if (!(await this.repository.appendArchive(away.destPath, away.archive))) {
-            // Told to the user by the write layer, which refused it.
-            logWarn(`[FlowExecutor] Flow did not fire, nothing written: ${away.task.id}`);
-            return;
-        }
-        const outcome = await writeSource(away.source, away.ops);
-        if (outcome.refused) this.reportMoveLeftCopy(away.task, away.destPath, outcome.refused);
     }
 
     /**
@@ -378,24 +296,6 @@ export class FlowExecutor {
             flowLines: effect.flowLines,
             children: effect.children,
         };
-    }
-
-    /**
-     * Tell the user that a move reached its destination and left the original
-     * where it was: the task is in two places now, and nothing on screen says
-     * so. One notice, saying both — the refusal of the source's write would
-     * otherwise be a second one, telling half of it.
-     */
-    reportMoveLeftCopy(task: Task, destPath: string, refused: Refusal): void {
-        logWarn(`[FlowExecutor] Moved but the original could not be removed: ${task.id} (${refused.reason.kind})`);
-        const reason = refused.reason.kind === 'gone'
-            ? t('notice.moveOriginGone')
-            : refused.reason.kind === 'unplaceable'
-                ? t('notice.moveOriginUnplaceable')
-                : refused.reason.kind === 'disturbs'
-                    ? t('notice.moveOriginDisturbs')
-                    : t('notice.moveOriginChanged');
-        new Notice(t('notice.moveOriginKept', { dest: fileName(destPath), reason, subject: refused.subject }));
     }
 
     /** What one effect does in the row's own file, as the write applies it. */

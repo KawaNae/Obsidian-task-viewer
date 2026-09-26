@@ -37,7 +37,6 @@ describe('FlowExecutor.planFire: a completion planned from the lines the write h
         const plan = executor().planFire(FILE, lines, 1);
         expect(plan.kind).toBe('fires');
         if (plan.kind !== 'fires') return;
-        expect(plan.away).toBeNull();
         expect(plan.ops.map(op => op.kind)).toEqual(['insert-instance', 'strip-flow']);
         expect(written(lines, 1, plan.ops)).toEqual(['# N', '- [ ] T @2026-08-18 ==> every 1d', '- [x] T @2026-08-17', '- [ ] U']);
     });

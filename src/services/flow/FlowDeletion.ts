@@ -52,8 +52,8 @@ export interface FlowDeleteAssessment {
  * The effects that write the next instance are kept and the ones that end the
  * original are dropped: fire-consumes normally strips the command off the line,
  * but here the line goes away entirely, which consumes it more thoroughly than
- * stripping ever could. `archive-to` is dropped with them. A user who chose
- * delete did not choose to keep a copy somewhere else, and the command's own
+ * stripping ever could. The move is dropped with them. A user who chose
+ * delete did not choose to keep the row somewhere else, and the command's own
  * reading of `move` is not a reason to leave one behind.
  */
 export function planFlowForDeletion(task: Task, deps: FlowPlanDeps): FlowDeleteOutlook {
