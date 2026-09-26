@@ -223,7 +223,7 @@ describe('a move within the note (move-to-end, end)', () => {
 
         // The completion is written; the fire's write is not.
         expect(contents.get(FILE)).toBe(before!.replace(' - [ ] X', ' - [x] X'));
-        expect(Notice.messages).toEqual([t('notice.writeDisturbs', { subject: 'X' })]);
+        expect(Notice.messages).toEqual([t('notice.flowNotRun', { reason: t('notice.refusedDisturbs'), subject: 'X' })]);
     });
 });
 

@@ -114,7 +114,7 @@ describe('a next instance with nowhere in the body to go', () => {
 
         const checked = before!.replace('  - [ ] 対象', '  - [x] 対象');
         expect(contents.get(FILE)).toBe(checked);
-        expect(Notice.messages).toEqual([t('notice.writeTargetUnplaceable', { subject: '対象' })]);
+        expect(Notice.messages).toEqual([t('notice.flowNotRun', { reason: t('notice.refusedUnplaceable'), subject: '対象' })]);
     });
 
     it('goes at the top of its run when a fence it stands after is closed above it', async () => {
@@ -227,7 +227,7 @@ describe('a next instance with nowhere in the body to go', () => {
         await fire(session);
 
         expect(contents.get(FILE)).toBe(before.replace('- [ ] 対象', '- [x] 対象'));
-        expect(Notice.messages).toEqual([t('notice.writeTargetUnplaceable', { subject: '対象' })]);
+        expect(Notice.messages).toEqual([t('notice.flowNotRun', { reason: t('notice.refusedUnplaceable'), subject: '対象' })]);
     });
 });
 

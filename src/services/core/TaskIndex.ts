@@ -480,7 +480,7 @@ export class TaskIndex {
      * A write that may complete a row (`completingIn`, its file; null when it
      * does not), made with the row's fire in it: whether it was written. A
      * fire that gives way leaves the completion written alone in the same
-     * write (`FireOp.givesWay`), and the user is told the fire's refusal;
+     * write (`FireOp.givesWay`), and the user is told the flow was not run;
      * a fire that could not be planned is told once the completion landed.
      */
     private async writeCompleting(
@@ -491,7 +491,7 @@ export class TaskIndex {
         const fire = this.commandExecutor.fireOp(completingIn);
         const outcome = await write(fire);
         if (!outcome.written) return false;
-        if (outcome.insteadOf) this.reportRefusal(outcome.insteadOf);
+        if (outcome.insteadOf) this.reportFireRefusal(outcome.insteadOf);
         else this.commandExecutor.reportUnfired(fire);
         return true;
     }
@@ -821,6 +821,7 @@ export class TaskIndex {
             fireOp: (path) => this.commandExecutor.fireOp(path),
             applyOps: (draft, session, target, ops) => this.repository.applyOps(draft, session, target, ops),
             refused: (refusal) => this.reportRefusal(refusal),
+            fireRefused: (refusal) => this.reportFireRefusal(refusal),
             didNotFire: (plan) => this.commandExecutor.reportDidNotFire(plan.task, plan.error),
         };
     }
@@ -855,6 +856,27 @@ export class TaskIndex {
         }
     }
 
+    /**
+     * Tell the user a completion was written without its fire, and why: the
+     * fire's lines were refused (`FireOp.givesWay`, the editor's fire).
+     */
+    private reportFireRefusal(refusal: Refusal): void {
+        const { reason, subject, file } = refusal;
+        logWarn(`[TaskIndex] fire refused, completion written: file=${file} reason=${reason.kind} subject=${subject}`);
+        new Notice(t('notice.flowNotRun', { reason: refusalReason(reason), subject }));
+    }
+
+}
+
+/** Why a write was refused, as a clause the notice of a fire not run gives (`notice.flowNotRun`). */
+function refusalReason(reason: Refusal['reason']): string {
+    switch (reason.kind) {
+        case 'gone': return t('notice.refusedGone');
+        case 'changed': return t('notice.refusedChanged');
+        case 'unplaceable': return t('notice.refusedUnplaceable');
+        case 'disturbs': return t('notice.refusedDisturbs');
+        case 'failed': return t('notice.refusedFailed');
+    }
 }
 
 // ── Parse-affecting settings fingerprint ──
