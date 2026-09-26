@@ -1,19 +1,9 @@
 import type { DocumentNode, SectionNode, BlockNode, PropertyBlockEntry, TaskBlock } from './DocumentTree';
 import { ChildLineClassifier } from '../utils/ChildLineClassifier';
 import { TaskLineClassifier } from '../utils/TaskLineClassifier';
-import { IN_LINE } from '../../../utils/LineBreak';
 import { INDENT_SOURCE, Outline, type OutlineReading } from '../utils/Outline';
 import { SPACE_OR_TAB_SOURCE } from '../utils/ListMarker';
 
-/**
- * A markdown heading line: capture group 1 = `#` run, group 2 = title text.
- *
- * No trailing `$` anchor — callers must pass a single line with no embedded
- * newline (DocumentTreeBuilder does: it splits the document into lines before
- * matching). Matching this against a string that can contain `\n` would let
- * group 2 swallow past the line the caller thinks it matched.
- */
-export const HEADING_REGEX = new RegExp(`^(#{1,6})${SPACE_OR_TAB_SOURCE}+(${IN_LINE}*)`);
 const PROPERTY_GROUP_HEADER = new RegExp(`^${INDENT_SOURCE}-${SPACE_OR_TAB_SOURCE}+properties::\\s*$`);
 
 /**
@@ -32,9 +22,7 @@ export class DocumentTreeBuilder {
         // and a `# comment` in one is no heading; a task's subtree is the
         // item it opens. No part below reads a slice of the note on its own:
         // a slice loses the items it stands in, and reads differently.
-        const fenceMask = outline.codeMask();
-        const bodyLines = lines.slice(bodyStartLine);
-        const sections = this.buildSectionTree(bodyLines, bodyStartLine, fenceMask);
+        const sections = this.buildSectionTree(outline, bodyStartLine, lines.length);
         for (const section of this.flattenSections(sections)) {
             this.classifyBlocks(section, lines, outline);
         }
@@ -43,21 +31,15 @@ export class DocumentTreeBuilder {
 
     // ── Pass 1: セクションツリー構築 ──
 
-    private static buildSectionTree(bodyLines: string[], bodyStartLine: number, fenceMask: boolean[]): SectionNode[] {
-        const headings: { level: number; text: string; line: number }[] = [];
-
-        for (let i = 0; i < bodyLines.length; i++) {
-            // A heading-like line in a fence is code: splitting a section there
-            // cut the subtree of the task the fence stands under, and a write
-            // carried lines the parser gave to no one.
-            if (fenceMask[bodyStartLine + i]) continue;
-            const m = bodyLines[i].match(HEADING_REGEX);
-            if (m) {
-                headings.push({ level: m[1].length, text: m[2].trim(), line: bodyStartLine + i });
-            }
-        }
-
-        const totalEndLine = bodyStartLine + bodyLines.length;
+    private static buildSectionTree(outline: OutlineReading, bodyStartLine: number, totalEndLine: number): SectionNode[] {
+        // The note's headings as its one reading reads them (`headings`):
+        // a heading-like line in a fence is code — splitting a section there
+        // cut the subtree of the task the fence stands under, and a write
+        // carried lines the parser gave to no one — and one in an item is a
+        // line of the item.
+        const headings = outline.headings
+            .filter(h => h.line >= bodyStartLine)
+            .map(h => ({ level: h.level, text: h.text, line: h.line }));
 
         // 見出しがない場合: 暗黙ルートセクションのみ
         if (headings.length === 0) {
@@ -292,7 +274,7 @@ export class DocumentTreeBuilder {
      * as the outline reads it (`OutlineReading.subtreeEnd`), and the task
      * blocks directly under it — the tasks in the subtree with no task
      * between. No subtree runs past its section: a section opens on a heading
-     * at column 0 outside code, and the outline closes every item there.
+     * the outline reads, at the top of the note, where no item is open.
      */
     private static collectBlock(
         allLines: string[],

@@ -7,7 +7,6 @@ import { matchFlowLine } from '../../../src/services/parsing/utils/FlowLineScann
 import { readsAsPlanned } from '../../../src/services/persistence/RowBasis';
 import { FileOperations } from '../../../src/services/persistence/utils/FileOperations';
 import { leadingIndent } from '../../../src/services/parsing/gen/GenBodyParser';
-import { HEADING_REGEX } from '../../../src/services/parsing/tree/DocumentTreeBuilder';
 import { splitLines } from '../../../src/utils/FileLines';
 import { DEFAULT_SETTINGS } from '../../../src/types';
 
@@ -187,7 +186,7 @@ describe('line breaks, as Obsidian ends a line', () => {
         expect(ChildLineClassifier.inferType(`[a${LS}b]`)).toBe('array');
 
         expect(matchFlowLine(`    - ==> next${LS}more`)?.tail).toBe(`next${LS}more`);
-        expect(HEADING_REGEX.exec(`## a${LS}b`)?.[2]).toBe(`a${LS}b`);
+        expect(Outline.read([`## a${LS}b`]).headings[0].text).toBe(`a${LS}b`);
     });
 
     it('keeps the whole command past U+2028 on a task line', () => {
