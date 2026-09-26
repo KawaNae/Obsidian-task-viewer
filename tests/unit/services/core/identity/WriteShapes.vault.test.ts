@@ -218,9 +218,9 @@ describe('2. stripFlow (a completion consuming its command)', () => {
     });
 });
 
-// ─── 3. deleteTaskFromFile ───────────────────────────────────────────
+// ─── 3. remove ──────────────────────────────────────────────────────
 
-describe('3. deleteTaskFromFile', () => {
+describe('3. remove (deleteTask)', () => {
     it('A: a delete takes the row and its children, and the names held for the rows around follow them', async () => {
         const { contents, session } = await open({ [FILE]: NOTE('- [ ] 対象 @2026-09-21', '\t- [ ] 子 @2026-09-21') });
         const held = { above: idOf(session, '上'), below: idOf(session, '下') };
@@ -613,7 +613,7 @@ describe('twins after an outside edit: refused, with one notice', () => {
         expect(Notice.messages).toEqual([changed('子')]);
     });
 
-    it('deleteTaskFromFile is refused, though the twin now on the coordinate reads as the basis', async () => {
+    it('a remove is refused, though the twin now on the coordinate reads as the basis', async () => {
         const { contents, session } = await open({ [FILE]: TWINS('- [ ] 子 @2026-09-21') });
         const second = rows(session)[2].id;
 

@@ -102,34 +102,6 @@ export class InlineTaskWriter {
     }
 
     /**
-     * Take the row away with its subtree. Planned from the row and the subtree
-     * the index read (`target.basis.subtree`), so a line written into the
-     * subtree since, or a row rewritten from outside, is not taken with it.
-     *
-     * @returns the outcome. Not written means the file still holds the lines:
-     * the caller must not report the task gone.
-     */
-    async deleteTaskFromFile(target: PlannedTarget): Promise<WriteOutcome> {
-        const file = this.app.vault.getAbstractFileByPath(target.file);
-        if (!(file instanceof TFile)) return this.refusedGone(target);
-
-        return processLines(this.app, file, this.channelOf(target.file), (draft, _eol, { row }) => {
-            const currentLine = row(target);
-            if (currentLine === null) return false;
-
-            const { childrenLines } = this.fileOps.collectChildrenFromLines(draft.lines, currentLine);
-
-            // Delete task line + all children. What the report carries is what
-            // this splice actually removed, not `1 + childrenLines.length`
-            // counted a second time: the two cannot disagree if only one of
-            // them exists.
-            draft.splice(currentLine, 1 + childrenLines.length);
-
-            return true;
-        });
-    }
-
-    /**
      * Do everything one operation does to one row of one file, as one write.
      *
      * A fire used to write each of its effects on its own — the next

@@ -52,7 +52,7 @@ describe('after the editor\'s menu rewrote a row, before any scan', () => {
     it('refuses a delete and a shifted duplicate as well', async () => {
         const { bench, task } = await afterMenu();
 
-        expect((await bench.writer.deleteTaskFromFile(plannedOn(task, { subtree: true }))).written).toBe(false);
+        expect((await bench.writer.applyToTask(plannedOn(task, { subtree: true }), [{ kind: 'remove' }])).written).toBe(false);
         expect((await bench.cloner.duplicateInlineTask(plannedOn(task), { dayOffset: 1 })).written).toBe(false);
         expect(bench.lines()).toEqual([TICKED, '']);
         expect(bench.refused.map(r => r.reason.kind)).toEqual(['changed', 'changed']);
@@ -152,7 +152,7 @@ describe('an operation that takes the row away plans from its subtree', () => {
         const a = bench.taskAt(0);
         bench.edit(edited);
 
-        expect((await bench.writer.deleteTaskFromFile(plannedOn(a, { subtree: true }))).written).toBe(false);
+        expect((await bench.writer.applyToTask(plannedOn(a, { subtree: true }), [{ kind: 'remove' }])).written).toBe(false);
         expect(bench.lines()).toEqual(edited);
         expect(bench.refused.map(r => r.reason.kind)).toEqual(['changed']);
     });
@@ -183,7 +183,7 @@ describe('an operation that takes the row away plans from its subtree', () => {
 
     it('takes the row and the subtree the scan read', async () => {
         const bench = await writeBench(scanned);
-        expect((await bench.writer.deleteTaskFromFile(plannedOn(bench.taskAt(1), { subtree: true }))).written).toBe(true);
+        expect((await bench.writer.applyToTask(plannedOn(bench.taskAt(1), { subtree: true }), [{ kind: 'remove' }])).written).toBe(true);
         expect(bench.lines()).toEqual(['- [ ] A', '']);
     });
 });

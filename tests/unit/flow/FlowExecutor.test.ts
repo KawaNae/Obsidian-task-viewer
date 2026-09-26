@@ -15,7 +15,6 @@ import { makeTask } from '../helpers/makeTask';
 function makeRepository() {
     return {
         applyToTask: vi.fn().mockResolvedValue({ written: true, refused: null, made: [] }),
-        deleteTaskFromFile: vi.fn().mockResolvedValue(true),
     };
 }
 
@@ -218,7 +217,6 @@ describe('fireAndDelete', () => {
             { kind: 'insert-instance', insert: expect.objectContaining({ kind: 'recurrence' }) },
             { kind: 'remove' },
         ]);
-        expect(repository.deleteTaskFromFile).not.toHaveBeenCalled();
     });
 
     it('fires an unchecked task: deletion is not a completion', async () => {

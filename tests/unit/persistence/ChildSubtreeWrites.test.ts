@@ -22,7 +22,7 @@ import { writeBench, FILE, type WriteBench } from '../helpers/writeBench';
 
 // ── delete: the extent decides what disappears with the parent ──
 
-describe('deleteTaskFromFile removes the whole subtree', () => {
+describe('a remove takes the whole subtree', () => {
     it('takes tab-indented descendants', async () => {
         const h = await writeBench([
             '- [ ] parent @2026-08-15',
@@ -31,7 +31,7 @@ describe('deleteTaskFromFile removes the whole subtree', () => {
             '- [ ] sibling',
         ].join('\n'));
 
-        await h.writer.deleteTaskFromFile(plannedOn(h.taskAt(0), { subtree: true }));
+        await h.writer.applyToTask(plannedOn(h.taskAt(0), { subtree: true }), [{ kind: 'remove' }]);
 
         expect(h.lines()).toEqual(['- [ ] sibling']);
     });
@@ -44,7 +44,7 @@ describe('deleteTaskFromFile removes the whole subtree', () => {
             '- [ ] sibling',
         ].join('\n'));
 
-        await h.writer.deleteTaskFromFile(plannedOn(h.taskAt(0), { subtree: true }));
+        await h.writer.applyToTask(plannedOn(h.taskAt(0), { subtree: true }), [{ kind: 'remove' }]);
 
         expect(h.lines()).toEqual(['- [ ] sibling']);
     });
@@ -59,7 +59,7 @@ describe('deleteTaskFromFile removes the whole subtree', () => {
             '- [ ] next',
         ].join('\n'));
 
-        await h.writer.deleteTaskFromFile(plannedOn(h.taskAt(0), { subtree: true }));
+        await h.writer.applyToTask(plannedOn(h.taskAt(0), { subtree: true }), [{ kind: 'remove' }]);
 
         // The blank line after the subtree is not the parent's: it stays.
         expect(h.lines()).toEqual(['', '- [ ] next']);
@@ -75,7 +75,7 @@ describe('deleteTaskFromFile removes the whole subtree', () => {
             '- [ ] sibling',
         ].join('\n'));
 
-        await h.writer.deleteTaskFromFile(plannedOn(h.taskAt(0), { subtree: true }));
+        await h.writer.applyToTask(plannedOn(h.taskAt(0), { subtree: true }), [{ kind: 'remove' }]);
 
         expect(h.lines()).toEqual(['- [ ] sibling']);
     });
@@ -90,7 +90,7 @@ describe('deleteTaskFromFile removes the whole subtree', () => {
             '\t- [ ] sibling',
         ].join('\n'));
 
-        await h.writer.deleteTaskFromFile(plannedOn(h.taskAt(1), { subtree: true }));
+        await h.writer.applyToTask(plannedOn(h.taskAt(1), { subtree: true }), [{ kind: 'remove' }]);
 
         expect(h.lines()).toEqual(['- [ ] root', '\t- [ ] sibling']);
     });
@@ -454,7 +454,7 @@ describe('mixed indentation is read by the width it shows at', () => {
             '\t- [ ] sibling',
         ].join('\n'));
 
-        await h.writer.deleteTaskFromFile(plannedOn(h.taskAt(1), { subtree: true }));
+        await h.writer.applyToTask(plannedOn(h.taskAt(1), { subtree: true }), [{ kind: 'remove' }]);
 
         expect(h.lines()).toEqual([
             '- [ ] root',
@@ -474,7 +474,7 @@ describe('mixed indentation is read by the width it shows at', () => {
             '    - [ ] sibling',
         ].join('\n'));
 
-        await h.writer.deleteTaskFromFile(plannedOn(h.taskAt(1), { subtree: true }));
+        await h.writer.applyToTask(plannedOn(h.taskAt(1), { subtree: true }), [{ kind: 'remove' }]);
 
         expect(h.lines()).toEqual([
             '- [ ] root',
