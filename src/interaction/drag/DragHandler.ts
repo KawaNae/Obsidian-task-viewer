@@ -81,6 +81,8 @@ export class DragHandler {
     }
 
     destroy(): void {
+        // A drag the view closes on is ended like any other (`DragSession.end`).
+        this.session.cancel();
         this.container.removeEventListener('pointerdown', this.boundPointerDown);
         this.container.removeEventListener('touchstart', this.boundTouchStart, { capture: true });
         this.container.removeEventListener('touchmove', this.boundTouchMove);
