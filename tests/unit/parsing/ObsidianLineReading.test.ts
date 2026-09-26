@@ -6,7 +6,6 @@ import { ChildLineClassifier } from '../../../src/services/parsing/utils/ChildLi
 import { matchFlowLine } from '../../../src/services/parsing/utils/FlowLineScanner';
 import { readsAsPlanned } from '../../../src/services/persistence/RowBasis';
 import { FileOperations } from '../../../src/services/persistence/utils/FileOperations';
-import { leadingIndent } from '../../../src/services/parsing/gen/GenBodyParser';
 import { splitLines } from '../../../src/utils/FileLines';
 import { DEFAULT_SETTINGS } from '../../../src/types';
 
@@ -78,7 +77,6 @@ describe('indentation, as Obsidian nests a list', () => {
             const contentColumn = outline.item(0)!.contentColumn;
             expect(ChildLineClassifier.ownPropertyLines(outline, 0).includes(1), label).toBe(nests && Outline.depthOf(indent) >= contentColumn);
             expect(matchFlowLine(`${lead}- ==> next`) !== null, label).toBe(nests);
-            expect(leadingIndent(`${lead}text`), label).toBe(Outline.indentOf(`${lead}text`));
             expect(Outline.dedent(`${lead}- [ ] x`), label).toBe(`${lead}- [ ] x`.slice(indent.length));
         }
     });

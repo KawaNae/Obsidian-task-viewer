@@ -106,11 +106,6 @@ export function indentDepth(indent: string): number {
     return tabs + Math.ceil(spaces / SPACES_PER_LEVEL);
 }
 
-/** Leading whitespace of a line. */
-export function leadingIndent(raw: string): string {
-    return Outline.indentOf(raw);
-}
-
 /** Opening and closing tags of the leading js section. */
 const JS_OPEN_RE = new RegExp(`^${INDENT_SOURCE}<js>`);
 const JS_CLOSE_RE = new RegExp(`^${INDENT_SOURCE}<\\/js>\\s*$`);
@@ -196,7 +191,7 @@ function readGenBody(body: string[], firstLine: number, cells?: GenCellTypes): G
             continue;
         }
 
-        const indent = leadingIndent(raw);
+        const indent = Outline.indentOf(raw);
         const tabs = (indent.match(/\t/g) ?? []).length;
         const spaces = indent.length - tabs;
         if (spaces % SPACES_PER_LEVEL !== 0 || (tabs > 0 && spaces > 0)) {

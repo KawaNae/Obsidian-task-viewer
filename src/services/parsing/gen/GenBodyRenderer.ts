@@ -6,7 +6,7 @@ import type { Value } from '../../lang/Value';
 import { TaskLineClassifier } from '../utils/TaskLineClassifier';
 import { Outline } from '../utils/Outline';
 import { LINE_BREAK, holdsLineBreak } from '../../../utils/LineBreak';
-import { type GenBody, type GenLine, indentDepth, isSpliceLine, leadingIndent } from './GenBodyParser';
+import { type GenBody, type GenLine, indentDepth, isSpliceLine } from './GenBodyParser';
 
 /** One generated child line: its text, and how deep it sits under the parent. */
 export interface RenderedChild {
@@ -224,7 +224,7 @@ function renderChild(line: GenLine, ctx: EvalContext): RenderedEntry[] {
     const out: RenderedEntry[] = [];
     text.split(LINE_BREAK).forEach((raw, i) => {
         if (raw.trim() === '') return;
-        const own = i > 0 || placeFirstByValue ? indentDepth(leadingIndent(raw)) : 0;
+        const own = i > 0 || placeFirstByValue ? indentDepth(Outline.indentOf(raw)) : 0;
         out.push({ depth: line.depth + own, body: Outline.dedent(raw), from: line });
     });
     return out;
