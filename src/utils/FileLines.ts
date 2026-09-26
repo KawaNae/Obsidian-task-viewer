@@ -118,6 +118,14 @@ export interface LineDraft {
     /** The lines as they stand now, after every change made so far. */
     readonly lines: readonly string[];
     /**
+     * The reading of {@link lines} as they stand now (`Outline.read`): what a
+     * write asks `Placement` and the outline of. Made once, and again only
+     * after a change: the reading of the lines as handed in, while nothing
+     * has changed them, is the one the write's checks read too
+     * (`editLines`).
+     */
+    reading(): OutlineReading;
+    /**
      * Do a splice and report it, so the two cannot disagree.
      *
      * The check a report is held to compares text, and text is exactly what
@@ -166,9 +174,10 @@ export interface LineDraft {
  *
  * `processLines` builds this over the lines it is about to hand a write, and a
  * test builds it over the lines it passes in, so both run the same arithmetic
- * instead of a copy of it.
+ * instead of a copy of it. `handedReading`, when given, answers the reading of
+ * the lines as handed in, for the draft to use until it changes them.
  */
-export function draftOver(lines: string[]): {
+export function draftOver(lines: string[], handedReading?: () => OutlineReading): {
     draft: LineDraft;
     reported: LineEdit[];
     puts: PutBlock[];
@@ -177,14 +186,22 @@ export function draftOver(lines: string[]): {
     const { edits, reported, placedBy } = recordEdits(lines);
     const handed = lines.length;
     const puts: PutBlock[] = [];
+    // The reading of the lines as they stand, once asked for; dropped at
+    // every change, and made anew when asked for again.
+    let reading: OutlineReading | null = null;
+    let changed = false;
+    const change = () => { reading = null; changed = true; };
     const draft: LineDraft = {
         lines,
+        reading: () => reading ??= (!changed && handedReading ? handedReading() : Outline.read(lines)),
         splice: (at, deleteCount, ...items) => {
             items.forEach(oneLine);
+            change();
             edits.splice(at, deleteCount, ...items);
         },
         rewrite: (at, text) => {
             oneLine(text);
+            change();
             lines[at] = text;
             edits.replaced(at);
         },
@@ -205,6 +222,7 @@ export function draftOver(lines: string[]): {
                 parent = written[spot.parent];
             }
             const id = puts.length;
+            change();
             puts.push({ parent, lines: block.map(({ kind, under }) => ({ kind, under })) });
             if (carried) edits.carry(spot.at, block.map(line => ({ from: line.from!, text: line.text })), { id, offset: 0 });
             else edits.insert(spot.at, block.map(line => line.text), { id, offset: 0 });
@@ -743,10 +761,15 @@ export function editLines(
     const subject = () => lastSubject || subjects.about || path;
 
     const before = [...lines];
+    // The reading of the lines as handed in, made once and only if asked
+    // for: by a plan's check (`readsAsPlanned`), by the draft until it
+    // changes the lines (`LineDraft.reading`), and by the write's check.
+    let handedReading: OutlineReading | null = null;
+    const readBefore = (): OutlineReading => handedReading ??= Outline.read(before);
     // Every change the write makes, it makes to this array through the
     // draft, and the draft reports it.
     const working = [...lines];
-    const { draft, reported, puts, placedBy } = draftOver(working);
+    const { draft, reported, puts, placedBy } = draftOver(working, readBefore);
     const refuse = (reason: RefusalReason, about: string): false => {
         refused = { file: path, reason, subject: about };
         return false;
@@ -803,9 +826,9 @@ export function editLines(
         let holds: boolean;
         if (!('basis' in target)) {
             const shown: RowBasis = { text: target.text, ...(target.subtree ? { subtree: target.subtree } : {}) };
-            holds = readsAsPlanned(before, line, shown);
+            holds = readsAsPlanned(readBefore(), line, shown);
         } else {
-            holds = readsAsPlanned(before, line, target.basis);
+            holds = readsAsPlanned(readBefore(), line, target.basis);
         }
         return holds ? line : { kind: 'changed' };
     };
@@ -875,7 +898,7 @@ export function editLines(
         // The reading of the lines as written is the note's next
         // reading, once the write lands; read here once, for the check
         // and for the rows the write leaves.
-        readings = { read: Outline.read(before), left: Outline.read(next) };
+        readings = { read: readBefore(), left: Outline.read(next) };
         const check = checkWrite(readings.read, readings.left, written, puts);
         if (check === 'loose') return callerBug('a line was spliced into the body without a place (`LineDraft.put`)', { kind: 'failed' });
         if (check !== 'sound') {

@@ -1,14 +1,15 @@
 import { describe, expect, it } from 'vitest';
 import { Placement, headingKey } from '../../../src/services/persistence/utils/Placement';
+import { Outline } from '../../../src/services/parsing/utils/Outline';
 
 /**
  * A move's destination in its own note (F8): the heading a `[[#name]]` names,
  * looked up as Obsidian resolves the link, and the end of its section.
  */
 const endOf = (lines: string[], name: string, head = '- [ ] m') => {
-    const found = Placement.heading(lines, name);
+    const found = Placement.heading(Outline.read(lines), name);
     if (found.kind !== 'one') throw new Error(`no one heading: ${found.kind}`);
-    return Placement.sectionEnd(lines, found.heading, head);
+    return Placement.sectionEnd(Outline.read(lines), found.heading, head);
 };
 
 describe('headingKey', () => {
@@ -25,18 +26,18 @@ describe('headingKey', () => {
 describe('Placement.heading', () => {
     it('finds the one heading of the name, as Obsidian compares names', () => {
         const lines = ['# Top', '## Done **now**', '- [ ] a'];
-        expect(Placement.heading(lines, 'done now')).toEqual({ kind: 'one', heading: expect.objectContaining({ line: 1, level: 2 }) });
-        expect(Placement.heading(lines, ' DONE  now ')).toMatchObject({ kind: 'one' });
+        expect(Placement.heading(Outline.read(lines), 'done now')).toEqual({ kind: 'one', heading: expect.objectContaining({ line: 1, level: 2 }) });
+        expect(Placement.heading(Outline.read(lines), ' DONE  now ')).toMatchObject({ kind: 'one' });
     });
 
     it('answers none when no heading has the name, a heading-like line in a fence or an item aside', () => {
         const lines = ['```', '## Done', '```', '- [ ] a', '  ## Done'];
-        expect(Placement.heading(lines, 'Done')).toEqual({ kind: 'none' });
+        expect(Placement.heading(Outline.read(lines), 'Done')).toEqual({ kind: 'none' });
     });
 
     it('answers how many when two or more headings have the name, whatever their levels and case', () => {
         const lines = ['## Case', '- [ ] a', '### case', 'Case', '---'];
-        expect(Placement.heading(lines, 'CASE')).toEqual({ kind: 'many', count: 3 });
+        expect(Placement.heading(Outline.read(lines), 'CASE')).toEqual({ kind: 'many', count: 3 });
     });
 });
 

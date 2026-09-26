@@ -14,7 +14,7 @@ import {
 } from '../../../utils/FileLines';
 import type { PlannedTarget } from '../TaskRefs';
 import type { MoveDestination, TaskOp } from '../TaskOps';
-import { Outline } from '../../parsing/utils/Outline';
+import { Outline, type OutlineReading } from '../../parsing/utils/Outline';
 
 
 /**
@@ -188,7 +188,7 @@ export class InlineTaskWriter {
                 return;
             }
             case 'insert-instance': {
-                draft.put(Placement.groupHead(lines, line, flowInstanceHead(op.insert)), renderFlowInstance(this.fileOps, lines, line, op.insert));
+                draft.put(Placement.groupHead(draft.reading(), line, flowInstanceHead(op.insert)), renderFlowInstance(this.fileOps, lines, line, op.insert));
                 return;
             }
             case 'strip-flow': {
@@ -215,7 +215,7 @@ export class InlineTaskWriter {
                 // below the carried lines when they went above it.
                 const { childrenLines } = this.fileOps.collectChildrenFromLines(lines, line);
                 const block = this.carriedWith(lines, line, op.text);
-                const spot = this.destinationOf(lines, op.to, block[0].text);
+                const spot = this.destinationOf(draft.reading(), op.to, block[0].text);
                 draft.put(spot, block);
                 draft.splice(spot.at <= line ? line + block.length : line, 1 + childrenLines.length);
                 return;
@@ -227,7 +227,7 @@ export class InlineTaskWriter {
             }
             case 'insert': {
                 // A new line beside the row, spelled as the item next to it.
-                draft.put(Placement[op.place](lines, line, op.text), Block.line(op.text));
+                draft.put(Placement[op.place](draft.reading(), line, op.text), Block.line(op.text));
                 return;
             }
             case 'copy': {
@@ -235,7 +235,7 @@ export class InlineTaskWriter {
                 // it, the copy took the row's children for its own (P1's
                 // counterexample 5): it goes past the subtree, and the
                 // report says which of the two rows the write made.
-                draft.put(Placement.copyOf(lines, line, 'below', op.text), Block.line(op.text));
+                draft.put(Placement.copyOf(draft.reading(), line, 'below', op.text), Block.line(op.text));
                 return;
             }
         }
@@ -249,11 +249,11 @@ export class InlineTaskWriter {
      * them; none of those ops writes a heading, so the plan's answer — one
      * heading — is this one. Any other answer is a caller's bug.
      */
-    private destinationOf(lines: readonly string[], to: MoveDestination, head: string): Spot {
-        if (to.kind === 'end') return Placement.end(lines);
-        const found = Placement.heading(lines, to.name);
+    private destinationOf(outline: OutlineReading, to: MoveDestination, head: string): Spot {
+        if (to.kind === 'end') return Placement.end(outline);
+        const found = Placement.heading(outline, to.name);
         if (found.kind !== 'one') throw new UnfollowableDraft(`a move to the heading '${to.name}' finds ${found.kind === 'none' ? 'none' : found.count} where it was planned to find one`);
-        return Placement.sectionEnd(lines, found.heading, head);
+        return Placement.sectionEnd(outline, found.heading, head);
     }
 
     /**
@@ -272,7 +272,7 @@ export class InlineTaskWriter {
             const currentLine = row(target);
             if (currentLine === null) return false;
 
-            draft.put(Placement.lastChild(draft.lines, currentLine, lineBody), Block.line(lineBody));
+            draft.put(Placement.lastChild(draft.reading(), currentLine, lineBody), Block.line(lineBody));
 
             return true;
         });
@@ -294,7 +294,7 @@ export class InlineTaskWriter {
             if (currentLine === null) return false;
 
             // Directly below the task line, past its own text that goes on.
-            draft.put(Placement.firstChild(draft.lines, currentLine, lineBody), Block.line(lineBody));
+            draft.put(Placement.firstChild(draft.reading(), currentLine, lineBody), Block.line(lineBody));
 
             return true;
         });
@@ -333,7 +333,7 @@ export class InlineTaskWriter {
 
         let inserted = -1;
         const outcome = await processLines(this.app, file, channel, (draft) => {
-            const spot = Placement.end(draft.lines);
+            const spot = Placement.end(draft.reading());
             draft.put(spot, block);
             inserted = spot.at;
             return true;

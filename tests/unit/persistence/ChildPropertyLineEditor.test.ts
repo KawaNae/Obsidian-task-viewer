@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { ChildPropertyLineEditor } from '../../../src/services/persistence/utils/ChildPropertyLineEditor';
+import { Outline } from '../../../src/services/parsing/utils/Outline';
 import { draftOver, type LineEdit } from '../../../src/utils/FileLines';
 import type { PropertyOp } from '../../../src/services/persistence/PropertyUpdatePlanner';
 import { FileParsePipeline } from '../../../src/services/parsing/FileParsePipeline';
@@ -27,7 +28,7 @@ describe('ChildPropertyLineEditor', () => {
                 '    - key ::',
                 '    - key2 :: value2',
             ];
-            const own = ChildPropertyLineEditor.findOwnPropertyLines(lines, 0);
+            const own = ChildPropertyLineEditor.findOwnPropertyLines(Outline.read(lines), 0);
             expect(own).toEqual([
                 { lineIdx: 1, key: 'key', value: '' },
                 { lineIdx: 2, key: 'key2', value: 'value2' },
@@ -45,7 +46,7 @@ describe('ChildPropertyLineEditor', () => {
                 '        - key:: of-tabbed',
                 '    - key:: own',
             ];
-            expect(ChildPropertyLineEditor.findOwnPropertyLines(lines, 0)).toEqual([
+            expect(ChildPropertyLineEditor.findOwnPropertyLines(Outline.read(lines), 0)).toEqual([
                 { lineIdx: 5, key: 'key', value: 'own' },
             ]);
         });
@@ -64,7 +65,7 @@ describe('ChildPropertyLineEditor', () => {
         ];
 
         it('is found as the task\'s own', () => {
-            expect(ChildPropertyLineEditor.findOwnPropertyLines(lines(), 0)).toEqual([
+            expect(ChildPropertyLineEditor.findOwnPropertyLines(Outline.read(lines()), 0)).toEqual([
                 { lineIdx: 3, key: 'key', value: 'old' },
             ]);
         });
@@ -174,7 +175,7 @@ describe('ChildPropertyLineEditor', () => {
                 '    - key:: 例',
                 '    ```',
             ];
-            expect(ChildPropertyLineEditor.findOwnPropertyLines(lines, 0)).toEqual([]);
+            expect(ChildPropertyLineEditor.findOwnPropertyLines(Outline.read(lines), 0)).toEqual([]);
         });
 
         it('フェンス内の同名宣言を更新の対象にしない', () => {
@@ -254,7 +255,7 @@ describe('ChildPropertyLineEditor', () => {
                 if (parsed.ignored) throw new Error('ignored');
                 const task = parsed.tasks.find(candidate => candidate.line === 0)!;
                 const written = Object.fromEntries(
-                    ChildPropertyLineEditor.findOwnPropertyLines(lines, 0).map(line => [line.key, line.value]),
+                    ChildPropertyLineEditor.findOwnPropertyLines(Outline.read(lines), 0).map(line => [line.key, line.value]),
                 );
                 const read = Object.fromEntries(
                     Object.entries(task.properties).map(([key, value]) => [key, value.value]),

@@ -3,7 +3,7 @@ import { TaskLineClassifier } from '../../parsing/utils/TaskLineClassifier';
 import { Block, Placement } from './Placement';
 import type { PropertyOp } from '../PropertyUpdatePlanner';
 import type { LineDraft } from '../../../utils/FileLines';
-import { INDENT_SOURCE, Outline } from '../../parsing/utils/Outline';
+import { INDENT_SOURCE, Outline, type OutlineReading } from '../../parsing/utils/Outline';
 import { SPACE_OR_TAB_SOURCE } from '../../parsing/utils/ListMarker';
 
 interface OwnPropertyLine {
@@ -36,8 +36,9 @@ export class ChildPropertyLineEditor {
      * コードでない `- key:: value` 行。子タスクやメモの下、コードブロック
      * の中の行は own でない。
      */
-    static findOwnPropertyLines(lines: readonly string[], taskLineIdx: number): OwnPropertyLine[] {
-        return ChildLineClassifier.ownPropertyLines(Outline.read(lines), taskLineIdx).map(lineIdx => {
+    static findOwnPropertyLines(outline: OutlineReading, taskLineIdx: number): OwnPropertyLine[] {
+        const { lines } = outline;
+        return ChildLineClassifier.ownPropertyLines(outline, taskLineIdx).map(lineIdx => {
             const m = lines[lineIdx].match(ChildLineClassifier.PROPERTY_LINE)!;
             return { lineIdx, key: m[1].trim(), value: m[2].trim() };
         });
@@ -57,7 +58,7 @@ export class ChildPropertyLineEditor {
     static applyOps(draft: LineDraft, taskLineIdx: number, ops: PropertyOp[]): void {
         const lines = draft.lines;
         for (const op of ops) {
-            const ownLines = this.findOwnPropertyLines(lines, taskLineIdx);
+            const ownLines = this.findOwnPropertyLines(draft.reading(), taskLineIdx);
             const matching = ownLines.filter(l => l.key === op.key);
 
             if (op.op === 'delete') {
@@ -94,8 +95,8 @@ export class ChildPropertyLineEditor {
             // 隣に兄弟が無ければ子の字下げ（`FileOperations.resolveChildIndent`）。
             const line = `- ${op.key}:: ${this.formatValue(op.value, null)}`;
             const spot = ownLines.length > 0
-                ? Placement.afterSubtree(lines, ownLines[ownLines.length - 1].lineIdx, line)
-                : Placement.firstChild(lines, taskLineIdx, line);
+                ? Placement.afterSubtree(draft.reading(), ownLines[ownLines.length - 1].lineIdx, line)
+                : Placement.firstChild(draft.reading(), taskLineIdx, line);
             draft.put(spot, Block.line(line));
         }
     }
