@@ -180,14 +180,16 @@ export function createDiagnosticsExtension(): Extension {
      * line's tail after `==>` ('' without a marker), followed by the direct
      * flow child lines. Which lines those are, and where the child block
      * ends, is asked of the note's one reading (`flowGroupOf`), as the
-     * parser asks it. Returns null when the task has no flow at all.
+     * parser asks it. The task line is cut as the parser cuts it, its `^id`
+     * taken off first (`extractLineBlockId`): the `^id` is no part of the
+     * command. Returns null when the task has no flow at all.
      */
     const collectGroup = (
         view: EditorView,
         rootLineNumber: number,
     ): { segments: SegmentLoc[]; childLines: string[] } | null => {
         const doc = view.state.doc;
-        const rootText = doc.line(rootLineNumber).text;
+        const rootText = TaskLineClassifier.extractLineBlockId(doc.line(rootLineNumber).text).text;
         const markerIdx = rootText.indexOf(FLOW_MARKER);
 
         const { flowLines, childLines } = flowGroupOf(outlineFor(doc), rootLineNumber - 1);
