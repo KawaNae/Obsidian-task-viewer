@@ -703,46 +703,17 @@ export class TaskIndex {
     }
 
     /**
-     * Add a child at the head of the row's children: from a card's menu, the
-     * API or the CLI. Planned from the index's copy of the row
-     * (`plannedOn`), so written only where the row the name was read in
-     * stands, as every write that names a row is.
-     *
-     * @returns whether the child line was written.
-     */
-    async insertChildTask(parentTaskId: string, childLine: string): Promise<boolean> {
-        if (this.refuseAfterDispose('insertChildTask')) return false;
-        const task = this.copyForWrite(parentTaskId, undefined);
-        if (!task) return false;
-        // Read-only parsers (Tasks / dayPlanner) must never be written to.
-        // TaskApi guards this as well, but the menu path reaches the write
-        // service directly and would otherwise bypass it.
-        if (task.isReadOnly) return false;
-        return this.withNotify(task.file, async () => {
-            logInfo(`[insertChildTask] parentId=${parentTaskId}`);
-
-
-            // インデントは書き込み層が既存子行から決める（親行だけからは
-            // トップレベルのとき 4 スペース固定になり、タブ書きのファイルに
-            // スペースが混ざる）。
-            const { written } = await this.repository.insertLineAsFirstChild(plannedOn(task), childLine);
-            if (!written) {
-                logWarn(`[TaskIndex] child insert was not written: parentId=${parentTaskId}`);
-            }
-
-            return written;
-        });
-    }
-
-    /**
-     * A timer's line put in beside the row, where `place` says (`TaskOp`
-     * `insert`): its first session line or a record at the head of the row's
-     * children, the next session beside the last one, the first session of a
-     * continued run past the completed siblings. The one insert every timer
-     * line takes. Planned from the index's copy of the row (`plannedOn`), so
-     * written only where the row the name was read in stands, as every write
-     * that names a row is (`WriteSession.row`): a timer finds the row by its
-     * anchor (`getTaskByAnchor`) and writes by the name that answers.
+     * A line put in beside the row, where `place` says (`TaskOp` `insert`):
+     * a child at the head of the row's children, added from a card's menu,
+     * the API or the CLI; a timer's first session line or record there, the
+     * next session beside the last one, the first session of a continued run
+     * past the completed siblings. The one insert beside a row. Planned from
+     * the index's copy of the row (`plannedOn`), so written only where the
+     * row the name was read in stands, as every write that names a row is
+     * (`WriteSession.row`): a timer finds the row by its anchor
+     * (`getTaskByAnchor`) and writes by the name that answers. A read-only
+     * row (Tasks, Day Planner) is not written: the menu reaches here without
+     * the API's guard.
      *
      * `rowId`, when given, rewrites the row's own `^id` in the same write: a
      * string puts it on (the target's anchor, on the first session line), null
@@ -751,13 +722,13 @@ export class TaskIndex {
      *
      * @returns whether the line was written.
      */
-    async insertRecord(taskId: string, line: string, place: InsertPlace, rowId?: string | null): Promise<boolean> {
-        if (this.refuseAfterDispose('insertRecord')) return false;
+    async insertLine(taskId: string, line: string, place: InsertPlace, rowId?: string | null): Promise<boolean> {
+        if (this.refuseAfterDispose('insertLine')) return false;
         const task = this.copyForWrite(taskId, undefined);
         if (!task) return false;
         if (task.isReadOnly) return false;
         return this.withNotify(task.file, async () => {
-            logInfo(`[insertRecord] taskId=${taskId} place=${place}${rowId === undefined ? '' : ` rowId=${rowId ?? '(off)'}`}`);
+            logInfo(`[insertLine] taskId=${taskId} place=${place}${rowId === undefined ? '' : ` rowId=${rowId ?? '(off)'}`}`);
             const ops: TaskOp[] = [];
             if (rowId !== undefined) ops.push({ kind: 'update', text: TaskParser.format({ ...task, blockId: rowId ?? undefined }) });
             ops.push({ kind: 'insert', place, text: line });
@@ -768,9 +739,9 @@ export class TaskIndex {
 
     /**
      * Append a child at the end of the parent's subtree, in contrast to
-     * insertChildTask's head insertion. Session records accumulate over time,
-     * so head insertion would print the log backwards. Planned from the
-     * index's copy of the row, as {@link insertChildTask} is.
+     * {@link insertLine}'s head insertion. Session records accumulate over
+     * time, so head insertion would print the log backwards. Planned from the
+     * index's copy of the row, as {@link insertLine} is.
      */
     /** @returns whether the child line was written. */
     async appendChildTask(parentTaskId: string, childLine: string): Promise<boolean> {

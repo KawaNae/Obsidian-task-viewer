@@ -87,7 +87,7 @@ describe('2. a child inserted with no content', () => {
         const parent = onlyTask(session, t => t.content === '親');
 
         // What TaskApi.insertChildTask sends for `content: ''`.
-        expect(await session.index.insertChildTask(parent.id, '- [ ] ')).toBe(true);
+        expect(await session.index.insertLine(parent.id, '- [ ] ', 'firstChild')).toBe(true);
         await session.settle(FILE);
 
         const lines = written(contents);

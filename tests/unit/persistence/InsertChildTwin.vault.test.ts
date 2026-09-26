@@ -155,13 +155,13 @@ describe('a timer\'s record (the same check as every write)', () => {
 
     it('is refused as a first child on a row only indented since the scan', async () => {
         const { contents, session, task } = await indentedSinceTheScan();
-        expect(await session.index.insertRecord(task.id, '- [x] rec', 'firstChild')).toBe(false);
+        expect(await session.index.insertLine(task.id, '- [x] rec', 'firstChild')).toBe(false);
         expect(contents.get(FILE)).toBe(INDENTED);
     });
 
     it('is refused as a next sibling on a row only indented since the scan', async () => {
         const { contents, session, task } = await indentedSinceTheScan();
-        expect(await session.index.insertRecord(task.id, '- [x] rec', 'afterSubtree')).toBe(false);
+        expect(await session.index.insertLine(task.id, '- [x] rec', 'afterSubtree')).toBe(false);
         expect(contents.get(FILE)).toBe(INDENTED);
     });
 });

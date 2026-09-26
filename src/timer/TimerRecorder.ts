@@ -409,7 +409,7 @@ export class TimerRecorder {
      */
     private startLine(timer: TimerInstance, start: StartTarget, place: 'firstChild' | 'afterCompletedRun'): Promise<boolean> {
         return this.writeFirstLine(timer, start, line =>
-            this.plugin.getTaskWriteService().insertRecord(start.task.id, line, place, start.rowId));
+            this.plugin.getTaskWriteService().insertLine(start.task.id, line, place, start.rowId));
     }
 
     /**
@@ -446,7 +446,7 @@ export class TimerRecorder {
             this.noticeResolveFailure(timer, 'writeChildLine (not written)');
             return false;
         }
-        return this.plugin.getTaskWriteService().insertRecord(target.id, line, 'firstChild');
+        return this.plugin.getTaskWriteService().insertLine(target.id, line, 'firstChild');
     }
 
     /**
@@ -590,7 +590,7 @@ export class TimerRecorder {
         const next = this.opening(timer, blockId, { puts: [blockId], takesOff: releases ? timer.tailRecordBlockId : undefined });
         // 書けなければ、理由は書き込みの層が1回だけ通知済みで、尻尾は動かない。
         return this.writeOpening(timer, next, () => tail
-            ? this.plugin.getTaskWriteService().insertRecord(tail.id, line, 'afterSubtree', releases ? null : undefined)
+            ? this.plugin.getTaskWriteService().insertLine(tail.id, line, 'afterSubtree', releases ? null : undefined)
             : this.writeChildLine(timer, line));
     }
 
