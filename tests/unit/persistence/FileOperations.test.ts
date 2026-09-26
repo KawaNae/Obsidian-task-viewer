@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { FileOperations } from '../../../src/services/persistence/utils/FileOperations';
+import { Outline } from '../../../src/services/parsing/utils/Outline';
 import type { App } from 'obsidian';
 
 // Instance with dummy App (methods under test don't use vault)
@@ -19,7 +20,7 @@ describe('FileOperations', () => {
                 '    - [ ] child 2',
                 '- [ ] sibling',
             ];
-            const result = ops.collectChildrenFromLines(lines, 0);
+            const result = ops.collectChildrenFromLines(Outline.read(lines), 0);
             expect(result.childrenLines).toEqual(['    - [ ] child 1', '    - [ ] child 2']);
         });
 
@@ -35,7 +36,7 @@ describe('FileOperations', () => {
                 '',
                 '- [ ] sibling',
             ];
-            const result = ops.collectChildrenFromLines(lines, 0);
+            const result = ops.collectChildrenFromLines(Outline.read(lines), 0);
             expect(result.childrenLines).toEqual(['    - [ ] child', '', '    - [ ] also a child']);
         });
 
@@ -52,7 +53,7 @@ describe('FileOperations', () => {
                 '    - [ ] real child',
                 '- [ ] sibling',
             ];
-            const result = ops.collectChildrenFromLines(lines, 0);
+            const result = ops.collectChildrenFromLines(Outline.read(lines), 0);
             expect(result.childrenLines).toEqual([
                 '    ```md',
                 '    - [ ] not a real task',
@@ -67,13 +68,13 @@ describe('FileOperations', () => {
                 '    child',
                 '- [ ] next',
             ];
-            const result = ops.collectChildrenFromLines(lines, 0);
+            const result = ops.collectChildrenFromLines(Outline.read(lines), 0);
             expect(result.childrenLines).toEqual(['    child']);
         });
 
         it('returns empty when no children', () => {
             const lines = ['- [ ] alone', '- [ ] next'];
-            const result = ops.collectChildrenFromLines(lines, 0);
+            const result = ops.collectChildrenFromLines(Outline.read(lines), 0);
             expect(result.childrenLines).toEqual([]);
         });
 
@@ -84,7 +85,7 @@ describe('FileOperations', () => {
                 '\t\t- [ ] grandchild',
                 '- [ ] next',
             ];
-            const result = ops.collectChildrenFromLines(lines, 0);
+            const result = ops.collectChildrenFromLines(Outline.read(lines), 0);
             expect(result.childrenLines).toHaveLength(2);
         });
 
@@ -98,7 +99,7 @@ describe('FileOperations', () => {
                 '\t\t\t- [ ] grandchild',
                 '\t- [ ] sibling',
             ];
-            const result = ops.collectChildrenFromLines(lines, 1);
+            const result = ops.collectChildrenFromLines(Outline.read(lines), 1);
             expect(result.childrenLines).toHaveLength(2);
             // Width, not characters: one tab is four columns.
         });
@@ -161,43 +162,46 @@ describe('FileOperations', () => {
     });
 
     describe('resolveChildIndent', () => {
+        const resolve = (lines: string[], line: number, parent?: string, except?: ReadonlySet<number>) =>
+            FileOperations.resolveChildIndent(Outline.read(lines), line, parent, except);
+
         it('copies the first existing child', () => {
             const lines = ['- [ ] parent', '\t- [ ] child'];
-            expect(FileOperations.resolveChildIndent(lines, 0)).toBe('\t');
+            expect(resolve(lines,0)).toBe('\t');
         });
 
         it('prefers the task\'s own children over the rest of the file', () => {
             const lines = ['- [ ] other', '    - [ ] other child', '- [ ] parent', '\t- [ ] child'];
-            expect(FileOperations.resolveChildIndent(lines, 2)).toBe('\t');
+            expect(resolve(lines,2)).toBe('\t');
         });
 
         it('falls back to the file when the task has no children', () => {
             const lines = ['- [ ] parent', '- [ ] other', '    - [ ] other child'];
-            expect(FileOperations.resolveChildIndent(lines, 0)).toBe('    ');
+            expect(resolve(lines,0)).toBe('    ');
         });
 
         it('nests below an already indented parent', () => {
             const lines = ['- [ ] top', '\t- [ ] parent', '\t\t- [ ] child'];
-            expect(FileOperations.resolveChildIndent(lines, 1)).toBe('\t\t');
+            expect(resolve(lines,1)).toBe('\t\t');
         });
 
         it('carries the first child under a line written in the task\'s place, as far past it as it stands past the task', () => {
             // The next instance of a tab row, written at four spaces: its
             // child is a tab past the four spaces, as the tab row's is past the tab.
             const lines = ['- [ ] P', '\t- [ ] T', '\t\t- [ ] c'];
-            expect(FileOperations.resolveChildIndent(lines, 1, '    - [ ] T')).toBe('    \t');
+            expect(resolve(lines,1, '    - [ ] T')).toBe('    \t');
         });
 
         it('takes the sample from the children the write keeps, and from the others where it keeps none', () => {
             const lines = ['- [ ] T', '\t- ==> every mon', '  - [ ] c'];
-            expect(FileOperations.resolveChildIndent(lines, 0, lines[0], new Set([1]))).toBe('  ');
-            expect(FileOperations.resolveChildIndent(['- [ ] T', '\t- ==> every mon'], 0, '- [ ] T', new Set([1]))).toBe('\t');
+            expect(resolve(lines,0, lines[0], new Set([1]))).toBe('  ');
+            expect(resolve(['- [ ] T', '\t- ==> every mon'],0, '- [ ] T', new Set([1]))).toBe('\t');
         });
 
         it('does not treat a line past a blank as a child', () => {
             const lines = ['- [ ] parent', '', '    - [ ] not a child'];
             // Nothing indented before the blank, so the file's own unit decides.
-            expect(FileOperations.resolveChildIndent(lines, 0)).toBe('    ');
+            expect(resolve(lines,0)).toBe('    ');
         });
     });
 });

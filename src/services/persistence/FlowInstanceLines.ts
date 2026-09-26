@@ -1,6 +1,6 @@
-import { collectFlowLineIndicesInFile, formatFlowLine } from '../parsing/utils/FlowLineScanner';
+import { collectFlowLineIndices, formatFlowLine } from '../parsing/utils/FlowLineScanner';
 import { FileOperations } from './utils/FileOperations';
-import { Outline } from '../parsing/utils/Outline';
+import { Outline, type OutlineReading } from '../parsing/utils/Outline';
 import { TaskLineClassifier } from '../parsing/utils/TaskLineClassifier';
 import { Block, type PlacedLine } from './utils/Placement';
 
@@ -56,20 +56,19 @@ export function flowInstanceHead(insert: FlowInstanceInsert): string {
  * the same effect — which is the whole reason this is not a method on the
  * writer that happens to call it.
  *
- * `currentLine` is the original's line in `lines`, already resolved by the
- * caller. Nothing here searches for it: a search after a line has been written
- * is what hands a copy the original's place.
+ * `currentLine` is the original's line in the lines `outline` reads, already
+ * resolved by the caller. Nothing here searches for it: a search after a line
+ * has been written is what hands a copy the original's place.
  */
 export function renderFlowInstance(
-    fileOps: FileOperations,
-    lines: readonly string[],
+    outline: OutlineReading,
     currentLine: number,
     insert: FlowInstanceInsert,
 ): PlacedLine[] {
-    const head = spelledAsFired(lines[currentLine], flowInstanceHead(insert));
+    const head = spelledAsFired(outline.lines[currentLine], flowInstanceHead(insert));
     return insert.kind === 'recurrence'
-        ? renderRecurrence(lines, currentLine, head, insert.flowLines)
-        : renderGenerated(lines, currentLine, head, insert.flowLines, insert.children);
+        ? renderRecurrence(outline, currentLine, head, insert.flowLines)
+        : renderGenerated(outline, currentLine, head, insert.flowLines, insert.children);
 }
 
 /**
@@ -113,14 +112,14 @@ function spelledAsFired(fired: string, head: string): string {
  * (`FileOperations.resolveChildIndent`).
  */
 function renderRecurrence(
-    lines: readonly string[],
+    outline: OutlineReading,
     currentLine: number,
     newParentLine: string,
     flowLines: string[],
 ): PlacedLine[] {
 
-    const flowAbs = new Set(collectFlowLineIndicesInFile(lines, currentLine));
-    const childIndent = FileOperations.resolveChildIndent(lines, currentLine, newParentLine, flowAbs);
+    const flowAbs = new Set(collectFlowLineIndices(outline, currentLine));
+    const childIndent = FileOperations.resolveChildIndent(outline, currentLine, newParentLine, flowAbs);
 
     return [
         { text: newParentLine, kind: 'item', under: 'spot' },
@@ -139,14 +138,14 @@ function renderRecurrence(
  * a tab and spaces mixed do not cut a child loose.
  */
 function renderGenerated(
-    lines: readonly string[],
+    outline: OutlineReading,
     currentLine: number,
     head: string,
     flowLines: string[],
     children: GeneratedChild[],
 ): PlacedLine[] {
-    const flowAbs = new Set(collectFlowLineIndicesInFile(lines, currentLine));
-    const under = (line: string) => FileOperations.resolveChildIndent(lines, currentLine, line, flowAbs);
+    const flowAbs = new Set(collectFlowLineIndices(outline, currentLine));
+    const under = (line: string) => FileOperations.resolveChildIndent(outline, currentLine, line, flowAbs);
 
     const block: PlacedLine[] = [
         { text: head, kind: 'item', under: 'spot' },

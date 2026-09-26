@@ -103,6 +103,88 @@ describe('a write of several ops, read once while its lines are as handed', () =
     });
 });
 
+/**
+ * Every write of a long note reads its lines as handed once: whatever an op
+ * asks of the outline before it has changed the lines — the row's subtree,
+ * its `==>` lines, the indentation of a child — it asks of the draft's
+ * reading (`LineDraft.reading`), not of a reading of its own. Past that, the
+ * write reads the lines it leaves once (`checkWrite`); and a place that is
+ * settled by trying the new line there (`Placement.settle`) reads the lines
+ * with the line tried in, which are other lines, once.
+ */
+describe('a write of one op to a long note', () => {
+    const ROWS = Array.from({ length: 3000 }, (_, i) => `- [ ] row ${i}`);
+    // Row 1500 (line 1501) has a child and a command below it.
+    const NOTE = ['# note', ...ROWS.slice(0, 1500), '- [ ] T @2026-09-21', '\t- [ ] c', '\t- ==> every mon', ...ROWS.slice(1500), ''];
+    const T = 1501;
+
+    /** How many readings of the whole note `write` makes: of the note as it was handed, and in all. */
+    async function readingsOf(write: (session: VaultSession) => Promise<unknown>): Promise<{ handed: number; all: number }> {
+        const { session } = await openVault({ [FILE]: NOTE });
+        try {
+            const read = vi.spyOn(Outline, 'read');
+            const scans = session.holdScans();
+            await write(session);
+            await scans.release();
+            await session.settle(FILE);
+            const long = read.mock.calls.map(([lines]) => lines).filter(lines => lines.length > 3000);
+            const handed = long.filter(lines => lines.length === NOTE.length && lines.every((line, i) => line === NOTE[i]));
+            return { handed: handed.length, all: long.length };
+        } finally {
+            session.dispose();
+        }
+    }
+
+    const idOf = (session: VaultSession, content: string) => session.index.getTasks().find(t => t.content === content)!.id;
+
+    it('moves a row with its subtree', async () => {
+        const readings = await readingsOf(async (session) => {
+            const edited = together(session, NOTE, T, [{ kind: 'move', text: '- [x] T @2026-09-21', to: { kind: 'end' } }]);
+            expect(edited.written).toBe(true);
+        });
+        expect(readings).toEqual({ handed: 1, all: 2 });
+    });
+
+    it('removes a row with its subtree', async () => {
+        const readings = await readingsOf(async (session) => {
+            expect(await session.index.deleteTask(idOf(session, 'T'))).toBe(true);
+        });
+        expect(readings).toEqual({ handed: 1, all: 2 });
+    });
+
+    it('duplicates a row with its subtree', async () => {
+        const readings = await readingsOf(async (session) => {
+            expect(await session.index.duplicateTask(idOf(session, 'T'), { dayOffset: 1 })).toBe(true);
+        });
+        expect(readings).toEqual({ handed: 1, all: 3 });
+    });
+
+    it('puts a first child under a row that has none', async () => {
+        const readings = await readingsOf(async (session) => {
+            expect(await session.index.insertLine(idOf(session, 'row 1600'), '- [ ] new', 'firstChild')).toBe(true);
+        });
+        expect(readings).toEqual({ handed: 1, all: 3 });
+    });
+
+    it('puts a next instance, its command indented as the row\'s', async () => {
+        const readings = await readingsOf(async (session) => {
+            const edited = together(session, NOTE, T, [{
+                kind: 'insert-instance', insert: { kind: 'recurrence', content: '- [ ] T @2026-09-28', flowLines: ['every mon'] },
+            }]);
+            expect(edited.written).toBe(true);
+        });
+        expect(readings).toEqual({ handed: 1, all: 3 });
+    });
+
+    it('takes a row\'s command off', async () => {
+        const readings = await readingsOf(async (session) => {
+            const edited = together(session, NOTE, T, [{ kind: 'strip-flow', text: '- [x] T @2026-09-21' }]);
+            expect(edited.written).toBe(true);
+        });
+        expect(readings).toEqual({ handed: 1, all: 2 });
+    });
+});
+
 describe('an update of a long note', () => {
     it('reads the lines once before the write and once after, and the index takes in the one after', async () => {
         const note = ['# note', ...Array.from({ length: 3000 }, (_, i) => `- [ ] row ${i}`), ''];

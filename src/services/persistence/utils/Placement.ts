@@ -242,7 +242,7 @@ export class Placement {
             if (outline.subtreeEnd(up) === at) return Outline.indentOf(lines[up]);
             break;
         }
-        return parent === null ? '' : FileOperations.resolveChildIndent(lines, parent);
+        return parent === null ? '' : FileOperations.resolveChildIndent(outline, parent);
     }
 
     /**

@@ -1,7 +1,7 @@
 import { type App, TFile } from 'obsidian';
 import type { Task } from '../../../types';
 import { TaskParser } from '../../parsing/TaskParser';
-import { collectFlowLineIndices, collectFlowLineIndicesInFile } from '../../parsing/utils/FlowLineScanner';
+import { collectFlowLineIndices } from '../../parsing/utils/FlowLineScanner';
 import { FileOperations } from '../utils/FileOperations';
 import { ChildPropertyLineEditor } from '../utils/ChildPropertyLineEditor';
 import { Block, Placement, type PlacedLine, type Spot } from '../utils/Placement';
@@ -180,14 +180,15 @@ export class InlineTaskWriter {
                 return;
             }
             case 'insert-instance': {
-                draft.put(Placement.groupHead(draft.reading(), line, flowInstanceHead(op.insert)), renderFlowInstance(this.fileOps, lines, line, op.insert));
+                const outline = draft.reading();
+                draft.put(Placement.groupHead(outline, line, flowInstanceHead(op.insert)), renderFlowInstance(outline, line, op.insert));
                 return;
             }
             case 'strip-flow': {
                 // Every flow line is below the row (the scan starts past it
                 // and stops at the first line that is not a descendant), so
                 // taking them out leaves the row where it is.
-                const flowIndices = collectFlowLineIndicesInFile(lines, line);
+                const flowIndices = collectFlowLineIndices(draft.reading(), line);
                 for (let i = flowIndices.length - 1; i >= 0; i--) {
                     draft.splice(flowIndices[i], 1);
                 }
@@ -205,15 +206,16 @@ export class InlineTaskWriter {
                 // The spot is never inside the subtree (a section's end is
                 // past every item in it), so the subtree is where it was, or
                 // below the carried lines when they went above it.
-                const { childrenLines } = this.fileOps.collectChildrenFromLines(lines, line);
-                const block = this.carriedWith(lines, line, op.text);
-                const spot = this.destinationOf(draft.reading(), op.to, block[0].text);
+                const outline = draft.reading();
+                const { childrenLines } = this.fileOps.collectChildrenFromLines(outline, line);
+                const block = this.carriedWith(outline, line, op.text);
+                const spot = this.destinationOf(outline, op.to, block[0].text);
                 draft.put(spot, block);
                 draft.splice(spot.at <= line ? line + block.length : line, 1 + childrenLines.length);
                 return;
             }
             case 'remove': {
-                const { childrenLines } = this.fileOps.collectChildrenFromLines(lines, line);
+                const { childrenLines } = this.fileOps.collectChildrenFromLines(draft.reading(), line);
                 draft.splice(line, 1 + childrenLines.length);
                 return;
             }
@@ -311,8 +313,8 @@ export class InlineTaskWriter {
      * stood under one of them has lost its item: a task, command or property
      * there is not written (`checkWrite`).
      */
-    private carriedWith(lines: readonly string[], currentLine: number, head: string): PlacedLine[] {
-        const outline = Outline.read(lines);
+    private carriedWith(outline: OutlineReading, currentLine: number, head: string): PlacedLine[] {
+        const lines = outline.lines;
         const flowAbs = new Set(collectFlowLineIndices(outline, currentLine));
         const rows = [currentLine];
         for (let row = currentLine + 1; row < outline.subtreeEnd(currentLine); row++) {
