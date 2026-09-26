@@ -39,7 +39,6 @@ const putLine = (spot: Spot, text: string) => (draft: LineDraft) => draft.put(sp
 describe('a line put in reads as its block says, or the write is unplaceable', () => {
     it('is sound where the line is a task under the item meant', () => {
         const lines = ['- [ ] T', '  - [ ] a', '- [ ] U'];
-        expect(checked(lines, putLine(Placement.lastChild(Outline.read(lines), 0, '- [ ] n'), '- [ ] c'))).toBe('sound');
         expect(checked(lines, putLine(Placement.firstChild(Outline.read(lines), 0, '- [ ] n'), '- [ ] c'))).toBe('sound');
         expect(checked(lines, putLine(Placement.afterSubtree(Outline.read(lines), 0, '- [ ] n'), '- [ ] c'))).toBe('sound');
         expect(checked(lines, putLine(Placement.end(Outline.read(lines)), '- [ ] c'))).toBe('sound');
@@ -49,9 +48,9 @@ describe('a line put in reads as its block says, or the write is unplaceable', (
         const lines = ['- [ ] T', '    ```', '    code', '- [ ] U', ''];
         // Past the fence, the line goes on it.
         expect(checked(lines, putLine({ at: 3, parent: 0, indent: '    ' }, '- [ ] c'))).toBe('unplaceable');
-        // A last child goes at the end of the children, above the fence (R5 closed).
-        expect(Placement.lastChild(Outline.read(lines), 0, '- [ ] n').at).toBe(1);
-        expect(checked(lines, putLine(Placement.lastChild(Outline.read(lines), 0, '- [ ] n'), '- [ ] c'))).toBe('sound');
+        // A child goes above the fence, where it reads as a task.
+        expect(Placement.firstChild(Outline.read(lines), 0, '- [ ] n').at).toBe(1);
+        expect(checked(lines, putLine(Placement.firstChild(Outline.read(lines), 0, '- [ ] n'), '- [ ] c'))).toBe('sound');
         // A sibling put there starts an item, which ends the fence.
         expect(checked(lines, putLine(Placement.afterSubtree(Outline.read(lines), 0, '- [ ] n'), '- [ ] c'))).toBe('sound');
     });
@@ -148,7 +147,7 @@ describe('a line kept keeps its kind, and a task its items above, or the write d
         const lines = ['- [ ] T', '  ```', '  x', '  ```', 'after'];
         expect(found(lines, (draft) => draft.put({ at: 4, parent: null, indent: '' }, Block.read(['```'])))).toEqual({ check: 'disturbs', fence: null });
         // A sound write names none.
-        expect(found(item, putLine(Placement.lastChild(Outline.read(item), 0, '- [ ] n'), '- [ ] c'))).toEqual({ check: 'sound', fence: null });
+        expect(found(item, putLine(Placement.firstChild(Outline.read(item), 0, '- [ ] n'), '- [ ] c'))).toEqual({ check: 'sound', fence: null });
     });
 
     it('leaves a blank line blank wherever it stands: taking a fence\'s blank line out of it disturbs nothing (q13)', () => {
@@ -189,7 +188,6 @@ describe('a line spliced into the body without a block', () => {
 describe('mixed indentation', () => {
     it('is sound where a child is put under a tab row among space-indented siblings', () => {
         const lines = ['- [ ] P', '    - [ ] a', '\t- [ ] T', '    - [ ] b'];
-        expect(checked(lines, putLine(Placement.lastChild(Outline.read(lines), 2, '- [ ] n'), '- [ ] c'))).toBe('sound');
         expect(checked(lines, putLine(Placement.afterSubtree(Outline.read(lines), 2, '- [ ] n'), '- [ ] c'))).toBe('sound');
         expect(checked(lines, putLine(Placement.firstChild(Outline.read(lines), 2, '- [ ] n'), '- [ ] c'))).toBe('sound');
     });

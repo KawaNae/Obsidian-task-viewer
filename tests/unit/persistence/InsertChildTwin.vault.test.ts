@@ -129,17 +129,6 @@ describe('a child added through the API (and the CLI, which calls it)', () => {
     });
 });
 
-describe('a child appended at the end of a row\'s children', () => {
-    it('is refused, not written under the other twin, while the file holds an edit the scan has not read', async () => {
-        const { contents, session } = await open(TWINS);
-        const task = secondTwin(session);
-        contents.set(FILE, EDITED);
-
-        expect(await session.index.appendChildTask(task.id, '- [ ] c')).toBe(false);
-        expect(contents.get(FILE)).toBe(EDITED);
-    });
-});
-
 describe('a timer\'s record (the same check as every write)', () => {
     // A timer's record now takes the same check as every write: a row only
     // indented since the scan is refused, the same as any other row that

@@ -227,18 +227,6 @@ describe('a move within the note (move-to-end, end)', () => {
     });
 });
 
-describe('a last child (insertLineAfterTask, lastChild)', () => {
-    it('goes past the subtree at the children\'s indentation', async () => {
-        const { contents, session } = await open(['# n', '- [ ] T', '  - [ ] a', '  lazy', '- [ ] U', '']);
-
-        expect(await session.index.appendChildTask(only(session, 'T').id, '- [ ] c')).toBe(true);
-        await session.settle(FILE);
-
-        expect(lines(contents)).toEqual(['# n', '- [ ] T', '  - [ ] a', '  lazy', '  - [ ] c', '- [ ] U', '']);
-        expect(parents(session)).toEqual([['T', null], ['a', 'T'], ['c', 'T'], ['U', null]]);
-    });
-});
-
 describe('a sibling (insertSiblingAfterTask, afterSubtree and afterCompletedRun)', () => {
     // The first run's B1: a new line, spelled as the item next to it. At
     // T's spelling, `- ` at the top, it would take U in.
@@ -425,7 +413,7 @@ describe('the two readings L3 made CommonMark\'s: a quote after an item, an orde
     it('puts a child of a task a quote ends above the quote', async () => {
         const { contents, session } = await open(QUOTE);
 
-        expect(await session.index.appendChildTask(only(session, 'T').id, '- [ ] n')).toBe(true);
+        expect(await session.index.insertLine(only(session, 'T').id, '- [ ] n', 'firstChild')).toBe(true);
         await session.settle(FILE);
 
         expect(lines(contents)).toEqual(['# n', '- [ ] T', '    - [ ] n', '> quote', '  - [ ] c', '']);
@@ -446,7 +434,7 @@ describe('the two readings L3 made CommonMark\'s: a quote after an item, an orde
     it('puts a child of s3#18255\'s t2 past the empty item underlining it, above the quote', async () => {
         const { contents, session } = await open(['# n', '- [ ] t2', '  -', '> text', '  -  [ ] t8', '']);
 
-        expect(await session.index.appendChildTask(only(session, 't2').id, '- [ ] n')).toBe(true);
+        expect(await session.index.insertLine(only(session, 't2').id, '- [ ] n', 'firstChild')).toBe(true);
         await session.settle(FILE);
 
         expect(lines(contents)).toEqual(['# n', '- [ ] t2', '  -', '    - [ ] n', '> text', '  -  [ ] t8', '']);
@@ -459,16 +447,6 @@ describe('the two readings L3 made CommonMark\'s: a quote after an item, an orde
     it('reads an ordered line not starting at 1 in a task\'s text as the text, not a task', async () => {
         const { session } = await open(ORDERED);
         expect(parents(session)).toEqual([['P', null], ['c', 'P']]);
-    });
-
-    it('puts a last child past the subtree of a task whose text goes on as an ordered line', async () => {
-        const { contents, session } = await open(ORDERED);
-
-        expect(await session.index.appendChildTask(only(session, 'P').id, '- [ ] l')).toBe(true);
-        await session.settle(FILE);
-
-        expect(lines(contents)).toEqual(['# n', '- [ ] P', '  2. [ ] T', '  - [ ] c', '  - [ ] l', '']);
-        expect(parents(session)).toEqual([['P', null], ['c', 'P'], ['l', 'P']]);
     });
 
     it('puts a first child past the ordered line, which goes on in the task\'s text', async () => {
@@ -486,8 +464,7 @@ describe('the two readings L3 made CommonMark\'s: a quote after an item, an orde
     });
 
     // Each goes on in T's text, and would open an item below a line put
-    // between: a first child, a last child of a task with none, and a
-    // property all go below it.
+    // between: a first child and a property both go below it.
     describe.each(['  1.', '  2. [ ] U', '  -', '  *'])('past `%s`, T\'s text', tail => {
         const NOTE = ['# n', '- [ ] T', tail, '- [ ] V', ''];
 
@@ -499,16 +476,6 @@ describe('the two readings L3 made CommonMark\'s: a quote after an item, an orde
 
             expect(lines(contents)).toEqual(['# n', '- [ ] T', tail, '    - [ ] f', '- [ ] V', '']);
             expect(parents(session)).toEqual([['T', null], ['f', 'T'], ['V', null]]);
-        });
-
-        it('puts a last child', async () => {
-            const { contents, session } = await open(NOTE);
-
-            expect(await session.index.appendChildTask(only(session, 'T').id, '- [ ] l')).toBe(true);
-            await session.settle(FILE);
-
-            expect(lines(contents)).toEqual(['# n', '- [ ] T', tail, '    - [ ] l', '- [ ] V', '']);
-            expect(parents(session)).toEqual([['T', null], ['l', 'T'], ['V', null]]);
         });
 
         it('puts a property', async () => {

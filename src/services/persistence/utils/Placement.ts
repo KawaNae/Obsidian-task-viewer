@@ -124,20 +124,6 @@ export class Placement {
     }
 
     /**
-     * Where a last child of `row` goes: just past the subtree of its last
-     * child, where a first child goes when it has none. The end of the list
-     * of its children, which is not always the end of its subtree: the text,
-     * code or fence of its own below its children stays below them.
-     */
-    static lastChild(outline: OutlineReading, row: number, head: string): Spot {
-        let last: number | null = null;
-        for (let k = row + 1; k < outline.subtreeEnd(row); k++) {
-            if (outline.item(k)?.parent === row) last = k;
-        }
-        return this.sibling(outline, last === null ? this.pastOwnText(outline, row) : outline.subtreeEnd(last), row, head);
-    }
-
-    /**
      * Just past the lines straight below `row` that go on its text: the
      * paragraph its line opens, going on (`goesOnParagraph`), up to the
      * first line that does not. A line put above them would end `row`'s

@@ -95,15 +95,6 @@ export class TaskWriteService {
     }
 
     /**
-     * Append a child at the *end* of the parent's subtree. Session records are
-     * a log, so they must accumulate in chronological order — a first child
-     * goes at the head and would read backwards.
-     */
-    async appendChildTask(parentTaskId: string, childLine: string): Promise<boolean> {
-        return this.taskIndex.appendChildTask(this.resolveTaskId(parentTaskId), childLine);
-    }
-
-    /**
      * A line beside the row, where `place` says — a child from a card's
      * menu, the API or the CLI, a timer's line — and the row's own `^id` put
      * on or taken off in the same write (`TaskIndex.insertLine`).

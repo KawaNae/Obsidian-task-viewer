@@ -176,7 +176,7 @@ describe('writes after dispose', () => {
         });
 
         await proto.writeLine.call(closed, FILE, { line: 0, text: '- [ ] x', key: '' }, [{ kind: 'update', text: '- [x] x' }]);
-        await proto.appendChildTask.call(closed, 'id', '- [ ] x');
+        await proto.insertLine.call(closed, 'id', '- [ ] x', 'firstChild');
 
         expect(closed.withNotify).not.toHaveBeenCalled();
     });
