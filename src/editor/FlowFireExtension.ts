@@ -25,8 +25,10 @@ export interface EditorFireHost {
     statusDefinitions(): StatusDefinition[];
     fireOp(path: string): FireOp;
     applyOps(draft: LineDraft, session: WriteSession, target: NamedRow | EditorLine, ops: readonly TaskOp[]): boolean;
-    /** Tell the user a write was not made, and why (the index's `reportRefusal`). */
+    /** Tell the user a write was not made, and why (the index's `reportRefusal`): the editor menu's write. */
     refused(refusal: Refusal): void;
+    /** Tell the user a row's fire was not written, and why: the row stays completed (the index's `reportFireRefusal`). */
+    fireRefused(refusal: Refusal): void;
     /** Tell the user a fire could not be planned (`FlowExecutor.reportDidNotFire`). */
     didNotFire(plan: Extract<FirePlan, { kind: 'failed' }>): void;
 }
@@ -120,7 +122,7 @@ export function fireFilter(host: EditorFireHost): Extension {
             const edited = editLines(path, lines, '\n',
                 (draft, _eol, session) => host.applyOps(draft, session, { line, text: lines[line], key: contentKeyOf(lines) }, ops));
             if (!edited.written) {
-                host.refused(edited.refused);
+                host.fireRefused(edited.refused);
                 continue;
             }
             lines = edited.lines;

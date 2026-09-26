@@ -99,7 +99,7 @@ describe('a completion made in the editor', () => {
 
         expect(editor.lines()[1]).toBe('- [x] 対象 @2026-09-21');
         expect(editor.lines()).toHaveLength(6);
-        expect(Notice.messages).toEqual([t('notice.writeDisturbs', { subject: '- [x] 対象 @2026-09-21' })]);
+        expect(Notice.messages).toEqual([t('notice.flowNotRun', { reason: t('notice.refusedDisturbs'), subject: '- [x] 対象 @2026-09-21' })]);
     });
 });
 
@@ -121,7 +121,7 @@ describe('a transaction that completes rows, some of whose fires cannot be writt
             '- [x] 対象 @2026-09-21', '\t- ==> every mon', '\t\t- [ ] sub', '- [x] B @2026-09-21', '',
         ]);
         // Told of the row that was refused, not of the last row written.
-        expect(Notice.messages).toEqual([t('notice.writeDisturbs', { subject: '- [x] 対象 @2026-09-21' })]);
+        expect(Notice.messages).toEqual([t('notice.flowNotRun', { reason: t('notice.refusedDisturbs'), subject: '- [x] 対象 @2026-09-21' })]);
     });
 
     it('writes the fires that can be, above a row refused', async () => {
@@ -136,7 +136,7 @@ describe('a transaction that completes rows, some of whose fires cannot be writt
             '# note', '- [ ] A @2026-09-28 ==> every mon', '- [x] A @2026-09-21',
             '- [x] 対象 @2026-09-21', '\t- ==> every mon', '\t\t- [ ] sub', '',
         ]);
-        expect(Notice.messages).toEqual([t('notice.writeDisturbs', { subject: '- [x] 対象 @2026-09-21' })]);
+        expect(Notice.messages).toEqual([t('notice.flowNotRun', { reason: t('notice.refusedDisturbs'), subject: '- [x] 対象 @2026-09-21' })]);
     });
 });
 

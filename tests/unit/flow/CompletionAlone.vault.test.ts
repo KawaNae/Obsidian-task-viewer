@@ -9,7 +9,8 @@ import { freezeDate } from '../helpers/fakeDate';
  * (`unplaceable`, `disturbs`) is written alone, in the same write: the
  * completion is the user's, as one made in the editor stands when its fire
  * is refused. One `vault.process`, so nothing written from outside comes
- * between the refused fire and the completion; and one notice.
+ * between the refused fire and the completion; and one notice, which says the
+ * row was completed and the flow was not run.
  *
  * The shape is F8's (R2): `Para` / `- [ ] A ==> move()` / `---` — taking the
  * row out would make the paragraph and the rule a setext heading.
@@ -44,7 +45,7 @@ describe('a completion whose fire would disturb the note', () => {
         expect(note.contents.get(FILE)).toBe(DONE.join('\n'));
         expect(note.processed()).toBe(1);
         expect(Notice.messages).toHaveLength(1);
-        expect(Notice.messages[0]).toMatch(/heading.*: A$/);
+        expect(Notice.messages[0]).toMatch(/^The task was completed, but its flow was not run: .*heading.* \(A\)$/);
     });
 
     it('is written alone in one write, from the editor menu on a note no editor shows', async () => {
@@ -55,6 +56,6 @@ describe('a completion whose fire would disturb the note', () => {
         expect(note.contents.get(FILE)).toBe(DONE.join('\n'));
         expect(note.processed()).toBe(1);
         expect(Notice.messages).toHaveLength(1);
-        expect(Notice.messages[0]).toMatch(/heading/);
+        expect(Notice.messages[0]).toMatch(/^The task was completed, but its flow was not run: .*heading/);
     });
 });

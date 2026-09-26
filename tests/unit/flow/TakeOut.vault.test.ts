@@ -86,7 +86,7 @@ describe('a command line stripped by a fire', () => {
 
         expect(contents.get(FILE)).toBe(before.replace('- [ ] 対象', '- [x] 対象'));
         expect(session.index.getTask(sub)?.content).toBe('sub');
-        expect(Notice.messages).toEqual([t('notice.writeDisturbs', { subject: '対象' })]);
+        expect(Notice.messages).toEqual([t('notice.flowNotRun', { reason: t('notice.refusedDisturbs'), subject: '対象' })]);
     });
 });
 
