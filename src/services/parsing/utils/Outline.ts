@@ -206,6 +206,24 @@ export interface OutlineItem {
     end: number;
 }
 
+/**
+ * A heading as the outline reads it: an ATX line, or a paragraph and the
+ * line of `=` or `-` that underlines it (setext), at the top of the note.
+ */
+export interface OutlineHeading {
+    /** Its first line: the ATX line, or the paragraph's first line. */
+    line: number;
+    /** The index just past its last line: past the underline, for a setext one. */
+    end: number;
+    /** 1 to 6; a setext heading is 1 (`=`) or 2 (`-`). */
+    level: number;
+    /**
+     * Its text: the ATX line past its `#` run, without the closing run of
+     * `#`; a setext heading's paragraph lines, trimmed and joined by a space.
+     */
+    text: string;
+}
+
 /** A fenced code block as the outline reads it. */
 export interface OutlineFence {
     /** The line of its opening delimiter. */
@@ -250,6 +268,15 @@ export class OutlineReading {
          */
         readonly quotesClosingItems: readonly number[],
         private readonly continuations: readonly boolean[],
+        /**
+         * The note's headings, top to bottom: CommonMark's, at the top of
+         * the note only — not in an item, a quote, a fence or indented code,
+         * none of which Obsidian links a heading to (F8's Dev measurement).
+         * Every reader of a heading asks this: the sections of the note
+         * (`DocumentTreeBuilder`), the line under a heading
+         * (`HeadingInserter`), and a move's destination (`Placement`).
+         */
+        readonly headings: readonly OutlineHeading[],
     ) {}
 
     /**
@@ -360,6 +387,8 @@ const QUOTE_MARKER_RE = /^>[ \t]?/;
 const SETEXT_UNDERLINE_RE = /^(?:=+|-+)[ \t]*$/;
 const GAP_RE = /^[ \t]*/;
 const HEADING_RE = /^#{1,6}(?:[ \t]|$)/;
+const ATX_OPEN_RE = /^#{1,6}/;
+const ATX_CLOSE_RE = /(?:^|[ \t]+)#+[ \t]*$/;
 const THEMATIC_BREAK_RE = /^(?:(?:-[ \t]*){3,}|(?:\*[ \t]*){3,}|(?:_[ \t]*){3,})$/;
 
 /** An item a line opens (`itemStart`). */
@@ -457,6 +486,10 @@ function readOutline(lines: readonly string[], start: number): OutlineReading {
 
     const quotesClosingItems: number[] = [];
     const continuations: boolean[] = new Array(lines.length).fill(false);
+    const headings: OutlineHeading[] = [];
+    // The first line of the paragraph open at the top of the note, which a
+    // line of `=` or `-` may underline as a heading; null when none is.
+    let topParagraph: number | null = null;
 
     type Frame = { item: OutlineItem; last: number };
     const stack: Frame[] = [];
@@ -576,6 +609,12 @@ function readOutline(lines: readonly string[], start: number): OutlineReading {
                 holds(i);
                 continuations[i] = true;
                 leaf = 'none';
+                if (stack.length === 0 && topParagraph !== null) {
+                    headings.push({
+                        line: topParagraph, end: i + 1, level: text.startsWith('=') ? 1 : 2,
+                        text: lines.slice(topParagraph, i).map(l => l.trim()).join(' '),
+                    });
+                }
                 continue;
             }
             if (!interrupts(col, text, started, matched, direct)) {
@@ -616,8 +655,13 @@ function readOutline(lines: readonly string[], start: number): OutlineReading {
 
         holds(i);
         leaf = leafOf(text);
+        topParagraph = stack.length === 0 && leaf === 'paragraph' ? i : null;
+        if (stack.length === 0 && HEADING_RE.test(text)) {
+            const name = text.replace(ATX_OPEN_RE, '').trim().replace(ATX_CLOSE_RE, '');
+            headings.push({ line: i, end: i + 1, level: ATX_OPEN_RE.exec(text)![0].length, text: name });
+        }
     }
     closeTo(0);
 
-    return new OutlineReading(lines, items, owners, codes, fences, start, quotesClosingItems, continuations);
+    return new OutlineReading(lines, items, owners, codes, fences, start, quotesClosingItems, continuations, headings);
 }
