@@ -9,7 +9,7 @@ import type { PropertyOp } from '../PropertyUpdatePlanner';
 import { flowInstanceHead, renderFlowInstance } from '../FlowInstanceLines';
 import {
     UnfollowableDraft, createFile, editLines, fileGone, processLines, splitLines,
-    type DraftEdit, type EditorLine, type LineDraft, type NamedRow, type Refusal, type WriteAt, type WriteChannel,
+    type DraftEdit, type EditorLine, type LineDraft, type NamedRow, type WriteAt, type WriteChannel,
     type WriteChannels, type WriteOutcome, type WriteSession,
 } from '../../../utils/FileLines';
 import type { PlannedTarget } from '../TaskRefs';
