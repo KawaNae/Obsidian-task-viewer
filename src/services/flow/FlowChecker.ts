@@ -107,11 +107,7 @@ export function checkFlow(program: FlowProgram, diagnostics: Diagnostic[]): void
         }
     }
 
-    if (program.move) {
-        const t = checkExpr(program.move.target, FLOW_TYPE_ENV, diagnostics);
-        if (t !== 'error' && t !== 'link' && t !== 'string') {
-            diagnostics.push(error('type.move-target', `move() expects a wikilink or string target, got ${typeName(t)}`,
-                program.move.target.span, { actual: typeName(t) }));
-        }
-    }
+    // `move`'s target is not an expression to check: where it goes is read
+    // off how it is written (`MoveTarget`), and anything but `()` and a link
+    // to a heading of the note is retired, which the parser has said.
 }

@@ -95,10 +95,54 @@ describe('FlowParser', () => {
         });
 
         it('parses move alone (no schedule)', () => {
-            const { program, diagnostics } = parseFlow('move([[Archive]])');
+            const { program, diagnostics } = parseFlow('move()');
             expect(diagnostics).toEqual([]);
             expect(program?.schedule).toBeUndefined();
             expect(program?.move).toBeDefined();
+        });
+    });
+
+    // F8: a move stays in its note. Where it goes is read off how the clause
+    // is written, before anything is evaluated, once, here.
+    describe('where move goes', () => {
+        const toOf = (raw: string) => {
+            const { program, diagnostics } = parseFlow(raw);
+            return { to: program?.move?.to, codes: diagnostics.map(d => `${d.severity}:${d.code}`) };
+        };
+
+        it('reads move() as the end of the note', () => {
+            expect(toOf('move()')).toEqual({ to: { kind: 'end' }, codes: [] });
+            expect(toOf('every mon move( )')).toEqual({ to: { kind: 'end' }, codes: [] });
+        });
+
+        it('reads a link to a heading of the note as the end of its section, an alias aside', () => {
+            expect(toOf('move([[#Done]])')).toEqual({ to: { kind: 'heading', name: 'Done' }, codes: [] });
+            expect(toOf('move([[#Done later|later]])')).toEqual({ to: { kind: 'heading', name: 'Done later' }, codes: [] });
+        });
+
+        it.each([
+            'move([[Log]])',
+            'move([[Log#Done]])',
+            'move([[note#Done]])',
+            'move("Log/Done")',
+            'move([[Log/]] + format(done, "YYYY-MM"))',
+            'move([[#Top#Done]])',
+            'move([[#]])',
+            'move(3)',
+        ])('reads anything else as a move to another note, retired, and warns: %s', (raw) => {
+            const { program, diagnostics } = parseFlow(raw);
+            expect(program?.move?.to).toEqual({ kind: 'retired' });
+            expect(diagnostics.map(d => `${d.severity}:${d.code}`)).toEqual(['warning:flow.move-retired']);
+        });
+
+        it('keeps the rest of a command whose move is retired', () => {
+            const { program } = parseFlow('every mon move([[Log]])');
+            expect(program?.schedule?.kind).toBe('every');
+        });
+
+        it('prints move() and a heading link as written', () => {
+            expect(serializeFlow(parseFlow('move( )  every mon').program!)).toBe('every mon move()');
+            expect(serializeFlow(parseFlow('move([[#Done|d]])').program!)).toBe('move([[#Done|d]])');
         });
     });
 
@@ -218,6 +262,8 @@ describe('FlowParser', () => {
             'every mon x14 use("週報") move([[Log]])',
             'move([[Archive/Done]])',
             'every mon move([[Log]])',
+            'every mon x2 move()',
+            'move([[#Done|later]])',
             'at(startOf(month, done + 1mo) + 4d)',
             'every mon setContent("週報 " + format(start, "MM/DD")) setDue(start + 3d)',
             'every mon until(endOf(year))',
