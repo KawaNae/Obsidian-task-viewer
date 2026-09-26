@@ -8,7 +8,7 @@ import { Block, Placement, type PlacedLine, type Spot } from '../utils/Placement
 import type { PropertyOp } from '../PropertyUpdatePlanner';
 import { flowInstanceHead, renderFlowInstance } from '../FlowInstanceLines';
 import {
-    UnfollowableDraft, createFile, fileGone, processLines, splitLines,
+    UnfollowableDraft, createFile, editLines, fileGone, processLines, splitLines,
     type DraftEdit, type EditorLine, type LineDraft, type NamedRow, type Refusal, type WriteAt, type WriteChannel,
     type WriteChannels, type WriteOutcome, type WriteSession,
 } from '../../../utils/FileLines';
@@ -323,8 +323,10 @@ export class InlineTaskWriter {
     /**
      * @returns the outcome.
      *
-     * A note that does not exist yet is made whole (`createFile`): every row
-     * in it is new, and there is no report of lines to follow.
+     * A note that does not exist yet is made of what the append writes to an
+     * empty note, held to the same check (`editLines`), and created whole
+     * (`createFile`): every row in it is new, and there is no report of lines
+     * to follow.
      */
     async appendTaskToFile(filePath: string, content: string): Promise<WriteAt> {
         // The appended text is built with LF; splitting it here lets the file's
@@ -338,26 +340,31 @@ export class InlineTaskWriter {
         const file = this.app.vault.getAbstractFileByPath(filePath);
         const subject = block[0].text.trim();
         const channel = this.channelOf(filePath);
+        let inserted = -1;
+        const append = (draft: LineDraft) => {
+            const spot = Placement.end(draft.reading());
+            draft.put(spot, block);
+            inserted = spot.at;
+            return true;
+        };
 
         if (!file) {
+            const edited = editLines(filePath, [], '\n', append, { about: subject });
+            if (!edited.written) {
+                channel?.refused(edited.refused);
+                return edited;
+            }
             const created = await createFile(this.app, filePath, channel, subject, async () => {
                 await this.fileOps.ensureDirectoryExists(filePath);
-                // At the top of the note, as a put at its end would write it.
-                return Block.at(block, '').map(line => line.text).join('\n');
+                return edited.lines.join('\n');
             });
-            return created.written ? { ...created, line: 0 } : created;
+            return created.written ? { ...created, line: inserted } : created;
         }
 
         // A folder by that name: there is no note to append to.
         if (!(file instanceof TFile)) return fileGone(channel, filePath, subject);
 
-        let inserted = -1;
-        const outcome = await processLines(this.app, file, channel, (draft) => {
-            const spot = Placement.end(draft.reading());
-            draft.put(spot, block);
-            inserted = spot.at;
-            return true;
-        }, subject);
+        const outcome = await processLines(this.app, file, channel, append, subject);
         return outcome.written ? { ...outcome, line: inserted } : outcome;
     }
 
