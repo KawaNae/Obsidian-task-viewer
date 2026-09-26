@@ -1,4 +1,4 @@
-import { Outline, type OutlineReading } from '../../parsing/utils/Outline';
+import { Outline, type OutlineHeading, type OutlineReading } from '../../parsing/utils/Outline';
 import type { PlacedReading } from '../../parsing/utils/OutlineCheck';
 import { TaskLineClassifier } from '../../parsing/utils/TaskLineClassifier';
 import { FileOperations } from './FileOperations';
@@ -16,6 +16,28 @@ export interface Spot {
     at: number;
     parent: number | null;
     indent: string;
+}
+
+/** The heading a name names in a note (`Placement.heading`): one, none, or how many. */
+export type HeadingLookup =
+    | { kind: 'one'; heading: OutlineHeading }
+    | { kind: 'none' }
+    | { kind: 'many'; count: number };
+
+/** The ASCII marks Obsidian reads as a space in a heading's name: all but `'`, `-` and `_`. */
+const HEADING_MARKS_RE = /[!"#$%&()*+,./:;<=>?@[\\\]^`{|}~]/g;
+
+/**
+ * A heading's name as Obsidian compares it when it resolves a link to a
+ * heading (F8's Dev measurement, as the API's `stripHeading` describes it):
+ * the ASCII marks but `'`, `-` and `_` read as a space, spaces run together
+ * and trimmed off, and case aside. `**bold**` is `bold`, `[[Other]]` is
+ * `other`, `a:b` is `a b`. Other characters (full-width ones) are compared
+ * as they are. Two headings of the same name are two headings the link
+ * cannot tell apart.
+ */
+export function headingKey(name: string): string {
+    return name.replace(HEADING_MARKS_RE, ' ').replace(/\s+/g, ' ').trim().toLowerCase();
 }
 
 /** A line a write puts in: its text, how it is to read, and the line it is when it is one carried. */
@@ -175,6 +197,38 @@ export class Placement {
      */
     static underHeading(lines: readonly string[], heading: number, head: string): Spot {
         return this.sibling(Outline.read(lines), heading + 1, null, head);
+    }
+
+    /**
+     * The heading `name` names in the note, as Obsidian resolves a link to a
+     * heading of the note it stands in (`[[#name]]`): the headings the note
+     * reads (`OutlineReading.headings`), their names compared by
+     * {@link headingKey}. A move's destination, looked up where the move is
+     * planned and again where it is put, from the same lines, so both find
+     * the same one — or both find none or several, and nothing moves.
+     */
+    static heading(lines: readonly string[], name: string): HeadingLookup {
+        const key = headingKey(name);
+        const named = Outline.read(lines).headings.filter(h => headingKey(h.text) === key);
+        if (named.length === 0) return { kind: 'none' };
+        if (named.length > 1) return { kind: 'many', count: named.length };
+        return { kind: 'one', heading: named[0] };
+    }
+
+    /**
+     * Where lines moved to the end of `heading`'s section go: its section
+     * runs from below the heading to the next heading of its level or above,
+     * or the end of the note, and they go just past its last line that is not
+     * blank — past the subtree of an item that ends it, as a sibling at the
+     * top — so the blank lines that end it stay below them. A section with
+     * nothing in it has them just below the heading.
+     */
+    static sectionEnd(lines: readonly string[], heading: OutlineHeading, head: string): Spot {
+        const outline = Outline.read(lines);
+        const next = outline.headings.find(h => h.line >= heading.end && h.level <= heading.level);
+        let at = next ? next.line : lines.length;
+        while (at > heading.end && Outline.isBlank(lines[at - 1])) at--;
+        return this.sibling(outline, at, null, head);
     }
 
     /**
