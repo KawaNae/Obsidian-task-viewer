@@ -1,6 +1,6 @@
 import { describe, it, expect, afterEach } from 'vitest';
 import { Notice } from 'obsidian';
-import { vaultSession, type VaultSession } from '../../../helpers/vaultSession';
+import { vaultSession, type VaultSession } from '../../helpers/vaultSession';
 
 /**
  * A task moved within its own file is followed by the name held before the
