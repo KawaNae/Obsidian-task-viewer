@@ -2,7 +2,7 @@ import { TIMER_ICON_PREFIX_RE } from '../../utils/TimerIcons';
 import { type Diagnostic, warning } from '../lang/Diagnostic';
 import { TaskLineClassifier } from '../parsing/utils/TaskLineClassifier';
 import type { FlowProgram } from './FlowAst';
-import { isFlowLine } from './FlowLineScanner';
+import { isFlowLine } from '../parsing/utils/FlowLineScanner';
 
 /**
  * Tell a task that its child lines have stopped travelling to the next

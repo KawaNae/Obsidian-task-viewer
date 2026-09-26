@@ -30,7 +30,7 @@ export class WindowAttachment {
     private observer: MutationObserver | null = null;
     private nativeSuggestStyles: Map<string, HTMLStyleElement> = new Map();
     private colorWriteTimer: number | null = null;
-    private pendingColorWrite: (() => Promise<void>) | null = null;
+    private pendingColorWrite: (() => Promise<boolean>) | null = null;
 
     constructor(
         private win: Window,
@@ -61,7 +61,7 @@ export class WindowAttachment {
     }
 
     /** 最後の色だけを書くよう予約し直す（前の予約は破棄する）。 */
-    private queueColorWrite(write: () => Promise<void>): void {
+    private queueColorWrite(write: () => Promise<boolean>): void {
         this.pendingColorWrite = write;
         if (this.colorWriteTimer !== null) this.win.clearTimeout(this.colorWriteTimer);
         this.colorWriteTimer = this.win.setTimeout(() => {
@@ -203,8 +203,20 @@ export class WindowAttachment {
             ) as HTMLDivElement | null;
             if (currentValueDiv) currentValueDiv.textContent = hex;
 
-            this.queueColorWrite(() => this.ctx.suggestHost.getTaskWriteService()
-                .setFrontmatterKeys(activeFile.path, { [colorKey]: hex }));
+            this.queueColorWrite(async () => {
+                const written = await this.ctx.suggestHost.getTaskWriteService()
+                    .setFrontmatterKeys(activeFile.path, { [colorKey]: hex });
+                if (!written) {
+                    // 書けなかった。表示を先に変えていたので、ファイルの値へ戻す。
+                    // 理由は書き込みの層が通知済み。
+                    const onFile = this.ctx.app.metadataCache.getFileCache(activeFile)?.frontmatter?.[colorKey];
+                    const shown = container.querySelector(
+                        '.metadata-input-longtext'
+                    ) as HTMLDivElement | null;
+                    if (shown) shown.textContent = typeof onFile === 'string' ? onFile : '';
+                }
+                return written;
+            });
         });
 
         // ピッカーを閉じた時点で確定させる（debounce の満了を待たない）。

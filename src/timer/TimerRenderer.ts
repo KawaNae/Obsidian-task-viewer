@@ -36,13 +36,11 @@ import { canTriggerFlow } from '../services/flow/FlowTrigger';
 import { NextTaskSuggester, suggestionKey } from './NextTaskSuggester';
 import type { TimerContentBinding } from './TimerContentBinding';
 import { autoGrowTextarea } from '../utils/TextareaAutoGrow';
-import { TimerTaskResolver } from './TimerTaskResolver';
 import { refreshTimerTask } from './TimerTaskSync';
 
 export class TimerRenderer {
     private closeConfirmTimers = new Map<string, number>();
     private suggester: NextTaskSuggester;
-    private resolver: TimerTaskResolver;
     /** {@link growTitleInputs} の次フレーム再適用ぶんの未発火 rAF。destroy で取り消す。 */
     private titleGrowFrame: { win: Window; id: number } | null = null;
 
@@ -53,7 +51,6 @@ export class TimerRenderer {
         private contentBinding: TimerContentBinding,
     ) {
         this.suggester = new NextTaskSuggester(ctx.plugin);
-        this.resolver = new TimerTaskResolver(ctx.plugin);
     }
 
     // ─── Render ──────────────────────────────────────────────
@@ -146,7 +143,9 @@ export class TimerRenderer {
                 fileSpan.setText(fileName);
             }
 
-            if (timer.runState === 'suspended') {
+            if (timer.pendingRecord) {
+                header.createSpan({ cls: 'timer-widget__state-badge', text: t('timer.unrecorded') });
+            } else if (timer.runState === 'suspended') {
                 header.createSpan({ cls: 'timer-widget__state-badge', text: t('timer.suspended') });
             }
 
@@ -196,15 +195,17 @@ export class TimerRenderer {
             setIcon(closeBtn, 'x');
             closeBtn.onclick = () => {
                 // 中断中は記録済み＝失うものが無いので確認なしで閉じる。
-                // 走行中は 2-tap 確認（走行分は記録せず捨てる）。
-                if (timer.runState === 'suspended' || !timer.isRunning) {
+                // 走行中は 2-tap 確認（走行分は記録せず捨てる）。記録待ちも
+                // 計測を持つので走行中と同じに扱う。
+                const holdsRun = timer.pendingRecord !== null;
+                if (timer.runState === 'suspended' || (!timer.isRunning && !holdsRun)) {
                     this.clearCloseConfirmTimer(timerId);
                     this.lifecycle.closeTimer(timerId);
                     return;
                 }
                 // Idle timers close without confirmation, but ignore accidental clicks
                 // right after the idle timer spawns (e.g. double-clicking a previous close)
-                if (timer.phase === 'idle') {
+                if (timer.phase === 'idle' && !holdsRun) {
                     if (Date.now() - timer.startTimeMs < 500) return;
                     this.clearCloseConfirmTimer(timerId);
                     this.lifecycle.closeTimer(timerId);
@@ -344,9 +345,23 @@ export class TimerRenderer {
         }
     }
 
-    private updateTimerDisplay(itemEl: HTMLElement, timer: TimerInstance): void {
-        this.syncTimerTaskInfo(itemEl, timer);
+    /**
+     * 索引が変わったときに、各 widget の名前欄と名前と色を索引の読みから合わせ
+     * 直す（{@link syncTimerTaskInfo}）。走っていない widget には tick が来ない
+     * ので、読みの変化はここから届く — 復元の描画は最初のスキャンの前に走り、
+     * そのときの名前欄は空になる。
+     */
+    refreshFromIndex(): void {
+        if (this.ctx.timers.size === 0) return;
+        const container = this.ctx.ensureContainer();
+        for (const [timerId, timer] of this.ctx.timers) {
+            const itemEl = container.querySelector(`[data-timer-id="${timerId}"]`) as HTMLElement | null;
+            if (itemEl) this.syncTimerTaskInfo(itemEl, timer);
+        }
+    }
 
+    /** tick の描き直し: 時間の表示だけを進める。名前は索引の変化で合わせる（{@link refreshFromIndex}）。 */
+    private updateTimerDisplay(itemEl: HTMLElement, timer: TimerInstance): void {
         const headerTime = itemEl.querySelector('[data-time-display="header"]') as HTMLElement;
         if (headerTime) {
             headerTime.setText(this.getTimerDisplayText(timer));
@@ -358,17 +373,17 @@ export class TimerRenderer {
     private syncTimerTaskInfo(itemEl: HTMLElement, timer: TimerInstance): void {
         if (this.lifecycle.isIdleTimer(timer.id)) return;
 
-        // 入力欄は md 側の変化に追随する（打鍵中と未書き込みの入力があるときは
-        // binding が見送る）。デイリーノート起点でも尻尾があれば同じ扱い。
+        // 入力欄は索引の読み（尻尾の行）に追随する（打鍵中と未書き込みの入力が
+        // あるときは binding が見送る）。デイリーノート起点でも尻尾があれば同じ扱い。
         const inputEl = itemEl.querySelector('.timer-widget__title-input') as HTMLTextAreaElement | null;
         if (inputEl) this.contentBinding.syncFromFile(timer, inputEl);
 
         // デイリーノート起点は対象タスクを持たない（id は `daily-<date>`）。
         if (isDailyTimer(timer)) return;
 
-        // 復元直後の taskId は前セッションの runtime ID で何も指さない。
-        // resolver で引けたら書き戻し、名前と色の追随を再開する。
-        const { task, rewritten } = refreshTimerTask(timer, this.ctx.plugin.getTaskIndex(), this.resolver);
+        // 復元直後の taskId は、内容が変わっていれば何も指さない（名前は読みの内容から作る）。
+        // 対象の錨で引けたら書き戻し、名前と色の追随を再開する。
+        const { task, rewritten } = refreshTimerTask(timer, this.ctx.plugin.getTaskIndex());
         if (rewritten) this.ctx.persistTimersToStorage();
         if (!task) return;
 
@@ -475,7 +490,7 @@ export class TimerRenderer {
             taskColor: getEffectiveColor(task) ?? '',
             recordMode: selfUnsafe ? 'child' : 'self',
             parserId: task.parserId,
-            timerTargetId: task.timerTargetId ?? task.blockId,
+            timerTargetId: task.anchor,
             autoStart: true,
             timerType: 'countup',
         });
@@ -487,15 +502,14 @@ export class TimerRenderer {
      *
      *   未開始   … [▶ 開始]（まだセッションが 1 つも無い状態。出口ではない）
      *   走行中   … [⏸ 中断][■ 終了]
+     *   記録待ち … [⏸ 中断][■ 終了]（固定した記録を書き直す。押した方が行き先）
      *   中断中   … [▶ 再開][■ 終了]
      *
      * interval は現行の Pause(prepare)/Stop を維持するので、ここには来ない。
      */
     private renderSessionControls(container: HTMLElement, timer: CountupTimer | CountdownTimer): void {
-        const neverStarted = !timer.isRunning
-            && timer.runState === 'running'
-            && timer.sessionCount === 0
-            && timer.elapsedTime === 0;
+        // 走行の側で止まっているのは、まだ始めていないときと記録待ちだけ。
+        const neverStarted = !timer.isRunning && timer.runState === 'running' && !timer.pendingRecord;
 
         if (neverStarted) {
             this.addWidgetButton(container, 'primary', 'play', t('timer.start'), () => {
@@ -546,6 +560,14 @@ export class TimerRenderer {
     }
 
     private renderIntervalControls(container: HTMLElement, timer: IntervalTimer): void {
+        // 記録待ち: 固定した記録を ■ で書き直す。続ける区間は無いので ▶ は出さない。
+        if (timer.pendingRecord) {
+            this.addWidgetButton(container, 'secondary', 'square', t('timer.stop'), () => {
+                void this.lifecycle.stopIntervalTimer(timer);
+            });
+            return;
+        }
+
         if (timer.phase === 'idle') {
             this.addWidgetButton(container, 'primary', 'play', t('timer.start'), () => {
                 const segment = getCurrentSegment(timer);
@@ -574,25 +596,12 @@ export class TimerRenderer {
             return;
         }
 
-        if (timer.isRunning) {
-            this.addWidgetButton(container, 'secondary', 'pause', t('timer.pause'), () => {
-                this.lifecycle.pauseIntervalToPrepare(timer);
-                AudioUtils.playPauseSound();
-                this.render();
-                this.ctx.persistTimersToStorage();
-            });
-            return;
-        }
-
-        // 区間中（work / break）で走っていない状態。UI 操作では作れない
-        // （一時停止は必ず prepare に入る）が、停止の記録待ちのまま Obsidian が
-        // 落ちると localStorage にこの形が残り、復元でここに来る。操作列が無いと
-        // 記録も終了もできなくなるので、prepare と同じ 2 つを出す。
-        this.addWidgetButton(container, 'primary', 'play', t('timer.resume'), () => {
-            this.lifecycle.resumeTimer(timer);
-        });
-        this.addWidgetButton(container, 'secondary', 'square', t('timer.stop'), () => {
-            void this.lifecycle.stopIntervalTimer(timer);
+        // 区間中（work / break）は走っている。止まるのは一時停止（prepare）か記録待ちだけ。
+        this.addWidgetButton(container, 'secondary', 'pause', t('timer.pause'), () => {
+            this.lifecycle.pauseIntervalToPrepare(timer);
+            AudioUtils.playPauseSound();
+            this.render();
+            this.ctx.persistTimersToStorage();
         });
     }
 

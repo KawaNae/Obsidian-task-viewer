@@ -1,13 +1,16 @@
-import { parseYaml, TFile } from 'obsidian';
+import { type App, parseYaml, TFile } from 'obsidian';
 import { TaskIndex } from '../../../src/services/core/TaskIndex';
 import type { TaskScanner } from '../../../src/services/core/TaskScanner';
 import { TaskWriteService } from '../../../src/services/data/TaskWriteService';
 import { TimerRecorder } from '../../../src/timer/TimerRecorder';
 import { TimerCreator } from '../../../src/timer/TimerCreator';
 import type { TimerContext } from '../../../src/timer/TimerContext';
+import type { TimerInstance } from '../../../src/timer/TimerInstance';
 import type { TimerStorageUtils } from '../../../src/timer/TimerStorageUtils';
 import { DEFAULT_SETTINGS } from '../../../src/types';
-import { splitLines } from '../../../src/utils/FileLines';
+import type { FlowExecutor } from '../../../src/services/flow/FlowExecutor';
+import { splitLines } from '../../../src/services/persistence/FileLines';
+import type { Refusal, WriteChannel } from '../../../src/services/persistence/FileLines';
 
 export function makeFile(path: string): TFile {
     const file = new TFile();
@@ -71,32 +74,49 @@ function computeCache(content: string): VaultCache {
 }
 
 /**
+ * The private parts of a session that tests reach into. Every cast to one is
+ * here, so a change to a private name is a change to this file.
+ */
+
+/** The index's flow executor, whose `planFire` a test wraps to count fires. */
+export type FlowExecutorView = FlowExecutor;
+
+/** The scanner a `TaskIndex` built, for a test that makes its own index. */
+export function scannerOf(index: TaskIndex): TaskScanner {
+    return (index as unknown as { scanner: TaskScanner }).scanner;
+}
+
+/**
  * One plugin session — a real TaskIndex, its scanner, a TimerRecorder — over
  * an in-memory vault shared between sessions.
  *
  * Writes go through the real write path (`vault.process`) and the real
- * `modify` handler `TaskIndex.initialize` registers (called here so a
- * session needs no separate opt-in): `isLocal` comes from `SyncDetector`,
- * exactly as it would from Obsidian's own `modify` event, rather than being
- * forced true. A write that changed bytes is followed by the `metadataCache`
- * `changed` event real Obsidian sends after `modify`.
- *
- * `TaskIndex` drops that `changed` for a local write via `selfWrites`
- * (`TaskIndex.ts:179-181`), but `selfWrites` is a 1000ms window keyed by path
- * alone, not by which write set it (`PathTtlWindow`) — so a flow's own writes,
- * landing within milliseconds of the local write that triggered them, have
- * their `changed` swallowed by that same mark too. Measured (report.md):
- * a normal firing's `changed` never reaches the second scan
- * (`TaskIndex.ts:182`, `:234-235`) at ordinary speed; it takes the window
- * actually expiring, or a manual `fireVault('changed', ...)`, to see it run.
+ * `modify` handler `TaskIndex.initialize` registers (called here): the scan
+ * reads the writes exactly as it would after Obsidian's own `modify` event. A
+ * completion fires in the write that made it, never from a scan. A write that changed bytes is followed by the
+ * `metadataCache` `changed` event real Obsidian sends after `modify`; the scan
+ * that asks for commits nothing when it reads what the last scan read
+ * (`TaskScanner.queueScan`).
  *
  * A second `vaultSession` over the same `contents` is a reload: a new index,
- * a new ledger, new runtime IDs.
+ * a new session of readings, new names.
  */
 export function vaultSession(contents: Map<string, string>) {
     let scanner: TaskScanner | undefined;
     const noop = { on: () => ({}), offref: () => { } };
     const vaultHandlers = new Map<string, (...args: unknown[]) => unknown>();
+    // Obsidian holds one TFile per note, and a write to it queues by that
+    // object (`processOrFail`): the same path answers the same file.
+    const held = new Map<string, TFile>();
+    const fileAt = (path: string): TFile => held.get(path) ?? held.set(path, makeFile(path)).get(path)!;
+    // While set, a write's change events wait here instead of reaching the
+    // index: the scan a write's `modify` starts has not come yet.
+    let heldEvents: TFile[] | null = null;
+    const fireChanged = async (file: TFile) => {
+        await (vaultHandlers.get('modify') as (f: TFile) => Promise<void>)(file);
+        const changed = vaultHandlers.get('changed') as ((f: TFile) => void) | undefined;
+        if (changed) changed(file);
+    };
     const app = {
         vault: {
             on: (name: string, fn: (...args: unknown[]) => unknown) => { vaultHandlers.set(name, fn); return {}; },
@@ -112,9 +132,8 @@ export function vaultSession(contents: Map<string, string>) {
                 // identity hints included, which wait for a scan that the real
                 // vault would never send.
                 if (next !== before) {
-                    await (vaultHandlers.get('modify') as (f: TFile) => Promise<void>)(file);
-                    const changed = vaultHandlers.get('changed') as ((f: TFile) => void) | undefined;
-                    if (changed) changed(file);
+                    if (heldEvents) heldEvents.push(file);
+                    else await fireChanged(file);
                 }
                 return next;
             },
@@ -122,13 +141,13 @@ export function vaultSession(contents: Map<string, string>) {
             // `create`, which the index scans like any other arrival — so the
             // scan follows here too, and every row in the file is minted by it.
             create: async (path: string, data: string) => {
-                const file = makeFile(path);
+                const file = fileAt(path);
                 contents.set(path, data);
                 await (vaultHandlers.get('create') as (f: TFile) => void | Promise<void>)(file);
                 return file;
             },
-            getAbstractFileByPath: (path: string) => (contents.has(path) ? makeFile(path) : null),
-            getMarkdownFiles: () => [...contents.keys()].map(makeFile),
+            getAbstractFileByPath: (path: string) => (contents.has(path) ? fileAt(path) : null),
+            getMarkdownFiles: () => [...contents.keys()].map(fileAt),
         },
         metadataCache: {
             ...noop,
@@ -139,19 +158,26 @@ export function vaultSession(contents: Map<string, string>) {
     };
 
     const index = new TaskIndex(app as never, { ...DEFAULT_SETTINGS });
-    scanner = (index as unknown as { scanner: TaskScanner }).scanner;
-    scanner.setInitializing(false);
+    scanner = scannerOf(index);
     // Registers the real vault/metadataCache handlers `process`/`create`
-    // above call into. Safe to call again (existing callers of the
-    // `initialize` returned below still may): `onLayoutReady` never runs its
-    // callback here, so this only re-registers handlers in `vaultHandlers`,
-    // which a same-named `on` just overwrites.
+    // above call into. `onLayoutReady` never runs its callback here.
     void index.initialize();
 
+    const internals = index as unknown as {
+        commandExecutor: FlowExecutorView;
+        reportRefusal(refusal: Refusal): void;
+    };
+    const executor = internals.commandExecutor;
+    // The channel `TaskIndex` connected, taken before a test connects another.
+    const connected = (index.getRepository() as unknown as { channels: (file: string) => WriteChannel }).channels;
+
     let n = 0;
+    // What the recorder calls to save the timers before it writes a line.
+    let persist = (): void => { };
+    // The timers the recorder sees open, when it decides whether it may take an anchor off.
+    let openTimers = (): Iterable<TimerInstance> => [];
     const storageUtils = {
         generateTimerTargetId: () => `tv-t-test${++n}`,
-        isAutoManagedTimerTargetId: () => true,
     } as unknown as TimerStorageUtils;
     const plugin = {
         settings: { ...DEFAULT_SETTINGS },
@@ -160,17 +186,88 @@ export function vaultSession(contents: Map<string, string>) {
     };
 
     return {
+        /** For a test that writes through `processLines` itself. */
+        app: app as unknown as App,
         index,
         scanner,
-        recorder: new TimerRecorder(app as never, plugin as never, storageUtils),
-        creator: new TimerCreator({} as TimerContext, storageUtils),
-        /** No longer required: the session already initializes itself. Kept for existing callers. */
-        initialize: () => index.initialize(),
+        /** The flow executor, whose `planFire` plans every completion's fire. */
+        executor,
+        /** The scanner's private scan entry, which a test wraps to see its answers. */
+        scannerPrivates: scanner as unknown as { queueScan: (file: TFile) => Promise<boolean> },
+        /** The channel `TaskIndex` gave a write to `file`, even after a test has connected another. */
+        channelOf: (file: string): WriteChannel => connected(file),
+        /** Tell `TaskIndex` a write was refused, as its own channel does. */
+        reportRefusal: (refusal: Refusal): void => internals.reportRefusal(refusal),
+        recorder: new TimerRecorder(app as never, plugin as never, storageUtils, () => persist(), () => openTimers()),
+        /** Save the timers as the plugin does when the recorder asks, before it writes a line. */
+        onPersist: (fn: () => void): void => { persist = fn; },
+        /** The open timers the recorder sees, as the widget's own map. */
+        onOpenTimers: (fn: () => Iterable<TimerInstance>): void => { openTimers = fn; },
+        creator: new TimerCreator({} as TimerContext),
         fireVault: (name: string, ...args: unknown[]) => vaultHandlers.get(name)!(...args),
         scanAll: () => scanner!.scanVault(),
+        /**
+         * Hold every write's change events until `release`, which sends them
+         * in order: the moment between a write landing and the scan it starts.
+         */
+        holdScans: (): { release: () => Promise<void> } => {
+            heldEvents = [];
+            return {
+                release: async () => {
+                    const events = heldEvents ?? [];
+                    heldEvents = null;
+                    for (const file of events) await fireChanged(file);
+                },
+            };
+        },
         settle: (path: string) => index.waitForScan(path),
+        /**
+         * Wait until the scan of each `path` has finished. A fire is made in
+         * the write that completed its row, so by the time that write is back
+         * there is nothing of it left to wait for but the scans it started.
+         */
+        flowSettled: async (...paths: string[]): Promise<void> => {
+            for (const path of paths) await index.waitForScan(path);
+        },
         dispose: () => index.dispose(),
     };
 }
 
+/** The note a session opens when it is given one text or one list of lines. */
+const NOTE = 'note.md';
+
+/**
+ * A session over `files`, scanned once. One text or one list of lines is
+ * `NOTE`; a record names each file and gives its text or its lines.
+ * The caller disposes the session.
+ */
+export async function openVault(
+    files: string | string[] | Record<string, string | string[]>,
+): Promise<{ contents: Map<string, string>; session: VaultSession }> {
+    const text = (content: string | string[]) => (typeof content === 'string' ? content : content.join('\n'));
+    const contents = new Map<string, string>(
+        typeof files === 'string' || Array.isArray(files)
+            ? [[NOTE, text(files)]]
+            : Object.entries(files).map(([path, content]) => [path, text(content)]),
+    );
+    const session = vaultSession(contents);
+    await session.scanAll();
+    return { contents, session };
+}
+
 export type VaultSession = ReturnType<typeof vaultSession>;
+
+/**
+ * `openVault`, handing the session to `setLive` besides — the `let live` a
+ * vault test's own `open()` set, so `afterEach` can dispose it. Most vault
+ * tests defined that `open()` themselves, byte for byte; this is the one
+ * function they all called it for.
+ */
+export async function openLiveVault(
+    files: string | string[] | Record<string, string | string[]>,
+    setLive: (session: VaultSession) => void,
+): Promise<{ contents: Map<string, string>; session: VaultSession }> {
+    const opened = await openVault(files);
+    setLive(opened.session);
+    return opened;
+}

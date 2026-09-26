@@ -1,10 +1,13 @@
 import { describe, it, expect } from 'vitest';
 import { ChildPropertyLineEditor } from '../../../src/services/persistence/utils/ChildPropertyLineEditor';
-import { recordEdits, type LineEdit } from '../../../src/utils/FileLines';
+import { Outline } from '../../../src/services/parsing/utils/Outline';
+import { draftOver, type LineEdit } from '../../../src/services/persistence/FileLines';
 import type { PropertyOp } from '../../../src/services/persistence/PropertyUpdatePlanner';
+import { FileParsePipeline } from '../../../src/services/parsing/FileParsePipeline';
+import { DEFAULT_SETTINGS } from '../../../src/types';
 
 /**
- * `applyOps` over a recorder, the way `processLines` hands it one.
+ * `applyOps` over a draft, the way `processLines` hands it one.
  *
  * Answers the report, so a test can pin what the edit said as well as what it
  * left in the file. The two have to agree: a line these ops rewrite without
@@ -12,8 +15,8 @@ import type { PropertyOp } from '../../../src/services/persistence/PropertyUpdat
  * dropped.
  */
 function apply(lines: string[], taskLineIdx: number, ops: PropertyOp[]): LineEdit[] {
-    const { edits, reported } = recordEdits(lines);
-    ChildPropertyLineEditor.applyOps(lines, taskLineIdx, ops, edits);
+    const { draft, reported } = draftOver(lines);
+    ChildPropertyLineEditor.applyOps(draft, taskLineIdx, ops);
     return reported;
 }
 
@@ -25,10 +28,53 @@ describe('ChildPropertyLineEditor', () => {
                 '    - key ::',
                 '    - key2 :: value2',
             ];
-            const own = ChildPropertyLineEditor.findOwnPropertyLines(lines, 0);
+            const own = ChildPropertyLineEditor.findOwnPropertyLines(Outline.read(lines), 0);
             expect(own).toEqual([
                 { lineIdx: 1, key: 'key', value: '' },
                 { lineIdx: 2, key: 'key2', value: 'value2' },
+            ]);
+        });
+
+        it('does not take a child task\'s property lines as its own', () => {
+            // The child is a task however its marker is spaced (`-\t[ ]`),
+            // so the lines below it are the child's, not the parent's.
+            const lines = [
+                '- [ ] task',
+                '    - [ ] child',
+                '        - deep:: of-child',
+                '    -\t[ ] tabbed',
+                '        - key:: of-tabbed',
+                '    - key:: own',
+            ];
+            expect(ChildPropertyLineEditor.findOwnPropertyLines(Outline.read(lines), 0)).toEqual([
+                { lineIdx: 5, key: 'key', value: 'own' },
+            ]);
+        });
+    });
+
+    describe('a property line below a blank line inside the children', () => {
+        // The parser reads it as the task's property (OutlineReading.subtreeEnd); an
+        // edit that did not would add a second declaration of the key.
+        const lines = () => [
+            '- [ ] task @2026-07-18T10:00',
+            '    - [ ] child',
+            '',
+            '    - key:: old',
+            '',
+            '- [ ] next',
+        ];
+
+        it('is found as the task\'s own', () => {
+            expect(ChildPropertyLineEditor.findOwnPropertyLines(Outline.read(lines()), 0)).toEqual([
+                { lineIdx: 3, key: 'key', value: 'old' },
+            ]);
+        });
+
+        it('is updated in place, not declared again', () => {
+            const edited = lines();
+            apply(edited, 0, [{ op: 'set', key: 'key', value: 'new' }]);
+            expect(edited).toEqual([
+                '- [ ] task @2026-07-18T10:00', '    - [ ] child', '', '    - key:: new', '', '- [ ] next',
             ]);
         });
     });
@@ -129,7 +175,7 @@ describe('ChildPropertyLineEditor', () => {
                 '    - key:: 例',
                 '    ```',
             ];
-            expect(ChildPropertyLineEditor.findOwnPropertyLines(lines, 0)).toEqual([]);
+            expect(ChildPropertyLineEditor.findOwnPropertyLines(Outline.read(lines), 0)).toEqual([]);
         });
 
         it('フェンス内の同名宣言を更新の対象にしない', () => {
@@ -182,6 +228,42 @@ describe('ChildPropertyLineEditor', () => {
                 '    ```',
             ]);
         });
+    });
+
+    /**
+     * The lines a property edit touches are the lines the parser read the
+     * task's properties from (`ChildLineClassifier.ownPropertyLines`), for
+     * every shape here: an edit of a line the parser does not read as the
+     * task's writes where the index says nothing is.
+     */
+    describe('the parser and the writer read one set of own property lines', () => {
+        const SHAPES: Array<[string, string[], Record<string, string>]> = [
+            ['a fence under the task', ['- [ ] task', '    ```md', '    - key:: 例', '    ```', '    - key:: 本物'], { key: '本物' }],
+            ['a tab-indented fence', ['- [ ] task', '\t```', '\t- key:: 例', '\t```', '\t- other:: 本物'], { other: '本物' }],
+            ['a property under a note bullet', ['- [ ] task', '    - note', '        - deep:: of-note', '    - key:: own'], { key: 'own' }],
+            ['a property under a child task', ['- [ ] task', '    - [ ] child', '        - deep:: of-child', '    - key:: own'], { key: 'own' }],
+            // (Obsidian, measurement.md q4) eight columns in is the task's
+            // paragraph going on, not an item: no property.
+            ['a property line in the paragraph going on', ['- [ ] task', '        - key:: deep', '    - other:: own'], { other: 'own' }],
+            ['a blank line between', ['- [ ] task', '    - [ ] child', '', '    - key:: own', ''], { key: 'own' }],
+            ['a fence at column 0 that holds a property line', ['- [ ] task', '```', '- key:: 例', '```'], {}],
+        ];
+
+        for (const [name, lines, expected] of SHAPES) {
+            it(name, () => {
+                const parsed = FileParsePipeline.parse('note.md', [...lines], DEFAULT_SETTINGS);
+                if (parsed.ignored) throw new Error('ignored');
+                const task = parsed.tasks.find(candidate => candidate.line === 0)!;
+                const written = Object.fromEntries(
+                    ChildPropertyLineEditor.findOwnPropertyLines(Outline.read(lines), 0).map(line => [line.key, line.value]),
+                );
+                const read = Object.fromEntries(
+                    Object.entries(task.properties).map(([key, value]) => [key, value.value]),
+                );
+                expect(read).toEqual(written);
+                expect(written).toEqual(expected);
+            });
+        }
     });
 
     describe('applyOps: 申告', () => {

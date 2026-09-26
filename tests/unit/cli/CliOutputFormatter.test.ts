@@ -5,9 +5,12 @@ import { normalizeTask } from '../../../src/api/TaskNormalizer';
 import { makeTask } from '../helpers/makeTask';
 import { toDisplayTask } from '../../../src/services/display/DisplayTaskConverter';
 
+/** No row answers to a name: every ID goes out as it is. */
+const noRow = () => undefined;
+
 /** Helper: makeTask → DisplayTask → NormalizedTask */
 function makeNormalized(overrides: Parameters<typeof makeTask>[0] = {}) {
-    return normalizeTask(toDisplayTask(makeTask(overrides), 5));
+    return normalizeTask(toDisplayTask(makeTask(overrides), 5), noRow);
 }
 
 describe('CliOutputFormatter', () => {
@@ -28,7 +31,7 @@ describe('CliOutputFormatter', () => {
             });
 
             const fields = resolveFields('file,line,content,status,startDate,startTime,endDate,endTime,tags,parserId');
-            const result = taskToRecord(task, fields);
+            const result = taskToRecord(task, fields, noRow);
 
             expect(result.id).toBe('tv-inline:daily/2026-03-14.md:ln:5');
             expect(result.file).toBe('daily/2026-03-14.md');
@@ -46,7 +49,7 @@ describe('CliOutputFormatter', () => {
         it('uses null for missing optional fields', () => {
             const task = makeTask({});
             const fields = resolveFields('startDate,startTime,endDate,endTime,due,parentId,color,linestyle');
-            const result = taskToRecord(task, fields);
+            const result = taskToRecord(task, fields, noRow);
 
             expect(result.startDate).toBeNull();
             expect(result.startTime).toBeNull();
@@ -60,7 +63,7 @@ describe('CliOutputFormatter', () => {
 
         it('only includes requested fields', () => {
             const task = makeTask({ content: 'Test', startDate: '2026-03-14' });
-            const result = taskToRecord(task, ['content', 'startDate']);
+            const result = taskToRecord(task, ['content', 'startDate'], noRow);
 
             expect(Object.keys(result)).toEqual(['content', 'startDate']);
             expect(result.content).toBe('Test');
@@ -93,6 +96,14 @@ describe('CliOutputFormatter', () => {
             const lines = result.split('\n');
             expect(lines[0]).toBe('content\tstatus');
             expect(lines[1]).toContain('A');
+        });
+
+        it('keeps a tsv row on one line when the content holds U+2028 or U+2029', () => {
+            // A note keeps them inside a line (L1), but a reader of tsv may
+            // split its rows there, as at a newline.
+            const content = ['a', 'b', 'c'].join(String.fromCharCode(0x2028)) + String.fromCharCode(0x2029) + 'd';
+            const row = formatOutput([makeNormalized({ content })], 'tsv', ['content']).split('\n')[1];
+            expect(row).toBe('a b c d');
         });
 
         it('formats as jsonl with one line per task', () => {

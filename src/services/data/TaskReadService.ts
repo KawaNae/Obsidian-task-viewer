@@ -4,6 +4,8 @@ import type { FilterContext } from '../filter/FilterContext';
 import { hasConditions } from '../filter/FilterTypes';
 import type { SortState } from '../sort/SortTypes';
 import type { TaskIndex } from '../core/TaskIndex';
+import type { ContentKey } from '../core/ContentKey';
+import type { TFile } from 'obsidian';
 import { toDisplayTask, toDisplayTasks } from '../display/DisplayTaskConverter';
 import { TaskFilterEngine } from '../filter/TaskFilterEngine';
 import { TaskSorter } from '../sort/TaskSorter';
@@ -61,6 +63,21 @@ export class TaskReadService {
     /** Inline task lookup by file + line. Primary use: editor extensions. */
     getTaskByFileLine(filePath: string, line: number): Task | undefined {
         return this.taskIndex.getTaskByFileLine(filePath, line);
+    }
+
+    /** The task on a line an editor shows, in the content it shows (`TaskIndex.taskAtEditorLine`). Primary use: the editor's menu. */
+    taskAtEditorLine(filePath: string, line: number, key: ContentKey): Task | undefined | null {
+        return this.taskIndex.taskAtEditorLine(filePath, line, key);
+    }
+
+    /** Have the index read `file` now, and wait until it has (`TaskIndex.requestScan`). */
+    async readNow(file: TFile): Promise<void> {
+        return this.taskIndex.requestScan(file);
+    }
+
+    /** The row a file's `^id` anchors now (`TaskIndex.getTaskByAnchor`). Primary use: the API's IDs. */
+    getTaskByAnchor(filePath: string, anchor: string): Task | undefined {
+        return this.taskIndex.getTaskByAnchor(filePath, anchor);
     }
 
     /**

@@ -24,7 +24,7 @@ export interface RenderSchedulerHandlers {
  * The renderer no longer makes a partial-vs-full decision: keyed
  * reconciliation inside `performFull` reuses surviving card elements by
  * `data-card-instance-id`, so a "full" render is cheap when most cards are
- * unchanged. `blockId` / `timerTargetId` flips have no visual effect at all
+ * unchanged. `blockId` flips have no visual effect at all
  * and are short-circuited here.
  *
  * Exposes:
@@ -44,7 +44,7 @@ export class RenderScheduler {
 
     /**
      * `readService.onChange` entry point. Skips the render entirely if every
-     * key in `changes` is purely internal (`blockId`, `timerTargetId`); those
+     * key in `changes` is purely internal (`blockId`); those
      * flips do not affect any rendered card.
      */
     handleChange(taskId: string | undefined, changes: string[] | undefined): void {
@@ -94,11 +94,11 @@ export class RenderScheduler {
 }
 
 /** Keys with zero visual effect — render is skipped entirely. */
-const NO_RENDER_KEYS = new Set(['blockId', 'timerTargetId']);
+const NO_RENDER_KEYS = new Set(['blockId']);
 
 /**
  * Whether a `readService.onChange` notification warrants a re-render. A change
- * touching only internal keys (blockId / timerTargetId) has zero visual effect
+ * touching only internal keys (blockId) has zero visual effect
  * and is skipped. Single authority shared by every card-bearing view — both the
  * scheduler-backed views and the renderers that lack a scheduler (e.g.
  * PinnedListRenderer).

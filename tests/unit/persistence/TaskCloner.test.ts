@@ -1,7 +1,10 @@
 import { describe, it, expect } from 'vitest';
 import { TaskCloner } from '../../../src/services/persistence/TaskCloner';
-import { recordEdits } from '../../../src/utils/FileLines';
+import { draftOver, replayEdits } from '../../../src/services/persistence/FileLines';
+import { Outline } from '../../../src/services/parsing/utils/Outline';
+import { checkWrite, type WrittenLine } from '../../../src/services/parsing/utils/OutlineCheck';
 import { FileOperations } from '../../../src/services/persistence/utils/FileOperations';
+import { Placement } from '../../../src/services/persistence/utils/Placement';
 import type { App } from 'obsidian';
 
 // Access private methods via prototype
@@ -11,7 +14,7 @@ function callShiftInlineDates(line: string, dayOffset: number): string {
     return proto.shiftInlineDates.call(null, line, dayOffset);
 }
 
-// spliceCopies only reads lines and fileOps; the vault is never touched.
+// putCopies only reads lines and fileOps; the vault is never touched.
 const fileOps = new FileOperations({} as App);
 
 function callSpliceCopies(
@@ -20,13 +23,15 @@ function callSpliceCopies(
     parentLines: string[],
     position: 'before' | 'after',
 ): string[] {
-    return spliceAndReport(lines, taskLine, parentLines, position).lines;
+    const { lines: written, check } = spliceAndReport(lines, taskLine, parentLines, position);
+    expect(check).toBe('sound');
+    return written;
 }
 
 /**
  * The lines a copy produced, and what it said it did to them.
  *
- * Through the real {@link recordEdits}, over the array the copy is about to
+ * Through the real {@link draftOver}, over the array the copy is about to
  * splice — the same object `processLines` hands a write. A stand-in here would
  * be a second implementation of the arithmetic this file exists to check.
  */
@@ -37,10 +42,20 @@ function spliceAndReport(
     position: 'before' | 'after',
 ) {
     const target = [...lines];
-    const { edits, reported } = recordEdits(target);
-    const out: string[] = proto.spliceCopies.call(
-        { fileOps }, target, taskLine, parentLines, position, edits);
-    return { lines: out, reported };
+    // Where the two duplicate paths put their copies.
+    const spot = Placement.copyOf(Outline.read(target), taskLine, position === 'before' ? 'above' : 'below', '- [ ] n');
+    const { draft, reported, puts, placedBy } = draftOver(target);
+    proto.putCopies.call({ fileOps }, draft, taskLine, parentLines, spot);
+    // Every copy reads as the original's subtree does, and every other line
+    // as it did: the check the write is held to (`checkWrite`).
+    const replayed = replayEdits(lines.length, reported, placedBy)!;
+    const written = replayed.origin.map((from, k): WrittenLine => {
+        const put = replayed.placed[k];
+        if (put) return { kind: 'placed', put: put.id, offset: put.offset };
+        return from === null ? { kind: 'loose' } : { kind: 'kept', from };
+    });
+    const { check } = checkWrite(Outline.read(lines), Outline.read(target), written, puts);
+    return { lines: target, reported, check };
 }
 
 // ---------------------------------------------------------------------------
@@ -81,7 +96,7 @@ describe('TaskCloner', () => {
         });
     });
 
-    describe('spliceCopies', () => {
+    describe('putCopies', () => {
         const file = [
             '# note',
             '',
@@ -140,10 +155,9 @@ describe('TaskCloner', () => {
             expect(out.filter(l => l.includes('^abc'))).toHaveLength(1);
         });
 
-        it('clears the whole indented region, not just the parsed children', () => {
-            // The parser ends the children at the blank line, but what follows
-            // it still reads as the task's. A copy dropped at the end of the
-            // parsed children would land in the middle of them.
+        it('copies the children below a blank line too, and goes after all of them', () => {
+            // The blank line is inside the subtree: what follows it is the
+            // task's, for the parser and for the copy alike.
             const withGap = [
                 '- [ ] p @2026-03-11T10:00>11:00',
                 '\t- c1',
@@ -159,11 +173,13 @@ describe('TaskCloner', () => {
                 '\t- c2',
                 '- [ ] copy',
                 '\t- c1',
+                '',
+                '\t- c2',
                 '- [ ] n',
             ]);
         });
 
-        it('does not cut a child code fence that has a blank line in it', () => {
+        it('copies a child code fence that has a blank line in it whole', () => {
             const withFence = [
                 '- [ ] p @2026-03-11T10:00>11:00',
                 '\t```js',
@@ -176,8 +192,9 @@ describe('TaskCloner', () => {
 
             const out = callSpliceCopies(withFence, 0, ['- [ ] copy'], 'after');
 
-            // The fence closes before the copy begins.
-            expect(out.indexOf('- [ ] copy')).toBeGreaterThan(out.lastIndexOf('\t```'));
+            // The original's fence closes before the copy begins, and the copy
+            // carries a fence that closes too.
+            expect(out).toEqual([...withFence.slice(0, 6), '- [ ] copy', ...withFence.slice(1, 6), '- [ ] n']);
         });
 
         it('leaves everything below the task alone when copying before it', () => {
@@ -188,7 +205,7 @@ describe('TaskCloner', () => {
                 '\t- c2',
             ];
 
-            expect(callSpliceCopies(withGap, 0, ['- [ ] copy'], 'before').slice(2)).toEqual([
+            expect(callSpliceCopies(withGap, 0, ['- [ ] copy'], 'before').slice(4)).toEqual([
                 '- [ ] p @2026-03-11T10:00>11:00',
                 '\t- c1',
                 '',

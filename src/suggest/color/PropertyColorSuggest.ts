@@ -50,10 +50,11 @@ export class PropertyColorSuggest extends AbstractInputSuggest<string> {
         }
 
         const colorKey = this.plugin.settings.scopeKeys.color;
-        await this.plugin.getTaskWriteService()
+        const written = await this.plugin.getTaskWriteService()
             .setFrontmatterKeys(activeFile.path, { [colorKey]: value });
 
-        this.syncValue(value);
+        // 書けなかったときは表示を変えない。理由は書き込みの層が通知済み。
+        if (written) this.syncValue(value);
     }
 }
 

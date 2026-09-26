@@ -33,8 +33,8 @@ function createMockApi(task: Task | undefined, opts: { writesLand?: boolean } = 
         updateTask: vi.fn().mockResolvedValue(lands),
         deleteTask: vi.fn().mockResolvedValue(lands),
         duplicateTask: vi.fn().mockResolvedValue(lands),
-        insertChildTask: vi.fn().mockResolvedValue(lands),
-        createTask: vi.fn().mockResolvedValue(lands ? 0 : -1),
+        insertLine: vi.fn().mockResolvedValue(lands),
+        createTask: vi.fn().mockResolvedValue(lands ? 0 : null),
     };
     const mockPlugin = {
         app: { vault: { getAbstractFileByPath: vi.fn() } },
@@ -250,21 +250,21 @@ describe('C17: content の改行注入拒否', () => {
     it('create: 改行入り content を拒否', async () => {
         const api = createMockApi(undefined);
         await expect(api.create({ file: 'test.md', content: 'line1\nline2' }))
-            .rejects.toThrow(/content must not contain newlines/);
+            .rejects.toThrow(/content must not contain line breaks/);
     });
 
     it('insertChildTask: 改行入り content を拒否', async () => {
         const task = makeTask({ isReadOnly: false });
         const api = createMockApi(task);
         await expect(api.insertChildTask({ parentId: 'test-1', content: 'line1\nline2' }))
-            .rejects.toThrow(/content must not contain newlines/);
+            .rejects.toThrow(/content must not contain line breaks/);
     });
 
     it('update: 改行入り content を拒否', async () => {
         const task = makeTask({ isReadOnly: false });
         const api = createMockApi(task);
         await expect(api.update({ id: 'test-1', content: 'line1\nline2' }))
-            .rejects.toThrow(/content must not contain newlines/);
+            .rejects.toThrow(/content must not contain line breaks/);
     });
 
     it('create: 改行なし content は通過', async () => {
@@ -272,7 +272,7 @@ describe('C17: content の改行注入拒否', () => {
         try {
             await api.create({ file: 'test.md', content: 'simple task' });
         } catch (e) {
-            expect((e as Error).message).not.toMatch(/newline/);
+            expect((e as Error).message).not.toMatch(/line break/);
         }
     });
 });
@@ -307,5 +307,97 @@ describe('C18: 書けなかった変更系はエラーになる', () => {
         const api = createMockApi(makeTask(), { writesLand: false });
         await expect(api.insertChildTask({ parentId: 'test-1', content: 'child' }))
             .rejects.toThrow(/could not be written/);
+    });
+});
+
+describe('F5: 1要素1行。改行を含む値は、書き込みの前に理由を添えて拒否する', () => {
+    // The write layer refuses such a line whole (LineBreakInLine); the API
+    // says which parameter it was before anything is written.
+    it('create: CR だけの content を拒否', async () => {
+        const api = createMockApi(undefined);
+        await expect(api.create({ file: 'test.md', content: 'line1\rline2' }))
+            .rejects.toThrow(/content must not contain line breaks/);
+    });
+
+    it('update: CR だけの content を拒否', async () => {
+        const api = createMockApi(makeTask({ isReadOnly: false }));
+        await expect(api.update({ id: 'test-1', content: 'line1\rline2' }))
+            .rejects.toThrow(/content must not contain line breaks/);
+    });
+
+    it('insertChildTask: CR だけの content を拒否', async () => {
+        const api = createMockApi(makeTask({ isReadOnly: false }));
+        await expect(api.insertChildTask({ parentId: 'test-1', content: 'line1\rline2' }))
+            .rejects.toThrow(/content must not contain line breaks/);
+    });
+
+    it('create: 改行の status を拒否', async () => {
+        const api = createMockApi(undefined);
+        await expect(api.create({ file: 'test.md', content: 'task', status: '\n' }))
+            .rejects.toThrow(/status must be a single character a checkbox can hold/);
+        await expect(api.create({ file: 'test.md', content: 'task', status: '\r' }))
+            .rejects.toThrow(/status must be a single character a checkbox can hold/);
+    });
+
+    it('status の U+2028 と U+2029 を拒否（Obsidian はそのチェックボックスをタスクと読まない）', async () => {
+        const created = createMockApi(undefined);
+        const existing = createMockApi(makeTask({ isReadOnly: false }));
+        for (const sep of [' ', ' ']) {
+            await expect(created.create({ file: 'test.md', content: 'task', status: sep }))
+                .rejects.toThrow(/status must be a single character a checkbox can hold/);
+            await expect(existing.update({ id: 'test-1', status: sep }))
+                .rejects.toThrow(/status must be a single character a checkbox can hold/);
+        }
+    });
+
+    it('status は文字列に限る（数や toString を持つ値を文字に直して書かない）', async () => {
+        const created = createMockApi(undefined);
+        const existing = createMockApi(makeTask({ isReadOnly: false }));
+        for (const bad of [5, { toString: () => 'y' }]) {
+            await expect(created.create({ file: 'test.md', content: 'task', status: bad as unknown as string }))
+                .rejects.toThrow(/status must be a single character a checkbox can hold/);
+            await expect(existing.update({ id: 'test-1', status: bad as unknown as string }))
+                .rejects.toThrow(/status must be a single character a checkbox can hold/);
+        }
+    });
+
+    it('update: 改行の status を拒否', async () => {
+        const api = createMockApi(makeTask({ isReadOnly: false }));
+        await expect(api.update({ id: 'test-1', status: '\n' }))
+            .rejects.toThrow(/status must be a single character a checkbox can hold/);
+    });
+
+    it('create: 改行を含む heading を拒否', async () => {
+        const api = createMockApi(undefined);
+        await expect(api.create({ file: 'test.md', content: 'task', heading: 'Tasks\n- [ ] injected' }))
+            .rejects.toThrow(/heading must not contain line breaks/);
+        await expect(api.create({ file: 'test.md', content: 'task', heading: 'Tasks\rx' }))
+            .rejects.toThrow(/heading must not contain line breaks/);
+    });
+
+    it('単独の CR は改行として拒否（エディタが行を割るため）', async () => {
+        const created = createMockApi(undefined);
+        const existing = createMockApi(makeTask({ isReadOnly: false }));
+        await expect(created.create({ file: 'test.md', content: 'a\rb' }))
+            .rejects.toThrow(/content must not contain line breaks/);
+        await expect(existing.update({ id: 'test-1', content: 'a\rb' }))
+            .rejects.toThrow(/content must not contain line breaks/);
+        await expect(existing.update({ id: 'test-1', status: '\r' }))
+            .rejects.toThrow(/status must be a single character a checkbox can hold/);
+    });
+
+    it('U+2028 と U+2029 は行の中身として通し、そのまま書き込みへ渡す（L1。Obsidian も読み手も行の区切りにしない）', async () => {
+        for (const sep of ['\u2028', '\u2029']) {
+            const created = createMockApi(undefined);
+            const existing = createMockApi(makeTask({ isReadOnly: false }));
+            const write = (existing as any).plugin.getTaskWriteService();
+            // What the mock task lacks for the result does not matter here: the
+            // value reached the write, unchanged.
+            await existing.update({ id: 'test-1', content: `a${sep}b` }).catch(() => undefined);
+            expect(write.updateTask).toHaveBeenCalledWith('test-1', expect.objectContaining({ content: `a${sep}b` }));
+            // create checks the file after the values: getting that far means the values passed.
+            await expect(created.create({ file: 'test.md', content: `a${sep}b`, heading: `T${sep}x` }))
+                .rejects.toThrow(/File not found/);
+        }
     });
 });

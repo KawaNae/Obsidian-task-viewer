@@ -1,4 +1,6 @@
 import type { TFile } from 'obsidian';
+import type { EditorLine, WriteChannels } from '../persistence/FileLines';
+import type { InsertPlace, TaskOp } from '../persistence/TaskOps';
 import type { DuplicateOptions, Task } from '../../types';
 import type { TaskIndex } from '../core/TaskIndex';
 import type { FlowDeleteAssessment } from '../flow/FlowDeletion';
@@ -87,63 +89,28 @@ export class TaskWriteService {
 
     // ===== Task creation =====
 
-    async createTask(filePath: string, taskLine: string, heading?: string): Promise<number> {
+    /** @returns the line the task was written on, or null when it was not. */
+    async createTask(filePath: string, taskLine: string, heading?: string): Promise<number | null> {
         return this.taskIndex.createTask(filePath, taskLine, heading);
     }
 
-    /** @returns whether the child line was written. */
-    async insertChildTask(parentTaskId: string, childLine: string): Promise<boolean> {
-        return this.taskIndex.insertChildTask(this.resolveTaskId(parentTaskId), childLine);
-    }
-
     /**
-     * Append a child at the *end* of the parent's subtree. Session records are
-     * a log, so they must accumulate in chronological order — insertChildTask
-     * inserts at the head and would read backwards.
-     */
-    async appendChildTask(parentTaskId: string, childLine: string): Promise<void> {
-        return this.taskIndex.appendChildTask(this.resolveTaskId(parentTaskId), childLine);
-    }
-
-    /**
-     * Insert a line as the task's next sibling, at the task's own indentation.
-     * `siblingLine` is a formatted line body without indentation — the write
-     * layer reads the indent off the file, so a shifted line cannot make the
-     * record land at the wrong depth.
+     * A line beside the row, where `place` says — a child from a card's
+     * menu, the API or the CLI, a timer's line — and the row's own `^id` put
+     * on or taken off in the same write (`TaskIndex.insertLine`).
      *
-     * Pass `afterCompletedRun` to skip past the completed siblings that follow
-     * the task, which is what keeps a run of session records in chronological
-     * order when the timer resumes from an earlier one. Completion means `[x]`
-     * and nothing else.
-     *
-     * Returns the inserted line index, or -1 when nothing was written
-     * (unknown / read-only task, or an unresolvable line).
+     * @returns whether the line was written. Not written: an unknown or
+     * read-only task, or a write that was refused (and told the user why).
      */
-    async insertSiblingAfterTask(
-        taskId: string,
-        siblingLine: string,
-        opts: { afterCompletedRun?: boolean } = {}
-    ): Promise<number> {
-        return this.taskIndex.insertSiblingAfterTask(this.resolveTaskId(taskId), siblingLine, opts);
+    async insertLine(taskId: string, line: string, place: InsertPlace, rowId?: string | null): Promise<boolean> {
+        return this.taskIndex.insertLine(this.resolveTaskId(taskId), line, place, rowId);
     }
 
-    // ===== Line-level operations =====
-    //
-    // updateLine / insertLineAfterLine / deleteLine operate on raw (file, line)
-    // pairs. They are appropriate when the caller has direct knowledge of the
-    // line via the editor cursor (e.g. TaskMenuExtension) or another trusted
-    // source.
+    // ===== A line the editor pointed at =====
 
-    async updateLine(filePath: string, lineNumber: number, newContent: string): Promise<void> {
-        return this.taskIndex.updateLine(filePath, lineNumber, newContent);
-    }
-
-    async insertLineAfterLine(filePath: string, lineNumber: number, newContent: string): Promise<void> {
-        return this.taskIndex.insertLineAfterLine(filePath, lineNumber, newContent);
-    }
-
-    async deleteLine(filePath: string, lineNumber: number): Promise<void> {
-        return this.taskIndex.deleteLine(filePath, lineNumber);
+    /** @returns whether `ops` were written to the row at `at`, in the file (see TaskIndex.writeLine). */
+    async writeLine(filePath: string, at: EditorLine, ops: readonly TaskOp[]): Promise<boolean> {
+        return this.taskIndex.writeLine(filePath, at, ops);
     }
 
     // ===== Frontmatter key writes (Task を介さない書き込み) =====
@@ -153,9 +120,17 @@ export class TaskWriteService {
     // ノートのスコープ属性で、タスクは作らない。no-op な vault.process が
     // modify を発火しない挙動もここでは変わらない。
 
-    async setFrontmatterKeys(filePath: string, updates: Record<string, string | null>): Promise<void> {
-        return this.taskIndex.getRepository().setFrontmatterKeys(filePath, updates);
+    /** @returns whether the keys were written. */
+    async setFrontmatterKeys(filePath: string, updates: Record<string, string | null>): Promise<boolean> {
+        return (await this.taskIndex.getRepository().setFrontmatterKeys(filePath, updates)).written;
     }
+
+    /**
+     * Where a write to a file made outside the repository reports what it
+     * did — the daily note's heading insert, for one. Undefined once the
+     * index is taken down. Bound, so a writer is handed it as it is.
+     */
+    readonly writeChannel: WriteChannels = (filePath) => this.taskIndex.getRepository().channelOf(filePath);
 
     // ===== Drag state control =====
 

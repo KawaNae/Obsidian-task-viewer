@@ -101,6 +101,20 @@ describe('renderGenBody', () => {
         expect(!result.ok && result.error.message).toContain('several lines');
     });
 
+    it('reads a lone CR in a value as a line break, as Obsidian ends a line', () => {
+        const parent = render(['- [ ] ${["a", "b"].join("\r")}']);
+        expect(!parent.ok && parent.error.message).toContain('one line');
+
+        const child = render(['- [ ] 親', '    - ${["a", "b"].join("\r")}']);
+        expect(child.ok && child.children).toEqual([
+            { depth: 1, body: '- a' },
+            { depth: 1, body: 'b' },
+        ]);
+
+        const tail = render(['- [ ] 親', '    - ${["a", "b"].join("\r")} tail']);
+        expect(!tail.ok && tail.error.message).toContain('several lines');
+    });
+
     it('evaluates the lines in document order, parent line included', () => {
         // 今は式に効果が無いので順序は結果に現れない — 段 3 の代入
         // ${n = n + 1} が入った日に、書き手の読む順で走ることが要る。

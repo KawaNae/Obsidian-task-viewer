@@ -5,12 +5,18 @@ import { BuiltinPropertyExtractor } from './BuiltinPropertyExtractor';
 import { ChildLineClassifier } from '../utils/ChildLineClassifier';
 import { TagExtractor } from '../utils/TagExtractor';
 import { TaskParser } from '../TaskParser';
-import { collectFlowLineIndices, flowLineTail } from '../../flow/FlowLineScanner';
+import { collectFlowLineIndices, flowLineTail } from '../utils/FlowLineScanner';
 import { flowValidation, parseFlowSegments } from '../../flow/FlowSegments';
+import { Outline, type OutlineReading } from '../utils/Outline';
 
 export interface TaskExtractionContext {
     filePath: string;
     scopeKeys: ScopeKeys;
+}
+
+/** What extracting one note's tasks reads: the context and the note's one reading. */
+interface NoteContext extends TaskExtractionContext {
+    outline: OutlineReading;
 }
 
 /**
@@ -28,7 +34,8 @@ type BlockOutcome =
  * SectionPropertyResolver.resolve() が呼ばれた後のツリーを受け取る。
  */
 export class TreeTaskExtractor {
-    static extract(doc: DocumentNode, ctx: TaskExtractionContext): Task[] {
+    static extract(doc: DocumentNode, context: TaskExtractionContext): Task[] {
+        const ctx: NoteContext = { ...context, outline: doc.outline };
         const allTasks: Task[] = [];
         for (const section of this.allSections(doc.sections)) {
             for (const block of section.blocks) {
@@ -56,12 +63,12 @@ export class TreeTaskExtractor {
     private static classifyBlock(
         block: TaskBlock,
         section: SectionNode,
-        ctx: TaskExtractionContext
+        ctx: NoteContext
     ): BlockOutcome {
         const task = TaskParser.parse(block.rawLine, ctx.filePath, block.line);
         if (!task) return { kind: 'lines' };
 
-        const flowLineIndices = this.mergeChildFlow(task, block);
+        const flowLineIndices = this.mergeChildFlow(task, block, ctx.outline);
 
         const cc: NonNullable<Task['cascadeContext']> = {};
         if (!task.startDate && section.resolvedStartDate) cc.startDate = section.resolvedStartDate;
@@ -85,7 +92,7 @@ export class TreeTaskExtractor {
         block: TaskBlock,
         outcome: BlockOutcome,
         section: SectionNode,
-        ctx: TaskExtractionContext,
+        ctx: NoteContext,
         output: Task[]
     ): Task | undefined {
         if (outcome.kind === 'lines') {
@@ -114,37 +121,25 @@ export class TreeTaskExtractor {
 
         // タスクを生成する childTaskBlocks を childLines から除外する
         // （childLines はチェックボックスでない行だけになる）
-        const taskProducingLines = new Set<number>();
+        // その行と部分木（子 block が持つ行）を除外する。
+        const excludedLines = new Set<number>();
         for (const co of childOutcomes) {
-            if (co.outcome.kind === 'task') {
-                taskProducingLines.add(co.block.line);
-            }
+            if (co.outcome.kind !== 'task') continue;
+            excludedLines.add(co.block.line);
+            for (const line of co.block.childLineNumbers) excludedLines.add(line);
         }
 
         // フロー子行はコンテンツではなくコマンドの物理表現なので
         // childLines（描画・コピー・プロパティ収集の substrate）から除外する
         const excludeIndices = new Set<number>(outcome.flowLineIndices);
-        for (let k = 0; k < children.length; k++) {
-            const absLine = block.childLineNumbers[k];
-            if (!taskProducingLines.has(absLine)) continue;
-            excludeIndices.add(k);
-            // この子タスクより深いインデントの後続行も除外
-            const ctIndent = children[k].search(/\S|$/);
-            for (let m = k + 1; m < children.length; m++) {
-                const nextLine = children[m];
-                if (nextLine.trim() === '') { excludeIndices.add(m); continue; }
-                if (nextLine.search(/\S|$/) > ctIndent) {
-                    excludeIndices.add(m);
-                } else {
-                    break;
-                }
-            }
-        }
+        block.childLineNumbers.forEach((line, k) => {
+            if (excludedLines.has(line)) excludeIndices.add(k);
+        });
 
         // インデント正規化 + タスク生成行除外 + 絶対行番号の付与
         const nonEmptyChildren = children.filter(c => c.trim() !== '');
         if (nonEmptyChildren.length > 0) {
-            const minIndent = Math.min(...nonEmptyChildren.map(c => c.search(/\S|$/)));
+            const minIndent = Math.min(...nonEmptyChildren.map(c => Outline.indentOf(c).length));
             const normalized = children.map(c => {
                 if (c.trim() === '') return c;
                 return c.substring(minIndent);
@@ -164,7 +159,11 @@ export class TreeTaskExtractor {
         }
 
         // 子行プロパティを収集
-        const rawProps = ChildLineClassifier.collectProperties(task.childLines);
+        // 自分のプロパティ行だけ（writer が編集する行と同じ集合）
+        const ownProperty = new Set(ChildLineClassifier.ownPropertyLines(ctx.outline, block.line));
+        const rawProps = ChildLineClassifier.collectProperties(
+            task.childLines.filter(line => ownProperty.has(line.bodyLine)),
+        );
 
         // 組み込みプロパティを専用フィールドに分離
         const extracted = BuiltinPropertyExtractor.extract(rawProps, ctx.scopeKeys);
@@ -222,16 +221,13 @@ export class TreeTaskExtractor {
      * タスク行である行のみ）。ネストした checkbox 配下の flow 行はその
      * checkbox 自身の merge が拾う。
      */
-    private static mergeChildFlow(task: Task, block: TaskBlock): Set<number> {
+    private static mergeChildFlow(task: Task, block: TaskBlock, outline: OutlineReading): Set<number> {
         if (!isTvInline(task)) return new Set();
 
-        // フェンス判定は DocumentTreeBuilder が済ませている（block.childFenced）。
-        // タスク行自身は task-block になっている時点で非フェンスが確定している。
-        const indices = collectFlowLineIndices(
-            [block.rawLine, ...block.childRawLines],
-            0,
-            [false, ...block.childFenced],
-        ).map(i => i - 1);
+        // A flow line in the block's lines is one below the block's own line;
+        // the block's lines are the row's whole subtree, so every one is there.
+        const indices = collectFlowLineIndices(outline, block.line)
+            .map(line => line - block.line - 1);
         if (indices.length === 0) return new Set();
 
         const oldFlow = task.flow;

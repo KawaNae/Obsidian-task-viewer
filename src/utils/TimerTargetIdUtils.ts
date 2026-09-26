@@ -1,22 +1,15 @@
 /**
  * Block IDs the timer writes onto the line it is currently recording into.
  *
- * The id is auto-managed: the timer attaches it at start and removes it when
- * the session ends, so at most one lives in the vault per running timer. It is
- * still visible in the note while it is there, which is why the current form is
- * deliberately short — the long UUID form below read as noise in the middle of
- * a task line.
+ * The timer puts one on in a write of its own and takes it off when the widget
+ * closes. Which ids a timer put on is recorded by the write that put them on
+ * (`TimerBase.ownedAnchors`), never read off the id's shape. It is still visible
+ * in the note while it is there, which is why the form is deliberately short —
+ * the long UUID form it replaced read as noise in the middle of a task line.
  */
 
-/** Current form: `tv-t-` + 7 lowercase alphanumerics (12 chars total). */
+/** `tv-t-` + 7 lowercase alphanumerics (12 chars total). */
 export const TIMER_TARGET_ID_PREFIX = 'tv-t-';
-
-/**
- * Pre-v2 form, `tv-timer-target-` + a 36-char UUID. Only ever recognised, never
- * generated: notes written before the shortening still carry these ids, and a
- * running timer resolves its line through them.
- */
-export const LEGACY_TIMER_TARGET_ID_PREFIX = 'tv-timer-target-';
 
 const ID_ALPHABET = 'abcdefghijklmnopqrstuvwxyz0123456789';
 const ID_LENGTH = 7;
@@ -58,15 +51,4 @@ export function generateTimerTargetId(): string {
         }
     }
     return `${TIMER_TARGET_ID_PREFIX}${suffix}`;
-}
-
-/**
- * True for block IDs the timer manages itself, in either form. Both must keep
- * answering true: a vault mid-migration holds a mix, and a false here means the
- * timer stops recognising a line it wrote.
- */
-export function isTimerTargetId(value: string | undefined | null): boolean {
-    if (!value) return false;
-    return value.startsWith(TIMER_TARGET_ID_PREFIX)
-        || value.startsWith(LEGACY_TIMER_TARGET_ID_PREFIX);
 }

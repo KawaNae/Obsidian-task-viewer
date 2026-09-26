@@ -1,28 +1,22 @@
 import type { Task } from '../../types';
 import type { Diagnostic } from '../lang/Diagnostic';
 import type { GeneratedChild } from '../persistence/TaskCloner';
+import type { MoveTarget } from './FlowAst';
 
 /**
  * Effect descriptors produced by the pure planner and applied by the
  * FlowExecutor's interpreter against TaskRepository.
  *
- * ORDER INVARIANT: the planner emits effects in the order
- *   create-next / create-generated → archive-to → strip-flow / delete-original
- * and the interpreter applies them sequentially without reordering.
- * Effects that rewrite or remove the original line must run last, because
- * line resolution (findTaskLineNumber) matches on originalText.
- *
- * What the ordering buys is narrower than it looks: it keeps the original
- * findable only for as long as the line just written reads differently from
- * it, and that holds by value rather than by construction. A written instance
- * always starts unchecked (`buildNextTask` in FlowPlanner, and the status
- * normalization in GeneratedLineCheck) so it cannot read like the line that
- * fired, and an archived copy drops its `==>` and its block id. Where the
- * value stopped differing, the ordering stopped protecting anything: a
- * deletion fire removes a line that never fired and is worded exactly like the
- * instance it writes. Those two effects are not applied in order at all — they
- * are one write, which resolves the line once and takes every number from the
- * array it is writing (see InlineTaskWriter.replaceTaskWithInstances).
+ * ORDER: the planner emits effects in the order
+ *   create-next / create-generated → move / strip-flow
+ * and the interpreter keeps it, as the order of the ops of one write (see
+ * FlowExecutor.planTask and InlineTaskWriter.applyOps). Everything a fire
+ * does is the write that completed the row, in the row's own note: the row
+ * is located once, and each op after the first takes its line from that
+ * answer carried across the splices before it. The next instance goes in at
+ * the head of the sibling group, so the row it came from moves down under it
+ * and is still the row the later ops are about; nothing searches the file
+ * for the row a second time.
  */
 export type FlowEffect =
     | { kind: 'create-next'; newTask: Task }
@@ -51,10 +45,11 @@ export type FlowEffect =
          */
         warnings: Diagnostic[];
     }
-    | { kind: 'archive-to'; destPath: string; archivedTask: Task }
     | { kind: 'strip-flow' }
     /**
-     * `destPath` is where `archive-to` just put the task. The delete carries it
-     * so the write layer can see that this removal is one half of a move.
+     * The row, as `movedTask` reads, carried with its subtree to `to` in its
+     * own note — which consumes the command as `strip-flow` does. Where `to`
+     * is, and whether it is one place, is answered against the lines the
+     * write holds (`FlowExecutor.planTask`, `Placement.heading`).
      */
-    | { kind: 'delete-original'; destPath: string };
+    | { kind: 'move'; to: MoveTarget; movedTask: Task };

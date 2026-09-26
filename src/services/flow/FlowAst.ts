@@ -1,6 +1,7 @@
 import type { Span } from '../lang/Diagnostic';
 import type { Expr } from '../lang/ExprAst';
 import type { DurUnit, Value, Weekday } from '../lang/Value';
+import type { MoveDestination } from '../persistence/TaskOps';
 
 /** Calendar-grid recurrence rules (`every ...`). */
 export type EveryRule =
@@ -100,9 +101,25 @@ export interface FlowProgram {
      * All RHS evaluate against the same post-shift snapshot (no chaining).
      */
     sets?: Partial<Record<SetField, { expr: Expr; span: Span }>>;
-    /** Move the completed task (+children) to the target file. */
-    move?: { target: Expr; span: Span };
+    /**
+     * `move()` / `move([[#heading]])` — carry the completed task and its
+     * subtree within its note. `target` is what is written between the
+     * parentheses (null for none), printed back as it is; `to` is where the
+     * task goes, read off how it is written (`FlowParser`), never evaluated.
+     */
+    move?: { target: Expr | null; to: MoveTarget; span: Span };
 }
+
+/**
+ * Where a move takes the task, answered from how the clause is written,
+ * once, by the parser: the end of the note (`move()`), the end of the section
+ * of a heading of the note (`move([[#name]])`, an alias aside), or nowhere —
+ * anything else names another note, and moving to another note is retired
+ * (F8). The parser warns on a retired one, and a completion with it does not
+ * fire; the diagnostic and the fire read this one answer. A move that is
+ * not retired names where the write puts the row (`MoveDestination`).
+ */
+export type MoveTarget = MoveDestination | { kind: 'retired' };
 
 /**
  * Every clause's span, said once.

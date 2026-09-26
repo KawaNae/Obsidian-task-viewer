@@ -1,5 +1,6 @@
 import type { DragContext, DragStrategy } from './DragStrategy';
 import type { DragSession } from './DragSession';
+import { heldBy } from '../../views/taskcard/CardHold';
 import { TimelineMoveGesture } from './strategies/timeline/TimelineMoveGesture';
 import { TimelineResizeGesture } from './strategies/timeline/TimelineResizeGesture';
 import { GridMoveGesture } from './strategies/grid/GridMoveGesture';
@@ -38,28 +39,13 @@ export class DragRouter {
         if (target.closest('.tv-sidebar__pinned-lists')) return;
 
         const handle = target.closest('.task-card__handle-btn') as HTMLElement | null;
-        let taskEl: HTMLElement | null = null;
-        let taskId: string | null = null;
-        let isFromHandle = false;
+        const isFromHandle = handle !== null;
 
-        if (handle) {
-            isFromHandle = true;
-            taskId = handle.dataset.taskId || null;
-            if (taskId) {
-                taskEl = handle.closest('.task-card') as HTMLElement;
-                if (!taskEl) {
-                    taskEl = this.container.querySelector(`.task-card[data-id="${taskId}"]`) as HTMLElement;
-                }
-                if (taskEl && taskEl.dataset.splitOriginalId) {
-                    taskId = taskEl.dataset.splitOriginalId;
-                }
-            }
-        } else {
-            taskEl = target.closest('.task-card') as HTMLElement;
-            if (taskEl) {
-                taskId = taskEl.dataset.splitOriginalId || taskEl.dataset.id || null;
-            }
-        }
+        // The task is the one the card was last drawn from, read now from its
+        // hold: a card (with the handles in it) is kept across readings that
+        // rename the task (`CardHold`).
+        const taskEl = target.closest('.task-card') as HTMLElement | null;
+        const taskId = taskEl ? (heldBy(taskEl)?.name ?? null) : null;
 
         if (!taskEl || !taskId) return;
 

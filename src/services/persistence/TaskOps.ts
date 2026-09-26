@@ -1,0 +1,72 @@
+import type { FlowInstanceInsert } from './FlowInstanceLines';
+import type { PropertyOp } from './PropertyUpdatePlanner';
+
+/**
+ * One thing an operation does to the row it names, in a write that may do
+ * several (see `InlineTaskWriter.applyToTask`).
+ *
+ * Each carries finished text or a finished instance, never a task: what to
+ * write is the caller's to decide, and where it goes is decided here, against
+ * the lines the write is holding. That is the division the recurrence path has
+ * always had, now held for every effect of a fire.
+ *
+ * - `insert-instance`: the next instance goes in at the head of the row's
+ *   sibling group, indented from the file.
+ * - `strip-flow`: the command is consumed — the row's own `- ==>` lines go,
+ *   and the row reads `text` (indentation kept from the file).
+ * - `move`: the row is moved within its note, reading `text`, to `to` (the
+ *   end of the note, or the end of a heading's section: `Placement.end`,
+ *   `Placement.sectionEnd`), with its children re-indented under it and
+ *   without its own `- ==>` lines. The row and its children are carried, not
+ *   copied: they are the rows they were (see `LineEdits.carry`).
+ * - `remove`: the row and its children are taken out.
+ * - `insert`: `text`, a new line, goes in beside the row where `place`
+ *   says (`Placement`, of the same name): at the head of its children
+ *   (`firstChild`), as its next sibling past its subtree (`afterSubtree`),
+ *   or past the completed siblings that follow it (`afterCompletedRun`),
+ *   spelled as the item next to it. A timer's record, the one insert every
+ *   timer line takes (`TaskIndex.insertLine`).
+ * - `copy`: `text` goes in as the row's next sibling, past its subtree,
+ *   spelled as the row is (`Placement.copyOf`): the editor menu's duplicate
+ *   of a line.
+ * - `update`: the row reads `text` (indentation kept from the file), and
+ *   its own property lines change by `childOps`. A card's, the API's and a
+ *   timer's rewrite of a row, and the editor menu's rewrite of a line.
+ * - `fire`: the row's flow fires. What it does is planned here, inside the
+ *   write, from the lines as the ops before it left them (`plan`, which the
+ *   flow layer hands in), and the ops it answers are applied in its place.
+ *   Only a write that completes the row carries it (`completes`): a fire is
+ *   what completing a task does, never what a later reading of it finds.
+ */
+/** Where a new line goes beside the row (see {@link TaskOp} `insert`). */
+export type InsertPlace = 'firstChild' | 'afterSubtree' | 'afterCompletedRun';
+
+/** Where a `move` takes the row in its note: the end of the note, or the end of the section of the heading named `name`. */
+export type MoveDestination = { kind: 'end' } | { kind: 'heading'; name: string };
+
+export type TaskOp =
+    | { kind: 'insert-instance'; insert: FlowInstanceInsert }
+    | { kind: 'strip-flow'; text: string }
+    | { kind: 'move'; text: string; to: MoveDestination }
+    | { kind: 'remove' }
+    | { kind: 'copy'; text: string }
+    | { kind: 'insert'; place: InsertPlace; text: string }
+    | { kind: 'update'; text: string; childOps?: readonly PropertyOp[] }
+    | { kind: 'fire'; plan: (lines: readonly string[], line: number) => readonly TaskOp[] };
+
+/**
+ * The fire of a write that completes a row, handed in with the op by the flow
+ * layer (`FlowExecutor.fireOp`).
+ *
+ * The completion is the user's and the fire follows from it, so a fire that
+ * writes lines never takes the completion down with it: a write refused with
+ * the fire in it, whatever it was refused for, is tried without it
+ * (`processLines`'s `instead`), as the editor writes the fire apart from the
+ * completion it follows (`FlowFireExtension`). A refusal of the completion's
+ * own is met again without the fire, and nothing is written.
+ */
+export interface CompletionFire {
+    op: Extract<TaskOp, { kind: 'fire' }>;
+    /** Whether the fire, as the write's last run planned it, writes lines. */
+    writes(): boolean;
+}

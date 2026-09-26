@@ -827,7 +827,7 @@ export class CalendarView extends ItemView {
     ): Promise<void> {
         if (entry.useBarVariant) {
             const cardInstanceId = `${VIEW_ID}::lane-multi::${entry.segmentId}`;
-            const reused = reconciler.acquire(cardInstanceId);
+            const reused = reconciler.acquire(cardInstanceId, entry.task);
             const barEl = reused ?? weekRow.createDiv('task-card task-card--multi-day');
             markHandleSurface(barEl, 'grid');
             if (reused) weekRow.appendChild(reused);
@@ -838,12 +838,12 @@ export class CalendarView extends ItemView {
                 topRight: { mode: 'none' },
                 compact: true,
             });
-            if (!reused) this.menuHandler.addTaskContextMenu(barEl, entry.task);
+            if (!reused) this.menuHandler.addTaskContextMenu(barEl);
             return;
         }
 
         const cardInstanceId = `${VIEW_ID}::lane::${entry.task.id}`;
-        const reused = reconciler.acquire(cardInstanceId);
+        const reused = reconciler.acquire(cardInstanceId, entry.task);
         const card = reused ?? weekRow.createDiv('task-card');
         markHandleSurface(card, 'grid');
         if (reused) weekRow.appendChild(reused);
@@ -854,7 +854,7 @@ export class CalendarView extends ItemView {
             topRight: { mode: 'time' },
             compact: true,
         });
-        if (!reused) this.menuHandler.addTaskContextMenu(card, entry.task);
+        if (!reused) this.menuHandler.addTaskContextMenu(card);
     }
 
     /**
@@ -868,13 +868,6 @@ export class CalendarView extends ItemView {
         if (entry.continuesBefore) el.addClass('task-card--split-continues-before');
         if (entry.continuesAfter) el.addClass('task-card--split-continues-after');
 
-        el.dataset.id = entry.segmentId;
-        if (entry.continuesBefore || entry.continuesAfter) {
-            el.dataset.splitOriginalId = (entry.task as DisplayTask).originalTaskId || entry.task.id;
-        } else {
-            delete el.dataset.splitOriginalId;
-        }
-
         this.applyCalendarGridPosition(el, entry, colOffset);
 
         TaskStyling.applyTaskColor(el, getEffectiveColor(entry.task) ?? null);
@@ -886,9 +879,6 @@ export class CalendarView extends ItemView {
      * Idempotent decoration for single-cell calendar cards (no multi-day span).
      */
     private decorateCalendarCell(el: HTMLElement, entry: GridTaskEntry, colOffset: number): void {
-        el.dataset.id = entry.task.id;
-        delete el.dataset.splitOriginalId;
-
         this.applyCalendarGridPosition(el, entry, colOffset);
 
         TaskStyling.applyTaskColor(el, getEffectiveColor(entry.task) ?? null);

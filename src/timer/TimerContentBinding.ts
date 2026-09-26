@@ -22,8 +22,11 @@ interface BindingState {
     /** 未書き込みの素の名前。無いときは書くものが無い。 */
     pending?: string;
     timeoutId?: ReturnType<typeof setTimeout>;
-    /** 書き込み中。返るまで次を走らせない（行の取り違えを防ぐ）。 */
-    writing: boolean;
+    /**
+     * 書き込み中の drain。返るまで次を走らせない（行の取り違えを防ぐ）。
+     * 途中で呼ばれた flush は、これが書き切れたかを待って答える。
+     */
+    draining?: Promise<boolean>;
 }
 
 /** 貼り付け・IME 由来の改行を含め、記録前に必ず 1 行へ畳む。 */
@@ -79,7 +82,7 @@ export class TimerContentBinding {
     }
 
     /**
-     * md 側の変化を入力欄へ返す。tick 経路から呼ぶ。
+     * md 側の変化を入力欄へ返す。索引が変わるたびに呼ぶ（TimerRenderer.refreshFromIndex）。
      *
      * 打鍵中（フォーカス中）と未書き込みの入力があるときは見送る — どちらも
      * ユーザーが今書いている値を、古い md の値で上書きすることになる。
@@ -101,7 +104,11 @@ export class TimerContentBinding {
      * 未書き込みの入力を書き出す。**記録を書く前に必ず待つ** — ここを飛ばすと
      * 停止時の記録が古い content を読み、入力が 1 セッション繰り越される。
      */
-    async flush(timer: TimerInstance): Promise<void> {
+    /**
+     * @returns whether what was typed was written. A write that was not keeps
+     * the name as the draft (`pendingContent`), to be written by the next flush.
+     */
+    async flush(timer: TimerInstance): Promise<boolean> {
         const state = this.stateFor(timer.id);
         if (state.timeoutId !== undefined) {
             clearTimeout(state.timeoutId);
@@ -113,7 +120,7 @@ export class TimerContentBinding {
         if (state.pending === undefined && timer.pendingContent !== undefined) {
             state.pending = timer.pendingContent;
         }
-        await this.drain(timer);
+        return this.drain(timer);
     }
 
     /**
@@ -137,7 +144,7 @@ export class TimerContentBinding {
     private stateFor(timerId: string): BindingState {
         let state = this.states.get(timerId);
         if (!state) {
-            state = { writing: false };
+            state = {};
             this.states.set(timerId, state);
         }
         return state;
@@ -156,23 +163,35 @@ export class TimerContentBinding {
      * 書き込み中に来た入力は `pending` に上書きされ、1 本目が返ってから続けて
      * 走る。並べて投げると、行を引き直す前のスナップショットで書くことになる。
      */
-    private async drain(timer: TimerInstance): Promise<void> {
+    private drain(timer: TimerInstance): Promise<boolean> {
         const state = this.stateFor(timer.id);
-        if (state.writing) return;
+        // 書き込み中の drain が、いま積まれた分まで書く。その成否を待って答える。
+        // 待たずに書けたと答えると、停止は名前の書き込みの結果を知らずに記録へ
+        // 進み、名前が拒否されたときに通知が拒否と成功の2回になる。
+        if (state.draining) return state.draining;
+        // 書くものが無ければ握らない。本体に await が無いと `finally` が先に
+        // 同期で走り、解けた握りの上に解決済みの promise が残る。以後の flush は
+        // それを返して、名前を書かずに書けたと答えていた。
+        if (state.pending === undefined) return Promise.resolve(true);
 
-        state.writing = true;
-        try {
-            while (state.pending !== undefined) {
-                const next = state.pending;
-                state.pending = undefined;
-                await this.writeOnce(timer, next);
+        const draining = (async () => {
+            try {
+                while (state.pending !== undefined) {
+                    const next = state.pending;
+                    state.pending = undefined;
+                    if (!(await this.writeOnce(timer, next))) return false;
+                }
+                return true;
+            } finally {
+                state.draining = undefined;
             }
-        } finally {
-            state.writing = false;
-        }
+        })();
+        state.draining = draining;
+        return draining;
     }
 
-    private async writeOnce(timer: TimerInstance, name: string): Promise<void> {
+    /** @returns whether the name was written, or had nothing to be written to yet. */
+    private async writeOnce(timer: TimerInstance, name: string): Promise<boolean> {
         // 単一の畳み関門。上流（bind の oninput）で既に畳んでいても、ここで
         // 独立に保証する — 記法は 1 行のみで、改行が行を割ってタスクを壊す。
         const trimmed = foldNewlines(name).trim();
@@ -180,7 +199,7 @@ export class TimerContentBinding {
         if (!tail) {
             // 書く相手がまだ居ない。下書きのまま置いて、行が生えたときに書き出す。
             timer.pendingContent = foldNewlines(name);
-            return;
+            return true;
         }
 
         const current = splitTimerIcon(tail.content);
@@ -189,14 +208,22 @@ export class TimerContentBinding {
             // 自己修復も効かないまま無駄な往復だけが残る。
             timer.pendingContent = undefined;
             this.ctx.persistTimersToStorage();
-            return;
+            return true;
         }
 
         // 行に付いていたアイコンはそのまま戻す（無ければ付けない）。
         const content = current.icon ? withTimerIcon(current.icon, trimmed) : trimmed;
-        await this.ctx.plugin.getTaskIndex().updateTask(tail.id, { content });
+        if (!(await this.ctx.plugin.getTaskIndex().updateTask(tail.id, { content }))) {
+            // 書けなかった。理由は書き込みの層が1回だけ通知済み。打った名前は
+            // 下書きに残し、次の flush で書き直す。往復中にもっと新しい入力が
+            // 来ていれば、下書きはもうそれを持っている。
+            if (this.stateFor(timer.id).pending === undefined) timer.pendingContent = foldNewlines(name);
+            this.ctx.persistTimersToStorage();
+            return false;
+        }
 
         timer.pendingContent = undefined;
         this.ctx.persistTimersToStorage();
+        return true;
     }
 }

@@ -1,5 +1,6 @@
 import { type App, TFile, moment } from 'obsidian';
 import { HeadingInserter } from './HeadingInserter';
+import { createFile, type WriteChannel } from '../services/persistence/FileLines';
 import type { TaskViewerSettings, NoteType } from '../types';
 import { processTemplate, normalizeTrailingNewline } from './NoteTemplateProcessor';
 import { withWeekStartDay } from './momentWeekLocale';
@@ -75,9 +76,18 @@ export class DailyNoteUtils {
     }
 
     static async createDailyNote(app: App, date: Date): Promise<TFile> {
+        const { path, content } = this.dailyNoteToCreate(app, date);
+        return await app.vault.create(path, await content());
+    }
+
+    /** Where the daily note goes, and its content made: its folder in place and its template read. */
+    private static dailyNoteToCreate(app: App, date: Date): { path: string; content: () => Promise<string> } {
         const dailySettings = this.getDailyNoteSettings(app);
         const path = this.getDailyNotePath(date, dailySettings);
+        return { path, content: () => this.makeDailyNote(app, date, dailySettings) };
+    }
 
+    private static async makeDailyNote(app: App, date: Date, dailySettings: ReturnType<typeof DailyNoteUtils.getDailyNoteSettings>): Promise<string> {
         if (dailySettings.folder) {
             const folderExists = await app.vault.adapter.exists(dailySettings.folder);
             if (!folderExists) {
@@ -85,14 +95,12 @@ export class DailyNoteUtils {
             }
         }
 
-        const content = await this.loadAndApplyTemplate(app, dailySettings.template, {
+        return await this.loadAndApplyTemplate(app, dailySettings.template, {
             noteType: 'daily',
             triggerDate: date,
             filenameFormat: dailySettings.format,
             weekStartDay: 0,
         });
-
-        return await app.vault.create(path, content);
     }
 
     /**
@@ -223,7 +231,11 @@ export class DailyNoteUtils {
      * @param line The line to append (should include full task format, e.g., "- [x] ...")
      * @param header Header text (without # prefix)
      * @param headerLevel Number of # to use (e.g., 2 for ##)
-     * @returns 書き込んだノートのパス。ノートを用意できなければ null。
+     * @param channelFor Where the write to the note reports what it did (see
+     *        `TaskWriteService.writeChannel`). Asked once the note is known:
+     *        the note may be the one this call creates.
+     * @returns 書き込んだノートのパス。書けなかったときは null で、理由は
+     * 書き込みの層が1回だけ告げてある（ノートを作れなかったときも同じ）。
      *
      * パスを返すのは、書いた行を後から引き直す呼び出し側があるため。タイマーは
      * 走行中の行を `^id` で追い、停止時に同じ行を閉じる。
@@ -233,18 +245,21 @@ export class DailyNoteUtils {
         date: Date,
         line: string,
         header: string,
-        headerLevel: number
+        headerLevel: number,
+        channelFor: (path: string) => WriteChannel | undefined,
     ): Promise<string | null> {
         let file = this.getDailyNote(app, date);
         if (!file) {
-            file = await this.createDailyNote(app, date);
+            const { path, content } = this.dailyNoteToCreate(app, date);
+            const created = await createFile(app, path, channelFor(path), line.trim(), content);
+            if (!created.written) return null;
+            file = created.file;
         }
-        if (!file) return null;
 
         // file は既に手元にある TFile を直接渡す。作成直後のファイルは
         // getAbstractFileByPath で引き直せるとは限らないため、パスへ
         // 変換すると書き込みが黙って失敗しうる。
-        await HeadingInserter.writeUnderHeading(app, file, line, header, headerLevel);
-        return file.path;
+        const outcome = await HeadingInserter.writeUnderHeading(app, file, channelFor(file.path), line, header, headerLevel);
+        return outcome.written ? file.path : null;
     }
 }

@@ -76,7 +76,7 @@ export class TaskActionsMenuBuilder {
                 taskColor: getEffectiveColor(task) ?? '',
                 recordMode: 'child' as const,
                 parserId: task.parserId,
-                timerTargetId: task.timerTargetId ?? task.blockId,
+                timerTargetId: task.anchor,
                 autoStart: false,
             };
 
@@ -115,7 +115,7 @@ export class TaskActionsMenuBuilder {
                     menu.close();
                     new CreateTaskModal(this.app, async (result) => {
                         const taskLine = formatTaskLine(result);
-                        await this.writeService.insertChildTask(task.id, taskLine);
+                        await this.writeService.insertLine(task.id, taskLine, 'firstChild');
                     }, {}, { startHour: this.plugin.settings.startHour }).open();
                 });
         });

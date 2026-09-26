@@ -4,6 +4,7 @@ import { GridHandleStrategy } from './GridHandleStrategy';
 import { TimelineHandleStrategy } from './TimelineHandleStrategy';
 import type { HandleStrategy } from './HandleStrategy';
 import { resolveHandleSurface } from './HandleSurface';
+import { heldBy } from '../../taskcard/CardHold';
 
 interface HandleManagerDeps {
     getTask(id: string): Task | undefined;
@@ -34,15 +35,24 @@ export class HandleManager implements SelectionHost {
 
     /**
      * Gets the currently selected task ID.
+     *
+     * A name lasts one reading of its file. One given before a write of ours
+     * is followed to the row's name now (`getTask`), and the selection takes
+     * it over; one from before a change that was not ours names nothing, and
+     * is kept as it is, selecting no card.
      */
     getSelectedTaskId(): string | null {
+        const held = this.selectedTaskId;
+        if (held === null) return null;
+        const now = this.deps.getTask(held)?.id;
+        if (now !== undefined && now !== held) this.selectedTaskId = now;
         return this.selectedTaskId;
     }
 
     /**
      * Selects a task (or clears selection when passed null) and renders its handles.
      * The taskId should be a base task id (not a split segment id) so that all
-     * segments of the same task get `.is-selected` via `dataset.splitOriginalId`.
+     * segments of the same task get `.is-selected` by the name their hold gives (`CardHold.name`).
      */
     selectTask(taskId: string | null): void {
         // Remove handles from the previously selected task. Selection z-index
@@ -61,7 +71,7 @@ export class HandleManager implements SelectionHost {
      * selection state on fresh DOM.
      */
     reapplySelectionClass(): void {
-        const taskId = this.selectedTaskId;
+        const taskId = this.getSelectedTaskId();
         const taskCards = this.getMainTaskCards();
         // Selection is a pure class toggle. The z-index overlay lives in CSS
         // (.task-card.is-selected → --z-task-card-selected !important), so the
@@ -69,9 +79,12 @@ export class HandleManager implements SelectionHost {
         // save/restore that previously went stale across re-renders.
         taskCards.forEach(el => {
             const htmlEl = el as HTMLElement;
-            const isSelected = !!taskId
-                && (htmlEl.dataset.id === taskId || htmlEl.dataset.splitOriginalId === taskId);
+            const isSelected = !!taskId && heldBy(htmlEl)?.name === taskId;
             el.toggleClass('is-selected', isSelected);
+            // A card is kept across readings that rename its task. One that
+            // had the handles and is no longer the selected task's (its file
+            // was changed by another hand) gives them up.
+            if (!isSelected) this.clearHandles(htmlEl);
         });
 
         if (taskId) {
@@ -86,14 +99,18 @@ export class HandleManager implements SelectionHost {
         const taskCards = this.getMainTaskCards();
         taskCards.forEach(el => {
             const htmlEl = el as HTMLElement;
-            if (htmlEl.dataset.id === taskId || htmlEl.dataset.splitOriginalId === taskId) {
-                // handles-out は GridHandleStrategy が render 時に付ける
-                // 選択スコープの class なので、handle と同時に掃除する
-                htmlEl.classList.remove('task-card--handles-out');
-                const handles = htmlEl.querySelectorAll('.task-card__handle');
-                handles.forEach(h => h.remove());
+            if (heldBy(htmlEl)?.name === taskId) {
+                this.clearHandles(htmlEl);
             }
         });
+    }
+
+    private clearHandles(taskEl: HTMLElement): void {
+        // handles-out は GridHandleStrategy が render 時に付ける
+        // 選択スコープの class なので、handle と同時に掃除する
+        taskEl.classList.remove('task-card--handles-out');
+        const handles = taskEl.querySelectorAll('.task-card__handle');
+        handles.forEach(h => h.remove());
     }
 
     /**
@@ -105,7 +122,7 @@ export class HandleManager implements SelectionHost {
     private renderHandles(taskId: string): void {
         const taskCards = Array.from(this.getMainTaskCards()).filter(el => {
             const htmlEl = el as HTMLElement;
-            return htmlEl.dataset.id === taskId || htmlEl.dataset.splitOriginalId === taskId;
+            return heldBy(htmlEl)?.name === taskId;
         });
 
         if (taskCards.length === 0) return;
@@ -123,7 +140,7 @@ export class HandleManager implements SelectionHost {
             existingHandles.forEach(h => h.remove());
 
             const strategy = this.pickStrategy(taskEl);
-            strategy.render(taskEl, taskId, task, startHour);
+            strategy.render(taskEl, task, startHour);
         });
     }
 

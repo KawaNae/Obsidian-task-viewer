@@ -1,6 +1,9 @@
+import { Outline } from '../../parsing/utils/Outline';
+import type { LineDraft } from '../FileLines';
+
 /**
  * Frontmatter の行レベル編集ユーティリティ。
- * vault.process() コールバック内で使用する静的メソッドを提供。
+ * `processLines` のコールバック内で、その draft を編集する静的メソッドを提供。
  *
  * 書き込みは surgical edit（外科的編集）方式:
  * 対象キーの行のみを更新・削除・挿入し、他の行は一切触らない。
@@ -13,26 +16,25 @@ export class FrontmatterLineEditor {
      * frontmatter の閉じタグ `---` の行インデックスを返す。
      * frontmatter がない場合は -1 を返す。
      */
-    static findEnd(lines: string[]): number {
-        if (!lines.length || lines[0]?.trim() !== '---') return -1;
-        for (let i = 1; i < lines.length; i++) {
-            if (lines[i].trim() === '---') return i;
-        }
-        return -1;
+    static findEnd(lines: readonly string[]): number {
+        // The parser's reading of where the body begins, so the block edited
+        // here is the one the index reads as frontmatter.
+        return Outline.bodyStart(lines) - 1;
     }
 
     /**
      * frontmatter を持たないファイルのために空の block を先頭へ挿し、
-     * 書き込み可能な lines と fmEnd を返す。既にある場合はそのまま返す。
+     * fmEnd を返す。既にある場合は何も足さない。
      *
      * `processFrontMatter` はキーを書くときに block を作るので、surgical edit
      * へ寄せる経路（{@link FrontmatterWriter.setKeys}）が block 無しのファイルで
      * 黙って何もしないと機能が落ちる。本文は後ろにそのまま残す。
      */
-    static ensureBlock(lines: string[]): { lines: string[]; fmEnd: number } {
-        const existing = this.findEnd(lines);
-        if (existing >= 0) return { lines, fmEnd: existing };
-        return { lines: ['---', '---', ...lines], fmEnd: 1 };
+    static ensureBlock(draft: LineDraft): number {
+        const existing = this.findEnd(draft.lines);
+        if (existing >= 0) return existing;
+        draft.splice(0, 0, '---', '---');
+        return 1;
     }
 
     /**
@@ -42,7 +44,7 @@ export class FrontmatterLineEditor {
      * {@link escapeYamlScalar} を通した形と生の形の双方を許す。マルチライン値は
      * 対象外で、キー行の右側だけを見る。
      */
-    static readRawScalar(lines: string[], fmEnd: number, key: string): string | null {
+    static readRawScalar(lines: readonly string[], fmEnd: number, key: string): string | null {
         const range = this.findKeyRange(lines, fmEnd, key);
         if (!range) return null;
         const m = lines[range[0]].match(/^[^:\s]+\s*:\s*(.*)$/);
@@ -54,7 +56,7 @@ export class FrontmatterLineEditor {
      * 継続行（配列項目・ブロックスカラー等）も含む。
      * キーが存在しない場合は null。
      */
-    static findKeyRange(lines: string[], fmEnd: number, key: string): [number, number] | null {
+    static findKeyRange(lines: readonly string[], fmEnd: number, key: string): [number, number] | null {
         for (let i = 1; i < fmEnd; i++) {
             const keyMatch = lines[i].match(/^([^:\s]+)\s*:/);
             if (keyMatch && keyMatch[1] === key) {
@@ -79,11 +81,11 @@ export class FrontmatterLineEditor {
      * - value: string[] → キー行 + 継続行の完全な生行列（マルチライン値。
      *   先頭要素が `key:` 行であること）。既存範囲を丸ごと差し替え / 挿入
      *
-     * @returns 編集後の行配列。文字列への復元は呼び口が行う（ファイルの
-     *          改行はファイルごとに違うので、{@link joinLines} の仕事である）
+     * 行の差し替えは draft の splice で行う。frontmatter の行はタスクではない
+     * ので、消して足した行として報告してよい。
      */
-    static applyUpdates(lines: string[], fmEnd: number, updates: Record<string, string | string[] | null>): string[] {
-        const result = [...lines];
+    static applyUpdates(draft: LineDraft, fmEnd: number, updates: Record<string, string | string[] | null>): void {
+        const result = draft.lines;
         let currentFmEnd = fmEnd;
 
         for (const [key, value] of Object.entries(updates)) {
@@ -93,7 +95,7 @@ export class FrontmatterLineEditor {
                 // 削除: キー行 + 継続行を除去
                 if (range) {
                     const count = range[1] - range[0];
-                    result.splice(range[0], count);
+                    draft.splice(range[0], count);
                     currentFmEnd -= count;
                 }
             } else {
@@ -103,17 +105,15 @@ export class FrontmatterLineEditor {
                 if (range) {
                     // 更新: キー行 + 継続行を新しい行列に置換
                     const count = range[1] - range[0];
-                    result.splice(range[0], count, ...newLines);
+                    draft.splice(range[0], count, ...newLines);
                     currentFmEnd += newLines.length - count;
                 } else {
                     // 挿入: 閉じ --- の直前に追加
-                    result.splice(currentFmEnd, 0, ...newLines);
+                    draft.splice(currentFmEnd, 0, ...newLines);
                     currentFmEnd += newLines.length;
                 }
             }
         }
-
-        return result;
     }
 
     /**

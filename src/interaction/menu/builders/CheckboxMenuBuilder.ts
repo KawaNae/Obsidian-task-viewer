@@ -7,10 +7,14 @@ import { DailyNoteUtils } from '../../../utils/DailyNoteUtils';
 import { TaskLineClassifier } from '../../../services/parsing/utils/TaskLineClassifier';
 import { t } from '../../../i18n';
 
+/**
+ * The editor's writes to one line. Each answers whether it was written; a
+ * write that was not has told the user why (see `TaskIndex.reportRefusal`).
+ */
 export interface CheckboxLineOps {
-    updateLine(newContent: string): void | Promise<void>;
-    insertLineAfter(content: string): void | Promise<void>;
-    deleteLine(): void | Promise<void>;
+    updateLine(newContent: string): Promise<boolean>;
+    insertLineAfter(content: string): Promise<boolean>;
+    deleteLine(): Promise<boolean>;
 }
 
 /**
@@ -81,13 +85,19 @@ export class CheckboxMenuBuilder {
         });
     }
 
+    /**
+     * The copy goes in without the line's `^id`, as every other duplicate
+     * does (`DuplicateShift`): two lines with one `^id` would anchor neither
+     * (`Task.anchor`), and the original would lose its lasting ID.
+     */
     private addDuplicateItem(menu: Menu, lineText: string, ops: CheckboxLineOps): void {
+        const copy = TaskLineClassifier.extractLineBlockId(lineText).text;
         menu.addItem((item) => {
             item.setTitle(t('menu.duplicate'))
                 .setIcon('copy')
                 .onClick(async () => {
                     menu.close();
-                    await ops.insertLineAfter(lineText);
+                    await ops.insertLineAfter(copy);
                 });
         });
     }
@@ -114,7 +124,8 @@ export class CheckboxMenuBuilder {
                         this.app,
                         async (result) => {
                             const formatted = formatTaskLine(result);
-                            const newLine = indent + formatted.replace(/^- \[ \]/, `${marker} [${statusChar}]`);
+                            const newLine = indent + TaskLineClassifier.formatPrefix(statusChar, '', marker)
+                                + TaskLineClassifier.splitContent(formatted).content;
                             await ops.updateLine(newLine);
                         },
                         { content, startDate: today },

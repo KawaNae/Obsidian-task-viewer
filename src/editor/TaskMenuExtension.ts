@@ -1,9 +1,8 @@
 import { ViewPlugin, type ViewUpdate, Decoration, WidgetType, type EditorView, type DecorationSet } from '@codemirror/view';
 import { StateEffect, RangeSet, type Extension } from '@codemirror/state';
-import { editorInfoField, setIcon, MarkdownView } from 'obsidian';
+import { editorInfoField, setIcon, MarkdownView, Notice } from 'obsidian';
 import type { App } from 'obsidian';
 import type { TaskReadService } from '../services/data/TaskReadService';
-import type { TaskWriteService } from '../services/data/TaskWriteService';
 import type { TaskViewerSettings } from '../types';
 import { toDisplayTask } from '../services/display/DisplayTaskConverter';
 import type { PropertiesMenuBuilder } from '../interaction/menu/builders/PropertiesMenuBuilder';
@@ -17,7 +16,14 @@ import { TaskLineClassifier } from '../services/parsing/utils/TaskLineClassifier
 import { getTaskNotation } from '../services/filter/parserTaxonomy';
 import { t } from '../i18n';
 import { editorCm } from '../utils/editorCm';
-import { fenceMaskFor } from './EditorFenceCache';
+import { outlineFor } from './EditorOutline';
+import { subtreeAt } from '../services/persistence/RowBasis';
+import { keyOf } from './EditorDoc';
+import { writeEditorLine, type EditorLineHost } from './EditorWrite';
+import { taskShownAt, type ShownTaskLookup } from './ShownTask';
+import type { ContentKey } from '../services/core/ContentKey';
+import type { EditorLine } from '../services/persistence/FileLines';
+import type { TaskOp } from '../services/persistence/TaskOps';
 
 const taskIndexChanged = StateEffect.define<void>();
 const settingsChanged = StateEffect.define<void>();
@@ -71,7 +77,7 @@ export interface TaskMenuExtensionResult {
 export function createTaskMenuExtension(
     app: App,
     readService: TaskReadService,
-    writeService: TaskWriteService,
+    lineHost: EditorLineHost,
     propertiesBuilder: PropertiesMenuBuilder,
     timerBuilder: TimerMenuBuilder,
     actionsBuilder: TaskActionsMenuBuilder,
@@ -82,14 +88,30 @@ export function createTaskMenuExtension(
     openTaskHub: TaskHubOpener
 ): TaskMenuExtensionResult {
 
-    const showMenu = (view: EditorView, lineNumber: number, btnEl: HTMLElement) => {
+    const lookup: ShownTaskLookup = {
+        taskAtEditorLine: (path, line, key) => readService.taskAtEditorLine(path, line, key),
+        readShown: async (editor) => {
+            const info = editor.state.field(editorInfoField, false);
+            if (info instanceof MarkdownView) await info.save();
+            if (info?.file) await readService.readNow(info.file);
+        },
+    };
+
+    const showMenu = async (view: EditorView, lineNumber: number, btnEl: HTMLElement) => {
         const info = view.state.field(editorInfoField);
         const filePath = info?.file?.path;
         if (!filePath) return;
-
-        const task = readService.getTaskByFileLine(filePath, lineNumber);
-        const isTaskviewerTask = !!task && getTaskNotation(task.parserId) === 'taskviewer';
+        // Where the button is now: the scan below may draw it again.
         const rect = btnEl.getBoundingClientRect();
+
+        // The task on the line in what the editor shows, not on the same
+        // number of what the index last read.
+        const task = await taskShownAt(view, filePath, lineNumber, lookup);
+        if (task === null) {
+            new Notice(t('notice.editorMenuNotRead'));
+            return;
+        }
+        const isTaskviewerTask = !!task && getTaskNotation(task.parserId) === 'taskviewer';
 
         menuPresenter.present((menu) => {
             if (isTaskviewerTask && task) {
@@ -118,10 +140,20 @@ export function createTaskMenuExtension(
                 // status + basic actions, writing through CheckboxLineOps preserves the original notation.
                 const lineText = view.state.doc.line(lineNumber + 1).text; // CM6 lines are 1-based
 
+                // The line holds only in the content the menu was opened in.
+                const at = { line: lineNumber, text: lineText, key: keyOf(view.state.doc) };
+                // What a delete takes, as the editor shows it now: the line
+                // and its subtree. The write takes it only if they still
+                // read so.
+                const subtree = subtreeAt(outlineFor(view.state.doc), lineNumber);
+                // Written in this editor while it shows the note, as the
+                // user's own edit is; to the file once it does not (`shows`).
+                const write = (target: EditorLine, ops: readonly TaskOp[]) =>
+                    writeEditorLine(view, filePath, target, ops, lineHost);
                 const ops: CheckboxLineOps = {
-                    updateLine: (content) => writeService.updateLine(filePath, lineNumber, content),
-                    insertLineAfter: (content) => writeService.insertLineAfterLine(filePath, lineNumber, content),
-                    deleteLine: () => writeService.deleteLine(filePath, lineNumber),
+                    updateLine: (content) => write(at, [{ kind: 'update', text: content }]),
+                    insertLineAfter: (content) => write(at, [{ kind: 'copy', text: content }]),
+                    deleteLine: () => write({ ...at, subtree }, [{ kind: 'remove' }]),
                 };
 
                 checkboxBuilder.addFullMenu(menu, lineText, getSettings(), ops, filePath);
@@ -144,24 +176,28 @@ export function createTaskMenuExtension(
 
         const widgets: { from: number; deco: Decoration }[] = [];
         const seen = new Set<number>();
-        // A checkbox line inside a code fence is example text, not a task —
-        // DocumentTreeBuilder already excludes it from the parsed tree via
-        // the same mask; this scan is independent of that tree (see the
-        // TaskLineClassifier import above), so it needs its own check.
-        const fenceMask = fenceMaskFor(view.state.doc);
+        // A checkbox line in code, or one that opens no list item, is text,
+        // not a task — DocumentTreeBuilder reads it so from the same reading;
+        // this scan is independent of that tree (see the TaskLineClassifier
+        // import above), so it asks the reading itself.
+        const outline = outlineFor(view.state.doc);
+        // The key of what the editor shows, made once and only if asked.
+        let key: ContentKey | undefined;
 
         for (const { from, to } of view.visibleRanges) {
             let pos = from;
             while (pos <= to) {
                 const line = view.state.doc.lineAt(pos);
                 const lineNumber = line.number - 1; // CM6 is 1-based, Task.line is 0-based
-                const lineText = view.state.doc.sliceString(line.from, line.to);
 
-                if (!fenceMask[lineNumber] && TaskLineClassifier.isTaskLine(lineText) && !seen.has(line.number)) {
+                if (TaskLineClassifier.opensTask(outline, lineNumber) && !seen.has(line.number)) {
                     seen.add(line.number);
                     let show = true;
                     if (needsFilter && filePath) {
-                        const found = readService.getTaskByFileLine(filePath, lineNumber);
+                        // Not read yet in what the editor shows: a checkbox
+                        // until the scan's change draws the buttons again.
+                        key ??= keyOf(view.state.doc);
+                        const found = readService.taskAtEditorLine(filePath, lineNumber, key) ?? undefined;
                         const isTaskviewerTask = !!found && getTaskNotation(found.parserId) === 'taskviewer';
                         show = isTaskviewerTask ? settings.editorMenuForTasks : settings.editorMenuForCheckboxes;
                     }

@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { TaskIndex } from '../../../../src/services/core/TaskIndex';
 import { clearLog, getLogEntries } from '../../../../src/log/log';
 import { makeTask } from '../../helpers/makeTask';
-import type { Task } from '../../../../src/types';
+import { DEFAULT_STATUS_DEFINITIONS, type Task } from '../../../../src/types';
 
 /**
  * What `updateTask` does when a display-layer segment ID reaches it.
@@ -37,15 +37,24 @@ function buildHost(task: Task) {
             bumpRevision: vi.fn(),
             notifyListeners: vi.fn(),
         },
-        settings: { scopeKeys: {} },
-        syncDetector: { markLocalEdit: vi.fn() },
-        scanner: { requestScan: vi.fn(async () => { }) },
+        settings: { scopeKeys: {}, statusDefinitions: DEFAULT_STATUS_DEFINITIONS },
+        // A completion fires in its write; the fire itself is not measured here.
+        commandExecutor: {
+            fireOp: () => ({ op: { kind: "fire", plan: () => [] }, planned: () => null, writes: () => false }),
+            reportNotRun: () => { },
+        },
+        writeCompleting: proto.writeCompleting,
+        scanner: { requestScan: vi.fn(async () => {}), follow: () => null, holds: () => false },
         app: { vault: { getAbstractFileByPath: () => null } },
         repository: {
-            updateTaskInFile: vi.fn(async () => true),
+            updateTaskInFile: vi.fn(async () => ({ written: true, refused: null })),
         },
-        draggingFilePath: null,
         revertUnwrittenUpdate: proto.revertUnwrittenUpdate,
+        onRow: proto.onRow,
+        copyForWrite: proto.copyForWrite,
+        getTask: proto.getTask,
+        reportRefusal: vi.fn(),
+        writeUpdate: proto.writeUpdate,
         // The dispose guard every write goes through; this index is open.
         disposed: false,
         refuseAfterDispose: proto.refuseAfterDispose,

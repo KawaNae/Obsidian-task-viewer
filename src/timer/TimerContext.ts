@@ -41,7 +41,8 @@ export interface TimerContext {
      * 未書き込みの content 入力を書き出す。**記録を書く前に待つ** — 飛ばすと
      * 停止時の記録が古い content を読み、入力が 1 セッション繰り越される。
      */
-    flushTimerContent(timerId: string): Promise<void>;
+    /** @returns whether everything typed was written (nothing pending counts as written). */
+    flushTimerContent(timerId: string): Promise<boolean>;
 
     /** 未書き込みの content 入力を捨てる（✕ 破棄。行ごと消えるので書かない）。 */
     discardTimerContent(timerId: string): void;

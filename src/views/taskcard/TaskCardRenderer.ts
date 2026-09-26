@@ -42,9 +42,22 @@ import { CheckboxWiring } from './CheckboxWiring';
 import type { MenuPresenter } from '../../interaction/menu/MenuPresenter';
 import { TaskLinkInteractionManager } from './TaskLinkInteractionManager';
 import { bindTapIntents } from '../../interaction/tap/TapIntent';
-import type { TaskCardLinkRuntime } from './types';
+import type { ChildRenderItem, TaskCardLinkRuntime } from './types';
 import { getEffectiveMask } from '../../services/data/EffectiveProperties';
+import { TaskIdGenerator } from '../../services/display/TaskIdGenerator';
+import { holdCard, type CardHold } from './CardHold';
 
+/**
+ * What a card shows, to tell whether a kept card can stay as it is drawn.
+ *
+ * Everything the card shows is in it, and nothing else: not the task's name,
+ * which changes with every reading of its file while the card shows the same
+ * thing. What the card acts on is held apart and put in on every draw
+ * (`CardHold`), so a card kept across a reading acts on the task it shows.
+ *
+ * @param children the card's child items, as `ChildItemBuilder` builds them
+ *   (the drawn lines of the children and their children, with their notation)
+ */
 export function computeContentSignature(
     task: DisplayTask,
     settings: TaskViewerSettings,
@@ -53,15 +66,14 @@ export function computeContentSignature(
     overdueLevel: OverdueLevel,
     maskMode: boolean,
     isExpanded: boolean,
-    readService: TaskReadService,
+    children: readonly ChildRenderItem[],
 ): string {
-    const childSig = task.childEntries.map(e => {
-        if (e.kind === 'task') {
-            const child = readService.getTask(e.taskId);
-            return `t:${e.taskId}:${child?.statusChar ?? '?'}:${child?.content ?? ''}`;
-        }
-        return `l:${e.line.text}`;
-    });
+    const childSig = children.map(item => [
+        item.isCheckbox ? 1 : 0,
+        item.markdown,
+        item.notation ?? '',
+        item.propertyKey ?? '',
+    ]);
 
     // JSON.stringify: field values are escaped, so no separator can collide
     // with content, and the result never contains raw control characters.
@@ -73,6 +85,8 @@ export function computeContentSignature(
         task.content,
         task.file,
         task.parserId,
+        // A child's time-only notation is shown with the parent's own date.
+        task.startDate ?? '',
         task.effectiveStartDate,
         task.effectiveStartTime ?? '',
         task.effectiveEndDate ?? '',
@@ -88,7 +102,9 @@ export function computeContentSignature(
         // for as long as the task is not edited.
         overdueLevel,
         options.compact ? '1' : '0',
+        options.context ?? '',
         maskMode ? '1' : '0',
+        maskMode ? (getEffectiveMask(task) ?? '') : '',
         isExpanded ? '1' : '0',
         settings.startHour,
         settings.childCollapseThreshold,
@@ -159,6 +175,31 @@ export class TaskCardRenderer extends Component {
         this.childSectionRenderer.setChildMenuCallback(cb);
     }
 
+    /**
+     * Whether the card `cardInstanceId`, drawing the task `taskId`, was left
+     * expanded. A key ends in the name the task had when it was expanded, and
+     * a name lasts one reading of its file: one given before a write of ours
+     * is followed to the row's name now (`getTask`), and the key is taken
+     * over by this card. One from before a change that was not ours names
+     * nothing, and the card is drawn collapsed.
+     */
+    private isExpanded(cardInstanceId: string, taskId: string): boolean {
+        if (this.expandedTaskIds.has(cardInstanceId)) return true;
+        if (!cardInstanceId.endsWith(taskId)) return false;
+        const scope = cardInstanceId.slice(0, cardInstanceId.length - taskId.length);
+        const readService = this.childItemBuilder.getReadService();
+        for (const key of this.expandedTaskIds) {
+            if (!key.startsWith(scope)) continue;
+            const held = key.slice(scope.length);
+            const now = TaskIdGenerator.mapRow(held, row => readService.getTask(row)?.id);
+            if (now !== taskId) continue;
+            this.expandedTaskIds.delete(key);
+            this.expandedTaskIds.add(cardInstanceId);
+            return true;
+        }
+        return false;
+    }
+
     setDetailCallback(cb: (task: Task) => void): void {
         this.onDetailClick = cb;
     }
@@ -189,6 +230,14 @@ export class TaskCardRenderer extends Component {
         const enableLinks = isHubPreview || settings.enableCardFileLink;
         const onNavigate = options.hooks?.onNavigate;
 
+        // What the card shows of its children, and the names behind them. A
+        // compact card shows only their count, which the items still decide.
+        const children = task.childEntries.length > 0
+            ? this.childItemBuilder.buildChildItems(task, '')
+            : [];
+        // Every draw puts the task it draws in the hold, whether or not the
+        // card is drawn anew: a kept card acts on the task it shows.
+        const hold = holdCard(container, task, cardInstanceId, children.map(item => item.handler?.taskId ?? null));
         container.dataset.cardInstanceId = cardInstanceId;
 
         if (isHubPreview) {
@@ -197,15 +246,14 @@ export class TaskCardRenderer extends Component {
 
         // Compute content signature for render skip
         const topRightResolved = this.resolveTopRightString(task, settings, topRight);
-        const isExpanded = this.expandedTaskIds.has(cardInstanceId);
+        const isExpanded = this.isExpanded(cardInstanceId, task.id);
         const overdueLevel = getOverdueLevel(
             task, settings.startHour, settings.statusDefinitions,
             this.childItemBuilder.getReadService(),
         );
         const sig = computeContentSignature(
             task, settings, options, topRightResolved, overdueLevel,
-            this.getMaskMode(), isExpanded,
-            this.childItemBuilder.getReadService(),
+            this.getMaskMode(), isExpanded, children,
         );
 
         if (container.dataset.contentSig === sig) {
@@ -238,11 +286,11 @@ export class TaskCardRenderer extends Component {
                 onDoubleTap: (x, y) => {
                     const action = this.getDoubleTapAction();
                     if (action === 'menu') {
-                        this.onContextMenu?.(task, x, y);
+                        this.onContextMenu?.(hold.task, x, y);
                     } else if (action === 'open') {
-                        this.onOpenInEditor?.(task);
+                        this.onOpenInEditor?.(hold.task);
                     } else {
-                        this.onDetailClick?.(task);
+                        this.onDetailClick?.(hold.task);
                     }
                 },
             }, {
@@ -283,13 +331,13 @@ export class TaskCardRenderer extends Component {
                 countLabelSpan.setText(`${this.getChildOverdueIcon(task, settings)}${completed}/${total}`);
             }
         } else if (task.childEntries.length > 0) {
-            await this.renderInlineChildren(contentContainer, task, cardComp, settings, parentMarkdown, cardInstanceId, forceExpand);
+            await this.renderInlineChildren(contentContainer, task, children, hold, cardComp, settings, parentMarkdown, forceExpand);
         } else {
             await MarkdownRenderer.render(this.app, parentMarkdown, contentContainer, task.file, cardComp);
         }
 
         this.bindInternalLinks(contentContainer, task.file, enableLinks, onNavigate);
-        this.bindParentCheckbox(contentContainer, task.originalTaskId ?? task.id, settings, task.isReadOnly);
+        this.bindParentCheckbox(contentContainer, hold, settings, task.isReadOnly);
 
         // Apply mask last so it overlays whatever child/inline renderer produced.
         // Detail modal opts out — the user explicitly asked to inspect this task.
@@ -455,20 +503,22 @@ export class TaskCardRenderer extends Component {
     private async renderInlineChildren(
         contentContainer: HTMLElement,
         task: DisplayTask,
+        items: ChildRenderItem[],
+        hold: CardHold,
         component: Component,
         settings: TaskViewerSettings,
         parentMarkdown: string,
-        cardInstanceId: string,
         forceExpand = false
     ): Promise<void> {
-        const items = this.childItemBuilder.buildChildItems(task, '');
+        const nameAt = (index: number) => hold.childAt(index);
         if (!forceExpand && items.length >= settings.childCollapseThreshold) {
             await MarkdownRenderer.render(this.app, parentMarkdown, contentContainer, task.file, component);
             await this.childSectionRenderer.renderCollapsed(
                 contentContainer,
                 items,
+                nameAt,
                 this.expandedTaskIds,
-                cardInstanceId,
+                () => hold.cardInstanceId,
                 task.file,
                 component,
                 settings,
@@ -478,11 +528,13 @@ export class TaskCardRenderer extends Component {
             return;
         }
 
-        const indentedItems = this.childItemBuilder.buildChildItems(task, '    ');
+        // Under the parent's line, each item goes one level in.
+        const indentedItems = items.map(item => ({ ...item, markdown: '    ' + item.markdown }));
         await this.childSectionRenderer.renderParentWithChildren(
             contentContainer,
             parentMarkdown,
             indentedItems,
+            nameAt,
             task.file,
             component,
             settings,
@@ -500,13 +552,13 @@ export class TaskCardRenderer extends Component {
 
     private bindParentCheckbox(
         contentContainer: HTMLElement,
-        taskId: string,
+        hold: CardHold,
         settings: TaskViewerSettings,
         readOnly?: boolean
     ): void {
         const mainCheckbox = contentContainer.querySelector(':scope > ul > li > input[type="checkbox"]');
         if (mainCheckbox) {
-            this.checkboxWiring.wireParentCheckbox(mainCheckbox, taskId, settings, readOnly);
+            this.checkboxWiring.wireParentCheckbox(mainCheckbox, () => hold.name, settings, readOnly);
         }
     }
 

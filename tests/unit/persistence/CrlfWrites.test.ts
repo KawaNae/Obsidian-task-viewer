@@ -1,5 +1,10 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { vaultSession, type VaultSession } from '../helpers/vaultSession';
+import { freezeDate } from '../helpers/fakeDate';
+
+// Frozen so `==> every mon` on `@2026-09-21` lands on the `@2026-09-28` these
+// tests hard-code, no matter which day the suite runs.
+freezeDate(new Date(2026, 8, 25, 12, 0, 0));
 
 /**
  * Writes to notes that are not written in LF, driven through the real scan and
@@ -92,7 +97,7 @@ describe('a note written in CRLF', () => {
         const { contents, session } = await openNote(CRLF_NOTE);
         const a = session.index.getTasks().find(task => task.content === 'タスクA')!;
 
-        const written = await session.index.insertChildTask(a.id, '- [ ] 子タスク');
+        const written = await session.index.insertLine(a.id, '- [ ] 子タスク', 'firstChild');
         await session.settle(FILE);
 
         expect(written).toBe(true);
@@ -114,32 +119,31 @@ describe('a note written in CRLF', () => {
         expect(terminators(contents.get(FILE)!).lf).toBe(0);
     });
 
-    it('appends a moved subtree with the destination\'s own terminator', async () => {
+    it('moves a subtree within the note with the note\'s own terminator', async () => {
         // A move writes the task and its children as one block. Joining that
-        // block with LF is how the destination ended up half CRLF and half LF,
-        // and it is the only append that spans more than one line.
+        // block with LF is how a note ended up half CRLF and half LF.
         const contents = new Map([
             [FILE, [
                 '# crlf move',
                 '',
-                '- [ ] 移すタスク @2026-09-21 ==> move([[archive]])',
+                '- [ ] 移すタスク @2026-09-21 ==> move([[#Done]])',
                 '\t- [ ] 子1 @2026-09-21',
                 '\t- [ ] 子2 @2026-09-21',
+                '## Done',
                 '',
             ].join('\r\n')],
-            ['archive.md', ['# archive', ''].join('\r\n')],
         ]);
         live = vaultSession(contents);
         await live.scanAll();
         const moving = live.index.getTasks().find(task => task.content === '移すタスク')!;
 
         await live.index.updateTask(moving.id, { statusChar: 'x' });
-        await vi.waitFor(() => expect(contents.get('archive.md')).toContain('子2'));
-        await live.settle('archive.md');
+        await live.settle(FILE);
 
-        // Heading, task, child, child: three terminators, and the appended
-        // block ends without one — as an append to a note always has.
-        expect(terminators(contents.get('archive.md')!)).toEqual({ crlf: 3, lf: 0 });
+        expect(contents.get(FILE)!.split('\r\n')).toEqual([
+            '# crlf move', '', '## Done', '- [x] 移すタスク @2026-09-21', '\t- [ ] 子1 @2026-09-21', '\t- [ ] 子2 @2026-09-21', '',
+        ]);
+        expect(terminators(contents.get(FILE)!).lf).toBe(0);
     });
 });
 
@@ -226,8 +230,9 @@ describe('a note whose last line ends with a stray CR', () => {
 
         expect(written).toBe(true);
         expect(contents.get(FILE)).toContain('- [x] beta @2026-09-21');
-        // The unfinished terminator goes with the write; nothing else changes.
-        expect(terminators(contents.get(FILE)!)).toEqual({ crlf: 0, lf: 2 });
+        // The CR ends the line, as the editor reads it, and is written back as
+        // the file's own terminator; nothing else changes.
+        expect(terminators(contents.get(FILE)!)).toEqual({ crlf: 0, lf: 3 });
         expect(contents.get(FILE)!.endsWith('\r')).toBe(false);
     });
 

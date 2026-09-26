@@ -4,6 +4,8 @@ import {
     type LocatedDiagnostic,
     spreadOverLines,
 } from '../../../src/services/parsing/gen/GenBlockCollector';
+import { Outline } from '../../../src/services/parsing/utils/Outline';
+import { outlineDiagnostics } from '../../../src/services/parsing/utils/OutlineDiagnostics';
 
 const codes = (lines: string[]) =>
     collectGenBlocks(lines).diagnostics.map(d => [d.code, d.line]);
@@ -86,9 +88,13 @@ describe('collectGenBlocks', () => {
             expect(blocks.get('手順')!.body).toEqual(['- [ ] 先']);
         });
 
-        it('reports a block that is never closed', () => {
-            expect(codes(['prose', '```tv-gen 手順', '- [ ] a'])).toEqual([
-                ['gen.unterminated-block', 1],
+        it('does not collect a block that is never closed, and leaves saying so to the outline', () => {
+            const lines = ['prose', '```tv-gen 手順', '- [ ] a'];
+            const { blocks, diagnostics } = collectGenBlocks(lines);
+            expect(blocks.size).toBe(0);
+            expect(diagnostics).toEqual([]);
+            expect(outlineDiagnostics(Outline.read(lines)).map(d => [d.code, d.line])).toEqual([
+                ['outline.unclosed-fence', 1],
             ]);
         });
 
@@ -103,6 +109,29 @@ describe('collectGenBlocks', () => {
             expect(diagnostics.map(d => [d.code, d.line])).toEqual([['gen.indented-block', 1]]);
             // The span skips the indentation and covers the delimiter line.
             expect(diagnostics[0].span).toEqual({ start: 4, end: 16 });
+        });
+
+        it('reports a block that stands in a list item, however shallow, and does not collect it', () => {
+            // Two columns under `- [ ] ` is the item's content column, and a
+            // fence opened on the item's own line is in the item too.
+            const { blocks, diagnostics } = collectGenBlocks([
+                '- [ ] task',
+                '  ```tv-gen 手順',
+                '  ```',
+                '- ```tv-gen 行',
+                '  ```',
+            ]);
+            expect(blocks.size).toBe(0);
+            expect(diagnostics.map(d => [d.code, d.line, d.span.start])).toEqual([
+                ['gen.indented-block', 1, 2],
+                ['gen.indented-block', 3, 2],
+            ]);
+        });
+
+        it('collects a block indented less than four columns at the top', () => {
+            const { blocks, diagnostics } = collectGenBlocks(['prose', '', '  ```tv-gen 手順', '  - [ ] a', '  ```']);
+            expect(diagnostics).toEqual([]);
+            expect(blocks.get('手順')!.body).toEqual(['  - [ ] a']);
         });
 
         it('reports a mistyped tv- tag', () => {

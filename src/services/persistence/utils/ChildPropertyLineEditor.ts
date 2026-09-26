@@ -1,8 +1,9 @@
 import { ChildLineClassifier } from '../../parsing/utils/ChildLineClassifier';
-import { CodeFenceTracker } from '../../../utils/CodeFenceTracker';
-import { FileOperations } from './FileOperations';
+import { Block, Placement } from './Placement';
 import type { PropertyOp } from '../PropertyUpdatePlanner';
-import type { LineEdits } from '../../../utils/FileLines';
+import type { LineDraft } from '../FileLines';
+import { INDENT_SOURCE, Outline, type OutlineReading } from '../../parsing/utils/Outline';
+import { SPACE_OR_TAB_SOURCE } from '../../parsing/utils/ListMarker';
 
 interface OwnPropertyLine {
     lineIdx: number;
@@ -25,75 +26,44 @@ interface OwnPropertyLine {
  */
 export class ChildPropertyLineEditor {
     /** `- key:: ` プレフィックス捕捉用（PROPERTY_LINE と同じ形状制約） */
-    private static readonly PROPERTY_PREFIX = /^(\s*-\s+[^:[\]]+?::\s*)/;
+    private static readonly PROPERTY_PREFIX = new RegExp(`^(${INDENT_SOURCE}-${SPACE_OR_TAB_SOURCE}+[^:[\\]]+?::\\s*)`);
 
     /**
-     * タスク直下の own プロパティ行を列挙する。
-     * 子範囲の規則は FileOperations.collectChildrenFromLines と同一
-     * （空行で終端、インデントがタスク行より深い連続行）。範囲内の
-     * ネスト子タスク（checkbox 行）のブロックは own でないためスキップ
-     * （TreeTaskExtractor の除外規則の write 層版）。
+     * タスク直下の own プロパティ行を列挙する。どの行が own かはパーサと
+     * 同じ1か所（`ChildLineClassifier.ownPropertyLines`）が決める: ノート
+     * 全体の読み（`Outline.read`）でタスクの項目を親に持つ項目のうち、
+     * コードでない `- key:: value` 行。子タスクやメモの下、コードブロック
+     * の中の行は own でない。
      */
-    static findOwnPropertyLines(lines: string[], taskLineIdx: number): OwnPropertyLine[] {
-        const taskIndent = lines[taskLineIdx].search(/\S|$/);
-        const result: OwnPropertyLine[] = [];
-        let skipDeeperThan: number | null = null;
-
-        // `- key:: value` written inside a fence is a sample, not a declaration.
-        // The parser never turned it into a property, so treating it as one here
-        // would let an edit to the task rewrite a line in someone's code block.
-        // The subtree reading is the one that applies: a fence under a task
-        // carries the list item's indentation, which the document-level reading
-        // cannot see.
-        const fenced = CodeFenceTracker.subtreeMask(lines.slice(taskLineIdx + 1));
-
-        for (let j = taskLineIdx + 1; j < lines.length; j++) {
-            const line = lines[j];
-            if (line.trim() === '') break;
-            const indent = line.search(/\S|$/);
-            if (indent <= taskIndent) break;
-
-            if (fenced[j - taskLineIdx - 1]) continue;
-
-            if (skipDeeperThan !== null) {
-                if (indent > skipDeeperThan) continue;
-                skipDeeperThan = null;
-            }
-            if (ChildLineClassifier.CHECKBOX_CHAR.test(line)) {
-                skipDeeperThan = indent;
-                continue;
-            }
-            if (ChildLineClassifier.isPropertyLine(line)) {
-                const m = line.match(ChildLineClassifier.PROPERTY_LINE);
-                if (m) {
-                    result.push({ lineIdx: j, key: m[1].trim(), value: m[2].trim() });
-                }
-            }
-        }
-        return result;
+    static findOwnPropertyLines(outline: OutlineReading, taskLineIdx: number): OwnPropertyLine[] {
+        const { lines } = outline;
+        return ChildLineClassifier.ownPropertyLines(outline, taskLineIdx).map(lineIdx => {
+            const m = lines[lineIdx].match(ChildLineClassifier.PROPERTY_LINE)!;
+            return { lineIdx, key: m[1].trim(), value: m[2].trim() };
+        });
     }
 
     /**
-     * ops を lines に適用する（in-place mutate）。
+     * ops を draft に適用する。
      * 各 op の前に own プロパティ行を再走査するので、op 間の行シフトに
      * 対して常に正しい行を対象にする。
      *
-     * `edits` は必須である。ここが触る行はどれもタスク行より下なので、
-     * 呼び口が先に出した `replaced(taskLineIdx)` の座標は動かない。一方、
-     * 申告を1経路でも落とすと、その行は「報告されていないのに前後で
-     * 文字列が違う行」になり、`explains` が書き込み全体の主張を捨てる
-     * （{@link processLines}）。3経路とも申告する必要があるのはそのためで、
-     * 渡し忘れを型で止めるために省略可にしていない。
+     * ここが触る行はどれもタスク行より下なので、呼び口が先に書き換えた
+     * タスク行の座標は動かない。変更はすべて draft を通るので、3経路とも
+     * そのまま申告になる。行を足す位置は `Placement` が答え、足した行と
+     * 消した行のあとで、ほかの行が変わらないかは書き込みの検査
+     * （`checkWrite`）が答える。変わるなら書き込み全体が拒否される。
      */
-    static applyOps(lines: string[], taskLineIdx: number, ops: PropertyOp[], edits: LineEdits): void {
+    static applyOps(draft: LineDraft, taskLineIdx: number, ops: PropertyOp[]): void {
+        const lines = draft.lines;
         for (const op of ops) {
-            const ownLines = this.findOwnPropertyLines(lines, taskLineIdx);
+            const ownLines = this.findOwnPropertyLines(draft.reading(), taskLineIdx);
             const matching = ownLines.filter(l => l.key === op.key);
 
             if (op.op === 'delete') {
                 // 逆順に消すので、各 lineIdx はその行が立っていた座標のまま。
                 for (let i = matching.length - 1; i >= 0; i--) {
-                    edits.splice(matching[i].lineIdx, 1);
+                    draft.splice(matching[i].lineIdx, 1);
                 }
                 continue;
             }
@@ -107,34 +77,26 @@ export class ChildPropertyLineEditor {
                     // 空値行 (`- key ::`) はプレフィックスが `::` で終わるため、
                     // 値を書き込むときはセパレータの空白を補う
                     const sep = value !== '' && !/\s$/.test(prefix) ? ' ' : '';
-                    lines[target.lineIdx] = prefix + sep + value;
                     // 値が変わっただけで、行の素性は変わらない。
-                    edits.replaced(target.lineIdx);
+                    draft.rewrite(target.lineIdx, prefix + sep + value);
                     continue;
                 }
                 // プレフィックスが取れない（理論上到達しない）場合は行ごと再構築
-                const indent = lines[target.lineIdx].match(/^(\s*)/)?.[1] ?? '';
-                lines[target.lineIdx] = `${indent}- ${op.key}:: ${this.formatValue(op.value, target.value)}`;
-                edits.replaced(target.lineIdx);
+                const indent = Outline.indentOf(lines[target.lineIdx]);
+                draft.rewrite(target.lineIdx, `${indent}- ${op.key}:: ${this.formatValue(op.value, target.value)}`);
                 continue;
             }
 
             // 新規挿入（ルールA: 正準位置）: 既存の own プロパティ行があれば
-            // その最後の直後（宣言塊を保つ・インデント踏襲）、なければ
-            // タスク行直下 first child。インデントは既存子行の表現を踏襲する
-            // （タブ固定にするとスペース系ファイルで tab/スペース混在になり、
-            // 文字数ベースのインデント正規化が剥がし残りを起こす）
-            let insertIdx: number;
-            let indent: string;
-            if (ownLines.length > 0) {
-                const last = ownLines[ownLines.length - 1];
-                insertIdx = last.lineIdx + 1;
-                indent = lines[last.lineIdx].match(/^(\s*)/)?.[1] ?? '';
-            } else {
-                insertIdx = taskLineIdx + 1;
-                indent = FileOperations.resolveChildIndent(lines, taskLineIdx);
-            }
-            edits.splice(insertIdx, 0, `${indent}- ${op.key}:: ${this.formatValue(op.value, null)}`);
+            // その最後の兄弟として部分木の後ろ（宣言塊を保つ。その行の下の
+            // 行はその行のまま）、なければタスクの最初の子（タスクの本文の
+            // 続きの行の後ろ）。新しい行なので、字下げは隣の項目の綴りで、
+            // 隣に兄弟が無ければ子の字下げ（`FileOperations.resolveChildIndent`）。
+            const line = `- ${op.key}:: ${this.formatValue(op.value, null)}`;
+            const spot = ownLines.length > 0
+                ? Placement.afterSubtree(draft.reading(), ownLines[ownLines.length - 1].lineIdx, line)
+                : Placement.firstChild(draft.reading(), taskLineIdx, line);
+            draft.put(spot, Block.line(line));
         }
     }
 

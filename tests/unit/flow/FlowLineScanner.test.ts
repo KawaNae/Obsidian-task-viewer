@@ -6,7 +6,8 @@ import {
     formatFlowLine,
     isFlowLine,
     matchFlowLine,
-} from '../../../src/services/flow/FlowLineScanner';
+} from '../../../src/services/parsing/utils/FlowLineScanner';
+import { Outline } from '../../../src/services/parsing/utils/Outline';
 
 describe('FlowLineScanner', () => {
     describe('flowLineTail / isFlowLine', () => {
@@ -31,6 +32,14 @@ describe('FlowLineScanner', () => {
             expect(flowLineTail('- [ ] task ==> every mon')).toBeNull(); // checkbox line, not a flow child line
             expect(flowLineTail('prose with ==> inside')).toBeNull();
             expect(isFlowLine('- key:: value')).toBe(false);
+        });
+
+        it('rejects a line whose bullet opens no list item (Obsidian, measurement.md q9)', () => {
+            // After the bullet, a list item has spaces or tabs and nothing else.
+            expect(isFlowLine('-==> every mon')).toBe(false);
+            expect(isFlowLine('- ==> every mon')).toBe(false);
+            expect(isFlowLine('-　==> every mon')).toBe(false);
+            expect(isFlowLine('-\t==> every mon')).toBe(true);
         });
     });
 
@@ -84,12 +93,22 @@ describe('FlowLineScanner', () => {
             expect(collectFlowLineIndicesInFile(lines, 0)).toEqual([]);
         });
 
-        it('stops at a blank line (end of child block)', () => {
+        it('reads past a blank line inside the children', () => {
             const lines = [
                 '- [ ] task',
                 '\t- ==> every mon',
                 '',
                 '\t- ==> x3',
+            ];
+            expect(collectFlowLineIndicesInFile(lines, 0)).toEqual([1, 3]);
+        });
+
+        it('stops at the first line no deeper than the task, over a blank line', () => {
+            const lines = [
+                '- [ ] task',
+                '\t- ==> every mon',
+                '',
+                '- ==> not the task\'s',
             ];
             expect(collectFlowLineIndicesInFile(lines, 0)).toEqual([1]);
         });
@@ -113,13 +132,20 @@ describe('FlowLineScanner', () => {
             expect(collectFlowLineIndicesInFile(lines, 1)).toEqual([2]);
         });
 
-        it('honours the caller-supplied fence mask', () => {
-            const lines = [
-                '- [ ] task',
-                '\t- ==> every mon',
-                '\t- ==> x3',
-            ];
-            expect(collectFlowLineIndices(lines, 0, [false, true, false])).toEqual([2]);
+        it('reads the lines as the whole note reads them', () => {
+            // The task's parent item is what makes the second line its child.
+            const lines = ['- [ ] outer', '  - [ ] task', '    - ==> every mon'];
+            expect(collectFlowLineIndices(Outline.read(lines), 1)).toEqual([2]);
+        });
+
+        it('takes no line with no gap after its bullet (Obsidian, measurement.md q9)', () => {
+            // `-==>` opens no list item: it goes on the task's paragraph.
+            expect(collectFlowLineIndicesInFile(['- [ ] task', '\t-==> every mon'], 0)).toEqual([]);
+        });
+
+        it('takes no line indented four columns past the task\'s content (Obsidian, measurement.md q4)', () => {
+            // Six spaces under `- [ ] ` is the paragraph going on, not an item.
+            expect(collectFlowLineIndicesInFile(['- [ ] task', '      - ==> every mon'], 0)).toEqual([]);
         });
     });
 

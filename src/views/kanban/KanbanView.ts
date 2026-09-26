@@ -393,7 +393,7 @@ export class KanbanView extends ItemView {
             : { mode: 'none' as const };
         for (const task of tasks) {
             const cardInstanceId = `kanban::cell-${listId}::${task.id}`;
-            const reused = reconciler?.acquire(cardInstanceId);
+            const reused = reconciler?.acquire(cardInstanceId, task);
             const card = reused ?? body.createDiv('task-card');
             if (reused) body.appendChild(reused);
 
@@ -402,7 +402,7 @@ export class KanbanView extends ItemView {
                 cardInstanceId,
                 topRight,
             });
-            if (!reused) this.menuHandler.addTaskContextMenu(card, task);
+            if (!reused) this.menuHandler.addTaskContextMenu(card);
         }
     }
 
@@ -411,8 +411,6 @@ export class KanbanView extends ItemView {
      * Kanban tasks are never split in this path, so no split variants apply.
      */
     private decorateKanbanCard(card: HTMLElement, task: import('../../types').DisplayTask): void {
-        card.dataset.id = task.id;
-
         TaskStyling.applyTaskColor(card, getEffectiveColor(task) ?? null);
         TaskStyling.applyTaskLinestyle(card, getEffectiveLinestyle(task) ?? null);
         TaskStyling.applyReadOnly(card, task);

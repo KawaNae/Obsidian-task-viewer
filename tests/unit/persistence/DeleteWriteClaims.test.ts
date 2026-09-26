@@ -1,10 +1,7 @@
 import { describe, it, expect } from 'vitest';
-import { TFile } from 'obsidian';
-import { InlineTaskWriter } from '../../../src/services/persistence/writers/InlineTaskWriter';
-import { WriteObserver } from '../../../src/services/persistence/WriteObserver';
-import { FileOperations } from '../../../src/services/persistence/utils/FileOperations';
-import { makeTask } from '../helpers/makeTask';
-import type { LineEdit } from '../../../src/utils/FileLines';
+import { contentKeyOf } from '../../../src/services/core/ContentKey';
+import { writeBench, FILE, type Filed } from '../helpers/writeBench';
+import { plannedOn } from '../../../src/services/persistence/TaskRefs';
 
 /**
  * What the two deleting writes report about the lines they removed.
@@ -12,42 +9,9 @@ import type { LineEdit } from '../../../src/utils/FileLines';
  * A delete is the one write that cannot describe itself wrongly by accident:
  * it files what the splice actually took out, and `processLines` refuses a
  * report that does not account for the file it produced. So these tests are
- * about the two things the arithmetic cannot settle — how far a subtree
- * reaches, and which deletes are supposed to stay quiet.
+ * about the one thing the arithmetic cannot settle — how far a subtree
+ * reaches — and about a move's origin, which says what it did like any other.
  */
-
-const FILE = 'note.md';
-
-interface Filed {
-    before: string[];
-    after: string[];
-    edits: LineEdit[];
-}
-
-function bench(lines: string[]) {
-    let content = lines.join('\n');
-    const file = new TFile();
-    file.path = FILE;
-    const app = {
-        vault: {
-            getAbstractFileByPath: (path: string) => (path === FILE ? file : null),
-            process: async (_f: TFile, fn: (data: string) => string) => { content = fn(content); },
-        },
-    } as any;
-
-    const filed: Filed[] = [];
-    const writes = new WriteObserver();
-    writes.connect(() => (before, after, edits) => {
-        filed.push({ before: [...before], after: [...after], edits: [...edits] });
-        return () => { filed.pop(); };
-    });
-
-    return {
-        writer: new InlineTaskWriter(app, new FileOperations(app), writes),
-        filed,
-        lines: () => content.split('\n'),
-    };
-}
 
 /** The one claim a write filed. Fails loudly when a write filed none. */
 function only(filed: Filed[]): Filed {
@@ -55,11 +19,11 @@ function only(filed: Filed[]): Filed {
     return filed[0];
 }
 
-describe('what deleteTaskFromFile reports', () => {
+describe('what a remove reports', () => {
     const parent = '- [ ] 親 @2026-09-21';
 
     it('says the task line and its children went, as one removal', async () => {
-        const b = bench([
+        const b = await writeBench([
             '# note',
             parent,
             '\t- [ ] 子1',
@@ -67,89 +31,87 @@ describe('what deleteTaskFromFile reports', () => {
             '- [ ] 次の親 @2026-09-21',
         ]);
 
-        const removed = await b.writer.deleteTaskFromFile(makeTask({
-            file: FILE, line: 1, content: '親', originalText: parent, startDate: '2026-09-21',
-        }));
+        const removed = await b.writer.applyToTask(plannedOn(b.taskAt(1), { subtree: true }), [{ kind: 'remove' }]);
 
-        expect(removed).toBe(true);
+        expect(removed.written).toBe(true);
         expect(only(b.filed).edits).toEqual([{ kind: 'removed', at: 1, count: 3 }]);
         expect(b.lines()).toEqual(['# note', '- [ ] 次の親 @2026-09-21']);
     });
 
     it('counts what the splice took, not what the subtree looked like', async () => {
-        // The subtree stops at the blank line, so the blank and the task after
-        // it stay. A claim that counted to the end of the indented run would
-        // say four and be refused by `explains`; this one says two because two
-        // lines left the array.
-        const b = bench([
+        // The subtree goes on past the blank line inside it and stops before
+        // the blank line after it, which stays with the task that follows. A
+        // claim that counted to the next task would say five and be refused by
+        // `explains`; this one says four because four lines left the array.
+        const b = await writeBench([
             parent,
             '\t- [ ] 子1',
             '',
-            '\t- [ ] 別の塊の行',
+            '\t- [ ] 空行の下の子',
+            '',
+            '- [ ] 次のタスク',
         ]);
 
-        await b.writer.deleteTaskFromFile(makeTask({
-            file: FILE, line: 0, content: '親', originalText: parent, startDate: '2026-09-21',
-        }));
+        await b.writer.applyToTask(plannedOn(b.taskAt(0), { subtree: true }), [{ kind: 'remove' }]);
 
-        expect(only(b.filed).edits).toEqual([{ kind: 'removed', at: 0, count: 2 }]);
-        expect(b.lines()).toEqual(['', '\t- [ ] 別の塊の行']);
+        expect(only(b.filed).edits).toEqual([{ kind: 'removed', at: 0, count: 4 }]);
+        expect(b.lines()).toEqual(['', '- [ ] 次のタスク']);
     });
 
     it('files nothing when the line cannot be resolved', async () => {
-        const b = bench(['# note', '- [ ] 別のタスク @2026-09-21']);
+        // The task was read, then taken out of the file by something else.
+        const b = await writeBench(['# note', parent, '- [ ] 別のタスク @2026-09-21']);
+        const task = b.taskAt(1);
+        b.edit(['# note', '- [ ] 別のタスク @2026-09-21']);
 
-        const removed = await b.writer.deleteTaskFromFile(makeTask({
-            file: FILE, line: 1, content: '親', originalText: parent, startDate: '2026-09-21',
-        }));
+        const removed = await b.writer.applyToTask(plannedOn(task, { subtree: true }), [{ kind: 'remove' }]);
 
-        expect(removed).toBe(false);
+        expect(removed.written).toBe(false);
         expect(b.filed).toEqual([]);
+        expect(b.lines()).toEqual(['# note', '- [ ] 別のタスク @2026-09-21']);
+        expect(b.refused).toEqual([{ file: FILE, reason: { kind: 'changed' }, subject: '親' }]);
     });
 });
 
-describe('the origin half of a move stays quiet', () => {
+describe('the origin half of a move says what it did', () => {
     const moving = '- [ ] 移動する @2026-09-21';
 
-    it('files nothing when the lines were written to another file', async () => {
-        const b = bench(['# note', moving, '\t- [ ] 子']);
+    it('says the lines went, when they were written to another file', async () => {
+        // Before F3 this half stayed quiet, so that a move within one file
+        // would not call its living rows dead. That move is now one write that
+        // carries them, and across files "gone" is true: the row in the other
+        // file is another row, as the ladder would also say.
+        const b = await writeBench(['# note', moving, '\t- [ ] 子']);
 
-        const removed = await b.writer.deleteTaskFromFile(makeTask({
-            file: FILE, line: 1, content: '移動する', originalText: moving, startDate: '2026-09-21',
-        }), { to: 'archive/2026-09.md' });
+        const outcome = await b.writer.applyToTask(plannedOn(b.taskAt(1)), [{ kind: 'remove' }]);
 
-        expect(removed).toBe(true);
+        expect(outcome.written).toBe(true);
         expect(b.lines()).toEqual(['# note']);
-        expect(b.filed).toEqual([]);
+        expect(only(b.filed).edits).toEqual([{ kind: 'removed', at: 1, count: 2 }]);
     });
 
-    it('files nothing when the destination is this same file', async () => {
-        // The reason the whole half is silent. `archive-to` has already written
-        // the task further down this file, so those rows are alive; a `removed`
-        // here would be a claim that they are not, and the next scan would mint
-        // a new ID for a row the ladder could have carried.
-        const b = bench(['# note', moving, '## archive', moving]);
+    it('says the lines were carried, when the destination is this same file', async () => {
+        const b = await writeBench(['# note', moving, '## archive', '']);
 
-        await b.writer.deleteTaskFromFile(makeTask({
-            file: FILE, line: 1, content: '移動する', originalText: moving, startDate: '2026-09-21',
-        }), { to: FILE });
+        await b.writer.applyToTask(plannedOn(b.taskAt(1)), [{ kind: 'move', to: { kind: 'end' }, text: '- [x] 移動する @2026-09-21' }]);
 
-        expect(b.filed).toEqual([]);
+        expect(b.lines()).toEqual(['# note', '## archive', '- [x] 移動する @2026-09-21', '']);
+        expect(only(b.filed).edits.map(edit => edit.kind)).toEqual(['carried', 'replaced', 'removed']);
     });
 });
 
-describe('what deleteLine reports', () => {
-    it('says one line went, and leaves the children where they are', async () => {
-        const b = bench([
+describe('what the editor menu delete reports (applyToLine, remove)', () => {
+    it('says the line and its subtree went, as a card\'s delete does (P1)', async () => {
+        const b = await writeBench([
             '- [ ] 親 @2026-09-21',
             '\t- [ ] 子 @2026-09-21',
             '- [ ] 次 @2026-09-21',
         ]);
 
-        await b.writer.deleteLine(FILE, 0);
+        await b.writer.applyToLine(FILE, { line: 0, text: b.lines()[0], subtree: b.lines().slice(0, 2), key: contentKeyOf(b.lines()) }, [{ kind: 'remove' }]);
 
-        expect(only(b.filed).edits).toEqual([{ kind: 'removed', at: 0, count: 1 }]);
-        expect(b.lines()).toEqual(['\t- [ ] 子 @2026-09-21', '- [ ] 次 @2026-09-21']);
+        expect(only(b.filed).edits).toEqual([{ kind: 'removed', at: 0, count: 2 }]);
+        expect(b.lines()).toEqual(['- [ ] 次 @2026-09-21']);
     });
 
     it('reports a line that is not a task at all', async () => {
@@ -160,9 +122,9 @@ describe('what deleteLine reports', () => {
         const note = ['---', 'tags: a', '---', 'ただの文', '', '```', '- [ ] 見本', '```'];
 
         for (const at of [1, 3, 4, 6]) {
-            const b = bench(note);
+            const b = await writeBench(note);
 
-            await b.writer.deleteLine(FILE, at);
+            await b.writer.applyToLine(FILE, { line: at, text: note[at], subtree: [note[at]], key: contentKeyOf(note) }, [{ kind: 'remove' }]);
 
             expect(only(b.filed).edits).toEqual([{ kind: 'removed', at, count: 1 }]);
             expect(b.lines()).toEqual(note.filter((_, i) => i !== at));
@@ -170,11 +132,12 @@ describe('what deleteLine reports', () => {
     });
 
     it('files nothing when the coordinate is past the end', async () => {
-        const b = bench(['- [ ] 親 @2026-09-21']);
+        const b = await writeBench(['- [ ] 親 @2026-09-21']);
 
-        await b.writer.deleteLine(FILE, 5);
+        await b.writer.applyToLine(FILE, { line: 5, text: '- [ ] 親 @2026-09-21', subtree: ['- [ ] 親 @2026-09-21'], key: contentKeyOf(b.lines()) }, [{ kind: 'remove' }]);
 
         expect(b.filed).toEqual([]);
+        expect(b.refused).toEqual([{ file: FILE, reason: { kind: 'changed' }, subject: '- [ ] 親 @2026-09-21' }]);
         expect(b.lines()).toEqual(['- [ ] 親 @2026-09-21']);
     });
 });

@@ -112,7 +112,9 @@ function formatTsvRow(record: Record<string, unknown>, fields: string[]): string
 function tsvValue(value: unknown): string {
     if (value === null || value === undefined) return '';
     if (Array.isArray(value)) return value.join(';');
-    return String(value).replace(/[\t\n\r]/g, ' ');
+    // U+2028 and U+2029 too: a note keeps them inside a line, but a reader
+    // of this output may split its rows at them.
+    return String(value).replace(/[\t\n\r\u2028\u2029]/g, ' ');
 }
 
 // ── Shared CLI validation ──

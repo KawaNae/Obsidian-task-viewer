@@ -48,11 +48,13 @@ function makeHarness(): Harness {
             file: DAILY_PATH,
             content,
             blockId,
+            anchor: blockId,
         }));
     }
 
     const taskIndex = {
         getTask: (id: string) => tasks.find(t => t.id === id),
+        getTaskByAnchor: (file: string, anchor: string) => tasks.find(t => t.file === file && t.anchor === anchor),
         getTasks: () => tasks,
         updateTask: async () => { /* 記録の書き込みは測らない */ },
         waitForScan: async () => { /* 書き込みと同時に載せている */ },
@@ -62,10 +64,10 @@ function makeHarness(): Harness {
         settings: { dailyNoteHeader: 'Tasks', dailyNoteHeaderLevel: 2 },
         getTaskIndex: () => taskIndex,
         getTaskWriteService: () => ({
-            insertSiblingAfterTask: async (afterTaskId: string, line: string) => {
+            insertLine: async (afterTaskId: string, line: string) => {
                 siblings.push({ afterTaskId, line });
                 registerWrittenLine(line);
-                return 5;
+                return true;
             },
         }),
     } as unknown as TaskViewerPlugin;
@@ -74,7 +76,7 @@ function makeHarness(): Harness {
         generateTimerTargetId: () => `tv-t-${++idSeq}`,
     } as unknown as TimerStorageUtils;
 
-    return { recorder: new TimerRecorder({} as App, plugin, storageUtils), appended, siblings, tasks };
+    return { recorder: new TimerRecorder({} as App, plugin, storageUtils, () => { /* unused */ }, () => []), appended, siblings, tasks };
 }
 
 function makeDailyTimer(overrides: Partial<TimerInstance> = {}): TimerInstance {
@@ -98,6 +100,8 @@ function makeDailyTimer(overrides: Partial<TimerInstance> = {}): TimerInstance {
         taskColor: '',
         timerType: 'countup',
         elapsedTime: 0,
+        ownedAnchors: [],
+        opening: null,
         ...overrides,
     } as TimerInstance;
 }
@@ -109,18 +113,18 @@ describe('daily note timers own a running line too', () => {
         const h = makeHarness();
         const timer = makeDailyTimer();
 
-        const sessionId = await h.recorder.createChildAtStart(timer);
+        const written = await h.recorder.writeStart(timer);
 
         expect(h.appended).toHaveLength(1);
         expect(h.appended[0]).toMatch(/^- \[ \]/);
-        expect(sessionId).toBeDefined();
+        expect(written).toBe(true);
     });
 
     it('adopts the written line as the tail and remembers the note path', async () => {
         const h = makeHarness();
         const timer = makeDailyTimer();
 
-        await h.recorder.createChildAtStart(timer);
+        await h.recorder.writeStart(timer);
 
         // パスを覚えないと、尻尾の解決（ファイルで絞る）も兄弟挿入も相手を見失う。
         expect(timer.taskFile).toBe(DAILY_PATH);
@@ -130,7 +134,7 @@ describe('daily note timers own a running line too', () => {
 
     it('starts the line unnamed instead of inheriting the date', async () => {
         const h = makeHarness();
-        await h.recorder.createChildAtStart(makeDailyTimer());
+        await h.recorder.writeStart(makeDailyTimer());
 
         // taskName は日付。継ぐと「2026-08-17 を 25 分やった」という記録になる。
         expect(h.appended[0]).toMatch(/^- \[ \]\s+@/);
@@ -138,7 +142,7 @@ describe('daily note timers own a running line too', () => {
 
     it('carries the draft into the line when one was typed before the write landed', async () => {
         const h = makeHarness();
-        await h.recorder.createChildAtStart(makeDailyTimer({ pendingContent: '資料集め' }));
+        await h.recorder.writeStart(makeDailyTimer({ pendingContent: '資料集め' }));
 
         expect(h.appended[0]).toContain('資料集め');
     });
@@ -148,7 +152,7 @@ describe('daily note timers own a running line too', () => {
         // 直前のレコードが名前の出どころになる（毎回打ち直させない）。
         const h = makeHarness();
         const timer = makeDailyTimer({ pendingContent: '資料集め' });
-        await h.recorder.createChildAtStart(timer);
+        await h.recorder.writeStart(timer);
 
         await h.recorder.startNextSession(timer);
 
@@ -158,7 +162,7 @@ describe('daily note timers own a running line too', () => {
     it('puts the second session next to the first, not under the heading again', async () => {
         const h = makeHarness();
         const timer = makeDailyTimer();
-        await h.recorder.createChildAtStart(timer);
+        await h.recorder.writeStart(timer);
 
         await h.recorder.startNextSession(timer);
 

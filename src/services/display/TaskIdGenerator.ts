@@ -1,10 +1,5 @@
-import type { ParserId, Task } from '../../types';
-
-const PARSER_IDS: ReadonlySet<ParserId> = new Set(['tv-inline', 'tasks-plugin', 'day-planner']);
-
-function isParserId(value: string): value is ParserId {
-    return PARSER_IDS.has(value as ParserId);
-}
+import type { ParserId } from '../../types';
+import { READING_ID_SOURCE, type ReadingId } from '../core/Reading';
 
 export interface ParsedTaskId {
     parserId: string;
@@ -17,12 +12,13 @@ export interface ParsedSegmentId {
     segmentDate: string;
 }
 
-// `blk:`, `tid:`, `ln:` and `fm-root` are no longer minted. They stay readable
-// because timers persisted by earlier versions still carry them, and the restore
-// guard (TimerPersistence.fromPersistedTimer) drops any ID `parse` rejects.
-// `prov:` is left out on purpose: a provisional ID that leaked should fail to parse.
-const TASK_ID_REGEX = /^([^:]+):(.+):(blk:[^:]+|tid:[^:]+|seq:\d+|ln:\d+|fm-root)$/;
-const RUNTIME_ANCHOR_REGEX = /^seq:\d+$/;
+// `seq:`, `blk:`, `tid:`, `ln:` and `fm-root` are no longer minted. They stay
+// readable because timers persisted by earlier versions still carry them, and
+// the restore guard (TimerPersistence.fromPersistedTimer) drops any ID `parse`
+// rejects. `prov:` is left out on purpose: a provisional ID that leaked should
+// fail to parse.
+const TASK_ID_REGEX = new RegExp(String.raw`^([^:]+):(.+):(n:${READING_ID_SOURCE}:\d+|blk:[^:]+|tid:[^:]+|seq:\d+|ln:\d+|fm-root)$`);
+const NAME_ANCHOR_REGEX = new RegExp(String.raw`^n:(${READING_ID_SOURCE}):(\d+)$`);
 const SEGMENT_ID_REGEX = /^(.*)##seg:(\d{4}-\d{2}-\d{2})$/;
 
 export class TaskIdGenerator {
@@ -35,34 +31,37 @@ export class TaskIdGenerator {
      *
      * Line-based on purpose: one line yields at most one task, so this is unique
      * within a file even when two lines share a `^blockId`. It never outlives the
-     * scan — `applyIdentity` swaps it for a runtime ID before anything else reads
-     * it — so the line number cannot leak into what consumers hold.
+     * scan — the scan swaps it for the row's name (`nameOf`) before anything
+     * else reads it.
      */
     static provisionalId(parserId: ParserId, filePath: string, line: number): string {
         return this.generate(parserId, filePath, `prov:${line}`);
     }
 
     /**
-     * The runtime ID a scan hands out to a task the ledger has not seen.
+     * The name reading `reading` of `filePath` gives the row on `line`: which
+     * reading, and which line of it.
      *
-     * Transitional shape: `seq:<n>` still sits behind the path, so the shape
-     * guards and `renameFile` keep working unchanged.
+     * One reading holds one row per line, so a name picks one row of it, and
+     * no two readings share a number (`ReadingId`), so no name is given
+     * twice — not even when a write of ours brings the file back to a content
+     * it had. A content read again that the last reading read takes no new
+     * number, so a `modify` that changed nothing leaves the names as they
+     * were. Any other reading of the file gives every row in it a new name: a
+     * name is never carried to another reading, where the line it points at
+     * could hold another row.
      */
-    static mintRuntimeId(task: Pick<Task, 'parserId' | 'file'>, next: () => number): string {
-        return this.generate(task.parserId, task.file, `seq:${next()}`);
+    static nameOf(parserId: ParserId, filePath: string, line: number, reading: ReadingId): string {
+        return this.generate(parserId, filePath, `n:${reading}:${line}`);
     }
 
-    /**
-     * Whether `id` is shaped like an ID a scan commits to the store.
-     *
-     * A positive test on purpose: `prov:` is not the only shape that must stay
-     * out of the store — the legacy `ln:`, `blk:`, `tid:` and `fm-root` still
-     * parse — and
-     * listing the bad shapes would let a new one slip past.
-     */
-    static isRuntimeId(id: string): boolean {
+    /** What a name says (`nameOf`), or null for an ID of any other shape. */
+    static readName(id: string): { parserId: string; filePath: string; reading: ReadingId; line: number } | null {
         const parsed = this.parse(id);
-        return parsed !== null && RUNTIME_ANCHOR_REGEX.test(parsed.anchor);
+        if (!parsed) return null;
+        const match = parsed.anchor.match(NAME_ANCHOR_REGEX);
+        if (!match) return null;
+        return { parserId: parsed.parserId, filePath: parsed.filePath, reading: match[1], line: Number(match[2]) };
     }
 
     static parse(id: string): ParsedTaskId | null {
@@ -82,6 +81,19 @@ export class TaskIdGenerator {
         return `${baseId}##seg:${segmentDate}`;
     }
 
+    /**
+     * `id` with the ID of its row put through `map`: a segment of a row split
+     * at the day boundary keeps its suffix after what `map` answers for its
+     * row; undefined when `map` answers undefined. The one place a segment's
+     * ID is taken apart to answer for its row's.
+     */
+    static mapRow<R extends string | undefined>(id: string, map: (rowId: string) => R): R {
+        const segment = this.parseSegmentId(id);
+        if (!segment) return map(id);
+        const row = map(segment.baseId);
+        return (row === undefined ? row : this.makeSegmentId(row, segment.segmentDate)) as R;
+    }
+
     static parseSegmentId(id: string): ParsedSegmentId | null {
         const match = id.match(SEGMENT_ID_REGEX);
         if (!match) {
@@ -93,25 +105,5 @@ export class TaskIdGenerator {
             segmentDate: match[2],
         };
     }
-
-    static renameFile(id: string, oldPath: string, newPath: string): string {
-        const segment = this.parseSegmentId(id);
-        if (segment) {
-            const renamedBase = this.renameFile(segment.baseId, oldPath, newPath);
-            return this.makeSegmentId(renamedBase, segment.segmentDate);
-        }
-
-        const parsed = this.parse(id);
-        if (!parsed || parsed.filePath !== oldPath) {
-            return id;
-        }
-
-        // parse() returns parserId as a raw string from regex; validate before
-        // re-generating so renameFile cannot smuggle an unknown ParserId.
-        if (!isParserId(parsed.parserId)) {
-            return id;
-        }
-
-        return this.generate(parsed.parserId, newPath, parsed.anchor);
-    }
 }
+

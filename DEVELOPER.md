@@ -197,7 +197,7 @@ Quick reference for locating the right layer when implementing a feature.
 | **TaskIndex** | `services/core/TaskIndex.ts` | Central orchestrator for scanning, indexing, and event management; branches on `parserId` |
 | **TaskStore** | `services/core/TaskStore.ts` | In-memory task cache; notifies UI via `onChange` listeners |
 | **TaskScanner** | `services/core/TaskScanner.ts` | File scanning → `FileParsePipeline` invocation (parse/detect/commit の3相 orchestration) |
-| **SyncDetector / EditorObserver** | `services/core/SyncDetector.ts` et al. | Distinguishes local edits from remote sync changes |
+| **FlowFireExtension** | `editor/FlowFireExtension.ts` | Fires a completion made in the editor, in the same transaction (see Flow Firing) |
 | **ParserChain** | `services/parsing/strategies/ParserChain.ts` | Tries multiple parsers in order (Strategy chain) |
 | **TVInlineParser** | `services/parsing/tv-inline/TVInlineParser.ts` | Parses `@date` inline notation (line-level) |
 | **TaskRepository** | `services/persistence/TaskRepository.ts` | Write facade over the inline writer, the cloner and frontmatter key writes |
@@ -721,8 +721,8 @@ obsidian://task-viewer?view=calendar&position=tab&showSidebar=true&filter=<base6
 
 | Component | File | Role |
 |-----------|------|------|
-| **URI builder** | `src/utils/ViewUriBuilder.ts` | `build()` — generates URI from `ViewUriOptions` |
-| **Position detection** | `src/utils/ViewUriBuilder.ts` | `detectLeafPosition()` — auto-detects leaf placement via parent chain |
+| **URI builder** | `src/views/sharedLogic/ViewUriBuilder.ts` | `build()` — generates URI from `ViewUriOptions` |
+| **Position detection** | `src/views/sharedLogic/ViewUriBuilder.ts` | `detectLeafPosition()` — auto-detects leaf placement via parent chain |
 | **Settings menu** | `src/views/sharedUI/ViewToolbar.ts` | `ViewSettingsMenu` — gear icon menu with Save/Load view, Copy URI, Copy as link, Position |
 | **URI handler** | `src/main.ts` | `registerObsidianProtocolHandler('task-viewer', ...)` — parses params |
 | **View activation** | `src/main.ts` | `activateView()` — creates leaf at specified position and sets view state |
@@ -766,27 +766,23 @@ ScheduleView omits view-mode, zoom, and sidebar-toggle.
 
 ---
 
-## Sync Detection
+## Flow Firing
 
 ### Mechanism
 
-The plugin detects local edits through two channels:
+A completed task with a `==>` command fires from the operation that completed it, never from a read. The operation holds the line before and after, so nothing is inferred from a difference between two scans:
 
-1. **Active editor input event monitoring**
-   - Listens for `beforeinput` / `input` events on the active editor.
-   - Marks the file as "locally edited".
+1. **An edit in the editor.** A transaction that is an operation (`isOperation`: any `userEvent` but `set`, `undo` and `redo`) and turns an open task line into a completed one (`completes`) gets the fire's lines in the same transaction.
+2. **A write of ours** (a card, the editor's menu, the API, a timer). The write that completes the row plans the fire from the lines it holds and writes both at once.
 
-2. **Plugin UI operations**
-   - Timeline view drag/edit operations.
-   - Internally marks the file as "locally edited".
-
-If `vault.modify` fires without either mark being set, the change is classified as a remote sync.
+A scan, a `modify`, a sync, or another plugin's write to the vault is no operation and fires nothing. Once fired, the command is consumed (`strip-flow`), so an operation fires once.
 
 ### Implementation
 
-- [`TaskIndex.ts`](./src/services/core/TaskIndex.ts): composition point; holds `editorObserver` and `syncDetector` and wires them together
-- [`EditorObserver.ts`](./src/services/core/EditorObserver.ts): `setupInteractionListeners()` attaches editor event listeners
-- [`SyncDetector.ts`](./src/services/core/SyncDetector.ts): `markLocalEdit()` sets the local-edit flag for a given file path
+- [`FlowFireExtension.ts`](./src/editor/FlowFireExtension.ts): the editor's fire (`fireFilter`)
+- [`FlowTrigger.ts`](./src/services/flow/FlowTrigger.ts): `completes` and `isOperation`
+- [`TaskIndex.ts`](./src/services/core/TaskIndex.ts): a completing write and its fire as one write (`writeCompleting`)
+- [`FlowExecutor.ts`](./src/services/flow/FlowExecutor.ts): the fire's plan (`planFire`)
 
 ---
 

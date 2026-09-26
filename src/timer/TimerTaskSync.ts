@@ -1,8 +1,7 @@
 import type { Task } from '../types';
 import type { TimerInstance } from './TimerInstance';
-import type { TimerTaskResolver } from './TimerTaskResolver';
 
-type SyncedTimer = Pick<TimerInstance, 'taskId' | 'taskFile' | 'taskOriginalText' | 'timerTargetId'>;
+type SyncedTimer = Pick<TimerInstance, 'taskId' | 'taskFile' | 'timerTargetId'>;
 
 export interface TimerTaskRefresh {
     task: Task | undefined;
@@ -11,26 +10,29 @@ export interface TimerTaskRefresh {
 }
 
 /**
- * Find the timer's task, and re-point `timer.taskId` at it when the ID went stale.
+ * Find the timer's task, and re-point `timer.taskId` at it when the name went stale.
  *
- * Runtime IDs live for one session, so after a restart the persisted `taskId`
- * names nothing; the resolver still finds the task by `timerTargetId` or its
- * text, and writing that answer back is what lets the name and colour follow
- * the task again. The direct lookup stays the fast path: this runs on every
- * tick, and the resolver walks every task in the vault.
+ * A name lasts one reading of its file: after a restart the persisted
+ * `taskId` names nothing. A timer with a target anchor finds its row by the
+ * anchor (`getTaskByAnchor`), the one place an anchor is looked up; writing
+ * that answer back is what lets the name and colour follow the task again.
+ * One given before a write of ours is followed to the row's name now
+ * (`getTask`), and the timer takes it over. The direct lookup stays the fast
+ * path: this runs on every render, and the anchor's lookup walks every task.
  */
 export function refreshTimerTask(
     timer: SyncedTimer,
-    index: { getTask(id: string): Task | undefined },
-    resolver: Pick<TimerTaskResolver, 'resolveTvInline'>
+    index: { getTask(id: string): Task | undefined; getTaskByAnchor(file: string, anchor: string): Task | undefined },
 ): TimerTaskRefresh {
     const byId = index.getTask(timer.taskId);
-    if (byId) return { task: byId, rewritten: false };
+    if (byId && byId.id === timer.taskId && (!timer.timerTargetId || byId.anchor === timer.timerTargetId)) {
+        return { task: byId, rewritten: false };
+    }
 
-    const resolved = resolver.resolveTvInline(timer);
-    if (!resolved) return { task: undefined, rewritten: false };
+    const found = timer.timerTargetId ? index.getTaskByAnchor(timer.taskFile, timer.timerTargetId) : byId;
+    if (!found) return { task: undefined, rewritten: false };
 
-    timer.taskId = resolved.id;
-    timer.taskFile = resolved.file;
-    return { task: resolved, rewritten: true };
+    timer.taskId = found.id;
+    timer.taskFile = found.file;
+    return { task: found, rewritten: true };
 }

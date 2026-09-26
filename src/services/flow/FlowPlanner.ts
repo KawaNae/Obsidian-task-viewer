@@ -1,4 +1,5 @@
 import { differenceInCalendarDays } from 'date-fns';
+import { TaskLineClassifier } from '../parsing/utils/TaskLineClassifier';
 import type { Task, TaskFlow } from '../../types';
 import { DateUtils } from '../../utils/DateUtils';
 import { TIMER_ICON_PREFIX_RE } from '../../utils/TimerIcons';
@@ -19,6 +20,7 @@ import type { FlowEffect } from './FlowEffects';
 import { checkGeneratedChildLine, checkGeneratedParentLine } from './GeneratedLineCheck';
 import { flowRaws, joinSegments } from './FlowSegments';
 import { serializeFlowLines } from './FlowSerializer';
+import { holdsLineBreak } from '../../utils/LineBreak';
 import { type DateAnchor, type NextOccurrence, nextOccurrence } from './ScheduleEngine';
 
 export interface FlowPlanDeps {
@@ -74,11 +76,12 @@ export class GenerationError extends Error {
  * TaskRepository.
  *
  * Fire-consumes semantics: the returned effects ALWAYS remove the command
- * from the original line (strip-flow, or delete-original for move), even
+ * from the original line (strip-flow, or the move that carries it), even
  * when no next instance is generated (until expired / telomere exhausted).
  *
  * Evaluation contexts (do not mix up):
- * - at(expr) and move(target) evaluate against the PRE-shift original task.
+ * - at(expr) evaluates against the PRE-shift original task. move() is not
+ *   evaluated: where it goes is read off how it is written (`MoveTarget`).
  * - set(field: expr) evaluates against the POST-shift new instance; all
  *   right-hand sides see the same snapshot, then apply at once (no chaining).
  *
@@ -130,11 +133,11 @@ export function planFlow(task: Task, program: FlowProgram, deps: FlowPlanDeps): 
     }
 
     if (program.move) {
-        const target = evalExpr(program.move.target, preCtx);
-        const destPath = normalizeDestination(target);
-        const archivedTask: Task = { ...task, flow: undefined, blockId: undefined, timerTargetId: undefined };
-        effects.push({ kind: 'archive-to', destPath, archivedTask });
-        effects.push({ kind: 'delete-original', destPath });
+        // Where to is the parser's answer, read off how the clause is
+        // written; nothing of it is evaluated. The row is carried, not
+        // copied, so it keeps its `^id`: only a write that makes a copy (the
+        // next instance, a duplicate) takes the copy's off.
+        effects.push({ kind: 'move', to: program.move.to, movedTask: { ...task, flow: undefined } });
     } else {
         effects.push({ kind: 'strip-flow' });
     }
@@ -294,7 +297,7 @@ function composeParentLine(
     newTask: Task,
     warnings: Diagnostic[],
 ): string {
-    if (parentText === null) return TaskParser.format(newTask).trim();
+    if (parentText === null) return TaskParser.format(newTask);
 
     const checked = checkGeneratedParentLine(parentText);
     // The line check speaks in diagnostics, and its sentence is the whole of
@@ -302,7 +305,8 @@ function composeParentLine(
     // a diagnostic's code up where diagnostics keep their translations.
     if (!checked.ok) throw new GenerationError(checked.error.code, checked.error.message, checked.error.params);
     warnings.push(...checked.warnings);
-    return checked.line + (newTask.flow?.raw ? ` ==> ${newTask.flow.raw}` : '');
+    const { head, content } = TaskLineClassifier.splitContent(checked.line);
+    return head + TaskLineClassifier.joinContent(content, newTask.flow?.raw ? `==> ${newTask.flow.raw}` : '');
 }
 
 function checkedChild(child: { depth: number; body: string }, warnings: Diagnostic[]): GeneratedChild {
@@ -313,7 +317,7 @@ function checkedChild(child: { depth: number; body: string }, warnings: Diagnost
     // write layer treats an element as a line and would emit the rest of it
     // without indentation, which reads as a different tree than the one the
     // block described.
-    if (checked.line.includes('\n')) {
+    if (holdsLineBreak(checked.line)) {
         throw new GenerationError('eval.gen-child-line-break',
             'A generated line cannot contain a line break');
     }
@@ -351,7 +355,6 @@ function buildNextTask(task: Task, anchor: DateAnchor | null, next: NextOccurren
         originalText: '',
         childLines: [],
         blockId: undefined,
-        timerTargetId: undefined,
         // タイマーのアイコンは記法に準ずる目印なので次インスタンスへ持ち越さない。
         // 一覧の単一情報源は TimerIcons — ここに直接書くと、付ける側に足した
         // アイコンが剥がす側から漏れる（`🔁` が実際に漏れていた）。
@@ -401,9 +404,20 @@ function applySet(newTask: Task, program: FlowProgram, deps: FlowPlanDeps): void
 
     for (const { field, value } of results) {
         switch (field) {
-            case 'content':
-                newTask.content = value.type === 'none' ? '' : valueToDisplay(value);
+            case 'content': {
+                const content = value.type === 'none' ? '' : valueToDisplay(value);
+                // The next instance is one line. A value of several lines
+                // would split it, and the write refuses such a line without a
+                // word (`LineBreakInLine`), so it is said here instead, where
+                // the fire can stop with a reason.
+                if (holdsLineBreak(content)) {
+                    throw new EvalError('eval.set-content-multiline',
+                        'The content is one line — a value of several lines cannot be set on it',
+                        program.sets!.content!.expr.span);
+                }
+                newTask.content = content;
                 break;
+            }
             case 'start':
                 if (value.type === 'none') {
                     newTask.startDate = undefined;
@@ -539,22 +553,4 @@ function datish(date: string, time: string | undefined): Value {
 function fileName(path: string): string {
     const base = path.split('/').pop() ?? path;
     return base.replace(/\.md$/i, '');
-}
-
-// ---------------------------------------------------------------------------
-// move destination
-// ---------------------------------------------------------------------------
-
-/**
- * Normalize a move() target into a vault path: sanitize Windows-invalid
- * characters per segment and ensure the .md extension (ported from the
- * legacy MoveCommand).
- */
-export function normalizeDestination(target: Value): string {
-    let dest = target.type === 'link' ? target.target : valueToDisplay(target);
-    dest = dest.replace(/^\[\[/, '').replace(/\]\]$/, '').trim();
-    dest = dest.replace(/\\/g, '/');
-    dest = dest.split('/').map(segment => segment.replace(/[<>:"|?*#]/g, '_')).join('/');
-    if (!dest.toLowerCase().endsWith('.md')) dest += '.md';
-    return dest;
 }

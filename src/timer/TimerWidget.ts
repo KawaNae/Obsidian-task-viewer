@@ -15,7 +15,6 @@ import type {
 } from './TimerInstance';
 import { isDailyTimer } from './TimerInstance';
 import { TimerRecorder } from './TimerRecorder';
-import { TaskIdGenerator } from '../services/display/TaskIdGenerator';
 import { TimerStorageUtils } from './TimerStorageUtils';
 import { decideTimerStartMode, type TimerStartChoice } from './TimerStartMode';
 import type { Task } from '../types';
@@ -25,7 +24,6 @@ import { TimerLifecycle } from './TimerLifecycle';
 import { TimerRenderer } from './TimerRenderer';
 import { TimerContentBinding } from './TimerContentBinding';
 import { TimerPersistence } from './TimerPersistence';
-import { TimerTargetManager } from './TimerTargetManager';
 import { TimerWidgetWindowObserver, type PinState } from './TimerWidgetWindowObserver';
 import { autoGrowTextarea } from '../utils/TextareaAutoGrow';
 import {
@@ -54,48 +52,39 @@ export class TimerWidget implements TimerContext {
     private renderer: TimerRenderer;
     private contentBinding: TimerContentBinding;
     private persistence: TimerPersistence;
-    private targetManager: TimerTargetManager;
     private observer: TimerWidgetWindowObserver | null = null;
+    /** 索引の変化の購読を解く。{@link activate} で結び、{@link destroy} で解く。 */
+    private unwatchIndex: (() => void) | null = null;
 
     constructor(app: App, plugin: PluginContext & EventRegistrar) {
         this.app = app;
         this.plugin = plugin;
         this.storageUtils = new TimerStorageUtils(app);
-        this.recorder = new TimerRecorder(app, plugin, this.storageUtils);
-        this.creator = new TimerCreator(this, this.storageUtils);
+        this.recorder = new TimerRecorder(app, plugin, this.storageUtils, () => this.persistTimersToStorage(), () => this.timers.values());
+        this.creator = new TimerCreator(this);
         this.lifecycle = new TimerLifecycle(this, this.creator);
         // 値を書き換えた直後にオートグローを掛け直す（input 時 / syncFromFile 時）。
         // bind 直後（初期値セット時）の一回は TimerRenderer 側が自分で呼ぶ。
         this.contentBinding = new TimerContentBinding(this, autoGrowTextarea);
         this.renderer = new TimerRenderer(this, this.lifecycle, this.creator, this.contentBinding);
         this.persistence = new TimerPersistence(this, this.creator, this.lifecycle, this.storageUtils);
-        this.targetManager = new TimerTargetManager(this, this.storageUtils);
     }
 
     /**
      * Wire up window observation and restore persisted timers. Must be called
      * after `workspace.onLayoutReady` so the observer can resolve which window
      * currently holds the active leaf.
+     *
+     * widget の表示（名前欄、名前、色）は索引の読みから作るので、索引が変わる
+     * たびに描き直す。tick は時間の表示だけを進める。
      */
     activate(): void {
         logInfo('[Timer:activate]');
         if (this.observer) return;
         this.observer = new TimerWidgetWindowObserver(this.app, this.plugin, this);
         this.observer.start();
-        this.persistence.restoreTimersFromStorage((timerId) => {
-            if (!this.lifecycle.isIdleTimer(timerId)) {
-                const timer = this.timers.get(timerId);
-                // 対象行に id が要るのは self だけ（開始経路と同じ条件）。child /
-                // sibling は自分が書いたレコード行が尻尾 id を持つので、復元を
-                // きっかけにユーザーのタスク行へ id を足すのは筋が違う。
-                if (timer
-                    && timer.recordMode === 'self'
-                    && !timer.timerTargetId
-                    && !isDailyTimer(timer)) {
-                    void this.targetManager.ensureTimerTargetId(timerId);
-                }
-            }
-        });
+        this.unwatchIndex = this.plugin.getTaskReadService().onChange(() => this.renderer.refreshFromIndex());
+        this.persistence.restoreTimersFromStorage();
     }
 
     // ─── TimerContext: container delegation to observer ───────
@@ -208,6 +197,11 @@ export class TimerWidget implements TimerContext {
      * 1 本目のセッションを書いてタイマーを走らせる。書き方は `recordMode` が持つ
      * （self = 対象行を消費 / child = 子に挿す / sibling = 完了済みの続きとして隣に
      * 挿す）。2 本目以降は再開時に recorder が尻尾の兄弟へ並べる。
+     *
+     * 開始の書き込み（{@link TimerRecorder.writeStart}）は対象の行に錨も置く。
+     * 書けなければタイマーは始めない — widget を閉じ、理由の通知は書き込みの層か
+     * recorder が1回だけ出している。書く前に、書こうとしている錨（`opening`）を
+     * recorder が保存する。
      */
     private startTimerNow(config: TimerStartConfig): void {
         const timer = this.creator.createTimer(config);
@@ -220,43 +214,33 @@ export class TimerWidget implements TimerContext {
             }
         }
 
-        // Write start time immediately so the task moves on Timeline
-        if (config.timerType !== 'idle') {
-            if (timer.recordMode === 'self') {
-                void this.recorder.updateTaskStartTime(timer);
-            } else {
-                void this.writeFirstSession(timer);
-            }
-        }
-
         this.render();
-        this.persistTimersToStorage();
-        // self だけが対象タスク行に id を要る（記録でその行を書き換えるため）。
-        // child / sibling は自分が書いたレコード行が尻尾 id を持つので、対象行に
-        // 目印を足さない（ノートに残る自動 id を増やさない）。
-        if (!this.lifecycle.isIdleTimer(timer.id)
-            && !isDailyTimer(timer)
-            && timer.recordMode === 'self') {
-            void this.targetManager.ensureTimerTargetId(timer.id);
-        }
-    }
-
-    private async writeFirstSession(timer: TimerInstance): Promise<void> {
-        const sessionTaskId = timer.recordMode === 'sibling'
-            ? await this.recorder.startContinuationSession(timer)
-            : await this.recorder.createChildAtStart(timer);
-        if (sessionTaskId) {
+        if (config.timerType === 'idle') {
             this.persistTimersToStorage();
+            return;
         }
-        // 書き込みの往復中に打たれた入力は行き先が無く下書きに溜まっている。
-        // 行が生えた今なら書ける。
-        await this.flushTimerContent(timer.id);
+        void this.writeFirstSession(timer);
     }
 
-    async flushTimerContent(timerId: string): Promise<void> {
+    /** 開始の書き込み。往復中の出口と破棄は受け付けない（TimerLifecycle.busy）。 */
+    private writeFirstSession(timer: TimerInstance): Promise<void> {
+        return this.lifecycle.exclusive(timer, async () => {
+            if (!(await this.recorder.writeStart(timer))) {
+                // 何も書いていない。付けた錨も無いので、閉じても外すものは無い。
+                this.lifecycle.closeTimer(timer.id);
+                return;
+            }
+            this.persistTimersToStorage();
+            // 書き込みの往復中に打たれた入力は行き先が無く下書きに溜まっている。
+            // 行が生えた今なら書ける。
+            await this.flushTimerContent(timer.id);
+        });
+    }
+
+    async flushTimerContent(timerId: string): Promise<boolean> {
         const timer = this.timers.get(timerId);
-        if (!timer) return;
-        await this.contentBinding.flush(timer);
+        if (!timer) return true;
+        return this.contentBinding.flush(timer);
     }
 
     discardTimerContent(timerId: string): void {
@@ -266,17 +250,15 @@ export class TimerWidget implements TimerContext {
     }
 
     /**
-     * 閉じたタイマーの後始末。ノートに残る自動 id は 0 個にする — 尻尾の `^id` を
-     * 外してから、対象行に付けた id を片付ける（self では同じ行を指すことがあるが、
-     * どちらも「自動生成のときだけ・冪等」なので二重に走っても無害）。
+     * 閉じたタイマーの後始末。このタイマーが付けた `^id`（対象の行と尻尾の行）を
+     * 外す。ほかのタイマーがまだ持つ錨は残す（TimerRecorder.releaseAnchors）。
      */
     onTimerClosed(timer: TimerInstance): void {
         void (async () => {
             // 尻尾の `^id` を外す前に書き切る。先に外すと書き先を引けなくなる。
             await this.contentBinding.flush(timer);
             this.contentBinding.release(timer.id);
-            await this.recorder.clearTailRecordId(timer);
-            await this.targetManager.cleanupGeneratedTargetId(timer);
+            await this.recorder.releaseAnchors(timer);
         })();
     }
 
@@ -296,12 +278,6 @@ export class TimerWidget implements TimerContext {
                 timer.taskFile = newPath;
                 changed = true;
             }
-
-            const renamedTaskId = TaskIdGenerator.renameFile(timer.taskId, oldPath, newPath);
-            if (renamedTaskId !== timer.taskId) {
-                timer.taskId = renamedTaskId;
-                changed = true;
-            }
         }
 
         if (changed) {
@@ -314,6 +290,8 @@ export class TimerWidget implements TimerContext {
     }
 
     destroy(): void {
+        this.unwatchIndex?.();
+        this.unwatchIndex = null;
         for (const [timerId] of this.timers) {
             this.lifecycle.stopTimerTick(timerId);
         }

@@ -70,7 +70,7 @@ describe('RenderScheduler coalescing', () => {
         const s = new RenderScheduler({ performFull: () => { renders++; }, getHost: () => host.node });
 
         s.handleChange('t1', ['blockId']);
-        s.handleChange('t2', ['timerTargetId']);
+        s.handleChange('t2', ['blockId']);
         expect(host.pendingCount()).toBe(0);   // no frame was even requested
 
         s.handleChange('t3', ['statusChar']);
@@ -120,17 +120,15 @@ describe('RenderScheduler coalescing', () => {
 });
 
 describe('shouldRenderForChanges', () => {
-    it('skips render when every changed key is internal (blockId / timerTargetId)', () => {
+    it('skips render when every changed key is internal (blockId)', () => {
         expect(shouldRenderForChanges(['blockId'])).toBe(false);
-        expect(shouldRenderForChanges(['timerTargetId'])).toBe(false);
-        expect(shouldRenderForChanges(['blockId', 'timerTargetId'])).toBe(false);
     });
 
     it('renders when any changed key has visual effect', () => {
         expect(shouldRenderForChanges(['statusChar'])).toBe(true);
         expect(shouldRenderForChanges(['startDate'])).toBe(true);
         // mixed: a visual key alongside an internal one still renders
-        expect(shouldRenderForChanges(['timerTargetId', 'statusChar'])).toBe(true);
+        expect(shouldRenderForChanges(['blockId', 'statusChar'])).toBe(true);
     });
 
     it('renders when change info is absent (undefined / empty) — cannot prove it is a no-op', () => {

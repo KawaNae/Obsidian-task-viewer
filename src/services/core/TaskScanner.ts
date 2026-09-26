@@ -1,106 +1,78 @@
-import type { App, TFile } from 'obsidian';
-import type { TaskViewerSettings } from '../../types';
+import { type App, TFile } from 'obsidian';
 import { FileParsePipeline } from '../parsing/FileParsePipeline';
 import type { TaskStore } from './TaskStore';
 import type { TaskValidator } from './TaskValidator';
-import type { SyncDetector } from './SyncDetector';
-import { CompletionDetector } from './CompletionDetector';
-import type { FlowExecutor } from '../flow/FlowExecutor';
+import type { Task, TaskViewerSettings } from '../../types';
 import { TaskIdGenerator } from '../display/TaskIdGenerator';
-import { IdentityLedger, type LedgerEntry } from './identity/IdentityLedger';
-import { HintLog } from './identity/IdentityHints';
-import { matchFile, matchWithoutRepeatedIds } from './identity/IdentityMatcher';
-import { WriteClaims, type ClaimResult } from './identity/WriteClaims';
-import { applyIdentity, assertDistinctRuntimeIds, assertNoProvisionalIds, assertUniqueProvisionalIds } from './identity/IdentityApplier';
-import { splitLines, type WriteSink } from '../../utils/FileLines';
+import { contentKeyOf, type ContentKey } from './ContentKey';
+import { WriteLinks } from './WriteLinks';
+import { newSession, readReading, readingId, type ReadingId } from './Reading';
+import { splitLines, type Landing, type ReadMark } from '../persistence/FileLines';
+import type { OutlineReading } from '../parsing/utils/Outline';
+import { TaskLineClassifier } from '../parsing/utils/TaskLineClassifier';
 import { logDebug, logError, logInfo } from '../../log/log';
 
 /**
- * タスクスキャナー — ファイル単位のスキャンのオーケストレーション。
- * scanFile は 5 相を順に呼ぶだけ:
+ * タスクスキャナー — ファイル単位の読みのオーケストレーション。
+ * 1 回の読みは 4 相を順に呼ぶだけ:
  *   parse    — FileParsePipeline（ファイル → Task[]、仮 ID。パース順序契約の所有者）
- *   identity — IdentityLedger との突き合わせで仮 ID を runtime ID に置き換える
- *   validate — バリデーション警告の収集（以降は runtime ID しか見ない）
- *   detect   — CompletionDetector（完了イベントの差分検出、署名メモリの所有者）
- *   commit   — store 更新 + ledger 置換 + フロー発火
+ *   name     — 仮 ID を、この読みの中の名前（パス、読みの番号、行）に置き換える
+ *   validate — バリデーション警告の収集（以降は名前しか見ない）
+ *   commit   — store 更新
+ *
+ * 前回の読みと突き合わせない。名前は 1 回の読みの中だけで意味を持ち、読み
+ * 直しをまたぐ同一性は `^id` だけが担う（structure.md の「名前」）。自分の
+ * 書き込みをまたぐ名前は、書き込みの報告で写す（`WriteLinks`）。
+ *
+ * スキャンは読むだけで、フローを発火させない。発火は完了させた操作が起こす
+ * （エディタのトランザクションと、プラグイン自身の書き込み。structure.md の
+ * 「発火の可否」）。
  */
 export class TaskScanner {
-    private scanQueue: Map<string, Promise<void>> = new Map();
-    private completionDetector = new CompletionDetector();
-    private isInitializing = true;
+    private scanQueue: Map<string, Promise<unknown>> = new Map();
+
+    /** This index's readings, apart from any other's (`ReadingId`). */
+    private readonly session = newSession();
+
     /**
-     * Written only by scanFile's commit, so the store and the ledger move together.
+     * The last number given to a reading of each file, and the key of that
+     * reading's content: a scan's reading, or what a write of ours left
+     * (`landed`), committed or not — a write to the file being dragged gives
+     * its number all the same. A content read again that the reading with the
+     * last number read takes no new number.
      *
-     * Seeded from the clock so runtime IDs are unique across sessions, not just
-     * within one: timers persist task IDs, and a counter restarting at 1 would
-     * hand a previous session's number to a different task after a reload —
-     * a stale ID must name nothing, never someone else. In microseconds, the
-     * next session starts ahead of this one as long as it mints fewer than 1000
-     * IDs per millisecond on average; ~1.7e15 stays within safe integers.
+     * The number is kept when the file is renamed or deleted, and the key is
+     * not, so that no number is given twice in a session and a content read
+     * after is a new reading. A reading is committed only if no number after
+     * the one it started from is given: one that read the file before is
+     * late, and what it read is older than what the index holds.
      */
-    private ledger = new IdentityLedger(Date.now() * 1000);
+    private numbers = new Map<string, ReadMark>();
+
+    /** The number of each file's last committed reading: the one the store holds. */
+    private committed = new Map<string, number>();
 
     /**
-     * What the plugin's own writes left for the next scan of each file.
-     *
-     * Owned here for the same reason the ledger is: a scan is the only thing
-     * that consumes a hint, and the consuming and the ledger's commit have to
-     * happen in the same step or a hint could outlive the state it describes.
+     * Files to be read again even if their content is the one their last
+     * reading read: every file when the vault is read whole (`scanVault`), as
+     * it is when the settings change what a parse makes of the same lines,
+     * and a file a caller asks for (`requestScan`).
      */
-    private hints = new HintLog();
+    private stale = new Set<string>();
+
+    /** Our own writes to each file, to follow a name across them (`follow`). */
+    private links = new WriteLinks();
 
     /**
-     * Turns what a write reports about a file's lines into a claim about its
-     * rows. Owned here because it needs both the parser and the ledger, and
-     * because its bookkeeping has to be dropped in the same step that commits
-     * a scan — see `WriteClaims`.
+     * The file whose readings are not taken into the store now (`hold`), and
+     * whether one was held back since: the file being dragged, whose store
+     * copy the drag draws from until it ends.
      */
-    private claims = new WriteClaims(
-        (path, lines) => {
-            // The frontmatter is the cache's, which is the file as it was
-            // before the write asking this question — Obsidian updates the
-            // cache from the `modify` that has not fired yet. Nothing here can
-            // do better from inside `vault.process`. What it costs is a claim
-            // made under the old reading of a `tv-ignore` or a notation
-            // switch; the scan that follows reads the new one and refuses a
-            // claim that does not reproduce what it sees.
-            const parsed = FileParsePipeline.parse(
-                path, [...lines], this.app.metadataCache.getCache(path)?.frontmatter, this.settings);
-            // Not the same answer as a file with no tasks: an ignored file is
-            // one this pipeline declines to read, and "it has no rows" would
-            // be a claim about it.
-            if (parsed.ignored) return null;
-            // In the parser's own order, not sorted by line. A claim is
-            // weighed against `parsed.tasks` as a scan hands them to
-            // `matchFile`, so a claim ordered some other way would pair its
-            // rows with different rows than the scan read — invisibly, where
-            // two swapped rows read the same.
-            return parsed.tasks.map(task => ({
-                line: task.line,
-                text: task.originalText,
-                parserId: task.parserId,
-            }));
-        },
-        // Everything the ledger holds has been read by a scan, so nothing it
-        // hands back is a row still waiting to be recorded.
-        (path) => this.ledger.snapshotFor(path).map(entry => ({
-            runtimeId: entry.runtimeId,
-            created: false,
-            text: entry.fingerprint.originalText,
-            line: entry.line,
-        })),
-        // The same counter a scan mints from, so a name issued by a write can
-        // never collide with one issued by a read.
-        (path, parserId) => TaskIdGenerator.mintRuntimeId(
-            { parserId, file: path }, () => this.ledger.mint()),
-    );
-
+    private holding: { path: string; held: boolean } | null = null;
     constructor(
         private app: App,
         private store: TaskStore,
         private validator: TaskValidator,
-        private syncDetector: SyncDetector,
-        private commandExecutor: FlowExecutor,
         private settings: TaskViewerSettings
     ) { }
 
@@ -109,17 +81,20 @@ export class TaskScanner {
      */
     async scanVault(): Promise<void> {
         this.validator.clearErrors();
+        // Every file is read again from here on, whatever it read last.
+        for (const path of this.committed.keys()) this.stale.add(path);
         const allFiles = this.app.vault.getMarkdownFiles();
         const files = allFiles.filter(f => this.mayContainTasks(f));
         logInfo(`[scanVault] total=${allFiles.length} candidates=${files.length} skipped=${allFiles.length - files.length}`);
 
+        // Queued without a line each: the vault's scan says what it did
+        // above and below, and a line per file would bury the log.
         for (const file of files) {
-            await this.queueScan(file);
+            await this.queue(file);
         }
 
         this.store.notifyListenersStaggered();
         logInfo(`[scanVault:done] tasks=${this.store.getTasks().length}`);
-        this.isInitializing = false;
     }
 
     /**
@@ -149,25 +124,41 @@ export class TaskScanner {
     }
 
     /**
-     * 外部から呼ばれるスキャンリクエスト
+     * Read the file again, whatever it read last: for a caller that has
+     * reason to think the index parts from the file (an update that was not
+     * written and put its values back).
      */
     async requestScan(file: TFile): Promise<void> {
-        return this.queueScan(file);
+        this.stale.add(file.path);
+        await this.queueScan(file);
     }
 
     /**
-     * スキャンをキューに追加
+     * Scan the file unless what it reads is what the last reading committed
+     * read, and say whether it committed.
+     *
+     * Every change event comes here: a `modify`, and the `metadataCache`
+     * `changed` after it, ours or not. Most echo a content the index already
+     * holds — the one a write of ours landed (`landed`), or the one the
+     * `modify` before it read — and the parse reads the content's own
+     * frontmatter, not the cache. So "was this already read" is the content's
+     * to answer, not a window of time after a write.
      */
-    async queueScan(file: TFile, isLocal: boolean = false): Promise<void> {
-        if (!this.isInitializing) logDebug(`[queueScan] file=${file.path} isLocal=${isLocal}`);
+    queueScan(file: TFile): Promise<boolean> {
+        logDebug(`[queueScan] file=${file.path}`);
+        return this.queue(file);
+    }
+
+    private queue(file: TFile): Promise<boolean> {
         // シンプルなキューメカニズム: ファイルパスごとにプロミスをチェーン
         const previousScan = this.scanQueue.get(file.path) || Promise.resolve();
 
         const currentScan = previousScan.then(async () => {
             try {
-                await this.scanFile(file, isLocal);
+                return await this.scanFile(file);
             } catch (error) {
                 logError(`Error scanning file ${file.path}: ${(error as Error)?.message ?? error}`);
+                return false;
             }
         });
 
@@ -186,69 +177,182 @@ export class TaskScanner {
     }
 
     /**
-     * ファイルをスキャンしてタスクを抽出（parse → identity → validate → detect → commit）
+     * The last reading of `path` a number was given to, as a write is handed
+     * the file (`WriteChannel.reading`).
      */
-    private async scanFile(file: TFile, isLocalChange: boolean = false): Promise<void> {
-        this.validator.clearErrorsForFile(file.path);
+    readingOf(path: string): ReadMark {
+        return this.numbers.get(path) ?? { n: 0, key: undefined };
+    }
 
-        // Everything from here to the match below is synchronous, so the claims
-        // this scan weighs are, near enough, the ones filed by the time the read
-        // resolved. Near enough rather than exactly: another write's callback
-        // can slip in between the read settling and this line running, and its
-        // claim describes a file this read never saw. Nothing here tries to
-        // fence that off, because a position cannot — what keeps such a claim
-        // from deciding anything is that it has to be the only one that fits
-        // (see resolveHints).
+    /**
+     * A write of ours landed in `path`, leaving `landing.lines`: take them in
+     * as the file's next reading, now, without waiting for the scan its
+     * `modify` starts — which then reads the same content and commits
+     * nothing. Whether it committed.
+     *
+     * The lines are what the file holds: `processOrFail` answered that the
+     * write landed, and nothing is read that the write did not leave. The
+     * write left the reading after the one it was handed with its lines
+     * (`Landing.handed`): writes to one file run one at a time, each told
+     * here before the next is handed its lines (`processOrFail`), so a write
+     * handed a content that reading is not was handed a change nobody
+     * reported, and what came before is not followed across it. What it left
+     * is a number given, committed or not (`commit`: the file held is not),
+     * and it is late like any other reading: a scan that read the file after
+     * the write got its number first.
+     *
+     * The write left reading `n` only if reading `n` is its lines: the number
+     * is given here, or the late scan that took it read what the write left.
+     * A scan that read an edit from outside took the number for other lines,
+     * and a row the write carried to a line of its own lines is not the row on
+     * that line of the scan's: nothing is followed across the write.
+     */
+    landed(path: string, landing: Landing): boolean {
+        const { handed } = landing;
+        const last = this.readingOf(path);
+        const from = contentKeyOf(landing.before);
+        const to = contentKeyOf(landing.lines);
+        const n = handed.n + 1;
+        const left = n > last.n || (n === last.n && last.key === to);
+        const start = left && handed.key === from ? handed.n : null;
+        this.links.wrote(path, start, from, to, landing.before.length, landing.edits);
+        if (n <= last.n) return false;
+        this.numbers.set(path, { n, key: to });
+        return this.commit(path, [...landing.lines], n, to, landing.reading ?? undefined);
+    }
+
+    /**
+     * Where line `line` of reading `n` of `path` stands in the reading the
+     * last number was given to: the line itself when that is reading `n`,
+     * the line our own writes from `n` carried it to when that reading is the
+     * one they left (`WriteLinks.walk`), else null.
+     */
+    private carry(path: string, n: number, line: number): number | null {
+        const last = this.numbers.get(path);
+        if (last === undefined) return null;
+        if (n === last.n) return line;
+        const walked = this.links.walk(path, n, line);
+        return walked?.n === last.n ? walked.line : null;
+    }
+
+    /**
+     * Where line `line` of reading `read` of `path` stands in content `now`,
+     * when `now` is the content of the reading the last number was given to
+     * (`carry`), else null. What a write asks of a row read in some reading
+     * (`WriteChannel.follow`).
+     */
+    followLine(path: string, read: ReadingId, line: number, now: ContentKey): number | null {
+        const reading = readReading(read);
+        if (!reading || reading.session !== this.session) return null;
+        return this.numbers.get(path)?.key === now ? this.carry(path, reading.n, line) : null;
+    }
+
+    /**
+     * The name the row `name` names has now, when the store holds the reading
+     * the last number was given to and the row stands in it (`carry`). Null
+     * when it names no row now — a write took the row away, the file was read
+     * some other way since, or what our writes left is not committed yet.
+     */
+    follow(name: string): string | null {
+        const read = TaskIdGenerator.readName(name);
+        const reading = read ? readReading(read.reading) : null;
+        if (!read || !reading || reading.session !== this.session) return null;
+        const last = this.numbers.get(read.filePath);
+        if (last === undefined || this.committed.get(read.filePath) !== last.n) return null;
+        const line = this.carry(read.filePath, reading.n, read.line);
+        if (line === null) return null;
+        return TaskIdGenerator.nameOf(read.parserId as Task['parserId'], read.filePath, line, readingId(this.session, last.n));
+    }
+
+    /**
+     * ファイルをスキャンしてタスクを抽出（parse → identity → validate → commit）
+     */
+    private async scanFile(file: TFile): Promise<boolean> {
+        // Before the read: a number given while it is under way may be of a
+        // content after the one it gets.
+        const after = this.readingOf(file.path).n;
         const content = await this.app.vault.read(file);
         const { lines } = splitLines(content);
+        return this.scanned(file.path, lines, after);
+    }
+
+    /**
+     * A scan read `lines` of `path`, begun when `after` was the last number
+     * given: commit it as the reading after that. Not committed when it is
+     * late — a number after `after` is given already, to the file as it was
+     * then or later.
+     *
+     * A content the reading with the last number read is that reading: it
+     * takes no new number, and is committed only when the store does not hold
+     * it — a reading of the file held, or of a write to it — or the file is
+     * to be read again whatever it read (`stale`). Parsed again, its rows
+     * keep their names.
+     */
+    private scanned(path: string, lines: string[], after: number): boolean {
+        const last = this.readingOf(path);
+        if (last.n > after) return false;
+        const key = contentKeyOf(lines);
+        if (last.key !== key) {
+            this.numbers.set(path, { n: after + 1, key });
+            return this.commit(path, lines, after + 1, key);
+        }
+        if (this.committed.get(path) === last.n && !this.stale.has(path)) return false;
+        return this.commit(path, lines, last.n, key);
+    }
+
+    /**
+     * Hold back every reading of `path` from the store from now on, or of no
+     * file (null), and let go of the file held before: the file being
+     * dragged. When a reading of that file was held back, it is read again
+     * and committed then (`scanned`: its last reading is not the committed
+     * one). Whether that committed.
+     *
+     * The one place that answers whether a file's reading may go in the
+     * store now is `commit`, whoever read it: a change from outside, the
+     * `changed` after it, a write of ours landing, or a caller asking for
+     * the file again (`requestScan`).
+     */
+    hold(path: string | null): Promise<boolean> {
+        const released = this.holding;
+        this.holding = path === null ? null : { path, held: false };
+        if (!released?.held) return Promise.resolve(false);
+        const file = this.app.vault.getAbstractFileByPath(released.path);
+        return file instanceof TFile ? this.queue(file) : Promise.resolve(false);
+    }
+
+    /** Whether readings of `path` are held back now (`hold`). */
+    holds(path: string): boolean {
+        return this.holding?.path === path;
+    }
+
+    /**
+     * Put reading `n` of `path`, `lines` of content `key`, in the store, unless
+     * the file is held (`hold`). `reading` is a reading of these lines already
+     * made. Whether it went in.
+     */
+    private commit(path: string, lines: string[], n: number, key: ContentKey, reading?: OutlineReading): boolean {
+        if (this.holding?.path === path) {
+            this.holding.held = true;
+            return false;
+        }
+        const file = { path };
+        this.validator.clearErrorsForFile(file.path);
 
         // --- parse ---
-        const parsed = FileParsePipeline.parse(
-            file.path,
-            lines,
-            this.app.metadataCache.getCache(file.path)?.frontmatter,
-            this.settings
-        );
+        const parsed = FileParsePipeline.parse(file.path, lines, this.settings, reading);
 
         if (parsed.ignored) {
             this.store.removeTasksByFile(file.path);
-            this.completionDetector.clearForFile(file.path);
-            // Retired for good: lifting tv-ignore later mints fresh IDs.
-            this.ledger.dropFile(file.path);
-            // With no rows to match against, a hint has nothing left to claim.
-            this.hints.dropFile(file.path);
-            this.claims.forget(file.path);
-            return;
+            this.links.drop(file.path);
+            this.readRead(file.path, n);
+            return true;
         }
 
-        // --- identity ---
+        // --- name ---
         // Right after parse, so nothing downstream — validator included — ever
         // sees a provisional ID.
-        if (__DEV__) {
-            assertUniqueProvisionalIds(parsed.tasks);
-        }
-        const now = Date.now();
-        const previousRows = this.ledger.snapshotFor(file.path);
-        const guarded = matchWithoutRepeatedIds(
-            claims => matchFile(
-                previousRows,
-                parsed.tasks,
-                task => TaskIdGenerator.mintRuntimeId(task, () => this.ledger.mint()),
-                claims,
-            ),
-            this.hints.pendingFor(file.path, now),
-        );
-        if (guarded.withoutClaims) {
-            // The log said something no file can be: one row on two lines. What
-            // it would cost to commit is a task the index cannot see again (see
-            // matchWithoutRepeatedIds), so the ladder answered instead and the
-            // file's claims go — a log that produced this is not one to weigh
-            // the next read against.
-            logError(`[TaskScanner] ${file.path}: a claim gave one runtime ID to two rows; matched without the log`);
-            this.hints.dropFile(file.path);
-        }
-        const identity = guarded.result;
-        applyIdentity(parsed, identity.mapping);
+        nameRows(parsed.tasks, file.path, readingId(this.session, n));
+        anchorRows(parsed.tasks, lines);
 
         // --- validate ---
         for (const task of parsed.tasks) {
@@ -262,35 +366,12 @@ export class TaskScanner {
             }
         }
 
-        // --- detect ---
-        const tasksToTrigger = this.completionDetector.detect(file.path, parsed.tasks, {
-            isLocalChange,
-            isInitializing: this.isInitializing,
-            statusDefinitions: this.settings.statusDefinitions,
-        });
-
-        // What this scan decided, which is the first question a report of a
-        // task generated twice has to answer: two scans of one change that
-        // each fired, or one scan that fired twice.
-        //
-        // A third shape — a pipeline that outlived its index and kept scanning
-        // — reads differently in the two places this line goes. The stored log
-        // cannot show it: every load of the plugin gets its own copy of this
-        // module, and only the live one's manager flushes, so the copies write
-        // where nobody reads. The console can: it belongs to the window rather
-        // than to a copy, so with verbose on, one change printing this line
-        // twice is a surviving pipeline saying so.
-        if (!this.isInitializing) {
-            logDebug(`[scan] file=${file.path} isLocal=${isLocalChange} fired=${tasksToTrigger.length} minted=${identity.minted.length} retired=${identity.retired.length}`);
-        }
+        // Two readings of one change, or a pipeline that outlived its index
+        // and kept scanning, print this line twice: the console belongs to the
+        // window rather than to a copy of the module.
+        logDebug(`[scan] file=${file.path} tasks=${parsed.tasks.length}`);
 
         // --- commit (batched: 1 file = 1 revision bump) ---
-        // Checked before the batch opens: throwing inside it would have already
-        // removed the file's tasks from the store.
-        if (__DEV__) {
-            assertNoProvisionalIds(parsed.tasks, id => !TaskIdGenerator.isRuntimeId(id));
-            assertDistinctRuntimeIds(identity.entries);
-        }
         this.store.beginBatch();
         try {
             this.store.removeTasksByFile(file.path);
@@ -303,113 +384,49 @@ export class TaskScanner {
             // replacement, not a merge — the scan owns the file's blocks.
             this.store.setGenBlocks(file.path, parsed.genBlocks);
 
-            // Last, so a store write that throws leaves the ledger on the
-            // previous generation too.
-            this.ledger.replaceFile(file.path, identity.entries);
-            this.hints.settle(
-                file.path, identity.consumedHints,
-                ledgerMoved(previousRows, identity.entries),
-            );
-            // Whatever this scan decided, it decided: the next write builds on
-            // the ledger rather than on what the last write thought it left. A
-            // base carried across a scan that answered its own way would hand
-            // the next claim identities the ledger does not agree with, and the
-            // texts would line up well enough that nothing later would notice.
-            this.claims.forget(file.path);
+            // Last, so a store write that throws leaves the file to be read again.
+            this.readRead(file.path, n);
         } finally {
             this.store.endBatch();
         }
+        return true;
+    }
 
-        // フロー発火
-        for (const task of tasksToTrigger) {
-            await this.commandExecutor.handleTaskCompletion(task);
-        }
+    /** Reading `n` of `path` is committed. */
+    private readRead(path: string, n: number): void {
+        this.committed.set(path, n);
+        this.stale.delete(path);
     }
 
     /**
-     * ファイルリネーム（md → md）時の内部状態の引き継ぎ。
-     * oldPath に紐づく scanQueue / 完了検出メモリを除去し、ledger を newPath へ再キーする。
-     *
-     * 新パスの再スキャンより前に呼ぶこと。逆順だと空の ledger と突き合わせて
-     * 全タスクが新発番になる。再キーは TaskHubPanel / TimerWidget が握る ID を
-     * 書き換えるのと同じ renameFile で行い、両者の文字列を一致させる。
+     * ファイルリネーム（md → md）時の内部状態の破棄。名前はパスを含むので、
+     * 新パスの読みが新しい名前を付ける。
      */
     handleFileRenamed(oldPath: string, newPath: string): void {
         this.scanQueue.delete(oldPath);
-        this.completionDetector.forgetFile(oldPath);
-        this.ledger.rekeyFile(oldPath, newPath, id => TaskIdGenerator.renameFile(id, oldPath, newPath));
-        // Hints name runtime IDs, and a rename rewrites those, so carrying the
-        // log across would leave claims about rows nothing answers to. They
-        // would fail to apply and cost the file its next hint anyway.
-        this.hints.dropFile(oldPath);
-        this.hints.dropFile(newPath);
-        this.claims.forget(oldPath);
-        this.claims.forget(newPath);
+        for (const path of [oldPath, newPath]) this.forget(path);
     }
 
     /**
      * ファイル削除（md → 非 md のリネームを含む）時の内部状態の破棄。
-     * scanQueue / 完了検出メモリ / ledger から path を除去する。
+     * scanQueue から path を除去し、読みと書き込みの記録を捨てる。
      */
     handleFileDeleted(path: string): void {
         this.scanQueue.delete(path);
-        this.completionDetector.forgetFile(path);
-        this.ledger.dropFile(path);
-        this.hints.dropFile(path);
-        this.claims.forget(path);
+        this.forget(path);
     }
 
     /**
-     * The identity ledger, for reverse lookups from the console and CLI.
-     * @internal Read-only use: only scanFile writes it.
+     * Let go of what was read of `path`, but the last number given, and of
+     * holding it: a file renamed or deleted is not the one being dragged.
      */
-    getLedger(): IdentityLedger {
-        return this.ledger;
-    }
-
-    /**
-     * The hint log, for seeing from the console what the write layer claimed.
-     * @internal Read-only use: only scanFile changes it.
-     */
-    getHintLog(): HintLog {
-        return this.hints;
-    }
-
-    /**
-     * Where a write reports what it did to one file's lines.
-     *
-     * Everything here is inside the writer's `vault.process` callback, so
-     * nothing may throw: a report that cannot be turned into a claim is worth
-     * a log line, never a lost write. The parse this runs is the one place a
-     * write pays for stage 2 — one pass over the file it just wrote.
-     */
-    writeSink(file: string): WriteSink {
-        return (before, after, edits) => {
-            let result: ClaimResult;
-            try {
-                result = this.claims.claim(file, before, after, edits);
-            } catch (error) {
-                logError(`[TaskScanner] could not read back ${file} after a write: ${(error as Error)?.message ?? error}`);
-                // Whatever base this file had is left alone. It describes the
-                // file as it was before this write, so it no longer fits, and
-                // a base that no longer fits is what stops the next write from
-                // building on a ledger that is older still.
-                return () => { };
-            }
-            // Both halves of what a claim leaves behind come back together:
-            // the hint the next scan would weigh, and the base the next write
-            // to this file would build on.
-            if (!result.hint) return result.withdraw;
-            const drop = this.hints.add(file, [result.hint], Date.now());
-            return () => { drop(); result.withdraw(); };
-        };
-    }
-
-    /**
-     * 初期化状態を設定
-     */
-    setInitializing(value: boolean): void {
-        this.isInitializing = value;
+    private forget(path: string): void {
+        if (this.holding?.path === path) this.holding = null;
+        const last = this.numbers.get(path);
+        if (last !== undefined) this.numbers.set(path, { n: last.n, key: undefined });
+        this.committed.delete(path);
+        this.stale.delete(path);
+        this.links.drop(path);
     }
 
     /**
@@ -421,18 +438,35 @@ export class TaskScanner {
 }
 
 /**
- * Whether a scan changed the file's rows — which lines exist, in what order,
- * carrying which identity.
- *
- * Used to decide what happens to hints this scan did not believe: if the rows
- * moved anyway, something the hints could not account for reached the file, and
- * the ladder has already placed it. See {@link HintLog.settle}.
+ * Give every row of one reading its name, in place of the provisional ID the
+ * parser gave it: `parentId` and `childIds` too, which the parser has
+ * already written with the provisional ones. A provisional ID is the row's
+ * line, and so is a name, so one reading's names are as distinct as its
+ * lines.
  */
-function ledgerMoved(before: LedgerEntry[], after: LedgerEntry[]): boolean {
-    if (before.length !== after.length) return true;
-    for (let i = 0; i < before.length; i++) {
-        if (before[i].runtimeId !== after[i].runtimeId) return true;
-        if (before[i].fingerprint.originalText !== after[i].fingerprint.originalText) return true;
+function nameRows(tasks: Task[], path: string, reading: ReadingId): void {
+    const names = new Map<string, string>();
+    for (const task of tasks) names.set(task.id, TaskIdGenerator.nameOf(task.parserId, path, task.line, reading));
+    const rename = (id: string) => names.get(id) ?? id;
+    for (const task of tasks) {
+        task.id = rename(task.id);
+        if (task.parentId !== undefined) task.parentId = rename(task.parentId);
+        task.childIds = task.childIds.map(rename);
     }
-    return false;
+}
+
+/**
+ * Give a row its anchor (`Task.anchor`): the `^id` on its line, when no other
+ * line of the reading carries that `^id`. Every line is counted, a task's or
+ * not and whichever parser reads it, so an `^id` Obsidian would resolve to
+ * two places anchors neither.
+ */
+function anchorRows(tasks: Task[], lines: readonly string[]): void {
+    const count = new Map<string, number>();
+    const ids = lines.map(line => TaskLineClassifier.extractLineBlockId(line).blockId);
+    for (const id of ids) if (id !== undefined) count.set(id, (count.get(id) ?? 0) + 1);
+    for (const task of tasks) {
+        const id = ids[task.line];
+        if (id !== undefined && count.get(id) === 1) task.anchor = id;
+    }
 }

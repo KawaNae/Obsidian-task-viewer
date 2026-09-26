@@ -2,7 +2,7 @@ import { type App, TFile } from 'obsidian';
 import type { FileOperations } from '../utils/FileOperations';
 import { FrontmatterLineEditor } from '../utils/FrontmatterLineEditor';
 import { HeadingInserter } from '../../../utils/HeadingInserter';
-import { processLines } from '../../../utils/FileLines';
+import { fileGone, processLines, type WriteAt, type WriteChannels, type WriteOutcome } from '../FileLines';
 
 /**
  * frontmatter と見出しへの書き込みを担当するクラス。frontmatter はノートの
@@ -13,20 +13,20 @@ export class FrontmatterWriter {
     constructor(
         private app: App,
         private fileOps: FileOperations,
+        private channelOf: WriteChannels = () => undefined,
     ) {}
 
     /**
      * 指定ファイルの見出し下に行を挿入する（見出し付きのタスク作成に使う
      * 汎用操作）。見出しが存在しない場合はファイル末尾に作成する。
-     * @returns 挿入した行の 0-based 行番号。ファイルが無ければ -1。
      */
     async insertLineUnderHeading(
         filePath: string,
         lineContent: string,
         header: string,
         headerLevel: number
-    ): Promise<number> {
-        return HeadingInserter.writeUnderHeading(this.app, filePath, lineContent, header, headerLevel);
+    ): Promise<WriteAt> {
+        return HeadingInserter.writeUnderHeading(this.app, filePath, this.channelOf(filePath), lineContent, header, headerLevel);
     }
 
     /**
@@ -43,21 +43,27 @@ export class FrontmatterWriter {
      * 設定するキーが1つでもあれば block の無いファイルには block を作る。
      * 削除だけの場合は作らない（消す相手が無いので書く必要がない）。
      */
-    async setKeys(filePath: string, updates: Record<string, string | null>): Promise<void> {
+    async setKeys(filePath: string, updates: Record<string, string | null>): Promise<WriteOutcome> {
         const file = this.app.vault.getAbstractFileByPath(filePath);
-        if (!(file instanceof TFile)) return;
+        if (!(file instanceof TFile)) return fileGone(this.channelOf(filePath), filePath, filePath);
 
         const hasSet = Object.values(updates).some(v => v !== null);
 
-        await processLines(this.app, file, (raw) => {
-            if (FrontmatterLineEditor.findEnd(raw) < 0 && !hasSet) return null;
+        // Reported like any other write: every row below a key added or
+        // removed here moves, and without the report the next scan could not
+        // be told which is which (see `WriteClaims.stateFor`).
+        return processLines(this.app, file, this.channelOf(filePath), (draft) => {
+            // Nothing to delete from: the file already reads as asked, the way
+            // a rewrite to the same bytes does. Written, and nothing changes.
+            if (FrontmatterLineEditor.findEnd(draft.lines) < 0 && !hasSet) return true;
 
-            const { lines, fmEnd } = FrontmatterLineEditor.ensureBlock(raw);
+            const fmEnd = FrontmatterLineEditor.ensureBlock(draft);
             const escaped: Record<string, string | null> = {};
             for (const [key, value] of Object.entries(updates)) {
                 escaped[key] = value === null ? null : FrontmatterLineEditor.escapeYamlScalar(value);
             }
-            return FrontmatterLineEditor.applyUpdates(lines, fmEnd, escaped);
+            FrontmatterLineEditor.applyUpdates(draft, fmEnd, escaped);
+            return true;
         });
     }
 }

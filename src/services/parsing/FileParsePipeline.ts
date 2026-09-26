@@ -2,6 +2,7 @@ import { parseYaml } from 'obsidian';
 import type { Task, TaskViewerSettings } from '../../types';
 import { collectGenBlocks, type GenBlock } from './gen/GenBlockCollector';
 import { DocumentTreeBuilder } from './tree/DocumentTreeBuilder';
+import { Outline, type OutlineReading } from './utils/Outline';
 import { SectionPropertyResolver } from './tree/SectionPropertyResolver';
 import { TreeTaskExtractor } from './tree/TreeTaskExtractor';
 
@@ -26,35 +27,45 @@ export interface FileParseResult {
  *
  * build → resolve → extract mutate one shared DocumentNode in that exact
  * order; wrapping them here means callers cannot get it wrong. Pure with
- * respect to the vault: no I/O, no store access — TaskScanner owns
- * completion detection and store commits.
+ * respect to the vault: no I/O, no store access — TaskScanner owns the
+ * store commits.
  */
 export class FileParsePipeline {
     /**
-     * @param cachedFrontmatter metadataCache frontmatter when available;
-     *   the pipeline falls back to parsing the raw `---` block (covers the
-     *   vault.modify → metadataCache.changed window).
+     * The frontmatter is read off `lines`, never out of metadataCache. The
+     * cache describes the file at some other moment: inside a write's
+     * `vault.process` it is the file before the write, and when the scan
+     * a `modify` starts reads, Obsidian has not re-read it yet — while the
+     * scan the `changed` that follows asks for does nothing when it reads what
+     * the last scan read. A frontmatter key decides whether the note has
+     * rows at all (`tv-ignore`) and what every row inherits (dates), so the
+     * reading a write lands and the scan that follows have to read the same
+     * lines the same way, which only the lines themselves allow.
+     *
+     * `reading` is a reading of these very lines someone already made (a
+     * write's check, `processLines`), taken instead of reading them again.
+     * One of other lines is not taken.
      */
     static parse(
         filePath: string,
         lines: string[],
-        cachedFrontmatter: Record<string, any> | undefined,
-        settings: TaskViewerSettings
+        settings: TaskViewerSettings,
+        reading?: OutlineReading,
     ): FileParseResult {
         // --- Frontmatter境界検出 ---
-        let bodyStartIndex = 0;
-        let frontmatterObj = cachedFrontmatter;
-        if (lines.length > 0 && lines[0].trim() === '---') {
-            for (let i = 1; i < lines.length; i++) {
-                if (lines[i].trim() === '---') { bodyStartIndex = i + 1; break; }
-            }
-            if (bodyStartIndex > 0 && !frontmatterObj) {
-                try {
-                    const yamlContent = lines.slice(1, bodyStartIndex - 1).join('\n');
-                    frontmatterObj = parseYaml(yamlContent);
-                } catch {
-                    // YAML パースエラー時は無視（metadataCache.changed で再スキャンされる）
-                }
+        // The same reading a write takes of where the body begins
+        // (`Placement`): a line the parser reads as body is one a write may
+        // place a line at.
+        const bodyStartIndex = Outline.bodyStart(lines);
+        let frontmatterObj: Record<string, any> | undefined;
+        if (bodyStartIndex > 0) {
+            try {
+                const yamlContent = lines.slice(1, bodyStartIndex - 1).join('\n');
+                const parsed: unknown = parseYaml(yamlContent);
+                if (parsed && typeof parsed === 'object') frontmatterObj = parsed as Record<string, any>;
+            } catch {
+                // A malformed block reads as no frontmatter, as metadataCache
+                // reads it.
             }
         }
 
@@ -63,16 +74,25 @@ export class FileParsePipeline {
         }
 
         // --- ツリーパイプライン（順序契約: build → resolve → extract）---
-        const doc = DocumentTreeBuilder.build(filePath, lines, bodyStartIndex);
+        const outline = reading && sameLines(reading.lines, lines) ? reading : Outline.read(lines);
+        const doc = DocumentTreeBuilder.build(filePath, lines, bodyStartIndex, outline);
         SectionPropertyResolver.resolve(doc, frontmatterObj, settings.scopeKeys);
         const tasks = TreeTaskExtractor.extract(doc, {
             filePath,
             scopeKeys: settings.scopeKeys,
         });
+        // What an operation that takes a row away plans from (`RowBasis`).
+        // Slices of one array share its strings, so a deep tree costs one
+        // reference per line and level, not a copy of the text.
+        for (const task of tasks) {
+            if (task.line >= 0 && task.line < lines.length) {
+                task.subtreeLines = lines.slice(task.line, outline.subtreeEnd(task.line));
+            }
+        }
 
         // Blocks are collected from the whole file (frontmatter cannot hold a
         // fence, and a block is not a task, so the body offset is irrelevant).
-        const { blocks: genBlocks } = collectGenBlocks(lines);
+        const { blocks: genBlocks } = collectGenBlocks(lines, outline);
 
         return { ignored: false, tasks, genBlocks };
     }
@@ -92,7 +112,7 @@ export class FileParsePipeline {
             return false;
         }
 
-        // metadataCache 未更新の窓に備え、raw frontmatter 行も直接照合する
+        // A block YAML refuses still says tv-ignore line by line.
         const escapedKey = ignoreKey.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
         const keyLineRegex = new RegExp(`^${escapedKey}\\s*:\\s*(.*)$`);
 
@@ -124,4 +144,12 @@ export class FileParsePipeline {
             || normalized === 'on'
             || normalized === '1';
     }
+}
+
+/** Whether two arrays hold the same lines, one by one. */
+function sameLines(a: readonly string[], b: readonly string[]): boolean {
+    if (a === b) return true;
+    if (a.length !== b.length) return false;
+    for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) return false;
+    return true;
 }

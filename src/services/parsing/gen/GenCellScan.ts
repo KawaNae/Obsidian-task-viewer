@@ -1,8 +1,8 @@
-import { CodeFenceTracker } from '../../../utils/CodeFenceTracker';
-import { FLOW_MARKER, matchFlowLine } from '../../flow/FlowLineScanner';
+import { FLOW_MARKER, matchFlowLine } from '../utils/FlowLineScanner';
 import { parseFlowCells } from '../../flow/FlowParser';
 import type { StaticType } from '../../lang/functions';
 import type { GenCellTypes } from './GenBodyParser';
+import { Outline, type OutlineReading } from '../utils/Outline';
 
 /**
  * Every state cell a file declares, by the type it starts from.
@@ -25,15 +25,14 @@ import type { GenCellTypes } from './GenBodyParser';
  * skipped this would report every cell as a name nobody declared — which is
  * exactly what the preview did until it was given this.
  *
- * `fenced` is the per-line code-fence mask, since a command written inside a
- * fence is an example rather than a command. Callers that already hold one
- * pass it; the rest let it be built here.
+ * A line of code is skipped, since a command written in a code block is an
+ * example rather than a command (`Outline.read`). Callers that already hold
+ * the note's reading pass it; the rest let it be read here.
  */
-export function declaredCells(lines: string[], fenced?: boolean[]): GenCellTypes {
-    const mask = fenced ?? fenceMask(lines);
+export function declaredCells(lines: string[], outline: OutlineReading = Outline.read(lines)): GenCellTypes {
     const types = new Map<string, StaticType>();
     lines.forEach((text, i) => {
-        if (mask[i]) return;
+        if (outline.inCode(i)) return;
         const tail = flowTailOf(text);
         if (tail === null) return;
         for (const cell of parseFlowCells(tail)) {
@@ -48,13 +47,6 @@ export function declaredCells(lines: string[], fenced?: boolean[]): GenCellTypes
         }
     });
     return types;
-}
-
-/** Both readings of the fence rule, the way every other caller ORs them. */
-function fenceMask(lines: string[]): boolean[] {
-    const document = CodeFenceTracker.mask(lines);
-    const subtree = CodeFenceTracker.subtreeMask(lines);
-    return lines.map((_, i) => document[i] || subtree[i]);
 }
 
 /** The command text of a line: a task line's tail, or a flow child line's. */

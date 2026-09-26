@@ -83,6 +83,7 @@ export class KanbanToolbar extends ViewToolbarBase {
             }),
             viewType: VIEW_META_KANBAN.type,
             getViewTemplateFolder: () => deps.plugin.settings.viewTemplateFolder,
+            writeChannel: deps.plugin.getTaskWriteService().writeChannel,
             getViewTemplate: () => ({
                 filePath: '',
                 name: deps.getCustomName() || VIEW_META_KANBAN.displayText,

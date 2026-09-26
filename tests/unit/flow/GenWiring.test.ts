@@ -1,27 +1,24 @@
-import { describe, it, expect, vi, beforeAll, afterAll } from 'vitest';
-import { TFile } from 'obsidian';
+import { describe, it, expect, vi } from 'vitest';
 import { FlowExecutor } from '../../../src/services/flow/FlowExecutor';
 import { parseFlowSegments, singleLineFlow } from '../../../src/services/flow/FlowSegments';
 import { collectGenBlocks, type GenBlock } from '../../../src/services/parsing/gen/GenBlockCollector';
 import { parseGenBody } from '../../../src/services/parsing/gen/GenBodyParser';
-import { TaskCloner, type GeneratedChild } from '../../../src/services/persistence/TaskCloner';
-import { FileOperations } from '../../../src/services/persistence/utils/FileOperations';
+import type { GeneratedChild } from '../../../src/services/persistence/TaskCloner';
 import { TaskIndex } from '../../../src/services/core/TaskIndex';
 import { TaskRepository } from '../../../src/services/persistence/TaskRepository';
+import type { TaskOp } from '../../../src/services/persistence/TaskOps';
+import type { FlowInstanceInsert } from '../../../src/services/persistence/FlowInstanceLines';
+import { plannedOn } from '../../../src/services/persistence/TaskRefs';
 import { DEFAULT_SETTINGS, type Task } from '../../../src/types';
+import { completing } from '../helpers/completing';
 import { makeTask } from '../helpers/makeTask';
+import { writeBench } from '../helpers/writeBench';
+import { freezeDate } from '../helpers/fakeDate';
 
 // `every` lands on the first grid point after the later of today and the
 // instance's own date, so the fixtures below (anchored on 2026-08-17) only
-// read as written while "today" is not past them. Only Date is faked: the
-// executor settles through a real setTimeout in flush().
-beforeAll(() => {
-    vi.useFakeTimers({ toFake: ['Date'] });
-    vi.setSystemTime(new Date(2026, 7, 17, 12, 0, 0));
-});
-afterAll(() => {
-    vi.useRealTimers();
-});
+// read as written while "today" is not past them.
+freezeDate(new Date(2026, 7, 17, 12, 0, 0));
 
 /**
  * The seam between a `use()` flow and the block that is meant to write its
@@ -45,13 +42,32 @@ afterAll(() => {
 
 function makeRepository() {
     return {
+        applyToTask: vi.fn().mockResolvedValue({ written: true, refused: null, made: [] }),
         insertRecurrenceForTask: vi.fn().mockResolvedValue(undefined),
         insertGeneratedInstance: vi.fn().mockResolvedValue(undefined),
-        appendTaskWithChildren: vi.fn().mockResolvedValue(undefined),
         updateTaskInFile: vi.fn().mockResolvedValue(undefined),
         stripFlow: vi.fn().mockResolvedValue(undefined),
-        deleteTaskFromFile: vi.fn().mockResolvedValue(undefined),
     };
+}
+
+/** What the fire's one write inserts, if it inserts anything. */
+function insertOf(repository: ReturnType<typeof makeRepository>): FlowInstanceInsert | undefined {
+    const ops = repository.applyToTask.mock.calls[0]?.[1] as TaskOp[] | undefined;
+    const op = ops?.find(o => o.kind === 'insert-instance');
+    return op?.kind === 'insert-instance' ? op.insert : undefined;
+}
+
+/** The generated instance the fire's one write inserts (fails if there is none). */
+function generatedOf(repository: ReturnType<typeof makeRepository>): Extract<FlowInstanceInsert, { kind: 'generated' }> {
+    const insert = insertOf(repository);
+    if (insert?.kind !== 'generated') throw new Error('the fire inserts no generated instance');
+    return insert;
+}
+
+/** How many strip-flow ops the fires wrote. */
+function stripsOf(repository: ReturnType<typeof makeRepository>): number {
+    return repository.applyToTask.mock.calls
+        .flatMap(c => c[1] as TaskOp[]).filter(o => o.kind === 'strip-flow').length;
 }
 
 const app = { vault: { getAbstractFileByPath: () => null } };
@@ -66,18 +82,15 @@ function makeExecutor(
     blocks: Record<string, GenBlock> = {},
 ) {
     const taskIndex = {
-        waitForScan: vi.fn().mockResolvedValue(undefined),
-        resolveTask: vi.fn((t: Task) => t),
-        requestScan: vi.fn().mockResolvedValue(undefined),
-        notifyImmediate: vi.fn(),
+        getTask: vi.fn(() => undefined),
         getGenBlock: vi.fn((_file: string, name: string) => blocks[name]),
     };
-    const executor = new FlowExecutor(
+    const executor = completing(new FlowExecutor(
         repository as unknown as TaskRepository,
         taskIndex as unknown as TaskIndex,
         app as never,
         () => DEFAULT_SETTINGS
-    );
+    ), repository, blocks);
     return { executor, taskIndex };
 }
 
@@ -107,10 +120,12 @@ describe('a use() flow writes what its block describes', () => {
         const repository = makeRepository();
         const { executor } = makeExecutor(repository, { 週報: WEEKLY });
 
-        await executor.handleTaskCompletion(firedTask('every mon use("週報")'));
+        await executor.complete(firedTask('every mon use("週報")'));
         await flush();
 
-        expect(repository.insertGeneratedInstance).toHaveBeenCalledTimes(1);
+        expect(repository.applyToTask).toHaveBeenCalledTimes(1);
+        expect(insertOf(repository)?.kind).toBe('generated');
+        expect(repository.insertGeneratedInstance).not.toHaveBeenCalled();
         expect(repository.insertRecurrenceForTask).not.toHaveBeenCalled();
     });
 
@@ -121,10 +136,10 @@ describe('a use() flow writes what its block describes', () => {
         const repository = makeRepository();
         const { executor } = makeExecutor(repository, { 週報: WEEKLY });
 
-        await executor.handleTaskCompletion(firedTask('every mon use("週報")'));
+        await executor.complete(firedTask('every mon use("週報")'));
         await flush();
 
-        const [, , , children] = repository.insertGeneratedInstance.mock.calls[0];
+        const { children } = generatedOf(repository);
         expect(children).toEqual([
             { depth: 1, body: '- [ ] 資料集め' },
             { depth: 2, body: '- [ ] 先週分' },
@@ -137,10 +152,10 @@ describe('a use() flow writes what its block describes', () => {
         const repository = makeRepository();
         const { executor } = makeExecutor(repository, { 週報: WEEKLY });
 
-        await executor.handleTaskCompletion(firedTask('every mon use("週報")'));
+        await executor.complete(firedTask('every mon use("週報")'));
         await flush();
 
-        const [, parentLine] = repository.insertGeneratedInstance.mock.calls[0];
+        const { parentLine } = generatedOf(repository);
         expect(parentLine).toContain('==> every mon use("週報")');
     });
 
@@ -148,10 +163,10 @@ describe('a use() flow writes what its block describes', () => {
         const repository = makeRepository();
         const { executor } = makeExecutor(repository, { 週報: WEEKLY });
 
-        await executor.handleTaskCompletion(firedTask('every mon use("週報")'));
+        await executor.complete(firedTask('every mon use("週報")'));
         await flush();
 
-        const [, parentLine] = repository.insertGeneratedInstance.mock.calls[0];
+        const { parentLine } = generatedOf(repository);
         expect(parentLine).toContain('@2026-08-24');
     });
 
@@ -163,7 +178,7 @@ describe('a use() flow writes what its block describes', () => {
         const raws = ['every mon', 'use("週報")'];
         const { program, diagnostics } = parseFlowSegments(raws);
 
-        await executor.handleTaskCompletion(firedTask('every mon', {
+        await executor.complete(firedTask('every mon', {
             flow: {
                 raw: raws[0],
                 childSegments: [{ raw: raws[1], bodyLine: 1 }],
@@ -173,7 +188,7 @@ describe('a use() flow writes what its block describes', () => {
         }));
         await flush();
 
-        const [, parentLine, flowLines] = repository.insertGeneratedInstance.mock.calls[0];
+        const { parentLine, flowLines } = generatedOf(repository);
         expect(parentLine).not.toContain('use(');
         expect(flowLines).toEqual(['use("週報")']);
     });
@@ -186,10 +201,10 @@ describe('a use() flow writes what its block describes', () => {
             朝: block('朝', ['\t- [ ] ストレッチ']),
         });
 
-        await executor.handleTaskCompletion(firedTask('every mon use("朝")'));
+        await executor.complete(firedTask('every mon use("朝")'));
         await flush();
 
-        const [, parentLine, , children] = repository.insertGeneratedInstance.mock.calls[0];
+        const { parentLine, children } = generatedOf(repository);
         expect(parentLine).toBe('- [ ] 週報 第3回 @2026-08-24 ==> every mon use("朝")');
         expect(children).toEqual([{ depth: 1, body: '- [ ] ストレッチ' }]);
     });
@@ -202,10 +217,10 @@ describe('a use() flow writes what its block describes', () => {
         const repository = makeRepository();
         const { executor } = makeExecutor(repository, { 週報: WEEKLY });
 
-        await executor.handleTaskCompletion(firedTask('every mon x1 use("週報")'));
+        await executor.complete(firedTask('every mon x1 use("週報")'));
         await flush();
 
-        const [, parentLine, flowLines, children] = repository.insertGeneratedInstance.mock.calls[0];
+        const { parentLine, flowLines, children } = generatedOf(repository);
         expect(parentLine).not.toContain('==>');
         expect(flowLines).toEqual([]);
         expect(children).toEqual([
@@ -224,10 +239,10 @@ describe('a use() flow writes what its block describes', () => {
             週報: block('週報', ['\t${["- [ ] 資料集め"]}', '- [ ] 週報 @${start}']),
         });
 
-        await executor.handleTaskCompletion(firedTask('every mon use("週報")'));
+        await executor.complete(firedTask('every mon use("週報")'));
         await flush();
 
-        const [, parentLine, , children] = repository.insertGeneratedInstance.mock.calls[0];
+        const { parentLine, children } = generatedOf(repository);
         expect(parentLine).toContain('- [ ] 週報 @2026-08-24');
         expect(children).toEqual([{ depth: 1, body: '- [ ] 資料集め' }]);
     });
@@ -240,10 +255,10 @@ describe('a use() flow writes what its block describes', () => {
             週報: block('週報', ['- [x] 週報 @${start}']),
         });
 
-        await executor.handleTaskCompletion(firedTask('every mon use("週報")'));
+        await executor.complete(firedTask('every mon use("週報")'));
         await flush();
 
-        const [, parentLine] = repository.insertGeneratedInstance.mock.calls[0];
+        const { parentLine } = generatedOf(repository);
         expect(parentLine.startsWith('- [ ] ')).toBe(true);
     });
 });
@@ -253,13 +268,13 @@ describe('a fire that cannot generate writes nothing and keeps its command', () 
         const repository = makeRepository();
         const { executor } = makeExecutor(repository, blocks);
 
-        await executor.handleTaskCompletion(firedTask(src));
+        await executor.complete(firedTask(src));
         await flush();
 
+        expect(repository.applyToTask).not.toHaveBeenCalled();
         expect(repository.insertGeneratedInstance).not.toHaveBeenCalled();
         expect(repository.insertRecurrenceForTask).not.toHaveBeenCalled();
         expect(repository.stripFlow).not.toHaveBeenCalled();
-        expect(repository.deleteTaskFromFile).not.toHaveBeenCalled();
     };
 
     it('when no block answers to the name', async () => {
@@ -315,12 +330,13 @@ describe('a fire that generates nothing still consumes its command', () => {
         const repository = makeRepository();
         const { executor } = makeExecutor(repository, {});
 
-        await executor.handleTaskCompletion(
+        await executor.complete(
             firedTask('every mon until(2026-08-18) use("存在しない")'));
         await flush();
 
-        expect(repository.insertGeneratedInstance).not.toHaveBeenCalled();
-        expect(repository.stripFlow).toHaveBeenCalledTimes(1);
+        expect(repository.applyToTask).toHaveBeenCalledTimes(1);
+        expect(insertOf(repository)).toBeUndefined();
+        expect(stripsOf(repository)).toBe(1);
     });
 });
 
@@ -338,23 +354,6 @@ describe('a fire that generates nothing still consumes its command', () => {
  * depth and a text on one side, an indent and a line on the other, with no
  * transformation in between that either side could disagree about.
  */
-
-const FILE = 'note.md';
-
-function harness(initial: string) {
-    let content = initial;
-    const file = new TFile();
-    const vaultApp = {
-        vault: {
-            getAbstractFileByPath: () => file,
-            process: async (_f: TFile, fn: (data: string) => string) => { content = fn(content); },
-        },
-    } as any;
-    return {
-        cloner: new TaskCloner(vaultApp, new FileOperations(vaultApp)),
-        lines: () => content.split('\n'),
-    };
-}
 
 /** Read one named block of `lines` as a parent line and children. */
 function shapeOf(lines: string[], name: string) {
@@ -376,23 +375,17 @@ const document = [
     '```',
 ];
 
-const firedInFile = () => makeTask({
-    file: FILE,
-    line: 0,
-    content: '週報 第3回',
-    statusChar: 'x',
-    startDate: '2026-08-17',
-    originalText: document[0],
-});
-
 describe('a block body reaches the file unchanged', () => {
     it('places the block\'s shape above the task that fired', async () => {
-        const h = harness(document.join('\n'));
+        const h = await writeBench(document.join('\n'));
         const { parentLine, children } = shapeOf(document, '週報');
 
-        await h.cloner.insertGeneratedInstance(
-            firedInFile(), parentLine!, ['every mon', 'use("週報")'], children
-        );
+        await h.writer.applyToTask(plannedOn(h.taskAt(0)), [
+            {
+                kind: 'insert-instance',
+                insert: { kind: 'generated', parentLine: parentLine!, flowLines: ['every mon', 'use("週報")'], children },
+            },
+        ]);
 
         expect(h.lines().slice(0, 7)).toEqual([
             '- [ ] 週報 第4回 @2026-08-24',
@@ -409,10 +402,12 @@ describe('a block body reaches the file unchanged', () => {
         // The live child lines are that instance's own history. Nothing in
         // this path touches them — the block decides what the next instance
         // holds, which is the whole point of the redesign.
-        const h = harness(document.join('\n'));
+        const h = await writeBench(document.join('\n'));
         const { parentLine, children } = shapeOf(document, '週報');
 
-        await h.cloner.insertGeneratedInstance(firedInFile(), parentLine!, [], children);
+        await h.writer.applyToTask(plannedOn(h.taskAt(0)), [
+            { kind: 'insert-instance', insert: { kind: 'generated', parentLine: parentLine!, flowLines: [], children } },
+        ]);
 
         const written = h.lines();
         expect(written[written.indexOf(document[0]) + 1]).toBe('\t- [x] ⏱️ 09:00-10:00');
@@ -445,16 +440,12 @@ describe('a block body reaches the file unchanged', () => {
             '\t- [ ] 資料集め',
             '```',
         ];
-        const h = harness(spaced.join('\n'));
+        const h = await writeBench(spaced.join('\n'));
         const { parentLine, children } = shapeOf(spaced, '週報');
 
-        await h.cloner.insertGeneratedInstance(
-            makeTask({
-                file: FILE, line: 0, content: '週報 第3回', statusChar: 'x',
-                startDate: '2026-08-17', originalText: spaced[0],
-            }),
-            parentLine!, [], children
-        );
+        await h.writer.applyToTask(plannedOn(h.taskAt(0)), [
+            { kind: 'insert-instance', insert: { kind: 'generated', parentLine: parentLine!, flowLines: [], children } },
+        ]);
 
         expect(h.lines()[1]).toBe('    - [ ] 資料集め');
     });

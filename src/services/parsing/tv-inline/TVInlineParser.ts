@@ -1,9 +1,9 @@
 import type { Task, TaskFlow } from '../../../types';
 import { t } from '../../../i18n';
 import { flowValidation, singleLineFlow } from '../../flow/FlowSegments';
+import { FLOW_SPLIT } from '../utils/FlowLineScanner';
 import { createBaseTask } from '../TaskFactory';
 import type { LeafParserStrategy } from '../strategies/ParserStrategy';
-import { isTimerTargetId } from '../../../utils/TimerTargetIdUtils';
 import { TaskIdGenerator } from '../../display/TaskIdGenerator';
 import { TagExtractor } from '../utils/TagExtractor';
 import { parseDateTimeField } from '../utils/DateTimeFieldParser';
@@ -38,21 +38,19 @@ export class TVInlineParser implements LeafParserStrategy {
     readonly isReadOnly = false;
 
     parse(line: string, filePath: string, lineNumber: number): Task | null {
-        // Extract trailing block ID (^id) before parsing task structure.
-        const { text: lineForParse, blockId } = TaskLineClassifier.extractBlockId(line);
-        const timerTargetId = blockId && isTimerTargetId(blockId) ? blockId : undefined;
-
-        // 1. Split flow commands (==>)
-        const flowSplit = lineForParse.split(/==>(.+)/);
-        const taskPart = flowSplit[0];
-        const flowPart = flowSplit[1] || '';
-
-        const classified = TaskLineClassifier.classify(taskPart);
+        const classified = TaskLineClassifier.classify(line);
         if (!classified) {
             return null;
         }
+        const { statusChar } = classified;
 
-        const { statusChar, rawContent } = classified;
+        // 1. The trailing block ID (^id) is the content's last part
+        const { text: body, blockId } = TaskLineClassifier.extractBlockId(classified.rawContent);
+
+        // Split flow commands (==>)
+        const flowSplit = body.split(FLOW_SPLIT);
+        const rawContent = flowSplit[0];
+        const flowPart = flowSplit[1] || '';
 
         // 2. Parse the flow command. `raw` always carries the verbatim text
         // so format() re-emits it losslessly even when parsing failed;
@@ -123,7 +121,6 @@ export class TVInlineParser implements LeafParserStrategy {
             flow,
             tags: TagExtractor.fromContent(content.trim()),
             blockId,
-            timerTargetId,
             validation,
         });
     }
@@ -248,17 +245,17 @@ export class TVInlineParser implements LeafParserStrategy {
         // block is handed are one implementation rather than two that agree
         // until one of them is changed.
         const dateBlock = formatDateBlock(task);
-        const metaStr = dateBlock ? ` ${dateBlock}` : '';
 
         // Flow text is always re-emitted verbatim (round-trip safety, even
         // for unparseable commands). Canonical re-serialization happens only
         // when a fire generates the next instance (FlowPlanner). Only the
         // task-line segment is emitted here — `- ==>` child segments are
         // physical lines of their own and are never rewritten by format().
-        const flowStr = task.flow?.raw ? ` ==> ${task.flow.raw}` : '';
+        const flowStr = task.flow?.raw ? `==> ${task.flow.raw}` : '';
 
-        const blockIdStr = task.blockId ? ` ^${task.blockId}` : '';
+        const blockIdStr = task.blockId ? `^${task.blockId}` : '';
         const marker = TaskLineClassifier.extractMarker(task.originalText);
-        return `${marker} [${statusChar}] ${task.content}${metaStr}${flowStr}${blockIdStr}`;
+        return TaskLineClassifier.formatPrefix(statusChar, '', marker)
+            + TaskLineClassifier.joinContent(task.content, dateBlock, flowStr, blockIdStr);
     }
 }

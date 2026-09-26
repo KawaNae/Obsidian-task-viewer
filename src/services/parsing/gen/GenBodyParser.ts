@@ -10,7 +10,10 @@ import type { Program } from '../../lang/StmtAst';
 import { checkProgram } from '../../lang/StmtChecker';
 import { parseProgram } from '../../lang/StmtParser';
 import { TaskLineClassifier } from '../utils/TaskLineClassifier';
+import { INDENT_SOURCE, Outline } from '../utils/Outline';
+import { IN_LINE } from '../../../utils/LineBreak';
 import type { LocatedDiagnostic } from './GenBlockCollector';
+import { childStatusWarning, parentStatusWarning } from './GenGeneratedStatusCheck';
 
 /** One literal line of a block body, with its indentation read as a depth. */
 export interface GenLine {
@@ -103,16 +106,11 @@ export function indentDepth(indent: string): number {
     return tabs + Math.ceil(spaces / SPACES_PER_LEVEL);
 }
 
-/** Leading whitespace of a line. */
-export function leadingIndent(raw: string): string {
-    return raw.slice(0, raw.length - raw.trimStart().length);
-}
-
 /** Opening and closing tags of the leading js section. */
-const JS_OPEN_RE = /^\s*<js>/;
-const JS_CLOSE_RE = /^\s*<\/js>\s*$/;
+const JS_OPEN_RE = new RegExp(`^${INDENT_SOURCE}<js>`);
+const JS_CLOSE_RE = new RegExp(`^${INDENT_SOURCE}<\\/js>\\s*$`);
 /** The whole section on one line, which is a shape worth writing. */
-const JS_INLINE_RE = /^\s*<js>.*<\/js>\s*$/;
+const JS_INLINE_RE = new RegExp(`^${INDENT_SOURCE}<js>${IN_LINE}*<\\/js>\\s*$`);
 
 /**
  * Read the literal lines of a block body.
@@ -193,7 +191,7 @@ function readGenBody(body: string[], firstLine: number, cells?: GenCellTypes): G
             continue;
         }
 
-        const indent = leadingIndent(raw);
+        const indent = Outline.indentOf(raw);
         const tabs = (indent.match(/\t/g) ?? []).length;
         const spaces = indent.length - tabs;
         if (spaces % SPACES_PER_LEVEL !== 0 || (tabs > 0 && spaces > 0)) {
@@ -209,7 +207,7 @@ function readGenBody(body: string[], firstLine: number, cells?: GenCellTypes): G
 
         // Spans are measured from the start of the raw line, which is where
         // the editor puts them, so the interpolations carry the indent.
-        const text = raw.trimStart();
+        const text = Outline.dedent(raw);
         const lineDiagnostics: Diagnostic[] = [];
         const parts = splitInterpolations(text, lineDiagnostics, indent.length);
         for (const d of lineDiagnostics) diagnostics.push({ ...d, line });
@@ -480,10 +478,35 @@ function classify(
         });
     }
 
+    const children = lines.filter(l => l !== parent && (l.depth > 0 || isSpliceLine(l)));
+
+    // The two warnings GeneratedLineCheck raises at fire time, read here off
+    // the block's own literal lines instead of a rendered instance — this is
+    // what lets them reach a reader before anything fires: DiagnosticsExtension
+    // and GenBlockPreview both read them straight off this GenBody, and
+    // GenBlockPreview is the one that actually renders while a closed block's
+    // fence is replaced by its Live Preview widget (see that module). A line
+    // whose status or `==>` arrives from a value stays quiet, not by a special
+    // case here but because TaskLineClassifier.classify() cannot read a
+    // status through `${...}`, and an interpolated `==>` is not literal text
+    // on the line — see GenGeneratedStatusCheck for both.
+    if (parent) {
+        const text = parent.text.trimEnd();
+        const classified = TaskLineClassifier.classify(text);
+        const w = classified && parentStatusWarning(classified, { start: parent.indent, end: parent.indent + text.length });
+        if (w) diagnostics.push({ ...w, line: parent.line });
+    }
+    for (const child of children) {
+        const text = child.text.trimEnd();
+        const classified = TaskLineClassifier.classify(text);
+        const w = childStatusWarning(classified, text, { start: child.indent, end: child.indent + text.length });
+        if (w) diagnostics.push({ ...w, line: child.line });
+    }
+
     diagnostics.sort((a, b) => a.line - b.line);
     return {
         parent,
-        children: lines.filter(l => l !== parent && (l.depth > 0 || isSpliceLine(l))),
+        children,
         js,
         bindings,
         diagnostics,

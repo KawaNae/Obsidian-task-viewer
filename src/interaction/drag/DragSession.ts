@@ -2,7 +2,6 @@ import type { Task } from '../../types';
 import type { TaskWriteService } from '../../services/data/TaskWriteService';
 import type { DragContext, DragStrategy } from './DragStrategy';
 import { logDebug } from '../../log/log';
-import { hostWindow } from '../../utils/HostWindow';
 
 /**
  * 1 回の drag (pointerdown → pointerup) の lifecycle を保持する。
@@ -55,12 +54,12 @@ export class DragSession {
      *
      * 1. Strategy の onUp を await（finish*Move/Resize 内部で commitPlan）
      * 2. notifyImmediate で onChange の coalesce/partial に乗せる
-     * 3. draggingFile を 1 frame 遅延で解除（metadataCache.changed の遅延
-     *    イベントで自分自身の書き戻しを除外するため）。このフレームは
-     *    **container の window** から取る: 素の rAF は main window のクロック
-     *    なので、popout でドラッグしている最中に main が最小化されていると
-     *    永久に発火せず、draggingFilePath が残留して以後の外部変更が恒久的に
-     *    スキップされる。
+     * 3. draggingFile をその場で解除する（`end`。onUp が投げても通る）。解除すると、ドラッグ中に保留した
+     *    ファイルの読み（確定の書き込みを含む）を入れて通知する
+     *    （`TaskIndex.setDraggingFile`）。以前は 1 frame 遅らせて、確定の
+     *    書き込みの遅れて来る `changed` を draggingFile で除いていた。今は
+     *    `changed` がすでに読んだ内容かを内容で答える（`f8827b9a`）ので、
+     *    フレームを待つ理由は無い。
      *
      * drag 完了時の合成 click による誤 deselect は SelectionController が
      * `pointerdown` で deselect するように設計されているため構造的に発生
@@ -73,34 +72,40 @@ export class DragSession {
         this.committing = true;
         try {
             await this.currentStrategy.onUp(e, this.context);
+            logDebug(`[Drag:committed] taskId=${taskId}`);
+            this.writeService.notifyImmediate(
+                taskId ?? undefined,
+                taskId ? ['startDate', 'startTime', 'endDate', 'endTime'] : undefined,
+            );
         } finally {
             this.committing = false;
+            this.end();
         }
-        logDebug(`[Drag:committed] taskId=${this.currentDragTaskId}`);
-
-        this.writeService.notifyImmediate(
-            taskId ?? undefined,
-            taskId ? ['startDate', 'startTime', 'endDate', 'endTime'] : undefined,
-        );
-
-        hostWindow(this.container).requestAnimationFrame(() => {
-            this.writeService.setDraggingFile(null);
-        });
-
-        this.currentStrategy = null;
-        this.currentDragTaskId = null;
-        this.container.style.touchAction = '';
     }
 
     /**
      * Abort the active gesture without committing the edit (pointercancel /
-     * lost-capture). Mirrors handleUp's teardown minus the commit + notify.
+     * lost-capture, or the view closing: `DragHandler.destroy`). A commit
+     * already in progress is left to end the session itself.
      */
     cancel(): void {
         logDebug(`[Drag:cancel] taskId=${this.currentDragTaskId}`);
         if (!this.currentStrategy) return;
         if (this.committing) return;
-        this.currentStrategy.onCancel();
+        try {
+            this.currentStrategy.onCancel();
+        } finally {
+            this.end();
+        }
+    }
+
+    /**
+     * The one place a drag ends, however it ends (commit, abort, the view
+     * closing, a throw): it lets go of the dragged file, so the readings held
+     * while it was dragged go into the index. A file left held would keep every
+     * reading of it out, and every write to it refused.
+     */
+    private end(): void {
         this.writeService.setDraggingFile(null);
         this.currentStrategy = null;
         this.currentDragTaskId = null;

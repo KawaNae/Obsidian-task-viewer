@@ -7,6 +7,7 @@
 
 import { type App, TFile, TFolder, normalizePath } from 'obsidian';
 import type { IntervalGroup } from './TimerInstance';
+import { createFile, replaceWhole, type WriteChannel } from '../services/persistence/FileLines';
 
 export interface TemplateCreateData {
     name: string;
@@ -15,23 +16,29 @@ export interface TemplateCreateData {
 }
 
 export class IntervalTemplateWriter {
-    constructor(private app: App) {}
+    constructor(
+        private app: App,
+        private channelFor: (path: string) => WriteChannel | undefined,
+    ) {}
 
-    async updateTemplate(filePath: string, data: TemplateCreateData): Promise<TFile> {
+    /** @returns the note, or null when the overwrite was not written (the write layer has told the user why). */
+    async updateTemplate(filePath: string, data: TemplateCreateData): Promise<TFile | null> {
         const existing = this.app.vault.getAbstractFileByPath(filePath);
         if (!(existing instanceof TFile)) {
             throw new Error('Template file not found.');
         }
         const content = this.buildFileContent(data);
-        // 全体上書きで読み取り結果は使わないが、他の書き込み経路と揃えて
-        // vault.process を使う（read-modify-write の atomic 性を持つ）。
-        await this.app.vault.process(existing, () => content);
-        return existing;
+        // 全体上書き。どの行がどの行になったかは言えないので、申告の
+        // 代わりに連鎖が切れた印を残す（replaceWhole）。
+        const { written } = await replaceWhole(this.app, existing, this.channelFor(filePath), content);
+        return written ? existing : null;
     }
 
-    async saveTemplate(folderPath: string, data: TemplateCreateData): Promise<TFile> {
-        await this.ensureFolder(folderPath);
-
+    /**
+     * @returns the note, or null when it was not created (the write layer has
+     * told the user why). A name already taken throws, before anything is written.
+     */
+    async saveTemplate(folderPath: string, data: TemplateCreateData): Promise<TFile | null> {
         const content = this.buildFileContent(data);
         const sanitizedName = data.name.replace(/[\\/:*?"<>|]/g, '_');
         const filePath = normalizePath(`${folderPath}/${sanitizedName}.md`);
@@ -40,7 +47,11 @@ export class IntervalTemplateWriter {
         if (existing instanceof TFile) {
             throw new Error(`A template named "${data.name}" already exists.`);
         }
-        return await this.app.vault.create(filePath, content);
+        const created = await createFile(this.app, filePath, this.channelFor(filePath), data.name, async () => {
+            await this.ensureFolder(folderPath);
+            return content;
+        });
+        return created.written ? created.file : null;
     }
 
     private buildFileContent(data: TemplateCreateData): string {

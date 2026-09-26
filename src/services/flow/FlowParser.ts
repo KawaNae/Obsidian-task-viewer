@@ -5,7 +5,7 @@ import { splitDurationText, tokenize } from '../lang/Lexer';
 import { type Token, TokenCursor, tokenSpan } from '../lang/Token';
 import { type Value, type Weekday, weekdayFromName } from '../lang/Value';
 import { lookupWord } from '../lang/WordTable';
-import { type EveryRule, type FlowCell, type FlowProgram, SET_FIELD_ORDER, type SetField, type ScheduleNode, setHeadName } from './FlowAst';
+import { type EveryRule, type FlowCell, type FlowProgram, type MoveTarget, SET_FIELD_ORDER, type SetField, type ScheduleNode, setHeadName } from './FlowAst';
 import { checkFlow } from './FlowChecker';
 
 export interface ParseFlowResult {
@@ -162,12 +162,25 @@ function parseNode(cursor: TokenCursor, program: FlowProgram, diagnostics: Diagn
         }
         case 'move': {
             cursor.next();
-            const target = parseParenExpr(cursor, 'move', diagnostics);
-            if (target) {
-                assignNode(program, 'move', { target, span: { start: head.start, end: target.span.end + 1 } }, diagnostics, tokenSpan(head));
-            } else {
-                skipToNextNode(cursor);
+            // `move()` writes nothing between the parentheses: the end of the note.
+            if (cursor.at('lparen') && cursor.peek(1).kind === 'rparen') {
+                cursor.next();
+                const close = cursor.next();
+                assignNode(program, 'move', { target: null, to: { kind: 'end' }, span: { start: head.start, end: close.end } }, diagnostics, tokenSpan(head));
+                return;
             }
+            const target = parseParenExpr(cursor, 'move', diagnostics);
+            if (!target) {
+                skipToNextNode(cursor);
+                return;
+            }
+            const to = moveTargetOf(target);
+            if (to.kind === 'retired') {
+                diagnostics.push(warning('flow.move-retired',
+                    'move() moves the task within its note only: move() to the end of the note, move([[#heading]]) to the end of a heading\'s section. This one names another note, and does not fire',
+                    target.span));
+            }
+            assignNode(program, 'move', { target, to, span: { start: head.start, end: target.span.end + 1 } }, diagnostics, tokenSpan(head));
             return;
         }
     }
@@ -400,6 +413,23 @@ function parseParenExpr(cursor: TokenCursor, fnName: string, diagnostics: Diagno
         return null;
     }
     return expr;
+}
+
+/**
+ * Where a move written with `target` goes (`MoveTarget`), from how it is
+ * written: a link to a heading of the note it stands in, `[[#name]]` or
+ * `[[#name|alias]]`, is that heading's section. Anything else names another
+ * note — a link to one, with or without a heading, the note's own name
+ * included, a string, an expression — or is no one heading (`[[#A#B]]`,
+ * `[[#]]`), and is retired.
+ */
+function moveTargetOf(target: Expr): MoveTarget {
+    if (target.kind !== 'lit' || target.value.type !== 'link') return { kind: 'retired' };
+    const path = target.value.target.split('|')[0];
+    if (!path.startsWith('#')) return { kind: 'retired' };
+    const name = path.slice(1);
+    if (name.includes('#') || name.trim() === '') return { kind: 'retired' };
+    return { kind: 'heading', name };
 }
 
 function assignSchedule(program: FlowProgram, node: ScheduleNode, diagnostics: Diagnostic[]): void {

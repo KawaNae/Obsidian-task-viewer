@@ -1,5 +1,9 @@
 import { describe, it, expect } from 'vitest';
 import { ChildLineClassifier } from '../../../src/services/parsing/utils/ChildLineClassifier';
+import { Outline } from '../../../src/services/parsing/utils/Outline';
+
+const NBSP = String.fromCharCode(0x00a0);
+const IDEOGRAPHIC = String.fromCharCode(0x3000);
 
 describe('ChildLineClassifier', () => {
     describe('classify', () => {
@@ -97,6 +101,17 @@ describe('ChildLineClassifier', () => {
             const result = ChildLineClassifier.classify('\t- [[key:: value]]', 0);
             expect(result.propertyKey).toBeNull();
         });
+
+        it('reads no property or link on a line whose bullet opens no list item (Obsidian, measurement.md q9)', () => {
+            // After the bullet, a list item has spaces or tabs and nothing else.
+            for (const gap of ['', ' ', '　']) {
+                const outline = Outline.read(['- [ ] task', `\t-${gap}key:: value`]);
+                expect(ChildLineClassifier.ownPropertyLines(outline, 0), JSON.stringify(gap)).toEqual([]);
+                expect(ChildLineClassifier.classify(`\t-${gap}[[note]]`, 0).wikilinkTarget).toBeNull();
+            }
+            const outline = Outline.read(['- [ ] task', '\t-\tkey:: value']);
+            expect(ChildLineClassifier.ownPropertyLines(outline, 0)).toEqual([1]);
+        });
     });
 
     describe('collectProperties', () => {
@@ -177,11 +192,33 @@ describe('ChildLineClassifier', () => {
             expect(() => ChildLineClassifier.classifyLines(['- a'], [])).toThrow();
         });
 
-        it('isPropertyLine is a pure predicate over the same rules', () => {
-            expect(ChildLineClassifier.isPropertyLine('- key:: value')).toBe(true);
-            expect(ChildLineClassifier.isPropertyLine('- [x] key:: value')).toBe(false);
-            expect(ChildLineClassifier.isPropertyLine('- [[key:: value]]')).toBe(false);
-            expect(ChildLineClassifier.isPropertyLine('- plain note')).toBe(false);
+        it('ownPropertyLines keeps only the task\'s own `- key:: value` children', () => {
+            const outline = Outline.read([
+                '- [ ] task',
+                '\t- key:: value',
+                '\t- [x] key:: value',
+                '\t- [[key:: value]]',
+                '\t- plain note',
+            ]);
+            expect(ChildLineClassifier.ownPropertyLines(outline, 0)).toEqual([1]);
+        });
+
+        it('tells a task\'s own property line from a deeper one by depth, not by indent length', () => {
+            // A tab reaches the next multiple of four columns, so two indents
+            // of the same length in characters can stand at very different
+            // depths. Line 2 is a grandchild (nested under key1's own item);
+            // line 3 is the task's own property. Both have a 2-character
+            // indent, but only line 3 belongs in the result.
+            const outline = Outline.read([
+                '- [ ] task',
+                '\t- key1:: v1',
+                '\t\t- key2:: v2',
+                '  - key3:: v3',
+            ]);
+            expect(Outline.indentOf(outline.lines[2]).length).toBe(Outline.indentOf(outline.lines[3]).length);
+            expect(outline.item(2)!.parent).toBe(1);
+            expect(outline.item(3)!.parent).toBe(0);
+            expect(ChildLineClassifier.ownPropertyLines(outline, 0)).toEqual([1, 3]);
         });
     });
 });

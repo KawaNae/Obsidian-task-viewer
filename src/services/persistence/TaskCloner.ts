@@ -1,13 +1,11 @@
 import { type App, TFile } from 'obsidian';
-import type { DuplicateOptions, Task } from '../../types';
-import { formatFlowLine } from '../flow/FlowLineScanner';
+import type { DuplicateOptions } from '../../types';
 import { DateUtils } from '../../utils/DateUtils';
-import { logWarn } from '../../log/log';
 import { FileOperations } from './utils/FileOperations';
-import { appendLines, processLines, splitLines, type LineEdits } from '../../utils/FileLines';
-import type { WriteObserver } from './WriteObserver';
-
-import { type GeneratedChild, renderFlowInstance } from './FlowInstanceLines';
+import { fileGone, processLines, type LineDraft, type WriteChannels, type WriteOutcome } from './FileLines';
+import type { PlannedTarget } from './TaskRefs';
+import { Outline } from '../parsing/utils/Outline';
+import { Block, Placement, type Spot } from './utils/Placement';
 
 export type { GeneratedChild } from './FlowInstanceLines';
 
@@ -31,7 +29,7 @@ export class TaskCloner {
     constructor(
         private app: App,
         private fileOps: FileOperations,
-        private writes?: WriteObserver,
+        private channelOf: WriteChannels,
     ) { }
 
     /**
@@ -45,21 +43,16 @@ export class TaskCloner {
      * @returns whether the copy was written. A `false` means the original line
      * could not be resolved and the file is untouched.
      */
-    async duplicateInlineTask(task: Task, options?: DuplicateOptions): Promise<boolean> {
+    async duplicateInlineTask(target: PlannedTarget, options?: DuplicateOptions): Promise<WriteOutcome> {
         const { dayOffset = 0, count = 1 } = options ?? {};
 
-        const file = this.app.vault.getAbstractFileByPath(task.file);
-        if (!(file instanceof TFile)) {
-            logWarn(`[TaskCloner] File not found: ${task.file}`);
-            return false;
-        }
+        const file = this.app.vault.getAbstractFileByPath(target.file);
+        if (!(file instanceof TFile)) return fileGone(this.channelOf(target.file), target.file, target.subject);
 
-        return processLines(this.app, file, (lines, _eol, edits) => {
-            const idx = this.fileOps.findTaskLineNumber(lines, task);
-            if (idx < 0 || idx >= lines.length) {
-                logWarn('[TaskCloner] Task not found in file (duplicate)');
-                return null;
-            }
+        return processLines(this.app, file, this.channelOf(target.file), (draft, _eol, { row }) => {
+            const lines = draft.lines;
+            const idx = row(target);
+            if (idx === null) return false;
 
             const cleanParent = this.fileOps.stripBlockIds([lines[idx]])[0];
             const parents: string[] = [];
@@ -68,8 +61,9 @@ export class TaskCloner {
                 parents.push(this.shiftInlineDates(cleanParent, offset));
             }
 
-            return this.spliceCopies(lines, idx, parents, 'before', edits);
-        }, this.writes?.for(task.file));
+            this.putCopies(draft, idx, parents, Placement.copyOf(draft.reading(), idx, 'above', parents[0]));
+            return true;
+        });
     }
 
     /**
@@ -77,7 +71,8 @@ export class TaskCloner {
      *
      * 複写の行は呼び出し側が組んで渡す。どこへ置くかを決めるのがこの層で、
      * 何を書くか（実効 end から始めて長さを保つ）を決めるのは日付を解決
-     * できる層である、という分担は {@link insertRecurrenceForTask} と同じ。
+     * できる層である、という分担はフローの次回分（`InlineTaskWriter.applyToTask`
+     * の `insert-instance`）と同じ。
      * 時刻を持たないタスクはずらす先が無いので、呼び出し側は `verbatim` を
      * 渡す。その複写はファイルの行をそのまま写し、formatter を通らない。
      *
@@ -87,179 +82,56 @@ export class TaskCloner {
      *
      * @returns whether the copies were written.
      */
-    async duplicateInlineTaskInPlace(task: Task, copies: InPlaceCopyLines): Promise<boolean> {
-        const file = this.app.vault.getAbstractFileByPath(task.file);
-        if (!(file instanceof TFile)) {
-            logWarn(`[TaskCloner] File not found: ${task.file}`);
-            return false;
-        }
+    async duplicateInlineTaskInPlace(target: PlannedTarget, copies: InPlaceCopyLines): Promise<WriteOutcome> {
+        const file = this.app.vault.getAbstractFileByPath(target.file);
+        if (!(file instanceof TFile)) return fileGone(this.channelOf(target.file), target.file, target.subject);
 
-        return processLines(this.app, file, (lines, _eol, edits) => {
-            const idx = this.fileOps.findTaskLineNumber(lines, task);
-            if (idx < 0 || idx >= lines.length) {
-                logWarn('[TaskCloner] Task not found in file (duplicate as next)');
-                return null;
-            }
+        return processLines(this.app, file, this.channelOf(target.file), (draft, _eol, { row }) => {
+            const lines = draft.lines;
+            const idx = row(target);
+            if (idx === null) return false;
 
-            const indent = lines[idx].match(/^(\s*)/)?.[1] ?? '';
+            const indent = Outline.indentOf(lines[idx]);
             const parents = copies.kind === 'verbatim'
                 ? Array.from({ length: copies.count },
                     () => this.fileOps.stripBlockIds([lines[idx]])[0])
-                : copies.lines.map(l => indent + l.trim());
+                : copies.lines.map(l => indent + Outline.dedent(l));
 
-            return this.spliceCopies(lines, idx, parents, 'after', edits);
-        }, this.writes?.for(task.file));
-    }
-
-    /**
-     * タスクの再発処理：元タスクの兄弟位置に新しいタスク行を挿入する。
-     * `content` は呼び出し側（FlowExecutor interpreter）が format 済みの行文字列。
-     * `flowLines` は新インスタンスの `- ==>` フロー子行の raw 列（行単位
-     * canonical、FlowPlanner 産）。タスク行直後に正規化位置で挿入する。
-     *
-     * 子行は運ばない。発火したインスタンスの下にある行はそのインスタンスが
-     * 何をしたかの記録で、次インスタンスに何を持たせるかは生成ブロックが
-     * 記述する（gen v3）。既存子行はここでも読むが、用途はフロー子行の
-     * インデントをファイルの綴りに揃えることだけである。
-     */
-    async insertRecurrenceForTask(task: Task, content: string, flowLines: string[] = []): Promise<void> {
-        const file = this.app.vault.getAbstractFileByPath(task.file);
-        if (!(file instanceof TFile)) return;
-
-        await processLines(this.app, file, (lines, _eol, edits) => {
-            const currentLine = this.fileOps.findTaskLineNumber(lines, task);
-            if (currentLine < 0 || currentLine >= lines.length) {
-                // Task not found: append to end
-                appendLines(lines, [
-                    ...splitLines(content).lines,
-                    ...flowLines.map(raw => formatFlowLine('\t', raw)),
-                ], edits);
-                return lines;
-            }
-
-            const rendered = renderFlowInstance(this.fileOps, lines, currentLine,
-                { kind: 'recurrence', content, flowLines });
-
-            const insertAt = this.fileOps.findSiblingGroupStart(lines, currentLine);
-            edits.splice(insertAt, 0, ...rendered);
-
-            return lines;
-        }, this.writes?.for(task.file));
-    }
-
-    /**
-     * Write the next instance from what a gen block described.
-     *
-     * The caller hands over finished values: the parent line with its flow
-     * clause already composed, the flow child lines in canonical form, and the
-     * children as depth and body. Nothing here reads the block or evaluates
-     * anything — this layer only decides where the lines go and how deep they
-     * sit, which is the same division of labour the recurrence path has always
-     * had.
-     *
-     * Indentation is resolved from the file, not from the caller. The parent is
-     * a sibling of the task that fired, so it takes that task's own indent; the
-     * children take one unit per level of `depth`, where a depth of 1 means the
-     * first level below the parent. The unit follows the task's existing
-     * children, falling back to however the rest of the file is written — the
-     * same rule the child-insert primitives use, so a subtree keeps one
-     * spelling.
-     */
-    async insertGeneratedInstance(
-        task: Task,
-        parentLine: string,
-        flowLines: string[],
-        children: GeneratedChild[],
-    ): Promise<void> {
-        const file = this.app.vault.getAbstractFileByPath(task.file);
-        if (!(file instanceof TFile)) return;
-
-        await processLines(this.app, file, (lines, _eol, edits) => {
-            const currentLine = this.fileOps.findTaskLineNumber(lines, task);
-            if (currentLine < 0 || currentLine >= lines.length) {
-                logWarn('[TaskCloner] Task not found in file (insertGeneratedInstance)');
-                return null;
-            }
-
-            const rendered = renderFlowInstance(this.fileOps, lines, currentLine,
-                { kind: 'generated', parentLine, flowLines, children });
-
-            const insertAt = this.fileOps.findSiblingGroupStart(lines, currentLine);
-            edits.splice(insertAt, 0, ...rendered);
-
-            return lines;
-        }, this.writes?.for(task.file));
+            this.putCopies(draft, idx, parents, Placement.copyOf(draft.reading(), idx, 'below', parents[0]));
+            return true;
+        });
     }
 
     // --- Private helpers ---
 
     /**
      * Put one copy per parent line into the file, each followed by the
-     * original's children with their block ids stripped.
+     * original's children with their block ids stripped: a sibling of the
+     * task, at `spot` — just above it or just past its subtree, spelled as
+     * the task is (`Placement.copyOf`).
      *
      * Children travel verbatim. A child's dates are its own, not an offset
      * from its parent's, so nothing here rewrites them — the same rule in
-     * both duplication paths.
+     * both duplication paths. Each copy is to read as the original's subtree
+     * reads (`Block.of`), and is not written where it would not.
      *
-     * @returns the modified lines array.
+     * A fence among the children that never closes ends with the copy's item,
+     * as it ended with the original's (`Outline.read`): below a copy stands
+     * the original's own line, or whatever stood below the original.
      */
-    private spliceCopies(
-        lines: string[],
-        taskLine: number,
-        parentLines: string[],
-        position: 'before' | 'after',
-        edits: LineEdits,
-    ): string[] {
-        const { childrenLines } = this.fileOps.collectChildrenFromLines(lines, taskLine);
-        const cleanedChildren = this.fileOps.stripBlockIds(childrenLines);
+    private putCopies(draft: LineDraft, taskLine: number, parentLines: string[], spot: Spot): void {
+        const lines = draft.lines;
+        const outline = draft.reading();
+        const rows: number[] = [];
+        for (let row = taskLine; row < outline.subtreeEnd(taskLine); row++) rows.push(row);
+        const cleanedChildren = this.fileOps.stripBlockIds(rows.slice(1).map(row => lines[row]));
 
-        const linesToInsert: string[] = [];
-        for (const parent of parentLines) {
-            linesToInsert.push(parent, ...cleanedChildren);
-        }
-
-        const insertIndex = position === 'before'
-            ? taskLine
-            : TaskCloner.indentedRegionEnd(lines, taskLine);
-        // Through `edits` rather than beside it: the copy is worded exactly
+        // Through the draft rather than beside it: the copy is worded exactly
         // like the line it copies, so a position off by one would read the same
         // and hand the original's identity to the copy. One number does both.
-        //
-        // Which of these lines are tasks is not this layer's question — the
-        // copied children can hold anything, a fence among them — and the index
-        // answers it by parsing what was written.
-        edits.splice(insertIndex, 0, ...linesToInsert);
-
-        return lines;
-    }
-
-    /**
-     * The index just past everything indented under the task line.
-     *
-     * The parser ends a task's children at the first blank line, and the
-     * lines after that blank still read as the task's — a second group of
-     * notes, a fenced block with a blank line in it. A copy dropped at the
-     * end of the parsed children would land in the middle of them, and the
-     * fence would be cut in half. So the region runs to the last line deeper
-     * than the task, and the copy goes after that.
-     *
-     * Only the insertion point is measured this way. What a copy carries is
-     * still the children the parser sees, so the copy and the index agree on
-     * what its subtree is.
-     */
-    private static indentedRegionEnd(lines: string[], taskLine: number): number {
-        const taskIndent = lines[taskLine].search(/\S|$/);
-        let last = taskLine;
-
-        for (let j = taskLine + 1; j < lines.length; j++) {
-            const line = lines[j];
-            // A blank line decides nothing on its own — what follows it does.
-            if (line.trim() === '') continue;
-            if (line.search(/\S|$/) <= taskIndent) break;
-            last = j;
-        }
-
-        return last + 1;
+        // Each copy's lines stand under lines of that copy.
+        draft.put(spot, parentLines.flatMap((parent, copy) => Block.of(outline, rows, [parent, ...cleanedChildren])
+            .map(line => (typeof line.under === 'number' ? { ...line, under: line.under + copy * rows.length } : line))));
     }
 
     /**

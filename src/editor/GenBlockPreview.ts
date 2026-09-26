@@ -6,7 +6,9 @@ import {
 } from '../services/parsing/gen/GenBlockCollector';
 import { type GenCellTypes, parseGenBody } from '../services/parsing/gen/GenBodyParser';
 import { declaredCells } from '../services/parsing/gen/GenCellScan';
+import { Outline } from '../services/parsing/utils/Outline';
 import { TaskLineClassifier } from '../services/parsing/utils/TaskLineClassifier';
+import { splitLines } from '../services/persistence/FileLines';
 
 /**
  * Reading-view rendering of a `tv-gen` block.
@@ -39,8 +41,9 @@ export function createGenBlockPreview() {
     let cache: { text: string; scan: GenBlockScan; cells: GenCellTypes } | null = null;
     const readOf = (text: string) => {
         if (cache?.text === text) return cache;
-        const lines = text.split('\n');
-        cache = { text, scan: collectGenBlocks(lines), cells: declaredCells(lines) };
+        const lines = splitLines(text).lines;
+        const outline = Outline.read(lines);
+        cache = { text, scan: collectGenBlocks(lines, outline), cells: declaredCells(lines, outline) };
         return cache;
     };
 
@@ -63,7 +66,7 @@ export function createGenBlockPreview() {
         }
 
         const bodyStart = info ? info.lineStart + 1 : 0;
-        const body = parseGenBody(source.split('\n'), bodyStart, read?.cells);
+        const body = parseGenBody(splitLines(source).lines, bodyStart, read?.cells);
 
         const lines = body.parent ? [body.parent, ...body.children] : body.children;
         if (lines.length === 0) {

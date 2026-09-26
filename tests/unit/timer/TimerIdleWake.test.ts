@@ -1,9 +1,8 @@
-import { describe, expect, it, beforeEach } from 'vitest';
+import { describe, expect, it, beforeEach, vi } from 'vitest';
 import { TimerCreator } from '../../../src/timer/TimerCreator';
 import { TimerLifecycle } from '../../../src/timer/TimerLifecycle';
 import { IDLE_TIMER_ID, type TimerContext } from '../../../src/timer/TimerContext';
 import type { CountupTimer, TimerInstance } from '../../../src/timer/TimerInstance';
-import type { TimerStorageUtils } from '../../../src/timer/TimerStorageUtils';
 
 /**
  * idle タイマー（次タスク提案）は「走行中のタイマーが 1 本も無い」ときに出る。
@@ -20,9 +19,8 @@ function build() {
     const ctx = {
         timers: new Map<string, TimerInstance>(),
         recorder: {
-            recordSessionEnd: async () => { /* unused */ },
-            createChildAtStart: async () => undefined,
-            startNextSession: async () => undefined,
+            recordSessionEnd: async () => true,
+            startNextSession: async () => true,
             discardRunningPlaceholder: async () => { /* unused */ },
         } as unknown as TimerContext['recorder'],
         plugin: { settings: { pomodoroWorkMinutes: 25, pomodoroBreakMinutes: 5 } } as unknown as TimerContext['plugin'],
@@ -32,7 +30,7 @@ function build() {
         renderTimerItem: () => { /* unused */ },
         persistTimersToStorage: () => { /* unused */ },
         onTimerClosed: () => { /* unused */ },
-        flushTimerContent: async () => { /* unused */ },
+        flushTimerContent: async () => true,
         discardTimerContent: () => { /* unused */ },
         ensureContainer: () => ({}) as HTMLElement,
         destroyContainer: () => { /* unused */ },
@@ -40,7 +38,7 @@ function build() {
         togglePin: () => { /* unused */ },
         shouldShowPinBadge: () => false,
     };
-    const creator = new TimerCreator(ctx, { isAutoManagedTimerTargetId: () => false } as unknown as TimerStorageUtils);
+    const creator = new TimerCreator(ctx);
     return { ctx, lifecycle: new TimerLifecycle(ctx, creator) };
 }
 
@@ -120,6 +118,9 @@ describe('idle wake', () => {
         expect(h.ctx.timers.has(IDLE_TIMER_ID)).toBe(true);
 
         h.lifecycle.resumeSession(timer);
+        // 再開は書けてから走行に移る。往復（busy）が済むまで待つ。
+        const busy = (h.lifecycle as unknown as { busy: Set<string> }).busy;
+        await vi.waitFor(() => expect(busy.has(timer.id)).toBe(false));
         expect(h.ctx.timers.has(IDLE_TIMER_ID)).toBe(false);
     });
 });

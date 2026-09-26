@@ -11,30 +11,39 @@
 
 import { type App, TFile, TFolder, normalizePath } from 'obsidian';
 import type { ViewTemplate } from '../../types';
+import { createFile, replaceWhole, type WriteChannel } from '../persistence/FileLines';
 
 export class ViewTemplateWriter {
-    constructor(private app: App) {}
+    constructor(
+        private app: App,
+        private channelFor: (path: string) => WriteChannel | undefined,
+    ) {}
 
     /**
      * Save a view template to the configured folder.
      * Creates the folder if it doesn't exist.
      * Overwrites existing file with the same name.
+     *
+     * @returns the note, or null when it was not written, overwritten or
+     * created (the write layer has told the user why).
      */
-    async saveTemplate(folderPath: string, template: ViewTemplate): Promise<TFile> {
-        await this.ensureFolder(folderPath);
-
+    async saveTemplate(folderPath: string, template: ViewTemplate): Promise<TFile | null> {
         const content = this.buildFileContent(template);
         const sanitizedName = template.name.replace(/[\\/:*?"<>|]/g, '_');
         const filePath = normalizePath(`${folderPath}/${sanitizedName}.md`);
 
         const existing = this.app.vault.getAbstractFileByPath(filePath);
         if (existing instanceof TFile) {
-            // 全体上書きで読み取り結果は使わないが、他の書き込み経路と揃えて
-            // vault.process を使う（read-modify-write の atomic 性を持つ）。
-            await this.app.vault.process(existing, () => content);
-            return existing;
+            // 全体上書き。どの行がどの行になったかは言えないので、申告の
+            // 代わりに連鎖が切れた印を残す（replaceWhole）。
+            const { written } = await replaceWhole(this.app, existing, this.channelFor(filePath), content);
+            return written ? existing : null;
         }
-        return await this.app.vault.create(filePath, content);
+        const created = await createFile(this.app, filePath, this.channelFor(filePath), template.name, async () => {
+            await this.ensureFolder(folderPath);
+            return content;
+        });
+        return created.written ? created.file : null;
     }
 
     private buildFileContent(template: ViewTemplate): string {

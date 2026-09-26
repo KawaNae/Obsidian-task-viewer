@@ -7,20 +7,22 @@ export type MovePosition = 'top-right' | 'top-left' | 'bottom-right' | 'bottom-l
  *
  * 生成された要素は `taskEl` に直接 append される。位置決めは CSS が
  * `position: absolute` + edge offset で行うため、生成順は表示順に影響しない。
+ *
+ * handle はタスクの名前を持たない。drag はつかんだ handle のカードから名前を
+ * 読む（`DragRouter`）。カードは読み直しをまたいで残るので、handle に刻んだ
+ * 名前は古くなりうる。
  */
 export const HandleRenderer = {
-    createResize(taskEl: HTMLElement, taskId: string, position: ResizePosition, icon: string): void {
+    createResize(taskEl: HTMLElement, position: ResizePosition, icon: string): void {
         const container = taskEl.createDiv(`task-card__handle task-card__handle--resize-${position}`);
         const btn = container.createDiv('task-card__handle-btn');
         btn.setText(icon);
-        btn.dataset.taskId = taskId;
     },
 
-    createMove(taskEl: HTMLElement, taskId: string, position: MovePosition): void {
+    createMove(taskEl: HTMLElement, position: MovePosition): void {
         const container = taskEl.createDiv(`task-card__handle task-card__handle--move-${position}`);
         const btn = container.createDiv('task-card__handle-btn');
         btn.setText('::');
-        btn.dataset.taskId = taskId;
         btn.style.cursor = 'move';
     },
 };

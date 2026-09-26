@@ -26,9 +26,9 @@ describe('DailyNoteUtils.appendLineToDailyNote', () => {
             },
         } as any;
 
-        const spy = vi.spyOn(HeadingInserter, 'writeUnderHeading').mockResolvedValue(1);
+        const spy = vi.spyOn(HeadingInserter, 'writeUnderHeading').mockResolvedValue({ written: true, refused: null, made: [], rows: [], line: 1 });
 
-        const path = await DailyNoteUtils.appendLineToDailyNote(app, new Date(), '- [ ] task', 'Log', 2);
+        const path = await DailyNoteUtils.appendLineToDailyNote(app, new Date(), '- [ ] task', 'Log', 2, () => undefined);
 
         expect(spy).toHaveBeenCalledTimes(1);
         const fileArg = spy.mock.calls[0][1];

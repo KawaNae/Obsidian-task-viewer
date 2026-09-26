@@ -1,4 +1,9 @@
-import { LIST_BULLET_SOURCE } from './ListMarker';
+import { IN_LINE } from '../../../utils/LineBreak';
+import { CHECKBOX_GAP_SOURCE, LIST_BULLET_SOURCE, MARKER_GAP_SOURCE, STATUS_CHAR_SOURCE } from './ListMarker';
+import { INDENT_SOURCE, Outline, type OutlineReading } from './Outline';
+
+/** The characters of a `^id` (Obsidian's block ID), for a pattern that holds one. */
+export const BLOCK_ID_SOURCE = '[A-Za-z0-9-]+';
 
 export interface TaskLineMatch {
     /** Leading whitespace */
@@ -14,36 +19,71 @@ export interface TaskLineMatch {
 }
 
 /**
- * Unified classifier for parent task lines (`- [ ] content`).
- * Centralises the checkbox-line regex so that callers don't maintain their own copies.
+ * The one reading of "is this line a task" (`- [ ] content`), for a row and
+ * for a checkbox among a row's children alike: a child checkbox is a task
+ * line deeper than its parent. Callers do not keep copies of the pattern.
  * Supports `-`, `*`, `+`, and ordered list markers (`1.`, `1)`).
  */
 export class TaskLineClassifier {
-    private static readonly TASK_LINE_REGEX = new RegExp(`^(\\s*)(${LIST_BULLET_SOURCE} *\\[)(.)(\\].*)$`);
-    private static readonly MARKER_REGEX = new RegExp(`^\\s*(${LIST_BULLET_SOURCE})`);
-    private static readonly BLOCK_ID_REGEX = /\s\^([A-Za-z0-9-]+)\s*$/;
+    private static readonly TASK_LINE_REGEX = new RegExp(`^(${INDENT_SOURCE})(${LIST_BULLET_SOURCE}${MARKER_GAP_SOURCE}\\[)(${STATUS_CHAR_SOURCE})(\\]${CHECKBOX_GAP_SOURCE}(${IN_LINE}*))$`);
+    private static readonly STATUS_CHAR_REGEX = new RegExp(`^${STATUS_CHAR_SOURCE}$`);
+    private static readonly BLOCK_ID_REGEX = new RegExp(String.raw`(?:^|\s)\^(${BLOCK_ID_SOURCE})\s*$`);
 
     /**
-     * Strip a trailing `^block-id` from a line/content string. The single
+     * Strip a trailing `^block-id` from a line's content. The single
      * implementation shared by all parsers (timer-target semantics of the
      * id are the caller's concern).
+     *
+     * An id is part of the content, never of the checkbox: it stands at the
+     * content's end, alone or after a space. `content` is what follows a
+     * task's gap (`classify`'s `rawContent`); for a whole line, see
+     * {@link extractLineBlockId}.
      */
-    static extractBlockId(text: string): { text: string; blockId?: string } {
-        const match = text.match(this.BLOCK_ID_REGEX);
-        if (!match) return { text };
-        return {
-            text: text.slice(0, match.index).trimEnd(),
-            blockId: match[1],
-        };
+    static extractBlockId(content: string): { text: string; blockId?: string } {
+        const match = content.match(this.BLOCK_ID_REGEX);
+        if (!match) return { text: content };
+        return { text: content.slice(0, match.index).trimEnd(), blockId: match[1] };
+    }
+
+    /**
+     * {@link extractBlockId} on a whole line: taken off the line's content
+     * ({@link splitContent}), so that the checkbox, its gap and the
+     * indentation stay as they are.
+     */
+    static extractLineBlockId(line: string): { text: string; blockId?: string } {
+        const { head, content } = this.splitContent(line);
+        const { text, blockId } = this.extractBlockId(content);
+        return { text: head + text, blockId };
+    }
+
+    /**
+     * A line cut where its content begins. A task's content follows the
+     * space or tab after its `]` — that gap is the checkbox's, and a task
+     * with no content still has it (`- [ ] `), since without it the line is
+     * no task to Obsidian. Any other line's content follows its indentation.
+     */
+    static splitContent(line: string): { head: string; content: string } {
+        const task = this.classify(line);
+        const at = task ? line.length - task.rawContent.length : Outline.indentOf(line).length;
+        return { head: line.slice(0, at), content: line.slice(at) };
+    }
+
+    /**
+     * A content made of parts — the text, the date block, the command, the
+     * block id — one space apart, each with its end trimmed and the empty
+     * ones left out. How every line the plugin writes puts its content
+     * together, so that no part leaves a space behind when it is absent.
+     */
+    static joinContent(...parts: string[]): string {
+        return parts.map(part => part.trimEnd()).filter(part => part !== '').join(' ');
     }
 
     /** Full classification — returns null if the line is not a task line. */
     static classify(line: string): TaskLineMatch | null {
         const m = line.match(this.TASK_LINE_REGEX);
         if (!m) return null;
-        const [, indent, bulletBracket, statusChar, bracketTail] = m;
-        // rawContent: strip leading `] ` (bracket + optional space)
-        const rawContent = bracketTail.replace(/^\]\s?/, '');
+        // rawContent: past `]` and the gap a task line has there
+        const [, indent, bulletBracket, statusChar, bracketTail, rawContent] = m;
         return {
             indent,
             statusChar,
@@ -53,19 +93,53 @@ export class TaskLineClassifier {
         };
     }
 
+    /**
+     * Whether `status` is a character a checkbox can hold (`STATUS_CHAR_SOURCE`):
+     * one written there makes a line that reads back as a task. Takes what an
+     * API caller passed as is: `RegExp.test` would turn `5` into `'5'`.
+     */
+    static isStatusChar(status: unknown): status is string {
+        return typeof status === 'string' && this.STATUS_CHAR_REGEX.test(status);
+    }
+
     /** Boolean-only check — avoids object allocation on hot paths. */
     static isTaskLine(line: string): boolean {
         return this.TASK_LINE_REGEX.test(line);
     }
 
-    /** Extract the list marker (`-`, `*`, `+`, `1.`, etc.) from a line. Returns `-` if not found. */
-    static extractMarker(line: string): string {
-        const m = line.match(this.MARKER_REGEX);
-        return m ? m[1] : '-';
+    /**
+     * Whether line `line` of the note is a task line as the parser reads the
+     * note: it opens a list item the outline reads, is not code, and is a
+     * task line. A checkbox the outline reads as a paragraph going on, or as
+     * code, is text.
+     */
+    static opensTask(outline: OutlineReading, line: number): boolean {
+        return outline.item(line) !== null && this.isTaskLine(outline.lines[line]);
     }
 
-    /** Build the `- [x] ` prefix for a given status char, indent, and marker. */
-    static formatPrefix(statusChar: string, indent: string = '', marker: string = '-'): string {
-        return `${indent}${marker} [${statusChar}] `;
+    /**
+     * A task line's list marker with the gap after it, the gap as wide as it
+     * is on the line and made of spaces (`- `, `10.  `; `-\t` at column 0 is
+     * `-   `); `- ` for a line that is no task. A line written over a task
+     * line keeps them: the gap sets the item's content column, and a child
+     * reaches the item by it (under `-\t[ ] T`, a child two spaces past a tab
+     * is the task's; under `- [ ] T` it goes on T's paragraph).
+     *
+     * Spaces, as a tab's width is the column it stands at: a line moved to
+     * another indentation keeps its content as far past its marker, and a
+     * child moved with it stays its child (the fifth L2 counterexample run).
+     * One to four columns: a task line's gap either way.
+     */
+    static extractMarker(line: string): string {
+        const task = this.classify(line);
+        if (!task) return '- ';
+        const marker = task.prefix.slice(task.indent.length, -1).trimEnd();
+        const gapStart = task.indent.length + marker.length;
+        return marker + ' '.repeat(Outline.widthWithin(line, gapStart, task.prefix.length - 1));
+    }
+
+    /** Build the `- [x] ` prefix for a given status char, indent, and marker with its gap. */
+    static formatPrefix(statusChar: string, indent: string = '', marker: string = '- '): string {
+        return `${indent}${marker}[${statusChar}] `;
     }
 }

@@ -3,6 +3,7 @@
  * Only the symbols actually imported by source code are stubbed here.
  */
 import { load as loadYaml } from 'js-yaml';
+import { StateField } from '@codemirror/state';
 
 // --- Core classes ---
 
@@ -80,6 +81,15 @@ export class Component {
     unload() {}
 }
 
+/** Only what the plugin's suggests read of it: the app and the open context. */
+export class EditorSuggest<T> {
+    context: { editor: any; start: { line: number; ch: number } } | null = null;
+    constructor(public app: any) { }
+    close(): void { }
+    /** Unused by the stub; present so the type parameter is read. */
+    protected value?: T;
+}
+
 export class AbstractInputSuggest {
     app: App;
     inputEl: any;
@@ -146,7 +156,14 @@ export function parseYaml(yaml: string): any {
 
 // --- CodeMirror integration stubs ---
 
-export const editorInfoField = {} as any;
+/**
+ * The field Obsidian keeps an editor's file in. A real field here, so that a
+ * test builds an `EditorState` for a note with `editorInfoField.init(() => ({ file }))`.
+ */
+export const editorInfoField = StateField.define<{ file: { path: string } | null }>({
+    create: () => ({ file: null }),
+    update: value => value,
+});
 
 // --- moment stub (returns object with basic format/toDate) ---
 

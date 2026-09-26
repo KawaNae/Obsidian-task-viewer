@@ -48,4 +48,12 @@ describe('computeParseFingerprint', () => {
         const after = computeParseFingerprint(settings);
         expect(before).toBe(after);
     });
+
+    it('ignores statusDefinitions: the parse does not read them', () => {
+        const settings = { ...DEFAULT_SETTINGS, statusDefinitions: [...DEFAULT_SETTINGS.statusDefinitions] };
+        const before = computeParseFingerprint(settings);
+        settings.statusDefinitions.push({ char: '!', label: 'Urgent', isComplete: true });
+        const after = computeParseFingerprint(settings);
+        expect(before).toBe(after);
+    });
 });

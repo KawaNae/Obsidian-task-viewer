@@ -366,7 +366,7 @@ export class PinnedListRenderer {
             : { mode: 'none' as const };
         tasks.forEach(task => {
             const cardInstanceId = `${viewId}::pl-${listId}::${task.id}`;
-            const reused = reconciler?.acquire(cardInstanceId);
+            const reused = reconciler?.acquire(cardInstanceId, task);
             const card = reused ?? body.createDiv('task-card');
             if (reused) body.appendChild(reused);
 
@@ -375,7 +375,7 @@ export class PinnedListRenderer {
                 cardInstanceId,
                 topRight,
             });
-            if (!reused) this.menuHandler.addTaskContextMenu(card, task);
+            if (!reused) this.menuHandler.addTaskContextMenu(card);
         });
     }
 
@@ -384,8 +384,6 @@ export class PinnedListRenderer {
      * Pinned-list tasks are never split in this path, so no split variants apply.
      */
     private decoratePinnedCard(card: HTMLElement, task: DisplayTask): void {
-        card.dataset.id = task.id;
-
         TaskStyling.applyTaskColor(card, getEffectiveColor(task) ?? null);
         TaskStyling.applyTaskLinestyle(card, getEffectiveLinestyle(task) ?? null);
         TaskStyling.applyReadOnly(card, task);

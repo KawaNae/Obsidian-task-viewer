@@ -7,6 +7,7 @@
 !*/
 
 # 2. Root-level config / metadata
+!/.gitattributes
 !/.gitignore
 !/DEVELOPER.md
 !/esbuild.config.mjs

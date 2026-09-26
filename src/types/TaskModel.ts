@@ -89,10 +89,6 @@ export type ChildEntry =
  * Identifier of the parser that produced a task.
  *
  * Every task is a line in a note, read by one of these three parsers.
- * Legacy persisted values (`'at-notation'`, `'plain'`) are migrated at load
- * time by `TimerPersistence.normalizeParserId`; `'tv-file'` and `'frontmatter'`
- * named the file task, which no longer exists, and fall back to `'tv-inline'`
- * there. None of them appears on a live Task.
  */
 export type ParserId = 'tv-inline' | 'tasks-plugin' | 'day-planner';
 
@@ -169,8 +165,22 @@ export interface Task {
 
     // Original parsed text and stable IDs.
     originalText: string;
+    /**
+     * The row's line and every line of its subtree, verbatim, as the parse
+     * read them (`OutlineReading.subtreeEnd`). What a delete or a move takes away is
+     * planned from this, and the write checks the file still reads so (see
+     * `RowBasis.subtree`). Absent on a task no file was parsed for.
+     */
+    subtreeLines?: readonly string[];
     blockId?: string;
-    timerTargetId?: string;
+    /**
+     * The `^id` on the row's line, when no other line of the file carries
+     * that `^id` — every line counted, whatever reads it. The one name of a
+     * row that outlives a reading: the index finds the row it anchors in any
+     * later reading (`TaskIndex.getTaskByAnchor`). Set by the scan; absent
+     * when the line has no `^id` or shares it.
+     */
+    anchor?: string;
 
     /**
      * Raw tags: the task's own declaration only (content `#tags` + own

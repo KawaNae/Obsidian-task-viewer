@@ -1,6 +1,7 @@
 import type { Task } from '../../../types';
 import { ReadOnlyParserBase } from './ReadOnlyParserBase';
 import { DateUtils } from '../../../utils/DateUtils';
+import { IN_LINE } from '../../../utils/LineBreak';
 
 /**
  * Read-only parser for Day Planner format.
@@ -15,7 +16,7 @@ export class DayPlannerParser extends ReadOnlyParserBase {
     readonly id = 'day-planner';
 
     /** HH:MM[ - HH:MM] at start of content, followed by text. */
-    private static readonly TIME_RANGE_REGEX = /^(\d{2}:\d{2})(?:\s*-\s*(\d{2}:\d{2}))?\s+(.+)$/;
+    private static readonly TIME_RANGE_REGEX = new RegExp(`^(\\d{2}:\\d{2})(?:\\s*-\\s*(\\d{2}:\\d{2}))?\\s+(${IN_LINE}+)$`);
 
     parse(line: string, filePath: string, lineNumber: number): Task | null {
         const classified = this.classify(line);

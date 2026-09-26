@@ -4,6 +4,7 @@ import type { TaskReadService } from '../../services/data/TaskReadService';
 import type { ChildRenderItem } from './types';
 import type { CheckboxWiring } from './CheckboxWiring';
 import { NotationUtils } from './NotationUtils';
+import { touchCard } from './CardHold';
 import { t } from '../../i18n';
 
 export type ChildMenuCallback = (taskId: string, x: number, y: number) => void;
@@ -28,6 +29,11 @@ function countChildCompletion(
 
 /**
  * Renders child sections from ChildRenderItem[].
+ *
+ * What a drawn section binds asks for names when it is used, not when it is
+ * drawn: the section is kept while it shows the same items, across readings
+ * that rename the tasks behind them (`CardHold`). `nameAt(i)` answers the
+ * name behind `items[i]`.
  */
 export class ChildSectionRenderer {
     private onChildMenuClick: ChildMenuCallback | null = null;
@@ -45,8 +51,9 @@ export class ChildSectionRenderer {
     async renderCollapsed(
         contentContainer: HTMLElement,
         items: ChildRenderItem[],
+        nameAt: (index: number) => string | undefined,
         expandedTaskIds: Set<string>,
-        expandKey: string,
+        expandKey: () => string,
         filePath: string,
         component: Component,
         settings: TaskViewerSettings,
@@ -55,7 +62,7 @@ export class ChildSectionRenderer {
     ): Promise<void> {
         const { completed, total } = countChildCompletion(items, this.readService, settings);
         const label = `${warnIcon}${completed}/${total}`;
-        const wasExpanded = expandedTaskIds.has(expandKey);
+        const wasExpanded = expandedTaskIds.has(expandKey());
 
         const toggle = contentContainer.createDiv('task-card__children-toggle');
         const childrenContainer = contentContainer.createDiv('task-card__children');
@@ -70,24 +77,25 @@ export class ChildSectionRenderer {
             childrenContainer.addClass('task-card__children--collapsed');
         }
 
-        await this.renderAndPostProcess(childrenContainer, items, filePath, component, parentStartDate);
-        this.checkboxWiring.wireChildCheckboxes(childrenContainer, items, settings);
+        await this.renderAndPostProcess(childrenContainer, items, nameAt, filePath, component, parentStartDate);
+        this.checkboxWiring.wireChildCheckboxes(childrenContainer, items, settings, nameAt);
 
         toggle.addEventListener('click', (e) => {
             e.stopPropagation();
+            touchCard(toggle);
             const isCollapsed = toggle.dataset.collapsed === 'true';
             if (isCollapsed) {
                 toggle.dataset.collapsed = 'false';
                 toggle.innerHTML = `<span class="task-card__children-toggle-icon">▼</span> ${label}`;
                 childrenContainer.removeClass('task-card__children--collapsed');
                 childrenContainer.addClass('task-card__children--expanded');
-                expandedTaskIds.add(expandKey);
+                expandedTaskIds.add(expandKey());
             } else {
                 toggle.dataset.collapsed = 'true';
                 toggle.innerHTML = `<span class="task-card__children-toggle-icon">▶</span> ${label}`;
                 childrenContainer.removeClass('task-card__children--expanded');
                 childrenContainer.addClass('task-card__children--collapsed');
-                expandedTaskIds.delete(expandKey);
+                expandedTaskIds.delete(expandKey());
             }
         });
     }
@@ -95,20 +103,22 @@ export class ChildSectionRenderer {
     async renderExpanded(
         contentContainer: HTMLElement,
         items: ChildRenderItem[],
+        nameAt: (index: number) => string | undefined,
         filePath: string,
         component: Component,
         settings: TaskViewerSettings,
         parentStartDate?: string
     ): Promise<void> {
         const childrenContainer = contentContainer.createDiv('task-card__children task-card__children--expanded');
-        await this.renderAndPostProcess(childrenContainer, items, filePath, component, parentStartDate);
-        this.checkboxWiring.wireChildCheckboxes(childrenContainer, items, settings);
+        await this.renderAndPostProcess(childrenContainer, items, nameAt, filePath, component, parentStartDate);
+        this.checkboxWiring.wireChildCheckboxes(childrenContainer, items, settings, nameAt);
     }
 
     async renderParentWithChildren(
         contentContainer: HTMLElement,
         parentLine: string,
         items: ChildRenderItem[],
+        nameAt: (index: number) => string | undefined,
         filePath: string,
         component: Component,
         settings: TaskViewerSettings,
@@ -119,26 +129,28 @@ export class ChildSectionRenderer {
         await MarkdownRenderer.render(this.app, fullText, contentContainer, filePath, component);
 
         // Parent checkbox occupies the first task-list-item, so child mapping starts at offset=1.
-        this.insertChildNotations(contentContainer, items, parentStartDate, 1);
-        this.checkboxWiring.wireChildCheckboxesWithOffset(contentContainer, items, settings, 1);
+        this.insertChildNotations(contentContainer, items, nameAt, parentStartDate, 1);
+        this.checkboxWiring.wireChildCheckboxesWithOffset(contentContainer, items, settings, 1, nameAt);
     }
 
     private async renderAndPostProcess(
         container: HTMLElement,
         items: ChildRenderItem[],
+        nameAt: (index: number) => string | undefined,
         filePath: string,
         component: Component,
         parentStartDate?: string
     ): Promise<void> {
         const markdown = items.map((item) => item.markdown).join('\n');
         await MarkdownRenderer.render(this.app, markdown, container, filePath, component);
-        this.insertChildNotations(container, items, parentStartDate, 0);
+        this.insertChildNotations(container, items, nameAt, parentStartDate, 0);
         this.markPropertyLines(container, items);
     }
 
     private insertChildNotations(
         container: HTMLElement,
         items: ChildRenderItem[],
+        nameAt: (index: number) => string | undefined,
         parentStartDate?: string,
         checkboxOffset: number = 0
     ): void {
@@ -161,7 +173,8 @@ export class ChildSectionRenderer {
             // For items with notation: show notation text
             let el: HTMLElement;
             if (isTask && this.onChildMenuClick) {
-                el = this.createChildMenuButton(handler.taskId);
+                const index = i;
+                el = this.createChildMenuButton(() => nameAt(index));
             } else if (item.notation) {
                 el = document.createElement('span');
                 el.className = 'task-card__child-notation';
@@ -187,7 +200,7 @@ export class ChildSectionRenderer {
         }
     }
 
-    private createChildMenuButton(taskId: string): HTMLButtonElement {
+    private createChildMenuButton(nameOf: () => string | undefined): HTMLButtonElement {
         const btn = document.createElement('button');
         btn.className = 'task-card__child-menu-btn';
         btn.setAttribute('aria-label', t('aria.taskMenu'));
@@ -200,8 +213,10 @@ export class ChildSectionRenderer {
         btn.addEventListener('click', (e) => {
             e.preventDefault();
             e.stopPropagation();
+            const name = nameOf();
+            if (name === undefined) return;
             const rect = btn.getBoundingClientRect();
-            this.onChildMenuClick?.(taskId, rect.left, rect.bottom);
+            this.onChildMenuClick?.(name, rect.left, rect.bottom);
         });
 
         btn.addEventListener('mousedown', (e) => {

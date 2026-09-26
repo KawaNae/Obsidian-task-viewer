@@ -1,18 +1,10 @@
 import type { DocumentNode, SectionNode, BlockNode, PropertyBlockEntry, TaskBlock } from './DocumentTree';
 import { ChildLineClassifier } from '../utils/ChildLineClassifier';
 import { TaskLineClassifier } from '../utils/TaskLineClassifier';
-import { CodeFenceTracker } from '../../../utils/CodeFenceTracker';
+import { INDENT_SOURCE, Outline, type OutlineReading } from '../utils/Outline';
+import { SPACE_OR_TAB_SOURCE } from '../utils/ListMarker';
 
-/**
- * A markdown heading line: capture group 1 = `#` run, group 2 = title text.
- *
- * No trailing `$` anchor — callers must pass a single line with no embedded
- * newline (DocumentTreeBuilder does: it splits the document into lines before
- * matching). Matching this against a string that can contain `\n` would let
- * group 2 swallow past the line the caller thinks it matched.
- */
-export const HEADING_REGEX = /^(#{1,6})\s+(.*)/;
-const PROPERTY_GROUP_HEADER = /^\s*-\s+properties::\s*$/;
+const PROPERTY_GROUP_HEADER = new RegExp(`^${INDENT_SOURCE}-${SPACE_OR_TAB_SOURCE}+properties::\\s*$`);
 
 /**
  * Markdown ファイルの行配列からドキュメント構造ツリーを構築する。
@@ -22,33 +14,32 @@ export class DocumentTreeBuilder {
     static build(
         filePath: string,
         lines: string[],
-        bodyStartLine: number
+        bodyStartLine: number,
+        outline: OutlineReading = Outline.read(lines),
     ): DocumentNode {
-        const bodyLines = lines.slice(bodyStartLine);
-        const sections = this.buildSectionTree(bodyLines, bodyStartLine);
-        // Absolute-indexed fence membership: a `- [ ]` inside a fenced block is
-        // sample text, not a task. Computed once from line 0 so that every
-        // consumer below can ask about any absolute line number.
-        const fenceMask = CodeFenceTracker.mask(lines);
+        // One reading of the whole note (`Outline.read`), asked by absolute
+        // line number: a `- [ ]` in a code block is sample text, not a task,
+        // and a `# comment` in one is no heading; a task's subtree is the
+        // item it opens. No part below reads a slice of the note on its own:
+        // a slice loses the items it stands in, and reads differently.
+        const sections = this.buildSectionTree(outline, bodyStartLine, lines.length);
         for (const section of this.flattenSections(sections)) {
-            this.classifyBlocks(section, lines, fenceMask);
+            this.classifyBlocks(section, lines, outline);
         }
-        return { filePath, bodyStartLine, sections };
+        return { filePath, bodyStartLine, sections, outline };
     }
 
     // ── Pass 1: セクションツリー構築 ──
 
-    private static buildSectionTree(bodyLines: string[], bodyStartLine: number): SectionNode[] {
-        const headings: { level: number; text: string; line: number }[] = [];
-
-        for (let i = 0; i < bodyLines.length; i++) {
-            const m = bodyLines[i].match(HEADING_REGEX);
-            if (m) {
-                headings.push({ level: m[1].length, text: m[2].trim(), line: bodyStartLine + i });
-            }
-        }
-
-        const totalEndLine = bodyStartLine + bodyLines.length;
+    private static buildSectionTree(outline: OutlineReading, bodyStartLine: number, totalEndLine: number): SectionNode[] {
+        // The note's headings as its one reading reads them (`headings`):
+        // a heading-like line in a fence is code — splitting a section there
+        // cut the subtree of the task the fence stands under, and a write
+        // carried lines the parser gave to no one — and one in an item is a
+        // line of the item.
+        const headings = outline.headings
+            .filter(h => h.line >= bodyStartLine)
+            .map(h => ({ level: h.level, text: h.text, line: h.line }));
 
         // 見出しがない場合: 暗黙ルートセクションのみ
         if (headings.length === 0) {
@@ -135,16 +126,16 @@ export class DocumentTreeBuilder {
     private static classifyBlocks(
         section: SectionNode,
         allLines: string[],
-        fenceMask: boolean[]
+        outline: OutlineReading
     ): void {
         const ownRanges = this.getOwnLineRanges(section);
         if (ownRanges.length === 0) return;
 
         // ── Step A: lead area の property 収集 ──
-        section.propertyBlock = this.collectSectionProperties(section, allLines, ownRanges, fenceMask);
+        section.propertyBlock = this.collectSectionProperties(section, allLines, ownRanges, outline);
 
         // ── Step B: own range 内の task block 検出 ──
-        section.blocks = this.classifyTaskBlocks(section, allLines, ownRanges, fenceMask);
+        section.blocks = this.classifyTaskBlocks(section, allLines, ownRanges, outline);
     }
 
     /**
@@ -155,7 +146,8 @@ export class DocumentTreeBuilder {
      *
      * Lead area 内の **indent 0 の** `- key:: value` 行をすべて entries に集約する
      * （テキスト・wikilink・空行・インデントされたリスト項目を挟んでもよい）。
-     * `- properties::` グループ形式 (indent 0) の直下インデント entry も吸収する。
+     * `- properties::` グループ形式 (indent 0) の部分木の entry も吸収する。
+     * コードの中の行はプロパティにならない。
      *
      * 最初のタスク行が出現した時点で打ち切り。これにより:
      *   - 後方のタスクメモが前方のタスクへ遡及しない
@@ -169,51 +161,39 @@ export class DocumentTreeBuilder {
         section: SectionNode,
         allLines: string[],
         ownRanges: [number, number][],
-        fenceMask: boolean[]
+        outline: OutlineReading
     ): { entries: PropertyBlockEntry[] } | null {
-        const leadLines = this.collectLeadAreaLines(section, allLines, ownRanges, fenceMask);
+        const leadLines = this.collectLeadAreaLines(section, allLines, ownRanges, outline);
         if (leadLines.length === 0) return null;
 
         const entries: PropertyBlockEntry[] = [];
+        const take = (lineNum: number) => {
+            const propMatch = allLines[lineNum].match(ChildLineClassifier.PROPERTY_LINE);
+            if (propMatch) {
+                entries.push({ key: propMatch[1].trim(), value: propMatch[2].trim(), line: lineNum });
+            }
+        };
 
         for (let idx = 0; idx < leadLines.length; idx++) {
             const lineNum = leadLines[idx];
             const line = allLines[lineNum];
-            if (line.trim() === '') continue;
-            if (line.search(/\S|$/) !== 0) continue;
+            if (outline.inCode(lineNum) || Outline.isBlank(line)) continue;
+            if (Outline.depthOf(line) !== 0) continue;
 
-            // グループ形式: `- properties::` の直下の indented エントリを吸収
-            if (PROPERTY_GROUP_HEADER.test(line)) {
+            // グループ形式: `- properties::` の部分木の entry を吸収
+            if (PROPERTY_GROUP_HEADER.test(line) && outline.item(lineNum)) {
+                const end = outline.subtreeEnd(lineNum);
                 let j = idx + 1;
-                while (j < leadLines.length) {
-                    const childLine = allLines[leadLines[j]];
-                    if (childLine.trim() === '') { j++; continue; }
-                    const childIndent = childLine.search(/\S|$/);
-                    if (childIndent === 0) break;
-                    const propMatch = childLine.match(ChildLineClassifier.PROPERTY_LINE);
-                    if (propMatch) {
-                        entries.push({
-                            key: propMatch[1].trim(),
-                            value: propMatch[2].trim(),
-                            line: leadLines[j],
-                        });
-                    }
-                    j++;
+                for (; j < leadLines.length && leadLines[j] < end; j++) {
+                    if (!outline.inCode(leadLines[j])) take(leadLines[j]);
                 }
                 idx = j - 1;
                 continue;
             }
 
             // フラット形式: `- key:: value`
-            const propMatch = line.match(ChildLineClassifier.PROPERTY_LINE);
-            if (propMatch) {
-                entries.push({
-                    key: propMatch[1].trim(),
-                    value: propMatch[2].trim(),
-                    line: lineNum,
-                });
-            }
             // それ以外（text / wikilink / 通常 bullet）は読み飛ばすだけで打ち切らない
+            take(lineNum);
         }
 
         return entries.length > 0 ? { entries } : null;
@@ -227,13 +207,13 @@ export class DocumentTreeBuilder {
         section: SectionNode,
         allLines: string[],
         ownRanges: [number, number][],
-        fenceMask: boolean[]
+        outline: OutlineReading
     ): number[] {
         const leadLines: number[] = [];
         for (const [rangeStart, rangeEnd] of ownRanges) {
             for (let i = rangeStart; i < rangeEnd; i++) {
                 if (section.heading && i === section.heading.line) continue;
-                if (!fenceMask[i] && TaskLineClassifier.isTaskLine(allLines[i])) {
+                if (TaskLineClassifier.opensTask(outline, i)) {
                     return leadLines;
                 }
                 leadLines.push(i);
@@ -250,18 +230,15 @@ export class DocumentTreeBuilder {
         section: SectionNode,
         allLines: string[],
         ownRanges: [number, number][],
-        fenceMask: boolean[]
+        outline: OutlineReading
     ): BlockNode[] {
         const blocks: BlockNode[] = [];
-        const identityLineNumbers = allLines.map((_, idx) => idx);
         for (const [rangeStart, rangeEnd] of ownRanges) {
             let i = rangeStart;
             while (i < rangeEnd) {
                 if (section.heading && i === section.heading.line) { i++; continue; }
-                const line = allLines[i];
-                if (line.trim() === '') { i++; continue; }
-                if (!fenceMask[i] && TaskLineClassifier.isTaskLine(line)) {
-                    const taskBlock = this.collectBlock(allLines, identityLineNumbers, i, rangeEnd, fenceMask);
+                if (TaskLineClassifier.opensTask(outline, i)) {
+                    const taskBlock = this.collectBlock(allLines, outline, i);
                     blocks.push(taskBlock);
                     i = taskBlock.line + 1 + taskBlock.childRawLines.length;
                 } else {
@@ -293,69 +270,46 @@ export class DocumentTreeBuilder {
     }
 
     /**
-     * タスクブロックを収集（タスク行 + インデントされた子行 + ネスト再帰）。
-     * `lines[i]` の絶対行番号を `lineNumbers[i]` が与える一般形 — トップ
-     * レベル（絶対行配列 + 連番）とネスト（相対子行配列 + 行番号マップ）を
-     * 同じ 1 実装で賄う。走査規則: タスク行より深い非空行の連続、空行で停止。
+     * The task block at absolute line `row`: the task line and its subtree
+     * as the outline reads it (`OutlineReading.subtreeEnd`), and the task
+     * blocks directly under it — the tasks in the subtree with no task
+     * between. No subtree runs past its section: a section opens on a heading
+     * the outline reads, at the top of the note, where no item is open.
      */
     private static collectBlock(
-        lines: string[],
-        lineNumbers: number[],
-        startIndex: number,
-        endIndex: number,
-        fenceMask: boolean[]
+        allLines: string[],
+        outline: OutlineReading,
+        row: number,
     ): TaskBlock {
-        const rawLine = lines[startIndex];
-        const indent = rawLine.search(/\S|$/);
-        const childRawLines: string[] = [];
+        const rawLine = allLines[row];
+        const end = outline.subtreeEnd(row);
+        const childRawLines = allLines.slice(row + 1, end);
         const childLineNumbers: number[] = [];
-        let j = startIndex + 1;
+        for (let i = row + 1; i < end; i++) childLineNumbers.push(i);
 
-        while (j < endIndex) {
-            const nextLine = lines[j];
-            if (nextLine.trim() === '') break;
-            const nextIndent = nextLine.search(/\S|$/);
-            if (nextIndent > indent) {
-                childRawLines.push(nextLine);
-                childLineNumbers.push(lineNumbers[j]);
-                j++;
-            } else {
-                break;
-            }
-        }
-
-        // フェンス判定はここで 1 度だけ行い、TaskBlock に載せて下流と共有する。
-        // Fenced lines stay in childRawLines (they are part of the subtree
+        // Code lines stay in childRawLines (they are part of the subtree
         // body and must survive moves verbatim) but are never interpreted as
         // notation — neither as tasks nor as `- ==>` flow lines.
-        const localFence = CodeFenceTracker.subtreeMask(childRawLines);
-        const childFenced = childRawLines.map(
-            (_, i) => fenceMask[childLineNumbers[i]] || localFence[i]
-        );
 
-        // 再帰的に子タスクブロックを検出
         const childTaskBlocks: TaskBlock[] = [];
-        let ci = 0;
-        while (ci < childRawLines.length) {
-            if (!childFenced[ci] && TaskLineClassifier.isTaskLine(childRawLines[ci])) {
-                const childBlock = this.collectBlock(
-                    childRawLines, childLineNumbers, ci, childRawLines.length, fenceMask
-                );
+        let i = row + 1;
+        while (i < end) {
+            if (TaskLineClassifier.opensTask(outline, i)) {
+                const childBlock = this.collectBlock(allLines, outline, i);
                 childTaskBlocks.push(childBlock);
-                ci += 1 + childBlock.childRawLines.length;
+                i += 1 + childBlock.childRawLines.length;
             } else {
-                ci++;
+                i++;
             }
         }
 
         return {
             type: 'task-block',
-            line: lineNumbers[startIndex],
+            line: row,
             rawLine,
-            indent,
+            indent: Outline.depthOf(rawLine),
             childRawLines,
             childLineNumbers,
-            childFenced,
             childTaskBlocks,
         };
     }

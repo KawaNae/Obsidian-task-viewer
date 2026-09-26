@@ -4,44 +4,39 @@ import type { DuplicateOptions, Task, TaskViewerSettings } from '../../types';
 import { isTvInline } from '../../types';
 import { TaskRepository } from '../persistence/TaskRepository';
 import { PropertyUpdatePlanner } from '../persistence/PropertyUpdatePlanner';
-import { FlowExecutor } from '../flow/FlowExecutor';
+import { FlowExecutor, type FireOp } from '../flow/FlowExecutor';
+import { completes } from '../flow/FlowTrigger';
+import type { EditorFireHost } from '../../editor/FlowFireExtension';
 import type { FlowDeleteAssessment } from '../flow/FlowDeletion';
 import { TaskStore } from './TaskStore';
 import { TaskScanner } from './TaskScanner';
 import { TaskValidator, type ValidationError } from './TaskValidator';
-import { SyncDetector } from './SyncDetector';
-import { EditorObserver } from './EditorObserver';
 import { PathTtlWindow } from './PathTtlWindow';
+import { refusalClause } from './RefusalClause';
 import { NotifyCoalescer } from './NotifyCoalescer';
 import { TaskIdGenerator } from '../display/TaskIdGenerator';
 import { TaskParser } from '../parsing/TaskParser';
 import { toDisplayTask } from '../display/DisplayTaskConverter';
 import { planInPlaceCopies } from '../persistence/DuplicateShift';
 import type { GenBlock } from '../parsing/gen/GenBlockCollector';
-import { FileOperations } from '../persistence/utils/FileOperations';
+import { plannedOn, subjectOf } from '../persistence/TaskRefs';
 import { logError, logInfo, logWarn } from '../../log/log';
+import type { EditorLine, Landing, Refusal, WriteOutcome } from '../persistence/FileLines';
+import type { InsertPlace, TaskOp } from '../persistence/TaskOps';
+import type { ContentKey } from './ContentKey';
 
 /**
  * TaskIndex - タスク管理の統括ファサードクラス
- * 各種サービス（Store, Scanner, Validator, SyncDetector, EditorObserver）を統合
+ * 各種サービス（Store, Scanner, Validator, Repository, FlowExecutor）を統合
  */
 export class TaskIndex {
     private store: TaskStore;
     private scanner: TaskScanner;
     private validator: TaskValidator;
-    private syncDetector: SyncDetector;
-    private editorObserver: EditorObserver;
     private repository: TaskRepository;
     private commandExecutor: FlowExecutor;
     private settings: TaskViewerSettings;
     private parseFingerprint: string;
-    private draggingFilePath: string | null = null;  // ドラッグ中のファイルパス
-
-    /**
-     * ドラッグ中に読み飛ばした変更。終了時に読み直すために覚えておく。
-     * パスは常に `draggingFilePath` と同じで、`isLocal` は飛ばした変更の論理和。
-     */
-    private skippedDuringDrag: { path: string; isLocal: boolean } | null = null;
 
     /**
      * `dispose` 済みか。閉じたあとの書き込みは行わず、できなかったと答える。
@@ -52,16 +47,14 @@ export class TaskIndex {
      */
     private disposed = false;
 
+    /** The writes asked of each row, in order (see {@link onRow}). */
+    private rowWrites?: Map<string, Promise<unknown>>;
+
     // 1 フレーム（16ms）分の通知を 1 回にまとめる。合流規則は NotifyCoalescer 側。
     private readonly notify = new NotifyCoalescer(
         (taskId, changes) => this.store.notifyListeners(taskId, changes),
         16,
     );
-
-    // 自己発信書き込みを覚えておくためのウィンドウ。
-    // vault.modify 後にメタデータキャッシュが遅延発火しても、自己書き込み由来であれば
-    // 重ねて notify を発火しないようにするため。
-    private readonly selfWrites = new PathTtlWindow(1000);
 
     // API CRUD (withNotify) の実行中を覚えておくためのウィンドウ。
     private readonly apiWrites = new PathTtlWindow(2000);
@@ -71,11 +64,11 @@ export class TaskIndex {
      * it.
      *
      * Held because a subscription outlives the object that made it. An index
-     * left listening after the plugin unloads keeps its own scanner, its own
-     * completion memory and its own flow executor, and the next load adds a
-     * second set: one file change is then processed twice, and a completed
-     * command generates its next instance once per surviving listener. That is
-     * what an update without a restart used to look like.
+     * left listening after the plugin unloads keeps its own scanner and its own
+     * flow executor, and the next load adds a second set: one file change is
+     * then processed twice, and, while completions were read off the scans, a
+     * completed command generated its next instance once per surviving
+     * listener. That is what an update without a restart used to look like.
      */
     private eventRefs: { emitter: { offref(ref: EventRef): void }; ref: EventRef }[] = [];
 
@@ -86,21 +79,21 @@ export class TaskIndex {
         // サービスの初期化
         this.store = new TaskStore(settings);
         this.validator = new TaskValidator();
-        this.syncDetector = new SyncDetector();
         this.repository = new TaskRepository(app);
         // Settings getter (not a snapshot): updateSettings replaces the
         // settings object, and trigger judgment must always see the latest
         // statusDefinitions.
         this.commandExecutor = new FlowExecutor(this.repository, this, app, () => this.settings);
-        this.editorObserver = new EditorObserver(app, this.syncDetector);
-        this.scanner = new TaskScanner(
-            app, this.store, this.validator,
-            this.syncDetector, this.commandExecutor, settings
-        );
+        this.scanner = new TaskScanner(app, this.store, this.validator, settings);
         // Connected here rather than built into the repository, because the
         // scanner does not exist when the repository does — and cut on dispose,
-        // so a write that outlives this index files nothing (see WriteObserver).
-        this.repository.getWriteObserver().connect(path => this.scanner.writeSink(path));
+        // so a write that outlives this index lands nothing in it (see WriteChannels).
+        this.repository.connect((path) => ({
+            landed: landing => this.landed(path, landing),
+            refused: refusal => this.reportRefusal(refusal),
+            follow: (read, line, now) => this.scanner.followLine(path, read, line, now),
+            reading: () => this.scanner.readingOf(path),
+        }));
     }
 
     getRepository(): TaskRepository {
@@ -110,43 +103,20 @@ export class TaskIndex {
     async initialize(): Promise<void> {
         this.app.workspace.onLayoutReady(async () => {
             await this.scanner.scanVault();
-            this.scanner.setInitializing(false);
         });
-
-        // エディタ監視の開始
-        this.editorObserver.setupInteractionListeners();
 
         // Vault イベントハンドラー
         this.own(this.app.vault, this.app.vault.on('modify', async (file) => {
             if (file instanceof TFile && file.extension === 'md') {
-                const isLocal = this.syncDetector.isLocalEdit(file.path);
-                this.syncDetector.clearLocalEditFlag(file.path);
-
-                // 自己書き込み: 後続の metadataCache.changed が遅延着弾しても
-                // 二重 notify にならないよう短時間だけマーク
-                if (isLocal) {
-                    this.selfWrites.mark(file.path);
-                }
-
-                // ドラッグ中のファイルはスキャンをスキップ（古い値でストアが上書きされるのを防止）。
-                // 飛ばしたことは覚えておき、ドラッグの終了時に読み直す。忘れると、
-                // その間に届いた変更を読む契機がどこにも無くなる。
-                if (this.draggingFilePath === file.path) {
-                    this.skippedDuringDrag = {
-                        path: file.path,
-                        // 1つでも自己書き込みがあれば自己書き込みとして読み直す。
-                        // ドラッグ確定の書き込み自体がこれに当たる。
-                        isLocal: (this.skippedDuringDrag?.isLocal ?? false) || isLocal,
-                    };
-                    return;
-                }
-
-                await this.scanner.queueScan(file, isLocal);
+                // The file being dragged is read, but its reading is held back
+                // from the store until the drag ends (`TaskScanner.hold`).
+                await this.scanner.queueScan(file);
                 // Skip notify when an API write (withNotify) is in flight for this
                 // file — withNotify's own notifyImmediate is the authoritative notify.
                 // Editor direct edits (no withNotify) are unaffected: the API
-                // window is only marked during API CRUD operations.
-                if (!this.apiWrites.has(file.path)) {
+                // window is only marked during API CRUD operations. Nor for the
+                // file being dragged: the drag draws it, and its end notifies.
+                if (!this.apiWrites.has(file.path) && !this.scanner.holds(file.path)) {
                     this.notify.schedule();
                 }
             }
@@ -169,17 +139,14 @@ export class TaskIndex {
 
         this.own(this.app.metadataCache, this.app.metadataCache.on('changed', (file) => {
             if (file instanceof TFile && file.extension === 'md') {
-                // ドラッグ中のファイルはスキャンをスキップ
-                if (this.draggingFilePath === file.path) {
-                    return;
-                }
-                // 自己書き込み直後のメタデータキャッシュ更新は完全に無視する。
-                // ドラッグ完了後 setDraggingFile(null) と相前後して着弾する遅延イベントが
-                // 余分な scan + notify を引き起こすのを防ぐ。
-                if (this.selfWrites.has(file.path)) {
-                    return;
-                }
-                void this.rescanAndNotify(file);
+                // `changed` follows every write, and mostly echoes a change
+                // the file's `modify` already had scanned — ours, someone
+                // else's, or the drag's own commit read when the drag ended.
+                // The scan answers that by content and skips the commit and the
+                // notify when there is nothing new (see TaskScanner.queueScan).
+                void this.scanner.queueScan(file).then(committed => {
+                    if (committed) this.notify.schedule();
+                });
             }
         }));
 
@@ -199,12 +166,7 @@ export class TaskIndex {
                 return;
             }
 
-            // md → md（通常のリネーム）
-            if (this.draggingFilePath === oldPath) {
-                this.draggingFilePath = null;
-            }
-            this.syncDetector.clearLocalEditFlag(oldPath);
-
+            // md → md（通常のリネーム）。ドラッグ中のファイルなら、保留も外れる。
             this.store.removeTasksByFile(oldPath);
             this.scanner.handleFileRenamed(oldPath, file.path);
 
@@ -230,9 +192,20 @@ export class TaskIndex {
         return true;
     }
 
+    /**
+     * A write of ours landed in `path`: the index reads what it left now,
+     * rather than when the scan its `modify` starts gets there, so the next
+     * operation plans from the file as it is. For the file being dragged the
+     * reading is held back like any other of it (`TaskScanner.hold`); the
+     * write's report is kept all the same, to follow names across it.
+     */
+    private landed(path: string, landing: Landing): void {
+        if (this.scanner.landed(path, landing)) this.notify.schedule();
+    }
+
     /** Read the file back into the store, then notify. */
-    private async rescanAndNotify(file: TFile, isLocal?: boolean): Promise<void> {
-        await this.scanner.queueScan(file, isLocal);
+    private async rescanAndNotify(file: TFile): Promise<void> {
+        await this.scanner.queueScan(file);
         this.notify.schedule();
     }
 
@@ -251,29 +224,20 @@ export class TaskIndex {
     // ===== ドラッグ制御 =====
 
     /**
-     * ドラッグ中のファイルパスを設定する。
-     * 指定されたファイルのスキャンをスキップし、ストアの上書きを防止。
+     * ドラッグ中のファイルパスを設定する。そのファイルの読みは、誰が読んだ
+     * ものも store に入れずに保留する（`TaskScanner.hold`）。ドラッグは
+     * store の写しを描いているので、古い値で上書きしない。
      * 通知は呼び出し元（DragHandler）が notifyImmediate で明示的に行う。
      *
-     * 終了時（null）には、その間に飛ばした変更を読み直す。ドラッグ確定の
-     * 書き込みもここに含まれる: `DragSession.handleUp` は commit を待ってから
-     * rAF でこのフラグを下ろすので、確定の modify は必ず飛ばされる側に入る。
-     * 読み直さないと ledger が前回のまま残り、そのタスクを握っていたハブや
-     * 選択が、後の無関係な再スキャンで外れる。外から書き換えられた場合は
-     * ストアの値自体が古いまま残る。
+     * 終了時（null）には、保留した読みがあればファイルを読み直して入れ、
+     * 通知する。ドラッグ確定の書き込みもここに含まれる: `DragSession.handleUp`
+     * は commit を待ってからこれを下ろすので、確定の書き込みの読みは必ず
+     * 保留される側に入る。
      */
     setDraggingFile(filePath: string | null): void {
-        this.draggingFilePath = filePath;
-        if (filePath !== null) return;
-
-        const skipped = this.skippedDuringDrag;
-        this.skippedDuringDrag = null;
-        if (!skipped) return;
-
-        const file = this.app.vault.getAbstractFileByPath(skipped.path);
-        if (file instanceof TFile) {
-            void this.rescanAndNotify(file, skipped.isLocal);
-        }
+        void this.scanner.hold(filePath).then(committed => {
+            if (committed) this.notify.schedule();
+        });
     }
 
     // ===== 設定 =====
@@ -305,19 +269,16 @@ export class TaskIndex {
      *
      * The subscriptions come first: a timer that fires after unload wastes a
      * frame, while a listener that survives it keeps a whole second pipeline
-     * alive — one that scans, detects completions and fires flow commands
-     * against the vault the next load is already working on.
+     * alive — one that scans and writes against the vault the next load is
+     * already working on.
      */
     dispose(): void {
         this.disposed = true;
-        this.skippedDuringDrag = null;
         for (const { emitter, ref } of this.eventRefs) emitter.offref(ref);
         this.eventRefs = [];
-        this.editorObserver.dispose();
-        this.repository.getWriteObserver().disconnect();
+        this.repository.disconnect();
 
         this.notify.dispose();
-        this.selfWrites.dispose();
         this.apiWrites.dispose();
     }
 
@@ -332,8 +293,36 @@ export class TaskIndex {
         return this.store.getTasks();
     }
 
+    /**
+     * The index's copy of the row `taskId` names, or undefined when it names
+     * none now.
+     *
+     * A name lasts one reading of its file. One given before a write of ours
+     * is followed across that write's report to the row's name now
+     * (`TaskScanner.follow`), so the copy that comes back may carry another
+     * name than the one asked for: whoever holds the name takes the new one
+     * from it. A name from before a change that was not ours names nothing.
+     * This is the one place a name is followed.
+     */
     getTask(taskId: string): Task | undefined {
-        return this.store.getTask(taskId);
+        const held = this.store.getTask(taskId);
+        if (held) return held;
+        const now = this.scanner.follow(taskId);
+        return now === null ? undefined : this.store.getTask(now);
+    }
+
+    /**
+     * The index's copy of the row `anchor` anchors in `filePath` now
+     * (`Task.anchor`), or undefined when no row of the file's last reading
+     * carries that `^id` alone. The one place an anchor is looked up.
+     *
+     * An anchor outlives readings, a name does not: what comes back is the
+     * copy of the last reading, under that reading's name. A write to it goes
+     * by that name, and so through the one check every write passes
+     * (`WriteSession.row`): a file that changed since the reading refuses it.
+     */
+    getTaskByAnchor(filePath: string, anchor: string): Task | undefined {
+        return this.getTasks().find(t => t.file === filePath && t.anchor === anchor);
     }
 
     /**
@@ -350,14 +339,16 @@ export class TaskIndex {
         );
     }
 
-    getTaskLineNumbersForFile(filePath: string): Set<number> {
-        const lines = new Set<number>();
-        for (const task of this.getTasks()) {
-            if (task.file === filePath) {
-                lines.add(task.line);
-            }
-        }
-        return lines;
+    /**
+     * The task on line `line` of content `key`: a line an editor shows, in
+     * the content it shows. Looked up only when the index's last reading of
+     * the file is that content; null when it is another, since a line number
+     * counts in nothing but the content it is in. Undefined when no task
+     * stands on the line.
+     */
+    taskAtEditorLine(filePath: string, line: number, key: ContentKey): Task | undefined | null {
+        if (this.scanner.readingOf(filePath).key !== key) return null;
+        return this.getTaskByFileLine(filePath, line);
     }
 
     getValidationErrors(): ValidationError[] {
@@ -421,11 +412,15 @@ export class TaskIndex {
             taskId = segmentInfo.baseId;
         }
 
-        const task = this.store.getTask(taskId);
-        if (!task) {
-            logWarn(`[TaskIndex] Task ${taskId} not found`);
-            return false;
-        }
+        const id = taskId;
+        const known = this.getTask(id);
+        return this.onRow(id, () => this.writeUpdate(id, updates, known));
+    }
+
+    /** {@link updateTask}, once every write already asked of the row has finished. */
+    private async writeUpdate(taskId: string, updates: Partial<Task>, known: Task | undefined): Promise<boolean> {
+        const task = this.copyForWrite(taskId, known);
+        if (!task) return false;
         if (task.isReadOnly) return false;
 
         // 非時刻プロパティ（color/tags/custom 等）の書き込み操作を導出。
@@ -436,12 +431,11 @@ export class TaskIndex {
         // 更新前の姿。行の探索と、書けなかったときの巻き戻しの両方で要る。
         const before: Task = { ...task };
 
-        this.syncDetector.markLocalEdit(task.file);
         Object.assign(task, updates);
         this.store.bumpRevision();
 
         // ドラッグ中のファイルはnotifyをスキップ（ドラッグ終了時にsetDraggingFile(null)で一括通知）
-        if (this.draggingFilePath !== task.file) {
+        if (!this.scanner.holds(task.file)) {
             this.store.notifyListeners(taskId, Object.keys(updates));
         }
 
@@ -454,12 +448,91 @@ export class TaskIndex {
         // 探索は更新前の姿で行う。ファイルに書かれているのは更新前の行なので、
         // 更新後の日付や時刻で探しに行くと、まさにその値を変える更新のときに
         // 空振りする。第 2 引数が書く内容、第 1 引数がどの行かを決める。
-        const written = await this.repository.updateTaskInFile(before, task, propertyOps);
+        // 子のプロパティ行も写しの値から作るので、書き換えるときは部分木も
+        // 計画が読んだものになる。外から足したタグの上に写しのタグを書かない。
+        //
+        // 行を完了させる書き換えは、同じ書き込みでフローを発火させる。完了か
+        // どうかは、書き込みが照合する土台の行と書く行の対で答える
+        // （`completes`）。発火の計画は書き込みの中で、書く行から立てる。
+        const target = plannedOn(before, { subtree: propertyOps.length > 0 });
+        const written = await this.writeCompleting(
+            completes(before.originalText, TaskParser.format(task), this.settings.statusDefinitions) ? task.file : null,
+            (fire) => this.repository.updateTaskInFile(target, task, propertyOps, fire));
 
         if (!written) {
             this.revertUnwrittenUpdate(task, taskId, before, updates);
+            return false;
         }
-        return written;
+        return true;
+    }
+
+    /**
+     * A write that may complete a row (`completingIn`, its file; null when it
+     * does not), made with the row's fire in it: whether it was written. A
+     * write refused with a fire that writes lines is made without it in the
+     * same attempt (`CompletionFire.writes`). Once the completion landed, the
+     * user is told if its flow was not run: the fire's write was refused, or
+     * its plan failed (`FlowExecutor.reportNotRun`).
+     */
+    private async writeCompleting(
+        completingIn: string | null,
+        write: (fire?: FireOp) => Promise<WriteOutcome>,
+    ): Promise<boolean> {
+        if (completingIn === null) return (await write()).written;
+        const fire = this.commandExecutor.fireOp(completingIn);
+        const outcome = await write(fire);
+        if (!outcome.written) return false;
+        const planned = fire.planned();
+        if (outcome.insteadOf) this.commandExecutor.reportNotRun({ kind: 'refused', refusal: outcome.insteadOf });
+        else if (planned?.kind === 'failed') this.commandExecutor.reportNotRun(planned);
+        return true;
+    }
+
+    /**
+     * The copy of a row a write is planned from, or undefined when the store no
+     * longer holds the row — an earlier write to it took it away, or a scan
+     * read the file without it — which is told once, as `gone`, like any
+     * write that finds its row gone. `known` is the copy as the write was
+     * asked for, to say which row it was.
+     */
+    private copyForWrite(taskId: string, known: Task | undefined): Task | undefined {
+        const task = this.getTask(taskId);
+        if (task) return task;
+        logWarn(`[TaskIndex] write to a row the index no longer holds: id=${taskId}`);
+        // A row the caller named but the store never held here: say which
+        // note, as a write refused before it read the note does.
+        const file = known?.file ?? TaskIdGenerator.parse(taskId)?.filePath ?? '';
+        this.reportRefusal({
+            file,
+            reason: { kind: 'gone' },
+            subject: known ? subjectOf(known) : file,
+        });
+        return undefined;
+    }
+
+    /**
+     * Run `op` once every write already asked of this row has finished.
+     *
+     * A write that names a row is planned from the index's copy of it
+     * (`plannedOn`), and the index takes in what a write left only once it has
+     * landed (`landed`). A second write asked
+     * before then — a checkbox clicked twice, which does not wait for the
+     * first — would plan from the copy the first write has already moved on
+     * from, and be refused against our own write. In order, each is planned
+     * from the copy the one before it left.
+     *
+     * Per row, not per file: a write to another row plans from that row's
+     * copy, which this one does not change.
+     */
+    private onRow<T>(taskId: string, op: () => Promise<T>): Promise<T> {
+        const queue = (this.rowWrites ??= new Map<string, Promise<unknown>>());
+        const previous = queue.get(taskId) ?? Promise.resolve();
+        // After the one before, whether it landed or threw.
+        const next = previous.then(op, op);
+        queue.set(taskId, next);
+        const settled = () => { if (queue.get(taskId) === next) queue.delete(taskId); };
+        next.then(settled, settled);
+        return next;
     }
 
     /**
@@ -485,12 +558,12 @@ export class TaskIndex {
             target[key] = source[key];
         }
         this.store.bumpRevision();
-        if (this.draggingFilePath !== task.file) {
+        if (!this.scanner.holds(task.file)) {
             this.store.notifyListeners(taskId, Object.keys(updates));
         }
 
+        // The write layer has told the user why (see reportRefusal).
         logWarn(`[TaskIndex] update was not written, reverted: id=${taskId} fields=[${Object.keys(updates)}]`);
-        new Notice(t('notice.taskWriteFailed'));
 
         const file = this.app.vault.getAbstractFileByPath(task.file);
         if (file instanceof TFile) {
@@ -503,7 +576,7 @@ export class TaskIndex {
      * writing anything. The delete menu asks before it decides what to offer.
      */
     assessFlowDelete(taskId: string): FlowDeleteAssessment {
-        const task = this.store.getTask(taskId);
+        const task = this.getTask(taskId);
         if (!task) return { outlook: { kind: 'nothing' }, descendantFlows: 0 };
         return this.commandExecutor.assessDeletion(task);
     }
@@ -518,29 +591,34 @@ export class TaskIndex {
      */
     async deleteTask(taskId: string, options: { fireFlow?: boolean } = {}): Promise<boolean> {
         if (this.refuseAfterDispose('deleteTask')) return false;
-        const task = this.store.getTask(taskId);
+        const known = this.getTask(taskId);
+        return this.onRow(taskId, () => this.writeDelete(taskId, options, known));
+    }
+
+    /** {@link deleteTask}, once every write already asked of the row has finished. */
+    private async writeDelete(taskId: string, options: { fireFlow?: boolean }, known: Task | undefined): Promise<boolean> {
+        const task = this.copyForWrite(taskId, known);
         if (!task) return false;
         return this.withNotify(task.file, async () => {
             logInfo(`[deleteTask] id=${taskId} fireFlow=${options.fireFlow === true}`);
             if (task.isReadOnly) return false;
 
-            this.syncDetector.markLocalEdit(task.file);
 
             let removed: boolean;
             if (options.fireFlow && isTvInline(task)) {
                 removed = await this.commandExecutor.fireAndDelete(task);
             } else {
-                removed = await this.repository.deleteTaskFromFile(task);
+                // The row and the subtree the index read (`plannedOn`): a line
+                // written into the subtree since is not taken with it.
+                removed = (await this.repository.applyToTask(plannedOn(task, { subtree: true }), [{ kind: 'remove' }])).written;
                 if (!removed) {
                     // Nothing was written, so no rescan follows and the store
                     // still holds a task the file also still holds. They agree,
                     // and the caller must not report the task gone.
                     logWarn(`[TaskIndex] delete was not written: id=${taskId}`);
-                    new Notice(t('notice.taskWriteFailed'));
                 }
             }
 
-            await this.scanner.waitForScan(task.file);
             return removed;
         });
     }
@@ -548,20 +626,25 @@ export class TaskIndex {
     /** @returns whether the copy was written. */
     async duplicateTask(taskId: string, options?: DuplicateOptions): Promise<boolean> {
         if (this.refuseAfterDispose('duplicateTask')) return false;
-        const task = this.store.getTask(taskId);
-        if (!task) return false;
+        const known = this.getTask(taskId);
+        return this.onRow(taskId, async () => {
+            const task = this.copyForWrite(taskId, known);
+            if (!task) return false;
+            return this.writeDuplicateOf(task, taskId, options);
+        });
+    }
+
+    /** {@link duplicateTask} on the copy the store holds once the row's earlier writes are done. */
+    private async writeDuplicateOf(task: Task, taskId: string, options?: DuplicateOptions): Promise<boolean> {
         return this.withNotify(task.file, async () => {
             if (task.isReadOnly) return false;
 
-            this.syncDetector.markLocalEdit(task.file);
 
             const written = await this.writeDuplicate(task, options);
             if (!written) {
                 logWarn(`[TaskIndex] duplicate was not written: id=${taskId}`);
-                new Notice(t('notice.taskWriteFailed'));
             }
 
-            await this.scanner.waitForScan(task.file);
             return written;
         });
     }
@@ -581,175 +664,124 @@ export class TaskIndex {
     private async writeDuplicate(task: Task, options?: DuplicateOptions): Promise<boolean> {
         const { dayOffset = 0, count = 1 } = options ?? {};
         if (dayOffset !== 0) {
-            return this.repository.duplicateInlineTask(task, options);
+            return (await this.repository.duplicateInlineTask(plannedOn(task), options)).written;
         }
 
         const display = toDisplayTask(task, this.settings.startHour, (id) => this.store.getTask(id));
         const copies = planInPlaceCopies(task, display, count);
-        return this.repository.duplicateInlineTaskInPlace(
-            task,
+        const outcome = await this.repository.duplicateInlineTaskInPlace(
+            plannedOn(task),
             copies.kind === 'verbatim'
                 ? copies
                 : { kind: 'lines', lines: copies.tasks.map(copy => TaskParser.format(copy)) },
         );
+        return outcome.written;
     }
 
-    async createTask(filePath: string, taskLine: string, heading?: string): Promise<number> {
-        if (this.refuseAfterDispose('createTask')) return -1;
-        let insertedLine = -1;
-        await this.withNotify(filePath, async () => {
+    /**
+     * @returns the line the task was written on, or null when it was not — a
+     * write that was not has told the user why.
+     */
+    async createTask(filePath: string, taskLine: string, heading?: string): Promise<number | null> {
+        if (this.refuseAfterDispose('createTask')) return null;
+        return this.withNotify(filePath, async () => {
             logInfo(`[createTask] path=${filePath} heading=${heading ?? '(none)'}`);
-            this.syncDetector.markLocalEdit(filePath);
 
-            if (heading) {
-                insertedLine = await this.repository.insertLineUnderHeading(filePath, taskLine, heading, 2);
-                if (insertedLine < 0) return; // ファイルが無ければ何も書けていない
-            } else {
-                insertedLine = await this.repository.appendTaskToFile(filePath, taskLine);
-            }
-
-            await this.scanner.waitForScan(filePath);
+            const outcome = heading
+                ? await this.repository.insertLineUnderHeading(filePath, taskLine, heading, 2)
+                : await this.repository.appendTaskToFile(filePath, taskLine);
+            // What the write left is in the index once it landed (`landed`):
+            // the caller finds the row on its line without waiting for a scan.
+            return outcome.written ? outcome.line : null;
         });
-        return insertedLine;
     }
 
-    /** @returns whether the child line was written. */
-    async insertChildTask(parentTaskId: string, childLine: string): Promise<boolean> {
-        if (this.refuseAfterDispose('insertChildTask')) return false;
-        const task = this.store.getTask(parentTaskId);
+    /**
+     * A line put in beside the row, where `place` says (`TaskOp` `insert`):
+     * a child at the head of the row's children, added from a card's menu,
+     * the API or the CLI; a timer's first session line or record there, the
+     * next session beside the last one, the first session of a continued run
+     * past the completed siblings. The one insert beside a row. Planned from
+     * the index's copy of the row (`plannedOn`), so written only where the
+     * row the name was read in stands, as every write that names a row is
+     * (`WriteSession.row`): a timer finds the row by its anchor
+     * (`getTaskByAnchor`) and writes by the name that answers. A read-only
+     * row (Tasks, Day Planner) is not written: the menu reaches here without
+     * the API's guard.
+     *
+     * `rowId`, when given, rewrites the row's own `^id` in the same write: a
+     * string puts it on (the target's anchor, on the first session line), null
+     * takes it off (the last session's, once the next one is beside it). Both
+     * land or neither does.
+     *
+     * @returns whether the line was written.
+     */
+    async insertLine(taskId: string, line: string, place: InsertPlace, rowId?: string | null): Promise<boolean> {
+        if (this.refuseAfterDispose('insertLine')) return false;
+        const task = this.copyForWrite(taskId, undefined);
         if (!task) return false;
-        // Read-only parsers (Tasks / dayPlanner) must never be written to.
-        // TaskApi guards this as well, but the menu path reaches the write
-        // service directly and would otherwise bypass it.
         if (task.isReadOnly) return false;
         return this.withNotify(task.file, async () => {
-            logInfo(`[insertChildTask] parentId=${parentTaskId}`);
-
-            this.syncDetector.markLocalEdit(task.file);
-
-            // インデントは書き込み層が既存子行から決める（親行だけからは
-            // トップレベルのとき 4 スペース固定になり、タブ書きのファイルに
-            // スペースが混ざる）。
-            const insertedLine = await this.repository.insertLineAsFirstChild(task, childLine);
-            if (insertedLine < 0) {
-                logWarn(`[TaskIndex] child insert was not written: parentId=${parentTaskId}`);
-                new Notice(t('notice.taskWriteFailed'));
-            }
-
-            await this.scanner.waitForScan(task.file);
-            return insertedLine >= 0;
+            logInfo(`[insertLine] taskId=${taskId} place=${place}${rowId === undefined ? '' : ` rowId=${rowId ?? '(off)'}`}`);
+            const ops: TaskOp[] = [];
+            if (rowId !== undefined) ops.push({ kind: 'update', text: TaskParser.format({ ...task, blockId: rowId ?? undefined }) });
+            ops.push({ kind: 'insert', place, text: line });
+            const { written } = await this.repository.applyToTask(plannedOn(task), ops);
+            return written;
         });
     }
 
     /**
-     * Append a child at the end of the parent's subtree, in contrast to
-     * insertChildTask's head insertion. Session records accumulate over time,
-     * so head insertion would print the log backwards.
+     * Apply `ops` to the row at a line the editor pointed at, in the file:
+     * the editor menu's write, when the editor it was opened in no longer
+     * shows the file (`shows`). A rewrite that completes the line — an
+     * `update` whose text `completes` the line the editor showed — fires in
+     * the same write, as a card's does (see writeUpdate), its `fire` the last
+     * op of the write.
+     *
+     * @returns whether the line was written.
      */
-    async appendChildTask(parentTaskId: string, childLine: string): Promise<void> {
-        if (this.refuseAfterDispose('appendChildTask')) return;
-        const task = this.store.getTask(parentTaskId);
-        if (!task) return;
-        if (task.isReadOnly) return;
-        return this.withNotify(task.file, async () => {
-            logInfo(`[appendChildTask] parentId=${parentTaskId}`);
-
-            this.syncDetector.markLocalEdit(task.file);
-
-            await this.repository.insertLineAfterTask(task, childLine);
-
-            await this.scanner.waitForScan(task.file);
+    async writeLine(filePath: string, at: EditorLine, ops: readonly TaskOp[]): Promise<boolean> {
+        if (this.refuseAfterDispose('writeLine')) return false;
+        return this.withNotify(filePath, async () => {
+            const defs = this.settings.statusDefinitions;
+            const completing = ops.some(op => op.kind === 'update' && completes(at.text, op.text, defs));
+            return this.writeCompleting(
+                completing ? filePath : null,
+                (fire) => this.repository.applyToLine(filePath, at, ops, { fire }));
         });
     }
 
     /**
-     * Insert a line as the task's next sibling — same indentation, just past
-     * its subtree. Session records after the first one live beside the record
-     * before them, not under it, so the log stays flat.
+     * What the editor's fire needs of this index (`flowFireExtension`): the
+     * plan, the ops, and where its refusals go. After `dispose`, nothing
+     * fires.
      */
-    async insertSiblingAfterTask(
-        taskId: string,
-        siblingLine: string,
-        opts: { afterCompletedRun?: boolean } = {}
-    ): Promise<number> {
-        if (this.refuseAfterDispose('insertSiblingAfterTask')) return -1;
-        const task = this.store.getTask(taskId);
-        if (!task) return -1;
-        if (task.isReadOnly) return -1;
-        return this.withNotify(task.file, async () => {
-            logInfo(`[insertSiblingAfterTask] taskId=${taskId}`);
-
-            this.syncDetector.markLocalEdit(task.file);
-            const insertedLine = await this.repository.insertSiblingAfterTask(task, siblingLine, opts);
-            await this.scanner.waitForScan(task.file);
-
-            return insertedLine;
-        });
-    }
-
-    async updateLine(filePath: string, lineNumber: number, newContent: string): Promise<void> {
-        if (this.refuseAfterDispose('updateLine')) return;
-        return this.withNotify(filePath, async () => {
-            this.syncDetector.markLocalEdit(filePath);
-            await this.repository.updateLine(filePath, lineNumber, newContent);
-
-            const file = this.app.vault.getAbstractFileByPath(filePath);
-            if (file instanceof TFile) {
-                await this.scanner.waitForScan(filePath);
-            }
-        });
-    }
-
-    async insertLineAfterLine(filePath: string, lineNumber: number, newContent: string): Promise<void> {
-        if (this.refuseAfterDispose('insertLineAfterLine')) return;
-        return this.withNotify(filePath, async () => {
-            this.syncDetector.markLocalEdit(filePath);
-            await this.repository.insertLineAfterLine(filePath, lineNumber, newContent);
-
-            const file = this.app.vault.getAbstractFileByPath(filePath);
-            if (file instanceof TFile) {
-                await this.scanner.waitForScan(filePath);
-            }
-        });
-    }
-
-    async deleteLine(filePath: string, lineNumber: number): Promise<void> {
-        if (this.refuseAfterDispose('deleteLine')) return;
-        return this.withNotify(filePath, async () => {
-            this.syncDetector.markLocalEdit(filePath);
-            await this.repository.deleteLine(filePath, lineNumber);
-
-            const file = this.app.vault.getAbstractFileByPath(filePath);
-            if (file instanceof TFile) {
-                await this.scanner.waitForScan(filePath);
-            }
-        });
+    editorFireHost(): EditorFireHost {
+        return {
+            active: () => !this.disposed,
+            statusDefinitions: () => this.settings.statusDefinitions,
+            fireOp: (path) => this.commandExecutor.fireOp(path),
+            applyOps: (draft, session, target, ops) => this.repository.applyOps(draft, session, target, ops),
+            refused: (refusal) => this.reportRefusal(refusal),
+            notRun: (why) => this.commandExecutor.reportNotRun(why),
+        };
     }
 
     // ===== ヘルパー =====
 
-    resolveTask(originalTask: Task): Task | undefined {
-        // 1. IDで検索
-        let found = this.store.getTask(originalTask.id);
-        if (found &&
-            found.content === originalTask.content &&
-            found.file === originalTask.file &&
-            found.line === originalTask.line &&
-            found.startDate === originalTask.startDate) {
-            return found;
-        }
-
-        // 2. シグネチャで検索（File + Content）
-        for (const t of this.store.getTasks()) {
-            if (t.file === originalTask.file && t.content === originalTask.content) {
-                if (t.startDate === originalTask.startDate) {
-                    return t;
-                }
-            }
-        }
-
-        return undefined;
+    /**
+     * Tell the user a write was not made, and why. Every write that gives up
+     * for want of a target comes through here — once per write, from the
+     * write layer — so the callers that learn of it from a `false` do not
+     * say it again.
+     */
+    private reportRefusal(refusal: Refusal): void {
+        const { reason, subject, file } = refusal;
+        logWarn(`[TaskIndex] write refused: file=${file} reason=${reason.kind} subject=${subject}`);
+        new Notice(t('notice.notWritten', { reason: refusalClause(reason), subject }));
     }
+
 }
 
 // ── Parse-affecting settings fingerprint ──
@@ -766,13 +798,15 @@ export class TaskIndex {
 //   enableDayPlanner    — toggles DayPlanner parser in the chain
 //   enableTasksPlugin   — toggles TasksPlugin parser in the chain
 //   tasksPluginMapping  — emoji-to-field mapping for TasksPlugin parser
-//   statusDefinitions   — which status chars count as complete (CompletionDetector)
+//
+// Not statusDefinitions: which status chars count as complete is read where a
+// completion is answered and where a view draws, never by the parse, so a
+// change to it needs only the notify.
 export function computeParseFingerprint(settings: TaskViewerSettings): string {
     return JSON.stringify([
         settings.scopeKeys,
         settings.enableDayPlanner,
         settings.enableTasksPlugin,
         settings.tasksPluginMapping,
-        settings.statusDefinitions,
     ]);
 }

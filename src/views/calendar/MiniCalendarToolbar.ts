@@ -122,6 +122,7 @@ export class MiniCalendarToolbar extends ViewToolbarBase {
             }),
             viewType: VIEW_META_MINI_CALENDAR.type,
             getViewTemplateFolder: () => deps.plugin.settings.viewTemplateFolder,
+            writeChannel: deps.plugin.getTaskWriteService().writeChannel,
             getViewTemplate: () => ({
                 filePath: '',
                 name: deps.getCustomName() || VIEW_META_MINI_CALENDAR.displayText,
