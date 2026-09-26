@@ -121,7 +121,7 @@ export class TaskCloner {
      */
     private putCopies(draft: LineDraft, taskLine: number, parentLines: string[], spot: Spot): void {
         const lines = draft.lines;
-        const outline = Outline.read(lines);
+        const outline = draft.reading();
         const rows: number[] = [];
         for (let row = taskLine; row < outline.subtreeEnd(taskLine); row++) rows.push(row);
         const cleanedChildren = this.fileOps.stripBlockIds(rows.slice(1).map(row => lines[row]));

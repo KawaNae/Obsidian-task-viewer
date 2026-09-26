@@ -1,6 +1,6 @@
 import { type App, TFolder } from 'obsidian';
 import { TaskLineClassifier } from '../../parsing/utils/TaskLineClassifier';
-import { Outline } from '../../parsing/utils/Outline';
+import { Outline, type OutlineReading } from '../../parsing/utils/Outline';
 
 
 /**
@@ -11,14 +11,14 @@ export class FileOperations {
     constructor(private app: App) { }
 
     /**
-     * The lines of the task's subtree below its own line, as the parser reads
+     * The lines of the task's subtree below its own line, as `outline` reads
      * them (`OutlineReading.subtreeEnd`): blank lines between them included, the
      * blank lines after the last of them not.
      */
-    collectChildrenFromLines(lines: readonly string[], taskLineIndex: number): {
+    collectChildrenFromLines(outline: OutlineReading, taskLineIndex: number): {
         childrenLines: string[];
     } {
-        const childrenLines = lines.slice(taskLineIndex + 1, Outline.read(lines).subtreeEnd(taskLineIndex));
+        const childrenLines = outline.lines.slice(taskLineIndex + 1, outline.subtreeEnd(taskLineIndex));
         return { childrenLines };
     }
 
@@ -42,14 +42,13 @@ export class FileOperations {
      * and a line written at its indentation would be none either.
      */
     static firstChildIndent(
-        lines: readonly string[],
+        outline: OutlineReading,
         taskLineIndex: number,
         except: ReadonlySet<number> = new Set(),
     ): string | null {
-        const outline = Outline.read(lines);
         const end = outline.subtreeEnd(taskLineIndex);
         for (let j = taskLineIndex + 1; j < end; j++) {
-            if (outline.item(j)?.parent === taskLineIndex && !except.has(j)) return Outline.indentOf(lines[j]);
+            if (outline.item(j)?.parent === taskLineIndex && !except.has(j)) return Outline.indentOf(outline.lines[j]);
         }
         return null;
     }
@@ -81,16 +80,18 @@ export class FileOperations {
      * it there answered four spaces for every file, tab-written ones included,
      * and put the two spellings in one subtree. The file's unit is repeated
      * until the line reaches the parent's content column (`Outline.childIndent`,
-     * the one rule for a child's indentation).
+     * the one rule for a child's indentation). The lines are read as
+     * `outline` reads them.
      */
     static resolveChildIndent(
-        lines: readonly string[],
+        outline: OutlineReading,
         taskLineIndex: number,
-        parent: string = lines[taskLineIndex],
+        parent: string = outline.lines[taskLineIndex],
         except: ReadonlySet<number> = new Set(),
     ): string {
-        const first = FileOperations.firstChildIndent(lines, taskLineIndex, except)
-            ?? (except.size > 0 ? FileOperations.firstChildIndent(lines, taskLineIndex) : null);
+        const lines = outline.lines;
+        const first = FileOperations.firstChildIndent(outline, taskLineIndex, except)
+            ?? (except.size > 0 ? FileOperations.firstChildIndent(outline, taskLineIndex) : null);
         const sample = first === null ? null
             : Outline.shiftedIndent(first, Outline.indentOf(lines[taskLineIndex]), Outline.indentOf(parent));
         return Outline.childIndent(parent, sample, FileOperations.detectIndentUnit(lines));

@@ -1,8 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import type { App } from 'obsidian';
 import { Outline } from '../../../src/services/parsing/utils/Outline';
-import { FileOperations } from '../../../src/services/persistence/utils/FileOperations';
-import { renderFlowInstance } from '../../../src/services/persistence/FlowInstanceLines';
+import { renderFlowInstance, type FlowInstanceInsert } from '../../../src/services/persistence/FlowInstanceLines';
 
 /**
  * The indentation of a child is decided in one place (`Outline.childIndent`),
@@ -106,7 +104,7 @@ describe('Outline.shiftIndent', () => {
 });
 
 describe('renderFlowInstance: the lines a next instance is written as', () => {
-    const fileOps = new FileOperations({} as App);
+    const render = (lines: string[], line: number, insert: FlowInstanceInsert) => renderFlowInstance(Outline.read(lines), line, insert);
 
     it('spells the next instance as the row that fired, its `==>` line its child (H2)', () => {
         // `10.   [ ] T` opens its content at column 6, and its `==>` line at
@@ -115,14 +113,14 @@ describe('renderFlowInstance: the lines a next instance is written as', () => {
         // (a marker that can interrupt a paragraph): its content opens at
         // column 5, and the same six spaces are its child too.
         const lines = ['10.   [ ] T ==> next', '      - ==> every day', ''];
-        const rendered = texts(renderFlowInstance(fileOps, lines, 0, { kind: 'recurrence', content: '- [ ] T', flowLines: ['every day'] }));
+        const rendered = texts(render(lines, 0, { kind: 'recurrence', content: '- [ ] T', flowLines: ['every day'] }));
         expect(rendered).toEqual(['1.   [ ] T', '      - ==> every day']);
         expect(parentOf(rendered, 1)).toBe(0);
     });
 
     it('writes the same bytes as the row\'s children where they fit the line written', () => {
         const lines = ['- [ ] T', '  - ==> every day', ''];
-        const rendered = texts(renderFlowInstance(fileOps, lines, 0, { kind: 'recurrence', content: '- [ ] T', flowLines: ['every day'] }));
+        const rendered = texts(render(lines, 0, { kind: 'recurrence', content: '- [ ] T', flowLines: ['every day'] }));
         expect(rendered).toEqual(['- [ ] T', '  - ==> every day']);
     });
 
@@ -131,7 +129,7 @@ describe('renderFlowInstance: the lines a next instance is written as', () => {
         // spaces: cut by T's one character, the step was seven spaces, and
         // the children landed five past G's content, a paragraph line.
         const lines = ['- r', '\t- [ ] T', '        - note', ''];
-        const rendered = texts(renderFlowInstance(fileOps, lines, 1, {
+        const rendered = texts(render(lines, 1, {
             kind: 'generated',
             parentLine: '- [ ] G',
             flowLines: ['every day'],
@@ -144,7 +142,7 @@ describe('renderFlowInstance: the lines a next instance is written as', () => {
     it('keeps the step of the task\'s own children where it is not the file\'s unit', () => {
         // Children two spaces in; the file's unit reads four (the mutation run's 8f).
         const lines = ['- [ ] T', '  - note', ''];
-        const rendered = renderFlowInstance(fileOps, lines, 0, {
+        const rendered = render(lines, 0, {
             kind: 'generated',
             parentLine: '- [ ] G',
             flowLines: ['every day'],
@@ -155,7 +153,7 @@ describe('renderFlowInstance: the lines a next instance is written as', () => {
 
     it('writes the same bytes as before where the first child is a unit past the task', () => {
         const lines = ['- r', '\t- [ ] T', '\t\t- note', ''];
-        const rendered = renderFlowInstance(fileOps, lines, 1, {
+        const rendered = render(lines, 1, {
             kind: 'generated',
             parentLine: '- [ ] G',
             flowLines: ['every day'],

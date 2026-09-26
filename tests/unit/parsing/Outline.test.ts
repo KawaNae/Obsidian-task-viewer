@@ -82,8 +82,8 @@ describe('a note that mixes tabs and spaces', () => {
 
     it('has the subtree a write carries where the parser reads it', () => {
         const ops = new FileOperations({} as App);
-        expect(ops.collectChildrenFromLines([...MIXED], 1).childrenLines).toEqual([]);
-        expect(ops.collectChildrenFromLines([...MIXED], 2).childrenLines).toEqual([MIXED[3], MIXED[4]]);
+        expect(ops.collectChildrenFromLines(Outline.read([...MIXED]), 1).childrenLines).toEqual([]);
+        expect(ops.collectChildrenFromLines(Outline.read([...MIXED]), 2).childrenLines).toEqual([MIXED[3], MIXED[4]]);
     });
 });
 
@@ -193,7 +193,7 @@ describe('the write and the parser agree on every subtree', () => {
             const blocks = blocksOf([...lines]);
             expect(blocks.length).toBeGreaterThan(0);
             for (const block of blocks) {
-                const { childrenLines } = ops.collectChildrenFromLines([...lines], block.line);
+                const { childrenLines } = ops.collectChildrenFromLines(Outline.read([...lines]), block.line);
                 const written = childrenLines.map((_, i) => block.line + 1 + i);
                 expect(written, `subtree of line ${block.line}`).toEqual(block.childLineNumbers);
             }

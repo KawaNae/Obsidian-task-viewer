@@ -4,8 +4,6 @@ import { checkWrite, type WrittenLine, type WriteCheck, type WriteFinding } from
 import { draftOver, replayEdits, type LineDraft } from '../../../src/services/persistence/FileLines';
 import { Block, Placement, type Spot } from '../../../src/services/persistence/utils/Placement';
 import { renderFlowInstance } from '../../../src/services/persistence/FlowInstanceLines';
-import { FileOperations } from '../../../src/services/persistence/utils/FileOperations';
-import type { App } from 'obsidian';
 
 /**
  * The one check every write is held to (`checkWrite`, run by
@@ -248,7 +246,7 @@ describe('a next instance put at a sibling spelled apart from the row that fired
     it('is written at the sibling\'s indentation, its `==>` line as far past it as it stands past the row', () => {
         // R is four spaces in, its group's head A a tab: both P's children.
         const lines = ['- [ ] P', '\t- [x] A', '    - [ ] R ==> every mon', '      - ==> every mon', ''];
-        const block = renderFlowInstance(new FileOperations({} as App), lines, 2, { kind: 'recurrence', content: '- [ ] R', flowLines: ['every mon'] });
+        const block = renderFlowInstance(Outline.read(lines), 2, { kind: 'recurrence', content: '- [ ] R', flowLines: ['every mon'] });
         const spot = Placement.groupHead(Outline.read(lines), 2, '- [ ] R');
         expect(spot).toEqual({ at: 1, parent: 0, indent: '\t' });
         const check = checked(lines, (draft) => draft.put(spot, block));
