@@ -21,9 +21,10 @@ import type { MoveTarget } from './FlowAst';
  * The order used to protect more than it does. When each effect was a write
  * of its own that found the row by its text, the row stayed findable only for
  * as long as the line just written read differently from it — held by value
- * (a written instance always starts unchecked, an archived copy drops its
- * `==>` and its block id), not by construction. A deletion fire removes a line
- * worded exactly like the instance it writes, and that is where it broke.
+ * (a written instance always starts unchecked; the copy a move wrote to
+ * another note, before F8, dropped its `==>` and its block id), not by
+ * construction. A deletion fire removes a line worded exactly like the
+ * instance it writes, and that is where it broke.
  */
 export type FlowEffect =
     | { kind: 'create-next'; newTask: Task }
