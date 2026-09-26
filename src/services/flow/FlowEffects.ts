@@ -1,24 +1,22 @@
 import type { Task } from '../../types';
 import type { Diagnostic } from '../lang/Diagnostic';
 import type { GeneratedChild } from '../persistence/TaskCloner';
+import type { MoveTarget } from './FlowAst';
 
 /**
  * Effect descriptors produced by the pure planner and applied by the
  * FlowExecutor's interpreter against TaskRepository.
  *
  * ORDER: the planner emits effects in the order
- *   create-next / create-generated → archive-to → strip-flow / delete-original
+ *   create-next / create-generated → move / strip-flow
  * and the interpreter keeps it, as the order of the ops of one write (see
  * FlowExecutor.planTask and InlineTaskWriter.applyOps). Everything a fire
- * does in the row's own file is the write that completed the row: the row is
- * located once,
- * and each op after the first takes its line from that answer carried across
- * the splices before it. The next instance goes in at the head of the sibling
- * group, so the row it came from moves down under it and is still the row the
- * later ops are about; nothing searches the file for the row a second time.
- * The one exception is a move to another file, which cannot be one write:
- * the completion lands first, then the archive is written to the destination,
- * and only once it has landed is the source's write made (`finishAway`).
+ * does is the write that completed the row, in the row's own note: the row
+ * is located once, and each op after the first takes its line from that
+ * answer carried across the splices before it. The next instance goes in at
+ * the head of the sibling group, so the row it came from moves down under it
+ * and is still the row the later ops are about; nothing searches the file
+ * for the row a second time.
  *
  * The order used to protect more than it does. When each effect was a write
  * of its own that found the row by its text, the row stayed findable only for
@@ -54,11 +52,11 @@ export type FlowEffect =
          */
         warnings: Diagnostic[];
     }
-    | { kind: 'archive-to'; destPath: string; archivedTask: Task }
     | { kind: 'strip-flow' }
     /**
-     * `destPath` is where `archive-to` put the task. Within the row's own
-     * file the two are one op, the row carried to the end; to another file
-     * this is the removal the source's write makes once the archive landed.
+     * The row, as `movedTask` reads, carried with its subtree to `to` in its
+     * own note — which consumes the command as `strip-flow` does. Where `to`
+     * is, and whether it is one place, is answered against the lines the
+     * write holds (`FlowExecutor.planTask`, `Placement.heading`).
      */
-    | { kind: 'delete-original'; destPath: string };
+    | { kind: 'move'; to: MoveTarget; movedTask: Task };

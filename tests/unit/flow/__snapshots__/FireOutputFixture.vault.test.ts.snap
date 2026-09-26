@@ -103,20 +103,20 @@ exports[`a completion fire leaves the same bytes > nested row indented by spaces
 }
 `;
 
-exports[`a completion fire leaves the same bytes > next instance and a move to another file 1`] = `
+exports[`a completion fire leaves the same bytes > next instance and a move to a heading of the note 1`] = `
 {
-  "archive.md": [
-    ""# archive"",
-    ""- [x] 対象 @2026-09-21"",
-    ""\\t- [ ] 子 @2026-09-21"",
-    """",
-  ],
   "note.md": [
     ""# note"",
     ""- [ ] 対象 @2026-09-28"",
-    ""\\t- ==> every mon move([[archive]])"",
+    ""\\t- ==> every mon move([[#Done]])"",
     ""- [ ] 上 @2026-09-21"",
     ""- [ ] 下 @2026-09-21"",
+    ""## Done"",
+    ""- [x] 済 @2026-09-20"",
+    ""- [x] 対象 @2026-09-21"",
+    ""\\t- [ ] 子 @2026-09-21"",
+    """",
+    ""## Later"",
     """",
   ],
 }
@@ -127,7 +127,7 @@ exports[`a completion fire leaves the same bytes > next instance and a move with
   "note.md": [
     ""# note"",
     ""- [ ] 対象 @2026-09-28"",
-    ""\\t- ==> every mon move([[note]])"",
+    ""\\t- ==> every mon move()"",
     ""- [ ] 上 @2026-09-21"",
     ""- [ ] 下 @2026-09-21"",
     ""- [x] 対象 @2026-09-21"",

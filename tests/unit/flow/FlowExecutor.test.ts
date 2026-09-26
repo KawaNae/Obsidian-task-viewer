@@ -47,7 +47,7 @@ function flowTask(src: string, overrides: Partial<Task> = {}): Task {
 
 /** The fire of a completed row read as `task`, with no blocks. */
 function planOf(task: Task): FirePlan {
-    return makeExecutor().planTask(task, () => undefined);
+    return makeExecutor().planTask(task, () => undefined, []);
 }
 
 /** The ops of a plan that fires in the completing write (fails the test otherwise). */
@@ -92,20 +92,17 @@ describe('FlowExecutor.planTask: what a completion fires', () => {
         expect(ops.filter(o => o.kind === 'strip-flow')).toHaveLength(1);
     });
 
-    it('holds a move to another file apart: nothing in the completing write, the removal after', () => {
-        const plan = planOf(flowTask('move([[Archive]])'));
+    it('carries the row with move(), after the next instance, in the completing write', () => {
+        const ops = opsOf(planOf(flowTask('every mon move()')));
 
-        expect(opsOf(plan)).toEqual([]);
-        expect(plan.kind === 'fires' && plan.away).toEqual({
-            destPath: 'Archive.md', content: '- [x] Test task @2026-06-29', ops: [{ kind: 'remove' }],
-        });
+        expect(ops.map(o => o.kind)).toEqual(['insert-instance', 'move']);
+        expect(ops[1]).toEqual({ kind: 'move', text: '- [x] Test task @2026-06-29', to: { kind: 'end' } });
     });
 
-    it('goes with the next instance to the source\'s write after the archive', () => {
+    it('fails a move that names another note: retired, nothing of the fire is written', () => {
         const plan = planOf(flowTask('every mon move([[Archive]])'));
 
-        expect(opsOf(plan)).toEqual([]);
-        expect(plan.kind === 'fires' && plan.away?.ops.map(o => o.kind)).toEqual(['insert-instance', 'remove']);
+        expect(plan.kind === 'failed' && plan.error.code).toBe('eval.move-retired');
     });
 
     it('consumes without generating when until has expired', () => {

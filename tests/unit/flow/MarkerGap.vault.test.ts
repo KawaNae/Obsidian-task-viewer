@@ -74,7 +74,7 @@ describe('a task line written over', () => {
     });
 
     it('keeps the gap when a move within the note carries it with its child', async () => {
-        const { contents, session } = await open(['# note', '-    [ ] T @2026-09-21 ==> move([[note]])', '      - [ ] c', '- [ ] U', '']);
+        const { contents, session } = await open(['# note', '-    [ ] T @2026-09-21 ==> move()', '      - [ ] c', '- [ ] U', '']);
 
         await complete(session, 'T');
 
@@ -127,7 +127,7 @@ describe('a task moved to another indentation', () => {
 
     it('keeps its children and its properties within the note', async () => {
         const { contents, session } = await openNotes({
-            [FILE]: ['# note', '- [ ] P', '  -\t[ ] T @2026-09-21 ==> move([[note]])', '    - [ ] c', '    - memo:: a', '- [ ] U', ''],
+            [FILE]: ['# note', '- [ ] P', '  -\t[ ] T @2026-09-21 ==> move()', '    - [ ] c', '    - memo:: a', '- [ ] U', ''],
         });
 
         await completeIn(session, 'T', [FILE]);
@@ -138,29 +138,27 @@ describe('a task moved to another indentation', () => {
         expect(T.properties?.memo?.value).toBe('a');
     });
 
-    it('keeps its child in the archive', async () => {
+    it('keeps its child under a heading of the note', async () => {
         const { contents, session } = await openNotes({
-            [FILE]: ['# note', ' -\t[ ] T @2026-09-21 ==> move([[archive]])', '    - [ ] c', '- [ ] U', ''],
-            'archive.md': ['# archive', ''],
+            [FILE]: ['# note', ' -\t[ ] T @2026-09-21 ==> move([[#Done]])', '    - [ ] c', '- [ ] U', '## Done', ''],
         });
 
-        await completeIn(session, 'T', [FILE, 'archive.md']);
+        await completeIn(session, 'T', [FILE]);
 
-        expect(contents.get('archive.md')!.split('\n')).toContain('-  [x] T @2026-09-21');
-        const { T, c } = movedIn(session, 'archive.md');
+        expect(contents.get(FILE)!.split('\n')).toContain('-  [x] T @2026-09-21');
+        const { T, c } = movedIn(session, FILE);
         expect(c?.parentId).toBe(T.id);
     });
 
-    it('keeps a child deep in its item a task in the archive', async () => {
+    it('keeps a child deep in its item a task under a heading of the note', async () => {
         const { contents, session } = await openNotes({
-            [FILE]: ['# note', '- [ ] P', '  1.\t[ ] T @2026-09-21 ==> move([[archive]])', '           - [ ] c', '- [ ] U', ''],
-            'archive.md': ['# archive', ''],
+            [FILE]: ['# note', '- [ ] P', '  1.\t[ ] T @2026-09-21 ==> move([[#Done]])', '           - [ ] c', '- [ ] U', '## Done', ''],
         });
 
-        await completeIn(session, 'T', [FILE, 'archive.md']);
+        await completeIn(session, 'T', [FILE]);
 
-        expect(contents.get('archive.md')!.split('\n')).toContain('1.    [x] T @2026-09-21');
-        const { T, c } = movedIn(session, 'archive.md');
+        expect(contents.get(FILE)!.split('\n')).toContain('1.    [x] T @2026-09-21');
+        const { T, c } = movedIn(session, FILE);
         expect(c?.parentId).toBe(T.id);
     });
 });

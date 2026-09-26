@@ -13,7 +13,8 @@ import type { FlowInstanceInsert } from '../persistence/FlowInstanceLines';
 import type { TaskOp } from '../persistence/TaskOps';
 import { plannedOn } from '../persistence/TaskRefs';
 import type { EditorSubtree, Refusal, WriteOutcome } from '../../utils/FileLines';
-import type { PlacedLine } from '../persistence/utils/Placement';
+import { type PlacedLine, Placement } from '../persistence/utils/Placement';
+import type { MoveTarget } from './FlowAst';
 import { flowSource } from './FlowSegments';
 import { type FlowPlanDeps, GenerationError, planFlow } from './FlowPlanner';
 import { canTriggerFlow } from './FlowTrigger';
@@ -25,6 +26,28 @@ import { runtimeText } from './runtimeText';
 
 /** The source's write of a move to another file: `ops` applied to the row at `at`. */
 export type SourceWrite = (at: EditorSubtree, ops: readonly TaskOp[]) => Promise<WriteOutcome>;
+
+/**
+ * Why a move to `to` cannot be made in `lines`, or null when it can: it names
+ * another note (retired, F8), or the heading it names is not there, or is
+ * there more than once (`Placement.heading`, as the write will look it up).
+ */
+function destinationRefused(to: MoveTarget, lines: readonly string[]): GenerationError | null {
+    if (to.kind === 'retired') {
+        return new GenerationError('eval.move-retired',
+            'move() moves the task within its note only, and this one names another note');
+    }
+    if (to.kind === 'end') return null;
+    const found = Placement.heading(lines, to.name);
+    if (found.kind === 'none') {
+        return new GenerationError('eval.move-no-heading', `No heading '${to.name}' in this note`, { name: to.name });
+    }
+    if (found.kind === 'many') {
+        return new GenerationError('eval.move-heading-ambiguous',
+            `${found.count} headings are named '${to.name}' in this note`, { name: to.name, count: found.count });
+    }
+    return null;
+}
 
 /** How long one failure stays quiet after it has been shown. */
 const FAILURE_NOTICE_WINDOW_MS = 5000;
@@ -129,14 +152,20 @@ export class FlowExecutor {
         if (parsed.ignored) return { kind: 'none' };
         const task = parsed.tasks.find(candidate => candidate.line === line);
         if (!task || !canTriggerFlow(task, this.getSettings().statusDefinitions)) return { kind: 'none' };
-        return this.planTask(task, name => parsed.genBlocks.get(name));
+        return this.planTask(task, name => parsed.genBlocks.get(name), lines);
     }
 
     /**
-     * The fire of a row read as `task`, its blocks looked up by `blockNamed`:
-     * the plan, and what it does to the row, as ops.
+     * The fire of a row read as `task` in `lines`, its blocks looked up by
+     * `blockNamed`: the plan, and what it does to the row, as ops.
+     *
+     * A move whose destination is not one place in `lines` fails the plan
+     * whole, as an expression that fails does: nothing of the fire is
+     * written, the command stays, and the user is told why. Dropping only
+     * the move would consume the command, and the user who fixes the heading
+     * and checks the row again would find nothing left to fire.
      */
-    planTask(task: Task, blockNamed: (name: string) => GenBlock | undefined): FirePlan {
+    planTask(task: Task, blockNamed: (name: string) => GenBlock | undefined, lines: readonly string[]): FirePlan {
         const program = task.flow?.program;
         if (!program) return { kind: 'none' };
         logInfo(`[Flow:completion] taskId=${task.id} flow="${task.flow ? flowSource(task.flow) : ''}"`);
@@ -154,16 +183,16 @@ export class FlowExecutor {
             }
             throw err;
         }
+        const move = effects.find((effect): effect is Extract<FlowEffect, { kind: 'move' }> => effect.kind === 'move');
+        const unplaced = move ? destinationRefused(move.to, lines) : null;
+        if (unplaced) {
+            logWarn(`[FlowExecutor] Flow did not fire for ${task.id}: ${unplaced.message}`);
+            return { kind: 'failed', task, error: unplaced };
+        }
         const ops = effects.flatMap(effect => {
             logInfo(`[Flow:effect] ${effect.kind} taskId=${task.id}`);
             return this.opsFor(task, effect);
         });
-        const away = effects.find(
-            (effect): effect is Extract<FlowEffect, { kind: 'archive-to' }> =>
-                effect.kind === 'archive-to' && effect.destPath !== task.file);
-        if (away) {
-            return { kind: 'fires', task, ops: [], away: { destPath: away.destPath, content: TaskParser.format(away.archivedTask), ops } };
-        }
         return { kind: 'fires', task, ops, away: null };
     }
 
@@ -381,17 +410,13 @@ export class FlowExecutor {
                 // is written; a deletion's is checked against the row it was
                 // planned from (`plannedOn`).
                 return [{ kind: 'strip-flow', text: TaskParser.format({ ...task, flow: undefined }) }];
-            case 'archive-to':
-                // To another file it is written after the completing write
-                // (see finishAway). Within the file it is one op: the row is
-                // carried to the end, so the moved row is the row that fired,
-                // and taking it from where it stood is part of the carrying.
-                return effect.destPath === task.file
-                    ? [{ kind: 'move-to-end', text: TaskParser.format(effect.archivedTask) }]
-                    : [];
-            case 'delete-original':
-                // Within the file, done by `move-to-end` above.
-                return effect.destPath === task.file ? [] : [{ kind: 'remove' }];
+            case 'move':
+                // One op: the row is carried, so the moved row is the row
+                // that fired, and taking it from where it stood is part of
+                // the carrying. A retired move never gets here (`planTask`).
+                return effect.to.kind === 'retired'
+                    ? []
+                    : [{ kind: 'move', text: TaskParser.format(effect.movedTask), to: effect.to }];
         }
     }
 

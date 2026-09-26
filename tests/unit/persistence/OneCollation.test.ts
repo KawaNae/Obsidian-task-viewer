@@ -175,7 +175,7 @@ describe('an operation that takes the row away plans from its subtree', () => {
         bench.edit(['- [ ] A', '    - [ ] 子 書き足し', '- [ ] Z', '']);
 
         const outcome = await bench.writer.applyToTask(
-            plannedOn(a, { commands: true, subtree: true }), [{ kind: 'move-to-end', text: '- [x] A' }]);
+            plannedOn(a, { commands: true, subtree: true }), [{ kind: 'move', to: { kind: 'end' }, text: '- [x] A' }]);
 
         expect(outcome.written).toBe(false);
         expect(bench.lines()).toEqual(['- [ ] A', '    - [ ] 子 書き足し', '- [ ] Z', '']);

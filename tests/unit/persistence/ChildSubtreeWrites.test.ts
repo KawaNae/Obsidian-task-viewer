@@ -310,7 +310,7 @@ describe('duplicateInlineTask shifts along the calendar', () => {
 
 /** A move within the file, as the executor writes it: one op, the row carried to the end. */
 function moveToEnd(h: Awaited<ReturnType<typeof writeBench>>, text: string) {
-    return h.writer.applyToTask(plannedOn(h.taskAt(0)), [{ kind: 'move-to-end', text }]);
+    return h.writer.applyToTask(plannedOn(h.taskAt(0)), [{ kind: 'move', to: { kind: 'end' }, text }]);
 }
 
 describe('a move within the file carries the subtree', () => {
@@ -342,7 +342,7 @@ describe('a move within the file carries the subtree', () => {
             '\t\t\t- [ ] grandchild',
         ].join('\n'));
 
-        await h.writer.applyToTask(plannedOn(h.taskAt(1)), [{ kind: 'move-to-end', text: '- [x] parent @2026-08-15' }]);
+        await h.writer.applyToTask(plannedOn(h.taskAt(1)), [{ kind: 'move', to: { kind: 'end' }, text: '- [x] parent @2026-08-15' }]);
 
         expect(h.lines()).toEqual([
             '- [ ] root',

@@ -92,17 +92,17 @@ const COMPLETIONS: Array<[string, string, string[]?]> = [
         '# note', '- [ ] 対象 @2026-09-21 ==> every mon until(2026-09-22)', '',
     ].join('\n')],
     ['move within the same file', [
-        '# note', '- [ ] 上 @2026-09-21', '- [ ] 対象 @2026-09-21 ==> move([[note]])', '\t- [ ] 子 @2026-09-21 ^c1',
+        '# note', '- [ ] 上 @2026-09-21', '- [ ] 対象 @2026-09-21 ==> move()', '\t- [ ] 子 @2026-09-21 ^c1',
         '- [ ] 下 @2026-09-21', '',
     ].join('\n')],
     ['next instance and a move within the same file', [
-        '# note', '- [ ] 上 @2026-09-21', '- [ ] 対象 @2026-09-21', '\t- ==> every mon move([[note]])', '\t- [ ] 子 @2026-09-21',
+        '# note', '- [ ] 上 @2026-09-21', '- [ ] 対象 @2026-09-21', '\t- ==> every mon move()', '\t- [ ] 子 @2026-09-21',
         '- [ ] 下 @2026-09-21', '',
     ].join('\n')],
-    ['next instance and a move to another file', [
-        '# note', '- [ ] 上 @2026-09-21', '- [ ] 対象 @2026-09-21', '\t- ==> every mon move([[archive]])', '\t- [ ] 子 @2026-09-21',
-        '- [ ] 下 @2026-09-21', '',
-    ].join('\n'), [ARCHIVE]],
+    ['next instance and a move to a heading of the note', [
+        '# note', '- [ ] 上 @2026-09-21', '- [ ] 対象 @2026-09-21', '\t- ==> every mon move([[#Done]])', '\t- [ ] 子 @2026-09-21',
+        '- [ ] 下 @2026-09-21', '## Done', '- [x] 済 @2026-09-20', '', '## Later', '',
+    ].join('\n')],
 ];
 
 describe('a completion fire leaves the same bytes', () => {

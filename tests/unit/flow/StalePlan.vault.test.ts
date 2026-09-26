@@ -21,9 +21,7 @@ import { freezeDate } from '../helpers/fakeDate';
  * made at all: the copy it names was read in content the file has moved on
  * from (`NamedRow.read`). It is refused with one notice, and once the scan
  * has read the file, the command, the block or the child is fired as the
- * file says it now; what the older copy said is never written. What can still go stale is a move to another file, whose source is
- * written after its destination: a child edited in between is not taken away
- * unseen (CE3).
+ * file says it now; what the older copy said is never written.
  */
 
 // `every` lands on the first grid point after the later of today and the
@@ -31,7 +29,6 @@ import { freezeDate } from '../helpers/fakeDate';
 freezeDate(new Date(2026, 8, 25, 12, 0, 0));
 
 const FILE = 'note.md';
-const OTHER = 'other.md';
 
 let live: VaultSession | undefined;
 
@@ -102,54 +99,15 @@ describe('CE2: a command line edited from outside, before any scan read it', () 
 
     it('a move is refused until a scan, then goes where the command names now', async () => {
         const { contents, session } = await open({
-            [FILE]: ['# note', '- [ ] A @2026-09-21', '\t- ==> move([[note]])', '\t- [ ] c', '- [ ] Z', ''],
-            [OTHER]: ['# other', ''],
+            [FILE]: ['# note', '- [ ] A @2026-09-21', '\t- ==> move()', '\t- [ ] c', '- [ ] Z', '## Done', ''],
         });
         const id = idOf(session, 'A');
-        contents.set(FILE, contents.get(FILE)!.replace('move([[note]])', 'move([[other]])'));
+        contents.set(FILE, contents.get(FILE)!.replace('move()', 'move([[#Done]])'));
 
-        await check(session, await refusedUntilScanned(contents, session, id), OTHER);
+        await check(session, await refusedUntilScanned(contents, session, id));
 
-        expect(contents.get(FILE)).toBe(['# note', '- [ ] Z', ''].join('\n'));
-        expect(contents.get(OTHER)).toBe(['# other', '- [x] A @2026-09-21', '\t- [ ] c', ''].join('\n'));
+        expect(contents.get(FILE)).toBe(['# note', '- [ ] Z', '## Done', '- [x] A @2026-09-21', '\t- [ ] c', ''].join('\n'));
         expect(Notice.messages).toEqual([]);
-    });
-});
-
-describe('CE3: a child edited between the archive and the source\'s write', () => {
-    /** A vault in which the first write to `trigger` is followed by an outside edit of `victim`. */
-    class RacingMap extends Map<string, string> {
-        armed = false;
-        constructor(entries: Array<[string, string]>, private trigger: string, private victim: string, private edit: (s: string) => string) {
-            super(entries);
-        }
-        set(key: string, value: string): this {
-            super.set(key, value);
-            if (this.armed && key === this.trigger) {
-                this.armed = false;
-                super.set(this.victim, this.edit(super.get(this.victim)!));
-            }
-            return this;
-        }
-    }
-
-    it('is not taken away unseen: the task stays in both, and one notice says so', async () => {
-        const source = ['# note', '- [ ] A @2026-09-21', '\t- ==> every 1d move([[other]])', '\t- [ ] c', '- [ ] Z', ''].join('\n');
-        const contents = new RacingMap([[FILE, source], [OTHER, '# other\n']], OTHER, FILE,
-            text => text.replace('\t- [ ] c', '\t- [ ] c edited'));
-        live = vaultSession(contents);
-        await live.scanAll();
-        const id = idOf(live, 'A');
-        contents.armed = true;
-
-        await check(live, id, OTHER);
-
-        // The completion landed with its command: the move is what stopped.
-        expect(contents.get(FILE)).toBe(source.replace('- [ ] A', '- [x] A').replace('\t- [ ] c', '\t- [ ] c edited'));
-        expect(contents.get(OTHER)).toBe(['# other', '- [x] A @2026-09-21', '\t- [ ] c', ''].join('\n'));
-        expect(Notice.messages).toEqual([t('notice.moveOriginKept', {
-            dest: 'other', reason: t('notice.moveOriginChanged'), subject: 'A',
-        })]);
     });
 });
 
@@ -212,7 +170,7 @@ describe('F5: a subtree changed from outside, before any scan read it', () => {
 
     it('a move within the file is refused until a scan, then carries the child as the file holds it', async () => {
         const { contents, session } = await open({
-            [FILE]: ['# note', '- [ ] A @2026-09-21', '\t- ==> move([[note]])', '\t- [ ] 子', '- [ ] Z', ''],
+            [FILE]: ['# note', '- [ ] A @2026-09-21', '\t- ==> move()', '\t- [ ] 子', '- [ ] Z', ''],
         });
         const id = idOf(session, 'A');
         contents.set(FILE, contents.get(FILE)!.replace('\t- [ ] 子', '\t- [ ] 子 書き足し'));

@@ -220,7 +220,7 @@ describe('a next instance with nowhere in the body to go', () => {
 
     it('refuses a move to the end of a note that ends inside a fence that never closes', async () => {
         // Appended past the opening line, the row and its child would be code.
-        const note = ['# note', '- [ ] 対象 @2026-09-21 ==> move([[note]])', '\t- [ ] 子', '```', 'code', ''];
+        const note = ['# note', '- [ ] 対象 @2026-09-21 ==> move()', '\t- [ ] 子', '```', 'code', ''];
         const { contents, session } = await open(note);
         const before = contents.get(FILE)!;
 
@@ -233,7 +233,7 @@ describe('a next instance with nowhere in the body to go', () => {
 
 describe('the end of a note', () => {
     it('keeps its final terminator when a move carries a row there', async () => {
-        const note = ['# note', '- [ ] 対象 @2026-09-21 ==> move([[note]])', '\t- [ ] 子', '- [ ] 下', ''];
+        const note = ['# note', '- [ ] 対象 @2026-09-21 ==> move()', '\t- [ ] 子', '- [ ] 下', ''];
         const { contents, session } = await open(note);
 
         await fire(session);

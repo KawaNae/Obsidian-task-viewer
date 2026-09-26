@@ -4,16 +4,16 @@ import { TaskParser } from '../../parsing/TaskParser';
 import { collectFlowLineIndices, collectFlowLineIndicesInFile } from '../../parsing/utils/FlowLineScanner';
 import { FileOperations } from '../utils/FileOperations';
 import { ChildPropertyLineEditor } from '../utils/ChildPropertyLineEditor';
-import { Block, Placement, type PlacedLine } from '../utils/Placement';
+import { Block, Placement, type PlacedLine, type Spot } from '../utils/Placement';
 import type { PropertyOp } from '../PropertyUpdatePlanner';
 import { flowInstanceHead, renderFlowInstance } from '../FlowInstanceLines';
 import {
-    createFile, fileGone, processLines, splitLines,
+    UnfollowableDraft, createFile, fileGone, processLines, splitLines,
     type EditorLine, type LineDraft, type NamedRow, type Refusal, type WriteAt, type WriteChannels, type WriteOutcome,
     type WriteSession,
 } from '../../../utils/FileLines';
 import type { PlannedTarget } from '../TaskRefs';
-import type { TaskOp } from '../TaskOps';
+import type { MoveDestination, TaskOp } from '../TaskOps';
 import { Outline } from '../../parsing/utils/Outline';
 
 
@@ -206,15 +206,20 @@ export class InlineTaskWriter {
                 draft.rewrite(line, indent + Outline.dedent(op.text));
                 return;
             }
-            case 'move-to-end': {
-                // The row and what goes with it are carried to the end — where
-                // an append puts lines, the file's final terminator kept after
-                // them — and then its whole subtree is taken away from where
-                // it was. Everything is read before either: carrying to the
-                // end leaves every line above it where it is.
+            case 'move': {
+                // The row and what goes with it are carried to where the move
+                // goes — the end of the note, where an append puts lines, the
+                // file's final terminator kept after them; or the end of a
+                // heading's section — and then its whole subtree is taken
+                // away from where it was. Everything is read before either.
+                // The spot is never inside the subtree (a section's end is
+                // past every item in it), so the subtree is where it was, or
+                // below the carried lines when they went above it.
                 const { childrenLines } = this.fileOps.collectChildrenFromLines(lines, line);
-                draft.put(Placement.end(lines), this.carriedWith(lines, line, op.text, true));
-                draft.splice(line, 1 + childrenLines.length);
+                const block = this.carriedWith(lines, line, op.text, true);
+                const spot = this.destinationOf(lines, op.to, block[0].text);
+                draft.put(spot, block);
+                draft.splice(spot.at <= line ? line + block.length : line, 1 + childrenLines.length);
                 return;
             }
             case 'remove': {
@@ -236,6 +241,21 @@ export class InlineTaskWriter {
                 return;
             }
         }
+    }
+
+    /**
+     * Where a move to `to` puts its lines, `head` their first: the end of the
+     * note, or the end of the section of the heading `to` names. The heading
+     * is looked up as the fire's plan looked it up (`FlowExecutor.planTask`),
+     * in the lines the plan was made from as the ops before this one left
+     * them; none of those ops writes a heading, so the plan's answer — one
+     * heading — is this one. Any other answer is a caller's bug.
+     */
+    private destinationOf(lines: readonly string[], to: MoveDestination, head: string): Spot {
+        if (to.kind === 'end') return Placement.end(lines);
+        const found = Placement.heading(lines, to.name);
+        if (found.kind !== 'one') throw new UnfollowableDraft(`a move to the heading '${to.name}' finds ${found.kind === 'none' ? 'none' : found.count} where it was planned to find one`);
+        return Placement.sectionEnd(lines, found.heading, head);
     }
 
     /**

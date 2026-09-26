@@ -119,33 +119,31 @@ describe('a note written in CRLF', () => {
         expect(terminators(contents.get(FILE)!).lf).toBe(0);
     });
 
-    it('appends a moved subtree with the destination\'s own terminator', async () => {
+    it('moves a subtree within the note with the note\'s own terminator', async () => {
         // A move writes the task and its children as one block. Joining that
-        // block with LF is how the destination ended up half CRLF and half LF,
-        // and it is the only append that spans more than one line.
+        // block with LF is how a note ended up half CRLF and half LF.
         const contents = new Map([
             [FILE, [
                 '# crlf move',
                 '',
-                '- [ ] 移すタスク @2026-09-21 ==> move([[archive]])',
+                '- [ ] 移すタスク @2026-09-21 ==> move([[#Done]])',
                 '\t- [ ] 子1 @2026-09-21',
                 '\t- [ ] 子2 @2026-09-21',
+                '## Done',
                 '',
             ].join('\r\n')],
-            ['archive.md', ['# archive', ''].join('\r\n')],
         ]);
         live = vaultSession(contents);
         await live.scanAll();
         const moving = live.index.getTasks().find(task => task.content === '移すタスク')!;
 
         await live.index.updateTask(moving.id, { statusChar: 'x' });
-        await vi.waitFor(() => expect(contents.get('archive.md')).toContain('子2'));
-        await live.settle('archive.md');
+        await live.settle(FILE);
 
-        // Heading, task, child, child: four terminators — the append goes in
-        // before the note's own trailing terminator, which stays the note's
-        // last character, as any append now does.
-        expect(terminators(contents.get('archive.md')!)).toEqual({ crlf: 4, lf: 0 });
+        expect(contents.get(FILE)!.split('\r\n')).toEqual([
+            '# crlf move', '', '## Done', '- [x] 移すタスク @2026-09-21', '\t- [ ] 子1 @2026-09-21', '\t- [ ] 子2 @2026-09-21', '',
+        ]);
+        expect(terminators(contents.get(FILE)!).lf).toBe(0);
     });
 });
 
