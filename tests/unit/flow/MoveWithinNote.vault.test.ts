@@ -3,7 +3,7 @@ import { Notice } from 'obsidian';
 import { TaskApi } from '../../../src/api/TaskApi';
 import { TaskReadService } from '../../../src/services/data/TaskReadService';
 import { TaskWriteService } from '../../../src/services/data/TaskWriteService';
-import { openVault, type VaultSession } from '../helpers/vaultSession';
+import { openVault, vaultSession, type VaultSession } from '../helpers/vaultSession';
 import { editorSession } from '../helpers/editorSession';
 import { freezeDate } from '../helpers/fakeDate';
 
@@ -207,5 +207,36 @@ describe('a parent\'s move and a child\'s fire in one editor transaction (R10 wi
             '# note', '- [x] P @2026-09-21 ==> move([[#Nope]])', '    - [ ] C @2026-09-22 ==> +1d', '    - [x] C @2026-09-21', '',
         ]);
         expect(Notice.messages).toHaveLength(1);
+    });
+});
+
+describe.each<Path>(['card', 'api', 'editor'])('the ^ids a move carries, from the %s', (path) => {
+    it('keeps the row\'s and its children\'s, to a heading', async () => {
+        const lines = ['# note', '- [ ] 移す @2026-09-21 ==> move([[#Done]]) ^keep', '    - [ ] 子 ^kid', '        - [ ] 孫 ^deep', '## Done', ''];
+        expect(await complete(lines, 1, '移す', path)).toEqual([
+            '# note', '## Done', '- [x] 移す @2026-09-21 ^keep', '    - [ ] 子 ^kid', '        - [ ] 孫 ^deep', '',
+        ]);
+    });
+
+    it('keeps them to the end of the note, and gives the next instance none', async () => {
+        const lines = ['# note', '- [ ] 移す @2026-09-21 ==> +1d move() ^keep', '    - [ ] 子 ^kid', '- [ ] U', ''];
+        expect(await complete(lines, 1, '移す', path)).toEqual([
+            '# note', '- [ ] 移す @2026-09-22 ==> +1d move()', '- [ ] U', '- [x] 移す @2026-09-21 ^keep', '    - [ ] 子 ^kid', '',
+        ]);
+    });
+});
+
+describe('a moved row, after a reload', () => {
+    it('is found by its ^id where it went', async () => {
+        const note = await open(['# note', '- [ ] 移す @2026-09-21 ==> move([[#Done]]) ^keep', '    - [ ] 子 ^kid', '## Done', '']);
+        await note.session.index.updateTask(note.idOf('移す'), { statusChar: 'x' });
+        await note.session.flowSettled(FILE);
+        note.session.dispose();
+
+        const reloaded = vaultSession(note.contents);
+        live = reloaded;
+        await reloaded.scanAll();
+        expect(reloaded.index.getTaskByAnchor(FILE, 'keep')).toMatchObject({ content: '移す', line: 2, statusChar: 'x' });
+        expect(reloaded.index.getTaskByAnchor(FILE, 'kid')).toMatchObject({ content: '子', line: 3 });
     });
 });
