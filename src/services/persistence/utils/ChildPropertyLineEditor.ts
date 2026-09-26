@@ -1,5 +1,4 @@
 import { ChildLineClassifier } from '../../parsing/utils/ChildLineClassifier';
-import { TaskLineClassifier } from '../../parsing/utils/TaskLineClassifier';
 import { Block, Placement } from './Placement';
 import type { PropertyOp } from '../PropertyUpdatePlanner';
 import type { LineDraft } from '../../../utils/FileLines';

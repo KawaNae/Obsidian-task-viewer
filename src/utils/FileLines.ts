@@ -3,7 +3,7 @@ import { logError, logWarn } from '../log/log';
 import { LINE_BREAK, holdsLineBreak } from './LineBreak';
 import { Outline, type OutlineReading } from '../services/parsing/utils/Outline';
 import { checkWrite, type PutBlock, type WrittenLine } from '../services/parsing/utils/OutlineCheck';
-import { readsAsPlanned, subtreeAt, type RowBasis } from '../services/persistence/RowBasis';
+import { readsAsPlanned, type RowBasis } from '../services/persistence/RowBasis';
 import { Block, type PlacedLine, type Spot } from '../services/persistence/utils/Placement';
 import { contentKeyOf, type ContentKey } from '../services/core/ContentKey';
 import type { ReadingId } from '../services/core/Reading';

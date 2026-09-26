@@ -18,7 +18,6 @@ import { TaskParser } from '../parsing/TaskParser';
 import { toDisplayTask } from '../display/DisplayTaskConverter';
 import { planInPlaceCopies } from '../persistence/DuplicateShift';
 import type { GenBlock } from '../parsing/gen/GenBlockCollector';
-import { FileOperations } from '../persistence/utils/FileOperations';
 import { plannedOn, subjectOf } from '../persistence/TaskRefs';
 import { logError, logInfo, logWarn } from '../../log/log';
 import type { EditorLine, Landing, Refusal, WriteOutcome } from '../../utils/FileLines';
