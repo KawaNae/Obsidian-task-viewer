@@ -11,7 +11,7 @@
 
 import { type App, TFile, TFolder, normalizePath } from 'obsidian';
 import type { ViewTemplate } from '../../types';
-import { createFile, replaceWhole, type WriteChannel } from '../../utils/FileLines';
+import { createFile, replaceWhole, type WriteChannel } from '../persistence/FileLines';
 
 export class ViewTemplateWriter {
     constructor(

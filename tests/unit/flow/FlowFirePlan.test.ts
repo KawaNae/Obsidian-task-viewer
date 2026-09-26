@@ -5,7 +5,7 @@ import { FileParsePipeline } from '../../../src/services/parsing/FileParsePipeli
 import { FileOperations } from '../../../src/services/persistence/utils/FileOperations';
 import { InlineTaskWriter } from '../../../src/services/persistence/writers/InlineTaskWriter';
 import type { TaskOp } from '../../../src/services/persistence/TaskOps';
-import { editLines } from '../../../src/utils/FileLines';
+import { editLines } from '../../../src/services/persistence/FileLines';
 import { DEFAULT_SETTINGS } from '../../../src/types';
 import { freezeDate } from '../helpers/fakeDate';
 

@@ -1,6 +1,6 @@
 import type { FlowInstanceInsert } from './FlowInstanceLines';
 import type { PropertyOp } from './PropertyUpdatePlanner';
-import type { Refusal } from '../../utils/FileLines';
+import type { Refusal } from './FileLines';
 
 /**
  * One thing an operation does to the row it names, in a write that may do

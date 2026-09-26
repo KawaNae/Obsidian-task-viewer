@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { contentKeyOf, lineKey } from '../../../../src/services/core/ContentKey';
-import { splitLines, joinLines } from '../../../../src/utils/FileLines';
+import { splitLines, joinLines } from '../../../../src/services/persistence/FileLines';
 
 describe('contentKeyOf', () => {
     it('gives the same content the same key', () => {

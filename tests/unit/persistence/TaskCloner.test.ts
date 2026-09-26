@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { TaskCloner } from '../../../src/services/persistence/TaskCloner';
-import { draftOver, replayEdits } from '../../../src/utils/FileLines';
+import { draftOver, replayEdits } from '../../../src/services/persistence/FileLines';
 import { Outline } from '../../../src/services/parsing/utils/Outline';
 import { checkWrite, type WrittenLine } from '../../../src/services/parsing/utils/OutlineCheck';
 import { FileOperations } from '../../../src/services/persistence/utils/FileOperations';

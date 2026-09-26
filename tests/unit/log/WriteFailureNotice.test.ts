@@ -1,7 +1,7 @@
 import { describe, it, expect, afterEach } from 'vitest';
 import { TFile } from 'obsidian';
 import { initLog, logError } from '../../../src/log/log';
-import { processLines, type Refusal } from '../../../src/utils/FileLines';
+import { processLines, type Refusal } from '../../../src/services/persistence/FileLines';
 import { channelDouble } from '../helpers/channelDouble';
 
 /**

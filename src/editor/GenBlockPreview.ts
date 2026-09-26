@@ -8,7 +8,7 @@ import { type GenCellTypes, parseGenBody } from '../services/parsing/gen/GenBody
 import { declaredCells } from '../services/parsing/gen/GenCellScan';
 import { Outline } from '../services/parsing/utils/Outline';
 import { TaskLineClassifier } from '../services/parsing/utils/TaskLineClassifier';
-import { splitLines } from '../utils/FileLines';
+import { splitLines } from '../services/persistence/FileLines';
 
 /**
  * Reading-view rendering of a `tv-gen` block.

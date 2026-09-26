@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { ChildPropertyLineEditor } from '../../../src/services/persistence/utils/ChildPropertyLineEditor';
 import { Outline } from '../../../src/services/parsing/utils/Outline';
-import { draftOver, type LineEdit } from '../../../src/utils/FileLines';
+import { draftOver, type LineEdit } from '../../../src/services/persistence/FileLines';
 import type { PropertyOp } from '../../../src/services/persistence/PropertyUpdatePlanner';
 import { FileParsePipeline } from '../../../src/services/parsing/FileParsePipeline';
 import { DEFAULT_SETTINGS } from '../../../src/types';

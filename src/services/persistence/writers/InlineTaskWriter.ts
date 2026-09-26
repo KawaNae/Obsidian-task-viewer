@@ -11,7 +11,7 @@ import {
     UnfollowableDraft, createFile, editLines, fileGone, processLines, splitLines,
     type DraftEdit, type EditorLine, type LineDraft, type NamedRow, type WriteAt, type WriteChannel,
     type WriteChannels, type WriteOutcome, type WriteSession,
-} from '../../../utils/FileLines';
+} from '../FileLines';
 import type { PlannedTarget } from '../TaskRefs';
 import type { CompletionFire, MoveDestination, TaskOp } from '../TaskOps';
 import { Outline, type OutlineReading } from '../../parsing/utils/Outline';

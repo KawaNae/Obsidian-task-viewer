@@ -22,7 +22,7 @@ import { keyOf } from './EditorDoc';
 import { writeEditorLine, type EditorLineHost } from './EditorWrite';
 import { taskShownAt, type ShownTaskLookup } from './ShownTask';
 import type { ContentKey } from '../services/core/ContentKey';
-import type { EditorLine } from '../utils/FileLines';
+import type { EditorLine } from '../services/persistence/FileLines';
 import type { TaskOp } from '../services/persistence/TaskOps';
 
 const taskIndexChanged = StateEffect.define<void>();

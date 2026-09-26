@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { Outline } from '../../../src/services/parsing/utils/Outline';
 import { checkWrite, type WrittenLine, type WriteCheck, type WriteFinding } from '../../../src/services/parsing/utils/OutlineCheck';
-import { draftOver, replayEdits, type LineDraft } from '../../../src/utils/FileLines';
+import { draftOver, replayEdits, type LineDraft } from '../../../src/services/persistence/FileLines';
 import { Block, Placement, type Spot } from '../../../src/services/persistence/utils/Placement';
 import { renderFlowInstance } from '../../../src/services/persistence/FlowInstanceLines';
 import { FileOperations } from '../../../src/services/persistence/utils/FileOperations';

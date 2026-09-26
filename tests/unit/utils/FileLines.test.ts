@@ -1,12 +1,12 @@
 import { describe, it, expect } from 'vitest';
 import { contentKeyOf } from '../../../src/services/core/ContentKey';
 import { TFile } from 'obsidian';
-import { BrokenWrite, LineBreakInLine, UnfollowableDraft, draftOver, joinLines, processLines, replayEdits, splitLines } from '../../../src/utils/FileLines';
-import type { Landing, LineEdit, NamedRow, Refusal } from '../../../src/utils/FileLines';
+import { BrokenWrite, LineBreakInLine, UnfollowableDraft, draftOver, joinLines, processLines, replayEdits, splitLines } from '../../../src/services/persistence/FileLines';
+import type { Landing, LineEdit, NamedRow, Refusal } from '../../../src/services/persistence/FileLines';
 import { channelDouble } from '../helpers/channelDouble';
 import { holdsLineBreak } from '../../../src/utils/LineBreak';
 import { Block } from '../../../src/services/persistence/utils/Placement';
-import type { LineDraft } from '../../../src/utils/FileLines';
+import type { LineDraft } from '../../../src/services/persistence/FileLines';
 
 /**
  * Put `texts` in at `at`, at the top, each to read as it does by itself:

@@ -1,5 +1,5 @@
 import { Outline } from '../../parsing/utils/Outline';
-import type { LineDraft } from '../../../utils/FileLines';
+import type { LineDraft } from '../FileLines';
 
 /**
  * Frontmatter の行レベル編集ユーティリティ。

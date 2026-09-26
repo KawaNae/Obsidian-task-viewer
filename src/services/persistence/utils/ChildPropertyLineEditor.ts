@@ -1,7 +1,7 @@
 import { ChildLineClassifier } from '../../parsing/utils/ChildLineClassifier';
 import { Block, Placement } from './Placement';
 import type { PropertyOp } from '../PropertyUpdatePlanner';
-import type { LineDraft } from '../../../utils/FileLines';
+import type { LineDraft } from '../FileLines';
 import { INDENT_SOURCE, Outline, type OutlineReading } from '../../parsing/utils/Outline';
 import { SPACE_OR_TAB_SOURCE } from '../../parsing/utils/ListMarker';
 

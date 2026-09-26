@@ -1,5 +1,5 @@
 import { type App, TFile } from 'obsidian';
-import { fileGone, processLines, type LineDraft, type WriteAt, type WriteChannel } from './FileLines';
+import { fileGone, processLines, type LineDraft, type WriteAt, type WriteChannel } from '../services/persistence/FileLines';
 import { Outline } from '../services/parsing/utils/Outline';
 import { Block, Placement } from '../services/persistence/utils/Placement';
 

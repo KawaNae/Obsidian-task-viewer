@@ -9,7 +9,7 @@ import type { TaskOp } from '../../../src/services/persistence/TaskOps';
 import { plannedOn } from '../../../src/services/persistence/TaskRefs';
 import { TaskParser } from '../../../src/services/parsing/TaskParser';
 import { DEFAULT_SETTINGS, Task } from '../../../src/types';
-import type { WriteOutcome } from '../../../src/utils/FileLines';
+import type { WriteOutcome } from '../../../src/services/persistence/FileLines';
 import { makeTask } from '../helpers/makeTask';
 
 function makeRepository() {

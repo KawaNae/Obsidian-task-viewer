@@ -14,7 +14,7 @@ import type { IntervalTemplate } from '../../timer/IntervalTemplateLoader';
 import { PopoverStack } from '../sharedUI/PopoverStack';
 import type { PopoverShell } from '../sharedUI/PopoverShell';
 import { OverlayShell } from '../sharedUI/OverlayShell';
-import type { WriteChannel } from '../../utils/FileLines';
+import type { WriteChannel } from '../../services/persistence/FileLines';
 
 export interface TemplateCreatorCallbacks {
     onSaved: (filePath: string) => void;

@@ -2,7 +2,7 @@ import { type App, TFile } from 'obsidian';
 import type { FileOperations } from '../utils/FileOperations';
 import { FrontmatterLineEditor } from '../utils/FrontmatterLineEditor';
 import { HeadingInserter } from '../../../utils/HeadingInserter';
-import { fileGone, processLines, type WriteAt, type WriteChannels, type WriteOutcome } from '../../../utils/FileLines';
+import { fileGone, processLines, type WriteAt, type WriteChannels, type WriteOutcome } from '../FileLines';
 
 /**
  * frontmatter と見出しへの書き込みを担当するクラス。frontmatter はノートの

@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { contentKeyOf } from '../../../src/services/core/ContentKey';
-import { editLines, replayEdits, type EditedLines } from '../../../src/utils/FileLines';
+import { editLines, replayEdits, type EditedLines } from '../../../src/services/persistence/FileLines';
 import { Outline } from '../../../src/services/parsing/utils/Outline';
 import type { TaskOp } from '../../../src/services/persistence/TaskOps';
 import { openVault, type VaultSession } from '../helpers/vaultSession';

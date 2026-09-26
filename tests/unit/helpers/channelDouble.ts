@@ -1,4 +1,4 @@
-import type { WriteChannel } from '../../../src/utils/FileLines';
+import type { WriteChannel } from '../../../src/services/persistence/FileLines';
 
 /**
  * A channel for a write made without an index: what the test hands it, a

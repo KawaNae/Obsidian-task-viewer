@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { FrontmatterLineEditor } from '../../../src/services/persistence/utils/FrontmatterLineEditor';
-import { draftOver } from '../../../src/utils/FileLines';
+import { draftOver } from '../../../src/services/persistence/FileLines';
 
 /**
  * applyUpdates は行配列を返す（ファイルの改行は呼び口が持つ）。これらのケースが

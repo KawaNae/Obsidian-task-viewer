@@ -7,7 +7,7 @@ import { TaskIdGenerator } from '../display/TaskIdGenerator';
 import { contentKeyOf, type ContentKey } from './ContentKey';
 import { WriteLinks } from './WriteLinks';
 import { newSession, readReading, readingId, type ReadingId } from './Reading';
-import { splitLines, type Landing, type ReadMark } from '../../utils/FileLines';
+import { splitLines, type Landing, type ReadMark } from '../persistence/FileLines';
 import type { OutlineReading } from '../parsing/utils/Outline';
 import { TaskLineClassifier } from '../parsing/utils/TaskLineClassifier';
 import { logDebug, logError, logInfo } from '../../log/log';

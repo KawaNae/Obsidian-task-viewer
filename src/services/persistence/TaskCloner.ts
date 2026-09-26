@@ -2,7 +2,7 @@ import { type App, TFile } from 'obsidian';
 import type { DuplicateOptions } from '../../types';
 import { DateUtils } from '../../utils/DateUtils';
 import { FileOperations } from './utils/FileOperations';
-import { fileGone, processLines, type LineDraft, type WriteChannels, type WriteOutcome } from '../../utils/FileLines';
+import { fileGone, processLines, type LineDraft, type WriteChannels, type WriteOutcome } from './FileLines';
 import type { PlannedTarget } from './TaskRefs';
 import { Outline } from '../parsing/utils/Outline';
 import { Block, Placement, type Spot } from './utils/Placement';
