@@ -351,16 +351,6 @@ export class TaskIndex {
         return this.getTaskByFileLine(filePath, line);
     }
 
-    getTaskLineNumbersForFile(filePath: string): Set<number> {
-        const lines = new Set<number>();
-        for (const task of this.getTasks()) {
-            if (task.file === filePath) {
-                lines.add(task.line);
-            }
-        }
-        return lines;
-    }
-
     getValidationErrors(): ValidationError[] {
         return this.validator.getValidationErrors();
     }
