@@ -15,7 +15,7 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import {
     cliList, cliUpdate,
-    isObsidianRunning, waitForTask, waitForTaskGone, sleep,
+    isObsidianRunning, waitForTask, sleep,
 } from '../helpers/cli-helper';
 import {
     writeTestFile, deleteTestFile,
@@ -24,7 +24,6 @@ import {
 import * as fs from 'fs';
 
 const TEST_FILE = 'test-int-generation.md';
-const ARCHIVE_FILE = 'test-archive.md';
 
 const FIXTURE_CONTENT = [
     '# Flow Commands テスト',
@@ -40,10 +39,10 @@ const FIXTURE_CONTENT = [
     '- [ ] flow-until-D @2026-04-01 ==> every mon until(2026-04-30)',
     '',
     '## move',
-    '- [ ] flow-move-E @2026-04-01 ==> move([[test-archive]])',
+    '- [ ] flow-move-E @2026-04-01 ==> move([[#Done]])',
     '',
     '## combined',
-    '- [ ] flow-combo-F @2026-04-01 ==> at(start + 1d) move([[test-archive]])',
+    '- [ ] flow-combo-F @2026-04-01 ==> at(start + 1d) move([[#Done]])',
     '',
     '## multi-line',
     '- [ ] flow-multi-G @2026-04-01 ==> at(start + 1d)',
@@ -54,7 +53,9 @@ const FIXTURE_CONTENT = [
     '- [ ] flow-multi-I @2026-04-01 ==> at(start + 1d)',
     '\t- ==> x1',
     '- [ ] flow-multi-J @2026-04-01',
-    '\t- ==> move([[test-archive]])',
+    '\t- ==> move([[#Done]])',
+    '',
+    '## Done',
 ].join('\n');
 
 /** Find a task by content substring in the test file */
@@ -65,6 +66,12 @@ function findTask(contentSubstr: string, outputFields = 'id,content,status,start
 
 function readTestFile(): string {
     return fs.readFileSync(vaultAbsolute(TEST_FILE), 'utf-8');
+}
+
+/** The lines of the test file's `## Done` section: where a move takes a row (F8, within its note). */
+function doneSection(): string[] {
+    const lines = readTestFile().split(/\r?\n/);
+    return lines.slice(lines.indexOf('## Done') + 1);
 }
 
 /** Poll the raw file until the predicate holds (fire-consumes assertions). */
@@ -96,13 +103,6 @@ beforeAll(async () => {
 afterAll(async () => {
     deleteTestFile(TEST_FILE);
     await waitForFileDeindexed(TEST_FILE);
-
-    // Clean up archive file if it was created
-    const archiveAbs = vaultAbsolute(ARCHIVE_FILE);
-    if (fs.existsSync(archiveAbs)) {
-        deleteTestFile(ARCHIVE_FILE);
-        await waitForFileDeindexed(ARCHIVE_FILE);
-    }
 });
 
 // ────────────────────────────────────────────
@@ -222,28 +222,22 @@ describe('until (expired)', () => {
 describe('move', () => {
     beforeAll(() => resetFixture());
 
-    it('moves the task to the archive file and deletes the original', async () => {
+    it('carries the task to the end of the heading\'s section, without its command', async () => {
         const task = findTask('flow-move-E');
         expect(task).toBeDefined();
 
         cliUpdate({ id: task!.id as string, status: 'x' });
 
-        const gone = await waitForTaskGone(
-            { file: TEST_FILE, 'output-fields': 'id,content' },
-            t => (t.content as string).includes('flow-move-E'),
-            5000,
-        );
-        expect(gone).toBe(true);
+        const moved = await waitForFileContent(() => doneSection().includes('- [x] flow-move-E @2026-04-01'));
+        expect(moved).toBe(true);
 
-        const archiveResult = cliList({
-            file: ARCHIVE_FILE,
-            content: 'flow-move-E',
-            'output-fields': 'id,content,status',
-        });
-        expect(archiveResult.count).toBeGreaterThanOrEqual(1);
+        // Carried, not copied: one row, in the note it was in
+        const rows = cliList({ file: TEST_FILE, content: 'flow-move-E', 'output-fields': 'id,status' });
+        expect(rows.count).toBe(1);
+        expect(readTestFile()).not.toContain('flow-move-E @2026-04-01 ==>');
     }, 20000);
 
-    it('schedule + move: generates the next instance AND archives the completed one', async () => {
+    it('schedule + move: generates the next instance AND carries the completed one to the heading', async () => {
         await resetFixture();
 
         const task = findTask('flow-combo-F');
@@ -261,17 +255,13 @@ describe('move', () => {
         );
         expect(newTask).not.toBeNull();
 
-        // Completed original moved to the archive
-        const archived = cliList({
-            file: ARCHIVE_FILE,
-            content: 'flow-combo-F',
-            'output-fields': 'id,content,status',
-        });
-        expect(archived.count).toBeGreaterThanOrEqual(1);
+        // Completed original carried to the end of the Done section
+        const moved = await waitForFileContent(() => doneSection().includes('- [x] flow-combo-F @2026-04-01'));
+        expect(moved).toBe(true);
 
-        // Exactly one instance remains in the source (the new one)
-        const remaining = cliList({ file: TEST_FILE, content: 'flow-combo-F', 'output-fields': 'id,status' });
-        expect(remaining.count).toBe(1);
+        // The new instance and the completed original, nothing more
+        const rows = cliList({ file: TEST_FILE, content: 'flow-combo-F', 'output-fields': 'id,status' });
+        expect(rows.count).toBe(2);
     }, 20000);
 });
 
@@ -369,7 +359,7 @@ describe('multi-line flows', () => {
         expect(lines.filter(l => l.includes('- ==> x1')).length).toBe(0);
     }, 20000);
 
-    it('move via a child-line flow: archive receives no flow lines', async () => {
+    it('move via a child-line flow: the moved row carries no flow lines', async () => {
         await resetFixture();
 
         const task = findTask('flow-multi-J');
@@ -377,24 +367,11 @@ describe('multi-line flows', () => {
 
         cliUpdate({ id: task!.id as string, status: 'x' });
 
-        const gone = await waitForTaskGone(
-            { file: TEST_FILE, 'output-fields': 'id,content' },
-            t => (t.content as string).includes('flow-multi-J'),
-            5000,
-        );
-        expect(gone).toBe(true);
+        const moved = await waitForFileContent(() => doneSection().includes('- [x] flow-multi-J @2026-04-01'));
+        expect(moved).toBe(true);
 
-        const archived = cliList({
-            file: ARCHIVE_FILE,
-            content: 'flow-multi-J',
-            'output-fields': 'id,content,status',
-        });
-        expect(archived.count).toBeGreaterThanOrEqual(1);
-
-        // The consumed flow line must not travel to the archive
-        const archiveContent = fs.readFileSync(vaultAbsolute(ARCHIVE_FILE), 'utf-8');
-        expect(archiveContent).not.toContain('- ==>');
-        // ...and the source file no longer contains J's flow line
-        expect(readTestFile()).not.toContain('- ==> move([[test-archive]])');
+        // The consumed flow line does not travel with the row, nor stay behind
+        expect(doneSection().some(l => l.includes('- ==>'))).toBe(false);
+        expect(readTestFile()).not.toContain('- ==> move([[#Done]])');
     }, 20000);
 });
