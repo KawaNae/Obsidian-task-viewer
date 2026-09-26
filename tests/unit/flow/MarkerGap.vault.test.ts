@@ -1,6 +1,6 @@
 import { describe, it, expect, afterEach, beforeEach, vi } from 'vitest';
 import { Notice } from 'obsidian';
-import { vaultSession, type VaultSession } from '../helpers/vaultSession';
+import { openLiveVault, vaultSession, type VaultSession } from '../helpers/vaultSession';
 
 /**
  * A task line written over keeps its indentation, its list marker and the
@@ -26,10 +26,7 @@ afterEach(() => {
 });
 
 async function open(lines: string[]): Promise<{ contents: Map<string, string>; session: VaultSession }> {
-    const contents = new Map([[FILE, lines.join('\n')]]);
-    live = vaultSession(contents);
-    await live.scanAll();
-    return { contents, session: live };
+    return openLiveVault(lines, session => { live = session; });
 }
 
 function taskWorded(session: VaultSession, content: string) {

@@ -256,3 +256,18 @@ export async function openVault(
 }
 
 export type VaultSession = ReturnType<typeof vaultSession>;
+
+/**
+ * `openVault`, handing the session to `setLive` besides — the `let live` a
+ * vault test's own `open()` set, so `afterEach` can dispose it. Most vault
+ * tests defined that `open()` themselves, byte for byte; this is the one
+ * function they all called it for.
+ */
+export async function openLiveVault(
+    files: string | string[] | Record<string, string | string[]>,
+    setLive: (session: VaultSession) => void,
+): Promise<{ contents: Map<string, string>; session: VaultSession }> {
+    const opened = await openVault(files);
+    setLive(opened.session);
+    return opened;
+}

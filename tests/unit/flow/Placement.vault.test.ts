@@ -1,6 +1,6 @@
 import { describe, it, expect, afterEach, beforeEach } from 'vitest';
 import { Notice } from 'obsidian';
-import { openVault, type VaultSession } from '../helpers/vaultSession';
+import { openLiveVault, type VaultSession } from '../helpers/vaultSession';
 import { t } from '../../../src/i18n';
 import { freezeDate } from '../helpers/fakeDate';
 
@@ -35,9 +35,7 @@ afterEach(() => {
 });
 
 async function open(lines: string[]): Promise<{ contents: Map<string, string>; session: VaultSession }> {
-    const opened = await openVault(lines);
-    live = opened.session;
-    return opened;
+    return openLiveVault(lines, session => { live = session; });
 }
 
 function tasksWorded(session: VaultSession, content: string) {
