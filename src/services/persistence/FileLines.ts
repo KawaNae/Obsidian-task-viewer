@@ -729,8 +729,12 @@ export type EditedLines =
         lines: readonly string[];
         /** The draft's report: every change the write made, in order. */
         edits: readonly LineEdit[];
-        /** Whether the report accounts for every line the write left unreported (`explains`). */
-        accounted: boolean;
+        /**
+         * Whether the report accounts for every line the write left
+         * unreported (`explains`): asked only by a write that lands, and
+         * answered once.
+         */
+        accounted(): boolean;
         /** The reading of `lines` the write's check made, or null when it made none. */
         reading: OutlineReading | null;
     }
@@ -934,8 +938,12 @@ export function editLines(
         }
     }
 
-    accounted ??= explains(before, next, reported);
-    return { written: true, before, lines: next, edits: reported, accounted, reading: readings?.left ?? null };
+    const left = next;
+    return {
+        written: true, before, lines: left, edits: reported,
+        accounted: () => accounted ??= explains(before, left, reported),
+        reading: readings?.left ?? null,
+    };
 }
 
 /**
@@ -1030,7 +1038,7 @@ export async function processLines(
             refused = edited.refused;
             return content;
         }
-        const { before, lines: next, edits: reported, accounted } = edited;
+        const { before, lines: next, edits: reported } = edited;
         // The mark the note opened with, put back where it was.
         const rebuilt = (bom ? BOM : '') + joinLines([...next], eol);
 
@@ -1039,6 +1047,7 @@ export async function processLines(
         // caller still hears `true` — the line was found, which is what it
         // asked.
         if (rebuilt !== content) {
+            const accounted = edited.accounted();
             if (!accounted) {
                 logError(`[FileLines] ${file.path}: a write's report does not account for the lines it wrote; landed without it`);
             }
