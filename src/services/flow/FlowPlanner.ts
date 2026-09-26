@@ -132,8 +132,7 @@ export function planFlow(task: Task, program: FlowProgram, deps: FlowPlanDeps): 
     }
 
     if (program.move) {
-        const target = evalExpr(program.move.target, preCtx);
-        const destPath = normalizeDestination(target);
+        const destPath = program.move.target ? normalizeDestination(evalExpr(program.move.target, preCtx)) : task.file;
         const archivedTask: Task = { ...task, flow: undefined, blockId: undefined };
         effects.push({ kind: 'archive-to', destPath, archivedTask });
         effects.push({ kind: 'delete-original', destPath });
