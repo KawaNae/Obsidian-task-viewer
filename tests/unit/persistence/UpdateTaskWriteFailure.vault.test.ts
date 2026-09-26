@@ -5,7 +5,7 @@ import en from '../../../src/i18n/locales/en.json';
 
 /**
  * `vault.process` が投げたときの updateTask の答え。着地しなかったなら偽を返し、
- * 写しを更新前に戻し、理由（writeFailed）を1回だけ言う。書いてから投げたなら、
+ * 写しを更新前に戻し、書かなかったことと理由（refusedFailed）を1回だけ言う。書いてから投げたなら、
  * ファイルが書けたと読めるので真を返し、写しは新しい値のまま、何も言わない。
  * 実物の TaskIndex と書き込みの層（processLines）を通す。
  */
@@ -40,7 +40,7 @@ describe('updateTask when vault.process throws', () => {
 
     const target = () => s.index.getTasks().find(task => task.content === '対象')!;
 
-    it('answers false, puts the copy back, and says writeFailed once', async () => {
+    it('answers false, puts the copy back, and says once that the write failed', async () => {
         const task = target();
         const before = contents.get(FILE);
         vault.process = async () => { throw new Error('disk on fire'); };
@@ -53,7 +53,8 @@ describe('updateTask when vault.process throws', () => {
         expect(copy.statusChar).toBe(' ');
         expect(contents.get(FILE)).toBe(before);
         expect(Notice.messages, Notice.messages.join(' | ')).toHaveLength(1);
-        expect(isNotice(Notice.messages[0], 'writeFailed'), Notice.messages[0]).toBe(true);
+        expect(isNotice(Notice.messages[0], 'notWritten'), Notice.messages[0]).toBe(true);
+        expect(Notice.messages[0]).toContain(en.notice.refusedFailed);
     });
 
     it('answers true and keeps the new value when the write landed before it threw', async () => {

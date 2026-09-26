@@ -284,7 +284,7 @@ describe('a line put past a fence in a list item that never closes', () => {
         // Either the child is a task, or nothing is written and the user hears why.
         const written = contents.get(FILE) !== before;
         if (written) expect(tasksWorded(session, 'c')).toHaveLength(1);
-        else expect(Notice.messages).toEqual([t('notice.writeTargetUnplaceable', { subject: 'T' })]);
+        else expect(Notice.messages).toEqual([t('notice.notWritten', { reason: t('notice.refusedUnplaceable'), subject: 'T' })]);
         // As it stands, it is written above the fence.
         expect(written).toBe(true);
         expect(contents.get(FILE)!.split('\n').slice(1, 4)).toEqual(['- [ ] T', '    - [ ] c', '    ```']);

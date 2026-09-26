@@ -366,7 +366,7 @@ describe('an append (appendTaskToFile, end)', () => {
         await session.settle(FILE);
 
         expect(contents.get(FILE)).toBe(before);
-        expect(Notice.messages).toEqual([t('notice.writeTargetUnplaceableInFence', { line: 2, subject: '- [ ] N' })]);
+        expect(Notice.messages).toEqual([t('notice.notWritten', { reason: t('notice.refusedUnplaceableInFence', { line: 2 }), subject: '- [ ] N' })]);
     });
 });
 
@@ -381,7 +381,7 @@ describe('a delete (deleteTask), held to the same check', () => {
         await session.settle(FILE);
 
         expect(contents.get(FILE)).toBe(before);
-        expect(Notice.messages).toEqual([t('notice.writeDisturbs', { subject: 't' })]);
+        expect(Notice.messages).toEqual([t('notice.notWritten', { reason: t('notice.refusedDisturbs'), subject: 't' })]);
     });
 });
 

@@ -110,7 +110,8 @@ describe('one press of ■ says one thing', () => {
         await lifecycle.finishTimer(timer);
 
         expect(Notice.messages, Notice.messages.join(' | ')).toHaveLength(1);
-        expect(isNotice(Notice.messages[0], 'writeTargetChanged'), Notice.messages[0]).toBe(true);
+        expect(isNotice(Notice.messages[0], 'notWritten'), Notice.messages[0]).toBe(true);
+        expect(Notice.messages[0]).toContain(en.notice.refusedChanged);
         // widget は残り、計測も残る。
         expect(ctx.timers.has(timer.id)).toBe(true);
         expect(timer.sessionCount).toBe(0);
@@ -129,7 +130,8 @@ describe('one press of ■ says one thing', () => {
         await lifecycle.finishTimer(timer);
 
         expect(Notice.messages, Notice.messages.join(' | ')).toHaveLength(1);
-        expect(isNotice(Notice.messages[0], 'writeTargetChanged'), Notice.messages[0]).toBe(true);
+        expect(isNotice(Notice.messages[0], 'notWritten'), Notice.messages[0]).toBe(true);
+        expect(Notice.messages[0]).toContain(en.notice.refusedChanged);
         expect(ctx.timers.has(timer.id)).toBe(true);
         expect(contents.get(FILE)).toBe(before);
     });

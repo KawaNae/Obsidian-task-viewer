@@ -40,7 +40,7 @@ const FILE = 'note.md';
 const OUTSIDE = '- [ ] 外部 @2026-09-21';
 
 /** The notice a write tells once its target's coordinate no longer reads as its basis. */
-const changed = (subject: string) => t('notice.writeTargetChanged', { subject });
+const changed = (subject: string) => t('notice.notWritten', { reason: t('notice.refusedChanged'), subject });
 
 let live: VaultSession | undefined;
 
