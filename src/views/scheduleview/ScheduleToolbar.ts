@@ -142,7 +142,7 @@ export class ScheduleToolbar extends ViewToolbarBase {
             }),
             viewType: VIEW_META_SCHEDULE.type,
             getViewTemplateFolder: () => deps.plugin.settings.viewTemplateFolder,
-            writeService: deps.plugin.getTaskWriteService(),
+            writeChannel: deps.plugin.getTaskWriteService().writeChannel,
             getViewTemplate: () => ({
                 filePath: '',
                 name: deps.getCustomName() || VIEW_META_SCHEDULE.displayText,

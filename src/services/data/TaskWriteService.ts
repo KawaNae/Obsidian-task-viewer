@@ -1,5 +1,5 @@
 import type { TFile } from 'obsidian';
-import type { EditorLine, WriteChannel } from '../../utils/FileLines';
+import type { EditorLine, WriteChannels } from '../../utils/FileLines';
 import type { InsertPlace, TaskOp } from '../persistence/TaskOps';
 import type { DuplicateOptions, Task } from '../../types';
 import type { TaskIndex } from '../core/TaskIndex';
@@ -135,13 +135,11 @@ export class TaskWriteService {
     }
 
     /**
-     * Where a write to `filePath` made outside the repository reports what it
+     * Where a write to a file made outside the repository reports what it
      * did — the daily note's heading insert, for one. Undefined once the
-     * index is taken down.
+     * index is taken down. Bound, so a writer is handed it as it is.
      */
-    writeChannel(filePath: string): WriteChannel | undefined {
-        return this.taskIndex.getRepository().channelOf(filePath);
-    }
+    readonly writeChannel: WriteChannels = (filePath) => this.taskIndex.getRepository().channelOf(filePath);
 
     // ===== Drag state control =====
 
