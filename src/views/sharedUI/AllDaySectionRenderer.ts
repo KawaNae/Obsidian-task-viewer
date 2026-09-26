@@ -149,7 +149,6 @@ export class AllDaySectionRenderer {
         // task's (`originalTaskId`), which the handles find on the card's
         // hold (`CardHold.name`).
         const originalTaskId = getOriginalTaskId(task);
-        el.dataset.id = task.id;
         el.toggleClass('is-selected', originalTaskId === this.handleManager.getSelectedTaskId());
 
         TaskStyling.applyTaskColor(el, getEffectiveColor(dt) ?? null);
