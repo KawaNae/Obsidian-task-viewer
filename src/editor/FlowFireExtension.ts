@@ -112,8 +112,12 @@ export function fireFilter(host: EditorFireHost): Extension {
             const planned = fire.planned();
             if (planned?.kind === 'failed') queueMicrotask(() => host.didNotFire(planned));
             if (ops.length === 0) continue;
+            // The row as the fires above it left it: carried by our own
+            // writes (`replayEdits`), and re-indented when a parent's move
+            // carried it under another indentation. Before any fire, that is
+            // the line the transaction completed.
             const edited = editLines(path, lines, '\n',
-                (draft, _eol, session) => host.applyOps(draft, session, { line, text: row.text, key: contentKeyOf(lines) }, ops));
+                (draft, _eol, session) => host.applyOps(draft, session, { line, text: lines[line], key: contentKeyOf(lines) }, ops));
             if (!edited.written) {
                 host.refused(edited.refused);
                 continue;
