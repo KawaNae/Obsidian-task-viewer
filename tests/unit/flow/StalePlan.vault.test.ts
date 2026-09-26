@@ -1,6 +1,6 @@
 import { describe, it, expect, afterEach } from 'vitest';
 import { Notice } from 'obsidian';
-import { openVault, vaultSession, type VaultSession } from '../helpers/vaultSession';
+import { openLiveVault, vaultSession, type VaultSession } from '../helpers/vaultSession';
 import { t } from '../../../src/i18n';
 import { freezeDate } from '../helpers/fakeDate';
 
@@ -39,9 +39,7 @@ afterEach(() => {
 });
 
 async function open(files: Record<string, string[]>): Promise<{ contents: Map<string, string>; session: VaultSession }> {
-    const opened = await openVault(files);
-    live = opened.session;
-    return opened;
+    return openLiveVault(files, session => { live = session; });
 }
 
 function idOf(session: VaultSession, content: string): string {

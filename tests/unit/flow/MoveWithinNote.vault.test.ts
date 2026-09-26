@@ -3,7 +3,7 @@ import { Notice } from 'obsidian';
 import { TaskApi } from '../../../src/api/TaskApi';
 import { TaskReadService } from '../../../src/services/data/TaskReadService';
 import { TaskWriteService } from '../../../src/services/data/TaskWriteService';
-import { openVault, vaultSession, type VaultSession } from '../helpers/vaultSession';
+import { openLiveVault, vaultSession, type VaultSession } from '../helpers/vaultSession';
 import { editorSession } from '../helpers/editorSession';
 import { freezeDate } from '../helpers/fakeDate';
 
@@ -32,8 +32,7 @@ afterEach(() => {
 });
 
 async function open(lines: string[]) {
-    const { contents, session } = await openVault({ [FILE]: lines });
-    live = session;
+    const { contents, session } = await openLiveVault({ [FILE]: lines }, s => { live = s; });
     const idOf = (content: string) => session.index.getTasks().find(task => task.content === content)!.id;
     const read = () => contents.get(FILE)!.split('\n');
     return { contents, session, idOf, read };

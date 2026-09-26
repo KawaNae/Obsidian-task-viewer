@@ -5,7 +5,7 @@ import { writeEditorLine } from '../../../src/editor/EditorWrite';
 import type { EditorLine } from '../../../src/utils/FileLines';
 import type { TaskOp } from '../../../src/services/persistence/TaskOps';
 import { Notice } from 'obsidian';
-import { openVault, makeFile, type VaultSession } from '../helpers/vaultSession';
+import { openLiveVault, makeFile, type VaultSession } from '../helpers/vaultSession';
 import { editorSession, type EditorSession } from '../helpers/editorSession';
 import { freezeDate } from '../helpers/fakeDate';
 
@@ -51,8 +51,7 @@ interface Opened {
 }
 
 async function open(lines: string[]): Promise<Opened> {
-    const { contents, session } = await openVault({ [FILE]: lines });
-    live = session;
+    const { contents, session } = await openLiveVault({ [FILE]: lines }, s => { live = s; });
     const fired: string[] = [];
     const executor = session.executor;
     const plan = executor.planFire.bind(executor);
@@ -62,9 +61,9 @@ async function open(lines: string[]): Promise<Opened> {
         return planned;
     };
     let writes = 0;
-    const vault = session.app.vault as unknown as { process: (...args: unknown[]) => Promise<string> };
+    const vault = session.app.vault;
     const process = vault.process.bind(vault);
-    vault.process = (...args: unknown[]) => { writes++; return process(...args); };
+    vault.process = (...args) => { writes++; return process(...args); };
     return {
         contents,
         session,
@@ -272,8 +271,7 @@ describe('the editor menu\'s rewrite of a line, written to the file when the edi
 
     it('moves the line within the note, in the file, when the editor closed before the menu wrote', async () => {
         const lines = ['# note', '- [ ] T @2026-09-21 ==> move([[#Done]])', '\t- [ ] c', '- [ ] U', '## Done', ''];
-        const { contents, session } = await openVault({ [FILE]: lines });
-        live = session;
+        const { contents, session } = await openLiveVault({ [FILE]: lines }, s => { live = s; });
         const editor = editorSession(session.index.editorFireHost(), FILE, lines.join('\n'));
         const at = { line: 1, text: lines[1], key: keyOf(editor.state.doc) };
         editor.close();

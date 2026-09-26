@@ -1,6 +1,6 @@
 import { describe, it, expect, afterEach, beforeEach } from 'vitest';
 import { Notice } from 'obsidian';
-import { openVault, type VaultSession } from '../helpers/vaultSession';
+import { openLiveVault, type VaultSession } from '../helpers/vaultSession';
 import { freezeDate } from '../helpers/fakeDate';
 
 // Frozen so `==> every mon` on `@2026-09-21` lands on the `@2026-09-28` these
@@ -31,9 +31,7 @@ afterEach(() => {
 });
 
 async function open(files: Record<string, string[]>): Promise<{ contents: Map<string, string>; session: VaultSession }> {
-    const opened = await openVault(files);
-    live = opened.session;
-    return opened;
+    return openLiveVault(files, session => { live = session; });
 }
 
 function idOf(session: VaultSession, content: string, file = FILE): string {
