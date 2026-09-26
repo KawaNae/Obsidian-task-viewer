@@ -13,6 +13,7 @@ import type { FlowInstanceInsert } from '../persistence/FlowInstanceLines';
 import type { MoveDestination, TaskOp } from '../persistence/TaskOps';
 import { plannedOn } from '../persistence/TaskRefs';
 import { Placement } from '../persistence/utils/Placement';
+import { Outline } from '../parsing/utils/Outline';
 import type { MoveTarget } from './FlowAst';
 import { flowSource } from './FlowSegments';
 import { type FlowPlanDeps, GenerationError, planFlow } from './FlowPlanner';
@@ -33,7 +34,7 @@ function destinationIn(to: MoveTarget, lines: readonly string[]): MoveDestinatio
             'move() moves the task within its note only, and this one names another note');
     }
     if (to.kind === 'end') return to;
-    const found = Placement.heading(lines, to.name);
+    const found = Placement.heading(Outline.read(lines), to.name);
     if (found.kind === 'none') {
         return new GenerationError('eval.move-no-heading', `No heading '${to.name}' in this note`, { name: to.name });
     }

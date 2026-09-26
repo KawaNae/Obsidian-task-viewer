@@ -52,8 +52,8 @@ export interface PlacedLine extends PlacedReading {
  * opposed to "which line is this" (`WriteSession.row`). Every write that puts
  * a line in the body asks here (`LineDraft.put` takes a {@link Spot}).
  *
- * The answers are read off the lines before the write, the way the parser
- * reads them (`Outline.read`): a row's group is the item it stands in, and a
+ * The answers are read off a reading of the lines as they stand
+ * (`LineDraft.reading`), the way the parser reads them: a row's group is the item it stands in, and a
  * subtree is the item's lines. Each question is asked with `head`, the first
  * line the write puts (its indentation aside: it takes the spot's), and each
  * answer goes past the lines that line would take in, as the reading with the
@@ -81,8 +81,8 @@ export class Placement {
      * two siblings. None of those is a task, and the next instance joins the
      * tasks it stands among, not the text above them.
      */
-    static groupHead(lines: readonly string[], row: number, head: string): Spot {
-        const outline = Outline.read(lines);
+    static groupHead(outline: OutlineReading, row: number, head: string): Spot {
+        const { lines } = outline;
         const parent = outline.item(row)?.parent ?? null;
         if (parent !== null) return this.sibling(outline, parent + 1, parent, head);
 
@@ -99,8 +99,7 @@ export class Placement {
     }
 
     /** Just past `row`'s subtree, a new line as its next sibling. */
-    static afterSubtree(lines: readonly string[], row: number, head: string): Spot {
-        const outline = Outline.read(lines);
+    static afterSubtree(outline: OutlineReading, row: number, head: string): Spot {
         return this.sibling(outline, outline.subtreeEnd(row), outline.item(row)?.parent ?? null, head);
     }
 
@@ -113,16 +112,14 @@ export class Placement {
      * caller's to say, by the question it asks: this is the one that takes
      * the row's spelling.
      */
-    static copyOf(lines: readonly string[], row: number, side: 'above' | 'below', head: string): Spot {
-        const outline = Outline.read(lines);
+    static copyOf(outline: OutlineReading, row: number, side: 'above' | 'below', head: string): Spot {
         const at = side === 'above' ? row : outline.subtreeEnd(row);
-        const indent = Outline.indentOf(lines[row]);
+        const indent = Outline.indentOf(outline.lines[row]);
         return this.settle(outline, at, outline.item(row)?.parent ?? null, head, () => indent);
     }
 
     /** Where a first child of `row` goes: just below it, past its own text that goes on. */
-    static firstChild(lines: readonly string[], row: number, head: string): Spot {
-        const outline = Outline.read(lines);
+    static firstChild(outline: OutlineReading, row: number, head: string): Spot {
         return this.sibling(outline, this.pastOwnText(outline, row), row, head);
     }
 
@@ -132,8 +129,7 @@ export class Placement {
      * of its children, which is not always the end of its subtree: the text,
      * code or fence of its own below its children stays below them.
      */
-    static lastChild(lines: readonly string[], row: number, head: string): Spot {
-        const outline = Outline.read(lines);
+    static lastChild(outline: OutlineReading, row: number, head: string): Spot {
         let last: number | null = null;
         for (let k = row + 1; k < outline.subtreeEnd(row); k++) {
             if (outline.item(k)?.parent === row) last = k;
@@ -167,8 +163,8 @@ export class Placement {
      * past a subtree that is not a completed sibling: a blank line, a line
      * that is no item in `row`'s parent, or an unfinished one.
      */
-    static afterCompletedRun(lines: readonly string[], row: number, head: string): Spot {
-        const outline = Outline.read(lines);
+    static afterCompletedRun(outline: OutlineReading, row: number, head: string): Spot {
+        const { lines } = outline;
         const parent = outline.item(row)?.parent ?? null;
         let last = row;
         for (let next = outline.item(outline.subtreeEnd(last)); next !== null && next.parent === parent; next = outline.item(outline.subtreeEnd(last))) {
@@ -184,7 +180,7 @@ export class Placement {
      * the terminator stays the note's last character. Nothing stands after
      * it for a line put there to take in.
      */
-    static end(lines: readonly string[]): Spot {
+    static end({ lines }: OutlineReading): Spot {
         const at = lines.length > 0 && lines[lines.length - 1] === '' ? lines.length - 1 : lines.length;
         return { at, parent: null, indent: '' };
     }
@@ -195,8 +191,8 @@ export class Placement {
      * items there. A task indented under the heading stays where it stands,
      * not under the new line.
      */
-    static underHeading(lines: readonly string[], heading: number, head: string): Spot {
-        return this.sibling(Outline.read(lines), heading + 1, null, head);
+    static underHeading(outline: OutlineReading, heading: number, head: string): Spot {
+        return this.sibling(outline, heading + 1, null, head);
     }
 
     /**
@@ -207,9 +203,9 @@ export class Placement {
      * planned and again where it is put, from the same lines, so both find
      * the same one — or both find none or several, and nothing moves.
      */
-    static heading(lines: readonly string[], name: string): HeadingLookup {
+    static heading(outline: OutlineReading, name: string): HeadingLookup {
         const key = headingKey(name);
-        const named = Outline.read(lines).headings.filter(h => headingKey(h.text) === key);
+        const named = outline.headings.filter(h => headingKey(h.text) === key);
         if (named.length === 0) return { kind: 'none' };
         if (named.length > 1) return { kind: 'many', count: named.length };
         return { kind: 'one', heading: named[0] };
@@ -223,8 +219,8 @@ export class Placement {
      * top — so the blank lines that end it stay below them. A section with
      * nothing in it has them just below the heading.
      */
-    static sectionEnd(lines: readonly string[], heading: OutlineHeading, head: string): Spot {
-        const outline = Outline.read(lines);
+    static sectionEnd(outline: OutlineReading, heading: OutlineHeading, head: string): Spot {
+        const { lines } = outline;
         const next = outline.headings.find(h => h.line >= heading.end && h.level <= heading.level);
         let at = next ? next.line : lines.length;
         while (at > heading.end && Outline.isBlank(lines[at - 1])) at--;

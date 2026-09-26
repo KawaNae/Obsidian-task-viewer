@@ -33,16 +33,17 @@ export interface RowBasis {
 }
 
 /**
- * Whether the row at `line` still reads as the operation's plan read it.
+ * Whether the row at `line` still reads as the operation's plan read it, in
+ * the lines `outline` is the reading of.
  *
  * A plan made from a copy the file has moved on from would otherwise be
  * written over what moved it: an update putting the row back to an older
  * text, a fire consuming a command line edited since, a delete taking a child
  * written after the index read the row.
  */
-export function readsAsPlanned(lines: readonly string[], line: number, basis: RowBasis): boolean {
+export function readsAsPlanned(outline: OutlineReading, line: number, basis: RowBasis): boolean {
+    const { lines } = outline;
     if (!Outline.VERBATIM.holds(lines[line], basis.text)) return false;
-    const outline = Outline.read(lines);
     if (basis.commands) {
         const commands = collectFlowLineIndices(outline, line).map(i => flowLineTail(lines[i]));
         if (commands.length !== basis.commands.length) return false;
@@ -50,7 +51,7 @@ export function readsAsPlanned(lines: readonly string[], line: number, basis: Ro
     }
     if (basis.subtree && !sameLines(subtreeAt(outline, line), basis.subtree)) return false;
     if (basis.blocks) {
-        const current = collectGenBlocks([...lines]).blocks;
+        const current = collectGenBlocks(lines, outline).blocks;
         for (const block of basis.blocks) {
             const body = current.get(block.name)?.body;
             if (!body || !sameLines(body, block.body)) return false;

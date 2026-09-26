@@ -42,17 +42,17 @@ export class HeadingInserter {
         // is a line of the task above it, and one inside the frontmatter is
         // YAML. The first of its level and text; a setext one is under its
         // underline.
-        const found = Outline.read(out).headings.find(h => h.level === headerLevel && h.text === header);
+        const found = draft.reading().headings.find(h => h.level === headerLevel && h.text === header);
 
         if (found) {
-            const spot = Placement.underHeading(out, found.end - 1, line);
+            const spot = Placement.underHeading(draft.reading(), found.end - 1, line);
             draft.put(spot, Block.line(line));
             return spot.at;
         }
         // At the end, before the empty element a terminated file splits
         // into, so the file still ends with its terminator. One blank line
         // sets the new heading off from the text above it.
-        const spot = Placement.end(out);
+        const spot = Placement.end(draft.reading());
         const head = spot.at > 0 && !Outline.isBlank(out[spot.at - 1]) ? [''] : [];
         draft.put(spot, Block.read([...head, fullHeader, line]));
         return spot.at + head.length + 1;

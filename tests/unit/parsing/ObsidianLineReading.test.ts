@@ -88,10 +88,10 @@ describe('indentation, as Obsidian nests a list', () => {
         // indentation, and a tab moves the row to another depth: either way
         // that line is another line, not the row the plan read.
         const basis = { text: '\t- [ ] a' };
-        expect(readsAsPlanned([`${IDEOGRAPHIC}- [ ] a`], 0, basis)).toBe(false);
-        expect(readsAsPlanned([`${NBSP}- [ ] a`], 0, basis)).toBe(false);
-        expect(readsAsPlanned(['- [ ] a'], 0, basis)).toBe(false);
-        expect(readsAsPlanned(['\t- [ ] a'], 0, basis)).toBe(true);
+        expect(readsAsPlanned(Outline.read([`${IDEOGRAPHIC}- [ ] a`]), 0, basis)).toBe(false);
+        expect(readsAsPlanned(Outline.read([`${NBSP}- [ ] a`]), 0, basis)).toBe(false);
+        expect(readsAsPlanned(Outline.read(['- [ ] a']), 0, basis)).toBe(false);
+        expect(readsAsPlanned(Outline.read(['\t- [ ] a']), 0, basis)).toBe(true);
     });
 });
 
