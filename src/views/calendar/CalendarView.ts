@@ -868,8 +868,6 @@ export class CalendarView extends ItemView {
         if (entry.continuesBefore) el.addClass('task-card--split-continues-before');
         if (entry.continuesAfter) el.addClass('task-card--split-continues-after');
 
-        el.dataset.id = entry.segmentId;
-
         this.applyCalendarGridPosition(el, entry, colOffset);
 
         TaskStyling.applyTaskColor(el, getEffectiveColor(entry.task) ?? null);
@@ -881,8 +879,6 @@ export class CalendarView extends ItemView {
      * Idempotent decoration for single-cell calendar cards (no multi-day span).
      */
     private decorateCalendarCell(el: HTMLElement, entry: GridTaskEntry, colOffset: number): void {
-        el.dataset.id = entry.task.id;
-
         this.applyCalendarGridPosition(el, entry, colOffset);
 
         TaskStyling.applyTaskColor(el, getEffectiveColor(entry.task) ?? null);

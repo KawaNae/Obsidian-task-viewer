@@ -121,8 +121,6 @@ export class ScheduleTaskRenderer {
     private decorateScheduleCard(card: HTMLElement, task: DisplayTask): void {
         TaskStyling.applySplitClasses(card, task);
 
-        card.dataset.id = task.id;
-
         TaskStyling.applyTaskColor(card, getEffectiveColor(task) ?? null);
         TaskStyling.applyTaskLinestyle(card, getEffectiveLinestyle(task) ?? null);
         TaskStyling.applyReadOnly(card, task);

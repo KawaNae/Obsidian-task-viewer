@@ -14,7 +14,7 @@ export type Section = Exclude<SectionKind, null>;
  * （AllDaySectionRenderer は分類済みの結果を受け取る）、
  * TaskDateCategorizer が `placeTask` 経由で kind + 日付所属の合成に使う。
  * 個別実装にすると 23.5h 境界などで判定がドリフトし、同じ task が複数セクションに
- * 描画されて DOM 上で同じ data-id が重複する原因となる。
+ * 描画される原因となる。
  * 日付所属（どの visual/calendar 日付に入るか）は TaskDateCategorizer、
  * バケツ内の描画順は TaskRenderOrder が所有する。
  *

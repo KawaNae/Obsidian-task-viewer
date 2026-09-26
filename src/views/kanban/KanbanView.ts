@@ -411,8 +411,6 @@ export class KanbanView extends ItemView {
      * Kanban tasks are never split in this path, so no split variants apply.
      */
     private decorateKanbanCard(card: HTMLElement, task: import('../../types').DisplayTask): void {
-        card.dataset.id = task.id;
-
         TaskStyling.applyTaskColor(card, getEffectiveColor(task) ?? null);
         TaskStyling.applyTaskLinestyle(card, getEffectiveLinestyle(task) ?? null);
         TaskStyling.applyReadOnly(card, task);

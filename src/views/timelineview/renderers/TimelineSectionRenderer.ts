@@ -104,8 +104,6 @@ export class TimelineSectionRenderer {
         // Reset + apply split-segment variant classes (idempotent).
         TaskStyling.applySplitClasses(el, task);
 
-        el.dataset.id = task.id;
-
         TaskStyling.applyTaskColor(el, getEffectiveColor(task) ?? null);
         TaskStyling.applyTaskLinestyle(el, getEffectiveLinestyle(task) ?? null);
         TaskStyling.applyReadOnly(el, task);

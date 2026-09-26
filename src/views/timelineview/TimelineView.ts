@@ -8,7 +8,7 @@ import { DragHandler } from '../../interaction/drag/DragHandler';
 import { MenuHandler } from '../../interaction/menu/MenuHandler';
 import { createTaskHubOpener } from '../../modals/hub/openTaskHub';
 import type { TaskHubPanelOptions } from '../../modals/hub/TaskHubPanel';
-import { logDebug, logError } from '../../log/log';
+import { logDebug } from '../../log/log';
 
 import { DateUtils } from '../../utils/DateUtils';
 import type { TaskReadService } from '../../services/data/TaskReadService';
@@ -1055,28 +1055,6 @@ export class TimelineView extends ItemView {
         // ちらつきを防ぐ。
         if (this.handleManager.getSelectedTaskId()) {
             this.handleManager.reapplySelectionClass();
-        }
-
-        // Dev invariant: timeline 主域内に同一 data-id のカードが複数存在しないこと。
-        // 同 id 重複は section dispatch のドリフトを示す致命的不整合のサイン。
-        // production ビルドでは esbuild の define で __DEV__=false が dead-code 化される。
-        if (__DEV__) {
-            this.assertNoDuplicateCardIds();
-        }
-    }
-
-    private assertNoDuplicateCardIds(): void {
-        const main = this.container.querySelector('.tv-sidebar__main') ?? this.container;
-        const counts = new Map<string, number>();
-        main.querySelectorAll<HTMLElement>('.task-card[data-id]').forEach(el => {
-            const id = el.dataset.id;
-            if (!id) return;
-            counts.set(id, (counts.get(id) ?? 0) + 1);
-        });
-        for (const [id, n] of counts) {
-            if (n > 1) {
-                logError(`[render-invariant] duplicate task-card data-id: id=${id}, count=${n}`);
-            }
         }
     }
 
