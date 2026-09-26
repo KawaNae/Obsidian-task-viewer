@@ -7,8 +7,7 @@
 
 import { type App, TFile, TFolder, normalizePath } from 'obsidian';
 import type { IntervalGroup } from './TimerInstance';
-import { createFile, replaceWhole } from '../utils/FileLines';
-import type { TaskWriteService } from '../services/data/TaskWriteService';
+import { createFile, replaceWhole, type WriteChannel } from '../utils/FileLines';
 
 export interface TemplateCreateData {
     name: string;
@@ -19,7 +18,7 @@ export interface TemplateCreateData {
 export class IntervalTemplateWriter {
     constructor(
         private app: App,
-        private writeService: TaskWriteService,
+        private channelFor: (path: string) => WriteChannel | undefined,
     ) {}
 
     /** @returns the note, or null when the overwrite was not written (the write layer has told the user why). */
@@ -31,7 +30,7 @@ export class IntervalTemplateWriter {
         const content = this.buildFileContent(data);
         // 全体上書き。どの行がどの行になったかは言えないので、申告の
         // 代わりに連鎖が切れた印を残す（replaceWhole）。
-        const { written } = await replaceWhole(this.app, existing, this.writeService.writeChannel(filePath), content);
+        const { written } = await replaceWhole(this.app, existing, this.channelFor(filePath), content);
         return written ? existing : null;
     }
 
@@ -48,7 +47,7 @@ export class IntervalTemplateWriter {
         if (existing instanceof TFile) {
             throw new Error(`A template named "${data.name}" already exists.`);
         }
-        const created = await createFile(this.app, filePath, this.writeService.writeChannel(filePath), data.name, async () => {
+        const created = await createFile(this.app, filePath, this.channelFor(filePath), data.name, async () => {
             await this.ensureFolder(folderPath);
             return content;
         });

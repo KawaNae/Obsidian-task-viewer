@@ -282,7 +282,7 @@ export class TimelineToolbar extends ViewToolbarBase {
             }),
             viewType: VIEW_META_TIMELINE.type,
             getViewTemplateFolder: () => deps.plugin.settings.viewTemplateFolder,
-            writeService: deps.plugin.getTaskWriteService(),
+            writeChannel: deps.plugin.getTaskWriteService().writeChannel,
             getViewTemplate: () => ({
                 filePath: '',
                 name: deps.getCustomName() || VIEW_META_TIMELINE.displayText,

@@ -1,11 +1,10 @@
 import { type App, TFile, moment } from 'obsidian';
 import { HeadingInserter } from './HeadingInserter';
-import { createFile } from './FileLines';
+import { createFile, type WriteChannel } from './FileLines';
 import type { TaskViewerSettings, NoteType } from '../types';
 import { processTemplate, normalizeTrailingNewline } from './NoteTemplateProcessor';
 import { withWeekStartDay } from './momentWeekLocale';
 import { logError, logWarn } from '../log/log';
-import type { TaskWriteService } from '../services/data/TaskWriteService';
 
 export class DailyNoteUtils {
     static getDailyNoteSettings(app: App) {
@@ -232,8 +231,8 @@ export class DailyNoteUtils {
      * @param line The line to append (should include full task format, e.g., "- [x] ...")
      * @param header Header text (without # prefix)
      * @param headerLevel Number of # to use (e.g., 2 for ##)
-     * @param writeService Where the write to the note reports what it did
-     *        (`writeService.writeChannel`). Asked once the note is known:
+     * @param channelFor Where the write to the note reports what it did (see
+     *        `TaskWriteService.writeChannel`). Asked once the note is known:
      *        the note may be the one this call creates.
      * @returns 書き込んだノートのパス。書けなかったときは null で、理由は
      * 書き込みの層が1回だけ告げてある（ノートを作れなかったときも同じ）。
@@ -247,12 +246,12 @@ export class DailyNoteUtils {
         line: string,
         header: string,
         headerLevel: number,
-        writeService: TaskWriteService,
+        channelFor: (path: string) => WriteChannel | undefined,
     ): Promise<string | null> {
         let file = this.getDailyNote(app, date);
         if (!file) {
             const { path, content } = this.dailyNoteToCreate(app, date);
-            const created = await createFile(app, path, writeService.writeChannel(path), line.trim(), content);
+            const created = await createFile(app, path, channelFor(path), line.trim(), content);
             if (!created.written) return null;
             file = created.file;
         }
@@ -260,7 +259,7 @@ export class DailyNoteUtils {
         // file は既に手元にある TFile を直接渡す。作成直後のファイルは
         // getAbstractFileByPath で引き直せるとは限らないため、パスへ
         // 変換すると書き込みが黙って失敗しうる。
-        const outcome = await HeadingInserter.writeUnderHeading(app, file, writeService.writeChannel(file.path), line, header, headerLevel);
+        const outcome = await HeadingInserter.writeUnderHeading(app, file, channelFor(file.path), line, header, headerLevel);
         return outcome.written ? file.path : null;
     }
 }

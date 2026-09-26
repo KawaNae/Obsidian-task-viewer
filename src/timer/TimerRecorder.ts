@@ -732,7 +732,7 @@ export class TimerRecorder {
             taskLine,
             this.plugin.settings.dailyNoteHeader,
             this.plugin.settings.dailyNoteHeaderLevel,
-            this.plugin.getTaskWriteService(),
+            this.plugin.getTaskWriteService().writeChannel,
         );
     }
 

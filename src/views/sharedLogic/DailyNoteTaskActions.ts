@@ -66,7 +66,7 @@ export function openCreateTaskForDailyNote(
                 taskLine,
                 plugin.settings.dailyNoteHeader,
                 plugin.settings.dailyNoteHeaderLevel,
-                plugin.getTaskWriteService(),
+                plugin.getTaskWriteService().writeChannel,
             );
         },
         seed,
