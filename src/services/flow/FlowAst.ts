@@ -1,6 +1,7 @@
 import type { Span } from '../lang/Diagnostic';
 import type { Expr } from '../lang/ExprAst';
 import type { DurUnit, Value, Weekday } from '../lang/Value';
+import type { MoveDestination } from '../persistence/TaskOps';
 
 /** Calendar-grid recurrence rules (`every ...`). */
 export type EveryRule =
@@ -115,12 +116,10 @@ export interface FlowProgram {
  * of a heading of the note (`move([[#name]])`, an alias aside), or nowhere —
  * anything else names another note, and moving to another note is retired
  * (F8). The parser warns on a retired one, and a completion with it does not
- * fire; the diagnostic and the fire read this one answer.
+ * fire; the diagnostic and the fire read this one answer. A move that is
+ * not retired names where the write puts the row (`MoveDestination`).
  */
-export type MoveTarget =
-    | { kind: 'end' }
-    | { kind: 'heading'; name: string }
-    | { kind: 'retired' };
+export type MoveTarget = MoveDestination | { kind: 'retired' };
 
 /**
  * Every clause's span, said once.

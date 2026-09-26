@@ -10,7 +10,7 @@ import { EvalError } from '../lang/ExprEvaluator';
 import type { FlowEffect } from './FlowEffects';
 import { type CreatingEffect, type FlowDeleteAssessment, assessFlowDelete, planFlowForDeletion } from './FlowDeletion';
 import type { FlowInstanceInsert } from '../persistence/FlowInstanceLines';
-import type { TaskOp } from '../persistence/TaskOps';
+import type { MoveDestination, TaskOp } from '../persistence/TaskOps';
 import { plannedOn } from '../persistence/TaskRefs';
 import { Placement } from '../persistence/utils/Placement';
 import type { MoveTarget } from './FlowAst';
@@ -23,16 +23,16 @@ import type { GenBlock } from '../parsing/gen/GenBlockCollector';
 import { runtimeText } from './runtimeText';
 
 /**
- * Why a move to `to` cannot be made in `lines`, or null when it can: it names
- * another note (retired, F8), or the heading it names is not there, or is
- * there more than once (`Placement.heading`, as the write will look it up).
+ * Where a move to `to` goes in `lines`, or why it cannot be made there: it
+ * names another note (retired, F8), or the heading it names is not there, or
+ * is there more than once (`Placement.heading`, as the write will look it up).
  */
-function destinationRefused(to: MoveTarget, lines: readonly string[]): GenerationError | null {
+function destinationIn(to: MoveTarget, lines: readonly string[]): MoveDestination | GenerationError {
     if (to.kind === 'retired') {
         return new GenerationError('eval.move-retired',
             'move() moves the task within its note only, and this one names another note');
     }
-    if (to.kind === 'end') return null;
+    if (to.kind === 'end') return to;
     const found = Placement.heading(lines, to.name);
     if (found.kind === 'none') {
         return new GenerationError('eval.move-no-heading', `No heading '${to.name}' in this note`, { name: to.name });
@@ -41,7 +41,7 @@ function destinationRefused(to: MoveTarget, lines: readonly string[]): Generatio
         return new GenerationError('eval.move-heading-ambiguous',
             `${found.count} headings are named '${to.name}' in this note`, { name: to.name, count: found.count });
     }
-    return null;
+    return to;
 }
 
 /** How long one failure stays quiet after it has been shown. */
@@ -146,16 +146,22 @@ export class FlowExecutor {
             }
             throw err;
         }
-        const move = effects.find((effect): effect is Extract<FlowEffect, { kind: 'move' }> => effect.kind === 'move');
-        const unplaced = move ? destinationRefused(move.to, lines) : null;
-        if (unplaced) {
-            logWarn(`[FlowExecutor] Flow did not fire for ${task.id}: ${unplaced.message}`);
-            return { kind: 'failed', task, error: unplaced };
-        }
-        const ops = effects.flatMap(effect => {
+        const ops: TaskOp[] = [];
+        for (const effect of effects) {
             logInfo(`[Flow:effect] ${effect.kind} taskId=${task.id}`);
-            return this.opsFor(task, effect);
-        });
+            if (effect.kind !== 'move') {
+                ops.push(...this.opsFor(task, effect));
+                continue;
+            }
+            const to = destinationIn(effect.to, lines);
+            if (to instanceof GenerationError) {
+                logWarn(`[FlowExecutor] Flow did not fire for ${task.id}: ${to.message}`);
+                return { kind: 'failed', task, error: to };
+            }
+            // One op: the row is carried, so the moved row is the row that
+            // fired, and taking it from where it stood is part of the carrying.
+            ops.push({ kind: 'move', text: TaskParser.format(effect.movedTask), to });
+        }
         return { kind: 'fires', task, ops };
     }
 
@@ -298,8 +304,11 @@ export class FlowExecutor {
         };
     }
 
-    /** What one effect does in the row's own file, as the write applies it. */
-    private opsFor(task: Task, effect: FlowEffect): TaskOp[] {
+    /**
+     * What one effect does in the row's own file, as the write applies it. A
+     * move's op takes the destination looked up in the lines (`planTask`).
+     */
+    private opsFor(task: Task, effect: Exclude<FlowEffect, { kind: 'move' }>): TaskOp[] {
         switch (effect.kind) {
             case 'create-next':
             case 'create-generated':
@@ -310,13 +319,6 @@ export class FlowExecutor {
                 // is written; a deletion's is checked against the row it was
                 // planned from (`plannedOn`).
                 return [{ kind: 'strip-flow', text: TaskParser.format({ ...task, flow: undefined }) }];
-            case 'move':
-                // One op: the row is carried, so the moved row is the row
-                // that fired, and taking it from where it stood is part of
-                // the carrying. A retired move never gets here (`planTask`).
-                return effect.to.kind === 'retired'
-                    ? []
-                    : [{ kind: 'move', text: TaskParser.format(effect.movedTask), to: effect.to }];
         }
     }
 
