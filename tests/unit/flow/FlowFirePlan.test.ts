@@ -22,7 +22,7 @@ function executor(): FlowExecutor {
     return new FlowExecutor({} as never, {} as never, app as never, () => DEFAULT_SETTINGS);
 }
 
-const writer = new InlineTaskWriter(app as never, new FileOperations(app as never));
+const writer = new InlineTaskWriter(app as never, new FileOperations(app as never), () => undefined);
 
 /** The lines a write of `ops` to the row at `line` leaves, with nothing written anywhere. */
 function written(lines: readonly string[], line: number, ops: readonly TaskOp[]): readonly string[] | null {

@@ -30,7 +30,7 @@ export class TaskCloner {
     constructor(
         private app: App,
         private fileOps: FileOperations,
-        private channelOf: WriteChannels = () => undefined,
+        private channelOf: WriteChannels,
     ) { }
 
     /**
