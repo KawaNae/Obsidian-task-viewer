@@ -194,6 +194,21 @@ describe('a parent\'s move and a child\'s fire in one editor transaction (R10 wi
         ]);
     });
 
+    it('fires the child once when the parent\'s move carries it to another indentation', async () => {
+        const note = await open(['# note', '- [ ] Q', '    - [ ] P @2026-09-21 ==> move([[#Done]])', '        - [ ] C @2026-09-21 ==> +1d', '## Done', '']);
+        const editor = editorSession(note.session.index.editorFireHost(), FILE, note.contents.get(FILE)!);
+        const status = (line: number) => editor.at(line, editor.lines()[line].indexOf('[') + 1);
+        editor.change([
+            { from: status(2), to: status(2) + 1, insert: 'x' },
+            { from: status(3), to: status(3) + 1, insert: 'x' },
+        ], 'input.type');
+        await Promise.resolve();
+        expect(editor.lines()).toEqual([
+            '# note', '- [ ] Q', '## Done', '- [x] P @2026-09-21', '    - [ ] C @2026-09-22 ==> +1d', '    - [x] C @2026-09-21', '',
+        ]);
+        expect(Notice.messages).toEqual([]);
+    });
+
     it('fires the child where it stands when the parent\'s fire fails', async () => {
         const note = await open(['# note', '- [ ] P @2026-09-21 ==> move([[#Nope]])', '    - [ ] C @2026-09-21 ==> +1d', '']);
         const editor = editorSession(note.session.index.editorFireHost(), FILE, note.contents.get(FILE)!);
