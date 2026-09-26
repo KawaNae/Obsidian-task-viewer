@@ -569,6 +569,28 @@ export interface WriteMade {
     /** The callback said to write, whether or not the lines differed. */
     written: true;
     refused: null;
+    /**
+     * The refusal of the edit tried first, when the one written is the edit
+     * tried in its place (`processLines`'s `instead`). Told by the caller,
+     * which knows what the edit it gave up was.
+     */
+    insteadOf?: Refusal;
+}
+
+/**
+ * A write's edit: what it does to the lines handed in, through the draft
+ * (`editLines`). False gives the write up, the reason said through `row`.
+ */
+export type DraftEdit = (draft: LineDraft, eol: Eol, session: WriteSession) => boolean;
+
+/**
+ * The edit a write tries in place of its first, on the same lines, when the
+ * first is refused as `when` answers: one attempt, one `vault.process`, so
+ * nothing written from outside comes between the two.
+ */
+export interface EditInstead {
+    when: (refused: Refusal) => boolean;
+    edit: DraftEdit;
 }
 
 /** Where each line of the file came from, once a write's report is replayed. */
@@ -751,7 +773,7 @@ export function editLines(
     path: string,
     lines: readonly string[],
     eol: Eol,
-    edit: (draft: LineDraft, eol: Eol, session: WriteSession) => boolean,
+    edit: DraftEdit,
     subjects: {
         about?: string;
         asked?: (subject: string) => void;
@@ -942,15 +964,22 @@ export function editLines(
  * as null. Anything a write owes the rest of the plugin belongs on the
  * written branch only, and after `vault.process`: a write that never landed
  * leaves nothing behind.
+ *
+ * `instead`, when given, is the edit tried on the same lines when `edit` is
+ * refused as `instead.when` answers; the outcome then says what `edit` met
+ * (`WriteMade.insteadOf`). Which refusals those are is the caller's to say.
  */
 export async function processLines(
     app: App,
     file: TFile,
     channel: WriteChannel | undefined,
-    edit: (draft: LineDraft, eol: Eol, session: WriteSession) => boolean,
+    edit: DraftEdit,
     about?: string,
+    instead?: EditInstead,
 ): Promise<WriteOutcome> {
     let refused: Refusal | null = null;
+    // The refusal of `edit`, when `instead` was written in its place.
+    let setAside: Refusal | null = null;
     // What the write left, when it changed the file: handed to the channel
     // once it is known to have landed.
     let landing: Landing | null = null;
@@ -970,24 +999,32 @@ export async function processLines(
     // Set inside the callback too.
     const landed = landing as Landing | null;
     if (landed !== null) channel?.landed(landed);
-    return { written: true, refused: null };
+    const gaveWay = setAside as Refusal | null;
+    return gaveWay === null ? { written: true, refused: null } : { written: true, refused: null, insteadOf: gaveWay };
 
     /** One run of the callback: the content to write, or the content as it was. */
     function attempt(content: string): string {
         // Obsidian may run the callback again (it retries on a conflicting
         // write). Only the last attempt is the one written.
         refused = null;
+        setAside = null;
         landing = null;
         lastSubject = '';
         // Asked with the lines in hand: the reading the write starts from.
         const handed = channel?.reading();
 
         const { lines, eol, bom } = splitLines(content);
-        const edited = editLines(file.path, lines, eol, edit, {
+        const subjects = {
             about,
-            asked: (said) => { lastSubject = said; },
-            follow: channel ? (read, line, now) => channel.follow(read, line, now) : undefined,
-        });
+            asked: (said: string) => { lastSubject = said; },
+            follow: channel ? (read: ReadingId, line: number, now: ContentKey) => channel.follow(read, line, now) : undefined,
+        };
+        let edited = editLines(file.path, lines, eol, edit, subjects);
+        if (!edited.written && instead?.when(edited.refused)) {
+            setAside = edited.refused;
+            lastSubject = '';
+            edited = editLines(file.path, lines, eol, instead.edit, subjects);
+        }
         if (!edited.written) {
             refused = edited.refused;
             return content;

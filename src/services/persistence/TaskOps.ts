@@ -1,5 +1,6 @@
 import type { FlowInstanceInsert } from './FlowInstanceLines';
 import type { PropertyOp } from './PropertyUpdatePlanner';
+import type { Refusal } from '../../utils/FileLines';
 
 /**
  * One thing an operation does to the row it names, in a write that may do
@@ -53,3 +54,14 @@ export type TaskOp =
     | { kind: 'insert'; place: InsertPlace; text: string }
     | { kind: 'update'; text: string; childOps?: readonly PropertyOp[] }
     | { kind: 'fire'; plan: (lines: readonly string[], line: number) => readonly TaskOp[] };
+
+/**
+ * The fire of a write that completes a row, and which refusals of the write
+ * with it leave the completion to be written without it (`processLines`'s
+ * `instead`): the flow layer's answer, handed in with the op
+ * (`FlowExecutor.fireOp`).
+ */
+export interface CompletionFire {
+    op: Extract<TaskOp, { kind: 'fire' }>;
+    givesWay(refused: Refusal): boolean;
+}

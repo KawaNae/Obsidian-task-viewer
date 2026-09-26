@@ -10,7 +10,7 @@ import { EvalError } from '../lang/ExprEvaluator';
 import type { FlowEffect } from './FlowEffects';
 import { type CreatingEffect, type FlowDeleteAssessment, assessFlowDelete, planFlowForDeletion } from './FlowDeletion';
 import type { FlowInstanceInsert } from '../persistence/FlowInstanceLines';
-import type { MoveDestination, TaskOp } from '../persistence/TaskOps';
+import type { CompletionFire, MoveDestination, TaskOp } from '../persistence/TaskOps';
 import { plannedOn } from '../persistence/TaskRefs';
 import { Placement } from '../persistence/utils/Placement';
 import { Outline } from '../parsing/utils/Outline';
@@ -70,9 +70,11 @@ export type FirePlan =
     | { kind: 'failed'; task: Task; error: EvalError | GenerationError }
     | { kind: 'fires'; task: Task; ops: TaskOp[] };
 
-/** A `fire` op, and what its plan answered the last time a write ran it. */
-export interface FireOp {
-    op: Extract<TaskOp, { kind: 'fire' }>;
+/**
+ * A `fire` op, what its plan answered the last time a write ran it, and
+ * which refusals of that write leave the completion to be written alone.
+ */
+export interface FireOp extends CompletionFire {
     /** The plan of the write's last run, or null while no write has run it. */
     planned(): FirePlan | null;
 }
@@ -183,6 +185,15 @@ export class FlowExecutor {
                 },
             },
             planned: () => last,
+            // Lines of the fire that cannot be written where they go take the
+            // completion with them, and the completion is the user's: it is
+            // written alone, as one made in the editor stands when its fire
+            // is refused. Any other refusal is the completion's own.
+            givesWay: (refused) => {
+                const placing = refused.reason.kind === 'unplaceable' || refused.reason.kind === 'disturbs';
+                const planned = last as FirePlan | null;
+                return placing && planned?.kind === 'fires' && planned.ops.length > 0;
+            },
         };
     }
 
