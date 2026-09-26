@@ -59,7 +59,7 @@ describe('a property line deleted', () => {
 
         expect(contents.get(FILE)).toBe(before);
         expect(session.index.getTask(sub)?.content).toBe('sub');
-        expect(Notice.messages).toEqual([t('notice.writeDisturbs', { subject: 'T' })]);
+        expect(Notice.messages).toEqual([t('notice.notWritten', { reason: t('notice.refusedDisturbs'), subject: 'T' })]);
     });
 
     it('is taken out when it stands alone', async () => {

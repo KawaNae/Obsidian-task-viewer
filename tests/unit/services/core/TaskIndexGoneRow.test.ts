@@ -24,7 +24,7 @@ async function session() {
     return { s, contents, id };
 }
 
-const gone = (subject: string) => t('notice.writeTargetGone', { subject });
+const gone = (subject: string) => t('notice.notWritten', { reason: t('notice.refusedGone'), subject });
 
 describe('a write whose row the index no longer holds is told once, as gone', () => {
     it('delete then update on one row: the update is refused with one notice', async () => {

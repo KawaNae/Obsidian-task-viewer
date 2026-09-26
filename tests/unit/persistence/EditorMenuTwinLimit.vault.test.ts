@@ -23,6 +23,7 @@ import type { TaskOp } from '../../../src/services/persistence/TaskOps';
  */
 
 const FILE = 'note.md';
+const CHANGED = t('notice.notWritten', { reason: t('notice.refusedChanged'), subject: '- [ ] 読書' });
 
 let live: VaultSession[] = [];
 
@@ -44,7 +45,7 @@ describe('the editor menu, written to the file, on one of two twin lines', () =>
 
         expect(await session.index.writeLine(FILE, at, [{ kind: 'update', text: '- [x] 読書' }])).toBe(false);
         expect(contents.get(FILE)).toBe(['- [ ] 読書', '- [ ] 読書', ''].join('\n'));
-        expect(Notice.messages).toEqual([t('notice.writeTargetChanged', { subject: '- [ ] 読書' })]);
+        expect(Notice.messages).toEqual([CHANGED]);
     });
 
     it('is refused when an edit from outside took a line away above it since the menu was opened', async () => {
@@ -59,7 +60,7 @@ describe('the editor menu, written to the file, on one of two twin lines', () =>
 
         expect(await session.index.writeLine(FILE, at, [{ kind: 'remove' }])).toBe(false);
         expect(contents.get(FILE)).toBe(['- [ ] 読書', '- [ ] 読書', ''].join('\n'));
-        expect(Notice.messages).toEqual([t('notice.writeTargetChanged', { subject: '- [ ] 読書' })]);
+        expect(Notice.messages).toEqual([CHANGED]);
     });
 
     it('is written when the file reads as the editor showed it', async () => {
@@ -107,7 +108,7 @@ describe('the editor menu, written in the editor, on one of two twin lines', () 
         expect(await writeEditorLine(editor.handle, FILE, at, [{ kind: 'remove' }], host(session))).toBe(false);
 
         expect(editor.lines()).toEqual(['- [ ] 読書', '- [ ] 読書', '']);
-        expect(Notice.messages).toEqual([t('notice.writeTargetChanged', { subject: '- [ ] 読書' })]);
+        expect(Notice.messages).toEqual([CHANGED]);
     });
 
     it('is written to the file when the editor shows another note', async () => {

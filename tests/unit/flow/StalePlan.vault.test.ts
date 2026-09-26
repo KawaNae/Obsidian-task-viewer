@@ -54,7 +54,7 @@ async function check(session: VaultSession, id: string, ...files: string[]): Pro
     await session.flowSettled(FILE, ...files);
 }
 
-const CHANGED = t('notice.writeTargetChanged', { subject: 'A' });
+const CHANGED = t('notice.notWritten', { reason: t('notice.refusedChanged'), subject: 'A' });
 
 /**
  * A card's completion of A over a file edited from outside that no scan has

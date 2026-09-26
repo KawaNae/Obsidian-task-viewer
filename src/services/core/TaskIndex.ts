@@ -12,6 +12,7 @@ import { TaskStore } from './TaskStore';
 import { TaskScanner } from './TaskScanner';
 import { TaskValidator, type ValidationError } from './TaskValidator';
 import { PathTtlWindow } from './PathTtlWindow';
+import { refusalClause } from './RefusalClause';
 import { NotifyCoalescer } from './NotifyCoalescer';
 import { TaskIdGenerator } from '../display/TaskIdGenerator';
 import { TaskParser } from '../parsing/TaskParser';
@@ -778,27 +779,7 @@ export class TaskIndex {
     private reportRefusal(refusal: Refusal): void {
         const { reason, subject, file } = refusal;
         logWarn(`[TaskIndex] write refused: file=${file} reason=${reason.kind} subject=${subject}`);
-        switch (reason.kind) {
-            case 'gone':
-                new Notice(t('notice.writeTargetGone', { subject }));
-                return;
-            case 'changed':
-                new Notice(t('notice.writeTargetChanged', { subject }));
-                return;
-            case 'unplaceable':
-                new Notice(reason.fence === null
-                    ? t('notice.writeTargetUnplaceable', { subject })
-                    : t('notice.writeTargetUnplaceableInFence', { line: reason.fence + 1, subject }));
-                return;
-            case 'disturbs':
-                new Notice(reason.fence === null
-                    ? t('notice.writeDisturbs', { subject })
-                    : t('notice.writeDisturbsInFence', { line: reason.fence + 1, subject }));
-                return;
-            case 'failed':
-                new Notice(t('notice.writeFailed', { subject }));
-                return;
-        }
+        new Notice(t('notice.notWritten', { reason: refusalClause(reason), subject }));
     }
 
 }
