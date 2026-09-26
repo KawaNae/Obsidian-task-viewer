@@ -517,4 +517,33 @@ describe('DocumentTreeBuilder', () => {
             expect((risona.blocks[0] as any).rawLine).toContain('risona');
         });
     });
+
+    describe('見出しの読み（Outline.headings）', () => {
+        it('setext の見出しと 1〜3 字下げの ATX でも節を区切る', () => {
+            const doc = buildFromBody([
+                '- p:: root',
+                '',
+                'Setext',
+                '---',
+                '- [ ] a @2026-03-24',
+                '',
+                ' ## Indented ##',
+                '- [ ] b @2026-03-25',
+            ]);
+            expect(doc.sections.map(s => s.heading && { level: s.heading.level, text: s.heading.text, line: s.heading.line }))
+                .toEqual([null, { level: 2, text: 'Setext', line: 2 }, { level: 2, text: 'Indented', line: 6 }]);
+            expect(doc.sections[0].endLine).toBe(2);
+            expect(doc.sections[1].blocks.map(b => (b as any).rawLine)).toEqual(['- [ ] a @2026-03-24']);
+        });
+
+        it('項目の中の見出しでは節を区切らない', () => {
+            const doc = buildFromBody([
+                '- [ ] a @2026-03-24',
+                '  ## Inside',
+                '- [ ] b @2026-03-25',
+            ]);
+            expect(doc.sections).toHaveLength(1);
+            expect(doc.sections[0].heading).toBeNull();
+        });
+    });
 });

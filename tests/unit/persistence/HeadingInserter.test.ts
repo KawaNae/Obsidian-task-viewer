@@ -226,6 +226,18 @@ describe('HeadingInserter', () => {
             expect(result.insertedLine).toBeGreaterThan(4);
         });
 
+        it('reads the heading as the note does: a setext one, one indented up to three columns, one closed with `#` (F8)', () => {
+            const put = (lines: string[]) => insertFromText(lines.join('\n'), '- [ ] n', 'Tasks', 2).content.split('\n');
+            expect(put(['Tasks', '---', '- [ ] a'])).toEqual(['Tasks', '---', '- [ ] n', '- [ ] a']);
+            expect(put(['text', '', '  ## Tasks', '- [ ] a'])).toEqual(['text', '', '  ## Tasks', '- [ ] n', '- [ ] a']);
+            expect(put(['## Tasks ##', '- [ ] a'])).toEqual(['## Tasks ##', '- [ ] n', '- [ ] a']);
+        });
+
+        it('does not take a heading of another level for the heading', () => {
+            const result = insertFromText(['Tasks', '===', '- [ ] a'].join('\n'), '- [ ] n', 'Tasks', 2);
+            expect(result.content.split('\n')).toEqual(['Tasks', '===', '- [ ] a', '', '## Tasks', '- [ ] n']);
+        });
+
         it('does not take an indented heading-like line for the heading', () => {
             // Indented, it is a line of the task above it, as the parser reads it.
             const content = '- [ ] P\n    ## Tasks\n    - [ ] c\n';

@@ -35,25 +35,17 @@ export class HeadingInserter {
         headerLevel: number
     ): number {
         const out = draft.lines;
-        const headerPrefix = '#'.repeat(headerLevel) + ' ';
-        const fullHeader = headerPrefix + header;
+        const fullHeader = '#'.repeat(headerLevel) + ' ' + header;
 
-        // A heading as the parser reads one: in the body, not in a fence, and
-        // at the start of its line — an indented `## Tasks` is a line of the
-        // task above it, and one inside the frontmatter is YAML.
-        const bodyStart = Outline.bodyStart(out);
-        const outline = Outline.read(out);
-        let headerIndex = -1;
-        for (let i = bodyStart; i < out.length; i++) {
-            if (outline.inCode(i)) continue;
-            if (out[i].trimEnd() === fullHeader) {
-                headerIndex = i;
-                break;
-            }
-        }
+        // A heading as the note reads one (`OutlineReading.headings`): at the
+        // top of the body, not in a fence or an item — an indented `## Tasks`
+        // is a line of the task above it, and one inside the frontmatter is
+        // YAML. The first of its level and text; a setext one is under its
+        // underline.
+        const found = Outline.read(out).headings.find(h => h.level === headerLevel && h.text === header);
 
-        if (headerIndex !== -1) {
-            const spot = Placement.underHeading(out, headerIndex, line);
+        if (found) {
+            const spot = Placement.underHeading(out, found.end - 1, line);
             draft.put(spot, Block.line(line));
             return spot.at;
         }
