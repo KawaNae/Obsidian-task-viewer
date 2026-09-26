@@ -1,9 +1,9 @@
 import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
 import { Notice } from 'obsidian';
-import { openVault, type VaultSession } from '../../../helpers/vaultSession';
-import { t } from '../../../../../src/i18n';
-import type { TaskRepository } from '../../../../../src/services/persistence/TaskRepository';
-import { freezeDate } from '../../../helpers/fakeDate';
+import { openVault, type VaultSession } from '../../helpers/vaultSession';
+import { t } from '../../../../src/i18n';
+import type { TaskRepository } from '../../../../src/services/persistence/TaskRepository';
+import { freezeDate } from '../../helpers/fakeDate';
 
 // Frozen so `==> every mon` on `@2026-09-21` lands on the `@2026-09-28` these
 // tests hard-code, no matter which day the suite runs.
