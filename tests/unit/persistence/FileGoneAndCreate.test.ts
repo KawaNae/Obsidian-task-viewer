@@ -162,4 +162,19 @@ describe('creating a note', () => {
         expect(b.text(NEW)).toBe(CONTENT);
         expect(b.refused).toEqual([]);
     });
+
+    it('appendTaskToFile: a note is made only of lines that read there as put, as when they are appended to an empty note', async () => {
+        // By itself, four spaces make the line code; at the top of a note, unindented, it would be a task.
+        const CODE = '    - [ ] 字下げ';
+        const b = await writeBench({ [FILE]: '' });
+        const create = vi.spyOn(b.app.vault, 'create');
+
+        const appended = await b.writer.appendTaskToFile(FILE, CODE);
+        const made = await b.writer.appendTaskToFile(NEW, CODE);
+
+        expect(appended.refused?.reason).toEqual({ kind: 'unplaceable', fence: null });
+        expect(made.refused).toEqual({ file: NEW, reason: { kind: 'unplaceable', fence: null }, subject: CODE.trim() });
+        expect(create).not.toHaveBeenCalled();
+        expect(b.refused).toHaveLength(2);
+    });
 });
