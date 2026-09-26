@@ -76,11 +76,12 @@ export class GenerationError extends Error {
  * TaskRepository.
  *
  * Fire-consumes semantics: the returned effects ALWAYS remove the command
- * from the original line (strip-flow, or delete-original for move), even
+ * from the original line (strip-flow, or the move that carries it), even
  * when no next instance is generated (until expired / telomere exhausted).
  *
  * Evaluation contexts (do not mix up):
- * - at(expr) and move(target) evaluate against the PRE-shift original task.
+ * - at(expr) evaluates against the PRE-shift original task. move() is not
+ *   evaluated: where it goes is read off how it is written (`MoveTarget`).
  * - set(field: expr) evaluates against the POST-shift new instance; all
  *   right-hand sides see the same snapshot, then apply at once (no chaining).
  *
@@ -132,10 +133,9 @@ export function planFlow(task: Task, program: FlowProgram, deps: FlowPlanDeps): 
     }
 
     if (program.move) {
-        const destPath = program.move.target ? normalizeDestination(evalExpr(program.move.target, preCtx)) : task.file;
-        const archivedTask: Task = { ...task, flow: undefined, blockId: undefined };
-        effects.push({ kind: 'archive-to', destPath, archivedTask });
-        effects.push({ kind: 'delete-original', destPath });
+        // Where to is the parser's answer, read off how the clause is
+        // written; nothing of it is evaluated.
+        effects.push({ kind: 'move', to: program.move.to, movedTask: { ...task, flow: undefined, blockId: undefined } });
     } else {
         effects.push({ kind: 'strip-flow' });
     }

@@ -195,7 +195,7 @@ describe('the next instance (insert-instance, groupHead)', () => {
 
 describe('a move within the note (move-to-end, end)', () => {
     it('writes nothing when taking the task away would put a task below under another', async () => {
-        const { contents, session } = await open(['# n', '- [x] a', ' - [ ] X @2026-09-21 ==> move([[note]])', '  1. [ ] u', '']);
+        const { contents, session } = await open(['# n', '- [x] a', ' - [ ] X @2026-09-21 ==> move()', '  1. [ ] u', '']);
         // ` - [ ] X` stands at the top; `  1. [ ] u` is no child of it (its
         // content is at 3). Taken away, X leaves u under a.
         expect(parents(session)).toEqual([['a', null], ['X', null], ['u', null]]);

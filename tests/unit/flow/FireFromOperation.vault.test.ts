@@ -217,21 +217,18 @@ describe('a card\'s completion', () => {
         expect(note.fired).toEqual([]);
     });
 
-    it('keeps the command of a move to another file that has not landed, for a write before the scan', async () => {
-        // The completing write of a move to another file consumes nothing:
-        // its command stays on the row until the source's write takes the row
-        // away. The destination refused here, the row stays with it, and the
-        // copy has to say so, or the next card's write drops the command.
+    it('keeps the command of a move that does not fire, for a write before the scan', async () => {
+        // A move that names another note is retired: the completing write
+        // consumes nothing, and the command stays on the row. The copy has to
+        // say so, or the next card's write drops the command.
         const note = await open(['# note', '- [ ] T @2026-09-21 ==> move([[other]])', '- [ ] U', '']);
-        const repository = (note.session.index as unknown as { repository: { appendArchive: () => Promise<boolean> } }).repository;
-        repository.appendArchive = async () => false;
         const id = note.idOf('T');
         note.session.holdScans();
 
         expect(await note.session.index.updateTask(id, { statusChar: 'x' })).toBe(true);
         expect(await note.session.index.updateTask(id, { content: 'T2' })).toBe(true);
 
-        expect(note.fired).toEqual(['T']);
+        expect(note.fired).toEqual([]);
         expect(note.contents.get(FILE)!.split('\n')).toEqual([
             '# note', '- [x] T2 @2026-09-21 ==> move([[other]])', '- [ ] U', '',
         ]);
@@ -240,7 +237,7 @@ describe('a card\'s completion', () => {
 
 describe('a move within the note, completed in the editor', () => {
     it('carries the row to the end in the same transaction, with the cursor on it', async () => {
-        const note = await open(['# note', '- [ ] T @2026-09-21 ==> move([[note]])', '	- [ ] c', '- [ ] U', '']);
+        const note = await open(['# note', '- [ ] T @2026-09-21 ==> move()', '	- [ ] c', '- [ ] U', '']);
 
         note.editor.check(1);
 
@@ -273,12 +270,9 @@ describe('the editor menu\'s rewrite of a line, written to the file when the edi
         expect(note.fired).toEqual([]);
     });
 
-    it('moves the line to another file, and takes the original away in the file, when the editor closed before the menu wrote', async () => {
-        // The source's write is made at the line the completing write left
-        // the row on, in the content it left (`fireOp`'s `source.key`): right
-        // only while the fire is the last op of that write.
-        const lines = ['# note', '- [ ] T @2026-09-21 ==> move([[other]])', '\t- [ ] c', '- [ ] U', ''];
-        const { contents, session } = await openVault({ [FILE]: lines, 'other.md': ['# other', ''] });
+    it('moves the line within the note, in the file, when the editor closed before the menu wrote', async () => {
+        const lines = ['# note', '- [ ] T @2026-09-21 ==> move([[#Done]])', '\t- [ ] c', '- [ ] U', '## Done', ''];
+        const { contents, session } = await openVault({ [FILE]: lines });
         live = session;
         const editor = editorSession(session.index.editorFireHost(), FILE, lines.join('\n'));
         const at = { line: 1, text: lines[1], key: keyOf(editor.state.doc) };
@@ -289,8 +283,7 @@ describe('the editor menu\'s rewrite of a line, written to the file when the edi
             writeLine: (path: string, line: EditorLine, ops: readonly TaskOp[]) => session.index.writeLine(path, line, ops),
         })).toBe(true);
 
-        expect(contents.get('other.md')).toBe(['# other', '- [x] T @2026-09-21', '\t- [ ] c', ''].join('\n'));
-        expect(contents.get(FILE)).toBe(['# note', '- [ ] U', ''].join('\n'));
+        expect(contents.get(FILE)).toBe(['# note', '- [ ] U', '## Done', '- [x] T @2026-09-21', '\t- [ ] c', ''].join('\n'));
         expect(editor.lines()).toEqual(lines);
         expect(Notice.messages).toEqual([]);
     });

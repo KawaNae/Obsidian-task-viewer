@@ -54,14 +54,14 @@ describe('FlowPlanner', () => {
             expect(effects.map(e => e.kind)).toEqual(['create-next', 'strip-flow']);
         });
 
-        it('move alone: archive-to then delete-original', () => {
-            const effects = plan('move([[Archive]])');
-            expect(effects.map(e => e.kind)).toEqual(['archive-to', 'delete-original']);
+        it('move alone: move', () => {
+            const effects = plan('move()');
+            expect(effects.map(e => e.kind)).toEqual(['move']);
         });
 
-        it('repeat + move: create-next, archive-to, delete-original', () => {
-            const effects = plan('every mon move([[Log]])', { startDate: '2026-06-29' });
-            expect(effects.map(e => e.kind)).toEqual(['create-next', 'archive-to', 'delete-original']);
+        it('repeat + move: create-next, move', () => {
+            const effects = plan('every mon move([[#Log]])', { startDate: '2026-06-29' });
+            expect(effects.map(e => e.kind)).toEqual(['create-next', 'move']);
         });
     });
 
@@ -330,24 +330,19 @@ describe('FlowPlanner', () => {
     });
 
     describe('move', () => {
-        it('normalizes the destination path', () => {
-            const effects = plan('move([[Archive/Done:2026]])');
-            const archive = effects.find(e => e.kind === 'archive-to');
-            expect(archive).toMatchObject({ destPath: 'Archive/Done_2026.md' });
+        it('goes where the parser read it goes, evaluating nothing', () => {
+            const to = (src: string) => plan(src).find(e => e.kind === 'move');
+            expect(to('move()')).toMatchObject({ to: { kind: 'end' } });
+            expect(to('move([[#Done|d]])')).toMatchObject({ to: { kind: 'heading', name: 'Done' } });
+            // Refused where the fire is planned against the note (`FlowExecutor.planTask`).
+            expect(to('move([[Log/]] + file.name)')).toMatchObject({ to: { kind: 'retired' } });
         });
 
-        it('strips flow and ids from the archived task', () => {
-            const effects = plan('move([[Archive]])', { blockId: 'xyz' });
-            const archive = effects.find(e => e.kind === 'archive-to');
-            if (archive?.kind !== 'archive-to') throw new Error('no archive-to');
-            expect(archive.archivedTask.flow).toBeUndefined();
-            expect(archive.archivedTask.blockId).toBeUndefined();
-        });
-
-        it('supports expression destinations', () => {
-            const effects = plan('move([[Log/]] + file.name)', { file: 'Projects/note.md' });
-            const archive = effects.find(e => e.kind === 'archive-to');
-            expect(archive).toMatchObject({ destPath: 'Log/note.md' });
+        it('strips flow and ids from the moved task', () => {
+            const move = plan('move()', { blockId: 'xyz' }).find(e => e.kind === 'move');
+            if (move?.kind !== 'move') throw new Error('no move');
+            expect(move.movedTask.flow).toBeUndefined();
+            expect(move.movedTask.blockId).toBeUndefined();
         });
     });
 

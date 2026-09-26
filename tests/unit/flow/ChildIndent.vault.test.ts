@@ -111,81 +111,30 @@ describe.each(NOT_A_CHILD)('a line of the subtree %s', (_name, line, unit) => {
  * landed seven past the task's new row, four past its content, a paragraph
  * line (the fourth L2 counterexample run, G3, M14).
  */
-describe('a child carried by a move to another note', () => {
-    it('stays the moved task\'s child', async () => {
-        const contents = new Map([
-            [FILE, ['# note', '- [ ] P', '\t- [ ] X @2026-09-21 ==> move([[other]])', '        - [ ] c', ''].join('\n')],
-            ['other.md', '# other\n'],
-        ]);
-        live = vaultSession(contents);
-        await live.scanAll();
-        const session = live;
-
-        expect(await session.index.updateTask(taskWorded(session, 'X').id, { statusChar: 'x' })).toBe(true);
-        await session.settle(FILE);
-        await session.settle('other.md');
-
-        const moved = session.index.getTasks().filter(task => task.file === 'other.md');
-        const c = moved.find(task => task.content === 'c');
-        expect(c?.parentId).toBe(moved.find(task => task.content === 'X')?.id);
-    });
-
-    // Tab and spaces mixed both ways, to another note and within the note
-    // (`move-to-end`): the child is written as many columns past the moved
+describe('a child carried by a move within the note', () => {
+    // Tab and spaces mixed both ways, to the end of the note and to a
+    // heading's section: the child is written as many columns past the moved
     // row as it stood past the task, in spaces where the characters cut off
     // would not keep them.
     it.each([
-        ['under a tab, eight spaces', '\t- [ ] X @2026-09-21 ==> move([[DEST]])', '        - [ ] c', '    - [ ] c'],
-        ['under four spaces, a tab and two spaces', '    - [ ] X @2026-09-21 ==> move([[DEST]])', '\t  - [ ] c', '  - [ ] c'],
-        ['under a tab, a tab (unchanged bytes)', '\t- [ ] X @2026-09-21 ==> move([[DEST]])', '\t\t- [ ] c', '\t- [ ] c'],
-    ])('%s: stays the child, to another note and within the note', async (_name, row, child, written) => {
-        for (const dest of ['other', 'note']) {
+        ['under a tab, eight spaces', '\t- [ ] X @2026-09-21 ==> DEST', '        - [ ] c', '    - [ ] c'],
+        ['under four spaces, a tab and two spaces', '    - [ ] X @2026-09-21 ==> DEST', '\t  - [ ] c', '  - [ ] c'],
+        ['under a tab, a tab (unchanged bytes)', '\t- [ ] X @2026-09-21 ==> DEST', '\t\t- [ ] c', '\t- [ ] c'],
+    ])('%s: stays the child, to the end and to a heading', async (_name, row, child, written) => {
+        for (const dest of ['move()', 'move([[#Done]])']) {
             live?.dispose();
-            const contents = new Map([
-                [FILE, ['# note', '- [ ] P', row.replace('DEST', dest), child, ''].join('\n')],
-                ['other.md', '# other\n'],
-            ]);
+            const contents = new Map([[FILE, ['# note', '- [ ] P', row.replace('DEST', dest), child, '## Done', ''].join('\n')]]);
             live = vaultSession(contents);
             await live.scanAll();
             const session = live;
 
             expect(await session.index.updateTask(taskWorded(session, 'X').id, { statusChar: 'x' })).toBe(true);
             await session.settle(FILE);
-            await session.settle('other.md');
 
-            const target = `${dest}.md`;
-            const lines = contents.get(target)!.split('\n');
-            expect(lines.slice(-3)).toEqual(['- [x] X @2026-09-21', written, '']);
-            const moved = session.index.getTasks().filter(task => task.file === target);
-            expect(moved.find(task => task.content === 'c')?.parentId).toBe(moved.find(task => task.content === 'X')?.id);
+            const lines = contents.get(FILE)!.split('\n');
+            expect(lines.slice(-4)).toEqual(['## Done', '- [x] X @2026-09-21', written, '']);
+            expect(taskWorded(session, 'c').parentId).toBe(taskWorded(session, 'X').id);
             expect(Notice.messages).toEqual([]);
         }
-    });
-});
-
-/**
- * A move to a note that does not exist yet makes the note of the moved row
- * and its children, at the top as a put at a note's end writes them
- * (`Block.at`). Written with the row's own indentation, the row was indented
- * code at the top of the new note, and its children with it (found on the
- * device, 2026-09-24).
- */
-describe('a move to a note that does not exist yet', () => {
-    it.each([
-        ['under a tab, eight spaces', '\t- [ ] X @2026-09-21 ==> move([[fresh]])', '        - [ ] c', '    - [ ] c'],
-        ['under four spaces, a tab and two spaces', '    - [ ] X @2026-09-21 ==> move([[fresh]])', '\t  - [ ] c', '  - [ ] c'],
-    ])('%s: writes the row at the top and the child under it', async (_name, row, child, written) => {
-        const contents = new Map([[FILE, ['# note', '- [ ] P', row, child, ''].join('\n')]]);
-        live = vaultSession(contents);
-        await live.scanAll();
-        const session = live;
-
-        expect(await session.index.updateTask(taskWorded(session, 'X').id, { statusChar: 'x' })).toBe(true);
-        await session.settle(FILE);
-        await session.settle('fresh.md');
-
-        expect(contents.get('fresh.md')!.split('\n')).toEqual(['- [x] X @2026-09-21', written]);
-        const moved = session.index.getTasks().filter(task => task.file === 'fresh.md');
-        expect(moved.find(task => task.content === 'c')?.parentId).toBe(moved.find(task => task.content === 'X')?.id);
     });
 });

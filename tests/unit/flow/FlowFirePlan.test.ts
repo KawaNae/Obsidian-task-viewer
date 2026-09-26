@@ -86,15 +86,15 @@ describe('FlowExecutor.planFire: a completion planned from the lines the write h
         expect(plan.kind).toBe('failed');
     });
 
-    it('holds a move to another file apart: nothing in the completing write, the source\'s ops after', () => {
-        const lines = ['- [x] T @2026-08-17 ==> move("archive")', '    - c'];
-        const plan = executor().planFire(FILE, lines, 0);
-        expect(plan.kind).toBe('fires');
-        if (plan.kind !== 'fires') return;
-        expect(plan.ops).toEqual([]);
-        expect(plan.away?.destPath).toBe('archive.md');
-        expect(plan.away?.content).toBe('- [x] T @2026-08-17');
-        expect(plan.away?.ops.map(op => op.kind)).toEqual(['remove']);
+    it('fails a move that names another note, and a heading that is not one, from the lines it is handed', () => {
+        const retired = executor().planFire(FILE, ['- [x] T @2026-08-17 ==> move("archive")', '    - c'], 0);
+        expect(retired.kind === 'failed' && retired.error.code).toBe('eval.move-retired');
+        const none = executor().planFire(FILE, ['- [x] T @2026-08-17 ==> move([[#Done]])', '## Other'], 0);
+        expect(none.kind === 'failed' && none.error.code).toBe('eval.move-no-heading');
+        const many = executor().planFire(FILE, ['- [x] T @2026-08-17 ==> move([[#Done]])', '## Done', '# done'], 0);
+        expect(many.kind === 'failed' && many.error.code).toBe('eval.move-heading-ambiguous');
+        const one = executor().planFire(FILE, ['- [x] T @2026-08-17 ==> move([[#Done]])', '## Done'], 0);
+        expect(one.kind === 'fires' && one.ops).toEqual([{ kind: 'move', text: '- [x] T @2026-08-17', to: { kind: 'heading', name: 'Done' } }]);
     });
 });
 

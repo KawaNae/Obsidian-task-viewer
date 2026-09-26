@@ -93,7 +93,7 @@ describe('the origin half of a move says what it did', () => {
     it('says the lines were carried, when the destination is this same file', async () => {
         const b = await writeBench(['# note', moving, '## archive', '']);
 
-        await b.writer.applyToTask(plannedOn(b.taskAt(1)), [{ kind: 'move-to-end', text: '- [x] 移動する @2026-09-21' }]);
+        await b.writer.applyToTask(plannedOn(b.taskAt(1)), [{ kind: 'move', to: { kind: 'end' }, text: '- [x] 移動する @2026-09-21' }]);
 
         expect(b.lines()).toEqual(['# note', '## archive', '- [x] 移動する @2026-09-21', '']);
         expect(only(b.filed).edits.map(edit => edit.kind)).toEqual(['carried', 'replaced', 'removed']);

@@ -18,7 +18,6 @@ freezeDate(new Date(2026, 8, 25, 12, 0, 0));
  */
 
 const FILE = 'note.md';
-const ARCHIVE = 'archive.md';
 
 let live: VaultSession | undefined;
 
@@ -51,7 +50,7 @@ async function complete(session: VaultSession, content: string, ...paths: string
 describe('a subtree with a blank line inside it', () => {
     it('moves whole within the file, every row keeping its ID (C-3)', async () => {
         const { contents, session } = await open({
-            [FILE]: ['# note', '- [ ] 対象 @2026-09-21 ==> move([[note]])', '\t- [ ] 子1', '', '\t- [ ] 子2', '- [ ] 下', ''],
+            [FILE]: ['# note', '- [ ] 対象 @2026-09-21 ==> move()', '\t- [ ] 子1', '', '\t- [ ] 子2', '- [ ] 下', ''],
         });
         const held = { target: idOf(session, '対象'), first: idOf(session, '子1'), second: idOf(session, '子2') };
 
@@ -66,17 +65,15 @@ describe('a subtree with a blank line inside it', () => {
         expect(Notice.messages).toEqual([]);
     });
 
-    it('moves whole to another file, and nothing of it stays behind', async () => {
+    it('moves whole to a heading of the note, and nothing of it stays behind', async () => {
         const { contents, session } = await open({
-            [FILE]: ['# note', '- [ ] 対象 @2026-09-21 ==> move([[archive]])', '\t- [ ] 子1', '', '\t- [ ] 子2', '- [ ] 下', ''],
-            [ARCHIVE]: ['# archive', ''],
+            [FILE]: ['# note', '- [ ] 対象 @2026-09-21 ==> move([[#Done]])', '\t- [ ] 子1', '', '\t- [ ] 子2', '- [ ] 下', '## Done', ''],
         });
 
-        await complete(session, '対象', ARCHIVE);
+        await complete(session, '対象');
 
-        expect(contents.get(FILE)).toBe(['# note', '- [ ] 下', ''].join('\n'));
-        expect(contents.get(ARCHIVE)).toBe(
-            ['# archive', '- [x] 対象 @2026-09-21', '\t- [ ] 子1', '', '\t- [ ] 子2', ''].join('\n'),
+        expect(contents.get(FILE)).toBe(
+            ['# note', '- [ ] 下', '## Done', '- [x] 対象 @2026-09-21', '\t- [ ] 子1', '', '\t- [ ] 子2', ''].join('\n'),
         );
         expect(Notice.messages).toEqual([]);
     });
@@ -124,7 +121,7 @@ describe('a fence below a blank line whose closing line is at column 0 (Obsidian
     });
 
     it('refuses a move to the end of the note, which ends inside the fence U is in', async () => {
-        const note = ['# note', '- [ ] T @2026-09-21 ==> move([[note]])', '', '  ```js', 'code', '```', '- [ ] U', ''];
+        const note = ['# note', '- [ ] T @2026-09-21 ==> move()', '', '  ```js', 'code', '```', '- [ ] U', ''];
         const { contents, session } = await open({ [FILE]: note });
         const before = contents.get(FILE)!;
         const t = idOf(session, 'T');

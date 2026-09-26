@@ -43,8 +43,8 @@ const followed = (session: VaultSession, ids: string[]): Array<string | undefine
     ids.map(id => session.index.getTask(id)?.id);
 
 const COMMANDS: Array<[string, string]> = [
-    ['a move alone', 'move([[note]])'],
-    ['a next instance and a move', 'every mon move([[note]])'],
+    ['a move alone', 'move()'],
+    ['a next instance and a move', 'every mon move()'],
 ];
 
 describe.each(COMMANDS)('%s within the same file', (_name, command) => {

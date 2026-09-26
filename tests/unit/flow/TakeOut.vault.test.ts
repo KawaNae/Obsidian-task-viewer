@@ -92,7 +92,7 @@ describe('a command line stripped by a fire', () => {
 
 describe('a move that leaves its command line behind', () => {
     it('is refused, the whole fire with it, when a child stands below the command', async () => {
-        const { contents, session } = await open(['# note', '- [ ] X @2026-09-21', '\t- ==> move([[note]])', '\t\t- [ ] sub ^s', '- [ ] U', '']);
+        const { contents, session } = await open(['# note', '- [ ] X @2026-09-21', '\t- ==> move()', '\t\t- [ ] sub ^s', '- [ ] U', '']);
         const before = contents.get(FILE)!;
         const sub = idOf(session, 'sub');
 
