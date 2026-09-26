@@ -28,12 +28,11 @@ function buildHost(task: Task, written = true) {
             reportUnfired: () => { },
         },
         writeCompleting: proto.writeCompleting,
-        scanner: { requestScan: vi.fn(async () => {}), follow: () => null },
+        scanner: { requestScan: vi.fn(async () => {}), follow: () => null, holds: () => false },
         app: { vault: { getAbstractFileByPath: () => null } },
         repository: {
             updateTaskInFile: vi.fn(async () => ({ written, refused: null })),
         },
-        draggingFilePath: null,
         // The revert lives on the prototype; the host stands in for `this`.
         revertUnwrittenUpdate: proto.revertUnwrittenUpdate,
         onRow: proto.onRow,

@@ -55,12 +55,12 @@ export class DragSession {
      *
      * 1. Strategy の onUp を await（finish*Move/Resize 内部で commitPlan）
      * 2. notifyImmediate で onChange の coalesce/partial に乗せる
-     * 3. draggingFile を 1 frame 遅延で解除（metadataCache.changed の遅延
-     *    イベントで自分自身の書き戻しを除外するため）。このフレームは
-     *    **container の window** から取る: 素の rAF は main window のクロック
-     *    なので、popout でドラッグしている最中に main が最小化されていると
-     *    永久に発火せず、draggingFilePath が残留して以後の外部変更が恒久的に
-     *    スキップされる。
+     * 3. draggingFile を 1 frame 遅延で解除する。解除すると、ドラッグ中に
+     *    保留したファイルの読み（確定の書き込みを含む）を入れて通知する
+     *    （`TaskIndex.setDraggingFile`）。このフレームは **container の
+     *    window** から取る: 素の rAF は main window のクロックなので、popout
+     *    でドラッグしている最中に main が最小化されていると永久に発火せず、
+     *    そのファイルの読みが以後ずっと保留される。
      *
      * drag 完了時の合成 click による誤 deselect は SelectionController が
      * `pointerdown` で deselect するように設計されているため構造的に発生

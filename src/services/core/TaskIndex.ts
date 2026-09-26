@@ -37,13 +37,6 @@ export class TaskIndex {
     private commandExecutor: FlowExecutor;
     private settings: TaskViewerSettings;
     private parseFingerprint: string;
-    private draggingFilePath: string | null = null;  // ドラッグ中のファイルパス
-
-    /**
-     * ドラッグ中に読み飛ばした変更のパス。終了時に読み直すために覚えておく。
-     * 常に `draggingFilePath` と同じ。
-     */
-    private skippedDuringDrag: string | null = null;
 
     /**
      * `dispose` 済みか。閉じたあとの書き込みは行わず、できなかったと答える。
@@ -115,20 +108,15 @@ export class TaskIndex {
         // Vault イベントハンドラー
         this.own(this.app.vault, this.app.vault.on('modify', async (file) => {
             if (file instanceof TFile && file.extension === 'md') {
-                // ドラッグ中のファイルはスキャンをスキップ（古い値でストアが上書きされるのを防止）。
-                // 飛ばしたことは覚えておき、ドラッグの終了時に読み直す。忘れると、
-                // その間に届いた変更を読む契機がどこにも無くなる。
-                if (this.draggingFilePath === file.path) {
-                    this.skippedDuringDrag = file.path;
-                    return;
-                }
-
+                // The file being dragged is read, but its reading is held back
+                // from the store until the drag ends (`TaskScanner.hold`).
                 await this.scanner.queueScan(file);
                 // Skip notify when an API write (withNotify) is in flight for this
                 // file — withNotify's own notifyImmediate is the authoritative notify.
                 // Editor direct edits (no withNotify) are unaffected: the API
-                // window is only marked during API CRUD operations.
-                if (!this.apiWrites.has(file.path)) {
+                // window is only marked during API CRUD operations. Nor for the
+                // file being dragged: the drag draws it, and its end notifies.
+                if (!this.apiWrites.has(file.path) && !this.scanner.holds(file.path)) {
                     this.notify.schedule();
                 }
             }
@@ -151,10 +139,6 @@ export class TaskIndex {
 
         this.own(this.app.metadataCache, this.app.metadataCache.on('changed', (file) => {
             if (file instanceof TFile && file.extension === 'md') {
-                // ドラッグ中のファイルはスキャンをスキップ
-                if (this.draggingFilePath === file.path) {
-                    return;
-                }
                 // `changed` follows every write, and mostly echoes a change
                 // the file's `modify` already had scanned — ours, someone
                 // else's, or the drag's own commit read when the drag ended.
@@ -182,11 +166,7 @@ export class TaskIndex {
                 return;
             }
 
-            // md → md（通常のリネーム）
-            if (this.draggingFilePath === oldPath) {
-                this.draggingFilePath = null;
-            }
-
+            // md → md（通常のリネーム）。ドラッグ中のファイルなら、保留も外れる。
             this.store.removeTasksByFile(oldPath);
             this.scanner.handleFileRenamed(oldPath, file.path);
 
@@ -215,14 +195,12 @@ export class TaskIndex {
     /**
      * A write of ours landed in `path`: the index reads what it left now,
      * rather than when the scan its `modify` starts gets there, so the next
-     * operation plans from the file as it is. Not read for the file being
-     * dragged, as that file's scans are not, and read when the drag ends; the
+     * operation plans from the file as it is. For the file being dragged the
+     * reading is held back like any other of it (`TaskScanner.hold`); the
      * write's report is kept all the same, to follow names across it.
      */
     private landed(path: string, landing: Landing): void {
-        const dragging = this.draggingFilePath === path;
-        if (dragging) this.skippedDuringDrag = path;
-        if (this.scanner.landed(path, landing, !dragging)) this.notify.schedule();
+        if (this.scanner.landed(path, landing)) this.notify.schedule();
     }
 
     /** Read the file back into the store, then notify. */
@@ -246,28 +224,20 @@ export class TaskIndex {
     // ===== ドラッグ制御 =====
 
     /**
-     * ドラッグ中のファイルパスを設定する。
-     * 指定されたファイルのスキャンをスキップし、ストアの上書きを防止。
+     * ドラッグ中のファイルパスを設定する。そのファイルの読みは、誰が読んだ
+     * ものも store に入れずに保留する（`TaskScanner.hold`）。ドラッグは
+     * store の写しを描いているので、古い値で上書きしない。
      * 通知は呼び出し元（DragHandler）が notifyImmediate で明示的に行う。
      *
-     * 終了時（null）には、その間に飛ばした変更を読み直す。ドラッグ確定の
-     * 書き込みもここに含まれる: `DragSession.handleUp` は commit を待ってから
-     * rAF でこのフラグを下ろすので、確定の modify は必ず飛ばされる側に入る。
-     * 読み直さないと、ストアはドラッグ前の読みのまま残る。外から書き換え
-     * られた場合も同じである。
+     * 終了時（null）には、保留した読みがあればファイルを読み直して入れ、
+     * 通知する。ドラッグ確定の書き込みもここに含まれる: `DragSession.handleUp`
+     * は commit を待ってからこれを下ろすので、確定の書き込みの読みは必ず
+     * 保留される側に入る。
      */
     setDraggingFile(filePath: string | null): void {
-        this.draggingFilePath = filePath;
-        if (filePath !== null) return;
-
-        const skipped = this.skippedDuringDrag;
-        this.skippedDuringDrag = null;
-        if (!skipped) return;
-
-        const file = this.app.vault.getAbstractFileByPath(skipped);
-        if (file instanceof TFile) {
-            void this.rescanAndNotify(file);
-        }
+        void this.scanner.hold(filePath).then(committed => {
+            if (committed) this.notify.schedule();
+        });
     }
 
     // ===== 設定 =====
@@ -304,7 +274,6 @@ export class TaskIndex {
      */
     dispose(): void {
         this.disposed = true;
-        this.skippedDuringDrag = null;
         for (const { emitter, ref } of this.eventRefs) emitter.offref(ref);
         this.eventRefs = [];
         this.repository.disconnect();
@@ -476,7 +445,7 @@ export class TaskIndex {
         this.store.bumpRevision();
 
         // ドラッグ中のファイルはnotifyをスキップ（ドラッグ終了時にsetDraggingFile(null)で一括通知）
-        if (this.draggingFilePath !== task.file) {
+        if (!this.scanner.holds(task.file)) {
             this.store.notifyListeners(taskId, Object.keys(updates));
         }
 
@@ -599,7 +568,7 @@ export class TaskIndex {
             target[key] = source[key];
         }
         this.store.bumpRevision();
-        if (this.draggingFilePath !== task.file) {
+        if (!this.scanner.holds(task.file)) {
             this.store.notifyListeners(taskId, Object.keys(updates));
         }
 

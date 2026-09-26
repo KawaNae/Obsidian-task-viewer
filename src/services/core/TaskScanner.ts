@@ -1,4 +1,4 @@
-import type { App, TFile } from 'obsidian';
+import { type App, TFile } from 'obsidian';
 import { FileParsePipeline } from '../parsing/FileParsePipeline';
 import type { TaskStore } from './TaskStore';
 import type { TaskValidator } from './TaskValidator';
@@ -62,6 +62,13 @@ export class TaskScanner {
 
     /** Our own writes to each file, to follow a name across them (`follow`). */
     private links = new WriteLinks();
+
+    /**
+     * The file whose readings are not taken into the store now (`hold`), and
+     * whether one was held back since: the file being dragged, whose store
+     * copy the drag draws from until it ends.
+     */
+    private holding: { path: string; held: boolean } | null = null;
     constructor(
         private app: App,
         private store: TaskStore,
@@ -190,9 +197,9 @@ export class TaskScanner {
      * here before the next is handed its lines (`processOrFail`), so a write
      * handed a content that reading is not was handed a change nobody
      * reported, and what came before is not followed across it. What it left
-     * is a number given, committed or not (`commit`: the file being dragged
-     * is not), and it is late like any other reading: a scan that read the
-     * file after the write got its number first.
+     * is a number given, committed or not (`commit`: the file held is not),
+     * and it is late like any other reading: a scan that read the file after
+     * the write got its number first.
      *
      * The write left reading `n` only if reading `n` is its lines: the number
      * is given here, or the late scan that took it read what the write left.
@@ -200,7 +207,7 @@ export class TaskScanner {
      * and a row the write carried to a line of its own lines is not the row on
      * that line of the scan's: nothing is followed across the write.
      */
-    landed(path: string, landing: Landing, commit = true): boolean {
+    landed(path: string, landing: Landing): boolean {
         const { handed } = landing;
         const last = this.readingOf(path);
         const from = contentKeyOf(landing.before);
@@ -211,9 +218,7 @@ export class TaskScanner {
         this.links.wrote(path, start, from, to, landing.before.length, landing.edits);
         if (n <= last.n) return false;
         this.numbers.set(path, { n, key: to });
-        if (!commit) return false;
-        this.commit(path, [...landing.lines], n, to, landing.reading ?? undefined);
-        return true;
+        return this.commit(path, [...landing.lines], n, to, landing.reading ?? undefined);
     }
 
     /**
@@ -279,8 +284,9 @@ export class TaskScanner {
      *
      * A content the reading with the last number read is that reading: it
      * takes no new number, and is committed only when the store does not hold
-     * it — a write to the file being dragged — or the file is to be read again
-     * whatever it read (`stale`). Parsed again, its rows keep their names.
+     * it — a reading of the file held, or of a write to it — or the file is
+     * to be read again whatever it read (`stale`). Parsed again, its rows
+     * keep their names.
      */
     private scanned(path: string, lines: string[], after: number): boolean {
         const last = this.readingOf(path);
@@ -288,19 +294,47 @@ export class TaskScanner {
         const key = contentKeyOf(lines);
         if (last.key !== key) {
             this.numbers.set(path, { n: after + 1, key });
-            this.commit(path, lines, after + 1, key);
-            return true;
+            return this.commit(path, lines, after + 1, key);
         }
         if (this.committed.get(path) === last.n && !this.stale.has(path)) return false;
-        this.commit(path, lines, last.n, key);
-        return true;
+        return this.commit(path, lines, last.n, key);
     }
 
     /**
-     * Put reading `n` of `path`, `lines` of content `key`, in the store. `reading`
-     * is a reading of these lines already made.
+     * Hold back every reading of `path` from the store from now on, or of no
+     * file (null), and let go of the file held before: the file being
+     * dragged. When a reading of that file was held back, it is read again
+     * and committed then (`scanned`: its last reading is not the committed
+     * one). Whether that committed.
+     *
+     * The one place that answers whether a file's reading may go in the
+     * store now is `commit`, whoever read it: a change from outside, the
+     * `changed` after it, a write of ours landing, or a caller asking for
+     * the file again (`requestScan`).
      */
-    private commit(path: string, lines: string[], n: number, key: ContentKey, reading?: OutlineReading): void {
+    hold(path: string | null): Promise<boolean> {
+        const released = this.holding;
+        this.holding = path === null ? null : { path, held: false };
+        if (!released?.held) return Promise.resolve(false);
+        const file = this.app.vault.getAbstractFileByPath(released.path);
+        return file instanceof TFile ? this.queue(file) : Promise.resolve(false);
+    }
+
+    /** Whether readings of `path` are held back now (`hold`). */
+    holds(path: string): boolean {
+        return this.holding?.path === path;
+    }
+
+    /**
+     * Put reading `n` of `path`, `lines` of content `key`, in the store, unless
+     * the file is held (`hold`). `reading` is a reading of these lines already
+     * made. Whether it went in.
+     */
+    private commit(path: string, lines: string[], n: number, key: ContentKey, reading?: OutlineReading): boolean {
+        if (this.holding?.path === path) {
+            this.holding.held = true;
+            return false;
+        }
         const file = { path };
         this.validator.clearErrorsForFile(file.path);
 
@@ -311,7 +345,7 @@ export class TaskScanner {
             this.store.removeTasksByFile(file.path);
             this.links.drop(file.path);
             this.readRead(file.path, n);
-            return;
+            return true;
         }
 
         // --- name ---
@@ -355,6 +389,7 @@ export class TaskScanner {
         } finally {
             this.store.endBatch();
         }
+        return true;
     }
 
     /** Reading `n` of `path` is committed. */
@@ -381,8 +416,12 @@ export class TaskScanner {
         this.forget(path);
     }
 
-    /** Let go of what was read of `path`, but the last number given. */
+    /**
+     * Let go of what was read of `path`, but the last number given, and of
+     * holding it: a file renamed or deleted is not the one being dragged.
+     */
     private forget(path: string): void {
+        if (this.holding?.path === path) this.holding = null;
         const last = this.numbers.get(path);
         if (last !== undefined) this.numbers.set(path, { n: last.n, key: undefined });
         this.committed.delete(path);
