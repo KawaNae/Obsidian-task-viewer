@@ -64,6 +64,36 @@ describe('a completion whose fire would disturb the note', () => {
 });
 
 /**
+ * A completion whose fire could not be planned is written, and told in the
+ * same words as one whose fire's write was refused: the task was completed,
+ * the flow was not run, and why (`FlowExecutor.reportNotRun`).
+ */
+describe('a completion whose fire could not be planned', () => {
+    const FAILS = ['# note', '- [ ] A @2026-09-21 ==> at(end + 1d)', ''];
+    const told = /^The task was completed, but its flow was not run: Property 'end' is not set on this task.* \(A\)$/;
+
+    it('is written, and told the flow was not run, from a card', async () => {
+        const note = await open(FAILS);
+        const id = note.session.index.getTasks().find(t => t.content === 'A')!.id;
+        expect(await note.session.index.updateTask(id, { statusChar: 'x' })).toBe(true);
+        await note.session.flowSettled(FILE);
+        expect(note.contents.get(FILE)).toBe(['# note', '- [x] A @2026-09-21 ==> at(end + 1d)', ''].join('\n'));
+        expect(Notice.messages).toHaveLength(1);
+        expect(Notice.messages[0]).toMatch(told);
+    });
+
+    it('stands in the editor, told the same', async () => {
+        const note = await open(FAILS);
+        const editor = editorSession(note.session.index.editorFireHost(), FILE, note.contents.get(FILE)!);
+        editor.check(1);
+        await Promise.resolve();
+        expect(editor.lines()[1]).toBe('- [x] A @2026-09-21 ==> at(end + 1d)');
+        expect(Notice.messages).toHaveLength(1);
+        expect(Notice.messages[0]).toMatch(told);
+    });
+});
+
+/**
  * Whether a completion stands without its fire is one rule, read the same by
  * a card's write and the editor's: a fire that writes something is tried
  * without, whatever its write was refused for. The fire here takes the row

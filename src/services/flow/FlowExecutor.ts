@@ -11,7 +11,9 @@ import type { FlowEffect } from './FlowEffects';
 import { type CreatingEffect, type FlowDeleteAssessment, assessFlowDelete, planFlowForDeletion } from './FlowDeletion';
 import type { FlowInstanceInsert } from '../persistence/FlowInstanceLines';
 import type { CompletionFire, MoveDestination, TaskOp } from '../persistence/TaskOps';
-import { plannedOn } from '../persistence/TaskRefs';
+import { plannedOn, subjectOf } from '../persistence/TaskRefs';
+import type { Refusal } from '../persistence/FileLines';
+import { refusalClause } from '../core/RefusalClause';
 import { Placement } from '../persistence/utils/Placement';
 import { Outline } from '../parsing/utils/Outline';
 import type { MoveTarget } from './FlowAst';
@@ -61,7 +63,7 @@ function fileName(path: string): string {
  *   ignored.
  * - `failed`: the plan failed (an expression, a block, a move's
  *   destination). Nothing is written for the fire, the command stays, and
- *   the caller says so once the completion has landed (`reportDidNotFire`).
+ *   the caller says so once the completion has landed (`reportNotRun`).
  * - `fires`: `ops` are what the fire does to the row in the completing
  *   write.
  */
@@ -69,6 +71,13 @@ export type FirePlan =
     | { kind: 'none' }
     | { kind: 'failed'; task: Task; error: EvalError | GenerationError }
     | { kind: 'fires'; task: Task; ops: TaskOp[] };
+
+/**
+ * Why a completion was written without its flow (`FlowExecutor.reportNotRun`):
+ * the fire's plan failed, or the fire's write was refused, for the reason the
+ * write gave.
+ */
+export type NotRun = Extract<FirePlan, { kind: 'failed' }> | { kind: 'refused'; refusal: Refusal };
 
 /**
  * A `fire` op, what its plan answered the last time a write ran it, and
@@ -192,12 +201,6 @@ export class FlowExecutor {
         };
     }
 
-    /** What a completing write owes once it has landed: the notice of a fire that could not be planned. */
-    reportUnfired(fire: FireOp): void {
-        const planned = fire.planned();
-        if (planned?.kind === 'failed') this.reportDidNotFire(planned.task, planned.error);
-    }
-
     /**
      * What deleting this task would cost, decided before anything is written.
      *
@@ -253,7 +256,7 @@ export class FlowExecutor {
 
         if (outlook.kind === 'failed') {
             logWarn(`[FlowExecutor] Delete cancelled, flow did not fire for ${task.id}: ${outlook.error.message}`);
-            this.reportDidNotFire(task, outlook.error, 'notice.flowDeleteDidNotFire');
+            this.reportDeleteDidNotFire(task, outlook.error);
             return false;
         }
 
@@ -325,28 +328,49 @@ export class FlowExecutor {
     }
 
     /**
-     * Tell the user that the check they ticked did nothing.
+     * Tell the user a completion was written and its flow was not run, and
+     * why: its plan failed, or the fire's write was refused. The one notice of
+     * it, for a card's write and the editor's alike.
      *
      * Not firing and not consuming is the design — a command whose expression
      * failed has to stay on the line — but from the outside it is a checkbox
      * that answers with nothing at all. The log line was the only trace, and
      * nobody has the console open while ticking a task.
      *
-     * The same failure is shown once per window. A task is toggled on and off
-     * while its author works out what is wrong, and a notice per toggle would
-     * bury the file behind its own complaint. A different failure is a
-     * different message, so fixing one and hitting the next is still visible.
-     *
-     * A delete that stopped for the same reason says so in its own sentence.
-     * The task is still on the page and the user is watching for it to go, so
-     * "the flow did not fire" would leave them to work out that the delete
-     * did not happen either.
+     * The same failure of a plan is shown once per window (`shownLately`).
      */
-    reportDidNotFire(
-        task: Task,
-        err: EvalError | GenerationError,
-        messageKey: 'notice.flowDidNotFire' | 'notice.flowDeleteDidNotFire' = 'notice.flowDidNotFire',
-    ): void {
+    reportNotRun(why: NotRun): void {
+        if (why.kind === 'refused') {
+            const { reason, subject, file } = why.refusal;
+            logWarn(`[FlowExecutor] fire refused, completion written: file=${file} reason=${reason.kind} subject=${subject}`);
+            new Notice(t('notice.flowNotRun', { reason: refusalClause(reason), subject }));
+            return;
+        }
+        if (this.shownLately('notice.flowNotRun', why.task, why.error)) return;
+        new Notice(t('notice.flowNotRun', { reason: runtimeText(why.error), subject: subjectOf(why.task) }));
+    }
+
+    /**
+     * Tell the user a delete stopped because its fire could not be planned,
+     * in a sentence of its own: the task is still on the page and the user is
+     * watching for it to go, so "the flow was not run" would leave them to
+     * work out that the delete did not happen either. Once per window, as
+     * {@link reportNotRun}.
+     */
+    private reportDeleteDidNotFire(task: Task, err: EvalError | GenerationError): void {
+        if (this.shownLately('notice.flowDeleteDidNotFire', task, err)) return;
+        new Notice(t('notice.flowDeleteDidNotFire', { reason: runtimeText(err), file: fileName(task.file) }));
+    }
+
+    /**
+     * Whether the notice `notice` of this failure of the task's plan was shown
+     * within the window; if not, it counts as shown now. A task is toggled on
+     * and off while its author works out what is wrong, and a notice per
+     * toggle would bury the file behind its own complaint. A different
+     * failure is a different message, so fixing one and hitting the next is
+     * still visible.
+     */
+    private shownLately(notice: string, task: Task, err: EvalError | GenerationError): boolean {
         const now = Date.now();
         // Drop what has aged out on the way past, so a long session does not
         // keep a key for every failure it has ever seen.
@@ -356,10 +380,10 @@ export class FlowExecutor {
         // Which failure this is, said in neither language: the code and the
         // values it was given. Keying on the sentence would make the same
         // failure a different one as soon as the vault changes language.
-        const key = `${messageKey}::${task.id}::${err.code}::${JSON.stringify(err.params ?? {})}`;
-        if (this.recentFailures.has(key)) return;
+        const key = `${notice}::${task.id}::${err.code}::${JSON.stringify(err.params ?? {})}`;
+        if (this.recentFailures.has(key)) return true;
         this.recentFailures.set(key, now);
-        new Notice(t(messageKey, { reason: runtimeText(err), file: fileName(task.file) }));
+        return false;
     }
 
     /**

@@ -24,7 +24,7 @@ export function completing<E extends FlowExecutor>(
     const complete = async (task: Task): Promise<FirePlan> => {
         if (!canTriggerFlow(task, DEFAULT_SETTINGS.statusDefinitions)) return { kind: 'none' };
         const plan = executor.planTask(task, name => blocks[name], []);
-        if (plan.kind === 'failed') executor.reportDidNotFire(plan.task, plan.error);
+        if (plan.kind === 'failed') executor.reportNotRun(plan);
         if (plan.kind === 'fires') {
             const ops = plan.ops;
             if (ops.length > 0) await repository.applyToTask(plannedOn(task), ops);

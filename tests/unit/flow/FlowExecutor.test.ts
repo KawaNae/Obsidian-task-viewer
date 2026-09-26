@@ -133,15 +133,16 @@ describe('a fire that does not happen says so', () => {
     async function complete(executor: FlowExecutor, command: string, file = 'notes/週報.md'): Promise<void> {
         const fire = executor.fireOp(file);
         fire.op.plan([`- [x] Test task @2026-06-29 ==> ${command}`], 0);
-        executor.reportUnfired(fire);
+        const planned = fire.planned();
+        if (planned?.kind === 'failed') executor.reportNotRun(planned);
     }
 
-    it('shows what stopped it, and which file it was in', async () => {
+    it('shows what stopped it, and which task it was', async () => {
         await complete(makeExecutor(), 'at(end + 1d)');
 
         expect(Notice.messages).toHaveLength(1);
         expect(Notice.messages[0]).toContain("Property 'end' is not set on this task");
-        expect(Notice.messages[0]).toContain('週報');
+        expect(Notice.messages[0]).toContain('(Test task)');
     });
 
     it('says it once while the same task keeps failing the same way', async () => {
