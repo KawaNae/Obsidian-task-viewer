@@ -70,7 +70,13 @@ describe('indentation, as Obsidian nests a list', () => {
             expect(ChildLineClassifier.classify(`${lead}- [ ] x`, 0).indent, label).toBe(indent);
             expect(ChildLineClassifier.classify(`${lead}- k:: v`, 0).propertyKey !== null, label).toBe(nests);
             expect(ChildLineClassifier.classify(`${lead}- [[note]]`, 0).wikilinkTarget !== null, label).toBe(nests);
-            expect(ChildLineClassifier.isPropertyLine(`${lead}- k:: v`), label).toBe(nests);
+            // A task's own property line must also nest under it (depth at
+            // least its content column, 2 for `- [ ] task`); a valid indent
+            // shallower than that is a sibling, not a child, so this needs
+            // `nests` plus that second, depth condition.
+            const outline = Outline.read(['- [ ] task', `${lead}- k:: v`]);
+            const contentColumn = outline.item(0)!.contentColumn;
+            expect(ChildLineClassifier.ownPropertyLines(outline, 0).includes(1), label).toBe(nests && Outline.depthOf(indent) >= contentColumn);
             expect(matchFlowLine(`${lead}- ==> next`) !== null, label).toBe(nests);
             expect(leadingIndent(`${lead}text`), label).toBe(Outline.indentOf(`${lead}text`));
             expect(Outline.dedent(`${lead}- [ ] x`), label).toBe(`${lead}- [ ] x`.slice(indent.length));

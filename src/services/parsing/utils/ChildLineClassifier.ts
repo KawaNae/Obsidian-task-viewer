@@ -68,14 +68,6 @@ export class ChildLineClassifier {
     }
 
     /**
-     * `- key:: value` プロパティ行かの純粋述語（bodyLine 概念を持たない
-     * write 層向け。分類本体と同じ `PROPERTY_LINE` を通す）。
-     */
-    static isPropertyLine(text: string): boolean {
-        return this.PROPERTY_LINE.test(text);
-    }
-
-    /**
      * The task's own property lines, as absolute line numbers: the list items
      * the outline reads directly under the task's item, not code, that are
      * `- key:: value` lines. A property line under a child task, under a
