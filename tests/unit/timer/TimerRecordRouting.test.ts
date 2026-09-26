@@ -220,15 +220,24 @@ describe('recordSessionEnd: one session writes one line', () => {
         expect(h.updates).toHaveLength(0);
     });
 
-    it('self mode keeps the anchor on the record line so the next session can find it', async () => {
+    it('self mode keeps the anchor on the record line after ⏸, so the next session can find it', async () => {
         // 記録で content も日時も書き換わるため、id を落とすと再開後のセッションが
         // 対象を引き直せない（実機で「再開しても記録されない」として現れた）。
-        // 自動生成 id の掃除はタイマーを閉じるときに行う。
         const timer = makeTimer({
             recordMode: 'self', tailRecordBlockId: 'tv-timer-anchor', ownedAnchors: ['tv-timer-anchor'],
         });
-        await h.recorder.recordSessionEnd(timer, recordFor(timer));
+        await h.recorder.recordSessionEnd(timer, recordFor(timer, 'suspend'));
         expect(h.updates[0].updates.blockId).toBe('tv-timer-anchor');
+    });
+
+    it('self mode takes its own anchor off in the record\'s write when ■ closes it (F8)', async () => {
+        // 同じ書き込みで発火する move は行を ^id ごと運ぶので、閉じたあとに外すと
+        // 運ばれた先に錨が残る。
+        const timer = makeTimer({
+            recordMode: 'self', tailRecordBlockId: 'tv-timer-anchor', ownedAnchors: ['tv-timer-anchor'],
+        });
+        await h.recorder.recordSessionEnd(timer, recordFor(timer, 'close'));
+        expect(h.updates[0].updates.blockId).toBeUndefined();
     });
 });
 

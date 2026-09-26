@@ -678,6 +678,10 @@ export class TimerRecorder {
         const endTime = new Date(record.endMs);
         const startTime = new Date(endTime.getTime() - elapsedSeconds * 1000);
         const icon = this.getTimerIcon(timer);
+        // ■ で閉じる記録は、自分で付けた錨をこの書き込みで外す（外してよければ。
+        // {@link mayTakeOff}）。行を完了させるこの書き込みは同じ書き込みで発火し、
+        // move は行を `^id` ごと運ぶので、あとから外すと錨が運ばれた先に残る。
+        const closes = record.then === 'close' && !!task.blockId && this.mayTakeOff(timer, task.blockId, []);
 
         const updates: Partial<Task> = {
             startDate: this.formatDate(startTime),
@@ -685,12 +689,11 @@ export class TimerRecorder {
             endDate: this.formatDate(endTime),
             endTime: this.formatTime(endTime),
             statusChar: 'x',
-            // blockId は**残す**。この行は self モードのレコードであると同時に
+            // ⏸ では blockId を**残す**。この行は self モードのレコードであると同時に
             // 尻尾でもあり、中断→再開の次セッションはこの id でしか隣を
             // 決められない（記録で content も日時も変わるため、originalText /
-            // 内容一致では解決できなくなる）。自分で付けた id は widget を
-            // 閉じるときに外れる。ユーザーの手動 blockId はもとより保持。
-            blockId: task.blockId,
+            // 内容一致では解決できなくなる）。ユーザーの手動 blockId はもとより保持。
+            blockId: closes ? undefined : task.blockId,
             content: withTimerIcon(icon, task.content.trim()),
         };
 
