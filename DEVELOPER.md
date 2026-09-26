@@ -197,7 +197,7 @@ Quick reference for locating the right layer when implementing a feature.
 | **TaskIndex** | `services/core/TaskIndex.ts` | Central orchestrator for scanning, indexing, and event management; branches on `parserId` |
 | **TaskStore** | `services/core/TaskStore.ts` | In-memory task cache; notifies UI via `onChange` listeners |
 | **TaskScanner** | `services/core/TaskScanner.ts` | File scanning → `FileParsePipeline` invocation (parse/detect/commit の3相 orchestration) |
-| **EditorSignal / EditorObserver** | `services/core/EditorSignal.ts` et al. | Says whether a completion no write of ours made was made by hand in an editor (see Sync Detection) |
+| **FlowFireExtension** | `editor/FlowFireExtension.ts` | Fires a completion made in the editor, in the same transaction (see Flow Firing) |
 | **ParserChain** | `services/parsing/strategies/ParserChain.ts` | Tries multiple parsers in order (Strategy chain) |
 | **TVInlineParser** | `services/parsing/tv-inline/TVInlineParser.ts` | Parses `@date` inline notation (line-level) |
 | **TaskRepository** | `services/persistence/TaskRepository.ts` | Write facade over the inline writer, the cloner and frontmatter key writes |
@@ -721,8 +721,8 @@ obsidian://task-viewer?view=calendar&position=tab&showSidebar=true&filter=<base6
 
 | Component | File | Role |
 |-----------|------|------|
-| **URI builder** | `src/utils/ViewUriBuilder.ts` | `build()` — generates URI from `ViewUriOptions` |
-| **Position detection** | `src/utils/ViewUriBuilder.ts` | `detectLeafPosition()` — auto-detects leaf placement via parent chain |
+| **URI builder** | `src/views/sharedLogic/ViewUriBuilder.ts` | `build()` — generates URI from `ViewUriOptions` |
+| **Position detection** | `src/views/sharedLogic/ViewUriBuilder.ts` | `detectLeafPosition()` — auto-detects leaf placement via parent chain |
 | **Settings menu** | `src/views/sharedUI/ViewToolbar.ts` | `ViewSettingsMenu` — gear icon menu with Save/Load view, Copy URI, Copy as link, Position |
 | **URI handler** | `src/main.ts` | `registerObsidianProtocolHandler('task-viewer', ...)` — parses params |
 | **View activation** | `src/main.ts` | `activateView()` — creates leaf at specified position and sets view state |
@@ -766,23 +766,23 @@ ScheduleView omits view-mode, zoom, and sidebar-toggle.
 
 ---
 
-## Sync Detection
+## Flow Firing
 
 ### Mechanism
 
-A completed task with a `==>` command fires only when the user completed it. A scan answers that row by row:
+A completed task with a `==>` command fires from the operation that completed it, never from a read. The operation holds the line before and after, so nothing is inferred from a difference between two scans:
 
-1. **A write of ours wrote the row.** Every write the plugin makes says whom it was made for (`WriteOrigin`: `user` for the UI, the editor's menu, the API and timers; `flow` for a command's effects) and which rows it wrote. If the lines the scan read hold that write (`WriteClaims.placeRead`) and the row reads as the write left it, the row answers by the write's origin: `user` fires, `flow` does not. This is what keeps a flow from firing on its own writes.
-2. **No write of ours wrote it.** The change came from an editor or from outside (a sync). The editor's signal tells them apart: typing (`beforeinput`), or a change to the focused editor within a second of a key or a press (a checkbox clicked in Live Preview, the checkbox toggle's hotkey, a command). A read that is not wholly a state our writes left takes the signal once; it lapses ten seconds after the last hand.
+1. **An edit in the editor.** A transaction that is an operation (`isOperation`: any `userEvent` but `set`, `undo` and `redo`) and turns an open task line into a completed one (`completes`) gets the fire's lines in the same transaction.
+2. **A write of ours** (a card, the editor's menu, the API, a timer). The write that completes the row plans the fire from the lines it holds and writes both at once.
 
-Rows with the same signature fire no more often than those that may, and a row a flow wrote since the last scan does not count toward the increase.
+A scan, a `modify`, a sync, or another plugin's write to the vault is no operation and fires nothing. Once fired, the command is consumed (`strip-flow`), so an operation fires once.
 
 ### Implementation
 
-- [`TaskScanner.ts`](./src/services/core/TaskScanner.ts): answers each completed row (`whose`) before the scan commits
-- [`WriteClaims.ts`](./src/services/core/identity/WriteClaims.ts): `writerOf()` finds the write of ours that last wrote a row, as the read holds it
-- [`CompletionDetector.ts`](./src/services/core/CompletionDetector.ts): counts completions per signature and fires the user's
-- [`EditorObserver.ts`](./src/services/core/EditorObserver.ts) and [`EditorSignal.ts`](./src/services/core/EditorSignal.ts): the editor's signal
+- [`FlowFireExtension.ts`](./src/editor/FlowFireExtension.ts): the editor's fire (`fireFilter`)
+- [`FlowTrigger.ts`](./src/services/flow/FlowTrigger.ts): `completes` and `isOperation`
+- [`TaskIndex.ts`](./src/services/core/TaskIndex.ts): a completing write and its fire as one write (`writeCompleting`)
+- [`FlowExecutor.ts`](./src/services/flow/FlowExecutor.ts): the fire's plan (`planFire`)
 
 ---
 
