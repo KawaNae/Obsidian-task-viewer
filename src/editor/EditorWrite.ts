@@ -1,4 +1,4 @@
-import type { EditorState, StateEffect, TransactionSpec } from '@codemirror/state';
+import type { EditorState, TransactionSpec } from '@codemirror/state';
 import { isolateHistory } from '@codemirror/commands';
 import { editorInfoField } from 'obsidian';
 import type { TaskOp } from '../services/persistence/TaskOps';
@@ -18,9 +18,9 @@ export interface EditorHandle {
 /**
  * Whether `editor` shows the note `path`: it is still open, and the note in
  * it is that one. The one answer to "the editor or the file" for every write
- * of a line the editor pointed at, the menu's (`writeEditorLine`) and a
- * move's source (`AwayRunner`): in the editor while it shows the note, to the
- * file once it does not (closed, or showing another note). Either way the
+ * of a line the editor pointed at, the menu's (`writeEditorLine`): in the
+ * editor while it shows the note, to the file once it does not (closed, or
+ * showing another note). Either way the
  * line holds only in the content it was taken in (`EditorLine.key`).
  */
 export function shows(editor: EditorHandle, path: string): boolean {
@@ -34,8 +34,7 @@ export type ApplyOps = (draft: LineDraft, session: WriteSession, target: NamedRo
  * Write `ops` to the row at a line the editor pointed at, in the editor's
  * document: the one core every write of lines runs (`editLines`, with the
  * same ops and the same check as a write to the file), turned into changes to
- * the document (`lineChanges`) and dispatched with `effects` as one
- * transaction. The line is taken only in the content it was taken in
+ * the document (`lineChanges`) and dispatched as one transaction. The line is taken only in the content it was taken in
  * (`EditorLine.key`): the editor has to read as it did.
  *
  * The transaction is a step of its own to undo (`isolateHistory`), whatever
@@ -52,7 +51,6 @@ export function writeInEditor(
     at: EditorLine,
     ops: readonly TaskOp[],
     applyOps: ApplyOps,
-    effects: readonly StateEffect<unknown>[] = [],
 ): WriteOutcome {
     const edited = editLines(path, linesOf(editor.state.doc), '\n',
         (draft, _eol, session) => applyOps(draft, session, at, ops));
@@ -62,7 +60,7 @@ export function writeInEditor(
         logError(`[EditorWrite] ${path}: a write's report does not follow; nothing written`);
         return { written: false, refused: { file: path, reason: { kind: 'failed' }, subject: at.text.trim() } };
     }
-    editor.dispatch({ changes, effects: [...effects], annotations: isolateHistory.of('full') });
+    editor.dispatch({ changes, annotations: isolateHistory.of('full') });
     return { written: true, refused: null };
 }
 

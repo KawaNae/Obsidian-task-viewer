@@ -504,13 +504,7 @@ export class TaskIndex {
             this.revertUnwrittenUpdate(task, taskId, before, updates);
             return false;
         }
-        // The source's write of a move to another file takes the row this
-        // write was planned on, carried across this write to where it left it
-        // (`NamedRow.read`), planned from the row and subtree it left.
-        if (fire) {
-            await this.commandExecutor.settleFire(fire, (at, ops) => this.repository.applyToTask(
-                { ...target, basis: { text: at.text, subtree: at.subtree } }, ops, { tellRefusal: false }));
-        }
+        if (fire) this.commandExecutor.reportUnfired(fire);
         return true;
     }
 
@@ -533,16 +527,6 @@ export class TaskIndex {
         const placing = outcome.refused?.reason.kind === 'unplaceable' || outcome.refused?.reason.kind === 'disturbs';
         if (outcome.written || !placing || planned?.kind !== 'fires' || planned.ops.length === 0) return { outcome, fire };
         return { outcome: await write(), fire: undefined };
-    }
-
-    /**
-     * What a completing write to a line the editor pointed at owes once it
-     * landed (`FlowExecutor.settleFire`): the source's write to the file, at
-     * the line that write left the row on.
-     */
-    private settleFire(fire: FireOp, file: string): Promise<void> {
-        return this.commandExecutor.settleFire(fire,
-            (at, ops) => this.repository.applyToLine(file, at, ops, { tellRefusal: false }));
     }
 
     /**
@@ -855,15 +839,15 @@ export class TaskIndex {
             const { outcome: { written }, fire } = await this.writeCompleting(
                 completing ? filePath : null,
                 (op) => this.repository.applyToLine(filePath, at, op ? [...ops, op] : ops));
-            if (written && fire) await this.settleFire(fire, filePath);
+            if (written && fire) this.commandExecutor.reportUnfired(fire);
             return written;
         });
     }
 
     /**
      * What the editor's fire needs of this index (`flowFireExtension`): the
-     * plan, the ops, and where its refusals and the rest of a move go. After
-     * `dispose`, nothing fires.
+     * plan, the ops, and where its refusals go. After `dispose`, nothing
+     * fires.
      */
     editorFireHost(): EditorFireHost {
         return {
@@ -873,8 +857,6 @@ export class TaskIndex {
             applyOps: (draft, session, target, ops) => this.repository.applyOps(draft, session, target, ops),
             refused: (refusal) => this.reportRefusal(refusal),
             didNotFire: (plan) => this.commandExecutor.reportDidNotFire(plan.task, plan.error),
-            finishAway: (away, writeSource) => this.commandExecutor.finishAway(away, writeSource),
-            writeFile: (path, at, ops) => this.repository.applyToLine(path, at, ops, { tellRefusal: false }),
         };
     }
 

@@ -64,10 +64,8 @@ export class InlineTaskWriter {
     /**
      * Apply `ops` to the row at a line the editor pointed at, planned from the
      * row, and its subtree when `at` holds one: the editor menu's write, when
-     * the editor it was opened in no longer shows the file, and the source's
-     * write of a move to another file, made once the destination landed, to
-     * the row the completing write left (`FlowExecutor.finishAway`). A caller
-     * that tells a refusal in its own words has it from the outcome, as
+     * the editor it was opened in no longer shows the file. A caller that
+     * tells a refusal in its own words has it from the outcome, as
      * `applyToTask` does.
      */
     async applyToLine(
@@ -216,7 +214,7 @@ export class InlineTaskWriter {
                 // past every item in it), so the subtree is where it was, or
                 // below the carried lines when they went above it.
                 const { childrenLines } = this.fileOps.collectChildrenFromLines(lines, line);
-                const block = this.carriedWith(lines, line, op.text, true);
+                const block = this.carriedWith(lines, line, op.text);
                 const spot = this.destinationOf(lines, op.to, block[0].text);
                 draft.put(spot, block);
                 draft.splice(spot.at <= line ? line + block.length : line, 1 + childrenLines.length);
@@ -345,20 +343,19 @@ export class InlineTaskWriter {
 
     /**
      * The row, written as `head`, and the lines of its subtree that go with
-     * it on a move: to read, once written, as they read under the row
-     * (`Block.of`), written as they stand, the row's own indentation before
-     * `head` (`format` writes none), each line of its subtree its block ID
-     * taken off; the put writes them at the spot (`LineDraft.put`). Shared by the
-     * move within one file, which carries the lines (`carried`), and the move
-     * to another, which writes them anew.
+     * it on a move, carried (`LineEdits.carry`): to read, once written, as
+     * they read under the row (`Block.of`), written as they stand, the row's
+     * own indentation before `head` (`format` writes none), each line of its
+     * subtree its block ID taken off; the put writes them at the spot
+     * (`LineDraft.put`).
      *
      * The task's own direct `- ==>` flow lines are consumed by the fire and
-     * do not travel to the archive. Descendant tasks' flow lines are NOT
+     * do not travel with it. Descendant tasks' flow lines are NOT
      * direct (structural-parent rule) and stay as templates. A line that
      * stood under one of them has lost its item: a task, command or property
      * there is not written (`checkWrite`).
      */
-    private carriedWith(lines: readonly string[], currentLine: number, head: string, carried: boolean): PlacedLine[] {
+    private carriedWith(lines: readonly string[], currentLine: number, head: string): PlacedLine[] {
         const outline = Outline.read(lines);
         const flowAbs = new Set(collectFlowLineIndices(outline, currentLine));
         const rows = [currentLine];
@@ -367,38 +364,6 @@ export class InlineTaskWriter {
         }
         const texts = [Outline.indentOf(lines[currentLine]) + Outline.dedent(head),
             ...this.fileOps.stripBlockIds(rows.slice(1).map(row => lines[row]))];
-        return Block.of(outline, rows, texts, carried);
-    }
-
-    /**
-     * What a move to another file writes to the destination for the row at
-     * `line` of `lines` — the lines the completing write held — the row as
-     * `content` and the lines of its subtree that go with it (`block`, new
-     * lines to the destination), and the row's whole subtree as `lines` hold
-     * it (`subtree`), which is what taking the original away plans from.
-     *
-     * The two files cannot be one write — Obsidian's `process` is per file —
-     * so the destination is written first (`appendArchive`), and the source's
-     * write is made once it has landed, checked against `subtree`: a child
-     * edited in between is refused there rather than taken away unseen.
-     * Handing a move from one file to the other is F8's. The appended lines are
-     * new rows: the move drops the task's `^id` on the way (see
-     * `FlowPlanner`'s archived copy), and a row in another file is another
-     * row to the index.
-     */
-    archiveOf(lines: readonly string[], line: number, content: string): { block: PlacedLine[]; subtree: string[] } {
-        const { childrenLines } = this.fileOps.collectChildrenFromLines(lines, line);
-        return {
-            block: this.carriedWith(lines, line, content, false),
-            subtree: lines.slice(line, line + 1 + childrenLines.length),
-        };
-    }
-
-    /**
-     * Append a move's archive (`archiveOf`) to `destPath`, or make the note
-     * of it: whether it was written. A refusal is told by the write layer.
-     */
-    async appendArchive(destPath: string, block: readonly PlacedLine[]): Promise<boolean> {
-        return (await this.appendBlock(destPath, block)).written;
+        return Block.of(outline, rows, texts, true);
     }
 }

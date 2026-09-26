@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { Notice, setMockLocale } from 'obsidian';
 import { initI18n } from '../../../src/i18n';
-import { FlowExecutor, type FirePlan, type PendingAway } from '../../../src/services/flow/FlowExecutor';
+import { FlowExecutor, type FirePlan } from '../../../src/services/flow/FlowExecutor';
 import { parseFlowSegments, singleLineFlow } from '../../../src/services/flow/FlowSegments';
 import { TaskIndex } from '../../../src/services/core/TaskIndex';
 import { TaskRepository } from '../../../src/services/persistence/TaskRepository';
@@ -15,10 +15,6 @@ import { makeTask } from '../helpers/makeTask';
 function makeRepository() {
     return {
         applyToTask: vi.fn().mockResolvedValue({ written: true, refused: null, made: [] }),
-        appendArchive: vi.fn().mockResolvedValue(true),
-        archiveOf: vi.fn((lines: readonly string[], line: number, content: string) => ({
-            block: [{ text: content, kind: 'item' }], subtree: [lines[line]],
-        })),
         deleteTaskFromFile: vi.fn().mockResolvedValue(true),
     };
 }
@@ -123,62 +119,6 @@ describe('FlowExecutor.planTask: what a completion fires', () => {
     });
 });
 
-describe('FlowExecutor.finishAway: the rest of a move to another file', () => {
-    beforeEach(() => {
-        Notice.messages.length = 0;
-    });
-
-    const away = (): PendingAway => ({
-        task: flowTask('move([[Archive]])'),
-        destPath: 'Archive.md',
-        archive: [{ text: '- [x] Test task', kind: 'item' } as never],
-        source: { line: 3, text: '- [x] Test task ==> move([[Archive]])', subtree: ['- [x] Test task ==> move([[Archive]])'] },
-        ops: [{ kind: 'remove' }],
-    });
-    const landed: WriteOutcome = { written: true, refused: null, made: [], rows: new Map() };
-
-    it('writes the archive, then the source, to the row the completing write left', async () => {
-        const repository = makeRepository();
-        const writeSource = vi.fn().mockResolvedValue(landed);
-
-        await makeExecutor(repository).finishAway(away(), writeSource);
-
-        expect(repository.appendArchive).toHaveBeenCalledWith('Archive.md', away().archive);
-        expect(writeSource).toHaveBeenCalledWith(away().source, [{ kind: 'remove' }]);
-        expect(repository.appendArchive.mock.invocationCallOrder[0]).toBeLessThan(writeSource.mock.invocationCallOrder[0]);
-        expect(Notice.messages).toEqual([]);
-    });
-
-    it('writes nothing to the source when the archive was not written', async () => {
-        // 移送先に書けなかったなら、次回分も元の行の削除も書かない。
-        // 拒否の通知は書き込みの層が1回だけ出す。
-        const repository = makeRepository();
-        repository.appendArchive.mockResolvedValue(false);
-        const writeSource = vi.fn();
-
-        await makeExecutor(repository).finishAway(away(), writeSource);
-
-        expect(writeSource).not.toHaveBeenCalled();
-        expect(Notice.messages).toHaveLength(0);
-    });
-
-    it('says so, once, when the move wrote the copy but could not take the original away', async () => {
-        // 移送先には書かれたので、元が消せないとタスクが2か所に居る。move で
-        // これだけは画面に何も出ないまま起きるので、通知で伝える。拒否の理由も
-        // 同じ1つの通知に入れる。
-        const writeSource = vi.fn().mockResolvedValue({
-            written: false, refused: { file: 'note.md', reason: { kind: 'changed' }, subject: 'Test task' },
-        });
-
-        await makeExecutor().finishAway(away(), writeSource);
-
-        expect(Notice.messages).toHaveLength(1);
-        expect(Notice.messages[0]).toContain('Archive');
-        expect(Notice.messages[0]).toContain('the note has changed');
-        expect(Notice.messages[0]).toContain('Test task');
-    });
-});
-
 describe('a fire that does not happen says so', () => {
     // 非発火・非消費は設計どおりだが、外から見えるのは「チェックしても何も
     // 起きないチェックボックス」。ログしか残らないと、タスクを触っている人
@@ -194,7 +134,7 @@ describe('a fire that does not happen says so', () => {
     async function complete(executor: FlowExecutor, command: string, file = 'notes/週報.md'): Promise<void> {
         const fire = executor.fireOp(file);
         fire.op.plan([`- [x] Test task @2026-06-29 ==> ${command}`], 0);
-        await executor.settleFire(fire, vi.fn());
+        executor.reportUnfired(fire);
     }
 
     it('shows what stopped it, and which file it was in', async () => {
@@ -289,13 +229,14 @@ describe('fireAndDelete', () => {
         expect(deletionsOf(repository).map(ops => ops.map(o => o.kind))).toEqual([['insert-instance', 'remove']]);
     });
 
-    it('does not archive a move: a delete was not a request to keep a copy', async () => {
-        const repository = makeRepository();
+    it('does not move, whatever the move names: a delete was not a request to keep a copy', async () => {
+        for (const move of ['move()', 'move([[#Nope]])', 'move([[Archive]])']) {
+            const repository = makeRepository();
 
-        await makeExecutor(repository).fireAndDelete(flowTask('every mon move([[Archive]])', { statusChar: ' ' }));
+            expect(await makeExecutor(repository).fireAndDelete(flowTask(`every mon ${move}`, { statusChar: ' ' }))).toBe(true);
 
-        expect(repository.appendArchive).not.toHaveBeenCalled();
-        expect(deletionsOf(repository).map(ops => ops.map(o => o.kind))).toEqual([['insert-instance', 'remove']]);
+            expect(deletionsOf(repository).map(ops => ops.map(o => o.kind))).toEqual([['insert-instance', 'remove']]);
+        }
     });
 
     it('deletes without generating when until has expired', async () => {

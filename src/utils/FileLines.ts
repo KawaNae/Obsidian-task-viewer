@@ -360,15 +360,10 @@ export interface EditorLine {
     key: ContentKey;
     /**
      * The line and every line of its subtree as the editor showed them, for a
-     * write that takes them away (`EditorSubtree`). The write is made only if
-     * the file still reads them so, as a delete that names its row is (F5).
+     * write that takes them away. The write is made only if the file still
+     * reads them so, as a delete that names its row is (F5).
      */
     subtree?: readonly string[];
-}
-
-/** A line the editor pointed at, with the subtree it showed under it: what an editor's delete was planned from. */
-export interface EditorSubtree extends EditorLine {
-    subtree: readonly string[];
 }
 
 /**

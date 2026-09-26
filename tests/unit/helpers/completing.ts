@@ -23,10 +23,10 @@ export function completing<E extends FlowExecutor>(
 ): E & { complete(task: Task): Promise<FirePlan> } {
     const complete = async (task: Task): Promise<FirePlan> => {
         if (!canTriggerFlow(task, DEFAULT_SETTINGS.statusDefinitions)) return { kind: 'none' };
-        const plan = executor.planTask(task, name => blocks[name]);
+        const plan = executor.planTask(task, name => blocks[name], []);
         if (plan.kind === 'failed') executor.reportDidNotFire(plan.task, plan.error);
         if (plan.kind === 'fires') {
-            const ops = plan.away ? plan.away.ops : plan.ops;
+            const ops = plan.ops;
             if (ops.length > 0) await repository.applyToTask(plannedOn(task), ops);
         }
         return plan;

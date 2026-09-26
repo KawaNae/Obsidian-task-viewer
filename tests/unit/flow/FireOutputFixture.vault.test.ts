@@ -21,7 +21,6 @@ freezeDate(new Date(2026, 8, 25, 12, 0, 0));
  */
 
 const FILE = 'note.md';
-const ARCHIVE = 'archive.md';
 
 let live: VaultSession | undefined;
 
@@ -63,7 +62,7 @@ function bytes(contents: Map<string, string>): Record<string, string[]> {
 const GEN = ['```tv-gen 週報', '- [ ] 対象', '\t- [ ] 生成子', '```', ''];
 
 /** Each note holds one row worded `対象`, the one that fires. */
-const COMPLETIONS: Array<[string, string, string[]?]> = [
+const COMPLETIONS: Array<[string, string]> = [
     ['inline command, top level', [
         '# note', '- [ ] 上 @2026-09-21', '- [ ] 対象 @2026-09-21 ==> every mon', '- [ ] 下 @2026-09-21', '',
     ].join('\n')],
@@ -106,14 +105,12 @@ const COMPLETIONS: Array<[string, string, string[]?]> = [
 ];
 
 describe('a completion fire leaves the same bytes', () => {
-    for (const [name, note, others] of COMPLETIONS) {
+    for (const [name, note] of COMPLETIONS) {
         it(name, async () => {
-            const files: Record<string, string> = { [FILE]: note };
-            for (const path of others ?? []) files[path] = ['# archive', ''].join('\n');
-            const { contents, session } = await open(files);
+            const { contents, session } = await open({ [FILE]: note });
 
             expect(await session.index.updateTask(idOf(session, '対象'), { statusChar: 'x' })).toBe(true);
-            await session.flowSettled(FILE, ...(others ?? []));
+            await session.flowSettled(FILE);
 
             expect(bytes(contents)).toMatchSnapshot();
             expect(Notice.messages).toEqual([]);

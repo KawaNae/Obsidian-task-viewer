@@ -6,7 +6,6 @@ import { FrontmatterWriter } from './writers/FrontmatterWriter';
 import { TaskCloner, type InPlaceCopyLines } from './TaskCloner';
 import type { PropertyOp } from './PropertyUpdatePlanner';
 import type { EditorLine, LineDraft, NamedRow, WriteAt, WriteChannel, WriteOutcome, WriteSession } from '../../utils/FileLines';
-import type { PlacedLine } from './utils/Placement';
 import type { PlannedTarget } from './TaskRefs';
 import type { TaskOp } from './TaskOps';
 
@@ -66,16 +65,6 @@ export class TaskRepository {
     /** Ops applied to the row at a line the editor pointed at, as `at` holds it (see InlineTaskWriter.applyToLine). */
     async applyToLine(filePath: string, at: EditorLine, ops: readonly TaskOp[], opts: { tellRefusal?: boolean } = {}): Promise<WriteOutcome> {
         return this.inlineWriter.applyToLine(filePath, at, ops, opts);
-    }
-
-    /** What a move to another file writes to the destination (see InlineTaskWriter.archiveOf). */
-    archiveOf(lines: readonly string[], line: number, content: string): { block: PlacedLine[]; subtree: string[] } {
-        return this.inlineWriter.archiveOf(lines, line, content);
-    }
-
-    /** Append a move's archive to the destination: whether it was written (see InlineTaskWriter.appendArchive). */
-    async appendArchive(destPath: string, block: readonly PlacedLine[]): Promise<boolean> {
-        return this.inlineWriter.appendArchive(destPath, block);
     }
 
     /** @returns whether the task's lines were removed (see InlineTaskWriter). */
