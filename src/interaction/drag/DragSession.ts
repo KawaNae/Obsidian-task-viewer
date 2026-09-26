@@ -2,7 +2,6 @@ import type { Task } from '../../types';
 import type { TaskWriteService } from '../../services/data/TaskWriteService';
 import type { DragContext, DragStrategy } from './DragStrategy';
 import { logDebug } from '../../log/log';
-import { hostWindow } from '../../utils/HostWindow';
 
 /**
  * 1 回の drag (pointerdown → pointerup) の lifecycle を保持する。
@@ -55,12 +54,12 @@ export class DragSession {
      *
      * 1. Strategy の onUp を await（finish*Move/Resize 内部で commitPlan）
      * 2. notifyImmediate で onChange の coalesce/partial に乗せる
-     * 3. draggingFile を 1 frame 遅延で解除する。解除すると、ドラッグ中に
-     *    保留したファイルの読み（確定の書き込みを含む）を入れて通知する
-     *    （`TaskIndex.setDraggingFile`）。このフレームは **container の
-     *    window** から取る: 素の rAF は main window のクロックなので、popout
-     *    でドラッグしている最中に main が最小化されていると永久に発火せず、
-     *    そのファイルの読みが以後ずっと保留される。
+     * 3. draggingFile をその場で解除する。解除すると、ドラッグ中に保留した
+     *    ファイルの読み（確定の書き込みを含む）を入れて通知する
+     *    （`TaskIndex.setDraggingFile`）。以前は 1 frame 遅らせて、確定の
+     *    書き込みの遅れて来る `changed` を draggingFile で除いていた。今は
+     *    `changed` がすでに読んだ内容かを内容で答える（`f8827b9a`）ので、
+     *    フレームを待つ理由は無い。
      *
      * drag 完了時の合成 click による誤 deselect は SelectionController が
      * `pointerdown` で deselect するように設計されているため構造的に発生
@@ -83,9 +82,7 @@ export class DragSession {
             taskId ? ['startDate', 'startTime', 'endDate', 'endTime'] : undefined,
         );
 
-        hostWindow(this.container).requestAnimationFrame(() => {
-            this.writeService.setDraggingFile(null);
-        });
+        this.writeService.setDraggingFile(null);
 
         this.currentStrategy = null;
         this.currentDragTaskId = null;
