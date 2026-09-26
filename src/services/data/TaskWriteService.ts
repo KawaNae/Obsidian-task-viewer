@@ -94,29 +94,25 @@ export class TaskWriteService {
         return this.taskIndex.createTask(filePath, taskLine, heading);
     }
 
-    /** @returns whether the child line was written. */
-    async insertChildTask(parentTaskId: string, childLine: string): Promise<boolean> {
-        return this.taskIndex.insertChildTask(this.resolveTaskId(parentTaskId), childLine);
-    }
-
     /**
      * Append a child at the *end* of the parent's subtree. Session records are
-     * a log, so they must accumulate in chronological order — insertChildTask
-     * inserts at the head and would read backwards.
+     * a log, so they must accumulate in chronological order — a first child
+     * goes at the head and would read backwards.
      */
     async appendChildTask(parentTaskId: string, childLine: string): Promise<boolean> {
         return this.taskIndex.appendChildTask(this.resolveTaskId(parentTaskId), childLine);
     }
 
     /**
-     * A timer's line beside the row, where `place` says, and the row's own
-     * `^id` put on or taken off in the same write (`TaskIndex.insertRecord`).
+     * A line beside the row, where `place` says — a child from a card's
+     * menu, the API or the CLI, a timer's line — and the row's own `^id` put
+     * on or taken off in the same write (`TaskIndex.insertLine`).
      *
      * @returns whether the line was written. Not written: an unknown or
      * read-only task, or a write that was refused (and told the user why).
      */
-    async insertRecord(taskId: string, line: string, place: InsertPlace, rowId?: string | null): Promise<boolean> {
-        return this.taskIndex.insertRecord(this.resolveTaskId(taskId), line, place, rowId);
+    async insertLine(taskId: string, line: string, place: InsertPlace, rowId?: string | null): Promise<boolean> {
+        return this.taskIndex.insertLine(this.resolveTaskId(taskId), line, place, rowId);
     }
 
     // ===== A line the editor pointed at =====

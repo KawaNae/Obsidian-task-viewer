@@ -713,7 +713,7 @@ export class TaskApi {
         if (hasLineBreak(params.content)) throw new TaskApiError('content must not contain line breaks (\\r or \\n)');
         const task = this.rowOf(params.parentId);
         if (task.isReadOnly) throw new TaskApiError(`Task ${params.parentId} is read-only (parserId=${task.parserId})`);
-        const written = await this.writeService.insertChildTask(task.id, TaskParser.format(createTempTask({ id: 'api-child', content: params.content })));
+        const written = await this.writeService.insertLine(task.id, TaskParser.format(createTempTask({ id: 'api-child', content: params.content })), 'firstChild');
         if (!written) throw new TaskApiError(`Child task could not be written under: ${params.parentId}`);
         return { parentId: params.parentId };
     }

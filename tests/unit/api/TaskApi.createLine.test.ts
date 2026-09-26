@@ -44,7 +44,7 @@ function createMockApiForCreate(opts: {
         updateTask: vi.fn(),
         deleteTask: vi.fn(),
         duplicateTask: vi.fn(),
-        insertChildTask: vi.fn(),
+        insertLine: vi.fn(),
     };
     const mockPlugin = {
         app: {
@@ -154,8 +154,8 @@ describe('the line create and insertChildTask write', () => {
             createdTask: undefined,
         });
         readService.getTask.mockReturnValue(makeFullTask({ id: 'parent-1' }));
-        writeService.insertChildTask.mockResolvedValue(true);
+        writeService.insertLine.mockResolvedValue(true);
         await api.insertChildTask({ parentId: 'parent-1', content: 'child ' });
-        expect(writeService.insertChildTask).toHaveBeenCalledWith('parent-1', '- [ ] child');
+        expect(writeService.insertLine).toHaveBeenCalledWith('parent-1', '- [ ] child', 'firstChild');
     });
 });

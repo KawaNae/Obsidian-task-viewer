@@ -115,7 +115,7 @@ export class TaskActionsMenuBuilder {
                     menu.close();
                     new CreateTaskModal(this.app, async (result) => {
                         const taskLine = formatTaskLine(result);
-                        await this.writeService.insertChildTask(task.id, taskLine);
+                        await this.writeService.insertLine(task.id, taskLine, 'firstChild');
                     }, {}, { startHour: this.plugin.settings.startHour }).open();
                 });
         });

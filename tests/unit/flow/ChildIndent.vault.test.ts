@@ -70,7 +70,7 @@ describe.each(NOT_A_CHILD)('a line of the subtree %s', (_name, line, unit) => {
     it('lends no indentation to a first child', async () => {
         const { contents, session } = await open(NOTE);
 
-        expect(await session.index.insertChildTask(taskWorded(session, 'T').id, '- [ ] c')).toBe(true);
+        expect(await session.index.insertLine(taskWorded(session, 'T').id, '- [ ] c', 'firstChild')).toBe(true);
         await session.settle(FILE);
 
         // Past the task's text that goes on, which a child put above it would

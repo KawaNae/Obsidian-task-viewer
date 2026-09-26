@@ -299,28 +299,6 @@ export class InlineTaskWriter {
     }
 
     /**
-     * Insert `lineBody` as the first child of a task (right after the task line):
-     * a child added from a card's menu, the API or the CLI.
-     *
-     * As with {@link insertLineAfterTask}, the indent is resolved here from the
-     * task's existing children rather than supplied by the caller.
-     */
-    async insertLineAsFirstChild(target: PlannedTarget, lineBody: string): Promise<WriteOutcome> {
-        const file = this.app.vault.getAbstractFileByPath(target.file);
-        if (!(file instanceof TFile)) return fileGone(this.channelOf(target.file), target.file, target.subject);
-
-        return processLines(this.app, file, this.channelOf(target.file), (draft, _eol, { row }) => {
-            const currentLine = row(target);
-            if (currentLine === null) return false;
-
-            // Directly below the task line, past its own text that goes on.
-            draft.put(Placement.firstChild(draft.reading(), currentLine, lineBody), Block.line(lineBody));
-
-            return true;
-        });
-    }
-
-    /**
      * @returns the outcome.
      *
      * A note that does not exist yet is made of what the append writes to an

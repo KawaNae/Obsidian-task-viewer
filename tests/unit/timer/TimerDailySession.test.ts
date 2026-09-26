@@ -64,7 +64,7 @@ function makeHarness(): Harness {
         settings: { dailyNoteHeader: 'Tasks', dailyNoteHeaderLevel: 2 },
         getTaskIndex: () => taskIndex,
         getTaskWriteService: () => ({
-            insertRecord: async (afterTaskId: string, line: string) => {
+            insertLine: async (afterTaskId: string, line: string) => {
                 siblings.push({ afterTaskId, line });
                 registerWrittenLine(line);
                 return true;

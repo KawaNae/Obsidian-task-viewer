@@ -73,7 +73,7 @@ function makeHarness(options: { tail?: Task | undefined; siblingFails?: boolean 
         settings: { pomodoroWorkMinutes: 25, pomodoroBreakMinutes: 5 },
         getTaskIndex: () => taskIndex,
         getTaskWriteService: () => ({
-            insertRecord: async (
+            insertLine: async (
                 taskId: string,
                 line: string,
                 place: 'firstChild' | 'afterSubtree' | 'afterCompletedRun',

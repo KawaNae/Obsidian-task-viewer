@@ -33,7 +33,7 @@ function createMockApi(task: Task | undefined, opts: { writesLand?: boolean } = 
         updateTask: vi.fn().mockResolvedValue(lands),
         deleteTask: vi.fn().mockResolvedValue(lands),
         duplicateTask: vi.fn().mockResolvedValue(lands),
-        insertChildTask: vi.fn().mockResolvedValue(lands),
+        insertLine: vi.fn().mockResolvedValue(lands),
         createTask: vi.fn().mockResolvedValue(lands ? 0 : null),
     };
     const mockPlugin = {

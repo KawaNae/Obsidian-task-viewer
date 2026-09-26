@@ -4,7 +4,7 @@ import { vaultSession, type VaultSession } from '../helpers/vaultSession';
 
 /**
  * A timer's record is put in beside its row by the one insert every timer
- * line takes (`TaskIndex.insertRecord`), planned from the index's copy of the
+ * line takes (`TaskIndex.insertLine`), planned from the index's copy of the
  * row and checked as every write that names a row is (`WriteSession.row`):
  * against the reading the copy was read in. Not on the row's text alone.
  */

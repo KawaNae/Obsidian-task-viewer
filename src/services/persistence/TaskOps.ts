@@ -26,7 +26,7 @@ import type { Refusal } from '../../utils/FileLines';
  *   (`firstChild`), as its next sibling past its subtree (`afterSubtree`),
  *   or past the completed siblings that follow it (`afterCompletedRun`),
  *   spelled as the item next to it. A timer's record, the one insert every
- *   timer line takes (`TaskIndex.insertRecord`).
+ *   timer line takes (`TaskIndex.insertLine`).
  * - `copy`: `text` goes in as the row's next sibling, past its subtree,
  *   spelled as the row is (`Placement.copyOf`): the editor menu's duplicate
  *   of a line.

@@ -97,7 +97,7 @@ describe('a note written in CRLF', () => {
         const { contents, session } = await openNote(CRLF_NOTE);
         const a = session.index.getTasks().find(task => task.content === 'タスクA')!;
 
-        const written = await session.index.insertChildTask(a.id, '- [ ] 子タスク');
+        const written = await session.index.insertLine(a.id, '- [ ] 子タスク', 'firstChild');
         await session.settle(FILE);
 
         expect(written).toBe(true);
