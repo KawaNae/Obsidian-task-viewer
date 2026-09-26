@@ -134,8 +134,10 @@ export function planFlow(task: Task, program: FlowProgram, deps: FlowPlanDeps): 
 
     if (program.move) {
         // Where to is the parser's answer, read off how the clause is
-        // written; nothing of it is evaluated.
-        effects.push({ kind: 'move', to: program.move.to, movedTask: { ...task, flow: undefined, blockId: undefined } });
+        // written; nothing of it is evaluated. The row is carried, not
+        // copied, so it keeps its `^id`: only a write that makes a copy (the
+        // next instance, a duplicate) takes the copy's off.
+        effects.push({ kind: 'move', to: program.move.to, movedTask: { ...task, flow: undefined } });
     } else {
         effects.push({ kind: 'strip-flow' });
     }

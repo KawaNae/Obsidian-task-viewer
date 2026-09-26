@@ -338,11 +338,11 @@ describe('FlowPlanner', () => {
             expect(to('move([[Log/]] + file.name)')).toMatchObject({ to: { kind: 'retired' } });
         });
 
-        it('strips flow and ids from the moved task', () => {
+        it('strips the flow from the moved task and keeps its ^id: the row is carried, not copied', () => {
             const move = plan('move()', { blockId: 'xyz' }).find(e => e.kind === 'move');
             if (move?.kind !== 'move') throw new Error('no move');
             expect(move.movedTask.flow).toBeUndefined();
-            expect(move.movedTask.blockId).toBeUndefined();
+            expect(move.movedTask.blockId).toBe('xyz');
         });
     });
 

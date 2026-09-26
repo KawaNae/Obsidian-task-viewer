@@ -345,9 +345,10 @@ export class InlineTaskWriter {
      * The row, written as `head`, and the lines of its subtree that go with
      * it on a move, carried (`LineEdits.carry`): to read, once written, as
      * they read under the row (`Block.of`), written as they stand, the row's
-     * own indentation before `head` (`format` writes none), each line of its
-     * subtree its block ID taken off; the put writes them at the spot
-     * (`LineDraft.put`).
+     * own indentation before `head` (`format` writes none); the put writes
+     * them at the spot (`LineDraft.put`). They are the rows they were, so
+     * each keeps its `^id`: only a write that makes a copy takes a copy's
+     * off (`TaskCloner`).
      *
      * The task's own direct `- ==>` flow lines are consumed by the fire and
      * do not travel with it. Descendant tasks' flow lines are NOT
@@ -362,8 +363,7 @@ export class InlineTaskWriter {
         for (let row = currentLine + 1; row < outline.subtreeEnd(currentLine); row++) {
             if (!flowAbs.has(row)) rows.push(row);
         }
-        const texts = [Outline.indentOf(lines[currentLine]) + Outline.dedent(head),
-            ...this.fileOps.stripBlockIds(rows.slice(1).map(row => lines[row]))];
+        const texts = [Outline.indentOf(lines[currentLine]) + Outline.dedent(head), ...rows.slice(1).map(row => lines[row])];
         return Block.of(outline, rows, texts, true);
     }
 }

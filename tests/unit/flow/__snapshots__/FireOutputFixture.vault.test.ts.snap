@@ -81,7 +81,7 @@ exports[`a completion fire leaves the same bytes > move within the same file 1`]
     ""- [ ] 上 @2026-09-21"",
     ""- [ ] 下 @2026-09-21"",
     ""- [x] 対象 @2026-09-21"",
-    ""\\t- [ ] 子 @2026-09-21"",
+    ""\\t- [ ] 子 @2026-09-21 ^c1"",
     """",
   ],
 }
