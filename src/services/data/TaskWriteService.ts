@@ -1,5 +1,5 @@
 import type { TFile } from 'obsidian';
-import type { EditorLine, WriteChannels } from '../../utils/FileLines';
+import type { EditorLine, WriteChannels } from '../persistence/FileLines';
 import type { InsertPlace, TaskOp } from '../persistence/TaskOps';
 import type { DuplicateOptions, Task } from '../../types';
 import type { TaskIndex } from '../core/TaskIndex';

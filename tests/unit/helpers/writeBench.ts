@@ -8,7 +8,7 @@ import { TaskRepository } from '../../../src/services/persistence/TaskRepository
 import { FileOperations } from '../../../src/services/persistence/utils/FileOperations';
 import { DEFAULT_SETTINGS } from '../../../src/types';
 import type { Task } from '../../../src/types';
-import type { LineEdit, Refusal, WriteChannel } from '../../../src/utils/FileLines';
+import type { LineEdit, Refusal, WriteChannel } from '../../../src/services/persistence/FileLines';
 
 /**
  * A vault in memory with a real `TaskScanner` over it, and the write layer

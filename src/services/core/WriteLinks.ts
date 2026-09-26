@@ -1,4 +1,4 @@
-import { replayEdits, type LineEdit } from '../../utils/FileLines';
+import { replayEdits, type LineEdit } from '../persistence/FileLines';
 import type { ContentKey } from './ContentKey';
 
 /**

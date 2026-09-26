@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { contentKeyOf } from '../../../src/services/core/ContentKey';
-import { editLines } from '../../../src/utils/FileLines';
-import type { NamedRow } from '../../../src/utils/FileLines';
+import { editLines } from '../../../src/services/persistence/FileLines';
+import type { NamedRow } from '../../../src/services/persistence/FileLines';
 import { Block } from '../../../src/services/persistence/utils/Placement';
 
 /**

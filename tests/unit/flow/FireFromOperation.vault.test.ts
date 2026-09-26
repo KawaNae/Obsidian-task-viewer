@@ -2,7 +2,7 @@ import { describe, it, expect, afterEach, beforeEach } from 'vitest';
 import { contentKeyOf } from '../../../src/services/core/ContentKey';
 import { keyOf } from '../../../src/editor/EditorDoc';
 import { writeEditorLine } from '../../../src/editor/EditorWrite';
-import type { EditorLine } from '../../../src/utils/FileLines';
+import type { EditorLine } from '../../../src/services/persistence/FileLines';
 import type { TaskOp } from '../../../src/services/persistence/TaskOps';
 import { Notice } from 'obsidian';
 import { openLiveVault, makeFile, type VaultSession } from '../helpers/vaultSession';

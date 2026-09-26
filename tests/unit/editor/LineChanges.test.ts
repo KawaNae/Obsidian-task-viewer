@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { EditorSelection, EditorState } from '@codemirror/state';
 import { lineChanges } from '../../../src/editor/LineChanges';
-import { draftOver, type LineDraft, type LineEdit } from '../../../src/utils/FileLines';
+import { draftOver, type LineDraft, type LineEdit } from '../../../src/services/persistence/FileLines';
 
 /** The lines a draft's changes leave, and its report. */
 function written(before: readonly string[], write: (draft: LineDraft) => void): { after: string[]; edits: LineEdit[] } {

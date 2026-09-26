@@ -8,7 +8,7 @@ import type { TaskOp } from '../services/persistence/TaskOps';
 import {
     editLines, replayEdits,
     type EditorLine, type LineEdit, type LineDraft, type NamedRow, type Refusal, type WriteSession,
-} from '../utils/FileLines';
+} from '../services/persistence/FileLines';
 import { lineChanges } from './LineChanges';
 import { linesOf } from './EditorDoc';
 import { contentKeyOf } from '../services/core/ContentKey';

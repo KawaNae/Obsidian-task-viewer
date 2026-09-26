@@ -6,7 +6,7 @@ import { ChildLineClassifier } from '../../../src/services/parsing/utils/ChildLi
 import { matchFlowLine } from '../../../src/services/parsing/utils/FlowLineScanner';
 import { readsAsPlanned } from '../../../src/services/persistence/RowBasis';
 import { FileOperations } from '../../../src/services/persistence/utils/FileOperations';
-import { splitLines } from '../../../src/utils/FileLines';
+import { splitLines } from '../../../src/services/persistence/FileLines';
 import { DEFAULT_SETTINGS } from '../../../src/types';
 
 /**

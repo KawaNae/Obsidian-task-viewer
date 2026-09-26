@@ -5,7 +5,7 @@ import { plannedOn } from '../../../src/services/persistence/TaskRefs';
 import { FrontmatterWriter } from '../../../src/services/persistence/writers/FrontmatterWriter';
 import { FileOperations } from '../../../src/services/persistence/utils/FileOperations';
 import { HeadingInserter } from '../../../src/utils/HeadingInserter';
-import { createFile } from '../../../src/utils/FileLines';
+import { createFile } from '../../../src/services/persistence/FileLines';
 
 /**
  * The two writes that do not go through `processLines`: one whose file is not

@@ -1,4 +1,4 @@
-import { replayEdits, type LineEdit } from '../utils/FileLines';
+import { replayEdits, type LineEdit } from '../services/persistence/FileLines';
 
 /** One change to an editor's document, in the offsets of the document as it was (a CM6 `ChangeSpec`). */
 export interface LineChange {

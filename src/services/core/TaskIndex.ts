@@ -20,7 +20,7 @@ import { planInPlaceCopies } from '../persistence/DuplicateShift';
 import type { GenBlock } from '../parsing/gen/GenBlockCollector';
 import { plannedOn, subjectOf } from '../persistence/TaskRefs';
 import { logError, logInfo, logWarn } from '../../log/log';
-import type { EditorLine, Landing, Refusal, WriteOutcome } from '../../utils/FileLines';
+import type { EditorLine, Landing, Refusal, WriteOutcome } from '../persistence/FileLines';
 import type { InsertPlace, TaskOp } from '../persistence/TaskOps';
 import type { ContentKey } from './ContentKey';
 

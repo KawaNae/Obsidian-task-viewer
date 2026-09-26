@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { TFile } from 'obsidian';
 import { HeadingInserter } from '../../../src/utils/HeadingInserter';
-import { draftOver } from '../../../src/utils/FileLines';
+import { draftOver } from '../../../src/services/persistence/FileLines';
 
 /**
  * writeUnderHeading は TaskIndex.createTask / DailyNoteUtils.appendLineToDailyNote /

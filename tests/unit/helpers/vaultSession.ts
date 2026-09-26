@@ -9,8 +9,8 @@ import type { TimerInstance } from '../../../src/timer/TimerInstance';
 import type { TimerStorageUtils } from '../../../src/timer/TimerStorageUtils';
 import { DEFAULT_SETTINGS } from '../../../src/types';
 import type { FlowExecutor } from '../../../src/services/flow/FlowExecutor';
-import { splitLines } from '../../../src/utils/FileLines';
-import type { Refusal, WriteChannel } from '../../../src/utils/FileLines';
+import { splitLines } from '../../../src/services/persistence/FileLines';
+import type { Refusal, WriteChannel } from '../../../src/services/persistence/FileLines';
 
 export function makeFile(path: string): TFile {
     const file = new TFile();

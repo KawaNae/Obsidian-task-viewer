@@ -7,7 +7,7 @@
 
 import { type App, TFile, TFolder, normalizePath } from 'obsidian';
 import type { IntervalGroup } from './TimerInstance';
-import { createFile, replaceWhole, type WriteChannel } from '../utils/FileLines';
+import { createFile, replaceWhole, type WriteChannel } from '../services/persistence/FileLines';
 
 export interface TemplateCreateData {
     name: string;

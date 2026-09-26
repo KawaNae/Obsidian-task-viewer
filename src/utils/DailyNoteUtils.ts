@@ -1,6 +1,6 @@
 import { type App, TFile, moment } from 'obsidian';
 import { HeadingInserter } from './HeadingInserter';
-import { createFile, type WriteChannel } from './FileLines';
+import { createFile, type WriteChannel } from '../services/persistence/FileLines';
 import type { TaskViewerSettings, NoteType } from '../types';
 import { processTemplate, normalizeTrailingNewline } from './NoteTemplateProcessor';
 import { withWeekStartDay } from './momentWeekLocale';

@@ -13,7 +13,7 @@ import { exportDescriptorFor, resolveExportContainer } from '../../services/expo
 import { buildExportFilename } from '../../services/export/ExportFilename';
 import type { MenuPresenter } from '../../interaction/menu/MenuPresenter';
 import { viewContentEl } from '../../utils/ObsidianView';
-import type { WriteChannel } from '../../utils/FileLines';
+import type { WriteChannel } from '../../services/persistence/FileLines';
 
 /**
  * Persistent toolbar root with mount/detach lifecycle.

@@ -1,12 +1,12 @@
 import { TFile, type App } from 'obsidian';
-import { logError, logWarn } from '../log/log';
-import { LINE_BREAK, holdsLineBreak } from './LineBreak';
-import { Outline, type OutlineReading } from '../services/parsing/utils/Outline';
-import { checkWrite, type PutBlock, type WrittenLine } from '../services/parsing/utils/OutlineCheck';
-import { readsAsPlanned, type RowBasis } from '../services/persistence/RowBasis';
-import { Block, type PlacedLine, type Spot } from '../services/persistence/utils/Placement';
-import { contentKeyOf, type ContentKey } from '../services/core/ContentKey';
-import type { ReadingId } from '../services/core/Reading';
+import { logError, logWarn } from '../../log/log';
+import { LINE_BREAK, holdsLineBreak } from '../../utils/LineBreak';
+import { Outline, type OutlineReading } from '../parsing/utils/Outline';
+import { checkWrite, type PutBlock, type WrittenLine } from '../parsing/utils/OutlineCheck';
+import { readsAsPlanned, type RowBasis } from './RowBasis';
+import { Block, type PlacedLine, type Spot } from './utils/Placement';
+import { contentKeyOf, type ContentKey } from '../core/ContentKey';
+import type { ReadingId } from '../core/Reading';
 
 /**
  * A file's line terminator. Obsidian writes LF, but notes arrive with CRLF

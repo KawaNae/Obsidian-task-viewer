@@ -2,7 +2,7 @@ import type { EditorState, TransactionSpec } from '@codemirror/state';
 import { isolateHistory } from '@codemirror/commands';
 import { editorInfoField } from 'obsidian';
 import type { TaskOp } from '../services/persistence/TaskOps';
-import { editLines, type EditorLine, type LineDraft, type NamedRow, type Refusal, type WriteOutcome, type WriteSession } from '../utils/FileLines';
+import { editLines, type EditorLine, type LineDraft, type NamedRow, type Refusal, type WriteOutcome, type WriteSession } from '../services/persistence/FileLines';
 import { lineChanges } from './LineChanges';
 import { linesOf } from './EditorDoc';
 import { logError } from '../log/log';

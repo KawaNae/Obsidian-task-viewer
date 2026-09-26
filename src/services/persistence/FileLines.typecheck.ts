@@ -1,8 +1,8 @@
 import type { App, TFile } from 'obsidian';
 import { processLines, type WriteChannel } from './FileLines';
-import type { TaskRepository } from '../services/persistence/TaskRepository';
-import type { PlannedTarget } from '../services/persistence/TaskRefs';
-import type { Task } from '../types';
+import type { TaskRepository } from './TaskRepository';
+import type { PlannedTarget } from './TaskRefs';
+import type { Task } from '../../types';
 
 /**
  * Compile-time checks on how a write reaches the file. Nothing imports this

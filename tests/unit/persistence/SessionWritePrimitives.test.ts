@@ -4,7 +4,7 @@ import { TaskWriteService } from '../../../src/services/data/TaskWriteService';
 import { makeTask } from '../helpers/makeTask';
 import { writeBench, FILE } from '../helpers/writeBench';
 import { plannedOn } from '../../../src/services/persistence/TaskRefs';
-import type { Refusal, WriteOutcome } from '../../../src/utils/FileLines';
+import type { Refusal, WriteOutcome } from '../../../src/services/persistence/FileLines';
 import type { Task } from '../../../src/types';
 
 /**
