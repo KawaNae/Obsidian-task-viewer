@@ -45,7 +45,8 @@ export type WriteCheck = 'sound' | 'unplaceable' | 'disturbs' | 'loose';
  * every write that adds, takes out or rewrites lines is held to
  * (`processLines`). `written` says, per line after, where it came from.
  *
- * - A line kept keeps its kind (`OutlineReading.kindOf`). An item kept
+ * - A line kept keeps its kind (`OutlineReading.kindOf`): a heading stays
+ *   one, and a line that was none does not become one. An item kept
  *   that the plugin reads a meaning from (`ChildLineClassifier.carriesMeaning`:
  *   a task, a `==>` line, a property, a wikilink child) keeps the items it
  *   stands in: the line it stood under is not taken out, and the items above

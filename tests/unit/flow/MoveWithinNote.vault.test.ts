@@ -145,6 +145,38 @@ describe.each<Path>(['card', 'api', 'editor'])('a move within the note, from the
     });
 });
 
+/**
+ * A heading is a bound of the note's structure as an item is: a write puts
+ * no line past one, and leaves every one reading as it did (F8's
+ * counterexample run, R1 and R2). A move that would is refused, the
+ * completion written alone and the command kept, and the user is told.
+ */
+describe.each<Path>(['card', 'api', 'editor'])('a move and the headings around it, from the %s', (path) => {
+    it.each([
+        ['an indented heading just below an empty section (R1)', ['## Log', '   ## Next', '- [x] b']],
+        ['a setext heading just below an empty section (R1)', ['## Log', 'Next', '----']],
+        ['an indented heading below the section\'s paragraph (R1)', ['## Log', 'words', '', '  ## Next']],
+    ])('does not carry the row past %s', async (_name, below) => {
+        const lines = ['# note', '- [ ] A ==> move([[#Log]])', ...below, ''];
+        expect(await complete(lines, 1, 'A', path)).toEqual(['# note', '- [x] A ==> move([[#Log]])', ...below, '']);
+        await Promise.resolve();
+        expect(Notice.messages).toHaveLength(1);
+        expect(Notice.messages[0]).toMatch(/heading/);
+    });
+
+    it.each([
+        ['a paragraph and a rule become a setext heading (R2)', ['Para', '- [ ] A ==> move()', '---'], 2],
+        ['an indented heading goes into the item above (R2)', ['1. [x] Z', '  1. [ ] A ==> move()', '   # H'], 2],
+    ])('does not take the row out when %s', async (_name, note, line) => {
+        const lines = ['# note', ...note, ''];
+        const expected = lines.map(text => text.replace('[ ] A', '[x] A'));
+        expect(await complete(lines, line, 'A', path)).toEqual(expected);
+        await Promise.resolve();
+        expect(Notice.messages).toHaveLength(1);
+        expect(Notice.messages[0]).toMatch(/heading/);
+    });
+});
+
 describe('a parent\'s move and a child\'s fire in one editor transaction (R10 within a note)', () => {
     const PARENT = '- [ ] P @2026-09-21 ==> move([[#Done]])';
 

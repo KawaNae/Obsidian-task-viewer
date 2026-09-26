@@ -192,7 +192,7 @@ export class Outline {
 }
 
 /** What a line is to a write (`OutlineReading.kindOf`). */
-export type LineKind = 'frontmatter' | 'blank' | 'fence' | 'item-fence' | 'code' | 'item' | 'text';
+export type LineKind = 'frontmatter' | 'blank' | 'fence' | 'item-fence' | 'code' | 'item' | 'heading' | 'text';
 
 /** A list item as the outline reads it. */
 export interface OutlineItem {
@@ -294,7 +294,14 @@ export class OutlineReading {
      * What `line` is, as a write is held to it: in the frontmatter, blank,
      * in a fenced code block (its delimiters included; `item-fence` when the
      * line opens an item as well, `- ```js`), indented code, opening a list
-     * item, or text — a paragraph, a heading, a thematic break.
+     * item, a line of a heading the note reads ({@link headings}: a setext
+     * one's paragraph and underline both), or text — a paragraph, a thematic
+     * break, a heading in an item or a quote.
+     *
+     * A heading is a bound of the note's structure as an item is: the
+     * sections of the note, a move's destination and the properties a
+     * section gives are read off it. A write puts no line past one
+     * (`Placement`) and leaves each one reading as it did (`checkWrite`).
      *
      * Blank wherever it stands, a fence included: a blank line shows nothing,
      * so which block holds one changes nothing the note shows, and nothing
@@ -305,7 +312,20 @@ export class OutlineReading {
         if (Outline.isBlank(this.lines[line])) return 'blank';
         if (this.fenced()[line]) return this.items.has(line) ? 'item-fence' : 'fence';
         if (this.codes[line]) return 'code';
+        if (this.headed()[line]) return 'heading';
         return this.items.has(line) ? 'item' : 'text';
+    }
+
+    private headedLines: boolean[] | null = null;
+
+    /** Per line, whether it is a line of a heading the note reads. */
+    private headed(): boolean[] {
+        if (this.headedLines === null) {
+            const headed = new Array<boolean>(this.lines.length).fill(false);
+            for (const heading of this.headings) headed.fill(true, heading.line, heading.end);
+            this.headedLines = headed;
+        }
+        return this.headedLines;
     }
 
     private fencedLines: boolean[] | null = null;

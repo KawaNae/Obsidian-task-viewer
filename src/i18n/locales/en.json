@@ -671,7 +671,7 @@
     "writeTargetChanged": "The note has changed since it was last read, so nothing was written. Please try again: {{subject}}",
     "editorMenuNotRead": "The note has not been read as the editor shows it yet, so the menu did not open. Please try again.",
     "writeTargetUnplaceable": "The new line cannot be put where it would read as a task in the place meant for it, so nothing was written: {{subject}}",
-    "writeDisturbs": "Writing this would change which item another line stands in, or where a code block ends, so nothing was written: {{subject}}",
+    "writeDisturbs": "Writing this would change which item another line stands in, where a code block ends, or which lines are headings, so nothing was written: {{subject}}",
     "writeFailed": "The note could not be written, so nothing was changed. See the console for details: {{subject}}",
     "taskNotFoundInIndex": "Task not found in index",
     "exportingImage": "Exporting image…",
