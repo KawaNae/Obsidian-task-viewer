@@ -7,7 +7,7 @@
  * Replaces the vault-mock InlineTaskWriter.test.ts with real CLI-based tests.
  *
  * Prerequisites:
- *   - Obsidian is running with the Dev vault (C:\Obsidian\Dev) open
+ *   - Obsidian is running with the Dev vault (path in dev-paths.mjs) open
  *
  * Run:  npx vitest run tests/integration/persistence/inline-write.test.ts
  */

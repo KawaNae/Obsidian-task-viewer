@@ -3,7 +3,7 @@
  *
  * These tests call the real Obsidian CLI via PowerShell and assert on JSON responses.
  * Prerequisites:
- *   - Obsidian is running with the Dev vault (C:\Obsidian\Dev) open
+ *   - Obsidian is running with the Dev vault (path in dev-paths.mjs) open
  *
  * The tag/property fixture (test-tags-properties.md) is written by this
  * suite itself — it used to be a manually-maintained vault file and got

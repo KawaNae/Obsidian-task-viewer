@@ -5,7 +5,7 @@
  * replacing the InMemoryVault-based mock tests.
  *
  * Prerequisites:
- *   - Obsidian is running with the Dev vault (C:\Obsidian\Dev) open
+ *   - Obsidian is running with the Dev vault (path in dev-paths.mjs) open
  *
  * Run:  npx vitest run tests/integration/scanning/task-scanner.test.ts
  */

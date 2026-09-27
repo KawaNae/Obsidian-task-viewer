@@ -1,5 +1,6 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
-import { dirname } from 'node:path';
+import { dirname, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { describe, it, expect } from 'vitest';
 import type { EvalContext } from '../../../src/services/lang/ExprEvaluator';
 import type { EvalHost, StaticType } from '../../../src/services/lang/functions';
@@ -18,16 +19,17 @@ import { renderGenBody } from '../../../src/services/parsing/gen/GenBodyRenderer
  * path and not from a summary of it. Every entry is rendered as a real
  * generation block with real cells, which is the same code a firing runs.
  *
- * Paths are fixed and outside any one session's scratch, so an agent in any
- * worktree can be told them once. Both can be overridden by environment
- * variables when a run needs its own corpus.
+ * Paths sit under `.probe/naive/` at the root of the checkout the suite runs
+ * in, so an agent is told one relative path whatever the machine or worktree.
+ * The whitelist `.gitignore` keeps them untracked. Both can be overridden by
+ * environment variables when a run needs its own corpus.
  *
  * A missing or empty corpus is a pass that writes an empty result: the file is
  * evergreen, so it lives in the ordinary suite rather than in a place someone
  * has to remember to run.
  */
 
-const PROBE_DIR = 'C:/Users/KawaNae/AppData/Local/Temp/claude/C--VScode-obsidian-task-viewer/naive-probe';
+const PROBE_DIR = resolve(dirname(fileURLToPath(import.meta.url)), '../../../.probe/naive');
 const IN = process.env.NAIVE_PROBE_IN ?? `${PROBE_DIR}/corpus.json`;
 const OUT = process.env.NAIVE_PROBE_OUT ?? `${PROBE_DIR}/result.json`;
 

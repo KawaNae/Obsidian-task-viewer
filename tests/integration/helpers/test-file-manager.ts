@@ -1,9 +1,10 @@
 import * as fs from 'fs';
 import * as path from 'path';
+import { VAULT_PATHS } from '../../../dev-paths.mjs';
 import { sleep, cliList } from './cli-helper';
 
 /** Dev vault root. Must match the path Obsidian is watching. */
-const VAULT_PATH = 'C:\\Obsidian\\Dev';
+const VAULT_PATH = VAULT_PATHS.dev;
 
 /** Resolve a relative vault path to its absolute location on disk. */
 export function vaultAbsolute(relativePath: string): string {

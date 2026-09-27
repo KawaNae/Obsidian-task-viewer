@@ -583,7 +583,10 @@ src/styles/
 npm install       # Install dependencies
 npm run dev       # Development build (watch)
 npm run build     # Production build
+npm run test:e2e  # E2E against the Dev vault through the Obsidian CLI
 ```
+
+The build writes into `<vault>/.obsidian/plugins/obsidian-task-viewer`. Vault paths per OS live in `dev-paths.mjs`. The Dev vault is the default; set `OBSIDIAN_VAULT=main` or `OBSIDIAN_VAULT_PATH=<path>` to write elsewhere. E2E needs Obsidian running with the Dev vault open, the plugin enabled there, and the `obsidian` CLI on the PATH.
 
 ---
 
