@@ -122,7 +122,7 @@ describe('a timer does not write where it cannot name the row by its anchor', ()
         });
         const before = contents.get(FILE);
 
-        expect(s.recorder.resolveTarget(timer)).toBeUndefined();
+        expect((await s.recorder.resolveTarget(timer))).toBeUndefined();
         expect(await record(s, timer)).toBe(false);
         expect(contents.get(FILE)).toBe(before);
     });

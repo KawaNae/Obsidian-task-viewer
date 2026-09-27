@@ -20,6 +20,8 @@ describe('a drag that ends', () => {
         const writeService = {
             setDraggingFile: vi.fn((path: string | null) => { calls.push(`drag ${path}`); }),
             notifyImmediate: vi.fn(() => { calls.push('notify'); }),
+            // The dragged row is the row on the disk.
+            confirmTask: vi.fn(async () => true),
         } as unknown as TaskWriteService;
         const strategy = {
             onDown: () => { },
@@ -52,6 +54,8 @@ describe('a drag that ends without a commit', () => {
         const writeService = {
             setDraggingFile: vi.fn((path: string | null) => { calls.push(`drag ${path}`); }),
             notifyImmediate: vi.fn(() => { calls.push('notify'); }),
+            // The dragged row is the row on the disk.
+            confirmTask: vi.fn(async () => true),
         } as unknown as TaskWriteService;
         const strategy = {
             onDown: () => { },

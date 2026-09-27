@@ -396,6 +396,19 @@ export class TaskApi {
     }
 
     /**
+     * {@link rowOf} for a write. An anchored ID outlives readings, so its
+     * note is read again first when the disk holds another content than the
+     * index read (`freshByAnchor`), and the write goes on with the row the
+     * anchor finds there. A name is checked by the write itself, which turns
+     * it away when the note changed (`TaskIndex.copyToPlan`).
+     */
+    private async rowToWrite(id: string): Promise<Task> {
+        const read = readApiId(id);
+        if (read.kind === 'anchor') await this.writeService.freshByAnchor(read.file, read.anchor);
+        return this.rowOf(id);
+    }
+
+    /**
      * List tasks with optional filters, sort, and pagination.
      */
     async list(params?: ListParams): Promise<TaskListResult> {
@@ -546,7 +559,7 @@ export class TaskApi {
     async update(params: UpdateParams): Promise<MutationResult> {
         assertParams(params, UPDATE_SCHEMA, 'update');
 
-        const task = this.rowOf(params.id);
+        const task = await this.rowToWrite(params.id);
         if (task.isReadOnly) throw new TaskApiError(`Task ${params.id} is read-only (parserId=${task.parserId})`);
 
         const updates: Partial<Task> = {};
@@ -614,7 +627,7 @@ export class TaskApi {
     async delete(params: DeleteParams): Promise<DeleteResult> {
         assertParams(params, DELETE_SCHEMA, 'delete');
 
-        const task = this.rowOf(params.id);
+        const task = await this.rowToWrite(params.id);
         if (task.isReadOnly) throw new TaskApiError(`Task ${params.id} is read-only (parserId=${task.parserId})`);
 
         const removed = await this.writeService.deleteTask(task.id);
@@ -641,7 +654,7 @@ export class TaskApi {
      */
     async duplicate(params: DuplicateParams): Promise<DuplicateResult> {
         assertParams(params, DUPLICATE_SCHEMA, 'duplicate');
-        const task = this.rowOf(params.id);
+        const task = await this.rowToWrite(params.id);
         if (task.isReadOnly) throw new TaskApiError(`Task ${params.id} is read-only (parserId=${task.parserId})`);
         if (params.dayOffset !== undefined) {
             if (typeof params.dayOffset !== 'number' || isNaN(params.dayOffset)) throw new TaskApiError('dayOffset must be a number');
@@ -711,7 +724,7 @@ export class TaskApi {
     async insertChildTask(params: InsertChildTaskParams): Promise<InsertChildTaskResult> {
         assertParams(params, INSERT_CHILD_TASK_SCHEMA, 'insertChildTask');
         if (hasLineBreak(params.content)) throw new TaskApiError('content must not contain line breaks (\\r or \\n)');
-        const task = this.rowOf(params.parentId);
+        const task = await this.rowToWrite(params.parentId);
         if (task.isReadOnly) throw new TaskApiError(`Task ${params.parentId} is read-only (parserId=${task.parserId})`);
         const written = await this.writeService.insertLine(task.id, TaskParser.format(createTempTask({ id: 'api-child', content: params.content })), 'firstChild');
         if (!written) throw new TaskApiError(`Child task could not be written under: ${params.parentId}`);

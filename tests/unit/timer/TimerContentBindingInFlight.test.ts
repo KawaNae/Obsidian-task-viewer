@@ -31,7 +31,7 @@ function harness() {
     let tail = makeTask({ id: TAIL_ID, file: 'notes/a.md', line: 3, content: '器タスク', blockId: 'tv-t-1' });
     const ctx = {
         timers: new Map([[timer.id, timer]]),
-        recorder: { resolveTailRecord: () => tail },
+        recorder: { tailInIndex: () => tail, resolveTailRecord: async () => tail },
         plugin: {
             getTaskIndex: () => ({
                 updateTask: (_id: string, u: Record<string, unknown>) => {

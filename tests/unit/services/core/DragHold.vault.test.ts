@@ -9,8 +9,10 @@ import { TaskWriteService } from '../../../../src/services/data/TaskWriteService
  * While a file is dragged, no reading of it is taken into the store, whoever
  * reads it: the one place a reading is committed holds it back
  * (`TaskScanner.commit`), and reads the file when the drag ends. A write
- * that was not written puts its values back and asks for the file to be read
- * again (`requestScan`); that reading is held back too, so the names held
+ * that was not written puts its values back, and the refusal asks for the
+ * file to be read again (`reportRefusal`, through the reconciler); that
+ * reading is held back too, as is the check's before a write
+ * (`TaskIndex.copyToPlan`), so the names held
  * from before the drag still name their rows, and a write by one of them
  * lands as it would without the drag.
  *

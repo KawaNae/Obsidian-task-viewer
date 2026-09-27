@@ -66,7 +66,9 @@ function harness(opts: { tailIsTarget: boolean; found: boolean; owned: string[];
         getTask: (id: string) => [target, tail].find(t => t.id === id),
         getTaskByAnchor,
         updateTask,
-        waitForScan: vi.fn(async () => { /* the scan is done */ }),
+        // Fresh as held: this index reads no disk, so a write's row is looked up
+        // by its anchor in what it holds (`TaskIndex.freshByAnchor`).
+        freshByAnchor(file: string, anchor: string) { return Promise.resolve(this.getTaskByAnchor(file, anchor)); },
         deleteTask: vi.fn(async () => true),
     };
     const plugin = { settings: {}, getTaskIndex: () => taskIndex } as unknown as TaskViewerPlugin;

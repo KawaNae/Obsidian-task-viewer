@@ -152,7 +152,7 @@ export class TimerContentBinding {
 
     /** 尻尾の行の素の名前（アイコンを剥がしたもの）。 */
     private tailName(timer: TimerInstance): string {
-        const tail = this.ctx.recorder.resolveTailRecord(timer);
+        const tail = this.ctx.recorder.tailInIndex(timer);
         if (!tail) return '';
         return splitTimerIcon(tail.content).name;
     }
@@ -195,7 +195,7 @@ export class TimerContentBinding {
         // 単一の畳み関門。上流（bind の oninput）で既に畳んでいても、ここで
         // 独立に保証する — 記法は 1 行のみで、改行が行を割ってタスクを壊す。
         const trimmed = foldNewlines(name).trim();
-        const tail = this.ctx.recorder.resolveTailRecord(timer);
+        const tail = await this.ctx.recorder.resolveTailRecord(timer);
         if (!tail) {
             // 書く相手がまだ居ない。下書きのまま置いて、行が生えたときに書き出す。
             timer.pendingContent = foldNewlines(name);

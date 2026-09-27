@@ -21,9 +21,20 @@ import { planInPlaceCopies } from '../persistence/DuplicateShift';
 import type { GenBlock } from '../parsing/gen/GenBlockCollector';
 import { plannedOn, subjectOf } from '../persistence/TaskRefs';
 import { logError, logInfo, logWarn } from '../../log/log';
-import type { EditorLine, Landing, Refusal, WriteOutcome } from '../persistence/FileLines';
+import { readInLine, type EditorLine, type Landing, type Refusal, type WriteOutcome } from '../persistence/FileLines';
 import type { InsertPlace, TaskOp } from '../persistence/TaskOps';
 import type { ContentKey } from './ContentKey';
+import { checkCopy, checkFile, type CheckDeps, type Checked } from './ReadingCheck';
+import { DiskReconciler } from './DiskReconciler';
+import { diskProbeOf, type DiskProbe } from './DiskProbe';
+
+/**
+ * What an operation planned from the index's copy of a row is, as a check of
+ * that copy against the disk names it (`TaskIndex.copyToPlan`): an entry
+ * point that checks before the user puts work in (`drag`, `menu`), or the
+ * write itself.
+ */
+export type PlanOp = 'drag' | 'menu' | 'update' | 'delete' | 'duplicate' | 'insert';
 
 /**
  * TaskIndex - タスク管理の統括ファサードクラス
@@ -72,7 +83,20 @@ export class TaskIndex {
      */
     private eventRefs: { emitter: { offref(ref: EventRef): void }; ref: EventRef }[] = [];
 
-    constructor(private app: App, settings: TaskViewerSettings) {
+    /**
+     * Brings the index's readings to the disk when a change notice never
+     * comes (structure.md, 読みの鮮度). None where there is no disk to ask.
+     */
+    private readonly reconciler: DiskReconciler | null;
+
+    /** What a check of a copy against the disk asks (`ReadingCheck`). */
+    private readonly checks: CheckDeps;
+
+    /**
+     * @param probe where the reconciler asks the disk; by default the one
+     * this app can have (`diskProbeOf`).
+     */
+    constructor(private app: App, settings: TaskViewerSettings, probe: DiskProbe | null = diskProbeOf(app)) {
         this.settings = settings;
         this.parseFingerprint = computeParseFingerprint(settings);
 
@@ -94,6 +118,22 @@ export class TaskIndex {
             follow: (read, line, now) => this.scanner.followLine(path, read, line, now),
             reading: () => this.scanner.readingOf(path),
         }));
+        this.checks = {
+            read: (path) => {
+                const file = app.vault.getAbstractFileByPath(path);
+                if (!(file instanceof TFile)) return Promise.reject(new Error(`no note at ${path}`));
+                return readInLine(app, file);
+            },
+            follow: (path, read, line, now) => this.scanner.followLine(path, read, line, now),
+            last: (path) => this.scanner.readingOf(path),
+        };
+        this.reconciler = probe && new DiskReconciler({
+            files: () => app.vault.getMarkdownFiles(),
+            readingOf: (path) => this.scanner.readingOf(path),
+            reread: (file) => this.scanner.queueScan(file),
+            forget: (path) => this.forgetFile(path),
+            changed: () => this.notify.schedule(),
+        }, probe, { workspace: app.workspace, win: typeof window === 'undefined' ? undefined : window });
     }
 
     getRepository(): TaskRepository {
@@ -103,6 +143,8 @@ export class TaskIndex {
     async initialize(): Promise<void> {
         this.app.workspace.onLayoutReady(async () => {
             await this.scanner.scanVault();
+            // From the vault as read, the disk is checked against it.
+            this.reconciler?.start();
         });
 
         // Vault イベントハンドラー
@@ -124,9 +166,7 @@ export class TaskIndex {
 
         this.own(this.app.vault, this.app.vault.on('delete', (file) => {
             if (file instanceof TFile && file.extension === 'md') {
-                this.store.removeTasksByFile(file.path);
-                this.scanner.handleFileDeleted(file.path);
-                this.validator.clearErrorsForFile(file.path);
+                this.forgetFile(file.path);
                 this.notify.schedule();
             }
         }));
@@ -153,9 +193,7 @@ export class TaskIndex {
         this.own(this.app.vault, this.app.vault.on('rename', async (file, oldPath) => {
             // md → 非md（拡張子変更）: delete 扱い
             if (!(file instanceof TFile) || file.extension !== 'md') {
-                this.store.removeTasksByFile(oldPath);
-                this.scanner.handleFileDeleted(oldPath);
-                this.validator.clearErrorsForFile(oldPath);
+                this.forgetFile(oldPath);
                 this.notify.schedule();
                 return;
             }
@@ -172,6 +210,18 @@ export class TaskIndex {
 
             await this.rescanAndNotify(file);
         }));
+    }
+
+    /**
+     * Take a note that is no longer there out of the index: its rows, what
+     * was read of it, its warnings. A note deleted, renamed to something that
+     * is not a note, or found gone from the disk (`DiskReconciler`). The
+     * caller notifies.
+     */
+    private forgetFile(path: string): void {
+        this.store.removeTasksByFile(path);
+        this.scanner.handleFileDeleted(path);
+        this.validator.clearErrorsForFile(path);
     }
 
     /** Remember a subscription so `dispose` can close it. */
@@ -277,6 +327,7 @@ export class TaskIndex {
         for (const { emitter, ref } of this.eventRefs) emitter.offref(ref);
         this.eventRefs = [];
         this.repository.disconnect();
+        this.reconciler?.dispose();
 
         this.notify.dispose();
         this.apiWrites.dispose();
@@ -419,7 +470,7 @@ export class TaskIndex {
 
     /** {@link updateTask}, once every write already asked of the row has finished. */
     private async writeUpdate(taskId: string, updates: Partial<Task>, known: Task | undefined): Promise<boolean> {
-        const task = this.copyForWrite(taskId, known);
+        const task = await this.copyToPlan(taskId, known, 'update');
         if (!task) return false;
         if (task.isReadOnly) return false;
 
@@ -489,25 +540,84 @@ export class TaskIndex {
     }
 
     /**
-     * The copy of a row a write is planned from, or undefined when the store no
-     * longer holds the row — an earlier write to it took it away, or a scan
-     * read the file without it — which is told once, as `gone`, like any
-     * write that finds its row gone. `known` is the copy as the write was
-     * asked for, to say which row it was.
+     * The copy of a row an operation is planned from, once it is known to be
+     * the row on the disk; else undefined, and the user told why, once.
+     *
+     * A row the store no longer holds — an earlier write to it took it away,
+     * or a scan read the file without it — is told as `gone`, like any write
+     * that finds its row gone. `known` is the copy as the operation was asked
+     * for, to say which row it was.
+     *
+     * A copy the disk no longer reads as (`checkCopy`: a change the index was
+     * never told of) is not planned from: the note is read again, the
+     * operation is given up, and the user is asked to do it again, from the
+     * new reading (structure.md, 読みの鮮度). Every write that plans from a
+     * copy comes through here, and so do the drag and the card's menu before
+     * the user puts work in (`confirmTask`).
      */
-    private copyForWrite(taskId: string, known: Task | undefined): Task | undefined {
+    private async copyToPlan(taskId: string, known: Task | undefined, op: PlanOp): Promise<Task | undefined> {
         const task = this.getTask(taskId);
-        if (task) return task;
-        logWarn(`[TaskIndex] write to a row the index no longer holds: id=${taskId}`);
-        // A row the caller named but the store never held here: say which
-        // note, as a write refused before it read the note does.
-        const file = known?.file ?? TaskIdGenerator.parse(taskId)?.filePath ?? '';
-        this.reportRefusal({
-            file,
-            reason: { kind: 'gone' },
-            subject: known ? subjectOf(known) : file,
-        });
+        if (!task) {
+            logWarn(`[TaskIndex] write to a row the index no longer holds: id=${taskId}`);
+            // A row the caller named but the store never held here: say which
+            // note, as a write refused before it read the note does.
+            const file = known?.file ?? TaskIdGenerator.parse(taskId)?.filePath ?? '';
+            this.reportRefusal({
+                file,
+                reason: { kind: 'gone' },
+                subject: known ? subjectOf(known) : file,
+            });
+            return undefined;
+        }
+        const checked = await checkCopy(this.checks, task);
+        if (checked.verdict === 'fresh') return task;
+        await this.notFresh(task.file, subjectOf(task), op, checked, TaskIdGenerator.readName(task.id)?.reading);
+        new Notice(t(checked.verdict === 'stale' ? 'notice.readAgain' : 'notice.notReadable', { subject: subjectOf(task) }));
         return undefined;
+    }
+
+    /**
+     * Whether the index's copy of the row `taskId` is the row on the disk: a
+     * drag or a card's menu asks as it opens, so the user does not put work
+     * into an operation the write would turn away. When it is not, it has
+     * been told and the note read again (`copyToPlan`). The write asks again
+     * when it is made.
+     */
+    async confirmTask(taskId: string, op: 'drag' | 'menu'): Promise<boolean> {
+        if (this.refuseAfterDispose(`confirmTask ${op}`)) return false;
+        return (await this.copyToPlan(taskId, undefined, op)) !== undefined;
+    }
+
+    /**
+     * The row `anchor` anchors in `filePath` (`getTaskByAnchor`), looked up in
+     * a reading of the note as the disk holds it: a note that changed in a
+     * way the index was never told of is read again first. For a caller that
+     * names its row by `^id` — the API's `path#^id`, a timer — whose anchor
+     * outlives readings, so it goes on with the row it finds (contract 3),
+     * where one that named a reading is asked to try again.
+     */
+    async freshByAnchor(filePath: string, anchor: string): Promise<Task | undefined> {
+        // No note there to read: the index answers as it holds it.
+        if (!(this.app.vault.getAbstractFileByPath(filePath) instanceof TFile)) return this.getTaskByAnchor(filePath, anchor);
+        const checked = await checkFile(this.checks, filePath);
+        if (checked.verdict !== 'fresh') await this.notFresh(filePath, `^${anchor}`, 'anchor', checked);
+        return checked.verdict === 'unreadable' ? undefined : this.getTaskByAnchor(filePath, anchor);
+    }
+
+    /**
+     * What is done when a reading is found not to be the disk's, in one
+     * place: logged, the note read again when it could be read, and the
+     * reconciler asked to sweep — one change notice missed is evidence that
+     * others were too.
+     */
+    private async notFresh(path: string, subject: string, op: PlanOp | 'anchor', checked: Checked, read?: string): Promise<void> {
+        logInfo(`[ReadingCheck] ${checked.verdict} op=${op} file=${path} subject=${subject}${read ? ` read=${read}` : ''}`
+            + ` disk=${shortKey(checked.disk)} last=${shortKey(this.scanner.readingOf(path).key)}`);
+        if (checked.verdict === 'stale') {
+            const file = this.app.vault.getAbstractFileByPath(path);
+            if (file instanceof TFile && await this.scanner.queueScan(file)) this.notify.schedule();
+        }
+        this.reconciler?.request('stale', path);
     }
 
     /**
@@ -539,10 +649,8 @@ export class TaskIndex {
      * 書き込みが 1 バイトも書かなかった更新を取り消す。
      *
      * index を先に書き換える設計なので、書けなかった更新を残すと画面とファイルが
-     * 食い違ったまま居座る。しかも何も書かなければ `vault.modify` が発火せず
-     * 再スキャンも走らないため、index を正す唯一の経路が、まさに落ちたその書き込み
-     * 自身に依存してしまう。値を戻し、再スキャンを促し、これまで警告ログだけで
-     * 黙って捨てていた失敗をユーザーにも伝える。
+     * 食い違ったまま居座る。値を戻す。拒否の理由は書き込みの層が伝え、拒否された
+     * ノートの読み直しは拒否の1か所（`reportRefusal`）が頼む。
      */
     private revertUnwrittenUpdate(
         task: Task,
@@ -564,11 +672,6 @@ export class TaskIndex {
 
         // The write layer has told the user why (see reportRefusal).
         logWarn(`[TaskIndex] update was not written, reverted: id=${taskId} fields=[${Object.keys(updates)}]`);
-
-        const file = this.app.vault.getAbstractFileByPath(task.file);
-        if (file instanceof TFile) {
-            void this.scanner.requestScan(file);
-        }
     }
 
     /**
@@ -597,7 +700,7 @@ export class TaskIndex {
 
     /** {@link deleteTask}, once every write already asked of the row has finished. */
     private async writeDelete(taskId: string, options: { fireFlow?: boolean }, known: Task | undefined): Promise<boolean> {
-        const task = this.copyForWrite(taskId, known);
+        const task = await this.copyToPlan(taskId, known, 'delete');
         if (!task) return false;
         return this.withNotify(task.file, async () => {
             logInfo(`[deleteTask] id=${taskId} fireFlow=${options.fireFlow === true}`);
@@ -628,7 +731,7 @@ export class TaskIndex {
         if (this.refuseAfterDispose('duplicateTask')) return false;
         const known = this.getTask(taskId);
         return this.onRow(taskId, async () => {
-            const task = this.copyForWrite(taskId, known);
+            const task = await this.copyToPlan(taskId, known, 'duplicate');
             if (!task) return false;
             return this.writeDuplicateOf(task, taskId, options);
         });
@@ -718,16 +821,18 @@ export class TaskIndex {
      */
     async insertLine(taskId: string, line: string, place: InsertPlace, rowId?: string | null): Promise<boolean> {
         if (this.refuseAfterDispose('insertLine')) return false;
-        const task = this.copyForWrite(taskId, undefined);
-        if (!task) return false;
-        if (task.isReadOnly) return false;
-        return this.withNotify(task.file, async () => {
-            logInfo(`[insertLine] taskId=${taskId} place=${place}${rowId === undefined ? '' : ` rowId=${rowId ?? '(off)'}`}`);
-            const ops: TaskOp[] = [];
-            if (rowId !== undefined) ops.push({ kind: 'update', text: TaskParser.format({ ...task, blockId: rowId ?? undefined }) });
-            ops.push({ kind: 'insert', place, text: line });
-            const { written } = await this.repository.applyToTask(plannedOn(task), ops);
-            return written;
+        return this.onRow(taskId, async () => {
+            const task = await this.copyToPlan(taskId, undefined, 'insert');
+            if (!task) return false;
+            if (task.isReadOnly) return false;
+            return this.withNotify(task.file, async () => {
+                logInfo(`[insertLine] taskId=${taskId} place=${place}${rowId === undefined ? '' : ` rowId=${rowId ?? '(off)'}`}`);
+                const ops: TaskOp[] = [];
+                if (rowId !== undefined) ops.push({ kind: 'update', text: TaskParser.format({ ...task, blockId: rowId ?? undefined }) });
+                ops.push({ kind: 'insert', place, text: line });
+                const { written } = await this.repository.applyToTask(plannedOn(task), ops);
+                return written;
+            });
         });
     }
 
@@ -775,11 +880,16 @@ export class TaskIndex {
      * for want of a target comes through here — once per write, from the
      * write layer — so the callers that learn of it from a `false` do not
      * say it again.
+     *
+     * A write refused as `changed` or `failed` found the note other than the
+     * index read it: the reconciler is asked to read it again, and to sweep —
+     * a change notice may have gone missing (structure.md, 読みの鮮度).
      */
     private reportRefusal(refusal: Refusal): void {
         const { reason, subject, file } = refusal;
         logWarn(`[TaskIndex] write refused: file=${file} reason=${reason.kind} subject=${subject}`);
         new Notice(t('notice.notWritten', { reason: refusalClause(reason), subject }));
+        if (reason.kind === 'changed' || reason.kind === 'failed') this.reconciler?.request('refusal', file);
     }
 
 }
@@ -802,6 +912,13 @@ export class TaskIndex {
 // Not statusDefinitions: which status chars count as complete is read where a
 // completion is answered and where a view draws, never by the parse, so a
 // change to it needs only the notify.
+/** A content key as a log line gives it: the line count and the length, the hash cut short. */
+function shortKey(key: ContentKey | null | undefined): string {
+    if (!key) return '-';
+    const cut = key.lastIndexOf(':');
+    return `${key.slice(0, cut + 1)}${key.slice(cut + 1, cut + 7)}…`;
+}
+
 export function computeParseFingerprint(settings: TaskViewerSettings): string {
     return JSON.stringify([
         settings.scopeKeys,

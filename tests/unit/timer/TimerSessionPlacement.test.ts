@@ -66,7 +66,9 @@ function makeHarness(options: { tail?: Task | undefined; siblingFails?: boolean 
             if (task && 'blockId' in u) task.blockId = u.blockId as string | undefined;
         },
         deleteTask: async (id: string) => { deletes.push(id); },
-        waitForScan: async () => { /* 書き込みは同期的に反映済み */ },
+        // Fresh as held: this index reads no disk, so a write's row is looked up
+        // by its anchor in what it holds (`TaskIndex.freshByAnchor`).
+        freshByAnchor(file: string, anchor: string) { return Promise.resolve(this.getTaskByAnchor(file, anchor)); },
     };
 
     const plugin = {
@@ -152,7 +154,7 @@ describe('startNextSession: the next record sits beside the last one', () => {
         expect(h.childInserts).toHaveLength(0);
         expect(written).toBe(true);
         // 新しい行が書けて、スキャンが引き直せる状態まで進んだ（採用が完了した）。
-        expect(h.recorder.resolveTailRecord(timer)?.id).toBe(NEW_SESSION_ID);
+        expect((await h.recorder.resolveTailRecord(timer))?.id).toBe(NEW_SESSION_ID);
     });
 
     it('carries the record name over instead of leaving the line unnamed', async () => {

@@ -57,7 +57,9 @@ function makeHarness(): Harness {
         getTaskByAnchor: (file: string, anchor: string) => tasks.find(t => t.file === file && t.anchor === anchor),
         getTasks: () => tasks,
         updateTask: async () => { /* 記録の書き込みは測らない */ },
-        waitForScan: async () => { /* 書き込みと同時に載せている */ },
+        // Fresh as held: this index reads no disk, so a write's row is looked up
+        // by its anchor in what it holds (`TaskIndex.freshByAnchor`).
+        freshByAnchor(file: string, anchor: string) { return Promise.resolve(this.getTaskByAnchor(file, anchor)); },
     };
 
     const plugin = {
@@ -129,7 +131,7 @@ describe('daily note timers own a running line too', () => {
         // パスを覚えないと、尻尾の解決（ファイルで絞る）も兄弟挿入も相手を見失う。
         expect(timer.taskFile).toBe(DAILY_PATH);
         expect(timer.tailRecordBlockId).toBe('tv-t-1');
-        expect(h.recorder.resolveTailRecord(timer)?.file).toBe(DAILY_PATH);
+        expect((await h.recorder.resolveTailRecord(timer))?.file).toBe(DAILY_PATH);
     });
 
     it('starts the line unnamed instead of inheriting the date', async () => {

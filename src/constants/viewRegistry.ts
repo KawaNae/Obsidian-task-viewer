@@ -99,3 +99,8 @@ export function getViewMeta(viewType: string): ViewMeta {
     }
     return buildViewMeta(def);
 }
+
+/** Whether `viewType` is one of this plugin's views. */
+export function isViewType(viewType: string): viewType is ViewType {
+    return Object.prototype.hasOwnProperty.call(VIEW_META_DEFS, viewType);
+}

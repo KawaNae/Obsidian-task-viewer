@@ -28,7 +28,7 @@ function buildHost(task: Task, written = true) {
             reportNotRun: () => { },
         },
         writeCompleting: proto.writeCompleting,
-        scanner: { requestScan: vi.fn(async () => {}), follow: () => null, holds: () => false },
+        scanner: { follow: () => null, holds: () => false },
         app: { vault: { getAbstractFileByPath: () => null } },
         repository: {
             updateTaskInFile: vi.fn(async () => ({ written, refused: null })),
@@ -41,7 +41,7 @@ function buildHost(task: Task, written = true) {
         disposed: false,
         refuseAfterDispose: proto.refuseAfterDispose,
 
-        copyForWrite: proto.copyForWrite,
+        copyToPlan: proto.copyToPlan,
         getTask: proto.getTask,
 
         reportRefusal: () => { /* the notice is not measured here */ },

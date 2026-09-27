@@ -11,6 +11,8 @@ import { DEFAULT_SETTINGS } from '../../../src/types';
 import type { FlowExecutor } from '../../../src/services/flow/FlowExecutor';
 import { splitLines } from '../../../src/services/persistence/FileLines';
 import type { Refusal, WriteChannel } from '../../../src/services/persistence/FileLines';
+import type { DiskProbe } from '../../../src/services/core/DiskProbe';
+import type { DiskReconciler } from '../../../src/services/core/DiskReconciler';
 
 export function makeFile(path: string): TFile {
     const file = new TFile();
@@ -100,8 +102,14 @@ export function scannerOf(index: TaskIndex): TaskScanner {
  *
  * A second `vaultSession` over the same `contents` is a reload: a new index,
  * a new session of readings, new names.
+ *
+ * `contents` is the disk: a test that sets it without writing through the
+ * index makes an edit from outside whose change event never came. The index
+ * has a reconciler only when `probe` is given (its stand-in for the disk's
+ * stats); it starts it when the test says (`reconciler.start()`), as the
+ * plugin does once the vault is read.
  */
-export function vaultSession(contents: Map<string, string>) {
+export function vaultSession(contents: Map<string, string>, options: { probe?: DiskProbe } = {}) {
     let scanner: TaskScanner | undefined;
     const noop = { on: () => ({}), offref: () => { } };
     const vaultHandlers = new Map<string, (...args: unknown[]) => unknown>();
@@ -157,7 +165,7 @@ export function vaultSession(contents: Map<string, string>) {
         workspace: { ...noop, onLayoutReady: () => { }, activeLeaf: null },
     };
 
-    const index = new TaskIndex(app as never, { ...DEFAULT_SETTINGS });
+    const index = new TaskIndex(app as never, { ...DEFAULT_SETTINGS }, options.probe ?? null);
     scanner = scannerOf(index);
     // Registers the real vault/metadataCache handlers `process`/`create`
     // above call into. `onLayoutReady` never runs its callback here.
@@ -166,6 +174,7 @@ export function vaultSession(contents: Map<string, string>) {
     const internals = index as unknown as {
         commandExecutor: FlowExecutorView;
         reportRefusal(refusal: Refusal): void;
+        reconciler: DiskReconciler | null;
     };
     const executor = internals.commandExecutor;
     // The channel `TaskIndex` connected, taken before a test connects another.
@@ -196,6 +205,8 @@ export function vaultSession(contents: Map<string, string>) {
         scannerPrivates: scanner as unknown as { queueScan: (file: TFile) => Promise<boolean> },
         /** The channel `TaskIndex` gave a write to `file`, even after a test has connected another. */
         channelOf: (file: string): WriteChannel => connected(file),
+        /** The index's reconciler, when the session was given a probe. */
+        reconciler: internals.reconciler,
         /** Tell `TaskIndex` a write was refused, as its own channel does. */
         reportRefusal: (refusal: Refusal): void => internals.reportRefusal(refusal),
         recorder: new TimerRecorder(app as never, plugin as never, storageUtils, () => persist(), () => openTimers()),

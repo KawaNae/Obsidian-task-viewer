@@ -124,9 +124,8 @@ export class TaskScanner {
     }
 
     /**
-     * Read the file again, whatever it read last: for a caller that has
-     * reason to think the index parts from the file (an update that was not
-     * written and put its values back).
+     * Read the file again, whatever it read last: for a caller that has to
+     * know the index read the file now (the editor's menu, after it saved).
      */
     async requestScan(file: TFile): Promise<void> {
         this.stale.add(file.path);

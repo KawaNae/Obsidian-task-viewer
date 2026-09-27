@@ -68,6 +68,24 @@ export class TaskWriteService {
     }
 
     /**
+     * Whether the task is still the row on the disk, asked as a drag or a
+     * card's menu opens (`TaskIndex.confirmTask`). No: the user has been
+     * told, and the note read again; the caller does not go on.
+     */
+    async confirmTask(taskId: string, op: 'drag' | 'menu'): Promise<boolean> {
+        return this.taskIndex.confirmTask(this.resolveTaskId(taskId), op);
+    }
+
+    /**
+     * The row a note's `^id` anchors, in a reading of the note as the disk
+     * holds it (`TaskIndex.freshByAnchor`): for a write that names its row
+     * by anchor — the API's `path#^id`, a timer.
+     */
+    async freshByAnchor(filePath: string, anchor: string): Promise<Task | undefined> {
+        return this.taskIndex.freshByAnchor(filePath, anchor);
+    }
+
+    /**
      * Subscribe to UI-initiated task deletions. Fired after deleteTask resolves.
      * Views use this to clear selection when the selected task is deleted via
      * the UI (context menu, command palette, API), preventing a stale id from

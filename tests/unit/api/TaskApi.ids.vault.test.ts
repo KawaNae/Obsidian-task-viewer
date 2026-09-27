@@ -91,13 +91,17 @@ describe('an anchored ID', () => {
         expect(contents.get(FILE)).toBe(['メモ', '- [x] A ^keep', '- [ ] A', ''].join('\n'));
     });
 
-    it('is refused, and the file left as it is, while the file holds an edit the scan has not read', async () => {
+    // The anchor outlives readings (contract 3): a note the index was never
+    // told changed is read again first (`freshByAnchor`), and the write goes
+    // to the row the anchor finds there.
+    it('reads the note again when the file holds an edit no scan has read, and writes the row its anchor finds', async () => {
         const { contents, api } = await open(['- [ ] A ^keep', '- [ ] A', '']);
-        const edited = ['- [ ] A ^keep', '- [ ] A', '- [ ] B', ''].join('\n');
-        contents.set(FILE, edited);
+        contents.set(FILE, ['メモ', '- [ ] A', '- [ ] A ^keep', ''].join('\n'));
 
-        await expect(api.update({ id: 'note.md#^keep', status: 'x' })).rejects.toThrow(/could not be written/);
-        expect(contents.get(FILE)).toBe(edited);
+        const { task } = await api.update({ id: 'note.md#^keep', status: 'x' });
+
+        expect(task.id).toBe('note.md#^keep');
+        expect(contents.get(FILE)).toBe(['メモ', '- [ ] A', '- [x] A ^keep', ''].join('\n'));
     });
 
     it('names nothing once its ^id is gone or no longer alone, and says so', async () => {

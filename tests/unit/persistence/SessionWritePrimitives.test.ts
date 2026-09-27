@@ -223,11 +223,12 @@ function buildIndexHost(task: Task | undefined) {
             applyToTask: vi.fn(async () => MADE),
         },
         withNotify: vi.fn(async (_file: string, fn: () => Promise<unknown>) => await fn()),
+        onRow: proto.onRow,
         // The dispose guard every write goes through; this index is open.
         disposed: false,
         refuseAfterDispose: proto.refuseAfterDispose,
 
-        copyForWrite: proto.copyForWrite,
+        copyToPlan: proto.copyToPlan,
         getTask: proto.getTask,
 
         reportRefusal: () => { /* the notice is not measured here */ },

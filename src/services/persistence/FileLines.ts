@@ -1091,8 +1091,27 @@ function processOrFail(
     attempt: (content: string) => string,
     subject: () => string,
 ): Promise<WriteRefused | null> {
+    return inLineOf(file, () => processAndSettle(app, file, channel, attempt, subject));
+}
+
+/**
+ * The file's content, read once every write to it already asked has landed
+ * and the index has been told what it left (`processOrFail`), and before any
+ * write asked after: what a check of the index's reading against the disk
+ * reads (`ReadingCheck`). Read out of line, it could see a write of ours on
+ * disk that the index has not been told of yet, and call the index's reading
+ * stale when it is only a moment behind.
+ */
+export function readInLine(app: App, file: TFile): Promise<string> {
+    return inLineOf(file, () => app.vault.read(file));
+}
+
+/**
+ * Run `run` once everything already in the file's line has settled, and keep
+ * the line waiting for it in turn.
+ */
+function inLineOf<T>(file: TFile, run: () => Promise<T>): Promise<T> {
     const ahead = inLine.get(file);
-    const run = () => processAndSettle(app, file, channel, attempt, subject);
     // Nothing ahead: start now, as a write did before there was a line.
     const mine = ahead ? ahead.then(run) : run();
     const settled = mine.then(() => undefined, () => undefined);
@@ -1103,7 +1122,7 @@ function processOrFail(
     return mine;
 }
 
-/** Each file's latest write through {@link processOrFail}, settled when it is done. */
+/** Each file's latest write or read through {@link inLineOf}, settled when it is done. */
 const inLine = new WeakMap<TFile, Promise<void>>();
 
 async function processAndSettle(

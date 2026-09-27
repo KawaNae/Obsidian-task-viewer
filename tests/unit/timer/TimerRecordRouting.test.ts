@@ -43,7 +43,9 @@ function makeHarness(options: { childExists?: boolean; childContent?: string } =
         getTasks: () => visible,
         getTaskByFileLine: () => parent,
         updateTask: async (id: string, u: Record<string, unknown>) => { updates.push({ id, updates: u }); return true; },
-        waitForScan: async () => { /* unused */ },
+        // Fresh as held: this index reads no disk, so a write's row is looked up
+        // by its anchor in what it holds (`TaskIndex.freshByAnchor`).
+        freshByAnchor(file: string, anchor: string) { return Promise.resolve(this.getTaskByAnchor(file, anchor)); },
     };
 
     const plugin = {
