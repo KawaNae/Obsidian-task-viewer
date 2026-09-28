@@ -1,14 +1,14 @@
 import type { Task } from '../../types';
 import type { Diagnostic } from '../lang/Diagnostic';
 import type { GeneratedChild } from '../persistence/TaskCloner';
-import type { MoveTarget } from './FlowAst';
+import type { GenerationError } from './FlowPlanner';
 
 /**
  * Effect descriptors produced by the pure planner and applied by the
  * FlowExecutor's interpreter against TaskRepository.
  *
  * ORDER: the planner emits effects in the order
- *   create-next / create-generated → move / strip-flow
+ *   create-next / create-generated → move / strip-flow → move-dropped
  * and the interpreter keeps it, as the order of the ops of one write (see
  * FlowExecutor.planTask and InlineTaskWriter.applyOps). Everything a fire
  * does is the write that completed the row, in the row's own note: the row
@@ -47,9 +47,18 @@ export type FlowEffect =
     }
     | { kind: 'strip-flow' }
     /**
-     * The row, as `movedTask` reads, carried with its subtree to `to` in its
-     * own note — which consumes the command as `strip-flow` does. Where `to`
-     * is, and whether it is one place, is answered against the lines the
-     * write holds (`FlowExecutor.planTask`, `Placement.heading`).
+     * The row, as `movedTask` reads, carried with its subtree to the section
+     * of the heading `heading` in its own note — which consumes the command
+     * as `strip-flow` does. Whether that heading is one place is answered
+     * against the lines the write holds (`FlowExecutor.planTask`,
+     * `Placement.heading`); a failure there fails the fire whole.
      */
-    | { kind: 'move'; to: MoveTarget; movedTask: Task };
+    | { kind: 'move'; heading: string; movedTask: Task }
+    /**
+     * The move the command asks for, not made, and why: its destination is
+     * retired (`MoveTarget`), which is known from how the clause is written,
+     * before any note is read. Writes nothing. The rest of the fire goes
+     * ahead, the command is consumed (`strip-flow` before it), and the user
+     * is told the move was dropped (`FlowExecutor.reportNotRun`).
+     */
+    | { kind: 'move-dropped'; error: GenerationError };

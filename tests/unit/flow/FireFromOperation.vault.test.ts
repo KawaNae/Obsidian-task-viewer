@@ -217,10 +217,11 @@ describe('a card\'s completion', () => {
     });
 
     it('keeps the command of a move that does not fire, for a write before the scan', async () => {
-        // A move that names another note is retired: the completing write
-        // consumes nothing, and the command stays on the row. The copy has to
-        // say so, or the next card's write drops the command.
-        const note = await open(['# note', '- [ ] T @2026-09-21 ==> move([[other]])', '- [ ] U', '']);
+        // A move to a heading the note does not have fails the fire whole:
+        // the completing write consumes nothing, and the command stays on the
+        // row. The copy has to say so, or the next card's write drops the
+        // command.
+        const note = await open(['# note', '- [ ] T @2026-09-21 ==> move([[#Done]])', '- [ ] U', '']);
         const id = note.idOf('T');
         note.session.holdScans();
 
@@ -229,7 +230,7 @@ describe('a card\'s completion', () => {
 
         expect(note.fired).toEqual([]);
         expect(note.contents.get(FILE)!.split('\n')).toEqual([
-            '# note', '- [x] T2 @2026-09-21 ==> move([[other]])', '- [ ] U', '',
+            '# note', '- [x] T2 @2026-09-21 ==> move([[#Done]])', '- [ ] U', '',
         ]);
     });
 });

@@ -4,7 +4,7 @@ import type { DuplicateOptions, Task, TaskViewerSettings } from '../../types';
 import { isTvInline } from '../../types';
 import { TaskRepository } from '../persistence/TaskRepository';
 import { PropertyUpdatePlanner } from '../persistence/PropertyUpdatePlanner';
-import { FlowExecutor, type FireOp } from '../flow/FlowExecutor';
+import { FlowExecutor, type FireOp, notRunOf } from '../flow/FlowExecutor';
 import { completes } from '../flow/FlowTrigger';
 import type { EditorFireHost } from '../../editor/FlowFireExtension';
 import type { FlowDeleteAssessment } from '../flow/FlowDeletion';
@@ -536,7 +536,7 @@ export class TaskIndex {
      * write refused with a fire that writes lines is made without it in the
      * same attempt (`CompletionFire.writes`). Once the completion landed, the
      * user is told if its flow was not run: the fire's write was refused, or
-     * its plan failed (`FlowExecutor.reportNotRun`).
+     * its plan failed, or fired without its move (`FlowExecutor.reportNotRun`).
      */
     private async writeCompleting(
         completingIn: string | null,
@@ -546,9 +546,8 @@ export class TaskIndex {
         const fire = this.commandExecutor.fireOp(completingIn);
         const outcome = await write(fire);
         if (!outcome.written) return false;
-        const planned = fire.planned();
-        if (outcome.insteadOf) this.commandExecutor.reportNotRun({ kind: 'refused', refusal: outcome.insteadOf });
-        else if (planned?.kind === 'failed') this.commandExecutor.reportNotRun(planned);
+        const notRun = outcome.insteadOf ? { kind: 'refused' as const, refusal: outcome.insteadOf } : notRunOf(fire.planned());
+        if (notRun) this.commandExecutor.reportNotRun(notRun);
         return true;
     }
 

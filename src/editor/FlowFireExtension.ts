@@ -3,7 +3,7 @@ import { isolateHistory } from '@codemirror/commands';
 import { editorInfoField } from 'obsidian';
 import type { StatusDefinition } from '../types';
 import { completes, isOperation } from '../services/flow/FlowTrigger';
-import type { FireOp, NotRun } from '../services/flow/FlowExecutor';
+import { type FireOp, type NotRun, notRunOf } from '../services/flow/FlowExecutor';
 import type { TaskOp } from '../services/persistence/TaskOps';
 import {
     editLines, replayEdits,
@@ -27,7 +27,7 @@ export interface EditorFireHost {
     applyOps(draft: LineDraft, session: WriteSession, target: NamedRow | EditorLine, ops: readonly TaskOp[]): boolean;
     /** Tell the user a write was not made, and why (the index's `reportRefusal`): the editor menu's write. */
     refused(refusal: Refusal): void;
-    /** Tell the user a completed row's flow was not run, and why: the row stays completed (`FlowExecutor.reportNotRun`). */
+    /** Tell the user a completed row's flow, or its move, was not run, and why: the row stays completed (`FlowExecutor.reportNotRun`). */
     notRun(why: NotRun): void;
 }
 
@@ -109,8 +109,8 @@ export function fireFilter(host: EditorFireHost): Extension {
             // Planned where `applyOps` would plan it, first: from the lines
             // the write is handed, at the row.
             const ops = fire.op.plan(lines, line);
-            const planned = fire.planned();
-            if (planned?.kind === 'failed') queueMicrotask(() => host.notRun(planned));
+            const notRun = notRunOf(fire.planned());
+            if (notRun) queueMicrotask(() => host.notRun(notRun));
             // The completion is in the document already, and stands whatever
             // comes of its fire (`CompletionFire`).
             if (!fire.writes()) continue;
