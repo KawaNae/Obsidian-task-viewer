@@ -1152,6 +1152,11 @@ export class TimelineView extends ItemView {
      * actually on screen if the day-list logic ever changes (e.g. an
      * oldest-overdue start date).
      */
+    /** Open the toolbar's date picker (the "Go to date" command). */
+    openDatePicker(): void {
+        this.toolbar?.openDatePicker();
+    }
+
     getExportedDateRange(): { anchor: string; from: string; to: string } | null {
         const dates = this.getDatesToShow();
         if (dates.length === 0) return null;

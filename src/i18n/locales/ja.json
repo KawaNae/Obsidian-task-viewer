@@ -253,7 +253,8 @@
     "openMiniCalendar": "ミニカレンダービューを開く",
     "openKanban": "カンバンビューを開く",
     "openTimer": "タイマービューを開く",
-    "openLog": "ログビューを開く"
+    "openLog": "ログビューを開く",
+    "goToDate": "日付へ移動"
   },
   "ribbon": {
     "openTimeline": "タイムラインを開く",
@@ -272,6 +273,7 @@
   },
   "toolbar": {
     "today": "今日",
+    "todayOrPickDate": "クリックで今日、ダブルクリックで日付を指定",
     "previousDay": "前日",
     "nextDay": "翌日",
     "previousWeek": "前週",

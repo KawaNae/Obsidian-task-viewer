@@ -915,6 +915,11 @@ export class CalendarView extends ItemView {
      * week-aligned 42-day window, not the calendar month — so this can't
      * drift from what's actually on screen.
      */
+    /** Open the toolbar's date picker (the "Go to date" command). */
+    openDatePicker(): void {
+        this.toolbar.openDatePicker();
+    }
+
     getExportedDateRange(): { anchor: string; from: string; to: string } | null {
         const { startDate, endDate } = this.getCalendarDateRange();
         return {

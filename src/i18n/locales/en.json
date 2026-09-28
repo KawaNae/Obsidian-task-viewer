@@ -253,7 +253,8 @@
     "openMiniCalendar": "Open Mini Calendar View",
     "openKanban": "Open Kanban View",
     "openTimer": "Open Timer View",
-    "openLog": "Open Log View"
+    "openLog": "Open Log View",
+    "goToDate": "Go to date"
   },
   "ribbon": {
     "openTimeline": "Open Timeline",
@@ -272,6 +273,7 @@
   },
   "toolbar": {
     "today": "Today",
+    "todayOrPickDate": "Click for today, double-click to pick a date",
     "previousDay": "Previous day",
     "nextDay": "Next day",
     "previousWeek": "Previous week",

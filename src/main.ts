@@ -307,6 +307,21 @@ export default class TaskViewerPlugin extends Plugin {
             }
         });
 
+        // Opens the date picker of the focused Timeline / Schedule / Calendar.
+        this.addCommand({
+            id: 'go-to-date',
+            name: t('command.goToDate'),
+            checkCallback: (checking) => {
+                const { workspace } = this.app;
+                const view = workspace.getActiveViewOfType(TimelineView)
+                    ?? workspace.getActiveViewOfType(ScheduleView)
+                    ?? workspace.getActiveViewOfType(CalendarView);
+                if (!view) return false;
+                if (!checking) view.openDatePicker();
+                return true;
+            }
+        });
+
         this.addCommand({
             id: 'open-log-view',
             name: t('command.openLog'),

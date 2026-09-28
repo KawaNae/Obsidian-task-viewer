@@ -76,9 +76,19 @@ export abstract class ViewToolbarBase {
     protected abstract buildDom(rootEl: HTMLElement): void;
 }
 
+/** What {@link DateNavigator.render} hands back to its toolbar. */
+export interface DateNavigatorHandle {
+    /**
+     * Open the date picker (the command palette's "Go to date"). No-op when
+     * the navigator was rendered without `dateJump`.
+     */
+    openDatePicker: () => void;
+}
+
 /**
- * Date navigation component with prev/next/today buttons, and optionally a
- * calendar button that opens a {@link DatePickerPopover} to jump to any date.
+ * Date navigation component with prev/next/today buttons. With `dateJump` it
+ * also offers a {@link DatePickerPopover} to jump to any date, two ways that
+ * are on trial side by side: a calendar button, and a double-click on Today.
  */
 export class DateNavigator {
     /**
@@ -86,7 +96,8 @@ export class DateNavigator {
      * @param toolbar - Parent element to render into
      * @param onNavigate - Callback when navigating by days (e.g., -1 or +1)
      * @param onToday - Callback when clicking Now button
-     * @param options.dateJump - Adds the calendar button. It gives way to
+     * @param options.dateJump - Adds the calendar button, and makes a
+     *   double-click on Today open the picker. The button gives way to
      *   {@link appendCompactItem} in the compact "⋮" menu on narrow panes.
      */
     static render(
@@ -98,7 +109,7 @@ export class DateNavigator {
             onNavigateFast?: (direction: number) => void;
             dateJump?: DateJumpOptions;
         }
-    ): void {
+    ): DateNavigatorHandle {
         const vertical = options?.vertical ?? false;
         const prevIcon = vertical ? 'chevron-up' : 'chevron-left';
         const nextIcon = vertical ? 'chevron-down' : 'chevron-right';
@@ -142,15 +153,30 @@ export class DateNavigator {
             fastNextBtn.onclick = () => onFastNext(1);
         }
 
-        if (options?.dateJump) {
-            const picker = new DatePickerPopover(options.dateJump);
-            const jumpBtn = navGroup.createEl('button', {
-                cls: 'view-toolbar__btn--icon view-toolbar__btn--date-jump',
-            });
-            setIcon(jumpBtn, 'calendar');
-            jumpBtn.setAttribute('aria-label', t('toolbar.goToDate'));
-            jumpBtn.onclick = () => picker.open({ kind: 'element', element: jumpBtn });
-        }
+        if (!options?.dateJump) return { openDatePicker: () => {} };
+
+        const picker = new DatePickerPopover(options.dateJump);
+        const jumpBtn = navGroup.createEl('button', {
+            cls: 'view-toolbar__btn--icon view-toolbar__btn--date-jump',
+        });
+        setIcon(jumpBtn, 'calendar');
+        jumpBtn.setAttribute('aria-label', t('toolbar.goToDate'));
+        jumpBtn.onclick = () => picker.open({ kind: 'element', element: jumpBtn });
+
+        // Today keeps its single click as is, with no wait to tell a double
+        // click apart: both clicks of a double click go to today, and the
+        // dblclick that follows opens the picker, on today's month.
+        todayBtn.setAttribute('aria-label', t('toolbar.todayOrPickDate'));
+        todayBtn.ondblclick = () => picker.open({ kind: 'element', element: todayBtn });
+
+        return {
+            // Anchor on the calendar button while it shows; compact mode hides
+            // it, and Today is always there.
+            openDatePicker: () => {
+                const anchor = jumpBtn.getClientRects().length > 0 ? jumpBtn : todayBtn;
+                picker.open({ kind: 'element', element: anchor });
+            },
+        };
     }
 
     /**

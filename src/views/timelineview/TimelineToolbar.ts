@@ -4,7 +4,7 @@ import type { AstronomyDisplay } from '../../types';
 import type { TaskReadService } from '../../services/data/TaskReadService';
 import type { PluginContext } from '../../PluginContext';
 import type { DateJumpOptions } from '../sharedUI/DatePickerPopover';
-import { DateNavigator, DaysToShowSelector, ZoomSelector, ViewSettingsMenu, MaskToggleButton, ViewToolbarBase, appendCompactFilterAndMask, type ViewSettingsOptions, type CompactMenuDeps } from '../sharedUI/ViewToolbar';
+import { DateNavigator, type DateNavigatorHandle, DaysToShowSelector, ZoomSelector, ViewSettingsMenu, MaskToggleButton, ViewToolbarBase, appendCompactFilterAndMask, type ViewSettingsOptions, type CompactMenuDeps } from '../sharedUI/ViewToolbar';
 import { DateLabel } from '../sharedUI/DateLabel';
 import { appendAstronomyMenuSection } from '../sharedUI/AstronomyMenuSection';
 import type { FilterMenuComponent } from '../customMenus/FilterMenuComponent';
@@ -98,6 +98,7 @@ export class TimelineToolbar extends ViewToolbarBase {
     private viewModeHandle: { update: () => void } | null = null;
     private zoomHandle: { update: () => void } | null = null;
     private maskHandle: { update: () => void } | null = null;
+    private dateNavigatorHandle: DateNavigatorHandle | null = null;
 
     constructor(private deps: TimelineToolbarDeps) {
         super();
@@ -141,7 +142,7 @@ export class TimelineToolbar extends ViewToolbarBase {
         DateLabel.bindHoverPreview(toolbar, dateLabelDeps);
 
         // Date Navigation
-        DateNavigator.render(
+        this.dateNavigatorHandle = DateNavigator.render(
             toolbar,
             (days) => deps.onNavigateDays(days),
             () => deps.onJumpToNow(),
@@ -229,6 +230,11 @@ export class TimelineToolbar extends ViewToolbarBase {
             (newZoom) => this.deps.setZoomLevel(newZoom),
             this.deps.plugin.menuPresenter
         );
+    }
+
+    /** Open the date picker from outside the toolbar (the "Go to date" command). */
+    openDatePicker(): void {
+        this.dateNavigatorHandle?.openDatePicker();
     }
 
     /** The date picker's hookup, shared by the calendar button and the ⋮ entry. */
