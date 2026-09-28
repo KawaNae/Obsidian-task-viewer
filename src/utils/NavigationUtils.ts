@@ -29,6 +29,19 @@ export function openFileInExistingOrNewTab(app: App, filePath: string): void {
 }
 
 /**
+ * ファイルを開く。設定 `reuseExistingTab` が有効なら既存タブへ移動し
+ * （なければ新規タブ）、無効なら常に新規タブで開く。プラグインがノートを
+ * 開く経路はここに集める。
+ */
+export function openFile(app: App, filePath: string, reuseTab: boolean): void {
+    if (reuseTab) {
+        openFileInExistingOrNewTab(app, filePath);
+    } else {
+        void app.workspace.openLinkText(filePath, '', true);
+    }
+}
+
+/**
  * リンクテキスト（wikilink等）を解決して既存タブに移動、なければ新規タブで開く。
  */
 export function openLinkInExistingOrNewTab(app: App, linktext: string, sourcePath: string): void {
@@ -44,11 +57,7 @@ export function openLinkInExistingOrNewTab(app: App, linktext: string, sourcePat
  * ファイルを開いて指定行を選択・フォーカスする。
  */
 export function openFileAndSelectLine(app: App, filePath: string, lineNumber: number, reuseTab: boolean): void {
-    if (reuseTab) {
-        openFileInExistingOrNewTab(app, filePath);
-    } else {
-        void app.workspace.openLinkText(filePath, '', true);
-    }
+    openFile(app, filePath, reuseTab);
 
     setTimeout(() => {
         const view = app.workspace.getActiveViewOfType(MarkdownView);
@@ -65,21 +74,5 @@ export function openFileAndSelectLine(app: App, filePath: string, lineNumber: nu
 }
 
 export function openTaskInEditor(app: App, task: Task, reuseTab: boolean): void {
-    if (reuseTab) {
-        openFileInExistingOrNewTab(app, task.file);
-    } else {
-        void app.workspace.openLinkText(task.file, '', true);
-    }
-    setTimeout(() => {
-        const view = app.workspace.getActiveViewOfType(MarkdownView);
-        if (view) {
-            const editor = view.editor;
-            const lineText = editor.getLine(task.line);
-            editor.setSelection(
-                { line: task.line, ch: 0 },
-                { line: task.line, ch: lineText.length }
-            );
-            editor.focus();
-        }
-    }, 100);
+    openFileAndSelectLine(app, task.file, task.line, reuseTab);
 }

@@ -12,7 +12,7 @@ import { PROPERTY_ICONS } from '../../constants/propertyIcons';
 import { attachBracketPairing, type BracketPairingHandle } from '../form/bracketPairing';
 import { TaskUpdateBuilder } from '../form/TaskUpdateBuilder';
 import { CascadeSource, type CascadeSourceKind } from './CascadeSource';
-import { openFileInExistingOrNewTab } from '../../utils/NavigationUtils';
+import { openFile } from '../../utils/NavigationUtils';
 import { SuggestController } from '../../views/customMenus/SuggestController';
 import type { PopoverStack } from '../../views/sharedUI/PopoverStack';
 import type { DateGroupKey } from '../form/DateFieldGroup';
@@ -314,11 +314,7 @@ export class TaskHubForm {
     }
 
     private jumpToFile(): void {
-        if (this.deps.plugin.settings.reuseExistingTab) {
-            openFileInExistingOrNewTab(this.deps.app, this.task.file);
-        } else {
-            void this.deps.app.workspace.openLinkText(this.task.file, '', true);
-        }
+        openFile(this.deps.app, this.task.file, this.deps.plugin.settings.reuseExistingTab);
         this.deps.onNavigate?.();
     }
 
