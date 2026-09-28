@@ -55,7 +55,7 @@ function makeHarness(options: { tail?: Task | undefined } = {}): Harness {
 
     const ctx = {
         timers: new Map([[timer.id, timer]]),
-        recorder: { tailInIndex: () => tail, resolveTailRecord: async () => tail },
+        recorder: { tailInIndex: () => tail, resolveTailRecord: async () => (tail ? { kind: 'row' as const, task: tail } : { kind: 'none' as const }) },
         plugin: {
             getTaskIndex: () => ({
                 updateTask: async (id: string, u: Record<string, unknown>) => {

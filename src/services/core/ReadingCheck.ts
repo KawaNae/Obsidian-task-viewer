@@ -10,16 +10,18 @@ import type { ReadingId } from './Reading';
  *
  * `fresh`: it is, or our own writes carry it there. `stale`: the file changed
  * in a way the index has not read — an edit from outside whose change event
- * has not come, or never will (Obsidian drops some on Windows). `unreadable`:
- * the file could not be read.
+ * has not come, or never will (Obsidian drops some on Windows); `disk` is the
+ * key of what the disk holds. `unread`: the index has no reading of the file
+ * yet (the vault's first scan has not come to it) — which says nothing of a
+ * change notice. `unreadable`: the file could not be read.
  */
-export type Verdict = 'fresh' | 'stale' | 'unreadable';
+export type Checked =
+    | { verdict: 'fresh' }
+    | { verdict: 'stale'; disk: ContentKey }
+    | { verdict: 'unread' }
+    | { verdict: 'unreadable' };
 
-/** A verdict, and the key of the content the disk holds when it was read. */
-export interface Checked {
-    verdict: Verdict;
-    disk: ContentKey | null;
-}
+export type Verdict = Checked['verdict'];
 
 /** What a check asks of the index and of the disk. */
 export interface CheckDeps {
@@ -44,21 +46,24 @@ export interface CheckDeps {
  */
 export async function checkCopy(deps: CheckDeps, task: Task): Promise<Checked> {
     const { read, line } = plannedOn(task);
-    if (read === undefined) return { verdict: 'fresh', disk: null };
+    if (read === undefined) return { verdict: 'fresh' };
     const disk = await diskKey(deps, task.file);
-    if (disk === null) return { verdict: 'unreadable', disk };
-    return { verdict: deps.follow(task.file, read, line, disk) === null ? 'stale' : 'fresh', disk };
+    if (disk === null) return { verdict: 'unreadable' };
+    return deps.follow(task.file, read, line, disk) === null ? { verdict: 'stale', disk } : { verdict: 'fresh' };
 }
 
 /**
  * Whether the index's last reading of `path` is the file on disk: the check
  * for a row looked up by its anchor (`TaskIndex.freshByAnchor`), which looks
- * in the last reading, whichever it is.
+ * in the last reading, whichever it is. A file the index has not read yet is
+ * `unread`, not `stale`: no notice was missed for it.
  */
 export async function checkFile(deps: CheckDeps, path: string): Promise<Checked> {
     const disk = await diskKey(deps, path);
-    if (disk === null) return { verdict: 'unreadable', disk };
-    return { verdict: deps.last(path).key === disk ? 'fresh' : 'stale', disk };
+    if (disk === null) return { verdict: 'unreadable' };
+    const last = deps.last(path).key;
+    if (last === undefined) return { verdict: 'unread' };
+    return last === disk ? { verdict: 'fresh' } : { verdict: 'stale', disk };
 }
 
 /** The key of what the disk holds for `path`, or null when it cannot be read. */

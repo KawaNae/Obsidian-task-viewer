@@ -165,7 +165,7 @@ export function vaultSession(contents: Map<string, string>, options: { probe?: D
         workspace: { ...noop, onLayoutReady: () => { }, activeLeaf: null },
     };
 
-    const index = new TaskIndex(app as never, { ...DEFAULT_SETTINGS }, options.probe ?? null);
+    const index = new TaskIndex(app as never, { ...DEFAULT_SETTINGS }, { probe: options.probe ?? null });
     scanner = scannerOf(index);
     // Registers the real vault/metadataCache handlers `process`/`create`
     // above call into. `onLayoutReady` never runs its callback here.
@@ -231,14 +231,14 @@ export function vaultSession(contents: Map<string, string>, options: { probe?: D
                 },
             };
         },
-        settle: (path: string) => index.waitForScan(path),
+        settle: (path: string) => scanner!.waitForScan(path),
         /**
          * Wait until the scan of each `path` has finished. A fire is made in
          * the write that completed its row, so by the time that write is back
          * there is nothing of it left to wait for but the scans it started.
          */
         flowSettled: async (...paths: string[]): Promise<void> => {
-            for (const path of paths) await index.waitForScan(path);
+            for (const path of paths) await scanner!.waitForScan(path);
         },
         dispose: () => index.dispose(),
     };

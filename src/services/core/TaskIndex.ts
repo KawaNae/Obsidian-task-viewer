@@ -12,7 +12,7 @@ import { TaskStore } from './TaskStore';
 import { TaskScanner } from './TaskScanner';
 import { TaskValidator, type ValidationError } from './TaskValidator';
 import { PathTtlWindow } from './PathTtlWindow';
-import { refusalClause } from './RefusalClause';
+import { refusalNotice, type IndexRefusal } from './RefusalClause';
 import { NotifyCoalescer } from './NotifyCoalescer';
 import { TaskIdGenerator } from '../display/TaskIdGenerator';
 import { TaskParser } from '../parsing/TaskParser';
@@ -20,21 +20,35 @@ import { toDisplayTask } from '../display/DisplayTaskConverter';
 import { planInPlaceCopies } from '../persistence/DuplicateShift';
 import type { GenBlock } from '../parsing/gen/GenBlockCollector';
 import { plannedOn, subjectOf } from '../persistence/TaskRefs';
-import { logError, logInfo, logWarn } from '../../log/log';
-import { readInLine, type EditorLine, type Landing, type Refusal, type WriteOutcome } from '../persistence/FileLines';
+import { logDebug, logError, logInfo, logWarn } from '../../log/log';
+import { readInLine, type EditorLine, type Landing, type WriteOutcome } from '../persistence/FileLines';
 import type { InsertPlace, TaskOp } from '../persistence/TaskOps';
 import type { ContentKey } from './ContentKey';
-import { checkCopy, checkFile, type CheckDeps, type Checked } from './ReadingCheck';
+import { checkCopy, checkFile, type CheckDeps } from './ReadingCheck';
 import { DiskReconciler } from './DiskReconciler';
 import { diskProbeOf, type DiskProbe } from './DiskProbe';
 
 /**
- * What an operation planned from the index's copy of a row is, as a check of
- * that copy against the disk names it (`TaskIndex.copyToPlan`): an entry
- * point that checks before the user puts work in (`drag`, `menu`), or the
- * write itself.
+ * A row looked up by its anchor in a reading of the note as the disk holds it
+ * (`TaskIndex.freshByAnchor`): the row, no row carrying the anchor, or a note
+ * that could not be read — which says nothing of whether the row is there.
  */
-export type PlanOp = 'drag' | 'menu' | 'update' | 'delete' | 'duplicate' | 'insert';
+export type AnchoredRow =
+    | { kind: 'row'; task: Task }
+    | { kind: 'none' }
+    | { kind: 'unreadable' };
+
+/** How the index's reconciler meets the host (`DiskReconciler`). */
+export interface ReconcileOptions {
+    /** Where the disk is asked: by default the one this app can have (`diskProbeOf`); null for none. */
+    probe?: DiskProbe | null;
+    /**
+     * Whether a view type is one of the plugin's views, whose coming to the
+     * front asks for a sweep. The views are the plugin's to name, not the
+     * index's; none by default.
+     */
+    isOwnView?: (viewType: string) => boolean;
+}
 
 /**
  * TaskIndex - タスク管理の統括ファサードクラス
@@ -92,11 +106,8 @@ export class TaskIndex {
     /** What a check of a copy against the disk asks (`ReadingCheck`). */
     private readonly checks: CheckDeps;
 
-    /**
-     * @param probe where the reconciler asks the disk; by default the one
-     * this app can have (`diskProbeOf`).
-     */
-    constructor(private app: App, settings: TaskViewerSettings, probe: DiskProbe | null = diskProbeOf(app)) {
+    /** @param reconcile how the reconciler meets the host ({@link ReconcileOptions}). */
+    constructor(private app: App, settings: TaskViewerSettings, reconcile: ReconcileOptions = {}) {
         this.settings = settings;
         this.parseFingerprint = computeParseFingerprint(settings);
 
@@ -114,7 +125,7 @@ export class TaskIndex {
         // so a write that outlives this index lands nothing in it (see WriteChannels).
         this.repository.connect((path) => ({
             landed: landing => this.landed(path, landing),
-            refused: refusal => this.reportRefusal(refusal),
+            refused: refusal => { void this.reportRefusal(refusal); },
             follow: (read, line, now) => this.scanner.followLine(path, read, line, now),
             reading: () => this.scanner.readingOf(path),
         }));
@@ -127,13 +138,18 @@ export class TaskIndex {
             follow: (path, read, line, now) => this.scanner.followLine(path, read, line, now),
             last: (path) => this.scanner.readingOf(path),
         };
+        const probe = reconcile.probe === undefined ? diskProbeOf(app) : reconcile.probe;
         this.reconciler = probe && new DiskReconciler({
             files: () => app.vault.getMarkdownFiles(),
             readingOf: (path) => this.scanner.readingOf(path),
             reread: (file) => this.scanner.queueScan(file),
             forget: (path) => this.forgetFile(path),
             changed: () => this.notify.schedule(),
-        }, probe, { workspace: app.workspace, win: typeof window === 'undefined' ? undefined : window });
+        }, probe, {
+            workspace: app.workspace,
+            win: typeof window === 'undefined' ? undefined : window,
+            isOwnView: reconcile.isOwnView ?? (() => false),
+        });
     }
 
     getRepository(): TaskRepository {
@@ -418,10 +434,6 @@ export class TaskIndex {
         return this.scanner.requestScan(file);
     }
 
-    async waitForScan(filePath: string): Promise<void> {
-        return this.scanner.waitForScan(filePath);
-    }
-
     // ===== CRUD操作 =====
 
     /**
@@ -470,7 +482,7 @@ export class TaskIndex {
 
     /** {@link updateTask}, once every write already asked of the row has finished. */
     private async writeUpdate(taskId: string, updates: Partial<Task>, known: Task | undefined): Promise<boolean> {
-        const task = await this.copyToPlan(taskId, known, 'update');
+        const task = await this.copyToPlan(taskId, known);
         if (!task) return false;
         if (task.isReadOnly) return false;
 
@@ -541,38 +553,35 @@ export class TaskIndex {
 
     /**
      * The copy of a row an operation is planned from, once it is known to be
-     * the row on the disk; else undefined, and the user told why, once.
+     * the row on the disk; else undefined, and the user told why, once
+     * (`reportRefusal`).
      *
      * A row the store no longer holds — an earlier write to it took it away,
-     * or a scan read the file without it — is told as `gone`, like any write
-     * that finds its row gone. `known` is the copy as the operation was asked
-     * for, to say which row it was.
+     * or a scan read the file without it — is refused as `gone`, like any
+     * write that finds its row gone. `known` is the copy as the operation was
+     * asked for, to say which row it was.
      *
      * A copy the disk no longer reads as (`checkCopy`: a change the index was
-     * never told of) is not planned from: the note is read again, the
-     * operation is given up, and the user is asked to do it again, from the
-     * new reading (structure.md, 読みの鮮度). Every write that plans from a
-     * copy comes through here, and so do the drag and the card's menu before
-     * the user puts work in (`confirmTask`).
+     * never told of) is not planned from: it is refused as `stale`, the note
+     * is read again, and the user is asked to do it again, from the new
+     * reading (structure.md, 読みの鮮度). Every write that plans from a copy
+     * comes through here, and so do the drag and the card's menu before the
+     * user puts work in (`confirmTask`).
      */
-    private async copyToPlan(taskId: string, known: Task | undefined, op: PlanOp): Promise<Task | undefined> {
+    private async copyToPlan(taskId: string, known: Task | undefined): Promise<Task | undefined> {
         const task = this.getTask(taskId);
         if (!task) {
-            logWarn(`[TaskIndex] write to a row the index no longer holds: id=${taskId}`);
+            logWarn(`[TaskIndex] the index no longer holds the row: id=${taskId}`);
             // A row the caller named but the store never held here: say which
             // note, as a write refused before it read the note does.
             const file = known?.file ?? TaskIdGenerator.parse(taskId)?.filePath ?? '';
-            this.reportRefusal({
-                file,
-                reason: { kind: 'gone' },
-                subject: known ? subjectOf(known) : file,
-            });
+            await this.reportRefusal({ file, reason: { kind: 'gone' }, subject: known ? subjectOf(known) : file });
             return undefined;
         }
         const checked = await checkCopy(this.checks, task);
         if (checked.verdict === 'fresh') return task;
-        await this.notFresh(task.file, subjectOf(task), op, checked, TaskIdGenerator.readName(task.id)?.reading);
-        new Notice(t(checked.verdict === 'stale' ? 'notice.readAgain' : 'notice.notReadable', { subject: subjectOf(task) }));
+        const reason = checked.verdict === 'stale' ? { kind: 'stale' as const, disk: checked.disk } : { kind: 'unreadable' as const };
+        await this.reportRefusal({ file: task.file, reason, subject: subjectOf(task) });
         return undefined;
     }
 
@@ -583,41 +592,50 @@ export class TaskIndex {
      * been told and the note read again (`copyToPlan`). The write asks again
      * when it is made.
      */
-    async confirmTask(taskId: string, op: 'drag' | 'menu'): Promise<boolean> {
-        if (this.refuseAfterDispose(`confirmTask ${op}`)) return false;
-        return (await this.copyToPlan(taskId, undefined, op)) !== undefined;
+    async confirmTask(taskId: string): Promise<boolean> {
+        if (this.refuseAfterDispose('confirmTask')) return false;
+        return (await this.copyToPlan(taskId, undefined)) !== undefined;
     }
 
     /**
      * The row `anchor` anchors in `filePath` (`getTaskByAnchor`), looked up in
      * a reading of the note as the disk holds it: a note that changed in a
-     * way the index was never told of is read again first. For a caller that
-     * names its row by `^id` — the API's `path#^id`, a timer — whose anchor
-     * outlives readings, so it goes on with the row it finds (contract 3),
-     * where one that named a reading is asked to try again.
+     * way the index was never told of, or that the index has not read yet,
+     * is read first. For a caller that names its row by `^id` — the API's
+     * `path#^id`, a timer — whose anchor outlives readings, so it goes on
+     * with the row it finds (contract 3), where one that named a reading is
+     * asked to try again. Nothing is told the user here: the caller goes on,
+     * or says why it does not.
+     *
+     * While the note is being dragged (`TaskScanner.hold`), the check is
+     * against the reading held back, and the row comes from the reading the
+     * store has: a change from outside during the drag passes the check here
+     * and the write by that row's name is refused by its own check
+     * (`WriteSession.row`), as any write to the note is until the drag ends.
      */
-    async freshByAnchor(filePath: string, anchor: string): Promise<Task | undefined> {
+    async freshByAnchor(filePath: string, anchor: string): Promise<AnchoredRow> {
+        const file = this.app.vault.getAbstractFileByPath(filePath);
         // No note there to read: the index answers as it holds it.
-        if (!(this.app.vault.getAbstractFileByPath(filePath) instanceof TFile)) return this.getTaskByAnchor(filePath, anchor);
-        const checked = await checkFile(this.checks, filePath);
-        if (checked.verdict !== 'fresh') await this.notFresh(filePath, `^${anchor}`, 'anchor', checked);
-        return checked.verdict === 'unreadable' ? undefined : this.getTaskByAnchor(filePath, anchor);
-    }
-
-    /**
-     * What is done when a reading is found not to be the disk's, in one
-     * place: logged, the note read again when it could be read, and the
-     * reconciler asked to sweep — one change notice missed is evidence that
-     * others were too.
-     */
-    private async notFresh(path: string, subject: string, op: PlanOp | 'anchor', checked: Checked, read?: string): Promise<void> {
-        logInfo(`[ReadingCheck] ${checked.verdict} op=${op} file=${path} subject=${subject}${read ? ` read=${read}` : ''}`
-            + ` disk=${shortKey(checked.disk)} last=${shortKey(this.scanner.readingOf(path).key)}`);
-        if (checked.verdict === 'stale') {
-            const file = this.app.vault.getAbstractFileByPath(path);
-            if (file instanceof TFile && await this.scanner.queueScan(file)) this.notify.schedule();
+        if (file instanceof TFile) {
+            const checked = await checkFile(this.checks, filePath);
+            switch (checked.verdict) {
+                case 'fresh':
+                    break;
+                case 'unread':
+                    // Not read yet, as at startup: no change notice was missed.
+                    logDebug(`[ReadingCheck] unread file=${filePath} subject=^${anchor}`);
+                    if (await this.scanner.queueScan(file)) this.notify.schedule();
+                    break;
+                case 'stale':
+                    await this.learnFrom({ file: filePath, reason: { kind: 'stale', disk: checked.disk }, subject: `^${anchor}` });
+                    break;
+                case 'unreadable':
+                    await this.learnFrom({ file: filePath, reason: { kind: 'unreadable' }, subject: `^${anchor}` });
+                    return { kind: 'unreadable' };
+            }
         }
-        this.reconciler?.request('stale', path);
+        const task = this.getTaskByAnchor(filePath, anchor);
+        return task ? { kind: 'row', task } : { kind: 'none' };
     }
 
     /**
@@ -700,7 +718,7 @@ export class TaskIndex {
 
     /** {@link deleteTask}, once every write already asked of the row has finished. */
     private async writeDelete(taskId: string, options: { fireFlow?: boolean }, known: Task | undefined): Promise<boolean> {
-        const task = await this.copyToPlan(taskId, known, 'delete');
+        const task = await this.copyToPlan(taskId, known);
         if (!task) return false;
         return this.withNotify(task.file, async () => {
             logInfo(`[deleteTask] id=${taskId} fireFlow=${options.fireFlow === true}`);
@@ -731,7 +749,7 @@ export class TaskIndex {
         if (this.refuseAfterDispose('duplicateTask')) return false;
         const known = this.getTask(taskId);
         return this.onRow(taskId, async () => {
-            const task = await this.copyToPlan(taskId, known, 'duplicate');
+            const task = await this.copyToPlan(taskId, known);
             if (!task) return false;
             return this.writeDuplicateOf(task, taskId, options);
         });
@@ -822,7 +840,7 @@ export class TaskIndex {
     async insertLine(taskId: string, line: string, place: InsertPlace, rowId?: string | null): Promise<boolean> {
         if (this.refuseAfterDispose('insertLine')) return false;
         return this.onRow(taskId, async () => {
-            const task = await this.copyToPlan(taskId, undefined, 'insert');
+            const task = await this.copyToPlan(taskId, undefined);
             if (!task) return false;
             if (task.isReadOnly) return false;
             return this.withNotify(task.file, async () => {
@@ -868,7 +886,7 @@ export class TaskIndex {
             statusDefinitions: () => this.settings.statusDefinitions,
             fireOp: (path) => this.commandExecutor.fireOp(path),
             applyOps: (draft, session, target, ops) => this.repository.applyOps(draft, session, target, ops),
-            refused: (refusal) => this.reportRefusal(refusal),
+            refused: (refusal) => { void this.reportRefusal(refusal); },
             notRun: (why) => this.commandExecutor.reportNotRun(why),
         };
     }
@@ -876,22 +894,60 @@ export class TaskIndex {
     // ===== ヘルパー =====
 
     /**
-     * Tell the user a write was not made, and why. Every write that gives up
-     * for want of a target comes through here — once per write, from the
-     * write layer — so the callers that learn of it from a `false` do not
-     * say it again.
-     *
-     * A write refused as `changed` or `failed` found the note other than the
-     * index read it: the reconciler is asked to read it again, and to sweep —
-     * a change notice may have gone missing (structure.md, 読みの鮮度).
+     * Tell the user an operation was not made, and why, and learn from it
+     * (`learnFrom`). Every write that gives up for want of a target comes
+     * through here — once per write, from the write layer — and so does an
+     * operation the check of its copy gave up (`copyToPlan`), so the callers
+     * that learn of it from a `false` do not say it again. Settled once the
+     * note is read again, where the reason asks for that.
      */
-    private reportRefusal(refusal: Refusal): void {
-        const { reason, subject, file } = refusal;
-        logWarn(`[TaskIndex] write refused: file=${file} reason=${reason.kind} subject=${subject}`);
-        new Notice(t('notice.notWritten', { reason: refusalClause(reason), subject }));
-        if (reason.kind === 'changed' || reason.kind === 'failed') this.reconciler?.request('refusal', file);
+    private reportRefusal(refusal: IndexRefusal): Promise<void> {
+        new Notice(refusalNotice(refusal));
+        return this.learnFrom(refusal);
     }
 
+    /**
+     * What the index does when an operation found its note other than the
+     * index read it, by the reason's kind, in one place: the log line, the
+     * reading asked for, and what the reconciler is asked
+     * (structure.md, 読みの鮮度).
+     *
+     * `stale`: the note is read now, so the operation asked again plans from
+     * the new reading, and the reconciler sweeps — one change notice missed
+     * is evidence that others were too. `changed`, `failed`, `unreadable`: the
+     * reconciler reads the note again at a sweep whatever its stat says,
+     * since an edit the stat does not show, or a read that failed, is not
+     * found by the stat. Not told the user: a row looked up by its anchor
+     * (`freshByAnchor`) comes here and goes on.
+     */
+    private async learnFrom({ file, reason, subject }: IndexRefusal): Promise<void> {
+        switch (reason.kind) {
+            case 'stale': {
+                logInfo(`[ReadingCheck] stale file=${file} subject=${subject}`
+                    + ` disk=${shortKey(reason.disk)} last=${shortKey(this.scanner.readingOf(file).key)}`);
+                const note = this.app.vault.getAbstractFileByPath(file);
+                if (note instanceof TFile && await this.scanner.queueScan(note)) this.notify.schedule();
+                this.reconciler?.request('stale');
+                return;
+            }
+            case 'unreadable':
+                logInfo(`[ReadingCheck] unreadable file=${file} subject=${subject}`);
+                break;
+            default:
+                logWarn(`[TaskIndex] refused: file=${file} reason=${reason.kind} subject=${subject}`);
+                // `gone`, `unplaceable`, `disturbs`: the note read as the index read it.
+                if (reason.kind !== 'changed' && reason.kind !== 'failed') return;
+        }
+        this.reconciler?.request('refusal', file);
+    }
+
+}
+
+/** A content key as a log line gives it: the line count and the length, the hash cut short. */
+function shortKey(key: ContentKey | undefined): string {
+    if (!key) return '-';
+    const cut = key.lastIndexOf(':');
+    return `${key.slice(0, cut + 1)}${key.slice(cut + 1, cut + 7)}…`;
 }
 
 // ── Parse-affecting settings fingerprint ──
@@ -912,13 +968,6 @@ export class TaskIndex {
 // Not statusDefinitions: which status chars count as complete is read where a
 // completion is answered and where a view draws, never by the parse, so a
 // change to it needs only the notify.
-/** A content key as a log line gives it: the line count and the length, the hash cut short. */
-function shortKey(key: ContentKey | null | undefined): string {
-    if (!key) return '-';
-    const cut = key.lastIndexOf(':');
-    return `${key.slice(0, cut + 1)}${key.slice(cut + 1, cut + 7)}…`;
-}
-
 export function computeParseFingerprint(settings: TaskViewerSettings): string {
     return JSON.stringify([
         settings.scopeKeys,

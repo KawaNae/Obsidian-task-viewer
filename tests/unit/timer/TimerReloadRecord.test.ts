@@ -123,7 +123,7 @@ describe('stopping a timer after a reload', () => {
         timer.taskId = timer.taskId.replace(FILE, renamed);
 
         await live.recorder.recordSessionEnd(timer, recordFor(timer));
-        await live.index.waitForScan(renamed);
+        await live.scanner.waitForScan(renamed);
 
         const after = contents.get(renamed)!.split('\n').filter(line => line.trim() !== '');
         expect(after).toHaveLength(3);

@@ -24,7 +24,7 @@ import { untrackAllKeyboards } from './utils/KeyboardState';
 import { registerWeekStartLocales } from './utils/momentWeekLocale';
 import { AudioUtils } from './timer/AudioUtils';
 import { TASK_VIEWER_HOVER_SOURCE_DISPLAY, TASK_VIEWER_HOVER_SOURCE_ID } from './constants/hover';
-import { getViewMeta } from './constants/viewRegistry';
+import { getViewMeta, isViewType } from './constants/viewRegistry';
 import { openLeafFromState } from './services/viewConfig/LeafOpener';
 import { openViewFromUri } from './services/viewConfig/UriViewOpener';
 import { migrateSettings } from './services/settings/migration';
@@ -117,7 +117,7 @@ export default class TaskViewerPlugin extends Plugin {
         );
 
         // Initialize Services
-        this.taskIndex = new TaskIndex(this.app, this.settings);
+        this.taskIndex = new TaskIndex(this.app, this.settings, { isOwnView: isViewType });
         await this.taskIndex.initialize();
 
         // Initialize persistent log storage

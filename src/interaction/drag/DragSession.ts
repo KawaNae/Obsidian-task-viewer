@@ -1,7 +1,7 @@
 import type { Task } from '../../types';
 import type { TaskWriteService } from '../../services/data/TaskWriteService';
 import type { DragContext, DragStrategy } from './DragStrategy';
-import { logDebug } from '../../log/log';
+import { logDebug, logError } from '../../log/log';
 
 /**
  * 1 回の drag (pointerdown → pointerup) の lifecycle を保持する。
@@ -20,11 +20,15 @@ export class DragSession {
     private currentStrategy: DragStrategy | null = null;
     private currentDragTaskId: string | null = null;
     /** True while handleUp is executing (async). Prevents lostpointercapture
-     *  from cancelling a commit that is already in progress. */
+     *  from cancelling a commit that is already in progress. The window opens
+     *  when the pointer is let go, before the check has answered (`confirmed`):
+     *  a cancel in that moment — the view closing included — is left to
+     *  handleUp, which ends the drag as cancelled on a no, or commits on a yes. */
     private committing = false;
     /**
      * Whether the dragged task is the row on the disk (`confirmTask`), asked
-     * as the drag starts: the drag commits only on a yes.
+     * as the drag starts: the drag commits only on a yes. Never rejects: a
+     * check that threw answers no.
      */
     private confirmed: Promise<boolean> | null = null;
 
@@ -52,7 +56,10 @@ export class DragSession {
         this.currentStrategy = strategy;
         this.currentDragTaskId = task.id;
         this.writeService.setDraggingFile(task.file);
-        const confirmed = this.writeService.confirmTask(task.id, 'drag');
+        const confirmed = this.writeService.confirmTask(task.id).catch((error: unknown) => {
+            logError(`[Drag:confirm] taskId=${task.id} failed: ${(error as Error)?.message ?? error}`);
+            return false;
+        });
         this.confirmed = confirmed;
         void confirmed.then(fresh => {
             // This drag's answer, not a later one's: `end` lets go of it.

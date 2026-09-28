@@ -67,6 +67,11 @@ function hasLineBreak(value: string): boolean {
     return holdsLineBreak(value);
 }
 
+/** Why an anchored ID finds no row: the one wording of it, for a read and a write. */
+function anchorNotFound(id: string, file: string, anchor: string): string {
+    return `Task not found: ${id} (no line of ${file} carries ^${anchor} alone)`;
+}
+
 export const API_HELP_TEXT = `
 Task Viewer API Reference
 =========================
@@ -387,7 +392,7 @@ export class TaskApi {
         const read = readApiId(id);
         if (read.kind === 'anchor') {
             const task = this.readService.getTaskByAnchor(read.file, read.anchor);
-            if (!task) throw new TaskApiError(`Task not found: ${id} (no line of ${read.file} carries ^${read.anchor} alone)`);
+            if (!task) throw new TaskApiError(anchorNotFound(id, read.file, read.anchor));
             return task;
         }
         const task = this.readService.getTask(read.name);
@@ -396,16 +401,22 @@ export class TaskApi {
     }
 
     /**
-     * {@link rowOf} for a write. An anchored ID outlives readings, so its
-     * note is read again first when the disk holds another content than the
-     * index read (`freshByAnchor`), and the write goes on with the row the
-     * anchor finds there. A name is checked by the write itself, which turns
-     * it away when the note changed (`TaskIndex.copyToPlan`).
+     * {@link rowOf} for a write. An anchored ID outlives readings, so its row
+     * is looked up in a reading of the note as the disk holds it
+     * (`freshByAnchor`: the note is read again first when the disk holds
+     * another content than the index read), and the write goes on with the
+     * row the anchor finds there. A name is checked by the write itself,
+     * which turns it away when the note changed (`TaskIndex.copyToPlan`).
      */
     private async rowToWrite(id: string): Promise<Task> {
         const read = readApiId(id);
-        if (read.kind === 'anchor') await this.writeService.freshByAnchor(read.file, read.anchor);
-        return this.rowOf(id);
+        if (read.kind !== 'anchor') return this.rowOf(id);
+        const found = await this.writeService.freshByAnchor(read.file, read.anchor);
+        switch (found.kind) {
+            case 'row': return found.task;
+            case 'none': throw new TaskApiError(anchorNotFound(id, read.file, read.anchor));
+            case 'unreadable': throw new TaskApiError(`Task ${id} could not be looked up: ${read.file} could not be read`);
+        }
     }
 
     /**

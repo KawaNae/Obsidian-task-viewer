@@ -12,6 +12,7 @@ import { DailyNoteUtils } from '../utils/DailyNoteUtils';
 import { DateUtils } from '../utils/DateUtils';
 import { TaskParser } from '../services/parsing/TaskParser';
 import type { Task } from '../types';
+import type { AnchoredRow } from '../services/core/TaskIndex';
 import { createTempTask } from '../services/data/createTempTask';
 import { TimeFormatter } from '../utils/TimeFormatter';
 import { type TimerIcon, getTimerIcon, splitTimerIcon, withTimerIcon } from '../utils/TimerIcons';
@@ -134,6 +135,8 @@ export class TimerRecorder {
      * 時刻と長さは止めたときに固定した `record` のもので、押し直しても変わらない。
      * 尻尾はディスクの内容のとおりの読みで引く（{@link resolveTailRecord}）— 外の
      * 書き込みの通知が届かなくても、錨で引いた行を読みの鍵まで照合して通る。
+     * ノートを読めなければ（一時的な EBUSY など）、尻尾が無いとは言えないので
+     * レコードを足さず、書けなかったと答える。
      *
      * @returns 記録を書けたか（記録するものが無い idle は書けたと答える）。書けな
      * かったときは、その理由を1回だけ通知済みで、成功の通知は出していない。
@@ -141,9 +144,12 @@ export class TimerRecorder {
      */
     async recordSessionEnd(timer: TimerInstance, record: PendingRecord): Promise<boolean> {
         const tail = await this.resolveTailRecord(timer);
-        if (!tail) return this.addRecord(timer, record);
-        if (timer.tailRecordBlockId === timer.timerTargetId) return this.updateTaskDirectly(timer, tail, record);
-        return this.updateChildAtEnd(timer, tail, record);
+        switch (tail.kind) {
+            case 'none': return this.addRecord(timer, record);
+            case 'unreadable': return this.noticeUnreadable(timer, 'recordSessionEnd (not recorded)');
+        }
+        if (timer.tailRecordBlockId === timer.timerTargetId) return this.updateTaskDirectly(timer, tail.task, record);
+        return this.updateChildAtEnd(timer, tail.task, record);
     }
 
     /**
@@ -304,16 +310,25 @@ export class TimerRecorder {
      * 再読み込みのあと、保存に残った `opening` に答える。その行を錨で引けたら、
      * その書き込みは届いている — タイマーに当てる。引けなければ届いていない。
      * どちらでも `opening` は消す。推定でなく、ファイルに在る `^id` で答える。
+     * ノートを読めなければ答えられないので、`opening` を残して次の再読み込みに
+     * 任せる。
      *
      * @returns タイマーを変えたか。
      */
     async adoptOpening(timer: TimerInstance): Promise<boolean> {
         const opening = timer.opening;
         if (!opening) return false;
-        if (await this.plugin.getTaskIndex().freshByAnchor(timer.taskFile, opening.tail)) {
-            this.apply(timer, opening);
-        } else {
-            logInfo(`[TimerRecorder] adoptOpening: ${opening.tail} is not in ${timer.taskFile || '-'}, the write did not land (${describeTimerAnchor(timer)})`);
+        const row = await this.rowByAnchor(timer, opening.tail);
+        switch (row.kind) {
+            case 'row':
+                this.apply(timer, opening);
+                break;
+            case 'none':
+                logInfo(`[TimerRecorder] adoptOpening: ${opening.tail} is not in ${timer.taskFile || '-'}, the write did not land (${describeTimerAnchor(timer)})`);
+                break;
+            case 'unreadable':
+                logWarn(`[TimerRecorder] adoptOpening: ${timer.taskFile} could not be read, the opening is kept (${describeTimerAnchor(timer)})`);
+                return false;
         }
         timer.opening = null;
         return true;
@@ -340,8 +355,9 @@ export class TimerRecorder {
      * @returns 次に見直す時刻（ミリ秒）。行を引けなかったときだけ undefined。
      */
     async extendRunningSession(timer: TimerInstance): Promise<number | undefined> {
-        const target = await this.resolveTailRecord(timer);
-        if (!target) return undefined;
+        const tail = await this.resolveTailRecord(timer);
+        if (tail.kind !== 'row') return undefined;
+        const target = tail.task;
 
         const display = this.plugin.getTaskReadService().getDisplayTask(target.id);
         if (!display?.effectiveEndDate || !display.effectiveEndTime) return undefined;
@@ -439,11 +455,14 @@ export class TimerRecorder {
             return filePath !== null;
         }
         const target = await this.resolveTarget(timer);
-        if (!target) {
-            this.noticeResolveFailure(timer, 'writeChildLine (not written)');
-            return false;
+        switch (target.kind) {
+            case 'none':
+                this.noticeResolveFailure(timer, 'writeChildLine (not written)');
+                return false;
+            case 'unreadable':
+                return this.noticeUnreadable(timer, 'writeChildLine (not written)');
         }
-        return this.plugin.getTaskWriteService().insertLine(target.id, line, 'firstChild');
+        return this.plugin.getTaskWriteService().insertLine(target.task.id, line, 'firstChild');
     }
 
     /**
@@ -487,6 +506,19 @@ export class TimerRecorder {
     private noticeResolveFailure(timer: TimerInstance, site: string): void {
         logWarn(`[TimerRecorder] ${site}: timer target not found (${describeTimerAnchor(timer)})`);
         new Notice(t('notice.timerTargetNotFound'));
+    }
+
+    /**
+     * 行を引くノートを読めなかったことを伝える（`AnchoredRow` の `unreadable`）。
+     * 行が無いとは言えないので、書かずに止める。書けなかったと答える呼び手の
+     * 通知の1回（名前の書き出し `TimerContentBinding` も使う）。
+     *
+     * @returns 書けなかった（false）。
+     */
+    noticeUnreadable(timer: TimerInstance, site: string): false {
+        logWarn(`[TimerRecorder] ${site}: ${timer.taskFile} could not be read (${describeTimerAnchor(timer)})`);
+        new Notice(t('notice.notReadable', { subject: timer.taskName }));
+        return false;
     }
 
     /**
@@ -544,25 +576,35 @@ export class TimerRecorder {
      * タイマーの対象の行。対象の錨（`timerTargetId`、開始の書き込みで決まる）で
      * 引く — 錨はファイルで 1 つだけの `^id` なので、読み直しをまたいでも同じ行を
      * 指し、双子も重複も引かない。書くために引くので、ディスクの内容のとおりの
-     * 読みで引く（`TaskIndex.freshByAnchor`）。デイリーノート起点は対象を持たない。
+     * 読みで引く（{@link rowByAnchor}）。デイリーノート起点は対象を持たない。
      */
-    async resolveTarget(timer: TimerInstance): Promise<Task | undefined> {
-        if (!timer.timerTargetId) return undefined;
-        return this.plugin.getTaskIndex().freshByAnchor(timer.taskFile, timer.timerTargetId);
+    async resolveTarget(timer: TimerInstance): Promise<AnchoredRow> {
+        if (!timer.timerTargetId) return { kind: 'none' };
+        return this.rowByAnchor(timer, timer.timerTargetId);
     }
 
     /**
      * タイマーが最後に書いたレコード行（＝ 尻尾）。尻尾の錨 `tailRecordBlockId`
      * で引く — 行番号ベースの task id はユーザーの編集やリロードで腐るのに対し、
      * `^id` はファイルに書いてあるものが正になる。書くために引くので、ディスクの
-     * 内容のとおりの読みで引く（`TaskIndex.freshByAnchor`）。
+     * 内容のとおりの読みで引く（{@link rowByAnchor}）。
      *
      * self は 1 本目のレコードが対象の行そのものなので、開始の書き込みで尻尾を
      * 対象の錨に置く（{@link startOnTarget}）。2 本目からは自分で書いた行が尻尾。
      */
-    async resolveTailRecord(timer: TimerInstance): Promise<Task | undefined> {
-        if (!timer.tailRecordBlockId) return undefined;
-        return this.plugin.getTaskIndex().freshByAnchor(timer.taskFile, timer.tailRecordBlockId);
+    async resolveTailRecord(timer: TimerInstance): Promise<AnchoredRow> {
+        if (!timer.tailRecordBlockId) return { kind: 'none' };
+        return this.rowByAnchor(timer, timer.tailRecordBlockId);
+    }
+
+    /**
+     * `taskFile` で錨 `anchor` を持つ行を、ディスクの内容のとおりの読みで引く。
+     * API の `path#^id` と同じ1つの口（`TaskWriteService.freshByAnchor`）を通る。
+     * 行が無い（`none`）とノートを読めない（`unreadable`）は分けて答える —
+     * 読めないだけで行が無いとみなすと、閉じるはずの行の代わりにレコードを足す。
+     */
+    private rowByAnchor(timer: TimerInstance, anchor: string): Promise<AnchoredRow> {
+        return this.plugin.getTaskWriteService().freshByAnchor(timer.taskFile, anchor);
     }
 
     /**
@@ -587,7 +629,10 @@ export class TimerRecorder {
      * も、記録そのものは落とさない。
      */
     async startNextSession(timer: TimerInstance, startMs = Date.now()): Promise<boolean> {
-        const tail = await this.resolveTailRecord(timer);
+        const found = await this.resolveTailRecord(timer);
+        // 読めなければ尻尾が無いとは言えない。フォールバックの子を書かずに止める。
+        if (found.kind === 'unreadable') return this.noticeUnreadable(timer, 'startNextSession (not started)');
+        const tail = found.kind === 'row' ? found.task : undefined;
         const { line, blockId } = this.buildSessionPlaceholder(timer, startMs);
 
         // 尻尾は 1 個。前の行の錨は、外してよければ（{@link mayTakeOff}）新しい行と
@@ -623,13 +668,12 @@ export class TimerRecorder {
 
     /** 錨 `anchor` の行からその `^id` を外す。行を引けなければ何もしない。 */
     private async takeOff(timer: TimerInstance, anchor: string): Promise<void> {
-        const taskIndex = this.plugin.getTaskIndex();
-        const row = await taskIndex.freshByAnchor(timer.taskFile, anchor);
-        if (!row) {
-            logInfo(`[TimerRecorder] takeOff: ${anchor} not found in ${timer.taskFile}, nothing taken off (${describeTimerAnchor(timer)})`);
+        const row = await this.rowByAnchor(timer, anchor);
+        if (row.kind !== 'row') {
+            logInfo(`[TimerRecorder] takeOff: ${anchor} ${row.kind === 'none' ? 'not found in' : 'not looked up, could not read'} ${timer.taskFile}, nothing taken off (${describeTimerAnchor(timer)})`);
             return;
         }
-        await taskIndex.updateTask(row.id, { blockId: undefined });
+        await this.plugin.getTaskIndex().updateTask(row.task.id, { blockId: undefined });
     }
 
     /**
@@ -663,8 +707,9 @@ export class TimerRecorder {
         const blockId = timer.tailRecordBlockId;
         if (!blockId || !this.mayTakeOff(timer, blockId, [timer.timerTargetId])) return;
 
-        const tail = await this.resolveTailRecord(timer);
-        if (!tail) return;
+        const found = await this.resolveTailRecord(timer);
+        if (found.kind !== 'row') return;
+        const tail = found.task;
 
         const untouchedPlaceholder = tail.statusChar === ' ' && !tail.endTime;
         if (!untouchedPlaceholder) {

@@ -1,7 +1,9 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { Notice } from 'obsidian';
 import { t } from '../../../../src/i18n';
-import { openLiveVault, type VaultSession } from '../../helpers/vaultSession';
+import { openLiveVault, vaultSession, type VaultSession } from '../../helpers/vaultSession';
+import { rowOf } from '../../helpers/anchoredRow';
+import { clearLog, getLogEntries } from '../../../../src/log/log';
 
 /**
  * Before an operation is planned from the index's copy of a row, the copy is
@@ -22,7 +24,9 @@ const readAgain = (subject: string) => t('notice.readAgain', { subject });
 
 let live: VaultSession | undefined;
 afterEach(() => { live?.dispose(); live = undefined; });
-beforeEach(() => { Notice.messages.length = 0; });
+beforeEach(() => { Notice.messages.length = 0; clearLog(); });
+afterEach(() => { vi.restoreAllMocks(); });
+const lines = () => getLogEntries().map(entry => entry.message);
 
 const open = (lines: string[] = NOTE) => openLiveVault({ [FILE]: lines }, (s) => { live = s; });
 
@@ -134,7 +138,7 @@ describe('an operation over an edit from outside that no scan has read', () => {
 describe('the entry check (`confirmTask`)', () => {
     it('answers yes for a fresh copy and says nothing', async () => {
         const { session } = await open();
-        expect(await session.index.confirmTask(idOf(session, 'A'), 'menu')).toBe(true);
+        expect(await session.index.confirmTask(idOf(session, 'A'))).toBe(true);
         expect(Notice.messages).toEqual([]);
     });
 
@@ -143,7 +147,7 @@ describe('the entry check (`confirmTask`)', () => {
         const id = idOf(session, 'A');
         contents.set(FILE, OUTSIDE);
 
-        expect(await session.index.confirmTask(id, 'drag')).toBe(false);
+        expect(await session.index.confirmTask(id)).toBe(false);
 
         expect(Notice.messages).toEqual([readAgain('A')]);
         expect(session.index.getTask(idOf(session, 'A'))?.line).toBe(1);
@@ -155,7 +159,8 @@ describe('a row named by its anchor (`freshByAnchor`)', () => {
         const { contents, session } = await open(['- [ ] A ^keep', '- [ ] A', '']);
         contents.set(FILE, ['メモ', '- [ ] A', '- [ ] A ^keep', ''].join('\n'));
 
-        const row = await session.index.freshByAnchor(FILE, 'keep');
+        const found = await session.index.freshByAnchor(FILE, 'keep');
+        const row = rowOf(found);
         expect(row?.line).toBe(2);
         expect(await session.index.updateTask(row!.id, { statusChar: 'x' })).toBe(true);
 
@@ -179,6 +184,26 @@ describe('a row named by its anchor (`freshByAnchor`)', () => {
         const { contents, session } = await open(['- [ ] A ^keep', '']);
         contents.set(FILE, ['- [ ] A', ''].join('\n'));
 
-        expect(await session.index.freshByAnchor(FILE, 'keep')).toBeUndefined();
+        expect(await session.index.freshByAnchor(FILE, 'keep')).toEqual({ kind: 'none' });
+    });
+
+    it('a note that cannot be read for a moment is not a note without the row: it answers unreadable, and tells the user nothing', async () => {
+        const { session } = await open(['- [ ] A ^keep', '']);
+        vi.spyOn(session.app.vault, 'read').mockRejectedValueOnce(Object.assign(new Error('EBUSY'), { code: 'EBUSY' }));
+
+        expect(await session.index.freshByAnchor(FILE, 'keep')).toEqual({ kind: 'unreadable' });
+        expect(Notice.messages).toEqual([]);
+        expect(lines()).toContain(`[ReadingCheck] unreadable file=${FILE} subject=^keep`);
+
+        expect(rowOf(await session.index.freshByAnchor(FILE, 'keep'))?.content).toBe('A');
+    });
+
+    it('a note the index has not read yet is read, and logged as not read, not as stale', async () => {
+        const contents = new Map([[FILE, ['- [ ] A ^keep', ''].join('\n')]]);
+        live = vaultSession(contents);
+
+        expect(rowOf(await live.index.freshByAnchor(FILE, 'keep'))?.content).toBe('A');
+        expect(lines().some(line => line.startsWith('[ReadingCheck] stale'))).toBe(false);
+        expect(lines()).toContain(`[ReadingCheck] unread file=${FILE} subject=^keep`);
     });
 });

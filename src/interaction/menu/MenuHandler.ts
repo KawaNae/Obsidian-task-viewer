@@ -148,7 +148,7 @@ export class MenuHandler {
             return;
         }
         if (task.isReadOnly) return;
-        if (!(await this.writeService.confirmTask(task.id, 'menu'))) return;
+        if (!(await this.writeService.confirmTask(task.id))) return;
 
         // Convert to DisplayTask for property display (implicit/explicit flags)
         const displayTask = toDisplayTask(task, this.plugin.settings.startHour, (id) => this.readService.getTask(id));

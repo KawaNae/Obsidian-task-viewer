@@ -218,7 +218,7 @@ const MADE = { written: true, refused: null, made: [], rows: new Map() } as cons
 function buildIndexHost(task: Task | undefined) {
     return {
         store: { getTask: () => task },
-        scanner: { waitForScan: vi.fn(async () => {}), follow: () => null },
+        scanner: { follow: () => null },
         repository: {
             applyToTask: vi.fn(async () => MADE),
         },

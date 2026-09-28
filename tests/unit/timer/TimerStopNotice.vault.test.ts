@@ -134,4 +134,34 @@ describe('one press of ■ says one thing', () => {
         expect(ctx.timers.has(timer.id)).toBe(false);
         expect(contents.get(FILE)).toMatch(/^- \[x\] ⏱️ 別の名前 @/);
     });
+
+    // A read that fails for a moment (EBUSY on Windows) says nothing of
+    // whether the running line is there: no record is added in its place.
+    it('the note could not be read for a moment: nothing written, the record kept pending, one notice; pressed again, the running line is closed', async () => {
+        const timer = await start(s, 'child');
+        const { ctx, lifecycle } = lifecycleOver(s);
+        ctx.timers.set(timer.id, timer);
+        const before = contents.get(FILE);
+        const busy = Object.assign(new Error('EBUSY: resource busy or locked'), { code: 'EBUSY' });
+        vi.spyOn(s.app.vault, 'read').mockRejectedValueOnce(busy);
+        Notice.messages.length = 0;
+
+        await lifecycle.finishTimer(timer);
+
+        expect(Notice.messages, Notice.messages.join(' | ')).toHaveLength(1);
+        expect(isNotice(Notice.messages[0], 'notReadable'), Notice.messages[0]).toBe(true);
+        expect(contents.get(FILE)).toBe(before);
+        expect(timer.pendingRecord).not.toBeNull();
+        expect(ctx.timers.has(timer.id)).toBe(true);
+
+        Notice.messages.length = 0;
+        await lifecycle.finishTimer(timer);
+
+        expect(Notice.messages, Notice.messages.join(' | ')).toHaveLength(1);
+        expect(isNotice(Notice.messages[0], 'kindRecorded'), Notice.messages[0]).toBe(true);
+        expect(ctx.timers.has(timer.id)).toBe(false);
+        // The running line closed: one record under the target, not two.
+        expect(contents.get(FILE)!.split('\n').filter(line => line.includes('⏱️'))).toHaveLength(1);
+        expect(contents.get(FILE)).toMatch(/\t- \[x\] ⏱️ 対象 .*\^tv-t-/);
+    });
 });

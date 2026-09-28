@@ -1,8 +1,6 @@
 import type { EventRef, TFile, WorkspaceLeaf } from 'obsidian';
 import type { ReadMark } from '../persistence/FileLines';
-import type { ContentKey } from './ContentKey';
 import type { DiskProbe, DiskStat } from './DiskProbe';
-import { isViewType } from '../../constants/viewRegistry';
 import { logDebug, logError, logInfo } from '../../log/log';
 
 /**
@@ -24,6 +22,14 @@ export const QUIET_MS = 2000;
 /** How often the vault is swept while the window shows, where the whole vault is swept. */
 export const INTERVAL_MS = 60_000;
 
+/**
+ * How long a divergence has been found, sweep after sweep, before it is told:
+ * well past the time a change notice takes to come (seen up to 17 s late
+ * under load on a Mac). Two sweeps a moment apart — a refusal's, right after
+ * a focus's — would otherwise tell a notice still on its way.
+ */
+export const LASTING_MS = INTERVAL_MS;
+
 /** How many divergences one sweep tells line by line; the rest are counted. */
 const TOLD_PER_SWEEP = 20;
 
@@ -31,7 +37,7 @@ const TOLD_PER_SWEEP = 20;
 export interface ReconcileHost {
     /** Every markdown file Obsidian knows of (`vault.getMarkdownFiles`). */
     files(): TFile[];
-    /** The index's last reading of the file (`TaskScanner.readingOf`). */
+    /** The index's last reading of the file (`TaskScanner.readingOf`): whether it has read it. */
     readingOf(path: string): ReadMark;
     /** Read the file again (`TaskScanner.queueScan`): whether that committed. */
     reread(file: TFile): Promise<boolean>;
@@ -41,7 +47,10 @@ export interface ReconcileHost {
     changed(): void;
 }
 
-/** Where the reconciler hears its triggers: the workspace, and the main window. */
+/**
+ * Where the reconciler hears its triggers: the workspace, the main window, and
+ * which views are the plugin's — the plugin's to say, not the index's.
+ */
 export interface ReconcileEnv {
     workspace: {
         on(name: 'active-leaf-change', callback: (leaf: WorkspaceLeaf | null) => unknown): EventRef;
@@ -51,6 +60,8 @@ export interface ReconcileEnv {
     };
     /** The main window, when there is one (none in the unit tests). */
     win?: Window;
+    /** Whether a view type is one of the plugin's views, whose coming to the front asks for a sweep. */
+    isOwnView(viewType: string): boolean;
 }
 
 /**
@@ -58,8 +69,7 @@ export interface ReconcileEnv {
  * stat differs from `TFile.stat` (`modified`), the file is gone from the disk
  * while Obsidian still holds it (`deleted`), a markdown file is on disk that
  * Obsidian does not know (`created`). Counted each sweep, told once it has
- * lasted from one sweep to the next, never mended:
- * Obsidian's model is Obsidian's.
+ * lasted {@link LASTING_MS}, never mended: Obsidian's model is Obsidian's.
  */
 export interface Divergence {
     path: string;
@@ -68,10 +78,12 @@ export interface Divergence {
     obsidian: DiskStat | null;
 }
 
-/** What the reconciler last made sure of for a file: the disk's stat, and the index's reading then. */
-interface Recorded extends DiskStat {
-    key: ContentKey | undefined;
-}
+/**
+ * What the reconciler last made sure of for a file: the disk's stat, or that
+ * the disk had no file there (`absent`), so a file that comes back is read
+ * again even with the stat it had.
+ */
+type Recorded = DiskStat | 'absent';
 
 /** What one sweep measured: the divergences, and what the index is to be mended by. */
 interface Measured {
@@ -85,17 +97,18 @@ interface Measured {
  * 読みの鮮度): the one place that answers when a change notice never comes.
  *
  * At each trigger it stats the files on disk and compares each with what it
- * last made sure of (its record): a file whose stat moved, or whose reading
- * the index moved on from since, is read again through the one door every
- * reading comes in by (`queueScan`), so the commit and the hold of the file
- * being dragged answer as they do for any reading. A file gone from the disk
- * is taken out of the index. Nothing here decides what a reading is.
+ * last made sure of (its record): a file whose stat moved, or that comes back
+ * after it was gone, is read again through the one door every reading comes
+ * in by (`queueScan`), so the commit and the hold of the file being dragged
+ * answer as they do for any reading. A file gone from the disk is taken out
+ * of the index. Nothing here decides what a reading is.
  *
  * The comparison is with its own record, not with `TFile.stat`: when
  * Obsidian drops a change notice, `TFile.stat` is as stale as the index. A
- * file it has no record of starts from `TFile.stat` and the index's reading,
- * which are wrong only where Obsidian missed a change — and then the disk's
- * stat differs from them.
+ * file it has no record of starts from `TFile.stat`, which is wrong only
+ * where Obsidian missed a change — and then the disk's stat differs from it.
+ * A reading the index moved on to by an event or a write of ours needs no
+ * record: either moved the disk's stat too.
  *
  * One sweep runs at a time. A trigger during one asks for one more after
  * it; a patient trigger within {@link QUIET_MS} of the last start waits
@@ -112,8 +125,8 @@ export class DiskReconciler {
     private deferred: { timer: ReturnType<typeof setTimeout>; trigger: Trigger } | null = null;
     /** Files a trigger named, read again at the next sweep whatever their stat says. */
     private named = new Set<string>();
-    /** The divergences the sweep before found, so one that lasts can be told from one in flight. */
-    private seen = new Set<string>();
+    /** Each divergence found by every sweep since it was first, and when it was first found. */
+    private seen = new Map<string, number>();
     /** The lasting divergences told already, so each is told once. */
     private told = new Set<string>();
     private undo: (() => void)[] = [];
@@ -223,7 +236,7 @@ export class DiskReconciler {
         // Only a divergence that lasts is told, and once; while it only
         // lasts, the summary drops to debug, or Obsidian's model, stale until
         // a reload, would fill the log a line a minute.
-        const unseen = this.newlyLasting(measured.divergences);
+        const unseen = this.newlyLasting(measured.divergences, Date.now());
         if (unseen.length > 0 || committed > 0 || measured.gone.length > 0) logInfo(summary);
         else logDebug(summary);
         this.tell(unseen);
@@ -244,7 +257,10 @@ export class DiskReconciler {
      * Compare what the disk answered with the record, and with Obsidian's
      * model: which files to read again, which to take out of the index, and
      * where Obsidian's model parts from the disk. The record is made anew
-     * from the files swept, so a file gone or out of scope leaves it.
+     * from the files swept, so a file out of scope leaves it. A file gone
+     * from the disk is recorded as `absent` while Obsidian still holds it:
+     * the index forgot it, so when it comes back it is read, whatever its
+     * stat.
      */
     private measure(
         files: readonly TFile[],
@@ -264,19 +280,19 @@ export class DiskReconciler {
                 continue;
             }
             const obsidian = { mtime: file.stat.mtime, size: file.stat.size };
-            const key = this.host.readingOf(file.path).key;
             if (stat === null) {
                 measured.divergences.push({ path: file.path, kind: 'deleted', disk: null, obsidian });
                 // Taken out once: a file the index holds nothing of is not taken out again.
-                if (key !== undefined) measured.gone.push(file.path);
+                if (this.host.readingOf(file.path).key !== undefined) measured.gone.push(file.path);
+                next.set(file.path, 'absent');
                 continue;
             }
             if (!sameStat(stat, obsidian)) measured.divergences.push({ path: file.path, kind: 'modified', disk: stat, obsidian });
-            const made = before ?? { ...obsidian, key };
-            if (!sameStat(stat, made) || made.key !== key || named.has(file.path)) {
+            const made = before ?? obsidian;
+            if (made === 'absent' || !sameStat(stat, made) || named.has(file.path)) {
                 measured.reread.push({ file, stat });
             } else {
-                next.set(file.path, { ...stat, key });
+                next.set(file.path, stat);
             }
         }
         // A file named outside the scope (one the index has not read, off
@@ -309,7 +325,7 @@ export class DiskReconciler {
         for (const { file, stat } of measured.reread) {
             if (this.disposed) return null;
             if (await this.host.reread(file)) committed++;
-            this.record.set(file.path, { ...stat, key: this.host.readingOf(file.path).key });
+            this.record.set(file.path, stat);
         }
         if (this.disposed) return null;
         for (const path of measured.gone) this.host.forget(path);
@@ -318,22 +334,29 @@ export class DiskReconciler {
     }
 
     /**
-     * The divergences that lasted since the sweep before and are not told
-     * yet. One found once may be a change whose notice is still on its way:
-     * a sweep that runs between a write and its \`modify\` finds Obsidian's
-     * stat behind the disk for a moment. A notice Obsidian dropped leaves the
-     * divergence until a reload, so the next sweep finds it again. Told by
-     * path, kind and disk stat: one that ends and comes back is new again.
+     * The divergences found by every sweep for {@link LASTING_MS} and not
+     * told yet. One found for a moment may be a change whose notice is still
+     * on its way: a sweep that runs between a write and its `modify` finds
+     * Obsidian's stat behind the disk. A notice Obsidian dropped leaves the
+     * divergence until a reload, so it lasts. By time, not by sweeps: a
+     * refusal's sweep does not wait for the quiet time, and can come a moment
+     * after the sweep before. Told by path, kind and disk stat: one that ends
+     * and comes back is new again.
      */
-    private newlyLasting(divergences: readonly Divergence[]): Divergence[] {
-        const found = divergences.map(divergence => ({
-            divergence,
-            id: `${divergence.kind}|${divergence.path}|${statText(divergence.disk)}`,
-        }));
-        const lasting = found.filter(({ id }) => this.seen.has(id));
-        const unseen = lasting.filter(({ id }) => !this.told.has(id)).map(({ divergence }) => divergence);
-        this.seen = new Set(found.map(({ id }) => id));
-        this.told = new Set(lasting.map(({ id }) => id));
+    private newlyLasting(divergences: readonly Divergence[], now: number): Divergence[] {
+        const seen = new Map<string, number>();
+        const told = new Set<string>();
+        const unseen: Divergence[] = [];
+        for (const divergence of divergences) {
+            const id = `${divergence.kind}|${divergence.path}|${statText(divergence.disk)}`;
+            const since = this.seen.get(id) ?? now;
+            seen.set(id, since);
+            if (now - since < LASTING_MS) continue;
+            told.add(id);
+            if (!this.told.has(id)) unseen.push(divergence);
+        }
+        this.seen = seen;
+        this.told = told;
         return unseen;
     }
 
@@ -378,7 +401,7 @@ export class DiskReconciler {
             focusOf.delete(popoutWin);
         }));
         own(workspace.on('active-leaf-change', (leaf) => {
-            if (leaf && isViewType(leaf.view.getViewType())) this.request('view');
+            if (leaf && this.env.isOwnView(leaf.view.getViewType())) this.request('view');
         }));
         if (this.whole) {
             const timer = setInterval(() => {

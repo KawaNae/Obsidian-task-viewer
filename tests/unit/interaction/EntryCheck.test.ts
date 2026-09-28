@@ -44,7 +44,7 @@ describe('a drag of a row the disk no longer holds as the index read it', () => 
         const { calls, session, strategy, task, writeService } = dragRig([answer.promise]);
 
         session.start(strategy, {} as PointerEvent, task, {} as HTMLElement);
-        expect(writeService.confirmTask).toHaveBeenCalledWith('t', 'drag');
+        expect(writeService.confirmTask).toHaveBeenCalledWith('t');
         answer.resolve(false);
         await answer.promise;
         await Promise.resolve();
@@ -81,6 +81,14 @@ describe('a drag of a row the disk no longer holds as the index read it', () => 
         expect(calls).toEqual(['drag note.md', 'down', 'commit', 'notify', 'drag null']);
     });
 
+    it('a check that throws answers no: the drag is cancelled, and nothing is left unhandled', async () => {
+        const { calls, session, strategy, task } = dragRig([Promise.reject(new Error('boom'))]);
+        session.start(strategy, {} as PointerEvent, task, {} as HTMLElement);
+
+        await vi.waitFor(() => expect(calls).toContain('cancel'));
+        expect(calls).toEqual(['drag note.md', 'down', 'cancel', 'drag null']);
+    });
+
     it('a late no for a drag already over does not cancel the next one', async () => {
         const first = deferred<boolean>();
         const { calls, session, strategy, task } = dragRig([first.promise, Promise.resolve(true)]);
@@ -115,7 +123,7 @@ describe('a card\'s menu', () => {
         const { handler, task, present, confirmTask } = menuRig(true);
         handler.showTaskContextMenu(task, 1, 2);
         await vi.waitFor(() => expect(present).toHaveBeenCalledTimes(1));
-        expect(confirmTask).toHaveBeenCalledWith(task.id, 'menu');
+        expect(confirmTask).toHaveBeenCalledWith(task.id);
     });
 
     it('does not open over a stale copy', async () => {

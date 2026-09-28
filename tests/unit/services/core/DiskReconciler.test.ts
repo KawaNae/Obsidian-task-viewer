@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { clearLog, getLogEntries } from '../../../../src/log/log';
 import type { DiskProbe, DiskStat } from '../../../../src/services/core/DiskProbe';
-import { INTERVAL_MS, QUIET_MS } from '../../../../src/services/core/DiskReconciler';
+import { INTERVAL_MS, LASTING_MS, QUIET_MS } from '../../../../src/services/core/DiskReconciler';
 import { vaultSession, type VaultSession } from '../../helpers/vaultSession';
 
 /**
@@ -51,7 +51,12 @@ async function swept(count: number): Promise<void> {
 
 let session: VaultSession | undefined;
 beforeEach(() => clearLog());
-afterEach(() => { session?.dispose(); session = undefined; vi.restoreAllMocks(); });
+afterEach(() => { session?.dispose(); session = undefined; vi.restoreAllMocks(); vi.useRealTimers(); });
+
+/** Let the clock the reconciler reads run on by `ms`, the timers left real. */
+function later(ms: number): void {
+    vi.useFakeTimers({ toFake: ['Date'], now: Date.now() + ms });
+}
 
 async function open(files: Record<string, string>, options: { whole?: boolean } = {}) {
     const contents = new Map(Object.entries(files));
@@ -77,8 +82,9 @@ describe('a sweep', () => {
 
         expect(contentsOf(s)).toEqual(['A', 'B']);
         expect(summaries()[0]).toMatch(/^\[Reconcile\] trigger=start scope=2 stat=\d+ms list=\d+ms reread=1 committed=1 dropped=0 obsidian:modified=1 deleted=0 created=0$/);
-        // Found once, it may be a notice still on its way; lasting to the next sweep, it is told.
+        // Found for a moment, it may be a notice still on its way; lasting, it is told.
         expect(lines().some(line => line.startsWith('[Reconcile:diverge]'))).toBe(false);
+        later(LASTING_MS);
         s.reconciler!.request('refusal');
         await swept(2);
         expect(lines()).toContain(`[Reconcile:diverge] kind=modified path=${FILE} disk=5/16 obsidian=0/0`);
@@ -91,6 +97,7 @@ describe('a sweep', () => {
         s.reconciler!.start();
         await swept(1);
 
+        later(LASTING_MS);
         s.reconciler!.request('refusal');
         await swept(2);
         s.reconciler!.request('refusal');
@@ -118,6 +125,46 @@ describe('a sweep', () => {
         expect(getLogEntries().filter(entry => entry.message.startsWith('[Reconcile] ')).map(entry => entry.level)).toEqual(['info', 'debug']);
     });
 
+    it('does not tell a divergence two sweeps find a moment apart: it is told by how long it lasted, not by how many sweeps found it', async () => {
+        const { contents, disk, s } = await open({ [FILE]: '- [ ] A\n', [OTHER]: '- [ ] O\n' });
+        contents.set(FILE, '- [ ] A\n- [ ] B\n');
+        disk.moved.set(FILE, { mtime: 5, size: 16 });
+        s.reconciler!.start();
+        await swept(1);
+
+        // A refusal's sweep does not wait for the quiet time.
+        s.reconciler!.request('refusal');
+        await swept(2);
+        later(LASTING_MS - 1000);
+        s.reconciler!.request('refusal');
+        await swept(3);
+        expect(lines().some(line => line.startsWith('[Reconcile:diverge]'))).toBe(false);
+
+        later(LASTING_MS);
+        s.reconciler!.request('refusal');
+        await swept(4);
+        expect(lines().filter(line => line.startsWith('[Reconcile:diverge]'))).toHaveLength(1);
+    });
+
+    it('starts the time over for a divergence a sweep did not find', async () => {
+        const { contents, disk, s } = await open({ [FILE]: '- [ ] A\n', [OTHER]: '- [ ] O\n' });
+        contents.set(FILE, '- [ ] A\n- [ ] B\n');
+        disk.moved.set(FILE, { mtime: 5, size: 16 });
+        s.reconciler!.start();
+        await swept(1);
+
+        disk.moved.delete(FILE);
+        later(LASTING_MS / 2);
+        s.reconciler!.request('refusal');
+        await swept(2);
+        disk.moved.set(FILE, { mtime: 5, size: 16 });
+        later(LASTING_MS);
+        s.reconciler!.request('refusal');
+        await swept(3);
+
+        expect(lines().some(line => line.startsWith('[Reconcile:diverge]'))).toBe(false);
+    });
+
     it('takes a note gone from the disk out of the index, and counts it deleted', async () => {
         const { disk, s } = await open({ [FILE]: '- [ ] A\n', [OTHER]: '- [ ] O\n' });
         disk.gone.add(FILE);
@@ -128,6 +175,7 @@ describe('a sweep', () => {
         expect(contentsOf(s)).toEqual([]);
         expect(contentsOf(s, OTHER)).toEqual(['O']);
         expect(summaries()[0]).toContain('dropped=1 obsidian:modified=0 deleted=1 created=0');
+        later(LASTING_MS);
         s.reconciler!.request('refusal');
         await swept(2);
         expect(summaries()[1]).toContain('dropped=0 obsidian:modified=0 deleted=1 created=0');
@@ -143,6 +191,7 @@ describe('a sweep', () => {
         await swept(1);
 
         expect(summaries()[0]).toContain('reread=0 committed=0 dropped=0 obsidian:modified=0 deleted=0 created=1');
+        later(LASTING_MS);
         s.reconciler!.request('refusal');
         await swept(2);
         expect(lines()).toContain('[Reconcile:diverge] kind=created path=zz/b.md disk=3/88');
@@ -195,6 +244,41 @@ describe('a sweep', () => {
         await vi.waitFor(() => expect(contentsOf(s)).toEqual(['A', 'B']));
     });
 
+    it('reads a note again that comes back after it was taken out, even with the stat it had', async () => {
+        const { disk, s } = await open({ [FILE]: '- [ ] A\n', [OTHER]: '- [ ] O\n' });
+        disk.gone.add(FILE);
+        s.reconciler!.start();
+        await swept(1);
+        expect(contentsOf(s)).toEqual([]);
+
+        disk.gone.delete(FILE);
+        s.reconciler!.request('refusal');
+        await swept(2);
+
+        expect(summaries()[1]).toContain('reread=1 committed=1');
+        expect(contentsOf(s)).toEqual(['A']);
+    });
+
+    it('disposed in the middle of a sweep, mends nothing and sums nothing up', async () => {
+        const { contents, disk, s } = await open({ [FILE]: '- [ ] A\n', [OTHER]: '- [ ] O\n' });
+        contents.set(FILE, '- [ ] A\n- [ ] B\n');
+        disk.moved.set(FILE, { mtime: 5, size: 16 });
+        disk.gone.add(OTHER);
+        const release = disk.holdStats();
+        const queueScan = vi.spyOn(s.scanner, 'queueScan');
+        s.reconciler!.start();
+        await vi.waitFor(() => expect(disk.asked).toHaveLength(1));
+
+        s.reconciler!.dispose();
+        release();
+        await new Promise(r => setTimeout(r, 20));
+
+        expect(queueScan).not.toHaveBeenCalled();
+        expect(contentsOf(s)).toEqual(['A']);
+        expect(contentsOf(s, OTHER)).toEqual(['O']);
+        expect(summaries()).toEqual([]);
+    });
+
     it('off the desktop app, asks only of the notes the index read, and walks no folder', async () => {
         // `bare.md` holds no list item: the vault's scan passes it by, so the index never read it.
         const { disk, s } = await open({ [FILE]: '- [ ] A\n', 'bare.md': 'text\n' }, { whole: false });
@@ -232,11 +316,15 @@ describe('what asks for a sweep besides the triggers it hears', () => {
         contents.set(OTHER, '- [ ] O 変更\n');
         disk.moved.set(OTHER, { mtime: 9, size: 14 });
 
-        expect(await s.index.confirmTask(s.index.getTasks().find(t => t.file === FILE)!.id, 'menu')).toBe(false);
+        const queueScan = vi.spyOn(s.scanner, 'queueScan');
+
+        expect(await s.index.confirmTask(s.index.getTasks().find(t => t.file === FILE)!.id)).toBe(false);
         await swept(2);
 
         expect(summaries()[1]).toContain('trigger=stale');
         expect(contentsOf(s, OTHER)).toEqual(['O 変更']);
+        // The stale note was read by the check; the sweep does not name it to read it again.
+        expect(queueScan.mock.calls.filter(([file]) => file.path === FILE)).toHaveLength(1);
     });
 });
 

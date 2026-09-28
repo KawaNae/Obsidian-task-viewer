@@ -183,10 +183,12 @@ describe('reportRefusal', () => {
         for (const reason of [
             { kind: 'gone' },
             { kind: 'changed' },
+            { kind: 'unreadable' },
         ] as const) {
             Notice.messages.length = 0;
 
-            proto.reportRefusal.call({}, { file: 'note.md', reason, subject: '週報' });
+            // What it learns besides (`learnFrom`) asks an index with no reconciler nothing.
+            proto.reportRefusal.call({ learnFrom: proto.learnFrom }, { file: 'note.md', reason, subject: '週報' });
 
             expect(Notice.messages).toHaveLength(1);
             expect(Notice.messages[0]).toContain('週報');
