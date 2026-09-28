@@ -3,6 +3,7 @@ import { t } from '../../i18n';
 import type { AstronomyDisplay } from '../../types';
 import type { TaskReadService } from '../../services/data/TaskReadService';
 import type { PluginContext } from '../../PluginContext';
+import type { DateJumpOptions } from '../sharedUI/DatePickerPopover';
 import { DateNavigator, DaysToShowSelector, ZoomSelector, ViewSettingsMenu, MaskToggleButton, ViewToolbarBase, appendCompactFilterAndMask, type ViewSettingsOptions, type CompactMenuDeps } from '../sharedUI/ViewToolbar';
 import { DateLabel } from '../sharedUI/DateLabel';
 import { appendAstronomyMenuSection } from '../sharedUI/AstronomyMenuSection';
@@ -35,6 +36,10 @@ export interface TimelineToolbarDeps {
     onNavigateDays: (days: number) => void;
     /** Jump to today (or the oldest overdue date) and scroll to now. */
     onJumpToNow: () => void;
+    /** Show `date` the way the Now button shows today (same past-days lead). */
+    onJumpToDate: (date: string) => void;
+    /** Dates the view shows now, for the date picker to open on and mark. */
+    getShownRange: () => { start: string; end: string };
 
     getCustomName: () => string | undefined;
     onRename: (newName: string | undefined) => void;
@@ -140,7 +145,7 @@ export class TimelineToolbar extends ViewToolbarBase {
             toolbar,
             (days) => deps.onNavigateDays(days),
             () => deps.onJumpToNow(),
-            {}
+            { dateJump: this.dateJump }
         );
 
         // Push action zone to the right
@@ -224,6 +229,16 @@ export class TimelineToolbar extends ViewToolbarBase {
             (newZoom) => this.deps.setZoomLevel(newZoom),
             this.deps.plugin.menuPresenter
         );
+    }
+
+    /** The date picker's hookup, shared by the calendar button and the ⋮ entry. */
+    private get dateJump(): DateJumpOptions {
+        const { deps } = this;
+        return {
+            getSettings: () => deps.plugin.settings,
+            getShownRange: () => deps.getShownRange(),
+            onJump: (date) => deps.onJumpToDate(date),
+        };
     }
 
     /** Shared filter + mask entries for the compact menu. */
@@ -318,6 +333,9 @@ export class TimelineToolbar extends ViewToolbarBase {
 
     private appendCompactMenuItems(menu: Menu, moreBtn: HTMLElement): void {
         const { deps } = this;
+
+        DateNavigator.appendCompactItem(menu, moreBtn, this.dateJump);
+        menu.addSeparator();
 
         DaysToShowSelector.appendSubmenu(
             menu,

@@ -116,6 +116,7 @@ const copyStaticFiles = {
           '_send-dialog.css',
           '_filter-popover.css',
           '_sort-popover.css',
+          '_date-picker.css',
           '_kanban.css',
           '_log-view.css',
           '_settings.css'

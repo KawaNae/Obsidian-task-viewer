@@ -72,6 +72,17 @@ export class DateUtils {
     }
 
     /**
+     * First date (YYYY-MM-DD) of the month grid that shows `date`'s month: the
+     * week start on or before the 1st. The Calendar views anchor their window
+     * here, and the date picker draws its grid from it, so a month looks the
+     * same in both.
+     */
+    static getMonthGridStart(date: Date, weekStartDay: 0 | 1): string {
+        const monthStart = new Date(date.getFullYear(), date.getMonth(), 1);
+        return this.getLocalDateString(this.getWeekStart(monthStart, weekStartDay));
+    }
+
+    /**
      * Returns a canonical YYYY-MM-DD identifier for the visual week containing `date`,
      * honoring the user's weekStartDay. Two dates yield the same key iff they belong
      * to the same visual week. Used by views that need to group/compare dates by week.

@@ -3,6 +3,7 @@ import { t } from '../../i18n';
 import type { PluginContext } from '../../PluginContext';
 import type { TaskReadService } from '../../services/data/TaskReadService';
 import { VIEW_META_SCHEDULE } from '../../constants/viewRegistry';
+import type { DateJumpOptions } from '../sharedUI/DatePickerPopover';
 import { DateNavigator, ViewSettingsMenu, MaskToggleButton, ViewToolbarBase, appendCompactFilterAndMask, type ViewSettingsOptions, type CompactMenuDeps } from '../sharedUI/ViewToolbar';
 import { DateLabel } from '../sharedUI/DateLabel';
 import { appendAstronomyMenuSection } from '../sharedUI/AstronomyMenuSection';
@@ -23,6 +24,9 @@ export interface ScheduleToolbarDeps {
 
     onNavigate: (days: number) => void;
     onToday: () => void;
+    onJumpToDate: (date: string) => void;
+    /** Dates the view shows now, for the date picker to open on and mark. */
+    getShownRange: () => { start: string; end: string };
     onFilterChange: () => void;
 
     getCustomName: () => string | undefined;
@@ -86,7 +90,7 @@ export class ScheduleToolbar extends ViewToolbarBase {
             toolbar,
             (days) => deps.onNavigate(days),
             () => deps.onToday(),
-            {}
+            { dateJump: this.dateJump }
         );
 
         toolbar.createDiv('view-toolbar__spacer');
@@ -126,6 +130,16 @@ export class ScheduleToolbar extends ViewToolbarBase {
                 menu.addSeparator();
                 ViewSettingsMenu.appendItems(menu, this.getSettingsOptions());
             }, { kind: 'mouseEvent', event: e });
+        };
+    }
+
+    /** The date picker's hookup, shared by the calendar button and the ⋮ entry. */
+    private get dateJump(): DateJumpOptions {
+        const { deps } = this;
+        return {
+            getSettings: () => deps.plugin.settings,
+            getShownRange: () => deps.getShownRange(),
+            onJump: (date) => deps.onJumpToDate(date),
         };
     }
 
@@ -184,6 +198,8 @@ export class ScheduleToolbar extends ViewToolbarBase {
             setMaskMode: (next) => deps.setMaskMode(next),
             onAfter: () => this.update(),
         };
+        DateNavigator.appendCompactItem(menu, moreBtn, this.dateJump);
+        menu.addSeparator();
         appendCompactFilterAndMask(menu, moreBtn, compact);
     }
 

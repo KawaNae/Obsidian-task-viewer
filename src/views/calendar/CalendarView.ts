@@ -144,10 +144,7 @@ export class CalendarView extends ItemView {
             },
             getIsOpen: () => this.showSidebar,
         });
-        const now = new Date();
-        const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
-        const weekStart = this.getWeekStart(monthStart, this.plugin.settings.weekStartDay);
-        this.windowStart = DateUtils.getLocalDateString(weekStart);
+        this.windowStart = DateUtils.getMonthGridStart(new Date(), this.plugin.settings.weekStartDay);
         this.filterMenu.setStartHourProvider(() => this.plugin.settings.startHour);
         this.filterMenu.setTaskLookupProvider((id) => this.readService.getTask(id));
         this.filterMenu.setStatusDefinitions(this.plugin.settings.statusDefinitions);
@@ -164,13 +161,10 @@ export class CalendarView extends ItemView {
             container: this.containerEl,
             onNavigateWeek: (days) => this.navigateWeek(days),
             onNavigateMonth: (direction) => this.navigateMonth(direction),
-            onJumpToCurrentMonth: () => {
-                const today = new Date();
-                const monthStart = new Date(today.getFullYear(), today.getMonth(), 1);
-                const weekStart = this.getWeekStart(monthStart, this.plugin.settings.weekStartDay);
-                this.windowStart = DateUtils.getLocalDateString(weekStart);
-                void this.app.workspace.requestSaveLayout();
-                this.render();
+            onJumpToCurrentMonth: () => this.showMonthOf(new Date()),
+            onJumpToDate: (date) => {
+                const parsed = this.parseLocalDateString(date);
+                if (parsed) this.showMonthOf(parsed);
             },
             onFilterChange: () => {
                 void this.app.workspace.requestSaveLayout();
@@ -215,6 +209,13 @@ export class CalendarView extends ItemView {
                 this.toolbar.update();
             },
             getReferenceMonth: () => this.getReferenceMonth(),
+            getShownRange: () => {
+                const { year, month } = this.getReferenceMonth();
+                return {
+                    start: DateUtils.getLocalDateString(new Date(year, month, 1)),
+                    end: DateUtils.getLocalDateString(new Date(year, month + 1, 0)),
+                };
+            },
             linkInteractionManager: this.linkInteractionManager,
             hoverParent: this.hoverParent,
         });
@@ -989,9 +990,16 @@ export class CalendarView extends ItemView {
 
     private navigateMonth(offset: number): void {
         const ref = this.getReferenceMonth();
-        const monthStart = new Date(ref.year, ref.month + offset, 1);
-        const weekStart = this.getWeekStart(monthStart, this.plugin.settings.weekStartDay);
-        this.windowStart = DateUtils.getLocalDateString(weekStart);
+        this.showMonthOf(new Date(ref.year, ref.month + offset, 1));
+    }
+
+    /**
+     * Show the month that contains `date`, laid out from the week of its 1st.
+     * The Today button, month stepping and the date picker all land here, so
+     * a picked date and "today" line up the same way.
+     */
+    private showMonthOf(date: Date): void {
+        this.windowStart = DateUtils.getMonthGridStart(date, this.plugin.settings.weekStartDay);
         void this.app.workspace.requestSaveLayout();
         this.render();
     }

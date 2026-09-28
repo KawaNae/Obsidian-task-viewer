@@ -306,8 +306,7 @@ export class TimelineView extends ItemView {
     async onOpen() {
         logDebug(`[${this.getViewType()}] opened`);
         // Set initial startDate - will be re-evaluated in onChange when tasks are loaded
-        const initialVisualToday = DateUtils.getVisualDateOfNow(this.plugin.settings.startHour);
-        this.viewState.startDate = DateUtils.addDays(initialVisualToday, -this.plugin.settings.pastDaysToShow);
+        this.viewState.startDate = this.startDateLeadingTo(DateUtils.getVisualDateOfNow(this.plugin.settings.startHour));
 
         this.container = this.contentEl;
         this.container.empty();
@@ -367,6 +366,14 @@ export class TimelineView extends ItemView {
                 this.jumpToNowStartDate();
                 this.scrollToNowOnNextRender = true;
                 this.render();
+            },
+            onJumpToDate: (date) => {
+                this.viewState.startDate = this.startDateLeadingTo(date);
+                this.render();
+            },
+            getShownRange: () => {
+                const dates = this.getDatesToShow();
+                return { start: dates[0], end: dates[dates.length - 1] };
             },
 
             getCustomName: () => this.viewState.customName,
@@ -727,13 +734,22 @@ export class TimelineView extends ItemView {
      */
     private jumpToNowStartDate(): void {
         const visualToday = DateUtils.getVisualDateOfNow(this.plugin.settings.startHour);
-        const visualPastDate = DateUtils.addDays(visualToday, -this.plugin.settings.pastDaysToShow);
+        const visualPastDate = this.startDateLeadingTo(visualToday);
         if (this.plugin.settings.startFromOldestOverdue) {
             const oldestOverdue = this.findOldestOverdueDate();
             this.viewState.startDate = (oldestOverdue && oldestOverdue < visualPastDate) ? oldestOverdue : visualPastDate;
         } else {
             this.viewState.startDate = visualPastDate;
         }
+    }
+
+    /**
+     * The start date that shows `date` with the configured past-days lead in
+     * front of it. The Now button applies it to today; the date picker to the
+     * picked date, so a picked date sits where today would.
+     */
+    private startDateLeadingTo(date: string): string {
+        return DateUtils.addDays(date, -this.plugin.settings.pastDaysToShow);
     }
 
     public refresh() {

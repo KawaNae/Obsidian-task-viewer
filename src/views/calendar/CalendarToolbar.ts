@@ -4,6 +4,7 @@ import type { PluginContext } from '../../PluginContext';
 import type { TaskReadService } from '../../services/data/TaskReadService';
 import type { PinnedListDefinition, AstronomyDisplay } from '../../types';
 import { VIEW_META_CALENDAR } from '../../constants/viewRegistry';
+import type { DateJumpOptions } from '../sharedUI/DatePickerPopover';
 import { DateNavigator, ViewSettingsMenu, MaskToggleButton, ViewToolbarBase, appendCompactFilterAndMask, type ViewSettingsOptions, type CompactMenuDeps } from '../sharedUI/ViewToolbar';
 import { DateLabel } from '../sharedUI/DateLabel';
 import { appendAstronomyMenuSection } from '../sharedUI/AstronomyMenuSection';
@@ -25,6 +26,10 @@ export interface CalendarToolbarDeps {
     onNavigateWeek: (days: number) => void;
     onNavigateMonth: (direction: number) => void;
     onJumpToCurrentMonth: () => void;
+    /** Show the month containing `date`, as the Today button shows this month. */
+    onJumpToDate: (date: string) => void;
+    /** Dates the view shows now, for the date picker to open on and mark. */
+    getShownRange: () => { start: string; end: string };
     onFilterChange: () => void;
 
     getCustomName: () => string | undefined;
@@ -96,6 +101,7 @@ export class CalendarToolbar extends ViewToolbarBase {
             {
                 vertical: true,
                 onNavigateFast: (direction) => deps.onNavigateMonth(direction),
+                dateJump: this.dateJump,
             }
         );
 
@@ -148,6 +154,16 @@ export class CalendarToolbar extends ViewToolbarBase {
             deps.setShowSidebar(nextOpen, { animate: true, persist: true });
         };
         this.sidebarToggleBtn = toggleBtn;
+    }
+
+    /** The date picker's hookup, shared by the calendar button and the ⋮ entry. */
+    private get dateJump(): DateJumpOptions {
+        const { deps } = this;
+        return {
+            getSettings: () => deps.plugin.settings,
+            getShownRange: () => deps.getShownRange(),
+            onJump: (date) => deps.onJumpToDate(date),
+        };
     }
 
     private getSettingsOptions(): ViewSettingsOptions {
@@ -205,6 +221,8 @@ export class CalendarToolbar extends ViewToolbarBase {
             setMaskMode: (next) => deps.setMaskMode(next),
             onAfter: () => this.update(),
         };
+        DateNavigator.appendCompactItem(menu, moreBtn, this.dateJump);
+        menu.addSeparator();
         appendCompactFilterAndMask(menu, moreBtn, compact);
     }
 

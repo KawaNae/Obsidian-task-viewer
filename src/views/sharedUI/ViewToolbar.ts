@@ -14,6 +14,7 @@ import { buildExportFilename } from '../../services/export/ExportFilename';
 import type { MenuPresenter } from '../../interaction/menu/MenuPresenter';
 import { viewContentEl } from '../../utils/ObsidianView';
 import type { WriteChannel } from '../../services/persistence/FileLines';
+import { DatePickerPopover, type DateJumpOptions } from './DatePickerPopover';
 
 /**
  * Persistent toolbar root with mount/detach lifecycle.
@@ -76,7 +77,8 @@ export abstract class ViewToolbarBase {
 }
 
 /**
- * Date navigation component with prev/next/today buttons.
+ * Date navigation component with prev/next/today buttons, and optionally a
+ * calendar button that opens a {@link DatePickerPopover} to jump to any date.
  */
 export class DateNavigator {
     /**
@@ -84,12 +86,18 @@ export class DateNavigator {
      * @param toolbar - Parent element to render into
      * @param onNavigate - Callback when navigating by days (e.g., -1 or +1)
      * @param onToday - Callback when clicking Now button
+     * @param options.dateJump - Adds the calendar button. It gives way to
+     *   {@link appendCompactItem} in the compact "⋮" menu on narrow panes.
      */
     static render(
         toolbar: HTMLElement,
         onNavigate: (days: number) => void,
         onToday: () => void,
-        options?: { vertical?: boolean; onNavigateFast?: (direction: number) => void }
+        options?: {
+            vertical?: boolean;
+            onNavigateFast?: (direction: number) => void;
+            dateJump?: DateJumpOptions;
+        }
     ): void {
         const vertical = options?.vertical ?? false;
         const prevIcon = vertical ? 'chevron-up' : 'chevron-left';
@@ -133,6 +141,30 @@ export class DateNavigator {
             const onFastNext = options.onNavigateFast;
             fastNextBtn.onclick = () => onFastNext(1);
         }
+
+        if (options?.dateJump) {
+            const picker = new DatePickerPopover(options.dateJump);
+            const jumpBtn = navGroup.createEl('button', {
+                cls: 'view-toolbar__btn--icon view-toolbar__btn--date-jump',
+            });
+            setIcon(jumpBtn, 'calendar');
+            jumpBtn.setAttribute('aria-label', t('toolbar.goToDate'));
+            jumpBtn.onclick = () => picker.open({ kind: 'element', element: jumpBtn });
+        }
+    }
+
+    /**
+     * The calendar button's entry in the compact "⋮" menu, where the button
+     * itself is hidden. The picker anchors on `anchorEl` (the ⋮ button).
+     */
+    static appendCompactItem(menu: Menu, anchorEl: HTMLElement, dateJump: DateJumpOptions): void {
+        menu.addItem((item: MenuItem) => {
+            item.setTitle(t('toolbar.goToDate'))
+                .setIcon('calendar')
+                .onClick(() => {
+                    new DatePickerPopover(dateJump).open({ kind: 'element', element: anchorEl });
+                });
+        });
     }
 }
 
