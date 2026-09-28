@@ -111,14 +111,17 @@ describe('FlowParser', () => {
         };
 
         // Retired 2026-09-28: `move()` named no heading, and moved the task
-        // to the end of the note, where the one who wrote it never said.
-        it('does not read move() at all: an error, so the command is no command and completing the task runs none of it', () => {
+        // to the end of the note, where the one who wrote it never said. It
+        // names no heading of the note, as a move to another note does, and
+        // is read as that: a warning, and the rest of the command stands.
+        it('reads move() as a move that names no heading of the note, retired, and warns', () => {
             for (const raw of ['move()', 'every mon move( )', 'every mon x2 move()']) {
                 const { program, diagnostics } = parseFlow(raw);
-                expect(program).toBeNull();
-                expect(diagnostics.map(d => `${d.severity}:${d.code}`)).toEqual(['error:flow.move-no-heading-retired']);
+                expect(program?.move?.to).toEqual({ kind: 'retired' });
+                expect(diagnostics.map(d => `${d.severity}:${d.code}`)).toEqual(['warning:flow.move-retired']);
             }
-            const [diagnostic] = parseFlow('every mon move( )').diagnostics;
+            const { program, diagnostics: [diagnostic] } = parseFlow('every mon move( )');
+            expect(program?.schedule?.kind).toBe('every');
             expect(diagnostic.span).toEqual({ start: 10, end: 17 });
         });
 
@@ -150,6 +153,10 @@ describe('FlowParser', () => {
         it('prints a heading link as written', () => {
             expect(serializeFlow(parseFlow('move([[#Done]])  every mon').program!)).toBe('every mon move([[#Done]])');
             expect(serializeFlow(parseFlow('move([[#Done|d]])').program!)).toBe('move([[#Done|d]])');
+        });
+
+        it('prints move() back as written, so the next instance carries it as it stood', () => {
+            expect(serializeFlow(parseFlow('move( ) every mon').program!)).toBe('every mon move()');
         });
     });
 

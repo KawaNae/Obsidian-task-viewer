@@ -4,9 +4,9 @@ import type { DecorationSet, EditorView } from '@codemirror/view';
 import { createDiagnosticsExtension } from '../../../src/editor/DiagnosticsExtension';
 
 /**
- * `move()` names no heading and is retired (2026-09-28): the command it
- * stands in is not read, and the editor says so where it is written, as an
- * error. `move([[#heading]])` is marked nothing.
+ * `move()` names no heading and is retired (2026-09-28), as a move to
+ * another note is: the editor says so where it is written, as a warning, and
+ * the rest of the command is read. `move([[#heading]])` is marked nothing.
  */
 
 /** The marks the diagnostics put on `lines`, all of them in view, as `class: title`. */
@@ -24,14 +24,14 @@ function marksOn(lines: string[]): string[] {
 }
 
 describe('a retired move() in the editor', () => {
-    it('is marked as an error, on the task line and on a command line below it', () => {
+    it('is marked as a warning, on the task line and on a command line below it', () => {
         for (const lines of [
             ['- [ ] A @2026-09-26 ==> every mon move()', '## Done'],
             ['- [ ] A @2026-09-26', '    - ==> move()', '## Done'],
         ]) {
             const marks = marksOn(lines);
             expect(marks).toHaveLength(1);
-            expect(marks[0]).toContain('tv-diag--error');
+            expect(marks[0]).toContain('tv-diag--warning');
             expect(marks[0]).toContain('move([[#');
         }
     });
