@@ -10,11 +10,11 @@ import { EvalError } from '../lang/ExprEvaluator';
 import type { FlowEffect } from './FlowEffects';
 import { type CreatingEffect, type FlowDeleteAssessment, assessFlowDelete, planFlowForDeletion } from './FlowDeletion';
 import type { FlowInstanceInsert } from '../persistence/FlowInstanceLines';
-import type { CompletionFire, MoveDestination, TaskOp } from '../persistence/TaskOps';
+import type { CompletionFire, TaskOp } from '../persistence/TaskOps';
 import { plannedOn, subjectOf } from '../persistence/TaskRefs';
 import type { Refusal } from '../persistence/FileLines';
 import { refusalClause } from '../core/RefusalClause';
-import { Placement } from '../persistence/utils/Placement';
+import { type InSection, Placement, type SectionSide } from '../persistence/utils/Placement';
 import { Outline } from '../parsing/utils/Outline';
 import type { MoveTarget } from './FlowAst';
 import { flowSource } from './FlowSegments';
@@ -26,16 +26,16 @@ import type { GenBlock } from '../parsing/gen/GenBlockCollector';
 import { runtimeText } from './runtimeText';
 
 /**
- * Where a move to `to` goes in `lines`, or why it cannot be made there: it
- * names another note (retired, F8), or the heading it names is not there, or
- * is there more than once (`Placement.heading`, as the write will look it up).
+ * Where a move to `to` goes in `lines`, at `side` of the section, or why it
+ * cannot be made there: it names another note (retired, F8), or the heading
+ * it names is not there, or is there more than once (`Placement.heading`, as
+ * the write will look it up: `Placement.into`).
  */
-function destinationIn(to: MoveTarget, lines: readonly string[]): MoveDestination | GenerationError {
+function destinationIn(to: MoveTarget, side: SectionSide, lines: readonly string[]): InSection | GenerationError {
     if (to.kind === 'retired') {
         return new GenerationError('eval.move-retired',
             'move() moves the task within its note only, and this one names another note');
     }
-    if (to.kind === 'end') return to;
     const found = Placement.heading(Outline.read(lines), to.name);
     if (found.kind === 'none') {
         return new GenerationError('eval.move-no-heading', `No heading '${to.name}' in this note`, { name: to.name });
@@ -44,7 +44,7 @@ function destinationIn(to: MoveTarget, lines: readonly string[]): MoveDestinatio
         return new GenerationError('eval.move-heading-ambiguous',
             `${found.count} headings are named '${to.name}' in this note`, { name: to.name, count: found.count });
     }
-    return to;
+    return { heading: to.name, side };
 }
 
 /** How long one failure stays quiet after it has been shown. */
@@ -165,7 +165,7 @@ export class FlowExecutor {
                 ops.push(...this.opsFor(task, effect));
                 continue;
             }
-            const to = destinationIn(effect.to, lines);
+            const to = destinationIn(effect.to, this.getSettings().sectionSide, lines);
             if (to instanceof GenerationError) {
                 logWarn(`[FlowExecutor] Flow did not fire for ${task.id}: ${to.message}`);
                 return { kind: 'failed', task, error: to };

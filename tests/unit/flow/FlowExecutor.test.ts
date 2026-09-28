@@ -87,11 +87,20 @@ describe('FlowExecutor.planTask: what a completion fires', () => {
         expect(ops.filter(o => o.kind === 'strip-flow')).toHaveLength(1);
     });
 
-    it('carries the row with move(), after the next instance, in the completing write', () => {
-        const ops = opsOf(planOf(flowTask('every mon move()')));
+    it('carries the row with move([[#heading]]), after the next instance, in the completing write, to the side the settings say', () => {
+        const task = flowTask('every mon move([[#Done]])');
+        const ops = opsOf(makeExecutor().planTask(task, () => undefined, ['## Done']));
 
         expect(ops.map(o => o.kind)).toEqual(['insert-instance', 'move']);
-        expect(ops[1]).toEqual({ kind: 'move', text: '- [x] Test task @2026-06-29', to: { kind: 'end' } });
+        expect(ops[1]).toEqual({ kind: 'move', text: '- [x] Test task @2026-06-29', to: { heading: 'Done', side: 'head' } });
+
+        const atEnd = new FlowExecutor(
+            makeRepository() as unknown as TaskRepository,
+            { getTask: vi.fn(), getGenBlock: vi.fn() } as unknown as TaskIndex,
+            app as never,
+            () => ({ ...DEFAULT_SETTINGS, sectionSide: 'end' }),
+        );
+        expect(opsOf(atEnd.planTask(task, () => undefined, ['## Done']))[1]).toMatchObject({ to: { heading: 'Done', side: 'end' } });
     });
 
     it('fails a move that names another note: retired, nothing of the fire is written', () => {
@@ -229,7 +238,7 @@ describe('fireAndDelete', () => {
     });
 
     it('does not move, whatever the move names: a delete was not a request to keep a copy', async () => {
-        for (const move of ['move()', 'move([[#Nope]])', 'move([[Archive]])']) {
+        for (const move of ['move([[#Nope]])', 'move([[Archive]])']) {
             const repository = makeRepository();
 
             expect(await makeExecutor(repository).fireAndDelete(flowTask(`every mon ${move}`, { statusChar: ' ' }))).toBe(true);

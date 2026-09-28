@@ -166,7 +166,7 @@ describe('a name given before a write of ours', () => {
         const b = idOf(session, 'B');
         session.holdScans();
 
-        expect(await session.index.getRepository().insertLineUnderHeading(FILE, '- [ ] 新', 'note', 1)).toMatchObject({ written: true });
+        expect(await session.index.getRepository().insertLineUnderHeading(FILE, '- [ ] 新', { heading: 'note', level: 1, side: 'head' })).toMatchObject({ written: true });
 
         expect(session.index.getTask(a)?.content).toBe('A');
         expect(session.index.getTask(b)?.content).toBe('B');

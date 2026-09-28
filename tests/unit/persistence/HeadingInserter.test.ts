@@ -2,6 +2,11 @@ import { describe, it, expect } from 'vitest';
 import { TFile } from 'obsidian';
 import { HeadingInserter } from '../../../src/utils/HeadingInserter';
 import { draftOver } from '../../../src/services/persistence/FileLines';
+import type { Section } from '../../../src/services/persistence/Destination';
+import type { SectionSide } from '../../../src/services/persistence/utils/Placement';
+
+/** The section of the heading `heading`, made at `level`, at `side` (the head unless said). */
+const section = (heading: string, level = 2, side: SectionSide = 'head'): Section => ({ heading, level, side });
 
 /**
  * writeUnderHeading は TaskIndex.createTask / DailyNoteUtils.appendLineToDailyNote /
@@ -27,10 +32,11 @@ function harness(initial: string) {
  * これらのケースが見ているのは「どの行がどこに入るか」なので、文字列で書いた
  * 元のままにしておき、境界だけここで合わせる。
  */
-function insertFromText(content: string, line: string, header: string, headerLevel: number) {
+function insertFromText(content: string, line: string, header: string, headerLevel: number, side: SectionSide = 'head') {
     const { draft } = draftOver(content.split('\n'));
-    const insertedLine = HeadingInserter.insertUnderHeading(draft, line, header, headerLevel);
-    return { content: draft.lines.join('\n'), insertedLine };
+    const put = HeadingInserter.insertUnderHeading(draft, line, section(header, headerLevel, side));
+    if (typeof put !== 'number') throw new Error(`${put.count} headings`);
+    return { content: draft.lines.join('\n'), insertedLine: put };
 }
 
 describe('HeadingInserter', () => {
@@ -38,7 +44,7 @@ describe('HeadingInserter', () => {
         it('writes the pure-function result back through vault.process and returns insertedLine', async () => {
             const h = harness('some text\n## Tasks\n- [ ] existing line');
             const at = await HeadingInserter.writeUnderHeading(
-                h.app, 'note.md', undefined, '- [ ] new task', 'Tasks', 2
+                h.app, 'note.md', undefined, '- [ ] new task', section('Tasks')
             );
             expect(at.written && at.line).toBe(2);
             expect(h.text().split('\n')[2]).toBe('- [ ] new task');
@@ -47,7 +53,7 @@ describe('HeadingInserter', () => {
         it('creates the heading when absent, matching insertUnderHeading', async () => {
             const h = harness('some text');
             const at = await HeadingInserter.writeUnderHeading(
-                h.app, 'note.md', undefined, '- [ ] task', 'Tasks', 2
+                h.app, 'note.md', undefined, '- [ ] task', section('Tasks')
             );
             const lines = h.text().split('\n');
             expect(lines).toContain('## Tasks');
@@ -58,11 +64,19 @@ describe('HeadingInserter', () => {
         it('is refused as gone without writing when the file does not exist', async () => {
             const h = harness('unchanged');
             const at = await HeadingInserter.writeUnderHeading(
-                h.app, 'missing.md', undefined, '- [ ] task', 'Tasks', 2
+                h.app, 'missing.md', undefined, '- [ ] task', section('Tasks')
             );
             expect(at.written).toBe(false);
             expect(at.refused?.reason).toEqual({ kind: 'gone' });
             expect(h.text()).toBe('unchanged');
+        });
+
+        it('is refused, told by the heading and how many there are, when the note has more than one by the name', async () => {
+            const h = harness('## Tasks\n- [ ] a\n### tasks\n- [ ] b');
+            const at = await HeadingInserter.writeUnderHeading(h.app, 'note.md', undefined, '- [ ] n', section('Tasks'));
+            expect(at.written).toBe(false);
+            expect(at.refused?.reason).toEqual({ kind: 'headings', name: 'Tasks', count: 2 });
+            expect(h.text()).toBe('## Tasks\n- [ ] a\n### tasks\n- [ ] b');
         });
 
         it('writes via a directly-passed TFile even when getAbstractFileByPath cannot resolve it yet', async () => {
@@ -79,7 +93,7 @@ describe('HeadingInserter', () => {
             } as any;
 
             const at = await HeadingInserter.writeUnderHeading(
-                app, file, undefined, '- [ ] just created', 'Tasks', 2
+                app, file, undefined, '- [ ] just created', section('Tasks')
             );
             expect(at.written && at.line).toBe(1);
             expect(content.split('\n')[1]).toBe('- [ ] just created');
@@ -169,14 +183,12 @@ describe('HeadingInserter', () => {
             expect(result.insertedLine).toBe(2);
         });
 
-        it('inserts at first match when multiple same headings', () => {
-            const content = '## Tasks\n- [ ] first\n## Tasks\nsecond';
-            const result = insertFromText(content, 'inserted', 'Tasks', 2);
-            const lines = result.content.split('\n');
-            expect(lines[0]).toBe('## Tasks');
-            expect(lines[1]).toBe('inserted');
-            expect(lines[2]).toBe('- [ ] first');
-            expect(result.insertedLine).toBe(1);
+        it('puts nothing when two headings go by the name, whatever their levels and case', () => {
+            for (const content of ['## Tasks\n- [ ] first\n## Tasks\nsecond', '## Tasks\n### TASKS']) {
+                const { draft } = draftOver(content.split('\n'));
+                expect(HeadingInserter.insertUnderHeading(draft, 'inserted', section('Tasks'))).toEqual({ kind: 'many', count: 2 });
+                expect(draft.lines.join('\n')).toBe(content);
+            }
         });
 
         it('ignores heading inside code fence and matches real one after it', () => {
@@ -233,9 +245,17 @@ describe('HeadingInserter', () => {
             expect(put(['## Tasks ##', '- [ ] a'])).toEqual(['## Tasks ##', '- [ ] n', '- [ ] a']);
         });
 
-        it('does not take a heading of another level for the heading', () => {
-            const result = insertFromText(['Tasks', '===', '- [ ] a'].join('\n'), '- [ ] n', 'Tasks', 2);
-            expect(result.content.split('\n')).toEqual(['Tasks', '===', '- [ ] a', '', '## Tasks', '- [ ] n']);
+        it('takes a heading of any level for the heading, as a link to it does: the level is the one a heading is made at', () => {
+            expect(insertFromText(['Tasks', '===', '- [ ] a'].join('\n'), '- [ ] n', 'Tasks', 2).content.split('\n'))
+                .toEqual(['Tasks', '===', '- [ ] n', '- [ ] a']);
+            expect(insertFromText(['### Tasks', '- [ ] a'].join('\n'), '- [ ] n', 'Tasks', 2).content.split('\n'))
+                .toEqual(['### Tasks', '- [ ] n', '- [ ] a']);
+            expect(insertFromText(['## **tasks**', '- [ ] a'].join('\n'), '- [ ] n', 'Tasks', 2).content.split('\n'))
+                .toEqual(['## **tasks**', '- [ ] n', '- [ ] a']);
+        });
+
+        it('makes the heading at the level asked for when the note has none by the name', () => {
+            expect(insertFromText('text', '- [ ] n', 'Log', 3).content.split('\n')).toEqual(['text', '', '### Log', '- [ ] n']);
         });
 
         it('does not take an indented heading-like line for the heading', () => {
@@ -245,6 +265,23 @@ describe('HeadingInserter', () => {
             const lines = result.content.split('\n');
             expect(lines.slice(0, 3)).toEqual(['- [ ] P', '    ## Tasks', '    - [ ] c']);
             expect(lines[result.insertedLine - 1]).toBe('## Tasks');
+        });
+
+        it('puts the line at the end of the section, just above a deeper heading, with the end side', () => {
+            const content = ['## Tasks', '- [ ] a', '- [ ] b', '', '### Sub', '- tv-color:: gray', '- [ ] c'].join('\n');
+            const result = insertFromText(content, '- [ ] n', 'Tasks', 2, 'end');
+            expect(result.content.split('\n')).toEqual(['## Tasks', '- [ ] a', '- [ ] b', '- [ ] n', '', '### Sub', '- tv-color:: gray', '- [ ] c']);
+            expect(result.insertedLine).toBe(3);
+        });
+
+        it('puts the line past the subtree of the section\'s last item, with the end side', () => {
+            const content = ['## Tasks', '- [ ] a', '    - [ ] child', '## Next'].join('\n');
+            expect(insertFromText(content, '- [ ] n', 'Tasks', 2, 'end').content.split('\n'))
+                .toEqual(['## Tasks', '- [ ] a', '    - [ ] child', '- [ ] n', '## Next']);
+        });
+
+        it('makes the heading at the end of the note whichever the side', () => {
+            expect(insertFromText('text', '- [ ] n', 'Tasks', 2, 'end').content.split('\n')).toEqual(['text', '', '## Tasks', '- [ ] n']);
         });
 
         it('frontmatter のみのファイルで heading 作成時の行番号', () => {

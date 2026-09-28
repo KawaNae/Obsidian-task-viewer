@@ -1,5 +1,6 @@
 import { DEFAULT_STATUS_DEFINITIONS, type StatusDefinition } from './TaskModel';
 import { DEFAULT_SCOPE_KEYS, type ScopeKeys } from './ScopeKeys';
+import type { SectionSide } from '../services/persistence/utils/Placement';
 
 export type DefaultLeafPosition = 'left' | 'right' | 'tab' | 'window';
 
@@ -12,8 +13,16 @@ export interface TaskViewerSettings {
     statusDefinitions: StatusDefinition[];
     scopeKeys: ScopeKeys;
     zoomLevel: number;
-    dailyNoteHeader: string;
-    dailyNoteHeaderLevel: number;
+    /**
+     * The heading a new task goes under when nothing names one: a task made
+     * in the daily note, a timer's record there (`Destination.taskSection`).
+     * Looked up as a link to it is, at any level (`headingKey`).
+     */
+    taskHeading: string;
+    /** The level the heading is made at when the note has none by its name. */
+    taskHeadingLevel: number;
+    /** Which end of a heading's section new lines go to (`Placement.into`). */
+    sectionSide: SectionSide;
     pomodoroWorkMinutes: number;
     pomodoroBreakMinutes: number;
     countdownMinutes: number;
@@ -123,8 +132,9 @@ export const DEFAULT_SETTINGS: TaskViewerSettings = {
     statusDefinitions: [...DEFAULT_STATUS_DEFINITIONS],
     scopeKeys: { ...DEFAULT_SCOPE_KEYS },
     zoomLevel: 1.0,
-    dailyNoteHeader: 'Tasks',
-    dailyNoteHeaderLevel: 2,
+    taskHeading: 'Tasks',
+    taskHeadingLevel: 2,
+    sectionSide: 'head',
     pomodoroWorkMinutes: 25,
     pomodoroBreakMinutes: 5,
     countdownMinutes: 25,

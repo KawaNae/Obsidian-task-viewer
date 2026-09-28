@@ -9,6 +9,7 @@ import { t } from '../i18n';
 import type { PluginContext } from '../PluginContext';
 import { type Opening, type PendingRecord, type TimerInstance, dailyDateOf, describeTimerAnchor, isDailyTimer } from './TimerInstance';
 import { DailyNoteUtils } from '../utils/DailyNoteUtils';
+import { Destination } from '../services/persistence/Destination';
 import { DateUtils } from '../utils/DateUtils';
 import { TaskParser } from '../services/parsing/TaskParser';
 import type { Task } from '../types';
@@ -781,8 +782,7 @@ export class TimerRecorder {
             this.app,
             date,
             taskLine,
-            this.plugin.settings.dailyNoteHeader,
-            this.plugin.settings.dailyNoteHeaderLevel,
+            Destination.taskSection(this.plugin.settings),
             this.plugin.getTaskWriteService().writeChannel,
         );
     }

@@ -1,7 +1,8 @@
 import { type App, TFile } from 'obsidian';
 import { fileGone, processLines, type LineDraft, type WriteAt, type WriteChannel } from '../services/persistence/FileLines';
 import { Outline } from '../services/parsing/utils/Outline';
-import { Block, Placement } from '../services/persistence/utils/Placement';
+import { Block, type SectionLookup, Placement } from '../services/persistence/utils/Placement';
+import type { Section } from '../services/persistence/Destination';
 
 /**
  * Heading-based line insertion utility.
@@ -14,55 +15,44 @@ import { Block, Placement } from '../services/persistence/utils/Placement';
  */
 export class HeadingInserter {
     /**
-     * Insert a line under a specific heading in file content.
-     * If the heading exists, puts it just under the heading, past the
-     * paragraph below it, as a sibling of the first task there
-     * (`Placement.underHeading`): a task indented under the heading is not
-     * made its child. If the heading does not exist, creates it at the end of
-     * the file — where `Placement.end` says lines appended to the note go.
-     * Whether the lines read as put is the write's check (`processLines`).
+     * Insert a line in the section `to` names, at its side
+     * (`Placement.into`: the heading looked up as a link to it is, at any
+     * level). If the note has no heading by the name, makes one at `to.level`
+     * at the end of the file — where `Placement.end` says lines appended to
+     * the note go — with the line under it. If it has more than one, the
+     * line goes nowhere: which of them is meant, no link to the heading
+     * tells either. Whether the lines read as put is the write's check
+     * (`processLines`).
      *
-     * @param draft   The file's lines, as a write is handed them
-     * @param line    Line to insert
-     * @param header  Heading text (without # prefix)
-     * @param headerLevel Number of # (e.g. 2 for ##)
-     * @returns The 0-based line number of the inserted line
+     * @param draft The file's lines, as a write is handed them
+     * @param line  Line to insert
+     * @param to    The section, and the level its heading is made at
+     * @returns The 0-based line number of the inserted line, or how many
+     *          headings go by the name
      */
-    static insertUnderHeading(
-        draft: LineDraft,
-        line: string,
-        header: string,
-        headerLevel: number
-    ): number {
+    static insertUnderHeading(draft: LineDraft, line: string, to: Section): number | Extract<SectionLookup, { kind: 'many' }> {
         const out = draft.lines;
-        const fullHeader = '#'.repeat(headerLevel) + ' ' + header;
-
-        // A heading as the note reads one (`OutlineReading.headings`): at the
-        // top of the body, not in a fence or an item — an indented `## Tasks`
-        // is a line of the task above it, and one inside the frontmatter is
-        // YAML. The first of its level and text; a setext one is under its
-        // underline.
-        const found = draft.reading().headings.find(h => h.level === headerLevel && h.text === header);
-
-        if (found) {
-            const spot = Placement.underHeading(draft.reading(), found.end - 1, line);
-            draft.put(spot, Block.line(line));
-            return spot.at;
+        const found = Placement.into(draft.reading(), to, line);
+        if (found.kind === 'many') return found;
+        if (found.kind === 'spot') {
+            draft.put(found.spot, Block.line(line));
+            return found.spot.at;
         }
         // At the end, before the empty element a terminated file splits
         // into, so the file still ends with its terminator. One blank line
         // sets the new heading off from the text above it.
         const spot = Placement.end(draft.reading());
         const head = spot.at > 0 && !Outline.isBlank(out[spot.at - 1]) ? [''] : [];
-        draft.put(spot, Block.read([...head, fullHeader, line]));
+        draft.put(spot, Block.read([...head, '#'.repeat(to.level) + ' ' + to.heading, line]));
         return spot.at + head.length + 1;
     }
 
     /**
-     * Insert a line under a heading in the given file, via `vault.process`
+     * Insert a line in a section of the given file, via `vault.process`
      * (atomic read-modify-write). The outcome carries the 0-based line number
-     * of the inserted line; not written when the file doesn't exist, or the
-     * lines would not read as put (told to the channel).
+     * of the inserted line; not written when the file doesn't exist, the note
+     * has more than one heading by the name (`headings`), or the lines would
+     * not read as put (told to the channel).
      *
      * The write reports what it did like every other (see `LineDraft`), so a
      * task already under the heading keeps its name across the insert.
@@ -77,8 +67,7 @@ export class HeadingInserter {
         fileOrPath: TFile | string,
         channel: WriteChannel | undefined,
         line: string,
-        header: string,
-        headerLevel: number
+        to: Section,
     ): Promise<WriteAt> {
         const file = typeof fileOrPath === 'string'
             ? app.vault.getAbstractFileByPath(fileOrPath)
@@ -88,8 +77,10 @@ export class HeadingInserter {
         }
 
         let inserted = -1;
-        const outcome = await processLines(app, file, channel, (draft) => {
-            inserted = HeadingInserter.insertUnderHeading(draft, line, header, headerLevel);
+        const outcome = await processLines(app, file, channel, (draft, _eol, session) => {
+            const put = HeadingInserter.insertUnderHeading(draft, line, to);
+            if (typeof put !== 'number') return session.refuse({ kind: 'headings', name: to.heading, count: put.count });
+            inserted = put;
             return true;
         }, line.trim());
         return outcome.written ? { ...outcome, line: inserted } : outcome;

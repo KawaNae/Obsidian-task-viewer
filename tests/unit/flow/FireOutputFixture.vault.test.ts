@@ -88,13 +88,13 @@ const COMPLETIONS: Array<[string, string]> = [
     ['expired: nothing to write, the command is consumed', [
         '# note', '- [ ] 対象 @2026-09-21 ==> every mon until(2026-09-22)', '',
     ].join('\n')],
-    ['move within the same file', [
-        '# note', '- [ ] 上 @2026-09-21', '- [ ] 対象 @2026-09-21 ==> move()', '\t- [ ] 子 @2026-09-21 ^c1',
-        '- [ ] 下 @2026-09-21', '',
+    ['move to an empty section of the same file', [
+        '# note', '- [ ] 上 @2026-09-21', '- [ ] 対象 @2026-09-21 ==> move([[#Done]])', '\t- [ ] 子 @2026-09-21 ^c1',
+        '- [ ] 下 @2026-09-21', '## Done', '',
     ].join('\n')],
-    ['next instance and a move within the same file', [
-        '# note', '- [ ] 上 @2026-09-21', '- [ ] 対象 @2026-09-21', '\t- ==> every mon move()', '\t- [ ] 子 @2026-09-21',
-        '- [ ] 下 @2026-09-21', '',
+    ['next instance and a move to an empty section of the same file', [
+        '# note', '- [ ] 上 @2026-09-21', '- [ ] 対象 @2026-09-21', '\t- ==> every mon move([[#Done]])', '\t- [ ] 子 @2026-09-21',
+        '- [ ] 下 @2026-09-21', '## Done', '',
     ].join('\n')],
     ['next instance and a move to a heading of the note', [
         '# note', '- [ ] 上 @2026-09-21', '- [ ] 対象 @2026-09-21', '\t- ==> every mon move([[#Done]])', '\t- [ ] 子 @2026-09-21',

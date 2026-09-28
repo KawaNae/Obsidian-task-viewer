@@ -2,8 +2,47 @@ import { Setting } from 'obsidian';
 import type { PluginContext } from '../PluginContext';
 import { t } from '../i18n';
 import { FileSuggest } from '../suggest/FileSuggest';
+import type { SectionSide } from '../services/persistence/utils/Placement';
 
 export function render(el: HTMLElement, plugin: PluginContext): void {
+    // Tasks in notes: where a new line goes in a note, whichever note it is
+    el.createEl('h3', { text: t('settings.notes.tasksInNotes'), cls: 'setting-section-header' });
+
+    new Setting(el)
+        .setName(t('settings.notes.taskHeading'))
+        .setDesc(t('settings.notes.taskHeadingDesc'))
+        .addText(text => text
+            .setPlaceholder('Tasks')
+            .setValue(plugin.settings.taskHeading)
+            .onChange(async (value) => {
+                plugin.settings.taskHeading = value;
+                await plugin.saveSettings();
+            }));
+
+    new Setting(el)
+        .setName(t('settings.notes.taskHeadingLevel'))
+        .setDesc(t('settings.notes.taskHeadingLevelDesc'))
+        .addSlider(slider => slider
+            .setLimits(1, 6, 1)
+            .setValue(plugin.settings.taskHeadingLevel)
+            .setDynamicTooltip()
+            .onChange(async (value) => {
+                plugin.settings.taskHeadingLevel = value;
+                await plugin.saveSettings();
+            }));
+
+    new Setting(el)
+        .setName(t('settings.notes.sectionSide'))
+        .setDesc(t('settings.notes.sectionSideDesc'))
+        .addDropdown(dropdown => dropdown
+            .addOption('head', t('settings.notes.sectionSideHead'))
+            .addOption('end', t('settings.notes.sectionSideEnd'))
+            .setValue(plugin.settings.sectionSide)
+            .onChange(async (value) => {
+                plugin.settings.sectionSide = value as SectionSide;
+                await plugin.saveSettings();
+            }));
+
     // Daily Notes
     el.createEl('h3', { text: t('settings.notes.dailyNotes'), cls: 'setting-section-header' });
 
@@ -11,29 +50,6 @@ export function render(el: HTMLElement, plugin: PluginContext): void {
         text: t('settings.notes.dailyNotesCoreInfo'),
         cls: 'setting-item-description',
     });
-
-    new Setting(el)
-        .setName(t('settings.notes.dailyNoteHeader'))
-        .setDesc(t('settings.notes.dailyNoteHeaderDesc'))
-        .addText(text => text
-            .setPlaceholder('Tasks')
-            .setValue(plugin.settings.dailyNoteHeader)
-            .onChange(async (value) => {
-                plugin.settings.dailyNoteHeader = value;
-                await plugin.saveSettings();
-            }));
-
-    new Setting(el)
-        .setName(t('settings.notes.dailyNoteHeaderLevel'))
-        .setDesc(t('settings.notes.dailyNoteHeaderLevelDesc'))
-        .addSlider(slider => slider
-            .setLimits(1, 6, 1)
-            .setValue(plugin.settings.dailyNoteHeaderLevel)
-            .setDynamicTooltip()
-            .onChange(async (value) => {
-                plugin.settings.dailyNoteHeaderLevel = value;
-                await plugin.saveSettings();
-            }));
 
     // Periodic Notes
     el.createEl('h3', { text: t('settings.notes.periodicNotes'), cls: 'setting-section-header' });

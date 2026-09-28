@@ -15,15 +15,15 @@ import { freezeDate } from '../helpers/fakeDate';
  * between the refused fire and the completion; and one notice, which says the
  * row was completed and the flow was not run.
  *
- * The shape is F8's (R2): `Para` / `- [ ] A ==> move()` / `---` — taking the
- * row out would make the paragraph and the rule a setext heading.
+ * The shape is F8's (R2): `Para` / `- [ ] A ==> move([[#Done]])` / `---` —
+ * taking the row out would make the paragraph and the rule a setext heading.
  */
 
 freezeDate(new Date(2026, 8, 25, 12, 0, 0));
 
 const FILE = 'note.md';
-const NOTE = ['# note', 'Para', '- [ ] A ==> move()', '---', ''];
-const DONE = ['# note', 'Para', '- [x] A ==> move()', '---', ''];
+const NOTE = ['# note', 'Para', '- [ ] A ==> move([[#Done]])', '---', '## Done', ''];
+const DONE = ['# note', 'Para', '- [x] A ==> move([[#Done]])', '---', '## Done', ''];
 
 let live: VaultSession | undefined;
 beforeEach(() => { Notice.messages.length = 0; });

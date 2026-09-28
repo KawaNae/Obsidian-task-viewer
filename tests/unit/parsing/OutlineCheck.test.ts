@@ -32,6 +32,12 @@ function found(lines: string[], edit: (draft: LineDraft) => void): WriteFinding 
 const checked = (lines: string[], edit: (draft: LineDraft) => void): WriteCheck => found(lines, edit).check;
 
 /** One line put at `spot`, to read as it does by itself. */
+/** The head of the section of `## H`, the note's first line (`Placement.into`). */
+const headOf = (lines: string[], head: string): Spot => {
+    const found = Placement.into(Outline.read(lines), { heading: 'H', side: 'head' }, head);
+    if (found.kind !== 'spot') throw new Error(`no spot: ${found.kind}`);
+    return found.spot;
+};
 const putLine = (spot: Spot, text: string) => (draft: LineDraft) => draft.put(spot, Block.line(spot.indent + text));
 
 describe('a line put in reads as its block says, or the write is unplaceable', () => {
@@ -171,7 +177,7 @@ describe('an item put in takes in no line past its block, or the write disturbs'
     it('disturbs where a heading\'s paragraph would go on the new item', () => {
         const lines = ['## H', 'words', '- [ ] a'];
         expect(checked(lines, putLine({ at: 1, parent: null, indent: '' }, '- [ ] n'))).toBe('disturbs');
-        expect(checked(lines, putLine(Placement.underHeading(Outline.read(lines), 0, '- [ ] n'), '- [ ] n'))).toBe('sound');
+        expect(checked(lines, putLine(headOf(lines, '- [ ] n'), '- [ ] n'))).toBe('sound');
     });
 });
 
@@ -200,7 +206,7 @@ describe('a line placed past what it would take in, as the reading with it in sa
 
     it('goes past a closed fence under a heading that a line put above would take in (the second run\'s H1)', () => {
         const lines = ['## H', '  ```', '  x', '  ```', '- [ ] A'];
-        expect(put(lines, text => Placement.underHeading(Outline.read(lines), 0, text), '- [ ] n'))
+        expect(put(lines, text => headOf(lines, text), '- [ ] n'))
             .toEqual({ spot: { at: 4, parent: null, indent: '' }, check: 'sound' });
     });
 
@@ -220,7 +226,7 @@ describe('a line placed past what it would take in, as the reading with it in sa
 
     it('stops at an item of the note it would take in, and takes that item\'s indentation', () => {
         const lines = ['## H', 'text', '  - [ ] a'];
-        expect(put(lines, text => Placement.underHeading(Outline.read(lines), 0, text), '- [ ] n'))
+        expect(put(lines, text => headOf(lines, text), '- [ ] n'))
             .toEqual({ spot: { at: 2, parent: null, indent: '  ' }, check: 'sound' });
     });
 

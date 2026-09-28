@@ -4,7 +4,8 @@ import { TaskParser } from '../../parsing/TaskParser';
 import { collectFlowLineIndices } from '../../parsing/utils/FlowLineScanner';
 import { FileOperations } from '../utils/FileOperations';
 import { ChildPropertyLineEditor } from '../utils/ChildPropertyLineEditor';
-import { Block, Placement, type PlacedLine, type Spot } from '../utils/Placement';
+import { Block, Placement, type InSection, type PlacedLine, type Spot } from '../utils/Placement';
+import { ListNumber } from '../utils/ListNumber';
 import type { PropertyOp } from '../PropertyUpdatePlanner';
 import { flowInstanceHead, renderFlowInstance } from '../FlowInstanceLines';
 import {
@@ -13,7 +14,7 @@ import {
     type WriteChannels, type WriteOutcome, type WriteSession,
 } from '../FileLines';
 import type { PlannedTarget } from '../TaskRefs';
-import type { CompletionFire, MoveDestination, TaskOp } from '../TaskOps';
+import type { CompletionFire, TaskOp } from '../TaskOps';
 import { Outline, type OutlineReading } from '../../parsing/utils/Outline';
 
 
@@ -198,19 +199,19 @@ export class InlineTaskWriter {
                 return;
             }
             case 'move': {
-                // The row and what goes with it are carried to where the move
-                // goes — the end of the note, where an append puts lines, the
-                // file's final terminator kept after them; or the end of a
-                // heading's section — and then its whole subtree is taken
-                // away from where it was. Everything is read before either.
-                // The spot is never inside the subtree (a section's end is
-                // past every item in it), so the subtree is where it was, or
-                // below the carried lines when they went above it.
+                // The row and what goes with it are carried to the heading's
+                // section, at the side the move says, and then its whole
+                // subtree is taken away from where it was. Everything is read
+                // before either. The spot is never inside the subtree (a
+                // section's head and end are at the top, past no item's
+                // text), so the subtree is where it was, or below the carried
+                // lines when they went above it.
                 const outline = draft.reading();
                 const { childrenLines } = this.fileOps.collectChildrenFromLines(outline, line);
                 const block = this.carriedWith(outline, line, op.text);
-                const spot = this.destinationOf(outline, op.to, block[0].text);
-                draft.put(spot, block);
+                const spot = this.destinationOf(outline, op.to, ListNumber.first(block[0].text));
+                const numbered = ListNumber.at(outline, spot, block[0].text, { from: line, to: outline.subtreeEnd(line) });
+                draft.put(spot, numberedBlock(block, numbered));
                 draft.splice(spot.at <= line ? line + block.length : line, 1 + childrenLines.length);
                 return;
             }
@@ -236,18 +237,17 @@ export class InlineTaskWriter {
     }
 
     /**
-     * Where a move to `to` puts its lines, `head` their first: the end of the
-     * note, or the end of the section of the heading `to` names. The heading
-     * is looked up as the fire's plan looked it up (`FlowExecutor.planTask`),
-     * in the lines the plan was made from as the ops before this one left
-     * them; none of those ops writes a heading, so the plan's answer — one
-     * heading — is this one. Any other answer is a caller's bug.
+     * Where a move to `to` puts its lines, `head` their first
+     * (`Placement.into`). The heading is looked up as the fire's plan looked
+     * it up (`FlowExecutor.planTask`), in the lines the plan was made from as
+     * the ops before this one left them; none of those ops writes a heading,
+     * so the plan's answer — one heading — is this one. Any other answer is
+     * a caller's bug.
      */
-    private destinationOf(outline: OutlineReading, to: MoveDestination, head: string): Spot {
-        if (to.kind === 'end') return Placement.end(outline);
-        const found = Placement.heading(outline, to.name);
-        if (found.kind !== 'one') throw new UnfollowableDraft(`a move to the heading '${to.name}' finds ${found.kind === 'none' ? 'none' : found.count} where it was planned to find one`);
-        return Placement.sectionEnd(outline, found.heading, head);
+    private destinationOf(outline: OutlineReading, to: InSection, head: string): Spot {
+        const found = Placement.into(outline, to, head);
+        if (found.kind !== 'spot') throw new UnfollowableDraft(`a move to the heading '${to.heading}' finds ${found.kind === 'none' ? 'none' : found.count} where it was planned to find one`);
+        return found.spot;
     }
 
     /**
@@ -323,4 +323,18 @@ export class InlineTaskWriter {
         const texts = [Outline.indentOf(lines[currentLine]) + Outline.dedent(head), ...rows.slice(1).map(row => lines[row])];
         return Block.of(outline, rows, texts, true);
     }
+}
+
+/**
+ * A carried block with its first line numbered where it lands
+ * (`ListNumber.at`), and the lines below it moved as far right as that moved
+ * its content, so they stand in it still.
+ */
+function numberedBlock(block: readonly PlacedLine[], numbered: { text: string; shift: number }): PlacedLine[] {
+    const frame = Outline.indentOf(block[0].text);
+    const deeper = frame + ' '.repeat(numbered.shift);
+    return block.map((line, i) => ({
+        ...line,
+        text: i === 0 ? numbered.text : Outline.shiftIndent(line.text, frame, deeper),
+    }));
 }

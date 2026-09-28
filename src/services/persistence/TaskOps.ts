@@ -1,5 +1,6 @@
 import type { FlowInstanceInsert } from './FlowInstanceLines';
 import type { PropertyOp } from './PropertyUpdatePlanner';
+import type { InSection } from './utils/Placement';
 
 /**
  * One thing an operation does to the row it names, in a write that may do
@@ -14,11 +15,12 @@ import type { PropertyOp } from './PropertyUpdatePlanner';
  *   sibling group, indented from the file.
  * - `strip-flow`: the command is consumed — the row's own `- ==>` lines go,
  *   and the row reads `text` (indentation kept from the file).
- * - `move`: the row is moved within its note, reading `text`, to `to` (the
- *   end of the note, or the end of a heading's section: `Placement.end`,
- *   `Placement.sectionEnd`), with its children re-indented under it and
- *   without its own `- ==>` lines. The row and its children are carried, not
- *   copied: they are the rows they were (see `LineEdits.carry`).
+ * - `move`: the row is moved within its note, reading `text`, to `to` (a
+ *   heading's section, at the side the settings say: `Placement.into`), with
+ *   its children re-indented under it and without its own `- ==>` lines. An
+ *   ordered row is numbered where it lands (`ListNumber.at`). The row and its
+ *   children are carried, not copied: they are the rows they were (see
+ *   `LineEdits.carry`).
  * - `remove`: the row and its children are taken out.
  * - `insert`: `text`, a new line, goes in beside the row where `place`
  *   says (`Placement`, of the same name): at the head of its children
@@ -41,13 +43,10 @@ import type { PropertyOp } from './PropertyUpdatePlanner';
 /** Where a new line goes beside the row (see {@link TaskOp} `insert`). */
 export type InsertPlace = 'firstChild' | 'afterSubtree' | 'afterCompletedRun';
 
-/** Where a `move` takes the row in its note: the end of the note, or the end of the section of the heading named `name`. */
-export type MoveDestination = { kind: 'end' } | { kind: 'heading'; name: string };
-
 export type TaskOp =
     | { kind: 'insert-instance'; insert: FlowInstanceInsert }
     | { kind: 'strip-flow'; text: string }
-    | { kind: 'move'; text: string; to: MoveDestination }
+    | { kind: 'move'; text: string; to: InSection }
     | { kind: 'remove' }
     | { kind: 'copy'; text: string }
     | { kind: 'insert'; place: InsertPlace; text: string }

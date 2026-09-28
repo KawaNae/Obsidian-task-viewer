@@ -235,17 +235,17 @@ describe('a card\'s completion', () => {
 });
 
 describe('a move within the note, completed in the editor', () => {
-    it('carries the row to the end in the same transaction, with the cursor on it', async () => {
-        const note = await open(['# note', '- [ ] T @2026-09-21 ==> move()', '	- [ ] c', '- [ ] U', '']);
+    it('carries the row to a heading in the same transaction, with the cursor on it', async () => {
+        const note = await open(['# note', '- [ ] T @2026-09-21 ==> move([[#Done]])', '	- [ ] c', '- [ ] U', '## Done', '']);
 
         note.editor.check(1);
 
-        expect(note.editor.lines()).toEqual(['# note', '- [ ] U', '- [x] T @2026-09-21', '	- [ ] c', '']);
+        expect(note.editor.lines()).toEqual(['# note', '- [ ] U', '## Done', '- [x] T @2026-09-21', '	- [ ] c', '']);
         expect(note.editor.transactions).toHaveLength(1);
         // The changes keep the most lines that keep their order
-        // (`lineChanges`): the row and its child stay, and the line that was
-        // below them goes above. The cursor stays on the row, past its `x`.
-        expect(note.editor.state.selection.main.head).toBe(note.editor.at(2, 4));
+        // (`lineChanges`): the row and its child stay, and the lines that
+        // were below them go above. The cursor stays on the row, past its `x`.
+        expect(note.editor.state.selection.main.head).toBe(note.editor.at(3, 4));
     });
 });
 

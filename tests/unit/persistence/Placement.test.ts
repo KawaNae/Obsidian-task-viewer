@@ -176,25 +176,6 @@ describe('Placement.copyOf', () => {
     });
 });
 
-describe('Placement.underHeading', () => {
-    it('is just below the heading, at the top, unindented when no item follows', () => {
-        expect(Placement.underHeading(Outline.read(['## H', '- [ ] a']), 0, '- [ ] n')).toEqual({ at: 1, parent: null, indent: '' });
-        expect(Placement.underHeading(Outline.read(['## H']), 0, '- [ ] n')).toEqual({ at: 1, parent: null, indent: '' });
-    });
-
-    it('is at the indentation of the first item at the top below it, blank lines aside, as its sibling (P1)', () => {
-        expect(Placement.underHeading(Outline.read(['## H', '', '  - [ ] a', '\t- [ ] b']), 0, '- [ ] n')).toEqual({ at: 1, parent: null, indent: '  ' });
-    });
-
-    it('is past the paragraph and the indented code below the heading, and not past the next heading', () => {
-        expect(Placement.underHeading(Outline.read(['## H', 'para', 'more', '', '- [ ] a']), 0, '- [ ] n').at).toBe(3);
-        // Four columns under a heading is indented code (measurement.md q10).
-        expect(Placement.underHeading(Outline.read(['## H', '\t- [ ] a', '\t\t- [ ] b', '- [ ] c']), 0, '- [ ] n')).toEqual({ at: 3, parent: null, indent: '' });
-        expect(Placement.underHeading(Outline.read(['## H', '### Sub', 'para']), 0, '- [ ] n').at).toBe(1);
-        expect(Placement.underHeading(Outline.read(['## H', '---', 'para']), 0, '- [ ] n').at).toBe(1);
-    });
-});
-
 describe('the spot\'s parent and indentation', () => {
     it('is the row\'s parent and the row\'s indentation for a sibling', () => {
         const lines = ['- [ ] p', '    - [x] a', '    - [ ] b', '- [ ] q'];

@@ -2,6 +2,7 @@ import { type App, TFile } from 'obsidian';
 import type { FileOperations } from '../utils/FileOperations';
 import { FrontmatterLineEditor } from '../utils/FrontmatterLineEditor';
 import { HeadingInserter } from '../../../utils/HeadingInserter';
+import type { Section } from '../Destination';
 import { fileGone, processLines, type WriteAt, type WriteChannels, type WriteOutcome } from '../FileLines';
 
 /**
@@ -17,16 +18,11 @@ export class FrontmatterWriter {
     ) {}
 
     /**
-     * 指定ファイルの見出し下に行を挿入する（見出し付きのタスク作成に使う
+     * 指定ファイルの見出しの節に行を挿入する（見出し付きのタスク作成に使う
      * 汎用操作）。見出しが存在しない場合はファイル末尾に作成する。
      */
-    async insertLineUnderHeading(
-        filePath: string,
-        lineContent: string,
-        header: string,
-        headerLevel: number
-    ): Promise<WriteAt> {
-        return HeadingInserter.writeUnderHeading(this.app, filePath, this.channelOf(filePath), lineContent, header, headerLevel);
+    async insertLineUnderHeading(filePath: string, lineContent: string, to: Section): Promise<WriteAt> {
+        return HeadingInserter.writeUnderHeading(this.app, filePath, this.channelOf(filePath), lineContent, to);
     }
 
     /**

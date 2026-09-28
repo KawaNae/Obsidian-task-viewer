@@ -378,19 +378,22 @@ describe('7. insertLine, firstChild (a child from a card, the API or the CLI)', 
 // ─── 8. a move within the note ──────────────────────────────────────
 
 describe('8. a move within the note (the move op, in the completing write)', () => {
-    it('A: within the same file, the subtree goes to the end and every name held before the write follows its row, the moved ones too', async () => {
+    const MOVING = [
+        '# note', '- [ ] 上 @2026-09-21', '- [ ] 対象 @2026-09-21 ==> move([[#Done]])', '\t- [ ] 子 @2026-09-21', '- [ ] 下 @2026-09-21', '## Done', '',
+    ];
+    it('A: within the same file, the subtree goes to a section and every name held before the write follows its row, the moved ones too', async () => {
         const { contents, session } = await open({
-            [FILE]: NOTE('- [ ] 対象 @2026-09-21 ==> move()', '\t- [ ] 子 @2026-09-21'),
+            [FILE]: MOVING,
         });
         const held = { above: idOf(session, '上'), below: idOf(session, '下'), target: idOf(session, '対象'), child: idOf(session, '子') };
 
         await check(session, idOf(session, '対象'));
         await session.flowSettled(FILE);
 
-        // The append goes in before the note's final empty element, so the
-        // note keeps its terminator.
+        // The section is at the end: the rows go in before the note's final
+        // empty element, so the note keeps its terminator.
         expect(contents.get(FILE)).toBe([
-            '# note', '- [ ] 上 @2026-09-21', '- [ ] 下 @2026-09-21', '- [x] 対象 @2026-09-21', '\t- [ ] 子 @2026-09-21', '',
+            '# note', '- [ ] 上 @2026-09-21', '- [ ] 下 @2026-09-21', '## Done', '- [x] 対象 @2026-09-21', '\t- [ ] 子 @2026-09-21', '',
         ].join('\n'));
         expect(rows(session).map(row => row.id)).toEqual(followed(session, [held.above, held.below, held.target, held.child]));
         expect(Notice.messages).toEqual([]);
@@ -398,7 +401,7 @@ describe('8. a move within the note (the move op, in the completing write)', () 
 
     it('B: within the same file, a line written above from outside before the move: nothing written, one `changed`', async () => {
         const { contents, session } = await open({
-            [FILE]: NOTE('- [ ] 対象 @2026-09-21 ==> move()', '\t- [ ] 子 @2026-09-21'),
+            [FILE]: MOVING,
         });
 
         // A move within one file is in the completing write.
@@ -406,7 +409,7 @@ describe('8. a move within the note (the move op, in the completing write)', () 
         expect(await session.index.updateTask(idOf(session, '対象'), { statusChar: 'x' })).toBe(false);
         await session.flowSettled(FILE);
 
-        const expected = NOTE('- [ ] 対象 @2026-09-21 ==> move()', '\t- [ ] 子 @2026-09-21');
+        const expected = [...MOVING];
         expected.splice(1, 0, OUTSIDE);
         expect(contents.get(FILE)).toBe(expected.join('\n'));
         expect(Notice.messages).toEqual([changed('対象')]);
