@@ -197,6 +197,8 @@ Quick reference for locating the right layer when implementing a feature.
 | **TaskIndex** | `services/core/TaskIndex.ts` | Central orchestrator for scanning, indexing, and event management; branches on `parserId` |
 | **TaskStore** | `services/core/TaskStore.ts` | In-memory task cache; notifies UI via `onChange` listeners |
 | **TaskScanner** | `services/core/TaskScanner.ts` | File scanning → `FileParsePipeline` invocation (parse/detect/commit の3相 orchestration) |
+| **ReadingCheck** | `services/core/ReadingCheck.ts` | Whether the index's reading of a note is the note on disk, asked before an operation is planned from a copy (`checkCopy`, the same `followLine` question as a write's first check) or a row is looked up by anchor (`checkFile`). `TaskIndex.copyToPlan` and `freshByAnchor` act on the answer; a stale reading is refused through `reportRefusal` |
+| **DiskReconciler** | `services/core/DiskReconciler.ts` | Brings the index's readings to the disk when a change notice never comes: on start, focus, a plugin view, a refusal, a stale check and each minute (desktop), stats the notes Obsidian holds (`DiskProbe`; the whole vault on desktop, the notes the index has read elsewhere), reads again what moved through `queueScan`, forgets what is gone, and logs where Obsidian's stat of a note lasted apart from the disk (`modified`, `deleted`). Obsidian's model is only observed, never mended; a note Obsidian never heard created stays out of the index |
 | **FlowFireExtension** | `editor/FlowFireExtension.ts` | Fires a completion made in the editor, in the same transaction (see Flow Firing) |
 | **ParserChain** | `services/parsing/strategies/ParserChain.ts` | Tries multiple parsers in order (Strategy chain) |
 | **TVInlineParser** | `services/parsing/tv-inline/TVInlineParser.ts` | Parses `@date` inline notation (line-level) |
@@ -583,7 +585,10 @@ src/styles/
 npm install       # Install dependencies
 npm run dev       # Development build (watch)
 npm run build     # Production build
+npm run test:e2e  # E2E against the Dev vault through the Obsidian CLI
 ```
+
+The build writes into `<vault>/.obsidian/plugins/obsidian-task-viewer`. Vault paths per OS live in `dev-paths.mjs`. The Dev vault is the default; set `OBSIDIAN_VAULT=main` or `OBSIDIAN_VAULT_PATH=<path>` to write elsewhere. E2E needs Obsidian running with the Dev vault open, the plugin enabled there, and the `obsidian` CLI on the PATH.
 
 ---
 

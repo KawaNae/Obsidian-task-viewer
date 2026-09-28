@@ -5,6 +5,7 @@ import type { TimerStorageUtils } from '../../../src/timer/TimerStorageUtils';
 import type TaskViewerPlugin from '../../../src/main';
 import type { App } from 'obsidian';
 import { makeTask } from '../helpers/makeTask';
+import { heldByAnchor } from '../helpers/anchoredRow';
 
 /**
  * 書き足しの宛先は「今どの行に走っているか」で決まる。child モードなら
@@ -30,12 +31,12 @@ function makeHarness(effectiveEnd: Date, written = true) {
         getTaskByAnchor: (file: string, anchor: string) => [parent, child].find(t => t.file === file && t.anchor === anchor),
         getTasks: () => [parent, child],
         updateTask: async (id: string, u: Record<string, unknown>) => { updates.push({ id, updates: u }); return written; },
-        waitForScan: async () => { /* unused */ },
     };
 
     const plugin = {
         settings: {},
         getTaskIndex: () => taskIndex,
+        getTaskWriteService: () => ({ freshByAnchor: heldByAnchor(taskIndex) }),
         getTaskReadService: () => ({
             getDisplayTask: (id: string) => (id === CHILD_ID
                 ? {

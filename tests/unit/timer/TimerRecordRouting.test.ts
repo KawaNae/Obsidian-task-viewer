@@ -5,6 +5,7 @@ import type { TimerStorageUtils } from '../../../src/timer/TimerStorageUtils';
 import type TaskViewerPlugin from '../../../src/main';
 import type { App } from 'obsidian';
 import { makeTask } from '../helpers/makeTask';
+import { heldByAnchor } from '../helpers/anchoredRow';
 
 /**
  * child モードでは開始時に placeholder の子タスクが 1 行書かれる
@@ -43,13 +44,13 @@ function makeHarness(options: { childExists?: boolean; childContent?: string } =
         getTasks: () => visible,
         getTaskByFileLine: () => parent,
         updateTask: async (id: string, u: Record<string, unknown>) => { updates.push({ id, updates: u }); return true; },
-        waitForScan: async () => { /* unused */ },
     };
 
     const plugin = {
         settings: { pomodoroWorkMinutes: 25, pomodoroBreakMinutes: 5 },
         getTaskIndex: () => taskIndex,
         getTaskWriteService: () => ({
+            freshByAnchor: heldByAnchor(taskIndex),
             insertLine: async (_parentId: string, line: string, _place: string) => { inserted.push(line); return true; },
         }),
     } as unknown as TaskViewerPlugin;

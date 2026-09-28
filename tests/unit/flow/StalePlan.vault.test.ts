@@ -54,12 +54,14 @@ async function check(session: VaultSession, id: string, ...files: string[]): Pro
     await session.flowSettled(FILE, ...files);
 }
 
-const CHANGED = t('notice.notWritten', { reason: t('notice.refusedChanged'), subject: 'A' });
+// The write's check of its copy against the disk finds the edit first
+// (`TaskIndex.copyToPlan`), reads the note again, and asks to try again.
+const CHANGED = t('notice.readAgain', { subject: 'A' });
 
 /**
  * A card's completion of A over a file edited from outside that no scan has
- * read: refused, nothing written, one notice. The refusal has the file read
- * again; the answer is A's id in that reading.
+ * read: refused, nothing written, one notice. The check before the write has
+ * the file read again; the answer is A's id in that reading.
  */
 async function refusedUntilScanned(contents: Map<string, string>, session: VaultSession, id: string): Promise<string> {
     const edited = contents.get(FILE);

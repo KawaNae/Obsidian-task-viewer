@@ -4,7 +4,7 @@
  * Tests the `==>` flow language (schedule / telomere / until / move) via
  * CLI update against a live Obsidian instance.
  * Prerequisites:
- *   - Obsidian is running with the Dev vault (C:\Obsidian\Dev) open
+ *   - Obsidian is running with the Dev vault (path in dev-paths.mjs) open
  *
  * Run:  npx vitest run --config vitest.config.e2e.ts tests/integration/generation/cli-generation.test.ts
  *

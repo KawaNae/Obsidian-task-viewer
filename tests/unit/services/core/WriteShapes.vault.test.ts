@@ -41,6 +41,10 @@ const OUTSIDE = '- [ ] 外部 @2026-09-21';
 
 /** The notice a write tells once its target's coordinate no longer reads as its basis. */
 const changed = (subject: string) => t('notice.notWritten', { reason: t('notice.refusedChanged'), subject });
+// A write through the index checks its copy against the disk first
+// (`TaskIndex.copyToPlan`): an edit from outside no scan has read is found
+// there, the note read again, and the user asked to try again.
+const readAgain = (subject: string) => t('notice.readAgain', { subject });
 
 let live: VaultSession | undefined;
 
@@ -150,7 +154,7 @@ describe('1. updateTaskInFile', () => {
         expect(Notice.messages).toEqual([]);
     });
 
-    it('B: a check after a line was written above from outside: nothing written, one `changed`', async () => {
+    it('B: a check after a line was written above from outside: nothing written, read again, one notice', async () => {
         const { contents, session } = await open({ [FILE]: NOTE('- [ ] 対象 @2026-09-21') });
 
         writeOutside(contents, 1);
@@ -159,10 +163,10 @@ describe('1. updateTaskInFile', () => {
         await session.settle(FILE);
 
         expect(contents.get(FILE)).toBe(edited);
-        expect(Notice.messages).toEqual([changed('対象')]);
+        expect(Notice.messages).toEqual([readAgain('対象')]);
     });
 
-    it('B: a child property update after a line was written above from outside: nothing written, one `changed`', async () => {
+    it('B: a child property update after a line was written above from outside: nothing written, read again, one notice', async () => {
         const { contents, session } = await open({ [FILE]: NOTE('- [ ] 対象 @2026-09-21') });
 
         writeOutside(contents, 1);
@@ -171,7 +175,7 @@ describe('1. updateTaskInFile', () => {
         await session.settle(FILE);
 
         expect(contents.get(FILE)).toBe(edited);
-        expect(Notice.messages).toEqual([changed('対象')]);
+        expect(Notice.messages).toEqual([readAgain('対象')]);
     });
 });
 
@@ -233,7 +237,7 @@ describe('3. remove (deleteTask)', () => {
         expect(Notice.messages).toEqual([]);
     });
 
-    it('B: a delete after a line was written above from outside: nothing written, one `changed`', async () => {
+    it('B: a delete after a line was written above from outside: nothing written, read again, one notice', async () => {
         const { contents, session } = await open({ [FILE]: NOTE('- [ ] 対象 @2026-09-21', '\t- [ ] 子 @2026-09-21') });
 
         writeOutside(contents, 1);
@@ -242,7 +246,7 @@ describe('3. remove (deleteTask)', () => {
         await session.settle(FILE);
 
         expect(contents.get(FILE)).toBe(edited);
-        expect(Notice.messages).toEqual([changed('対象')]);
+        expect(Notice.messages).toEqual([readAgain('対象')]);
     });
 
 });
@@ -267,7 +271,7 @@ describe('4. a deletion fire (the instance and the removal, one applyToTask)', (
         expect(Notice.messages).toEqual([]);
     });
 
-    it('B: a line written above from outside before the fire: nothing written, one `changed`', async () => {
+    it('B: a line written above from outside before the fire: nothing written, read again, one notice', async () => {
         const { contents, session } = await open({ [FILE]: NOTE('- [ ] 対象 @2026-09-21 ==> every mon') });
         const held = { target: idOf(session, '対象') };
 
@@ -277,8 +281,8 @@ describe('4. a deletion fire (the instance and the removal, one applyToTask)', (
         await session.flowSettled(FILE);
 
         expect(contents.get(FILE)).toBe(edited);
-        expect(session.index.getTask(held.target)).toBeDefined();
-        expect(Notice.messages).toEqual([changed('対象')]);
+        expect(idOf(session, '対象')).toBeDefined();
+        expect(Notice.messages).toEqual([readAgain('対象')]);
     });
 });
 
@@ -314,7 +318,7 @@ describe('6. insertSiblingAfterTask (timer records)', () => {
         expect(Notice.messages).toEqual([]);
     });
 
-    it('B: a line written above from outside: nothing written, one `changed`', async () => {
+    it('B: a line written above from outside: nothing written, read again, one notice', async () => {
         const { contents, session } = await open({ [FILE]: NOTE('- [ ] 対象 @2026-09-21', '\t- [ ] 子 @2026-09-21') });
 
         writeOutside(contents, 1);
@@ -324,10 +328,10 @@ describe('6. insertSiblingAfterTask (timer records)', () => {
 
         expect(at).toBe(false);
         expect(contents.get(FILE)).toBe(edited);
-        expect(Notice.messages).toEqual([changed('対象')]);
+        expect(Notice.messages).toEqual([readAgain('対象')]);
     });
 
-    it('B: afterCompletedRun with a line written above from outside: nothing written, one `changed`', async () => {
+    it('B: afterCompletedRun with a line written above from outside: nothing written, read again, one notice', async () => {
         const target = ['- [ ] 対象 @2026-09-21T10:00>11:00', '- [x] 済1 @2026-09-21T11:00>12:00', '- [x] 済2 @2026-09-21T12:00>13:00'];
         const { contents, session } = await open({ [FILE]: NOTE(...target) });
 
@@ -338,7 +342,7 @@ describe('6. insertSiblingAfterTask (timer records)', () => {
 
         expect(at).toBe(false);
         expect(contents.get(FILE)).toBe(edited);
-        expect(Notice.messages).toEqual([changed('対象')]);
+        expect(Notice.messages).toEqual([readAgain('対象')]);
     });
 });
 
@@ -358,7 +362,7 @@ describe('7. insertLine, firstChild (a child from a card, the API or the CLI)', 
         expect(Notice.messages).toEqual([]);
     });
 
-    it('B: a line written above from outside: nothing written, one `changed`', async () => {
+    it('B: a line written above from outside: nothing written, read again, one notice', async () => {
         const { contents, session } = await open({ [FILE]: NOTE('- [ ] 対象 @2026-09-21', '\t- [ ] 子 @2026-09-21') });
 
         writeOutside(contents, 1);
@@ -367,7 +371,7 @@ describe('7. insertLine, firstChild (a child from a card, the API or the CLI)', 
         await session.settle(FILE);
 
         expect(contents.get(FILE)).toBe(edited);
-        expect(Notice.messages).toEqual([changed('対象')]);
+        expect(Notice.messages).toEqual([readAgain('対象')]);
     });
 });
 
@@ -429,7 +433,7 @@ describe('9. duplicateInlineTask (a copy on another day)', () => {
         expect(Notice.messages).toEqual([]);
     });
 
-    it('B: a line written above from outside: nothing written, one `changed`', async () => {
+    it('B: a line written above from outside: nothing written, read again, one notice', async () => {
         const { contents, session } = await open({ [FILE]: NOTE(...TARGET.map(line => line.replace(' ^blk', ''))) });
         const before = rows(session).map(row => row.id);
 
@@ -439,7 +443,7 @@ describe('9. duplicateInlineTask (a copy on another day)', () => {
         await session.settle(FILE);
 
         expect(contents.get(FILE)).toBe(edited);
-        expect(Notice.messages).toEqual([changed('対象')]);
+        expect(Notice.messages).toEqual([readAgain('対象')]);
     });
 });
 
@@ -461,7 +465,7 @@ describe('10. duplicateInlineTaskInPlace (a copy that continues)', () => {
         expect(Notice.messages).toEqual([]);
     });
 
-    it('B: a line written above from outside: nothing written, one `changed`', async () => {
+    it('B: a line written above from outside: nothing written, read again, one notice', async () => {
         const { contents, session } = await open({ [FILE]: NOTE(...TARGET) });
         const before = rows(session).map(row => row.id);
 
@@ -471,7 +475,7 @@ describe('10. duplicateInlineTaskInPlace (a copy that continues)', () => {
         await session.settle(FILE);
 
         expect(contents.get(FILE)).toBe(edited);
-        expect(Notice.messages).toEqual([changed('対象')]);
+        expect(Notice.messages).toEqual([readAgain('対象')]);
     });
 });
 
@@ -580,7 +584,7 @@ describe('twins after an outside edit: refused, with one notice', () => {
         await session.settle(FILE);
 
         expect(contents.get(FILE)).toBe(edited);
-        expect(Notice.messages).toEqual([changed('子')]);
+        expect(Notice.messages).toEqual([readAgain('子')]);
     });
 
     it('a remove is refused, though the twin now on the coordinate reads as the basis', async () => {
@@ -593,7 +597,7 @@ describe('twins after an outside edit: refused, with one notice', () => {
         await session.settle(FILE);
 
         expect(contents.get(FILE)).toBe(edited);
-        expect(Notice.messages).toEqual([changed('子')]);
+        expect(Notice.messages).toEqual([readAgain('子')]);
     });
 
     it('a flow fire (create-next, then strip-flow) writes nothing, and says so once', async () => {

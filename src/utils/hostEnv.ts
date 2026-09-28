@@ -54,6 +54,19 @@ export function nodeOs(): NodeOs | undefined {
     return electronRequire(window)?.('os') as NodeOs | undefined;
 }
 
+/** The slice of Node's `fs` the disk probe reads (`NodeDiskProbe`). */
+export interface NodeFs {
+    promises: {
+        stat(path: string): Promise<{ mtimeMs: number; size: number }>;
+    };
+}
+
+/** Node's `fs`, loaded when asked for, or undefined off the desktop app. */
+export function nodeFs(): NodeFs | undefined {
+    if (typeof window === 'undefined') return undefined;
+    return electronRequire(window)?.('fs') as NodeFs | undefined;
+}
+
 /**
  * `navigator.deviceMemory` — approximate device RAM in GB. A Chrome
  * extension to the standard, absent on iOS.

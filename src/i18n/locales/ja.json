@@ -665,6 +665,8 @@
     "flowDeleteDidNotFire": "フローが発火しなかったため、タスクは削除されませんでした: {{reason}}（{{file}}）",
     "flowNotRun": "完了にしましたが、フローは実行しませんでした: {{reason}}（{{subject}}）",
     "notWritten": "書き込みませんでした: {{reason}}（{{subject}}）",
+    "readAgain": "「{{subject}}」のノートの内容が変わっていたので読み直しました。もう一度操作してください",
+    "notReadable": "「{{subject}}」のノートを読めませんでした",
     "refusedGone": "対象のタスクが見つかりません",
     "refusedChanged": "ノートの内容が変わっています。もう一度操作してください",
     "refusedUnplaceable": "新しい行を、意図した位置のタスクとして読まれる場所に置けません",

@@ -5,6 +5,7 @@ import type { TimerInstance } from '../../../src/timer/TimerInstance';
 import type { TimerStorageUtils } from '../../../src/timer/TimerStorageUtils';
 import type TaskViewerPlugin from '../../../src/main';
 import { makeTask } from '../helpers/makeTask';
+import { heldByAnchor } from '../helpers/anchoredRow';
 
 /**
  * A timer takes a `^id` off only when its own write put it on
@@ -66,10 +67,13 @@ function harness(opts: { tailIsTarget: boolean; found: boolean; owned: string[];
         getTask: (id: string) => [target, tail].find(t => t.id === id),
         getTaskByAnchor,
         updateTask,
-        waitForScan: vi.fn(async () => { /* the scan is done */ }),
         deleteTask: vi.fn(async () => true),
     };
-    const plugin = { settings: {}, getTaskIndex: () => taskIndex } as unknown as TaskViewerPlugin;
+    const plugin = {
+        settings: {},
+        getTaskIndex: () => taskIndex,
+        getTaskWriteService: () => ({ freshByAnchor: heldByAnchor(taskIndex) }),
+    } as unknown as TaskViewerPlugin;
     const timer = makeTimer({ tailRecordBlockId: tailBlockId, timerTargetId: ANCHOR, ownedAnchors: opts.owned });
     const others = (opts.others ?? []).map((o, i) => makeTimer({ id: `other-${i}`, ...o }));
     const recorder = new TimerRecorder({} as App, plugin, {} as TimerStorageUtils, () => { /* unused */ }, () => [timer, ...others]);

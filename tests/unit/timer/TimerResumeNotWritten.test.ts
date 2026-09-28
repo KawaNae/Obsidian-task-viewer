@@ -6,6 +6,7 @@ import { TimerContentBinding } from '../../../src/timer/TimerContentBinding';
 import type { TimerContext } from '../../../src/timer/TimerContext';
 import type { CountupTimer, TimerInstance, TimerRecordMode } from '../../../src/timer/TimerInstance';
 import { vaultSession, type VaultSession } from '../helpers/vaultSession';
+import { rowOf } from '../helpers/anchoredRow';
 
 /**
  * 再開の行（兄弟の挿入）か名前を書けなかった再開は、取り消して中断に戻る
@@ -233,12 +234,12 @@ describe('resolveTailRecord: the target row is the tail of a self timer in its f
         await s.settle(FILE);
         const anchor = timer.timerTargetId!;
         expect(timer.tailRecordBlockId).toBe(anchor);
-        expect(s.recorder.resolveTailRecord(timer)?.content).toBe('対象');
+        expect(rowOf(await s.recorder.resolveTailRecord(timer))?.content).toBe('対象');
 
         // 中断中もまだ対象の行が尻尾（記録していないので動かない）。
         timer.sessionCount = 1;
         timer.runState = 'suspended';
-        expect(s.recorder.resolveTailRecord(timer)?.content).toBe('対象');
+        expect(rowOf(await s.recorder.resolveTailRecord(timer))?.content).toBe('対象');
 
         // 再開（2 本目）で尻尾は新しい行へ移り、対象の行はもう尻尾ではない。
         expect(await s.recorder.startNextSession(timer)).toBe(true);
@@ -247,8 +248,8 @@ describe('resolveTailRecord: the target row is the tail of a self timer in its f
 
         expect(timer.tailRecordBlockId).not.toBe(anchor);
         // 名前は対象タスクから継ぐので同じ「対象」だが、行そのものはもう対象行ではない。
-        expect(s.recorder.resolveTailRecord(timer)?.id).not.toBe(target.id);
-        expect(s.recorder.resolveTailRecord(timer)?.blockId).not.toBe(anchor);
+        expect(rowOf(await s.recorder.resolveTailRecord(timer))?.id).not.toBe(target.id);
+        expect(rowOf(await s.recorder.resolveTailRecord(timer))?.blockId).not.toBe(anchor);
         s.dispose();
     });
 });

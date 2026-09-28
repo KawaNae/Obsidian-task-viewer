@@ -97,42 +97,71 @@ describe('one press of ■ says one thing', () => {
         expect(contents.get(FILE)).toMatch(/- \[x\] .*\^tv-t-/);
     });
 
-    it('the running line was removed behind the index: one notice, and it is the refusal', async () => {
+    // An edit from outside that the index was never told of: the timer looks
+    // its rows up by anchor in a reading of the note as the disk holds it
+    // (`TaskIndex.freshByAnchor`), and goes on with what the anchor finds.
+    it('the running line was removed behind the index: it is found gone, and the record is written in its place', async () => {
         const timer = await start(s, 'child');
         const { ctx, lifecycle } = lifecycleOver(s);
         ctx.timers.set(timer.id, timer);
         // 外から走行中の行を消す。index はまだ読み直していない。
         const anchor = `^${timer.tailRecordBlockId}`;
         contents.set(FILE, contents.get(FILE)!.split('\n').filter(line => !line.includes(anchor)).join('\n'));
-        const before = contents.get(FILE);
         Notice.messages.length = 0;
 
         await lifecycle.finishTimer(timer);
 
         expect(Notice.messages, Notice.messages.join(' | ')).toHaveLength(1);
-        expect(isNotice(Notice.messages[0], 'notWritten'), Notice.messages[0]).toBe(true);
-        expect(Notice.messages[0]).toContain(en.notice.refusedChanged);
-        // widget は残り、計測も残る。
-        expect(ctx.timers.has(timer.id)).toBe(true);
-        expect(timer.sessionCount).toBe(0);
-        expect(contents.get(FILE)).toBe(before);
+        expect(isNotice(Notice.messages[0], 'kindRecorded'), Notice.messages[0]).toBe(true);
+        expect(ctx.timers.has(timer.id)).toBe(false);
+        // The fallback record, under the target: the removed line is not written back.
+        expect(contents.get(FILE)).not.toContain(anchor);
+        expect(contents.get(FILE)).toMatch(/^- \[ \] 対象 .*\n\t- \[x\] ⏱️ 対象 /);
     });
 
-    it('the running line was rewritten behind the index: one notice, and it is the refusal', async () => {
+    it('the running line was rewritten behind the index: the anchor finds it, and the record is written there', async () => {
         const timer = await start(s, 'self');
         const { ctx, lifecycle } = lifecycleOver(s);
         ctx.timers.set(timer.id, timer);
         // self の記録先（対象タスクの行）を、index が読み直す前に書き換える。
         contents.set(FILE, contents.get(FILE)!.replace('- [ ] 対象', '- [ ] 別の名前'));
-        const before = contents.get(FILE);
         Notice.messages.length = 0;
 
         await lifecycle.finishTimer(timer);
 
         expect(Notice.messages, Notice.messages.join(' | ')).toHaveLength(1);
-        expect(isNotice(Notice.messages[0], 'notWritten'), Notice.messages[0]).toBe(true);
-        expect(Notice.messages[0]).toContain(en.notice.refusedChanged);
-        expect(ctx.timers.has(timer.id)).toBe(true);
+        expect(isNotice(Notice.messages[0], 'taskUpdated'), Notice.messages[0]).toBe(true);
+        expect(ctx.timers.has(timer.id)).toBe(false);
+        expect(contents.get(FILE)).toMatch(/^- \[x\] ⏱️ 別の名前 @/);
+    });
+
+    // A read that fails for a moment (EBUSY on Windows) says nothing of
+    // whether the running line is there: no record is added in its place.
+    it('the note could not be read for a moment: nothing written, the record kept pending, one notice; pressed again, the running line is closed', async () => {
+        const timer = await start(s, 'child');
+        const { ctx, lifecycle } = lifecycleOver(s);
+        ctx.timers.set(timer.id, timer);
+        const before = contents.get(FILE);
+        const busy = Object.assign(new Error('EBUSY: resource busy or locked'), { code: 'EBUSY' });
+        vi.spyOn(s.app.vault, 'read').mockRejectedValueOnce(busy);
+        Notice.messages.length = 0;
+
+        await lifecycle.finishTimer(timer);
+
+        expect(Notice.messages, Notice.messages.join(' | ')).toHaveLength(1);
+        expect(isNotice(Notice.messages[0], 'notReadable'), Notice.messages[0]).toBe(true);
         expect(contents.get(FILE)).toBe(before);
+        expect(timer.pendingRecord).not.toBeNull();
+        expect(ctx.timers.has(timer.id)).toBe(true);
+
+        Notice.messages.length = 0;
+        await lifecycle.finishTimer(timer);
+
+        expect(Notice.messages, Notice.messages.join(' | ')).toHaveLength(1);
+        expect(isNotice(Notice.messages[0], 'kindRecorded'), Notice.messages[0]).toBe(true);
+        expect(ctx.timers.has(timer.id)).toBe(false);
+        // The running line closed: one record under the target, not two.
+        expect(contents.get(FILE)!.split('\n').filter(line => line.includes('⏱️'))).toHaveLength(1);
+        expect(contents.get(FILE)).toMatch(/\t- \[x\] ⏱️ 対象 .*\^tv-t-/);
     });
 });

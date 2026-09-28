@@ -218,16 +218,17 @@ const MADE = { written: true, refused: null, made: [], rows: new Map() } as cons
 function buildIndexHost(task: Task | undefined) {
     return {
         store: { getTask: () => task },
-        scanner: { waitForScan: vi.fn(async () => {}), follow: () => null },
+        scanner: { follow: () => null },
         repository: {
             applyToTask: vi.fn(async () => MADE),
         },
         withNotify: vi.fn(async (_file: string, fn: () => Promise<unknown>) => await fn()),
+        onRow: proto.onRow,
         // The dispose guard every write goes through; this index is open.
         disposed: false,
         refuseAfterDispose: proto.refuseAfterDispose,
 
-        copyForWrite: proto.copyForWrite,
+        copyToPlan: proto.copyToPlan,
         getTask: proto.getTask,
 
         reportRefusal: () => { /* the notice is not measured here */ },

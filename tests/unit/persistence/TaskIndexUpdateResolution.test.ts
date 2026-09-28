@@ -28,7 +28,7 @@ function buildHost(task: Task, written = true) {
             reportNotRun: () => { },
         },
         writeCompleting: proto.writeCompleting,
-        scanner: { requestScan: vi.fn(async () => {}), follow: () => null, holds: () => false },
+        scanner: { follow: () => null, holds: () => false },
         app: { vault: { getAbstractFileByPath: () => null } },
         repository: {
             updateTaskInFile: vi.fn(async () => ({ written, refused: null })),
@@ -41,7 +41,7 @@ function buildHost(task: Task, written = true) {
         disposed: false,
         refuseAfterDispose: proto.refuseAfterDispose,
 
-        copyForWrite: proto.copyForWrite,
+        copyToPlan: proto.copyToPlan,
         getTask: proto.getTask,
 
         reportRefusal: () => { /* the notice is not measured here */ },
@@ -183,10 +183,12 @@ describe('reportRefusal', () => {
         for (const reason of [
             { kind: 'gone' },
             { kind: 'changed' },
+            { kind: 'unreadable' },
         ] as const) {
             Notice.messages.length = 0;
 
-            proto.reportRefusal.call({}, { file: 'note.md', reason, subject: '週報' });
+            // What it learns besides (`learnFrom`) asks an index with no reconciler nothing.
+            proto.reportRefusal.call({ learnFrom: proto.learnFrom }, { file: 'note.md', reason, subject: '週報' });
 
             expect(Notice.messages).toHaveLength(1);
             expect(Notice.messages[0]).toContain('週報');

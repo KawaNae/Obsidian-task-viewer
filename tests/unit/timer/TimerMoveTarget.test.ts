@@ -1,6 +1,7 @@
 import { describe, it, expect, afterEach, vi } from 'vitest';
 import { getTimerElapsedSeconds, type PendingRecord, type TimerInstance, type TimerRecordMode } from '../../../src/timer/TimerInstance';
 import { vaultSession, type VaultSession } from '../helpers/vaultSession';
+import { rowOf } from '../helpers/anchoredRow';
 
 /**
  * A timer whose target moves within its note (F8). A timer that closes with
@@ -84,13 +85,13 @@ describe('a timer that stays open while its target moves', () => {
         const after = lines(contents);
         expect(after[1]).toBe('## Done');
         expect(after[2]).toMatch(new RegExp(`^- \\[x\\] .*対象 .*\\^${anchor}$`));
-        expect(s.recorder.resolveTarget(timer)?.line).toBe(2);
-        expect(s.recorder.resolveTailRecord(timer)?.line).toBe(2);
+        expect(rowOf(await s.recorder.resolveTarget(timer))?.line).toBe(2);
+        expect(rowOf(await s.recorder.resolveTailRecord(timer))?.line).toBe(2);
         s.dispose();
 
         const reloaded = vaultSession(contents);
         await reloaded.scanAll();
-        expect(reloaded.recorder.resolveTarget(timer)?.content).toMatch(/対象/);
+        expect(rowOf(await reloaded.recorder.resolveTarget(timer))?.content).toMatch(/対象/);
         reloaded.dispose();
     });
 
@@ -107,8 +108,8 @@ describe('a timer that stays open while its target moves', () => {
         await s.settle(FILE);
 
         expect(lines(contents)[1]).toBe('## Done');
-        const target = s.recorder.resolveTarget(timer);
-        const tail = s.recorder.resolveTailRecord(timer);
+        const target = rowOf(await s.recorder.resolveTarget(timer));
+        const tail = rowOf(await s.recorder.resolveTailRecord(timer));
         expect(target?.content).toBe('対象');
         expect(target!.line).toBeGreaterThan(1);
         expect(tail?.line).toBeGreaterThan(1);

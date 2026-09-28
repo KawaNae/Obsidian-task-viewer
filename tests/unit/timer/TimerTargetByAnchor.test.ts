@@ -1,6 +1,7 @@
 import { describe, it, expect, afterEach, vi } from 'vitest';
 import { getTimerElapsedSeconds, type TimerInstance } from '../../../src/timer/TimerInstance';
 import { vaultSession, type VaultSession } from '../helpers/vaultSession';
+import { rowOf } from '../helpers/anchoredRow';
 
 /**
  * A timer finds the rows it follows across readings by their anchor alone
@@ -122,7 +123,7 @@ describe('a timer does not write where it cannot name the row by its anchor', ()
         });
         const before = contents.get(FILE);
 
-        expect(s.recorder.resolveTarget(timer)).toBeUndefined();
+        expect(rowOf(await s.recorder.resolveTarget(timer))).toBeUndefined();
         expect(await record(s, timer)).toBe(false);
         expect(contents.get(FILE)).toBe(before);
     });

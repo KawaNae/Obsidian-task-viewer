@@ -6,6 +6,7 @@ import type TaskViewerPlugin from '../../../src/main';
 import type { App } from 'obsidian';
 import type { Task } from '../../../src/types';
 import { makeTask } from '../helpers/makeTask';
+import { heldByAnchor, rowOf } from '../helpers/anchoredRow';
 
 /**
  * v2 の記録の置き場。**尻尾（最後に書いたレコード）の兄弟**に並べる、が原則で、
@@ -66,13 +67,13 @@ function makeHarness(options: { tail?: Task | undefined; siblingFails?: boolean 
             if (task && 'blockId' in u) task.blockId = u.blockId as string | undefined;
         },
         deleteTask: async (id: string) => { deletes.push(id); },
-        waitForScan: async () => { /* 書き込みは同期的に反映済み */ },
     };
 
     const plugin = {
         settings: { pomodoroWorkMinutes: 25, pomodoroBreakMinutes: 5 },
         getTaskIndex: () => taskIndex,
         getTaskWriteService: () => ({
+            freshByAnchor: heldByAnchor(taskIndex),
             insertLine: async (
                 taskId: string,
                 line: string,
@@ -152,7 +153,7 @@ describe('startNextSession: the next record sits beside the last one', () => {
         expect(h.childInserts).toHaveLength(0);
         expect(written).toBe(true);
         // 新しい行が書けて、スキャンが引き直せる状態まで進んだ（採用が完了した）。
-        expect(h.recorder.resolveTailRecord(timer)?.id).toBe(NEW_SESSION_ID);
+        expect(rowOf(await h.recorder.resolveTailRecord(timer))?.id).toBe(NEW_SESSION_ID);
     });
 
     it('carries the record name over instead of leaving the line unnamed', async () => {

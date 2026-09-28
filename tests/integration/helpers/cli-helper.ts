@@ -1,7 +1,8 @@
 import { execSync } from 'child_process';
 
 /**
- * Execute an Obsidian CLI command via PowerShell and return parsed JSON.
+ * Execute an Obsidian CLI command and return parsed JSON. On Windows the CLI
+ * is reached through PowerShell; elsewhere the default shell runs it directly.
  * Requires Obsidian to be running with the Dev vault open.
  */
 export function obsidianCli(command: string, flags: Record<string, string | boolean> = {}): unknown {
@@ -23,10 +24,10 @@ export function obsidianCli(command: string, flags: Record<string, string | bool
 
     let raw: string;
     try {
-        raw = execSync(
-            `powershell.exe -Command "${fullCmd}"`,
-            { encoding: 'utf-8', timeout: 15000 },
-        ).trim();
+        const shellCmd = process.platform === 'win32'
+            ? `powershell.exe -Command "${fullCmd}"`
+            : fullCmd;
+        raw = execSync(shellCmd, { encoding: 'utf-8', timeout: 15000 }).trim();
     } catch (err: unknown) {
         // execSync throws on non-zero exit code; stderr may contain the error
         const msg = (err as { stderr?: string }).stderr?.trim()

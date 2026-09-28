@@ -2,7 +2,7 @@ import type { TFile } from 'obsidian';
 import type { EditorLine, WriteChannels } from '../persistence/FileLines';
 import type { InsertPlace, TaskOp } from '../persistence/TaskOps';
 import type { DuplicateOptions, Task } from '../../types';
-import type { TaskIndex } from '../core/TaskIndex';
+import type { AnchoredRow, TaskIndex } from '../core/TaskIndex';
 import type { FlowDeleteAssessment } from '../flow/FlowDeletion';
 import { TaskIdGenerator } from '../display/TaskIdGenerator';
 
@@ -65,6 +65,24 @@ export class TaskWriteService {
      */
     assessFlowDelete(taskId: string): FlowDeleteAssessment {
         return this.taskIndex.assessFlowDelete(this.resolveTaskId(taskId));
+    }
+
+    /**
+     * Whether the task is still the row on the disk, asked as a drag or a
+     * card's menu opens (`TaskIndex.confirmTask`). No: the user has been
+     * told, and the note read again; the caller does not go on.
+     */
+    async confirmTask(taskId: string): Promise<boolean> {
+        return this.taskIndex.confirmTask(this.resolveTaskId(taskId));
+    }
+
+    /**
+     * The row a note's `^id` anchors, in a reading of the note as the disk
+     * holds it (`TaskIndex.freshByAnchor`): the one way a write that names its
+     * row by anchor — the API's `path#^id`, a timer — finds it.
+     */
+    async freshByAnchor(filePath: string, anchor: string): Promise<AnchoredRow> {
+        return this.taskIndex.freshByAnchor(filePath, anchor);
     }
 
     /**
@@ -146,9 +164,5 @@ export class TaskWriteService {
 
     async requestScan(file: TFile): Promise<void> {
         return this.taskIndex.requestScan(file);
-    }
-
-    async waitForScan(filePath: string): Promise<void> {
-        return this.taskIndex.waitForScan(filePath);
     }
 }

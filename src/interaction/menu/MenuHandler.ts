@@ -99,7 +99,7 @@ export class MenuHandler {
         this.boundCards.add(card);
         const show = (x: number, y: number) => {
             const held = heldBy(card);
-            if (held) this.showContextMenu(x, y, held.task, hooks);
+            if (held) void this.showContextMenu(x, y, held.task, hooks);
         };
         TouchLongPressBinder.bind(card, {
             getThreshold: () => this.plugin.settings.longPressThreshold,
@@ -118,7 +118,7 @@ export class MenuHandler {
     showMenuForTask(taskId: string, x: number, y: number): void {
         const task = this.readService.getTask(taskId);
         if (!task) return;
-        this.showContextMenu(x, y, task);
+        void this.showContextMenu(x, y, task);
     }
 
     /**
@@ -127,13 +127,18 @@ export class MenuHandler {
      * (including split segments) directly.
      */
     showTaskContextMenu(task: Task, x: number, y: number): void {
-        this.showContextMenu(x, y, task);
+        void this.showContextMenu(x, y, task);
     }
 
     /**
-     * Show context menu
+     * Show context menu. The one place a card's menu opens, from any view.
+     *
+     * Every item plans from the task's copy, so the menu opens only once the
+     * copy is known to be the row on the disk (`confirmTask`): a note changed
+     * in a way the index was never told of is read again, and the user told
+     * to open the menu again, before anything is chosen from a stale copy.
      */
-    private showContextMenu(x: number, y: number, taskInput: Task, hooks?: TaskMenuHooks) {
+    private async showContextMenu(x: number, y: number, taskInput: Task, hooks?: TaskMenuHooks): Promise<void> {
         // Resolve the real task from the index
         const originalId = getOriginalTaskId(taskInput);
         const task = this.readService.getTask(originalId);
@@ -143,6 +148,7 @@ export class MenuHandler {
             return;
         }
         if (task.isReadOnly) return;
+        if (!(await this.writeService.confirmTask(task.id))) return;
 
         // Convert to DisplayTask for property display (implicit/explicit flags)
         const displayTask = toDisplayTask(task, this.plugin.settings.startHour, (id) => this.readService.getTask(id));

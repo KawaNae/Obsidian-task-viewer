@@ -6,6 +6,7 @@ import type { TimerStorageUtils } from '../../../src/timer/TimerStorageUtils';
 import type TaskViewerPlugin from '../../../src/main';
 import { makeTask } from '../helpers/makeTask';
 import en from '../../../src/i18n/locales/en.json';
+import { heldByAnchor } from '../helpers/anchoredRow';
 
 /**
  * 記録の成否と通知。記録を書けたときだけ成功の通知を1回出し、書けなかったときは
@@ -62,13 +63,13 @@ function makeHarness(options: Options = {}) {
             updates.push({ id, updates: u });
             return options.updateResult ?? true;
         },
-        waitForScan: async () => { /* unused */ },
     };
 
     const plugin = {
         settings: { pomodoroWorkMinutes: 25, pomodoroBreakMinutes: 5 },
         getTaskIndex: () => taskIndex,
         getTaskWriteService: () => ({
+            freshByAnchor: heldByAnchor(taskIndex),
             insertLine: async (_parentId: string, line: string, _place: string) => {
                 inserted.push(line);
                 return options.insertResult ?? true;
