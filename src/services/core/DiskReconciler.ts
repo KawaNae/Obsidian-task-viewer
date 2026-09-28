@@ -26,9 +26,11 @@ export const INTERVAL_MS = 60_000;
  * How long a divergence has been found, sweep after sweep, before it is told:
  * well past the time a change notice takes to come (seen up to 17 s late
  * under load on a Mac). Two sweeps a moment apart — a refusal's, right after
- * a focus's — would otherwise tell a notice still on its way.
+ * a focus's — would otherwise tell a notice still on its way. Short of the
+ * interval, so the interval's next sweep tells it even when its timer fires a
+ * little early (seen 59.995 s on Windows).
  */
-export const LASTING_MS = INTERVAL_MS;
+export const LASTING_MS = INTERVAL_MS / 2;
 
 /** How many divergences one sweep tells line by line; the rest are counted. */
 const TOLD_PER_SWEEP = 20;

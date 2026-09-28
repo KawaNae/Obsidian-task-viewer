@@ -146,6 +146,19 @@ describe('a sweep', () => {
         expect(lines().filter(line => line.startsWith('[Reconcile:diverge]'))).toHaveLength(1);
     });
 
+    it('tells a lasting divergence at the next interval sweep, though its timer fires a little early', async () => {
+        const { contents, disk, s } = await open({ [FILE]: '- [ ] A\n', [OTHER]: '- [ ] O\n' });
+        contents.set(FILE, '- [ ] A\n- [ ] B\n');
+        disk.moved.set(FILE, { mtime: 5, size: 16 });
+        s.reconciler!.start();
+        await swept(1);
+
+        later(INTERVAL_MS - 5);
+        s.reconciler!.request('refusal');
+        await swept(2);
+        expect(lines().filter(line => line.startsWith('[Reconcile:diverge]'))).toHaveLength(1);
+    });
+
     it('starts the time over for a divergence a sweep did not find', async () => {
         const { contents, disk, s } = await open({ [FILE]: '- [ ] A\n', [OTHER]: '- [ ] O\n' });
         contents.set(FILE, '- [ ] A\n- [ ] B\n');
