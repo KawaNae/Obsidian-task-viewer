@@ -36,24 +36,68 @@ export function deleteTestFile(relativePath: string): void {
 }
 
 /**
- * Wait for Obsidian to index a file by polling `cliList` until
- * the file appears (i.e. at least one task is returned).
+ * Wait for Obsidian to index a file by polling `cliList` until the file
+ * appears (at least one task is returned), and no ID in `stale` is returned
+ * any more.
  *
  * @param relativePath  vault-relative path (e.g. `test-scanning.md`)
  * @param timeoutMs     max wait time (default 8 000 ms)
+ * @param stale         IDs of a reading the index must have left behind
+ *                      (`writeIndexedTestFile`)
  */
 export async function waitForFileIndexed(
     relativePath: string,
     timeoutMs = 8000,
+    stale: ReadonlySet<string> = new Set(),
 ): Promise<boolean> {
     const file = relativePath.replace(/\.md$/, '');
     const start = Date.now();
     while (Date.now() - start < timeoutMs) {
         const result = cliList({ file });
-        if (result.count > 0) return true;
+        if (result.count > 0 && !result.tasks.some(t => stale.has(t.id as string))) return true;
         await sleep(300);
     }
     return false;
+}
+
+/**
+ * The IDs the index hands out for the file's rows now that name a reading of
+ * it: every ID but a `path#^id` one, which outlives readings. Such an ID
+ * lasts until the file changes other than by a write of the plugin's
+ * (`src/api/TaskIds.ts`), so once none of them is handed out, the index has
+ * read the file again.
+ */
+function readingIds(relativePath: string): Set<string> {
+    const result = cliList({ file: relativePath.replace(/\.md$/, '') });
+    return new Set((result.tasks ?? []).map(t => t.id as string).filter(id => !id.includes('#^')));
+}
+
+/**
+ * Write a file in the Dev vault from outside, as `writeTestFile` does, and
+ * wait until the index lists the file as written (`waitForFileIndexed`).
+ *
+ * The index learns of a write from outside when Obsidian's watcher tells it,
+ * a moment later. Until then `list` answers the reading from before the
+ * write, and its IDs are refused by the next update ("Task not found ... list
+ * the tasks again"). Having some rows listed is not enough when the file had
+ * rows before: the wait is over when the IDs of the former reading are gone.
+ * A file written with the content it already has is not read again, and
+ * there is nothing to wait out.
+ */
+export async function writeIndexedTestFile(
+    relativePath: string,
+    content: string,
+    timeoutMs = 8000,
+): Promise<boolean> {
+    let before: string | null;
+    try {
+        before = fs.readFileSync(vaultAbsolute(relativePath), 'utf-8');
+    } catch {
+        before = null;
+    }
+    const stale = before === null || before === content ? new Set<string>() : readingIds(relativePath);
+    writeTestFile(relativePath, content);
+    return waitForFileIndexed(relativePath, timeoutMs, stale);
 }
 
 /**
@@ -93,8 +137,7 @@ export function createFixture(relativePath: string, content: string) {
             } catch {
                 originalContent = null;
             }
-            writeTestFile(relativePath, content);
-            await waitForFileIndexed(relativePath);
+            await writeIndexedTestFile(relativePath, content);
         },
         async teardown() {
             if (originalContent !== null) {
