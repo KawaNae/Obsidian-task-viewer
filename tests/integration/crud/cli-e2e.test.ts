@@ -18,7 +18,7 @@ import {
     cliInsertChildTask, cliGetStartHour, cliHelp,
     isObsidianRunning, obsidianCli, waitForTask, waitForTaskGone,
 } from '../helpers/cli-helper';
-import { deleteTestFile, writeTestFile, waitForFileIndexed, readTestFile } from '../helpers/test-file-manager';
+import { deleteTestFile, writeIndexedTestFile, readTestFile } from '../helpers/test-file-manager';
 
 const TEST_FILE = 'test-tags-properties.md';
 
@@ -58,8 +58,7 @@ beforeAll(async () => {
             'Start Obsidian with the Dev vault before running E2E tests.',
         );
     }
-    writeTestFile(TEST_FILE, FIXTURE_CONTENT);
-    await waitForFileIndexed(TEST_FILE);
+    await writeIndexedTestFile(TEST_FILE, FIXTURE_CONTENT);
 });
 
 // ────────────────────────────────────────────
@@ -337,8 +336,7 @@ describe('duplicate', () => {
     const MUTATION_CONTENT = '- [ ] E2E-dup-src @2026-04-10\n';
 
     beforeAll(async () => {
-        writeTestFile(MUTATION_FILE, MUTATION_CONTENT);
-        await waitForFileIndexed(MUTATION_FILE);
+        await writeIndexedTestFile(MUTATION_FILE, MUTATION_CONTENT);
     });
 
     afterAll(() => {
@@ -366,8 +364,7 @@ describe('duplicate', () => {
 
     it('duplicate with day-offset shifts dates', async () => {
         // Reset file to single task
-        writeTestFile(MUTATION_FILE, '- [ ] E2E-dup-offset @2026-04-01\n');
-        await waitForFileIndexed(MUTATION_FILE);
+        await writeIndexedTestFile(MUTATION_FILE, '- [ ] E2E-dup-offset @2026-04-01\n');
 
         const src = cliList({ file: MUTATION_FILE, 'output-fields': 'id' });
         const srcId = src.tasks[0].id as string;
@@ -465,8 +462,7 @@ describe('insert-child-task', () => {
     const MUTATION_FILE = 'test-cli-child.md';
 
     beforeAll(async () => {
-        writeTestFile(MUTATION_FILE, '- [ ] E2E-parent-task @2026-04-20\n');
-        await waitForFileIndexed(MUTATION_FILE);
+        await writeIndexedTestFile(MUTATION_FILE, '- [ ] E2E-parent-task @2026-04-20\n');
     });
 
     afterAll(() => {
