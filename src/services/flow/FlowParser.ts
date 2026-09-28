@@ -162,30 +162,30 @@ function parseNode(cursor: TokenCursor, program: FlowProgram, diagnostics: Diagn
         }
         case 'move': {
             cursor.next();
-            // `move()` names no heading. It moved the task to the end of the
-            // note, where the one who wrote it never said, and is retired
-            // (2026-09-28): an error, so the command is not read at all and
-            // completing the task runs none of it. Not rewritten for the user.
+            // `move()` names nothing: no heading, so no place in the note.
+            // It is one more way of naming no heading of the note, as a move
+            // to another note is, and is read as that (`moveTargetOf`).
+            let target: Expr | null = null;
+            let end: number;
             if (cursor.at('lparen') && cursor.peek(1).kind === 'rparen') {
                 cursor.next();
-                const close = cursor.next();
-                diagnostics.push(error('flow.move-no-heading-retired',
-                    'move() is retired: write move([[#heading]]) to move the task to a heading\'s section. This command is not read, and completing the task runs none of it',
-                    { start: head.start, end: close.end }));
-                return;
+                end = cursor.next().end;
+            } else {
+                target = parseParenExpr(cursor, 'move', diagnostics);
+                if (!target) {
+                    skipToNextNode(cursor);
+                    return;
+                }
+                end = target.span.end + 1;
             }
-            const target = parseParenExpr(cursor, 'move', diagnostics);
-            if (!target) {
-                skipToNextNode(cursor);
-                return;
-            }
+            const span = { start: head.start, end };
             const to = moveTargetOf(target);
             if (to.kind === 'retired') {
                 diagnostics.push(warning('flow.move-retired',
-                    'move() moves the task within its note only, to a heading\'s section: move([[#heading]]). This one names another note, and does not fire',
-                    target.span));
+                    'move() moves the task to a heading\'s section of its note: move([[#heading]]). This one names no heading of the note, and cannot move the task',
+                    target ? target.span : span));
             }
-            assignNode(program, 'move', { target, to, span: { start: head.start, end: target.span.end + 1 } }, diagnostics, tokenSpan(head));
+            assignNode(program, 'move', { target, to, span }, diagnostics, tokenSpan(head));
             return;
         }
     }
@@ -423,13 +423,14 @@ function parseParenExpr(cursor: TokenCursor, fnName: string, diagnostics: Diagno
 /**
  * Where a move written with `target` goes (`MoveTarget`), from how it is
  * written: a link to a heading of the note it stands in, `[[#name]]` or
- * `[[#name|alias]]`, is that heading's section. Anything else names another
- * note — a link to one, with or without a heading, the note's own name
- * included, a string, an expression — or is no one heading (`[[#A#B]]`,
- * `[[#]]`), and is retired.
+ * `[[#name|alias]]`, is that heading's section. Anything else names no
+ * heading of the note, and is retired: nothing at all (`move()`, null here),
+ * another note — a link to one, with or without a heading, the note's own
+ * name included, a string, an expression — or no one heading (`[[#A#B]]`,
+ * `[[#]]`).
  */
-function moveTargetOf(target: Expr): MoveTarget {
-    if (target.kind !== 'lit' || target.value.type !== 'link') return { kind: 'retired' };
+function moveTargetOf(target: Expr | null): MoveTarget {
+    if (!target || target.kind !== 'lit' || target.value.type !== 'link') return { kind: 'retired' };
     const path = target.value.target.split('|')[0];
     if (!path.startsWith('#')) return { kind: 'retired' };
     const name = path.slice(1);

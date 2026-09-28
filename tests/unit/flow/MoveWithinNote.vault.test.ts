@@ -16,7 +16,7 @@ import type { SectionSide } from '../../../src/services/persistence/utils/Placem
  * decision of 2026-09-28). A heading that is not there, or is there twice,
  * and a move that names another note, fire nothing: the completion is
  * written, the command stays, and the user is told. `move()`, naming no
- * heading, is retired and not read as a command at all. The same on every
+ * heading at all, is read as that too (2026-09-28). The same on every
  * path that completes a row — a card, the API, the editor.
  */
 
@@ -128,13 +128,14 @@ describe.each<Path>(['card', 'api', 'editor'])('a move within the note, from the
         expect(Notice.messages).toEqual([]);
     });
 
-    it('does not read move(): completing the row writes the completion alone, and runs none of the command', async () => {
-        const lines = ['# note', '- [ ] 移す @2026-09-21 ==> +1d move()', '    - [ ] 子', '## Tasks', '- [ ] later', ''];
+    it('fires nothing for move(), which names no heading of the note: the completion stays, with its command, and says why', async () => {
+        const lines = ['# note', '- [ ] 移す @2026-09-21 ==> every mon move()', '    - [ ] 子', '## Tasks', '- [ ] later', ''];
         expect(await complete(lines, 1, '移す', path)).toEqual([
-            '# note', '- [x] 移す @2026-09-21 ==> +1d move()', '    - [ ] 子', '## Tasks', '- [ ] later', '',
+            '# note', '- [x] 移す @2026-09-21 ==> every mon move()', '    - [ ] 子', '## Tasks', '- [ ] later', '',
         ]);
         await Promise.resolve();
-        expect(Notice.messages).toEqual([]);
+        expect(Notice.messages).toHaveLength(1);
+        expect(Notice.messages[0]).toContain('names no heading of the note');
     });
 
     it('writes the next instance where the row was, and carries the row', async () => {
@@ -169,7 +170,7 @@ describe.each<Path>(['card', 'api', 'editor'])('a move within the note, from the
         ]);
         await Promise.resolve();
         expect(Notice.messages).toHaveLength(1);
-        expect(Notice.messages[0]).toContain('within its note');
+        expect(Notice.messages[0]).toContain('names no heading of the note');
     });
 });
 

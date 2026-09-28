@@ -27,14 +27,14 @@ import { runtimeText } from './runtimeText';
 
 /**
  * Where a move to `to` goes in `lines`, at `side` of the section, or why it
- * cannot be made there: it names another note (retired, F8), or the heading
+ * cannot be made there: it names no heading of the note (retired), or the heading
  * it names is not there, or is there more than once (`Placement.heading`, as
  * the write will look it up: `Placement.into`).
  */
 function destinationIn(to: MoveTarget, side: SectionSide, lines: readonly string[]): InSection | GenerationError {
     if (to.kind === 'retired') {
         return new GenerationError('eval.move-retired',
-            'move() moves the task within its note only, and this one names another note');
+            'move() moves the task to a heading\'s section of its note, and this one names no heading of the note');
     }
     const found = Placement.heading(Outline.read(lines), to.name);
     if (found.kind === 'none') {

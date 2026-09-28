@@ -96,8 +96,9 @@ describe('FlowExecutor.planFire: a completion planned from the lines the write h
         expect(one.kind === 'fires' && one.ops).toEqual([{ kind: 'move', text: '- [x] T @2026-08-17', to: { heading: 'Done', side: 'head' } }]);
     });
 
-    it('fires nothing for a retired move(): the command is not read, so completing the row runs none of it', () => {
-        expect(executor().planFire(FILE, ['- [x] T @2026-08-17 ==> every 1d move()', '## Done'], 0)).toEqual({ kind: 'none' });
+    it('fails move(), which names no heading of the note, as it fails a move to another note', () => {
+        const plan = executor().planFire(FILE, ['- [x] T @2026-08-17 ==> every 1d move()', '## Done'], 0);
+        expect(plan.kind === 'failed' && plan.error.code).toBe('eval.move-retired');
     });
 });
 

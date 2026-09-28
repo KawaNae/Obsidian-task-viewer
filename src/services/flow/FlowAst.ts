@@ -103,18 +103,19 @@ export interface FlowProgram {
     /**
      * `move([[#heading]])` — carry the completed task and its subtree to a
      * heading's section within its note. `target` is what is written between
-     * the parentheses, printed back as it is; `to` is where the task goes,
-     * read off how it is written (`FlowParser`), never evaluated. `move()`,
-     * with nothing between them, is not read as a command at all.
+     * the parentheses, printed back as it is, null for `move()`; `to` is
+     * where the task goes, read off how it is written (`FlowParser`), never
+     * evaluated.
      */
-    move?: { target: Expr; to: MoveTarget; span: Span };
+    move?: { target: Expr | null; to: MoveTarget; span: Span };
 }
 
 /**
  * Where a move takes the task, answered from how the clause is written,
  * once, by the parser: the section of a heading of the note
- * (`move([[#name]])`, an alias aside), or nowhere — anything else names
- * another note, and moving to another note is retired (F8). The parser warns
+ * (`move([[#name]])`, an alias aside), or nowhere — anything else names no
+ * heading of the note, and is retired: another note (F8), or nothing at all,
+ * `move()` (2026-09-28). The parser warns
  * on a retired one, and a completion with it does not fire; the diagnostic
  * and the fire read this one answer. Which end of the section is the
  * settings' (`sectionSide`), not the clause's.

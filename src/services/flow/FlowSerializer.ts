@@ -61,7 +61,7 @@ function serializeParts(program: FlowProgram): { text: string; span: Span }[] {
             if (node) parts.push({ text: `${setHeadName(field)}(${printExpr(node.expr)})`, span: node.span });
         }
     }
-    if (program.move) parts.push({ text: `move(${printExpr(program.move.target)})`, span: program.move.span });
+    if (program.move) parts.push({ text: `move(${program.move.target ? printExpr(program.move.target) : ''})`, span: program.move.span });
     return parts;
 }
 
