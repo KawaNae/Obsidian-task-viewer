@@ -128,14 +128,23 @@ describe.each<Path>(['card', 'api', 'editor'])('a move within the note, from the
         expect(Notice.messages).toEqual([]);
     });
 
-    it('fires nothing for move(), which names no heading of the note: the completion stays, with its command, and says why', async () => {
+    it('fires move(), which names no heading of the note, without the move: the next instance, the command consumed, the row where it was, and says why', async () => {
         const lines = ['# note', '- [ ] 移す @2026-09-21 ==> every mon move()', '    - [ ] 子', '## Tasks', '- [ ] later', ''];
         expect(await complete(lines, 1, '移す', path)).toEqual([
-            '# note', '- [x] 移す @2026-09-21 ==> every mon move()', '    - [ ] 子', '## Tasks', '- [ ] later', '',
+            '# note', '- [ ] 移す @2026-09-28 ==> every mon move()', '- [x] 移す @2026-09-21', '    - [ ] 子', '## Tasks', '- [ ] later', '',
         ]);
         await Promise.resolve();
         expect(Notice.messages).toHaveLength(1);
+        expect(Notice.messages[0]).toContain('it was not moved');
         expect(Notice.messages[0]).toContain('names no heading of the note');
+    });
+
+    it.each(['move([[Other]])', 'move()'])('consumes %s alone: the command goes, and the row stays where it was', async (command) => {
+        const lines = ['# note', `- [ ] 移す @2026-09-21 ==> ${command}`, '## Done', ''];
+        expect(await complete(lines, 1, '移す', path)).toEqual(['# note', '- [x] 移す @2026-09-21', '## Done', '']);
+        await Promise.resolve();
+        expect(Notice.messages).toHaveLength(1);
+        expect(Notice.messages[0]).toContain('it was not moved');
     });
 
     it('writes the next instance where the row was, and carries the row', async () => {
@@ -163,13 +172,14 @@ describe.each<Path>(['card', 'api', 'editor'])('a move within the note, from the
         'move([[note#Done]])',
         'move("Log/Done")',
         'move([[Log/]] + format(done, "YYYY-MM"))',
-    ])('fires nothing for a move that names another note, retired: %s', async (command) => {
+    ])('fires without a move that names another note, retired: %s', async (command) => {
         const lines = ['# note', `- [ ] 移す @2026-09-21 ==> +1d ${command}`, '## Done', ''];
         expect(await complete(lines, 1, '移す', path)).toEqual([
-            '# note', `- [x] 移す @2026-09-21 ==> +1d ${command}`, '## Done', '',
+            '# note', `- [ ] 移す @2026-09-22 ==> +1d ${command}`, '- [x] 移す @2026-09-21', '## Done', '',
         ]);
         await Promise.resolve();
         expect(Notice.messages).toHaveLength(1);
+        expect(Notice.messages[0]).toContain('it was not moved');
         expect(Notice.messages[0]).toContain('names no heading of the note');
     });
 });

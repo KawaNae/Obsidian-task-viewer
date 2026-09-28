@@ -669,6 +669,7 @@
     "taskUpdated": "{{icon}} Task updated! ({{duration}})",
     "flowDeleteDidNotFire": "The flow did not fire, so the task was not deleted: {{reason}} ({{file}})",
     "flowNotRun": "The task was completed, but its flow was not run: {{reason}} ({{subject}})",
+    "flowMoveNotRun": "The task was completed and its flow was run, but it was not moved: {{reason}} ({{subject}})",
     "notWritten": "Nothing was written: {{reason}} ({{subject}})",
     "readAgain": "The note holding \"{{subject}}\" had changed since it was last read and has been read again. Please try again.",
     "notReadable": "The note holding \"{{subject}}\" could not be read.",

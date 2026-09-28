@@ -116,9 +116,10 @@ export interface FlowProgram {
  * (`move([[#name]])`, an alias aside), or nowhere — anything else names no
  * heading of the note, and is retired: another note (F8), or nothing at all,
  * `move()` (2026-09-28). The parser warns
- * on a retired one, and a completion with it does not fire; the diagnostic
- * and the fire read this one answer. Which end of the section is the
- * settings' (`sectionSide`), not the clause's.
+ * on a retired one, and a completion with it fires without the move and
+ * says so (`FlowPlanner`, `move-dropped`); the diagnostic and the fire read
+ * this one answer. Which end of the section is the settings'
+ * (`sectionSide`), not the clause's.
  */
 export type MoveTarget = { kind: 'heading'; name: string } | { kind: 'retired' };
 

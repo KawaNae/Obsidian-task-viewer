@@ -669,6 +669,7 @@
     "taskUpdated": "{{icon}} タスク更新完了！（{{duration}}）",
     "flowDeleteDidNotFire": "フローが発火しなかったため、タスクは削除されませんでした: {{reason}}（{{file}}）",
     "flowNotRun": "完了にしましたが、フローは実行しませんでした: {{reason}}（{{subject}}）",
+    "flowMoveNotRun": "完了にしてフローを実行しましたが、移動はしませんでした: {{reason}}（{{subject}}）",
     "notWritten": "書き込みませんでした: {{reason}}（{{subject}}）",
     "readAgain": "「{{subject}}」のノートの内容が変わっていたので読み直しました。もう一度操作してください",
     "notReadable": "「{{subject}}」のノートを読めませんでした",
