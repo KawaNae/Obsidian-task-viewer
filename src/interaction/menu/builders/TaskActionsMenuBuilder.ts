@@ -1,4 +1,4 @@
-import { type App, MarkdownView, type Menu } from 'obsidian';
+import type { App, Menu } from 'obsidian';
 import type { Task } from '../../../types';
 import type { TaskWriteService } from '../../../services/data/TaskWriteService';
 import type { PluginContext } from '../../../PluginContext';
@@ -9,7 +9,7 @@ import { FlowDeleteChoiceModal } from '../../../modals/FlowDeleteChoiceModal';
 import type { FlowDeleteOutlook } from '../../../services/flow/FlowDeletion';
 import { runtimeText } from '../../../services/flow/runtimeText';
 import { getTaskDisplayName } from '../../../services/parsing/utils/TaskContent';
-import { openFileInExistingOrNewTab } from '../../../utils/NavigationUtils';
+import { openTaskInEditor } from '../../../utils/NavigationUtils';
 import { DateUtils } from '../../../utils/DateUtils';
 import { t } from '../../../i18n';
 import { getEffectiveColor } from '../../../services/data/EffectiveProperties';
@@ -128,25 +128,9 @@ export class TaskActionsMenuBuilder {
         menu.addItem((item) => {
             item.setTitle(t('menu.openInEditor'))
                 .setIcon('document')
-                .onClick(async () => {
+                .onClick(() => {
                     menu.close();
-                    if (this.plugin.settings.reuseExistingTab) {
-                        openFileInExistingOrNewTab(this.app, task.file);
-                    } else {
-                        await this.app.workspace.openLinkText(task.file, '', true);
-                    }
-                    setTimeout(() => {
-                        const view = this.app.workspace.getActiveViewOfType(MarkdownView);
-                        if (view) {
-                            const editor = view.editor;
-                            const lineText = editor.getLine(task.line);
-                            editor.setSelection(
-                                { line: task.line, ch: 0 },
-                                { line: task.line, ch: lineText.length }
-                            );
-                            editor.focus();
-                        }
-                    }, 100);
+                    openTaskInEditor(this.app, task, this.plugin.settings.reuseExistingTab);
                     onDestructive?.();
                 });
         });

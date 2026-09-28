@@ -7,7 +7,7 @@ import type { PropertyFormatter } from '../PropertyFormatter';
 import { DateUtils } from '../../../utils/DateUtils';
 import { getTaskDisplayName } from '../../../services/parsing/utils/TaskContent';
 import { buildStatusOptions, createStatusTitle } from '../../../constants/statusOptions';
-import { openFileInExistingOrNewTab } from '../../../utils/NavigationUtils';
+import { openFile } from '../../../utils/NavigationUtils';
 import { t } from '../../../i18n';
 import { TaskStyling } from '../../../views/sharedUI/TaskStyling';
 import type { TaskHubFocusField } from '../../../modals/hub/TaskHubForm';
@@ -111,11 +111,7 @@ export class PropertiesMenuBuilder {
                 .setIcon('file-text')
                 .onClick(() => {
                     (rootMenu ?? menu).close();
-                    if (this.plugin.settings.reuseExistingTab) {
-                        openFileInExistingOrNewTab(this.app, task.file);
-                    } else {
-                        void this.app.workspace.openLinkText(task.file, '', true);
-                    }
+                    openFile(this.app, task.file, this.plugin.settings.reuseExistingTab);
                 });
 
             if (sub.dom) {
