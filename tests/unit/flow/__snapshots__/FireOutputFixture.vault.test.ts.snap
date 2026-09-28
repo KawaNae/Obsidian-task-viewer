@@ -74,12 +74,13 @@ exports[`a completion fire leaves the same bytes > inline command, top level 1`]
 }
 `;
 
-exports[`a completion fire leaves the same bytes > move within the same file 1`] = `
+exports[`a completion fire leaves the same bytes > move to an empty section of the same file 1`] = `
 {
   "note.md": [
     ""# note"",
     ""- [ ] 上 @2026-09-21"",
     ""- [ ] 下 @2026-09-21"",
+    ""## Done"",
     ""- [x] 対象 @2026-09-21"",
     ""\\t- [ ] 子 @2026-09-21 ^c1"",
     """",
@@ -112,9 +113,9 @@ exports[`a completion fire leaves the same bytes > next instance and a move to a
     ""- [ ] 上 @2026-09-21"",
     ""- [ ] 下 @2026-09-21"",
     ""## Done"",
-    ""- [x] 済 @2026-09-20"",
     ""- [x] 対象 @2026-09-21"",
     ""\\t- [ ] 子 @2026-09-21"",
+    ""- [x] 済 @2026-09-20"",
     """",
     ""## Later"",
     """",
@@ -122,14 +123,15 @@ exports[`a completion fire leaves the same bytes > next instance and a move to a
 }
 `;
 
-exports[`a completion fire leaves the same bytes > next instance and a move within the same file 1`] = `
+exports[`a completion fire leaves the same bytes > next instance and a move to an empty section of the same file 1`] = `
 {
   "note.md": [
     ""# note"",
     ""- [ ] 対象 @2026-09-28"",
-    ""\\t- ==> every mon move()"",
+    ""\\t- ==> every mon move([[#Done]])"",
     ""- [ ] 上 @2026-09-21"",
     ""- [ ] 下 @2026-09-21"",
+    ""## Done"",
     ""- [x] 対象 @2026-09-21"",
     ""\\t- [ ] 子 @2026-09-21"",
     """",

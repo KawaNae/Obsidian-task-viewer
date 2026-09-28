@@ -2,6 +2,7 @@ import { describe, it, expect, afterEach, beforeEach } from 'vitest';
 import { Notice } from 'obsidian';
 import { openLiveVault, type VaultSession } from '../helpers/vaultSession';
 import { freezeDate } from '../helpers/fakeDate';
+import { DEFAULT_SETTINGS } from '../../../src/types';
 
 // Frozen so `==> every mon` on `@2026-09-21` lands on the `@2026-09-28` these
 // tests hard-code, no matter which day the suite runs.
@@ -48,14 +49,14 @@ async function complete(session: VaultSession, content: string, ...paths: string
 describe('a subtree with a blank line inside it', () => {
     it('moves whole within the file, every row keeping its ID (C-3)', async () => {
         const { contents, session } = await open({
-            [FILE]: ['# note', '- [ ] 対象 @2026-09-21 ==> move()', '\t- [ ] 子1', '', '\t- [ ] 子2', '- [ ] 下', ''],
+            [FILE]: ['# note', '- [ ] 対象 @2026-09-21 ==> move([[#Done]])', '\t- [ ] 子1', '', '\t- [ ] 子2', '- [ ] 下', '## Done', '- [x] old', ''],
         });
         const held = { target: idOf(session, '対象'), first: idOf(session, '子1'), second: idOf(session, '子2') };
 
         await complete(session, '対象');
 
         expect(contents.get(FILE)).toBe(
-            ['# note', '- [ ] 下', '- [x] 対象 @2026-09-21', '\t- [ ] 子1', '', '\t- [ ] 子2', ''].join('\n'),
+            ['# note', '- [ ] 下', '## Done', '- [x] 対象 @2026-09-21', '\t- [ ] 子1', '', '\t- [ ] 子2', '- [x] old', ''].join('\n'),
         );
         expect(session.index.getTask(held.target)?.id).toBe(idOf(session, '対象'));
         expect(session.index.getTask(held.first)?.id).toBe(idOf(session, '子1'));
@@ -118,9 +119,10 @@ describe('a fence below a blank line whose closing line is at column 0 (Obsidian
         expect(session.index.getTasks()).toEqual([]);
     });
 
-    it('refuses a move to the end of the note, which ends inside the fence U is in', async () => {
-        const note = ['# note', '- [ ] T @2026-09-21 ==> move()', '', '  ```js', 'code', '```', '- [ ] U', ''];
+    it('refuses a move to the end of the section, which ends inside the fence U is in', async () => {
+        const note = ['# note', '## Done', '- [ ] T @2026-09-21 ==> move([[#Done]])', '', '  ```js', 'code', '```', '- [ ] U', ''];
         const { contents, session } = await open({ [FILE]: note });
+        session.index.updateSettings({ ...DEFAULT_SETTINGS, sectionSide: 'end' });
         const before = contents.get(FILE)!;
         const t = idOf(session, 'T');
 

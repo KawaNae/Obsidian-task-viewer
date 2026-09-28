@@ -4,6 +4,7 @@ import { Notice } from 'obsidian';
 import { openVault, type VaultSession } from '../helpers/vaultSession';
 import { t } from '../../../src/i18n';
 import { freezeDate } from '../helpers/fakeDate';
+import { DEFAULT_SETTINGS } from '../../../src/types';
 
 // Frozen so `==> every mon` on `@2026-09-21` lands on the `@2026-09-28` these
 // tests hard-code, no matter which day the suite runs.
@@ -150,6 +151,28 @@ describe('a task created under a heading (insertUnderHeading)', () => {
         expect(Notice.messages[0]).toMatch(/heading/);
     });
 
+    it('goes where the settings say: the heading at any level, its section\'s end, a heading made at their level', async () => {
+        const { contents, session } = await open(['### h', '- [ ] A', '#### Sub', '- [ ] S', '']);
+        session.index.updateSettings({ ...DEFAULT_SETTINGS, sectionSide: 'end', taskHeadingLevel: 4 });
+
+        expect(await session.index.createTask(FILE, '- [ ] N', 'H')).not.toBeNull();
+        expect(await session.index.createTask(FILE, '- [ ] M', 'Made')).not.toBeNull();
+        await session.settle(FILE);
+
+        expect(lines(contents)).toEqual(['### h', '- [ ] A', '- [ ] N', '#### Sub', '- [ ] S', '', '#### Made', '- [ ] M', '']);
+    });
+
+    it('is refused, and says so, when two headings go by the name', async () => {
+        const { contents, session } = await open(['## H', '- [ ] A', '### h', '']);
+        const before = contents.get(FILE)!;
+
+        expect(await session.index.createTask(FILE, '- [ ] N', 'H')).toBeNull();
+        await session.settle(FILE);
+
+        expect(contents.get(FILE)).toBe(before);
+        expect(Notice.messages).toEqual([t('notice.notWritten', { reason: t('notice.refusedHeadings', { name: 'H', count: 2 }), subject: '- [ ] N' })]);
+    });
+
     it('makes the heading at the end of a note that is only frontmatter, and of an empty note', async () => {
         for (const note of [['---', 'a: 1', '---', ''], ['']]) {
             live?.dispose();
@@ -210,9 +233,9 @@ describe('the next instance (insert-instance, groupHead)', () => {
     });
 });
 
-describe('a move within the note (move-to-end, end)', () => {
+describe('a move within the note (a move to a heading)', () => {
     it('writes nothing when taking the task away would put a task below under another', async () => {
-        const { contents, session } = await open(['# n', '- [x] a', ' - [ ] X @2026-09-21 ==> move()', '  1. [ ] u', '']);
+        const { contents, session } = await open(['# n', '- [x] a', ' - [ ] X @2026-09-21 ==> move([[#Done]])', '  1. [ ] u', '## Done', '']);
         // ` - [ ] X` stands at the top; `  1. [ ] u` is no child of it (its
         // content is at 3). Taken away, X leaves u under a.
         expect(parents(session)).toEqual([['a', null], ['X', null], ['u', null]]);

@@ -93,7 +93,11 @@ describe('FlowExecutor.planFire: a completion planned from the lines the write h
         const many = executor().planFire(FILE, ['- [x] T @2026-08-17 ==> move([[#Done]])', '## Done', '# done'], 0);
         expect(many.kind === 'failed' && many.error.code).toBe('eval.move-heading-ambiguous');
         const one = executor().planFire(FILE, ['- [x] T @2026-08-17 ==> move([[#Done]])', '## Done'], 0);
-        expect(one.kind === 'fires' && one.ops).toEqual([{ kind: 'move', text: '- [x] T @2026-08-17', to: { kind: 'heading', name: 'Done' } }]);
+        expect(one.kind === 'fires' && one.ops).toEqual([{ kind: 'move', text: '- [x] T @2026-08-17', to: { heading: 'Done', side: 'head' } }]);
+    });
+
+    it('fires nothing for a retired move(): the command is not read, so completing the row runs none of it', () => {
+        expect(executor().planFire(FILE, ['- [x] T @2026-08-17 ==> every 1d move()', '## Done'], 0)).toEqual({ kind: 'none' });
     });
 });
 

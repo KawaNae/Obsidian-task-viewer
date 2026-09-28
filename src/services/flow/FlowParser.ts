@@ -162,11 +162,16 @@ function parseNode(cursor: TokenCursor, program: FlowProgram, diagnostics: Diagn
         }
         case 'move': {
             cursor.next();
-            // `move()` writes nothing between the parentheses: the end of the note.
+            // `move()` names no heading. It moved the task to the end of the
+            // note, where the one who wrote it never said, and is retired
+            // (2026-09-28): an error, so the command is not read at all and
+            // completing the task runs none of it. Not rewritten for the user.
             if (cursor.at('lparen') && cursor.peek(1).kind === 'rparen') {
                 cursor.next();
                 const close = cursor.next();
-                assignNode(program, 'move', { target: null, to: { kind: 'end' }, span: { start: head.start, end: close.end } }, diagnostics, tokenSpan(head));
+                diagnostics.push(error('flow.move-no-heading-retired',
+                    'move() is retired: write move([[#heading]]) to move the task to a heading\'s section. This command is not read, and completing the task runs none of it',
+                    { start: head.start, end: close.end }));
                 return;
             }
             const target = parseParenExpr(cursor, 'move', diagnostics);
@@ -177,7 +182,7 @@ function parseNode(cursor: TokenCursor, program: FlowProgram, diagnostics: Diagn
             const to = moveTargetOf(target);
             if (to.kind === 'retired') {
                 diagnostics.push(warning('flow.move-retired',
-                    'move() moves the task within its note only: move() to the end of the note, move([[#heading]]) to the end of a heading\'s section. This one names another note, and does not fire',
+                    'move() moves the task within its note only, to a heading\'s section: move([[#heading]]). This one names another note, and does not fire',
                     target.span));
             }
             assignNode(program, 'move', { target, to, span: { start: head.start, end: target.span.end + 1 } }, diagnostics, tokenSpan(head));

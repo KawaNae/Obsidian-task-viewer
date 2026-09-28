@@ -95,7 +95,7 @@ describe('FlowParser', () => {
         });
 
         it('parses move alone (no schedule)', () => {
-            const { program, diagnostics } = parseFlow('move()');
+            const { program, diagnostics } = parseFlow('move([[#Done]])');
             expect(diagnostics).toEqual([]);
             expect(program?.schedule).toBeUndefined();
             expect(program?.move).toBeDefined();
@@ -110,9 +110,16 @@ describe('FlowParser', () => {
             return { to: program?.move?.to, codes: diagnostics.map(d => `${d.severity}:${d.code}`) };
         };
 
-        it('reads move() as the end of the note', () => {
-            expect(toOf('move()')).toEqual({ to: { kind: 'end' }, codes: [] });
-            expect(toOf('every mon move( )')).toEqual({ to: { kind: 'end' }, codes: [] });
+        // Retired 2026-09-28: `move()` named no heading, and moved the task
+        // to the end of the note, where the one who wrote it never said.
+        it('does not read move() at all: an error, so the command is no command and completing the task runs none of it', () => {
+            for (const raw of ['move()', 'every mon move( )', 'every mon x2 move()']) {
+                const { program, diagnostics } = parseFlow(raw);
+                expect(program).toBeNull();
+                expect(diagnostics.map(d => `${d.severity}:${d.code}`)).toEqual(['error:flow.move-no-heading-retired']);
+            }
+            const [diagnostic] = parseFlow('every mon move( )').diagnostics;
+            expect(diagnostic.span).toEqual({ start: 10, end: 17 });
         });
 
         it('reads a link to a heading of the note as the end of its section, an alias aside', () => {
@@ -140,8 +147,8 @@ describe('FlowParser', () => {
             expect(program?.schedule?.kind).toBe('every');
         });
 
-        it('prints move() and a heading link as written', () => {
-            expect(serializeFlow(parseFlow('move( )  every mon').program!)).toBe('every mon move()');
+        it('prints a heading link as written', () => {
+            expect(serializeFlow(parseFlow('move([[#Done]])  every mon').program!)).toBe('every mon move([[#Done]])');
             expect(serializeFlow(parseFlow('move([[#Done|d]])').program!)).toBe('move([[#Done|d]])');
         });
     });
@@ -262,7 +269,7 @@ describe('FlowParser', () => {
             'every mon x14 use("週報") move([[Log]])',
             'move([[Archive/Done]])',
             'every mon move([[Log]])',
-            'every mon x2 move()',
+            'every mon x2 move([[#Done]])',
             'move([[#Done|later]])',
             'at(startOf(month, done + 1mo) + 4d)',
             'every mon setContent("週報 " + format(start, "MM/DD")) setDue(start + 3d)',

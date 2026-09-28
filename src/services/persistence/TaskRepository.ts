@@ -8,6 +8,7 @@ import type { PropertyOp } from './PropertyUpdatePlanner';
 import type { EditorLine, LineDraft, NamedRow, WriteAt, WriteChannel, WriteOutcome, WriteSession } from './FileLines';
 import type { PlannedTarget } from './TaskRefs';
 import type { CompletionFire, TaskOp } from './TaskOps';
+import type { Section } from './Destination';
 
 /**
  * TaskRepository - タスクのファイル操作を統括するファサードクラス
@@ -86,8 +87,8 @@ export class TaskRepository {
     // --- Heading and frontmatter writes ---
 
     /** @returns 挿入した行の 0-based 行番号。ファイルが無ければ -1。 */
-    async insertLineUnderHeading(filePath: string, lineContent: string, header: string, headerLevel: number): Promise<WriteAt> {
-        return this.frontmatterWriter.insertLineUnderHeading(filePath, lineContent, header, headerLevel);
+    async insertLineUnderHeading(filePath: string, lineContent: string, to: Section): Promise<WriteAt> {
+        return this.frontmatterWriter.insertLineUnderHeading(filePath, lineContent, to);
     }
 
     /**

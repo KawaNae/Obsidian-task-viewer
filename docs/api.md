@@ -150,7 +150,7 @@ const result = await api.create({
 | `end` | | `string` | 終了日時 |
 | `due` | | `string` | 締切日（`YYYY-MM-DD`） |
 | `status` | | `string` | ステータス文字（デフォルト: ` `） |
-| `heading` | | `string` | 挿入先見出し |
+| `heading` | | `string` | 挿入先見出し。レベルを問わず、Obsidian のリンク `[[#見出し]]` と同じ比べ方で探します。節の先頭か末尾かは設定「節に行を足す位置」に従います。見出しが無ければ、ノートの末尾に設定のレベルで作ります。同じ名前の見出しが 2 つ以上あれば書き込みません |
 
 ## update
 

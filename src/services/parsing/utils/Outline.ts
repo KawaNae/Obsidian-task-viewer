@@ -273,8 +273,8 @@ export class OutlineReading {
          * the note only — not in an item, a quote, a fence or indented code,
          * none of which Obsidian links a heading to (F8's Dev measurement).
          * Every reader of a heading asks this: the sections of the note
-         * (`DocumentTreeBuilder`), the line under a heading
-         * (`HeadingInserter`), and a move's destination (`Placement`).
+         * (`DocumentTreeBuilder`), and where lines go in a heading's
+         * section (`Placement.into`: a move, a task made under a heading).
          */
         readonly headings: readonly OutlineHeading[],
     ) {}

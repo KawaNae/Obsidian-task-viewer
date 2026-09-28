@@ -390,14 +390,17 @@ export interface EditorLine {
  * read as meant where it goes (`unplaceable`), writing it would change what
  * another line is or which item it stands in (`disturbs`; both are
  * `checkWrite`, and name the fence that never closes when that is where the
- * line reads: `WriteFinding.fence`), or the write itself failed — it threw,
- * or the file could not be read or written.
+ * line reads: `WriteFinding.fence`), the section it goes to is under
+ * `count` headings named `name` and none of them is the one (`headings`,
+ * `Placement.into`), or the write itself failed — it threw, or the file could
+ * not be read or written.
  */
 export type RefusalReason =
     | { kind: 'gone' }
     | { kind: 'changed' }
     | { kind: 'unplaceable'; fence: number | null }
     | { kind: 'disturbs'; fence: number | null }
+    | { kind: 'headings'; name: string; count: number }
     | { kind: 'failed' };
 
 /** A write that was not made, as it is told to whoever reports it. */
@@ -543,6 +546,13 @@ export interface WriteSession {
      * account for the lines it returns.
      */
     row(target: NamedRow | EditorLine): number | null;
+
+    /**
+     * Give the write up for what the lines hold, not for a target: the
+     * section it goes to is under more than one heading of its name
+     * (`HeadingInserter`). The callback returns what this answers.
+     */
+    refuse(reason: Extract<RefusalReason, { kind: 'headings' }>): false;
 }
 
 /**
@@ -877,6 +887,7 @@ export function editLines(
             if (now === null) { refuse({ kind: 'gone' }, about); return null; }
             return now;
         },
+        refuse: (reason) => refuse(reason, subject()),
     };
     const notWritten = (): EditedLines => ({ written: false, refused: refused! });
     // A caller's bug, not the user's: a development build throws so the

@@ -6,14 +6,18 @@ import { TaskWriteService } from '../../../src/services/data/TaskWriteService';
 import { openLiveVault, vaultSession, type VaultSession } from '../helpers/vaultSession';
 import { editorSession } from '../helpers/editorSession';
 import { freezeDate } from '../helpers/fakeDate';
+import { DEFAULT_SETTINGS } from '../../../src/types';
+import type { SectionSide } from '../../../src/services/persistence/utils/Placement';
 
 /**
- * A move stays in its note (F8, the decision of 2026-09-26): `move()` carries
- * the completed row and its subtree to the end of the note, `move([[#name]])`
- * to the end of that heading's section. A heading that is not there, or is
- * there twice, and a move that names another note, fire nothing: the
- * completion is written, the command stays, and the user is told. The same
- * on every path that completes a row — a card, the API, the editor.
+ * A move stays in its note (F8, the decision of 2026-09-26): `move([[#name]])`
+ * carries the completed row and its subtree to that heading's section, at
+ * the side the settings say (`sectionSide`, the head unless set; the
+ * decision of 2026-09-28). A heading that is not there, or is there twice,
+ * and a move that names another note, fire nothing: the completion is
+ * written, the command stays, and the user is told. `move()`, naming no
+ * heading, is retired and not read as a command at all. The same on every
+ * path that completes a row — a card, the API, the editor.
  */
 
 freezeDate(new Date(2026, 8, 25, 12, 0, 0));
@@ -31,8 +35,9 @@ afterEach(() => {
     live = undefined;
 });
 
-async function open(lines: string[]) {
+async function open(lines: string[], side: SectionSide = 'head') {
     const { contents, session } = await openLiveVault({ [FILE]: lines }, s => { live = s; });
+    if (side !== 'head') session.index.updateSettings({ ...DEFAULT_SETTINGS, sectionSide: side });
     const idOf = (content: string) => session.index.getTasks().find(task => task.content === content)!.id;
     const read = () => contents.get(FILE)!.split('\n');
     return { contents, session, idOf, read };
@@ -41,8 +46,8 @@ async function open(lines: string[]) {
 type Path = 'card' | 'api' | 'editor';
 
 /** Complete the row reading `content` on line `line`, by `path`, and answer the note's lines once it has settled. */
-async function complete(lines: string[], line: number, content: string, path: Path): Promise<string[]> {
-    const note = await open(lines);
+async function complete(lines: string[], line: number, content: string, path: Path, side: SectionSide = 'head'): Promise<string[]> {
+    const note = await open(lines, side);
     if (path === 'card') {
         await note.session.index.updateTask(note.idOf(content), { statusChar: 'x' });
         await note.session.flowSettled(FILE);
@@ -83,18 +88,18 @@ const NOTE = [
 ];
 
 describe.each<Path>(['card', 'api', 'editor'])('a move within the note, from the %s', (path) => {
-    it('carries the row and its subtree to the end of the heading\'s section, past its deeper headings', async () => {
+    it('carries the row and its subtree to the head of the heading\'s section', async () => {
         expect(await complete(NOTE, 1, '移す', path)).toEqual([
             '# note',
             '## Done',
+            '- [x] 移す @2026-09-21',
+            '    - [ ] 子',
+            '    text',
             '- [x] old',
             '    - [x] old child',
             '',
             '### Deeper',
             '- [x] deep',
-            '- [x] 移す @2026-09-21',
-            '    - [ ] 子',
-            '    text',
             '',
             '## Later',
             '- [ ] later',
@@ -103,9 +108,33 @@ describe.each<Path>(['card', 'api', 'editor'])('a move within the note, from the
         expect(Notice.messages).toEqual([]);
     });
 
-    it('carries the row to the end of the note with move()', async () => {
-        const lines = ['# note', '- [ ] 移す ==> move()', '    - [ ] 子', '## Later', '- [ ] later', ''];
-        expect(await complete(lines, 1, '移す', path)).toEqual(['# note', '## Later', '- [ ] later', '- [x] 移す', '    - [ ] 子', '']);
+    it('carries the row and its subtree to the end of the heading\'s section, short of its deeper headings, with the end side', async () => {
+        expect(await complete(NOTE, 1, '移す', path, 'end')).toEqual([
+            '# note',
+            '## Done',
+            '- [x] old',
+            '    - [x] old child',
+            '- [x] 移す @2026-09-21',
+            '    - [ ] 子',
+            '    text',
+            '',
+            '### Deeper',
+            '- [x] deep',
+            '',
+            '## Later',
+            '- [ ] later',
+            '',
+        ]);
+        expect(Notice.messages).toEqual([]);
+    });
+
+    it('does not read move(): completing the row writes the completion alone, and runs none of the command', async () => {
+        const lines = ['# note', '- [ ] 移す @2026-09-21 ==> +1d move()', '    - [ ] 子', '## Tasks', '- [ ] later', ''];
+        expect(await complete(lines, 1, '移す', path)).toEqual([
+            '# note', '- [x] 移す @2026-09-21 ==> +1d move()', '    - [ ] 子', '## Tasks', '- [ ] later', '',
+        ]);
+        await Promise.resolve();
+        expect(Notice.messages).toEqual([]);
     });
 
     it('writes the next instance where the row was, and carries the row', async () => {
@@ -164,8 +193,8 @@ describe.each<Path>(['card', 'api', 'editor'])('a move and the headings around i
     });
 
     it.each([
-        ['a paragraph and a rule become a setext heading (R2)', ['Para', '- [ ] A ==> move()', '---'], 2],
-        ['an indented heading goes into the item above (R2)', ['1. [x] Z', '  1. [ ] A ==> move()', '   # H'], 2],
+        ['a paragraph and a rule become a setext heading (R2)', ['Para', '- [ ] A ==> move([[#Done]])', '---', '## Done'], 2],
+        ['an indented heading goes into the item above (R2)', ['1. [x] Z', '  1. [ ] A ==> move([[#Done]])', '   # H', '## Done'], 2],
     ])('does not take the row out when %s', async (_name, note, line) => {
         const lines = ['# note', ...note, ''];
         const expected = lines.map(text => text.replace('[ ] A', '[x] A'));
@@ -179,8 +208,8 @@ describe.each<Path>(['card', 'api', 'editor'])('a move and the headings around i
 describe('a parent\'s move and a child\'s fire in one editor transaction (R10 within a note)', () => {
     const PARENT = '- [ ] P @2026-09-21 ==> move([[#Done]])';
 
-    async function both(child: string, headings: string[] = []): Promise<{ lines: string[]; fired: string[] }> {
-        const note = await open(['# note', PARENT, `    - [ ] C @2026-09-21 ==> ${child}`, '## Done', '- [x] old', '', ...headings, '']);
+    async function both(child: string, headings: string[] = [], side: SectionSide = 'end'): Promise<{ lines: string[]; fired: string[] }> {
+        const note = await open(['# note', PARENT, `    - [ ] C @2026-09-21 ==> ${child}`, '## Done', '- [x] old', '', ...headings, ''], side);
         const fired: string[] = [];
         const plan = note.session.executor.planFire.bind(note.session.executor);
         note.session.executor.planFire = (...args) => {
@@ -207,15 +236,15 @@ describe('a parent\'s move and a child\'s fire in one editor transaction (R10 wi
         ]);
     });
 
-    it('carries the child out of the parent\'s subtree to the end of the note with move()', async () => {
-        const { lines, fired } = await both('move()');
-        expect(fired).toEqual(['P:fires', 'C:fires']);
-        expect(lines).toEqual(['# note', '## Done', '- [x] old', '- [x] P @2026-09-21', '', '- [x] C @2026-09-21', '']);
-    });
-
     it('puts the child past the parent\'s subtree, at the top, when both go to one heading', async () => {
         const { lines } = await both('move([[#Done]])');
         expect(lines).toEqual(['# note', '## Done', '- [x] old', '- [x] P @2026-09-21', '- [x] C @2026-09-21', '', '']);
+    });
+
+    it('puts the child at the section\'s head, above the parent, when both go to one heading at its head', async () => {
+        const { lines, fired } = await both('move([[#Done]])', [], 'head');
+        expect(fired).toEqual(['P:fires', 'C:fires']);
+        expect(lines).toEqual(['# note', '## Done', '- [x] C @2026-09-21', '- [x] P @2026-09-21', '- [x] old', '', '']);
     });
 
     it('carries the child to its own heading', async () => {
@@ -264,11 +293,40 @@ describe.each<Path>(['card', 'api', 'editor'])('the ^ids a move carries, from th
         ]);
     });
 
-    it('keeps them to the end of the note, and gives the next instance none', async () => {
-        const lines = ['# note', '- [ ] 移す @2026-09-21 ==> +1d move() ^keep', '    - [ ] 子 ^kid', '- [ ] U', ''];
-        expect(await complete(lines, 1, '移す', path)).toEqual([
-            '# note', '- [ ] 移す @2026-09-22 ==> +1d move()', '- [ ] U', '- [x] 移す @2026-09-21 ^keep', '    - [ ] 子 ^kid', '',
+    it('keeps them to the end of a section, and gives the next instance none', async () => {
+        const lines = ['# note', '- [ ] 移す @2026-09-21 ==> +1d move([[#Done]]) ^keep', '    - [ ] 子 ^kid', '- [ ] U', '## Done', '- [x] old', ''];
+        expect(await complete(lines, 1, '移す', path, 'end')).toEqual([
+            '# note', '- [ ] 移す @2026-09-22 ==> +1d move([[#Done]])', '- [ ] U', '## Done', '- [x] old', '- [x] 移す @2026-09-21 ^keep', '    - [ ] 子 ^kid', '',
         ]);
+    });
+});
+
+/**
+ * An ordered row is numbered where it lands (`ListNumber.at`): on from the
+ * ordered item straight above it, else 1, the one number that interrupts a
+ * paragraph.
+ */
+describe.each<Path>(['card', 'api', 'editor'])('an ordered row a move carries, from the %s', (path) => {
+    const LIST = ['# note', '3. [ ] T @2026-09-21 ==> move([[#Done]])', '## Done', '1. [x] old', ''];
+
+    it('opens the section\'s list at 1 at the head', async () => {
+        expect(await complete(LIST, 1, 'T', path)).toEqual(['# note', '## Done', '1. [x] T @2026-09-21', '1. [x] old', '']);
+    });
+
+    it('goes on from the section\'s last item at the end', async () => {
+        expect(await complete(LIST, 1, 'T', path, 'end')).toEqual(['# note', '## Done', '1. [x] old', '2. [x] T @2026-09-21', '']);
+    });
+
+    it('is numbered 1 past a paragraph, which a number past 1 would go on', async () => {
+        const lines = ['# note', '5. [ ] T @2026-09-21 ==> move([[#Done]])', '## Done', 'words', ''];
+        expect(await complete(lines, 1, 'T', path)).toEqual(['# note', '## Done', 'words', '1. [x] T @2026-09-21', '']);
+        expect(Notice.messages).toEqual([]);
+    });
+
+    it('takes its children as far right as a wider number moves its content', async () => {
+        const lines = ['# note', '1. [ ] T @2026-09-21 ==> move([[#Done]])', '   - [ ] c', '## Done', '9. [x] old', ''];
+        expect(await complete(lines, 1, 'T', path, 'end')).toEqual(['# note', '## Done', '9. [x] old', '10. [x] T @2026-09-21', '    - [ ] c', '']);
+        expect(Notice.messages).toEqual([]);
     });
 });
 

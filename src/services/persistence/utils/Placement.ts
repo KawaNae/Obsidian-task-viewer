@@ -24,6 +24,33 @@ export type HeadingLookup =
     | { kind: 'none' }
     | { kind: 'many'; count: number };
 
+/**
+ * Which end of a heading's section new lines go to: its head, just below the
+ * heading, or its end, just above the first heading below it. The setting
+ * `sectionSide`, the one answer for every write that adds lines to a section
+ * (a flow's move, a task made under a heading, a timer's record in the daily
+ * note).
+ */
+export type SectionSide = 'head' | 'end';
+
+/** The section of a note lines go to: the heading named `heading` (`headingKey`), at its `side`. */
+export interface InSection {
+    heading: string;
+    side: SectionSide;
+}
+
+/**
+ * Where lines go in a section (`Placement.into`): the spot, or why there is
+ * none — no heading by the name, or more than one, which a link to the
+ * heading cannot tell apart either. Whether a heading is made when there is
+ * none is the caller's to say (`HeadingInserter` makes one; a flow's move
+ * fails).
+ */
+export type SectionLookup =
+    | { kind: 'spot'; spot: Spot }
+    | { kind: 'none' }
+    | { kind: 'many'; count: number };
+
 /** The ASCII marks Obsidian reads as a space in a heading's name: all but `'`, `-` and `_`. */
 const HEADING_MARKS_RE = /[!"#$%&()*+,./:;<=>?@[\\\]^`{|}~]/g;
 
@@ -172,22 +199,13 @@ export class Placement {
     }
 
     /**
-     * Where a line under the heading on `heading` goes: just below it, past
-     * the paragraph and the code below it, at the top as a sibling of the
-     * items there. A task indented under the heading stays where it stands,
-     * not under the new line.
-     */
-    static underHeading(outline: OutlineReading, heading: number, head: string): Spot {
-        return this.sibling(outline, heading + 1, null, head);
-    }
-
-    /**
      * The heading `name` names in the note, as Obsidian resolves a link to a
      * heading of the note it stands in (`[[#name]]`): the headings the note
      * reads (`OutlineReading.headings`), their names compared by
-     * {@link headingKey}. A move's destination, looked up where the move is
-     * planned and again where it is put, from the same lines, so both find
-     * the same one — or both find none or several, and nothing moves.
+     * {@link headingKey}, at any level. A move's destination, looked up
+     * where the move is planned and again where it is put ({@link into}),
+     * from the same lines, so both find the same one — or both find none or
+     * several, and nothing moves.
      */
     static heading(outline: OutlineReading, name: string): HeadingLookup {
         const key = headingKey(name);
@@ -198,19 +216,36 @@ export class Placement {
     }
 
     /**
-     * Where lines moved to the end of `heading`'s section go: its section
-     * runs from below the heading to the next heading of its level or above,
-     * or the end of the note, and they go just past its last line that is not
-     * blank — past the subtree of an item that ends it, as a sibling at the
-     * top — so the blank lines that end it stay below them. A section with
-     * nothing in it has them just below the heading.
+     * Where lines go in the section of the heading `to` names, at its side:
+     * the one answer for every write that adds lines to a section. The
+     * heading is looked up as a link to it is ({@link heading}); none, or
+     * more than one, and there is no spot.
+     *
+     * A section, to a line put in it, is the lines from below its heading to
+     * the next heading of any level, or the end of the note: a line past a
+     * heading below — one of a lower level included — reads as that
+     * heading's, and takes on what its section holds (a property line
+     * there), so neither side goes past one.
+     *
+     * - `head`: just below the heading, past the paragraph and the code
+     *   below it, at the top as a sibling of the items there. A task
+     *   indented under the heading stays where it stands, not under the new
+     *   line.
+     * - `end`: just past the section's last line that is not blank — past
+     *   the subtree of an item that ends it, as a sibling at the top — so
+     *   the blank lines that end it stay below. A section with nothing in it
+     *   has the line just below the heading.
      */
-    static sectionEnd(outline: OutlineReading, heading: OutlineHeading, head: string): Spot {
+    static into(outline: OutlineReading, to: InSection, head: string): SectionLookup {
+        const found = this.heading(outline, to.heading);
+        if (found.kind !== 'one') return found;
+        const { heading } = found;
+        if (to.side === 'head') return { kind: 'spot', spot: this.sibling(outline, heading.end, null, head) };
         const { lines } = outline;
-        const next = outline.headings.find(h => h.line >= heading.end && h.level <= heading.level);
+        const next = outline.headings.find(h => h.line >= heading.end);
         let at = next ? next.line : lines.length;
         while (at > heading.end && Outline.isBlank(lines[at - 1])) at--;
-        return this.sibling(outline, at, null, head);
+        return { kind: 'spot', spot: this.sibling(outline, at, null, head) };
     }
 
     /**

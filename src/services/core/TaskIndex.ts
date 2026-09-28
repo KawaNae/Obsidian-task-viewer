@@ -23,6 +23,7 @@ import { plannedOn, subjectOf } from '../persistence/TaskRefs';
 import { logDebug, logError, logInfo, logWarn } from '../../log/log';
 import { readInLine, type EditorLine, type Landing, type WriteOutcome } from '../persistence/FileLines';
 import type { InsertPlace, TaskOp } from '../persistence/TaskOps';
+import { Destination } from '../persistence/Destination';
 import type { ContentKey } from './ContentKey';
 import { checkCopy, checkFile, type CheckDeps } from './ReadingCheck';
 import { DiskReconciler } from './DiskReconciler';
@@ -809,7 +810,7 @@ export class TaskIndex {
             logInfo(`[createTask] path=${filePath} heading=${heading ?? '(none)'}`);
 
             const outcome = heading
-                ? await this.repository.insertLineUnderHeading(filePath, taskLine, heading, 2)
+                ? await this.repository.insertLineUnderHeading(filePath, taskLine, Destination.sectionNamed(heading, this.settings))
                 : await this.repository.appendTaskToFile(filePath, taskLine);
             // What the write left is in the index once it landed (`landed`):
             // the caller finds the row on its line without waiting for a scan.
@@ -935,7 +936,7 @@ export class TaskIndex {
                 break;
             default:
                 logWarn(`[TaskIndex] refused: file=${file} reason=${reason.kind} subject=${subject}`);
-                // `gone`, `unplaceable`, `disturbs`: the note read as the index read it.
+                // `gone`, `unplaceable`, `disturbs`, `headings`: the note read as the index read it.
                 if (reason.kind !== 'changed' && reason.kind !== 'failed') return;
         }
         this.reconciler?.request('refusal', file);

@@ -1,6 +1,7 @@
 import { type App, TFile, moment } from 'obsidian';
 import { HeadingInserter } from './HeadingInserter';
 import { createFile, type WriteChannel } from '../services/persistence/FileLines';
+import type { Section } from '../services/persistence/Destination';
 import type { TaskViewerSettings, NoteType } from '../types';
 import { processTemplate, normalizeTrailingNewline } from './NoteTemplateProcessor';
 import { withWeekStartDay } from './momentWeekLocale';
@@ -224,13 +225,12 @@ export class DailyNoteUtils {
     }
 
     /**
-     * Append a line to the daily note under the specified header.
-     * Creates the daily note and/or header if they don't exist.
+     * Put a line in a section of the daily note (`HeadingInserter`).
+     * Creates the daily note and/or heading if they don't exist.
      * @param app Obsidian App instance
      * @param date Target date for the daily note
      * @param line The line to append (should include full task format, e.g., "- [x] ...")
-     * @param header Header text (without # prefix)
-     * @param headerLevel Number of # to use (e.g., 2 for ##)
+     * @param to The section, and the level its heading is made at (`Destination.taskSection`)
      * @param channelFor Where the write to the note reports what it did (see
      *        `TaskWriteService.writeChannel`). Asked once the note is known:
      *        the note may be the one this call creates.
@@ -244,8 +244,7 @@ export class DailyNoteUtils {
         app: App,
         date: Date,
         line: string,
-        header: string,
-        headerLevel: number,
+        to: Section,
         channelFor: (path: string) => WriteChannel | undefined,
     ): Promise<string | null> {
         let file = this.getDailyNote(app, date);
@@ -259,7 +258,7 @@ export class DailyNoteUtils {
         // file は既に手元にある TFile を直接渡す。作成直後のファイルは
         // getAbstractFileByPath で引き直せるとは限らないため、パスへ
         // 変換すると書き込みが黙って失敗しうる。
-        const outcome = await HeadingInserter.writeUnderHeading(app, file, channelFor(file.path), line, header, headerLevel);
+        const outcome = await HeadingInserter.writeUnderHeading(app, file, channelFor(file.path), line, to);
         return outcome.written ? file.path : null;
     }
 }

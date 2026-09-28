@@ -99,16 +99,15 @@ describe.each(NOT_A_CHILD)('a line of the subtree %s', (_name, line, unit) => {
  * line (the fourth L2 counterexample run, G3, M14).
  */
 describe('a child carried by a move within the note', () => {
-    // Tab and spaces mixed both ways, to the end of the note and to a
-    // heading's section: the child is written as many columns past the moved
-    // row as it stood past the task, in spaces where the characters cut off
-    // would not keep them.
+    // Tab and spaces mixed both ways, to a heading's section: the child is
+    // written as many columns past the moved row as it stood past the task,
+    // in spaces where the characters cut off would not keep them.
     it.each([
         ['under a tab, eight spaces', '\t- [ ] X @2026-09-21 ==> DEST', '        - [ ] c', '    - [ ] c'],
         ['under four spaces, a tab and two spaces', '    - [ ] X @2026-09-21 ==> DEST', '\t  - [ ] c', '  - [ ] c'],
         ['under a tab, a tab (unchanged bytes)', '\t- [ ] X @2026-09-21 ==> DEST', '\t\t- [ ] c', '\t- [ ] c'],
-    ])('%s: stays the child, to the end and to a heading', async (_name, row, child, written) => {
-        for (const dest of ['move()', 'move([[#Done]])']) {
+    ])('%s: stays the child, to a heading', async (_name, row, child, written) => {
+        for (const dest of ['move([[#Done]])']) {
             live?.dispose();
             const contents = new Map([[FILE, ['# note', '- [ ] P', row.replace('DEST', dest), child, '## Done', ''].join('\n')]]);
             live = vaultSession(contents);

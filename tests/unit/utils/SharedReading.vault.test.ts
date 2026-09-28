@@ -90,7 +90,7 @@ describe('a write of several ops, read once while its lines are as handed', () =
         // asks for stands a line further down than in the lines as handed.
         const note = ['# note', '- [ ] T @2026-09-21 ==> +1d move([[#Done]])', '\t- [ ] c', '- [ ] U', '## Done', '- [x] old', ''];
         const lines = await sameEitherWay(note, 1, (s) => [{ kind: 'update', text: '- [x] T @2026-09-21 ==> +1d move([[#Done]])' }, fire(s)]);
-        expect(lines).toEqual(['# note', '- [ ] T @2026-09-22 ==> +1d move([[#Done]])', '- [ ] U', '## Done', '- [x] old', '- [x] T @2026-09-21', '\t- [ ] c', '']);
+        expect(lines).toEqual(['# note', '- [ ] T @2026-09-22 ==> +1d move([[#Done]])', '- [ ] U', '## Done', '- [x] T @2026-09-21', '\t- [ ] c', '- [x] old', '']);
     });
 
     it('puts a second property line below the first it put, as op by op', async () => {
@@ -115,7 +115,7 @@ describe('a write of several ops, read once while its lines are as handed', () =
 describe('a write of one op to a long note', () => {
     const ROWS = Array.from({ length: 3000 }, (_, i) => `- [ ] row ${i}`);
     // Row 1500 (line 1501) has a child and a command below it.
-    const NOTE = ['# note', ...ROWS.slice(0, 1500), '- [ ] T @2026-09-21', '\t- [ ] c', '\t- ==> every mon', ...ROWS.slice(1500), ''];
+    const NOTE = ['# note', ...ROWS.slice(0, 1500), '- [ ] T @2026-09-21', '\t- [ ] c', '\t- ==> every mon', ...ROWS.slice(1500), '## Done', ''];
     const T = 1501;
 
     /** How many readings of the whole note `write` makes: of the note as it was handed, and in all. */
@@ -139,10 +139,11 @@ describe('a write of one op to a long note', () => {
 
     it('moves a row with its subtree', async () => {
         const readings = await readingsOf(async (session) => {
-            const edited = together(session, NOTE, T, [{ kind: 'move', text: '- [x] T @2026-09-21', to: { kind: 'end' } }]);
+            const edited = together(session, NOTE, T, [{ kind: 'move', text: '- [x] T @2026-09-21', to: { heading: 'Done', side: 'end' } }]);
             expect(edited.written).toBe(true);
         });
-        expect(readings).toEqual({ handed: 1, all: 2 });
+        // The section's end is settled with the row tried in (`Placement.into`).
+        expect(readings).toEqual({ handed: 1, all: 3 });
     });
 
     it('removes a row with its subtree', async () => {

@@ -80,7 +80,7 @@ export class GenerationError extends Error {
  * when no next instance is generated (until expired / telomere exhausted).
  *
  * Evaluation contexts (do not mix up):
- * - at(expr) evaluates against the PRE-shift original task. move() is not
+ * - at(expr) evaluates against the PRE-shift original task. move(...) is not
  *   evaluated: where it goes is read off how it is written (`MoveTarget`).
  * - set(field: expr) evaluates against the POST-shift new instance; all
  *   right-hand sides see the same snapshot, then apply at once (no chaining).
