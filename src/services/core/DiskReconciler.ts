@@ -67,17 +67,17 @@ export interface ReconcileEnv {
 }
 
 /**
- * Where Obsidian's model of a file and the disk part (`kind`): the disk's
- * stat differs from `TFile.stat` (`modified`), the file is gone from the disk
- * while Obsidian still holds it (`deleted`), a markdown file is on disk that
- * Obsidian does not know (`created`). Counted each sweep, told once it has
- * lasted {@link LASTING_MS}, never mended: Obsidian's model is Obsidian's.
+ * Where Obsidian's model of a note it holds and the disk part (`kind`): the
+ * disk's stat differs from `TFile.stat` (`modified`), or the file is gone
+ * from the disk while Obsidian still holds it (`deleted`). Counted each
+ * sweep and told once it has lasted {@link LASTING_MS}, for diagnosis only:
+ * Obsidian's model is Obsidian's, observed here and never mended.
  */
 export interface Divergence {
     path: string;
-    kind: 'modified' | 'deleted' | 'created';
+    kind: 'modified' | 'deleted';
     disk: DiskStat | null;
-    obsidian: DiskStat | null;
+    obsidian: DiskStat;
 }
 
 /**
@@ -112,6 +112,11 @@ interface Measured {
  * A reading the index moved on to by an event or a write of ours needs no
  * record: either moved the disk's stat too.
  *
+ * Obsidian's model of the vault is Obsidian's: where it parts from the disk,
+ * the sweep only logs it. The notes swept are the ones Obsidian holds, so a
+ * note written to the disk that Obsidian never heard of stays out of the
+ * index, as it stays out of Obsidian.
+ *
  * One sweep runs at a time. A trigger during one asks for one more after
  * it; a patient trigger within {@link QUIET_MS} of the last start waits
  * that out.
@@ -138,11 +143,6 @@ export class DiskReconciler {
         private readonly probe: DiskProbe,
         private readonly env: ReconcileEnv,
     ) { }
-
-    /** Whether the whole vault is swept: where the disk is cheap to ask (the desktop app). */
-    private get whole(): boolean {
-        return this.probe.list !== undefined;
-    }
 
     /** Begin: once the index has read the vault. Sweeps once, then listens. */
     start(): void {
@@ -208,33 +208,23 @@ export class DiskReconciler {
     /** One sweep: measure, mend the index, tell. */
     private async sweep(trigger: Trigger): Promise<void> {
         const files = this.host.files();
-        const scope = this.whole ? files : files.filter(file => this.host.readingOf(file.path).n > 0);
+        const scope = this.probe.wholeVault ? files : files.filter(file => this.host.readingOf(file.path).n > 0);
         const named = this.named;
         this.named = new Set();
 
-        let started = performance.now();
+        const started = performance.now();
         const disk = await this.statAll(scope.map(file => file.path));
         const statMs = Math.round(performance.now() - started);
-        let unknown: Map<string, DiskStat | null> | null = null;
-        let listMs = 0;
-        if (this.probe.list) {
-            started = performance.now();
-            const listed = await this.probe.list();
-            listMs = Math.round(performance.now() - started);
-            // What Obsidian does not know, stated as the disk has it.
-            const known = new Set(files.map(file => file.path));
-            unknown = await this.statAll(listed.filter(path => !known.has(path)));
-        }
         if (this.disposed) return;
 
-        const measured = this.measure(files, scope, disk, unknown, named);
+        const measured = this.measure(files, scope, disk, named);
         const committed = await this.mend(measured);
         if (committed === null) return;
 
         const count = (kind: Divergence['kind']) => measured.divergences.filter(d => d.kind === kind).length;
-        const summary = `[Reconcile] trigger=${trigger} scope=${scope.length} stat=${statMs}ms${unknown ? ` list=${listMs}ms` : ''}`
+        const summary = `[Reconcile] trigger=${trigger} scope=${scope.length} stat=${statMs}ms`
             + ` reread=${measured.reread.length} committed=${committed} dropped=${measured.gone.length}`
-            + ` obsidian:modified=${count('modified')} deleted=${count('deleted')} created=${count('created')}`;
+            + ` obsidian:modified=${count('modified')} deleted=${count('deleted')}`;
         // Only a divergence that lasts is told, and once; while it only
         // lasts, the summary drops to debug, or Obsidian's model, stale until
         // a reload, would fill the log a line a minute.
@@ -268,7 +258,6 @@ export class DiskReconciler {
         files: readonly TFile[],
         scope: readonly TFile[],
         disk: ReadonlyMap<string, DiskStat | null>,
-        unknown: ReadonlyMap<string, DiskStat | null> | null,
         named: ReadonlySet<string>,
     ): Measured {
         const measured: Measured = { divergences: [], reread: [], gone: [] };
@@ -304,10 +293,6 @@ export class DiskReconciler {
             if (named.has(file.path) && !inScope.has(file.path)) {
                 measured.reread.push({ file, stat: { mtime: file.stat.mtime, size: file.stat.size } });
             }
-        }
-        for (const [path, stat] of unknown ?? []) {
-            // Gone again since it was listed: nothing to count.
-            if (stat) measured.divergences.push({ path, kind: 'created', disk: stat, obsidian: null });
         }
         this.record = next;
         return measured;
@@ -366,8 +351,7 @@ export class DiskReconciler {
     private tell(divergences: readonly Divergence[]): void {
         for (const divergence of divergences.slice(0, TOLD_PER_SWEEP)) {
             const disk = divergence.kind === 'deleted' ? '' : ` disk=${statText(divergence.disk)}`;
-            const obsidian = divergence.kind === 'created' ? '' : ` obsidian=${statText(divergence.obsidian)}`;
-            logInfo(`[Reconcile:diverge] kind=${divergence.kind} path=${divergence.path}${disk}${obsidian}`);
+            logInfo(`[Reconcile:diverge] kind=${divergence.kind} path=${divergence.path}${disk} obsidian=${statText(divergence.obsidian)}`);
         }
         const untold = divergences.length - TOLD_PER_SWEEP;
         if (untold > 0) logInfo(`[Reconcile:diverge] ${untold} more not listed`);
@@ -405,7 +389,7 @@ export class DiskReconciler {
         own(workspace.on('active-leaf-change', (leaf) => {
             if (leaf && this.env.isOwnView(leaf.view.getViewType())) this.request('view');
         }));
-        if (this.whole) {
+        if (this.probe.wholeVault) {
             const timer = setInterval(() => {
                 if (!win || win.document.visibilityState === 'visible') this.request('interval');
             }, INTERVAL_MS);

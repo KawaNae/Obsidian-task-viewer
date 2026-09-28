@@ -17,19 +17,13 @@ let base: string;
 beforeAll(() => {
     base = fs.mkdtempSync(nodePath.join(os.tmpdir(), 'tv-probe-'));
     fs.mkdirSync(nodePath.join(base, 'notes/deep'), { recursive: true });
-    fs.mkdirSync(nodePath.join(base, '.obsidian'));
-    fs.mkdirSync(nodePath.join(base, 'notes/.hidden'));
     fs.writeFileSync(nodePath.join(base, 'top.md'), '- [ ] A\n');
     fs.writeFileSync(nodePath.join(base, 'notes/deep/b.md'), 'text');
-    fs.writeFileSync(nodePath.join(base, 'notes/c.txt'), 'not a note');
-    fs.writeFileSync(nodePath.join(base, '.obsidian/workspace.md'), '');
-    fs.writeFileSync(nodePath.join(base, 'notes/.hidden/d.md'), '');
 });
 afterAll(() => fs.rmSync(base, { recursive: true, force: true }));
 
 function adapterAt(root: string): FileSystemAdapter {
     return {
-        getBasePath: () => root,
         getFullPath: (path: string) => nodePath.join(root, path),
     } as unknown as FileSystemAdapter;
 }
@@ -42,7 +36,6 @@ function fsFailing(code: string, failing: string): NodeFs {
                 if (path.endsWith(failing)) throw Object.assign(new Error(code), { code });
                 return fs.promises.stat(path);
             },
-            readdir: (path: string, options: { withFileTypes: true }) => fs.promises.readdir(path, options),
         },
     };
 }
@@ -74,12 +67,6 @@ describe('NodeDiskProbe', () => {
         expect(answered.has('top.md')).toBe(false);
         expect(answered.get('notes/deep/b.md')).not.toBeNull();
     });
-
-    it('lists the notes on disk as vault paths, folders whose name opens with a dot left out', async () => {
-        const probe = new NodeDiskProbe(adapterAt(base), fs as unknown as NodeFs);
-
-        expect((await probe.list()).sort()).toEqual(['notes/deep/b.md', 'top.md']);
-    });
 });
 
 describe('AdapterDiskProbe', () => {
@@ -106,7 +93,6 @@ describe('AdapterDiskProbe', () => {
         expect(answered.get('none.md')).toBeNull();
         expect(answered.get('folder.md')).toBeNull();
         expect(answered.has('busy.md')).toBe(false);
-        expect(probe.list).toBeUndefined();
     });
 });
 

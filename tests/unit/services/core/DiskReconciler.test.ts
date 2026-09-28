@@ -16,27 +16,24 @@ import { vaultSession, type VaultSession } from '../../helpers/vaultSession';
 const FILE = 'note.md';
 const OTHER = 'other.md';
 
-/** A probe over `contents`: `moved` gives a note a new stat, `gone` takes it off the disk, `created` puts one there Obsidian does not know. */
+/** A probe over `contents`: `moved` gives a note a new stat, `gone` takes it off the disk. */
 function probeOver(contents: Map<string, string>, options: { whole?: boolean } = {}) {
     const moved = new Map<string, DiskStat>();
     const gone = new Set<string>();
-    const created: string[] = [];
     const asked: string[][] = [];
-    let listed = 0;
     let hold: Promise<void> | null = null;
     const probe: DiskProbe = {
         batch: 256,
+        wholeVault: options.whole !== false,
         stat: async (paths) => {
             asked.push([...paths]);
             if (hold) await hold;
-            const onDisk = (path: string) => !gone.has(path) && (contents.has(path) || created.includes(path));
+            const onDisk = (path: string) => !gone.has(path) && contents.has(path);
             return new Map(paths.map(path => [path, onDisk(path) ? moved.get(path) ?? { mtime: 0, size: 0 } : null]));
         },
     };
-    if (options.whole !== false) probe.list = async () => { listed++; return [...contents.keys(), ...created]; };
     return {
-        probe, moved, gone, created, asked,
-        listed: () => listed,
+        probe, moved, gone, asked,
         /** Keep every `stat` waiting until the returned release is called. */
         holdStats: () => { let release!: () => void; hold = new Promise(r => { release = r; }); return () => { hold = null; release(); }; },
     };
@@ -81,7 +78,7 @@ describe('a sweep', () => {
         await vi.waitFor(() => expect(notified()).toBe(1));
 
         expect(contentsOf(s)).toEqual(['A', 'B']);
-        expect(summaries()[0]).toMatch(/^\[Reconcile\] trigger=start scope=2 stat=\d+ms list=\d+ms reread=1 committed=1 dropped=0 obsidian:modified=1 deleted=0 created=0$/);
+        expect(summaries()[0]).toMatch(/^\[Reconcile\] trigger=start scope=2 stat=\d+ms reread=1 committed=1 dropped=0 obsidian:modified=1 deleted=0$/);
         // Found for a moment, it may be a notice still on its way; lasting, it is told.
         expect(lines().some(line => line.startsWith('[Reconcile:diverge]'))).toBe(false);
         later(LASTING_MS);
@@ -187,28 +184,12 @@ describe('a sweep', () => {
 
         expect(contentsOf(s)).toEqual([]);
         expect(contentsOf(s, OTHER)).toEqual(['O']);
-        expect(summaries()[0]).toContain('dropped=1 obsidian:modified=0 deleted=1 created=0');
+        expect(summaries()[0]).toContain('dropped=1 obsidian:modified=0 deleted=1');
         later(LASTING_MS);
         s.reconciler!.request('refusal');
         await swept(2);
-        expect(summaries()[1]).toContain('dropped=0 obsidian:modified=0 deleted=1 created=0');
+        expect(summaries()[1]).toContain('dropped=0 obsidian:modified=0 deleted=1');
         expect(lines()).toContain(`[Reconcile:diverge] kind=deleted path=${FILE} obsidian=0/0`);
-    });
-
-    it('counts a note on disk that Obsidian does not know, and does not put it in the index', async () => {
-        const { disk, s } = await open({ [FILE]: '- [ ] A\n' });
-        disk.created.push('zz/b.md');
-        disk.moved.set('zz/b.md', { mtime: 3, size: 88 });
-
-        s.reconciler!.start();
-        await swept(1);
-
-        expect(summaries()[0]).toContain('reread=0 committed=0 dropped=0 obsidian:modified=0 deleted=0 created=1');
-        later(LASTING_MS);
-        s.reconciler!.request('refusal');
-        await swept(2);
-        expect(lines()).toContain('[Reconcile:diverge] kind=created path=zz/b.md disk=3/88');
-        expect(s.index.getTasks().some(t => t.file === 'zz/b.md')).toBe(false);
     });
 
     it('reads nothing the second time when nothing moved', async () => {
@@ -292,7 +273,7 @@ describe('a sweep', () => {
         expect(summaries()).toEqual([]);
     });
 
-    it('off the desktop app, asks only of the notes the index read, and walks no folder', async () => {
+    it('off the desktop app, asks only of the notes the index read', async () => {
         // `bare.md` holds no list item: the vault's scan passes it by, so the index never read it.
         const { disk, s } = await open({ [FILE]: '- [ ] A\n', 'bare.md': 'text\n' }, { whole: false });
 
@@ -300,7 +281,6 @@ describe('a sweep', () => {
         await swept(1);
 
         expect(disk.asked).toEqual([[FILE]]);
-        expect(disk.probe.list).toBeUndefined();
         expect(summaries()[0]).toMatch(/scope=1 stat=\d+ms reread=0/);
     });
 });

@@ -19,18 +19,17 @@ export interface DiskProbe {
     /** How many paths one `stat` is handed: the sweep gives control back between them. */
     readonly batch: number;
     /**
+     * Whether a sweep asks of every note in the vault: only where the disk
+     * is cheap to ask (the desktop app). Elsewhere a sweep asks of the notes
+     * the index has read.
+     */
+    readonly wholeVault: boolean;
+    /**
      * Each path's stat, or null when there is no file there. A path the disk
      * could not answer for (an error other than its absence) is left out:
      * it is not known to be gone.
      */
     stat(paths: readonly string[]): Promise<Map<string, DiskStat | null>>;
-    /**
-     * Every markdown file on disk, as vault paths, folders whose name opens
-     * with a dot left out as Obsidian leaves them out. Only where the whole
-     * vault is cheap to walk (the desktop app), and that is also where the
-     * reconciler sweeps the whole vault.
-     */
-    list?(): Promise<string[]>;
 }
 
 /**
@@ -62,6 +61,7 @@ export function wholeMs(mtimeMs: number): number {
  */
 export class NodeDiskProbe implements DiskProbe {
     readonly batch = 256;
+    readonly wholeVault = true;
 
     constructor(private readonly adapter: FileSystemAdapter, private readonly fs: NodeFs) { }
 
@@ -77,38 +77,16 @@ export class NodeDiskProbe implements DiskProbe {
         }));
         return answered(paths, stats);
     }
-
-    async list(): Promise<string[]> {
-        const base = this.adapter.getBasePath();
-        const found: string[] = [];
-        const walk = async (folder: string): Promise<void> => {
-            let entries;
-            try {
-                entries = await this.fs.promises.readdir(folder === '' ? base : `${base}/${folder}`, { withFileTypes: true });
-            } catch {
-                return;
-            }
-            const below: Promise<void>[] = [];
-            for (const entry of entries) {
-                if (entry.name.startsWith('.')) continue;
-                const path = folder === '' ? entry.name : `${folder}/${entry.name}`;
-                if (entry.isDirectory()) below.push(walk(path));
-                else if (entry.isFile() && entry.name.endsWith('.md')) found.push(path);
-            }
-            await Promise.all(below);
-        };
-        await walk('');
-        return found;
-    }
 }
 
 /**
  * The probe off the desktop app: the adapter's own `stat`, a round trip to
- * the host each, so the sweep asks it of few files at a time and never
- * walks the vault.
+ * the host each, so the sweep asks it of few files at a time, and only of
+ * the notes the index has read.
  */
 export class AdapterDiskProbe implements DiskProbe {
     readonly batch = 32;
+    readonly wholeVault = false;
 
     constructor(private readonly adapter: DataAdapter) { }
 
