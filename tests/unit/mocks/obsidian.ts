@@ -2,7 +2,7 @@
  * Lightweight obsidian module stub for unit tests.
  * Only the symbols actually imported by source code are stubbed here.
  */
-import { load as loadYaml } from 'js-yaml';
+import { dump as dumpYaml, load as loadYaml } from 'js-yaml';
 import { StateField } from '@codemirror/state';
 
 // --- Core classes ---
@@ -199,6 +199,11 @@ export function normalizePath(path: string) { return path; }
  */
 export function parseYaml(yaml: string): any {
     return loadYaml(yaml);
+}
+
+/** Obsidian's writes the block style too; js-yaml's dump is the nearest. */
+export function stringifyYaml(obj: any): string {
+    return dumpYaml(obj);
 }
 
 // --- CodeMirror integration stubs ---
