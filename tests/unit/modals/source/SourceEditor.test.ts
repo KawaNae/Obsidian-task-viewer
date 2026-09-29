@@ -3,8 +3,9 @@ import { CompletionContext, insertBracket, type CompletionResult } from '@codemi
 import { indentLess, indentMore } from '@codemirror/commands';
 import { EditorSelection, EditorState, type StateCommand } from '@codemirror/state';
 import {
-    bracketPairing, childrenState, draftOf, newlineKeepingIndent, parentState,
+    bracketPairing, childrenState, draftOf, parentState,
 } from '../../../../src/modals/form/source/SourceEditor';
+import { newlineContinuingList } from '../../../../src/modals/form/source/ListMarkup';
 import { linkTagCompletionSource } from '../../../../src/modals/form/source/SourceCompletion';
 import { BRACKET_PAIRS } from '../../../../src/utils/BracketRules';
 
@@ -75,16 +76,16 @@ describe('children editor: indent', () => {
     });
 
     it('breaks a line keeping its indent as it is spelled', () => {
-        let s = childrenState(['- a', ' \t- b'], '    ', undefined, {});
+        let s = childrenState(['- a', ' \tnote'], '    ', undefined, {});
         s = s.update({ selection: EditorSelection.cursor(s.doc.length) }).state;
-        s = run(s, newlineKeepingIndent);
-        expect(shown(s)).toBe('- a\n \t- b\n \t|');
+        s = run(s, newlineContinuingList);
+        expect(shown(s)).toBe('- a\n \tnote\n \t|');
     });
 
     it('breaks a line inside its indent keeping the part before the caret', () => {
         let s = childrenState(['        - a'], '    ', undefined, {});
         s = s.update({ selection: EditorSelection.cursor(4) }).state;
-        s = run(s, newlineKeepingIndent);
+        s = run(s, newlineContinuingList);
         expect(shown(s)).toBe('    \n    |    - a');
     });
 });
