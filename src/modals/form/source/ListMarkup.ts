@@ -317,3 +317,31 @@ function keepingNumbers(move: StateCommand): StateCommand {
         return true;
     };
 }
+
+/** What Enter in the parent's line sends to the children, and what it leaves of the line. */
+export interface ParentBreak {
+    /** Where the parent's line is cut: it keeps the text before. Null to leave it whole. */
+    cut: number | null;
+    /** The line put first among the children. */
+    child: string;
+    /** Where the caret goes in that line. */
+    caret: number;
+}
+
+/**
+ * Enter in the parent's line at `[from, to]`: the text after the caret goes
+ * to a new first child line, less the whitespace it starts with, behind the
+ * markup of the parent's list (a bullet stays itself, a number starts at 1,
+ * a checkbox is open whatever the parent's status), and the caret goes to
+ * the start of that text. At the end of the line the child line is empty
+ * markup. In the parent's markup, the line is left whole and an empty child
+ * line is made, since there is no text to send. The parent's line has no
+ * indent (the source takes it off), so its markup is read from it as it is.
+ */
+export function breakParent(parent: string, from: number, to: number): ParentBreak {
+    const item = listMarkup(parent);
+    const markup = item ? `${item.bullet ?? `1${item.delimiter}`} ${item.checkbox ? '[ ] ' : ''}` : '';
+    if (item && from < item.end) return { cut: null, child: markup, caret: markup.length };
+    const after = parent.slice(to).replace(/^[ \t]+/, '');
+    return { cut: from, child: markup + after, caret: markup.length };
+}
