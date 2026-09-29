@@ -38,6 +38,9 @@ import { linkTagCompletionSource } from './SourceCompletion';
  *   overlay given the keymap holds). Let in, they would act on the note of
  *   the active tab behind (Mod+Enter opens the link under its cursor, Mod+B
  *   makes its text bold) where the keys are the editors' own.
+ * - The editors look indented under the parent's line by the width of
+ *   `indentUnit` (`--tv-source-indent`), as a child line stands under its
+ *   parent in Obsidian's editor.
  */
 
 export interface SourceEditorOptions {
@@ -67,6 +70,9 @@ export interface SourceDraft {
     children: SourceDraftLine[];
 }
 
+/** How wide a tab stands in the editors. */
+const TAB_SIZE = 4;
+
 interface EditorHooks {
     onSubmit?: () => void;
     onChange?: () => void;
@@ -90,7 +96,7 @@ function common(app: App | undefined, hooks: EditorHooks): Extension[] {
         history(),
         bracketPairing,
         app ? autocompletion({ override: [linkTagCompletionSource(app)], icons: false }) : [],
-        EditorState.tabSize.of(4),
+        EditorState.tabSize.of(TAB_SIZE),
         EditorView.lineWrapping,
         hooks.onSubmit ? Prec.high(keymap.of([{ key: 'Mod-Enter', run: () => { hooks.onSubmit?.(); return true; } }])) : [],
         keymap.of([...closeBracketsKeymap, ...defaultKeymap, ...historyKeymap]),
@@ -160,6 +166,13 @@ export function draftOf(parent: EditorState, children: EditorState): SourceDraft
     return { parent: parent.doc.toString(), children: lines };
 }
 
+/** The columns one level of `unit` takes, a tab standing as wide as the editors' tab size. */
+export function indentColumns(unit: string): number {
+    let columns = 0;
+    for (const ch of unit) columns += ch === '\t' ? TAB_SIZE : 1;
+    return columns;
+}
+
 export class SourceEditor {
     readonly dom: HTMLElement;
     private readonly parentView: EditorView;
@@ -183,6 +196,7 @@ export class SourceEditor {
             }),
             parent: this.dom.createDiv({ cls: 'tv-source-editor__children' }),
         });
+        this.dom.style.setProperty('--tv-source-indent', `${indentColumns(options.indentUnit)}ch`);
     }
 
     draft(): SourceDraft {
