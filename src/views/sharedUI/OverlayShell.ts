@@ -13,7 +13,13 @@
  *
  * Child popovers (dropdowns, suggests) continue to use PopoverShell via
  * PopoverStack. OverlayShell coordinates with an optional childStack for
- * outside-click and Escape handling.
+ * Escape handling.
+ *
+ * The overlay's surface is its panel and what opens on top of it while it
+ * is open (`LayerOrder`): the child popovers, and the lists and menus
+ * Obsidian opens from a field in the panel on the body (an input suggest's
+ * list). A press outside the surface asks to close; the focus in it keeps
+ * Obsidian's hotkeys out (`HotkeyShield`).
  *
  * Escape and the user's "back" (Android's back gesture, the desktop mouse's
  * back button: `HistoryBack`) step back alike: a child popover open closes
@@ -25,6 +31,7 @@ import type { PopoverAnchor } from './PopoverShell';
 import { positionElement, resolveHost } from './PopoverShell';
 import type { PopoverStack } from './PopoverStack';
 import { registerOverlay, unregisterOverlay } from './OverlayRegistry';
+import { inLayerAbove } from './LayerOrder';
 import { HotkeyShield } from './HotkeyShield';
 import { holdHistoryBack } from './HistoryBack';
 import { KeyboardAwareContainer } from '../../utils/KeyboardAwareContainer';
@@ -190,17 +197,14 @@ export class OverlayShell {
 
         // Outside-click
         this.outsideClickHandler = (e: MouseEvent) => {
-            const target = e.target as Node;
-            if (this.panelEl?.contains(target)) return;
-            if (this.childStack?.containsTarget(target)) return;
+            if (this.holds(e.target as Node | null)) return;
             this.requestClose();
         };
         hostDoc.addEventListener('pointerdown', this.outsideClickHandler, true);
 
-        // Hotkeys: kept out while the focus is in the panel or a child popover.
+        // Hotkeys: kept out while the focus is in the surface.
         if (opts.keymap) {
-            this.hotkeys = new HotkeyShield(opts.keymap, hostDoc, (node) => node !== null
-                && ((this.panelEl?.contains(node) ?? false) || (this.childStack?.containsTarget(node) ?? false)));
+            this.hotkeys = new HotkeyShield(opts.keymap, hostDoc, (node) => this.holds(node));
         }
 
         // Pagehide (popout window close): nothing to keep open for, so not asked.
@@ -221,6 +225,19 @@ export class OverlayShell {
         if (this.beforeCloseCb && !this.beforeCloseCb()) return false;
         this.close();
         return true;
+    }
+
+    /**
+     * Whether `node` is in the overlay's surface: in its panel, in a child
+     * popover, or in a layer opened on top of it (an input suggest's list
+     * Obsidian puts on the body). Its backdrop, and what stood before it,
+     * are outside.
+     */
+    private holds(node: Node | null): boolean {
+        if (node === null || !this.rootEl) return false;
+        return (this.panelEl?.contains(node) ?? false)
+            || (this.childStack?.containsTarget(node) ?? false)
+            || inLayerAbove(this.rootEl, node);
     }
 
     /** Escape or the back: a child popover open closes first, else the overlay is asked to close. */

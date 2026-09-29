@@ -9,9 +9,14 @@
  *
  * This eliminates the previous selector-based exclusion (".filter-child-popover")
  * by which parents had to know their children's class names.
+ *
+ * A shell holds what is in it and what opened on top of it on the body
+ * while it was open (`LayerOrder`), as the list of an Obsidian suggest
+ * opened from a field in it: a press there closes no shell under it.
  */
 
 import { PopoverShell, type PopoverOpenOpts } from './PopoverShell';
+import { inLayerAbove } from './LayerOrder';
 
 export class PopoverStack {
     private shells: PopoverShell[] = [];
@@ -112,7 +117,7 @@ export class PopoverStack {
             const target = e.target as Node;
             // Walk top-down: find the topmost shell containing the target.
             for (let i = this.shells.length - 1; i >= 0; i--) {
-                if (this.shells[i].contains(target)) {
+                if (this.holds(this.shells[i], target)) {
                     // Close shells above the matched one.
                     if (i + 1 < this.shells.length) {
                         this.closeFromIndex(i + 1);
@@ -125,6 +130,13 @@ export class PopoverStack {
         // Capture phase: catch the click before any in-popover handlers
         // (which typically stopPropagation).
         doc.addEventListener('pointerdown', this.outsideClickHandler, true);
+    }
+
+    /** Whether a press on `target` is in `shell`: in it, or in a layer opened on top of it. */
+    private holds(shell: PopoverShell, target: Node): boolean {
+        if (shell.contains(target)) return true;
+        const el = shell.getEl();
+        return el !== null && inLayerAbove(el, target);
     }
 
     private detachOutsideClick(): void {
