@@ -2,9 +2,10 @@ import { acceptCompletion, autocompletion, closeBrackets, closeBracketsKeymap, c
 import { defaultKeymap, history, historyKeymap, indentLess } from '@codemirror/commands';
 import { indentUnit } from '@codemirror/language';
 import { EditorState, Prec, type Extension } from '@codemirror/state';
-import { EditorView, keymap } from '@codemirror/view';
+import { EditorView, keymap, tooltips, type Rect } from '@codemirror/view';
 import type { App } from 'obsidian';
 import { BRACKET_CLOSERS, BRACKET_PAIRS } from '../../../utils/BracketRules';
+import { keyboardTop, trackKeyboard } from '../../../utils/KeyboardState';
 import { lineMapOf, trackLines } from './LineMap';
 import {
     breakParent, indentMoreRestartingLists, listNumbering, moveLineDownKeepingNumbers, moveLineUpKeepingNumbers,
@@ -41,6 +42,10 @@ import { linkTagCompletionSource } from './SourceCompletion';
  * - The editors look indented under the parent's line by the width of
  *   `indentUnit` (`--tv-source-indent`), as a child line stands under its
  *   parent in Obsidian's editor.
+ * - A completion list stands in the window above the virtual keyboard
+ *   (`keyboardTop`), and goes above the caret where there is no room under
+ *   it: on Obsidian mobile the keyboard covers the page without shrinking
+ *   it, and a list under a caret just above the keyboard would be hidden.
  */
 
 export interface SourceEditorOptions {
@@ -91,9 +96,16 @@ export const bracketPairing: Extension = [
     }]),
 ];
 
+/** The window above the virtual keyboard: where a tooltip (a completion list) has room to stand. */
+function spaceAboveKeyboard(view: EditorView): Rect {
+    const win = view.dom.ownerDocument.defaultView ?? window;
+    return { left: 0, top: 0, right: win.innerWidth, bottom: Math.min(win.innerHeight, keyboardTop(win)) };
+}
+
 function common(app: App | undefined, hooks: EditorHooks): Extension[] {
     return [
         history(),
+        tooltips({ tooltipSpace: spaceAboveKeyboard }),
         bracketPairing,
         app ? autocompletion({ override: [linkTagCompletionSource(app)], icons: false }) : [],
         EditorState.tabSize.of(TAB_SIZE),
@@ -180,6 +192,7 @@ export class SourceEditor {
 
     constructor(container: HTMLElement, private readonly options: SourceEditorOptions) {
         this.dom = container.createDiv({ cls: 'tv-source-editor' });
+        trackKeyboard(container.ownerDocument.defaultView ?? window);
         const hooks: EditorHooks = { onSubmit: options.onSubmit, onChange: options.onChange };
         this.parentView = new EditorView({
             state: parentState(options.parent, options.app, {
