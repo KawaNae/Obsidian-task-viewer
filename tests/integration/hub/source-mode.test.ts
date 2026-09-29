@@ -308,6 +308,90 @@ describe('the hub\'s source mode', () => {
         expect(readTestFile(TEST_FILE)).toBe(NOTE);
     });
 
+    it('withdraws the question on an edit, and writes a draft applied while asked, the hub staying open', async () => {
+        await writeIndexedTestFile(TEST_FILE, NOTE);
+        openSource('親');
+        const steps = run<Record<string, SourceState>>(`
+            const children = viewOf('children');
+            children.focus();
+            children.dispatch({ selection: { anchor: children.state.doc.length } });
+            typeText(' 1');
+            document.querySelector('.task-hub .tv-overlay__close').click();
+            await sleep(100);
+            const asked = state();
+            viewOf('children').focus();
+            await sleep(50);
+            const focusedBack = state();
+            typeText('2');
+            await sleep(50);
+            const edited = state();
+            document.querySelector('.task-hub .tv-overlay__close').click();
+            await sleep(100);
+            const askedAgain = state();
+            return JSON.stringify({ asked, focusedBack, edited, askedAgain });
+        `);
+        expect(steps.asked).toMatchObject({ hub: true, asking: true, actions: true });
+        // The focus given back without an edit leaves the question.
+        expect(steps.focusedBack).toMatchObject({ asking: true });
+        expect(steps.edited).toMatchObject({ hub: true, source: true, asking: false, children: '- [ ] 子a\n- [ ] 子b 12' });
+        expect(steps.askedAgain).toMatchObject({ asking: true });
+
+        const applied = click('.task-hub__source-actions .mod-cta');
+        expect(applied).toMatchObject({ hub: true, source: false, asking: false });
+        expect(readTestFile(TEST_FILE)).toBe(NOTE.replace('子b', '子b 12'));
+    });
+
+    it('keeps Obsidian\'s hotkeys from the note behind while the focus is in the hub, its child popovers among it', async () => {
+        await writeIndexedTestFile(TEST_FILE, NOTE);
+        const result = run<Record<string, unknown>>(`
+            const file = app.vault.getAbstractFileByPath(${JSON.stringify(TEST_FILE)});
+            const leaf = app.workspace.getLeaf('tab');
+            await leaf.openFile(file, { state: { mode: 'source', source: true } });
+            app.workspace.setActiveLeaf(leaf, { focus: true });
+            await sleep(300);
+            const editor = leaf.view.editor;
+            const pick = () => editor.setSelection({ line: 4, ch: 6 }, { line: 4, ch: 7 });
+            const bold = () => document.activeElement.dispatchEvent(new KeyboardEvent('keydown', { key: 'b', code: 'KeyB', keyCode: 66, metaKey: true, ctrlKey: navigator.platform.indexOf('Mac') < 0, bubbles: true, cancelable: true }));
+            try {
+                const task = plugin.getTaskIndex().getTasks().find(t => t.file === ${JSON.stringify(TEST_FILE)} && t.content.startsWith('親'));
+                plugin.openTaskHub(task.id);
+                await until(() => document.querySelector('.task-hub__form input.tv-ctrl__text-input'));
+                pick();
+                document.querySelector('.task-hub__form input.tv-ctrl__text-input').focus();
+                bold();
+                await sleep(200);
+                const inField = editor.getLine(4);
+
+                document.querySelector('.task-hub__status-pill').click();
+                await until(() => document.querySelector('.tv-ctrl__suggest button, .tv-ctrl__suggest input'));
+                document.querySelector('.tv-ctrl__suggest button, .tv-ctrl__suggest input').focus();
+                const inChild = { inPanel: !!document.activeElement.closest('.task-hub') };
+                bold();
+                await sleep(200);
+                inChild.line = editor.getLine(4);
+                document.activeElement.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', code: 'Escape', keyCode: 27, bubbles: true, cancelable: true }));
+                await sleep(200);
+                const afterEscape = { child: !!document.querySelector('.tv-ctrl__suggest'), hub: !!document.querySelector('.task-hub:not(.is-closing)') };
+
+                // The same key with the focus moved to the note: the hotkey is let in again.
+                editor.focus();
+                pick();
+                bold();
+                await sleep(200);
+                const inNote = editor.getLine(4);
+                return JSON.stringify({ inField, inChild, afterEscape, inNote });
+            } finally {
+                leaf.detach();
+            }
+        `);
+        expect(result).toMatchObject({
+            inField: '- [ ] 次',
+            inChild: { inPanel: false, line: '- [ ] 次' },
+            afterEscape: { child: false, hub: true },
+            inNote: '- [ ] **次**',
+        });
+    });
+
     it('keeps the draft of a row lost to a change from outside, offering to copy it and throw it away', async () => {
         await writeIndexedTestFile(TEST_FILE, NOTE);
         openSource('親');
