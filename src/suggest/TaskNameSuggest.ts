@@ -4,6 +4,7 @@
  */
 
 import { type App, AbstractInputSuggest } from 'obsidian';
+import { closersToTakeOver } from '../utils/BracketRules';
 
 interface SuggestionItem {
     label: string;
@@ -138,19 +139,13 @@ export class TaskNameSuggest extends AbstractInputSuggest<SuggestionItem> {
         const value = this.inputEl.value;
         const pos = this.inputEl.selectionStart ?? value.length;
         const before = value.substring(0, pos);
-        let afterCursor = value.substring(pos);
 
-        // Find the trigger start position
-        let triggerStart: number;
-        if (item.replacement.startsWith('[[')) {
-            triggerStart = before.lastIndexOf('[[');
-            // Consume auto-paired ]] after cursor if present
-            if (afterCursor.startsWith(']]')) {
-                afterCursor = afterCursor.substring(2);
-            }
-        } else {
-            triggerStart = before.lastIndexOf('#');
-        }
+        const triggerStart = item.replacement.startsWith('[[')
+            ? before.lastIndexOf('[[')
+            : before.lastIndexOf('#');
+        // The replacement writes its own closers; the ones pairing left after
+        // the caret are taken over (BracketRules.closersToTakeOver).
+        const afterCursor = value.substring(pos + closersToTakeOver(item.replacement, value.substring(pos)));
 
         const newValue = value.substring(0, triggerStart) + item.replacement + afterCursor;
         this.setValue(newValue);
