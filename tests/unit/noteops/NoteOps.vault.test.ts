@@ -4,10 +4,13 @@ import { openLiveVault, type VaultSession } from '../helpers/vaultSession';
 import { NoteOps } from '../../../src/services/data/NoteOps';
 import { TaskWriteService } from '../../../src/services/data/TaskWriteService';
 import { DEFAULT_SETTINGS } from '../../../src/types';
+import { t } from '../../../src/i18n';
+import { refusalClause } from '../../../src/services/core/RefusalClause';
+import type { SendDestination } from '../../../src/services/data/NoteOps';
 
 /**
- * The send operation as the UI asks for it (`NoteOps`, 段 B2): what its
- * dialog opens on, and a send to the rows' own note.
+ * The send operation as the UI asks for it (`NoteOps`): what its dialog
+ * opens on, the note a send goes to, and the one notice of what came of it.
  */
 
 const FILE = 'note.md';
@@ -16,11 +19,15 @@ let live: VaultSession | undefined;
 beforeEach(() => { Notice.messages.length = 0; });
 afterEach(() => { live?.dispose(); live = undefined; });
 
-async function open(lines: string[]) {
-    const { contents, session } = await openLiveVault({ [FILE]: lines }, s => { live = s; });
-    const ops = new NoteOps(new TaskWriteService(session.index), () => ({ ...DEFAULT_SETTINGS }));
+async function open(lines: string[], others: Record<string, string[]> = {}) {
+    const { contents, session } = await openLiveVault({ [FILE]: lines, ...others }, s => { live = s; });
+    const ops = new NoteOps(session.app, new TaskWriteService(session.index), () => ({ ...DEFAULT_SETTINGS }));
     const idOf = (content: string) => session.index.getTasks().find(one => one.content === content)!.id;
-    return { contents, session, ops, idOf, lines: () => contents.get(FILE)!.split('\n') };
+    const row = (content: string) => {
+        const task = session.index.getTasks().find(one => one.content === content)!;
+        return { taskId: task.id, base: task.subtreeLines! };
+    };
+    return { contents, session, ops, idOf, row, lines: () => contents.get(FILE)!.split('\n') };
 }
 
 describe('previewSend', () => {
@@ -61,17 +68,111 @@ describe('send', () => {
         expect(note.lines()).toEqual(['## Tasks', '- [ ] A', '    - [ ] a', '']);
     });
 
-    it('does not send to a new note yet, nor write frontmatter, and writes nothing', async () => {
+    it('within the rows\' own note: not told', async () => {
         const note = await open(['- [ ] A', '## Tasks', '']);
-        const task = note.session.index.getTask(note.idOf('A'))!;
-        const rows = [{ taskId: task.id, base: task.subtreeLines! }];
-        const section = { heading: 'Tasks', level: 2, side: 'head' as const };
 
-        expect(await note.ops.send({ rows, to: { note: { kind: 'new', folder: '', name: 'X' }, section }, frontmatter: [] })).toEqual({ kind: 'not-done' });
-        expect(await note.ops.send({
-            rows, to: { note: { kind: 'existing', path: FILE }, section },
-            frontmatter: [{ key: 'k', yaml: ['k: v'], from: [], obsidian: false }],
-        })).toEqual({ kind: 'not-done' });
-        expect(note.lines()).toEqual(['- [ ] A', '## Tasks', '']);
+        await note.ops.send({ rows: [note.row('A')], to: { note: { kind: 'existing', path: FILE }, section: SECTION }, frontmatter: [] });
+
+        expect(Notice.messages).toEqual([]);
+    });
+
+    it('to a new note: made, and told once, with the undo it cannot take back whole', async () => {
+        const note = await open(['- [ ] A', '']);
+
+        const sent = await note.ops.send({ rows: [note.row('A')], to: NEW('Projects', '設計'), frontmatter: [{ key: 'k', yaml: ['k: 1'], from: [], obsidian: false }] });
+
+        expect(sent.kind === 'done' && sent.note.path).toBe('Projects/設計.md');
+        expect(note.contents.get('Projects/設計.md')).toBe('---\nk: 1\n---\n\n## Tasks\n- [ ] A\n');
+        expect(Notice.messages).toEqual([t('notice.sent', { subject: 'A', note: 'Projects/設計.md' })]);
+    });
+
+    it('to a new note by the path a note has in another case: to that note', async () => {
+        const note = await open(['- [ ] A', ''], { 'Projects/Plan.md': ['# p', ''] });
+
+        const sent = await note.ops.send({ rows: [note.row('A')], to: NEW('projects', 'plan.md'), frontmatter: [] });
+
+        expect(sent.kind === 'done' && sent.note.path).toBe('Projects/Plan.md');
+        expect(note.contents.get('Projects/Plan.md')).toBe('# p\n\n## Tasks\n- [ ] A\n');
+        expect(note.lines()).toEqual(['- [[Plan]]', '']);
+    });
+
+    it('of two rows: told once for both', async () => {
+        const note = await open(['- [ ] A', '- [ ] B', '']);
+
+        await note.ops.send({ rows: [note.row('A'), note.row('B')], to: NEW('', 'X'), frontmatter: [] });
+
+        expect(Notice.messages).toEqual([t('notice.sentRows', { count: 2, note: 'X.md' })]);
+    });
+
+    it('whose note refused: not made, the note taken away, and told once why', async () => {
+        const note = await open(['- [ ] A', '']);
+        refuseNext(note, FILE);
+
+        const sent = await note.ops.send({ rows: [note.row('A')], to: NEW('', 'X'), frontmatter: [] });
+
+        expect(sent).toEqual({ kind: 'not-done' });
+        expect(note.contents.has('X.md')).toBe(false);
+        expect(Notice.messages).toEqual([[
+            t('notice.notSent'),
+            t('notice.sendRefused', { note: FILE, reason: refusalClause({ kind: 'changed' }), subject: 'A' }),
+        ].join(' ')]);
+    });
+
+    it('one of whose notes refused: made for the others, and told once which did not go and why', async () => {
+        const note = await open(['- [ ] A', ''], { 'b.md': ['- [ ] B', ''] });
+        refuseNext(note, 'b.md');
+
+        const sent = await note.ops.send({ rows: [note.row('A'), note.row('B')], to: NEW('', 'X'), frontmatter: [] });
+
+        expect(sent.kind === 'partly' && [sent.note.path, sent.refused]).toEqual(['X.md', ['b.md']]);
+        expect(Notice.messages).toEqual([[
+            t('notice.sentPartly', { note: 'X.md' }),
+            t('notice.sendRefused', { note: 'b.md', reason: refusalClause({ kind: 'changed' }), subject: 'B' }),
+        ].join(' ')]);
+    });
+
+    it('whose note refused, the note written since: the rows are in both notes, and the notice says so', async () => {
+        const note = await open(['- [ ] A', '']);
+        refuseNext(note, FILE, () => note.contents.set('X.md', note.contents.get('X.md') + 'typed\n'));
+
+        const sent = await note.ops.send({ rows: [note.row('A')], to: NEW('', 'X'), frontmatter: [] });
+
+        expect(sent.kind === 'partly' && sent.refused).toEqual([FILE]);
+        expect(Notice.messages).toEqual([[
+            t('notice.notSent'),
+            t('notice.sendRefused', { note: FILE, reason: refusalClause({ kind: 'changed' }), subject: 'A' }),
+            t('notice.sendStranded', { note: 'X.md' }),
+        ].join(' ')]);
+    });
+
+    it('asked wrongly — a name no note can have, a key given twice — is not made', async () => {
+        const note = await open(['- [ ] A', '']);
+        const key = { key: 'k', yaml: ['k: 1'], from: [], obsidian: false };
+
+        expect(await note.ops.send({ rows: [note.row('A')], to: NEW('', 'a|b'), frontmatter: [] })).toEqual({ kind: 'not-done' });
+        expect(await note.ops.send({ rows: [note.row('A')], to: NEW('', 'X'), frontmatter: [key, key] })).toEqual({ kind: 'not-done' });
+        expect([...note.contents.keys()]).toEqual([FILE]);
+        expect(Notice.messages).toEqual([]);
     });
 });
+
+const SECTION = { heading: 'Tasks', level: 2, side: 'head' as const };
+
+function NEW(folder: string, name: string): SendDestination {
+    return { note: { kind: 'new', folder, name }, section: SECTION };
+}
+
+/** Before the next write to `path`, edit it from outside — and do `also` — so the write is refused as `changed`. */
+function refuseNext(note: { contents: Map<string, string>; session: VaultSession }, path: string, also?: () => void): void {
+    const vault = note.session.app.vault as unknown as { process: (file: { path: string }, fn: (data: string) => string) => Promise<string> };
+    const process = vault.process.bind(vault);
+    let armed = true;
+    vault.process = async (file, fn) => {
+        if (armed && file.path === path) {
+            armed = false;
+            note.contents.set(path, note.contents.get(path) + '- [ ] typed\n');
+            also?.();
+        }
+        return process(file, fn);
+    };
+}

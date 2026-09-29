@@ -43,7 +43,7 @@ async function open(lines: string[]) {
             };
         },
         send: async (rows: SendRow[], heading = 'Tasks', side: 'head' | 'end' = 'head') => {
-            const answer = await session.index.send(rows, { path: FILE, section: { heading, level: 2, side } });
+            const answer = await session.index.send(rows, { path: FILE, create: false, section: { heading, level: 2, side }, frontmatter: [] });
             await session.flowSettled(FILE);
             return answer;
         },
@@ -249,14 +249,5 @@ describe('a send not made', () => {
 
         expect(await note.send([{ ...row, base: ['- [ ] A'] }])).toEqual({ kind: 'not-done' });
         expect(note.lines()).toEqual(['- [ ] A', '    - [ ] a', '## Tasks', '']);
-    });
-
-    it('to another note: not made yet', async () => {
-        const note = await open(['- [ ] A', '']);
-
-        const sent = await note.session.index.send([note.row('A')], { path: 'other.md', section: { heading: 'Tasks', level: 2, side: 'head' } });
-
-        expect(sent).toEqual({ kind: 'not-done' });
-        expect(note.writes()).toBe(0);
     });
 });
