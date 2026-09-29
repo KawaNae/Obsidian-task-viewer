@@ -2,8 +2,11 @@
  * Sending a row and its subtree to a note (`NoteOps.send`, 段 B3), in the
  * running Dev vault: to a new note, to a note there is, to a heading of the
  * row's own note, and a send whose note the row came from refuses once the
- * new note is written, which takes the new note away again. The notes' bytes
- * are read back from the disk.
+ * new note is written, which takes the new note away again. Then the send
+ * dialog (段 B5), opened from a card's menu: the note and the heading picked
+ * from their lists with the pointer while the rows' editor holds a draft,
+ * and a subtree it cannot open in the editor, shown as it stands. The
+ * notes' bytes are read back from the disk.
  *
  * Prerequisites:
  *   - Obsidian is running with the Dev vault (path in dev-paths.mjs) open,
@@ -11,7 +14,8 @@
  *
  * Run:  npx vitest run --config vitest.config.e2e.ts tests/integration/noteops/send.test.ts
  */
-import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll, afterEach } from 'vitest';
+import { execFileSync } from 'child_process';
 import * as fs from 'fs';
 import { isObsidianRunning, obsidianEval, sleep } from '../helpers/cli-helper';
 import { deleteTestFile, readTestFile, vaultAbsolute, waitForFileDeindexed, writeIndexedTestFile } from '../helpers/test-file-manager';
@@ -132,5 +136,161 @@ describe('sending a row', () => {
         await sleep(500);
         expect(exists(`${NEW}.md`)).toBe(false);
         expect(readTestFile(SRC)).toBe(['- [ ] 取り消す', '    - [ ] 子', '外から', ''].join('\n'));
+    });
+});
+
+/**
+ * What every snippet on the dialog starts with: the plugin, the dialog as it
+ * is drawn, and a press of the pointer as a mouse makes one.
+ */
+const DIALOG = `
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+const until = async (test, ms = 3000) => { const end = Date.now() + ms; while (Date.now() < end) { if (test()) return true; await sleep(50); } return false; };
+const plugin = app.plugins.plugins['obsidian-task-viewer'];
+const panel = () => document.querySelector('.tv-overlay:not(.is-closing) .tv-send');
+const inputs = () => [...(panel()?.querySelectorAll('.tv-send__destination input') ?? [])];
+const shown = el => !!el && getComputedStyle(el).display !== 'none';
+const viewOf = which => {
+    const el = panel()?.querySelector('.tv-source-editor__' + which + ' .cm-content');
+    return el ? (el.cmTile?.view ?? el.cmView?.rootView?.view ?? null) : null;
+};
+const state = () => ({
+    open: !!panel(),
+    closing: !!document.querySelector('.tv-overlay.is-closing'),
+    name: inputs()[0]?.value ?? null,
+    folder: inputs()[1]?.value ?? null,
+    heading: inputs()[2]?.value ?? null,
+    says: shown(panel()?.querySelector('.tv-send__says')) ? panel().querySelector('.tv-send__says').textContent : null,
+    asking: shown(panel()?.querySelector('.tv-send__ask')),
+    canSend: panel() ? !panel().querySelector('.tv-send__actions .mod-cta').disabled : false,
+    editors: panel()?.querySelectorAll('.tv-send__row-list .cm-content').length ?? 0,
+    fixed: panel()?.querySelector('.tv-send__fixed pre')?.textContent ?? null,
+    why: panel()?.querySelector('.tv-send__fixed .tv-form__info')?.textContent ?? null,
+});
+const press = el => {
+    const r = el.getBoundingClientRect();
+    const at = { bubbles: true, cancelable: true, composed: true, clientX: r.left + 4, clientY: r.top + 4, button: 0, pointerId: 1, isPrimary: true, pointerType: 'mouse' };
+    el.dispatchEvent(new PointerEvent('pointerdown', at));
+    el.dispatchEvent(new MouseEvent('mousedown', at));
+    el.dispatchEvent(new PointerEvent('pointerup', at));
+    el.dispatchEvent(new MouseEvent('mouseup', at));
+    el.dispatchEvent(new MouseEvent('click', at));
+};
+/** Type \`text\` into the field \`i\` (name, folder, heading), and press the item of its list that reads \`pick\`. */
+const pickFrom = async (i, text, pick) => {
+    const input = inputs()[i];
+    input.focus();
+    input.value = text;
+    input.setSelectionRange(text.length, text.length);
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    const item = () => [...document.querySelectorAll('.suggestion-container .suggestion-item')].find(el => el.textContent === pick);
+    if (!(await until(() => item()))) throw new Error('no ' + pick + ' in the list of ' + text);
+    press(item());
+    await sleep(100);
+};
+`;
+
+/** Run `body` (statements, ending in a `return`) in Obsidian after the dialog's prelude. */
+function onDialog<T>(body: string): T {
+    const result = obsidianEval(`(async () => { ${DIALOG}\n${body}\n})()`);
+    if (result && typeof result === 'object' && 'error' in (result as object)) {
+        throw new Error(`eval failed: ${(result as { error: string }).error}`);
+    }
+    return result as T;
+}
+
+interface DialogState {
+    open: boolean;
+    closing: boolean;
+    name: string | null;
+    folder: string | null;
+    heading: string | null;
+    says: string | null;
+    asking: boolean;
+    canSend: boolean;
+    editors: number;
+    fixed: string | null;
+    why: string | null;
+}
+
+/** Open the dialog on the row of `SRC` whose text is `name`, as its card's menu does. */
+function openDialog(name: string): DialogState {
+    return onDialog<DialogState>(`
+        const task = plugin.getTaskIndex().getTasks().find(t => t.file === ${JSON.stringify(SRC)} && t.content === ${JSON.stringify(name)});
+        if (!task) throw new Error('no row ' + ${JSON.stringify(name)});
+        await plugin.hubMenuHandler.showContextMenu(0, 0, task);
+        const menu = plugin.menuPresenter.currentMenu;
+        const item = menu?.items.find(one => one.titleEl?.textContent === 'ノートへ送る');
+        if (!item) throw new Error('no send in the menu');
+        menu.hide();
+        item.callback(new MouseEvent('click'));
+        await until(() => panel() && state().canSend);
+        return JSON.stringify(state());
+    `);
+}
+
+/** Close the dialog if it is open, throwing its draft away if it asks. */
+function closeDialog(): void {
+    onDialog(`
+        panel()?.querySelector('.tv-overlay__close')?.click();
+        await sleep(100);
+        panel()?.querySelector('.tv-send__discard')?.click();
+        await until(() => !panel());
+        return 'ok';
+    `);
+}
+
+describe('the send dialog', () => {
+    beforeAll(() => { execFileSync('osascript', ['-e', 'tell application "Obsidian" to activate']); });
+    afterEach(() => { closeDialog(); });
+
+    it('picks the note and the heading from their lists with the pointer, a draft kept, and moves the draft to the heading of its own note', async () => {
+        await writeIndexedTestFile(SRC, ['- [ ] 動かす', '    - [ ] 子', '## Done', '- [x] 済み', ''].join('\n'));
+        const opened = openDialog('動かす');
+        expect(opened).toMatchObject({ open: true, name: '動かす', editors: 2, asking: false });
+
+        const picked = onDialog<DialogState & { draft: string }>(`
+            const children = viewOf('children');
+            children.dispatch({ changes: { from: children.state.doc.line(1).to, insert: '2' } });
+            await pickFrom(0, ${JSON.stringify(SRC.slice(0, -5))}, ${JSON.stringify(SRC)});
+            await until(() => state().says?.includes('このノート'));
+            await pickFrom(2, 'Do', 'Done');
+            await until(() => state().says?.includes('Done') && state().canSend);
+            return JSON.stringify({ ...state(), draft: children.state.doc.toString() });
+        `);
+        // A press on either list neither closed the dialog nor asked to throw the draft away.
+        expect(picked).toMatchObject({ open: true, closing: false, asking: false, name: SRC.slice(0, -3), folder: '', heading: 'Done', canSend: true, draft: '- [ ] 子2' });
+        expect(picked.says).toContain('このノートの見出し Done');
+
+        const sent = onDialog<{ open: boolean; notices: number }>(`
+            const before = document.querySelectorAll('.notice').length;
+            panel().querySelector('.tv-send__actions .mod-cta').click();
+            await until(() => !panel());
+            await sleep(300);
+            return JSON.stringify({ open: !!panel(), notices: document.querySelectorAll('.notice').length - before });
+        `);
+        expect(sent).toEqual({ open: false, notices: 0 });
+        expect(readTestFile(SRC)).toBe(['## Done', '- [ ] 動かす', '    - [ ] 子2', '- [x] 済み', ''].join('\n'));
+    });
+
+    it('shows a subtree it cannot open in the editor as it stands, from the first column, and sends it so', async () => {
+        await writeIndexedTestFile(SRC, ['## Done', '- [x] 済み', '    - [ ] 浅い', '      続き', '        - [ ] 子', ''].join('\n'));
+        const opened = openDialog('浅い');
+        expect(opened).toMatchObject({ open: true, editors: 0, fixed: '- [ ] 浅い\n  続き\n    - [ ] 子' });
+        expect(opened.why).toContain('1 行目');
+
+        const sent = onDialog<DialogState>(`
+            const [name, , heading] = inputs();
+            name.value = ${JSON.stringify(SRC.slice(0, -3))};
+            name.dispatchEvent(new Event('input', { bubbles: true }));
+            heading.value = 'Done';
+            heading.dispatchEvent(new Event('input', { bubbles: true }));
+            await until(() => state().says?.includes('Done') && state().canSend);
+            panel().querySelector('.tv-send__actions .mod-cta').click();
+            await until(() => !panel());
+            return JSON.stringify(state());
+        `);
+        expect(sent.open).toBe(false);
+        expect(readTestFile(SRC)).toBe(['## Done', '- [ ] 浅い', '  続き', '    - [ ] 子', '- [x] 済み', ''].join('\n'));
     });
 });
