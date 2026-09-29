@@ -22,7 +22,7 @@ class FakeEditor implements DraftEditor {
     completing = false;
     destroyed = false;
     focused = 0;
-    constructor(private readonly frame: SubtreeFrame) {
+    constructor(private readonly frame: SubtreeFrame, private readonly hooks: { edited(): void }) {
         this.parent = frame.parent;
         this.children = frame.children.map((text, i) => ({ text, was: i + 1 }));
     }
@@ -34,6 +34,8 @@ class FakeEditor implements DraftEditor {
     isCompleting(): boolean { return this.completing; }
     focus(): void { this.focused++; }
     destroy(): void { this.destroyed = true; }
+    /** Change the parent's text as the user would, the editor telling of it. */
+    type(parent: string): void { this.parent = parent; this.hooks.edited(); }
 }
 
 function rowOf(overrides: Partial<Task> = {}): Task {
@@ -49,6 +51,7 @@ function setUp(opts: { task?: Task; answers?: ReplaceAnswer[]; confirm?: boolean
     const confirm = vi.fn(async () => opts.confirm ?? true);
     const lockForm = vi.fn();
     const closeHub = vi.fn();
+    const closeWithdrawn = vi.fn();
     const host: SourceHost = {
         drained: () => opts.drained ?? Promise.resolve(),
         confirm,
@@ -57,9 +60,10 @@ function setUp(opts: { task?: Task; answers?: ReplaceAnswer[]; confirm?: boolean
         indentUnit: () => '    ',
         lockForm,
         closeHub,
+        closeWithdrawn,
     };
     const source = new TaskHubSource(row!, host, {
-        openEditor: (frame) => { const editor = new FakeEditor(frame); editors.push(editor); return editor; },
+        openEditor: (frame, hooks) => { const editor = new FakeEditor(frame, hooks); editors.push(editor); return editor; },
         render: (state) => { states.push(state); },
     });
     return {
@@ -68,6 +72,7 @@ function setUp(opts: { task?: Task; answers?: ReplaceAnswer[]; confirm?: boolean
         confirm,
         lockForm,
         closeHub,
+        closeWithdrawn,
         editor: () => editors[editors.length - 1],
         editors,
         state: () => states[states.length - 1],
@@ -254,12 +259,11 @@ describe('cancelling', () => {
 
         h.source.cancel();
         expect(h.state()).toMatchObject({ phase: 'source', asking: true });
-        await h.source.apply();
-        expect(h.replace).not.toHaveBeenCalled();
 
         h.source.keep();
         expect(h.state()).toMatchObject({ phase: 'source', asking: false });
         expect(h.editor().draft().parent).toBe('- [ ] P2');
+        expect(h.replace).not.toHaveBeenCalled();
 
         h.source.cancel();
         h.source.discard();
@@ -310,6 +314,64 @@ describe('closing the hub (beforeClose)', () => {
         h.editor().parent = '- [x] P';
         await h.source.apply();
         expect(h.source.beforeClose()).toBe(false);
+    });
+});
+
+describe('going back to the draft while asked', () => {
+    it('withdraws the question on an edit, the close asked about given up', async () => {
+        const h = await opened();
+        h.editor().type('- [ ] P2');
+        expect(h.source.beforeClose()).toBe(false);
+        expect(h.state().asking).toBe(true);
+
+        h.editor().type('- [ ] P3');
+        expect(h.state()).toMatchObject({ phase: 'source', asking: false });
+        expect(h.closeWithdrawn).toHaveBeenCalledTimes(1);
+        expect(h.closeHub).not.toHaveBeenCalled();
+        expect(h.editor().destroyed).toBe(false);
+    });
+
+    it('withdraws it on an apply, which writes the draft and goes back to the card with the hub open', async () => {
+        const h = await opened();
+        h.editor().type('- [x] P');
+        h.source.beforeClose();
+        expect(h.state().asking).toBe(true);
+
+        await h.source.apply();
+        expect(h.replace).toHaveBeenCalledTimes(1);
+        expect(h.state()).toMatchObject({ phase: 'view', asking: false });
+        expect(h.closeWithdrawn).toHaveBeenCalledTimes(1);
+        expect(h.closeHub).not.toHaveBeenCalled();
+    });
+
+    it('withdraws it on an apply that is refused, the draft and why kept', async () => {
+        const h = await opened();
+        h.editor().type('text');
+        h.source.cancel();
+        await h.source.apply();
+        expect(h.replace).not.toHaveBeenCalled();
+        expect(h.state()).toMatchObject({ phase: 'source', asking: false, message: t('modal.hub.source.notTask') });
+        expect(h.closeWithdrawn).toHaveBeenCalledTimes(1);
+    });
+
+    it('tells the host the close is given up on back, and not on discard', async () => {
+        const h = await opened();
+        h.editor().type('- [ ] P2');
+        h.source.beforeClose();
+        h.source.keep();
+        expect(h.closeWithdrawn).toHaveBeenCalledTimes(1);
+
+        h.source.beforeClose();
+        h.source.discard();
+        expect(h.closeWithdrawn).toHaveBeenCalledTimes(1);
+        expect(h.closeHub).toHaveBeenCalledTimes(1);
+    });
+
+    it('does not withdraw what was never asked', async () => {
+        const h = await opened();
+        h.editor().type('- [ ] P2');
+        await h.source.apply();
+        expect(h.closeWithdrawn).not.toHaveBeenCalled();
     });
 });
 

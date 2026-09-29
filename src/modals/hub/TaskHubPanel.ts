@@ -38,6 +38,7 @@ export interface TaskHubPanelOptions {
  * 行と部分木のソースを編集できる（TaskHubSource）。ソースに下書きがある間、
  * 利用者が閉じる経路は下書きを捨てるかを確かめる（OverlayShell.beforeClose）。
  * 別のハブを開こうとして確かめたときは、捨てれば続けてそのハブを開く。
+ * 下書きへ戻れば（入力、適用、戻る）問いを取り下げ、そのハブは開かない。
  *
  * DOM スケルトン・swipe dismiss・close animation・keyboard awareness・
  * escape handling は OverlayShell (mode: 'centered') に委譲。
@@ -126,10 +127,7 @@ export class TaskHubPanel {
             apply: () => { void this.source?.apply(); },
             cancel: () => this.source?.cancel(),
             discard: () => this.source?.discard(),
-            keep: () => {
-                this.successor = null;
-                this.source?.keep();
-            },
+            keep: () => this.source?.keep(),
             draftText: () => this.source?.draftText() ?? null,
         });
         this.source = new TaskHubSource(this.task, {
@@ -141,6 +139,7 @@ export class TaskHubPanel {
             indentUnit: () => indentUnit(this.app),
             lockForm: (locked) => this.form?.setSourceOpen(locked),
             closeHub: () => this.handOver(),
+            closeWithdrawn: () => { this.successor = null; },
         }, view);
     }
 
