@@ -519,6 +519,11 @@
         "copied": "Draft copied",
         "copyFailed": "Could not copy the draft"
       }
+    },
+    "noteFields": {
+      "name": "Note name",
+      "folder": "Folder",
+      "folderRoot": "(vault root)"
     }
   },
   "validation": {

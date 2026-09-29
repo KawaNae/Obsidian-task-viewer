@@ -1,9 +1,15 @@
-import { type App, AbstractInputSuggest, type TFile } from 'obsidian';
+import type { App, TFile } from 'obsidian';
+import { ShownSuggest } from './ShownSuggest';
 
-export class FileSuggest extends AbstractInputSuggest<TFile> {
+/**
+ * The vault's notes, suggested by their path. Picking one puts its path in
+ * the input, unless the caller says what picking does (`onPick`) — a form
+ * that names a note by more than one field puts the note in each.
+ */
+export class FileSuggest extends ShownSuggest<TFile> {
     private textInputEl: HTMLInputElement;
 
-    constructor(app: App, inputEl: HTMLInputElement) {
+    constructor(app: App, inputEl: HTMLInputElement, private readonly onPick?: (file: TFile) => void) {
         super(app, inputEl);
         this.textInputEl = inputEl;
     }
@@ -21,8 +27,12 @@ export class FileSuggest extends AbstractInputSuggest<TFile> {
     }
 
     selectSuggestion(file: TFile): void {
-        this.textInputEl.value = file.path;
-        this.textInputEl.trigger('input');
+        if (this.onPick) {
+            this.onPick(file);
+        } else {
+            this.textInputEl.value = file.path;
+            this.textInputEl.trigger('input');
+        }
         this.close();
     }
 }
