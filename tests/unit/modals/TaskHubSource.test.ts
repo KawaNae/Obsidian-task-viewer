@@ -32,6 +32,11 @@ class FakeEditor implements DraftEditor {
             || this.children.map(line => line.text).join('\n') !== this.frame.children.join('\n');
     }
     isCompleting(): boolean { return this.completing; }
+    closeCompletion(): boolean {
+        const was = this.completing;
+        this.completing = false;
+        return was;
+    }
     focus(): void { this.focused++; }
     destroy(): void { this.destroyed = true; }
     /** Change the parent's text as the user would, the editor telling of it. */
@@ -396,5 +401,16 @@ describe('Escape', () => {
         expect(h.source.yieldsEscape()).toBe(false);
         h.editor().completing = true;
         expect(h.source.yieldsEscape()).toBe(true);
+    });
+});
+
+describe('back', () => {
+    it('closes a completion list the editor shows, taking the back, else leaves it to the hub', async () => {
+        const h = await opened();
+        expect(h.source.takesBack()).toBe(false);
+        h.editor().completing = true;
+        expect(h.source.takesBack()).toBe(true);
+        expect(h.editor().completing).toBe(false);
+        expect(h.state().asking).toBe(false);
     });
 });

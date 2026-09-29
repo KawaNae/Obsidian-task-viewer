@@ -1,4 +1,4 @@
-import { acceptCompletion, autocompletion, closeBrackets, closeBracketsKeymap, completionStatus } from '@codemirror/autocomplete';
+import { acceptCompletion, autocompletion, closeBrackets, closeBracketsKeymap, closeCompletion, completionStatus } from '@codemirror/autocomplete';
 import { defaultKeymap, history, historyKeymap, indentLess } from '@codemirror/commands';
 import { indentUnit } from '@codemirror/language';
 import { EditorState, Prec, type Extension } from '@codemirror/state';
@@ -225,6 +225,13 @@ export class SourceEditor {
     /** Whether either editor shows a completion list (an Escape there closes the list). */
     isCompleting(): boolean {
         return completionStatus(this.parentView.state) !== null || completionStatus(this.childrenView.state) !== null;
+    }
+
+    /** Close a completion list either editor shows, as an Escape there would. Whether there was one. */
+    closeCompletion(): boolean {
+        const parent = closeCompletion(this.parentView);
+        const children = closeCompletion(this.childrenView);
+        return parent || children;
     }
 
     /** Whether `node` is in either editor, or in a list one of them shows. */

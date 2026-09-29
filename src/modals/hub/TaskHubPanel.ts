@@ -85,6 +85,7 @@ export class TaskHubPanel {
             onClose: () => this.teardown(),
             beforeClose: () => this.source?.beforeClose() ?? true,
             yieldsEscape: () => this.source?.yieldsEscape() ?? false,
+            takesBack: () => this.source?.takesBack() ?? false,
         });
 
         if (this.options.focusField && this.form) {
