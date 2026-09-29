@@ -39,6 +39,8 @@ export interface TaskHubPanelOptions {
  * 利用者が閉じる経路は下書きを捨てるかを確かめる（OverlayShell.beforeClose）。
  * 別のハブを開こうとして確かめたときは、捨てれば続けてそのハブを開く。
  * 下書きへ戻れば（入力、適用、戻る）問いを取り下げ、そのハブは開かない。
+ * パネルにフォーカスがある間は Obsidian のホットキーを止める（OverlayShell の
+ * keymap）。フォームの欄やソースのエディタのキーが背後のノートに効かないように。
  *
  * DOM スケルトン・swipe dismiss・close animation・keyboard awareness・
  * escape handling は OverlayShell (mode: 'centered') に委譲。
@@ -83,6 +85,7 @@ export class TaskHubPanel {
             mode: 'centered',
             panelClass: 'tv-overlay__panel--dialog task-hub',
             childStack: this.stack,
+            keymap: this.app.keymap,
             build: (bodyEl) => this.buildContent(bodyEl),
             onClose: () => this.teardown(),
             beforeClose: () => this.source?.beforeClose() ?? true,
