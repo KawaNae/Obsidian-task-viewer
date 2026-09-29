@@ -108,8 +108,12 @@ export function scannerOf(index: TaskIndex): TaskScanner {
  * has a reconciler only when `probe` is given (its stand-in for the disk's
  * stats); it starts it when the test says (`reconciler.start()`), as the
  * plugin does once the vault is read.
+ *
+ * `config` is what `.obsidian/app.json` holds (`Vault.getConfig`); without
+ * it the vault has no `getConfig`, and the plugin reads Obsidian's defaults
+ * (`ObsidianConfig`).
  */
-export function vaultSession(contents: Map<string, string>, options: { probe?: DiskProbe } = {}) {
+export function vaultSession(contents: Map<string, string>, options: { probe?: DiskProbe; config?: Record<string, unknown> } = {}) {
     let scanner: TaskScanner | undefined;
     const noop = { on: () => ({}), offref: () => { } };
     const vaultHandlers = new Map<string, (...args: unknown[]) => unknown>();
@@ -125,8 +129,10 @@ export function vaultSession(contents: Map<string, string>, options: { probe?: D
         const changed = vaultHandlers.get('changed') as ((f: TFile) => void) | undefined;
         if (changed) changed(file);
     };
+    const config = options.config;
     const app = {
         vault: {
+            ...(config ? { getConfig: (key: string) => config[key] } : {}),
             on: (name: string, fn: (...args: unknown[]) => unknown) => { vaultHandlers.set(name, fn); return {}; },
             offref: () => { },
             read: async (file: TFile) => contents.get(file.path) ?? '',
@@ -254,6 +260,7 @@ const NOTE = 'note.md';
  */
 export async function openVault(
     files: string | string[] | Record<string, string | string[]>,
+    options: { config?: Record<string, unknown> } = {},
 ): Promise<{ contents: Map<string, string>; session: VaultSession }> {
     const text = (content: string | string[]) => (typeof content === 'string' ? content : content.join('\n'));
     const contents = new Map<string, string>(
@@ -261,7 +268,7 @@ export async function openVault(
             ? [[NOTE, text(files)]]
             : Object.entries(files).map(([path, content]) => [path, text(content)]),
     );
-    const session = vaultSession(contents);
+    const session = vaultSession(contents, options);
     await session.scanAll();
     return { contents, session };
 }
@@ -277,8 +284,9 @@ export type VaultSession = ReturnType<typeof vaultSession>;
 export async function openLiveVault(
     files: string | string[] | Record<string, string | string[]>,
     setLive: (session: VaultSession) => void,
+    options: { config?: Record<string, unknown> } = {},
 ): Promise<{ contents: Map<string, string>; session: VaultSession }> {
-    const opened = await openVault(files);
+    const opened = await openVault(files, options);
     setLive(opened.session);
     return opened;
 }

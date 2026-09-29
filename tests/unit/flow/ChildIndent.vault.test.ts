@@ -32,8 +32,8 @@ afterEach(() => {
     live = undefined;
 });
 
-async function open(lines: string[]): Promise<{ contents: Map<string, string>; session: VaultSession }> {
-    return openLiveVault(lines, session => { live = session; });
+async function open(lines: string[], config?: Record<string, unknown>): Promise<{ contents: Map<string, string>; session: VaultSession }> {
+    return openLiveVault(lines, session => { live = session; }, { config });
 }
 
 function taskWorded(session: VaultSession, content: string) {
@@ -44,18 +44,19 @@ function taskWorded(session: VaultSession, content: string) {
 
 /**
  * The lines below the task that are no child of it: a paragraph going on. With
- * no child to copy, the indentation comes from the rest of the file.
+ * no child to copy, the child is a new level, as Obsidian's settings say
+ * (`useTab`, `tabSize`).
  */
 const NOT_A_CHILD = [
-    ['at column 0', 'lazy text', '\t'],
-    ['four columns past the task\'s content', '      deep text', '    '],
-];
+    ['at column 0', 'lazy text', '\t', { useTab: true }],
+    ['four columns past the task\'s content', '      deep text', '    ', { useTab: false, tabSize: 4 }],
+] as const;
 
-describe.each(NOT_A_CHILD)('a line of the subtree %s', (_name, line, unit) => {
+describe.each(NOT_A_CHILD)('a line of the subtree %s', (_name, line, unit, config) => {
     const NOTE = ['# note', '- [ ] T', line, '- [ ] U', ''];
 
     it('lends no indentation to a first child', async () => {
-        const { contents, session } = await open(NOTE);
+        const { contents, session } = await open(NOTE, config);
 
         expect(await session.index.insertLine(taskWorded(session, 'T').id, '- [ ] c', 'firstChild')).toBe(true);
         await session.settle(FILE);
@@ -67,7 +68,7 @@ describe.each(NOT_A_CHILD)('a line of the subtree %s', (_name, line, unit) => {
     });
 
     it('lends no indentation to a property line', async () => {
-        const { contents, session } = await open(NOTE);
+        const { contents, session } = await open(NOTE, config);
 
         await session.index.updateTask(taskWorded(session, 'T').id,
             { properties: { memo: { value: 'new', type: 'string' } } } as never);

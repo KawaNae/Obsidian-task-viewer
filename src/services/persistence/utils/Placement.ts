@@ -84,7 +84,9 @@ export interface PlacedLine extends PlacedReading {
  * subtree is the item's lines. Each question is asked with `head`, the first
  * line the write puts (its indentation aside: it takes the spot's), and each
  * answer goes past the lines that line would take in, as the reading with the
- * line in it says ({@link settle}).
+ * line in it says ({@link settle}). A question whose line may be a level
+ * deeper than any beside it — a first child — takes `unit`, the level
+ * Obsidian's settings say (`ObsidianConfig.indentUnit`).
  *
  * Whether the lines put there read as meant — a task, not code; under the
  * item meant, not taking in the lines below — is not answered here but by the
@@ -108,10 +110,10 @@ export class Placement {
      * two siblings. None of those is a task, and the next instance joins the
      * tasks it stands among, not the text above them.
      */
-    static groupHead(outline: OutlineReading, row: number, head: string): Spot {
+    static groupHead(outline: OutlineReading, row: number, head: string, unit: string): Spot {
         const { lines } = outline;
         const parent = outline.item(row)?.parent ?? null;
-        if (parent !== null) return this.sibling(outline, parent + 1, parent, head);
+        if (parent !== null) return this.sibling(outline, parent + 1, parent, head, unit);
 
         let first = row;
         while (first - 1 >= outline.bodyStart) {
@@ -122,12 +124,12 @@ export class Placement {
             if (!TaskLineClassifier.isTaskLine(lines[above])) break;
             first = above;
         }
-        return this.sibling(outline, first, null, head);
+        return this.sibling(outline, first, null, head, unit);
     }
 
     /** Just past `row`'s subtree, a new line as its next sibling. */
-    static afterSubtree(outline: OutlineReading, row: number, head: string): Spot {
-        return this.sibling(outline, outline.subtreeEnd(row), outline.item(row)?.parent ?? null, head);
+    static afterSubtree(outline: OutlineReading, row: number, head: string, unit: string): Spot {
+        return this.sibling(outline, outline.subtreeEnd(row), outline.item(row)?.parent ?? null, head, unit);
     }
 
     /**
@@ -146,8 +148,8 @@ export class Placement {
     }
 
     /** Where a first child of `row` goes: just below it, past its own text that goes on. */
-    static firstChild(outline: OutlineReading, row: number, head: string): Spot {
-        return this.sibling(outline, this.pastOwnText(outline, row), row, head);
+    static firstChild(outline: OutlineReading, row: number, head: string, unit: string): Spot {
+        return this.sibling(outline, this.pastOwnText(outline, row), row, head, unit);
     }
 
     /**
@@ -176,7 +178,7 @@ export class Placement {
      * past a subtree that is not a completed sibling: a blank line, a line
      * that is no item in `row`'s parent, or an unfinished one.
      */
-    static afterCompletedRun(outline: OutlineReading, row: number, head: string): Spot {
+    static afterCompletedRun(outline: OutlineReading, row: number, head: string, unit: string): Spot {
         const { lines } = outline;
         const parent = outline.item(row)?.parent ?? null;
         let last = row;
@@ -184,7 +186,7 @@ export class Placement {
             if (TaskLineClassifier.classify(lines[next.line])?.statusChar !== 'x') break;
             last = next.line;
         }
-        return this.sibling(outline, outline.subtreeEnd(last), parent, head);
+        return this.sibling(outline, outline.subtreeEnd(last), parent, head, unit);
     }
 
     /**
@@ -240,32 +242,42 @@ export class Placement {
         const found = this.heading(outline, to.heading);
         if (found.kind !== 'one') return found;
         const { heading } = found;
-        if (to.side === 'head') return { kind: 'spot', spot: this.sibling(outline, heading.end, null, head) };
+        if (to.side === 'head') return { kind: 'spot', spot: this.topSibling(outline, heading.end, head) };
         const { lines } = outline;
         const next = outline.headings.find(h => h.line >= heading.end);
         let at = next ? next.line : lines.length;
         while (at > heading.end && Outline.isBlank(lines[at - 1])) at--;
-        return { kind: 'spot', spot: this.sibling(outline, at, null, head) };
+        return { kind: 'spot', spot: this.topSibling(outline, at, head) };
     }
 
     /**
      * At `at` or past what a line there takes in, a new line under `parent`,
      * spelled as the item next to it is (`siblingIndent`). A child is a
-     * sibling of the children there.
+     * sibling of the children there. With none next to it, it is a child of
+     * `parent` as a new one is (`FileOperations.resolveChildIndent`): the
+     * first child of a row with none takes `unit`, the new level Obsidian's
+     * settings say.
      */
-    private static sibling(outline: OutlineReading, at: number, parent: number | null, head: string): Spot {
-        return this.settle(outline, at, parent, head, spot => this.siblingIndent(outline, parent, spot));
+    private static sibling(outline: OutlineReading, at: number, parent: number | null, head: string, unit: string): Spot {
+        const indentAt = (spot: number) => this.siblingIndent(outline, parent, spot)
+            ?? (parent === null ? '' : FileOperations.resolveChildIndent(outline, parent, unit));
+        return this.settle(outline, at, parent, head, indentAt);
+    }
+
+    /** {@link sibling} at the top of the note, where no line is anything's child. */
+    private static topSibling(outline: OutlineReading, at: number, head: string): Spot {
+        return this.settle(outline, at, null, head, spot => this.siblingIndent(outline, null, spot) ?? '');
     }
 
     /**
      * The indentation a sibling under `parent` takes at `at`: that of the
      * item it goes above (the first line from `at` that is not blank) when
      * that is a sibling; else that of the sibling it goes below, the one
-     * whose subtree ends at `at`; else a child's of `parent`, nothing at the
-     * top. Siblings may be spelled apart (a tab and four spaces, two spaces
-     * and four); whichever it goes next to, it reads as one of them.
+     * whose subtree ends at `at`; null when neither is. Siblings may be
+     * spelled apart (a tab and four spaces, two spaces and four); whichever
+     * it goes next to, it reads as one of them.
      */
-    private static siblingIndent(outline: OutlineReading, parent: number | null, at: number): string {
+    private static siblingIndent(outline: OutlineReading, parent: number | null, at: number): string | null {
         const lines = outline.lines;
         let next = at;
         while (next < lines.length && Outline.isBlank(lines[next])) next++;
@@ -277,7 +289,7 @@ export class Placement {
             if (outline.subtreeEnd(up) === at) return Outline.indentOf(lines[up]);
             break;
         }
-        return parent === null ? '' : FileOperations.resolveChildIndent(outline, parent);
+        return null;
     }
 
     /**

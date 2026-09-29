@@ -16,7 +16,7 @@ import { DEFAULT_SETTINGS } from '../../../src/types';
  */
 function apply(lines: string[], taskLineIdx: number, ops: PropertyOp[]): LineEdit[] {
     const { draft, reported } = draftOver(lines);
-    ChildPropertyLineEditor.applyOps(draft, taskLineIdx, ops);
+    ChildPropertyLineEditor.applyOps(draft, taskLineIdx, ops, '\t');
     return reported;
 }
 
@@ -221,7 +221,8 @@ describe('ChildPropertyLineEditor', () => {
                 '    ```',
             ];
             apply(lines, 0, [{ key: 'key', op: 'set', value: '新' }]);
-            expect(lines[1]).toBe('    - key:: 新');
+            // No item to copy: a new level, the unit handed in (a tab).
+            expect(lines[1]).toBe('\t- key:: 新');
             expect(lines.slice(2)).toEqual([
                 '    ```md',
                 '    - key:: 例',

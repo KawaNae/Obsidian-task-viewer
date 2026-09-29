@@ -93,7 +93,7 @@ describe('a generated-instance insert places the generated lines', () => {
     });
 });
 
-describe('a generated-instance insert resolves the indent unit from the file', () => {
+describe('a generated-instance insert spells a child as the fired task\'s children, or a new level as Obsidian\'s settings say', () => {
     it('follows the fired task\'s existing children', async () => {
         const h = await writeBench([
             '- [ ] 週報 第3回 @2026-08-17',
@@ -111,12 +111,13 @@ describe('a generated-instance insert resolves the indent unit from the file', (
         ]);
     });
 
-    it('falls back to how the rest of the file is written', async () => {
+    it('takes the settings\' new level, not another task\'s children, when the fired task has none', async () => {
         const h = await writeBench([
             '- [ ] 週報 第3回 @2026-08-17',
             '- [ ] 別のタスク',
-            '    - [ ] その子',
+            '\t- [ ] その子',
         ].join('\n'));
+        h.app.vault.getConfig = (key: string) => ({ useTab: false, tabSize: 4 } as Record<string, unknown>)[key];
 
         await insertGenerated(h, h.taskAt(0), PARENT, [], [
             child(1, '- [ ] 資料集め'),
@@ -125,7 +126,7 @@ describe('a generated-instance insert resolves the indent unit from the file', (
         expect(h.lines()[1]).toBe('    - [ ] 資料集め');
     });
 
-    it('uses a tab when the file has no indentation to read', async () => {
+    it('uses a tab, Obsidian\'s default, when the settings cannot be read', async () => {
         const h = await writeBench('- [ ] 週報 第3回 @2026-08-17');
 
         await insertGenerated(h, h.taskAt(0), PARENT, [], [
