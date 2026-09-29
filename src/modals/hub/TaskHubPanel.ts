@@ -37,6 +37,7 @@ export interface TaskHubPanelOptions {
  * プレビューのみに縮退。プレビューの上の切り替えで、カードの代わりに
  * 行と部分木のソースを編集できる（TaskHubSource）。ソースに下書きがある間、
  * 利用者が閉じる経路は下書きを捨てるかを確かめる（OverlayShell.beforeClose）。
+ * 別のハブを開こうとして確かめたときは、捨てれば続けてそのハブを開く。
  *
  * DOM スケルトン・swipe dismiss・close animation・keyboard awareness・
  * escape handling は OverlayShell (mode: 'centered') に委譲。
@@ -52,6 +53,8 @@ export class TaskHubPanel {
     private form: TaskHubForm | null = null;
     private source: TaskHubSource | null = null;
     private unsubscribe: (() => void) | null = null;
+    /** The hub asked for while this one asks whether to throw its draft away: opened once it is thrown away. */
+    private successor: TaskHubPanel | null = null;
 
     constructor(
         private app: App,
@@ -66,8 +69,13 @@ export class TaskHubPanel {
     open(): void {
         if (this.overlay.isOpen()) return;
         // Another hub gives way as the user closing it would: not while it
-        // holds a draft, which it asks about in its own place.
-        if (TaskHubPanel.active && !TaskHubPanel.active.overlay.requestClose()) return;
+        // holds a draft, which it asks about in its own place, and this hub
+        // opens once the draft is thrown away there.
+        const current = TaskHubPanel.active;
+        if (current && !current.overlay.requestClose()) {
+            current.successor = this;
+            return;
+        }
         TaskHubPanel.active = this;
 
         this.overlay.open({
@@ -118,7 +126,10 @@ export class TaskHubPanel {
             apply: () => { void this.source?.apply(); },
             cancel: () => this.source?.cancel(),
             discard: () => this.source?.discard(),
-            keep: () => this.source?.keep(),
+            keep: () => {
+                this.successor = null;
+                this.source?.keep();
+            },
             draftText: () => this.source?.draftText() ?? null,
         });
         this.source = new TaskHubSource(this.task, {
@@ -129,7 +140,7 @@ export class TaskHubPanel {
             replace: (id, base, replacement) => this.deps.writeService.replaceSubtree(id, base, replacement, { tellRefusal: false }),
             indentUnit: () => indentUnit(this.app),
             lockForm: (locked) => this.form?.setSourceOpen(locked),
-            closeHub: () => this.close(),
+            closeHub: () => this.handOver(),
         }, view);
     }
 
@@ -176,6 +187,7 @@ export class TaskHubPanel {
 
     private teardown(): void {
         if (TaskHubPanel.active === this) TaskHubPanel.active = null;
+        this.successor = null;
 
         this.unsubscribe?.();
         this.unsubscribe = null;
@@ -186,8 +198,16 @@ export class TaskHubPanel {
         this.form = null;
     }
 
-    /** Close now, asking nothing: a navigation away, a destructive action, or a draft the user threw away. */
+    /** Close now, asking nothing: a navigation away, or a destructive action. */
     close(): void {
         this.overlay.close();
+    }
+
+    /** The draft thrown away as asked: close, and open the hub asked for meanwhile, if any. */
+    private handOver(): void {
+        const next = this.successor;
+        this.successor = null;
+        this.close();
+        next?.open();
     }
 }
