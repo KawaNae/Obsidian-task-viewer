@@ -25,7 +25,7 @@ import { readInLine, type EditorLine, type Landing } from '../persistence/FileLi
 import type { FiringOutcome, InsertPlace, SubtreeReplacement, TaskOp } from '../persistence/TaskOps';
 import { Destination } from '../persistence/Destination';
 import type { ContentKey } from './ContentKey';
-import { checkCopy, checkFile, type CheckDeps } from './ReadingCheck';
+import { checkCopy, checkFile, type CheckDeps, type OnDisk } from './ReadingCheck';
 import { DiskReconciler } from './DiskReconciler';
 import { diskProbeOf, type DiskProbe } from './DiskProbe';
 
@@ -49,6 +49,12 @@ export interface ReconcileOptions {
      * index's; none by default.
      */
     isOwnView?: (viewType: string) => boolean;
+}
+
+/** A row as the index read it, and the note's lines it was read in (`TaskIndex.rowSnapshot`). */
+export interface RowSnapshot {
+    task: Task;
+    lines: readonly string[];
 }
 
 /**
@@ -649,7 +655,7 @@ export class TaskIndex {
         taskId: string,
         known: Task | undefined,
         hear: (refusal: IndexRefusal) => Promise<void> = (refusal) => this.reportRefusal(refusal),
-    ): Promise<{ task: Task } | { refused: IndexRefusal }> {
+    ): Promise<{ task: Task; disk: OnDisk | null } | { refused: IndexRefusal }> {
         const task = this.getTask(taskId);
         if (!task) {
             logWarn(`[TaskIndex] the index no longer holds the row: id=${taskId}`);
@@ -661,7 +667,7 @@ export class TaskIndex {
             return { refused };
         }
         const checked = await checkCopy(this.checks, task);
-        if (checked.verdict === 'fresh') return { task };
+        if (checked.verdict === 'fresh') return { task, disk: checked.disk };
         const reason = checked.verdict === 'stale' ? { kind: 'stale' as const, disk: checked.disk } : { kind: 'unreadable' as const };
         const refused: IndexRefusal = { file: task.file, reason, subject: subjectOf(task) };
         await hear(refused);
@@ -678,6 +684,36 @@ export class TaskIndex {
     async confirmTask(taskId: string): Promise<boolean> {
         if (this.refuseAfterDispose('confirmTask')) return false;
         return (await this.copyToPlan(taskId, undefined)) !== undefined;
+    }
+
+    /**
+     * The index's copy of the row `taskId`, and all the lines of the note it
+     * was read in, as the disk holds them: what an operation that reads more
+     * of the note than the row plans from — the send dialog, the values the
+     * row inherits (`InheritedValues`). The same check as every write's
+     * (`planCopy`), which reads the note for it and keeps what it read.
+     *
+     * Undefined when the copy is not the row on the disk: told the user and
+     * the note read again, as for a write (`stale`, `gone`, `unreadable`).
+     * Undefined too, with nothing to tell, for a copy read before our own
+     * write the index has not committed, as while its note is dragged
+     * (`TaskScanner.hold`): the copy says what the row was, not what these
+     * lines say. Waits for the writes already asked of the row
+     * (`onRow`), so it reads what they left.
+     */
+    async rowSnapshot(taskId: string): Promise<RowSnapshot | undefined> {
+        if (this.refuseAfterDispose('rowSnapshot')) return undefined;
+        const known = this.getTask(taskId);
+        return this.onRow(taskId, async () => {
+            const planned = await this.planCopy(taskId, known);
+            if ('refused' in planned) return undefined;
+            const { task, disk } = planned;
+            if (!disk?.read) {
+                logWarn(`[TaskIndex] rowSnapshot: the copy was not read in what the disk holds: id=${taskId}`);
+                return undefined;
+            }
+            return { task, lines: disk.lines };
+        });
     }
 
     /**

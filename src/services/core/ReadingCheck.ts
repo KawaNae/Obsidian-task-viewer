@@ -2,7 +2,7 @@ import type { Task } from '../../types';
 import { splitLines, type ReadMark } from '../persistence/FileLines';
 import { plannedOn } from '../persistence/TaskRefs';
 import { contentKeyOf, type ContentKey } from './ContentKey';
-import type { ReadingId } from './Reading';
+import { readReading, type ReadingId } from './Reading';
 
 /**
  * Whether the index's reading of a file is the file on disk, asked before an
@@ -22,6 +22,26 @@ export type Checked =
     | { verdict: 'unreadable' };
 
 export type Verdict = Checked['verdict'];
+
+/**
+ * The file as a check of a copy read it. `read` says whether these lines are
+ * the reading the copy was made in: when they are not, our own writes carried
+ * the row here since, and the copy says what the row was before them — the
+ * index has not committed what they left (`TaskScanner.hold`).
+ */
+export interface OnDisk {
+    lines: readonly string[];
+    read: boolean;
+}
+
+/**
+ * {@link Checked} of a copy, with what the check read when it read the file:
+ * a fresh copy whose name gives no reading is not checked against anything,
+ * and has none.
+ */
+export type CopyChecked =
+    | { verdict: 'fresh'; disk: OnDisk | null }
+    | Exclude<Checked, { verdict: 'fresh' }>;
 
 /** What a check asks of the index and of the disk. */
 export interface CheckDeps {
@@ -44,12 +64,14 @@ export interface CheckDeps {
  * A copy whose name gives no reading is not one the index read: nothing
  * reads it fresh, and the write turns it away on its own (`changed`).
  */
-export async function checkCopy(deps: CheckDeps, task: Task): Promise<Checked> {
+export async function checkCopy(deps: CheckDeps, task: Task): Promise<CopyChecked> {
     const { read, line } = plannedOn(task);
-    if (read === undefined) return { verdict: 'fresh' };
-    const disk = await diskKey(deps, task.file);
+    if (read === undefined) return { verdict: 'fresh', disk: null };
+    const disk = await diskContent(deps, task.file);
     if (disk === null) return { verdict: 'unreadable' };
-    return deps.follow(task.file, read, line, disk) === null ? { verdict: 'stale', disk } : { verdict: 'fresh' };
+    if (deps.follow(task.file, read, line, disk.key) === null) return { verdict: 'stale', disk: disk.key };
+    // Followed, so the last reading numbered is what the disk holds.
+    return { verdict: 'fresh', disk: { lines: disk.lines, read: readReading(read)?.n === deps.last(task.file).n } };
 }
 
 /**
@@ -59,17 +81,18 @@ export async function checkCopy(deps: CheckDeps, task: Task): Promise<Checked> {
  * `unread`, not `stale`: no notice was missed for it.
  */
 export async function checkFile(deps: CheckDeps, path: string): Promise<Checked> {
-    const disk = await diskKey(deps, path);
+    const disk = await diskContent(deps, path);
     if (disk === null) return { verdict: 'unreadable' };
     const last = deps.last(path).key;
     if (last === undefined) return { verdict: 'unread' };
-    return last === disk ? { verdict: 'fresh' } : { verdict: 'stale', disk };
+    return last === disk.key ? { verdict: 'fresh' } : { verdict: 'stale', disk: disk.key };
 }
 
-/** The key of what the disk holds for `path`, or null when it cannot be read. */
-async function diskKey(deps: CheckDeps, path: string): Promise<ContentKey | null> {
+/** What the disk holds for `path`, and its key; null when it cannot be read. */
+async function diskContent(deps: CheckDeps, path: string): Promise<{ lines: string[]; key: ContentKey } | null> {
     try {
-        return contentKeyOf(splitLines(await deps.read(path)).lines);
+        const { lines } = splitLines(await deps.read(path));
+        return { lines, key: contentKeyOf(lines) };
     } catch {
         return null;
     }
