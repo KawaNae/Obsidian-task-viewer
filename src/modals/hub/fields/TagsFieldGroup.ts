@@ -29,7 +29,7 @@ export class TagsFieldGroup {
         this.sectionEl.empty();
 
         const task = this.ctx.getTask();
-        const missing = this.ctx.isMissing();
+        const shut = this.ctx.isShut();
         const contentTags = new Set(TagExtractor.fromContent(task.content ?? ''));
         const ownTags = new Set(task.tags);
         const keys = this.ctx.plugin.settings.scopeKeys;
@@ -48,7 +48,7 @@ export class TagsFieldGroup {
                     const removeBtn = chip.createEl('button', { cls: 'tv-ctrl__pill-remove' });
                     setIcon(removeBtn.createSpan(), 'x');
                     removeBtn.setAttribute('aria-label', t('modal.hub.removeTag', { tag }));
-                    removeBtn.disabled = missing;
+                    removeBtn.disabled = shut;
                     removeBtn.addEventListener('click', () => this.commit(task.tags.filter(x => x !== tag)));
                 } else {
                     const source = CascadeSource.forTag(this.ctx.app, task, keys, tag);
@@ -68,7 +68,7 @@ export class TagsFieldGroup {
             cls: 'tv-ctrl__input',
         });
         this.addInput = input;
-        input.disabled = missing;
+        input.disabled = shut;
 
         const addTags = (raw: string) => {
             const added = raw.split(/\s+/).map(s => s.replace(/^#/, '')).filter(s => s.length > 0);
@@ -108,7 +108,7 @@ export class TagsFieldGroup {
     }
 
     private commit(tags: string[]): void {
-        if (this.ctx.isMissing()) return;
+        if (this.ctx.isShut()) return;
         this.ctx.queue(TaskUpdateBuilder.tags(this.ctx.getTask(), tags));
         // 構造コミット（chip の増減）は楽観 model から即時再描画する。
         // echo 待ちだと focus がセクション内にある間 chip が現れ/消えない。
@@ -124,7 +124,7 @@ export class TagsFieldGroup {
     }
 
     setEnabled(_enabled: boolean): void {
-        // missing フラグは ctx.isMissing() 経由で反映されるため、
+        // shut は ctx.isShut() 経由で反映されるため、
         // disabled の見た目更新は force rebuild だけで足りる。
         this.render(true);
     }

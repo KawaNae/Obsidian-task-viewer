@@ -499,7 +499,26 @@
       "inheritedFromSection": "継承: セクション",
       "contentTagLocked": "タスク名内の #タグ — 名前フィールドで編集してください",
       "cascadeTagLocked": "継承タグ（{{source}}）— 削除するには継承元を編集してください",
-      "reservedKey": "「{{key}}」は予約キーです"
+      "reservedKey": "「{{key}}」は予約キーです",
+      "source": {
+        "view": "閲覧",
+        "source": "ソース",
+        "apply": "適用",
+        "applying": "適用中…",
+        "formShut": "ソースの編集中です。適用するかキャンセルすると、この欄を編集できます。",
+        "readOnly": "読み取り専用のタスクはソースを編集できません。",
+        "shallow": "このタスクの下の {{line}} 行目が子より浅く字下げされているため、ソースを開けません。",
+        "notWritable": "このタスクには書き込めません。",
+        "parentBreak": "タスクの行は1行のままにしてください。",
+        "notTask": "1行目がタスクの行ではありません。",
+        "discardAsk": "下書きを捨てますか",
+        "discard": "捨てる",
+        "keep": "戻る",
+        "lost": "タスクを見失いました（ノートが外で変わりました）。下書きは適用できません。コピーしてから捨ててください。",
+        "copy": "コピー",
+        "copied": "下書きをコピーしました",
+        "copyFailed": "下書きをコピーできませんでした"
+      }
     }
   },
   "validation": {

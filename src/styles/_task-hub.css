@@ -26,6 +26,86 @@
     filter: none;
 }
 
+/* --- Preview / source switch (TaskHubSourceView) --- */
+.task-hub__mode-bar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding-top: 4px;
+}
+
+.task-hub__mode-toggle {
+    display: inline-flex;
+    border: 1px solid var(--tv-border);
+    border-radius: var(--tv-radius-s, 4px);
+    overflow: hidden;
+}
+
+.tv-ctrl .task-hub__mode-toggle > button {
+    appearance: none;
+    -webkit-appearance: none;
+    border: none;
+    border-radius: 0;
+    box-shadow: none;
+    background: transparent;
+    color: var(--tv-text-muted);
+    font-size: var(--font-ui-small);
+    height: auto;
+    padding: 2px 10px;
+    cursor: pointer;
+}
+
+.tv-ctrl .task-hub__mode-toggle > button.is-active {
+    background: var(--tv-bg-input);
+    color: var(--tv-text);
+}
+
+.tv-ctrl .task-hub__mode-toggle > button:disabled {
+    cursor: default;
+    opacity: 0.6;
+}
+
+.task-hub__mode-shut {
+    font-size: var(--font-ui-smaller);
+    color: var(--tv-text-faint);
+}
+
+/* --- Source (the row and its subtree as text) --- */
+.task-hub__source {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding: 8px 0;
+}
+
+.task-hub__source-message {
+    font-size: var(--font-ui-small);
+    color: var(--text-error);
+}
+
+.task-hub__source-ask,
+.task-hub__source-lost,
+.task-hub__source-actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+    font-size: var(--font-ui-small);
+}
+
+.task-hub__source-ask > span,
+.task-hub__source-lost > span {
+    flex: 1 1 12em;
+}
+
+.task-hub__source-lost > span {
+    color: var(--text-warning);
+}
+
+.task-hub__source-actions {
+    justify-content: flex-end;
+}
+
 /* --- Form: flat sections with dividers --- */
 .task-hub__form {
     display: flex;

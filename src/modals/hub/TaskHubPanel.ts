@@ -12,7 +12,10 @@ import { getEffectiveColor, getEffectiveLinestyle } from '../../services/data/Ef
 import { PopoverStack } from '../../views/sharedUI/PopoverStack';
 import { OverlayShell } from '../../views/sharedUI/OverlayShell';
 import { TaskHubForm, type TaskHubFocusField } from './TaskHubForm';
+import { TaskHubSource } from './TaskHubSource';
+import { TaskHubSourceView } from './TaskHubSourceView';
 import { hostWindow } from '../../utils/HostWindow';
+import { indentUnit } from '../../utils/ObsidianConfig';
 
 export interface TaskHubDeps {
     taskRenderer: TaskCardRenderer;
@@ -31,7 +34,9 @@ export interface TaskHubPanelOptions {
  *
  * 上部にカードプレビュー（readService.onChange でライブ再描画）、下部に
  * プロパティ編集フォーム（フィールド確定で即保存）。read-only タスクは
- * プレビューのみに縮退。
+ * プレビューのみに縮退。プレビューの上の切り替えで、カードの代わりに
+ * 行と部分木のソースを編集できる（TaskHubSource）。ソースに下書きがある間、
+ * 利用者が閉じる経路は下書きを捨てるかを確かめる（OverlayShell.beforeClose）。
  *
  * DOM スケルトン・swipe dismiss・close animation・keyboard awareness・
  * escape handling は OverlayShell (mode: 'centered') に委譲。
@@ -45,6 +50,7 @@ export class TaskHubPanel {
     readonly stack = new PopoverStack();
     private previewEl: HTMLElement | null = null;
     private form: TaskHubForm | null = null;
+    private source: TaskHubSource | null = null;
     private unsubscribe: (() => void) | null = null;
 
     constructor(
@@ -59,7 +65,9 @@ export class TaskHubPanel {
 
     open(): void {
         if (this.overlay.isOpen()) return;
-        TaskHubPanel.active?.close();
+        // Another hub gives way as the user closing it would: not while it
+        // holds a draft, which it asks about in its own place.
+        if (TaskHubPanel.active && !TaskHubPanel.active.overlay.requestClose()) return;
         TaskHubPanel.active = this;
 
         this.overlay.open({
@@ -68,6 +76,8 @@ export class TaskHubPanel {
             childStack: this.stack,
             build: (bodyEl) => this.buildContent(bodyEl),
             onClose: () => this.teardown(),
+            beforeClose: () => this.source?.beforeClose() ?? true,
+            yieldsEscape: () => this.source?.yieldsEscape() ?? false,
         });
 
         if (this.options.focusField && this.form) {
@@ -80,7 +90,9 @@ export class TaskHubPanel {
     }
 
     private buildContent(bodyEl: HTMLElement): void {
+        const bar = bodyEl.createDiv();
         this.previewEl = bodyEl.createDiv({ cls: 'task-hub__preview' });
+        const sourceHost = bodyEl.createDiv();
         const formHost = bodyEl.createDiv({ cls: 'task-hub__form' });
 
         void this.renderPreview();
@@ -100,6 +112,25 @@ export class TaskHubPanel {
                 onNavigate: () => this.close(),
             });
         }
+
+        const view = new TaskHubSourceView(this.app, bar, this.previewEl, sourceHost, {
+            enter: () => { void this.source?.enter(); },
+            apply: () => { void this.source?.apply(); },
+            cancel: () => this.source?.cancel(),
+            discard: () => this.source?.discard(),
+            keep: () => this.source?.keep(),
+            draftText: () => this.source?.draftText() ?? null,
+        });
+        this.source = new TaskHubSource(this.task, {
+            drained: () => this.form?.drained() ?? Promise.resolve(),
+            confirm: (id) => this.deps.writeService.confirmTask(id),
+            reread: (id) => this.deps.readService.getTask(id),
+            // The refusal is shown under the draft it leaves; a notice would say it twice.
+            replace: (id, base, replacement) => this.deps.writeService.replaceSubtree(id, base, replacement, { tellRefusal: false }),
+            indentUnit: () => indentUnit(this.app),
+            lockForm: (locked) => this.form?.setSourceOpen(locked),
+            closeHub: () => this.close(),
+        }, view);
     }
 
     private setupLiveUpdates(): void {
@@ -113,6 +144,7 @@ export class TaskHubPanel {
             } else {
                 this.form?.setMissing();
             }
+            this.source?.follow(fresh);
         });
     }
 
@@ -147,11 +179,14 @@ export class TaskHubPanel {
 
         this.unsubscribe?.();
         this.unsubscribe = null;
+        this.source?.dispose();
+        this.source = null;
         if (this.previewEl) this.deps.taskRenderer.disposeInside(this.previewEl);
         this.previewEl = null;
         this.form = null;
     }
 
+    /** Close now, asking nothing: a navigation away, a destructive action, or a draft the user threw away. */
     close(): void {
         this.overlay.close();
     }

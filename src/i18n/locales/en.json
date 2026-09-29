@@ -499,7 +499,26 @@
       "inheritedFromSection": "inherited: section",
       "contentTagLocked": "#tag inside the task name — edit it in the name field",
       "cascadeTagLocked": "Inherited tag ({{source}}) — edit the source to remove it",
-      "reservedKey": "\"{{key}}\" is a reserved key"
+      "reservedKey": "\"{{key}}\" is a reserved key",
+      "source": {
+        "view": "Preview",
+        "source": "Source",
+        "apply": "Apply",
+        "applying": "Applying…",
+        "formShut": "Editing the source. Apply or cancel it to edit these fields.",
+        "readOnly": "A read-only task has no source to edit.",
+        "shallow": "Line {{line}} under this task is indented less than its children, so the source cannot be shown.",
+        "notWritable": "This task cannot be written.",
+        "parentBreak": "The task's line must stay one line.",
+        "notTask": "The first line is not a task line.",
+        "discardAsk": "Discard the draft?",
+        "discard": "Discard",
+        "keep": "Back",
+        "lost": "The task was lost: its note changed elsewhere. The draft cannot be applied; copy it, then discard it.",
+        "copy": "Copy",
+        "copied": "Draft copied",
+        "copyFailed": "Could not copy the draft"
+      }
     }
   },
   "validation": {
