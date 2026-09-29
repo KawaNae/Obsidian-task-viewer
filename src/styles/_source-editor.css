@@ -1,0 +1,89 @@
+/* ── Source editor (modals/form/source/SourceEditor) ──
+ *
+ * 行の1行（親）とその下の行（子）の2つの CodeMirror 6 のビュー。
+ * Obsidian のテーマの .cm-* はプラグインが単独で組むビューには当たらない前提で、
+ * Obsidian の CSS 変数から組む。子のエディタは親より一段深い字下げを 0 として
+ * 見せるので、左へずらして線を引き、字下げの分だけずれて見せる。
+ * 見た目は組み込む側（ハブ）で詰める。
+ */
+
+.tv-source-editor {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    font-family: var(--font-monospace);
+    font-size: var(--font-ui-small);
+    color: var(--text-normal);
+}
+
+.tv-source-editor .cm-editor {
+    background: var(--tv-bg-input, var(--background-modifier-form-field));
+    border-radius: var(--radius-s);
+}
+
+.tv-source-editor .cm-editor.cm-focused {
+    outline: none;
+    box-shadow: 0 0 0 2px var(--background-modifier-border-focus);
+}
+
+.tv-source-editor .cm-scroller {
+    font-family: inherit;
+    line-height: var(--line-height-normal);
+}
+
+.tv-source-editor .cm-content {
+    padding: 4px 0;
+    caret-color: var(--caret-color, var(--text-normal));
+}
+
+.tv-source-editor .cm-line {
+    padding: 0 8px;
+}
+
+.tv-source-editor .cm-cursor {
+    border-left-color: var(--caret-color, var(--text-normal));
+}
+
+.tv-source-editor .cm-selectionBackground,
+.tv-source-editor .cm-focused .cm-selectionBackground {
+    background: var(--text-selection);
+}
+
+.tv-source-editor__children {
+    margin-left: 1.5em;
+    padding-left: 6px;
+    border-left: 2px solid var(--background-modifier-border);
+}
+
+.tv-source-editor__children .cm-content {
+    min-height: 3em;
+}
+
+/* Completion list */
+.tv-source-editor .cm-tooltip {
+    background: var(--background-primary);
+    border: 1px solid var(--background-modifier-border);
+    border-radius: var(--radius-m);
+    box-shadow: var(--shadow-s);
+    color: var(--text-normal);
+}
+
+.tv-source-editor .cm-tooltip-autocomplete > ul {
+    font-family: var(--font-interface);
+    max-height: 16em;
+}
+
+.tv-source-editor .cm-tooltip-autocomplete > ul > li {
+    padding: 2px 8px;
+}
+
+.tv-source-editor .cm-tooltip-autocomplete > ul > li[aria-selected] {
+    background: var(--background-modifier-hover);
+    color: var(--text-normal);
+}
+
+.tv-source-editor .cm-completionDetail {
+    margin-left: 0.8em;
+    color: var(--text-muted);
+    font-style: normal;
+}
