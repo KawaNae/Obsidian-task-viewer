@@ -47,6 +47,9 @@ class MiniEventTarget {
 class MockPanel extends MiniEventTarget {
     style: { height: string; paddingBottom: string } = { height: '', paddingBottom: '' };
     scrollTop = 0;
+    /** No scroll room beyond what is shown, unless a test gives some. */
+    scrollHeight = 400;
+    clientHeight = 400;
     rectHeight = 400;
     computedPaddingBottom = 0;
     lastScrollBy: { top: number } | null = null;
@@ -68,8 +71,42 @@ class MockVisualViewport extends MiniEventTarget {
     constructor(height: number, offsetTop = 0) { super(); this.height = height; this.offsetTop = offsetTop; }
 }
 
+/** A text node in an editable field, and where its caret stands when the selection's focus is in it. */
+class MockText {
+    nodeType = 3;
+    constructor(public parentElement: MockEditable, public caretBottom: number | null) {}
+}
+
+/** An editable element (a CodeMirror editor's content), much taller than the caret line in it. */
+class MockEditable {
+    nodeType = 1;
+    isContentEditable = true;
+    ownerDocument: MockDocument;
+    parentElement = null;
+    constructor(doc: MockDocument, public bottom: number) { this.ownerDocument = doc; }
+    contains(node: any) { return node === this || node?.parentElement === this; }
+    getBoundingClientRect() { return { bottom: this.bottom, top: 0, height: this.bottom } as DOMRect; }
+}
+
+class MockDocument extends MiniEventTarget {
+    activeElement: any = null;
+    selection: { focusNode: any; focusOffset: number } | null = null;
+    getSelection() { return this.selection; }
+    createRange() {
+        let node: any = null;
+        return {
+            setStart(n: any) { node = n; },
+            collapse() {},
+            getClientRects() {
+                const bottom = node?.caretBottom ?? null;
+                return bottom === null ? [] : [{ bottom, top: bottom - 20, height: 20 }];
+            },
+        };
+    }
+}
+
 class MockContainer extends MiniEventTarget {
-    ownerDocument: { activeElement: any } = { activeElement: null };
+    ownerDocument = new MockDocument();
     private children = new Set<any>();
     adopt(el: any) { this.children.add(el); }
     contains(el: any) { return this.children.has(el); }
@@ -179,6 +216,21 @@ describe('KeyboardAwareContainer', () => {
             expect(panel.lastScrollTo).toEqual({ top: 5, behavior: 'instant' });
         });
 
+        it('pads only what the panel lacks of the scroll room', () => {
+            const { win, container, panel, kac } = setup({ vvHeight: 800 });
+            const input = new MockInput(750);
+            container.ownerDocument.activeElement = input;
+            container.adopt(input);
+            panel.scrollHeight = 500; // 100px left to scroll
+            kac.attach();
+
+            win.visualViewport!.height = 500; // overshoot 260
+            win.visualViewport!.dispatch('resize');
+
+            expect(panel.lastScrollBy).toEqual({ top: 260, behavior: 'instant' });
+            expect(panel.style.paddingBottom).toBe('160px');
+        });
+
         it('accumulates extraPad across repeated corrections without re-locking the panel height', () => {
             const { win, container, panel, kac } = setup({ vvHeight: 800 });
             const input = new MockInput(750);
@@ -195,6 +247,84 @@ describe('KeyboardAwareContainer', () => {
 
             // second correction should add on top of the first, not reset it
             expect(panel.style.height).toBe(heightAfterFirst); // height stays locked, not recomputed
+        });
+    });
+
+    describe('editable fields (contenteditable)', () => {
+        function editable(fieldBottom: number, caretBottom: number | null) {
+            const env = setup({ vvHeight: 800 });
+            const doc = env.container.ownerDocument;
+            const field = new MockEditable(doc, fieldBottom);
+            const text = new MockText(field, caretBottom);
+            doc.activeElement = field;
+            doc.selection = { focusNode: text, focusOffset: 0 };
+            env.container.adopt(field);
+            return { ...env, doc, field, text };
+        }
+
+        it('keeps the caret above the keyboard, not the field\'s bottom', () => {
+            const { win, panel, kac } = editable(1400, 700);
+            kac.attach();
+
+            win.visualViewport!.height = 500;
+            win.visualViewport!.dispatch('resize');
+
+            // caret 700 - keyboardTop 500 + 10 = 210 (the field's bottom would give 910)
+            expect(panel.lastScrollBy).toEqual({ top: 210, behavior: 'instant' });
+        });
+
+        it('does nothing while the caret is above the keyboard, however far the field runs below it', () => {
+            const { win, panel, kac } = editable(1400, 300);
+            kac.attach();
+
+            win.visualViewport!.height = 500;
+            win.visualViewport!.dispatch('resize');
+
+            expect(panel.lastScrollBy).toBeNull();
+        });
+
+        it('follows the caret as the selection moves while the keyboard is open', () => {
+            const { win, doc, panel, text, kac } = editable(1400, 300);
+            kac.attach();
+            win.visualViewport!.height = 500;
+            win.visualViewport!.dispatch('resize');
+            expect(panel.lastScrollBy).toBeNull();
+
+            text.caretBottom = 560; // typed on to a line under the keyboard's edge
+            doc.dispatch('selectionchange');
+
+            expect(panel.lastScrollBy).toEqual({ top: 70, behavior: 'instant' });
+        });
+
+        it('does not follow the selection while the keyboard is closed', () => {
+            const { doc, panel, text, kac } = editable(1400, 300);
+            kac.attach();
+
+            text.caretBottom = 900;
+            doc.dispatch('selectionchange');
+
+            expect(panel.lastScrollBy).toBeNull();
+        });
+
+        it('takes the line the caret is in where the caret has no box of its own (an empty line)', () => {
+            const { win, doc, field, panel, kac } = editable(650, null);
+            doc.selection = { focusNode: field, focusOffset: 0 };
+            kac.attach();
+
+            win.visualViewport!.height = 500;
+            win.visualViewport!.dispatch('resize');
+
+            expect(panel.lastScrollBy).toEqual({ top: 160, behavior: 'instant' });
+        });
+
+        it('stops following the selection once detached', () => {
+            const { doc, kac } = editable(1400, 300);
+            kac.attach();
+            expect(doc.listenerCount('selectionchange')).toBe(1);
+
+            kac.detach();
+
+            expect(doc.listenerCount('selectionchange')).toBe(0);
         });
     });
 
