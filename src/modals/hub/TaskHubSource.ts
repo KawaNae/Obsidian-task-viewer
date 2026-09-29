@@ -57,6 +57,7 @@ export interface DraftEditor {
     draft(): SourceDraft;
     isDirty(): boolean;
     isCompleting(): boolean;
+    closeCompletion(): boolean;
     focus(): void;
     destroy(): void;
 }
@@ -255,6 +256,11 @@ export class TaskHubSource {
     /** Whether an Escape is the editor's own (a completion list to close), not the hub's. */
     yieldsEscape(): boolean {
         return this.phase === 'source' && (this.opened?.editor.isCompleting() ?? false);
+    }
+
+    /** The back as the editor's own: a completion list closes, as on Escape. Whether it took the back. */
+    takesBack(): boolean {
+        return this.phase === 'source' && (this.opened?.editor.closeCompletion() ?? false);
     }
 
     /**

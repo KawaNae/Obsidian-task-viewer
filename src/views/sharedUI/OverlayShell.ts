@@ -53,6 +53,12 @@ export interface OverlayOpenOpts {
      * editor in it closing), so the overlay neither closes nor stops it.
      */
     yieldsEscape?: (e: KeyboardEvent) => boolean;
+    /**
+     * Whether the body takes this back itself (a completion list of an editor
+     * in it closing, as `yieldsEscape` lets an Escape do), so the overlay
+     * neither closes nor asks. The back is no key, so the body acts on it here.
+     */
+    takesBack?: () => boolean;
     childStack?: PopoverStack;
     hostDoc?: Document;
     /**
@@ -176,7 +182,11 @@ export class OverlayShell {
         hostDoc.addEventListener('keydown', this.escapeHandler, true);
 
         // Back (Android's back, the mouse's back button): as Escape.
-        this.releaseBack = holdHistoryBack(() => this.stepBack());
+        const takesBack = opts.takesBack;
+        this.releaseBack = holdHistoryBack(() => {
+            if (takesBack?.()) return;
+            this.stepBack();
+        });
 
         // Outside-click
         this.outsideClickHandler = (e: MouseEvent) => {
