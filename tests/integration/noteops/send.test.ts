@@ -241,7 +241,8 @@ function closeDialog(): void {
 }
 
 describe('the send dialog', () => {
-    beforeAll(() => { execFileSync('osascript', ['-e', 'tell application "Obsidian" to activate']); });
+    // Some of the dialog's events need the window to have the focus.
+    beforeAll(() => { if (process.platform === 'darwin') execFileSync('open', ['-a', 'Obsidian']); });
     afterEach(() => { closeDialog(); });
 
     it('picks the note and the heading from their lists with the pointer, a draft kept, and moves the draft to the heading of its own note', async () => {
