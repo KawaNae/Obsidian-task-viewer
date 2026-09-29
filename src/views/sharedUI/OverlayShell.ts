@@ -391,18 +391,23 @@ export class OverlayShell {
         handle.addEventListener('pointerup', endDrag);
         handle.addEventListener('pointercancel', endDrag);
 
+        // Pulling the body down from its top drags the sheet, unless the
+        // touch began in a field: there it is the field's, to select text
+        // or scroll it, and the sheet stays put.
         let touchStartY = 0;
         let overscrolling = false;
         let isBottomSheet = false;
+        let inField = false;
 
         body.addEventListener('touchstart', (e) => {
             touchStartY = e.touches[0].clientY;
             overscrolling = false;
             isBottomSheet = handle.offsetHeight > 0;
+            inField = isInField(e.target);
         }, { passive: true });
 
         body.addEventListener('touchmove', (e) => {
-            if (!isBottomSheet) return;
+            if (!isBottomSheet || inField) return;
             const currentY = e.touches[0].clientY;
             if (overscrolling) {
                 e.preventDefault();
@@ -429,4 +434,11 @@ export class OverlayShell {
         const handle = root.querySelector<HTMLElement>('.tv-overlay__handle');
         return (handle?.offsetHeight ?? 0) > 0;
     }
+}
+
+/** Whether a touch began in a field: an input, a textarea, or an editable element (a CodeMirror editor's content). */
+function isInField(target: EventTarget | null): boolean {
+    const el = target as HTMLElement | null;
+    if (!el || typeof el.closest !== 'function') return false;
+    return el.isContentEditable || el.closest('input, textarea') !== null;
 }
