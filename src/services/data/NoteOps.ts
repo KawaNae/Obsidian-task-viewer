@@ -4,7 +4,7 @@ import type { Task, TaskViewerSettings } from '../../types';
 import { HeadingInserter } from '../../utils/HeadingInserter';
 import { openFile } from '../../utils/NavigationUtils';
 import type { RowSnapshot, SendRow, SendWrite } from '../core/TaskIndex';
-import { refusalClause } from '../core/RefusalClause';
+import { refusalClause, refusalNotice } from '../core/RefusalClause';
 import { outermostRows } from '../core/SendRows';
 import { unresolvedAt, type UnresolvedReference } from '../flow/FlowReferences';
 import { FileParsePipeline } from '../parsing/FileParsePipeline';
@@ -143,12 +143,17 @@ export interface NoteFacts {
 /**
  * What came of a send: made, with the note the rows went to; made for some
  * rows, and not for those of the notes `refused` names; or not made. The
- * user has been told, once, either way.
+ * user has been told, once — but of `not-done` only when the caller did not
+ * ask to show it itself (`tellRefusal: false`).
+ *
+ * `why` is what came of it in one sentence, for the dialog to show beside the
+ * draft it keeps: the notice's words. `partly` is told by a notice all the
+ * same, since the note was written, and its notice links it.
  */
 export type SendResult =
     | { kind: 'done'; note: TFile }
-    | { kind: 'partly'; note: TFile; refused: readonly string[] }
-    | { kind: 'not-done' };
+    | { kind: 'partly'; note: TFile; refused: readonly string[]; why: string }
+    | { kind: 'not-done'; why: string };
 
 /**
  * The operations on notes the UI asks for: sending rows and their subtrees
@@ -273,8 +278,13 @@ export class NoteOps {
      * one there is. A send its caller asked wrongly — a name no note can
      * have, a key given twice — is not made, and said in the log: the dialog
      * does not ask it.
+     *
+     * With `opts.tellRefusal` false, a send not made is not told: the caller
+     * shows `why` itself, as the hub's source mode shows a draft it could
+     * not write, and a notice would say it twice.
      */
-    async send(req: SendRequest): Promise<SendResult> {
+    async send(req: SendRequest, opts: { tellRefusal?: boolean } = {}): Promise<SendResult> {
+        const wrongly: SendResult = { kind: 'not-done', why: t('notice.notSent') };
         const { note, section } = req.to;
         let path: string;
         let create = false;
@@ -282,7 +292,7 @@ export class NoteOps {
             const name = NoteName.check(note.name);
             if (!name.ok) {
                 logWarn(`[NoteOps] send: not a name a note can have (${name.why}): ${note.name}`);
-                return { kind: 'not-done' };
+                return wrongly;
             }
             const at = NoteName.at(this.app.vault, note.folder, note.name);
             path = at.kind === 'existing' ? at.file.path : at.path;
@@ -293,11 +303,11 @@ export class NoteOps {
         const keys = req.frontmatter.map(one => one.key);
         if (new Set(keys).size !== keys.length) {
             logWarn(`[NoteOps] send: a frontmatter key is given twice: ${keys.join(', ')}`);
-            return { kind: 'not-done' };
+            return wrongly;
         }
-        const written = await this.writeService.send(req.rows, { path, create, section, frontmatter: req.frontmatter });
-        if (written.kind === 'not-done') return written;
-        return this.tell(written, req.rows.length);
+        const written = await this.writeService.send(req.rows, { path, create, section, frontmatter: req.frontmatter }, opts);
+        if (written.kind === 'not-done') return written.refused ? { kind: 'not-done', why: refusalNotice(written.refused) } : wrongly;
+        return this.tell(written, req.rows.length, opts.tellRefusal !== false);
     }
 
     /**
@@ -307,9 +317,9 @@ export class NoteOps {
      * and the others not, and why; none sent. When what went of the rows
      * that were not sent could not be taken out of the note again, they are
      * in both notes, and the notice says so. A send within the rows' own
-     * note is not told.
+     * note is not told, and none sent is not when `tellNotDone` is false.
      */
-    private tell(written: Extract<SendWrite, { kind: 'done' }>, asked: number): SendResult {
+    private tell(written: Extract<SendWrite, { kind: 'done' }>, asked: number, tellNotDone: boolean): SendResult {
         const { note, landed, refused, takenBack } = written;
         const why = refused.map(one => t('notice.sendRefused', { note: one.file, reason: refusalClause(one.reason), subject: one.subject }));
         const stranded = takenBack ? [] : [t('notice.sendStranded', { note: note.path })];
@@ -321,12 +331,14 @@ export class NoteOps {
             return { kind: 'done', note };
         }
         if (landed.length === 0 && takenBack) {
-            new Notice([t('notice.notSent'), ...why].join(' '));
-            return { kind: 'not-done' };
+            const text = [t('notice.notSent'), ...why].join(' ');
+            if (tellNotDone) new Notice(text);
+            return { kind: 'not-done', why: text };
         }
         const head = landed.length === 0 ? t('notice.notSent') : t('notice.sentPartly', { note: note.path });
-        this.tellOf([head, ...why, ...stranded].join(' '), note);
-        return { kind: 'partly', note, refused: refused.map(one => one.file) };
+        const text = [head, ...why, ...stranded].join(' ');
+        this.tellOf(text, note);
+        return { kind: 'partly', note, refused: refused.map(one => one.file), why: text };
     }
 
     /**

@@ -5,7 +5,7 @@ import { NoteOps } from '../../../src/services/data/NoteOps';
 import { TaskWriteService } from '../../../src/services/data/TaskWriteService';
 import { DEFAULT_SETTINGS } from '../../../src/types';
 import { t } from '../../../src/i18n';
-import { refusalClause } from '../../../src/services/core/RefusalClause';
+import { refusalClause, refusalNotice } from '../../../src/services/core/RefusalClause';
 import type { DestinationAsk, DestinationFacts, SendDestination } from '../../../src/services/data/NoteOps';
 
 /**
@@ -257,12 +257,13 @@ describe('send', () => {
 
         const sent = await note.ops.send({ rows: [note.row('A')], to: NEW('', 'X'), frontmatter: [] });
 
-        expect(sent).toEqual({ kind: 'not-done' });
-        expect(note.contents.has('X.md')).toBe(false);
-        expect(Notice.messages).toEqual([[
+        const why = [
             t('notice.notSent'),
             t('notice.sendRefused', { note: FILE, reason: refusalClause({ kind: 'changed' }), subject: 'A' }),
-        ].join(' ')]);
+        ].join(' ');
+        expect(sent).toEqual({ kind: 'not-done', why });
+        expect(note.contents.has('X.md')).toBe(false);
+        expect(Notice.messages).toEqual([why]);
     });
 
     it('one of whose notes refused: made for the others, and told once which did not go and why', async () => {
@@ -296,10 +297,78 @@ describe('send', () => {
         const note = await open(['- [ ] A', '']);
         const key = { key: 'k', yaml: ['k: 1'], from: [], obsidian: false };
 
-        expect(await note.ops.send({ rows: [note.row('A')], to: NEW('', 'a|b'), frontmatter: [] })).toEqual({ kind: 'not-done' });
-        expect(await note.ops.send({ rows: [note.row('A')], to: NEW('', 'X'), frontmatter: [key, key] })).toEqual({ kind: 'not-done' });
+        const wrongly = { kind: 'not-done', why: t('notice.notSent') };
+        expect(await note.ops.send({ rows: [note.row('A')], to: NEW('', 'a|b'), frontmatter: [] })).toEqual(wrongly);
+        expect(await note.ops.send({ rows: [note.row('A')], to: NEW('', 'X'), frontmatter: [key, key] })).toEqual(wrongly);
         expect([...note.contents.keys()]).toEqual([FILE]);
         expect(Notice.messages).toEqual([]);
+    });
+});
+
+describe('send: a refusal the caller shows (tellRefusal: false)', () => {
+    const quiet = { tellRefusal: false };
+
+    it('the note sent to turned away: not told, and why answered', async () => {
+        const note = await open(['- [ ] A', ''], { 'Plan.md': ['## Tasks', '### tasks', ''] });
+        const to = { note: { kind: 'existing' as const, path: 'Plan.md' }, section: SECTION };
+
+        const sent = await note.ops.send({ rows: [note.row('A')], to, frontmatter: [] }, quiet);
+
+        // The write of a note there is says what it was about by the note: none of its own rows is sent.
+        expect(sent).toEqual({ kind: 'not-done', why: refusalNotice({ file: 'Plan.md', reason: { kind: 'headings', name: 'Tasks', count: 2 }, subject: 'Plan.md' }) });
+        expect(Notice.messages).toEqual([]);
+        // Told by default, in the same words.
+        expect(await note.ops.send({ rows: [note.row('A')], to, frontmatter: [] })).toEqual(sent);
+        expect(Notice.messages).toEqual([sent.kind === 'not-done' && sent.why]);
+    });
+
+    it('the note a row comes from turned its write away as it was tried: not told, nothing made', async () => {
+        const note = await open(['- [ ] A', '    ```', '    x', '    ```', 'para', '']);
+        const row = { ...note.row('A'), draft: { text: '- [ ] A', children: [{ text: '    ```', was: 1 }, { text: '    x', was: 2 }] } };
+
+        const sent = await note.ops.send({ rows: [row], to: NEW('', 'X'), frontmatter: [] }, quiet);
+
+        expect(sent).toMatchObject({ kind: 'not-done', why: expect.stringContaining('A') });
+        expect(note.contents.has('X.md')).toBe(false);
+        expect(Notice.messages).toEqual([]);
+    });
+
+    it('a row the index read otherwise than the disk holds: not told, why answered, and the note read again', async () => {
+        const note = await open(['- [ ] A', '']);
+        const row = note.row('A');
+        // Changed from outside, and the index never told.
+        note.contents.set(FILE, '- [ ] A2\n');
+
+        const sent = await note.ops.send({ rows: [row], to: NEW('', 'X'), frontmatter: [] }, quiet);
+
+        expect(sent).toEqual({ kind: 'not-done', why: t('notice.readAgain', { subject: 'A' }) });
+        expect(Notice.messages).toEqual([]);
+        await note.session.settle(FILE);
+        expect(note.session.index.getTasks().map(one => one.content)).toEqual(['A2']);
+    });
+
+    it('every note the rows came from refused, and what went taken back: not told, why answered', async () => {
+        const note = await open(['- [ ] A', '']);
+        refuseNext(note, FILE);
+
+        const sent = await note.ops.send({ rows: [note.row('A')], to: NEW('', 'X'), frontmatter: [] }, quiet);
+
+        expect(sent).toEqual({
+            kind: 'not-done',
+            why: [t('notice.notSent'), t('notice.sendRefused', { note: FILE, reason: refusalClause({ kind: 'changed' }), subject: 'A' })].join(' '),
+        });
+        expect(note.contents.has('X.md')).toBe(false);
+        expect(Notice.messages).toEqual([]);
+    });
+
+    it('some rows sent: told all the same, the note written, and why answered too', async () => {
+        const note = await open(['- [ ] A', ''], { 'b.md': ['- [ ] B', ''] });
+        refuseNext(note, 'b.md');
+
+        const sent = await note.ops.send({ rows: [note.row('A'), note.row('B')], to: NEW('', 'X'), frontmatter: [] }, quiet);
+
+        expect(sent.kind === 'partly' && sent.why).toBe(Notice.messages[0]);
+        expect(Notice.messages).toHaveLength(1);
     });
 });
 
