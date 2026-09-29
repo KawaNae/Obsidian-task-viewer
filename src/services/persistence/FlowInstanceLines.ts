@@ -59,16 +59,21 @@ export function flowInstanceHead(insert: FlowInstanceInsert): string {
  * `currentLine` is the original's line in the lines `outline` reads, already
  * resolved by the caller. Nothing here searches for it: a search after a line
  * has been written is what hands a copy the original's place.
+ *
+ * `unit` is the indentation of a new level, as Obsidian's settings say
+ * (`ObsidianConfig.indentUnit`): what a child takes where the row that fired
+ * has none to copy (`FileOperations.resolveChildIndent`).
  */
 export function renderFlowInstance(
     outline: OutlineReading,
     currentLine: number,
     insert: FlowInstanceInsert,
+    unit: string,
 ): PlacedLine[] {
     const head = spelledAsFired(outline.lines[currentLine], flowInstanceHead(insert));
     return insert.kind === 'recurrence'
-        ? renderRecurrence(outline, currentLine, head, insert.flowLines)
-        : renderGenerated(outline, currentLine, head, insert.flowLines, insert.children);
+        ? renderRecurrence(outline, currentLine, head, insert.flowLines, unit)
+        : renderGenerated(outline, currentLine, head, insert.flowLines, insert.children, unit);
 }
 
 /**
@@ -116,10 +121,11 @@ function renderRecurrence(
     currentLine: number,
     newParentLine: string,
     flowLines: string[],
+    unit: string,
 ): PlacedLine[] {
 
     const flowAbs = new Set(collectFlowLineIndices(outline, currentLine));
-    const childIndent = FileOperations.resolveChildIndent(outline, currentLine, newParentLine, flowAbs);
+    const childIndent = FileOperations.resolveChildIndent(outline, currentLine, unit, newParentLine, flowAbs);
 
     return [
         { text: newParentLine, kind: 'item', under: 'spot' },
@@ -143,9 +149,10 @@ function renderGenerated(
     head: string,
     flowLines: string[],
     children: GeneratedChild[],
+    unit: string,
 ): PlacedLine[] {
     const flowAbs = new Set(collectFlowLineIndices(outline, currentLine));
-    const under = (line: string) => FileOperations.resolveChildIndent(outline, currentLine, line, flowAbs);
+    const under = (line: string) => FileOperations.resolveChildIndent(outline, currentLine, unit, line, flowAbs);
 
     const block: PlacedLine[] = [
         { text: head, kind: 'item', under: 'spot' },

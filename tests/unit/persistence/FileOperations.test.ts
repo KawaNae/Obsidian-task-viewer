@@ -146,24 +146,9 @@ describe('FileOperations', () => {
     });
 
     // ── indent resolution (static) ──
-    describe('detectIndentUnit', () => {
-        it('takes the spelling of the first indented line', () => {
-            expect(FileOperations.detectIndentUnit(['- a', '\t- b'])).toBe('\t');
-            expect(FileOperations.detectIndentUnit(['- a', '    - b'])).toBe('    ');
-        });
-
-        it('ignores blank lines while looking', () => {
-            expect(FileOperations.detectIndentUnit(['- a', '   ', '\t- b'])).toBe('\t');
-        });
-
-        it('defaults to a tab when nothing is indented', () => {
-            expect(FileOperations.detectIndentUnit(['- a', '- b'])).toBe('\t');
-        });
-    });
-
     describe('resolveChildIndent', () => {
-        const resolve = (lines: string[], line: number, parent?: string, except?: ReadonlySet<number>) =>
-            FileOperations.resolveChildIndent(Outline.read(lines), line, parent, except);
+        const resolve = (lines: string[], line: number, parent?: string, except?: ReadonlySet<number>, unit = '\t') =>
+            FileOperations.resolveChildIndent(Outline.read(lines), line, unit, parent, except);
 
         it('copies the first existing child', () => {
             const lines = ['- [ ] parent', '\t- [ ] child'];
@@ -175,9 +160,23 @@ describe('FileOperations', () => {
             expect(resolve(lines,2)).toBe('\t');
         });
 
-        it('falls back to the file when the task has no children', () => {
+        it('takes the new level Obsidian\'s settings say when the task has no children, whatever the rest of the file does', () => {
+            // A line one level deeper than any beside it is spelled as the
+            // editor spells a new level, not copied from another task's children.
             const lines = ['- [ ] parent', '- [ ] other', '    - [ ] other child'];
-            expect(resolve(lines,0)).toBe('    ');
+            expect(resolve(lines,0)).toBe('\t');
+            expect(resolve(lines,0, undefined, undefined, '  ')).toBe('  ');
+            expect(resolve(['- [ ] other', '\t- [ ] other child', '- [ ] parent'],2, undefined, undefined, '    ')).toBe('    ');
+        });
+
+        it('builds the new level on the parent\'s own indentation, repeated to its content column', () => {
+            expect(resolve(['\t- [ ] parent'],0, undefined, undefined, '    ')).toBe('\t    ');
+            // `10. ` opens its content at column 4: two spaces are one short.
+            expect(resolve(['10. [ ] parent'],0, undefined, undefined, '  ')).toBe('    ');
+        });
+
+        it('copies an existing child over the settings', () => {
+            expect(resolve(['- [ ] parent', '  - [ ] child'],0, undefined, undefined, '\t')).toBe('  ');
         });
 
         it('nests below an already indented parent', () => {
@@ -198,9 +197,8 @@ describe('FileOperations', () => {
             expect(resolve(['- [ ] T', '\t- ==> every mon'],0, '- [ ] T', new Set([1]))).toBe('\t');
         });
 
-        it('does not treat a line past a blank as a child', () => {
-            const lines = ['- [ ] parent', '', '    - [ ] not a child'];
-            // Nothing indented before the blank, so the file's own unit decides.
+        it('copies a child past a blank line, which does not end the item', () => {
+            const lines = ['- [ ] parent', '', '    - [ ] child'];
             expect(resolve(lines,0)).toBe('    ');
         });
     });

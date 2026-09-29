@@ -17,6 +17,7 @@ import type { PlannedTarget } from '../TaskRefs';
 import type { CompletionFire, FiringOutcome, SubtreeReplacement, TaskOp } from '../TaskOps';
 import { replaceSubtree } from '../ReplaceSubtree';
 import { Outline, type OutlineReading } from '../../parsing/utils/Outline';
+import { indentUnit } from '../../../utils/ObsidianConfig';
 
 
 /**
@@ -279,12 +280,13 @@ export class InlineTaskWriter {
                 // Done before the property lines, which are all below it, so
                 // the coordinate is still this line afterwards.
                 draft.rewrite(line, Outline.indentOf(lines[line]) + Outline.dedent(op.text));
-                ChildPropertyLineEditor.applyOps(draft, line, [...(op.childOps ?? [])]);
+                ChildPropertyLineEditor.applyOps(draft, line, [...(op.childOps ?? [])], indentUnit(this.app));
                 return;
             }
             case 'insert-instance': {
                 const outline = draft.reading();
-                draft.put(Placement.groupHead(outline, line, flowInstanceHead(op.insert)), renderFlowInstance(outline, line, op.insert));
+                const unit = indentUnit(this.app);
+                draft.put(Placement.groupHead(outline, line, flowInstanceHead(op.insert), unit), renderFlowInstance(outline, line, op.insert, unit));
                 return;
             }
             case 'strip-flow': {
@@ -324,7 +326,7 @@ export class InlineTaskWriter {
             }
             case 'insert': {
                 // A new line beside the row, spelled as the item next to it.
-                draft.put(Placement[op.place](draft.reading(), line, op.text), Block.line(op.text));
+                draft.put(Placement[op.place](draft.reading(), line, op.text, indentUnit(this.app)), Block.line(op.text));
                 return;
             }
             case 'copy': {

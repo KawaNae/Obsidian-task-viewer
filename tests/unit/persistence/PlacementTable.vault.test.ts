@@ -36,8 +36,15 @@ afterEach(() => {
     live = undefined;
 });
 
+/**
+ * The vault indents a new level with four spaces (Obsidian's `useTab` off),
+ * as the notes here indent theirs: a first child with none to copy is
+ * spelled so (`ObsidianConfig.indentUnit`).
+ */
+const SPACES = { useTab: false, tabSize: 4 };
+
 async function open(lines: string[]): Promise<{ contents: Map<string, string>; session: VaultSession }> {
-    const opened = await openVault(lines);
+    const opened = await openVault(lines, { config: SPACES });
     live = opened.session;
     return opened;
 }
@@ -194,7 +201,7 @@ describe('a property line (ChildPropertyLineEditor.applyOps)', () => {
         expect(await session.index.updateTask(only(session, 'T').id, { properties: { memo: { value: 'x', type: 'string' } } } as never)).toBe(true);
         await session.settle(FILE);
 
-        expect(lines(contents)).toEqual(['# n', '- [ ] T', 'lazy words', '\t- memo:: x', '- [ ] U', '']);
+        expect(lines(contents)).toEqual(['# n', '- [ ] T', 'lazy words', '    - memo:: x', '- [ ] U', '']);
         expect(only(session, 'T').properties?.memo?.value).toBe('x');
     });
 
@@ -319,7 +326,7 @@ describe('text past a blank line that a line put above would take in (the P1 cou
         expect(await session.index.insertLine(only(session, 'T').id, '- [ ] c', 'firstChild')).toBe(true);
         await session.settle(FILE);
 
-        expect(lines(contents)).toEqual(['# n', '- [ ] T', '', '\t\tcode', '\t- [ ] c', '- [ ] U', '']);
+        expect(lines(contents)).toEqual(['# n', '- [ ] T', '', '\t\tcode', '    - [ ] c', '- [ ] U', '']);
         expect(parents(session)).toEqual([['T', null], ['c', 'T'], ['U', null]]);
     });
 

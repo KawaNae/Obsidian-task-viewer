@@ -287,9 +287,10 @@ describe('a line put past a fence in a list item that never closes', () => {
         const written = contents.get(FILE) !== before;
         if (written) expect(tasksWorded(session, 'c')).toHaveLength(1);
         else expect(Notice.messages).toEqual([t('notice.notWritten', { reason: t('notice.refusedUnplaceable'), subject: 'T' })]);
-        // As it stands, it is written above the fence.
+        // As it stands, it is written above the fence, a new level as
+        // Obsidian's settings say (their default here: a tab).
         expect(written).toBe(true);
-        expect(contents.get(FILE)!.split('\n').slice(1, 4)).toEqual(['- [ ] T', '    - [ ] c', '    ```']);
+        expect(contents.get(FILE)!.split('\n').slice(1, 4)).toEqual(['- [ ] T', '\t- [ ] c', '    ```']);
     });
 
     it('reads a task written under a heading made at the end as a task', async () => {
