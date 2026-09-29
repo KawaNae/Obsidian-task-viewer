@@ -316,3 +316,101 @@ describe('SectionPropertyResolver', () => {
         expect(risona.resolvedTags).toEqual(['出/りそな']);
     });
 });
+
+describe('SectionPropertyResolver の出所', () => {
+    const fm = { kind: 'frontmatter' };
+    const at = (line: number, text: string | null, level = 2) => ({
+        kind: 'section',
+        line,
+        heading: text === null ? null : { level, text, line: expect.any(Number) },
+    });
+
+    it('frontmatter だけ: 値はどれも frontmatter から', () => {
+        const doc = buildAndResolve([
+            '## Section',
+            '- [ ] task',
+        ], { 'tv-color': 'red', 'tv-start': '2026-09-28', owner: 'me', tags: ['a'] });
+        const sources = doc.sections[0].resolvedSources;
+        expect(sources.fields).toEqual({ color: fm, startDate: fm });
+        expect(sources.properties).toEqual({ owner: fm });
+        expect(sources.tags).toEqual([fm]);
+    });
+
+    it('見出しのプロパティ行が上書きした値は、その行から', () => {
+        const doc = buildAndResolve([
+            '## Section',
+            '- tv-color:: 00ff00',
+            '- owner:: you',
+            '- [ ] task',
+        ], { 'tv-color': 'red', owner: 'me', project: 'X' });
+        const sources = doc.sections[0].resolvedSources;
+        expect(sources.fields.color).toEqual(at(1, 'Section'));
+        expect(sources.properties).toEqual({ owner: at(2, 'Section'), project: fm });
+    });
+
+    it('入れ子の見出し: 子の節は、自分の行と親の節の行と frontmatter を重ねる', () => {
+        const doc = buildAndResolve([
+            '## Parent',
+            '- owner:: parent',
+            '- tv-mask:: ***',
+            '### Child',
+            '- owner:: child',
+            '- [ ] task',
+        ], { project: 'X' });
+        const child = doc.sections[0].children[0];
+        expect(child.resolvedSources.properties).toEqual({
+            project: fm,
+            owner: at(4, 'Child', 3),
+        });
+        expect(child.resolvedSources.fields.mask).toEqual(at(2, 'Parent'));
+        // 親の節の出所は子に書き換えられない
+        expect(doc.sections[0].resolvedSources.properties.owner).toEqual(at(1, 'Parent'));
+    });
+
+    it('日付を frontmatter から、時刻を見出しから受け継ぐ', () => {
+        const doc = buildAndResolve([
+            '## Morning',
+            '- tv-start:: 11:00',
+            '- [ ] task',
+        ], { 'tv-start': '2026-09-28' });
+        const section = doc.sections[0];
+        expect(section.resolvedStartDate).toBe('2026-09-28');
+        expect(section.resolvedStartTime).toBe('11:00');
+        expect(section.resolvedSources.fields.startDate).toEqual(fm);
+        expect(section.resolvedSources.fields.startTime).toEqual(at(1, 'Morning'));
+    });
+
+    it('tags の出所が2つ: 和集合に加えた層を上から順に', () => {
+        const doc = buildAndResolve([
+            '## Section',
+            '- tags:: sectionTag',
+            '- [ ] task',
+        ], { tags: ['project'] });
+        const section = doc.sections[0];
+        expect(section.resolvedTags).toEqual(['project', 'sectionTag']);
+        expect(section.resolvedSources.tags).toEqual([fm, at(1, 'Section')]);
+    });
+
+    it('最初の見出しより上の節は heading が null', () => {
+        const doc = buildAndResolve([
+            '- owner:: top',
+            '- [ ] task',
+            '## Later',
+            '- [ ] other',
+        ]);
+        expect(doc.sections[0].resolvedSources.properties.owner).toEqual(at(0, null));
+        expect(doc.sections[1].resolvedSources.properties).toEqual({});
+    });
+
+    it('同じキーが2度あれば、値と同じく後の行', () => {
+        const doc = buildAndResolve([
+            '## Section',
+            '- owner:: first',
+            '- owner:: second',
+            '- [ ] task',
+        ]);
+        const section = doc.sections[0];
+        expect(section.resolvedProperties.owner.value).toBe('second');
+        expect(section.resolvedSources.properties.owner).toEqual(at(2, 'Section'));
+    });
+});

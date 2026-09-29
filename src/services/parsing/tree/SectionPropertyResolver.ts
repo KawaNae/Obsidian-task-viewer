@@ -1,9 +1,17 @@
-import type { DocumentNode, SectionNode } from './DocumentTree';
+import { SCALAR_FIELDS, type DocumentNode, type ResolvedSources, type ScalarField, type SectionNode, type ValueSource } from './DocumentTree';
 import type { ScopeKeys, PropertyValue } from '../../../types';
-import { BuiltinPropertyExtractor, type ExtractedProperties } from './BuiltinPropertyExtractor';
+import { BuiltinPropertyExtractor, fieldKey, type ExtractedProperties } from './BuiltinPropertyExtractor';
 import { ChildLineClassifier } from '../utils/ChildLineClassifier';
 import { TagExtractor } from '../utils/TagExtractor';
 import { FilePropertyResolver } from '../FilePropertyResolver';
+
+/** What one layer hands the sections below it: its resolved values, and where each came from. */
+interface Resolved {
+    values: ExtractedProperties;
+    sources: ResolvedSources;
+}
+
+const FRONTMATTER: ValueSource = Object.freeze({ kind: 'frontmatter' });
 
 /**
  * Section-scope property resolver.
@@ -11,6 +19,12 @@ import { FilePropertyResolver } from '../FilePropertyResolver';
  * Cascades properties along the section tree (frontmatter → parent section →
  * child section, child-wins). The frontmatter base is delegated to
  * FilePropertyResolver (the File layer in the File/Section/Task pipeline).
+ *
+ * Beside each resolved value it records the layer that won it
+ * (`SectionNode.resolvedSources`): the frontmatter, or the property line of a
+ * section. Which layer wins is decided here and nowhere else; a reader that
+ * has to write a value again goes back to that layer's line
+ * (`InheritedValues`), and never walks the cascade itself.
  */
 export class SectionPropertyResolver {
     static resolve(
@@ -18,68 +32,94 @@ export class SectionPropertyResolver {
         frontmatter: Record<string, any> | undefined,
         keys: ScopeKeys
     ): void {
-        const fmBase = FilePropertyResolver.extract(frontmatter, keys);
+        const values = FilePropertyResolver.extract(frontmatter, keys);
+        const root: Resolved = { values, sources: this.frontmatterSources(values) };
 
         for (const section of doc.sections) {
-            this.resolveSection(section, fmBase, keys);
+            this.resolveSection(section, root, keys);
         }
+    }
+
+    /** Every value the frontmatter sets is the frontmatter's. */
+    private static frontmatterSources(values: ExtractedProperties): ResolvedSources {
+        const fields: Partial<Record<ScalarField, ValueSource>> = {};
+        for (const field of SCALAR_FIELDS) if (values[field] !== undefined) fields[field] = FRONTMATTER;
+        const properties: Record<string, ValueSource> = {};
+        for (const key of Object.keys(values.properties)) properties[key] = FRONTMATTER;
+        return { fields, tags: values.tags ? [FRONTMATTER] : [], properties };
     }
 
     private static resolveSection(
         section: SectionNode,
-        parentProps: ExtractedProperties,
+        parent: Resolved,
         keys: ScopeKeys
     ): void {
         // セクション自身の PropertyBlock からプロパティ抽出
-        const ownRaw = this.propertyBlockToRecord(section);
-        const ownExtracted = BuiltinPropertyExtractor.extract(ownRaw, keys);
+        const { raw, lines } = this.propertyBlockToRecord(section);
+        const own = BuiltinPropertyExtractor.extract(raw, keys);
+        const here = (key: string): ValueSource => ({ kind: 'section', line: lines.get(key)!, heading: section.heading });
 
-        // 親プロパティ + 自身のプロパティを child-wins マージ
-        section.resolvedProperties = { ...parentProps.properties, ...ownExtracted.properties };
-        section.resolvedColor = ownExtracted.color ?? parentProps.color;
-        section.resolvedLinestyle = ownExtracted.linestyle ?? parentProps.linestyle;
-        section.resolvedMask = ownExtracted.mask ?? parentProps.mask;
-        section.resolvedTags = ownExtracted.tags
-            ? TagExtractor.merge(parentProps.tags ?? [], ownExtracted.tags)
-            : parentProps.tags;
+        // 親プロパティ + 自身のプロパティを child-wins マージ。
+        // Partial merge: date と time は独立に継承（別の field）。
+        const values: ExtractedProperties = { properties: parent.values.properties };
+        const fields: Partial<Record<ScalarField, ValueSource>> = {};
+        for (const field of SCALAR_FIELDS) {
+            const mine = own[field];
+            values[field] = mine ?? parent.values[field];
+            const from = mine !== undefined ? here(fieldKey(field, keys)) : parent.sources.fields[field];
+            if (from) fields[field] = from;
+        }
 
-        // Partial merge: date と time は独立に継承
-        section.resolvedStartDate = ownExtracted.startDate ?? parentProps.startDate;
-        section.resolvedStartTime = ownExtracted.startTime ?? parentProps.startTime;
-        section.resolvedEndDate = ownExtracted.endDate ?? parentProps.endDate;
-        section.resolvedEndTime = ownExtracted.endTime ?? parentProps.endTime;
-        section.resolvedDue = ownExtracted.due ?? parentProps.due;
+        // tags: 和集合。加えた層をすべて記録する
+        values.tags = own.tags ? TagExtractor.merge(parent.values.tags ?? [], own.tags) : parent.values.tags;
+        const tags = own.tags ? [...parent.sources.tags, here('tags')] : parent.sources.tags;
+
+        // custom: キー単位の child-wins
+        let properties = parent.sources.properties;
+        const ownKeys = Object.keys(own.properties);
+        if (ownKeys.length > 0) {
+            values.properties = { ...parent.values.properties, ...own.properties };
+            const merged: Record<string, ValueSource> = { ...parent.sources.properties };
+            for (const key of ownKeys) merged[key] = here(key);
+            properties = merged;
+        }
+
+        section.resolvedProperties = values.properties;
+        section.resolvedColor = values.color;
+        section.resolvedLinestyle = values.linestyle;
+        section.resolvedMask = values.mask;
+        section.resolvedTags = values.tags;
+        section.resolvedStartDate = values.startDate;
+        section.resolvedStartTime = values.startTime;
+        section.resolvedEndDate = values.endDate;
+        section.resolvedEndTime = values.endTime;
+        section.resolvedDue = values.due;
+        section.resolvedSources = { fields, tags, properties };
 
         // 子セクションへ再帰
-        const resolved: ExtractedProperties = {
-            color: section.resolvedColor,
-            linestyle: section.resolvedLinestyle,
-            mask: section.resolvedMask,
-            tags: section.resolvedTags,
-            startDate: section.resolvedStartDate,
-            startTime: section.resolvedStartTime,
-            endDate: section.resolvedEndDate,
-            endTime: section.resolvedEndTime,
-            due: section.resolvedDue,
-            properties: section.resolvedProperties,
-        };
+        const resolved: Resolved = { values, sources: section.resolvedSources };
         for (const child of section.children) {
             this.resolveSection(child, resolved, keys);
         }
     }
 
-    /** PropertyBlock のエントリを Record<string, PropertyValue> に変換 */
+    /**
+     * PropertyBlock のエントリを Record<string, PropertyValue> に変換し、
+     * キーごとにその値を書いた行を添える。同じキーが2度あれば後の行が勝つ。
+     */
     private static propertyBlockToRecord(
         section: SectionNode
-    ): Record<string, PropertyValue> {
-        const result: Record<string, PropertyValue> = {};
-        if (!section.propertyBlock) return result;
+    ): { raw: Record<string, PropertyValue>; lines: Map<string, number> } {
+        const raw: Record<string, PropertyValue> = {};
+        const lines = new Map<string, number>();
+        if (!section.propertyBlock) return { raw, lines };
         for (const entry of section.propertyBlock.entries) {
-            result[entry.key] = {
+            raw[entry.key] = {
                 value: entry.value,
                 type: ChildLineClassifier.inferType(entry.value),
             };
+            lines.set(entry.key, entry.line);
         }
-        return result;
+        return { raw, lines };
     }
 }
