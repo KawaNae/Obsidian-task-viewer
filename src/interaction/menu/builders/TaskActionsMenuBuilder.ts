@@ -6,6 +6,7 @@ import type { TimerHost } from '../../../timer/TimerWidget';
 import { CreateTaskModal, formatTaskLine } from '../../../modals/CreateTaskModal';
 import { ConfirmModal } from '../../../modals/ConfirmModal';
 import { FlowDeleteChoiceModal } from '../../../modals/FlowDeleteChoiceModal';
+import { SendModal } from '../../../modals/noteops/SendModal';
 import type { FlowDeleteOutlook } from '../../../services/flow/FlowDeletion';
 import { runtimeText } from '../../../services/flow/runtimeText';
 import { getTaskDisplayName } from '../../../services/parsing/utils/TaskContent';
@@ -48,11 +49,12 @@ export class TaskActionsMenuBuilder {
     }
 
     /**
-     * G5: 破壊的変更 — Open in Editor / Delete
+     * G5: 破壊的変更 — Open in Editor / Send to Note / Delete
      * onDestructive が渡されているとき各アクション実行後に invoke する。
      */
     addDestructiveActions(menu: Menu, task: Task, onDestructive?: () => void): void {
         this.addOpenInEditorItem(menu, task, onDestructive);
+        this.addSendItem(menu, task, onDestructive);
         this.addDeleteItem(menu, task, onDestructive);
     }
 
@@ -132,6 +134,28 @@ export class TaskActionsMenuBuilder {
                     menu.close();
                     openTaskInEditor(this.app, task, this.plugin.settings.reuseExistingTab);
                     onDestructive?.();
+                });
+        });
+    }
+
+    /**
+     * "Send to Note": the row and its subtree, sent to a note the dialog
+     * names (`SendModal`). It opens on the row as the disk holds it
+     * (`NoteOps.previewSend`), and not when the row is not the one there,
+     * which the user is told. The row leaves where it stood once it went,
+     * all of it or some (`onDestructive`); a send not made keeps the dialog
+     * open.
+     */
+    private addSendItem(menu: Menu, task: Task, onDestructive?: () => void): void {
+        menu.addItem((item) => {
+            item.setTitle(t('menu.sendToNote'))
+                .setIcon('send')
+                .onClick(async () => {
+                    menu.close();
+                    const ops = this.plugin.getNoteOps();
+                    const preview = await ops.previewSend([task.id]);
+                    if (!preview) return;
+                    new SendModal(this.app, ops, preview, () => onDestructive?.()).open();
                 });
         });
     }
