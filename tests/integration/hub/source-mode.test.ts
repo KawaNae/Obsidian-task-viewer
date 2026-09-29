@@ -140,7 +140,7 @@ function closeHub(): void {
     run(`
         document.querySelector('.task-hub .tv-overlay__close, .tv-overlay__close')?.click();
         await sleep(100);
-        document.querySelector('.task-hub__source-ask .mod-warning')?.click();
+        document.querySelector('.task-hub__source-discard')?.click();
         await until(() => !document.querySelector('.task-hub'));
         return 'ok';
     `);
@@ -180,7 +180,24 @@ describe('the hub\'s source mode', () => {
         // A close the user asks for keeps the draft, and asks.
         const asked = click('.task-hub .tv-overlay__close');
         expect(asked).toMatchObject({ hub: true, source: true, asking: true });
-        const kept = click('.task-hub__source-ask button:not(.mod-warning)');
+        // One row asks: discard and the question at its start, back (where cancel was, with the focus) and apply at its end.
+        const row = run<Record<string, unknown>>(`
+            const actions = document.querySelector('.task-hub__source-actions');
+            const items = [...actions.children].filter(el => getComputedStyle(el).display !== 'none');
+            const rects = items.map(el => el.getBoundingClientRect());
+            const box = actions.getBoundingClientRect();
+            return JSON.stringify({
+                items: items.map(el => el.textContent),
+                oneLine: rects.every(r => Math.abs(r.top + r.height / 2 - (rects[0].top + rects[0].height / 2)) < 2),
+                discardAtStart: Math.abs(rects[0].left - box.left) < 2,
+                applyAtEnd: Math.abs(rects[3].right - box.right) < 2,
+                apart: rects[2].left - rects[1].right > 16,
+                focused: document.activeElement === actions.querySelector('.task-hub__source-cancel'),
+            });
+        `);
+        expect(row).toEqual({ items: ['捨てる', '下書きを捨てますか', '戻る', '適用'], oneLine: true, discardAtStart: true, applyAtEnd: true, apart: true, focused: true });
+        const kept = click('.task-hub__source-cancel');
+        expect(run<string[]>(`return JSON.stringify([...document.querySelectorAll('.task-hub__source-actions > *')].filter(el => getComputedStyle(el).display !== 'none').map(el => el.textContent));`)).toEqual(['キャンセル', '適用']);
         expect(kept).toMatchObject({ source: true, asking: false, children: '- [ ] 子a2\n- [ ] 子b\n    - [ ] 孫' });
 
         const applied = run<SourceState>(`
@@ -298,7 +315,7 @@ describe('the hub\'s source mode', () => {
         expect(asked.shadow).not.toBe('none');
 
         const handed = run<Record<string, unknown>>(`
-            document.querySelector('.task-hub__source-ask .mod-warning').click();
+            document.querySelector('.task-hub__source-discard').click();
             await until(() => document.querySelectorAll('.task-hub').length === 1 && document.querySelector('.task-hub__preview')?.textContent.includes('次'));
             await sleep(300);
             return JSON.stringify({ ...state(), hubs: document.querySelectorAll('.task-hub:not(.is-closing)').length, preview: document.querySelector('.task-hub:not(.is-closing) .task-hub__preview').textContent });

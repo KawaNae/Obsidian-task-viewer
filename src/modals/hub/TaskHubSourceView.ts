@@ -17,11 +17,16 @@ export interface SourceViewActions {
 
 /**
  * The hub's source mode as it looks: the switch between the card and the
- * source above them, and, in the source, the editor with apply and cancel
- * under it, why the last apply wrote nothing, the question whether to throw
- * the draft away (the apply still offered beside it), and what is left once
- * the row is lost. It draws what the
- * mode's state says (`SourceViewState`) and does nothing of its own.
+ * source above them, and, in the source, the editor with one row of controls
+ * under it, why the last apply wrote nothing, and what is left once the row
+ * is lost. It draws what the mode's state says (`SourceViewState`) and does
+ * nothing of its own.
+ *
+ * The row of controls is cancel and apply at its end. Asked whether to throw
+ * the draft away, the same row asks: discard comes in at its start, the
+ * question beside it, and cancel reads back, which keeps the draft. Discard
+ * stands apart from the buttons a hand goes to, so a slip of the hand keeps
+ * the draft; apply stays offered, since applying withdraws the question.
  */
 export class TaskHubSourceView implements SourceSurface {
     private readonly viewBtn: HTMLButtonElement;
@@ -30,13 +35,14 @@ export class TaskHubSourceView implements SourceSurface {
     private readonly pane: HTMLElement;
     private readonly editorHost: HTMLElement;
     private readonly messageEl: HTMLElement;
-    private readonly askEl: HTMLElement;
     private readonly lostEl: HTMLElement;
     private readonly actionsEl: HTMLElement;
-    private readonly applyBtn: HTMLButtonElement;
+    private readonly discardBtn: HTMLButtonElement;
+    private readonly askEl: HTMLElement;
     private readonly cancelBtn: HTMLButtonElement;
-    private readonly keepBtn: HTMLButtonElement;
-    private wasAsking = false;
+    private readonly applyBtn: HTMLButtonElement;
+    /** Asked as last drawn: the cancel button is back then. */
+    private asking = false;
 
     /**
      * @param bar where the switch goes, above the card
@@ -63,13 +69,6 @@ export class TaskHubSourceView implements SourceSurface {
         this.editorHost = this.pane.createDiv({ cls: 'task-hub__source-editor' });
         this.messageEl = this.pane.createDiv({ cls: 'task-hub__source-message' });
 
-        this.askEl = this.pane.createDiv({ cls: 'task-hub__source-ask' });
-        this.askEl.createSpan({ text: t('modal.hub.source.discardAsk') });
-        const discardBtn = this.askEl.createEl('button', { cls: 'mod-warning', text: t('modal.hub.source.discard'), attr: { type: 'button' } });
-        discardBtn.addEventListener('click', () => actions.discard());
-        this.keepBtn = this.askEl.createEl('button', { text: t('modal.hub.source.keep'), attr: { type: 'button' } });
-        this.keepBtn.addEventListener('click', () => actions.keep());
-
         this.lostEl = this.pane.createDiv({ cls: 'task-hub__source-lost' });
         this.lostEl.createSpan({ text: t('modal.hub.source.lost') });
         const copyBtn = this.lostEl.createEl('button', { text: t('modal.hub.source.copy'), attr: { type: 'button' } });
@@ -85,8 +84,11 @@ export class TaskHubSourceView implements SourceSurface {
         lostDiscardBtn.addEventListener('click', () => actions.discard());
 
         this.actionsEl = this.pane.createDiv({ cls: 'task-hub__source-actions' });
-        this.cancelBtn = this.actionsEl.createEl('button', { text: t('modal.cancel'), attr: { type: 'button' } });
-        this.cancelBtn.addEventListener('click', () => actions.cancel());
+        this.discardBtn = this.actionsEl.createEl('button', { cls: 'mod-warning task-hub__source-discard', text: t('modal.hub.source.discard'), attr: { type: 'button' } });
+        this.discardBtn.addEventListener('click', () => actions.discard());
+        this.askEl = this.actionsEl.createSpan({ cls: 'task-hub__source-ask', text: t('modal.hub.source.discardAsk') });
+        this.cancelBtn = this.actionsEl.createEl('button', { cls: 'task-hub__source-cancel', attr: { type: 'button' } });
+        this.cancelBtn.addEventListener('click', () => (this.asking ? actions.keep() : actions.cancel()));
         this.applyBtn = this.actionsEl.createEl('button', { cls: 'mod-cta', text: t('modal.hub.source.apply'), attr: { type: 'button' } });
         this.applyBtn.addEventListener('click', () => actions.apply());
     }
@@ -116,16 +118,21 @@ export class TaskHubSourceView implements SourceSurface {
         this.pane.toggle(open);
         this.messageEl.setText(state.message ?? '');
         this.messageEl.toggle(open && state.message !== null);
-        this.askEl.toggle(open && state.asking);
-        this.pane.toggleClass('task-hub__source-pane--asking', open && state.asking);
-        this.lostEl.toggle(open && state.lost && !state.asking);
+        const asking = open && state.asking;
+        this.pane.toggleClass('task-hub__source-pane--asking', asking);
+        this.lostEl.toggle(open && state.lost && !asking);
+        // A lost row has its own way out; asked there, the row asks as anywhere.
+        this.actionsEl.toggle(open && (!state.lost || asking));
+        this.discardBtn.toggle(asking);
+        this.askEl.toggle(asking);
+        this.cancelBtn.setText(asking ? t('modal.hub.source.keep') : t('modal.cancel'));
+        this.cancelBtn.disabled = !asking && state.phase !== 'source';
         // Asked, the apply stays offered: applying withdraws the question.
-        this.actionsEl.toggle(open && !state.lost);
+        this.applyBtn.toggle(!state.lost);
         this.applyBtn.disabled = state.phase !== 'source';
         this.applyBtn.setText(state.phase === 'applying' ? t('modal.hub.source.applying') : t('modal.hub.source.apply'));
-        this.cancelBtn.disabled = state.phase !== 'source' || state.asking;
-        // Asked: the safe answer takes the focus, so a stray Enter keeps the draft.
-        if (state.asking && !this.wasAsking) this.keepBtn.focus();
-        this.wasAsking = state.asking;
+        // Asked: back takes the focus, where cancel was, so a stray Enter keeps the draft.
+        if (asking && !this.asking) this.cancelBtn.focus();
+        this.asking = asking;
     }
 }

@@ -91,7 +91,6 @@
     color: var(--text-error);
 }
 
-.task-hub__source-ask,
 .task-hub__source-lost,
 .task-hub__source-actions {
     display: flex;
@@ -101,17 +100,20 @@
     font-size: var(--font-ui-small);
 }
 
-.task-hub__source-ask > span,
 .task-hub__source-lost > span {
     flex: 1 1 12em;
-}
-
-.task-hub__source-lost > span {
     color: var(--text-warning);
 }
 
+/* Cancel and apply at the end. Asked, discard and the question come in at
+ * the start, the question pushing the rest to the end: discard stands apart
+ * from back and apply. */
 .task-hub__source-actions {
     justify-content: flex-end;
+}
+
+.task-hub__source-ask {
+    margin-inline-end: auto;
 }
 
 /* --- Form: flat sections with dividers --- */
