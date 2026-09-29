@@ -73,15 +73,19 @@ export class InlineTaskWriter {
      * The target's basis holds the subtree the draft was opened on, so the
      * write is made only over a subtree that still reads so: a line written
      * into it since, by the form, a timer or by hand, refuses it as `changed`.
+     * A caller that shows the refusal itself hears it at `opts.refused`
+     * ({@link channelHearing}).
      */
     async replaceSubtreeInFile<F extends CompletionFire>(
         target: PlannedTarget,
         replacement: SubtreeReplacement,
         completing: { completes(before: string, after: string): boolean; fire(): F },
+        opts: { refused?: (refusal: Refusal) => void } = {},
     ): Promise<FiringOutcome<F>> {
         const file = this.app.vault.getAbstractFileByPath(target.file);
-        if (!(file instanceof TFile)) return this.refusedGone(target);
-        return this.writeFiring(file, this.channelOf(target.file), (draft, session) => {
+        const channel = this.channelHearing(target.file, opts.refused);
+        if (!(file instanceof TFile)) return fileGone(channel, target.file, target.subject);
+        return this.writeFiring(file, channel, (draft, session) => {
             const line = session.row(target);
             if (line === null) return false;
             const rewritten = replaceSubtree(draft, session, line, replacement);
@@ -185,6 +189,18 @@ export class InlineTaskWriter {
     }
 
     /**
+     * The channel a write to `file` goes through: the index's, with a refusal
+     * handed to `refused` instead when the caller gives one. A caller that
+     * shows the refusal in a place of its own hears it there, and decides
+     * what else is done of it (the index still learns from it); telling it
+     * through the channel too would be the same news twice.
+     */
+    private channelHearing(file: string, refused: ((refusal: Refusal) => void) | undefined): WriteChannel | undefined {
+        const told = this.channelOf(file);
+        return told && refused ? { ...told, refused } : told;
+    }
+
+    /**
      * Apply `ops` to the row at a line the editor pointed at, planned from the
      * row, and its subtree when `at` holds one: the editor menu's write, when
      * the editor it was opened in no longer shows the file, with `opts.fire`
@@ -196,11 +212,10 @@ export class InlineTaskWriter {
         filePath: string,
         at: EditorLine,
         ops: readonly TaskOp[],
-        opts: { tellRefusal?: boolean; fire?: F } = {},
+        opts: { refused?: (refusal: Refusal) => void; fire?: F } = {},
     ): Promise<FiringOutcome<F>> {
         const file = this.app.vault.getAbstractFileByPath(filePath);
-        const told = this.channelOf(filePath);
-        const channel = told && opts.tellRefusal === false ? { ...told, refused: () => { } } : told;
+        const channel = this.channelHearing(filePath, opts.refused);
         if (!(file instanceof TFile)) return fileGone(channel, filePath, at.text.trim());
         return this.writeOps(file, channel, at, ops, opts.fire);
     }
@@ -230,13 +245,10 @@ export class InlineTaskWriter {
     async applyToTask(
         target: PlannedTarget,
         ops: readonly TaskOp[],
-        opts: { tellRefusal?: boolean } = {},
+        opts: { refused?: (refusal: Refusal) => void } = {},
     ): Promise<WriteOutcome> {
         const file = this.app.vault.getAbstractFileByPath(target.file);
-        const told = this.channelOf(target.file);
-        // A caller that tells the refusal itself, in words of its own, has it
-        // from the outcome; telling it here too would be the same news twice.
-        const channel = told && opts.tellRefusal === false ? { ...told, refused: () => { } } : told;
+        const channel = this.channelHearing(target.file, opts.refused);
         if (!(file instanceof TFile)) return fileGone(channel, target.file, target.subject);
 
         return processLines(this.app, file, channel, (draft, _eol, session) => this.applyOps(draft, session, target, ops));

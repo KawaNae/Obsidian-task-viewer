@@ -5,7 +5,7 @@ import { InlineTaskWriter } from './writers/InlineTaskWriter';
 import { FrontmatterWriter } from './writers/FrontmatterWriter';
 import { TaskCloner, type InPlaceCopyLines } from './TaskCloner';
 import type { PropertyOp } from './PropertyUpdatePlanner';
-import type { EditorLine, LineDraft, RowTarget, WriteAt, WriteChannel, WriteOutcome, WriteSession } from './FileLines';
+import type { EditorLine, LineDraft, Refusal, RowTarget, WriteAt, WriteChannel, WriteOutcome, WriteSession } from './FileLines';
 import type { PlannedTarget } from './TaskRefs';
 import type { CompletionFire, FiringOutcome, SubtreeReplacement, TaskOp } from './TaskOps';
 import type { Section } from './Destination';
@@ -63,8 +63,9 @@ export class TaskRepository {
         target: PlannedTarget,
         replacement: SubtreeReplacement,
         completing: { completes(before: string, after: string): boolean; fire(): F },
+        opts: { refused?: (refusal: Refusal) => void } = {},
     ): Promise<FiringOutcome<F>> {
-        return this.inlineWriter.replaceSubtreeInFile(target, replacement, completing);
+        return this.inlineWriter.replaceSubtreeInFile(target, replacement, completing, opts);
     }
 
     /** The one loop that applies ops to a row, inside a write (see InlineTaskWriter.applyOps). */
@@ -73,7 +74,7 @@ export class TaskRepository {
     }
 
     /** Ops applied to the row at a line the editor pointed at, as `at` holds it (see InlineTaskWriter.applyToLine). */
-    async applyToLine<F extends CompletionFire>(filePath: string, at: EditorLine, ops: readonly TaskOp[], opts: { tellRefusal?: boolean; fire?: F } = {}): Promise<FiringOutcome<F>> {
+    async applyToLine<F extends CompletionFire>(filePath: string, at: EditorLine, ops: readonly TaskOp[], opts: { refused?: (refusal: Refusal) => void; fire?: F } = {}): Promise<FiringOutcome<F>> {
         return this.inlineWriter.applyToLine(filePath, at, ops, opts);
     }
 
@@ -84,7 +85,7 @@ export class TaskRepository {
     async applyToTask(
         target: PlannedTarget,
         ops: readonly TaskOp[],
-        opts: { tellRefusal?: boolean } = {},
+        opts: { refused?: (refusal: Refusal) => void } = {},
     ): Promise<WriteOutcome> {
         return this.inlineWriter.applyToTask(target, ops, opts);
     }
