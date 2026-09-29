@@ -1,5 +1,5 @@
 import { stringifyYaml } from 'obsidian';
-import type { TaskViewerSettings } from '../../types';
+import type { PropertyValue, TaskViewerSettings } from '../../types';
 import { FileParsePipeline } from '../parsing/FileParsePipeline';
 import type { SectionNode, ValueSource } from '../parsing/tree/DocumentTree';
 import { ChildLineClassifier } from '../parsing/utils/ChildLineClassifier';
@@ -33,9 +33,13 @@ const OBSIDIAN_KEYS: ReadonlySet<string> = new Set(['aliases', 'alias', 'cssclas
  * section's to hand on. Which layer won each value is the resolution's
  * record (`SectionNode.resolvedSources`); this only says it again:
  *
- * - A key one layer sets is said as that layer said it: the frontmatter's
- *   lines as they are, a property line's value as a YAML scalar. The
- *   resolved value is not used: it is normalized (a list joined).
+ * - A key one layer sets is said as that layer said it. The frontmatter's
+ *   lines go as they are: the resolved value is normalized (a list
+ *   joined), and the lines keep what it lost. A property line's value is
+ *   said in the YAML of the type the line gave it
+ *   (`ChildLineClassifier.inferType`), so the frontmatter reads back the
+ *   same type (`propertyYaml`); the plugin's own keys (color, line style,
+ *   mask) are read as text either way, and go as a string.
  * - A date and its time may come from two layers, so the key is put
  *   together from the resolved date and time.
  * - Tags are a union of layers, said as the resolved list.
@@ -57,10 +61,15 @@ export function inheritedAt(lines: readonly string[], row: number, settings: Tas
     const push = (key: string, yaml: readonly string[], from: readonly ValueSource[]) => {
         out.push({ key, yaml, from, obsidian: OBSIDIAN_KEYS.has(key) });
     };
-    /** A key one layer set, said as that layer said it. */
-    const asWritten = (key: string, from: ValueSource) => {
+    /**
+     * A key one layer set, said as that layer said it: a property line's
+     * value as `typed` says it, or else as a string.
+     */
+    const asWritten = (key: string, from: ValueSource, typed?: PropertyValue) => {
         if (from.kind === 'section') {
-            push(key, [`${yamlKey(key)}: ${sectionScalar(propertyValueAt(lines, from.line))}`], [from]);
+            push(key, typed
+                ? propertyYaml(key, typed)
+                : [`${yamlKey(key)}: ${FrontmatterLineEditor.escapeYamlScalar(propertyValueAt(lines, from.line))}`], [from]);
             return;
         }
         const range = FrontmatterLineEditor.findKeyRange(lines, fmEnd, key);
@@ -85,9 +94,9 @@ export function inheritedAt(lines: readonly string[], row: number, settings: Tas
         push('tags', ['tags:', ...section.resolvedTags.map(tag => `  - ${FrontmatterLineEditor.escapeYamlScalar(tag)}`)], tags);
     }
 
-    for (const key of Object.keys(section.resolvedProperties)) {
+    for (const [key, value] of Object.entries(section.resolvedProperties)) {
         const from = properties[key];
-        if (from) asWritten(key, from);
+        if (from) asWritten(key, from, value);
     }
     return out;
 }
@@ -107,14 +116,25 @@ function propertyValueAt(lines: readonly string[], line: number): string {
 }
 
 /**
- * A property line's value as a YAML scalar that reads back as the same
- * text. A number the line types as one (`ChildLineClassifier.inferType`)
- * stays a number when YAML reads it back unchanged; anything else is a
- * string, quoted when it has to be.
+ * A property line's value as frontmatter lines the frontmatter reads back
+ * as the same type (`FilePropertyResolver`): a number bare, a boolean as
+ * YAML's, an array as a list of its items (`ChildLineClassifier.arrayItems`,
+ * which the frontmatter joins back with `, `), a string quoted when it has
+ * to be. The text comes back as written but where the YAML type has its
+ * own spelling: `True` as `true`, `007` as `7`, `[a,b]` as `a, b`.
  */
-function sectionScalar(value: string): string {
-    if (/^\d+(\.\d+)?$/.test(value) && String(Number(value)) === value) return value;
-    return FrontmatterLineEditor.escapeYamlScalar(value);
+function propertyYaml(key: string, property: PropertyValue): string[] {
+    const head = `${yamlKey(key)}:`;
+    switch (property.type) {
+        case 'number': return [`${head} ${property.value}`];
+        case 'boolean': return [`${head} ${property.value === 'True'}`];
+        case 'array': {
+            const items = ChildLineClassifier.arrayItems(property.value);
+            if (items.length === 0) return [`${head} []`];
+            return [head, ...items.map(item => `  - ${FrontmatterLineEditor.escapeYamlScalar(item)}`)];
+        }
+        case 'string': return [`${head} ${FrontmatterLineEditor.escapeYamlScalar(property.value)}`];
+    }
 }
 
 /** A key as a YAML mapping key: plain when YAML reads it plain, else quoted. */

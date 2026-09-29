@@ -105,4 +105,35 @@ export class ChildLineClassifier {
         if (new RegExp(`^\\[${IN_LINE}*\\]$`).test(raw) || raw.includes(',')) return 'array';
         return 'string';
     }
+
+    /**
+     * The items of a value `inferType` reads as an array: the two forms it
+     * knows, a list in `[` `]` and a list `,` separates. A wikilink is one
+     * item whatever brackets and commas it holds (`[[x]]`, `[[a|b, c]]`),
+     * so the brackets `[` `]` strips are a list's only when a link's are not
+     * all there is. Items are trimmed and an empty one is none.
+     */
+    static arrayItems(raw: string): string[] {
+        // Links masked to same-length filler, so the list's brackets and
+        // commas are found by position in `masked` and cut out of `raw`.
+        const masked = raw.replace(ARRAY_ITEM_LINK, link => '_'.repeat(link.length));
+        let from = 0;
+        let to = raw.length;
+        if (masked.startsWith('[') && masked.endsWith(']') && masked.length >= 2) {
+            from = 1;
+            to = raw.length - 1;
+        }
+        const items: string[] = [];
+        let start = from;
+        for (let i = from; i <= to; i++) {
+            if (i < to && masked[i] !== ',') continue;
+            const item = raw.slice(start, i).trim();
+            if (item !== '') items.push(item);
+            start = i + 1;
+        }
+        return items;
+    }
 }
+
+/** A wikilink or embed, which an array value holds as one item. */
+const ARRAY_ITEM_LINK = /!?\[\[[^[\]\r\n]*\]\]/g;
