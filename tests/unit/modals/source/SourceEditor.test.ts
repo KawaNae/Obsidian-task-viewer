@@ -3,7 +3,7 @@ import { CompletionContext, insertBracket, type CompletionResult } from '@codemi
 import { indentLess, indentMore } from '@codemirror/commands';
 import { EditorSelection, EditorState, type StateCommand } from '@codemirror/state';
 import {
-    bracketPairing, childrenState, draftOf, parentState,
+    bracketPairing, childrenState, draftOf, indentColumns, parentState,
 } from '../../../../src/modals/form/source/SourceEditor';
 import { newlineContinuingList } from '../../../../src/modals/form/source/ListMarkup';
 import { linkTagCompletionSource } from '../../../../src/modals/form/source/SourceCompletion';
@@ -73,6 +73,12 @@ describe('children editor: indent', () => {
         t = t.update({ selection: EditorSelection.cursor(t.doc.line(2).from) }).state;
         t = run(t, indentMore);
         expect(t.doc.toString()).toBe('- a\n\t- b');
+    });
+
+    it('takes a tab as four columns for the width it shows a level at', () => {
+        expect(indentColumns('\t')).toBe(4);
+        expect(indentColumns('  ')).toBe(2);
+        expect(indentColumns('    ')).toBe(4);
     });
 
     it('breaks a line keeping its indent as it is spelled', () => {
