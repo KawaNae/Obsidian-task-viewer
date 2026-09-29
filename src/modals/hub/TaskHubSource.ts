@@ -27,7 +27,10 @@ import type { SourceDraft } from '../form/source/SourceEditor';
  *   the index holds has changed what the write would say of it.
  * - A draft the user has not thrown away is never lost to a close the user
  *   asks for: the hub asks first (`beforeClose`), in the same place as a
- *   cancel does.
+ *   cancel does. Going back to the draft withdraws the question as its keep
+ *   does: an edit of the text, or an apply, which goes on as asked. A focus
+ *   given back to the editor without an edit leaves the question, since
+ *   reading the draft or copying from it is a way to answer it.
  * - A row the hub lost (a change from outside renamed it) keeps the draft,
  *   and offers no apply: copying the draft and throwing it away is the way
  *   out.
@@ -59,8 +62,8 @@ export interface DraftEditor {
 }
 
 export interface SourceSurface {
-    /** Open the editor on `frame`'s text. */
-    openEditor(frame: SubtreeFrame, hooks: { submit(): void }): DraftEditor;
+    /** Open the editor on `frame`'s text: `submit` on Mod+Enter, `edited` on a change of its text. */
+    openEditor(frame: SubtreeFrame, hooks: { submit(): void; edited(): void }): DraftEditor;
     render(state: SourceViewState): void;
 }
 
@@ -81,6 +84,8 @@ export interface SourceHost {
     lockForm(locked: boolean): void;
     /** Close the hub, asking nothing more: the draft was thrown away for a close the user asked for (opening another hub among them). */
     closeHub(): void;
+    /** The close asked about is given up, the draft kept: what was to follow it (another hub asked for) is forgotten. */
+    closeWithdrawn(): void;
 }
 
 /** What throwing the draft away goes on to: the card, or closing the hub. */
@@ -150,7 +155,10 @@ export class TaskHubSource {
             throw new Error(`the source opened ${frame.children.length} child lines on a subtree of ${base.length} lines`);
         }
 
-        const editor = this.surface.openEditor(frame, { submit: () => { void this.apply(); } });
+        const editor = this.surface.openEditor(frame, {
+            submit: () => { void this.apply(); },
+            edited: () => this.edited(),
+        });
         this.opened = { frame, editor };
         this.current = fresh;
         this.phase = 'source';
@@ -159,11 +167,12 @@ export class TaskHubSource {
         editor.focus();
     }
 
-    /** Write the draft: the apply button, or Mod+Enter. */
+    /** Write the draft: the apply button, or Mod+Enter. Asked whether to throw it away, the question is withdrawn. */
     async apply(): Promise<void> {
         const opened = this.opened;
         const row = this.current;
-        if (this.phase !== 'source' || !opened || !row || this.asking) return;
+        if (this.phase !== 'source' || !opened || !row) return;
+        this.withdraw();
 
         const check = opened.frame.check(opened.editor.draft());
         if (check.kind === 'same') return this.leave();
@@ -220,6 +229,7 @@ export class TaskHubSource {
     /** Throw the draft away, as asked, and go on to what asked. */
     discard(): void {
         const after = this.asking ?? 'view';
+        this.asking = null;
         this.leave();
         if (after === 'close') this.host.closeHub();
     }
@@ -227,9 +237,16 @@ export class TaskHubSource {
     /** Keep the draft: the question is withdrawn. */
     keep(): void {
         if (!this.asking) return;
-        this.asking = null;
+        this.withdraw();
         this.render();
         this.opened?.editor.focus();
+    }
+
+    /** The draft's text changed: asked whether to throw it away, the question is withdrawn. */
+    private edited(): void {
+        if (!this.asking) return;
+        this.withdraw();
+        this.render();
     }
 
     /** Whether an Escape is the editor's own (a completion list to close), not the hub's. */
@@ -281,6 +298,13 @@ export class TaskHubSource {
         this.render();
     }
 
+    /** The question withdrawn, the draft kept, and the close it asked about given up. */
+    private withdraw(): void {
+        if (!this.asking) return;
+        this.asking = null;
+        this.host.closeWithdrawn();
+    }
+
     private ask(after: After): void {
         this.asking = after;
         this.render();
@@ -288,10 +312,10 @@ export class TaskHubSource {
 
     /** The source closed, the draft with it: the card again, and the form open. */
     private leave(): void {
+        this.withdraw();
         this.opened?.editor.destroy();
         this.opened = null;
         this.message = null;
-        this.asking = null;
         this.refused = null;
         this.phase = 'view';
         if (!this.disposed) this.host.lockForm(false);

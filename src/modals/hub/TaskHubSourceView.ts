@@ -19,7 +19,8 @@ export interface SourceViewActions {
  * The hub's source mode as it looks: the switch between the card and the
  * source above them, and, in the source, the editor with apply and cancel
  * under it, why the last apply wrote nothing, the question whether to throw
- * the draft away, and what is left once the row is lost. It draws what the
+ * the draft away (the apply still offered beside it), and what is left once
+ * the row is lost. It draws what the
  * mode's state says (`SourceViewState`) and does nothing of its own.
  */
 export class TaskHubSourceView implements SourceSurface {
@@ -90,13 +91,14 @@ export class TaskHubSourceView implements SourceSurface {
         this.applyBtn.addEventListener('click', () => actions.apply());
     }
 
-    openEditor(frame: SubtreeFrame, hooks: { submit(): void }): DraftEditor {
+    openEditor(frame: SubtreeFrame, hooks: { submit(): void; edited(): void }): DraftEditor {
         return new SourceEditor(this.editorHost, {
             parent: frame.parent,
             children: frame.children,
             indentUnit: frame.unit,
             app: this.app,
             onSubmit: hooks.submit,
+            onChange: hooks.edited,
         });
     }
 
@@ -117,10 +119,11 @@ export class TaskHubSourceView implements SourceSurface {
         this.askEl.toggle(open && state.asking);
         this.pane.toggleClass('task-hub__source-pane--asking', open && state.asking);
         this.lostEl.toggle(open && state.lost && !state.asking);
-        this.actionsEl.toggle(open && !state.lost && !state.asking);
+        // Asked, the apply stays offered: applying withdraws the question.
+        this.actionsEl.toggle(open && !state.lost);
         this.applyBtn.disabled = state.phase !== 'source';
         this.applyBtn.setText(state.phase === 'applying' ? t('modal.hub.source.applying') : t('modal.hub.source.apply'));
-        this.cancelBtn.disabled = state.phase !== 'source';
+        this.cancelBtn.disabled = state.phase !== 'source' || state.asking;
         // Asked: the safe answer takes the focus, so a stray Enter keeps the draft.
         if (state.asking && !this.wasAsking) this.keepBtn.focus();
         this.wasAsking = state.asking;
