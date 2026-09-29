@@ -24,10 +24,22 @@ export function makeFile(path: string): TFile {
     return file;
 }
 
-/** What `metadataCache.getCache` answers — only the fields `TaskScanner` reads. */
+/** A wikilink as `metadataCache.getCache` lists it: its target (alias left out) and the line it is on. */
+interface CachedLink {
+    link: string;
+    original: string;
+    position: { start: { line: number; col: number; offset: number }; end: { line: number; col: number; offset: number } };
+}
+
+/**
+ * What `metadataCache.getCache` answers — the fields `TaskScanner` reads,
+ * and the wikilinks and embeds a note writes (`NoteRefs.linksTo`).
+ */
 interface VaultCache {
     frontmatter?: Record<string, unknown>;
     listItems?: unknown[];
+    links: CachedLink[];
+    embeds: CachedLink[];
 }
 
 /** A line that opens a bullet, a numbered item, or a checkbox. */
@@ -73,7 +85,31 @@ function computeCache(content: string): VaultCache {
     }
 
     const listItems = lines.some(line => LIST_LINE.test(line)) ? [{}] : undefined;
-    return { frontmatter, listItems };
+    const links: CachedLink[] = [];
+    const embeds: CachedLink[] = [];
+    lines.forEach((line, n) => {
+        for (const m of line.matchAll(/(!?)\[\[([^\]]*)\]\]/g)) {
+            const col = m.index ?? 0;
+            const at = { line: n, col, offset: 0 };
+            (m[1] ? embeds : links).push({
+                link: m[2].split('|')[0],
+                original: m[0],
+                position: { start: at, end: { ...at, col: col + m[0].length } },
+            });
+        }
+    });
+    return { frontmatter, listItems, links, embeds };
+}
+
+/**
+ * The note of `paths` a link spelling `linkpath` resolves to, as Obsidian
+ * resolves one (`getFirstLinkpathDest`), case aside: the note at that path,
+ * or else the first by that name.
+ */
+function linkDest(paths: readonly string[], linkpath: string): string | undefined {
+    const bare = linkpath.replace(/\.md$/i, '').toLowerCase();
+    return paths.find(p => p.replace(/\.md$/i, '').toLowerCase() === bare)
+        ?? paths.find(p => (p.split('/').pop() ?? p).replace(/\.md$/i, '').toLowerCase() === bare);
 }
 
 /**
@@ -183,11 +219,32 @@ export function vaultSession(contents: Map<string, string>, options: { probe?: D
             },
             // Spelt as Obsidian was measured to spell a new link, by default settings.
             generateMarkdownLink: linkDouble(() => [...contents.keys()]),
+            // Obsidian's default place for new notes: the vault's root.
+            getNewFileParent: (_sourcePath: string) => Object.assign(new TFolder(), { path: '/', name: '' }),
         },
         metadataCache: {
             ...noop,
             on: (name: string, fn: (...args: unknown[]) => unknown) => { vaultHandlers.set(name, fn); return {}; },
             getCache: (path: string) => (contents.has(path) ? computeCache(contents.get(path)!) : null),
+            getFirstLinkpathDest: (linkpath: string, _sourcePath: string) => {
+                const path = linkDest([...contents.keys()], linkpath);
+                return path === undefined ? null : fileAt(path);
+            },
+            /** Per note, the notes its links and embeds resolve to, and how many times. */
+            get resolvedLinks(): Record<string, Record<string, number>> {
+                const paths = [...contents.keys()];
+                const out: Record<string, Record<string, number>> = {};
+                for (const [from, content] of contents) {
+                    out[from] = {};
+                    const { links, embeds } = computeCache(content);
+                    for (const one of [...links, ...embeds]) {
+                        const to = one.link.split('#')[0];
+                        const dest = to === '' ? undefined : linkDest(paths, to);
+                        if (dest !== undefined) out[from][dest] = (out[from][dest] ?? 0) + 1;
+                    }
+                }
+                return out;
+            },
         },
         workspace: { ...noop, onLayoutReady: () => { }, activeLeaf: null },
     };

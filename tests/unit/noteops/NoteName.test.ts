@@ -42,6 +42,20 @@ describe('NoteName.fromText: the name a row suggests', () => {
     });
 });
 
+describe('NoteName.linksIn: the notes a row links to', () => {
+    it('each as its link spells the note, without heading, block or shown text', () => {
+        expect(NoteName.linksIn('読む [[Plan]] と [[a/b#h|B]] と ![[c#^x]]')).toEqual(['Plan', 'a/b', 'c']);
+    });
+
+    it('a Markdown link to a path in the vault, decoded; not a URL', () => {
+        expect(NoteName.linksIn('[計画](Projects/My%20Plan.md#h) [web](https://example.com) [x](<a b.md>)')).toEqual(['Projects/My Plan.md', 'a b.md']);
+    });
+
+    it('not a link into its own note', () => {
+        expect(NoteName.linksIn('見る [[#Done]] [[#^id]] [t](#h)')).toEqual([]);
+    });
+});
+
 describe('NoteName.check: whether a name can be a note\'s', () => {
     it('takes a name of words', () => {
         expect(NoteName.check('設計書を書く')).toEqual({ ok: true });
