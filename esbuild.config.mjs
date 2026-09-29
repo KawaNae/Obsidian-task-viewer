@@ -113,6 +113,7 @@ const copyStaticFiles = {
           '_overlay.css',
           '_task-hub.css',
           '_source-editor.css',
+          '_send-dialog.css',
           '_filter-popover.css',
           '_sort-popover.css',
           '_kanban.css',
