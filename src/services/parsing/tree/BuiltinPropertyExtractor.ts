@@ -4,6 +4,7 @@ import { normalizeColor } from '../../../utils/ColorUtils';
 import { TagExtractor } from '../utils/TagExtractor';
 import { parseDateTimeField } from '../utils/DateTimeFieldParser';
 import { reservedPropertyKeys } from '../utils/FrontmatterPolicy';
+import type { ScalarField } from './DocumentTree';
 
 export interface ExtractedProperties {
     color?: string;
@@ -16,6 +17,23 @@ export interface ExtractedProperties {
     endTime?: string;
     due?: string;
     properties: Record<string, PropertyValue>;
+}
+
+/**
+ * The key a built-in value is written under, on any layer: the one
+ * {@link BuiltinPropertyExtractor.extract} and `FilePropertyResolver` read it
+ * from. A date and its time share their key.
+ */
+export function fieldKey(field: ScalarField | 'tags', keys: ScopeKeys): string {
+    switch (field) {
+        case 'color': return keys.color;
+        case 'linestyle': return keys.linestyle;
+        case 'mask': return keys.mask;
+        case 'startDate': case 'startTime': return keys.start;
+        case 'endDate': case 'endTime': return keys.end;
+        case 'due': return keys.due;
+        case 'tags': return 'tags';
+    }
 }
 
 /**

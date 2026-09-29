@@ -1,4 +1,4 @@
-import type { DocumentNode, SectionNode, BlockNode, PropertyBlockEntry, TaskBlock } from './DocumentTree';
+import { NO_SOURCES, type DocumentNode, type SectionNode, type BlockNode, type PropertyBlockEntry, type TaskBlock } from './DocumentTree';
 import { ChildLineClassifier } from '../utils/ChildLineClassifier';
 import { TaskLineClassifier } from '../utils/TaskLineClassifier';
 import { INDENT_SOURCE, Outline, type OutlineReading } from '../utils/Outline';
@@ -109,6 +109,7 @@ export class DocumentTreeBuilder {
             heading,
             propertyBlock: null,
             resolvedProperties: {},
+            resolvedSources: NO_SOURCES,
             blocks: [],
             children: [],
             startLine,
