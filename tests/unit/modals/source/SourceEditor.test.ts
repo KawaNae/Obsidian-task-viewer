@@ -75,6 +75,29 @@ describe('children editor: indent', () => {
         expect(t.doc.toString()).toBe('- a\n\t- b');
     });
 
+    it('outdents as Obsidian\'s editor does, rewriting the indent in the unit\'s spelling', () => {
+        // Measured in Obsidian 1.13.7 (tabSize 4): Shift+Tab under useTab, and under spaces.
+        const measured: Record<string, [string, string]> = {
+            '\t\t- x': ['\t- x', '    - x'],
+            '    \t- x': ['\t- x', '    - x'],
+            '\t    - x': ['\t- x', '    - x'],
+            '        - x': ['\t- x', '    - x'],
+            '  - x': ['- x', '- x'],
+            '      - x': ['  - x', '  - x'],
+            '   - x': ['- x', '- x'],
+            '\t  - x': ['  - x', '  - x'],
+            '  \t- x': ['- x', '- x'],
+            '- x': ['- x', '- x'],
+        };
+        for (const [line, [underTab, underSpaces]] of Object.entries(measured)) {
+            for (const [unit, want] of [['\t', underTab], ['    ', underSpaces]] as const) {
+                let st = childrenState([line], unit, undefined, {});
+                st = st.update({ selection: EditorSelection.cursor(line.length) }).state;
+                expect(run(st, indentLess).doc.toString(), `${JSON.stringify(line)} under ${JSON.stringify(unit)}`).toBe(want);
+            }
+        }
+    });
+
     it('takes a tab as four columns for the width it shows a level at', () => {
         expect(indentColumns('\t')).toBe(4);
         expect(indentColumns('  ')).toBe(2);
