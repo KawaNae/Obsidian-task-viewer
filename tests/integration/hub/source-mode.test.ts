@@ -298,7 +298,7 @@ describe('the hub\'s source mode', () => {
         ].join('\n'));
     });
 
-    it('shows the editors as invalid while asking, and opens the hub asked for once the draft is thrown away', async () => {
+    it('asks when another hub is asked for, showing the editors as invalid, and opens no other hub once the draft is thrown away', async () => {
         await writeIndexedTestFile(TEST_FILE, NOTE);
         openSource('親');
         const asked = run<Record<string, unknown>>(`
@@ -314,14 +314,14 @@ describe('the hub\'s source mode', () => {
         expect(asked).toMatchObject({ hub: true, source: true, asking: true, marked: true, children: '- [ ] 子a\n- [ ] 子b 下書き' });
         expect(asked.shadow).not.toBe('none');
 
-        const handed = run<Record<string, unknown>>(`
+        const discarded = run<Record<string, unknown>>(`
             document.querySelector('.task-hub__source-discard').click();
-            await until(() => document.querySelectorAll('.task-hub').length === 1 && document.querySelector('.task-hub__preview')?.textContent.includes('次'));
+            await until(() => !document.querySelector('.task-hub'));
             await sleep(300);
-            return JSON.stringify({ ...state(), hubs: document.querySelectorAll('.task-hub:not(.is-closing)').length, preview: document.querySelector('.task-hub:not(.is-closing) .task-hub__preview').textContent });
+            return JSON.stringify(state());
         `);
-        expect(handed).toMatchObject({ hub: true, source: false, hubs: 1 });
-        expect(handed.preview).toContain('次');
+        // The hub asked for is forgotten: throwing the draft away closes this hub and opens none.
+        expect(discarded).toMatchObject({ hub: false, source: false });
         expect(readTestFile(TEST_FILE)).toBe(NOTE);
     });
 
