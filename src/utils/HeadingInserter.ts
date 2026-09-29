@@ -38,10 +38,18 @@ export class HeadingInserter {
         // sets the new heading off from the text above it.
         const end = Placement.end(draft.reading());
         const blank = end.at > 0 && !Outline.isBlank(draft.lines[end.at - 1]) ? [''] : [];
-        draft.put(end, Block.read([...blank, '#'.repeat(to.level) + ' ' + to.heading]));
+        draft.put(end, Block.read([...blank, this.headingLine(to)]));
         const made = Placement.into(draft.reading(), to, head);
         if (made.kind !== 'spot') throw new UnfollowableDraft(`the heading '${to.heading}' just made is not one to put lines under`);
         return made.spot;
+    }
+
+    /**
+     * The line of the heading {@link sectionSpot} makes for `to`: what a note
+     * with none by the name will hold once lines are put in the section.
+     */
+    static headingLine(to: Section): string {
+        return '#'.repeat(to.level) + ' ' + to.heading;
     }
 
     /**

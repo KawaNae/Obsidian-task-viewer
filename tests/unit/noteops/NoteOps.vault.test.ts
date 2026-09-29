@@ -1,12 +1,12 @@
 import { describe, it, expect, afterEach, beforeEach } from 'vitest';
-import { Notice } from 'obsidian';
+import { Notice, TFolder } from 'obsidian';
 import { openLiveVault, type VaultSession } from '../helpers/vaultSession';
 import { NoteOps } from '../../../src/services/data/NoteOps';
 import { TaskWriteService } from '../../../src/services/data/TaskWriteService';
 import { DEFAULT_SETTINGS } from '../../../src/types';
 import { t } from '../../../src/i18n';
 import { refusalClause } from '../../../src/services/core/RefusalClause';
-import type { SendDestination } from '../../../src/services/data/NoteOps';
+import type { DestinationAsk, DestinationFacts, SendDestination } from '../../../src/services/data/NoteOps';
 
 /**
  * The send operation as the UI asks for it (`NoteOps`): what its dialog
@@ -31,7 +31,7 @@ async function open(lines: string[], others: Record<string, string[]> = {}) {
 }
 
 describe('previewSend', () => {
-    it('opens on each row once, in the order they stand, with its note\'s lines, to the settings\' section of the note', async () => {
+    it('opens on each row once, in the order they stand, with its note\'s lines, to the settings\' section', async () => {
         const note = await open(['- [ ] A', '- [ ] P', '    - [ ] c', '']);
 
         const preview = await note.ops.previewSend([note.idOf('c'), note.idOf('P'), note.idOf('A')]);
@@ -39,7 +39,7 @@ describe('previewSend', () => {
         expect(preview?.rows.map(row => row.task.content)).toEqual(['A', 'P']);
         expect(preview?.rows[1].task.subtreeLines).toEqual(['- [ ] P', '    - [ ] c']);
         expect(preview?.rows[0].lines).toEqual(note.lines());
-        expect(preview?.defaults).toEqual({ note: { kind: 'existing', path: FILE }, section: { heading: 'Tasks', level: 2, side: 'head' } });
+        expect(preview?.defaults.section).toEqual({ heading: 'Tasks', level: 2, side: 'head' });
     });
 
     it('opens on nothing when a row is not the one on the disk, and the user is told', async () => {
@@ -53,14 +53,161 @@ describe('previewSend', () => {
     });
 });
 
+describe('previewSend: the note by default', () => {
+    const noteOf = async (row: string, others: Record<string, string[]> = {}) => {
+        const note = await open([row, ''], others);
+        newNotesIn(note, 'Inbox');
+        return (await note.ops.previewSend([note.session.index.getTasks()[0].id]))!.defaults.note;
+    };
+
+    it('the one note the row links to', async () => {
+        expect(await noteOf('- [ ] 読む [[plan]]', { 'Projects/Plan.md': ['# p', ''] }))
+            .toEqual({ kind: 'existing', path: 'Projects/Plan.md' });
+        expect(await noteOf('- [ ] 読む [計画](Projects/Plan.md)', { 'Projects/Plan.md': ['# p', ''] }))
+            .toEqual({ kind: 'existing', path: 'Projects/Plan.md' });
+    });
+
+    it('a link no note answers: a new note where the link spells it, or in the folder for new notes', async () => {
+        expect(await noteOf('- [ ] 読む [[Ideas/Later#h|あとで]]')).toEqual({ kind: 'new', folder: 'Ideas', name: 'Later' });
+        expect(await noteOf('- [ ] 読む [[Later]]')).toEqual({ kind: 'new', folder: 'Inbox', name: 'Later' });
+    });
+
+    it('no link, or more than one: a new note in the folder for new notes, named after the row', async () => {
+        expect(await noteOf('- [ ] 設計 #plan')).toEqual({ kind: 'new', folder: 'Inbox', name: '設計' });
+        expect(await noteOf('- [ ] [[a]] と [[b]]', { 'a.md': [''], 'b.md': [''] })).toEqual({ kind: 'new', folder: 'Inbox', name: 'a と b' });
+        // A link into its own note names none.
+        expect(await noteOf('- [ ] 見る [[#Done]]')).toEqual({ kind: 'new', folder: 'Inbox', name: '見る' });
+    });
+});
+
+describe('previewSend: candidates and links', () => {
+    it('offers what the row inherits, Obsidian\'s own keys marked', async () => {
+        const note = await open(['---', 'aliases: [x]', 'k: 1', '---', '- [ ] A', '']);
+
+        const preview = (await note.ops.previewSend([note.idOf('A')]))!;
+
+        expect(preview.candidates.map(one => [one.key, one.obsidian])).toEqual([['aliases', true], ['k', false]]);
+    });
+
+    it('of more than one row, only the keys every row inherits alike', async () => {
+        const note = await open([
+            '---', 'k: 1', '---',
+            '## a', '- same:: s', '- differ:: 1', '- only:: o', '- [ ] A',
+            '## b', '- same:: s', '- differ:: 2', '- [ ] B', '',
+        ]);
+
+        const preview = (await note.ops.previewSend([note.idOf('A'), note.idOf('B')]))!;
+
+        expect(preview.candidates.map(one => one.key)).toEqual(['k', 'same']);
+    });
+
+    it('the links to a block of the rows\' subtrees, from elsewhere and from the rest of the note', async () => {
+        const note = await open(
+            ['- [ ] A ^a', '    - [ ] c ^c', '- [ ] B', '    - [[#^c]]', '- see [[#^a]]', ''],
+            { 'other.md': ['x [[note#^c]]', ''] },
+        );
+
+        const preview = (await note.ops.previewSend([note.idOf('A'), note.idOf('B')]))!;
+
+        // The link on line 3 goes with B.
+        expect(preview.links).toEqual([
+            { anchor: 'a', from: FILE, line: 4 },
+            { anchor: 'c', from: 'other.md', line: 0 },
+        ]);
+    });
+});
+
+describe('destinationFacts', () => {
+    const facts = async (lines: string[], ask: Partial<DestinationAsk>, others: Record<string, string[]> = {}, sent = ['A']) => {
+        const note = await open(lines, others);
+        const preview = (await note.ops.previewSend(sent.map(note.idOf)))!;
+        return note.ops.destinationFacts(preview, { folder: '', name: 'X', heading: '', ...ask });
+    };
+
+    it('a name no note can have: why', async () => {
+        expect(await facts(['- [ ] A', ''], { name: 'a|b' })).toEqual({ kind: 'unnamed', why: { ok: false, why: 'chars', chars: '|' } });
+        expect(await facts(['- [ ] A', ''], { name: ' ' })).toEqual({ kind: 'unnamed', why: { ok: false, why: 'empty' } });
+    });
+
+    it('a new note: to make, its heading made, the settings\' when none is typed', async () => {
+        const found = await facts(['- [ ] A', ''], { folder: 'projects', name: '設計' }, { 'Projects/old.md': [''] });
+
+        expect(found).toMatchObject({
+            kind: 'new',
+            path: 'Projects/設計.md',
+            to: { note: { kind: 'new', folder: 'projects', name: '設計' }, section: { heading: 'Tasks', level: 2, side: 'head' } },
+            heading: { kind: 'none' },
+            headings: [],
+            present: [],
+            ignored: false,
+            namesakes: [],
+            shared: [],
+            unresolved: [],
+        });
+    });
+
+    it('a note there is, named in another case: that note, and its heading one, none or many', async () => {
+        const other = { 'Plan.md': ['# Top', '## Tasks', '## Done', '## Done', ''] };
+
+        const one = await facts(['- [ ] A', ''], { name: 'plan' }, other);
+        expect(one).toMatchObject({ kind: 'existing', path: 'Plan.md', to: { note: { kind: 'existing', path: 'Plan.md' } }, heading: { kind: 'one' } });
+        expect(one.kind !== 'unnamed' && one.headings).toEqual(['Top', 'Tasks', 'Done', 'Done']);
+
+        expect(await facts(['- [ ] A', ''], { name: 'Plan', heading: ' Later ' }, other))
+            .toMatchObject({ to: { section: { heading: 'Later' } }, heading: { kind: 'none' } });
+        expect(await facts(['- [ ] A', ''], { name: 'Plan', heading: 'done' }, other))
+            .toMatchObject({ heading: { kind: 'many', count: 2 } });
+    });
+
+    it('the rows\' own note: same, and another note holding only some of them: existing', async () => {
+        expect(await facts(['- [ ] A', ''], { name: 'note' })).toMatchObject({ kind: 'same', path: FILE });
+        expect(await facts(['- [ ] A', ''], { name: 'note' }, { 'b.md': ['- [ ] B', ''] }, ['A', 'B'])).toMatchObject({ kind: 'existing' });
+    });
+
+    it('the keys offered that the note has already', async () => {
+        const found = await facts(['---', 'k: 1', 'm: 2', '---', '- [ ] A', ''], { name: 'Plan' }, { 'Plan.md': ['---', 'm: 9', '---', ''] });
+
+        expect(found).toMatchObject({ present: ['m'] });
+    });
+
+    it('a note the index does not read', async () => {
+        expect(await facts(['- [ ] A', ''], { name: 'Plan' }, { 'Plan.md': ['---', 'tv-ignore: true', '---', ''] })).toMatchObject({ ignored: true });
+        expect(await facts(['- [ ] A', ''], { name: 'Plan' }, { 'Plan.md': [''] })).toMatchObject({ ignored: false });
+    });
+
+    it('notes by the same name in other folders', async () => {
+        const found = await facts(['- [ ] A', ''], { name: 'Plan' }, { 'a/Plan.md': [''] });
+
+        expect(found.kind !== 'unnamed' && found.namesakes.map(file => file.path)).toEqual(['a/Plan.md']);
+    });
+
+    it('the ^ids a row of another note shares with the note; none for rows of the note itself', async () => {
+        const lines = ['- [ ] A ^a', '    - [ ] c ^c', '- [ ] B ^b', ''];
+
+        expect(await facts(lines, { name: 'Plan' }, { 'Plan.md': ['x ^c', 'y ^z', ''] })).toMatchObject({ shared: ['c'] });
+        expect(await facts(lines, { name: 'note' }, {}, ['A', 'B'])).toMatchObject({ shared: [] });
+    });
+
+    it('the commands of the rows and their descendants the note does not resolve, the heading it makes counted', async () => {
+        const lines = ['- [ ] A', '    - [ ] c @2026-09-28 ==> move([[#Done]])', '    - [ ] d @2026-09-28 ==> move([[#Tasks]])', ''];
+        const unresolved = (found: DestinationFacts) => found.kind === 'unnamed' ? null : found.unresolved.map(one => one.kind === 'heading' && [one.task.content, one.name, one.found]);
+
+        expect(unresolved(await facts(lines, { name: 'X' }))).toEqual([['c', 'Done', 'none']]);
+        expect(unresolved(await facts(lines, { name: 'Plan' }, { 'Plan.md': ['## Done', ''] }))).toEqual([]);
+        expect(unresolved(await facts(lines, { name: 'Plan', heading: 'Done' }, { 'Plan.md': ['# p', ''] }))).toEqual([['d', 'Tasks', 'none']]);
+    });
+});
+
 describe('send', () => {
     it('sends to a section of the rows\' own note', async () => {
         const note = await open(['- [ ] A', '    - [ ] a', '## Tasks', '']);
         const preview = (await note.ops.previewSend([note.idOf('A')]))!;
+        const facts = await note.ops.destinationFacts(preview, { folder: '', name: 'note', heading: '' });
+        if (facts.kind === 'unnamed') throw new Error('named');
 
         const sent = await note.ops.send({
             rows: preview.rows.map(({ task }) => ({ taskId: task.id, base: task.subtreeLines! })),
-            to: preview.defaults,
+            to: facts.to,
             frontmatter: [],
         });
 
@@ -175,4 +322,10 @@ function refuseNext(note: { contents: Map<string, string>; session: VaultSession
         }
         return process(file, fn);
     };
+}
+
+/** Make Obsidian's place for new notes, as the user's settings say it, the folder `path`. */
+function newNotesIn(note: { session: VaultSession }, path: string): void {
+    const fileManager = note.session.app.fileManager as unknown as { getNewFileParent: (source: string) => TFolder };
+    fileManager.getNewFileParent = () => Object.assign(new TFolder(), { path });
 }

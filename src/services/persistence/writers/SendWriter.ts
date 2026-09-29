@@ -321,7 +321,7 @@ export class SendWriter {
      * refused, the reason said through the session.
      */
     private placeInNote(draft: LineDraft, session: WriteSession, items: readonly Item[], to: SendTo): Placed | null {
-        const missing = to.frontmatter.filter(one => FrontmatterLineEditor.findKeyRange(draft.lines, FrontmatterLineEditor.findEnd(draft.lines), one.key) === null);
+        const missing = to.frontmatter.filter(one => !FrontmatterLineEditor.hasKey(draft.lines, one.key));
         if (missing.length > 0) {
             const fmEnd = FrontmatterLineEditor.ensureBlock(draft);
             FrontmatterLineEditor.applyUpdates(draft, fmEnd, Object.fromEntries(missing.map(one => [one.key, [...one.yaml]])));

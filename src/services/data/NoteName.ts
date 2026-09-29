@@ -1,4 +1,5 @@
-import type { App, TFile, TFolder } from 'obsidian';
+import { type App, type TFile, type TFolder, parseLinktext } from 'obsidian';
+import { extractWikilinkTarget } from '../../utils/WikilinkUtils';
 
 /** What {@link NoteName} asks of the vault: its files and its folders. */
 export type NoteVault = Pick<App['vault'], 'getFiles' | 'getMarkdownFiles' | 'getAllFolders'>;
@@ -86,6 +87,29 @@ export const NoteName = {
     },
 
     /**
+     * The notes a row's text links to, in the order it links to them, each
+     * as its link spells the note (`Folder/Note`), without the heading or
+     * block it points into and the text it shows: wikilinks and embeds, and
+     * Markdown links to a path in the vault (not a URL). A link into the
+     * note it is written in (`[[#heading]]`) names no note, and is left out.
+     */
+    linksIn(text: string): string[] {
+        const out: string[] = [];
+        const push = (linktext: string) => {
+            const { path } = parseLinktext(linktext.trim());
+            if (path.trim() !== '') out.push(path.trim());
+        };
+        for (const m of text.matchAll(/\[\[([^\]]*)\]\]|\[[^\]]*\]\(([^)]*)\)/g)) {
+            if (m[1] !== undefined) {
+                push(extractWikilinkTarget(m[1]));
+            } else if (!/^[a-z][a-z0-9+.-]*:/i.test(m[2].trim())) {
+                push(decoded(m[2].trim().replace(/^<(.*)>$/, '$1')));
+            }
+        }
+        return out;
+    },
+
+    /**
      * The folder a new note goes to by the user's settings for new notes,
      * seen from the note `sourcePath` ('' for the vault's root).
      */
@@ -120,6 +144,15 @@ export const NoteName = {
         return file ? { kind: 'existing', file, namesakes } : { kind: 'new', path, namesakes };
     },
 };
+
+/** A Markdown link's path, its `%20`s and the like read back; as written when it does not decode. */
+function decoded(path: string): string {
+    try {
+        return decodeURI(path);
+    } catch {
+        return path;
+    }
+}
 
 /** A folder's path as a note's place: '' for the root, which Obsidian calls '/'. */
 function folderPath(folder: TFolder): string {
