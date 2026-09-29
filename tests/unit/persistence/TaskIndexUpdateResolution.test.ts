@@ -28,10 +28,11 @@ function buildHost(task: Task, written = true) {
             reportNotRun: () => { },
         },
         writeCompleting: proto.writeCompleting,
+        tellNotRun: proto.tellNotRun,
         scanner: { follow: () => null, holds: () => false },
         app: { vault: { getAbstractFileByPath: () => null } },
         repository: {
-            updateTaskInFile: vi.fn(async () => ({ written, refused: null })),
+            updateTaskInFile: vi.fn(async () => ({ written, refused: null, fires: [] })),
         },
         // The revert lives on the prototype; the host stands in for `this`.
         revertUnwrittenUpdate: proto.revertUnwrittenUpdate,
@@ -42,6 +43,7 @@ function buildHost(task: Task, written = true) {
         refuseAfterDispose: proto.refuseAfterDispose,
 
         copyToPlan: proto.copyToPlan,
+        planCopy: proto.planCopy,
         getTask: proto.getTask,
 
         reportRefusal: () => { /* the notice is not measured here */ },

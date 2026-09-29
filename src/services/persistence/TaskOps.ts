@@ -1,4 +1,5 @@
 import type { FlowInstanceInsert } from './FlowInstanceLines';
+import type { Refusal, WriteMade, WriteRefused } from './FileLines';
 import type { PropertyOp } from './PropertyUpdatePlanner';
 import type { InSection } from './utils/Placement';
 
@@ -59,13 +60,56 @@ export type TaskOp =
  *
  * The completion is the user's and the fire follows from it, so a fire that
  * writes lines never takes the completion down with it: a write refused with
- * the fire in it, whatever it was refused for, is tried without it
- * (`processLines`'s `instead`), as the editor writes the fire apart from the
- * completion it follows (`FlowFireExtension`). A refusal of the completion's
- * own is met again without the fire, and nothing is written.
+ * the fire in it, whatever it was refused for, is tried without it, as the
+ * editor writes the fire apart from the completion it follows
+ * (`FlowFireExtension`). A refusal of the completion's own is met again
+ * without the fire, and nothing is written. Where one write completes several
+ * rows, each row's fire stands or is set aside on its own, as the editor's do
+ * (`InlineTaskWriter.writeFiring`).
  */
 export interface CompletionFire {
     op: Extract<TaskOp, { kind: 'fire' }>;
     /** Whether the fire, as the write's last run planned it, writes lines. */
     writes(): boolean;
+}
+
+/**
+ * What came of a write that may complete rows: refused whole, and nothing
+ * written; or made, with each fire of a row it completed, in the order the
+ * rows stand, and the refusal the write met with that fire in it when it was
+ * set aside (`setAside`: the completion is written without it, and the user
+ * is owed a word of it), else null.
+ */
+export type FiringOutcome<F extends CompletionFire = CompletionFire> =
+    | WriteRefused
+    | (WriteMade & { fires: ReadonlyArray<{ fire: F; setAside: Refusal | null }> });
+
+/**
+ * A row and its subtree written anew from a draft of their text: the hub's
+ * source mode (`TaskIndex.replaceSubtree`). `text` is the row's line, its
+ * indentation aside (the row keeps the file's). `children` are the lines of
+ * its subtree, in order, each as the file is to read it, indentation
+ * included, and each with the line of the subtree it was when the draft was
+ * opened: what the editor's own map of its changes says (`LineMap`), never
+ * a guess from the text.
+ *
+ * Not a {@link TaskOp}: it is a write of its own, never one effect among
+ * others, and what it answers (the rows it completed) is what the write's
+ * fires are planned on (`ReplaceSubtree`).
+ */
+export interface SubtreeReplacement {
+    text: string;
+    children: readonly SubtreeLine[];
+}
+
+/** A line of a {@link SubtreeReplacement}'s subtree. */
+export interface SubtreeLine {
+    /** The line as the file is to read it, indentation included. */
+    text: string;
+    /**
+     * Where it was in the subtree the draft was opened on: its offset from the
+     * row (1 for the row's first child line; 0 is the row itself, which no
+     * child is). Null for a line the draft made.
+     */
+    was: number | null;
 }

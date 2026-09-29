@@ -21,8 +21,8 @@ import { planInPlaceCopies } from '../persistence/DuplicateShift';
 import type { GenBlock } from '../parsing/gen/GenBlockCollector';
 import { plannedOn, subjectOf } from '../persistence/TaskRefs';
 import { logDebug, logError, logInfo, logWarn } from '../../log/log';
-import { readInLine, type EditorLine, type Landing, type WriteOutcome } from '../persistence/FileLines';
-import type { InsertPlace, TaskOp } from '../persistence/TaskOps';
+import { readInLine, type EditorLine, type Landing } from '../persistence/FileLines';
+import type { FiringOutcome, InsertPlace, SubtreeReplacement, TaskOp } from '../persistence/TaskOps';
 import { Destination } from '../persistence/Destination';
 import type { ContentKey } from './ContentKey';
 import { checkCopy, checkFile, type CheckDeps } from './ReadingCheck';
@@ -533,22 +533,78 @@ export class TaskIndex {
     /**
      * A write that may complete a row (`completingIn`, its file; null when it
      * does not), made with the row's fire in it: whether it was written. A
-     * write refused with a fire that writes lines is made without it in the
-     * same attempt (`CompletionFire.writes`). Once the completion landed, the
-     * user is told if its flow was not run: the fire's write was refused, or
-     * its plan failed, or fired without its move (`FlowExecutor.reportNotRun`).
+     * write refused with the fire in it is made without it in the same
+     * attempt (`InlineTaskWriter.writeFiring`), and the user told
+     * ({@link tellNotRun}).
      */
     private async writeCompleting(
         completingIn: string | null,
-        write: (fire?: FireOp) => Promise<WriteOutcome>,
+        write: (fire?: FireOp) => Promise<FiringOutcome<FireOp>>,
     ): Promise<boolean> {
-        if (completingIn === null) return (await write()).written;
-        const fire = this.commandExecutor.fireOp(completingIn);
-        const outcome = await write(fire);
-        if (!outcome.written) return false;
-        const notRun = outcome.insteadOf ? { kind: 'refused' as const, refusal: outcome.insteadOf } : notRunOf(fire.planned());
-        if (notRun) this.commandExecutor.reportNotRun(notRun);
-        return true;
+        const outcome = await write(completingIn === null ? undefined : this.commandExecutor.fireOp(completingIn));
+        this.tellNotRun(outcome);
+        return outcome.written;
+    }
+
+    /**
+     * Once a write that completed rows landed, tell the user of each row
+     * whose flow was not run, once: its fire was set aside, the write with it
+     * refused, or its plan failed, or it fired without its move
+     * (`FlowExecutor.reportNotRun`). The one word of it for every write of
+     * the index that completes rows.
+     */
+    private tellNotRun(outcome: FiringOutcome<FireOp>): void {
+        if (!outcome.written) return;
+        for (const { fire, setAside } of outcome.fires) {
+            const notRun = setAside ? { kind: 'refused' as const, refusal: setAside } : notRunOf(fire.planned());
+            if (notRun) this.commandExecutor.reportNotRun(notRun);
+        }
+    }
+
+    /**
+     * Write the row `taskId` and its subtree anew from a draft of their text:
+     * the hub's source mode. `base` is the row and its subtree as the draft
+     * was opened on them (the copy's `subtreeLines`), and the write is made
+     * only over a subtree that still reads so; `replacement` is the draft
+     * (`SubtreeReplacement`).
+     *
+     * One write, as every write that names a row: planned from the copy the
+     * index holds once the row's earlier writes are done (`onRow`,
+     * `copyToPlan`), named by the copy's line and reading, and checked against
+     * `base`. A row the write completes — the row, or a child line it keeps
+     * and writes checked — fires in the same write, each on its own
+     * (`InlineTaskWriter.writeFiring`), as the editor fires the rows one
+     * transaction completed; a line the draft made fires nothing, however it
+     * reads.
+     *
+     * @returns whether the draft was written; when not, why not, as the user
+     * was told it (`reportRefusal`), for the caller to show beside the draft
+     * it keeps. A read-only row is not written and answers `refused: null`:
+     * the hub does not offer it.
+     */
+    async replaceSubtree(taskId: string, base: readonly string[], replacement: SubtreeReplacement): Promise<{ written: true } | { written: false; refused: IndexRefusal | null }> {
+        if (this.refuseAfterDispose('replaceSubtree')) return { written: false, refused: null };
+        const known = this.getTask(taskId);
+        return this.onRow(taskId, async () => {
+            const planned = await this.planCopy(taskId, known);
+            if ('refused' in planned) return { written: false, refused: planned.refused };
+            const { task } = planned;
+            if (task.isReadOnly || base.length === 0) {
+                logWarn(`[TaskIndex] replaceSubtree: not a row to write: id=${taskId}`);
+                return { written: false, refused: null };
+            }
+            return this.withNotify(task.file, async () => {
+                logInfo(`[replaceSubtree] id=${taskId} lines=${base.length}->${replacement.children.length + 1}`);
+                const target = { ...plannedOn(task), basis: { text: base[0], subtree: base } };
+                const defs = this.settings.statusDefinitions;
+                const outcome = await this.repository.replaceSubtreeInFile(target, replacement, {
+                    completes: (was, now) => completes(was, now, defs),
+                    fire: () => this.commandExecutor.fireOp(task.file),
+                });
+                this.tellNotRun(outcome);
+                return outcome.written ? { written: true } : { written: false, refused: outcome.refused };
+            });
+        });
     }
 
     /**
@@ -569,20 +625,32 @@ export class TaskIndex {
      * user puts work in (`confirmTask`).
      */
     private async copyToPlan(taskId: string, known: Task | undefined): Promise<Task | undefined> {
+        const planned = await this.planCopy(taskId, known);
+        return 'task' in planned ? planned.task : undefined;
+    }
+
+    /**
+     * {@link copyToPlan}, with why not when the copy is not the row on the
+     * disk: told the user all the same, and answered too, for a caller that
+     * shows it in a place of its own (the hub's source mode).
+     */
+    private async planCopy(taskId: string, known: Task | undefined): Promise<{ task: Task } | { refused: IndexRefusal }> {
         const task = this.getTask(taskId);
         if (!task) {
             logWarn(`[TaskIndex] the index no longer holds the row: id=${taskId}`);
             // A row the caller named but the store never held here: say which
             // note, as a write refused before it read the note does.
             const file = known?.file ?? TaskIdGenerator.parse(taskId)?.filePath ?? '';
-            await this.reportRefusal({ file, reason: { kind: 'gone' }, subject: known ? subjectOf(known) : file });
-            return undefined;
+            const refused: IndexRefusal = { file, reason: { kind: 'gone' }, subject: known ? subjectOf(known) : file };
+            await this.reportRefusal(refused);
+            return { refused };
         }
         const checked = await checkCopy(this.checks, task);
-        if (checked.verdict === 'fresh') return task;
+        if (checked.verdict === 'fresh') return { task };
         const reason = checked.verdict === 'stale' ? { kind: 'stale' as const, disk: checked.disk } : { kind: 'unreadable' as const };
-        await this.reportRefusal({ file: task.file, reason, subject: subjectOf(task) });
-        return undefined;
+        const refused: IndexRefusal = { file: task.file, reason, subject: subjectOf(task) };
+        await this.reportRefusal(refused);
+        return { refused };
     }
 
     /**

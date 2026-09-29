@@ -10,11 +10,12 @@ import type { PropertyOp } from '../PropertyUpdatePlanner';
 import { flowInstanceHead, renderFlowInstance } from '../FlowInstanceLines';
 import {
     UnfollowableDraft, createFile, editLines, fileGone, processLines, splitLines,
-    type DraftEdit, type EditorLine, type LineDraft, type NamedRow, type WriteAt, type WriteChannel,
-    type WriteChannels, type WriteOutcome, type WriteSession,
+    type DraftEdit, type EditedLines, type EditorLine, type LineDraft, type NamedRow, type Refusal,
+    type RowTarget, type WriteAt, type WriteRefused, type WriteChannel, type WriteChannels, type WriteOutcome, type WriteSession,
 } from '../FileLines';
 import type { PlannedTarget } from '../TaskRefs';
-import type { CompletionFire, TaskOp } from '../TaskOps';
+import type { CompletionFire, FiringOutcome, SubtreeReplacement, TaskOp } from '../TaskOps';
+import { replaceSubtree } from '../ReplaceSubtree';
 import { Outline, type OutlineReading } from '../../parsing/utils/Outline';
 
 
@@ -44,10 +45,10 @@ export class InlineTaskWriter {
      * @returns the outcome. `written: false` means nothing was written at all,
      * which the caller must not treat as a successful no-op: the index has
      * already been updated optimistically, and an unwritten file leaves the two
-     * disagreeing until something else forces a rescan. `rows` holds the row
-     * as it was handed in and as it was written.
+     * disagreeing until something else forces a rescan. A write made says
+     * what came of `fire` (`FiringOutcome`).
      */
-    async updateTaskInFile(target: PlannedTarget, updatedTask: Task, childOps: PropertyOp[] = [], fire?: CompletionFire): Promise<WriteOutcome> {
+    async updateTaskInFile<F extends CompletionFire>(target: PlannedTarget, updatedTask: Task, childOps: PropertyOp[] = [], fire?: F): Promise<FiringOutcome<F>> {
         const file = this.app.vault.getAbstractFileByPath(target.file);
         if (!(file instanceof TFile)) return this.refusedGone(target);
 
@@ -59,25 +60,126 @@ export class InlineTaskWriter {
     }
 
     /**
-     * Apply `ops` to the row `target` names, as one write, with `fire` after
-     * them when a fire goes with them: when the write with the fire is
-     * refused, whatever for, and the fire writes lines, the ops are tried
-     * without it in the same attempt (`CompletionFire.writes`).
+     * Replace the row `target` names and its subtree with `replacement`, as
+     * one write, and fire each row the write completes, in the same write:
+     * the hub's source mode (`TaskIndex.replaceSubtree`). Which rows the
+     * write keeps and which it writes anew, and which of the kept ones it
+     * completes, is `ReplaceSubtree`'s to answer; whether a row is completed
+     * is `completing.completes`, handed in by the index, since it is the flow
+     * layer's question. Each completed row's fire is `completing.fire()`, and
+     * stands or is set aside on its own ({@link writeFiring}).
+     *
+     * The target's basis holds the subtree the draft was opened on, so the
+     * write is made only over a subtree that still reads so: a line written
+     * into it since, by the form, a timer or by hand, refuses it as `changed`.
      */
-    private writeOps(
+    async replaceSubtreeInFile<F extends CompletionFire>(
+        target: PlannedTarget,
+        replacement: SubtreeReplacement,
+        completing: { completes(before: string, after: string): boolean; fire(): F },
+    ): Promise<FiringOutcome<F>> {
+        const file = this.app.vault.getAbstractFileByPath(target.file);
+        if (!(file instanceof TFile)) return this.refusedGone(target);
+        return this.writeFiring(file, this.channelOf(target.file), (draft, session) => {
+            const line = session.row(target);
+            if (line === null) return false;
+            const rewritten = replaceSubtree(draft, session, line, replacement);
+            if (rewritten === false) return false;
+            return rewritten.filter(row => completing.completes(row.was, row.now)).map(row => row.row);
+        }, completing.fire);
+    }
+
+    /**
+     * Apply `ops` to the row `target` names, as one write, with `fire` after
+     * them when a fire goes with them ({@link writeFiring}).
+     */
+    private writeOps<F extends CompletionFire>(
         file: TFile,
         channel: WriteChannel | undefined,
         target: NamedRow | EditorLine,
         ops: readonly TaskOp[],
-        fire: CompletionFire | undefined,
-    ): Promise<WriteOutcome> {
-        const edit = (all: readonly TaskOp[]): DraftEdit => (draft, _eol, session) => this.applyOps(draft, session, target, all);
-        if (!fire) return processLines(this.app, file, channel, edit(ops));
-        return processLines(this.app, file, channel, edit([...ops, fire.op]), undefined, { when: () => fire.writes(), edit: edit(ops) });
+        fire: F | undefined,
+    ): Promise<FiringOutcome<F>> {
+        return this.writeFiring(file, channel, (draft, session) => {
+            if (!this.applyOps(draft, session, target, ops)) return false;
+            return fire ? [target] : [];
+        }, () => fire!);
+    }
+
+    /**
+     * One write of `base`, and of the fire of each row it completed, each
+     * fire kept or set aside on its own: as the editor fires the rows one
+     * transaction completed (`FlowFireExtension`), but in one write.
+     *
+     * `base` does the write's own edit and answers the rows it completed,
+     * where its session finds them (the row the write names, a line it
+     * marked), in the order they stand; false when it gave the write up.
+     * Each row's fire is `fire()`, asked once per row in each run of the
+     * write, and applied after `base`, row by row, the ones above first, each
+     * planned from the lines the fires before it left. A fire that carries a
+     * row below it (a parent's move) carries it through the write's own
+     * report, and the row fires where it went, once.
+     *
+     * The write is tried with every fire first, which is the one try when
+     * nothing is refused. Refused with a fire in it, it is tried with none:
+     * refused so too, the refusal is the write's own, and nothing is
+     * written. Otherwise the fires are put back one at a time, from the
+     * top, each kept if the write with it and the ones kept before it is
+     * made, and set aside, with the refusal it met, if not: the completion
+     * stands without it, its command stays on the row, and the user is owed a
+     * word of it (`FiringOutcome`). All of it is tried on the lines of one
+     * run of the write's callback (`EditTrials`).
+     */
+    private async writeFiring<F extends CompletionFire>(
+        file: TFile,
+        channel: WriteChannel | undefined,
+        base: (draft: LineDraft, session: WriteSession) => readonly RowTarget[] | false,
+        fire: () => F,
+    ): Promise<FiringOutcome<F>> {
+        // The last run's fires and what came of them: what the outcome says.
+        let fires: F[] = [];
+        let setAside = new Map<number, Refusal>();
+        const settle = (tryEdit: (edit: DraftEdit) => EditedLines): EditedLines => {
+            fires = [];
+            setAside = new Map();
+            const fireAt = (k: number): F => fires[k] ??= fire();
+            // How many rows `base` completed, as its last try answered.
+            let rows = 0;
+            // The write with the fires of the rows `kept` names (all of them
+            // for null), each after the ones above it.
+            const tryWith = (kept: readonly number[] | null): EditedLines => tryEdit((draft, _eol, session) => {
+                const completed = base(draft, session);
+                if (completed === false) return false;
+                rows = completed.length;
+                for (const k of kept ?? completed.keys()) {
+                    if (!this.applyOps(draft, session, completed[k], [fireAt(k).op])) return false;
+                }
+                return true;
+            });
+            const all = tryWith(null);
+            if (all.written || rows === 0) return all;
+            let made = tryWith([]);
+            if (!made.written) return made;
+            const kept: number[] = [];
+            for (let k = 0; k < rows; k++) {
+                // With every fire above it kept, the last is the first try again.
+                const withIt = kept.length === k && k === rows - 1 ? all : tryWith([...kept, k]);
+                if (withIt.written) {
+                    kept.push(k);
+                    made = withIt;
+                } else {
+                    setAside.set(k, withIt.refused);
+                }
+            }
+            return made;
+        };
+        const outcome = await processLines(this.app, file, channel, { settle });
+        if (!outcome.written) return outcome;
+        return { ...outcome, fires: fires.map((one, k) => ({ fire: one, setAside: setAside.get(k) ?? null })) };
     }
 
     /** Nothing written: the file is not there. Told as `gone`, like a row that is not. */
-    private refusedGone(target: PlannedTarget): WriteOutcome {
+    private refusedGone(target: PlannedTarget): WriteRefused {
         return fileGone(this.channelOf(target.file), target.file, target.subject);
     }
 
@@ -89,12 +191,12 @@ export class InlineTaskWriter {
      * tells a refusal in its own words has it from the outcome, as
      * `applyToTask` does.
      */
-    async applyToLine(
+    async applyToLine<F extends CompletionFire>(
         filePath: string,
         at: EditorLine,
         ops: readonly TaskOp[],
-        opts: { tellRefusal?: boolean; fire?: CompletionFire } = {},
-    ): Promise<WriteOutcome> {
+        opts: { tellRefusal?: boolean; fire?: F } = {},
+    ): Promise<FiringOutcome<F>> {
         const file = this.app.vault.getAbstractFileByPath(filePath);
         const told = this.channelOf(filePath);
         const channel = told && opts.tellRefusal === false ? { ...told, refused: () => { } } : told;
@@ -151,7 +253,7 @@ export class InlineTaskWriter {
      * A `fire` is planned where it stands, from the lines the ops before it
      * left, and the ops it answers take its place.
      */
-    applyOps(draft: LineDraft, session: WriteSession, target: NamedRow | EditorLine, ops: readonly TaskOp[]): boolean {
+    applyOps(draft: LineDraft, session: WriteSession, target: RowTarget, ops: readonly TaskOp[]): boolean {
         if (session.row(target) === null) return false;
         const queue = [...ops];
         for (let op = queue.shift(); op !== undefined; op = queue.shift()) {
