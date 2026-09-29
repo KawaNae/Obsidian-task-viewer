@@ -1,11 +1,15 @@
 import { acceptCompletion, autocompletion, closeBrackets, closeBracketsKeymap, completionStatus } from '@codemirror/autocomplete';
-import { defaultKeymap, history, historyKeymap, indentLess, indentMore } from '@codemirror/commands';
+import { defaultKeymap, history, historyKeymap, indentLess } from '@codemirror/commands';
 import { indentUnit } from '@codemirror/language';
-import { EditorSelection, EditorState, Prec, type Extension, type StateCommand } from '@codemirror/state';
+import { EditorState, Prec, type Extension } from '@codemirror/state';
 import { EditorView, keymap } from '@codemirror/view';
 import { Scope, type App } from 'obsidian';
 import { BRACKET_CLOSERS, BRACKET_PAIRS } from '../../../utils/BracketRules';
 import { lineMapOf, trackLines } from './LineMap';
+import {
+    indentMoreRestartingLists, listNumbering, moveLineDownKeepingNumbers, moveLineUpKeepingNumbers,
+    newlineContinuingList,
+} from './ListMarkup';
 import { linkTagCompletionSource } from './SourceCompletion';
 
 /**
@@ -18,8 +22,11 @@ import { linkTagCompletionSource } from './SourceCompletion';
  * - The parent editor holds one line: no change that would break it is
  *   taken, and Enter goes on to the children's editor.
  * - The children's editor holds any number of lines, indented from 0. Tab
- *   indents by the unit it is given, Shift+Tab outdents, and Enter keeps the
- *   indent of the line it breaks, as it is spelled.
+ *   indents by the unit it is given, Shift+Tab outdents, and Enter goes on
+ *   with a list as Obsidian's editor does, keeping the indent of the line it
+ *   breaks as it is spelled (`ListMarkup`). Numbered lists are numbered
+ *   again after each change, and Alt+ArrowUp/Down move lines with the
+ *   numbers left in place, as there.
  * - Both pair brackets as the task name field does (`BracketRules`), and
  *   complete links and tags as its suggest does (`LinkTagCandidates`).
  * - While either has the focus, Obsidian's hotkeys are kept out, as a modal
@@ -89,24 +96,6 @@ function common(app: App | undefined, hooks: EditorHooks): Extension[] {
 /** The parent editor holds one line: a change that would make it two is not taken. */
 export const singleLine: Extension = EditorState.transactionFilter.of((tr) => (tr.newDoc.lines > 1 ? [] : tr));
 
-/**
- * A line break that keeps the indent of the line it breaks, spelled as that
- * line spells it (a break inside the indent keeps the part before it).
- */
-export const newlineKeepingIndent: StateCommand = ({ state, dispatch }) => {
-    if (state.readOnly) return false;
-    dispatch(state.update(state.changeByRange((range) => {
-        const line = state.doc.lineAt(range.from);
-        const indent = /^[ \t]*/.exec(line.text)![0].slice(0, range.from - line.from);
-        const insert = state.lineBreak + indent;
-        return {
-            changes: { from: range.from, to: range.to, insert },
-            range: EditorSelection.cursor(range.from + insert.length),
-        };
-    }), { scrollIntoView: true, userEvent: 'input' }));
-    return true;
-};
-
 export function parentState(text: string, app: App | undefined, hooks: EditorHooks & { onEnter?: () => void }): EditorState {
     return EditorState.create({
         doc: text,
@@ -124,10 +113,13 @@ export function childrenState(lines: readonly string[], unit: string, app: App |
         extensions: [
             trackLines(lines.length === 0 ? 0 : undefined),
             indentUnit.of(unit),
+            listNumbering,
             Prec.high(keymap.of([
                 { key: 'Tab', run: acceptCompletion },
-                { key: 'Tab', run: indentMore, shift: indentLess },
-                { key: 'Enter', run: newlineKeepingIndent },
+                { key: 'Tab', run: indentMoreRestartingLists, shift: indentLess },
+                { key: 'Enter', run: newlineContinuingList },
+                { key: 'Alt-ArrowUp', run: moveLineUpKeepingNumbers },
+                { key: 'Alt-ArrowDown', run: moveLineDownKeepingNumbers },
             ])),
             common(app, hooks),
         ],
