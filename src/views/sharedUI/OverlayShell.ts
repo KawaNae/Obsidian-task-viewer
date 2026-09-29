@@ -14,6 +14,10 @@
  * Child popovers (dropdowns, suggests) continue to use PopoverShell via
  * PopoverStack. OverlayShell coordinates with an optional childStack for
  * outside-click and Escape handling.
+ *
+ * Escape and the user's "back" (Android's back gesture, the desktop mouse's
+ * back button: `HistoryBack`) step back alike: a child popover open closes
+ * first, else the overlay is asked to close.
  */
 
 import { setIcon, type Keymap } from 'obsidian';
@@ -22,6 +26,7 @@ import { positionElement, resolveHost } from './PopoverShell';
 import type { PopoverStack } from './PopoverStack';
 import { registerOverlay, unregisterOverlay } from './OverlayRegistry';
 import { HotkeyShield } from './HotkeyShield';
+import { holdHistoryBack } from './HistoryBack';
 import { KeyboardAwareContainer } from '../../utils/KeyboardAwareContainer';
 import { trackKeyboard } from '../../utils/KeyboardState';
 import { t } from '../../i18n';
@@ -36,8 +41,8 @@ export interface OverlayOpenOpts {
     onClose?: () => void;
     /**
      * Asked, synchronously, before a close the user asks for (the close
-     * button, Escape, a click outside, a swipe, another overlay taking its
-     * place: `requestClose`): false keeps the overlay open, the body having
+     * button, Escape, the back, a click outside, a swipe, another overlay
+     * taking its place: `requestClose`): false keeps the overlay open, the body having
      * said why in its own place (a draft to throw away or keep). Not asked
      * where nothing can be kept open — the window going away, the plugin
      * unloading — which close at once (`close`).
@@ -74,6 +79,7 @@ export class OverlayShell {
     private closing = false;
     private kbAware: KeyboardAwareContainer | null = null;
     private hotkeys: HotkeyShield | null = null;
+    private releaseBack: (() => void) | null = null;
 
     private outsideClickHandler: ((e: MouseEvent) => void) | null = null;
     private escapeHandler: ((e: KeyboardEvent) => void) | null = null;
@@ -165,13 +171,12 @@ export class OverlayShell {
             if (e.key !== 'Escape') return;
             if (yieldsEscape?.(e)) return;
             e.stopPropagation();
-            if (this.childStack?.isOpen()) {
-                this.childStack.closeAll();
-            } else {
-                this.requestClose();
-            }
+            this.stepBack();
         };
         hostDoc.addEventListener('keydown', this.escapeHandler, true);
+
+        // Back (Android's back, the mouse's back button): as Escape.
+        this.releaseBack = holdHistoryBack(() => this.stepBack());
 
         // Outside-click
         this.outsideClickHandler = (e: MouseEvent) => {
@@ -208,6 +213,15 @@ export class OverlayShell {
         return true;
     }
 
+    /** Escape or the back: a child popover open closes first, else the overlay is asked to close. */
+    private stepBack(): void {
+        if (this.childStack?.isOpen()) {
+            this.childStack.closeAll();
+        } else {
+            this.requestClose();
+        }
+    }
+
     /** Close now, asking nothing: the window or the plugin going away, or the body closing itself. */
     close(): void {
         if (!this.rootEl || this.closing) return;
@@ -219,6 +233,8 @@ export class OverlayShell {
         this.kbAware = null;
         this.hotkeys?.detach();
         this.hotkeys = null;
+        this.releaseBack?.();
+        this.releaseBack = null;
         this.childStack?.closeAll();
         this.childStack = null;
 
