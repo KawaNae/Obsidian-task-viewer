@@ -71,7 +71,7 @@
 }
 
 /* --- Source (the row and its subtree as text) --- */
-.task-hub__source {
+.task-hub__source-pane {
     display: flex;
     flex-direction: column;
     gap: 6px;
