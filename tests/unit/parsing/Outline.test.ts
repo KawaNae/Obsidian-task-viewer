@@ -200,3 +200,27 @@ describe('the write and the parser agree on every subtree', () => {
         });
     }
 });
+
+describe('Outline.readSubtree: a row and its subtree, read away from the note', () => {
+    it('reads a nested row as the item it is in the note, not as indented code', () => {
+        const note = ['- a', '    - b', '        - [ ] T', '            - [ ] c', '            ```', '            x', '            ```'];
+        const alone = Outline.readSubtree(note.slice(2));
+        expect(alone.item(0)).not.toBeNull();
+        expect(alone.item(1)?.parent).toBe(0);
+        expect(alone.subtreeEnd(0)).toBe(5);
+        expect(Outline.read(note.slice(2)).item(0)).toBeNull();
+    });
+
+    it('keeps the columns a tab reaches', () => {
+        // The row's gap is a tab from column 7 to 8, its content at 8, and c a
+        // child at 8. Moved to column 0, the tab would reach 4 from 1, and c,
+        // two columns in, would be no child.
+        const alone = Outline.readSubtree(['      -\t[ ] T', '        - [ ] c']);
+        expect(alone.item(1)?.parent).toBe(0);
+        expect(Outline.read(['-\t[ ] T', '  - [ ] c']).item(1)?.parent).toBeNull();
+    });
+
+    it('reads no frontmatter', () => {
+        expect(Outline.readSubtree(['- [ ] T', '  ---']).bodyStart).toBe(0);
+    });
+});
