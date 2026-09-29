@@ -1,23 +1,18 @@
 /**
  * TaskNameSuggest - AbstractInputSuggest for task name input.
  * Provides [[wikilink]], [[file#heading]], and #tag suggestions on a plain <input>.
+ * What to suggest and over which range is LinkTagCandidates'; this shows it.
  */
 
 import { type App, AbstractInputSuggest } from 'obsidian';
-import { closersToTakeOver } from '../utils/BracketRules';
+import {
+    linkTagCandidates, linkTagTrigger, replacedRange,
+    type LinkTagCandidate, type LinkTagMode,
+} from './LinkTagCandidates';
 
-interface SuggestionItem {
-    label: string;
-    replacement: string;
-    detail?: string;
-    folder?: string;
-}
-
-type SuggestMode = 'file' | 'heading' | 'tag';
-
-export class TaskNameSuggest extends AbstractInputSuggest<SuggestionItem> {
+export class TaskNameSuggest extends AbstractInputSuggest<LinkTagCandidate> {
     private inputEl: HTMLInputElement;
-    private currentMode: SuggestMode | null = null;
+    private currentMode: LinkTagMode | null = null;
 
     constructor(app: App, inputEl: HTMLInputElement) {
         super(app, inputEl);
@@ -25,106 +20,14 @@ export class TaskNameSuggest extends AbstractInputSuggest<SuggestionItem> {
         this.limit = 30;
     }
 
-    protected getSuggestions(query: string): SuggestionItem[] {
+    protected getSuggestions(query: string): LinkTagCandidate[] {
         const pos = this.inputEl.selectionStart ?? query.length;
-        const before = query.substring(0, pos);
-
-        // --- [[wikilink]] / [[file#heading]] ---
-        const wikiIdx = before.lastIndexOf('[[');
-        if (wikiIdx !== -1) {
-            const afterBrackets = before.substring(wikiIdx + 2);
-            if (!afterBrackets.includes(']]')) {
-                return this.getWikiLinkSuggestions(afterBrackets);
-            }
-        }
-
-        // --- #tag ---
-        const hashIdx = before.lastIndexOf('#');
-        if (hashIdx !== -1) {
-            if (hashIdx === 0 || /\s/.test(before[hashIdx - 1])) {
-                const lastOpen = before.lastIndexOf('[[');
-                const lastClose = before.lastIndexOf(']]');
-                if (lastOpen === -1 || lastClose > lastOpen) {
-                    const tagQuery = before.substring(hashIdx + 1).toLowerCase();
-                    return this.getTagSuggestions(tagQuery);
-                }
-            }
-        }
-
-        this.currentMode = null;
-        return [];
+        const found = linkTagCandidates(this.app, query.substring(0, pos));
+        this.currentMode = found?.mode ?? null;
+        return found?.candidates ?? [];
     }
 
-    private getWikiLinkSuggestions(after: string): SuggestionItem[] {
-        const hashPos = after.indexOf('#');
-
-        if (hashPos !== -1) {
-            // Heading mode: [[filename#query
-            this.currentMode = 'heading';
-            const fileQuery = after.substring(0, hashPos);
-            const headingQuery = after.substring(hashPos + 1).toLowerCase();
-
-            const file = this.app.metadataCache.getFirstLinkpathDest(fileQuery, '');
-            if (!file) return [];
-
-            const cache = this.app.metadataCache.getFileCache(file);
-            const headings = cache?.headings ?? [];
-            return headings
-                .filter(h => headingQuery === '' || h.heading.toLowerCase().includes(headingQuery))
-                .sort((a, b) => {
-                    const aP = a.heading.toLowerCase().startsWith(headingQuery) ? 0 : 1;
-                    const bP = b.heading.toLowerCase().startsWith(headingQuery) ? 0 : 1;
-                    if (aP !== bP) return aP - bP;
-                    return a.position.start.line - b.position.start.line;
-                })
-                .slice(0, 30)
-                .map(h => ({
-                    label: h.heading,
-                    replacement: `[[${file.basename}#${h.heading}]]`,
-                    detail: 'H' + h.level,
-                }));
-        }
-
-        // File mode: [[query
-        this.currentMode = 'file';
-        const query = after.toLowerCase();
-        return this.app.vault.getMarkdownFiles()
-            .filter(f => query === '' || f.basename.toLowerCase().includes(query))
-            .sort((a, b) => {
-                const aP = a.basename.toLowerCase().startsWith(query) ? 0 : 1;
-                const bP = b.basename.toLowerCase().startsWith(query) ? 0 : 1;
-                if (aP !== bP) return aP - bP;
-                return a.basename.localeCompare(b.basename);
-            })
-            .slice(0, 30)
-            .map(f => ({
-                label: f.basename,
-                replacement: `[[${f.basename}]]`,
-                folder: f.parent?.path || undefined,
-            }));
-    }
-
-    private getTagSuggestions(query: string): SuggestionItem[] {
-        this.currentMode = 'tag';
-        // @ts-ignore - getTags() is not in the public API typings
-        const tagMap: Record<string, number> = this.app.metadataCache.getTags?.() ?? {};
-        return Object.keys(tagMap)
-            .map(t => t.startsWith('#') ? t.substring(1) : t)
-            .filter(t => query === '' || t.toLowerCase().includes(query))
-            .sort((a, b) => {
-                const aP = a.toLowerCase().startsWith(query) ? 0 : 1;
-                const bP = b.toLowerCase().startsWith(query) ? 0 : 1;
-                if (aP !== bP) return aP - bP;
-                return a.localeCompare(b);
-            })
-            .slice(0, 30)
-            .map(t => ({
-                label: t,
-                replacement: `#${t}`,
-            }));
-    }
-
-    renderSuggestion(item: SuggestionItem, el: HTMLElement): void {
+    renderSuggestion(item: LinkTagCandidate, el: HTMLElement): void {
         const titleEl = el.createDiv({ cls: 'suggestion-title' });
         titleEl.createSpan({ text: item.label });
         if (item.detail) {
@@ -135,22 +38,18 @@ export class TaskNameSuggest extends AbstractInputSuggest<SuggestionItem> {
         }
     }
 
-    selectSuggestion(item: SuggestionItem, evt: MouseEvent | KeyboardEvent): void {
+    selectSuggestion(item: LinkTagCandidate, evt: MouseEvent | KeyboardEvent): void {
         const value = this.inputEl.value;
         const pos = this.inputEl.selectionStart ?? value.length;
-        const before = value.substring(0, pos);
-
-        const triggerStart = item.replacement.startsWith('[[')
-            ? before.lastIndexOf('[[')
-            : before.lastIndexOf('#');
+        const trigger = linkTagTrigger(value.substring(0, pos));
+        if (!trigger) return;
         // The replacement writes its own closers; the ones pairing left after
-        // the caret are taken over (BracketRules.closersToTakeOver).
-        const afterCursor = value.substring(pos + closersToTakeOver(item.replacement, value.substring(pos)));
-
-        const newValue = value.substring(0, triggerStart) + item.replacement + afterCursor;
+        // the caret are taken over (LinkTagCandidates.replacedRange).
+        const { from, to } = replacedRange(value, pos, trigger.start, item.replacement);
+        const newValue = value.substring(0, from) + item.replacement + value.substring(to);
         this.setValue(newValue);
 
-        const newPos = triggerStart + item.replacement.length;
+        const newPos = from + item.replacement.length;
         this.inputEl.setSelectionRange(newPos, newPos);
         this.inputEl.dispatchEvent(new Event('input', { bubbles: true }));
 
@@ -191,21 +90,9 @@ export class TaskNameSuggest extends AbstractInputSuggest<SuggestionItem> {
 
         const value = this.inputEl.value;
         const pos = this.inputEl.selectionStart ?? value.length;
-        const before = value.substring(0, pos);
-
-        // Determine trigger start index
-        let triggerIdx: number;
-        const wikiIdx = before.lastIndexOf('[[');
-        if (wikiIdx !== -1 && !before.substring(wikiIdx + 2).includes(']]')) {
-            triggerIdx = wikiIdx;
-        } else {
-            const hashIdx = before.lastIndexOf('#');
-            if (hashIdx !== -1 && (hashIdx === 0 || /\s/.test(before[hashIdx - 1]))) {
-                triggerIdx = hashIdx;
-            } else {
-                return;
-            }
-        }
+        const trigger = linkTagTrigger(value.substring(0, pos));
+        if (!trigger) return;
+        const triggerIdx = trigger.start;
 
         // Measure pixel offset of triggerIdx within the input using a mirror span
         const textBefore = value.substring(0, triggerIdx);
