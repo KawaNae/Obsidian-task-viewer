@@ -581,11 +581,14 @@ export interface WriteSession {
     /**
      * Give the write up for what the lines hold, not for a target: the
      * section it goes to is under more than one heading of its name
-     * (`HeadingInserter`), or a subtree's replacement would not read as the
-     * row's subtree (`ReplaceSubtree`). The callback returns what this
-     * answers.
+     * (`HeadingInserter`), a subtree's replacement would not read as the
+     * row's subtree (`ReplaceSubtree`), or the lines are not the ones the
+     * write was made for (`changed`: a send's row whose subtree, once its
+     * draft and fires are written, is not what went to its note, `SendWriter`;
+     * a note to take a write back from that was written since, `takeBack`).
+     * The callback returns what this answers.
      */
-    refuse(reason: Extract<RefusalReason, { kind: 'headings' | 'unplaceable' | 'disturbs' }>): false;
+    refuse(reason: Extract<RefusalReason, { kind: 'headings' | 'unplaceable' | 'disturbs' | 'changed' }>): false;
 }
 
 /**
@@ -1316,4 +1319,113 @@ export async function replaceWhole(
     const landed = landing as Landing | null;
     if (landed !== null) channel?.landed(landed);
     return { written: true, refused: null };
+}
+
+/**
+ * How a write of ours is taken back once the operation it was part of could
+ * not be made whole (`takeBack`): a send whose rows went to a note, and one
+ * of whose notes they came from refused to let them go (`SendWriter`).
+ *
+ * - `made`: the note the write created is taken away, to the trash the
+ *   user's settings name (`fileManager.trashFile`).
+ * - `restore`: the note is written back to `lines`, the lines the write was
+ *   handed: nothing it wrote is left.
+ * - `remove`: the lines `ranges` names (`[from, to)` of the lines the write
+ *   left) are taken away, and the rest of what it wrote is left.
+ */
+export type TakeBack =
+    | { kind: 'made' }
+    | { kind: 'restore'; lines: readonly string[] }
+    | { kind: 'remove'; ranges: readonly (readonly [number, number])[] };
+
+/**
+ * What became of a take-back: made, or not, and why — the note no longer
+ * reads as the write left it (`changed`: written since, from outside or by
+ * the user), it is not there under its path (`gone`: taken away or renamed
+ * since), or taking it back failed or would not read as the lines around it
+ * did (`failed`). A take-back that was not made left the note as it was, and
+ * tells nobody: its caller says what became of the operation, once.
+ */
+export type TakenBack = { taken: true } | { taken: false; why: 'changed' | 'gone' | 'failed' };
+
+/**
+ * Take back what a write of ours left in `file`, as `how` says — only while
+ * the note reads as the write left it (`left`, its lines; its mark and line
+ * ends aside), so nothing written since is lost with it.
+ *
+ * Run in the file's line (`processOrFail`): no write of ours comes between
+ * the reading and the taking back, and one asked after waits for it. What
+ * can still come between is a save from outside in the moment between the
+ * two, as it can around any write.
+ *
+ * What it leaves is handed to `channel` as any write's is: `remove` with its
+ * report, as lines taken away, so the rows it leaves are the rows they were;
+ * `restore` with none, as a whole content written (`replaceWhole`). A
+ * refusal or a failure is told to nobody.
+ */
+export async function takeBack(
+    app: App,
+    file: TFile,
+    channel: WriteChannel | undefined,
+    left: readonly string[],
+    how: TakeBack,
+): Promise<TakenBack> {
+    const readsAsLeft = (lines: readonly string[]) => lines.length === left.length && lines.every((line, i) => line === left[i]);
+    if (app.vault.getAbstractFileByPath(file.path) !== file) return { taken: false, why: 'gone' };
+    // Told to nobody: the caller says what became of the operation.
+    const quiet: WriteChannel | undefined = channel ? { ...channel, refused: () => { } } : undefined;
+    switch (how.kind) {
+        case 'made':
+            return inLineOf(file, async (): Promise<TakenBack> => {
+                let now: string;
+                try {
+                    now = await app.vault.read(file);
+                } catch (error) {
+                    logError(`[FileLines] ${file.path}: could not read the note to take back the write; left as it is: ${String(error)}`, { notice: false });
+                    return { taken: false, why: 'failed' };
+                }
+                if (!readsAsLeft(splitLines(now).lines)) return { taken: false, why: 'changed' };
+                try {
+                    await app.fileManager.trashFile(file);
+                    return { taken: true };
+                } catch (error) {
+                    logError(`[FileLines] ${file.path}: could not take the note away; left as it is: ${String(error)}`, { notice: false });
+                    return { taken: false, why: 'failed' };
+                }
+            });
+        case 'remove': {
+            // From the bottom, so each range stands where the write left it.
+            const ranges = [...how.ranges].sort((a, b) => b[0] - a[0]);
+            const outcome = await processLines(app, file, quiet, (draft, _eol, session) => {
+                if (!readsAsLeft(draft.lines)) return session.refuse({ kind: 'changed' });
+                for (const [from, to] of ranges) draft.splice(from, to - from);
+                return true;
+            });
+            if (outcome.written) return { taken: true };
+            if (outcome.refused.reason.kind !== 'changed') {
+                logWarn(`[FileLines] ${file.path}: the lines a write left were not taken back (${outcome.refused.reason.kind}); left as they are`);
+            }
+            return { taken: false, why: outcome.refused.reason.kind === 'changed' ? 'changed' : 'failed' };
+        }
+        case 'restore': {
+            let written = false;
+            let landing: Landing | null = null;
+            const threw = await processOrFail(app, file, quiet, (content) => {
+                written = false;
+                landing = null;
+                const { lines, eol, bom } = splitLines(content);
+                if (!readsAsLeft(lines)) return content;
+                written = true;
+                // The note's own mark and line ends, as they are now.
+                const back = (bom ? BOM : '') + joinLines([...how.lines], eol);
+                if (back !== content && quiet) landing = { before: lines, lines: [...how.lines], edits: null, reading: null, handed: quiet.reading() };
+                return back;
+            }, () => file.path);
+            if (threw) return { taken: false, why: 'failed' };
+            // Set inside the callback, which the compiler does not follow.
+            const landed = landing as Landing | null;
+            if (landed !== null) quiet?.landed(landed);
+            return (written as boolean) ? { taken: true } : { taken: false, why: 'changed' };
+        }
+    }
 }
