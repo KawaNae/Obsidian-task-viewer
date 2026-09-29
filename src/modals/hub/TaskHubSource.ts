@@ -3,7 +3,7 @@ import type { Task } from '../../types';
 import { refusalNotice, type IndexRefusal } from '../../services/core/RefusalClause';
 import type { SubtreeReplacement } from '../../services/persistence/TaskOps';
 import { SubtreeFrame } from '../../services/persistence/utils/SubtreeFrame';
-import type { SourceDraft } from '../form/source/SourceEditor';
+import type { DraftEditor } from '../form/source/SourceEditor';
 
 /**
  * The hub's source mode: the row and its subtree as text, written from a
@@ -50,16 +50,6 @@ export interface SourceViewState {
     asking: boolean;
     /** The hub lost the row: the draft cannot be written. */
     lost: boolean;
-}
-
-/** The editor the surface opens: the two CodeMirror editors (`SourceEditor`), as the mode uses them. */
-export interface DraftEditor {
-    draft(): SourceDraft;
-    isDirty(): boolean;
-    isCompleting(): boolean;
-    closeCompletion(): boolean;
-    focus(): void;
-    destroy(): void;
 }
 
 export interface SourceSurface {

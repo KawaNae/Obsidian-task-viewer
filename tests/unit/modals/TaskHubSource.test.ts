@@ -1,9 +1,9 @@
 import { describe, it, expect, vi } from 'vitest';
 import { t } from '../../../src/i18n';
-import { TaskHubSource, type DraftEditor, type ReplaceAnswer, type SourceHost, type SourceViewState } from '../../../src/modals/hub/TaskHubSource';
+import { TaskHubSource, type ReplaceAnswer, type SourceHost, type SourceViewState } from '../../../src/modals/hub/TaskHubSource';
 import type { SubtreeFrame } from '../../../src/services/persistence/utils/SubtreeFrame';
 import type { SubtreeReplacement } from '../../../src/services/persistence/TaskOps';
-import type { SourceDraft } from '../../../src/modals/form/source/SourceEditor';
+import type { DraftEditor, SourceDraft } from '../../../src/modals/form/source/SourceEditor';
 import type { Task } from '../../../src/types';
 import { makeTask } from '../helpers/makeTask';
 

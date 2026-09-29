@@ -1,8 +1,8 @@
 import { Notice, type App } from 'obsidian';
 import { t } from '../../i18n';
 import type { SubtreeFrame } from '../../services/persistence/utils/SubtreeFrame';
-import { SourceEditor } from '../form/source/SourceEditor';
-import type { DraftEditor, SourceSurface, SourceViewState } from './TaskHubSource';
+import { SourceEditor, type DraftEditor } from '../form/source/SourceEditor';
+import type { SourceSurface, SourceViewState } from './TaskHubSource';
 
 /** What the view's controls do: the source mode's operations (`TaskHubSource`). */
 export interface SourceViewActions {
