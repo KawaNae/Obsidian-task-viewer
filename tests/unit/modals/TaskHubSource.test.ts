@@ -51,7 +51,6 @@ function setUp(opts: { task?: Task; answers?: ReplaceAnswer[]; confirm?: boolean
     const confirm = vi.fn(async () => opts.confirm ?? true);
     const lockForm = vi.fn();
     const closeHub = vi.fn();
-    const closeWithdrawn = vi.fn();
     const host: SourceHost = {
         drained: () => opts.drained ?? Promise.resolve(),
         confirm,
@@ -60,7 +59,6 @@ function setUp(opts: { task?: Task; answers?: ReplaceAnswer[]; confirm?: boolean
         indentUnit: () => '    ',
         lockForm,
         closeHub,
-        closeWithdrawn,
     };
     const source = new TaskHubSource(row!, host, {
         openEditor: (frame, hooks) => { const editor = new FakeEditor(frame, hooks); editors.push(editor); return editor; },
@@ -72,7 +70,6 @@ function setUp(opts: { task?: Task; answers?: ReplaceAnswer[]; confirm?: boolean
         confirm,
         lockForm,
         closeHub,
-        closeWithdrawn,
         editor: () => editors[editors.length - 1],
         editors,
         state: () => states[states.length - 1],
@@ -326,7 +323,6 @@ describe('going back to the draft while asked', () => {
 
         h.editor().type('- [ ] P3');
         expect(h.state()).toMatchObject({ phase: 'source', asking: false });
-        expect(h.closeWithdrawn).toHaveBeenCalledTimes(1);
         expect(h.closeHub).not.toHaveBeenCalled();
         expect(h.editor().destroyed).toBe(false);
     });
@@ -340,7 +336,6 @@ describe('going back to the draft while asked', () => {
         await h.source.apply();
         expect(h.replace).toHaveBeenCalledTimes(1);
         expect(h.state()).toMatchObject({ phase: 'view', asking: false });
-        expect(h.closeWithdrawn).toHaveBeenCalledTimes(1);
         expect(h.closeHub).not.toHaveBeenCalled();
     });
 
@@ -351,27 +346,19 @@ describe('going back to the draft while asked', () => {
         await h.source.apply();
         expect(h.replace).not.toHaveBeenCalled();
         expect(h.state()).toMatchObject({ phase: 'source', asking: false, message: t('modal.hub.source.notTask') });
-        expect(h.closeWithdrawn).toHaveBeenCalledTimes(1);
     });
 
-    it('tells the host the close is given up on back, and not on discard', async () => {
+    it('forgets the close given up on back: a discard asked later by cancel goes back to the card, the hub open', async () => {
         const h = await opened();
         h.editor().type('- [ ] P2');
         h.source.beforeClose();
         h.source.keep();
-        expect(h.closeWithdrawn).toHaveBeenCalledTimes(1);
+        expect(h.state().asking).toBe(false);
 
-        h.source.beforeClose();
+        h.source.cancel();
         h.source.discard();
-        expect(h.closeWithdrawn).toHaveBeenCalledTimes(1);
-        expect(h.closeHub).toHaveBeenCalledTimes(1);
-    });
-
-    it('does not withdraw what was never asked', async () => {
-        const h = await opened();
-        h.editor().type('- [ ] P2');
-        await h.source.apply();
-        expect(h.closeWithdrawn).not.toHaveBeenCalled();
+        expect(h.state()).toMatchObject({ phase: 'view', asking: false });
+        expect(h.closeHub).not.toHaveBeenCalled();
     });
 });
 

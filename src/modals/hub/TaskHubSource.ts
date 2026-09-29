@@ -82,10 +82,8 @@ export interface SourceHost {
     indentUnit(): string;
     /** Shut the form while the source is open, and open it again after. */
     lockForm(locked: boolean): void;
-    /** Close the hub, asking nothing more: the draft was thrown away for a close the user asked for (opening another hub among them). */
+    /** Close the hub, asking nothing more: the draft was thrown away for a close the user asked for. */
     closeHub(): void;
-    /** The close asked about is given up, the draft kept: what was to follow it (another hub asked for) is forgotten. */
-    closeWithdrawn(): void;
 }
 
 /** What throwing the draft away goes on to: the card, or closing the hub. */
@@ -172,7 +170,7 @@ export class TaskHubSource {
         const opened = this.opened;
         const row = this.current;
         if (this.phase !== 'source' || !opened || !row) return;
-        this.withdraw();
+        this.asking = null;
 
         const check = opened.frame.check(opened.editor.draft());
         if (check.kind === 'same') return this.leave();
@@ -237,7 +235,7 @@ export class TaskHubSource {
     /** Keep the draft: the question is withdrawn. */
     keep(): void {
         if (!this.asking) return;
-        this.withdraw();
+        this.asking = null;
         this.render();
         this.opened?.editor.focus();
     }
@@ -245,7 +243,7 @@ export class TaskHubSource {
     /** The draft's text changed: asked whether to throw it away, the question is withdrawn. */
     private edited(): void {
         if (!this.asking) return;
-        this.withdraw();
+        this.asking = null;
         this.render();
     }
 
@@ -298,13 +296,6 @@ export class TaskHubSource {
         this.render();
     }
 
-    /** The question withdrawn, the draft kept, and the close it asked about given up. */
-    private withdraw(): void {
-        if (!this.asking) return;
-        this.asking = null;
-        this.host.closeWithdrawn();
-    }
-
     private ask(after: After): void {
         this.asking = after;
         this.render();
@@ -312,7 +303,7 @@ export class TaskHubSource {
 
     /** The source closed, the draft with it: the card again, and the form open. */
     private leave(): void {
-        this.withdraw();
+        this.asking = null;
         this.opened?.editor.destroy();
         this.opened = null;
         this.message = null;
