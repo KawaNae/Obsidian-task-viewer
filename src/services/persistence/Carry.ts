@@ -42,9 +42,34 @@ export function carryTo(draft: LineDraft, line: number, spot: Spot, opts: { head
         throw new UnfollowableDraft(`a row at line ${line} carried to line ${spot.at}, inside its own subtree`);
     }
     const block = carriedWith(outline, line, opts.head ?? outline.lines[line], opts.flow);
-    const numbered = ListNumber.at(outline, spot, block[0].text, { from: line, to: end });
-    draft.put(spot, numberedBlock(block, numbered));
+    putNumbered(draft, spot, block, { from: line, to: end });
     draft.splice(spot.at <= line ? line + block.length : line, end - line);
+}
+
+/**
+ * The row at `line` of `outline` and its subtree, as lines to put in another
+ * note: new lines there, each to read, once written, as it read under the
+ * row (`Block.of`), written as it stands, the row's own indentation before
+ * it. What a send puts in the note it sends a row to (`SendWriter`), which
+ * then puts it where a carry would ({@link putNumbered}): the row's lines go,
+ * `==>` and all, as a send carries them within its note.
+ */
+export function subtreeBlock(outline: OutlineReading, line: number): PlacedLine[] {
+    const rows: number[] = [];
+    for (let at = line; at < outline.subtreeEnd(line); at++) rows.push(at);
+    return Block.of(outline, rows, rows.map(at => outline.lines[at]));
+}
+
+/**
+ * Put `block` at `spot`, its first line numbered where it lands
+ * (`ListNumber.at`), and the lines below it moved as far right as that moved
+ * its content, so they stand in it still. `leaving` is the lines the write
+ * takes away from where they stood, the block's own when it is carried
+ * ({@link carryTo}).
+ */
+export function putNumbered(draft: LineDraft, spot: Spot, block: readonly PlacedLine[], leaving?: { from: number; to: number }): void {
+    const numbered = ListNumber.at(draft.reading(), spot, block[0].text, leaving);
+    draft.put(spot, numberedBlock(block, numbered));
 }
 
 /**
