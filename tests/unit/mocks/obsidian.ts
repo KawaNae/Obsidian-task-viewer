@@ -187,6 +187,12 @@ export class FileSystemAdapter {
 export function setIcon(_el: HTMLElement, _icon: string) {}
 export function normalizePath(path: string) { return path; }
 
+/** A wikilink's text cut at its first `#`, as Obsidian cuts it: the subpath keeps the `#`. */
+export function parseLinktext(linktext: string): { path: string; subpath: string } {
+    const hash = linktext.indexOf('#');
+    return hash < 0 ? { path: linktext, subpath: '' } : { path: linktext.slice(0, hash), subpath: linktext.slice(hash) };
+}
+
 /**
  * A bare `2026-09-21` in frontmatter comes back as a `Date`, not a string —
  * `DateTimeFieldParser.normalizeYamlDate` exists specifically to turn that
