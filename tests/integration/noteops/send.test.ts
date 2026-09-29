@@ -41,7 +41,7 @@ function send(name: string, to: unknown, frontmatter: unknown[] = [], prelude = 
         const plugin = app.plugins.plugins['obsidian-task-viewer'];
         const task = plugin.getTaskIndex().getTasks().find(t => t.file === ${JSON.stringify(SRC)} && t.content === ${JSON.stringify(name)});
         if (!task) throw new Error('no row ' + ${JSON.stringify(name)});
-        const before = document.querySelectorAll('.notice').length;
+        const before = new Set(document.querySelectorAll('.notice'));
         ${prelude}
         const sent = await plugin.getNoteOps().send({
             rows: [{ taskId: task.id, base: task.subtreeLines }],
@@ -49,7 +49,8 @@ function send(name: string, to: unknown, frontmatter: unknown[] = [], prelude = 
             frontmatter: ${JSON.stringify(frontmatter)},
         });
         await new Promise(r => setTimeout(r, 300));
-        const notices = [...document.querySelectorAll('.notice')].slice(before).map(el => el.textContent);
+        // Those raised since, by the elements: one raised before may be gone by now.
+        const notices = [...document.querySelectorAll('.notice')].filter(el => !before.has(el)).map(el => el.textContent);
         return JSON.stringify({ result: { kind: sent.kind, note: sent.note?.path, refused: sent.refused }, notices });
     })()`);
     if (result && typeof result === 'object' && 'error' in (result as object)) {
@@ -213,11 +214,18 @@ interface DialogState {
     why: string | null;
 }
 
-/** Open the dialog on the row of `SRC` whose text is `name`, as its card's menu does. */
+/** Open the dialog on the row of `SRC` whose text is `name`, from its card's menu (a card of the hub's). */
 function openDialog(name: string): DialogState {
     return onDialog<DialogState>(`
         const task = plugin.getTaskIndex().getTasks().find(t => t.file === ${JSON.stringify(SRC)} && t.content === ${JSON.stringify(name)});
         if (!task) throw new Error('no row ' + ${JSON.stringify(name)});
+        // The card menu the hub's cards open, made as a hub first opens.
+        if (!plugin.hubMenuHandler) {
+            plugin.openTaskHub(task.id);
+            await until(() => document.querySelector('.task-hub'));
+            document.querySelector('.task-hub')?.closest('.tv-overlay__panel')?.querySelector('.tv-overlay__close')?.click();
+            await until(() => !document.querySelector('.task-hub'));
+        }
         await plugin.hubMenuHandler.showContextMenu(0, 0, task);
         const menu = plugin.menuPresenter.currentMenu;
         const item = menu?.items.find(one => one.titleEl?.textContent === 'ノートへ送る');
@@ -264,11 +272,11 @@ describe('the send dialog', () => {
         expect(picked.says).toContain('このノートの見出し Done');
 
         const sent = onDialog<{ open: boolean; notices: number }>(`
-            const before = document.querySelectorAll('.notice').length;
+            const before = new Set(document.querySelectorAll('.notice'));
             panel().querySelector('.tv-send__actions .mod-cta').click();
             await until(() => !panel());
             await sleep(300);
-            return JSON.stringify({ open: !!panel(), notices: document.querySelectorAll('.notice').length - before });
+            return JSON.stringify({ open: !!panel(), notices: [...document.querySelectorAll('.notice')].filter(el => !before.has(el)).length });
         `);
         expect(sent).toEqual({ open: false, notices: 0 });
         expect(readTestFile(SRC)).toBe(['## Done', '- [ ] 動かす', '    - [ ] 子2', '- [x] 済み', ''].join('\n'));
