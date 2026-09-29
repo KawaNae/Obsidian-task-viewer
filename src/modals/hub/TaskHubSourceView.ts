@@ -131,8 +131,11 @@ export class TaskHubSourceView implements SourceSurface {
         this.applyBtn.toggle(!state.lost);
         this.applyBtn.disabled = state.phase !== 'source';
         this.applyBtn.setText(state.phase === 'applying' ? t('modal.hub.source.applying') : t('modal.hub.source.apply'));
-        // Asked: back takes the focus, where cancel was, so a stray Enter keeps the draft.
-        if (asking && !this.asking) this.cancelBtn.focus();
         this.asking = asking;
+    }
+
+    /** Asked, first or again: back takes the focus, where cancel was. */
+    asked(): void {
+        this.cancelBtn.focus();
     }
 }
