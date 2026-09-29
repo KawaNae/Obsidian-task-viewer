@@ -602,6 +602,7 @@
     "linestyleLabel": "Linestyle: {{value}}",
     "maskLabel": "Mask: {{value}}",
     "openInEditor": "Open in Editor",
+    "sendToNote": "Send to Note",
     "duplicate": "Duplicate",
     "asNext": "As Next",
     "forTomorrow": "For Tomorrow",

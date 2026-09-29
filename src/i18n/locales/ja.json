@@ -602,6 +602,7 @@
     "linestyleLabel": "線種: {{value}}",
     "maskLabel": "マスク: {{value}}",
     "openInEditor": "エディターで開く",
+    "sendToNote": "ノートへ送る",
     "duplicate": "複製",
     "asNext": "続きで",
     "forTomorrow": "明日用",
