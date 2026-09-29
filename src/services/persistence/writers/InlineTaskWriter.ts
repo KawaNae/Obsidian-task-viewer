@@ -2,6 +2,7 @@ import { type App, TFile } from 'obsidian';
 import type { Task } from '../../../types';
 import { TaskParser } from '../../parsing/TaskParser';
 import { collectFlowLineIndices } from '../../parsing/utils/FlowLineScanner';
+import { carryTo } from '../Carry';
 import { FileOperations } from '../utils/FileOperations';
 import { ChildPropertyLineEditor } from '../utils/ChildPropertyLineEditor';
 import { Block, Placement, type InSection, type PlacedLine, type Spot } from '../utils/Placement';
@@ -316,19 +317,12 @@ export class InlineTaskWriter {
             }
             case 'move': {
                 // The row and what goes with it are carried to the heading's
-                // section, at the side the move says, and then its whole
-                // subtree is taken away from where it was. Everything is read
-                // before either. The spot is never inside the subtree (a
-                // section's head and end are at the top, past no item's
-                // text), so the subtree is where it was, or below the carried
-                // lines when they went above it.
+                // section, at the side the move says, without its own `==>`
+                // lines, which the fire consumes (`carryTo`). The spot is
+                // asked with the row as it lands, numbered 1 when ordered.
                 const outline = draft.reading();
-                const { childrenLines } = this.fileOps.collectChildrenFromLines(outline, line);
-                const block = this.carriedWith(outline, line, op.text);
-                const spot = this.destinationOf(outline, op.to, ListNumber.first(block[0].text));
-                const numbered = ListNumber.at(outline, spot, block[0].text, { from: line, to: outline.subtreeEnd(line) });
-                draft.put(spot, numberedBlock(block, numbered));
-                draft.splice(spot.at <= line ? line + block.length : line, 1 + childrenLines.length);
+                const head = ListNumber.first(Outline.indentOf(lines[line]) + Outline.dedent(op.text));
+                carryTo(draft, line, this.destinationOf(outline, op.to, head), { head: op.text, flow: 'drop' });
                 return;
             }
             case 'remove': {
@@ -413,44 +407,4 @@ export class InlineTaskWriter {
         const outcome = await processLines(this.app, file, channel, append, subject);
         return outcome.written ? { ...outcome, line: inserted } : outcome;
     }
-
-    /**
-     * The row, written as `head`, and the lines of its subtree that go with
-     * it on a move, carried (`LineEdits.carry`): to read, once written, as
-     * they read under the row (`Block.of`), written as they stand, the row's
-     * own indentation before `head` (`format` writes none); the put writes
-     * them at the spot (`LineDraft.put`). They are the rows they were, so
-     * each keeps its `^id`: only a write that makes a copy takes a copy's
-     * off (`TaskCloner`).
-     *
-     * The task's own direct `- ==>` flow lines are consumed by the fire and
-     * do not travel with it. Descendant tasks' flow lines are NOT
-     * direct (structural-parent rule) and stay as templates. A line that
-     * stood under one of them has lost its item: a task, command or property
-     * there is not written (`checkWrite`).
-     */
-    private carriedWith(outline: OutlineReading, currentLine: number, head: string): PlacedLine[] {
-        const lines = outline.lines;
-        const flowAbs = new Set(collectFlowLineIndices(outline, currentLine));
-        const rows = [currentLine];
-        for (let row = currentLine + 1; row < outline.subtreeEnd(currentLine); row++) {
-            if (!flowAbs.has(row)) rows.push(row);
-        }
-        const texts = [Outline.indentOf(lines[currentLine]) + Outline.dedent(head), ...rows.slice(1).map(row => lines[row])];
-        return Block.of(outline, rows, texts, true);
-    }
-}
-
-/**
- * A carried block with its first line numbered where it lands
- * (`ListNumber.at`), and the lines below it moved as far right as that moved
- * its content, so they stand in it still.
- */
-function numberedBlock(block: readonly PlacedLine[], numbered: { text: string; shift: number }): PlacedLine[] {
-    const frame = Outline.indentOf(block[0].text);
-    const deeper = frame + ' '.repeat(numbered.shift);
-    return block.map((line, i) => ({
-        ...line,
-        text: i === 0 ? numbered.text : Outline.shiftIndent(line.text, frame, deeper),
-    }));
 }
