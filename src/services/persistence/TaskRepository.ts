@@ -2,6 +2,7 @@ import type { App } from 'obsidian';
 import type { DuplicateOptions, Task } from '../../types';
 import { FileOperations } from './utils/FileOperations';
 import { InlineTaskWriter } from './writers/InlineTaskWriter';
+import { SendWriter, type SentRow } from './writers/SendWriter';
 import { FrontmatterWriter } from './writers/FrontmatterWriter';
 import { TaskCloner, type InPlaceCopyLines } from './TaskCloner';
 import type { PropertyOp } from './PropertyUpdatePlanner';
@@ -19,6 +20,7 @@ export class TaskRepository {
     private inlineWriter: InlineTaskWriter;
     private frontmatterWriter: FrontmatterWriter;
     private cloner: TaskCloner;
+    private sendWriter: SendWriter;
     /**
      * Where the writers hand what they left and say what they gave up: the
      * channel the index connected, or null before it has and once it has cut
@@ -34,6 +36,7 @@ export class TaskRepository {
         this.inlineWriter = new InlineTaskWriter(app, this.fileOps, channelOf);
         this.frontmatterWriter = new FrontmatterWriter(app, this.fileOps, channelOf);
         this.cloner = new TaskCloner(app, this.fileOps, channelOf);
+        this.sendWriter = new SendWriter(app, this.inlineWriter, channelOf);
     }
 
     /** @internal For the index to connect once its scanner exists. */
@@ -66,6 +69,16 @@ export class TaskRepository {
         opts: { refused?: (refusal: Refusal) => void } = {},
     ): Promise<FiringOutcome<F>> {
         return this.inlineWriter.replaceSubtreeInFile(target, replacement, completing, opts);
+    }
+
+    /** Rows of one note sent to a section of it, as one write, each row a draft completes fired first (see SendWriter.sendWithinFile). */
+    async sendWithinFile<F extends CompletionFire>(
+        path: string,
+        rows: readonly SentRow[],
+        to: Section,
+        completing: { completes(before: string, after: string): boolean; fire(): F },
+    ): Promise<FiringOutcome<F>> {
+        return this.sendWriter.sendWithinFile(path, rows, to, completing);
     }
 
     /** The one loop that applies ops to a row, inside a write (see InlineTaskWriter.applyOps). */
