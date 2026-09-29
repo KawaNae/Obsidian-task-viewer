@@ -393,6 +393,53 @@ describe('the hub\'s source mode', () => {
         });
     });
 
+    it('takes the back as Escape: a child popover first, then a close that asks over a draft', async () => {
+        await writeIndexedTestFile(TEST_FILE, NOTE);
+        // Obsidian's history.back() calls what is on top of its stack, as Android's back and the mouse's back button do.
+        const steps = run<Record<string, unknown>>(`
+            const onBack = () => document.activeElement === document.querySelector('.task-hub__source-cancel');
+            const task = plugin.getTaskIndex().getTasks().find(t => t.file === ${JSON.stringify(TEST_FILE)} && t.content.startsWith('親'));
+            plugin.openTaskHub(task.id);
+            await until(() => document.querySelector('.task-hub__status-pill'));
+            document.querySelector('.task-hub__status-pill').click();
+            await until(() => document.querySelector('.tv-ctrl__suggest'));
+            window.history.back();
+            await sleep(200);
+            const child = { child: !!document.querySelector('.tv-ctrl__suggest'), hub: state().hub };
+
+            document.querySelectorAll('.task-hub__mode-toggle button')[1].click();
+            await until(() => viewOf('children'));
+            const children = viewOf('children');
+            children.dispatch({ changes: { from: children.state.doc.length, insert: ' 下書き' } });
+            children.focus();
+            window.history.back();
+            await sleep(100);
+            const asked = { ...state(), onBack: onBack() };
+            viewOf('children').focus();
+            window.history.back();
+            await sleep(100);
+            const again = { ...state(), onBack: onBack() };
+
+            document.querySelector('.task-hub__source-discard').click();
+            await until(() => !document.querySelector('.task-hub:not(.is-closing)'));
+            const discarded = state().hub;
+
+            plugin.openTaskHub(task.id);
+            await until(() => document.querySelector('.task-hub__mode-toggle'));
+            window.history.back();
+            await sleep(300);
+            const closed = !document.querySelector('.task-hub:not(.is-closing)');
+            return JSON.stringify({ child, asked, again, discarded, closed });
+        `);
+        expect(steps).toMatchObject({
+            child: { child: false, hub: true },
+            asked: { hub: true, asking: true, onBack: true },
+            again: { hub: true, asking: true, onBack: true },
+            discarded: false,
+            closed: true,
+        });
+    });
+
     it('keeps Obsidian\'s hotkeys from the note behind while the focus is in the hub, its child popovers among it', async () => {
         await writeIndexedTestFile(TEST_FILE, NOTE);
         const result = run<Record<string, unknown>>(`

@@ -96,6 +96,47 @@ export class EditorSuggest<T> {
     protected value?: T;
 }
 
+/**
+ * Obsidian's stack of what takes the back (`onHistoryBack`), and
+ * `PopoverSuggest`'s `open` and `close` on it, written as Obsidian 1.13.7's
+ * are: the scope pushed, the DOM attached, then the suggestion pushed; and
+ * the reverse on close.
+ */
+export const historyStack: { onHistoryBack(): void }[] = [];
+
+export class PopoverSuggest {
+    app: any;
+    scope: unknown;
+    isOpen = false;
+    win: unknown = null;
+    autoDestroy: (() => void) | null = null;
+    suggestions: any;
+    constructor(app: any) { this.app = app; }
+    attachDom(): void {}
+    detachDom(): void {}
+    onHistoryBack(): void { this.close(); }
+    open(): void {
+        const app = this.app;
+        if (this.isOpen) return;
+        this.isOpen = true;
+        this.win = (globalThis as { activeWindow?: unknown }).activeWindow ?? null;
+        app.keymap.pushScope(this.scope);
+        this.attachDom();
+        historyStack.push(this);
+    }
+    close(): void {
+        const app = this.app;
+        if (this.autoDestroy) { this.autoDestroy(); this.autoDestroy = null; }
+        app.keymap.popScope(this.scope);
+        if (!this.isOpen) return;
+        this.isOpen = false;
+        this.suggestions.setSuggestions([]);
+        this.detachDom();
+        historyStack.splice(historyStack.indexOf(this), 1);
+        this.win = null;
+    }
+}
+
 export class AbstractInputSuggest {
     app: App;
     inputEl: any;
