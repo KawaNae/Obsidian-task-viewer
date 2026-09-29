@@ -1,11 +1,4 @@
-const BRACKET_PAIRS: Record<string, string> = {
-    '(': ')', '[': ']',
-    '（': '）', '［': '］',
-    '「': '」', '『': '』', '【': '】',
-    '｛': '｝', '〈': '〉', '《': '》',
-};
-
-const BRACKET_CLOSERS: Set<string> = new Set(Object.values(BRACKET_PAIRS));
+import { BRACKET_CLOSERS, BRACKET_PAIRS, shouldAutoClose } from '../../utils/BracketRules';
 
 export interface BracketPairingHandle {
     /** IME composition 中か（Enter 確定の無視判定などに使う） */
@@ -39,10 +32,11 @@ export function attachBracketPairing(input: HTMLInputElement, onInput: () => voi
         if (newVal.length === oldVal.length + 1 && newPos === oldPos + 1) {
             const ch = newVal[oldPos];
 
-            // Opening bracket: insert closing partner unless it's already there.
+            // Opening bracket: add the closer where the editor would
+            // (BracketRules.shouldAutoClose).
             const closing = BRACKET_PAIRS[ch];
             if (closing) {
-                if (newVal[newPos] === closing) return;
+                if (!shouldAutoClose(newVal[newPos])) return;
                 input.value = newVal.slice(0, newPos) + closing + newVal.slice(newPos);
                 input.setSelectionRange(newPos, newPos);
                 return;
