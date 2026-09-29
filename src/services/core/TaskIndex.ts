@@ -577,16 +577,26 @@ export class TaskIndex {
      * transaction completed; a line the draft made fires nothing, however it
      * reads.
      *
-     * @returns whether the draft was written; when not, why not, as the user
-     * was told it (`reportRefusal`), for the caller to show beside the draft
-     * it keeps. A read-only row is not written and answers `refused: null`:
-     * the hub does not offer it.
+     * @returns whether the draft was written; when not, why not, for the
+     * caller to show beside the draft it keeps. The user is told it as any
+     * refusal is (`reportRefusal`), unless `opts.tellRefusal` is false: the
+     * caller shows it itself, and a notice would say it twice. The index
+     * learns from it either way (`learnFrom`). A read-only row is not
+     * written and answers `refused: null`: the hub does not offer it.
      */
-    async replaceSubtree(taskId: string, base: readonly string[], replacement: SubtreeReplacement): Promise<{ written: true } | { written: false; refused: IndexRefusal | null }> {
+    async replaceSubtree(
+        taskId: string,
+        base: readonly string[],
+        replacement: SubtreeReplacement,
+        opts: { tellRefusal?: boolean } = {},
+    ): Promise<{ written: true } | { written: false; refused: IndexRefusal | null }> {
         if (this.refuseAfterDispose('replaceSubtree')) return { written: false, refused: null };
         const known = this.getTask(taskId);
+        const hear = opts.tellRefusal === false
+            ? (refusal: IndexRefusal) => this.learnFrom(refusal)
+            : (refusal: IndexRefusal) => this.reportRefusal(refusal);
         return this.onRow(taskId, async () => {
-            const planned = await this.planCopy(taskId, known);
+            const planned = await this.planCopy(taskId, known, hear);
             if ('refused' in planned) return { written: false, refused: planned.refused };
             const { task } = planned;
             if (task.isReadOnly || base.length === 0) {
@@ -600,7 +610,7 @@ export class TaskIndex {
                 const outcome = await this.repository.replaceSubtreeInFile(target, replacement, {
                     completes: (was, now) => completes(was, now, defs),
                     fire: () => this.commandExecutor.fireOp(task.file),
-                });
+                }, { refused: (refusal) => { void hear(refusal); } });
                 this.tellNotRun(outcome);
                 return outcome.written ? { written: true } : { written: false, refused: outcome.refused };
             });
@@ -631,10 +641,15 @@ export class TaskIndex {
 
     /**
      * {@link copyToPlan}, with why not when the copy is not the row on the
-     * disk: told the user all the same, and answered too, for a caller that
-     * shows it in a place of its own (the hub's source mode).
+     * disk: handed to `hear` — told the user and learnt from
+     * (`reportRefusal`), or only learnt from, for a caller that shows it in
+     * a place of its own (the hub's source mode) — and answered too.
      */
-    private async planCopy(taskId: string, known: Task | undefined): Promise<{ task: Task } | { refused: IndexRefusal }> {
+    private async planCopy(
+        taskId: string,
+        known: Task | undefined,
+        hear: (refusal: IndexRefusal) => Promise<void> = (refusal) => this.reportRefusal(refusal),
+    ): Promise<{ task: Task } | { refused: IndexRefusal }> {
         const task = this.getTask(taskId);
         if (!task) {
             logWarn(`[TaskIndex] the index no longer holds the row: id=${taskId}`);
@@ -642,14 +657,14 @@ export class TaskIndex {
             // note, as a write refused before it read the note does.
             const file = known?.file ?? TaskIdGenerator.parse(taskId)?.filePath ?? '';
             const refused: IndexRefusal = { file, reason: { kind: 'gone' }, subject: known ? subjectOf(known) : file };
-            await this.reportRefusal(refused);
+            await hear(refused);
             return { refused };
         }
         const checked = await checkCopy(this.checks, task);
         if (checked.verdict === 'fresh') return { task };
         const reason = checked.verdict === 'stale' ? { kind: 'stale' as const, disk: checked.disk } : { kind: 'unreadable' as const };
         const refused: IndexRefusal = { file: task.file, reason, subject: subjectOf(task) };
-        await this.reportRefusal(refused);
+        await hear(refused);
         return { refused };
     }
 

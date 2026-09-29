@@ -131,10 +131,16 @@ export class TaskWriteService {
      * TaskIndex.replaceSubtree). `base` is the row and its subtree as the
      * draft was opened on them.
      *
-     * @returns whether it was written; when not, why not, as the user was told.
+     * @returns whether it was written; when not, why not — told the user
+     * too, unless `opts.tellRefusal` is false because the caller shows it.
      */
-    async replaceSubtree(taskId: string, base: readonly string[], replacement: SubtreeReplacement): Promise<{ written: true } | { written: false; refused: IndexRefusal | null }> {
-        return this.taskIndex.replaceSubtree(this.resolveTaskId(taskId), base, replacement);
+    async replaceSubtree(
+        taskId: string,
+        base: readonly string[],
+        replacement: SubtreeReplacement,
+        opts: { tellRefusal?: boolean } = {},
+    ): Promise<{ written: true } | { written: false; refused: IndexRefusal | null }> {
+        return this.taskIndex.replaceSubtree(this.resolveTaskId(taskId), base, replacement, opts);
     }
 
     // ===== A line the editor pointed at =====

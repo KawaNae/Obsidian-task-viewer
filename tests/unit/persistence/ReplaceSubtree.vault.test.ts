@@ -187,4 +187,23 @@ describe('a replacement refused', () => {
         expect(note.fired).toEqual([]);
         expect(Notice.messages).toHaveLength(1);
     });
+
+    it('is not told in a notice when the caller shows it, and is learnt from all the same', async () => {
+        const note = await open(['- [ ] P', '    - [ ] a', '']);
+        const id = note.idOf('P');
+        const base = note.session.index.getTask(id)!.subtreeLines!;
+        await note.session.index.insertLine(id, '- [ ] b', 'firstChild');
+        await note.session.flowSettled(FILE);
+        const index = note.session.index as unknown as { learnFrom: (refusal: unknown) => Promise<void> };
+        const learnt: unknown[] = [];
+        const learnFrom = index.learnFrom.bind(index);
+        index.learnFrom = (refusal) => { learnt.push(refusal); return learnFrom(refusal); };
+
+        const answer = await note.session.index.replaceSubtree(id, base, { text: '- [x] P', children: [{ text: '    - [ ] a', was: 1 }] }, { tellRefusal: false });
+
+        const refused = { file: FILE, reason: { kind: 'changed' }, subject: 'P' };
+        expect(answer).toEqual({ written: false, refused });
+        expect(Notice.messages).toEqual([]);
+        expect(learnt).toEqual([refused]);
+    });
 });
