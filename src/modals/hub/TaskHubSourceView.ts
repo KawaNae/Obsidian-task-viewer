@@ -23,8 +23,8 @@ export interface SourceViewActions {
  * nothing of its own.
  *
  * The row of controls is cancel and apply at its end. Asked whether to throw
- * the draft away, the same row asks: discard comes in at its start, the
- * question beside it, and cancel reads back, which keeps the draft. Discard
+ * the draft away, the same row asks: the question comes in at its start,
+ * discard beside it, and cancel reads back, which keeps the draft. Discard
  * stands apart from the buttons a hand goes to, so a slip of the hand keeps
  * the draft; apply stays offered, since applying withdraws the question.
  */
@@ -84,9 +84,9 @@ export class TaskHubSourceView implements SourceSurface {
         lostDiscardBtn.addEventListener('click', () => actions.discard());
 
         this.actionsEl = this.pane.createDiv({ cls: 'task-hub__source-actions' });
+        this.askEl = this.actionsEl.createSpan({ cls: 'task-hub__source-ask', text: t('modal.hub.source.discardAsk') });
         this.discardBtn = this.actionsEl.createEl('button', { cls: 'mod-warning task-hub__source-discard', text: t('modal.hub.source.discard'), attr: { type: 'button' } });
         this.discardBtn.addEventListener('click', () => actions.discard());
-        this.askEl = this.actionsEl.createSpan({ cls: 'task-hub__source-ask', text: t('modal.hub.source.discardAsk') });
         this.cancelBtn = this.actionsEl.createEl('button', { cls: 'task-hub__source-cancel', attr: { type: 'button' } });
         this.cancelBtn.addEventListener('click', () => (this.asking ? actions.keep() : actions.cancel()));
         this.applyBtn = this.actionsEl.createEl('button', { cls: 'mod-cta', text: t('modal.hub.source.apply'), attr: { type: 'button' } });
