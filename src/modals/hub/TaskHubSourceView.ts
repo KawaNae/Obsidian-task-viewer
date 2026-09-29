@@ -58,7 +58,7 @@ export class TaskHubSourceView implements SourceSurface {
         this.sourceBtn.addEventListener('click', () => actions.enter());
 
         this.pane = paneHost;
-        this.pane.addClass('task-hub__source');
+        this.pane.addClass('task-hub__source-pane');
         this.editorHost = this.pane.createDiv({ cls: 'task-hub__source-editor' });
         this.messageEl = this.pane.createDiv({ cls: 'task-hub__source-message' });
 
