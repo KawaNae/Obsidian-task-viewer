@@ -1,6 +1,7 @@
-import { type App, AbstractInputSuggest, type TFolder } from 'obsidian';
+import type { App, TFolder } from 'obsidian';
+import { ShownSuggest } from './ShownSuggest';
 
-export class FolderSuggest extends AbstractInputSuggest<TFolder> {
+export class FolderSuggest extends ShownSuggest<TFolder> {
     private textInputEl: HTMLInputElement;
 
     constructor(app: App, inputEl: HTMLInputElement) {

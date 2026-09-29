@@ -519,6 +519,11 @@
         "copied": "下書きをコピーしました",
         "copyFailed": "下書きをコピーできませんでした"
       }
+    },
+    "noteFields": {
+      "name": "ノート名",
+      "folder": "置き場所",
+      "folderRoot": "（vault の直下）"
     }
   },
   "validation": {

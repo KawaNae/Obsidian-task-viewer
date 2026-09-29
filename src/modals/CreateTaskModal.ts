@@ -76,7 +76,7 @@ export class CreateTaskModal {
         if (this.overlay.isOpen()) return;
         this.overlay.open({
             mode: 'centered',
-            panelClass: 'tv-overlay__panel--dialog create-task',
+            panelClass: 'tv-overlay__panel--dialog',
             build: (bodyEl) => this.buildContent(bodyEl),
         });
         // open アニメーション中の focus は取りこぼすことがあるため 1 frame 遅らせる
@@ -93,7 +93,7 @@ export class CreateTaskModal {
         // tv-ctrl は overlay root に付与済み。行文法のルートだけ足す
         bodyEl.addClass('tv-form');
 
-        bodyEl.createEl('h2', { text: this.options.title ?? t('modal.createTask'), cls: 'create-task__title' });
+        bodyEl.createEl('h2', { text: this.options.title ?? t('modal.createTask'), cls: 'tv-form__title' });
 
         // --- Task Name ---
         const nameSection = bodyEl.createDiv({ cls: 'tv-form__name-section' });
@@ -165,6 +165,7 @@ export class CreateTaskModal {
 
         // --- Create button ---
         new Setting(bodyEl)
+            .setClass('tv-form__actions')
             .addButton((btn) =>
                 btn
                     .setButtonText(this.options.submitLabel ?? t('modal.create'))

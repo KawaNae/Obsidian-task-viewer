@@ -5,6 +5,19 @@
    _controls.css（tv-ctrl__*）。
    ====================================================== */
 
+/* OverlayShell の上のフォームダイアログ（CreateTaskModal など）の
+   見出しとボタン行。ボタン行は Obsidian の Setting を枠なしで置く */
+.tv-form__title {
+    margin: 0 0 12px;
+}
+
+.tv-form__actions.setting-item {
+    background: transparent;
+    border: none;
+    padding: 0;
+    margin: 24px 0 0;
+}
+
 /* --- 行文法: 左固定幅ラベル列 + コントロール領域 --- */
 .tv-form {
     --tv-form-label-width: 7em;
@@ -287,4 +300,19 @@
     color: var(--tv-text-warning);
     font-size: 0.85em;
     margin-bottom: 12px;
+}
+
+/* A line of a note shown verbatim, as it will be written (the next instance
+   a flow's delete would write). Monospace says "this is the text, as text";
+   a long line wraps rather than widening the dialog */
+.tv-form__line-preview {
+    display: block;
+    padding: 8px;
+    border-radius: var(--tv-radius-s);
+    background: var(--tv-bg-input);
+    color: var(--tv-text);
+    font-family: var(--tv-font-mono);
+    font-size: 0.9em;
+    white-space: pre-wrap;
+    word-break: break-word;
 }
