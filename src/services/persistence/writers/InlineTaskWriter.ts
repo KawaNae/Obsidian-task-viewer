@@ -118,6 +118,10 @@ export class InlineTaskWriter {
      * transaction completed (`FlowFireExtension`), but in one write
      * ({@link firingTrials}).
      *
+     * A refusal says what the write was about by the row it asked for last,
+     * else `about` (`processLines`): a write that may ask for no row of its
+     * own names its subject there.
+     *
      * @returns the outcome, and, when it was written, what `after` answered
      * in the run written.
      */
@@ -127,9 +131,10 @@ export class InlineTaskWriter {
         base: (draft: LineDraft, session: WriteSession) => readonly RowTarget[] | false,
         fire: () => F,
         after?: (draft: LineDraft, session: WriteSession) => A | false,
+        about?: string,
     ): Promise<FiringOutcome<F> & { after?: A }> {
         const firing = this.firingTrials(base, fire, after);
-        const outcome = await processLines(this.app, file, channel, firing.trials);
+        const outcome = await processLines(this.app, file, channel, firing.trials, about);
         if (!outcome.written) return outcome;
         const { fires, after: answered } = firing.settled();
         return { ...outcome, fires, ...(answered !== undefined ? { after: answered } : {}) };

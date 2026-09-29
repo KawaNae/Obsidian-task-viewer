@@ -228,7 +228,7 @@ describe('to a note there is', () => {
         const note = await open({ 'src.md': ['- [ ] A', ''], 'dst.md': ['## Tasks', '### tasks', ''] });
 
         expect(await note.send([note.row('A')], { path: 'dst.md' }))
-            .toMatchObject({ kind: 'not-done', refused: { file: 'dst.md', reason: { kind: 'headings', name: 'Tasks', count: 2 } } });
+            .toMatchObject({ kind: 'not-done', refused: { file: 'dst.md', reason: { kind: 'headings', name: 'Tasks', count: 2 }, subject: 'A' } });
         expect(note.text('src.md')).toBe('- [ ] A\n');
         expect(note.text('dst.md')).toBe('## Tasks\n### tasks\n');
         expect(Notice.messages).toHaveLength(1);
