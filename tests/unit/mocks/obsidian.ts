@@ -58,6 +58,12 @@ export class Plugin {
     saveData(_data: any) { return Promise.resolve(); }
 }
 
+export class Scope {
+    constructor(public parent?: Scope) {}
+    register(): unknown { return {}; }
+    unregister(): void {}
+}
+
 export class Modal {
     app: App;
     constructor(app: App) { this.app = app; }
