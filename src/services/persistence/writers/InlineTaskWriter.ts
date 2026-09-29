@@ -11,7 +11,7 @@ import type { PropertyOp } from '../PropertyUpdatePlanner';
 import { flowInstanceHead, renderFlowInstance } from '../FlowInstanceLines';
 import {
     UnfollowableDraft, createFile, editLines, fileGone, processLines, splitLines,
-    type DraftEdit, type EditedLines, type EditorLine, type LineDraft, type NamedRow, type Refusal,
+    type DraftEdit, type EditTrials, type EditedLines, type EditorLine, type LineDraft, type NamedRow, type Refusal,
     type RowTarget, type WriteAt, type WriteRefused, type WriteChannel, type WriteChannels, type WriteOutcome, type WriteSession,
 } from '../FileLines';
 import type { PlannedTarget } from '../TaskRefs';
@@ -115,7 +115,33 @@ export class InlineTaskWriter {
     /**
      * One write of `base`, and of the fire of each row it completed, each
      * fire kept or set aside on its own: as the editor fires the rows one
-     * transaction completed (`FlowFireExtension`), but in one write.
+     * transaction completed (`FlowFireExtension`), but in one write
+     * ({@link firingTrials}).
+     *
+     * @returns the outcome, and, when it was written, what `after` answered
+     * in the run written.
+     */
+    async writeFiring<F extends CompletionFire, A = true>(
+        file: TFile,
+        channel: WriteChannel | undefined,
+        base: (draft: LineDraft, session: WriteSession) => readonly RowTarget[] | false,
+        fire: () => F,
+        after?: (draft: LineDraft, session: WriteSession) => A | false,
+    ): Promise<FiringOutcome<F> & { after?: A }> {
+        const firing = this.firingTrials(base, fire, after);
+        const outcome = await processLines(this.app, file, channel, firing.trials);
+        if (!outcome.written) return outcome;
+        const { fires, after: answered } = firing.settled();
+        return { ...outcome, fires, ...(answered !== undefined ? { after: answered } : {}) };
+    }
+
+    /**
+     * The edits one write of `base` and its fires tries, to settle on the one
+     * it writes (`EditTrials`): what {@link writeFiring} writes to its note,
+     * and what a send tries first on the lines of a note to learn what the
+     * write will leave of its rows (`SendWriter`). `settled` answers what the
+     * last settle chose: each fire and the refusal it was set aside with, and
+     * what `after` answered in the edit chosen.
      *
      * `base` does the write's own edit and answers the rows it completed,
      * where its session finds them (the row the write names, a line it
@@ -131,7 +157,8 @@ export class InlineTaskWriter {
      * finds through the session where they left them — a send carries the
      * rows its draft completed once they fired where they stood
      * (`SendWriter`). It is part of every try, the one without fires too;
-     * false gives the write up, as from `base`.
+     * false gives the write up, as from `base`, and anything else is what it
+     * answers of the edit.
      *
      * The write is tried with every fire first, which is the one try when
      * nothing is refused. Refused with a fire in it, it is tried with none:
@@ -143,35 +170,52 @@ export class InlineTaskWriter {
      * word of it (`FiringOutcome`). All of it is tried on the lines of one
      * run of the write's callback (`EditTrials`).
      */
-    async writeFiring<F extends CompletionFire>(
-        file: TFile,
-        channel: WriteChannel | undefined,
+    firingTrials<F extends CompletionFire, A = true>(
         base: (draft: LineDraft, session: WriteSession) => readonly RowTarget[] | false,
         fire: () => F,
-        after?: (draft: LineDraft, session: WriteSession) => boolean,
-    ): Promise<FiringOutcome<F>> {
-        // The last run's fires and what came of them: what the outcome says.
+        after?: (draft: LineDraft, session: WriteSession) => A | false,
+    ): { trials: EditTrials; settled(): { fires: ReadonlyArray<{ fire: F; setAside: Refusal | null }>; after: A | undefined } } {
+        // The last settle's fires, what came of them, and what `after`
+        // answered in the edit it chose.
         let fires: F[] = [];
         let setAside = new Map<number, Refusal>();
+        let chosen: A | undefined;
         const settle = (tryEdit: (edit: DraftEdit) => EditedLines): EditedLines => {
             fires = [];
             setAside = new Map();
+            chosen = undefined;
             const fireAt = (k: number): F => fires[k] ??= fire();
             // How many rows `base` completed, as its last try answered.
             let rows = 0;
+            // What `after` answered in each edit made.
+            const answers = new Map<EditedLines, A | undefined>();
             // The write with the fires of the rows `kept` names (all of them
             // for null), each after the ones above it.
-            const tryWith = (kept: readonly number[] | null): EditedLines => tryEdit((draft, _eol, session) => {
-                const completed = base(draft, session);
-                if (completed === false) return false;
-                rows = completed.length;
-                for (const k of kept ?? completed.keys()) {
-                    if (!this.applyOps(draft, session, completed[k], [fireAt(k).op])) return false;
-                }
-                return after ? after(draft, session) : true;
-            });
+            const tryWith = (kept: readonly number[] | null): EditedLines => {
+                let answered: A | undefined;
+                const edited = tryEdit((draft, _eol, session) => {
+                    answered = undefined;
+                    const completed = base(draft, session);
+                    if (completed === false) return false;
+                    rows = completed.length;
+                    for (const k of kept ?? completed.keys()) {
+                        if (!this.applyOps(draft, session, completed[k], [fireAt(k).op])) return false;
+                    }
+                    if (!after) return true;
+                    const answer = after(draft, session);
+                    if (answer === false) return false;
+                    answered = answer;
+                    return true;
+                });
+                if (edited.written) answers.set(edited, answered);
+                return edited;
+            };
+            const choose = (edited: EditedLines): EditedLines => {
+                chosen = answers.get(edited);
+                return edited;
+            };
             const all = tryWith(null);
-            if (all.written || rows === 0) return all;
+            if (all.written || rows === 0) return choose(all);
             let made = tryWith([]);
             if (!made.written) return made;
             const kept: number[] = [];
@@ -185,11 +229,12 @@ export class InlineTaskWriter {
                     setAside.set(k, withIt.refused);
                 }
             }
-            return made;
+            return choose(made);
         };
-        const outcome = await processLines(this.app, file, channel, { settle });
-        if (!outcome.written) return outcome;
-        return { ...outcome, fires: fires.map((one, k) => ({ fire: one, setAside: setAside.get(k) ?? null })) };
+        return {
+            trials: { settle },
+            settled: () => ({ fires: fires.map((one, k) => ({ fire: one, setAside: setAside.get(k) ?? null })), after: chosen }),
+        };
     }
 
     /** Nothing written: the file is not there. Told as `gone`, like a row that is not. */
