@@ -294,6 +294,16 @@ describe('closing the hub (beforeClose)', () => {
         expect(h.closeHub).toHaveBeenCalledTimes(1);
     });
 
+    it('closes once the draft is thrown away, when a close is asked for while the switch to the card is asking', async () => {
+        const h = await opened();
+        h.editor().parent = '- [ ] P2';
+        h.source.cancel();
+        expect(h.state().asking).toBe(true);
+        expect(h.source.beforeClose()).toBe(false);
+        h.source.discard();
+        expect(h.closeHub).toHaveBeenCalledTimes(1);
+    });
+
     it('keeps a refused draft from a close as any draft', async () => {
         const refused = { file: 'note.md', reason: { kind: 'changed' as const }, subject: 'P' };
         const h = await opened({ answers: [{ written: false, refused }] });

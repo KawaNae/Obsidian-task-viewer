@@ -79,7 +79,7 @@ export interface SourceHost {
     indentUnit(): string;
     /** Shut the form while the source is open, and open it again after. */
     lockForm(locked: boolean): void;
-    /** Close the hub, asking nothing more. */
+    /** Close the hub, asking nothing more: the draft was thrown away for a close the user asked for (opening another hub among them). */
     closeHub(): void;
 }
 
@@ -201,11 +201,17 @@ export class TaskHubSource {
     /**
      * Whether the hub may close now (`OverlayShell` asks it before a close
      * the user asked for). Not while there is a draft: the hub asks whether
-     * to throw it away, and closes if the user says so.
+     * to throw it away, and closes if the user says so. Asked while it is
+     * already asking (a close after the switch to the card asked), the
+     * question stays and throwing the draft away now closes: what the user
+     * asked for last is what it goes on to.
      */
     beforeClose(): boolean {
         if (this.phase !== 'source' && this.phase !== 'applying') return true;
-        if (this.asking) return false;
+        if (this.asking) {
+            this.asking = 'close';
+            return false;
+        }
         if (!this.opened?.editor.isDirty()) return true;
         this.ask('close');
         return false;
