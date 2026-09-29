@@ -75,6 +75,19 @@ export interface SourceDraft {
     children: SourceDraftLine[];
 }
 
+/**
+ * The editor as a draft's logic uses it (the hub's source mode, the send
+ * dialog), apart from the DOM: `SourceEditor`, or a stand-in in a test.
+ */
+export interface DraftEditor {
+    draft(): SourceDraft;
+    isDirty(): boolean;
+    isCompleting(): boolean;
+    closeCompletion(): boolean;
+    focus(): void;
+    destroy(): void;
+}
+
 /** How wide a tab stands in the editors. */
 const TAB_SIZE = 4;
 
@@ -185,7 +198,7 @@ export function indentColumns(unit: string): number {
     return columns;
 }
 
-export class SourceEditor {
+export class SourceEditor implements DraftEditor {
     readonly dom: HTMLElement;
     private readonly parentView: EditorView;
     private readonly childrenView: EditorView;
