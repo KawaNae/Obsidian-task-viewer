@@ -21,9 +21,10 @@ import { planInPlaceCopies } from '../persistence/DuplicateShift';
 import type { GenBlock } from '../parsing/gen/GenBlockCollector';
 import { plannedOn, subjectOf } from '../persistence/TaskRefs';
 import { logDebug, logError, logInfo, logWarn } from '../../log/log';
-import { readInLine, type EditorLine, type Landing } from '../persistence/FileLines';
+import { readInLine, type EditorLine, type Landing, type Refusal } from '../persistence/FileLines';
 import type { FiringOutcome, InsertPlace, SubtreeReplacement, TaskOp } from '../persistence/TaskOps';
 import { Destination, type Section } from '../persistence/Destination';
+import type { SendTo } from '../persistence/writers/SendWriter';
 import type { ContentKey } from './ContentKey';
 import { checkCopy, checkFile, type CheckDeps, type OnDisk } from './ReadingCheck';
 import { DiskReconciler } from './DiskReconciler';
@@ -65,13 +66,16 @@ export interface SendRow {
 }
 
 /**
- * What came of a send (`TaskIndex.send`): made, with the note the rows went
- * to, the notes whose rows landed there, and the refusals of the notes whose
- * rows did not (none while every send is to the rows' own note); or not
- * made, and the user told why.
+ * What came of a send (`TaskIndex.send`): the note written, what the send
+ * was about in the user's words (the first row's text), the notes
+ * whose rows went there (`landed`), and the refusals of the notes whose rows
+ * stayed where they stood, not told the user (`refused`), and whether what
+ * went of those was taken out of the note again (`takenBack`; the note
+ * taken away or written back as it was when no row went); or nothing
+ * written, and the user told why.
  */
 export type SendWrite =
-    | { kind: 'done'; note: TFile; landed: readonly string[]; refused: readonly IndexRefusal[] }
+    | { kind: 'done'; note: TFile; subject: string; landed: readonly string[]; refused: readonly Refusal[]; takenBack: boolean }
     | { kind: 'not-done' };
 
 /** A row as the index read it, and the note's lines it was read in (`TaskIndex.rowSnapshot`). */
@@ -475,14 +479,15 @@ export class TaskIndex {
      *
      * Note: notifyImmediate() is called with no args → full invalidation.
      */
-    private async withNotify<T>(filePath: string, op: () => Promise<T>): Promise<T> {
-        this.apiWrites.mark(filePath);
+    private async withNotify<T>(filePath: string | readonly string[], op: () => Promise<T>): Promise<T> {
+        const paths = typeof filePath === 'string' ? [filePath] : filePath;
+        for (const path of paths) this.apiWrites.mark(path);
         try {
             const result = await op();
             this.notifyImmediate();
             return result;
         } finally {
-            this.apiWrites.clear(filePath);
+            for (const path of paths) this.apiWrites.clear(path);
         }
     }
 
@@ -650,24 +655,29 @@ export class TaskIndex {
      * Send rows and their subtrees to a section of a note: the send
      * operation (`NoteOps.send`). Each row is `SendRow`: named by its id,
      * with the subtree the dialog was opened on (`base`) and the draft the
-     * user wrote of it, if any.
+     * user wrote of it, if any. `to` is the note, made by the send when
+     * `create` says so, its section, and the keys to write into its
+     * frontmatter where it has none by their name.
      *
      * Planned as every write that names a row: once the writes already
      * asked of each row are done (`onRow`), from copies the disk still reads
      * as (`planCopy`), each named by its line and checked against its
      * `base`. A row inside another's subtree goes with that one's subtree
-     * (`outermostRows`), and the rows go in the order they stand.
+     * (`outermostRows`), and the rows go in the order they stand, note by
+     * note.
      *
-     * To the note the rows are in, it is one write, which the write layer
-     * makes (`SendWriter.sendWithinFile`): each draft written, each row a
-     * draft completed fired where it stood, and the rows carried. Refused,
-     * nothing is written, and the user is told as for any write. A send to
-     * another note is not made yet (段 B3).
+     * The write layer makes it (`SendWriter.send`): to the rows' own note,
+     * one write; to another, the note first, then each note the rows came
+     * from, what went taken back again for a note that refused. A refusal
+     * before anything is written is told as for any write. One of a note the
+     * rows came from, once the note is written, is only learnt from
+     * (`learnFrom`) and answered, for the caller to tell once with what
+     * became of the rest.
      *
-     * @returns `done` with the note the rows went to, and the notes whose
-     * rows landed there; else `not-done`, the user told why.
+     * @returns `done` once the note is written; else `not-done`, the user
+     * told why.
      */
-    async send(rows: readonly SendRow[], to: { path: string; section: Section }): Promise<SendWrite> {
+    async send(rows: readonly SendRow[], to: SendTo): Promise<SendWrite> {
         if (this.refuseAfterDispose('send')) return { kind: 'not-done' };
         const asked = new Map<string, SendRow>();
         for (const row of rows) if (!asked.has(row.taskId)) asked.set(row.taskId, row);
@@ -693,24 +703,32 @@ export class TaskIndex {
                     logWarn(`[TaskIndex] send: a draft of a row in another's subtree is not written: id=${row.taskId}`);
                 }
             }
-            if (sent.some(({ task }) => task.file !== to.path)) {
-                logWarn(`[TaskIndex] send: a send to another note is not made yet: to=${to.path}`);
+            if (to.create && sent.some(({ task }) => task.file === to.path)) {
+                logWarn(`[TaskIndex] send: a note to make holds rows already: to=${to.path}`);
                 return { kind: 'not-done' };
             }
-            return this.withNotify(to.path, async (): Promise<SendWrite> => {
-                logInfo(`[send] to=${to.path}#${to.section.heading} rows=${sent.map(({ task }) => task.id).join(',')}`);
+            const paths = [...new Set([to.path, ...sent.map(({ task }) => task.file)])];
+            return this.withNotify(paths, async (): Promise<SendWrite> => {
+                logInfo(`[send] to=${to.path}#${to.section.heading}${to.create ? ' (new)' : ''} rows=${sent.map(({ task }) => task.id).join(',')}`);
                 const defs = this.settings.statusDefinitions;
-                const outcome = await this.repository.sendWithinFile(to.path, sent.map(({ task, row }) => ({
-                    target: { ...plannedOn(task), basis: { text: row.base[0], subtree: row.base } },
-                    ...(row.draft ? { draft: row.draft } : {}),
-                })), to.section, {
+                const outcome = await this.repository.send(sent.map(({ task, row }) => ({
+                    file: task.file,
+                    row: {
+                        target: { ...plannedOn(task), basis: { text: row.base[0], subtree: row.base } },
+                        ...(row.draft ? { draft: row.draft } : {}),
+                    },
+                })), to, {
                     completes: (was, now) => completes(was, now, defs),
-                    fire: () => this.commandExecutor.fireOp(to.path),
+                    fire: (path) => this.commandExecutor.fireOp(path),
                 });
-                this.tellNotRun(outcome);
-                const note = this.app.vault.getAbstractFileByPath(to.path);
-                if (!outcome.written || !(note instanceof TFile)) return { kind: 'not-done' };
-                return { kind: 'done', note, landed: [to.path], refused: [] };
+                if (outcome.kind === 'not-sent') return { kind: 'not-done' };
+                for (const write of outcome.writes) this.tellNotRun(write);
+                for (const refusal of outcome.refused) await this.learnFrom(refusal);
+                logInfo(`[send] landed=${outcome.landed.join(',') || '-'} refused=${outcome.refused.map(one => `${one.file}:${one.reason.kind}`).join(',') || '-'} takenBack=${outcome.takenBack}`);
+                return {
+                    kind: 'done', note: outcome.note, subject: subjectOf(sent[0].task),
+                    landed: outcome.landed, refused: outcome.refused, takenBack: outcome.takenBack,
+                };
             });
         });
     }

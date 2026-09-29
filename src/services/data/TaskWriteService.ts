@@ -4,7 +4,7 @@ import type { InsertPlace, SubtreeReplacement, TaskOp } from '../persistence/Tas
 import type { IndexRefusal } from '../core/RefusalClause';
 import type { DuplicateOptions, Task } from '../../types';
 import type { AnchoredRow, RowSnapshot, SendRow, SendWrite, TaskIndex } from '../core/TaskIndex';
-import type { Section } from '../persistence/Destination';
+import type { SendTo } from '../persistence/writers/SendWriter';
 import type { FlowDeleteAssessment } from '../flow/FlowDeletion';
 import { TaskIdGenerator } from '../display/TaskIdGenerator';
 
@@ -152,7 +152,7 @@ export class TaskWriteService {
     }
 
     /** Rows and their subtrees sent to a section of a note (see TaskIndex.send). */
-    async send(rows: readonly SendRow[], to: { path: string; section: Section }): Promise<SendWrite> {
+    async send(rows: readonly SendRow[], to: SendTo): Promise<SendWrite> {
         return this.taskIndex.send(rows.map(row => ({ ...row, taskId: this.resolveTaskId(row.taskId) })), to);
     }
 

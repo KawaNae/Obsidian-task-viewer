@@ -1,11 +1,15 @@
-import type { TFile } from 'obsidian';
+import { Notice, type App, type TFile } from 'obsidian';
+import { t } from '../../i18n';
 import type { TaskViewerSettings } from '../../types';
-import type { RowSnapshot, SendRow } from '../core/TaskIndex';
+import { openFile } from '../../utils/NavigationUtils';
+import type { RowSnapshot, SendRow, SendWrite } from '../core/TaskIndex';
+import { refusalClause } from '../core/RefusalClause';
 import { outermostRows } from '../core/SendRows';
 import { Destination, type Section } from '../persistence/Destination';
 import { logWarn } from '../../log/log';
 import type { InheritedValue } from './InheritedValues';
 import type { TaskWriteService } from './TaskWriteService';
+import { NoteName } from './NoteName';
 
 export type { SendRow } from '../core/TaskIndex';
 
@@ -43,9 +47,14 @@ export interface SendPreview {
     defaults: SendDestination;
 }
 
-/** What came of a send: made, with the note the rows went to; or not, and the user told why. */
+/**
+ * What came of a send: made, with the note the rows went to; made for some
+ * rows, and not for those of the notes `refused` names; or not made. The
+ * user has been told, once, either way.
+ */
 export type SendResult =
     | { kind: 'done'; note: TFile }
+    | { kind: 'partly'; note: TFile; refused: readonly string[] }
     | { kind: 'not-done' };
 
 /**
@@ -54,12 +63,10 @@ export type SendResult =
  * what the dialog holds as its arguments; what is told the user, the
  * operation tells, and the dialog only decides from the result whether it
  * closes.
- *
- * A send to the rows' own note is made (段 B2); one to another note, new or
- * there already, is not yet (段 B3).
  */
 export class NoteOps {
     constructor(
+        private app: App,
         private writeService: TaskWriteService,
         private getSettings: () => TaskViewerSettings,
     ) { }
@@ -71,8 +78,8 @@ export class NoteOps {
      * disk, and the user told why, as for a write.
      *
      * The destination is the rows' own note, at the settings' section
-     * (`Destination.taskSection`): the one a send can go to until a send to
-     * another note is made (段 B3), which answers its own default.
+     * (`Destination.taskSection`), until the dialog answers its own default
+     * (段 B5).
      */
     async previewSend(taskIds: readonly string[]): Promise<SendPreview | null> {
         const rows: RowSnapshot[] = [];
@@ -90,21 +97,89 @@ export class NoteOps {
     }
 
     /**
-     * Send the rows `req` names to its destination (`TaskIndex.send`). A
-     * send the service does not make yet, or that its caller asked wrongly,
-     * is not made, and said in the log: no user of the dialog can ask it.
+     * Send the rows `req` names to its destination (`TaskIndex.send`), and
+     * tell the user what came of it, once.
+     *
+     * A new note is looked up again as the send is made (`NoteName.at`): a
+     * path a note has, in any case, is that note, and the rows go to it as to
+     * one there is. A send its caller asked wrongly — a name no note can
+     * have, a key given twice — is not made, and said in the log: the dialog
+     * does not ask it.
      */
     async send(req: SendRequest): Promise<SendResult> {
         const { note, section } = req.to;
+        let path: string;
+        let create = false;
         if (note.kind === 'new') {
-            logWarn(`[NoteOps] send: a send to a new note is not made yet: ${note.folder}/${note.name}`);
+            const name = NoteName.check(note.name);
+            if (!name.ok) {
+                logWarn(`[NoteOps] send: not a name a note can have (${name.why}): ${note.name}`);
+                return { kind: 'not-done' };
+            }
+            const at = NoteName.at(this.app.vault, note.folder, note.name);
+            path = at.kind === 'existing' ? at.file.path : at.path;
+            create = at.kind === 'new';
+        } else {
+            path = note.path;
+        }
+        const keys = req.frontmatter.map(one => one.key);
+        if (new Set(keys).size !== keys.length) {
+            logWarn(`[NoteOps] send: a frontmatter key is given twice: ${keys.join(', ')}`);
             return { kind: 'not-done' };
         }
-        if (req.frontmatter.length > 0) {
-            logWarn(`[NoteOps] send: frontmatter is written only to another note, which a send does not go to yet: ${note.path}`);
+        const written = await this.writeService.send(req.rows, { path, create, section, frontmatter: req.frontmatter });
+        if (written.kind === 'not-done') return written;
+        return this.tell(written, req.rows.length);
+    }
+
+    /**
+     * Tell the user what came of a send the note was written for, once, the
+     * note a link that opens it (`openFile`): the rows sent, and that an
+     * undo in the note they came from leaves them in both (判断 8); some sent
+     * and the others not, and why; none sent. When what went of the rows
+     * that were not sent could not be taken out of the note again, they are
+     * in both notes, and the notice says so. A send within the rows' own
+     * note is not told.
+     */
+    private tell(written: Extract<SendWrite, { kind: 'done' }>, asked: number): SendResult {
+        const { note, landed, refused, takenBack } = written;
+        const why = refused.map(one => t('notice.sendRefused', { note: one.file, reason: refusalClause(one.reason), subject: one.subject }));
+        const stranded = takenBack ? [] : [t('notice.sendStranded', { note: note.path })];
+        if (refused.length === 0) {
+            // Within its own note, the rows are where the user looks: one
+            // write, which an undo takes back whole.
+            if (landed.every(path => path === note.path)) return { kind: 'done', note };
+            this.tellOf(asked === 1 ? t('notice.sent', { subject: written.subject, note: note.path }) : t('notice.sentRows', { count: asked, note: note.path }), note);
+            return { kind: 'done', note };
+        }
+        if (landed.length === 0 && takenBack) {
+            new Notice([t('notice.notSent'), ...why].join(' '));
             return { kind: 'not-done' };
         }
-        const written = await this.writeService.send(req.rows, { path: note.path, section });
-        return written.kind === 'done' ? { kind: 'done', note: written.note } : { kind: 'not-done' };
+        const head = landed.length === 0 ? t('notice.notSent') : t('notice.sentPartly', { note: note.path });
+        this.tellOf([head, ...why, ...stranded].join(' '), note);
+        return { kind: 'partly', note, refused: refused.map(one => one.file) };
+    }
+
+    /**
+     * Tell the user `text`, the note's path in it a link that opens the note
+     * as the plugin opens a note (`openFile`, by the setting
+     * `reuseExistingTab`).
+     */
+    private tellOf(text: string, note: TFile): void {
+        const notice = new Notice(text);
+        // Off Obsidian (the unit tests) a notice has no element to link in.
+        const el = (notice as { messageEl?: HTMLElement }).messageEl;
+        const at = text.indexOf(note.path);
+        if (!el || at < 0) return;
+        el.empty();
+        el.appendText(text.slice(0, at));
+        const link = el.createEl('a', { text: note.path, href: '#', cls: 'internal-link' });
+        link.addEventListener('click', (e) => {
+            e.preventDefault();
+            notice.hide();
+            openFile(this.app, note.path, this.getSettings().reuseExistingTab);
+        });
+        el.appendText(text.slice(at + note.path.length));
     }
 }

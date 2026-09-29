@@ -1,4 +1,4 @@
-import { type App, parseYaml, TFile } from 'obsidian';
+import { type App, parseYaml, TFile, TFolder } from 'obsidian';
 import { TaskIndex } from '../../../src/services/core/TaskIndex';
 import type { TaskScanner } from '../../../src/services/core/TaskScanner';
 import { TaskWriteService } from '../../../src/services/data/TaskWriteService';
@@ -13,6 +13,7 @@ import { splitLines } from '../../../src/services/persistence/FileLines';
 import type { Refusal, WriteChannel } from '../../../src/services/persistence/FileLines';
 import type { DiskProbe } from '../../../src/services/core/DiskProbe';
 import type { DiskReconciler } from '../../../src/services/core/DiskReconciler';
+import { linkDouble } from './linkDouble';
 
 export function makeFile(path: string): TFile {
     const file = new TFile();
@@ -154,7 +155,10 @@ export function vaultSession(contents: Map<string, string>, options: { probe?: D
             // A file written whole. Obsidian answers the new TFile and sends a
             // `create`, which the index scans like any other arrival — so the
             // scan follows here too, and every row in the file is minted by it.
+            // A path that differs from a note's in case alone is taken, as
+            // on the file systems of macOS and Windows (stage 0).
             create: async (path: string, data: string) => {
+                if ([...contents.keys()].some(p => p.toLowerCase() === path.toLowerCase())) throw new Error('File already exists.');
                 const file = fileAt(path);
                 contents.set(path, data);
                 await (vaultHandlers.get('create') as (f: TFile) => void | Promise<void>)(file);
@@ -162,6 +166,23 @@ export function vaultSession(contents: Map<string, string>, options: { probe?: D
             },
             getAbstractFileByPath: (path: string) => (contents.has(path) ? fileAt(path) : null),
             getMarkdownFiles: () => [...contents.keys()].map(fileAt),
+            getFiles: () => [...contents.keys()].map(fileAt),
+            // The folders the notes are in; none is kept apart from them.
+            getAllFolders: () => [...new Set([...contents.keys()].flatMap(path => {
+                const parts = path.split('/').slice(0, -1);
+                return parts.map((_, i) => parts.slice(0, i + 1).join('/'));
+            }))].map(path => Object.assign(new TFolder(), { path, name: path.split('/').pop() })),
+            createFolder: async () => { },
+        },
+        fileManager: {
+            // To the trash: the note is gone from the vault, which says so.
+            trashFile: async (file: TFile) => {
+                contents.delete(file.path);
+                held.delete(file.path);
+                await (vaultHandlers.get('delete') as (f: TFile) => void)(file);
+            },
+            // Spelt as Obsidian was measured to spell a new link, by default settings.
+            generateMarkdownLink: linkDouble(() => [...contents.keys()]),
         },
         metadataCache: {
             ...noop,

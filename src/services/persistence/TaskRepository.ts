@@ -2,7 +2,7 @@ import type { App } from 'obsidian';
 import type { DuplicateOptions, Task } from '../../types';
 import { FileOperations } from './utils/FileOperations';
 import { InlineTaskWriter } from './writers/InlineTaskWriter';
-import { SendWriter, type SentRow } from './writers/SendWriter';
+import { SendWriter, type SendCompleting, type SendOutcome, type SendTo, type SentRow } from './writers/SendWriter';
 import { FrontmatterWriter } from './writers/FrontmatterWriter';
 import { TaskCloner, type InPlaceCopyLines } from './TaskCloner';
 import type { PropertyOp } from './PropertyUpdatePlanner';
@@ -36,7 +36,7 @@ export class TaskRepository {
         this.inlineWriter = new InlineTaskWriter(app, this.fileOps, channelOf);
         this.frontmatterWriter = new FrontmatterWriter(app, this.fileOps, channelOf);
         this.cloner = new TaskCloner(app, this.fileOps, channelOf);
-        this.sendWriter = new SendWriter(app, this.inlineWriter, channelOf);
+        this.sendWriter = new SendWriter(app, this.inlineWriter, this.fileOps, channelOf);
     }
 
     /** @internal For the index to connect once its scanner exists. */
@@ -71,14 +71,13 @@ export class TaskRepository {
         return this.inlineWriter.replaceSubtreeInFile(target, replacement, completing, opts);
     }
 
-    /** Rows of one note sent to a section of it, as one write, each row a draft completes fired first (see SendWriter.sendWithinFile). */
-    async sendWithinFile<F extends CompletionFire>(
-        path: string,
-        rows: readonly SentRow[],
-        to: Section,
-        completing: { completes(before: string, after: string): boolean; fire(): F },
-    ): Promise<FiringOutcome<F>> {
-        return this.sendWriter.sendWithinFile(path, rows, to, completing);
+    /** Rows and their subtrees sent to a section of a note, what went taken back when a note they came from refused (see SendWriter.send). */
+    async send<F extends CompletionFire>(
+        rows: ReadonlyArray<{ file: string; row: SentRow }>,
+        to: SendTo,
+        completing: SendCompleting<F>,
+    ): Promise<SendOutcome<F>> {
+        return this.sendWriter.send(rows, to, completing);
     }
 
     /** The one loop that applies ops to a row, inside a write (see InlineTaskWriter.applyOps). */
