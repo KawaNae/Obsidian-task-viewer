@@ -47,6 +47,7 @@ function setUp(opts: { task?: Task; answers?: ReplaceAnswer[]; confirm?: boolean
     const answers = [...(opts.answers ?? [])];
     const states: SourceViewState[] = [];
     const editors: FakeEditor[] = [];
+    let asked = 0;
     const replace = vi.fn(async (_id: string, _base: readonly string[], _r: SubtreeReplacement): Promise<ReplaceAnswer> => answers.shift() ?? { written: true });
     const confirm = vi.fn(async () => opts.confirm ?? true);
     const lockForm = vi.fn();
@@ -63,6 +64,7 @@ function setUp(opts: { task?: Task; answers?: ReplaceAnswer[]; confirm?: boolean
     const source = new TaskHubSource(row!, host, {
         openEditor: (frame, hooks) => { const editor = new FakeEditor(frame, hooks); editors.push(editor); return editor; },
         render: (state) => { states.push(state); },
+        asked: () => { asked++; },
     });
     return {
         source,
@@ -73,6 +75,8 @@ function setUp(opts: { task?: Task; answers?: ReplaceAnswer[]; confirm?: boolean
         editor: () => editors[editors.length - 1],
         editors,
         state: () => states[states.length - 1],
+        /** How many times the question was put, the focus taken to its answer. */
+        asked: () => asked,
         /** The row as the index holds it now: gone when undefined. */
         setRow: (next: Task | undefined) => { row = next; },
     };
@@ -278,12 +282,17 @@ describe('closing the hub (beforeClose)', () => {
         expect(h.source.beforeClose()).toBe(true);
     });
 
-    it('keeps it open over a draft and asks; asked again, it stays open and asks nothing new', async () => {
+    it('keeps it open over a draft and asks; asked again, it stays open and puts the same question again', async () => {
         const h = await opened();
         h.editor().parent = '- [ ] P2';
         expect(h.source.beforeClose()).toBe(false);
         expect(h.state().asking).toBe(true);
+        expect(h.asked()).toBe(1);
+        const drawn = h.state();
+        // The focus may have gone back to the editor meanwhile: the question takes it to its answer again.
         expect(h.source.beforeClose()).toBe(false);
+        expect(h.asked()).toBe(2);
+        expect(h.state()).toBe(drawn);
         expect(h.closeHub).not.toHaveBeenCalled();
     });
 
@@ -300,7 +309,9 @@ describe('closing the hub (beforeClose)', () => {
         h.editor().parent = '- [ ] P2';
         h.source.cancel();
         expect(h.state().asking).toBe(true);
+        expect(h.asked()).toBe(1);
         expect(h.source.beforeClose()).toBe(false);
+        expect(h.asked()).toBe(2);
         h.source.discard();
         expect(h.closeHub).toHaveBeenCalledTimes(1);
     });

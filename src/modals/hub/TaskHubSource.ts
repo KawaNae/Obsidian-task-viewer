@@ -65,6 +65,13 @@ export interface SourceSurface {
     /** Open the editor on `frame`'s text: `submit` on Mod+Enter, `edited` on a change of its text. */
     openEditor(frame: SubtreeFrame, hooks: { submit(): void; edited(): void }): DraftEditor;
     render(state: SourceViewState): void;
+    /**
+     * The question whether to throw the draft away was put, first or again
+     * (a close refused while it stands): the focus goes to its answer that
+     * keeps the draft. Moved from the editor, it takes a phone's keyboard
+     * down with it, and a stray Enter keeps the draft.
+     */
+    asked(): void;
 }
 
 export type ReplaceAnswer = { written: true } | { written: false; refused: IndexRefusal | null };
@@ -209,17 +216,15 @@ export class TaskHubSource {
      * Whether the hub may close now (`OverlayShell` asks it before a close
      * the user asked for). Not while there is a draft: the hub asks whether
      * to throw it away, and closes if the user says so. Asked while it is
-     * already asking (a close after the switch to the card asked), the
-     * question stays and throwing the draft away now closes: what the user
-     * asked for last is what it goes on to.
+     * already asking (a close after the switch to the card asked, or a
+     * close again), the question is put again, and throwing the draft away
+     * now closes: what the user asked for last is what it goes on to. Every
+     * close refused puts the question, so each takes the focus to its answer
+     * as the first did.
      */
     beforeClose(): boolean {
         if (this.phase !== 'source' && this.phase !== 'applying') return true;
-        if (this.asking) {
-            this.asking = 'close';
-            return false;
-        }
-        if (!this.opened?.editor.isDirty()) return true;
+        if (!this.asking && !this.opened?.editor.isDirty()) return true;
         this.ask('close');
         return false;
     }
@@ -296,9 +301,12 @@ export class TaskHubSource {
         this.render();
     }
 
+    /** Put the question, first or again, and go on to `after` if the draft is thrown away. */
     private ask(after: After): void {
+        const drawn = this.asking !== null;
         this.asking = after;
-        this.render();
+        if (!drawn) this.render();
+        this.surface.asked();
     }
 
     /** The source closed, the draft with it: the card again, and the form open. */

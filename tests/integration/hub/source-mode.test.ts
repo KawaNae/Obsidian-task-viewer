@@ -358,6 +358,41 @@ describe('the hub\'s source mode', () => {
         expect(readTestFile(TEST_FILE)).toBe(NOTE.replace('子b', '子b 12'));
     });
 
+    it('takes the focus to back on every close refused, the question standing or not', async () => {
+        await writeIndexedTestFile(TEST_FILE, NOTE);
+        openSource('親');
+        const steps = run<Record<string, unknown>>(`
+            const children = viewOf('children');
+            children.dispatch({ changes: { from: children.state.doc.length, insert: ' 下書き' } });
+            const onBack = () => document.activeElement === document.querySelector('.task-hub__source-cancel');
+            const outside = () => document.querySelector('.task-hub .tv-overlay__backdrop, .tv-overlay__backdrop')
+                .dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, cancelable: true, button: 0 }));
+            // First asked by a press outside, with the focus in the editor.
+            viewOf('children').focus();
+            outside();
+            await sleep(50);
+            const first = { ...state(), onBack: onBack() };
+            // The focus given back to the editor, then a close again: the question stands, the focus goes to back.
+            viewOf('children').focus();
+            await sleep(50);
+            const inEditor = onBack();
+            outside();
+            await sleep(50);
+            const again = { ...state(), onBack: onBack() };
+            viewOf('children').focus();
+            document.querySelector('.task-hub .tv-overlay__close').click();
+            await sleep(50);
+            const byButton = { ...state(), onBack: onBack() };
+            return JSON.stringify({ first, inEditor, again, byButton });
+        `);
+        expect(steps).toMatchObject({
+            first: { hub: true, asking: true, onBack: true },
+            inEditor: false,
+            again: { hub: true, asking: true, onBack: true },
+            byButton: { hub: true, asking: true, onBack: true },
+        });
+    });
+
     it('keeps Obsidian\'s hotkeys from the note behind while the focus is in the hub, its child popovers among it', async () => {
         await writeIndexedTestFile(TEST_FILE, NOTE);
         const result = run<Record<string, unknown>>(`

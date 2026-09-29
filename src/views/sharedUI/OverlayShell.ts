@@ -117,6 +117,10 @@ export class OverlayShell {
         // backdrop で吸収する。touchend の preventDefault は合成 mouse
         // イベント（mousedown/mouseup/click）の発生自体を抑止する
         backdrop.addEventListener('touchend', (e) => e.preventDefault(), { passive: false });
+        // A mouse press on the backdrop moves no focus: a close refused
+        // there has put the focus where the body wants it (`beforeClose`),
+        // and the press's default would take it to the document's body.
+        backdrop.addEventListener('mousedown', (e) => e.preventDefault());
         backdrop.addEventListener('click', (e) => {
             e.preventDefault();
             e.stopPropagation();
