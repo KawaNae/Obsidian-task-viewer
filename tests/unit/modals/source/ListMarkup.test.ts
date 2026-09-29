@@ -3,7 +3,7 @@ import { indentLess } from '@codemirror/commands';
 import { indentUnit } from '@codemirror/language';
 import { EditorSelection, EditorState, type StateCommand } from '@codemirror/state';
 import {
-    indentMoreRestartingLists, listMarkup, listNumbering, moveLineDownKeepingNumbers,
+    breakParent, indentMoreRestartingLists, listMarkup, listNumbering, moveLineDownKeepingNumbers,
     moveLineUpKeepingNumbers, newlineContinuingList, outdented,
 } from '../../../../src/modals/form/source/ListMarkup';
 import { childrenState, draftOf, parentState } from '../../../../src/modals/form/source/SourceEditor';
@@ -235,5 +235,23 @@ describe('the line map through list edits', () => {
             { text: '- a', was: 1 },
             { text: '- ', was: 2 },
         ]);
+    });
+});
+
+describe('Enter in the parent\'s line', () => {
+    it('sends the text after the caret to the first child line, with the parent\'s markup and an open checkbox', () => {
+        expect(breakParent('- [x] task more', 10, 10)).toEqual({ cut: 10, child: '- [ ] more', caret: 6 });
+        expect(breakParent('* note text', 6, 6)).toEqual({ cut: 6, child: '* text', caret: 2 });
+        expect(breakParent('3) [ ] step next', 11, 11)).toEqual({ cut: 11, child: '1) [ ] next', caret: 7 });
+        expect(breakParent('plain text', 5, 5)).toEqual({ cut: 5, child: 'text', caret: 0 });
+    });
+
+    it('makes an empty child item at the end of the line, and in the markup leaves the line whole', () => {
+        expect(breakParent('- [ ] task', 10, 10)).toEqual({ cut: 10, child: '- [ ] ', caret: 6 });
+        expect(breakParent('- [ ] task', 3, 3)).toEqual({ cut: null, child: '- [ ] ', caret: 6 });
+    });
+
+    it('drops a selection', () => {
+        expect(breakParent('- [ ] a b c', 7, 9)).toEqual({ cut: 7, child: '- [ ] c', caret: 6 });
     });
 });

@@ -7,7 +7,7 @@ import { Scope, type App } from 'obsidian';
 import { BRACKET_CLOSERS, BRACKET_PAIRS } from '../../../utils/BracketRules';
 import { lineMapOf, trackLines } from './LineMap';
 import {
-    indentMoreRestartingLists, listNumbering, moveLineDownKeepingNumbers, moveLineUpKeepingNumbers,
+    breakParent, indentMoreRestartingLists, listNumbering, moveLineDownKeepingNumbers, moveLineUpKeepingNumbers,
     newlineContinuingList,
 } from './ListMarkup';
 import { linkTagCompletionSource } from './SourceCompletion';
@@ -20,13 +20,17 @@ import { linkTagCompletionSource } from './SourceCompletion';
  * indent maps to the file's, and when a draft is written are the caller's.
  *
  * - The parent editor holds one line: no change that would break it is
- *   taken, and Enter goes on to the children's editor.
+ *   taken. Enter sends the text after the caret to a new first child line,
+ *   with the parent's list markup, and goes on to it (`breakParent`).
  * - The children's editor holds any number of lines, indented from 0. Tab
  *   indents by the unit it is given, Shift+Tab outdents, and Enter goes on
  *   with a list as Obsidian's editor does, keeping the indent of the line it
  *   breaks as it is spelled (`ListMarkup`). Numbered lists are numbered
  *   again after each change, and Alt+ArrowUp/Down move lines with the
  *   numbers left in place, as there.
+ * - ArrowDown on the parent's last row goes to the children's first line;
+ *   ArrowUp on the children's first row goes to the parent. A completion
+ *   list open takes the keys first.
  * - Both pair brackets as the task name field does (`BracketRules`), and
  *   complete links and tags as its suggest does (`LinkTagCandidates`).
  * - While either has the focus, Obsidian's hotkeys are kept out, as a modal
@@ -96,18 +100,30 @@ function common(app: App | undefined, hooks: EditorHooks): Extension[] {
 /** The parent editor holds one line: a change that would make it two is not taken. */
 export const singleLine: Extension = EditorState.transactionFilter.of((tr) => (tr.newDoc.lines > 1 ? [] : tr));
 
-export function parentState(text: string, app: App | undefined, hooks: EditorHooks & { onEnter?: () => void }): EditorState {
+/** Keys an editor hands to the other: false leaves the key to the editor itself. */
+type Handoff = (view: EditorView) => boolean;
+
+export function parentState(
+    text: string, app: App | undefined,
+    hooks: EditorHooks & { onEnter?: Handoff; onDown?: Handoff },
+): EditorState {
     return EditorState.create({
         doc: text,
         extensions: [
             singleLine,
-            Prec.high(keymap.of([{ key: 'Enter', run: () => { hooks.onEnter?.(); return true; } }])),
+            Prec.high(keymap.of([
+                { key: 'Enter', run: (view) => hooks.onEnter?.(view) ?? true },
+                { key: 'ArrowDown', run: (view) => hooks.onDown?.(view) ?? false },
+            ])),
             common(app, hooks),
         ],
     });
 }
 
-export function childrenState(lines: readonly string[], unit: string, app: App | undefined, hooks: EditorHooks): EditorState {
+export function childrenState(
+    lines: readonly string[], unit: string, app: App | undefined,
+    hooks: EditorHooks & { onUp?: Handoff } = {},
+): EditorState {
     return EditorState.create({
         doc: lines.join('\n'),
         extensions: [
@@ -118,6 +134,7 @@ export function childrenState(lines: readonly string[], unit: string, app: App |
                 { key: 'Tab', run: acceptCompletion },
                 { key: 'Tab', run: indentMoreRestartingLists, shift: indentLess },
                 { key: 'Enter', run: newlineContinuingList },
+                { key: 'ArrowUp', run: (view) => hooks.onUp?.(view) ?? false },
                 { key: 'Alt-ArrowUp', run: moveLineUpKeepingNumbers },
                 { key: 'Alt-ArrowDown', run: moveLineDownKeepingNumbers },
             ])),
@@ -153,11 +170,18 @@ export class SourceEditor {
         this.dom = container.createDiv({ cls: 'tv-source-editor' });
         const hooks: EditorHooks = { onSubmit: options.onSubmit, onChange: options.onChange };
         this.parentView = new EditorView({
-            state: parentState(options.parent, options.app, { ...hooks, onEnter: () => this.focusChildren() }),
+            state: parentState(options.parent, options.app, {
+                ...hooks,
+                onEnter: () => this.breakParent(),
+                onDown: (view) => this.downToChildren(view),
+            }),
             parent: this.dom.createDiv({ cls: 'tv-source-editor__parent' }),
         });
         this.childrenView = new EditorView({
-            state: childrenState(options.children, options.indentUnit, options.app, hooks),
+            state: childrenState(options.children, options.indentUnit, options.app, {
+                ...hooks,
+                onUp: (view) => this.upToParent(view),
+            }),
             parent: this.dom.createDiv({ cls: 'tv-source-editor__children' }),
         });
         this.hotkeys = options.app ? { scope: new Scope(), pushed: false } : null;
@@ -213,8 +237,49 @@ export class SourceEditor {
         else keymap.popScope(hotkeys.scope);
     }
 
-    private focusChildren(): void {
-        this.childrenView.focus();
-        this.childrenView.dispatch({ selection: { anchor: 0 }, scrollIntoView: true });
+    /**
+     * Enter in the parent's line: its text after the caret becomes the first
+     * child line, and the caret goes there (`breakParent`). Each editor keeps
+     * its own history of the change.
+     */
+    private breakParent(): boolean {
+        const parent = this.parentView;
+        const children = this.childrenView;
+        const { from, to } = parent.state.selection.main;
+        const split = breakParent(parent.state.doc.toString(), from, to);
+        if (split.cut !== null) {
+            parent.dispatch({ changes: { from: split.cut, to: parent.state.doc.length }, userEvent: 'input' });
+        }
+        // An empty children's editor holds no lines: the line is the only one.
+        const rest = children.state.doc.length > 0 ? children.state.lineBreak : '';
+        children.focus();
+        children.dispatch({
+            changes: { from: 0, insert: split.child + rest },
+            selection: { anchor: split.caret },
+            scrollIntoView: true,
+            userEvent: 'input',
+        });
+        return true;
+    }
+
+    /** ArrowDown on the parent's last row: on to the children's first line, as near the caret's offset as it goes. */
+    private downToChildren(view: EditorView): boolean {
+        const range = view.state.selection.main;
+        if (!range.empty || view.moveToLineBoundary(range, true, true).head < view.state.doc.length) return false;
+        const children = this.childrenView;
+        children.focus();
+        children.dispatch({ selection: { anchor: Math.min(range.head, children.state.doc.line(1).length) }, scrollIntoView: true });
+        return true;
+    }
+
+    /** ArrowUp on the children's first row: back to the parent's line, as near the caret's offset as it goes. */
+    private upToParent(view: EditorView): boolean {
+        const range = view.state.selection.main;
+        if (!range.empty || view.state.doc.lineAt(range.head).number !== 1) return false;
+        if (view.moveToLineBoundary(range, false, true).head > 0) return false;
+        const parent = this.parentView;
+        parent.focus();
+        parent.dispatch({ selection: { anchor: Math.min(range.head, parent.state.doc.length) } });
+        return true;
     }
 }
