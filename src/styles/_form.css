@@ -302,6 +302,13 @@
     margin-bottom: 12px;
 }
 
+/* Info message: what the form will do, in the text's own colour */
+.tv-form__info {
+    color: var(--tv-text);
+    font-size: 0.85em;
+    margin-bottom: 12px;
+}
+
 /* A line of a note shown verbatim, as it will be written (the next instance
    a flow's delete would write). Monospace says "this is the text, as text";
    a long line wraps rather than widening the dialog */
