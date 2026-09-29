@@ -314,8 +314,8 @@ describe('send: a refusal the caller shows (tellRefusal: false)', () => {
 
         const sent = await note.ops.send({ rows: [note.row('A')], to, frontmatter: [] }, quiet);
 
-        // The write of a note there is says what it was about by the note: none of its own rows is sent.
-        expect(sent).toEqual({ kind: 'not-done', why: refusalNotice({ file: 'Plan.md', reason: { kind: 'headings', name: 'Tasks', count: 2 }, subject: 'Plan.md' }) });
+        // Said of the row sent, though the note sent to holds none of the rows.
+        expect(sent).toEqual({ kind: 'not-done', why: refusalNotice({ file: 'Plan.md', reason: { kind: 'headings', name: 'Tasks', count: 2 }, subject: 'A' }) });
         expect(Notice.messages).toEqual([]);
         // Told by default, in the same words.
         expect(await note.ops.send({ rows: [note.row('A')], to, frontmatter: [] })).toEqual(sent);

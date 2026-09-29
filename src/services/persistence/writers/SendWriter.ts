@@ -190,7 +190,7 @@ export class SendWriter {
         // 2. The note.
         const written = to.create
             ? await this.makeNote(to, items([]), subject, hearing(to.path))
-            : await this.writeNote(to, own, items, completing, hearing(to.path));
+            : await this.writeNote(to, own, items, completing, subject, hearing(to.path));
         if ('refused' in written) return { kind: 'not-sent', refused: written.refused };
         const { note, placed, before, outcome } = written;
         const writes: FiringOutcome<F>[] = outcome ? [outcome] : [];
@@ -299,17 +299,20 @@ export class SendWriter {
      * Write the note `to`, one there is, in one write: the keys it has none
      * of, and the rows `items` makes of `own`, its own rows as their drafts
      * and fires leave them, carried, and every other one put. Or why it is
-     * refused, told through `channel`.
+     * refused, told through `channel`: of the send's `subject`, the first
+     * row's text, when the write refuses before it asks for a row of its own
+     * — it has none when the rows come from other notes.
      */
     private async writeNote<F extends CompletionFire>(
         to: SendTo,
         own: readonly SentRow[],
         items: (sentOwn: readonly RowTarget[]) => readonly Item[],
         completing: SendCompleting<F>,
+        subject: string,
         channel: WriteChannel | undefined,
     ): Promise<{ note: TFile; placed: Placed; before: readonly string[]; outcome: FiringOutcome<F> | null } | { refused: Refusal }> {
         const file = this.app.vault.getAbstractFileByPath(to.path);
-        if (!(file instanceof TFile)) return fileGone(channel, to.path, own[0]?.target.subject ?? to.path);
+        if (!(file instanceof TFile)) return fileGone(channel, to.path, subject);
         // The lines the write was handed, and where the own rows are to be
         // found once their drafts are written. Made anew on each run.
         let before: readonly string[] = [];
@@ -320,7 +323,7 @@ export class SendWriter {
             if (drafted === false) return false;
             sentOwn = drafted.sent;
             return drafted.completed;
-        }, () => completing.fire(to.path), (draft, session) => this.placeInNote(draft, session, items(sentOwn), to) ?? false);
+        }, () => completing.fire(to.path), (draft, session) => this.placeInNote(draft, session, items(sentOwn), to) ?? false, subject);
         if (!outcome.written) return { refused: outcome.refused };
         return { note: file, placed: outcome.after!, before, outcome: own.length > 0 ? outcome : null };
     }
