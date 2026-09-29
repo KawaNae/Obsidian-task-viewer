@@ -126,6 +126,13 @@ export class InlineTaskWriter {
      * row below it (a parent's move) carries it through the write's own
      * report, and the row fires where it went, once.
      *
+     * `after`, when given, is the rest of the write, done once the fires
+     * are: an edit of rows the fires may have changed or moved, which it
+     * finds through the session where they left them — a send carries the
+     * rows its draft completed once they fired where they stood
+     * (`SendWriter`). It is part of every try, the one without fires too;
+     * false gives the write up, as from `base`.
+     *
      * The write is tried with every fire first, which is the one try when
      * nothing is refused. Refused with a fire in it, it is tried with none:
      * refused so too, the refusal is the write's own, and nothing is
@@ -136,11 +143,12 @@ export class InlineTaskWriter {
      * word of it (`FiringOutcome`). All of it is tried on the lines of one
      * run of the write's callback (`EditTrials`).
      */
-    private async writeFiring<F extends CompletionFire>(
+    async writeFiring<F extends CompletionFire>(
         file: TFile,
         channel: WriteChannel | undefined,
         base: (draft: LineDraft, session: WriteSession) => readonly RowTarget[] | false,
         fire: () => F,
+        after?: (draft: LineDraft, session: WriteSession) => boolean,
     ): Promise<FiringOutcome<F>> {
         // The last run's fires and what came of them: what the outcome says.
         let fires: F[] = [];
@@ -160,7 +168,7 @@ export class InlineTaskWriter {
                 for (const k of kept ?? completed.keys()) {
                     if (!this.applyOps(draft, session, completed[k], [fireAt(k).op])) return false;
                 }
-                return true;
+                return after ? after(draft, session) : true;
             });
             const all = tryWith(null);
             if (all.written || rows === 0) return all;

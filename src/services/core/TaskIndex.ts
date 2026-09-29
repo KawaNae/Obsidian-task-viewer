@@ -23,10 +23,11 @@ import { plannedOn, subjectOf } from '../persistence/TaskRefs';
 import { logDebug, logError, logInfo, logWarn } from '../../log/log';
 import { readInLine, type EditorLine, type Landing } from '../persistence/FileLines';
 import type { FiringOutcome, InsertPlace, SubtreeReplacement, TaskOp } from '../persistence/TaskOps';
-import { Destination } from '../persistence/Destination';
+import { Destination, type Section } from '../persistence/Destination';
 import type { ContentKey } from './ContentKey';
 import { checkCopy, checkFile, type CheckDeps, type OnDisk } from './ReadingCheck';
 import { DiskReconciler } from './DiskReconciler';
+import { outermostRows } from './SendRows';
 import { diskProbeOf, type DiskProbe } from './DiskProbe';
 
 /**
@@ -50,6 +51,28 @@ export interface ReconcileOptions {
      */
     isOwnView?: (viewType: string) => boolean;
 }
+
+/**
+ * A row a send takes (`TaskIndex.send`): its id, the row and its subtree as
+ * the send's dialog was opened on them (`Task.subtreeLines`), which the write
+ * is checked against, and the draft the user wrote of them there
+ * (`SubtreeFrame.check`'s `write`), if any.
+ */
+export interface SendRow {
+    taskId: string;
+    base: readonly string[];
+    draft?: SubtreeReplacement;
+}
+
+/**
+ * What came of a send (`TaskIndex.send`): made, with the note the rows went
+ * to, the notes whose rows landed there, and the refusals of the notes whose
+ * rows did not (none while every send is to the rows' own note); or not
+ * made, and the user told why.
+ */
+export type SendWrite =
+    | { kind: 'done'; note: TFile; landed: readonly string[]; refused: readonly IndexRefusal[] }
+    | { kind: 'not-done' };
 
 /** A row as the index read it, and the note's lines it was read in (`TaskIndex.rowSnapshot`). */
 export interface RowSnapshot {
@@ -624,6 +647,75 @@ export class TaskIndex {
     }
 
     /**
+     * Send rows and their subtrees to a section of a note: the send
+     * operation (`NoteOps.send`). Each row is `SendRow`: named by its id,
+     * with the subtree the dialog was opened on (`base`) and the draft the
+     * user wrote of it, if any.
+     *
+     * Planned as every write that names a row: once the writes already
+     * asked of each row are done (`onRow`), from copies the disk still reads
+     * as (`planCopy`), each named by its line and checked against its
+     * `base`. A row inside another's subtree goes with that one's subtree
+     * (`outermostRows`), and the rows go in the order they stand.
+     *
+     * To the note the rows are in, it is one write, which the write layer
+     * makes (`SendWriter.sendWithinFile`): each draft written, each row a
+     * draft completed fired where it stood, and the rows carried. Refused,
+     * nothing is written, and the user is told as for any write. A send to
+     * another note is not made yet (段 B3).
+     *
+     * @returns `done` with the note the rows went to, and the notes whose
+     * rows landed there; else `not-done`, the user told why.
+     */
+    async send(rows: readonly SendRow[], to: { path: string; section: Section }): Promise<SendWrite> {
+        if (this.refuseAfterDispose('send')) return { kind: 'not-done' };
+        const asked = new Map<string, SendRow>();
+        for (const row of rows) if (!asked.has(row.taskId)) asked.set(row.taskId, row);
+        const known = new Map([...asked.keys()].map(id => [id, this.getTask(id)]));
+        // Every row's writes queued in one order, so two sends of the same
+        // rows never wait for each other.
+        const ids = [...asked.keys()].sort();
+        return this.onRows(ids, async (): Promise<SendWrite> => {
+            const planned: { task: Task; row: SendRow }[] = [];
+            for (const id of ids) {
+                const copy = await this.planCopy(id, known.get(id));
+                if ('refused' in copy) return { kind: 'not-done' };
+                const row = asked.get(id)!;
+                if (copy.task.isReadOnly || row.base.length === 0) {
+                    logWarn(`[TaskIndex] send: not a row to write: id=${id}`);
+                    return { kind: 'not-done' };
+                }
+                planned.push({ task: copy.task, row });
+            }
+            const sent = outermostRows(planned);
+            for (const { row } of planned) {
+                if (row.draft && !sent.some(one => one.row === row)) {
+                    logWarn(`[TaskIndex] send: a draft of a row in another's subtree is not written: id=${row.taskId}`);
+                }
+            }
+            if (sent.some(({ task }) => task.file !== to.path)) {
+                logWarn(`[TaskIndex] send: a send to another note is not made yet: to=${to.path}`);
+                return { kind: 'not-done' };
+            }
+            return this.withNotify(to.path, async (): Promise<SendWrite> => {
+                logInfo(`[send] to=${to.path}#${to.section.heading} rows=${sent.map(({ task }) => task.id).join(',')}`);
+                const defs = this.settings.statusDefinitions;
+                const outcome = await this.repository.sendWithinFile(to.path, sent.map(({ task, row }) => ({
+                    target: { ...plannedOn(task), basis: { text: row.base[0], subtree: row.base } },
+                    ...(row.draft ? { draft: row.draft } : {}),
+                })), to.section, {
+                    completes: (was, now) => completes(was, now, defs),
+                    fire: () => this.commandExecutor.fireOp(to.path),
+                });
+                this.tellNotRun(outcome);
+                const note = this.app.vault.getAbstractFileByPath(to.path);
+                if (!outcome.written || !(note instanceof TFile)) return { kind: 'not-done' };
+                return { kind: 'done', note, landed: [to.path], refused: [] };
+            });
+        });
+    }
+
+    /**
      * The copy of a row an operation is planned from, once it is known to be
      * the row on the disk; else undefined, and the user told why, once
      * (`reportRefusal`).
@@ -780,6 +872,17 @@ export class TaskIndex {
         const settled = () => { if (queue.get(taskId) === next) queue.delete(taskId); };
         next.then(settled, settled);
         return next;
+    }
+
+    /**
+     * {@link onRow} for each of `ids`, nested in their order: `op` runs once
+     * every write already asked of any of them has finished, and each write
+     * asked of one of them after it waits for it. A caller hands the ids in
+     * one order (sorted), so two such operations over the same rows queue
+     * one behind the other and never each wait for the other.
+     */
+    private onRows<T>(ids: readonly string[], op: () => Promise<T>): Promise<T> {
+        return ids.reduceRight<() => Promise<T>>((inner, id) => () => this.onRow(id, inner), op)();
     }
 
     /**
