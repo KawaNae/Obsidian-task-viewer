@@ -3,7 +3,7 @@ import { defaultKeymap, history, historyKeymap, indentLess } from '@codemirror/c
 import { indentUnit } from '@codemirror/language';
 import { EditorState, Prec, type Extension } from '@codemirror/state';
 import { EditorView, keymap } from '@codemirror/view';
-import { Scope, type App } from 'obsidian';
+import type { App } from 'obsidian';
 import { BRACKET_CLOSERS, BRACKET_PAIRS } from '../../../utils/BracketRules';
 import { lineMapOf, trackLines } from './LineMap';
 import {
@@ -33,10 +33,11 @@ import { linkTagCompletionSource } from './SourceCompletion';
  *   list open takes the keys first.
  * - Both pair brackets as the task name field does (`BracketRules`), and
  *   complete links and tags as its suggest does (`LinkTagCandidates`).
- * - While either has the focus, Obsidian's hotkeys are kept out, as a modal
- *   keeps them out: they would act on the note of the active tab behind
- *   (Mod+Enter opens the link under its cursor, Mod+B makes its text bold),
- *   and the keys are the editors' own.
+ * - Obsidian's hotkeys are not the editors' to keep out: the surface they
+ *   are in keeps them out while the focus is in it (`HotkeyShield`, which an
+ *   overlay given the keymap holds). Let in, they would act on the note of
+ *   the active tab behind (Mod+Enter opens the link under its cursor, Mod+B
+ *   makes its text bold) where the keys are the editors' own.
  */
 
 export interface SourceEditorOptions {
@@ -163,8 +164,6 @@ export class SourceEditor {
     readonly dom: HTMLElement;
     private readonly parentView: EditorView;
     private readonly childrenView: EditorView;
-    /** The scope that keeps Obsidian's hotkeys out while an editor has the focus; pushed while it is. */
-    private readonly hotkeys: { scope: Scope; pushed: boolean } | null;
 
     constructor(container: HTMLElement, private readonly options: SourceEditorOptions) {
         this.dom = container.createDiv({ cls: 'tv-source-editor' });
@@ -183,11 +182,6 @@ export class SourceEditor {
                 onUp: (view) => this.upToParent(view),
             }),
             parent: this.dom.createDiv({ cls: 'tv-source-editor__children' }),
-        });
-        this.hotkeys = options.app ? { scope: new Scope(), pushed: false } : null;
-        this.dom.addEventListener('focusin', () => this.keepHotkeysOut(true));
-        this.dom.addEventListener('focusout', (e) => {
-            if (!this.contains(e.relatedTarget as Node | null)) this.keepHotkeysOut(false);
         });
     }
 
@@ -218,23 +212,9 @@ export class SourceEditor {
     }
 
     destroy(): void {
-        this.keepHotkeysOut(false);
         this.parentView.destroy();
         this.childrenView.destroy();
         this.dom.remove();
-    }
-
-    /**
-     * Push the scope with no parent while an editor has the focus, so no
-     * hotkey of Obsidian's is looked up; pop it once the focus leaves both.
-     */
-    private keepHotkeysOut(on: boolean): void {
-        const hotkeys = this.hotkeys;
-        const keymap = this.options.app?.keymap;
-        if (!hotkeys || !keymap || hotkeys.pushed === on) return;
-        hotkeys.pushed = on;
-        if (on) keymap.pushScope(hotkeys.scope);
-        else keymap.popScope(hotkeys.scope);
     }
 
     /**

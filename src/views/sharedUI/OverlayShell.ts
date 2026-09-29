@@ -16,11 +16,12 @@
  * outside-click and Escape handling.
  */
 
-import { setIcon } from 'obsidian';
+import { setIcon, type Keymap } from 'obsidian';
 import type { PopoverAnchor } from './PopoverShell';
 import { positionElement, resolveHost } from './PopoverShell';
 import type { PopoverStack } from './PopoverStack';
 import { registerOverlay, unregisterOverlay } from './OverlayRegistry';
+import { HotkeyShield } from './HotkeyShield';
 import { KeyboardAwareContainer } from '../../utils/KeyboardAwareContainer';
 import { trackKeyboard } from '../../utils/KeyboardState';
 import { t } from '../../i18n';
@@ -49,6 +50,13 @@ export interface OverlayOpenOpts {
     yieldsEscape?: (e: KeyboardEvent) => boolean;
     childStack?: PopoverStack;
     hostDoc?: Document;
+    /**
+     * Obsidian's keymap (`app.keymap`): given, its hotkeys are kept out
+     * while the focus is in the overlay, its child popovers among it
+     * (`HotkeyShield`), so a key pressed in a field of the overlay does not
+     * act on the note behind. Escape and the keys of the fields still work.
+     */
+    keymap?: Keymap;
 }
 
 export class OverlayShell {
@@ -65,6 +73,7 @@ export class OverlayShell {
     private beforeCloseCb: (() => boolean) | null = null;
     private closing = false;
     private kbAware: KeyboardAwareContainer | null = null;
+    private hotkeys: HotkeyShield | null = null;
 
     private outsideClickHandler: ((e: MouseEvent) => void) | null = null;
     private escapeHandler: ((e: KeyboardEvent) => void) | null = null;
@@ -169,6 +178,12 @@ export class OverlayShell {
         };
         hostDoc.addEventListener('pointerdown', this.outsideClickHandler, true);
 
+        // Hotkeys: kept out while the focus is in the panel or a child popover.
+        if (opts.keymap) {
+            this.hotkeys = new HotkeyShield(opts.keymap, hostDoc, (node) => node !== null
+                && ((this.panelEl?.contains(node) ?? false) || (this.childStack?.containsTarget(node) ?? false)));
+        }
+
         // Pagehide (popout window close): nothing to keep open for, so not asked.
         this.pageHideHandler = () => this.close();
         hostWin.addEventListener('pagehide', this.pageHideHandler);
@@ -198,6 +213,8 @@ export class OverlayShell {
         // Logical teardown (immediate — overlay is inert from here)
         this.kbAware?.detach();
         this.kbAware = null;
+        this.hotkeys?.detach();
+        this.hotkeys = null;
         this.childStack?.closeAll();
         this.childStack = null;
 
