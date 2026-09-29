@@ -105,14 +105,14 @@
     color: var(--text-warning);
 }
 
-/* Cancel and apply at the end. Asked, discard and the question come in at
- * the start, the question pushing the rest to the end: discard stands apart
+/* Cancel and apply at the end. Asked, the question and discard beside it
+ * come in at the start, discard pushing the rest to the end: it stands apart
  * from back and apply. */
 .task-hub__source-actions {
     justify-content: flex-end;
 }
 
-.task-hub__source-ask {
+.task-hub__source-discard {
     margin-inline-end: auto;
 }
 
