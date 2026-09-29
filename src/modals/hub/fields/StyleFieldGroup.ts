@@ -118,7 +118,7 @@ export class StyleFieldGroup {
     }
 
     private commit(field: StyleField): void {
-        if (this.ctx.isMissing()) return;
+        if (this.ctx.isShut()) return;
         const input = this.inputFor(field);
         const value = input.value.trim();
 

@@ -33,6 +33,20 @@ export interface OverlayOpenOpts {
     panelClass?: string;
     build: (bodyEl: HTMLElement) => void;
     onClose?: () => void;
+    /**
+     * Asked, synchronously, before a close the user asks for (the close
+     * button, Escape, a click outside, a swipe, another overlay taking its
+     * place: `requestClose`): false keeps the overlay open, the body having
+     * said why in its own place (a draft to throw away or keep). Not asked
+     * where nothing can be kept open — the window going away, the plugin
+     * unloading — which close at once (`close`).
+     */
+    beforeClose?: () => boolean;
+    /**
+     * Whether the body takes this Escape itself (a completion list of an
+     * editor in it closing), so the overlay neither closes nor stops it.
+     */
+    yieldsEscape?: (e: KeyboardEvent) => boolean;
     childStack?: PopoverStack;
     hostDoc?: Document;
 }
@@ -48,6 +62,7 @@ export class OverlayShell {
     private anchor: PopoverAnchor | null = null;
     private childStack: PopoverStack | null = null;
     private onCloseCb: (() => void) | null = null;
+    private beforeCloseCb: (() => boolean) | null = null;
     private closing = false;
     private kbAware: KeyboardAwareContainer | null = null;
 
@@ -65,6 +80,7 @@ export class OverlayShell {
         this.anchor = opts.anchor ?? null;
         this.childStack = opts.childStack ?? null;
         this.onCloseCb = opts.onClose ?? null;
+        this.beforeCloseCb = opts.beforeClose ?? null;
         this.closing = false;
 
         // Resolve host document (popout-aware)
@@ -109,7 +125,7 @@ export class OverlayShell {
         const closeBtn = panel.createEl('button', { cls: 'tv-overlay__close' });
         setIcon(closeBtn.createSpan(), 'x');
         closeBtn.setAttribute('aria-label', t('modal.cancel'));
-        closeBtn.addEventListener('click', () => this.close());
+        closeBtn.addEventListener('click', () => this.requestClose());
 
         const body = panel.createDiv({ cls: 'tv-overlay__body' });
         this.bodyEl = body;
@@ -131,13 +147,15 @@ export class OverlayShell {
         this.setupSwipeToDismiss(handle, panel, root, body);
 
         // Escape
+        const yieldsEscape = opts.yieldsEscape;
         this.escapeHandler = (e: KeyboardEvent) => {
             if (e.key !== 'Escape') return;
+            if (yieldsEscape?.(e)) return;
             e.stopPropagation();
             if (this.childStack?.isOpen()) {
                 this.childStack.closeAll();
             } else {
-                this.close();
+                this.requestClose();
             }
         };
         hostDoc.addEventListener('keydown', this.escapeHandler, true);
@@ -147,11 +165,11 @@ export class OverlayShell {
             const target = e.target as Node;
             if (this.panelEl?.contains(target)) return;
             if (this.childStack?.containsTarget(target)) return;
-            this.close();
+            this.requestClose();
         };
         hostDoc.addEventListener('pointerdown', this.outsideClickHandler, true);
 
-        // Pagehide (popout window close)
+        // Pagehide (popout window close): nothing to keep open for, so not asked.
         this.pageHideHandler = () => this.close();
         hostWin.addEventListener('pagehide', this.pageHideHandler);
 
@@ -160,6 +178,18 @@ export class OverlayShell {
         registerOverlay(this);
     }
 
+    /**
+     * Close as the user asked, unless `beforeClose` keeps it open.
+     * @returns whether it closed (or was not open).
+     */
+    requestClose(): boolean {
+        if (!this.rootEl || this.closing) return true;
+        if (this.beforeCloseCb && !this.beforeCloseCb()) return false;
+        this.close();
+        return true;
+    }
+
+    /** Close now, asking nothing: the window or the plugin going away, or the body closing itself. */
     close(): void {
         if (!this.rootEl || this.closing) return;
         this.closing = true;
@@ -187,6 +217,7 @@ export class OverlayShell {
 
         const cb = this.onCloseCb;
         this.onCloseCb = null;
+        this.beforeCloseCb = null;
         this.hostDoc = null;
         this.hostWin = null;
         this.panelEl = null;
@@ -313,13 +344,14 @@ export class OverlayShell {
         const endDrag = () => {
             if (!dragging) return;
             dragging = false;
-            if (dy > 80) {
+            if (dy > 80 && (!this.beforeCloseCb || this.beforeCloseCb())) {
                 panel.style.transition = 'transform 150ms ease-in';
                 panel.style.transform = 'translateY(100%)';
                 if (backdrop) {
                     backdrop.style.transition = 'opacity 150ms ease-in';
                     backdrop.style.opacity = '0';
                 }
+                // Already asked, above: the panel is on its way out.
                 window.setTimeout(() => this.close(), 160);
             } else {
                 panel.style.transition = 'transform 150ms ease-out';
