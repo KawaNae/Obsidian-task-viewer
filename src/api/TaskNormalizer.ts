@@ -61,7 +61,8 @@ function extractFlowString(task: DisplayTask): string | null {
 function toNativeValue(pv: PropertyValue): unknown {
     switch (pv.type) {
         case 'number': return Number(pv.value);
-        case 'boolean': return pv.value === 'True';
+        // A property line spells it True/False, frontmatter reads it back as true/false.
+        case 'boolean': return pv.value.toLowerCase() === 'true';
         case 'array': return ChildLineClassifier.arrayItems(pv.value);
         default: return pv.value;
     }
