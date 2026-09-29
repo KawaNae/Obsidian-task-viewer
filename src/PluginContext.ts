@@ -3,6 +3,7 @@ import type { TaskViewerSettings } from './types';
 import type { TaskIndex } from './services/core/TaskIndex';
 import type { TaskReadService } from './services/data/TaskReadService';
 import type { TaskWriteService } from './services/data/TaskWriteService';
+import type { NoteOps } from './services/data/NoteOps';
 import type { MenuPresenter } from './interaction/menu/MenuPresenter';
 import type { LogManager } from './log/log-manager';
 
@@ -63,6 +64,8 @@ export interface PluginContext {
     getTaskIndex(): TaskIndex;
     getTaskReadService(): TaskReadService;
     getTaskWriteService(): TaskWriteService;
+    /** The operations on notes: sending rows to a note (`NoteOps`). */
+    getNoteOps(): NoteOps;
     getLogManager(): LogManager | null;
 
     /** Re-apply the body classes that the global-style settings drive. */

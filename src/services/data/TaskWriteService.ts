@@ -3,7 +3,8 @@ import type { EditorLine, WriteChannels } from '../persistence/FileLines';
 import type { InsertPlace, SubtreeReplacement, TaskOp } from '../persistence/TaskOps';
 import type { IndexRefusal } from '../core/RefusalClause';
 import type { DuplicateOptions, Task } from '../../types';
-import type { AnchoredRow, TaskIndex } from '../core/TaskIndex';
+import type { AnchoredRow, RowSnapshot, SendRow, SendWrite, TaskIndex } from '../core/TaskIndex';
+import type { Section } from '../persistence/Destination';
 import type { FlowDeleteAssessment } from '../flow/FlowDeletion';
 import { TaskIdGenerator } from '../display/TaskIdGenerator';
 
@@ -141,6 +142,18 @@ export class TaskWriteService {
         opts: { tellRefusal?: boolean } = {},
     ): Promise<{ written: true } | { written: false; refused: IndexRefusal | null }> {
         return this.taskIndex.replaceSubtree(this.resolveTaskId(taskId), base, replacement, opts);
+    }
+
+    // ===== Sending rows to a note =====
+
+    /** The row and its note's lines as the disk holds them, or undefined (see TaskIndex.rowSnapshot). */
+    async rowSnapshot(taskId: string): Promise<RowSnapshot | undefined> {
+        return this.taskIndex.rowSnapshot(this.resolveTaskId(taskId));
+    }
+
+    /** Rows and their subtrees sent to a section of a note (see TaskIndex.send). */
+    async send(rows: readonly SendRow[], to: { path: string; section: Section }): Promise<SendWrite> {
+        return this.taskIndex.send(rows.map(row => ({ ...row, taskId: this.resolveTaskId(row.taskId) })), to);
     }
 
     // ===== A line the editor pointed at =====
