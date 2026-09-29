@@ -116,6 +116,13 @@
     margin-inline-end: auto;
 }
 
+/* On a phone the row has no width for the question, discard, back and apply
+ * on one line, and wrapping at will would set discard over back. The question
+ * takes a line of its own, and discard starts the next, apart at its start. */
+.is-phone .task-hub__source-ask {
+    flex-basis: 100%;
+}
+
 /* --- Form: flat sections with dividers --- */
 .task-hub__form {
     display: flex;
