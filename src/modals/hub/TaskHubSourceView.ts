@@ -115,6 +115,7 @@ export class TaskHubSourceView implements SourceSurface {
         this.messageEl.setText(state.message ?? '');
         this.messageEl.toggle(open && state.message !== null);
         this.askEl.toggle(open && state.asking);
+        this.pane.toggleClass('task-hub__source-pane--asking', open && state.asking);
         this.lostEl.toggle(open && state.lost && !state.asking);
         this.actionsEl.toggle(open && !state.lost && !state.asking);
         this.applyBtn.disabled = state.phase !== 'source';
