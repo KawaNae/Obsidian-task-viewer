@@ -178,7 +178,7 @@ describe('a draft', () => {
         // The fence left open runs on over `para`, below the subtree.
         const sent = await note.send([note.row('A', { text: '- [ ] A', children: [['    ```', 1], ['    x', 2]] })]);
 
-        expect(sent).toEqual({ kind: 'not-done' });
+        expect(sent).toMatchObject({ kind: 'not-done', refused: { file: FILE, reason: { kind: 'disturbs' } } });
         expect(note.lines()).toEqual(before);
         expect(Notice.messages).toHaveLength(1);
     });
@@ -238,7 +238,7 @@ describe('a send not made', () => {
         const note = await open(['- [ ] A', '## Tasks', '### tasks', '']);
         const before = note.lines();
 
-        expect(await note.send([note.row('A')])).toEqual({ kind: 'not-done' });
+        expect(await note.send([note.row('A')])).toMatchObject({ kind: 'not-done', refused: { file: FILE, reason: { kind: 'headings', count: 2 } } });
         expect(note.lines()).toEqual(before);
         expect(Notice.messages).toHaveLength(1);
     });
@@ -247,7 +247,7 @@ describe('a send not made', () => {
         const note = await open(['- [ ] A', '    - [ ] a', '## Tasks', '']);
         const row = note.row('A');
 
-        expect(await note.send([{ ...row, base: ['- [ ] A'] }])).toEqual({ kind: 'not-done' });
+        expect(await note.send([{ ...row, base: ['- [ ] A'] }])).toMatchObject({ kind: 'not-done', refused: { file: FILE, reason: { kind: 'changed' } } });
         expect(note.lines()).toEqual(['- [ ] A', '    - [ ] a', '## Tasks', '']);
     });
 });

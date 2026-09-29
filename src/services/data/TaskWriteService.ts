@@ -151,9 +151,13 @@ export class TaskWriteService {
         return this.taskIndex.rowSnapshot(this.resolveTaskId(taskId));
     }
 
-    /** Rows and their subtrees sent to a section of a note (see TaskIndex.send). */
-    async send(rows: readonly SendRow[], to: SendTo): Promise<SendWrite> {
-        return this.taskIndex.send(rows.map(row => ({ ...row, taskId: this.resolveTaskId(row.taskId) })), to);
+    /**
+     * Rows and their subtrees sent to a section of a note (see
+     * TaskIndex.send). A refusal before anything is written is told the user
+     * too, unless `opts.tellRefusal` is false because the caller shows it.
+     */
+    async send(rows: readonly SendRow[], to: SendTo, opts: { tellRefusal?: boolean } = {}): Promise<SendWrite> {
+        return this.taskIndex.send(rows.map(row => ({ ...row, taskId: this.resolveTaskId(row.taskId) })), to, opts);
     }
 
     // ===== A line the editor pointed at =====

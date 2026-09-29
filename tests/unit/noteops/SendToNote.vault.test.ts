@@ -115,7 +115,7 @@ describe('to a new note', () => {
         // The fence the draft leaves open runs on over `para`, below the subtree.
         const sent = await note.send([note.row('A', { text: '- [ ] A', children: [['    ```', 1], ['    x', 2]] })], { path: 'A.md', create: true });
 
-        expect(sent).toEqual({ kind: 'not-done' });
+        expect(sent).toMatchObject({ kind: 'not-done', refused: { file: 'src.md', reason: { kind: 'disturbs' }, subject: 'A' } });
         expect(note.contents.has('A.md')).toBe(false);
         expect(note.text('src.md')).toBe(before);
         expect(Notice.messages).toHaveLength(1);
@@ -127,7 +127,7 @@ describe('to a new note', () => {
         // A path a note has in another case (stage 0): the vault refuses it.
         const sent = await note.send([note.row('A')], { path: 'A.md', create: true });
 
-        expect(sent).toEqual({ kind: 'not-done' });
+        expect(sent).toMatchObject({ kind: 'not-done', refused: { file: 'A.md', reason: { kind: 'failed' } } });
         expect(note.text('src.md')).toBe('- [ ] A\n');
         expect(note.text('a.md')).toBe('x\n');
         expect(Notice.messages).toHaveLength(1);
@@ -227,7 +227,8 @@ describe('to a note there is', () => {
     it('with two headings of the name: refused before anything is written, told once', async () => {
         const note = await open({ 'src.md': ['- [ ] A', ''], 'dst.md': ['## Tasks', '### tasks', ''] });
 
-        expect(await note.send([note.row('A')], { path: 'dst.md' })).toEqual({ kind: 'not-done' });
+        expect(await note.send([note.row('A')], { path: 'dst.md' }))
+            .toMatchObject({ kind: 'not-done', refused: { file: 'dst.md', reason: { kind: 'headings', name: 'Tasks', count: 2 } } });
         expect(note.text('src.md')).toBe('- [ ] A\n');
         expect(note.text('dst.md')).toBe('## Tasks\n### tasks\n');
         expect(Notice.messages).toHaveLength(1);

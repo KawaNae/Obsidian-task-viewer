@@ -72,11 +72,12 @@ export interface SendRow {
  * stayed where they stood, not told the user (`refused`), and whether what
  * went of those was taken out of the note again (`takenBack`; the note
  * taken away or written back as it was when no row went); or nothing
- * written, and the user told why.
+ * written, and why — told the user unless the caller asked not to — or
+ * `refused: null` for a send its caller asked wrongly, said only in the log.
  */
 export type SendWrite =
     | { kind: 'done'; note: TFile; subject: string; landed: readonly string[]; refused: readonly Refusal[]; takenBack: boolean }
-    | { kind: 'not-done' };
+    | { kind: 'not-done'; refused: IndexRefusal | null };
 
 /** A row as the index read it, and the note's lines it was read in (`TaskIndex.rowSnapshot`). */
 export interface RowSnapshot {
@@ -674,11 +675,18 @@ export class TaskIndex {
      * (`learnFrom`) and answered, for the caller to tell once with what
      * became of the rest.
      *
-     * @returns `done` once the note is written; else `not-done`, the user
-     * told why.
+     * @returns `done` once the note is written; else `not-done`, and why.
+     * A refusal before anything is written — a row's copy the disk no longer
+     * reads as (`planCopy`), a note the write turned away — is told the user
+     * as any refusal is (`reportRefusal`), unless `opts.tellRefusal` is
+     * false: the caller shows it itself, and a notice would say it twice.
+     * The index learns from it either way (`learnFrom`).
      */
-    async send(rows: readonly SendRow[], to: SendTo): Promise<SendWrite> {
-        if (this.refuseAfterDispose('send')) return { kind: 'not-done' };
+    async send(rows: readonly SendRow[], to: SendTo, opts: { tellRefusal?: boolean } = {}): Promise<SendWrite> {
+        if (this.refuseAfterDispose('send')) return { kind: 'not-done', refused: null };
+        const hear = opts.tellRefusal === false
+            ? (refusal: IndexRefusal) => this.learnFrom(refusal)
+            : (refusal: IndexRefusal) => this.reportRefusal(refusal);
         const asked = new Map<string, SendRow>();
         for (const row of rows) if (!asked.has(row.taskId)) asked.set(row.taskId, row);
         const known = new Map([...asked.keys()].map(id => [id, this.getTask(id)]));
@@ -688,12 +696,12 @@ export class TaskIndex {
         return this.onRows(ids, async (): Promise<SendWrite> => {
             const planned: { task: Task; row: SendRow }[] = [];
             for (const id of ids) {
-                const copy = await this.planCopy(id, known.get(id));
-                if ('refused' in copy) return { kind: 'not-done' };
+                const copy = await this.planCopy(id, known.get(id), hear);
+                if ('refused' in copy) return { kind: 'not-done', refused: copy.refused };
                 const row = asked.get(id)!;
                 if (copy.task.isReadOnly || row.base.length === 0) {
                     logWarn(`[TaskIndex] send: not a row to write: id=${id}`);
-                    return { kind: 'not-done' };
+                    return { kind: 'not-done', refused: null };
                 }
                 planned.push({ task: copy.task, row });
             }
@@ -705,7 +713,7 @@ export class TaskIndex {
             }
             if (to.create && sent.some(({ task }) => task.file === to.path)) {
                 logWarn(`[TaskIndex] send: a note to make holds rows already: to=${to.path}`);
-                return { kind: 'not-done' };
+                return { kind: 'not-done', refused: null };
             }
             const paths = [...new Set([to.path, ...sent.map(({ task }) => task.file)])];
             return this.withNotify(paths, async (): Promise<SendWrite> => {
@@ -720,8 +728,8 @@ export class TaskIndex {
                 })), to, {
                     completes: (was, now) => completes(was, now, defs),
                     fire: (path) => this.commandExecutor.fireOp(path),
-                });
-                if (outcome.kind === 'not-sent') return { kind: 'not-done' };
+                }, { refused: (refusal) => { void hear(refusal); } });
+                if (outcome.kind === 'not-sent') return { kind: 'not-done', refused: outcome.refused };
                 for (const write of outcome.writes) this.tellNotRun(write);
                 for (const refusal of outcome.refused) await this.learnFrom(refusal);
                 logInfo(`[send] landed=${outcome.landed.join(',') || '-'} refused=${outcome.refused.map(one => `${one.file}:${one.reason.kind}`).join(',') || '-'} takenBack=${outcome.takenBack}`);

@@ -51,13 +51,13 @@ export interface SendCompleting<F extends CompletionFire> {
 }
 
 /**
- * What came of a send (`SendWriter.send`): nothing written, and the refusal
- * told as any write's is; or the note written, the rows of `landed` there
+ * What came of a send (`SendWriter.send`): nothing written, and why (told as
+ * any write's refusal is, or heard where the caller asked); or the note written, the rows of `landed` there
  * and gone from where they stood, and those of the notes `refused` names
  * still where they stood, their refusals told to nobody.
  */
 export type SendOutcome<F extends CompletionFire> =
-    | { kind: 'not-sent' }
+    | { kind: 'not-sent'; refused: Refusal }
     | {
         kind: 'sent';
         note: TFile;
@@ -136,6 +136,11 @@ export class SendWriter {
      *    its heading (`editLines`, `createFile`), or written in one write,
      *    with the keys it has none of and its own rows carried. Refused,
      *    nothing is written anywhere, and the refusal is told.
+     *
+     *    A refusal of 1 or 2 is told as any write's is, through the channel
+     *    of its note, or handed to `opts.refused` instead when the caller
+     *    shows it in a place of its own (as `InlineTaskWriter` hears one).
+     *    It is in the outcome either way.
      * 3. Each other note is written in one write: the drafts, the fires, and
      *    each row's subtree replaced by the link — only where the subtree
      *    then reads as it did when it was tried, so what went to the note is
@@ -150,7 +155,9 @@ export class SendWriter {
         rows: ReadonlyArray<{ file: string; row: SentRow }>,
         to: SendTo,
         completing: SendCompleting<F>,
+        opts: { refused?: (refusal: Refusal) => void } = {},
     ): Promise<SendOutcome<F>> {
+        const hearing = (path: string) => hearingChannel(this.channelOf(path), opts.refused);
         const own = rows.filter(one => one.file === to.path).map(one => one.row);
         const others: { path: string; rows: SentRow[] }[] = [];
         for (const { file, row } of rows) {
@@ -164,9 +171,9 @@ export class SendWriter {
         // 1. What each other note's write leaves of the rows it sends.
         const rehearsed = new Map<string, Rehearsed>();
         for (const from of others) {
-            const tried = await this.rehearse(from.path, from.rows, completing);
-            if (tried === null) return { kind: 'not-sent' };
-            rehearsed.set(from.path, tried);
+            const tried = await this.rehearse(from.path, from.rows, completing, hearing(from.path));
+            if ('refused' in tried) return { kind: 'not-sent', refused: tried.refused };
+            rehearsed.set(from.path, tried.left);
         }
         const taken = new Map<string, number>();
         const items = (sentOwn: readonly RowTarget[]): Item[] => {
@@ -182,9 +189,9 @@ export class SendWriter {
 
         // 2. The note.
         const written = to.create
-            ? await this.makeNote(to, items([]), subject)
-            : await this.writeNote(to, own, items, completing);
-        if (written === null) return { kind: 'not-sent' };
+            ? await this.makeNote(to, items([]), subject, hearing(to.path))
+            : await this.writeNote(to, own, items, completing, hearing(to.path));
+        if ('refused' in written) return { kind: 'not-sent', refused: written.refused };
         const { note, placed, before, outcome } = written;
         const writes: FiringOutcome<F>[] = outcome ? [outcome] : [];
         const landed: string[] = own.length > 0 ? [to.path] : [];
@@ -215,15 +222,17 @@ export class SendWriter {
      * Try the write of the note at `path` that sends `rows` on its lines as
      * the disk holds them, writing nothing ({@link leaveLinks}'s drafts and
      * fires, `InlineTaskWriter.firingTrials`), and answer what it leaves of
-     * each row, in their order; null when it is refused, and the refusal told.
+     * each row, in their order; or why it is refused, the refusal told
+     * through `channel`.
      */
-    private async rehearse<F extends CompletionFire>(path: string, rows: readonly SentRow[], completing: SendCompleting<F>): Promise<Rehearsed | null> {
+    private async rehearse<F extends CompletionFire>(
+        path: string,
+        rows: readonly SentRow[],
+        completing: SendCompleting<F>,
+        channel: WriteChannel | undefined,
+    ): Promise<{ left: Rehearsed } | { refused: Refusal }> {
         const file = this.app.vault.getAbstractFileByPath(path);
-        const channel = this.channelOf(path);
-        if (!(file instanceof TFile)) {
-            fileGone(channel, path, rows[0]?.target.subject ?? path);
-            return null;
-        }
+        if (!(file instanceof TFile)) return fileGone(channel, path, rows[0]?.target.subject ?? path);
         const { lines, eol } = splitLines(await readInLine(this.app, file));
         let sent: RowTarget[] = [];
         const firing = this.inline.firingTrials(
@@ -249,20 +258,25 @@ export class SendWriter {
         const edited = firing.trials.settle(one => editLines(path, lines, eol, one, { follow }));
         if (!edited.written) {
             channel?.refused(edited.refused);
-            return null;
+            return { refused: edited.refused };
         }
-        return firing.settled().after ?? null;
+        // Written, so `after` answered: it gives the write up otherwise.
+        return { left: firing.settled().after! };
     }
 
     /**
      * Make the note `to` of the rows `items` sends and the frontmatter keys:
      * the lines are put together as a write to an empty note, held to the
      * same check (`editLines`), and the note is made of them whole
-     * (`createFile`), in the folders its path names. Null when it is not,
-     * and the user told why.
+     * (`createFile`), in the folders its path names. Or why it is not, told
+     * through `channel`.
      */
-    private async makeNote(to: SendTo, items: readonly Item[], subject: string): Promise<{ note: TFile; placed: Placed; before: readonly string[]; outcome: null } | null> {
-        const channel = this.channelOf(to.path);
+    private async makeNote(
+        to: SendTo,
+        items: readonly Item[],
+        subject: string,
+        channel: WriteChannel | undefined,
+    ): Promise<{ note: TFile; placed: Placed; before: readonly string[]; outcome: null } | { refused: Refusal }> {
         let placed: Placed | null = null;
         // The lines of an empty note: the one a file with no terminator splits into.
         const edited = editLines(to.path, [''], '\n', (draft, _eol, session) => {
@@ -271,34 +285,31 @@ export class SendWriter {
         }, { about: subject });
         if (!edited.written) {
             channel?.refused(edited.refused);
-            return null;
+            return { refused: edited.refused };
         }
         const created = await createFile(this.app, to.path, channel, subject, async () => {
             await this.fileOps.ensureDirectoryExists(to.path);
             return edited.lines.join('\n');
         });
-        if (!created.written) return null;
+        if (!created.written) return { refused: created.refused };
         return { note: created.file, placed: placed!, before: [], outcome: null };
     }
 
     /**
      * Write the note `to`, one there is, in one write: the keys it has none
      * of, and the rows `items` makes of `own`, its own rows as their drafts
-     * and fires leave them, carried, and every other one put. Null when it is
-     * refused, and the user told why.
+     * and fires leave them, carried, and every other one put. Or why it is
+     * refused, told through `channel`.
      */
     private async writeNote<F extends CompletionFire>(
         to: SendTo,
         own: readonly SentRow[],
         items: (sentOwn: readonly RowTarget[]) => readonly Item[],
         completing: SendCompleting<F>,
-    ): Promise<{ note: TFile; placed: Placed; before: readonly string[]; outcome: FiringOutcome<F> | null } | null> {
+        channel: WriteChannel | undefined,
+    ): Promise<{ note: TFile; placed: Placed; before: readonly string[]; outcome: FiringOutcome<F> | null } | { refused: Refusal }> {
         const file = this.app.vault.getAbstractFileByPath(to.path);
-        const channel = this.channelOf(to.path);
-        if (!(file instanceof TFile)) {
-            fileGone(channel, to.path, own[0]?.target.subject ?? to.path);
-            return null;
-        }
+        if (!(file instanceof TFile)) return fileGone(channel, to.path, own[0]?.target.subject ?? to.path);
         // The lines the write was handed, and where the own rows are to be
         // found once their drafts are written. Made anew on each run.
         let before: readonly string[] = [];
@@ -310,7 +321,7 @@ export class SendWriter {
             sentOwn = drafted.sent;
             return drafted.completed;
         }, () => completing.fire(to.path), (draft, session) => this.placeInNote(draft, session, items(sentOwn), to) ?? false);
-        if (!outcome.written) return null;
+        if (!outcome.written) return { refused: outcome.refused };
         return { note: file, placed: outcome.after!, before, outcome: own.length > 0 ? outcome : null };
     }
 
@@ -446,6 +457,11 @@ function writeDrafts<F extends CompletionFire>(
         }
     }
     return { sent, completed };
+}
+
+/** `channel`, with a refusal handed to `refused` instead when the caller gives one (see {@link SendWriter.send}). */
+function hearingChannel(channel: WriteChannel | undefined, refused: ((refusal: Refusal) => void) | undefined): WriteChannel | undefined {
+    return channel && refused ? { ...channel, refused } : channel;
 }
 
 /** `channel`, with a refusal told to nobody: a write whose caller says what came of it. */

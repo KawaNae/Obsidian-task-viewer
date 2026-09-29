@@ -76,8 +76,9 @@ export class TaskRepository {
         rows: ReadonlyArray<{ file: string; row: SentRow }>,
         to: SendTo,
         completing: SendCompleting<F>,
+        opts: { refused?: (refusal: Refusal) => void } = {},
     ): Promise<SendOutcome<F>> {
-        return this.sendWriter.send(rows, to, completing);
+        return this.sendWriter.send(rows, to, completing, opts);
     }
 
     /** The one loop that applies ops to a row, inside a write (see InlineTaskWriter.applyOps). */
