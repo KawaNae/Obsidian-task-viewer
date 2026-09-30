@@ -27,6 +27,11 @@ describe('ChildLineClassifier', () => {
             expect(result.wikilinkTarget).toBe('path/to/note');
         });
 
+        it('reads no wikilink child from an empty link or one holding a bracket', () => {
+            expect(ChildLineClassifier.classify('- [[]]', 0).wikilinkTarget).toBeNull();
+            expect(ChildLineClassifier.classify('- [[a[b]]', 0).wikilinkTarget).toBeNull();
+        });
+
         it('parses wikilink child with any list bullet', () => {
             expect(ChildLineClassifier.classify('  * [[Note A]]', 0).wikilinkTarget).toBe('Note A');
             expect(ChildLineClassifier.classify('  + [[Note B]]', 0).wikilinkTarget).toBe('Note B');
