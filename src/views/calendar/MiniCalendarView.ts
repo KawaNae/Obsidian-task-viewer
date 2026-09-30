@@ -345,7 +345,7 @@ export class MiniCalendarView extends ItemView {
         }, { bindClick: false });
 
         cell.addEventListener('click', () => {
-            void openPeriodicNoteInLeaf(this.app, dailyNotes(this.app), dateKey, this.plugin.getOperations().writeChannel);
+            void openPeriodicNoteInLeaf(this.app, this.plugin.getOperations(), dailyNotes(this.app), dateKey);
         });
     }
 
@@ -433,7 +433,7 @@ export class MiniCalendarView extends ItemView {
             hoverParent: this.hoverParent,
         }, { bindClick: false });
         weekNumberEl.addEventListener('click', () => {
-            void openPeriodicNoteInLeaf(this.app, periodicNotes(this.plugin.settings, 'weekly'), DateUtils.getLocalDateString(weekStartDate), this.plugin.getOperations().writeChannel);
+            void openPeriodicNoteInLeaf(this.app, this.plugin.getOperations(), periodicNotes(this.plugin.settings, 'weekly'), DateUtils.getLocalDateString(weekStartDate));
         });
     }
 

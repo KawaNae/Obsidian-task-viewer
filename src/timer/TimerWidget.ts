@@ -62,7 +62,7 @@ export class TimerWidget implements TimerContext, SendTimers {
         this.app = app;
         this.plugin = plugin;
         this.storageUtils = new TimerStorageUtils(app);
-        this.recorder = new TimerRecorder(app, plugin, this.storageUtils, () => this.persistTimersToStorage(), () => this.timers.values());
+        this.recorder = new TimerRecorder(plugin, this.storageUtils, () => this.persistTimersToStorage(), () => this.timers.values());
         this.creator = new TimerCreator(this);
         this.lifecycle = new TimerLifecycle(this, this.creator);
         // 値を書き換えた直後にオートグローを掛け直す（input 時 / syncFromFile 時）。

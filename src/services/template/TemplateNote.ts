@@ -30,6 +30,14 @@ export function templateNoteContent(fields: ReadonlyArray<readonly [string, stri
 }
 
 /**
+ * What saving a template note asks of the operations
+ * (`Operations.saveTemplateNote`): the one way a template writer writes.
+ */
+export interface TemplateNoteSaver {
+    saveTemplateNote(path: string, name: string, content: string): Promise<TFile | null>;
+}
+
+/**
  * Save `content` as the note at `path`: the note there written over whole
  * (`replaceWhole`), or made, with the folders its path names
  * (`createFile`). Answers the note, or null when it was not written — the

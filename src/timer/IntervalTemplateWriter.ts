@@ -7,8 +7,7 @@
 
 import { type App, TFile } from 'obsidian';
 import type { IntervalGroup } from './TimerInstance';
-import type { WriteChannel } from '../services/persistence/FileLines';
-import { saveTemplateNote, templateNoteContent, templateNotePath, yamlQuoted } from '../services/template/TemplateNote';
+import { templateNoteContent, templateNotePath, yamlQuoted, type TemplateNoteSaver } from '../services/template/TemplateNote';
 
 export interface TemplateCreateData {
     name: string;
@@ -19,7 +18,7 @@ export interface TemplateCreateData {
 export class IntervalTemplateWriter {
     constructor(
         private app: App,
-        private channelFor: (path: string) => WriteChannel | undefined,
+        private notes: TemplateNoteSaver,
     ) {}
 
     /** @returns the note, or null when the overwrite was not written (the write layer has told the user why). */
@@ -27,7 +26,7 @@ export class IntervalTemplateWriter {
         if (!(this.app.vault.getAbstractFileByPath(filePath) instanceof TFile)) {
             throw new Error('Template file not found.');
         }
-        return saveTemplateNote(this.app, filePath, this.channelFor(filePath), data.name, this.buildFileContent(data));
+        return this.notes.saveTemplateNote(filePath, data.name, this.buildFileContent(data));
     }
 
     /**
@@ -39,7 +38,7 @@ export class IntervalTemplateWriter {
         if (this.app.vault.getAbstractFileByPath(filePath) instanceof TFile) {
             throw new Error(`A template named "${data.name}" already exists.`);
         }
-        return saveTemplateNote(this.app, filePath, this.channelFor(filePath), data.name, this.buildFileContent(data));
+        return this.notes.saveTemplateNote(filePath, data.name, this.buildFileContent(data));
     }
 
     private buildFileContent(data: TemplateCreateData): string {

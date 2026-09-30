@@ -303,7 +303,7 @@ export function vaultSession(contents: Map<string, string>, options: { probe?: D
         reconciler: internals.reconciler,
         /** Tell the operations a write was refused, as their own channel does. */
         reportRefusal: (refusal: Refusal): void => opsInternals.reportRefusal(refusal),
-        recorder: new TimerRecorder(app as never, plugin as never, storageUtils, () => persist(), () => openTimers()),
+        recorder: new TimerRecorder(plugin as never, storageUtils, () => persist(), () => openTimers()),
         /** Save the timers as the plugin does when the recorder asks, before it writes a line. */
         onPersist: (fn: () => void): void => { persist = fn; },
         /** The open timers the recorder sees, as the widget's own map. */

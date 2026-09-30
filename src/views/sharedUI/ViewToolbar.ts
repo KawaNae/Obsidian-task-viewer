@@ -15,7 +15,7 @@ import { buildExportFilename } from '../../services/export/ExportFilename';
 import type { MenuPresenter } from '../../interaction/menu/MenuPresenter';
 import { viewContentEl } from '../../utils/ObsidianView';
 import { createNativePicker } from './NativePicker';
-import type { WriteChannel } from '../../services/persistence/FileLines';
+import type { TemplateNoteSaver } from '../../services/template/TemplateNote';
 
 /**
  * Persistent toolbar root with mount/detach lifecycle.
@@ -504,8 +504,8 @@ export interface ViewSettingsOptions {
     buildUri: () => ViewUriOptions;
     viewType: string;
     getViewTemplateFolder: () => string;
-    /** Where saving a view template over an existing note reports that it did. */
-    writeChannel: (path: string) => WriteChannel | undefined;
+    /** What saves a view template as a note (`Operations.saveTemplateNote`). */
+    templateNotes: TemplateNoteSaver;
     getViewTemplate: () => ViewTemplate;
     onApplyTemplate: (template: ViewTemplate) => void;
     onReset: () => void;
@@ -569,7 +569,7 @@ export class ViewSettingsMenu {
                             if (!name) return;
                             const template = getViewTemplate();
                             template.name = name;
-                            const writer = new ViewTemplateWriter(app, options.writeChannel);
+                            const writer = new ViewTemplateWriter(options.templateNotes);
                             const saved = await writer.saveTemplate(folder, template);
                             // 書けなかったときは、書き込みの層が理由を通知済み。
                             if (!saved) return;

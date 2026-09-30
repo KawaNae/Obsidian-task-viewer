@@ -49,7 +49,7 @@ function makeHarness(effectiveEnd: Date, written = true) {
     } as unknown as TaskViewerPlugin;
 
     const recorder = new TimerRecorder(
-        {} as App, plugin,
+        plugin,
         { generateTimerTargetId: () => 'tv-timer-2' } as unknown as TimerStorageUtils,
         () => { /* unused */ }, () => [],
     );

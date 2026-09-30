@@ -4,13 +4,10 @@
  * Handles saving timer records to tasks or daily notes.
  */
 
-import { type App, Notice } from 'obsidian';
+import { Notice } from 'obsidian';
 import { t } from '../i18n';
 import type { PluginContext } from '../PluginContext';
 import { type Opening, type PendingRecord, type TimerInstance, dailyDateOf, describeTimerAnchor, isDailyTimer } from './TimerInstance';
-import { putInPeriodicNote } from '../services/persistence/Notes';
-import { dailyNotes } from '../utils/PeriodicNotes';
-import { Destination } from '../services/persistence/Destination';
 import { DateUtils } from '../utils/DateUtils';
 import { type TaskLineFields, formatTaskLine } from '../services/parsing/TaskLineFormat';
 import type { Task } from '../types';
@@ -41,7 +38,6 @@ export class TimerRecorder {
      * （{@link mayTakeOff}）。
      */
     constructor(
-        private app: App,
         private plugin: PluginContext,
         storageUtils: TimerStorageUtils,
         private persist: () => void,
@@ -820,14 +816,7 @@ export class TimerRecorder {
      * デイリーノートの見出しの下へ 1 行置き、書き込んだノートのパスを返す。
      */
     private async addTimerRecordToDailyNote(dateStr: string, taskLine: string): Promise<string | null> {
-        return putInPeriodicNote(
-            this.app,
-            dailyNotes(this.app),
-            dateStr,
-            taskLine,
-            Destination.taskSection(this.plugin.settings),
-            this.plugin.getOperations().writeChannel,
-        );
+        return this.plugin.getOperations().putInDailyNote(dateStr, taskLine);
     }
 
     /**

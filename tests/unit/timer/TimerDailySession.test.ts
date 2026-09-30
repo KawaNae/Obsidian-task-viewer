@@ -18,13 +18,6 @@ import { opsOver, rowOf } from '../helpers/anchoredRow';
 
 const DAILY_PATH = 'DailyNotes/2026-08-17.md';
 
-/** Where a line put in the daily note goes: the harness's own record of it. */
-const dailyPut = vi.hoisted(() => ({ put: null as null | ((line: string) => Promise<string | null>) }));
-vi.mock('../../../src/services/persistence/Notes', async (actual) => ({
-    ...(await actual<typeof import('../../../src/services/persistence/Notes')>()),
-    putInPeriodicNote: (_app: unknown, _desc: unknown, _date: string, line: string) => dailyPut.put!(line),
-}));
-
 interface Harness {
     recorder: TimerRecorder;
     /** 見出しの下へ置いた行。 */
@@ -40,7 +33,8 @@ function makeHarness(): Harness {
     const tasks: Task[] = [];
     let idSeq = 0;
 
-    dailyPut.put = async (line) => {
+    /** Where a line put in the daily note goes: the harness's own record of it. */
+    const putInDailyNote = async (_date: string, line: string): Promise<string | null> => {
         appended.push(line);
         registerWrittenLine(line);
         return DAILY_PATH;
@@ -71,6 +65,7 @@ function makeHarness(): Harness {
         getIndex: () => taskIndex,
         getOperations: () => ({
             ...opsOver(taskIndex),
+            putInDailyNote,
             insertLine: async (afterTaskId: string, line: string) => {
                 siblings.push({ afterTaskId, line });
                 registerWrittenLine(line);
@@ -83,7 +78,7 @@ function makeHarness(): Harness {
         generateTimerTargetId: () => `tv-t-${++idSeq}`,
     } as unknown as TimerStorageUtils;
 
-    return { recorder: new TimerRecorder({} as App, plugin, storageUtils, () => { /* unused */ }, () => []), appended, siblings, tasks };
+    return { recorder: new TimerRecorder(plugin, storageUtils, () => { /* unused */ }, () => []), appended, siblings, tasks };
 }
 
 function makeDailyTimer(overrides: Partial<TimerInstance> = {}): TimerInstance {
