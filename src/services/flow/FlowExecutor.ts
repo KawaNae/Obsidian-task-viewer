@@ -16,7 +16,7 @@ import type { Refusal } from '../persistence/FileLines';
 import { refusalClause } from '../core/RefusalClause';
 import { type InSection, Placement, type SectionSide } from '../persistence/utils/Placement';
 import { Outline } from '../parsing/utils/Outline';
-import { flowSource } from './FlowSegments';
+import { flowSource } from '../lang/flow/FlowSegments';
 import { type FlowPlanDeps, GenerationError, planFlow } from './FlowPlanner';
 import { canTriggerFlow } from './FlowTrigger';
 import { createMomentEvalHost } from './MomentEvalHost';

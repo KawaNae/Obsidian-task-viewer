@@ -5,7 +5,7 @@ import type { PluginContext } from '../../../PluginContext';
 import type { PropertyCalculator, PropertyCalculationContext, CalculatedProperty } from '../PropertyCalculator';
 import type { PropertyFormatter } from '../PropertyFormatter';
 import { DateUtils } from '../../../utils/DateUtils';
-import { getTaskDisplayName } from '../../../services/parsing/utils/TaskContent';
+import { getTaskDisplayName } from '../../../services/display/TaskContent';
 import { buildStatusOptions, createStatusTitle } from '../../../constants/statusOptions';
 import { openFile } from '../../../utils/NavigationUtils';
 import { t } from '../../../i18n';

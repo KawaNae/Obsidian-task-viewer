@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { parseFlow } from '../../../src/services/flow/FlowParser';
-import { serializeFlow } from '../../../src/services/flow/FlowSerializer';
+import { parseFlow } from '../../../src/services/lang/flow/FlowParser';
+import { serializeFlow } from '../../../src/services/lang/flow/FlowSerializer';
 
 describe('gen v3 sample 5 (date arithmetic)', () => {
     it('parses the expressions the sample uses', () => {

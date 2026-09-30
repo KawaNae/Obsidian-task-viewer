@@ -1,5 +1,5 @@
-import type { DiagnosticCode, Task, TaskFlow } from '../../types';
-import { type Diagnostic, type Span, error } from '../lang/Diagnostic';
+import type { DiagnosticCode, Task, TaskFlow } from '../../../types';
+import { type Diagnostic, type Span, error } from '../Diagnostic';
 import { clauseSpans } from './FlowAst';
 import { type ParseFlowResult, parseFlow } from './FlowParser';
 import { diagnosticText } from './diagnosticText';

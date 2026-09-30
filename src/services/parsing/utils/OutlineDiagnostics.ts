@@ -1,5 +1,5 @@
 import { warning } from '../../lang/Diagnostic';
-import type { LocatedDiagnostic } from '../gen/GenBlockCollector';
+import type { LocatedDiagnostic } from '../../lang/Diagnostic';
 import type { OutlineReading } from './Outline';
 
 /**

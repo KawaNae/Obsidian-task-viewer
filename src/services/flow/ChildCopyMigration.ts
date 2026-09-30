@@ -1,7 +1,7 @@
 import { TIMER_ICON_PREFIX_RE } from '../../utils/TimerIcons';
 import { type Diagnostic, warning } from '../lang/Diagnostic';
 import { TaskLineClassifier } from '../parsing/utils/TaskLineClassifier';
-import type { FlowProgram } from './FlowAst';
+import type { FlowProgram } from '../lang/flow/FlowAst';
 import { isFlowLine } from '../parsing/utils/FlowLineScanner';
 
 /**

@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
 import { FlowExecutor } from '../../../src/services/flow/FlowExecutor';
-import { parseFlowSegments, singleLineFlow } from '../../../src/services/flow/FlowSegments';
+import { parseFlowSegments, singleLineFlow } from '../../../src/services/lang/flow/FlowSegments';
 import { collectGenBlocks, type GenBlock } from '../../../src/services/parsing/gen/GenBlockCollector';
 import { parseGenBody } from '../../../src/services/parsing/gen/GenBodyParser';
 import type { GeneratedChild } from '../../../src/services/persistence/TaskCloner';

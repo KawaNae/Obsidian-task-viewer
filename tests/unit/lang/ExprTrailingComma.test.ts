@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import type { Diagnostic } from '../../../src/services/lang/Diagnostic';
-import { parseFlow } from '../../../src/services/flow/FlowParser';
+import { parseFlow } from '../../../src/services/lang/flow/FlowParser';
 import type { Expr } from '../../../src/services/lang/ExprAst';
 import { parseExpr } from '../../../src/services/lang/ExprParser';
 import { printExpr } from '../../../src/services/lang/ExprPrinter';

@@ -2,24 +2,20 @@ import { Decoration, type DecorationSet, type EditorView, ViewPlugin, type ViewU
 import { RangeSet, type Extension, type Text } from '@codemirror/state';
 import { outlineFor } from './EditorOutline';
 import { flowGroupOf, flowOwnerOf } from './FlowGroup';
-import {
-    collectGenBlocks,
-    type LocatedDiagnostic,
-    spreadOverLines,
-} from '../services/parsing/gen/GenBlockCollector';
+import { collectGenBlocks, spreadOverLines } from '../services/parsing/gen/GenBlockCollector';
 import { parseGenBody } from '../services/parsing/gen/GenBodyParser';
 import { declaredCells } from '../services/parsing/gen/GenCellScan';
-import { type HighlightMark, highlightGenBody } from '../services/parsing/gen/GenHighlight';
-import type { Diagnostic } from '../services/lang/Diagnostic';
+import { type HighlightMark, highlightGenBody } from './GenHighlight';
+import type { Diagnostic, LocatedDiagnostic } from '../services/lang/Diagnostic';
 import {
     joinSegments,
     type ParseFlowSegmentsResult,
     parseFlowSegments,
     segmentIndexAt,
-} from '../services/flow/FlowSegments';
+} from '../services/lang/flow/FlowSegments';
 import { childCopyMigrationWarning } from '../services/flow/ChildCopyMigration';
 import { FLOW_MARKER, isFlowLine, matchFlowLine } from '../services/parsing/utils/FlowLineScanner';
-import { diagnosticText } from '../services/flow/diagnosticText';
+import { diagnosticText } from '../services/lang/flow/diagnosticText';
 import { TaskLineClassifier } from '../services/parsing/utils/TaskLineClassifier';
 import { TaskParser } from '../services/parsing/TaskParser';
 import { dateBlockDiagnostics } from '../services/parsing/tv-inline/DateBlockDiagnostics';

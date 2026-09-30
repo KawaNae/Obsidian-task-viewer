@@ -1,5 +1,5 @@
 import { FLOW_MARKER, matchFlowLine } from '../utils/FlowLineScanner';
-import { parseFlowCells } from '../../flow/FlowParser';
+import { parseFlowCells } from '../../lang/flow/FlowParser';
 import type { StaticType } from '../../lang/functions';
 import type { GenCellTypes } from './GenBodyParser';
 import { Outline, type OutlineReading } from '../utils/Outline';

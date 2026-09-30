@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { FlowPlanDeps, planFlow } from '../../../src/services/flow/FlowPlanner';
-import { parseFlow } from '../../../src/services/flow/FlowParser';
-import { parseFlowSegments } from '../../../src/services/flow/FlowSegments';
+import { parseFlow } from '../../../src/services/lang/flow/FlowParser';
+import { parseFlowSegments } from '../../../src/services/lang/flow/FlowSegments';
 import { EvalError } from '../../../src/services/lang/ExprEvaluator';
 import { Task } from '../../../src/types';
 import { TIMER_ICONS } from '../../../src/utils/TimerIcons';

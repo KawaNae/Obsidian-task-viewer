@@ -1,9 +1,9 @@
-import { FN_NAMES, LITERAL_WORDS, PROP_NAMES, UNIT_KEYWORDS } from '../../lang/ExprAst';
-import { REFUSED_EXPR_KEYWORDS } from '../../lang/ExprParser';
-import { scanInterpolations, tokenize } from '../../lang/Lexer';
-import { REFUSED_STMT_KEYWORDS, STMT_KEYWORDS } from '../../lang/StmtParser';
-import type { Token } from '../../lang/Token';
-import { type GenBody, type GenLine, lineIndex } from './GenBodyParser';
+import { FN_NAMES, LITERAL_WORDS, PROP_NAMES, UNIT_KEYWORDS } from '../services/lang/ExprAst';
+import { REFUSED_EXPR_KEYWORDS } from '../services/lang/ExprParser';
+import { scanInterpolations, tokenize } from '../services/lang/Lexer';
+import { REFUSED_STMT_KEYWORDS, STMT_KEYWORDS } from '../services/lang/StmtParser';
+import type { Token } from '../services/lang/Token';
+import { type GenBody, type GenLine, lineIndex } from '../services/parsing/gen/GenBodyParser';
 
 /**
  * What a run of characters is, as far as this language is concerned.

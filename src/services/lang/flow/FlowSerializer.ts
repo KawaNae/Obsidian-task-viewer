@@ -1,6 +1,6 @@
-import type { Span } from '../lang/Diagnostic';
-import { printExpr } from '../lang/ExprPrinter';
-import { WEEKDAY_NAMES, valueToLiteral } from '../lang/Value';
+import type { Span } from '../Diagnostic';
+import { printExpr } from '../ExprPrinter';
+import { WEEKDAY_NAMES, valueToLiteral } from '../Value';
 import { type EveryRule, type FlowProgram, SET_FIELD_ORDER, type ScheduleNode, setHeadName } from './FlowAst';
 import { type SegmentTable, segmentIndexAt } from './FlowSegments';
 

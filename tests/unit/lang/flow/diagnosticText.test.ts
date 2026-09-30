@@ -1,17 +1,17 @@
 import { describe, it, expect } from 'vitest';
-import { setMockLocale } from '../mocks/obsidian';
-import { initI18n } from '../../../src/i18n';
-import ja from '../../../src/i18n/locales/ja.json';
-import { diagnosticText } from '../../../src/services/flow/diagnosticText';
-import { parseFlow } from '../../../src/services/flow/FlowParser';
-import { Diagnostic } from '../../../src/services/lang/Diagnostic';
-import { FLOW_TYPE_ENV, checkExpr } from '../../../src/services/lang/ExprChecker';
-import { parseExpr, splitInterpolations } from '../../../src/services/lang/ExprParser';
-import { tokenize } from '../../../src/services/lang/Lexer';
-import { checkProgram } from '../../../src/services/lang/StmtChecker';
-import { parseProgram } from '../../../src/services/lang/StmtParser';
-import { TokenCursor } from '../../../src/services/lang/Token';
-import { parseGenBody } from '../../../src/services/parsing/gen/GenBodyParser';
+import { setMockLocale } from '../../mocks/obsidian';
+import { initI18n } from '../../../../src/i18n';
+import ja from '../../../../src/i18n/locales/ja.json';
+import { diagnosticText } from '../../../../src/services/lang/flow/diagnosticText';
+import { parseFlow } from '../../../../src/services/lang/flow/FlowParser';
+import { Diagnostic } from '../../../../src/services/lang/Diagnostic';
+import { FLOW_TYPE_ENV, checkExpr } from '../../../../src/services/lang/ExprChecker';
+import { parseExpr, splitInterpolations } from '../../../../src/services/lang/ExprParser';
+import { tokenize } from '../../../../src/services/lang/Lexer';
+import { checkProgram } from '../../../../src/services/lang/StmtChecker';
+import { parseProgram } from '../../../../src/services/lang/StmtParser';
+import { TokenCursor } from '../../../../src/services/lang/Token';
+import { parseGenBody } from '../../../../src/services/parsing/gen/GenBodyParser';
 
 /** Whether `flowDiag.<family>.<name>` is actually spelled out in Japanese. */
 function hasJapanese(code: string): boolean {

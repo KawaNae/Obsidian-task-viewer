@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { parseFlow } from '../../../src/services/flow/FlowParser';
+import { parseFlow } from '../../../src/services/lang/flow/FlowParser';
 import { DateAnchor, ScheduleRuntime, nextOccurrence } from '../../../src/services/flow/ScheduleEngine';
 import { EvalContext } from '../../../src/services/lang/ExprEvaluator';
 

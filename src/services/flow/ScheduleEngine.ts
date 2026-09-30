@@ -3,7 +3,7 @@ import { DateUtils } from '../../utils/DateUtils';
 import { type EvalContext, EvalError, evalExpr } from '../lang/ExprEvaluator';
 import { MAX_GRID_STEPS, nextCycle, nextWeekdayAfter } from '../lang/functions';
 import { addDuration, isDatishValue, isWritableDatish } from '../lang/Value';
-import type { EveryRule, ScheduleNode } from './FlowAst';
+import type { EveryRule, ScheduleNode } from '../lang/flow/FlowAst';
 
 /** The task's primary date (start > end > due priority), if any. */
 export interface DateAnchor {

@@ -5,7 +5,7 @@ import {
     planFlowForDeletion,
 } from '../../../src/services/flow/FlowDeletion';
 import type { FlowPlanDeps } from '../../../src/services/flow/FlowPlanner';
-import { singleLineFlow } from '../../../src/services/flow/FlowSegments';
+import { singleLineFlow } from '../../../src/services/lang/flow/FlowSegments';
 import type { GenBlock } from '../../../src/services/parsing/gen/GenBlockCollector';
 import type { Task } from '../../../src/types';
 import { makeTask } from '../helpers/makeTask';

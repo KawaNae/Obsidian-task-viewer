@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { hasTaskContent, getFileBaseName, getTaskDisplayName } from '../../../src/services/parsing/utils/TaskContent';
+import { hasTaskContent, getFileBaseName, getTaskDisplayName } from '../../../../src/services/display/TaskContent';
 
 // ---------------------------------------------------------------------------
 // Tests

@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { childCopyMigrationWarning } from '../../../src/services/flow/ChildCopyMigration';
-import { parseFlow } from '../../../src/services/flow/FlowParser';
+import { parseFlow } from '../../../src/services/lang/flow/FlowParser';
 
 /**
  * Who hears that child lines have stopped travelling to the next instance.

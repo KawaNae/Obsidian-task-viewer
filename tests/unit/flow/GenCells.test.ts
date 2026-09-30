@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
 import { FlowExecutor } from '../../../src/services/flow/FlowExecutor';
-import { parseFlowSegments } from '../../../src/services/flow/FlowSegments';
+import { parseFlowSegments } from '../../../src/services/lang/flow/FlowSegments';
 import { TaskParser } from '../../../src/services/parsing/TaskParser';
 import type { GenBlock } from '../../../src/services/parsing/gen/GenBlockCollector';
 import { TaskIndex } from '../../../src/services/core/TaskIndex';
