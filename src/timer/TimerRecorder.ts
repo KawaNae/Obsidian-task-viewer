@@ -8,7 +8,8 @@ import { type App, Notice } from 'obsidian';
 import { t } from '../i18n';
 import type { PluginContext } from '../PluginContext';
 import { type Opening, type PendingRecord, type TimerInstance, dailyDateOf, describeTimerAnchor, isDailyTimer } from './TimerInstance';
-import { DailyNoteUtils } from '../utils/DailyNoteUtils';
+import { putInPeriodicNote } from '../services/persistence/Notes';
+import { dailyNotes } from '../utils/PeriodicNotes';
 import { Destination } from '../services/persistence/Destination';
 import { DateUtils } from '../utils/DateUtils';
 import { type TaskLineFields, formatTaskLine } from '../services/parsing/TaskLineFormat';
@@ -823,11 +824,10 @@ export class TimerRecorder {
      * デイリーノートの見出しの下へ 1 行置き、書き込んだノートのパスを返す。
      */
     private async addTimerRecordToDailyNote(dateStr: string, taskLine: string): Promise<string | null> {
-        const date = DateUtils.parseDate(dateStr);
-
-        return DailyNoteUtils.appendLineToDailyNote(
+        return putInPeriodicNote(
             this.app,
-            date,
+            dailyNotes(this.app),
+            dateStr,
             taskLine,
             Destination.taskSection(this.plugin.settings),
             this.plugin.getTaskWriteService().writeChannel,

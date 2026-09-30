@@ -1,4 +1,4 @@
-import { ItemView, type WorkspaceLeaf, type TFile, type ViewStateResult } from 'obsidian';
+import { ItemView, type WorkspaceLeaf, type ViewStateResult } from 'obsidian';
 import { logDebug } from '../../log/log';
 import { t } from '../../i18n';
 import type { DisplayTask, Task, AstronomyDisplay } from '../../types';
@@ -9,14 +9,14 @@ import { DateUtils } from '../../utils/DateUtils';
 import { getTaskDateRange } from '../../services/display/VisualDateRange';
 import { withWeekStartDay } from '../../utils/momentWeekLocale';
 import type { TaskReadService } from '../../services/data/TaskReadService';
-import { DailyNoteUtils } from '../../utils/DailyNoteUtils';
+import { dailyNotes, linkTarget, periodicNotes } from '../../utils/PeriodicNotes';
+import { openPeriodicNoteInLeaf } from '../sharedLogic/OpenPeriodicNote';
 import { isTaskCompleted as isTaskCompletedUtil } from '../../services/display/TaskStatusQuery';
 import {
     getCalendarDateRange,
     getNormalizedWindowStart,
     getReferenceMonth,
     getGridColumnForDay,
-    openOrCreateDailyNote,
 } from './CalendarDateUtils';
 import type { PluginContext } from '../../PluginContext';
 import { TaskLinkInteractionManager } from '../taskcard/TaskLinkInteractionManager';
@@ -298,12 +298,12 @@ export class MiniCalendarView extends ItemView {
             cell.addClass('is-today');
         }
 
-        const linkTarget = DailyNoteUtils.getDailyNoteLinkTarget(this.app, date);
+        const dayTarget = linkTarget(dailyNotes(this.app), dateKey);
         const link = cell.createEl('a', {
             cls: 'internal-link cal-day-cell__date-link',
         });
-        link.dataset.href = linkTarget;
-        link.setAttribute('href', linkTarget);
+        link.dataset.href = dayTarget;
+        link.setAttribute('href', dayTarget);
         link.addEventListener('click', (event: MouseEvent) => {
             event.preventDefault();
         });
@@ -345,7 +345,7 @@ export class MiniCalendarView extends ItemView {
         }, { bindClick: false });
 
         cell.addEventListener('click', () => {
-            void openOrCreateDailyNote(this.app, date);
+            void openPeriodicNoteInLeaf(this.app, dailyNotes(this.app), dateKey, this.plugin.getTaskWriteService().writeChannel);
         });
     }
 
@@ -416,7 +416,7 @@ export class MiniCalendarView extends ItemView {
             weekNumberEl.addClass('is-current-week');
         }
 
-        const weekLinkTarget = DailyNoteUtils.getWeeklyNoteLinkTarget(this.plugin.settings, weekStartDate);
+        const weekLinkTarget = linkTarget(periodicNotes(this.plugin.settings, 'weekly'), DateUtils.getLocalDateString(weekStartDate));
         const weekLink = weekNumberEl.createEl('a', { cls: 'internal-link' });
         weekLink.createSpan({
             cls: 'cal-week-number__label',
@@ -433,7 +433,7 @@ export class MiniCalendarView extends ItemView {
             hoverParent: this.hoverParent,
         }, { bindClick: false });
         weekNumberEl.addEventListener('click', () => {
-            void this.openOrCreateWeeklyNote(weekStartDate);
+            void openPeriodicNoteInLeaf(this.app, periodicNotes(this.plugin.settings, 'weekly'), DateUtils.getLocalDateString(weekStartDate), this.plugin.getTaskWriteService().writeChannel);
         });
     }
 
@@ -602,16 +602,5 @@ export class MiniCalendarView extends ItemView {
         }
 
         return weekEl;
-    }
-
-    private async openOrCreateWeeklyNote(date: Date): Promise<void> {
-        const settings = this.plugin.settings;
-        let file: TFile | null = DailyNoteUtils.getWeeklyNote(this.app, settings, date);
-        if (!file) {
-            file = await DailyNoteUtils.createWeeklyNote(this.app, settings, date);
-        }
-        if (file) {
-            await this.app.workspace.getLeaf(false).openFile(file);
-        }
     }
 }

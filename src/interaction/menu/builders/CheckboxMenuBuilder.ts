@@ -4,7 +4,7 @@ import { buildStatusOptions, createStatusTitle } from '../../../constants/status
 import { CreateTaskModal } from '../../../modals/CreateTaskModal';
 import { formatTaskLine } from '../../../services/parsing/TaskLineFormat';
 import { DateUtils } from '../../../utils/DateUtils';
-import { DailyNoteUtils } from '../../../utils/DailyNoteUtils';
+import { dailyNotes, dateOfPath } from '../../../utils/PeriodicNotes';
 import { TaskLineClassifier } from '../../../services/parsing/utils/TaskLineClassifier';
 import { t } from '../../../i18n';
 
@@ -113,7 +113,7 @@ export class CheckboxMenuBuilder {
         const { rawContent, statusChar, indent } = classified;
         const marker = TaskLineClassifier.extractMarker(lineText);
         const content = rawContent.trim();
-        const dailyNoteDate = filePath ? DailyNoteUtils.parseDateFromFilePath(this.app, filePath) ?? undefined : undefined;
+        const dailyNoteDate = filePath ? dateOfPath(dailyNotes(this.app), filePath) ?? undefined : undefined;
 
         menu.addItem((item) => {
             item.setTitle(t('menu.convertToInline'))

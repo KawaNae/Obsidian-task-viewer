@@ -47,3 +47,12 @@ export function registerWeekStartLocales(): void {
 export function withWeekStartDay(date: Date, weekStartDay: 0 | 1): moment.Moment {
     return moment(date).locale(localeName(weekStartDay));
 }
+
+/**
+ * `text` read strictly as `format`, its week tokens counted in the week
+ * starting on `weekStartDay` (the reading of what {@link withWeekStartDay}
+ * formats).
+ */
+export function parseInWeek(text: string, format: string, weekStartDay: 0 | 1): moment.Moment {
+    return moment(text, format, localeName(weekStartDay), true);
+}

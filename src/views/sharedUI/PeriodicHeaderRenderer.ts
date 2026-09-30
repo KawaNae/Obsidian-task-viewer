@@ -1,7 +1,7 @@
-import type { TFile } from 'obsidian';
 import type { App, HoverParent } from 'obsidian';
 import type { PluginContext } from '../../PluginContext';
-import { DailyNoteUtils } from '../../utils/DailyNoteUtils';
+import { linkTarget, periodicNotes } from '../../utils/PeriodicNotes';
+import { openPeriodicNoteInLeaf } from '../sharedLogic/OpenPeriodicNote';
 import { DateUtils } from '../../utils/DateUtils';
 import { withWeekStartDay } from '../../utils/momentWeekLocale';
 import { t } from '../../i18n';
@@ -74,22 +74,20 @@ export class PeriodicHeaderRenderer {
             cls: 'internal-link periodic-header__link periodic-header__link--week',
             text: m.format('[W]ww'),
         });
-        const target = DailyNoteUtils.getWeeklyNoteLinkTarget(this.deps.plugin.settings, dateObj);
+        const target = linkTarget(periodicNotes(this.deps.plugin.settings, 'weekly'), seg.anchorDate);
         link.dataset.href = target;
         link.setAttribute('href', target);
         link.setAttribute('aria-label', t('aria.openWeeklyNote', { label: m.format('gggg-[W]ww') }));
         link.addEventListener('click', (event: MouseEvent) => {
             event.preventDefault();
             event.stopPropagation();
-            void this.openOrCreateWeeklyNote(dateObj);
+            void this.openWeeklyNote(seg.anchorDate);
         });
     }
 
-    private async openOrCreateWeeklyNote(date: Date): Promise<void> {
+    private async openWeeklyNote(date: string): Promise<void> {
         const { app, plugin } = this.deps;
-        let file: TFile | null = DailyNoteUtils.getWeeklyNote(app, plugin.settings, date);
-        if (!file) file = await DailyNoteUtils.createWeeklyNote(app, plugin.settings, date);
-        if (file) await app.workspace.getLeaf(false).openFile(file);
+        await openPeriodicNoteInLeaf(app, periodicNotes(plugin.settings, 'weekly'), date, plugin.getTaskWriteService().writeChannel);
     }
 
     private computeWeekSegments(

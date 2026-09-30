@@ -75,6 +75,7 @@ export class ScheduleToolbar extends ViewToolbarBase {
         const dateLabelDeps = {
             app: deps.app,
             getSettings: () => deps.plugin.settings,
+            writeChannel: deps.plugin.getTaskWriteService().writeChannel,
             linkInteractionManager: deps.linkInteractionManager,
             hoverParent: deps.hoverParent,
         };

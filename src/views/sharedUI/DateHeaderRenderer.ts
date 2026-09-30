@@ -1,7 +1,8 @@
 import type { App, HoverParent } from 'obsidian';
 import type { PluginContext } from '../../PluginContext';
 import { DateUtils } from '../../utils/DateUtils';
-import { DailyNoteUtils } from '../../utils/DailyNoteUtils';
+import { dailyNotes, label as noteLabel, linkTarget } from '../../utils/PeriodicNotes';
+import { openPeriodicNoteInLeaf } from '../sharedLogic/OpenPeriodicNote';
 import type { TaskLinkInteractionManager } from '../taskcard/TaskLinkInteractionManager';
 import { TASK_VIEWER_HOVER_SOURCE_ID } from '../../constants/hover';
 import { t } from '../../i18n';
@@ -71,15 +72,15 @@ export class DateHeaderRenderer {
             const cell = row.createDiv('date-header__cell');
             const dayName = weekdays[DateUtils.weekdayOf(date)];
 
-            const dateObj = DateUtils.parseDate(date);
-            const linkTarget = DailyNoteUtils.getDailyNoteLinkTarget(app, dateObj);
-            const linkLabel = DailyNoteUtils.getDailyNoteLabelForDate(app, dateObj);
+            const daily = dailyNotes(app);
+            const target = linkTarget(daily, date);
+            const linkLabel = noteLabel(daily, date);
 
             const label = contextualDateLabel(date, referenceYearMonth, dayName);
 
             const linkEl = cell.createEl('a', { cls: 'internal-link date-header__date-link', text: label });
-            linkEl.dataset.href = linkTarget;
-            linkEl.setAttribute('href', linkTarget);
+            linkEl.dataset.href = target;
+            linkEl.setAttribute('href', target);
             linkEl.setAttribute('aria-label', t('aria.openDailyNote', { label: `${linkLabel} ${dayName}` }));
             linkEl.addEventListener('click', (event: MouseEvent) => {
                 event.preventDefault();
@@ -100,14 +101,8 @@ export class DateHeaderRenderer {
 
             cell.dataset.date = date;
 
-            cell.addEventListener('click', async () => {
-                let file = DailyNoteUtils.getDailyNote(app, dateObj);
-                if (!file) {
-                    file = await DailyNoteUtils.createDailyNote(app, dateObj);
-                }
-                if (file) {
-                    await app.workspace.getLeaf(false).openFile(file);
-                }
+            cell.addEventListener('click', () => {
+                void openPeriodicNoteInLeaf(app, dailyNotes(app), date, plugin.getTaskWriteService().writeChannel);
             });
 
         });

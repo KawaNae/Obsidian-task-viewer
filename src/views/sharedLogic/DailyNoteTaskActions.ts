@@ -8,7 +8,6 @@
  * time alongside the date.
  */
 
-import { DateUtils } from '../../utils/DateUtils';
 import type { Menu } from 'obsidian';
 import { t } from '../../i18n';
 import type { PluginContext } from '../../PluginContext';
@@ -16,6 +15,8 @@ import type { TimerHost } from '../../timer/TimerWidget';
 import { CreateTaskModal } from '../../modals/CreateTaskModal';
 import { formatTaskLine } from '../../services/parsing/TaskLineFormat';
 import { Destination } from '../../services/persistence/Destination';
+import { putInPeriodicNote } from '../../services/persistence/Notes';
+import { dailyNotes } from '../../utils/PeriodicNotes';
 
 export type DailyNoteTimerType = 'pomodoro' | 'countup';
 
@@ -57,12 +58,10 @@ export function openCreateTaskForDailyNote(
             // `date` is the file's day (the visual column), which is not always
             // the task's own start date — a click past midnight seeds the next
             // day while still belonging to this column's note.
-            const dateObj = DateUtils.parseDate(date);
-
-            const { DailyNoteUtils } = await import('../../utils/DailyNoteUtils');
-            await DailyNoteUtils.appendLineToDailyNote(
+            await putInPeriodicNote(
                 plugin.app,
-                dateObj,
+                dailyNotes(plugin.app),
+                date,
                 taskLine,
                 Destination.taskSection(plugin.settings),
                 plugin.getTaskWriteService().writeChannel,

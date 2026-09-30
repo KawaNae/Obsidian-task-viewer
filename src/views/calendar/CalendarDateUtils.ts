@@ -1,6 +1,4 @@
-import type { App, TFile } from 'obsidian';
 import { DateUtils } from '../../utils/DateUtils';
-import { DailyNoteUtils } from '../../utils/DailyNoteUtils';
 
 /**
  * Shared calendar date utilities used by both CalendarView and MiniCalendarView.
@@ -38,14 +36,4 @@ export function getColumnOffset(showWeekNumbers: boolean): number {
 
 export function getGridColumnForDay(dayColumn: number, showWeekNumbers: boolean): number {
     return dayColumn + getColumnOffset(showWeekNumbers);
-}
-
-export async function openOrCreateDailyNote(app: App, date: Date): Promise<void> {
-    let file: TFile | null = DailyNoteUtils.getDailyNote(app, date);
-    if (!file) {
-        file = await DailyNoteUtils.createDailyNote(app, date);
-    }
-    if (file) {
-        await app.workspace.getLeaf(false).openFile(file);
-    }
 }
