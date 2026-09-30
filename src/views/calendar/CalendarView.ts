@@ -160,7 +160,6 @@ export class CalendarView extends ItemView {
             filterMenu: this.filterMenu,
             container: this.containerEl,
             onNavigateWeek: (days) => this.navigateWeek(days),
-            onNavigateMonth: (direction) => this.navigateMonth(direction),
             onJumpToCurrentMonth: () => this.showMonthOf(new Date()),
             onJumpToDate: (date) => {
                 const parsed = this.parseLocalDateString(date);
@@ -985,15 +984,10 @@ export class CalendarView extends ItemView {
         this.render();
     }
 
-    private navigateMonth(offset: number): void {
-        const ref = this.getReferenceMonth();
-        this.showMonthOf(new Date(ref.year, ref.month + offset, 1));
-    }
-
     /**
      * Show the month that contains `date`, laid out from the week of its 1st.
-     * Today, the month steps and "Go to date" all land here, so a picked date
-     * and "today" line up the same way.
+     * The Today button and "Go to date" both land here, so a
+     * picked date and "today" line up the same way.
      */
     private showMonthOf(date: Date): void {
         this.windowStart = DateUtils.getMonthGridStart(date, this.plugin.settings.weekStartDay);
