@@ -481,6 +481,7 @@
     "emptyTaskWarning": "タスク名と日付が両方空です — このタスクはビューアーに表示されません。",
     "openDatePicker": "日付ピッカーを開く",
     "openTimePicker": "時刻ピッカーを開く",
+    "openColorPicker": "カラーピッカーを開く",
     "hub": {
       "status": "ステータス",
       "readOnlyNotice": "このタスクは読み取り専用です（外部プラグイン記法）— 編集はできません。",
