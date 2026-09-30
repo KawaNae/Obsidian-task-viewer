@@ -3,7 +3,7 @@ import type { Task, TaskViewerSettings } from '../../types';
 import { t } from '../../i18n';
 import { DateUtils } from '../../utils/DateUtils';
 import { logError, logInfo, logWarn } from '../../log/log';
-import type { TaskIndex } from '../core/TaskIndex';
+import type { IndexReads } from '../core/TaskIndex';
 import { formatRow } from '../parsing/TaskLineFormat';
 import type { TaskRepository } from '../persistence/TaskRepository';
 import { EvalError } from '../lang/ExprEvaluator';
@@ -117,7 +117,7 @@ export class FlowExecutor {
 
     constructor(
         private repository: TaskRepository,
-        private taskIndex: TaskIndex,
+        private taskIndex: IndexReads,
         private app: App,
         private getSettings: () => TaskViewerSettings
     ) { }
@@ -238,7 +238,7 @@ export class FlowExecutor {
     /**
      * Write the next instance, then remove this one, as one write. The
      * index runs it behind every write already asked of the row
-     * (`TaskIndex.onRow`), so it is planned from the copy the last of them
+     * (`Operations.onRow`), so it is planned from the copy the last of them
      * left. Awaited, so the caller's own rescan runs after the write has
      * landed.
      *

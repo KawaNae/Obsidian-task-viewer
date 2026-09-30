@@ -6,7 +6,7 @@ import type { TaskCardRenderer } from '../../views/taskcard/TaskCardRenderer';
 import { TaskStyling } from '../../views/sharedUI/TaskStyling';
 import type { MenuHandler } from '../../interaction/menu/MenuHandler';
 import type { TaskReadService } from '../../services/data/TaskReadService';
-import type { TaskWriteService } from '../../services/data/TaskWriteService';
+import type { Operations } from '../../services/operations/Operations';
 import { toDisplayTask, getOriginalTaskId } from '../../services/display/DisplayTaskConverter';
 import { getEffectiveColor, getEffectiveLinestyle } from '../../services/data/EffectiveProperties';
 import { PopoverStack } from '../../views/sharedUI/PopoverStack';
@@ -21,7 +21,7 @@ export interface TaskHubDeps {
     taskRenderer: TaskCardRenderer;
     menuHandler: MenuHandler;
     readService: TaskReadService;
-    writeService: TaskWriteService;
+    operations: Operations;
     plugin: PluginContext;
 }
 
@@ -117,7 +117,7 @@ export class TaskHubPanel {
                 app: this.app,
                 plugin: this.deps.plugin,
                 readService: this.deps.readService,
-                writeService: this.deps.writeService,
+                operations: this.deps.operations,
                 stack: this.stack,
                 onNavigate: () => this.close(),
             });
@@ -133,10 +133,10 @@ export class TaskHubPanel {
         });
         this.source = new TaskHubSource(this.task, {
             drained: () => this.form?.drained() ?? Promise.resolve(),
-            confirm: (id) => this.deps.writeService.confirmTask(id),
+            confirm: (id) => this.deps.operations.confirmTask(id),
             reread: (id) => this.deps.readService.getTask(id),
             // The refusal is shown under the draft it leaves; a notice would say it twice.
-            replace: (id, base, replacement) => this.deps.writeService.replaceSubtree(id, base, replacement, { tellRefusal: false }),
+            replace: (id, base, replacement) => this.deps.operations.replaceSubtree(id, base, replacement, { tellRefusal: false }),
             indentUnit: () => indentUnit(this.app),
             lockForm: (locked) => this.form?.setSourceOpen(locked),
             closeHub: () => this.close(),

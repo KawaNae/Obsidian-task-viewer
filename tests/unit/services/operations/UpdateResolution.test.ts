@@ -1,9 +1,9 @@
 import { describe, it, expect, vi } from 'vitest';
 import { Notice } from 'obsidian';
-import { TaskIndex } from '../../../src/services/core/TaskIndex';
-import { makeTask } from '../helpers/makeTask';
-import { formatRow } from '../../../src/services/parsing/TaskLineFormat';
-import { DEFAULT_STATUS_DEFINITIONS, type Task } from '../../../src/types';
+import { Operations } from '../../../../src/services/operations/Operations';
+import { makeTask } from '../../helpers/makeTask';
+import { formatRow } from '../../../../src/services/parsing/TaskLineFormat';
+import { DEFAULT_STATUS_DEFINITIONS, type Task } from '../../../../src/types';
 
 /**
  * Which values updateTask uses to find the line, and what it leaves the
@@ -12,16 +12,22 @@ import { DEFAULT_STATUS_DEFINITIONS, type Task } from '../../../src/types';
  * is told the views.
  */
 
-const proto = TaskIndex.prototype as any;
+const proto = Operations.prototype as any;
 
 function buildHost(task: Task, written = true) {
     task.reading ??= 'k1.1';
+    const store = { getTask: () => task, bumpRevision: vi.fn(), notifyListeners: vi.fn() };
     return {
-        store: {
+        // The index as the operations read it: the copy, and a disk that
+        // still holds it (`checkCopy`).
+        index: {
             getTask: () => task,
-            bumpRevision: vi.fn(),
-            notifyListeners: vi.fn(),
+            checkCopy: async () => ({ verdict: 'fresh', disk: { lines: [task.originalText], read: true } }),
+            learnFrom: async () => { },
         },
+        // What the index would have to be asked to change its copy or tell
+        // its views: never asked by a write.
+        store,
         settings: { scopeKeys: {}, statusDefinitions: DEFAULT_STATUS_DEFINITIONS },
         // A completion fires in its write; the fire itself is not measured here.
         commandExecutor: {
@@ -30,23 +36,19 @@ function buildHost(task: Task, written = true) {
         },
         writeCompleting: proto.writeCompleting,
         tellNotRun: proto.tellNotRun,
-        scanner: { follow: () => null, holds: () => false },
-        app: { vault: { getAbstractFileByPath: () => null } },
         repository: {
             write: vi.fn(async () => ({ written, refused: null, fires: [] })),
         },
         onRow: proto.onRow,
         rowNow: proto.rowNow,
+        update: proto.update,
         writeUpdate: proto.writeUpdate,
-        // The dispose guard every write goes through; this index is open.
+        // The dispose guard every write goes through; these operations are open.
         disposed: false,
         refuseAfterDispose: proto.refuseAfterDispose,
 
         copyToPlan: proto.copyToPlan,
         planCopy: proto.planCopy,
-        // A copy the index read, which the disk still holds (`checkCopy`).
-        checks: { read: async () => task.originalText, follow: () => task.line, last: () => ({ n: 1, key: undefined }) },
-        getTask: proto.getTask,
 
         reportRefusal: () => { /* the notice is not measured here */ },
     };
@@ -136,7 +138,7 @@ describe('updateTask: the answer', () => {
     });
 
     it('answers no for a read-only task, without touching the repository', async () => {
-        const task = makeTask({ content: 'x', isReadOnly: true });
+        const task = makeTask({ content: 'x', isReadOnly: true, parserId: 'tasks-plugin' });
         const host = buildHost(task, true);
 
         const written = await proto.updateTask.call(host, task.id, { startTime: '11:00' });
@@ -155,11 +157,39 @@ describe('reportRefusal', () => {
         ] as const) {
             Notice.messages.length = 0;
 
-            // What it learns besides (`learnFrom`) asks an index with no reconciler nothing.
-            proto.reportRefusal.call({ learnFrom: proto.learnFrom }, { file: 'note.md', reason, subject: '週報' });
+            // What the index learns besides (`learnFrom`) is not measured here.
+            proto.reportRefusal.call({ index: { learnFrom: async () => { } } }, { file: 'note.md', reason, subject: '週報' });
 
             expect(Notice.messages).toHaveLength(1);
             expect(Notice.messages[0]).toContain('週報');
         }
+    });
+});
+
+/**
+ * Whether a row is read-only is asked in one place, the check of the copy an
+ * operation plans from (`planCopy`), and only for a write: a drag or a menu
+ * that opens over a read-only row is not stopped by the check (the views
+ * decide what they offer), and a write to one is turned away without a word.
+ */
+describe('a read-only row', () => {
+    const readOnly = () => makeTask({ content: 'x', isReadOnly: true, parserId: 'tasks-plugin' });
+
+    it('passes the check a drag or a menu asks as it opens', async () => {
+        const task = readOnly();
+        const host = buildHost(task);
+
+        expect(await proto.confirmTask.call(host, task.id)).toBe(true);
+    });
+
+    it('is not written, and nothing is told', async () => {
+        const task = readOnly();
+        const host = { ...buildHost(task), reportRefusal: vi.fn() };
+        Notice.messages.length = 0;
+
+        expect(await proto.updateTask.call(host, task.id, { statusChar: 'x' })).toBe(false);
+        expect(host.repository.write).not.toHaveBeenCalled();
+        expect(host.reportRefusal).not.toHaveBeenCalled();
+        expect(Notice.messages).toHaveLength(0);
     });
 });

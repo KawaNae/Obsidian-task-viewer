@@ -1,7 +1,6 @@
 import { describe, it, expect, afterEach, vi } from 'vitest';
 import { openLiveVault, makeFile, type VaultSession } from '../helpers/vaultSession';
 import { NoteOps } from '../../../src/services/data/NoteOps';
-import { TaskWriteService } from '../../../src/services/data/TaskWriteService';
 import { TimerWidget } from '../../../src/timer/TimerWidget';
 import { IDLE_TIMER_ID } from '../../../src/timer/TimerContext';
 import type { TimerInstance } from '../../../src/timer/TimerInstance';
@@ -63,8 +62,8 @@ async function open(files: Record<string, string[]>) {
     Object.assign(session.app.vault, { getName: () => 'test-vault' });
     const plugin = {
         settings: { ...DEFAULT_SETTINGS },
-        getTaskIndex: () => session.index,
-        getTaskWriteService: () => new TaskWriteService(session.index),
+        getIndex: () => session.index,
+        getOperations: () => session.ops,
         getTaskReadService: () => ({
             getTask: (id: string) => session.index.getTask(id),
             onChange: (fn: () => void) => session.index.onChange(fn),
@@ -85,7 +84,7 @@ async function open(files: Record<string, string[]>) {
     widget.renderTimerItem = () => { };
     widget.ensureContainer = () => container as unknown as HTMLElement;
     widget.activate();
-    const ops = new NoteOps(session.app, new TaskWriteService(session.index), () => ({ ...DEFAULT_SETTINGS }), {
+    const ops = new NoteOps(session.app, session.ops, () => ({ ...DEFAULT_SETTINGS }), {
         getTask: (id) => session.index.getTask(id),
         timers: () => widget,
     });

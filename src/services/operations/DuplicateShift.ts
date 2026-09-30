@@ -58,7 +58,7 @@ function holdsTimeOfDay(task: Task): boolean {
 
 /**
  * What a duplicate of `task` writes, and on which side of it: the one op the
- * index hands the write (`TaskIndex.writeDuplicate`). What the copies say is
+ * operations hand the write (`Operations.writeDuplicate`). What the copies say is
  * decided here, where the task's dates are known; where they go is the
  * write's (`TaskOp` `copies`). Each copy carries the row's children.
  *

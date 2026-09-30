@@ -34,7 +34,7 @@ const RENDERER_OWNED_CHILD_CLASSES = [
 
 const SHAPE_CLASS = 'task-card__shape';
 import type { TaskReadService } from '../../services/data/TaskReadService';
-import type { TaskWriteService } from '../../services/data/TaskWriteService';
+import type { Operations } from '../../services/operations/Operations';
 import { getFileBaseName, hasTaskContent } from '../../services/display/TaskContent';
 import { ChildItemBuilder } from './ChildItemBuilder';
 import { ChildSectionRenderer, type ChildMenuCallback } from './ChildSectionRenderer';
@@ -131,7 +131,7 @@ export class TaskCardRenderer extends Component {
     constructor(
         private app: App,
         readService: TaskReadService,
-        writeService: TaskWriteService,
+        operations: Operations,
         menuPresenter: MenuPresenter,
         private linkRuntime: TaskCardLinkRuntime,
         getSettings: () => TaskViewerSettings,
@@ -145,7 +145,7 @@ export class TaskCardRenderer extends Component {
         private getMaskMode: () => boolean = () => false
     ) {
         super();
-        this.checkboxWiring = new CheckboxWiring(writeService, menuPresenter);
+        this.checkboxWiring = new CheckboxWiring(operations, menuPresenter);
         this.childItemBuilder = new ChildItemBuilder(readService);
         this.childSectionRenderer = new ChildSectionRenderer(app, this.checkboxWiring, readService);
         this.linkInteractionManager = new TaskLinkInteractionManager(app, getSettings);
@@ -154,7 +154,7 @@ export class TaskCardRenderer extends Component {
         // `${viewId}::${scope}::${task.id}` (cardInstanceId). Match by suffix so
         // all card instances of the deleted task are dropped regardless of view /
         // scope (main grid, pinned list, etc.).
-        this.unsubscribeTaskDeleted = writeService.onTaskDeleted((taskId) => {
+        this.unsubscribeTaskDeleted = operations.onTaskDeleted((taskId) => {
             const suffix = `::${taskId}`;
             for (const key of [...this.expandedTaskIds]) {
                 if (key.endsWith(suffix)) {

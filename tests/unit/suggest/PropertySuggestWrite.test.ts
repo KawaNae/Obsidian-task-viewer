@@ -22,7 +22,7 @@ function suggestAnswering(Cls: Suggest, written: boolean, activeFile: { path: st
         plugin: {
             app: { workspace: { getActiveFile: () => activeFile } },
             settings: { scopeKeys: { color: 'tv-color', linestyle: 'tv-linestyle' } },
-            getTaskWriteService: () => ({ setFrontmatterKeys }),
+            getOperations: () => ({ setFrontmatterKeys }),
         },
         syncValue,
     });

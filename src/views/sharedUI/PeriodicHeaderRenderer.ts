@@ -87,7 +87,7 @@ export class PeriodicHeaderRenderer {
 
     private async openWeeklyNote(date: string): Promise<void> {
         const { app, plugin } = this.deps;
-        await openPeriodicNoteInLeaf(app, periodicNotes(plugin.settings, 'weekly'), date, plugin.getTaskWriteService().writeChannel);
+        await openPeriodicNoteInLeaf(app, periodicNotes(plugin.settings, 'weekly'), date, plugin.getOperations().writeChannel);
     }
 
     private computeWeekSegments(

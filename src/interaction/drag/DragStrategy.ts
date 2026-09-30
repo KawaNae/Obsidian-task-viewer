@@ -1,14 +1,14 @@
 import type { Task } from '../../types';
 import type { PluginContext } from '../../PluginContext';
 import type { TaskReadService } from '../../services/data/TaskReadService';
-import type { TaskWriteService } from '../../services/data/TaskWriteService';
+import type { Operations } from '../../services/operations/Operations';
 import type { SelectionController } from '../selection/SelectionController';
 
 export interface DragContext {
     container: HTMLElement;
     plugin: PluginContext;
     readService: TaskReadService;
-    writeService: TaskWriteService;
+    operations: Operations;
     selectionController: SelectionController;
     onTaskClick: (taskId: string) => void;
     // Helper to get visual date from column element

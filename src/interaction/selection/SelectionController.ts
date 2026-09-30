@@ -1,4 +1,4 @@
-import type { TaskWriteService } from '../../services/data/TaskWriteService';
+import type { Operations } from '../../services/operations/Operations';
 import type { SelectionHost } from './SelectionHost';
 
 /**
@@ -41,8 +41,8 @@ export class SelectionController {
      * 選択中タスクが UI 経由で削除されたら selection をクリアする。
      * 戻り値は購読解除 callback (`view.unload` 等で呼ぶ)。
      */
-    attachDeleteListener(writeService: TaskWriteService): () => void {
-        return writeService.onTaskDeleted((deletedId) => {
+    attachDeleteListener(operations: Operations): () => void {
+        return operations.onTaskDeleted((deletedId) => {
             if (this.handleManager.getSelectedTaskId() === deletedId) {
                 this.handleManager.selectTask(null);
             }

@@ -38,11 +38,11 @@ function idOf(session: VaultSession, content: string): string {
 
 describe('an operation over an edit from outside that no scan has read', () => {
     const operations: [string, (s: VaultSession, id: string) => Promise<boolean>][] = [
-        ['updateTask', (s, id) => s.index.updateTask(id, { statusChar: 'x' })],
-        ['deleteTask', (s, id) => s.index.deleteTask(id)],
-        ['deleteTask with its fire', (s, id) => s.index.deleteTask(id, { fireFlow: true })],
-        ['duplicateTask', (s, id) => s.index.duplicateTask(id)],
-        ['insertLine', (s, id) => s.index.insertLine(id, '- [ ] child', 'firstChild')],
+        ['updateTask', (s, id) => s.ops.updateTask(id, { statusChar: 'x' })],
+        ['deleteTask', (s, id) => s.ops.deleteTask(id)],
+        ['deleteTask with its fire', (s, id) => s.ops.deleteTask(id, { fireFlow: true })],
+        ['duplicateTask', (s, id) => s.ops.duplicateTask(id)],
+        ['insertLine', (s, id) => s.ops.insertLine(id, '- [ ] child', 'firstChild')],
     ];
 
     for (const [name, operate] of operations) {
@@ -79,8 +79,8 @@ describe('an operation over an edit from outside that no scan has read', () => {
         const a = idOf(session, 'A');
         const b = idOf(session, 'B');
 
-        expect(await session.index.duplicateTask(a)).toBe(true);
-        expect(await session.index.updateTask(b, { statusChar: 'x' })).toBe(true);
+        expect(await session.ops.duplicateTask(a)).toBe(true);
+        expect(await session.ops.updateTask(b, { statusChar: 'x' })).toBe(true);
 
         expect(contents.get(FILE)).toContain('- [x] B @2026-09-21');
         expect(Notice.messages).toEqual([]);
@@ -98,11 +98,11 @@ describe('an operation over an edit from outside that no scan has read', () => {
         const queueScan = scanner.queueScan.bind(scanner);
         let second: Promise<boolean> | undefined;
         scanner.queueScan = (file) => {
-            second ??= session.index.updateTask(b, { statusChar: 'x' });
+            second ??= session.ops.updateTask(b, { statusChar: 'x' });
             return queueScan(file);
         };
 
-        expect(await session.index.duplicateTask(a)).toBe(true);
+        expect(await session.ops.duplicateTask(a)).toBe(true);
         expect(await second).toBe(true);
 
         expect(contents.get(FILE)).toBe(['- [ ] A @2026-09-21', '- [ ] A @2026-09-21', '- [x] B @2026-09-21', ''].join('\n'));
@@ -115,8 +115,8 @@ describe('an operation over an edit from outside that no scan has read', () => {
         const b = idOf(session, 'B');
         session.index.setDraggingFile(FILE);
 
-        expect(await session.index.duplicateTask(a)).toBe(true);
-        expect(await session.index.updateTask(b, { statusChar: 'x' })).toBe(true);
+        expect(await session.ops.duplicateTask(a)).toBe(true);
+        expect(await session.ops.updateTask(b, { statusChar: 'x' })).toBe(true);
         session.index.setDraggingFile(null);
 
         expect(contents.get(FILE)).toContain('- [x] B @2026-09-21');
@@ -128,7 +128,7 @@ describe('an operation over an edit from outside that no scan has read', () => {
         const id = idOf(session, 'A');
         contents.delete(FILE);
 
-        expect(await session.index.updateTask(id, { statusChar: 'x' })).toBe(false);
+        expect(await session.ops.updateTask(id, { statusChar: 'x' })).toBe(false);
 
         expect(contents.has(FILE)).toBe(false);
         expect(Notice.messages).toEqual([t('notice.notReadable', { subject: 'A' })]);
@@ -138,7 +138,7 @@ describe('an operation over an edit from outside that no scan has read', () => {
 describe('the entry check (`confirmTask`)', () => {
     it('answers yes for a fresh copy and says nothing', async () => {
         const { session } = await open();
-        expect(await session.index.confirmTask(idOf(session, 'A'))).toBe(true);
+        expect(await session.ops.confirmTask(idOf(session, 'A'))).toBe(true);
         expect(Notice.messages).toEqual([]);
     });
 
@@ -147,7 +147,7 @@ describe('the entry check (`confirmTask`)', () => {
         const id = idOf(session, 'A');
         contents.set(FILE, OUTSIDE);
 
-        expect(await session.index.confirmTask(id)).toBe(false);
+        expect(await session.ops.confirmTask(id)).toBe(false);
 
         expect(Notice.messages).toEqual([readAgain('A')]);
         expect(session.index.getTask(idOf(session, 'A'))?.line).toBe(1);
@@ -159,10 +159,10 @@ describe('a row named by its anchor (`freshByAnchor`)', () => {
         const { contents, session } = await open(['- [ ] A ^keep', '- [ ] A', '']);
         contents.set(FILE, ['メモ', '- [ ] A', '- [ ] A ^keep', ''].join('\n'));
 
-        const found = await session.index.freshByAnchor(FILE, 'keep');
+        const found = await session.ops.freshByAnchor(FILE, 'keep');
         const row = rowOf(found);
         expect(row?.line).toBe(2);
-        expect(await session.index.updateTask(row!.id, { statusChar: 'x' })).toBe(true);
+        expect(await session.ops.updateTask(row!.id, { statusChar: 'x' })).toBe(true);
 
         expect(contents.get(FILE)).toBe(['メモ', '- [ ] A', '- [x] A ^keep', ''].join('\n'));
         expect(Notice.messages).toEqual([]);
@@ -174,7 +174,7 @@ describe('a row named by its anchor (`freshByAnchor`)', () => {
         const edited = ['- [ ] A', '- [ ] A ^keep', ''].join('\n');
         contents.set(FILE, edited);
 
-        expect(await session.index.updateTask(twin, { statusChar: 'x' })).toBe(false);
+        expect(await session.ops.updateTask(twin, { statusChar: 'x' })).toBe(false);
 
         expect(contents.get(FILE)).toBe(edited);
         expect(Notice.messages).toEqual([readAgain('A')]);
@@ -184,25 +184,25 @@ describe('a row named by its anchor (`freshByAnchor`)', () => {
         const { contents, session } = await open(['- [ ] A ^keep', '']);
         contents.set(FILE, ['- [ ] A', ''].join('\n'));
 
-        expect(await session.index.freshByAnchor(FILE, 'keep')).toEqual({ kind: 'none' });
+        expect(await session.ops.freshByAnchor(FILE, 'keep')).toEqual({ kind: 'none' });
     });
 
     it('a note that cannot be read for a moment is not a note without the row: it answers unreadable, and tells the user nothing', async () => {
         const { session } = await open(['- [ ] A ^keep', '']);
         vi.spyOn(session.app.vault, 'read').mockRejectedValueOnce(Object.assign(new Error('EBUSY'), { code: 'EBUSY' }));
 
-        expect(await session.index.freshByAnchor(FILE, 'keep')).toEqual({ kind: 'unreadable' });
+        expect(await session.ops.freshByAnchor(FILE, 'keep')).toEqual({ kind: 'unreadable' });
         expect(Notice.messages).toEqual([]);
         expect(lines()).toContain(`[ReadingCheck] unreadable file=${FILE} subject=^keep`);
 
-        expect(rowOf(await session.index.freshByAnchor(FILE, 'keep'))?.content).toBe('A');
+        expect(rowOf(await session.ops.freshByAnchor(FILE, 'keep'))?.content).toBe('A');
     });
 
     it('a note the index has not read yet is read, and logged as not read, not as stale', async () => {
         const contents = new Map([[FILE, ['- [ ] A ^keep', ''].join('\n')]]);
         live = vaultSession(contents);
 
-        expect(rowOf(await live.index.freshByAnchor(FILE, 'keep'))?.content).toBe('A');
+        expect(rowOf(await live.ops.freshByAnchor(FILE, 'keep'))?.content).toBe('A');
         expect(lines().some(line => line.startsWith('[ReadingCheck] stale'))).toBe(false);
         expect(lines()).toContain(`[ReadingCheck] unread file=${FILE} subject=^keep`);
     });

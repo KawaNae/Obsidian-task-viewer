@@ -66,7 +66,7 @@ async function open(lines: string[]): Promise<Opened> {
     return {
         contents,
         session,
-        editor: editorSession(session.index.editorFireHost(), FILE, contents.get(FILE)!),
+        editor: editorSession(session.ops.editorFireHost(), FILE, contents.get(FILE)!),
         fired,
         writes: () => writes,
         fromOutside: async (next: string[]) => {
@@ -170,7 +170,7 @@ describe('rows that read alike (N2, Q2)', () => {
         const note = await open(['# note', WEEKLY, WEEKLY, '']);
         const [, second] = note.session.index.getTasks().sort((a, b) => a.line - b.line);
 
-        expect(await note.session.index.updateTask(second.id, { statusChar: 'x' })).toBe(true);
+        expect(await note.session.ops.updateTask(second.id, { statusChar: 'x' })).toBe(true);
         await note.session.flowSettled(FILE);
 
         expect(note.fired).toEqual(['週報']);
@@ -184,7 +184,7 @@ describe('a card\'s completion', () => {
     it('writes the check and the fire in one write, and fires once', async () => {
         const note = await open(['# note', WEEKLY, '- [ ] U', '']);
 
-        expect(await note.session.index.updateTask(note.idOf('週報'), { statusChar: 'x' })).toBe(true);
+        expect(await note.session.ops.updateTask(note.idOf('週報'), { statusChar: 'x' })).toBe(true);
         await note.session.flowSettled(FILE);
 
         expect(note.writes()).toBe(1);
@@ -197,9 +197,9 @@ describe('a card\'s completion', () => {
     it('fires nothing for a write that does not complete the row: a completed row edited, or given another complete status', async () => {
         const note = await open(['# note', WEEKLY.replace('[ ]', '[x]'), '']);
 
-        expect(await note.session.index.updateTask(note.idOf('週報'), { color: 'ff0000' })).toBe(true);
+        expect(await note.session.ops.updateTask(note.idOf('週報'), { color: 'ff0000' })).toBe(true);
         await note.session.flowSettled(FILE);
-        expect(await note.session.index.updateTask(note.idOf('週報'), { statusChar: '-' })).toBe(true);
+        expect(await note.session.ops.updateTask(note.idOf('週報'), { statusChar: '-' })).toBe(true);
         await note.session.flowSettled(FILE);
 
         expect(note.fired).toEqual([]);
@@ -209,7 +209,7 @@ describe('a card\'s completion', () => {
     it('fires nothing for a status that is not complete', async () => {
         const note = await open(['# note', WEEKLY, '']);
 
-        await note.session.index.updateTask(note.idOf('週報'), { statusChar: '/' });
+        await note.session.ops.updateTask(note.idOf('週報'), { statusChar: '/' });
         await note.session.flowSettled(FILE);
 
         expect(note.fired).toEqual([]);
@@ -224,8 +224,8 @@ describe('a card\'s completion', () => {
         const id = note.idOf('T');
         note.session.holdScans();
 
-        expect(await note.session.index.updateTask(id, { statusChar: 'x' })).toBe(true);
-        expect(await note.session.index.updateTask(id, { content: 'T2' })).toBe(true);
+        expect(await note.session.ops.updateTask(id, { statusChar: 'x' })).toBe(true);
+        expect(await note.session.ops.updateTask(id, { content: 'T2' })).toBe(true);
 
         expect(note.fired).toEqual([]);
         expect(note.contents.get(FILE)!.split('\n')).toEqual([
@@ -253,7 +253,7 @@ describe('the editor menu\'s rewrite of a line, written to the file when the edi
     it('fires once when it completes the line, in the same write', async () => {
         const note = await open(['# note', WEEKLY, '']);
 
-        expect(await note.session.index.writeLine(FILE, editorRow(1, WEEKLY, contentKeyOf(['# note', WEEKLY, ''])), [{ kind: 'update', text: WEEKLY.replace('[ ]', '[x]') }])).toBe(true);
+        expect(await note.session.ops.writeLine(FILE, editorRow(1, WEEKLY, contentKeyOf(['# note', WEEKLY, ''])), [{ kind: 'update', text: WEEKLY.replace('[ ]', '[x]') }])).toBe(true);
 
         expect(note.writes()).toBe(1);
         expect(note.fired).toEqual(['週報']);
@@ -264,7 +264,7 @@ describe('the editor menu\'s rewrite of a line, written to the file when the edi
         const checked = WEEKLY.replace('[ ]', '[x]');
         const note = await open(['# note', checked, '']);
 
-        expect(await note.session.index.writeLine(FILE, editorRow(1, checked, contentKeyOf(['# note', checked, ''])), [{ kind: 'update', text: checked.replace('[x]', '[-]') }])).toBe(true);
+        expect(await note.session.ops.writeLine(FILE, editorRow(1, checked, contentKeyOf(['# note', checked, ''])), [{ kind: 'update', text: checked.replace('[x]', '[-]') }])).toBe(true);
 
         expect(note.fired).toEqual([]);
     });
@@ -272,11 +272,11 @@ describe('the editor menu\'s rewrite of a line, written to the file when the edi
     it('moves the line within the note, in the file, when the editor closed before the menu wrote', async () => {
         const lines = ['# note', '- [ ] T @2026-09-21 ==> move([[#Done]])', '\t- [ ] c', '- [ ] U', '## Done', ''];
         const { contents, session } = await openLiveVault({ [FILE]: lines }, s => { live = s; });
-        const editor = editorSession(session.index.editorFireHost(), FILE, lines.join('\n'));
+        const editor = editorSession(session.ops.editorFireHost(), FILE, lines.join('\n'));
         const at = editorRow(1, lines[1], keyOf(editor.state.doc));
         editor.close();
 
-        expect(await writeEditorLine(editor.handle, FILE, at, [{ kind: 'update', text: lines[1].replace('[ ]', '[x]') }], session.index.editorLineHost())).toBe(true);
+        expect(await writeEditorLine(editor.handle, FILE, at, [{ kind: 'update', text: lines[1].replace('[ ]', '[x]') }], session.ops.editorLineHost())).toBe(true);
 
         expect(contents.get(FILE)).toBe(['# note', '- [ ] U', '## Done', '- [x] T @2026-09-21', '\t- [ ] c', ''].join('\n'));
         expect(editor.lines()).toEqual(lines);
@@ -285,7 +285,7 @@ describe('the editor menu\'s rewrite of a line, written to the file when the edi
 });
 
 describe('the editor menu\'s rewrite of a line, in the editor', () => {
-    const host = (session: VaultSession) => session.index.editorLineHost();
+    const host = (session: VaultSession) => session.ops.editorLineHost();
 
     it('fires once, in the transaction the menu made, a step of its own to undo, and writes nothing to the file', async () => {
         const note = await open(['# note', WEEKLY, '']);
@@ -327,7 +327,7 @@ describe('readings of a flow\'s own writes (R3, F-b, L, F-a)', () => {
 
     it('fire nothing after a card\'s completion either', async () => {
         const note = await open(['# note', WEEKLY, '- [ ] U', '']);
-        await note.session.index.updateTask(note.idOf('週報'), { statusChar: 'x' });
+        await note.session.ops.updateTask(note.idOf('週報'), { statusChar: 'x' });
         await note.session.flowSettled(FILE);
         const written = note.contents.get(FILE)!.split('\n');
 
@@ -392,7 +392,7 @@ describe('a copy of a parent that holds a completed row (counterexample 3)', () 
     it('fires nothing', async () => {
         const note = await open(['# note', '- [ ] 親 @2026-09-21', '\t' + WEEKLY.replace('[ ]', '[x]'), '']);
 
-        expect(await note.session.index.duplicateTask(note.idOf('親'), { dayOffset: 1 })).toBe(true);
+        expect(await note.session.ops.duplicateTask(note.idOf('親'), { dayOffset: 1 })).toBe(true);
         await note.session.flowSettled(FILE);
 
         expect(note.contents.get(FILE)!.split('\n').filter(line => line.includes('[x] 週報'))).toHaveLength(2);

@@ -65,7 +65,7 @@ export async function checkCopy(deps: CheckDeps, task: ReadCopy): Promise<CopyCh
 
 /**
  * Whether the index's last reading of `path` is the file on disk: the check
- * for a row looked up by its anchor (`TaskIndex.freshByAnchor`), which looks
+ * for a row looked up by its anchor (`Operations.freshByAnchor`), which looks
  * in the last reading, whichever it is. A file the index has not read yet is
  * `unread`, not `stale`: no notice was missed for it.
  */

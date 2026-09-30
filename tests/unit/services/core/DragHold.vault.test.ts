@@ -3,7 +3,6 @@ import { Notice } from 'obsidian';
 import { openVault } from '../../helpers/vaultSession';
 import { TaskApi } from '../../../../src/api/TaskApi';
 import { TaskReadService } from '../../../../src/services/data/TaskReadService';
-import { TaskWriteService } from '../../../../src/services/data/TaskWriteService';
 
 /**
  * While a file is dragged, no reading of it is taken into the store, whoever
@@ -34,7 +33,7 @@ async function replay(drag: boolean, dupBy: 'anchor' | 'name') {
             app: session.app,
             settings: { startHour: 0 },
             getTaskReadService: () => new TaskReadService(session.index, 0),
-            getTaskWriteService: () => new TaskWriteService(session.index),
+            getOperations: () => session.ops,
         };
         const api = new TaskApi(plugin as never);
         const byLine = new Map(session.index.getTasks().filter(t => t.file === FILE).map(t => [t.line, t.id]));
@@ -43,10 +42,10 @@ async function replay(drag: boolean, dupBy: 'anchor' | 'name') {
         const steps: unknown[] = [];
         steps.push(['delete', Boolean((await api.delete({ id: byLine.get(2)! })).deleted)]);
         // Its row went with the delete: refused, and the file is asked to be read again.
-        steps.push(['update-gone', await session.index.updateTask(byLine.get(3)!, { startDate: '2026-09-15' })]);
+        steps.push(['update-gone', await session.ops.updateTask(byLine.get(3)!, { startDate: '2026-09-15' })]);
         if (dupBy === 'anchor') steps.push(['duplicate', Boolean((await api.duplicate({ id: `${FILE}#^dd` })).duplicated)]);
-        else steps.push(['duplicate', await session.index.duplicateTask(byLine.get(5)!)]);
-        steps.push(['update-child', await session.index.updateTask(byLine.get(6)!, { startDate: '2026-09-16' })]);
+        else steps.push(['duplicate', await session.ops.duplicateTask(byLine.get(5)!)]);
+        steps.push(['update-child', await session.ops.updateTask(byLine.get(6)!, { startDate: '2026-09-16' })]);
         const during = session.index.getTasks().filter(t => t.file === FILE).map(t => t.originalText).sort();
         if (drag) session.index.setDraggingFile(null);
         await session.settle(FILE);

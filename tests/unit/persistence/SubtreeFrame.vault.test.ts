@@ -30,7 +30,7 @@ async function open(lines: string[], config?: Record<string, unknown>) {
             if (!opening.open) throw new Error('shut');
             const check = opening.frame.check(edit(opening.frame));
             if (check.kind !== 'write') return check;
-            const answer = await session.index.replaceSubtree(id, base, check.replacement);
+            const answer = await session.ops.replaceSubtree(id, base, check.replacement);
             await session.flowSettled(FILE);
             return answer;
         },

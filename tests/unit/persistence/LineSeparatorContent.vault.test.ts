@@ -45,7 +45,7 @@ describe('content holding U+2028 or U+2029', () => {
             const id = only(session, 'X').id;
             const value = `A${sep}B`;
 
-            expect(await session.index.updateTask(id, { content: value })).toBe(true);
+            expect(await session.ops.updateTask(id, { content: value })).toBe(true);
             await session.settle(FILE);
 
             expect(contents.get(FILE)!.split('\n')[1]).toBe(`- [ ] A${sep}B @2026-09-21 ==> every 1d`);
@@ -56,7 +56,7 @@ describe('content holding U+2028 or U+2029', () => {
 
             // And it stays a task a later write finds, whose command still
             // fires: the next instance carries the same value.
-            expect(await session.index.updateTask(id, { statusChar: 'x' })).toBe(true);
+            expect(await session.ops.updateTask(id, { statusChar: 'x' })).toBe(true);
             await vi.waitFor(() => expect(session.index.getTasks().filter(task => task.content === value)).toHaveLength(2));
             await session.settle(FILE);
             const rows = session.index.getTasks().filter(task => task.content === value);
@@ -69,7 +69,7 @@ describe('content holding U+2028 or U+2029', () => {
     it('is created as a task that scans back with the same value', async () => {
         const { session } = await open(['# note', '- [ ] Y', '']);
 
-        await session.index.createTask(FILE, `- [ ] A${LS}B`);
+        await session.ops.createTask(FILE, `- [ ] A${LS}B`);
         await session.settle(FILE);
 
         expect(session.index.getTasks().map(task => task.content)).toEqual(['Y', `A${LS}B`]);
@@ -79,7 +79,7 @@ describe('content holding U+2028 or U+2029', () => {
         const note = ['# note', '- [ ] A @2026-09-21', `\t- ==> every 1d setContent("x${LS}y")`, ''];
         const { contents, session } = await open(note);
 
-        expect(await session.index.updateTask(only(session, 'A').id, { statusChar: 'x' })).toBe(true);
+        expect(await session.ops.updateTask(only(session, 'A').id, { statusChar: 'x' })).toBe(true);
         await session.settle(FILE);
 
         expect(Notice.messages).toEqual([]);

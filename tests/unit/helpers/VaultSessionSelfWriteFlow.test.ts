@@ -37,7 +37,7 @@ describe("vaultSession: a flow's own writes", () => {
         const weekly = session.index.getTasks().find(t => t.content === '週報')!;
 
         const fires = countFires(session);
-        await session.index.updateTask(weekly.id, { statusChar: 'x' });
+        await session.ops.updateTask(weekly.id, { statusChar: 'x' });
         expect(contents.get(FILE)!.split('\n').filter(l => l.trim())).toEqual([
             '- [ ] 週報 @2026-09-28 ==> every mon',
             '- [x] 週報 @2026-09-21',
@@ -58,7 +58,7 @@ describe("vaultSession: a flow's own writes", () => {
 
         vi.useFakeTimers();
         try {
-            await session.index.updateTask(weekly.id, { statusChar: 'x' });
+            await session.ops.updateTask(weekly.id, { statusChar: 'x' });
             await vi.advanceTimersByTimeAsync(1500);
             const settled = contents.get(FILE);
 

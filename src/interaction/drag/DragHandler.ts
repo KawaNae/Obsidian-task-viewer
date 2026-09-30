@@ -1,5 +1,5 @@
 import type { TaskReadService } from '../../services/data/TaskReadService';
-import type { TaskWriteService } from '../../services/data/TaskWriteService';
+import type { Operations } from '../../services/operations/Operations';
 import type { PluginContext } from '../../PluginContext';
 import type { SelectionController } from '../selection/SelectionController';
 import type { DragContext } from './DragStrategy';
@@ -15,7 +15,7 @@ import { DragSession } from './DragSession';
  *   3. View からもらった依存を `DragContext` 1 つに束ねて Router/Session に注入
  *
  * pointerdown の解析 / Strategy 生成は `DragRouter`、active gesture の
- * lifecycle (start/move/up + writeService 通知) は `DragSession` に委譲。
+ * lifecycle (start/move/up、行の確認とドラッグの保留) は `DragSession` に委譲。
  */
 export class DragHandler {
     private readonly context: DragContext;
@@ -34,7 +34,7 @@ export class DragHandler {
     constructor(
         private readonly container: HTMLElement,
         readService: TaskReadService,
-        writeService: TaskWriteService,
+        operations: Operations,
         plugin: PluginContext,
         selectionController: SelectionController,
         onTaskClick: (taskId: string) => void,
@@ -45,7 +45,7 @@ export class DragHandler {
         this.context = {
             container,
             readService,
-            writeService,
+            operations,
             plugin,
             selectionController,
             onTaskClick,
@@ -54,7 +54,7 @@ export class DragHandler {
             getViewEndDate,
             getZoomLevel,
         };
-        this.session = new DragSession(this.context, container, writeService);
+        this.session = new DragSession(this.context, container, operations, plugin.getIndex());
         this.router = new DragRouter(this.context, this.session, container);
 
         this.boundPointerDown = this.onPointerDown.bind(this);

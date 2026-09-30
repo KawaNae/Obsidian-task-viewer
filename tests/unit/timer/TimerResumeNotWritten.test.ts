@@ -36,7 +36,7 @@ function lifecycleOver(s: VaultSession) {
     // 書かずに true を返す形（TimerContentBinding.drain）を避けて、ここで見たい
     // 再開の取り消しだけを見るため。下書きは timer.pendingContent が運ぶ。
     const flushName = (timer: TimerInstance) => new TimerContentBinding({
-        recorder: s.recorder, plugin: { getTaskIndex: () => s.index }, persistTimersToStorage: () => { },
+        recorder: s.recorder, plugin: { getIndex: () => s.index, getOperations: () => s.ops }, persistTimersToStorage: () => { },
     } as unknown as TimerContext).flush(timer);
     (ctx as unknown as { flushTimerContent: (id: string) => Promise<boolean> }).flushTimerContent =
         async (id: string) => flushName(ctx.timers.get(id)!);

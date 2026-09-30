@@ -1,8 +1,8 @@
 import type { App, Component, Plugin, PluginManifest } from 'obsidian';
 import type { TaskViewerSettings } from './types';
-import type { TaskIndex } from './services/core/TaskIndex';
+import type { IndexReads } from './services/core/TaskIndex';
 import type { TaskReadService } from './services/data/TaskReadService';
-import type { TaskWriteService } from './services/data/TaskWriteService';
+import type { Operations } from './services/operations/Operations';
 import type { NoteOps } from './services/data/NoteOps';
 import type { MenuPresenter } from './interaction/menu/MenuPresenter';
 import type { LogManager } from './log/log-manager';
@@ -61,9 +61,11 @@ export interface PluginContext {
 
     readonly menuPresenter: MenuPresenter;
 
-    getTaskIndex(): TaskIndex;
+    /** The index as the read side sees it: its copies, its changes, the drag's hold. It writes nothing. */
+    getIndex(): IndexReads;
     getTaskReadService(): TaskReadService;
-    getTaskWriteService(): TaskWriteService;
+    /** The operations on the notes: the one way to write (`Operations`). */
+    getOperations(): Operations;
     /** The operations on notes: sending rows to a note (`NoteOps`). */
     getNoteOps(): NoteOps;
     getLogManager(): LogManager | null;

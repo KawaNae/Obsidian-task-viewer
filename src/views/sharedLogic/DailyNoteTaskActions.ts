@@ -64,7 +64,7 @@ export function openCreateTaskForDailyNote(
                 date,
                 taskLine,
                 Destination.taskSection(plugin.settings),
-                plugin.getTaskWriteService().writeChannel,
+                plugin.getOperations().writeChannel,
             );
         },
         seed,

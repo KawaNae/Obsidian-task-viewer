@@ -57,7 +57,7 @@ function makeHarness(options: { tail?: Task | undefined } = {}): Harness {
         timers: new Map([[timer.id, timer]]),
         recorder: { tailInIndex: () => tail, resolveTailRecord: async () => (tail ? { kind: 'row' as const, task: tail } : { kind: 'none' as const }) },
         plugin: {
-            getTaskIndex: () => ({
+            getOperations: () => ({
                 updateTask: async (id: string, u: Record<string, unknown>) => {
                     updates.push({ id, updates: u });
                     // 書いた値は行に載る（次の比較の対象になる）。

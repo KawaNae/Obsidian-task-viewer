@@ -1,45 +1,19 @@
-import { type App, type EventRef, Notice, TFile } from 'obsidian';
-import { t } from '../../i18n';
-import type { DuplicateOptions, Task, TaskViewerSettings } from '../../types';
-import { isTvInline } from '../../types';
-import { TaskRepository } from '../persistence/TaskRepository';
-import { PropertyUpdatePlanner } from '../persistence/PropertyUpdatePlanner';
-import { FlowExecutor, type FireOp, notRunOf } from '../flow/FlowExecutor';
-import { completes } from '../flow/FlowTrigger';
-import type { EditorFireHost } from '../../editor/FlowFireExtension';
-import type { EditorLineHost } from '../../editor/EditorWrite';
-import type { FlowDeleteAssessment } from '../flow/FlowDeletion';
+import { type App, type EventRef, TFile } from 'obsidian';
+import type { Task, TaskViewerSettings } from '../../types';
 import { TaskStore } from './TaskStore';
 import { TaskScanner } from './TaskScanner';
-import { refusalNotice, type IndexRefusal } from './RefusalClause';
+import type { IndexRefusal } from './RefusalClause';
 import { NotifyCoalescer, type ChangeListener } from './NotifyCoalescer';
-import { readName } from './RowNames';
-import { formatRow } from '../parsing/TaskLineFormat';
 import { lineParsersFingerprint } from '../parsing/TaskParser';
-import { planDuplicate } from './DuplicateShift';
 import type { GenBlock } from '../parsing/gen/GenBlockCollector';
-import { isReadCopy, plannedOn, subjectOf, type ReadCopy } from '../persistence/TaskRefs';
-import { logDebug, logError, logInfo, logWarn } from '../../log/log';
-import { readInLine, splitLines, type Landing, type Refusal, type RowRef } from '../persistence/FileLines';
-import type { FiringOutcome, InsertPlace, SubtreeReplacement, TaskOp } from '../persistence/TaskOps';
-import { Destination, type Section } from '../persistence/Destination';
-import { Block } from '../persistence/utils/Placement';
-import type { SendTo } from '../persistence/writers/SendWriter';
+import { logError, logInfo, logWarn } from '../../log/log';
+import { readInLine, type Landing, type ReadMark } from '../persistence/FileLines';
+import type { ReadCopy } from '../persistence/TaskRefs';
 import type { ContentKey } from './ContentKey';
-import { checkCopy, checkFile, type CheckDeps, type OnDisk } from './ReadingCheck';
+import type { ReadingId } from './Reading';
+import { checkCopy, checkFile, type CheckDeps, type Checked, type CopyChecked } from './ReadingCheck';
 import { DiskReconciler } from './DiskReconciler';
-import { outermostRows } from '../persistence/writers/SendRows';
 import { diskProbeOf, type DiskProbe } from './DiskProbe';
-
-/**
- * A row looked up by its anchor in a reading of the note as the disk holds it
- * (`TaskIndex.freshByAnchor`): the row, no row carrying the anchor, or a note
- * that could not be read — which says nothing of whether the row is there.
- */
-export type AnchoredRow =
-    | { kind: 'row'; task: Task }
-    | { kind: 'none' }
-    | { kind: 'unreadable' };
 
 /** How the index's reconciler meets the host (`DiskReconciler`). */
 export interface ReconcileOptions {
@@ -54,60 +28,46 @@ export interface ReconcileOptions {
 }
 
 /**
- * A row a send takes (`TaskIndex.send`): its id, the row and its subtree as
- * the send's dialog was opened on them (`Task.subtreeLines`), which the write
- * is checked against, and the draft the user wrote of them there
- * (`SubtreeFrame.check`'s `write`), if any.
+ * What the read side asks of the index (`PluginContext.getIndex`): the
+ * copies of the last readings and how to look them up, when what it holds
+ * changed, and holding a note's readings back while it is dragged. No method
+ * writes a note: a write is an operation (`Operations`).
  */
-export interface SendRow {
-    taskId: string;
-    base: readonly string[];
-    draft?: SubtreeReplacement;
+export interface IndexReads {
+    /** Current store revision number (incremented on every change of what the index holds). */
+    getRevision(): number;
+    getTasks(): Task[];
+    /** The copy of the row `taskId` names, followed across our own writes (`TaskIndex.getTask`). */
+    getTask(taskId: string): Task | undefined;
+    /** The copy of the row `anchor` anchors in `filePath`'s last reading (`TaskIndex.getTaskByAnchor`). */
+    getTaskByAnchor(filePath: string, anchor: string): Task | undefined;
+    getGenBlock(filePath: string, name: string): GenBlock | undefined;
+    getTaskByFileLine(filePath: string, line: number): Task | undefined;
+    /** The task on a line an editor shows, in the content it shows (`TaskIndex.taskAtEditorLine`). */
+    taskAtEditorLine(filePath: string, line: number, key: ContentKey): Task | undefined | null;
+    onChange(callback: ChangeListener): () => void;
+    /** Have the index read `file` now, and wait until it has. */
+    requestScan(file: TFile): Promise<void>;
+    /** Tell every listener now (`TaskIndex.notifyImmediate`). */
+    notifyImmediate(): void;
+    /** Hold the dragged note's readings back, or let them in (`TaskIndex.setDraggingFile`). */
+    setDraggingFile(filePath: string | null): Promise<void>;
 }
 
 /**
- * What came of a send (`TaskIndex.send`): the note written, what the send
- * was about in the user's words (the first row's text), the notes
- * whose rows went there (`landed`), and the refusals of the notes whose rows
- * stayed where they stood, not told the user (`refused`), and whether what
- * went of those was taken out of the note again (`takenBack`; the note
- * taken away or written back as it was when no row went); or nothing
- * written, and why — told the user unless the caller asked not to — or
- * `refused: null` for a send its caller asked wrongly, said only in the log.
+ * The index: the copies of the last reading of each note, how to look them
+ * up by name and by anchor, whether a copy is still what the disk holds, and
+ * the one telling of a change to what it holds (structure/layers.md).
+ *
+ * The copies are written by the scan and by what a write of ours left
+ * (`landed`), nothing else. The operations (`Operations`) read the index and
+ * hand it what their writes left; the index knows nothing of them.
  */
-export type SendWrite =
-    | { kind: 'done'; note: TFile; subject: string; landed: readonly string[]; refused: readonly Refusal[]; takenBack: boolean }
-    | { kind: 'not-done'; refused: IndexRefusal | null };
-
-/** A row as the index read it, and the note's lines it was read in (`TaskIndex.rowSnapshot`). */
-export interface RowSnapshot {
-    task: Task;
-    lines: readonly string[];
-}
-
-/**
- * TaskIndex - タスク管理の統括ファサードクラス
- * 各種サービス（Store, Scanner, Validator, Repository, FlowExecutor）を統合
- */
-export class TaskIndex {
+export class TaskIndex implements IndexReads {
     private store: TaskStore;
     private scanner: TaskScanner;
-    private repository: TaskRepository;
-    private commandExecutor: FlowExecutor;
     private settings: TaskViewerSettings;
     private parseFingerprint: string;
-
-    /**
-     * `dispose` 済みか。閉じたあとの書き込みは行わず、できなかったと答える。
-     *
-     * reload 後も開いたままのハブが旧インスタンスの書き込み経路を握っていて、
-     * 古い内容で行を上書きしていた（#165）。購読を切るだけでは、既に参照を
-     * 持っている相手からの呼び出しは止まらない。
-     */
-    private disposed = false;
-
-    /** The writes asked of each row, in order (see {@link onRow}). */
-    private rowWrites?: Map<string, Promise<unknown>>;
 
     /**
      * The index's listeners, and the one way they are told: once a frame
@@ -121,11 +81,9 @@ export class TaskIndex {
      * it.
      *
      * Held because a subscription outlives the object that made it. An index
-     * left listening after the plugin unloads keeps its own scanner and its own
-     * flow executor, and the next load adds a second set: one file change is
-     * then processed twice, and, while completions were read off the scans, a
-     * completed command generated its next instance once per surviving
-     * listener. That is what an update without a restart used to look like.
+     * left listening after the plugin unloads keeps its own scanner, and the
+     * next load adds a second: one file change is then processed twice. That
+     * is what an update without a restart used to look like.
      */
     private eventRefs: { emitter: { offref(ref: EventRef): void }; ref: EventRef }[] = [];
 
@@ -143,23 +101,8 @@ export class TaskIndex {
         this.settings = settings;
         this.parseFingerprint = computeParseFingerprint(settings);
 
-        // サービスの初期化
         this.store = new TaskStore();
-        this.repository = new TaskRepository(app);
-        // Settings getter (not a snapshot): updateSettings replaces the
-        // settings object, and trigger judgment must always see the latest
-        // statusDefinitions.
-        this.commandExecutor = new FlowExecutor(this.repository, this, app, () => this.settings);
         this.scanner = new TaskScanner(app, this.store, settings);
-        // Connected here rather than built into the repository, because the
-        // scanner does not exist when the repository does — and cut on dispose,
-        // so a write that outlives this index lands nothing in it (see WriteChannels).
-        this.repository.connect((path) => ({
-            landed: landing => this.landed(path, landing),
-            refused: refusal => { void this.reportRefusal(refusal); },
-            follow: (read, line, now) => this.scanner.followLine(path, read, line, now),
-            reading: () => this.scanner.readingOf(path),
-        }));
         this.checks = {
             read: (path) => {
                 const file = app.vault.getAbstractFileByPath(path);
@@ -181,10 +124,6 @@ export class TaskIndex {
             win: typeof window === 'undefined' ? undefined : window,
             isOwnView: reconcile.isOwnView ?? (() => false),
         });
-    }
-
-    getRepository(): TaskRepository {
-        return this.repository;
     }
 
     async initialize(): Promise<void> {
@@ -271,27 +210,28 @@ export class TaskIndex {
     }
 
     /**
-     * 閉じたあとの書き込みを断る。
-     *
-     * 購読を切っても、既にこの index の参照を持っている相手（reload 前から
-     * 開いているハブ、走行中のタイマー）からの呼び出しは止まらない。断った
-     * ことはログに残す — 黙って捨てると、書いたつもりの側が気づけない。
-     */
-    private refuseAfterDispose(operation: string): boolean {
-        if (!this.disposed) return false;
-        logWarn(`[TaskIndex] refused after dispose: ${operation}`);
-        return true;
-    }
-
-    /**
      * A write of ours landed in `path`: the index reads what it left now,
      * rather than when the scan its `modify` starts gets there, so the next
      * operation plans from the file as it is. For the file being dragged the
      * reading is held back like any other of it (`TaskScanner.hold`); the
      * write's report is kept all the same, to follow names across it.
      */
-    private landed(path: string, landing: Landing): void {
+    landed(path: string, landing: Landing): void {
         if (this.scanner.landed(path, landing)) this.notify.schedule();
+    }
+
+    /**
+     * Where line `line` of reading `read` of `path` stands in content `now`,
+     * across our own writes (`TaskScanner.followLine`): what a write asks of
+     * the row it was planned on (`WriteChannel.follow`).
+     */
+    followLine(path: string, read: ReadingId, line: number, now: ContentKey): number | null {
+        return this.scanner.followLine(path, read, line, now);
+    }
+
+    /** The index's last reading of `path` (`WriteChannel.reading`). */
+    readingOf(path: string): ReadMark {
+        return this.scanner.readingOf(path);
     }
 
     /**
@@ -371,10 +311,8 @@ export class TaskIndex {
      * already working on.
      */
     dispose(): void {
-        this.disposed = true;
         for (const { emitter, ref } of this.eventRefs) emitter.offref(ref);
         this.eventRefs = [];
-        this.repository.disconnect();
         this.reconciler?.dispose();
 
         this.notify.dispose();
@@ -461,618 +399,25 @@ export class TaskIndex {
         return this.scanner.requestScan(file);
     }
 
-    // ===== CRUD操作 =====
+    // ===== 読みの鮮度（操作が問う） =====
 
     /**
-     * Rewrite the row `taskId` names with `updates`, in one write of its file.
-     *
-     * The index's copy is not touched: what the write left is the index's
-     * next reading of the file (`landed`), and its notify draws it. A view
-     * that shows the new values before then shows them from its own state
-     * (the hub's draft, the box a click changed), not from the copy.
-     *
-     * @returns whether the file was written. Not written: the user has been
-     * told why, once, and the copy still says what the file says.
+     * Whether the copy is the row on the disk: the note read, and the copy's
+     * line followed to it (`ReadingCheck.checkCopy`). What every operation
+     * that plans from a copy asks first (`Operations.planCopy`).
      */
-    async updateTask(taskId: string, updates: Partial<Task>): Promise<boolean> {
-        if (this.refuseAfterDispose('updateTask')) return false;
-        logInfo(`[updateTask] id=${taskId} fields=[${Object.keys(updates)}]`);
-
-        const known = this.getTask(taskId);
-        return this.onRow(taskId, () => this.writeUpdate(taskId, updates, known));
+    checkCopy(task: ReadCopy): Promise<CopyChecked> {
+        return checkCopy(this.checks, task);
     }
 
-    /** {@link updateTask}, once every write already asked of the row has finished. */
-    private async writeUpdate(taskId: string, updates: Partial<Task>, known: Task | undefined): Promise<boolean> {
-        const task = await this.copyToPlan(taskId, known);
-        if (!task) return false;
-        if (task.isReadOnly) return false;
-
-        // 非時刻プロパティ（color/tags/custom 等）の書き込み操作。写しと更新の
-        // diff から導く。
-        const propertyOps = PropertyUpdatePlanner.plan(task, updates, this.settings.scopeKeys);
-
-        // 書く行は写しに更新を重ねた姿から作る。行の探索は写しで行う:
-        // ファイルに書かれているのは写しの行なので、更新後の日付や時刻で
-        // 探しに行くと、まさにその値を変える更新のときに空振りする。子の
-        // プロパティ行も写しの値から作るので、書き換えるときは部分木も計画が
-        // 読んだものになる。外から足したタグの上に写しのタグを書かない。
-        //
-        // 行を完了させる書き換えは、同じ書き込みでフローを発火させる。完了か
-        // どうかは、書き込みが照合する土台の行と書く行の対で答える
-        // （`completes`）。発火の計画は書き込みの中で、書く行から立てる。
-        const text = formatRow({ ...task, ...updates });
-        const target = plannedOn(task, { subtree: propertyOps.length > 0 });
-        const written = await this.writeCompleting(
-            completes(task.originalText, text, this.settings.statusDefinitions) ? task.file : null,
-            (fire) => this.repository.write(task.file, target, [{ kind: 'update', text, childOps: propertyOps }], { fire }));
-
-        // Not written: the write layer has told the user why (see reportRefusal).
-        if (!written) logWarn(`[TaskIndex] update was not written: id=${taskId} fields=[${Object.keys(updates)}]`);
-        return written;
+    /** Whether the index's last reading of `path` is what the disk holds (`ReadingCheck.checkFile`). */
+    checkFile(path: string): Promise<Checked> {
+        return checkFile(this.checks, path);
     }
 
-    /**
-     * A write that may complete a row (`completingIn`, its file; null when it
-     * does not), made with the row's fire in it: whether it was written. A
-     * write refused with the fire in it is made without it in the same
-     * attempt (`InlineTaskWriter.writeFiring`), and the user told
-     * ({@link tellNotRun}).
-     */
-    private async writeCompleting(
-        completingIn: string | null,
-        write: (fire?: FireOp) => Promise<FiringOutcome<FireOp>>,
-    ): Promise<boolean> {
-        const outcome = await write(completingIn === null ? undefined : this.commandExecutor.fireOp(completingIn));
-        this.tellNotRun(outcome);
-        return outcome.written;
-    }
-
-    /**
-     * Once a write that completed rows landed, tell the user of each row
-     * whose flow was not run, once: its fire was set aside, the write with it
-     * refused, or its plan failed, or it fired without its move
-     * (`FlowExecutor.reportNotRun`). The one word of it for every write of
-     * the index that completes rows.
-     */
-    private tellNotRun(outcome: FiringOutcome<FireOp>): void {
-        if (!outcome.written) return;
-        for (const { fire, setAside } of outcome.fires) {
-            const notRun = setAside ? { kind: 'refused' as const, refusal: setAside } : notRunOf(fire.planned());
-            if (notRun) this.commandExecutor.reportNotRun(notRun);
-        }
-    }
-
-    /**
-     * Write the row `taskId` and its subtree anew from a draft of their text:
-     * the hub's source mode. `base` is the row and its subtree as the draft
-     * was opened on them (the copy's `subtreeLines`), and the write is made
-     * only over a subtree that still reads so; `replacement` is the draft
-     * (`SubtreeReplacement`).
-     *
-     * One write, as every write that names a row: planned from the copy the
-     * index holds once the row's earlier writes are done (`onRow`,
-     * `copyToPlan`), named by the copy's line and reading, and checked against
-     * `base`. A row the write completes — the row, or a child line it keeps
-     * and writes checked — fires in the same write, each on its own
-     * (`InlineTaskWriter.writeFiring`), as the editor fires the rows one
-     * transaction completed; a line the draft made fires nothing, however it
-     * reads.
-     *
-     * @returns whether the draft was written; when not, why not, for the
-     * caller to show beside the draft it keeps. The user is told it as any
-     * refusal is (`reportRefusal`), unless `opts.tellRefusal` is false: the
-     * caller shows it itself, and a notice would say it twice. The index
-     * learns from it either way (`learnFrom`). A read-only row is not
-     * written and answers `refused: null`: the hub does not offer it.
-     */
-    async replaceSubtree(
-        taskId: string,
-        base: readonly string[],
-        replacement: SubtreeReplacement,
-        opts: { tellRefusal?: boolean } = {},
-    ): Promise<{ written: true } | { written: false; refused: IndexRefusal | null }> {
-        if (this.refuseAfterDispose('replaceSubtree')) return { written: false, refused: null };
-        const known = this.getTask(taskId);
-        const hear = opts.tellRefusal === false
-            ? (refusal: IndexRefusal) => this.learnFrom(refusal)
-            : (refusal: IndexRefusal) => this.reportRefusal(refusal);
-        return this.onRow(taskId, async () => {
-            const planned = await this.planCopy(taskId, known, hear);
-            if ('refused' in planned) return { written: false, refused: planned.refused };
-            const { task } = planned;
-            if (task.isReadOnly || base.length === 0) {
-                logWarn(`[TaskIndex] replaceSubtree: not a row to write: id=${taskId}`);
-                return { written: false, refused: null };
-            }
-            logInfo(`[replaceSubtree] id=${taskId} lines=${base.length}->${replacement.children.length + 1}`);
-            const target = { ...plannedOn(task), basis: { text: base[0], subtree: base } };
-            const defs = this.settings.statusDefinitions;
-            const outcome = await this.repository.replaceSubtree(task.file, target, replacement, {
-                completes: (was, now) => completes(was, now, defs),
-                fire: () => this.commandExecutor.fireOp(task.file),
-            }, { refused: (refusal) => { void hear(refusal); } });
-            this.tellNotRun(outcome);
-            return outcome.written ? { written: true } : { written: false, refused: outcome.refused };
-        });
-    }
-
-    /**
-     * Send rows and their subtrees to a section of a note: the send
-     * operation (`NoteOps.send`). Each row is `SendRow`: named by its id,
-     * with the subtree the dialog was opened on (`base`) and the draft the
-     * user wrote of it, if any. `to` is the note, made by the send when
-     * `create` says so, its section, and the keys to write into its
-     * frontmatter where it has none by their name.
-     *
-     * Planned as every write that names a row: once the writes already
-     * asked of each row are done (`onRow`), from copies the disk still reads
-     * as (`planCopy`), each named by its line and checked against its
-     * `base`. A row inside another's subtree goes with that one's subtree
-     * (`outermostRows`), and the rows go in the order they stand, note by
-     * note.
-     *
-     * The write layer makes it (`SendWriter.send`): to the rows' own note,
-     * one write; to another, the note first, then each note the rows came
-     * from, what went taken back again for a note that refused. A refusal
-     * before anything is written is told as for any write. One of a note the
-     * rows came from, once the note is written, is only learnt from
-     * (`learnFrom`) and answered, for the caller to tell once with what
-     * became of the rest.
-     *
-     * @returns `done` once the note is written; else `not-done`, and why.
-     * A refusal before anything is written — a row's copy the disk no longer
-     * reads as (`planCopy`), a note the write turned away — is told the user
-     * as any refusal is (`reportRefusal`), unless `opts.tellRefusal` is
-     * false: the caller shows it itself, and a notice would say it twice.
-     * The index learns from it either way (`learnFrom`). `opts.landed` is
-     * handed each note the rows came from whose write landed, as it lands
-     * (`SendHearing.landed`).
-     */
-    async send(rows: readonly SendRow[], to: SendTo, opts: { tellRefusal?: boolean; landed?: (path: string) => void } = {}): Promise<SendWrite> {
-        if (this.refuseAfterDispose('send')) return { kind: 'not-done', refused: null };
-        const hear = opts.tellRefusal === false
-            ? (refusal: IndexRefusal) => this.learnFrom(refusal)
-            : (refusal: IndexRefusal) => this.reportRefusal(refusal);
-        const asked = new Map<string, SendRow>();
-        for (const row of rows) if (!asked.has(row.taskId)) asked.set(row.taskId, row);
-        const known = new Map([...asked.keys()].map(id => [id, this.getTask(id)]));
-        // Every row's writes queued in one order, so two sends of the same
-        // rows never wait for each other.
-        const ids = [...asked.keys()].sort();
-        return this.onRows(ids, async (): Promise<SendWrite> => {
-            const planned: { task: ReadCopy; row: SendRow }[] = [];
-            for (const id of ids) {
-                const copy = await this.planCopy(id, known.get(id), hear);
-                if ('refused' in copy) return { kind: 'not-done', refused: copy.refused };
-                const row = asked.get(id)!;
-                if (copy.task.isReadOnly || row.base.length === 0) {
-                    logWarn(`[TaskIndex] send: not a row to write: id=${id}`);
-                    return { kind: 'not-done', refused: null };
-                }
-                planned.push({ task: copy.task, row });
-            }
-            const sent = outermostRows(planned);
-            for (const { row } of planned) {
-                if (row.draft && !sent.some(one => one.row === row)) {
-                    logWarn(`[TaskIndex] send: a draft of a row in another's subtree is not written: id=${row.taskId}`);
-                }
-            }
-            if (to.create && sent.some(({ task }) => task.file === to.path)) {
-                logWarn(`[TaskIndex] send: a note to make holds rows already: to=${to.path}`);
-                return { kind: 'not-done', refused: null };
-            }
-            logInfo(`[send] to=${to.path}#${to.section.heading}${to.create ? ' (new)' : ''} rows=${sent.map(({ task }) => task.id).join(',')}`);
-            const defs = this.settings.statusDefinitions;
-            const outcome = await this.repository.send(sent.map(({ task, row }) => ({
-                file: task.file,
-                row: {
-                    target: { ...plannedOn(task), basis: { text: row.base[0], subtree: row.base } },
-                    ...(row.draft ? { draft: row.draft } : {}),
-                },
-            })), to, {
-                completes: (was, now) => completes(was, now, defs),
-                fire: (path) => this.commandExecutor.fireOp(path),
-            }, { refused: (refusal) => { void hear(refusal); }, landed: opts.landed });
-            if (outcome.kind === 'not-sent') return { kind: 'not-done', refused: outcome.refused };
-            for (const write of outcome.writes) this.tellNotRun(write);
-            for (const refusal of outcome.refused) await this.learnFrom(refusal);
-            logInfo(`[send] landed=${outcome.landed.join(',') || '-'} refused=${outcome.refused.map(one => `${one.file}:${one.reason.kind}`).join(',') || '-'} takenBack=${outcome.takenBack}`);
-            return {
-                kind: 'done', note: outcome.note, subject: subjectOf(sent[0].task),
-                landed: outcome.landed, refused: outcome.refused, takenBack: outcome.takenBack,
-            };
-        });
-    }
-
-    /**
-     * The copy of a row an operation is planned from, once it is known to be
-     * the row on the disk; else undefined, and the user told why, once
-     * (`reportRefusal`).
-     *
-     * A row the store no longer holds — an earlier write to it took it away,
-     * or a scan read the file without it — is refused as `gone`, like any
-     * write that finds its row gone. `known` is the copy as the operation was
-     * asked for, to say which row it was. So is a copy that names no reading
-     * (`ReadCopy`): its line is a coordinate in no content a write can check.
-     *
-     * A copy the disk no longer reads as (`checkCopy`: a change the index was
-     * never told of) is not planned from: it is refused as `stale`, the note
-     * is read again, and the user is asked to do it again, from the new
-     * reading (structure/layers.md, 読みの鮮度). Every write that plans from a copy
-     * comes through here, and so do the drag and the card's menu before the
-     * user puts work in (`confirmTask`).
-     */
-    private async copyToPlan(taskId: string, known: Task | undefined): Promise<ReadCopy | undefined> {
-        const planned = await this.planCopy(taskId, known);
-        return 'task' in planned ? planned.task : undefined;
-    }
-
-    /**
-     * {@link copyToPlan}, with why not when the copy is not the row on the
-     * disk: handed to `hear` — told the user and learnt from
-     * (`reportRefusal`), or only learnt from, for a caller that shows it in
-     * a place of its own (the hub's source mode) — and answered too.
-     */
-    private async planCopy(
-        taskId: string,
-        known: Task | undefined,
-        hear: (refusal: IndexRefusal) => Promise<void> = (refusal) => this.reportRefusal(refusal),
-    ): Promise<{ task: ReadCopy; disk: OnDisk } | { refused: IndexRefusal }> {
-        const task = this.getTask(taskId);
-        if (!task) {
-            logWarn(`[TaskIndex] the index no longer holds the row: id=${taskId}`);
-            // A row the caller named but the store never held here: say which
-            // note, as a write refused before it read the note does.
-            const file = known?.file ?? readName(taskId)?.filePath ?? '';
-            const refused: IndexRefusal = { file, reason: { kind: 'gone' }, subject: known ? subjectOf(known) : file };
-            await hear(refused);
-            return { refused };
-        }
-        if (!isReadCopy(task)) {
-            // A copy no reading of the index made: its line is a coordinate
-            // in no content a write can check, so there is no row to write.
-            logWarn(`[TaskIndex] the copy names no reading: id=${taskId}`);
-            const refused: IndexRefusal = { file: task.file, reason: { kind: 'gone' }, subject: subjectOf(task) };
-            await hear(refused);
-            return { refused };
-        }
-        const checked = await checkCopy(this.checks, task);
-        if (checked.verdict === 'fresh') return { task, disk: checked.disk };
-        const reason = checked.verdict === 'stale' ? { kind: 'stale' as const, disk: checked.disk } : { kind: 'unreadable' as const };
-        const refused: IndexRefusal = { file: task.file, reason, subject: subjectOf(task) };
-        await hear(refused);
-        return { refused };
-    }
-
-    /**
-     * Whether the index's copy of the row `taskId` is the row on the disk: a
-     * drag or a card's menu asks as it opens, so the user does not put work
-     * into an operation the write would turn away. When it is not, it has
-     * been told and the note read again (`copyToPlan`). The write asks again
-     * when it is made.
-     */
-    async confirmTask(taskId: string): Promise<boolean> {
-        if (this.refuseAfterDispose('confirmTask')) return false;
-        return (await this.copyToPlan(taskId, undefined)) !== undefined;
-    }
-
-    /**
-     * The index's copy of the row `taskId`, and all the lines of the note it
-     * was read in, as the disk holds them: what an operation that reads more
-     * of the note than the row plans from — the send dialog, the values the
-     * row inherits (`InheritedValues`). The same check as every write's
-     * (`planCopy`), which reads the note for it and keeps what it read.
-     *
-     * Undefined when the copy is not the row on the disk: told the user and
-     * the note read again, as for a write (`stale`, `gone`, `unreadable`).
-     * Undefined too, with nothing to tell, for a copy read before our own
-     * write the index has not committed, as while its note is dragged
-     * (`TaskScanner.hold`): the copy says what the row was, not what these
-     * lines say. Waits for the writes already asked of the row
-     * (`onRow`), so it reads what they left.
-     */
-    async rowSnapshot(taskId: string): Promise<RowSnapshot | undefined> {
-        if (this.refuseAfterDispose('rowSnapshot')) return undefined;
-        const known = this.getTask(taskId);
-        return this.onRow(taskId, async () => {
-            const planned = await this.planCopy(taskId, known);
-            if ('refused' in planned) return undefined;
-            const { task, disk } = planned;
-            if (!disk.read) {
-                logWarn(`[TaskIndex] rowSnapshot: the copy was not read in what the disk holds: id=${taskId}`);
-                return undefined;
-            }
-            return { task, lines: disk.lines };
-        });
-    }
-
-    /**
-     * The row `anchor` anchors in `filePath` (`getTaskByAnchor`), looked up in
-     * a reading of the note as the disk holds it: a note that changed in a
-     * way the index was never told of, or that the index has not read yet,
-     * is read first. For a caller that names its row by `^id` — the API's
-     * `path#^id`, a timer — whose anchor outlives readings, so it goes on
-     * with the row it finds (contract 3), where one that named a reading is
-     * asked to try again. Nothing is told the user here: the caller goes on,
-     * or says why it does not.
-     *
-     * While the note is being dragged (`TaskScanner.hold`), the check is
-     * against the reading held back, and the row comes from the reading the
-     * store has: a change from outside during the drag passes the check here
-     * and the write by that row's name is refused by its own check
-     * (`WriteSession.row`), as any write to the note is until the drag ends.
-     */
-    async freshByAnchor(filePath: string, anchor: string): Promise<AnchoredRow> {
-        const file = this.app.vault.getAbstractFileByPath(filePath);
-        // No note there to read: the index answers as it holds it.
-        if (file instanceof TFile) {
-            const checked = await checkFile(this.checks, filePath);
-            switch (checked.verdict) {
-                case 'fresh':
-                    break;
-                case 'unread':
-                    // Not read yet, as at startup: no change notice was missed.
-                    logDebug(`[ReadingCheck] unread file=${filePath} subject=^${anchor}`);
-                    if (await this.scanner.queueScan(file)) this.notify.schedule();
-                    break;
-                case 'stale':
-                    await this.learnFrom({ file: filePath, reason: { kind: 'stale', disk: checked.disk }, subject: `^${anchor}` });
-                    break;
-                case 'unreadable':
-                    await this.learnFrom({ file: filePath, reason: { kind: 'unreadable' }, subject: `^${anchor}` });
-                    return { kind: 'unreadable' };
-            }
-        }
-        const task = this.getTaskByAnchor(filePath, anchor);
-        return task ? { kind: 'row', task } : { kind: 'none' };
-    }
-
-    /**
-     * Run `op` once every write already asked of this row has finished.
-     *
-     * A write that names a row is planned from the index's copy of it
-     * (`plannedOn`), and the index takes in what a write left only once it has
-     * landed (`landed`). A second write asked
-     * before then — a checkbox clicked twice, which does not wait for the
-     * first — would plan from the copy the first write has already moved on
-     * from, and be refused against our own write. In order, each is planned
-     * from the copy the one before it left.
-     *
-     * Per row, not per file: a write to another row plans from that row's
-     * copy, which this one does not change. A row is one row across the
-     * names our writes give it (`getTask`).
-     */
-    private onRow<T>(taskId: string, op: () => Promise<T>): Promise<T> {
-        const queue = (this.rowWrites ??= new Map<string, Promise<unknown>>());
-        // One row, whatever name it was asked by: a name asked before a write
-        // of ours is followed to the row's name now (`getTask`), so a write
-        // asked by the new name waits for one still under way by the old.
-        const row = this.rowNow(taskId);
-        const before = [...queue].filter(([name]) => name === taskId || this.rowNow(name) === row).map(([, write]) => write);
-        // After the ones before, whether they landed or threw.
-        const previous = Promise.all(before.map(write => write.then(() => undefined, () => undefined)));
-        const next = previous.then(op);
-        queue.set(taskId, next);
-        const settled = () => { if (queue.get(taskId) === next) queue.delete(taskId); };
-        next.then(settled, settled);
-        return next;
-    }
-
-    /** The name the row `taskId` names has now, or `taskId` itself when it names none. */
-    private rowNow(taskId: string): string {
-        return this.getTask(taskId)?.id ?? taskId;
-    }
-
-    /**
-     * {@link onRow} for each of `ids`, nested in their order: `op` runs once
-     * every write already asked of any of them has finished, and each write
-     * asked of one of them after it waits for it. A caller hands the ids in
-     * one order (sorted), so two such operations over the same rows queue
-     * one behind the other and never each wait for the other.
-     */
-    private onRows<T>(ids: readonly string[], op: () => Promise<T>): Promise<T> {
-        return ids.reduceRight<() => Promise<T>>((inner, id) => () => this.onRow(id, inner), op)();
-    }
-
-    /**
-     * What deleting this task would cost its flow command, answered without
-     * writing anything. The delete menu asks before it decides what to offer.
-     */
-    assessFlowDelete(taskId: string): FlowDeleteAssessment {
-        const task = this.getTask(taskId);
-        if (!task) return { outlook: { kind: 'nothing' }, descendantFlows: 0 };
-        return this.commandExecutor.assessDeletion(task);
-    }
-
-    /**
-     * @param options.fireFlow write the command's next instance before
-     * removing this one. A fire that cannot be planned stops the delete —
-     * see {@link FlowExecutor.fireAndDelete} — so the task can survive this
-     * call, with a notice saying why.
-     * @returns whether the task is gone. A stopped fire, a read-only task and
-     * a delete whose lines could not be resolved in the file all answer no.
-     */
-    async deleteTask(taskId: string, options: { fireFlow?: boolean } = {}): Promise<boolean> {
-        if (this.refuseAfterDispose('deleteTask')) return false;
-        const known = this.getTask(taskId);
-        return this.onRow(taskId, () => this.writeDelete(taskId, options, known));
-    }
-
-    /** {@link deleteTask}, once every write already asked of the row has finished. */
-    private async writeDelete(taskId: string, options: { fireFlow?: boolean }, known: Task | undefined): Promise<boolean> {
-        const task = await this.copyToPlan(taskId, known);
-        if (!task) return false;
-        logInfo(`[deleteTask] id=${taskId} fireFlow=${options.fireFlow === true}`);
-        if (task.isReadOnly) return false;
-
-
-        let removed: boolean;
-        if (options.fireFlow && isTvInline(task)) {
-            removed = await this.commandExecutor.fireAndDelete(task);
-        } else {
-            // The row and the subtree the index read (`plannedOn`): a line
-            // written into the subtree since is not taken with it.
-            removed = (await this.repository.write(task.file, plannedOn(task, { subtree: true }), [{ kind: 'remove' }])).written;
-            if (!removed) {
-                // Nothing was written, so no rescan follows and the store
-                // still holds a task the file also still holds. They agree,
-                // and the caller must not report the task gone.
-                logWarn(`[TaskIndex] delete was not written: id=${taskId}`);
-            }
-        }
-
-        return removed;
-    }
-
-    /** @returns whether the copy was written. */
-    async duplicateTask(taskId: string, options?: DuplicateOptions): Promise<boolean> {
-        if (this.refuseAfterDispose('duplicateTask')) return false;
-        const known = this.getTask(taskId);
-        return this.onRow(taskId, async () => {
-            const task = await this.copyToPlan(taskId, known);
-            if (!task) return false;
-            return this.writeDuplicateOf(task, taskId, options);
-        });
-    }
-
-    /** {@link duplicateTask} on the copy the store holds once the row's earlier writes are done. */
-    private async writeDuplicateOf(task: ReadCopy, taskId: string, options?: DuplicateOptions): Promise<boolean> {
-        if (task.isReadOnly) return false;
-
-
-        const written = await this.writeDuplicate(task, options);
-        if (!written) {
-            logWarn(`[TaskIndex] duplicate was not written: id=${taskId}`);
-        }
-
-        return written;
-    }
-
-    /**
-     * The copies a duplicate asks for, planned from the index's copy of the
-     * row (`planDuplicate`: what they say needs the task's dates, which are
-     * resolved at this layer) and put by the write beside the row it names.
-     */
-    private async writeDuplicate(task: ReadCopy, options?: DuplicateOptions): Promise<boolean> {
-        const copies = planDuplicate(task, options, this.settings.startHour);
-        return (await this.repository.write(task.file, plannedOn(task), [copies])).written;
-    }
-
-    /**
-     * @returns the line the task was written on, or null when it was not — a
-     * write that was not has told the user why.
-     */
-    async createTask(filePath: string, taskLine: string, heading?: string): Promise<number | null> {
-        if (this.refuseAfterDispose('createTask')) return null;
-        logInfo(`[createTask] path=${filePath} heading=${heading ?? '(none)'}`);
-
-        // Under a heading, in a note that is there; at the end, in a note
-        // made empty when it is not. The appended text is built with LF;
-        // split here, the note's own terminator goes back between every
-        // line, and the lines are to read as they read by themselves.
-        const outcome = heading
-            ? await this.repository.putInNote(filePath, Destination.sectionNamed(heading, this.settings), Block.line(taskLine))
-            : await this.repository.putInNote(filePath, 'end', Block.read(splitLines(taskLine).lines), { create: () => '' });
-        // What the write left is in the index once it landed (`landed`):
-        // the caller finds the row on its line without waiting for a scan.
-        return outcome.written ? outcome.line : null;
-    }
-
-    /**
-     * A line put in beside the row, where `place` says (`TaskOp` `insert`):
-     * a child at the head of the row's children, added from a card's menu,
-     * the API or the CLI; a timer's first session line or record there, the
-     * next session beside the last one, the first session of a continued run
-     * past the completed siblings. The one insert beside a row. Planned from
-     * the index's copy of the row (`plannedOn`), so written only where the
-     * row the name was read in stands, as every write that names a row is
-     * (`WriteSession.row`): a timer finds the row by its anchor
-     * (`getTaskByAnchor`) and writes by the name that answers. A read-only
-     * row (Tasks, Day Planner) is not written: the menu reaches here without
-     * the API's guard.
-     *
-     * `rowId`, when given, rewrites the row's own `^id` in the same write: a
-     * string puts it on (the target's anchor, on the first session line), null
-     * takes it off (the last session's, once the next one is beside it). Both
-     * land or neither does.
-     *
-     * @returns whether the line was written.
-     */
-    async insertLine(taskId: string, line: string, place: InsertPlace, rowId?: string | null): Promise<boolean> {
-        if (this.refuseAfterDispose('insertLine')) return false;
-        return this.onRow(taskId, async () => {
-            const task = await this.copyToPlan(taskId, undefined);
-            if (!task) return false;
-            if (task.isReadOnly) return false;
-            logInfo(`[insertLine] taskId=${taskId} place=${place}${rowId === undefined ? '' : ` rowId=${rowId ?? '(off)'}`}`);
-            const ops: TaskOp[] = [];
-            if (rowId !== undefined) ops.push({ kind: 'update', text: formatRow({ ...task, blockId: rowId ?? undefined }) });
-            ops.push({ kind: 'insert', place, text: line });
-            const { written } = await this.repository.write(task.file, plannedOn(task), ops);
-            return written;
-        });
-    }
-
-    /**
-     * Apply `ops` to the row at a line the editor pointed at, in the file:
-     * the editor menu's write, when the editor it was opened in no longer
-     * shows the file (`shows`). A rewrite that completes the line — an
-     * `update` whose text `completes` the line the editor showed — fires in
-     * the same write, as a card's does (see writeUpdate), its `fire` the last
-     * op of the write.
-     *
-     * @returns whether the line was written.
-     */
-    async writeLine(filePath: string, at: RowRef, ops: readonly TaskOp[]): Promise<boolean> {
-        if (this.refuseAfterDispose('writeLine')) return false;
-        const defs = this.settings.statusDefinitions;
-        const completing = ops.some(op => op.kind === 'update' && completes(at.basis.text, op.text, defs));
-        return this.writeCompleting(
-            completing ? filePath : null,
-            (fire) => this.repository.write(filePath, at, ops, { fire }));
-    }
-
-    /**
-     * What the editor's fire needs of this index (`fireFilter`): the plan,
-     * the ops, and where its not-run goes. After `dispose`, nothing fires.
-     */
-    editorFireHost(): EditorFireHost {
-        return {
-            active: () => !this.disposed,
-            statusDefinitions: () => this.settings.statusDefinitions,
-            fireOp: (path) => this.commandExecutor.fireOp(path),
-            applyOps: (draft, session, target, ops) => this.repository.applyOps(draft, session, target, ops),
-            notRun: (why) => this.commandExecutor.reportNotRun(why),
-        };
-    }
-
-    /**
-     * What the editor menu's write needs of this index (`writeEditorLine`):
-     * the ops, where its refusals go, and the write to the file once the
-     * editor no longer shows the note.
-     */
-    editorLineHost(): EditorLineHost {
-        return {
-            applyOps: (draft, session, target, ops) => this.repository.applyOps(draft, session, target, ops),
-            refused: (refusal) => { void this.reportRefusal(refusal); },
-            writeLine: (path, at, ops) => this.writeLine(path, at, ops),
-        };
-    }
-
-    // ===== ヘルパー =====
-
-    /**
-     * Tell the user an operation was not made, and why, and learn from it
-     * (`learnFrom`). Every write that gives up for want of a target comes
-     * through here — once per write, from the write layer — and so does an
-     * operation the check of its copy gave up (`copyToPlan`), so the callers
-     * that learn of it from a `false` do not say it again. Settled once the
-     * note is read again, where the reason asks for that.
-     */
-    private reportRefusal(refusal: IndexRefusal): Promise<void> {
-        new Notice(refusalNotice(refusal));
-        return this.learnFrom(refusal);
+    /** Read `file` again, and tell the listeners when that changed what the index holds. */
+    async rescan(file: TFile): Promise<void> {
+        if (await this.scanner.queueScan(file)) this.notify.schedule();
     }
 
     /**
@@ -1089,13 +434,13 @@ export class TaskIndex {
      * found by the stat. Not told the user: a row looked up by its anchor
      * (`freshByAnchor`) comes here and goes on.
      */
-    private async learnFrom({ file, reason, subject }: IndexRefusal): Promise<void> {
+    async learnFrom({ file, reason, subject }: IndexRefusal): Promise<void> {
         switch (reason.kind) {
             case 'stale': {
                 logInfo(`[ReadingCheck] stale file=${file} subject=${subject}`
                     + ` disk=${shortKey(reason.disk)} last=${shortKey(this.scanner.readingOf(file).key)}`);
                 const note = this.app.vault.getAbstractFileByPath(file);
-                if (note instanceof TFile && await this.scanner.queueScan(note)) this.notify.schedule();
+                if (note instanceof TFile) await this.rescan(note);
                 this.reconciler?.request('stale');
                 return;
             }

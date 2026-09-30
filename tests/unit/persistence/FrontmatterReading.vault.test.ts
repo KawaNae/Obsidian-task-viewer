@@ -39,7 +39,7 @@ describe('a write that lifts tv-ignore', () => {
         expect(idsByText(session).size).toBe(0);
         session.holdScans();
 
-        await session.index.getRepository().setFrontmatterKeys(FILE, { 'tv-ignore': null });
+        await session.repository.setFrontmatterKeys(FILE, { 'tv-ignore': null });
 
         expect(idsByText(session).has('- [ ] A @2026-09-21')).toBe(true);
     });

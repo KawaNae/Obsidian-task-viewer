@@ -40,7 +40,7 @@ interface Sent {
 function send(name: string, to: unknown, frontmatter: unknown[] = [], prelude = ''): Sent {
     const result = obsidianEval(`(async () => {
         const plugin = app.plugins.plugins['obsidian-task-viewer'];
-        const task = plugin.getTaskIndex().getTasks().find(t => t.file === ${JSON.stringify(SRC)} && t.content === ${JSON.stringify(name)});
+        const task = plugin.getIndex().getTasks().find(t => t.file === ${JSON.stringify(SRC)} && t.content === ${JSON.stringify(name)});
         if (!task) throw new Error('no row ' + ${JSON.stringify(name)});
         const before = new Set(document.querySelectorAll('.notice'));
         ${prelude}
@@ -149,7 +149,7 @@ function startTimer(name: string, mode: 'child' | 'sibling'): { id: string; targ
     const result = obsidianEval(`(async () => {
         const plugin = app.plugins.plugins['obsidian-task-viewer'];
         const widget = plugin.getTimerWidget();
-        const task = plugin.getTaskIndex().getTasks().find(t => t.file === ${JSON.stringify(SRC)} && t.content === ${JSON.stringify(name)});
+        const task = plugin.getIndex().getTasks().find(t => t.file === ${JSON.stringify(SRC)} && t.content === ${JSON.stringify(name)});
         if (!task) throw new Error('no row ' + ${JSON.stringify(name)});
         const before = new Set(widget.timers.keys());
         widget.startTimer({ taskId: task.id, taskName: task.content, taskFile: task.file, taskOriginalText: task.originalText,
@@ -352,7 +352,7 @@ interface DialogState {
 /** Open the dialog on the row of `SRC` whose text is `name`, from its card's menu (a card of the hub's). */
 function openDialog(name: string): DialogState {
     return onDialog<DialogState>(`
-        const task = plugin.getTaskIndex().getTasks().find(t => t.file === ${JSON.stringify(SRC)} && t.content === ${JSON.stringify(name)});
+        const task = plugin.getIndex().getTasks().find(t => t.file === ${JSON.stringify(SRC)} && t.content === ${JSON.stringify(name)});
         if (!task) throw new Error('no row ' + ${JSON.stringify(name)});
         // The card menu the hub's cards open, made as a hub first opens.
         if (!plugin.hubMenuHandler) {

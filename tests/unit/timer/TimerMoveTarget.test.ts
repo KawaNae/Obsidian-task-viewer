@@ -104,7 +104,7 @@ describe('a timer that stays open while its target moves', () => {
         const moving = mode === 'sibling' ? '親' : '対象';
 
         const row = s.index.getTasks().find(task => task.content === moving)!;
-        expect(await s.index.updateTask(row.id, { statusChar: 'x' })).toBe(true);
+        expect(await s.ops.updateTask(row.id, { statusChar: 'x' })).toBe(true);
         await s.settle(FILE);
 
         expect(lines(contents)[1]).toBe('## Done');

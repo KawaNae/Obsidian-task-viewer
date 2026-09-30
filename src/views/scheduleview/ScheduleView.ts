@@ -34,7 +34,7 @@ import { ScheduleSectionRenderer } from './renderers/ScheduleSectionRenderer';
 import type { TaskReadService } from '../../services/data/TaskReadService';
 import { splitTasks } from '../../services/display/TaskSplitter';
 import { categorizeTasksForDate, type CategorizedTasks as BaseCategorizedTasks } from '../../services/display/TaskDateCategorizer';
-import type { TaskWriteService } from '../../services/data/TaskWriteService';
+import type { Operations } from '../../services/operations/Operations';
 import { getOverdueLevel } from '../../services/display/TaskStatusQuery';
 import { VIEW_META_SCHEDULE } from '../../constants/viewRegistry';
 import { codecFor, type ViewConfigCodec } from '../../services/viewConfig';
@@ -52,7 +52,7 @@ export class ScheduleView extends ItemView {
     private static readonly TIMELINE_BOTTOM_PADDING_PX = 16;
     private readonly plugin: PluginContext & TimerHost;
     private readonly readService: TaskReadService;
-    private readonly writeService: TaskWriteService;
+    private readonly operations: Operations;
     private readonly taskRenderer: TaskCardRenderer;
     private readonly linkInteractionManager: TaskLinkInteractionManager;
     private readonly moonRenderer: MoonPhaseRenderer;
@@ -93,8 +93,8 @@ export class ScheduleView extends ItemView {
         super(leaf);
         this.plugin = plugin;
         this.readService = plugin.getTaskReadService();
-        this.writeService = plugin.getTaskWriteService();
-        this.taskRenderer = new TaskCardRenderer(this.app, this.readService, this.writeService, this.plugin.menuPresenter, {
+        this.operations = plugin.getOperations();
+        this.taskRenderer = new TaskCardRenderer(this.app, this.readService, this.operations, this.plugin.menuPresenter, {
             hoverSource: TASK_VIEWER_HOVER_SOURCE_ID,
             getHoverParent: () => this.hoverParent,
         }, () => this.plugin.settings, () => this.maskMode);
@@ -113,13 +113,13 @@ export class ScheduleView extends ItemView {
             hoverParent: this.hoverParent,
             linkInteractionManager: this.linkInteractionManager,
         });
-        this.menuHandler = new MenuHandler(this.app, this.readService, this.writeService, this.plugin);
+        this.menuHandler = new MenuHandler(this.app, this.readService, this.operations, this.plugin);
         this.taskRenderer.setChildMenuCallback((taskId, x, y) => this.menuHandler.showMenuForTask(taskId, x, y));
         const openTaskHub = createTaskHubOpener(this.app, {
             taskRenderer: this.taskRenderer,
             menuHandler: this.menuHandler,
             readService: this.readService,
-            writeService: this.writeService,
+            operations: this.operations,
             plugin: this.plugin,
         });
         this.taskRenderer.setDetailCallback((task) => openTaskHub(task));

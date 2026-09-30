@@ -72,7 +72,7 @@ export class InlineTaskWriter {
     /**
      * Replace the row `target` names and its subtree with `replacement`, as
      * one write, and fire each row the write completes, in the same write:
-     * the hub's source mode (`TaskIndex.replaceSubtree`). Which rows the
+     * the hub's source mode (`Operations.replaceSubtree`). Which rows the
      * write keeps and which it writes anew, and which of the kept ones it
      * completes, is `ReplaceSubtree`'s to answer; whether a row is completed
      * is `completing.completes`, handed in by the index, since it is the flow

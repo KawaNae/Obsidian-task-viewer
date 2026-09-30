@@ -1,7 +1,7 @@
 import { type App, Notice } from 'obsidian';
 import type { Task } from '../../types';
 import type { TaskReadService } from '../../services/data/TaskReadService';
-import type { TaskWriteService } from '../../services/data/TaskWriteService';
+import type { Operations } from '../../services/operations/Operations';
 import type { PluginContext } from '../../PluginContext';
 import type { TimerHost } from '../../timer/TimerWidget';
 import { TouchLongPressBinder } from './TouchLongPressBinder';
@@ -53,7 +53,7 @@ export class MenuHandler {
     constructor(
         private app: App,
         private readService: TaskReadService,
-        private writeService: TaskWriteService,
+        private operations: Operations,
         private plugin: PluginContext & TimerHost
     ) {
         // Initialize services
@@ -63,13 +63,13 @@ export class MenuHandler {
         // Initialize builders
         this.propertiesMenuBuilder = new PropertiesMenuBuilder(
             app,
-            writeService,
+            operations,
             plugin,
             this.propertyCalculator,
             this.propertyFormatter
         );
         this.timerMenuBuilder = new TimerMenuBuilder(plugin);
-        this.taskActionsMenuBuilder = new TaskActionsMenuBuilder(app, writeService, plugin);
+        this.taskActionsMenuBuilder = new TaskActionsMenuBuilder(app, operations, plugin);
         this.validationMenuBuilder = new ValidationMenuBuilder();
     }
 
@@ -148,7 +148,7 @@ export class MenuHandler {
             return;
         }
         if (task.isReadOnly) return;
-        if (!(await this.writeService.confirmTask(task.id))) return;
+        if (!(await this.operations.confirmTask(task.id))) return;
 
         // Convert to DisplayTask for property display (implicit/explicit flags)
         const displayTask = toDisplayTask(task, this.plugin.settings.startHour, (id) => this.readService.getTask(id));

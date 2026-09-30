@@ -2,7 +2,8 @@ import { describe, it, expect, vi } from 'vitest';
 import { DragSession } from '../../../src/interaction/drag/DragSession';
 import { MenuHandler } from '../../../src/interaction/menu/MenuHandler';
 import type { DragContext, DragStrategy } from '../../../src/interaction/drag/DragStrategy';
-import type { TaskWriteService } from '../../../src/services/data/TaskWriteService';
+import type { Operations } from '../../../src/services/operations/Operations';
+import type { IndexReads } from '../../../src/services/core/TaskIndex';
 import { makeTask } from '../helpers/makeTask';
 import type { Task } from '../../../src/types';
 
@@ -21,11 +22,11 @@ function deferred<T>() {
 
 function dragRig(answers: Promise<boolean>[]) {
     const calls: string[] = [];
-    const writeService = {
+    const ports = {
         setDraggingFile: vi.fn((path: string | null) => { calls.push(`drag ${path}`); }),
         notifyImmediate: vi.fn(() => { calls.push('notify'); }),
         confirmTask: vi.fn(() => answers.shift()!),
-    } as unknown as TaskWriteService;
+    } as unknown as Operations & IndexReads;
     const strategy = {
         onDown: () => { calls.push('down'); },
         onMove: () => { },
@@ -33,18 +34,18 @@ function dragRig(answers: Promise<boolean>[]) {
         onCancel: () => { calls.push('cancel'); },
     } as unknown as DragStrategy;
     const container = { style: { touchAction: '' } } as unknown as HTMLElement;
-    const session = new DragSession({} as unknown as DragContext, container, writeService);
+    const session = new DragSession({} as unknown as DragContext, container, ports, ports);
     const task = { id: 't', file: 'note.md' } as Task;
-    return { calls, writeService, strategy, session, task };
+    return { calls, ports, strategy, session, task };
 }
 
 describe('a drag of a row the disk no longer holds as the index read it', () => {
     it('is cancelled when the answer comes during the drag, and commits nothing', async () => {
         const answer = deferred<boolean>();
-        const { calls, session, strategy, task, writeService } = dragRig([answer.promise]);
+        const { calls, session, strategy, task, ports } = dragRig([answer.promise]);
 
         session.start(strategy, {} as PointerEvent, task, {} as HTMLElement);
-        expect(writeService.confirmTask).toHaveBeenCalledWith('t');
+        expect(ports.confirmTask).toHaveBeenCalledWith('t');
         answer.resolve(false);
         await answer.promise;
         await Promise.resolve();
@@ -113,7 +114,7 @@ describe('a card\'s menu', () => {
         const handler = Object.create(MenuHandler.prototype) as MenuHandler;
         Object.assign(handler, {
             readService: { getTask: () => task },
-            writeService: { confirmTask },
+            operations: { confirmTask },
             plugin: { settings: { startHour: 0 }, menuPresenter: { present } },
         });
         return { handler, task, present, confirmTask };

@@ -87,7 +87,7 @@ describe('a write to the row an anchor finds', () => {
         await session.scanner.queueScan(makeFile(FILE));
 
         const row = session.index.getTaskByAnchor(FILE, 'keep')!;
-        expect(await session.index.updateTask(row.id, { statusChar: 'x' })).toBe(true);
+        expect(await session.ops.updateTask(row.id, { statusChar: 'x' })).toBe(true);
         expect(contents.get(FILE)).toBe(['- [ ] A', '- [x] A ^keep', '- [ ] A', ''].join('\n'));
     });
 
@@ -99,7 +99,7 @@ describe('a write to the row an anchor finds', () => {
         const edited = ['- [ ] A ^keep', '- [ ] A', '- [ ] B', ''].join('\n');
         contents.set(FILE, edited);
 
-        expect(await session.index.updateTask(row.id, { statusChar: 'x' })).toBe(false);
+        expect(await session.ops.updateTask(row.id, { statusChar: 'x' })).toBe(false);
         expect(contents.get(FILE)).toBe(edited);
     });
 });

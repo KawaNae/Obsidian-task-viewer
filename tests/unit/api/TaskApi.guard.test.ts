@@ -40,7 +40,7 @@ function createMockApi(task: Task | undefined, opts: { writesLand?: boolean } = 
         app: { vault: { getAbstractFileByPath: vi.fn() } },
         settings: { startHour: 0 },
         getTaskReadService: () => mockReadService,
-        getTaskWriteService: () => mockWriteService,
+        getOperations: () => mockWriteService,
     };
     return new TaskApi(mockPlugin as any);
 }
@@ -390,7 +390,7 @@ describe('F5: 1要素1行。改行を含む値は、書き込みの前に理由�
         for (const sep of ['\u2028', '\u2029']) {
             const created = createMockApi(undefined);
             const existing = createMockApi(makeTask({ isReadOnly: false }));
-            const write = (existing as any).plugin.getTaskWriteService();
+            const write = (existing as any).plugin.getOperations();
             // What the mock task lacks for the result does not matter here: the
             // value reached the write, unchanged.
             await existing.update({ id: 'test-1', content: `a${sep}b` }).catch(() => undefined);

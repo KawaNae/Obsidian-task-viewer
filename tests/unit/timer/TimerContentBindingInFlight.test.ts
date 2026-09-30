@@ -33,7 +33,7 @@ function harness() {
         timers: new Map([[timer.id, timer]]),
         recorder: { tailInIndex: () => tail, resolveTailRecord: async () => (tail ? { kind: 'row' as const, task: tail } : { kind: 'none' as const }) },
         plugin: {
-            getTaskIndex: () => ({
+            getOperations: () => ({
                 updateTask: (_id: string, u: Record<string, unknown>) => {
                     calls.push(u.content as string);
                     return new Promise<boolean>((resolve) => {

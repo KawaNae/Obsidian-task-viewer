@@ -24,7 +24,7 @@ function formAnswering(written: boolean, fresh: Task | undefined) {
     Object.assign(form, {
         task,
         writing: new Set(),
-        deps: { writeService: { updateTask }, readService: { getTask } },
+        deps: { operations: { updateTask }, readService: { getTask } },
         refresh,
     });
 

@@ -408,7 +408,7 @@ export class TimerRenderer {
     private syncTaskNameAndColor(itemEl: HTMLElement, timer: TimerInstance): void {
         // 復元直後の taskId は、内容が変わっていれば何も指さない（名前は読みの内容から作る）。
         // 対象の錨で引けたら書き戻し、名前と色の追随を再開する。
-        const { task, rewritten } = refreshTimerTask(timer, this.ctx.plugin.getTaskIndex());
+        const { task, rewritten } = refreshTimerTask(timer, this.ctx.plugin.getIndex());
         if (rewritten) this.ctx.persistTimersToStorage();
         if (!task) return;
 

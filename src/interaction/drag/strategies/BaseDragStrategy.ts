@@ -82,7 +82,7 @@ export abstract class BaseDragStrategy implements DragStrategy {
         const startHour = context.plugin.settings.startHour;
         const updates = this.diffUpdates(materializeRawDates(edits, baseTask, startHour), baseTask);
         if (Object.keys(updates).length === 0) return false;
-        const written = await context.writeService.updateTask(taskId, updates);
+        const written = await context.operations.updateTask(taskId, updates);
         this.restoreSelection(context, taskId);
         return written;
     }

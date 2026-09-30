@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { planInPlaceCopies } from '../../../../src/services/core/DuplicateShift';
+import { planInPlaceCopies } from '../../../../src/services/operations/DuplicateShift';
 import type { Task } from '../../../../src/types';
 
 const START_HOUR = 5;

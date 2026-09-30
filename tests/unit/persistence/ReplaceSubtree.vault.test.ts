@@ -46,7 +46,7 @@ async function open(lines: string[]) {
         replace: async (content: string, text: string, children: Child[]) => {
             const id = idOf(content);
             const base = session.index.getTask(id)!.subtreeLines!;
-            const answer = await session.index.replaceSubtree(id, base, {
+            const answer = await session.ops.replaceSubtree(id, base, {
                 text,
                 children: children.map(([line, was]): SubtreeLine => ({ text: line, was })),
             });
@@ -176,11 +176,11 @@ describe('a replacement refused', () => {
         const id = note.idOf('P');
         const base = note.session.index.getTask(id)!.subtreeLines!;
         // A child line written since the draft was opened, by the form.
-        await note.session.index.insertLine(id, '- [ ] b', 'firstChild');
+        await note.session.ops.insertLine(id, '- [ ] b', 'firstChild');
         await note.session.flowSettled(FILE);
         const before = note.lines();
 
-        const answer = await note.session.index.replaceSubtree(id, base, { text: '- [x] P ==> every 1d', children: [{ text: '    - [ ] a', was: 1 }] });
+        const answer = await note.session.ops.replaceSubtree(id, base, { text: '- [x] P ==> every 1d', children: [{ text: '    - [ ] a', was: 1 }] });
 
         expect(answer).toEqual({ written: false, refused: { file: FILE, reason: { kind: 'changed' }, subject: 'P' } });
         expect(note.lines()).toEqual(before);
@@ -192,14 +192,14 @@ describe('a replacement refused', () => {
         const note = await open(['- [ ] P', '    - [ ] a', '']);
         const id = note.idOf('P');
         const base = note.session.index.getTask(id)!.subtreeLines!;
-        await note.session.index.insertLine(id, '- [ ] b', 'firstChild');
+        await note.session.ops.insertLine(id, '- [ ] b', 'firstChild');
         await note.session.flowSettled(FILE);
         const index = note.session.index as unknown as { learnFrom: (refusal: unknown) => Promise<void> };
         const learnt: unknown[] = [];
         const learnFrom = index.learnFrom.bind(index);
         index.learnFrom = (refusal) => { learnt.push(refusal); return learnFrom(refusal); };
 
-        const answer = await note.session.index.replaceSubtree(id, base, { text: '- [x] P', children: [{ text: '    - [ ] a', was: 1 }] }, { tellRefusal: false });
+        const answer = await note.session.ops.replaceSubtree(id, base, { text: '- [x] P', children: [{ text: '    - [ ] a', was: 1 }] }, { tellRefusal: false });
 
         const refused = { file: FILE, reason: { kind: 'changed' }, subject: 'P' };
         expect(answer).toEqual({ written: false, refused });

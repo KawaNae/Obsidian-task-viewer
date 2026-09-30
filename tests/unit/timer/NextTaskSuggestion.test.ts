@@ -43,7 +43,7 @@ function makeSuggester(tasks: DisplayTask[]): NextTaskSuggester {
     let revision = 0;
     const plugin = {
         settings: { statusDefinitions: [], startHour: 0 },
-        getTaskIndex: () => ({ getRevision: () => ++revision }),
+        getIndex: () => ({ getRevision: () => ++revision }),
         getTaskReadService: () => ({
             getStartHour: () => 0,
             getVisibleDisplayTasks: () => tasks,

@@ -12,7 +12,7 @@ import { logDebug } from '../../log/log';
 
 import { DateUtils } from '../../utils/DateUtils';
 import type { TaskReadService } from '../../services/data/TaskReadService';
-import type { TaskWriteService } from '../../services/data/TaskWriteService';
+import type { Operations } from '../../services/operations/Operations';
 
 import type { PluginContext } from '../../PluginContext';
 import type { TimerHost } from '../../timer/TimerWidget';
@@ -71,7 +71,7 @@ type TimelineViewState = Partial<TimelineConfig> & Partial<TimelineTransient>;
 export class TimelineView extends ItemView {
     // ==================== Services & Handlers ====================
     private readService: TaskReadService;
-    private writeService: TaskWriteService;
+    private operations: Operations;
     private plugin: PluginContext & TimerHost;
     private taskRenderer: TaskCardRenderer;
     private dragHandler: DragHandler;
@@ -168,7 +168,7 @@ export class TimelineView extends ItemView {
     constructor(leaf: WorkspaceLeaf, plugin: PluginContext & TimerHost) {
         super(leaf);
         this.readService = plugin.getTaskReadService();
-        this.writeService = plugin.getTaskWriteService();
+        this.operations = plugin.getOperations();
         this.plugin = plugin;
         this.viewState = {
             startDate: DateUtils.getVisualDateOfNow(this.plugin.settings.startHour),
@@ -186,7 +186,7 @@ export class TimelineView extends ItemView {
             },
             getIsOpen: () => this.viewState.showSidebar,
         });
-        this.taskRenderer = new TaskCardRenderer(this.app, this.readService, this.writeService, this.plugin.menuPresenter, {
+        this.taskRenderer = new TaskCardRenderer(this.app, this.readService, this.operations, this.plugin.menuPresenter, {
             hoverSource: TASK_VIEWER_HOVER_SOURCE_ID,
             getHoverParent: () => this.hoverParent,
         }, () => this.plugin.settings, () => this.viewState.maskMode ?? false);
@@ -311,7 +311,7 @@ export class TimelineView extends ItemView {
         );
 
         // Initialize MenuHandler
-        this.menuHandler = new MenuHandler(this.app, this.readService, this.writeService, this.plugin);
+        this.menuHandler = new MenuHandler(this.app, this.readService, this.operations, this.plugin);
         this.taskRenderer.setChildMenuCallback((taskId, x, y) => this.menuHandler.showMenuForTask(taskId, x, y));
         this.taskRenderer.setDetailCallback((task) => this.openTaskHub(task));
         this.taskRenderer.setContextMenuCallback((task, x, y) => this.menuHandler.showTaskContextMenu(task, x, y));
@@ -487,7 +487,7 @@ export class TimelineView extends ItemView {
         this.sidebarFilterMenu.setStatusDefinitions(this.plugin.settings.statusDefinitions);
 
         // Initialize DragHandler with selection callback, move callback, and view start date provider
-        this.dragHandler = new DragHandler(this.container, this.readService, this.writeService, this.plugin,
+        this.dragHandler = new DragHandler(this.container, this.readService, this.operations, this.plugin,
             this.selectionController,
             (taskId: string) => {
                 // Store base task id so split segments all share one selection and
@@ -506,7 +506,7 @@ export class TimelineView extends ItemView {
         // case causes a visual glitch (line-shifted task inherits `.is-selected`),
         // user can click to re-select.
         this.selectionController.attachBackgroundClick(this.container);
-        this.unsubscribeDelete = this.selectionController.attachDeleteListener(this.writeService);
+        this.unsubscribeDelete = this.selectionController.attachDeleteListener(this.operations);
 
         // Initialize render dispatch controller (rAF coalesce only — partial
         // update was retired in favour of keyed reconciliation in performRender).
@@ -667,7 +667,7 @@ export class TimelineView extends ItemView {
             taskRenderer: this.taskRenderer,
             menuHandler: this.menuHandler,
             readService: this.readService,
-            writeService: this.writeService,
+            operations: this.operations,
             plugin: this.plugin,
         }, () => setTimeout(() => this.handleManager.selectTask(null), 0))(task, options);
     }

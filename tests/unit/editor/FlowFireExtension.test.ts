@@ -31,7 +31,7 @@ afterEach(() => {
 async function open(files: Record<string, string[]>) {
     const opened = await openVault(files);
     live = opened.session;
-    const host = opened.session.index.editorFireHost();
+    const host = opened.session.ops.editorFireHost();
     const applyOps = vi.fn(host.applyOps);
     const editor = editorSession({ ...host, applyOps }, FILE, opened.contents.get(FILE)!);
     return { ...opened, editor, applyOps };

@@ -12,7 +12,7 @@
  * are excluded too: the timer cannot write a record to them, so suggesting
  * one hands the user a session that will be lost.
  *
- * Results are cached per (TaskIndex revision, wall-clock minute) so the
+ * Results are cached per (index revision, wall-clock minute) so the
  * 1-second idle tick never rescans the index.
  */
 
@@ -41,7 +41,7 @@ export class NextTaskSuggester {
     constructor(private plugin: PluginContext) {}
 
     getSuggestion(): NextTaskSuggestion | null {
-        const revision = this.plugin.getTaskIndex().getRevision();
+        const revision = this.plugin.getIndex().getRevision();
         const minute = Math.floor(Date.now() / 60_000);
         if (revision === this.cacheRevision && minute === this.cacheMinute) {
             return this.cached;

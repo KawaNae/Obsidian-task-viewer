@@ -13,7 +13,7 @@ export interface ChildRenderItem {
  * Click target for a rendered child item.
  *
  * Every checkbox is a task, so a click routes through
- * TaskWriteService.updateTask(taskId).
+ * Operations.updateTask(taskId).
  */
 export type CheckboxHandler = { type: 'task'; taskId: string };
 

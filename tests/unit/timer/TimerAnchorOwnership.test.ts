@@ -3,7 +3,6 @@ import { TimerWidget } from '../../../src/timer/TimerWidget';
 import { TimerLifecycle } from '../../../src/timer/TimerLifecycle';
 import type { TimerInstance } from '../../../src/timer/TimerInstance';
 import { IDLE_TIMER_ID } from '../../../src/timer/TimerContext';
-import { TaskWriteService } from '../../../src/services/data/TaskWriteService';
 import { DEFAULT_SETTINGS } from '../../../src/types';
 import { vaultSession, type VaultSession } from '../helpers/vaultSession';
 
@@ -34,8 +33,8 @@ async function widgetOver() {
     Object.assign(s.app.vault, { getName: () => 'test-vault' });
     const plugin = {
         settings: { ...DEFAULT_SETTINGS },
-        getTaskIndex: () => s.index,
-        getTaskWriteService: () => new TaskWriteService(s.index),
+        getIndex: () => s.index,
+        getOperations: () => s.ops,
         getTaskReadService: () => ({ getTask: (id: string) => s.index.getTask(id) }),
     };
     const ticker = vi.spyOn(TimerLifecycle.prototype, 'startTimerTicker');

@@ -1,5 +1,6 @@
 import type { Task } from '../../types';
-import type { TaskWriteService } from '../../services/data/TaskWriteService';
+import type { Operations } from '../../services/operations/Operations';
+import type { IndexReads } from '../../services/core/TaskIndex';
 import type { DragContext, DragStrategy } from './DragStrategy';
 import { logDebug, logError } from '../../log/log';
 
@@ -11,10 +12,11 @@ import { logDebug, logError } from '../../log/log';
  * dispatch する。このクラス自体は listener を持たない（listener bind は
  * `DragHandler` の責務）。
  *
- * commit (writeService.updateTask) 自体は Strategy 内の `commitPlan` で完結
- * するため、Session の責務は「pointerup 直前の合成 click 抑制」「writeService
- * への drag-progress 通知（draggingFile / notifyImmediate）」「touchAction の
- * 一時 lock」だけ。
+ * commit (operations.updateTask) 自体は Strategy 内の `commitPlan` で完結
+ * するため、Session の責務は「掴んだ行がディスクのとおりかを問う
+ * （operations.confirmTask）」「索引へのドラッグの保留と、終わりの描画
+ * （index.setDraggingFile / notifyImmediate。書き込みでないので操作を通さない）」
+ * 「touchAction の一時 lock」だけ。
  */
 export class DragSession {
     private currentStrategy: DragStrategy | null = null;
@@ -35,7 +37,8 @@ export class DragSession {
     constructor(
         private readonly context: DragContext,
         private readonly container: HTMLElement,
-        private readonly writeService: TaskWriteService,
+        private readonly operations: Pick<Operations, 'confirmTask'>,
+        private readonly index: Pick<IndexReads, 'setDraggingFile' | 'notifyImmediate'>,
     ) {}
 
     isActive(): boolean {
@@ -55,8 +58,8 @@ export class DragSession {
         logDebug(`[Drag:start] taskId=${task.id}`);
         this.currentStrategy = strategy;
         this.currentDragTaskId = task.id;
-        void this.writeService.setDraggingFile(task.file);
-        const confirmed = this.writeService.confirmTask(task.id).catch((error: unknown) => {
+        void this.index.setDraggingFile(task.file);
+        const confirmed = this.operations.confirmTask(task.id).catch((error: unknown) => {
             logError(`[Drag:confirm] taskId=${task.id} failed: ${(error as Error)?.message ?? error}`);
             return false;
         });
@@ -112,7 +115,7 @@ export class DragSession {
             released = this.end();
         }
         await released;
-        this.writeService.notifyImmediate();
+        this.index.notifyImmediate();
     }
 
     /**
@@ -138,7 +141,7 @@ export class DragSession {
      * reading of it out, and every write to it refused.
      */
     private end(): Promise<void> {
-        const released = this.writeService.setDraggingFile(null);
+        const released = this.index.setDraggingFile(null);
         this.currentStrategy = null;
         this.currentDragTaskId = null;
         this.confirmed = null;

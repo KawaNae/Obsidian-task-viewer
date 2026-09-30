@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { CheckboxWiring } from '../../../src/views/taskcard/CheckboxWiring';
-import type { TaskWriteService } from '../../../src/services/data/TaskWriteService';
+import type { Operations } from '../../../src/services/operations/Operations';
 import type { MenuPresenter } from '../../../src/interaction/menu/MenuPresenter';
 import type { ChildRenderItem } from '../../../src/views/taskcard/types';
 import type { TaskViewerSettings } from '../../../src/types';
@@ -42,13 +42,13 @@ class FakeCheckbox extends FakeAttrs {
 
 function wiringAnswering(written: boolean) {
     const calls: { id: string; updates: Record<string, unknown> }[] = [];
-    const writeService = {
+    const operations = {
         updateTask: async (id: string, updates: Record<string, unknown>) => {
             calls.push({ id, updates });
             return written;
         },
-    } as unknown as TaskWriteService;
-    return { wiring: new CheckboxWiring(writeService, {} as MenuPresenter), calls };
+    } as unknown as Operations;
+    return { wiring: new CheckboxWiring(operations, {} as MenuPresenter), calls };
 }
 
 const settings = { enableStatusMenu: false } as unknown as TaskViewerSettings;

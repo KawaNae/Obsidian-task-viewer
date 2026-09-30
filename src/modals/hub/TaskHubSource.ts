@@ -70,11 +70,11 @@ export type ReplaceAnswer = { written: true } | { written: false; refused: Index
 export interface SourceHost {
     /** Resolves once the form's writes queued so far are done. */
     drained(): Promise<void>;
-    /** Whether the index's copy of the row is the row on the disk (`TaskWriteService.confirmTask`); told the user when not. */
+    /** Whether the index's copy of the row is the row on the disk (`Operations.confirmTask`); told the user when not. */
     confirm(taskId: string): Promise<boolean>;
     /** The index's copy of the row, followed through our own writes (`TaskReadService.getTask`). */
     reread(taskId: string): Task | undefined;
-    /** Write the draft (`TaskWriteService.replaceSubtree`), the refusal shown here rather than in a notice. */
+    /** Write the draft (`Operations.replaceSubtree`), the refusal shown here rather than in a notice. */
     replace(taskId: string, base: readonly string[], replacement: SubtreeReplacement): Promise<ReplaceAnswer>;
     /** A new level of indentation, as Obsidian's settings say (`ObsidianConfig.indentUnit`). */
     indentUnit(): string;

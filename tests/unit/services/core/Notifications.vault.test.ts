@@ -1,6 +1,5 @@
 import { describe, it, expect, afterEach } from 'vitest';
 import { openLiveVault, makeFile, type VaultSession } from '../../helpers/vaultSession';
-import { TaskWriteService } from '../../../../src/services/data/TaskWriteService';
 
 /**
  * What the views are told, and when, after a write of ours or a change event
@@ -39,7 +38,7 @@ describe('what a write of ours tells the views', () => {
         const heard = listen(session);
         const row = session.index.getTasks()[0];
 
-        await session.index.updateTask(row.id, { statusChar: 'x' });
+        await session.ops.updateTask(row.id, { statusChar: 'x' });
         const atReturn = [...heard];
         await frame();
 
@@ -52,7 +51,7 @@ describe('what a write of ours tells the views', () => {
         const heard = listen(session);
         const row = session.index.getTasks()[0];
 
-        await session.index.insertLine(row.id, '- [ ] child', 'firstChild');
+        await session.ops.insertLine(row.id, '- [ ] child', 'firstChild');
         const atReturn = [...heard];
         await frame();
 
@@ -85,16 +84,15 @@ describe('what a change event tells the views', () => {
 });
 
 describe('who hears that a row was deleted', () => {
-    it('a delete through the write service is heard; one straight to the index is not', async () => {
-        const { session } = await openQuiet('- [ ] a\n- [ ] b\n');
-        const service = new TaskWriteService(session.index);
+    it('a delete through the operations is heard; a row gone by an edit from outside is not', async () => {
+        const { contents, session } = await openQuiet('- [ ] a\n- [ ] b\n');
         const deleted: string[] = [];
-        service.onTaskDeleted(id => deleted.push(id));
-        const [a, b] = session.index.getTasks().sort((x, y) => x.line - y.line);
+        session.ops.onTaskDeleted(id => deleted.push(id));
+        const [a] = session.index.getTasks().sort((x, y) => x.line - y.line);
 
-        expect(await service.deleteTask(a.id)).toBe(true);
-        const bNow = session.index.getTask(b.id)!;
-        expect(await session.index.deleteTask(bNow.id)).toBe(true);
+        expect(await session.ops.deleteTask(a.id)).toBe(true);
+        contents.set(NOTE, '');
+        await session.fireVault('modify', makeFile(NOTE));
 
         expect(deleted).toEqual([a.id]);
     });
@@ -107,7 +105,7 @@ describe('what the end of a drag draws', () => {
         const row = session.index.getTasks()[0];
 
         session.index.setDraggingFile(NOTE);
-        await session.index.updateTask(row.id, { startDate: '2026-10-02' });
+        await session.ops.updateTask(row.id, { startDate: '2026-10-02' });
         // The write does not change the copy: the note is held.
         expect(session.index.getTask(row.id)?.startDate).toBe('2026-10-01');
         await session.index.setDraggingFile(null);

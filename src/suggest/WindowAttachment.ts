@@ -205,7 +205,7 @@ export class WindowAttachment {
             if (currentValueDiv) currentValueDiv.textContent = hex;
 
             this.queueColorWrite(async () => {
-                const written = await this.ctx.suggestHost.getTaskWriteService()
+                const written = await this.ctx.suggestHost.getOperations()
                     .setFrontmatterKeys(activeFile.path, { [colorKey]: hex });
                 if (!written) {
                     // 書けなかった。表示を先に変えていたので、ファイルの値へ戻す。

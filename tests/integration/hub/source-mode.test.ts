@@ -115,7 +115,7 @@ function sourceState(): SourceState {
 /** Open the hub on the row whose name starts with `name`, and switch it to the source. */
 function openSource(name: string): SourceState {
     return run<SourceState>(`
-        const task = plugin.getTaskIndex().getTasks().find(t => t.file === ${JSON.stringify(TEST_FILE)} && t.content.startsWith(${JSON.stringify(name)}));
+        const task = plugin.getIndex().getTasks().find(t => t.file === ${JSON.stringify(TEST_FILE)} && t.content.startsWith(${JSON.stringify(name)}));
         if (!task) throw new Error('no row ' + ${JSON.stringify(name)});
         plugin.openTaskHub(task.id);
         await until(() => document.querySelector('.task-hub__mode-toggle'));
@@ -229,7 +229,7 @@ describe('the hub\'s source mode', () => {
         run(`
             const children = viewOf('children');
             children.dispatch({ changes: { from: 0, to: children.state.doc.length, insert: 'text' } });
-            const service = plugin.writeService;
+            const service = plugin.operations;
             window.__tvSourceWrites = 0;
             window.__tvSourceReplace = service.replaceSubtree;
             service.replaceSubtree = function (...args) { window.__tvSourceWrites++; return window.__tvSourceReplace.apply(this, args); };
@@ -248,7 +248,7 @@ describe('the hub\'s source mode', () => {
             expect(run<number>('return window.__tvSourceWrites;')).toBe(1);
             expect(readTestFile(TEST_FILE)).toBe(FENCED);
         } finally {
-            run(`plugin.writeService.replaceSubtree = window.__tvSourceReplace; delete window.__tvSourceReplace; delete window.__tvSourceWrites; return 'ok';`);
+            run(`plugin.operations.replaceSubtree = window.__tvSourceReplace; delete window.__tvSourceReplace; delete window.__tvSourceWrites; return 'ok';`);
         }
     });
 
@@ -379,7 +379,7 @@ describe('the hub\'s source mode', () => {
         const asked = run<Record<string, unknown>>(`
             const children = viewOf('children');
             children.dispatch({ changes: { from: children.state.doc.length, insert: ' 下書き' } });
-            const next = plugin.getTaskIndex().getTasks().find(t => t.file === ${JSON.stringify(TEST_FILE)} && t.content.startsWith('次'));
+            const next = plugin.getIndex().getTasks().find(t => t.file === ${JSON.stringify(TEST_FILE)} && t.content.startsWith('次'));
             plugin.openTaskHub(next.id);
             await sleep(100);
             const pane = document.querySelector('.task-hub__source-pane');
@@ -473,7 +473,7 @@ describe('the hub\'s source mode', () => {
         // Obsidian's history.back() calls what is on top of its stack, as Android's back and the mouse's back button do.
         const steps = run<Record<string, unknown>>(`
             const onBack = () => document.activeElement === document.querySelector('.task-hub__source-cancel');
-            const task = plugin.getTaskIndex().getTasks().find(t => t.file === ${JSON.stringify(TEST_FILE)} && t.content.startsWith('親'));
+            const task = plugin.getIndex().getTasks().find(t => t.file === ${JSON.stringify(TEST_FILE)} && t.content.startsWith('親'));
             plugin.openTaskHub(task.id);
             await until(() => document.querySelector('.task-hub__status-pill'));
             document.querySelector('.task-hub__status-pill').click();
@@ -527,7 +527,7 @@ describe('the hub\'s source mode', () => {
             const pick = () => editor.setSelection({ line: 4, ch: 6 }, { line: 4, ch: 7 });
             const bold = () => document.activeElement.dispatchEvent(new KeyboardEvent('keydown', { key: 'b', code: 'KeyB', keyCode: 66, metaKey: true, ctrlKey: navigator.platform.indexOf('Mac') < 0, bubbles: true, cancelable: true }));
             try {
-                const task = plugin.getTaskIndex().getTasks().find(t => t.file === ${JSON.stringify(TEST_FILE)} && t.content.startsWith('親'));
+                const task = plugin.getIndex().getTasks().find(t => t.file === ${JSON.stringify(TEST_FILE)} && t.content.startsWith('親'));
                 plugin.openTaskHub(task.id);
                 await until(() => document.querySelector('.task-hub__form input.tv-ctrl__text-input'));
                 pick();

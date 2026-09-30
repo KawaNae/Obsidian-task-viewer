@@ -4,7 +4,7 @@ import { t } from '../../i18n';
 import { type Task } from '../../types';
 import type { PluginContext } from '../../PluginContext';
 import type { TaskReadService } from '../../services/data/TaskReadService';
-import type { TaskWriteService } from '../../services/data/TaskWriteService';
+import type { Operations } from '../../services/operations/Operations';
 import { DateFieldGroup } from '../form/DateFieldGroup';
 import { buildStatusOptions, getStatusLabel } from '../../constants/statusOptions';
 import { TaskNameSuggest } from '../../suggest/TaskNameSuggest';
@@ -33,7 +33,7 @@ export interface TaskHubFormDeps {
     app: App;
     plugin: PluginContext;
     readService: TaskReadService;
-    writeService: TaskWriteService;
+    operations: Operations;
     /** suggest（SuggestController）の子ポップオーバーを積む先（パネル所有） */
     stack: PopoverStack;
     /** 継承ラベルクリック等でファイルへ遷移した後に呼ぶ（パネルを閉じる） */
@@ -368,7 +368,7 @@ export class TaskHubForm {
         if (!updates) return;
         this.task = { ...this.task, ...updates };
         const id = this.task.id;
-        const write = this.deps.writeService.updateTask(id, updates)
+        const write = this.deps.operations.updateTask(id, updates)
             .then((written) => {
                 if (written) return;
                 const fresh = this.deps.readService.getTask(id);
