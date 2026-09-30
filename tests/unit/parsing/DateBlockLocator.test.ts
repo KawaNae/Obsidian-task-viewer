@@ -105,3 +105,13 @@ describe('spansForRule', () => {
         expect(spansForRule('parse-error', clean)).toEqual([clean.block]);
     });
 });
+
+describe('DATE_BLOCK_REGEX', () => {
+    it('is the date block grammar, built from the date module\'s shapes', async () => {
+        const { DATE_BLOCK_REGEX } = await import('../../../src/services/parsing/tv-inline/DateBlockLocator');
+        expect(DATE_BLOCK_REGEX.source).toBe(
+            String.raw`(@(?=[\d>T])(?:\d{4}-\d{2}-\d{2}(?:T\d{2}:\d{2})?|T?\d{2}:\d{2})?(?:>(?:\d{4}-\d{2}-\d{2}(?:T\d{2}:\d{2})?|\d{2}:\d{2})?)*)`,
+        );
+        expect(DATE_BLOCK_REGEX.flags).toBe('');
+    });
+});

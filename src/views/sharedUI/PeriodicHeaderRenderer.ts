@@ -38,7 +38,7 @@ export class PeriodicHeaderRenderer {
         const todayVisualDate = DateUtils.getVisualDateOfNow(this.deps.plugin.settings.startHour);
         const weekStartDay = this.deps.plugin.settings.weekStartDay;
         const todayVisualWeekKey = DateUtils.getVisualWeekKey(
-            this.parseLocalDate(todayVisualDate),
+            DateUtils.parseDate(todayVisualDate),
             weekStartDay,
         );
 
@@ -67,7 +67,7 @@ export class PeriodicHeaderRenderer {
         segEl.style.gridColumn = `${seg.startIdx + 2} / span ${seg.span}`;
         if (seg.isCurrent) segEl.addClass('is-current');
 
-        const dateObj = this.parseLocalDate(seg.anchorDate);
+        const dateObj = DateUtils.parseDate(seg.anchorDate);
         const m = withWeekStartDay(dateObj, this.deps.plugin.settings.weekStartDay);
 
         const link = segEl.createEl('a', {
@@ -100,7 +100,7 @@ export class PeriodicHeaderRenderer {
         const segments: Segment[] = [];
         let current: Segment | null = null;
         for (let i = 0; i < dates.length; i++) {
-            const dateObj = this.parseLocalDate(dates[i]);
+            const dateObj = DateUtils.parseDate(dates[i]);
             const k = DateUtils.getVisualWeekKey(dateObj, weekStartDay);
             if (current && current.key === k) {
                 current.span++;
@@ -117,10 +117,5 @@ export class PeriodicHeaderRenderer {
         }
         if (current) segments.push(current);
         return segments;
-    }
-
-    private parseLocalDate(date: string): Date {
-        const [year, month, day] = date.split('-').map(Number);
-        return new Date(year, month - 1, day, 0, 0, 0, 0);
     }
 }

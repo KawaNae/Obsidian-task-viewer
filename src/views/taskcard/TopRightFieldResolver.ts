@@ -1,4 +1,4 @@
-import { moment } from 'obsidian';
+import { DateUtils } from '../../utils/DateUtils';
 import type { DisplayTask, TaskViewerSettings } from '../../types';
 import { getEffectiveTags, getEffectiveProperties } from '../../services/data/EffectiveProperties';
 import { t } from '../../i18n';
@@ -7,9 +7,11 @@ type FieldExtractor = (task: DisplayTask, settings: TaskViewerSettings) => strin
 
 function weekday(dateStr?: string): string | null {
     if (!dateStr) return null;
-    const dow = moment(dateStr).day();
+    // A day that does not exist (`2026-02-30`, which the notation reads) has no weekday.
+    const date = DateUtils.readDate(dateStr);
+    if (!date) return null;
     const labels = t('calendar.weekdaysShort').split(',');
-    return labels[dow] ?? null;
+    return labels[date.getDay()] ?? null;
 }
 
 function dom(dateStr?: string): string | null {
@@ -39,12 +41,12 @@ const FIELD_MAP: Record<string, FieldExtractor> = {
     endWeekday:     (task) => weekday(task.effectiveEndDate),
 
     due:            (task) => task.due ?? null,
-    dueDate:        (task) => task.due?.split('T')[0] ?? null,
-    dueTime:        (task) => task.due?.includes('T') ? task.due.split('T')[1] : null,
+    dueDate:        (task) => DateUtils.dueDatePart(task.due) ?? null,
+    dueTime:        (task) => (task.due ? DateUtils.splitDateTime(task.due).time ?? null : null),
     dueYear:        (task) => task.due?.slice(0, 4) ?? null,
     dueMonth:       (task) => task.due?.slice(5, 7) ?? null,
-    dueDom:         (task) => dom(task.due?.split('T')[0]),
-    dueWeekday:     (task) => weekday(task.due?.split('T')[0]),
+    dueDom:         (task) => dom(DateUtils.dueDatePart(task.due)),
+    dueWeekday:     (task) => weekday(DateUtils.dueDatePart(task.due)),
 
     tags:           (task) => {
         const tags = getEffectiveTags(task);

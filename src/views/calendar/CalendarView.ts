@@ -14,9 +14,7 @@ import { DailyNoteUtils } from '../../utils/DailyNoteUtils';
 import { MOBILE_BREAKPOINT_PX } from '../../constants/layout';
 import { getTaskDateRange } from '../../services/display/VisualDateRange';
 import {
-    parseLocalDateString,
     getCalendarDateRange,
-    getWeekStart,
     getNormalizedWindowStart,
     getReferenceMonth,
     getColumnOffset,
@@ -162,7 +160,7 @@ export class CalendarView extends ItemView {
             onNavigateWeek: (days) => this.navigateWeek(days),
             onJumpToCurrentMonth: () => this.showMonthOf(new Date()),
             onJumpToDate: (date) => {
-                const parsed = parseLocalDateString(date);
+                const parsed = DateUtils.readDate(date);
                 if (parsed) this.showMonthOf(parsed);
             },
             onFilterChange: () => {
@@ -284,9 +282,9 @@ export class CalendarView extends ItemView {
         // Transient: windowStart needs week alignment, so it's handled here
         // rather than letting applyConfig blanket-overwrite.
         if (transient.windowStart) {
-            const parsedWindowStart = parseLocalDateString(transient.windowStart);
+            const parsedWindowStart = DateUtils.readDate(transient.windowStart);
             if (parsedWindowStart) {
-                const weekStart = getWeekStart(parsedWindowStart, this.plugin.settings.weekStartDay);
+                const weekStart = DateUtils.getWeekStart(parsedWindowStart, this.plugin.settings.weekStartDay);
                 this.windowStart = DateUtils.getLocalDateString(weekStart);
             }
         }
@@ -930,7 +928,7 @@ export class CalendarView extends ItemView {
         const weekNumberEl = weekRow.createDiv('cal-week-number');
         const weekNumber = withWeekStartDay(weekStartDate, this.plugin.settings.weekStartDay).week();
 
-        const todayWeekStart = getWeekStart(new Date(), this.plugin.settings.weekStartDay);
+        const todayWeekStart = DateUtils.getWeekStart(new Date(), this.plugin.settings.weekStartDay);
         if (DateUtils.getLocalDateString(weekStartDate) === DateUtils.getLocalDateString(todayWeekStart)) {
             weekNumberEl.addClass('is-current-week');
         }

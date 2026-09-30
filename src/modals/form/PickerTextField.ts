@@ -1,3 +1,4 @@
+import { DateUtils } from '../../utils/DateUtils';
 import { setIcon } from 'obsidian';
 import { t } from '../../i18n';
 import { createNativePicker } from '../../views/sharedUI/NativePicker';
@@ -110,12 +111,12 @@ export function createPickerTextField(
         clearable: true,
     });
     const { input, picker } = field;
-    const format = pickerType === 'date' ? /^\d{4}-\d{2}-\d{2}$/ : /^\d{2}:\d{2}$/;
+    const matchesShape = pickerType === 'date' ? DateUtils.isDateShape : DateUtils.isTimeShape;
 
     // テキストの値をピッカーへ写す。ピッカーが開く前（focus）にも写す
     const syncPickerFromText = () => {
         const value = input.value.trim();
-        picker.value = format.test(value) ? value : '';
+        picker.value = matchesShape(value) ? value : '';
     };
     input.addEventListener('input', syncPickerFromText);
     picker.addEventListener('focus', syncPickerFromText);

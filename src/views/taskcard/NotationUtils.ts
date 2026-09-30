@@ -1,4 +1,7 @@
 import type { DisplayTask, Task } from '../../types';
+import { DateUtils } from '../../utils/DateUtils';
+
+const LEADING_DATE_RE = new RegExp(`^(${DateUtils.DATE_PATTERN})`);
 
 /**
  * Polymorphic notation label input. Effective fields (DisplayTask) are
@@ -61,7 +64,7 @@ export class NotationUtils {
             // Inherited time-only: @T10:00 → use parent startDate
             return parentStartDate ? `@${parentStartDate}…` : notation;
         }
-        const dateMatch = raw.match(/^(\d{4}-\d{2}-\d{2})/);
+        const dateMatch = raw.match(LEADING_DATE_RE);
         if (!dateMatch) return notation;
         const datePart = dateMatch[1];
         // If notation is exactly @YYYY-MM-DD, show as-is; otherwise truncate

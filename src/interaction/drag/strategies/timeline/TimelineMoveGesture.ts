@@ -83,15 +83,15 @@ export class TimelineMoveGesture extends BaseDragStrategy {
 
         const effectiveEndDate = originalTask?.endDate || originalTask?.startDate;
         if (originalTask?.startDate && originalTask.startTime && effectiveEndDate && originalTask.endTime) {
-            const start = new Date(`${originalTask.startDate}T${originalTask.startTime}`);
-            const end = new Date(`${effectiveEndDate}T${originalTask.endTime}`);
+            const start = DateUtils.toDateTime(originalTask.startDate, originalTask.startTime);
+            const end = DateUtils.toDateTime(effectiveEndDate, originalTask.endTime);
             if (end < start) end.setDate(end.getDate() + 1);
 
             const dur = (end.getTime() - start.getTime()) / 60000;
             this.initialHeight = dur * zoomLevel;
 
             if (this.currentDayDate) {
-                const currentDayStart = new Date(`${this.currentDayDate}T00:00:00`);
+                const currentDayStart = DateUtils.parseDate(this.currentDayDate);
                 originalTaskStartMinutes = (start.getTime() - currentDayStart.getTime()) / 60000;
                 originalTaskEndMinutes = (end.getTime() - currentDayStart.getTime()) / 60000;
             }

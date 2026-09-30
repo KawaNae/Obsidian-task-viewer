@@ -69,9 +69,9 @@ export class DateHeaderRenderer {
 
         dates.forEach(date => {
             const cell = row.createDiv('date-header__cell');
-            const dayName = weekdays[new Date(date + 'T00:00:00Z').getUTCDay()];
+            const dayName = weekdays[DateUtils.weekdayOf(date)];
 
-            const dateObj = this.parseLocalDate(date);
+            const dateObj = DateUtils.parseDate(date);
             const linkTarget = DailyNoteUtils.getDailyNoteLinkTarget(app, dateObj);
             const linkLabel = DailyNoteUtils.getDailyNoteLabelForDate(app, dateObj);
 
@@ -113,10 +113,5 @@ export class DateHeaderRenderer {
         });
 
         return { row, axisCell };
-    }
-
-    private parseLocalDate(date: string): Date {
-        const [year, month, day] = date.split('-').map(Number);
-        return new Date(year, month - 1, day, 0, 0, 0, 0);
     }
 }

@@ -8,6 +8,7 @@
  * time alongside the date.
  */
 
+import { DateUtils } from '../../utils/DateUtils';
 import type { Menu } from 'obsidian';
 import { t } from '../../i18n';
 import type { PluginContext } from '../../PluginContext';
@@ -55,10 +56,7 @@ export function openCreateTaskForDailyNote(
             // `date` is the file's day (the visual column), which is not always
             // the task's own start date — a click past midnight seeds the next
             // day while still belonging to this column's note.
-            const [y, m, d] = date.split('-').map(Number);
-            const dateObj = new Date();
-            dateObj.setFullYear(y, m - 1, d);
-            dateObj.setHours(0, 0, 0, 0);
+            const dateObj = DateUtils.parseDate(date);
 
             const { DailyNoteUtils } = await import('../../utils/DailyNoteUtils');
             await DailyNoteUtils.appendLineToDailyNote(
