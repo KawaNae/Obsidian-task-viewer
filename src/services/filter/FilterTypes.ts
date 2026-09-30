@@ -60,13 +60,9 @@ export function isFilterCondition(node: FilterItem): node is FilterCondition {
     return 'property' in node;
 }
 
-export function isFilterGroup(node: FilterItem): node is FilterGroup {
-    return 'filters' in node;
-}
-
 // ── Frozen sentinel ──
 
-export const EMPTY_FILTER_STATE: FilterState = Object.freeze({
+const EMPTY_FILTER_STATE: FilterState = Object.freeze({
     filters: Object.freeze([]) as readonly FilterItem[] as FilterItem[],
     logic: 'and' as const,
 });

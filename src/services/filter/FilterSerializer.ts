@@ -14,9 +14,9 @@ export class FilterSerializer {
         if (!raw || typeof raw !== 'object') return createEmptyFilterState();
         const obj = raw as Record<string, unknown>;
 
-        // v6: has filters array
+        // The saved shape: a group `{ logic, filters }` (no version number)
         if (Array.isArray(obj.filters)) {
-            return parseV6Group(obj);
+            return parseGroup(obj);
         }
 
         // Single condition: has "property" directly
@@ -78,16 +78,16 @@ function serializeCondition(c: FilterCondition): Record<string, unknown> {
     return result;
 }
 
-// ── v6 deserialization (new format) ──
+// ── Deserialization of the group shape `{ logic, filters }` ──
 
-function parseV6Group(obj: Record<string, unknown>): FilterGroup {
+function parseGroup(obj: Record<string, unknown>): FilterGroup {
     const filters: FilterItem[] = [];
     if (Array.isArray(obj.filters)) {
         for (const child of obj.filters) {
             if (!child || typeof child !== 'object') continue;
             const c = child as Record<string, unknown>;
             if ('filters' in c || 'logic' in c) {
-                filters.push(parseV6Group(c));
+                filters.push(parseGroup(c));
             } else if ('property' in c && !isRetiredCondition(c)) {
                 filters.push(parseCondition(c));
             }

@@ -673,7 +673,7 @@ All parameters are flat query params. No nested encoding (the former `state=<bas
 | `zoom` | float | Zoom level (validated: 0.25–10.0) | `1.5` |
 | `date` | YYYY-MM-DD | Start date | `2026-02-28` |
 | `showSidebar` | boolean | Sidebar visibility | `true` / `false` |
-| `filter` | base64 | FilterState JSON (`{ version: 4, root: {...} }`) | `eyJ2ZXJzaW9uIjo0LC...` |
+| `filter` | base64 | FilterState JSON (`{ logic: 'and' \| 'or', filters: [...] }`, no version number) | `eyJsb2dpYyI6ImFuZCIs...` |
 | `pinnedLists` | base64 | `PinnedListDefinition[]` JSON | `W3siaWQiOiJwbC0xIi...` |
 | `template` | string | View template name (URL-encoded). When set, `filter`/`pinnedLists` are omitted | `My%20Template` |
 | `mode` | string | Timer view mode | `countup` / `countdown` / `pomodoro` / `interval` |
