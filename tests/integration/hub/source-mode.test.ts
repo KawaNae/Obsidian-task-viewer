@@ -308,11 +308,14 @@ describe('the hub\'s source mode', () => {
             plugin.openTaskHub(next.id);
             await sleep(100);
             const pane = document.querySelector('.task-hub__source-pane');
-            const editor = document.querySelector('.task-hub .tv-source-editor__children .cm-editor');
-            return JSON.stringify({ ...state(), marked: pane.classList.contains('tv-source-drafts--asking'), shadow: getComputedStyle(editor).boxShadow, preview: document.querySelector('.task-hub__preview').textContent });
+            const box = document.querySelector('.task-hub .tv-source-editor');
+            const probe = box.createDiv();
+            probe.style.color = 'var(--tv-text-danger)';
+            const danger = getComputedStyle(probe).color;
+            probe.remove();
+            return JSON.stringify({ ...state(), marked: pane.classList.contains('tv-source-drafts--asking'), red: getComputedStyle(box).borderTopColor === danger, preview: document.querySelector('.task-hub__preview').textContent });
         `);
-        expect(asked).toMatchObject({ hub: true, source: true, asking: true, marked: true, children: '- [ ] 子a\n- [ ] 子b 下書き' });
-        expect(asked.shadow).not.toBe('none');
+        expect(asked).toMatchObject({ hub: true, source: true, asking: true, marked: true, red: true, children: '- [ ] 子a\n- [ ] 子b 下書き' });
 
         const discarded = run<Record<string, unknown>>(`
             document.querySelector('.task-hub__source-discard').click();

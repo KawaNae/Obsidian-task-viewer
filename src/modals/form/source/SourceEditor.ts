@@ -42,6 +42,9 @@ import { linkTagCompletionSource } from './SourceCompletion';
  * - The editors look indented under the parent's line by the width of
  *   `indentUnit` (`--tv-source-indent`), as a child line stands under its
  *   parent in Obsidian's editor.
+ * - The two editors sit in one box, as one input field does
+ *   (`tv-ctrl__input-wrap`): the caret goes from one to the other as through
+ *   one text, and the box takes the fields' border and focus.
  * - A completion list stands in the window above the virtual keyboard
  *   (`keyboardTop`), and goes above the caret where there is no room under
  *   it: on Obsidian mobile the keyboard covers the page without shrinking
@@ -204,7 +207,7 @@ export class SourceEditor implements DraftEditor {
     private readonly childrenView: EditorView;
 
     constructor(container: HTMLElement, private readonly options: SourceEditorOptions) {
-        this.dom = container.createDiv({ cls: 'tv-source-editor' });
+        this.dom = container.createDiv({ cls: 'tv-source-editor tv-ctrl__input-wrap tv-ctrl__input-wrap--glow' });
         trackKeyboard(container.ownerDocument.defaultView ?? window);
         const hooks: EditorHooks = { onSubmit: options.onSubmit, onChange: options.onChange };
         this.parentView = new EditorView({
