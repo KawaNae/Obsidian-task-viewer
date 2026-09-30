@@ -374,6 +374,22 @@ export class OutlineReading {
         return this.items.get(row)?.end ?? row + 1;
     }
 
+    /**
+     * The items that stand directly in the item `line` opens, top to bottom:
+     * those whose parent is `line`, code left out. The lines a task owns by
+     * their shape — its `- ==>` lines (`collectFlowLineIndices`) and its
+     * property lines (`ChildLineClassifier.ownPropertyLines`) — are the
+     * ones among these that have it. A line that opens no item has none.
+     */
+    directItems(line: number): number[] {
+        const direct: number[] = [];
+        const end = this.subtreeEnd(line);
+        for (let i = line + 1; i < end; i++) {
+            if (this.items.get(i)?.parent === line && !this.codes[i]) direct.push(i);
+        }
+        return direct;
+    }
+
     /** The items `row`'s item stands in, innermost first. */
     itemsAbove(row: number): number[] {
         const above: number[] = [];

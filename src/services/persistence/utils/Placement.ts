@@ -111,7 +111,6 @@ export class Placement {
      * tasks it stands among, not the text above them.
      */
     static groupHead(outline: OutlineReading, row: number, head: string, unit: string): Spot {
-        const { lines } = outline;
         const parent = outline.item(row)?.parent ?? null;
         if (parent !== null) return this.sibling(outline, parent + 1, parent, head, unit);
 
@@ -121,7 +120,7 @@ export class Placement {
             let above = outline.ownerOf(first - 1);
             while (above !== null && outline.item(above)!.parent !== null) above = outline.item(above)!.parent;
             if (above === null || outline.subtreeEnd(above) !== first) break;
-            if (!TaskLineClassifier.isTaskLine(lines[above])) break;
+            if (!TaskLineClassifier.opensTask(outline, above)) break;
             first = above;
         }
         return this.sibling(outline, first, null, head, unit);

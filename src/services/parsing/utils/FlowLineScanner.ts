@@ -63,21 +63,15 @@ export function isFlowLine(line: string): boolean {
  * The flow child lines of the task at `taskLine`, as absolute line numbers.
  *
  * Ownership rule: a flow line belongs to the task iff it is a list item the
- * outline reads directly under the task's own item
- * (`OutlineReading.item(line).parent`), and is not code. A flow line under
+ * outline reads directly under the task's own item, and is not code
+ * (`OutlineReading.directItems`). A flow line under
  * a child checkbox, a bare checkbox or a plain note bullet belongs to that
  * item (a checkbox collects its own); a `- ==>` written inside a code block
  * is an example, not a command; a line the outline reads as a paragraph
  * going on is no item, and no command.
  */
 export function collectFlowLineIndices(outline: OutlineReading, taskLine: number): number[] {
-    const result: number[] = [];
-    const end = outline.subtreeEnd(taskLine);
-    for (let line = taskLine + 1; line < end; line++) {
-        if (outline.item(line)?.parent !== taskLine) continue;
-        if (isFlowLine(outline.lines[line])) result.push(line);
-    }
-    return result;
+    return outline.directItems(taskLine).filter(line => isFlowLine(outline.lines[line]));
 }
 
 /** Canonical physical form of a flow child line. */

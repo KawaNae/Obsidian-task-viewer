@@ -224,3 +224,26 @@ describe('Outline.readSubtree: a row and its subtree, read away from the note', 
         expect(Outline.readSubtree(['- [ ] T', '  ---']).bodyStart).toBe(0);
     });
 });
+
+describe('OutlineReading.directItems', () => {
+    it('answers the items whose parent is the line, top to bottom, code left out', () => {
+        const outline = Outline.read([
+            '- [ ] T',          // 0
+            '\t- a',            // 1
+            '\t\t- deep',       // 2
+            '',                 // 3
+            '\t- ```',          // 4: an item a fence opens on is code
+            '\t\t- in fence',   // 5
+            '\t  ```',          // 6
+            '\t- b',            // 7
+            '- next',           // 8
+        ]);
+        expect(outline.directItems(0)).toEqual([1, 7]);
+        expect(outline.directItems(1)).toEqual([2]);
+        expect(outline.directItems(8)).toEqual([]);
+    });
+
+    it('answers none for a line that opens no item', () => {
+        expect(Outline.read(['text', '  - a']).directItems(0)).toEqual([]);
+    });
+});
