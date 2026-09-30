@@ -15,7 +15,7 @@ import type { DraftEditor } from '../form/source/SourceEditor';
 
 /**
  * The send dialog: rows and their subtrees sent to a section of a note
- * (note-ops-plan.md 4). This is its logic, apart from the DOM: what it
+ * (`archive/2026-09-send.md`, ダイアログ, 骨組みと並び). This is its logic, apart from the DOM: what it
  * opens on, what it says of the destination the fields name, which values
  * it offers for the note's frontmatter, whether a send may be asked, what
  * a send asks, and whether the dialog may close. What it looks like is the

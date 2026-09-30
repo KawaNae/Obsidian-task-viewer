@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { vaultSession } from './vaultSession';
 
 /**
- * The frontmatter-reading gap `structure.md` names as a scaffold limit
+ * The frontmatter-reading gap once named a scaffold limit (`structure/changelog.md`, 2026-09-21 F0)
  * (`vaultSession` used to answer `metadataCache.getCache` with `null` always).
  *
  * `tv-color` is the cascade this exercises: `FilePropertyResolver.extract`

@@ -6,7 +6,7 @@ import { readReading, type ReadingId } from './Reading';
 
 /**
  * Whether the index's reading of a file is the file on disk, asked before an
- * operation is planned from it (structure.md, 読みの鮮度).
+ * operation is planned from it (structure/layers.md, 読みの鮮度).
  *
  * `fresh`: it is, or our own writes carry it there. `stale`: the file changed
  * in a way the index has not read — an edit from outside whose change event

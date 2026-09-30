@@ -9,7 +9,7 @@ export interface LinkSettings {
 /**
  * A stand-in for `fileManager.generateMarkdownLink`, spelling links as
  * Obsidian 1.13.7 was measured to at stage 0
- * (`stages/s0-measure/observation.md`, 2):
+ * (`archive/2026-09-stages/3-v058-2026-09-28.md`, s0-measure, リンクの生成):
  *
  * - shortest: the note's name when it is the one note of the vault by that
  *   name, case aside; its path without `.md` when another has it, or when

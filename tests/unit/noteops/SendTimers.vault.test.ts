@@ -11,7 +11,7 @@ import { DEFAULT_SETTINGS } from '../../../src/types';
 import { t } from '../../../src/i18n';
 
 /**
- * A send and the open timers (note-ops-plan.md 段 B4), with the real widget
+ * A send and the open timers (`archive/2026-09-send.md`, 開いているタイマー), with the real widget
  * over a live vault: a timer whose lines all go follows them to the note as
  * the write of their note lands, and records there; one of a note whose
  * write was refused stays; one the send would leave without its lines keeps

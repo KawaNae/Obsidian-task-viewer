@@ -133,7 +133,7 @@ export class TaskIndex {
 
     /**
      * Brings the index's readings to the disk when a change notice never
-     * comes (structure.md, 読みの鮮度). None where there is no disk to ask.
+     * comes (structure/layers.md, 読みの鮮度). None where there is no disk to ask.
      */
     private readonly reconciler: DiskReconciler | null;
 
@@ -748,7 +748,7 @@ export class TaskIndex {
      * A copy the disk no longer reads as (`checkCopy`: a change the index was
      * never told of) is not planned from: it is refused as `stale`, the note
      * is read again, and the user is asked to do it again, from the new
-     * reading (structure.md, 読みの鮮度). Every write that plans from a copy
+     * reading (structure/layers.md, 読みの鮮度). Every write that plans from a copy
      * comes through here, and so do the drag and the card's menu before the
      * user puts work in (`confirmTask`).
      */
@@ -1163,7 +1163,7 @@ export class TaskIndex {
      * What the index does when an operation found its note other than the
      * index read it, by the reason's kind, in one place: the log line, the
      * reading asked for, and what the reconciler is asked
-     * (structure.md, 読みの鮮度).
+     * (structure/layers.md, 読みの鮮度).
      *
      * `stale`: the note is read now, so the operation asked again plans from
      * the new reading, and the reconciler sweeps — one change notice missed

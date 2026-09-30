@@ -91,7 +91,7 @@ export class Outline {
     /**
      * A blank line: nothing on it but spaces, tabs, no-break spaces and
      * full-width spaces. Obsidian reads a line of the last two as blank too,
-     * though it does not indent with them (`stages\l2-blocks\measurement.md`).
+     * though it does not indent with them (`archive/2026-09-stages/2-rebuild-2026-09-24.md`, 行と読み, L2 の実測).
      */
     static isBlank(line: string): boolean {
         return BLANK_RE.test(line);
@@ -491,7 +491,7 @@ function leafOf(text: string): 'paragraph' | 'quote' | 'none' {
  * The reading is CommonMark's but where the reading view and Live Preview
  * both part from it the same way, in a task, a parent or a subtree: the
  * fence going on over shallower lines, and the blank lines of NBSP and
- * U+3000 (`stages\l2-blocks\measurement.md`, `stages\l3-indent\report.md`).
+ * U+3000 (`archive/2026-09-stages/2-rebuild-2026-09-24.md`, 行と読み, the L2 and L3 measurements).
  * Where only one view parts from CommonMark, the outline reads CommonMark,
  * and the editor warns on the two shapes where the views show another
  * subtree than the one the plugin writes (`OutlineDiagnostics`). The rules

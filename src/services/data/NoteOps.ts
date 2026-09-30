@@ -165,7 +165,7 @@ export interface SendingLines {
 }
 
 /**
- * The open timers, as a send asks them (note-ops-plan.md 段 B4). A timer
+ * The open timers, as a send asks them (`archive/2026-09-send.md`, 開いているタイマー; `structure/writes.md`). A timer
  * finds its lines by their `^id`s in its note; the timers are not the
  * send's to know, so they answer here.
  */
@@ -224,7 +224,7 @@ export type SendResult =
 
 /**
  * The operations on notes the UI asks for: sending rows and their subtrees
- * to a section of a note (`v0.58-features.md`, 送る操作への一般化). Each takes
+ * to a section of a note (`archive/2026-09-send.md`, 仕様の決定, 移す操作から送る操作へ). Each takes
  * what the dialog holds as its arguments; what is told the user, the
  * operation tells, and the dialog only decides from the result whether it
  * closes.

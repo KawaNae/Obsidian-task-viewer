@@ -4,7 +4,7 @@ import type { DiskProbe, DiskStat } from './DiskProbe';
 import { logDebug, logError, logInfo } from '../../log/log';
 
 /**
- * What makes the reconciler look at the disk (structure.md, 読みの鮮度): the
+ * What makes the reconciler look at the disk (structure/layers.md, 読みの鮮度): the
  * index read the vault (`start`), the window came back (`focus`, `visible`),
  * a view of the plugin came to the front (`view`), a minute went by
  * (`interval`), a write was refused as `changed` or `failed` (`refusal`), a
@@ -95,7 +95,7 @@ interface Measured {
 }
 
 /**
- * The index's reading of each file converges on the disk (structure.md,
+ * The index's reading of each file converges on the disk (structure/layers.md,
  * 読みの鮮度): the one place that answers when a change notice never comes.
  *
  * At each trigger it stats the files on disk and compares each with what it

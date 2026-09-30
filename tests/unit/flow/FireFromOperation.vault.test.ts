@@ -9,7 +9,7 @@ import { freezeDate } from '../helpers/fakeDate';
 
 /**
  * A completion fires from the operation that completed it, once, and from
- * nothing else (structure.md, 「発火の可否」; contract 2). Stage X closes
+ * nothing else (structure/firing.md, 「発火の可否」; contract 2). Stage X closes
  * with this every shape in which firing was answered from two readings of a
  * file — the rows of the table of defects and limits for "a completion
  * undone and redone" and "a completion that arrived by sync" — and each is

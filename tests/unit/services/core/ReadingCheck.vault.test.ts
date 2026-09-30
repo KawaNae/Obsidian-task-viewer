@@ -7,7 +7,7 @@ import { clearLog, getLogEntries } from '../../../../src/log/log';
 
 /**
  * Before an operation is planned from the index's copy of a row, the copy is
- * checked against the disk (`TaskIndex.copyToPlan`, structure.md の読みの鮮度):
+ * checked against the disk (`TaskIndex.copyToPlan`, structure/layers.md の読みの鮮度):
  * an edit from outside whose change event never came is found there, the
  * note is read again, and the operation is given up with one notice asking
  * the user to try again — from the new reading, where it is written.

@@ -11,7 +11,7 @@ import { DestinationField } from './DestinationField';
 import { SendDialog, initialAsk, type SendSurface, type SendViewState } from './SendDialog';
 
 /**
- * The send dialog as it looks (note-ops-plan.md 4, 並び): the rows to send
+ * The send dialog as it looks (`archive/2026-09-send.md`, ダイアログ, 骨組みと並び): the rows to send
  * in the source editor, the destination's fields, what the send does, the
  * values offered for the note's frontmatter, what keeps a send from being
  * asked and what it is asked in spite of, and cancel and send. It draws

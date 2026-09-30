@@ -10,7 +10,7 @@ import { DEFAULT_SETTINGS } from '../../../src/types';
 
 /**
  * What a line is and how deep it stands, read as Obsidian 1.12.4 reads it
- * (R0, `.plan/stages/r0-observe/report.md`, question 1). The cases are the
+ * (R0, `archive/2026-09-stages/1-identity-2026-09-21.md`, 実測で分かった事実, question 1). The cases are the
  * R0 probe's, byte for byte; the expectations are Obsidian's metadata
  * (`listItems`) rather than the plugin's reading at the time.
  */
@@ -102,7 +102,7 @@ describe('line breaks, as Obsidian ends a line', () => {
 
     it('takes any status but U+2028 and U+2029, which are no task to Obsidian', () => {
         // Dev, Obsidian 1.12.4: `listItems`, Live Preview and the reading view
-        // agree (`.plan/stages/l1-lines/device-1.md`).
+        // agree (`archive/2026-09-stages/2-rebuild-2026-09-24.md`, 行と読み, L1 の実測).
         for (const sep of [LS, PS]) {
             expect(TaskLineClassifier.isTaskLine(`- [${sep}] a`)).toBe(false);
             expect(TaskLineClassifier.isTaskLine(`\t- [${sep}] a`)).toBe(false);
@@ -116,7 +116,7 @@ describe('line breaks, as Obsidian ends a line', () => {
 
     it('reads a checkbox as a task only with a space or a tab after `]`', () => {
         // Dev, Obsidian 1.12.4: `listItems` and the reading view agree
-        // (`.plan/stages/l1-lines/device-1.md`).
+        // (`archive/2026-09-stages/2-rebuild-2026-09-24.md`, 行と読み, L1 の実測).
         for (const tail of [' x', '\tx', ' ']) {
             expect(TaskLineClassifier.isTaskLine(`- [ ]${tail}`)).toBe(true);
             expect(TaskLineClassifier.isTaskLine(`\t- [ ]${tail}`)).toBe(true);

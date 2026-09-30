@@ -11,7 +11,7 @@ import type { FrontmatterKey } from '../../../src/services/persistence/writers/S
  * made, or written in one write — then each note the rows came from, each
  * row's subtree replaced by a link to the note; and, when a note the rows
  * came from refuses, what went of its rows taken out of the note again
- * (`note-ops-plan.md` 3).
+ * (`archive/2026-09-send.md`, 書き込みの順序と補償).
  */
 
 freezeDate(new Date(2026, 8, 25, 12, 0, 0));
