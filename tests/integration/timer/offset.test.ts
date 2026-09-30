@@ -13,6 +13,11 @@
  * The menu is asked to draw itself in the page rather than as the OS's
  * native menu, whose items a test cannot reach.
  *
+ * What the tests look at does not hang on the hour they run at: the remembered
+ * start is offered only within today, so `startHour` is set, for the test and
+ * in memory only, half a day away from now; the time field is read against a
+ * now the dialog is given, at noon.
+ *
  * Prerequisites:
  *   - Obsidian is running with the Dev vault (path in dev-paths.mjs) open,
  *     with a build that shifts the start of a running timer
@@ -50,6 +55,42 @@ function evalOrThrow<T>(code: string): T {
         throw new Error(`eval failed: ${(result as { error: string }).error}`);
     }
     return result as T;
+}
+
+/**
+ * Set `startHour`, in memory only, half a day away from now, so that now and
+ * the 20 minutes before it fall in the same day whenever the test runs. Answer
+ * the hour it had, for {@link restoreStartHour}.
+ */
+function startHourAwayFromNow(): number {
+    const away = (new Date().getHours() + 12) % 24;
+    return evalOrThrow<number>(`(() => {
+        const settings = app.plugins.plugins['obsidian-task-viewer'].settings;
+        const had = settings.startHour;
+        settings.startHour = ${away};
+        return JSON.stringify(had);
+    })()`);
+}
+
+function restoreStartHour(hour: number): void {
+    obsidianEval(`(() => {
+        app.plugins.plugins['obsidian-task-viewer'].settings.startHour = ${hour};
+        return JSON.stringify(true);
+    })()`);
+}
+
+/** Today at `hours`:`minutes`, local. */
+function todayAt(hours: number, minutes: number): number {
+    const at = new Date();
+    at.setHours(hours, minutes, 0, 0);
+    return at.getTime();
+}
+
+/** The calendar day before the day of `ms`, by the date (not 24 hours back). */
+function dayBefore(ms: number): string {
+    const at = new Date(ms);
+    at.setDate(at.getDate() - 1);
+    return dateOf(at.getTime());
 }
 
 /**
@@ -147,12 +188,16 @@ afterAll(async () => {
 
 describe('shifting the start of a running count-up', () => {
     let open: string | null = null;
+    let startHour: number | null = null;
     afterEach(() => {
         if (open) closeTimer(open);
         open = null;
+        if (startHour !== null) restoreStartHour(startHour);
+        startHour = null;
     });
 
     it('self, shifted to the start it overwrote: offered in the menu, and ■ records from that start', async () => {
+        startHour = startHourAwayFromNow();
         const prior = minuteFloor(Date.now() - 20 * 60_000);
         await writeIndexedTestFile(FILE, [`- [ ] 自分 @${dateOf(prior)}T${timeOf(prior)}`, ''].join('\n'));
         open = startTimer('自分', 'self');
@@ -199,6 +244,7 @@ describe('shifting the start of a running count-up', () => {
     });
 
     it('self, after ⏸ and ▶: the remembered start is no longer offered, the minutes back still are', async () => {
+        startHour = startHourAwayFromNow();
         const prior = minuteFloor(Date.now() - 20 * 60_000);
         await writeIndexedTestFile(FILE, [`- [ ] 続ける @${dateOf(prior)}T${timeOf(prior)}`, ''].join('\n'));
         open = startTimer('続ける', 'self');
@@ -246,14 +292,14 @@ describe('shifting the start of a running count-up', () => {
         open = startTimer('時刻で', 'child');
         pressElapsed(open, '...');
 
-        const seen = offsetDialog({ kind: 'time', type: '23:59' });
-        // 23:59 is later than now but in the last minute of the day.
-        const yesterday = dateOf(Date.now() - 24 * 60 * 60_000);
+        // The dialog reads the field against noon; 13:00 is later than that.
+        const noon = todayAt(12, 0);
+        const seen = offsetDialog({ kind: 'time', type: '13:00', now: noon });
         expect(seen).toMatchObject({ kind: 'time', says: 'info', applicable: true });
-        expect(seen.text).toMatch(/前日 23:59|yesterday 23:59/);
+        expect(seen.text).toMatch(/前日 13:00|yesterday 13:00/);
 
-        offsetDialog({ apply: true });
-        expect(readTestFile(FILE).split('\n')[1]).toContain(`@${yesterday}T23:59`);
+        offsetDialog({ apply: true, now: noon });
+        expect(readTestFile(FILE).split('\n')[1]).toContain(`@${dayBefore(noon)}T13:00`);
     });
 
     it('a real press of the mouse on the elapsed time opens the menu, and does not move the widget', async () => {
@@ -327,36 +373,49 @@ function mouse(id: string, path: [number, number][], from: [number, number] = [0
  * press the button that shifts. Answer what the dialog shows then: the kind
  * chosen, the line under the field and its tone, whether the field is marked
  * invalid, and whether the button can be pressed.
+ *
+ * With `now`, the dialog is given that as the time it reads the field against
+ * and foresees from: `Date.now` answers it while the dialog is acted on, which
+ * it reads without waiting. The shift itself is then written at the real now.
  */
-function offsetDialog(act: { kind?: 'minutes' | 'time'; type?: string; apply?: boolean }): {
+function offsetDialog(act: { kind?: 'minutes' | 'time'; type?: string; apply?: boolean; now?: number }): {
     kind: string; text: string; says: 'info' | 'warning' | null; invalid: boolean; applicable: boolean;
 } {
     return evalOrThrow(`(async () => {
         const dialog = document.querySelector('.tv-timer-offset');
         if (!dialog) throw new Error('no start-offset dialog open');
         const act = ${JSON.stringify(act)};
-        const [minutesBtn, timeBtn] = dialog.querySelectorAll('.tv-ctrl__segments > button');
-        if (act.kind) (act.kind === 'minutes' ? minutesBtn : timeBtn).click();
-        const kind = timeBtn.classList.contains('is-active') ? 'time' : 'minutes';
-        const rows = dialog.querySelectorAll('.tv-form__row');
-        const input = rows[kind === 'minutes' ? 0 : 1].querySelector('input[type="text"]');
-        if (act.type !== undefined) {
-            input.value = act.type;
-            input.dispatchEvent(new Event('input', { bubbles: true }));
-        }
-        const says = dialog.querySelector('.tv-timer-offset__says');
-        const apply = dialog.querySelector('.tv-form__buttons .mod-cta');
-        const seen = {
-            kind,
-            text: says.textContent,
-            says: says.style.display === 'none' ? null : says.classList.contains('tv-form__warning') ? 'warning' : says.classList.contains('tv-form__info') ? 'info' : null,
-            invalid: input.classList.contains('tv-ctrl__text-input--invalid'),
-            applicable: !apply.disabled,
+        const look = () => {
+            const [minutesBtn, timeBtn] = dialog.querySelectorAll('.tv-ctrl__segments > button');
+            if (act.kind) (act.kind === 'minutes' ? minutesBtn : timeBtn).click();
+            const kind = timeBtn.classList.contains('is-active') ? 'time' : 'minutes';
+            const rows = dialog.querySelectorAll('.tv-form__row');
+            const input = rows[kind === 'minutes' ? 0 : 1].querySelector('input[type="text"]');
+            if (act.type !== undefined) {
+                input.value = act.type;
+                input.dispatchEvent(new Event('input', { bubbles: true }));
+            }
+            const says = dialog.querySelector('.tv-timer-offset__says');
+            const apply = dialog.querySelector('.tv-form__buttons .mod-cta');
+            const seen = {
+                kind,
+                text: says.textContent,
+                says: says.style.display === 'none' ? null : says.classList.contains('tv-form__warning') ? 'warning' : says.classList.contains('tv-form__info') ? 'info' : null,
+                invalid: input.classList.contains('tv-ctrl__text-input--invalid'),
+                applicable: !apply.disabled,
+            };
+            if (act.apply) apply.click();
+            return seen;
         };
-        if (act.apply) {
-            apply.click();
-            await new Promise(r => setTimeout(r, 800));
+        const realNow = Date.now;
+        if (act.now !== undefined) Date.now = () => act.now;
+        let seen;
+        try {
+            seen = look();
+        } finally {
+            Date.now = realNow;
         }
+        if (act.apply) await new Promise(r => setTimeout(r, 800));
         return JSON.stringify(seen);
     })()`);
 }
