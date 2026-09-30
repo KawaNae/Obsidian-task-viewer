@@ -5,6 +5,7 @@ import type { SubtreeFrame } from '../../services/persistence/utils/SubtreeFrame
 import { hostWindow } from '../../utils/HostWindow';
 import { indentUnit } from '../../utils/ObsidianConfig';
 import { OverlayShell } from '../../views/sharedUI/OverlayShell';
+import { createFormRow } from '../form/formRow';
 import { SourceEditor, type DraftEditor } from '../form/source/SourceEditor';
 import { DestinationField } from './DestinationField';
 import { SendDialog, initialAsk, type SendSurface, type SendViewState } from './SendDialog';
@@ -17,6 +18,13 @@ import { SendDialog, initialAsk, type SendSurface, type SendViewState } from './
  * what the dialog's state says (`SendViewState`) and does nothing of its
  * own; the dialog's logic is `SendDialog`.
  *
+ * It is built of the form's shared pieces, as the task hub is (`_form.css`):
+ * the rows, the destination and the values offered are sections
+ * (`tv-form__group`) the form divides with a line, the fields are form rows
+ * (`createFormRow`) with their icons, the values offered stand under a
+ * section label as the hub's properties do, and the row of buttons is the
+ * one the hub's source mode asks in (`tv-form__buttons`).
+ *
  * It stands on an overlay (`OverlayShell`, centered), which keeps
  * Obsidian's hotkeys off the note behind while the focus is in it, and asks
  * the dialog before a close the user asks for (`beforeClose`). Asked
@@ -28,11 +36,10 @@ export class SendModal implements SendSurface {
     private readonly overlay = new OverlayShell();
     private dialog: SendDialog | null = null;
     private field!: DestinationField;
-    private rowsLabel!: HTMLElement;
     private rowsEl!: HTMLElement;
     private destinationEl!: HTMLElement;
+    private candidatesLabel!: HTMLElement;
     private candidatesEl!: HTMLElement;
-    private candidatesList!: HTMLElement;
     private errorEl!: HTMLElement;
     private warningEl!: HTMLElement;
     private messageEl!: HTMLElement;
@@ -81,12 +88,10 @@ export class SendModal implements SendSurface {
         bodyEl.addClass('tv-form');
         bodyEl.createEl('h2', { text: t('modal.send.title'), cls: 'tv-form__title' });
 
-        const rows = bodyEl.createDiv({ cls: 'tv-send__rows' });
-        this.rowsLabel = rows.createDiv({ cls: 'tv-send__label' });
-        this.rowsEl = rows.createDiv({ cls: 'tv-send__row-list' });
+        const rows = bodyEl.createDiv({ cls: 'tv-form__group' });
+        this.rowsEl = rows.createDiv({ cls: 'tv-send__rows' });
 
-        const destination = bodyEl.createDiv({ cls: 'tv-send__destination' });
-        destination.createDiv({ cls: 'tv-send__label', text: t('modal.send.destination') });
+        const destination = bodyEl.createDiv({ cls: 'tv-form__group tv-send__destination' });
         const initial = initialAsk(this.preview);
         this.field = new DestinationField(this.app, destination, {
             initial,
@@ -96,17 +101,18 @@ export class SendModal implements SendSurface {
         });
         this.destinationEl = destination.createDiv({ cls: 'tv-send__says' });
 
-        this.candidatesEl = bodyEl.createDiv({ cls: 'tv-send__candidates' });
-        this.candidatesEl.createDiv({ cls: 'tv-send__label', text: t('modal.send.frontmatter') });
-        this.candidatesList = this.candidatesEl.createDiv();
+        // Put in and taken out rather than hidden (renderCandidates): the
+        // last group in the form draws no divider under it.
+        this.candidatesLabel = bodyEl.createEl('h4', { cls: 'tv-form__section-label', text: t('modal.send.frontmatter') });
+        this.candidatesEl = bodyEl.createDiv({ cls: 'tv-form__group tv-send__candidates' });
 
         this.errorEl = bodyEl.createDiv({ cls: 'tv-form__error' });
         this.warningEl = bodyEl.createDiv({ cls: 'tv-form__warning' });
         this.messageEl = bodyEl.createDiv({ cls: 'tv-form__error' });
 
-        const actions = bodyEl.createDiv({ cls: 'tv-send__actions' });
-        this.askEl = actions.createSpan({ cls: 'tv-send__ask', text: t('modal.send.discardAsk') });
-        this.discardBtn = actions.createEl('button', { cls: 'mod-warning tv-send__discard', text: t('modal.send.discard'), attr: { type: 'button' } });
+        const actions = bodyEl.createDiv({ cls: 'tv-form__buttons' });
+        this.askEl = actions.createSpan({ cls: 'tv-form__ask', text: t('modal.send.discardAsk') });
+        this.discardBtn = actions.createEl('button', { cls: 'mod-warning tv-form__discard', text: t('modal.send.discard'), attr: { type: 'button' } });
         this.discardBtn.addEventListener('click', () => this.dialog?.discard());
         this.cancelBtn = actions.createEl('button', { attr: { type: 'button' } });
         this.cancelBtn.addEventListener('click', () => (this.asking ? this.dialog?.keep() : this.overlay.requestClose()));
@@ -141,8 +147,7 @@ export class SendModal implements SendSurface {
     }
 
     render(state: SendViewState): void {
-        this.rowsLabel.setText(t('modal.send.rows', { count: String(state.lineCount) }));
-        this.rowsEl.toggleClass('tv-send__row-list--asking', state.asking);
+        this.rowsEl.toggleClass('tv-source-drafts--asking', state.asking);
 
         this.destinationEl.empty();
         this.destinationEl.removeClass('tv-form__info', 'tv-form__warning');
@@ -154,19 +159,7 @@ export class SendModal implements SendSurface {
         this.field.offerHeadings(state.headings);
         this.field.markInvalid(state.invalid);
 
-        this.candidatesEl.toggle(state.candidates !== null);
-        this.candidatesList.empty();
-        for (const one of state.candidates ?? []) {
-            const label = this.candidatesList.createEl('label', { cls: 'tv-send__candidate' });
-            const box = label.createEl('input', { type: 'checkbox' });
-            box.checked = one.checked;
-            box.disabled = one.shut !== null;
-            box.addEventListener('change', () => this.dialog?.check(one.key, box.checked));
-            label.createSpan({ cls: 'tv-send__key', text: one.key });
-            label.createSpan({ cls: 'tv-send__value', text: one.value });
-            label.createSpan({ cls: 'tv-send__from', text: one.from });
-            if (one.shut) label.createSpan({ cls: 'tv-send__shut', text: one.shut });
-        }
+        this.renderCandidates(state.candidates);
 
         lines(this.errorEl, state.errors);
         lines(this.warningEl, state.warnings);
@@ -178,6 +171,34 @@ export class SendModal implements SendSurface {
         this.sendBtn.disabled = !state.canSend;
         this.sendBtn.setText(state.phase === 'sending' ? t('modal.send.sending') : t('modal.send.send'));
         this.asking = state.asking;
+    }
+
+    /**
+     * The values offered for the frontmatter, a form row each, as the hub's
+     * properties are: the key in the label's place, and the box, the value
+     * and where it comes from in the control's. Their section stands after
+     * the destination's while there are any, and is out of the form while
+     * there are none.
+     */
+    private renderCandidates(candidates: SendViewState['candidates']): void {
+        this.candidatesEl.empty();
+        if (candidates === null) {
+            this.candidatesLabel.detach();
+            this.candidatesEl.detach();
+            return;
+        }
+        if (!this.candidatesEl.isConnected) this.errorEl.before(this.candidatesLabel, this.candidatesEl);
+        for (const one of candidates) {
+            const { row } = createFormRow(this.candidatesEl, one.key);
+            const label = row.createEl('label', { cls: 'tv-send__candidate' });
+            const box = label.createEl('input', { type: 'checkbox' });
+            box.checked = one.checked;
+            box.disabled = one.shut !== null;
+            box.addEventListener('change', () => this.dialog?.check(one.key, box.checked));
+            label.createSpan({ cls: 'tv-send__value', text: one.value });
+            label.createSpan({ cls: 'tv-send__from', text: one.from });
+            if (one.shut) label.createSpan({ cls: 'tv-send__from', text: one.shut });
+        }
     }
 
     /** Asked, first or again: back takes the focus, where cancel was. */

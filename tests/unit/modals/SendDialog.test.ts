@@ -133,7 +133,7 @@ describe('opening', () => {
 
         expect(h.editor().draft()).toEqual({ parent: '- [ ] A', children: [{ text: '- [ ] a', was: 1 }] });
         expect(h.asks.map(one => one.ask)).toEqual([{ folder: 'Inbox', name: 'A', heading: '' }]);
-        expect(h.state()).toMatchObject({ canSend: false, destination: null, lineCount: 2 });
+        expect(h.state()).toMatchObject({ canSend: false, destination: null });
 
         await h.answer(facts());
         expect(h.state().canSend).toBe(true);
@@ -152,7 +152,7 @@ describe('opening', () => {
 
         expect(h.editors).toEqual([]);
         expect(h.fixed).toEqual([{ lines: ['- [ ] A', '  going on', '    - [ ] a'], why: t('modal.send.shallow', { line: '1' }) }]);
-        expect(h.state()).toMatchObject({ canSend: true, lineCount: 3 });
+        expect(h.state()).toMatchObject({ canSend: true });
         expect(h.dialog.request()?.rows).toEqual([{ taskId: 'row-1', base: subtree }]);
         expect(h.dialog.beforeClose()).toBe(true);
     });
@@ -341,7 +341,6 @@ describe('a send', () => {
         const f = facts({ kind: 'existing', path: 'Plan.md' });
         const h = await answered(f, { preview: previewOf({ candidates: [value('project')] }) });
         h.editor().type('- [ ] A2');
-        expect(h.state().lineCount).toBe(2);
 
         await h.dialog.send();
 

@@ -1,82 +1,50 @@
 /* ======================================================
    Send dialog (tv-send__*): rows sent to a note (SendModal).
-   The form's own pieces are _form.css (tv-form__*); the
-   editor is _source-editor.css.
+   Its frame is the form's shared pieces (_form.css: sections,
+   rows, section label, the row of buttons), as the task hub's
+   is; the editor is _source-editor.css. This file holds what
+   only this dialog has.
    ====================================================== */
 
-.tv-send__rows,
-.tv-send__destination,
-.tv-send__candidates {
-    margin-bottom: 12px;
-}
-
-.tv-send__label {
-    font-size: var(--font-ui-small);
-    color: var(--tv-text-muted);
-    margin-bottom: 4px;
-}
-
-.tv-send__row-list {
+.tv-send__rows {
     display: flex;
     flex-direction: column;
     gap: 6px;
 }
 
-.tv-send__fixed .tv-form__line-preview {
-    margin: 0 0 4px;
+/* A row the editor cannot open: its lines as they go, and why. */
+.tv-send__fixed {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
 }
 
-/* Asking whether to throw the draft away: the editors read as an invalid
- * input does, as in the hub's source mode. */
-.tv-send__row-list--asking .tv-source-editor .cm-editor,
-.tv-send__row-list--asking .tv-source-editor .cm-editor.cm-focused {
-    box-shadow: 0 0 0 1px var(--tv-text-danger);
-    background-color: var(--tv-danger-bg-subtle);
+.tv-send__fixed > * {
+    margin: 0;
 }
 
-.tv-send__says {
+/* What the send does, under the destination's fields. */
+.tv-send .tv-send__says {
     margin: 8px 0 0;
 }
 
+/* A value offered for the frontmatter: the box, the value, and where it
+ * comes from as the hub says where a value is inherited from
+ * (task-hub__source). */
 .tv-send__candidate {
+    flex: 1 1 0;
+    min-width: 0;
     display: flex;
     flex-wrap: wrap;
     align-items: baseline;
-    gap: 6px;
-    padding: 2px 0;
-    font-size: var(--font-ui-small);
-}
-
-.tv-send__key {
-    font-weight: var(--font-semibold);
+    gap: 8px;
 }
 
 .tv-send__value {
-    font-family: var(--tv-font-mono);
     word-break: break-word;
 }
 
-.tv-send__from,
-.tv-send__shut {
-    color: var(--tv-text-muted);
-}
-
-.tv-send__actions {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    justify-content: flex-end;
-    gap: 8px;
-    margin-top: 16px;
-    font-size: var(--font-ui-small);
-}
-
-.tv-send__discard {
-    margin-inline-end: auto;
-}
-
-/* On a phone the row has no width for the question and three buttons:
- * the question takes a line of its own. */
-.is-phone .tv-send__ask {
-    flex-basis: 100%;
+.tv-send__from {
+    font-size: 0.75em;
+    color: var(--tv-text-faint);
 }
