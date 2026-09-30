@@ -78,8 +78,3 @@ export function logError(message: string, opts: { notice?: boolean } = {}): void
     console.error(message);
     if (opts.notice !== false) _showNotice?.(message, 8000);
 }
-
-export function notify(message: string, durationMs = 5000): void {
-    pushEntry("info", message);
-    _showNotice?.(message, durationMs);
-}

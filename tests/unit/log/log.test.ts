@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import {
     clearLog, getLogEntries, onLogEntry, initLog,
-    logDebug, logInfo, logWarn, logError, notify,
+    logDebug, logInfo, logWarn, logError,
 } from '../../../src/log/log';
 
 /**
@@ -141,16 +141,6 @@ describe('log', () => {
             logError('boom');
             expect(consoleErrorSpy).toHaveBeenCalledWith('boom');
             expect(notices).toEqual([{ message: 'boom', durationMs: 8000 }]);
-        });
-    });
-
-    describe('notify', () => {
-        it('always shows a Notice and records an info-level entry, without console output', () => {
-            notify('fyi', 999);
-            expect(notices).toEqual([{ message: 'fyi', durationMs: 999 }]);
-            expect(getLogEntries()).toHaveLength(1);
-            expect(getLogEntries()[0]).toMatchObject({ level: 'info', message: 'fyi' });
-            expect(consoleLogSpy).not.toHaveBeenCalled();
         });
     });
 });

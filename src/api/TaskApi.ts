@@ -53,19 +53,16 @@ import {
     type StartHourResult,
 } from './TaskApiTypes';
 
-/**
- * Whether a value holds a line break. Every value here becomes part of one
- * line of a note; a break would split it in two, and the write layer refuses
- * such a line whole (`LineBreakInLine`). Refused here instead, where the
- * caller can be told which parameter it was.
+/*
+ * A value holding a line break is refused (`holdsLineBreak`). Every value
+ * here becomes part of one line of a note; a break would split it in two,
+ * and the write layer refuses such a line whole (`LineBreakInLine`). Refused
+ * here instead, where the caller can be told which parameter it was.
  *
- * A line break is what ends a line of a note (`holdsLineBreak`): CR and LF.
- * U+2028 and U+2029 are not — Obsidian keeps them inside the line, and so
- * does every reader here — so a value may hold them.
+ * A line break is what ends a line of a note: CR and LF. U+2028 and U+2029
+ * are not — Obsidian keeps them inside the line, and so does every reader
+ * here — so a value may hold them.
  */
-function hasLineBreak(value: string): boolean {
-    return holdsLineBreak(value);
-}
 
 /** Why an anchored ID finds no row: the one wording of it, for a read and a write. */
 function anchorNotFound(id: string, file: string, anchor: string): string {
@@ -521,9 +518,9 @@ export class TaskApi {
         const statusChar = params.status || ' ';
         if (!TaskLineClassifier.isStatusChar(statusChar)) throw new TaskApiError(`status must be a single character a checkbox can hold (not a line break, U+2028 or U+2029), got: ${JSON.stringify(statusChar)}`);
 
-        if (hasLineBreak(params.content)) throw new TaskApiError('content must not contain line breaks (\\r or \\n)');
+        if (holdsLineBreak(params.content)) throw new TaskApiError('content must not contain line breaks (\\r or \\n)');
 
-        if (params.heading !== undefined && hasLineBreak(params.heading)) throw new TaskApiError('heading must not contain line breaks (\\r or \\n)');
+        if (params.heading !== undefined && holdsLineBreak(params.heading)) throw new TaskApiError('heading must not contain line breaks (\\r or \\n)');
 
         const file = this.plugin.app.vault.getAbstractFileByPath(params.file);
         if (!(file instanceof TFile)) throw new TaskApiError(`File not found: ${params.file}`);
@@ -576,7 +573,7 @@ export class TaskApi {
         const updates: Partial<Task> = {};
 
         if (params.content !== undefined) {
-            if (hasLineBreak(params.content)) throw new TaskApiError('content must not contain line breaks (\\r or \\n)');
+            if (holdsLineBreak(params.content)) throw new TaskApiError('content must not contain line breaks (\\r or \\n)');
             updates.content = params.content;
         }
         if (params.status !== undefined) {
@@ -734,7 +731,7 @@ export class TaskApi {
      */
     async insertChildTask(params: InsertChildTaskParams): Promise<InsertChildTaskResult> {
         assertParams(params, INSERT_CHILD_TASK_SCHEMA, 'insertChildTask');
-        if (hasLineBreak(params.content)) throw new TaskApiError('content must not contain line breaks (\\r or \\n)');
+        if (holdsLineBreak(params.content)) throw new TaskApiError('content must not contain line breaks (\\r or \\n)');
         const task = await this.rowToWrite(params.parentId);
         if (task.isReadOnly) throw new TaskApiError(`Task ${params.parentId} is read-only (parserId=${task.parserId})`);
         const written = await this.writeService.insertLine(task.id, TaskParser.format(createTempTask({ id: 'api-child', content: params.content })), 'firstChild');

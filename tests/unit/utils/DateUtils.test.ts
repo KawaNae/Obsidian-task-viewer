@@ -179,24 +179,6 @@ describe('DateUtils', () => {
         });
     });
 
-    describe('formatDateTimeForStorage', () => {
-        it('date + time → combined', () => {
-            expect(DateUtils.formatDateTimeForStorage('2026-03-11', '09:00')).toBe('2026-03-11T09:00');
-        });
-
-        it('date only → date', () => {
-            expect(DateUtils.formatDateTimeForStorage('2026-03-11')).toBe('2026-03-11');
-        });
-
-        it('no date, no time → null', () => {
-            expect(DateUtils.formatDateTimeForStorage()).toBeNull();
-        });
-
-        it('uses fallbackDate when date missing', () => {
-            expect(DateUtils.formatDateTimeForStorage(undefined, '09:00', '2026-03-11')).toBe('2026-03-11T09:00');
-        });
-    });
-
     describe('getVisualWeekKey', () => {
         // 2026-05-13 is Wednesday. Week containing it:
         // - weekStartDay=1 (Monday): starts 2026-05-11

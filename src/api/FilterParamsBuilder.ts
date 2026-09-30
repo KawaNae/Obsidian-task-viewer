@@ -43,7 +43,7 @@ function condition(
     return node;
 }
 
-export function normalizeStringArray(value: string | string[] | undefined, stripHash = false): string[] {
+function normalizeStringArray(value: string | string[] | undefined, stripHash = false): string[] {
     if (!value) return [];
     const arr = typeof value === 'string' ? value.split(',') : value;
     return arr.map(s => { let v = s.trim(); if (stripHash) v = v.replace(/^#/, ''); return v; }).filter(Boolean);

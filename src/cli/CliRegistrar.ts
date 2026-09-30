@@ -24,10 +24,12 @@ import { createHelpHandler } from './handlers/HelpHandler';
  * Flag declarations are derived from OperationSchemas (the single source of
  * truth for the CLI/API parameter surface), and every handler is wrapped
  * with strict validation: unknown flags error with a did-you-mean
- * suggestion instead of being silently ignored.
+ * suggestion instead of being silently ignored. `export-image` is the one
+ * registered without that wrapper (see its registration below).
  *
- * Commands (12): list, today, get, create, update, delete, duplicate, tasks-for-date-range,
- *                 categorized-tasks-for-date-range, insert-child-task, get-start-hour, help
+ * Commands (13): list, today, get, create, update, delete, duplicate, tasks-for-date-range,
+ *                 categorized-tasks-for-date-range, insert-child-task, get-start-hour,
+ *                 export-image, help
  */
 export function registerCliHandlers(plugin: PluginContext & CliRegistrar & ApiHost & ExportHost): void {
     function register(action: string, description: string, flags: CliFlags | null, handler: CliHandler): void {
