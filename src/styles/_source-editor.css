@@ -10,8 +10,8 @@
  * ビューはそれぞれ1つの入力欄で、自分の枠に入る。親は必ず1行、子は無くても
  * よい別のものなので、1つの枠に入れると空の子のビューが空の子の行に見える。
  * 枠、フォーカス、不正の見た目は入力欄の規則（tv-ctrl__input-wrap、
- * _controls.css）が描き、ビューは枠も背景も持たない。2つの枠は左端を揃え、
- * 子の字下げと線は子の枠の中に置く。
+ * _controls.css）が描き、ビューは枠も背景も持たない。子の枠は字下げ一段
+ * 右に置き、字下げの線はその左の外に立てる。
  */
 
 .tv-source-editor {
@@ -75,22 +75,25 @@
     background: var(--text-selection);
 }
 
-/* 子の文字は、親の行の記号の位置（行の左の余白）から字下げ一段右。
-   線は Obsidian の字下げの線（.cm-indent::before）と同じ太さと色で、
-   親の記号 `-` の幅の中ほどに、子の枠の中に立てる。2つの枠は左端が揃うので、
-   枠の中の同じ位置が親の `-` の下になる。上下は行の範囲（.cm-content の
-   padding の内側）に収め、枠の線に触れさせない */
+/* 子の枠は親の枠から字下げ一段（--tv-source-indent）右に置く。子は親の下に
+   必ず字下げされることを、枠そのものの位置で見せる。子の文字は枠の中で親の
+   文字と同じ余白から始まるので、親の記号 `-` から字下げ一段右になる。
+   線は Obsidian の字下げの線（.cm-indent::before）と同じ太さと色で、子の枠の
+   左の外（字下げの余白の中）、親の記号 `-` の幅の中ほどの下に、子の枠の上端
+   から下端まで立てる。2つの枠の枠線は同じ幅なので、子の枠の padding box から
+   見た親の `-` の位置は「行の余白 + 0.5ch − 字下げ」になる。上下の -1px は
+   枠線（_controls.css の 1px）の分で、線を枠の外の高さに揃える */
 .tv-source-editor__children {
     position: relative;
-    padding-left: var(--tv-source-indent, 4ch);
+    margin-left: var(--tv-source-indent, 4ch);
 }
 
 .tv-source-editor__children::before {
     content: '';
     position: absolute;
-    top: 4px;
-    bottom: 4px;
-    left: calc(var(--tv-source-line-pad) + 0.5ch);
+    top: -1px;
+    bottom: -1px;
+    left: calc(var(--tv-source-line-pad) + 0.5ch - var(--tv-source-indent, 4ch));
     border-left: var(--indentation-guide-width, 1px) solid var(--indentation-guide-color, var(--background-modifier-border));
 }
 

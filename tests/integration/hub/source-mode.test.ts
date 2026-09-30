@@ -252,7 +252,7 @@ describe('the hub\'s source mode', () => {
         }
     });
 
-    it('boxes the parent and the children each as an input field, the guide in the children\'s box, and says what goes in an empty one', async () => {
+    it('boxes the parent and the children each as an input field, the children\'s box indented with the guide outside it, and says what goes in an empty one', async () => {
         await writeIndexedTestFile(TEST_FILE, NOTE);
         openSource('次');
         const look = run<Record<string, unknown>>(`
@@ -260,7 +260,10 @@ describe('the hub\'s source mode', () => {
             const children = document.querySelector('.task-hub .tv-source-editor__children');
             const p = parent.getBoundingClientRect(), c = children.getBoundingClientRect();
             const guide = getComputedStyle(children, '::before');
-            const guideLeft = c.left + parseFloat(getComputedStyle(children).borderLeftWidth) + parseFloat(guide.left);
+            const border = parseFloat(getComputedStyle(children).borderLeftWidth);
+            const guideLeft = c.left + border + parseFloat(guide.left);
+            const guideTop = c.top + border + parseFloat(guide.top);
+            const dash = viewOf('parent').coordsAtPos(0, 1);
             const accent = colorOf('var(--tv-accent)');
             const focusedBoxes = () => [parent, children].map(box => getComputedStyle(box).borderTopColor === accent);
             viewOf('parent').focus();
@@ -272,14 +275,15 @@ describe('the hub\'s source mode', () => {
             return JSON.stringify({
                 boxes: [parent, children].map(box => box.classList.contains('tv-ctrl__input-wrap') && box.classList.contains('tv-ctrl__input-wrap--glow')),
                 oneBox: document.querySelector('.task-hub .tv-source-editor').classList.contains('tv-ctrl__input-wrap'),
-                leftAligned: Math.abs(p.left - c.left) < 1 && Math.abs(p.right - c.right) < 1,
-                guideInside: guideLeft > c.left && guideLeft < c.left + parseFloat(getComputedStyle(children).paddingLeft),
+                indented: c.left - p.left > 10 && Math.abs(p.right - c.right) < 1,
+                guideUnderDash: guideLeft >= dash.left && guideLeft <= dash.right && guideLeft < c.left - 2,
+                guideSpansBox: Math.abs(guideTop - c.top) < 1 && Math.abs(parseFloat(guide.height) - c.height) < 1,
                 placeholder: children.querySelector('.cm-placeholder')?.textContent ?? null,
                 onParent, onChildren,
             });
         `);
         expect(look).toEqual({
-            boxes: [true, true], oneBox: false, leftAligned: true, guideInside: true,
+            boxes: [true, true], oneBox: false, indented: true, guideUnderDash: true, guideSpansBox: true,
             placeholder: '子の行', onParent: [true, false], onChildren: [false, true],
         });
         // Typed in, the placeholder goes.
