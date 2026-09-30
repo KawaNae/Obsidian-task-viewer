@@ -1,9 +1,7 @@
 import { describe, it, expect } from 'vitest';
-import type { App } from 'obsidian';
 import { Outline } from '../../../src/services/parsing/utils/Outline';
 import { FileParsePipeline } from '../../../src/services/parsing/FileParsePipeline';
 import { namesOutsideIndex } from '../../../src/services/core/RowNames';
-import { FileOperations } from '../../../src/services/persistence/utils/FileOperations';
 import { DEFAULT_SETTINGS } from '../../../src/types';
 
 describe('Outline.depthOf', () => {
@@ -72,9 +70,8 @@ describe('a note that mixes tabs and spaces', () => {
     });
 
     it('has the subtree a write carries where the parser reads it', () => {
-        const ops = new FileOperations({} as App);
-        expect(ops.collectChildrenFromLines(Outline.read([...MIXED]), 1).childrenLines).toEqual([]);
-        expect(ops.collectChildrenFromLines(Outline.read([...MIXED]), 2).childrenLines).toEqual([MIXED[3], MIXED[4]]);
+        expect(Outline.read([...MIXED]).subtreeEnd(1)).toBe(2);
+        expect(Outline.read([...MIXED]).subtreeEnd(2)).toBe(5);
     });
 });
 
@@ -180,12 +177,11 @@ describe('the write and the parser agree on every subtree', () => {
 
     for (const [name, lines] of SHAPES) {
         it(name, () => {
-            const ops = new FileOperations({} as App);
             const blocks = rowsOf([...lines]);
             expect(blocks.length).toBeGreaterThan(0);
             for (const block of blocks) {
-                const { childrenLines } = ops.collectChildrenFromLines(Outline.read([...lines]), block.line);
-                const written = childrenLines.map((_, i) => block.line + 1 + i);
+                const end = Outline.read([...lines]).subtreeEnd(block.line);
+                const written = Array.from({ length: end - block.line - 1 }, (_, i) => block.line + 1 + i);
                 expect(written, `subtree of line ${block.line}`).toEqual(block.childLineNumbers);
             }
         });

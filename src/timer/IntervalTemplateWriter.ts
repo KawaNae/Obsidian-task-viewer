@@ -5,9 +5,10 @@
  * Format: YAML frontmatter (_tv-name) + JSON code block (icon, groups).
  */
 
-import { type App, TFile, TFolder, normalizePath } from 'obsidian';
+import { type App, TFile } from 'obsidian';
 import type { IntervalGroup } from './TimerInstance';
-import { createFile, replaceWhole, type WriteChannel } from '../services/persistence/FileLines';
+import type { WriteChannel } from '../services/persistence/FileLines';
+import { saveTemplateNote, templateNoteContent, templateNotePath, yamlQuoted } from '../services/template/TemplateNote';
 
 export interface TemplateCreateData {
     name: string;
@@ -23,15 +24,10 @@ export class IntervalTemplateWriter {
 
     /** @returns the note, or null when the overwrite was not written (the write layer has told the user why). */
     async updateTemplate(filePath: string, data: TemplateCreateData): Promise<TFile | null> {
-        const existing = this.app.vault.getAbstractFileByPath(filePath);
-        if (!(existing instanceof TFile)) {
+        if (!(this.app.vault.getAbstractFileByPath(filePath) instanceof TFile)) {
             throw new Error('Template file not found.');
         }
-        const content = this.buildFileContent(data);
-        // 全体上書き。どの行がどの行になったかは言えないので、行の対応を
-        // 持たない着地として告げる（replaceWhole）。
-        const { written } = await replaceWhole(this.app, existing, this.channelFor(filePath), content);
-        return written ? existing : null;
+        return saveTemplateNote(this.app, filePath, this.channelFor(filePath), data.name, this.buildFileContent(data));
     }
 
     /**
@@ -39,28 +35,15 @@ export class IntervalTemplateWriter {
      * told the user why). A name already taken throws, before anything is written.
      */
     async saveTemplate(folderPath: string, data: TemplateCreateData): Promise<TFile | null> {
-        const content = this.buildFileContent(data);
-        const sanitizedName = data.name.replace(/[\\/:*?"<>|]/g, '_');
-        const filePath = normalizePath(`${folderPath}/${sanitizedName}.md`);
-
-        const existing = this.app.vault.getAbstractFileByPath(filePath);
-        if (existing instanceof TFile) {
+        const filePath = templateNotePath(folderPath, data.name);
+        if (this.app.vault.getAbstractFileByPath(filePath) instanceof TFile) {
             throw new Error(`A template named "${data.name}" already exists.`);
         }
-        const created = await createFile(this.app, filePath, this.channelFor(filePath), data.name, async () => {
-            await this.ensureFolder(folderPath);
-            return content;
-        });
-        return created.written ? created.file : null;
+        return saveTemplateNote(this.app, filePath, this.channelFor(filePath), data.name, this.buildFileContent(data));
     }
 
     private buildFileContent(data: TemplateCreateData): string {
-        const lines: string[] = ['---'];
-        lines.push(`_tv-name: "${this.escapeYamlString(data.name)}"`);
-        lines.push('---');
-        lines.push('');
-
-        const jsonData: Record<string, unknown> = {
+        return templateNoteContent([['_tv-name', yamlQuoted(data.name)]], {
             icon: data.icon,
             groups: data.groups.map(g => ({
                 repeatCount: g.repeatCount,
@@ -70,33 +53,6 @@ export class IntervalTemplateWriter {
                     type: s.type,
                 })),
             })),
-        };
-
-        lines.push('```json');
-        lines.push(JSON.stringify(jsonData, null, 2));
-        lines.push('```');
-        lines.push('');
-
-        return lines.join('\n');
-    }
-
-    private escapeYamlString(str: string): string {
-        return str.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
-    }
-
-    private async ensureFolder(folderPath: string): Promise<void> {
-        const normalized = normalizePath(folderPath);
-        const existing = this.app.vault.getAbstractFileByPath(normalized);
-        if (existing instanceof TFolder) return;
-
-        const parts = normalized.split('/');
-        let current = '';
-        for (const part of parts) {
-            current = current ? `${current}/${part}` : part;
-            const folder = this.app.vault.getAbstractFileByPath(current);
-            if (!folder) {
-                await this.app.vault.createFolder(current);
-            }
-        }
+        });
     }
 }

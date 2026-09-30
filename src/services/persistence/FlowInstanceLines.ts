@@ -1,8 +1,7 @@
 import { collectFlowLineIndices, formatFlowLine } from '../parsing/utils/FlowLineScanner';
-import { FileOperations } from './utils/FileOperations';
 import { Outline, type OutlineReading } from '../parsing/utils/Outline';
 import { TaskLineClassifier } from '../parsing/utils/TaskLineClassifier';
-import { Block, type PlacedLine } from './utils/Placement';
+import { Block, Placement, type PlacedLine } from './utils/Placement';
 
 /**
  * One generated child line, as the block described it.
@@ -60,7 +59,7 @@ export function flowInstanceHead(insert: FlowInstanceInsert): string {
  *
  * `unit` is the indentation of a new level, as Obsidian's settings say
  * (`ObsidianConfig.indentUnit`): what a child takes where the row that fired
- * has none to copy (`FileOperations.resolveChildIndent`).
+ * has none to copy (`Placement.resolveChildIndent`).
  */
 export function renderFlowInstance(
     outline: OutlineReading,
@@ -112,7 +111,7 @@ function spelledAsFired(fired: string, head: string): string {
  * for the one that fired they would be a paragraph under the one written, the
  * series cut off. The spelling is taken from the fired row's children, its
  * own `==>` lines last, being the ones the fire consumes
- * (`FileOperations.resolveChildIndent`).
+ * (`Placement.resolveChildIndent`).
  */
 function renderRecurrence(
     outline: OutlineReading,
@@ -123,7 +122,7 @@ function renderRecurrence(
 ): PlacedLine[] {
 
     const flowAbs = new Set(collectFlowLineIndices(outline, currentLine));
-    const childIndent = FileOperations.resolveChildIndent(outline, currentLine, unit, newParentLine, flowAbs);
+    const childIndent = Placement.resolveChildIndent(outline, currentLine, unit, newParentLine, flowAbs);
 
     return [
         { text: newParentLine, kind: 'item', under: 'spot' },
@@ -138,7 +137,7 @@ function renderRecurrence(
  * sibling of the task that fired, spelled as it (`head`). Each
  * child is a child of the line above it one `depth` up (the parent for a
  * depth of 1), indented as a child of the fired task would be under that line
- * (`FileOperations.resolveChildIndent`) — so a subtree keeps one spelling, and
+ * (`Placement.resolveChildIndent`) — so a subtree keeps one spelling, and
  * a tab and spaces mixed do not cut a child loose.
  */
 function renderGenerated(
@@ -150,7 +149,7 @@ function renderGenerated(
     unit: string,
 ): PlacedLine[] {
     const flowAbs = new Set(collectFlowLineIndices(outline, currentLine));
-    const under = (line: string) => FileOperations.resolveChildIndent(outline, currentLine, unit, line, flowAbs);
+    const under = (line: string) => Placement.resolveChildIndent(outline, currentLine, unit, line, flowAbs);
 
     const block: PlacedLine[] = [
         { text: head, kind: 'item', under: 'spot' },

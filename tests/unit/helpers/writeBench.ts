@@ -4,7 +4,6 @@ import { TaskStore } from '../../../src/services/core/TaskStore';
 import { InlineTaskWriter } from '../../../src/services/persistence/writers/InlineTaskWriter';
 import { TaskCloner } from '../../../src/services/persistence/TaskCloner';
 import { TaskRepository } from '../../../src/services/persistence/TaskRepository';
-import { FileOperations } from '../../../src/services/persistence/utils/FileOperations';
 import { DEFAULT_SETTINGS } from '../../../src/types';
 import type { Task } from '../../../src/types';
 import type { LineEdit, Refusal, WriteChannel } from '../../../src/services/persistence/FileLines';
@@ -118,14 +117,13 @@ export async function writeBench(files: string | string[] | Record<string, strin
     const repo = new TaskRepository(app);
     repo.connect(channel);
     const writes = (path: string) => repo.channelOf(path);
-    const fileOps = new FileOperations(app);
 
     const bench: WriteBench = {
         app,
         contents,
         scanner,
-        writer: new InlineTaskWriter(app, fileOps, writes),
-        cloner: new TaskCloner(app, fileOps, writes),
+        writer: new InlineTaskWriter(app, writes),
+        cloner: new TaskCloner(app, writes),
         repo,
         refused,
         filed,

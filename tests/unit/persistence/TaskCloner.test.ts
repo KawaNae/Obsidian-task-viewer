@@ -3,9 +3,7 @@ import { TaskCloner } from '../../../src/services/persistence/TaskCloner';
 import { draftOver, replayEdits } from '../../../src/services/persistence/FileLines';
 import { Outline } from '../../../src/services/parsing/utils/Outline';
 import { checkWrite, type WrittenLine } from '../../../src/services/parsing/utils/OutlineCheck';
-import { FileOperations } from '../../../src/services/persistence/utils/FileOperations';
 import { Placement } from '../../../src/services/persistence/utils/Placement';
-import type { App } from 'obsidian';
 
 // Access private methods via prototype
 const proto = TaskCloner.prototype as any;
@@ -14,8 +12,7 @@ function callShiftInlineDates(line: string, dayOffset: number): string {
     return proto.shiftInlineDates.call(null, line, dayOffset);
 }
 
-// putCopies only reads lines and fileOps; the vault is never touched.
-const fileOps = new FileOperations({} as App);
+// putCopies only reads lines; the vault is never touched.
 
 function callSpliceCopies(
     lines: string[],
@@ -45,7 +42,7 @@ function spliceAndReport(
     // Where the two duplicate paths put their copies.
     const spot = Placement.copyOf(Outline.read(target), taskLine, position === 'before' ? 'above' : 'below', '- [ ] n');
     const { draft, reported, puts, placedBy } = draftOver(target);
-    proto.putCopies.call({ fileOps }, draft, taskLine, parentLines, spot);
+    proto.putCopies.call({}, draft, taskLine, parentLines, spot);
     // Every copy reads as the original's subtree does, and every other line
     // as it did: the check the write is held to (`checkWrite`).
     const replayed = replayEdits(lines.length, reported, placedBy)!;

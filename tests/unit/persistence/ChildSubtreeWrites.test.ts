@@ -6,7 +6,7 @@ import { writeBench, FILE, type WriteBench } from '../helpers/writeBench';
 /**
  * How far a task's subtree reaches, as seen by the writes that move it.
  *
- * `collectChildrenFromLines` is a *range* function: every caller uses the
+ * A subtree (`OutlineReading.subtreeEnd`) is a *range*: every caller uses the
  * result as a splice extent or an indent baseline, never as a list of task
  * lines. These tests pin the extent through the operations that depend on it,
  * so that a change to how depth is compared (visual width vs character count)
