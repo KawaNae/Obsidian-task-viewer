@@ -1151,7 +1151,7 @@ Defined in `src/types/Settings.ts` as `TaskViewerSettings` (re-exported from `sr
 | `applyGlobalStyles` | boolean | `false` | Apply plugin CSS globally |
 | `enableStatusMenu` | boolean | `true` | Show status menu on checkbox long-press |
 | `statusDefinitions` | StatusDefinition[] | *(see below)* | Status character definitions (char, label, isComplete) |
-| `scopeKeys` | ScopeKeys | `tv-*` family | Key names for the note scope (frontmatter) and section property lines; formerly `frontmatterTaskKeys`, then `tvFileKeys` (migrated in that order) |
+| `scopeKeys` | ScopeKeys | `tv-*` family | Key names for the note scope (frontmatter) and section property lines |
 | `longPressThreshold` | number | 400 | Long-press detection time (ms) |
 | `zoomLevel` | number | 1.0 | Default timeline zoom level |
 | `pastDaysToShow` | number | 0 | Number of past days to show in timeline |

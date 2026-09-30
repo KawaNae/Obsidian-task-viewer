@@ -27,7 +27,6 @@ import { TASK_VIEWER_HOVER_SOURCE_DISPLAY, TASK_VIEWER_HOVER_SOURCE_ID } from '.
 import { getViewMeta, isViewType } from './constants/viewRegistry';
 import { openLeafFromState } from './services/viewConfig/LeafOpener';
 import { openViewFromUri } from './services/viewConfig/UriViewOpener';
-import { migrateSettings } from './services/settings/migration';
 import { PropertiesMenuBuilder } from './interaction/menu/builders/PropertiesMenuBuilder';
 import { PropertyCalculator } from './interaction/menu/PropertyCalculator';
 import { PropertyFormatter } from './interaction/menu/PropertyFormatter';
@@ -395,8 +394,6 @@ export default class TaskViewerPlugin extends Plugin {
     async loadSettings() {
         const raw = await this.loadData();
         const rawObject = (raw && typeof raw === 'object') ? raw as Record<string, unknown> : {};
-
-        migrateSettings(rawObject);
 
         const merged = Object.assign({}, DEFAULT_SETTINGS, rawObject) as TaskViewerSettings;
         const normalizedKeys = normalizeScopeKeys(merged.scopeKeys);
