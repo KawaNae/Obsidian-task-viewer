@@ -2,10 +2,10 @@ import type { ParserId, Task } from '../../types';
 
 /**
  * A line read as a task, before it has a name: every field of a Task but
- * `id`. What a line parser answers; the name is the reader's to give
+ * `id` and `reading`. What a line parser answers; the name is the reader's to give
  * (`NoteTasks` applies the namer its caller hands it).
  */
-export type UnnamedTask = Omit<Task, 'id'>;
+export type UnnamedTask = Omit<Task, 'id' | 'reading'>;
 
 /**
  * Location + content fields every Task must state explicitly.

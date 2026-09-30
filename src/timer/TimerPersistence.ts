@@ -28,7 +28,7 @@ import {
 } from './IntervalMath';
 import type { TimerLifecycle } from './TimerLifecycle';
 import type { TimerStorageUtils } from './TimerStorageUtils';
-import { TaskIdGenerator } from '../services/display/TaskIdGenerator';
+import { readName } from '../services/core/RowNames';
 import { logError, logInfo } from '../log/log';
 
 /** Parsers a saved timer may name. Anything else is not a timer this version saved. */
@@ -328,7 +328,7 @@ export class TimerPersistence {
         }
 
         const taskId = persisted.taskId;
-        if (!this.lifecycle.isIdleTimer(taskId) && !isDailyTimer({ taskId }) && !TaskIdGenerator.parse(taskId)) {
+        if (!this.lifecycle.isIdleTimer(taskId) && !isDailyTimer({ taskId }) && !readName(taskId)) {
             return null;
         }
         if (!isPendingRecordOrNull(persisted.pendingRecord) || !isOpeningOrNull(persisted.opening)

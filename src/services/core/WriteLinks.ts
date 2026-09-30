@@ -26,7 +26,7 @@ export interface Walked {
  * say they went: what lets a name from before our own write be followed to
  * the line the row stands on after it.
  *
- * A name is one line of one reading (`TaskIdGenerator.nameOf`). Our own write
+ * A name is one line of one reading (`RowNames.nameOf`). Our own write
  * knows which line became which (`LineEdits`), so following a line across it
  * is not a guess; nothing else is followed. A row the write rewrote or carried
  * is followed, one it took away is not.

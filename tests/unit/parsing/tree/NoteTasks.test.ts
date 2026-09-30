@@ -893,9 +893,10 @@ describe('NoteTasks の名前', () => {
         const sections = NoteSections.read(outline);
         const tasks = NoteTasks.extract(outline, sections, {
             ...defaultCtx,
-            name: (parserId, line) => `${parserId}@${line}`,
+            name: (parserId, line) => ({ id: `${parserId}@${line}`, reading: 'r.1' }),
         });
         expect(tasks.map(t => t.id)).toEqual(['tv-inline@0', 'tv-inline@1']);
+        expect(tasks.map(t => t.reading)).toEqual(['r.1', 'r.1']);
         expect(tasks[0].childIds).toEqual(['tv-inline@1']);
         expect(tasks[1].parentId).toBe('tv-inline@0');
     });

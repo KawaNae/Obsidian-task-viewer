@@ -21,7 +21,7 @@ import { MOBILE_BREAKPOINT_PX } from '../../constants/layout';
 import { HandleManager } from '../sharedUI/handles/HandleManager';
 import { SelectionController } from '../../interaction/selection/SelectionController';
 import { TimelineToolbar } from './TimelineToolbar';
-import { TaskIdGenerator } from '../../services/display/TaskIdGenerator';
+import { parseSegmentId } from '../../services/display/SegmentIds';
 
 import { GridRenderer } from './renderers/GridRenderer';
 import { AllDaySectionRenderer } from '../sharedUI/AllDaySectionRenderer';
@@ -492,7 +492,7 @@ export class TimelineView extends ItemView {
             (taskId: string) => {
                 // Store base task id so split segments all share one selection and
                 // the selection survives a drag-move that regenerates segment ids.
-                const segInfo = TaskIdGenerator.parseSegmentId(taskId);
+                const segInfo = parseSegmentId(taskId);
                 const baseId = segInfo?.baseId ?? taskId;
                 this.handleManager.selectTask(baseId);
             },

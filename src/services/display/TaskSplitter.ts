@@ -6,7 +6,7 @@ import {
     shouldSplitDisplayTask,
     splitDisplayTaskAtBoundary,
 } from './DisplayTaskConverter';
-import { TaskIdGenerator } from './TaskIdGenerator';
+import { makeSegmentId } from './SegmentIds';
 import { getTaskDateRange } from './VisualDateRange';
 
 export type SplitBoundary =
@@ -102,7 +102,7 @@ function splitAtDateBoundary(dt: DisplayTask, boundaryDate: string, startHour: n
 
     const head: DisplayTask = {
         ...dt,
-        id: TaskIdGenerator.makeSegmentId(originalId, dt.effectiveStartDate),
+        id: makeSegmentId(originalId, dt.effectiveStartDate),
         effectiveEndDate: boundary.beforeDate,
         effectiveEndTime: boundary.beforeTime,
         endDate: boundary.beforeDate,
@@ -114,7 +114,7 @@ function splitAtDateBoundary(dt: DisplayTask, boundaryDate: string, startHour: n
 
     const tail: DisplayTask = {
         ...dt,
-        id: TaskIdGenerator.makeSegmentId(originalId, boundary.date),
+        id: makeSegmentId(originalId, boundary.date),
         effectiveStartDate: boundary.date,
         effectiveStartTime: boundary.time,
         startDate: boundary.date,

@@ -40,7 +40,7 @@ import { CalendarSchema, type CalendarConfig, type CalendarTransient } from './C
 import { HandleManager } from '../sharedUI/handles/HandleManager';
 import { markHandleSurface } from '../sharedUI/handles/HandleSurface';
 import { SelectionController } from '../../interaction/selection/SelectionController';
-import { TaskIdGenerator } from '../../services/display/TaskIdGenerator';
+import { parseSegmentId } from '../../services/display/SegmentIds';
 import { SidebarManager } from '../sidebar/SidebarManager';
 import { PinnedListRenderer } from '../sharedUI/PinnedListRenderer';
 import { RenderScheduler } from '../sharedUI/RenderScheduler';
@@ -358,7 +358,7 @@ export class CalendarView extends ItemView {
             (taskId: string) => {
                 // Store base task id so split segments all share one selection and
                 // the selection survives a drag-move that regenerates segment ids.
-                const baseId = TaskIdGenerator.parseSegmentId(taskId)?.baseId ?? taskId;
+                const baseId = parseSegmentId(taskId)?.baseId ?? taskId;
                 this.handleManager?.selectTask(baseId);
             },
             () => this.getViewStartDateString(),

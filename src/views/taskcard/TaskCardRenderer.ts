@@ -44,7 +44,7 @@ import { TaskLinkInteractionManager } from './TaskLinkInteractionManager';
 import { bindTapIntents } from '../../interaction/tap/TapIntent';
 import type { ChildRenderItem, TaskCardLinkRuntime } from './types';
 import { getEffectiveMask } from '../../services/data/EffectiveProperties';
-import { TaskIdGenerator } from '../../services/display/TaskIdGenerator';
+import { mapRow } from '../../services/display/SegmentIds';
 import { holdCard, type CardHold } from './CardHold';
 import { withoutEmbeds } from '../../services/parsing/utils/InlineNotation';
 
@@ -192,7 +192,7 @@ export class TaskCardRenderer extends Component {
         for (const key of this.expandedTaskIds) {
             if (!key.startsWith(scope)) continue;
             const held = key.slice(scope.length);
-            const now = TaskIdGenerator.mapRow(held, row => readService.getTask(row)?.id);
+            const now = mapRow(held, row => readService.getTask(row)?.id);
             if (now !== taskId) continue;
             this.expandedTaskIds.delete(key);
             this.expandedTaskIds.add(cardInstanceId);

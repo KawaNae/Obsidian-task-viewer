@@ -6,7 +6,7 @@ import type { DuplicateOptions, Task } from '../../types';
 import type { AnchoredRow, RowSnapshot, SendRow, SendWrite, TaskIndex } from '../core/TaskIndex';
 import type { SendTo } from '../persistence/writers/SendWriter';
 import type { FlowDeleteAssessment } from '../flow/FlowDeletion';
-import { TaskIdGenerator } from '../display/TaskIdGenerator';
+import { parseSegmentId } from '../display/SegmentIds';
 
 /**
  * Write-side entry point for views and interaction handlers.
@@ -28,7 +28,7 @@ export class TaskWriteService {
 
     /** Resolve a synthetic segment ID to the original task ID (see class doc). */
     private resolveTaskId(taskId: string): string {
-        return TaskIdGenerator.parseSegmentId(taskId)?.baseId ?? taskId;
+        return parseSegmentId(taskId)?.baseId ?? taskId;
     }
 
     // ===== Task CRUD =====
