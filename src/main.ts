@@ -44,7 +44,7 @@ import { OverdueWatcher } from './services/display/OverdueWatcher';
 import { TaskHubPanel, type TaskHubPanelOptions } from './modals/hub/TaskHubPanel';
 import { createTaskMenuExtension } from './editor/TaskMenuExtension';
 import { createDiagnosticsExtension } from './editor/DiagnosticsExtension';
-import { flowFireExtension } from './editor/FlowFireExtension';
+import { fireFilter } from './editor/FlowFireExtension';
 import { createGenBlockPreview } from './editor/GenBlockPreview';
 import { GEN_LANGUAGE_TAG } from './services/parsing/gen/GenBlockCollector';
 import { registerCliHandlers } from './cli/CliRegistrar';
@@ -340,15 +340,11 @@ export default class TaskViewerPlugin extends Plugin {
             () => this.settings.startHour,
         );
 
-        // What the editor's writes need of the index: the fire of a completion
-        // made in the editor, and the menu's write to the line it was opened on.
-        const editorFireHost = this.taskIndex.editorFireHost();
-
         // Register inline menu button on checkbox lines (CM6 extension)
         const taskMenuResult = createTaskMenuExtension(
             this.app,
             this.readService,
-            { ...editorFireHost, writeLine: (path, at, ops) => this.writeService.writeLine(path, at, ops) },
+            this.taskIndex.editorLineHost(),
             editorPropertiesBuilder,
             editorTimerBuilder,
             editorActionsBuilder,
@@ -364,7 +360,7 @@ export default class TaskViewerPlugin extends Plugin {
 
         // A completion made in the editor fires its flow in the transaction
         // that made it; nothing else in the editor fires.
-        this.registerEditorExtension(flowFireExtension(editorFireHost));
+        this.registerEditorExtension(fireFilter(this.taskIndex.editorFireHost()));
 
         // Wavy-underline diagnostics for `==>` flow commands and `@date`
         // blocks. Pure re-parse of visible lines — no TaskIndex.

@@ -1,6 +1,6 @@
 import type { Task } from '../../types';
 import type { Diagnostic } from '../lang/Diagnostic';
-import type { GeneratedChild } from '../persistence/TaskCloner';
+import type { GeneratedChild } from '../persistence/FlowInstanceLines';
 import type { GenerationError } from './FlowPlanner';
 
 /**

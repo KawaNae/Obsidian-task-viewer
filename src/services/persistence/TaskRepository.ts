@@ -34,7 +34,7 @@ export class TaskRepository {
         this.fileOps = new FileOperations(app);
         const channelOf = (file: string) => this.channelOf(file);
         this.inlineWriter = new InlineTaskWriter(app, this.fileOps, channelOf);
-        this.frontmatterWriter = new FrontmatterWriter(app, this.fileOps, channelOf);
+        this.frontmatterWriter = new FrontmatterWriter(app, channelOf);
         this.cloner = new TaskCloner(app, this.fileOps, channelOf);
         this.sendWriter = new SendWriter(app, this.inlineWriter, this.fileOps, channelOf);
     }
@@ -109,7 +109,7 @@ export class TaskRepository {
 
     // --- Heading and frontmatter writes ---
 
-    /** @returns 挿入した行の 0-based 行番号。ファイルが無ければ -1。 */
+    /** @returns 挿入した行の 0-based 行番号を持つ書き込みの結果か、拒否。 */
     async insertLineUnderHeading(filePath: string, lineContent: string, to: Section): Promise<WriteAt> {
         return this.frontmatterWriter.insertLineUnderHeading(filePath, lineContent, to);
     }

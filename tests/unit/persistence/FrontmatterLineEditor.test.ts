@@ -265,33 +265,6 @@ describe('FrontmatterLineEditor', () => {
         });
     });
 
-    // ── readRawScalar ──
-    describe('readRawScalar', () => {
-        const lines = ['---', 'plain: abc', 'quoted: "a: b"', 'empty:', 'list:', '  - x', '---'];
-        const fmEnd = 6;
-        const read = (key: string) => FrontmatterLineEditor.readRawScalar(lines, fmEnd, key);
-
-        it('returns the value as written', () => {
-            expect(read('plain')).toBe('abc');
-        });
-
-        it('keeps quotes rather than interpreting them', () => {
-            expect(read('quoted')).toBe('"a: b"');
-        });
-
-        it('returns an empty string for a key with no value', () => {
-            expect(read('empty')).toBe('');
-        });
-
-        it('returns null for a missing key', () => {
-            expect(read('nope')).toBeNull();
-        });
-
-        it('reads only the key line of a multi-line value', () => {
-            expect(read('list')).toBe('');
-        });
-    });
-
     // ── surgical edit が保つもの（processFrontMatter との差） ──
     describe('representation is preserved across a key write', () => {
         // processFrontMatter はここでコメントを落とし、引用符を外し、

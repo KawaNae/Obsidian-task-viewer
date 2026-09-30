@@ -87,8 +87,8 @@ export function flowRaws(flow: TaskFlow): string[] {
 }
 
 /**
- * Joined source of a flow — the completion-detection signature component
- * (TaskScanner) and log form. Editing or consuming ANY segment changes it.
+ * Joined source of a flow, as the fire's log prints it. Editing or consuming
+ * ANY segment changes it.
  */
 export function flowSource(flow: TaskFlow): string {
     return flowRaws(flow).join(SEGMENT_SEPARATOR);

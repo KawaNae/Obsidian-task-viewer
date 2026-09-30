@@ -1,7 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { TFile } from 'obsidian';
 import { FrontmatterWriter } from '../../../src/services/persistence/writers/FrontmatterWriter';
-import type { FileOperations } from '../../../src/services/persistence/utils/FileOperations';
 
 /**
  * The frontmatter write path that remains once frontmatter stopped making
@@ -21,7 +20,7 @@ function vault(initial: string) {
             process: async (_f: TFile, fn: (data: string) => string) => { content = fn(content); return content; },
         },
     };
-    return { writer: new FrontmatterWriter(app as never, {} as FileOperations), read: () => content };
+    return { writer: new FrontmatterWriter(app as never), read: () => content };
 }
 
 describe('FrontmatterWriter.setKeys', () => {

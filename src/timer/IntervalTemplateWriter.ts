@@ -28,8 +28,8 @@ export class IntervalTemplateWriter {
             throw new Error('Template file not found.');
         }
         const content = this.buildFileContent(data);
-        // 全体上書き。どの行がどの行になったかは言えないので、申告の
-        // 代わりに連鎖が切れた印を残す（replaceWhole）。
+        // 全体上書き。どの行がどの行になったかは言えないので、行の対応を
+        // 持たない着地として告げる（replaceWhole）。
         const { written } = await replaceWhole(this.app, existing, this.channelFor(filePath), content);
         return written ? existing : null;
     }

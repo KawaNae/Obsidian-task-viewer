@@ -14,7 +14,7 @@ import { parseGenBody } from '../parsing/gen/GenBodyParser';
 import { renderGenBody } from '../parsing/gen/GenBodyRenderer';
 import { TaskParser } from '../parsing/TaskParser';
 import { formatDateBlock } from '../parsing/tv-inline/DateBlockFormat';
-import type { GeneratedChild } from '../persistence/TaskCloner';
+import type { GeneratedChild } from '../persistence/FlowInstanceLines';
 import { type FlowProgram, SET_FIELD_ORDER, isCellValue } from './FlowAst';
 import type { FlowEffect } from './FlowEffects';
 import { checkGeneratedChildLine, checkGeneratedParentLine } from './GeneratedLineCheck';
@@ -358,8 +358,8 @@ export function resolveAnchor(task: Task): DateAnchor | null {
 
 /**
  * Build the next instance: shift the whole date block by the anchor delta
- * and reset per-instance identity (same override set as the legacy
- * generation path, so blockId/timer state never leaks into copies).
+ * and reset per-instance identity, so the blockId and the timer icons never
+ * leak into copies.
  */
 function buildNextTask(task: Task, anchor: DateAnchor | null, next: NextOccurrence): Task {
     const newTask: Task = {

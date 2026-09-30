@@ -7,6 +7,7 @@ import { PropertyUpdatePlanner } from '../persistence/PropertyUpdatePlanner';
 import { FlowExecutor, type FireOp, notRunOf } from '../flow/FlowExecutor';
 import { completes } from '../flow/FlowTrigger';
 import type { EditorFireHost } from '../../editor/FlowFireExtension';
+import type { EditorLineHost } from '../../editor/EditorWrite';
 import type { FlowDeleteAssessment } from '../flow/FlowDeletion';
 import { TaskStore } from './TaskStore';
 import { TaskScanner } from './TaskScanner';
@@ -1117,9 +1118,8 @@ export class TaskIndex {
     }
 
     /**
-     * What the editor's fire needs of this index (`flowFireExtension`): the
-     * plan, the ops, and where its refusals go. After `dispose`, nothing
-     * fires.
+     * What the editor's fire needs of this index (`fireFilter`): the plan,
+     * the ops, and where its not-run goes. After `dispose`, nothing fires.
      */
     editorFireHost(): EditorFireHost {
         return {
@@ -1127,8 +1127,20 @@ export class TaskIndex {
             statusDefinitions: () => this.settings.statusDefinitions,
             fireOp: (path) => this.commandExecutor.fireOp(path),
             applyOps: (draft, session, target, ops) => this.repository.applyOps(draft, session, target, ops),
-            refused: (refusal) => { void this.reportRefusal(refusal); },
             notRun: (why) => this.commandExecutor.reportNotRun(why),
+        };
+    }
+
+    /**
+     * What the editor menu's write needs of this index (`writeEditorLine`):
+     * the ops, where its refusals go, and the write to the file once the
+     * editor no longer shows the note.
+     */
+    editorLineHost(): EditorLineHost {
+        return {
+            applyOps: (draft, session, target, ops) => this.repository.applyOps(draft, session, target, ops),
+            refused: (refusal) => { void this.reportRefusal(refusal); },
+            writeLine: (path, at, ops) => this.writeLine(path, at, ops),
         };
     }
 

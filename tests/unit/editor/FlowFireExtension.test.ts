@@ -7,7 +7,7 @@ import { freezeDate } from '../helpers/fakeDate';
 
 /**
  * A completion made in the editor fires in the transaction that made it
- * (`flowFireExtension`): planned from the document the transaction leaves,
+ * (`fireFilter`): planned from the document the transaction leaves,
  * written into the same transaction, and nothing else in the editor fires.
  */
 

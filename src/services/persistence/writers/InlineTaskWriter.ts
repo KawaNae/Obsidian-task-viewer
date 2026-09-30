@@ -37,7 +37,7 @@ export class InlineTaskWriter {
      * — and, with `fire`, fire its flow in the same write: a card's, the
      * API's or a timer's completion of the row (`TaskIndex.writeUpdate`).
      * A write refused with a fire that writes lines leaves the rewrite
-     * written alone, in the same attempt (`CompletionFire.writes`).
+     * written alone, in the same attempt ({@link writeFiring}).
      *
      * The line is made from the index's copy, so it is written only over a
      * row that still reads as that copy (`target.basis`): a line edited since
@@ -45,18 +45,17 @@ export class InlineTaskWriter {
      * to what the copy says, the edit lost without a word.
      *
      * @returns the outcome. `written: false` means nothing was written at all,
-     * which the caller must not treat as a successful no-op: the index has
-     * already been updated optimistically, and an unwritten file leaves the two
-     * disagreeing until something else forces a rescan. A write made says
-     * what came of `fire` (`FiringOutcome`).
+     * which the caller must not treat as a successful no-op: the index changed
+     * its copy before the write and puts it back on this answer
+     * (`TaskIndex.revertUnwrittenUpdate`). A write made says what came of
+     * `fire` (`FiringOutcome`).
      */
     async updateTaskInFile<F extends CompletionFire>(target: PlannedTarget, updatedTask: Task, childOps: PropertyOp[] = [], fire?: F): Promise<FiringOutcome<F>> {
         const file = this.app.vault.getAbstractFileByPath(target.file);
         if (!(file instanceof TFile)) return this.refusedGone(target);
 
-        // 子プロパティ行（- key:: value）の更新は同一 process 内で
-        // 連続適用する（別 process だと originalText 失効と行番号
-        // シフトが競合するため、タスク行と子行は1原子書き込み）。
+        // 子プロパティ行（- key:: value）の更新はタスク行と同じ1回の書き込みで
+        // 行う。行の土台を1回照合し、1回で書く。
         const update: TaskOp = { kind: 'update', text: TaskParser.format(updatedTask), childOps };
         return this.writeOps(file, this.channelOf(target.file), target, [update], fire);
     }

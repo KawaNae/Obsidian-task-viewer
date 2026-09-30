@@ -2,8 +2,6 @@ import { describe, it, expect, afterEach, beforeEach } from 'vitest';
 import { contentKeyOf } from '../../../src/services/core/ContentKey';
 import { keyOf } from '../../../src/editor/EditorDoc';
 import { writeEditorLine } from '../../../src/editor/EditorWrite';
-import type { EditorLine } from '../../../src/services/persistence/FileLines';
-import type { TaskOp } from '../../../src/services/persistence/TaskOps';
 import { Notice } from 'obsidian';
 import { openLiveVault, makeFile, type VaultSession } from '../helpers/vaultSession';
 import { editorSession, type EditorSession } from '../helpers/editorSession';
@@ -277,10 +275,7 @@ describe('the editor menu\'s rewrite of a line, written to the file when the edi
         const at = { line: 1, text: lines[1], key: keyOf(editor.state.doc) };
         editor.close();
 
-        expect(await writeEditorLine(editor.handle, FILE, at, [{ kind: 'update', text: lines[1].replace('[ ]', '[x]') }], {
-            ...session.index.editorFireHost(),
-            writeLine: (path: string, line: EditorLine, ops: readonly TaskOp[]) => session.index.writeLine(path, line, ops),
-        })).toBe(true);
+        expect(await writeEditorLine(editor.handle, FILE, at, [{ kind: 'update', text: lines[1].replace('[ ]', '[x]') }], session.index.editorLineHost())).toBe(true);
 
         expect(contents.get(FILE)).toBe(['# note', '- [ ] U', '## Done', '- [x] T @2026-09-21', '\t- [ ] c', ''].join('\n'));
         expect(editor.lines()).toEqual(lines);
@@ -289,10 +284,7 @@ describe('the editor menu\'s rewrite of a line, written to the file when the edi
 });
 
 describe('the editor menu\'s rewrite of a line, in the editor', () => {
-    const host = (session: VaultSession) => ({
-        ...session.index.editorFireHost(),
-        writeLine: (path: string, at: EditorLine, ops: readonly TaskOp[]) => session.index.writeLine(path, at, ops),
-    });
+    const host = (session: VaultSession) => session.index.editorLineHost();
 
     it('fires once, in the transaction the menu made, a step of its own to undo, and writes nothing to the file', async () => {
         const note = await open(['# note', WEEKLY, '']);

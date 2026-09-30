@@ -5,8 +5,8 @@ import { DateUtils } from '../../utils/DateUtils';
  * Where the copies of a "duplicate as next" go on the clock.
  *
  * A copy that lands on the original's own slot is two cards in the same
- * place with the same words: the view stacks them, and the matcher that
- * hands runtime ids to lines has nothing to tell them apart by. So a copy
+ * place with the same words: the view stacks them, and nothing tells the
+ * user which is which. So a copy
  * starts where the original ends — implicitly an hour later when the task
  * never wrote an end, at the written or inherited end when it has one — and
  * keeps its length. Asking for several chains them, each starting where the

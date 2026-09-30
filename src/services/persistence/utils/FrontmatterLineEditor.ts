@@ -48,20 +48,6 @@ export class FrontmatterLineEditor {
     }
 
     /**
-     * キーの値を**書かれたまま**（引用符を外さず）返す。キーが無ければ null。
-     *
-     * 条件付き削除のための読み取りなので、値の解釈はしない。比較側は
-     * {@link escapeYamlScalar} を通した形と生の形の双方を許す。マルチライン値は
-     * 対象外で、キー行の右側だけを見る。
-     */
-    static readRawScalar(lines: readonly string[], fmEnd: number, key: string): string | null {
-        const range = this.findKeyRange(lines, fmEnd, key);
-        if (!range) return null;
-        const m = lines[range[0]].match(/^[^:\s]+\s*:\s*(.*)$/);
-        return m ? m[1].trim() : null;
-    }
-
-    /**
      * frontmatter 内でトップレベルキーの行範囲 [start, end) を返す。
      * 継続行（配列項目・ブロックスカラー等）も含む。
      * キーが存在しない場合は null。
