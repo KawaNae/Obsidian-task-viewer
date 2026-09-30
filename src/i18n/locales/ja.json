@@ -188,7 +188,9 @@
       "colorSuggest": "カラーサジェスト",
       "colorSuggestDesc": "カラープロパティのカスタムカラーサジェストを有効にします。",
       "lineStyleSuggest": "線種サジェスト",
-      "lineStyleSuggestDesc": "線種プロパティのカスタムサジェストを有効にします。"
+      "lineStyleSuggestDesc": "線種プロパティのカスタムサジェストを有効にします。",
+      "scopeKeyEmpty": "スコープキーは空にできません。",
+      "scopeKeyDuplicate": "スコープキーは重複できません。重複: 「{{key}}」"
     },
     "parsers": {
       "heading": "外部パーサー対応",
@@ -479,6 +481,10 @@
     "openDatePicker": "日付ピッカーを開く",
     "openTimePicker": "時刻ピッカーを開く",
     "openColorPicker": "カラーピッカーを開く",
+    "taskNameHint": {
+      "file": "#を入力すると 見出しにリンクできます　^を入力すると ブロックにリンクできます",
+      "heading": "↵ で確定"
+    },
     "sourceChildren": "子の行",
     "hub": {
       "status": "ステータス",

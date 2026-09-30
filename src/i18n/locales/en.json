@@ -188,7 +188,9 @@
       "colorSuggest": "Color suggest",
       "colorSuggestDesc": "Enable custom color suggestions for the color property.",
       "lineStyleSuggest": "Line style suggest",
-      "lineStyleSuggestDesc": "Enable custom line style suggestions for the linestyle property."
+      "lineStyleSuggestDesc": "Enable custom line style suggestions for the linestyle property.",
+      "scopeKeyEmpty": "Scope keys cannot be empty.",
+      "scopeKeyDuplicate": "Scope keys must be unique. Duplicate: \"{{key}}\"."
     },
     "parsers": {
       "heading": "External Parser Support",
@@ -479,6 +481,10 @@
     "openDatePicker": "Open date picker",
     "openTimePicker": "Open time picker",
     "openColorPicker": "Open color picker",
+    "taskNameHint": {
+      "file": "Type # to link to a heading, ^ to link to a block",
+      "heading": "↵ to confirm"
+    },
     "sourceChildren": "Child lines",
     "hub": {
       "status": "Status",

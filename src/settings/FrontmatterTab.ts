@@ -1,6 +1,6 @@
 import { Notice, Setting } from 'obsidian';
 import type { PluginContext } from '../PluginContext';
-import { type ScopeKeys, validateScopeKeys } from '../types';
+import { type ScopeKeys, type ScopeKeysError, validateScopeKeys } from '../types';
 import { t } from '../i18n';
 
 export function render(el: HTMLElement, plugin: PluginContext): void {
@@ -67,7 +67,7 @@ function addScopeKeySetting(
 
                 const error = validateScopeKeys(nextKeys);
                 if (error) {
-                    new Notice(error);
+                    new Notice(scopeKeysErrorText(error));
                     text.setValue(plugin.settings.scopeKeys[key]);
                     return;
                 }
@@ -76,4 +76,11 @@ function addScopeKeySetting(
                 await plugin.saveSettings();
             });
         });
+}
+
+function scopeKeysErrorText(error: ScopeKeysError): string {
+    switch (error.kind) {
+        case 'empty': return t('settings.frontmatter.scopeKeyEmpty');
+        case 'duplicate': return t('settings.frontmatter.scopeKeyDuplicate', { key: error.key });
+    }
 }
