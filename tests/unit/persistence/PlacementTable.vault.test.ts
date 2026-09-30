@@ -375,7 +375,7 @@ describe('a first child (insertLine, firstChild)', () => {
     });
 });
 
-describe('an append (appendTaskToFile, end)', () => {
+describe('an append (createTask without a heading, at the end)', () => {
     it('goes past the frontmatter of a note that is only frontmatter, and into an empty note', async () => {
         for (const note of [['---', 'a: 1', '---', ''], ['']]) {
             live?.dispose();

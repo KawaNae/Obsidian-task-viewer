@@ -1,7 +1,7 @@
 import { Notice, TFile, type App } from 'obsidian';
 import { t } from '../../i18n';
 import type { Task, TaskViewerSettings } from '../../types';
-import { HeadingInserter } from '../../utils/HeadingInserter';
+import { headingLine } from '../persistence/Notes';
 import { openFile } from '../../utils/NavigationUtils';
 import type { RowSnapshot, SendRow, SendWrite } from '../core/TaskIndex';
 import { refusalClause, refusalNotice } from '../core/RefusalClause';
@@ -294,7 +294,7 @@ export class NoteOps {
                 ignored: false,
                 namesakes: at.namesakes,
                 shared: [],
-                unresolved: unresolvedAt(sentTasks, [HeadingInserter.headingLine(section)]),
+                unresolved: unresolvedAt(sentTasks, [headingLine(section)]),
                 anchors: new Map(),
             };
         }
@@ -315,7 +315,7 @@ export class NoteOps {
             namesakes: at.namesakes,
             shared: anchorsIn(rows.filter(row => row.task.file !== path).flatMap(row => row.task.subtreeLines ?? []))
                 .filter(id => inNote.has(id)),
-            unresolved: unresolvedAt(sentTasks, found.kind === 'none' ? [...lines, HeadingInserter.headingLine(section)] : lines),
+            unresolved: unresolvedAt(sentTasks, found.kind === 'none' ? [...lines, headingLine(section)] : lines),
             anchors: TaskLineClassifier.blockIdCounts(lines),
         };
     }

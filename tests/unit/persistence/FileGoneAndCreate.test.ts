@@ -4,7 +4,8 @@ import { contentKeyOf } from '../../../src/services/core/ContentKey';
 import { writeBench, FILE } from '../helpers/writeBench';
 import { plannedOn } from '../../../src/services/persistence/TaskRefs';
 import { FrontmatterWriter } from '../../../src/services/persistence/writers/FrontmatterWriter';
-import { HeadingInserter } from '../../../src/utils/HeadingInserter';
+import { putInNote } from '../../../src/services/persistence/Notes';
+import { Block } from '../../../src/services/persistence/utils/Placement';
 import { editorRow, createFile } from '../../../src/services/persistence/FileLines';
 
 /**
@@ -63,12 +64,12 @@ describe('a write whose file is not there', () => {
         expect(b.refused).toEqual([{ file: FILE, reason: { kind: 'gone' }, subject: FILE }]);
     });
 
-    it('HeadingInserter.writeUnderHeading is refused as gone, told once', async () => {
+    it('putInNote without a note to make is refused as gone, told once', async () => {
         const { b } = await benchWithout('missing');
 
-        const outcome = await HeadingInserter.writeUnderHeading(
-            b.app, FILE, b.channel(FILE), '- [ ] 新しい', 'Tasks', 2,
-        );
+        const outcome = await putInNote(b.app, FILE, b.channel(FILE), {
+            where: { heading: 'Tasks', level: 2, side: 'head' }, block: Block.line('- [ ] 新しい'),
+        });
 
         expect(outcome.written).toBe(false);
         expect(outcome.refused?.reason).toEqual({ kind: 'gone' });
@@ -79,6 +80,9 @@ describe('a write whose file is not there', () => {
 describe('creating a note', () => {
     const NEW = 'new.md';
     const CONTENT = '- [ ] 新しいタスク';
+    /** A task created with no heading (the API's): at the end, the note made empty when it is not there. */
+    const append = (b: { repo: { putInNote: (...args: any[]) => Promise<any> } }, path: string, text: string) =>
+        b.repo.putInNote(path, 'end', Block.read([text]), { create: () => '' });
 
     /** A bench whose `vault.create` throws, having first left `left` at the path (or nothing). */
     async function benchCreateThrows(left: string | null) {
@@ -133,44 +137,46 @@ describe('creating a note', () => {
         expect(create).not.toHaveBeenCalled();
     });
 
-    it('appendTaskToFile: a note that could not be created is refused as failed, told once', async () => {
+    it('an append: a note that could not be created is refused as failed, told once', async () => {
         const b = await benchCreateThrows(null);
 
-        const outcome = await b.writer.appendTaskToFile(NEW, CONTENT, 'user');
+        const outcome = await append(b, NEW, CONTENT);
 
         expect(outcome.written).toBe(false);
         expect(outcome.refused?.reason).toEqual({ kind: 'failed' });
         expect(b.refused).toEqual([{ file: NEW, reason: { kind: 'failed' }, subject: CONTENT }]);
     });
 
-    it('appendTaskToFile: a create that threw but left the note as asked is written on line 0', async () => {
-        const b = await benchCreateThrows(CONTENT);
+    it('an append: a create that threw but left the note as asked is written on line 0', async () => {
+        const b = await benchCreateThrows(CONTENT + '\n');
 
-        const outcome = await b.writer.appendTaskToFile(NEW, CONTENT, 'user');
+        const outcome = await append(b, NEW, CONTENT);
 
         expect(outcome.written).toBe(true);
         expect(outcome.written && outcome.line).toBe(0);
         expect(b.refused).toEqual([]);
     });
 
-    it('appendTaskToFile: a create that did not throw is written', async () => {
+    it('an append: a create that did not throw is written, the note ending with a terminator as a note appended to does', async () => {
         const b = await writeBench({ [FILE]: '# note' });
 
-        const outcome = await b.writer.appendTaskToFile(NEW, CONTENT, 'user');
+        const outcome = await append(b, NEW, CONTENT);
 
         expect(outcome.written).toBe(true);
-        expect(b.text(NEW)).toBe(CONTENT);
+        // Made of the lines of an empty note, `['']`: until stage 4 it was
+        // made of none, and ended without a terminator (decided, 論点5).
+        expect(b.text(NEW)).toBe(CONTENT + '\n');
         expect(b.refused).toEqual([]);
     });
 
-    it('appendTaskToFile: a note is made only of lines that read there as put, as when they are appended to an empty note', async () => {
+    it('an append: a note is made only of lines that read there as put, as when they are appended to an empty note', async () => {
         // By itself, four spaces make the line code; at the top of a note, unindented, it would be a task.
         const CODE = '    - [ ] 字下げ';
         const b = await writeBench({ [FILE]: '' });
         const create = vi.spyOn(b.app.vault, 'create');
 
-        const appended = await b.writer.appendTaskToFile(FILE, CODE);
-        const made = await b.writer.appendTaskToFile(NEW, CODE);
+        const appended = await append(b, FILE, CODE);
+        const made = await append(b, NEW, CODE);
 
         expect(appended.refused?.reason).toEqual({ kind: 'unplaceable', fence: null });
         expect(made.refused).toEqual({ file: NEW, reason: { kind: 'unplaceable', fence: null }, subject: CODE.trim() });

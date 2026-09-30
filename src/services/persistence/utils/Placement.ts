@@ -42,7 +42,7 @@ export interface InSection {
  * Where lines go in a section (`Placement.into`): the spot, or why there is
  * none — no heading by the name, or more than one, which a link to the
  * heading cannot tell apart either. Whether a heading is made when there is
- * none is the caller's to say (`HeadingInserter` makes one; a flow's move
+ * none is the caller's to say (`Notes.sectionSpot` makes one; a flow's move
  * fails).
  */
 export type SectionLookup =
