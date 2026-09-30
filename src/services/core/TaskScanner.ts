@@ -461,11 +461,9 @@ function nameRows(tasks: Task[], path: string, reading: ReadingId): void {
  * two places anchors neither.
  */
 function anchorRows(tasks: Task[], lines: readonly string[]): void {
-    const count = new Map<string, number>();
-    const ids = lines.map(line => TaskLineClassifier.extractLineBlockId(line).blockId);
-    for (const id of ids) if (id !== undefined) count.set(id, (count.get(id) ?? 0) + 1);
+    const count = TaskLineClassifier.blockIdCounts(lines);
     for (const task of tasks) {
-        const id = ids[task.line];
+        const id = TaskLineClassifier.extractLineBlockId(lines[task.line] ?? '').blockId;
         if (id !== undefined && count.get(id) === 1) task.anchor = id;
     }
 }

@@ -57,6 +57,21 @@ export class TaskLineClassifier {
     }
 
     /**
+     * How many of `lines` carry each `^id` ({@link extractLineBlockId}), every
+     * line counted, a task's or not. An `^id` carried by exactly one line of a
+     * note is an anchor there (`TaskScanner`'s `anchorRows`); one carried by
+     * two, Obsidian resolves to either, and it anchors neither.
+     */
+    static blockIdCounts(lines: readonly string[]): Map<string, number> {
+        const count = new Map<string, number>();
+        for (const line of lines) {
+            const { blockId } = this.extractLineBlockId(line);
+            if (blockId !== undefined) count.set(blockId, (count.get(blockId) ?? 0) + 1);
+        }
+        return count;
+    }
+
+    /**
      * A line cut where its content begins. A task's content follows the
      * space or tab after its `]` — that gap is the checkbox's, and a task
      * with no content still has it (`- [ ] `), since without it the line is
