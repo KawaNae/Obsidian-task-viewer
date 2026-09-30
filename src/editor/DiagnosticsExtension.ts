@@ -7,19 +7,15 @@ import { parseGenBody } from '../services/parsing/gen/GenBodyParser';
 import { declaredCells } from '../services/parsing/gen/GenCellScan';
 import { type HighlightMark, highlightGenBody } from './GenHighlight';
 import type { Diagnostic, LocatedDiagnostic } from '../services/lang/Diagnostic';
-import {
-    joinSegments,
-    type ParseFlowSegmentsResult,
-    parseFlowSegments,
-    segmentIndexAt,
-} from '../services/lang/flow/FlowSegments';
+import { flowRaws, joinSegments, segmentIndexAt } from '../services/lang/flow/FlowSegments';
 import { childCopyMigrationWarning } from '../services/flow/ChildCopyMigration';
-import { FLOW_MARKER, isFlowLine, matchFlowLine } from '../services/parsing/utils/FlowLineScanner';
+import { FLOW_MARKER, isFlowLine, matchFlowLine, taskLineFlowTail } from '../services/parsing/utils/FlowLineScanner';
+import type { OutlineReading } from '../services/parsing/utils/Outline';
 import { diagnosticText } from '../services/lang/flow/diagnosticText';
 import { TaskLineClassifier } from '../services/parsing/utils/TaskLineClassifier';
 import { lineParsers, lineParsersFingerprint } from '../services/parsing/TaskParser';
 import type { ParserChain } from '../services/parsing/strategies/ParserChain';
-import type { TaskViewerSettings } from '../types';
+import type { TaskFlow, TaskViewerSettings } from '../types';
 import { dateBlockDiagnostics } from '../services/parsing/tv-inline/DateBlockDiagnostics';
 import { outlineDiagnostics } from '../services/parsing/utils/OutlineDiagnostics';
 import {
@@ -43,16 +39,49 @@ function memoize<K, V>(cache: Map<K, V>, cap: number, key: K, compute: () => V):
     return value;
 }
 
-/** One physical segment of a flow group, located in the editor document. */
+/**
+ * One segment of a flow program (`TaskFlow`: the task line's tail, then each
+ * `- ==>` line), located in the editor document.
+ */
 interface SegmentLoc {
     /** 1-based CM line number. */
     lineNumber: number;
-    /** Column where the (untrimmed) tail after `==>` begins. */
+    /** Column just past the `==>` marker: where a zero-width mark ends. */
     tailStart: number;
+    /** Column where the segment's text (`raw`, trimmed) begins: where its spans are counted from. */
+    rawStart: number;
     /** Column of the `==>` marker (null: task line without a marker). */
     markerCol: number | null;
-    /** Untrimmed tail text — the segment source. */
-    raw: string;
+}
+
+/**
+ * Where each segment of the task at `root`'s flow is written: the task
+ * line's tail (`taskLineFlowTail`, the cut the parser makes) and each flow
+ * line's (`matchFlowLine`), in the flow's own order. Placing a segment is
+ * this function's; which segments there are, and what they say, is
+ * `readFlow`'s.
+ */
+function locateSegments(outline: OutlineReading, root: number, flow: TaskFlow): SegmentLoc[] {
+    const cut = taskLineFlowTail(outline.lines[root]);
+    const tailStart = cut ? cut.marker + FLOW_MARKER.length : outline.lines[root].length;
+    const segments: SegmentLoc[] = [{
+        lineNumber: root + 1,
+        tailStart,
+        // `raw` is the tail trimmed: it stands where its first character does.
+        rawStart: cut ? tailStart + cut.tail.indexOf(flow.raw) : tailStart,
+        markerCol: cut ? cut.marker : null,
+    }];
+    for (const { raw, bodyLine } of flow.childSegments) {
+        const text = outline.lines[bodyLine];
+        const m = matchFlowLine(text)!;
+        segments.push({
+            lineNumber: bodyLine + 1,
+            tailStart: m.tailStart,
+            rawStart: m.tailStart + m.tail.indexOf(raw),
+            markerCol: text.indexOf(FLOW_MARKER),
+        });
+    }
+    return segments;
 }
 
 /**
@@ -62,24 +91,23 @@ interface SegmentLoc {
  * structural warnings).
  *
  * Flow is multi-line aware: a flow program is the task line's tail plus
- * its direct `- ==>` child lines, parsed as one joined source (mirrors
- * TreeTaskExtractor.mergeChildFlow). Groups are assembled around the
- * viewport with bounded scans, so a visible flow child line is diagnosed
- * correctly even when its task line is scrolled out of view — and a lone
- * `x3` child segment is NOT a false orphan-modifier.
+ * its direct `- ==>` child lines, read as one program by the function the
+ * extraction reads it with (`readFlow`), on the editor's reading of the
+ * note. A visible flow child line is diagnosed correctly even when its task
+ * line is scrolled out of view — and a lone `x3` child segment is NOT a
+ * false orphan-modifier.
  *
  * Date blocks are strictly per-line: each visible task line is re-parsed
  * through the real parser chain (see dateBlockDiagnostics), so ownership
  * and verdicts match the scanner exactly.
  *
  * Deliberately TaskIndex-independent — lines are re-parsed, so diagnostics
- * track unsaved text immediately. Results are memoized by source text. The
- * line parse is keyed on the settings it was read with
+ * track unsaved text immediately. Line verdicts are memoized by the line's
+ * text. The line parse is keyed on the settings it was read with
  * (`lineParsersFingerprint`): when they change, the chain is built again from
  * them and the caches that hold its verdicts are dropped.
  */
 export function createDiagnosticsExtension(settings: () => TaskViewerSettings): Extension {
-    const cache = new Map<string, ParseFlowSegmentsResult>();
     const dateCache = new Map<string, Diagnostic[]>();
     const inertCache = new Map<string, InertNotation | null>();
     const CACHE_CAP = 500;
@@ -110,14 +138,6 @@ export function createDiagnosticsExtension(settings: () => TaskViewerSettings): 
         return chain!.parsers;
     };
 
-    /**
-     * The parse of one flow group, memoized. The program is kept alongside
-     * the diagnostics because the migration notice asks what the command
-     * says (does it name a block?) rather than how it is written.
-     */
-    const parseFor = (raws: string[]): ParseFlowSegmentsResult =>
-        memoize(cache, CACHE_CAP, raws.join('\n'), () => parseFlowSegments(raws));
-
     const dateDiagnosticsFor = (lineText: string): Diagnostic[] =>
         memoize(dateCache, CACHE_CAP, lineText, () => dateBlockDiagnostics(lineText, parsers()));
 
@@ -130,7 +150,7 @@ export function createDiagnosticsExtension(settings: () => TaskViewerSettings): 
      * live in EditorOutline, shared with every extension that must not
      * decorate what the parser does not read as notation. The scanner never
      * turns a line in code, or a line that opens no list item, into a task
-     * or a flow segment (DocumentTreeBuilder reads the same reading), so
+     * or a flow segment (the extraction reads the same reading), so
      * decorating one here would make the editor claim a command the file
      * does not have.
      *
@@ -201,53 +221,12 @@ export function createDiagnosticsExtension(settings: () => TaskViewerSettings): 
         return analysis;
     };
 
-    /**
-     * Assemble the flow group rooted at a task line: segment 0 is the task
-     * line's tail after `==>` ('' without a marker), followed by the direct
-     * flow child lines. Which lines those are, and where the child block
-     * ends, is asked of the note's one reading (`flowGroupOf`), as the
-     * parser asks it. The task line is cut as the parser cuts it, its `^id`
-     * taken off first (`extractLineBlockId`): the `^id` is no part of the
-     * command. Returns null when the task has no flow at all.
-     */
-    const collectGroup = (
-        view: EditorView,
-        rootLineNumber: number,
-    ): { segments: SegmentLoc[]; childLines: string[] } | null => {
-        const doc = view.state.doc;
-        const rootText = TaskLineClassifier.extractLineBlockId(doc.line(rootLineNumber).text).text;
-        const markerIdx = rootText.indexOf(FLOW_MARKER);
-
-        const { flowLines, childLines } = flowGroupOf(outlineFor(doc), rootLineNumber - 1);
-        if (markerIdx === -1 && flowLines.length === 0) return null;
-
-        const seg0: SegmentLoc = markerIdx >= 0
-            ? {
-                lineNumber: rootLineNumber,
-                tailStart: markerIdx + FLOW_MARKER.length,
-                markerCol: markerIdx,
-                raw: rootText.slice(markerIdx + FLOW_MARKER.length),
-            }
-            : { lineNumber: rootLineNumber, tailStart: rootText.length, markerCol: null, raw: '' };
-
-        const segments: SegmentLoc[] = [seg0];
-        for (const line of flowLines) {
-            const text = doc.line(line + 1).text;
-            const m = matchFlowLine(text);
-            if (!m) continue;
-            segments.push({
-                lineNumber: line + 1,
-                tailStart: m.tailStart,
-                markerCol: text.indexOf(FLOW_MARKER),
-                raw: m.tail,
-            });
-        }
-        return { segments, childLines };
-    };
-
     const buildDecorations = (view: EditorView): DecorationSet => {
         const marks: { from: number; to: number; deco: Decoration }[] = [];
         const seenRoots = new Set<number>();
+        // The note's one reading, shared with every editor extension
+        // (EditorOutline) and made anyway by the analysis above.
+        const outline = outlineFor(view.state.doc);
 
         for (const { from, to } of view.visibleRanges) {
             let pos = from;
@@ -286,18 +265,15 @@ export function createDiagnosticsExtension(settings: () => TaskViewerSettings): 
                     }
                 }
 
-                const isTaskLine = TaskLineClassifier.isTaskLine(line.text);
-                const flowLine = !isTaskLine && isFlowLine(line.text);
+                // A task line and a `- ==>` line as the scanner reads them:
+                // one that opens a list item and is not code. A checkbox in
+                // code is an example, and one that opens no item a paragraph
+                // going on: the scanner parses neither its date block nor its
+                // `==>`.
+                const row = line.number - 1;
+                const isTaskLine = TaskLineClassifier.opensTask(outline, row);
+                const flowLine = !isTaskLine && outline.item(row) !== null && isFlowLine(line.text);
                 if (!isTaskLine && !flowLine) continue;
-
-                // A line in code is an example, and a line that opens no list
-                // item is a paragraph going on: the scanner parses neither
-                // its date block nor its `==>`. Checked here, once, for both
-                // halves of the extension — and only for lines that would
-                // otherwise be decorated, so the reading stays unmade on
-                // ordinary prose.
-                const outline = outlineFor(view.state.doc);
-                if (outline.item(line.number - 1) === null) continue;
 
                 // Date-block diagnostics: strictly per-line, so they run for
                 // every visible task line — BEFORE the flow-root shortcuts
@@ -318,22 +294,14 @@ export function createDiagnosticsExtension(settings: () => TaskViewerSettings): 
                     }
                 }
 
-                let rootNumber: number | null = null;
-                if (isTaskLine) {
-                    rootNumber = line.number;
-                } else {
-                    const owner = flowOwnerOf(outline, line.number - 1);
-                    rootNumber = owner === null ? null : owner + 1;
-                }
-                if (rootNumber === null || seenRoots.has(rootNumber)) continue;
-                seenRoots.add(rootNumber);
+                const root = isTaskLine ? row : flowOwnerOf(outline, row);
+                if (root === null || seenRoots.has(root)) continue;
+                seenRoots.add(root);
 
-                const group = collectGroup(view, rootNumber);
-                if (!group) continue;
-                const { segments, childLines } = group;
-                // Skip the degenerate "bare trailing ==> with nothing anywhere"
-                // — the parser treats a lone marker as content, not a command.
-                if (segments.length === 1 && !segments[0].raw.trim()) continue;
+                const { flow, childLines } = flowGroupOf(outline, root);
+                if (!flow) continue;
+                const segments = locateSegments(outline, root, flow);
+                const rootNumber = root + 1;
 
                 // A read-only notation owns this task line: the command never
                 // fires, so say that instead of grading its syntax. Every
@@ -357,15 +325,13 @@ export function createDiagnosticsExtension(settings: () => TaskViewerSettings): 
                     continue;
                 }
 
-                const raws = segments.map(s => s.raw);
-                const { table } = joinSegments(raws);
-                const parsed = parseFor(raws);
+                const { table } = joinSegments(flowRaws(flow));
 
                 // The children stopped travelling with the command. Nothing
                 // in the text says so, which is why it is said here; the mark
                 // covers the command because that is what has to change.
-                const migration = parsed.program
-                    && childCopyMigrationWarning(parsed.program, childLines, parsed.diagnostics);
+                const migration = flow.program
+                    && childCopyMigrationWarning(flow.program, childLines, flow.diagnostics);
                 if (migration) {
                     const anchor = segments.find(s => s.markerCol !== null);
                     if (anchor) {
@@ -381,7 +347,7 @@ export function createDiagnosticsExtension(settings: () => TaskViewerSettings): 
                     }
                 }
 
-                for (const d of parsed.diagnostics) {
+                for (const d of flow.diagnostics) {
                     const segIdx = Math.min(segmentIndexAt(table, d.span.start), segments.length - 1);
                     const seg = segments[segIdx];
                     const segLine = view.state.doc.line(seg.lineNumber);
@@ -403,10 +369,10 @@ export function createDiagnosticsExtension(settings: () => TaskViewerSettings): 
                     } else {
                         const local = d.span.start - table.spans[segIdx].start;
                         const localEnd = d.span.end - table.spans[segIdx].start;
-                        fromPos = segLine.from + seg.tailStart + local;
+                        fromPos = segLine.from + seg.rawStart + local;
                         // A span may legitimately cross the segment end
                         // (flow.node-spans-lines) — clamp to the line.
-                        toPos = Math.min(segLine.from + seg.tailStart + localEnd, segLine.to);
+                        toPos = Math.min(segLine.from + seg.rawStart + localEnd, segLine.to);
                     }
                     if (toPos <= fromPos) continue;
 

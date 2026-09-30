@@ -1,7 +1,6 @@
-import type { Task, TaskFlow } from '../../../types';
+import type { Task } from '../../../types';
 import { t } from '../../../i18n';
-import { flowValidation, singleLineFlow } from '../../lang/flow/FlowSegments';
-import { FLOW_SPLIT } from '../utils/FlowLineScanner';
+import { cutFlowTail } from '../utils/FlowLineScanner';
 import { createBaseTask } from '../TaskFactory';
 import type { LeafParserStrategy } from '../strategies/ParserStrategy';
 import { TaskIdGenerator } from '../../display/TaskIdGenerator';
@@ -45,20 +44,12 @@ export class TVInlineParser implements LeafParserStrategy {
         // 1. The trailing block ID (^id) is the content's last part
         const { text: body, blockId } = TaskLineClassifier.extractBlockId(classified.rawContent);
 
-        // Split flow commands (==>)
-        const flowSplit = body.split(FLOW_SPLIT);
-        const rawContent = flowSplit[0];
-        const flowPart = flowSplit[1] || '';
-
-        // 2. Parse the flow command. `raw` always carries the verbatim text
-        // so formatTaskLine re-emits it losslessly even when parsing failed;
-        // `program` is non-null only when the command is executable.
-        // Line-level view only: `- ==>` child segments are merged (and the
-        // program re-parsed from the joined source) by TreeTaskExtractor.
-        const trimmedFlow = flowPart.trim();
-        const flow: TaskFlow | undefined = trimmedFlow
-            ? singleLineFlow(trimmedFlow)
-            : undefined;
+        // 2. The command (`==>` and what follows) is no part of the content:
+        // it is cut off here and read, with the task's `- ==>` lines, by
+        // `readFlow` when the note is read — the line alone does not say the
+        // whole program.
+        const cut = cutFlowTail(body);
+        const rawContent = cut ? body.slice(0, cut.marker) : body;
 
         // 3. Parse date block (@start>end>due)
         let content = rawContent;
@@ -81,7 +72,8 @@ export class TVInlineParser implements LeafParserStrategy {
         // notation parsers (tasks-plugin, day-planner) get first crack on lines
         // that match their syntax; everything else falls through to here.
 
-        // 4. Validate date/time constraints
+        // 4. Validate date/time constraints: the line's own verdict. The
+        // command's is the extraction's to add (`NoteTasks`), after these.
         let validation: Task['validation'];
         const ruleResult = this.validateDateBlock(date, startTime, endDate, endTime, due);
         if (ruleResult) {
@@ -93,13 +85,6 @@ export class TVInlineParser implements LeafParserStrategy {
                 message: parseWarning,
                 hint: '',
             };
-        } else if (flow) {
-            // Surface the first flow diagnostic through the existing
-            // validation channel so a typo'd command is not a silent no-op
-            // for users who never see editor decorations. May be superseded
-            // when TreeTaskExtractor merges `- ==>` child segments and
-            // re-validates the joined program.
-            validation = flowValidation(flow);
         }
 
         return createBaseTask({
@@ -116,7 +101,6 @@ export class TVInlineParser implements LeafParserStrategy {
             endDate,
             endTime,
             due,
-            flow,
             tags: TagExtractor.fromContent(content.trim()),
             blockId,
             validation,

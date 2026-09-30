@@ -94,7 +94,11 @@ export function flowSource(flow: TaskFlow): string {
     return flowRaws(flow).join(SEGMENT_SEPARATOR);
 }
 
-/** TaskFlow for a lone task-line command (line-level parser, tests). */
+/**
+ * TaskFlow for a command written on the task line alone, with no `- ==>`
+ * lines: what `readFlow` reads of such a task. For a flow made outside a
+ * note (tests); a note's flow is read with `readFlow`.
+ */
 export function singleLineFlow(raw: string): TaskFlow {
     return { raw, childSegments: [], ...parseFlow(raw) };
 }
@@ -110,8 +114,8 @@ export function flowValidation(flow: TaskFlow): Task['validation'] {
     if (!first) return undefined;
     return {
         severity: first.severity,
-        // Diagnostic codes are namespaced (`flow.` / `lex.` / `expr.` /
-        // `type.`) by construction — see the ValidationRule union.
+        // Diagnostic codes are `flow.` / `lex.` / `expr.` / `type.` by
+        // construction — see the ValidationRule union.
         rule: first.code as DiagnosticCode,
         message: diagnosticText(first),
         hint: `==> ${flowRaws(flow).filter(r => r !== '').join(' ')}`,

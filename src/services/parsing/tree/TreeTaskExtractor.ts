@@ -5,8 +5,8 @@ import { BuiltinPropertyExtractor } from './BuiltinPropertyExtractor';
 import { ChildLineClassifier } from '../utils/ChildLineClassifier';
 import { TagExtractor } from '../utils/TagExtractor';
 import type { ParserChain } from '../strategies/ParserChain';
-import { collectFlowLineIndices, flowLineTail } from '../utils/FlowLineScanner';
-import { flowValidation, parseFlowSegments } from '../../lang/flow/FlowSegments';
+import { readFlow } from '../utils/FlowLineScanner';
+import { flowValidation } from '../../lang/flow/FlowSegments';
 import { Outline, type OutlineReading } from '../utils/Outline';
 
 export interface TaskExtractionContext {
@@ -215,46 +215,19 @@ export class TreeTaskExtractor {
     }
 
     /**
-     * 直下の `- ==>` フロー子行を task.flow に merge し、joined ソースで
-     * プログラムを再パースする。戻り値は childRawLines 相対の flow 行 index
-     * （childLines からの除外用）。
-     *
-     * flow 行の所有判定は FlowLineScanner に一元化されている（構造上の親が
-     * タスク行である行のみ）。ネストした checkbox 配下の flow 行はその
-     * checkbox 自身の merge が拾う。
+     * The task's flow, read once (`readFlow`: the line's tail and its own
+     * `- ==>` lines), and the one validation slot filled in its order: the
+     * line's own verdict (a date rule, then the date block's parse error)
+     * stands, and only a line with none takes the command's first
+     * diagnostic. Returns the flow lines as childRawLines indices (to leave
+     * out of childLines).
      */
     private static mergeChildFlow(task: Task, block: TaskBlock, outline: OutlineReading): Set<number> {
         if (!isTvInline(task)) return new Set();
-
-        // A flow line in the block's lines is one below the block's own line;
-        // the block's lines are the row's whole subtree, so every one is there.
-        const indices = collectFlowLineIndices(outline, block.line)
-            .map(line => line - block.line - 1);
-        if (indices.length === 0) return new Set();
-
-        const oldFlow = task.flow;
-        const childSegments = indices.map(k => ({
-            raw: flowLineTail(block.childRawLines[k]) ?? '',
-            bodyLine: block.childLineNumbers[k],
-        }));
-        const { program, diagnostics } = parseFlowSegments([
-            oldFlow?.raw ?? '',
-            ...childSegments.map(s => s.raw),
-        ]);
-        task.flow = { raw: oldFlow?.raw ?? '', childSegments, program, diagnostics };
-
-        // validation の鮮度: line-level パースが載せた flow 診断は joined で
-        // 解消され得る（例: タスク行単体では orphan-modifier）。旧 flow 診断
-        // 由来の validation はクリアし、joined の結果から再導出する。
-        // 日付ルール等 flow 以外の validation は温存。
-        const oldFlowCodes = new Set((oldFlow?.diagnostics ?? []).map(d => d.code));
-        if (task.validation && oldFlowCodes.has(task.validation.rule)) {
-            task.validation = undefined;
-        }
-        if (!task.validation) {
-            task.validation = flowValidation(task.flow);
-        }
-        return new Set(indices);
+        task.flow = readFlow(outline, block.line);
+        if (!task.flow) return new Set();
+        task.validation ??= flowValidation(task.flow);
+        return new Set(task.flow.childSegments.map(segment => segment.bodyLine - block.line - 1));
     }
 
     /** セクションツリーを深さ優先でフラットに展開 */

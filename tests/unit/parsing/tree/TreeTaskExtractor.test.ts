@@ -770,6 +770,16 @@ describe('TreeTaskExtractor', () => {
             expect(tasks[0].validation).toBeUndefined();
         });
 
+        it('validation の1枠は日付の規則、日付ブロックの parse-error、フローの最初の診断の順に埋まる', () => {
+            const [rule] = extractTasks(['- [ ] a @2026-03-24T10:00>2026-03-23T09:00 ==> evry']);
+            expect(rule.validation?.rule).toBe('end-before-start');
+            expect(rule.flow?.program).toBeNull();
+            const [parse] = extractTasks(['- [ ] a @2026-03-24>>>2026-03-25', '    - ==> evry']);
+            expect(parse.validation?.rule).toBe('parse-error');
+            const [flow] = extractTasks(['- [ ] a @2026-03-24', '    - ==> evry']);
+            expect(flow.validation?.rule).toBe('flow.unknown-head');
+        });
+
         it('segment 境界をまたぐノードは validation エラーになる', () => {
             const tasks = extractTasks([
                 '- [ ] task @2026-03-24 ==> every',

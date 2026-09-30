@@ -1,16 +1,22 @@
 /**
- * Recognition of `- ==> ...` flow child lines — the multi-line physical
- * form of a flow program (see TaskFlow in types/index.ts).
+ * A task's flow program as the note writes it: the task line's `==>` tail
+ * and the `- ==> ...` lines directly under the task (see TaskFlow in
+ * types/Flow.ts).
  *
- * Pure, obsidian-free. This is the SINGLE implementation of "which child
- * lines carry a task's flow"; the extractor (TreeTaskExtractor), the write
- * layer (InlineTaskWriter / TaskCloner) and the editor diagnostics
- * (DiagnosticsExtension) all share it — do not duplicate the judgment.
+ * Pure, obsidian-free. The SINGLE implementation of "which lines carry a
+ * task's flow" (`collectFlowLineIndices`) and of "what program they say"
+ * (`readFlow`): the extraction (`NoteTasks`), the write layer (`RowBasis`,
+ * `Carry`, `FlowInstanceLines`, `InlineTaskWriter`) and the editor
+ * diagnostics (`DiagnosticsExtension`) all ask these — do not assemble a
+ * flow anywhere else.
  */
 
 import { LIST_BULLET_SOURCE, SPACE_OR_TAB_SOURCE } from './ListMarker';
 import { INDENT_SOURCE, type OutlineReading } from './Outline';
+import { TaskLineClassifier } from './TaskLineClassifier';
 import { IN_LINE } from '../../../utils/LineBreak';
+import type { TaskFlow } from '../../../types';
+import { parseFlowSegments } from '../../lang/flow/FlowSegments';
 
 /**
  * The marker that turns the tail of a line into a flow command, on a task
@@ -24,6 +30,27 @@ export const FLOW_MARKER = '==>';
  * stopped at one and the rest of the command was dropped.
  */
 export const FLOW_SPLIT = new RegExp(`${FLOW_MARKER}(${IN_LINE}+)`);
+
+/**
+ * `text` cut at its first marker that has text after it (`FLOW_SPLIT`):
+ * the index the marker stands at, and the text after it as it is written,
+ * untrimmed. Null when no marker has. What stands before the marker is the
+ * text a parser reads as the task's content; what stands after is the
+ * command, which only {@link readFlow} reads.
+ */
+export function cutFlowTail(text: string): { marker: number; tail: string } | null {
+    const m = FLOW_SPLIT.exec(text);
+    return m ? { marker: m.index, tail: m[1] } : null;
+}
+
+/**
+ * The command on the task line `line`: {@link cutFlowTail} of the line with
+ * its `^id` taken off first (`extractLineBlockId`) — the `^id` is no part of
+ * the command. The marker's index is its column in the line.
+ */
+export function taskLineFlowTail(line: string): { marker: number; tail: string } | null {
+    return cutFlowTail(TaskLineClassifier.extractLineBlockId(line).text);
+}
 
 /**
  * `- ==> <tail>` with any list bullet. Group 1 = indent, group 2 = tail.
@@ -72,6 +99,24 @@ export function isFlowLine(line: string): boolean {
  */
 export function collectFlowLineIndices(outline: OutlineReading, taskLine: number): number[] {
     return outline.directItems(taskLine).filter(line => isFlowLine(outline.lines[line]));
+}
+
+/**
+ * The flow program of the task at `taskLine`, read once: the task line's
+ * tail ({@link taskLineFlowTail}) and the task's own flow lines
+ * ({@link collectFlowLineIndices}), trimmed, joined in document order and
+ * parsed as one source (`parseFlowSegments`). Undefined when the task has
+ * no command at all. The one place a flow program is built from a note:
+ * the extraction reads a task's flow with it, and the editor's diagnostics
+ * grade the same program.
+ */
+export function readFlow(outline: OutlineReading, taskLine: number): TaskFlow | undefined {
+    const raw = taskLineFlowTail(outline.lines[taskLine])?.tail.trim() ?? '';
+    const childSegments = collectFlowLineIndices(outline, taskLine)
+        .map(line => ({ raw: flowLineTail(outline.lines[line]) ?? '', bodyLine: line }));
+    if (raw === '' && childSegments.length === 0) return undefined;
+    const { program, diagnostics } = parseFlowSegments([raw, ...childSegments.map(segment => segment.raw)]);
+    return { raw, childSegments, program, diagnostics };
 }
 
 /** Canonical physical form of a flow child line. */

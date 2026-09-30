@@ -66,8 +66,7 @@ describe('the editor diagnostics read the subtree and the flow lines the parser 
                 expect(group.childLines, `children of line ${block.line}`).toEqual(block.childRawLines);
 
                 const task = parsed.tasks.find(candidate => candidate.line === block.line)!;
-                const parserFlow = (task.flow?.childSegments ?? []).map(segment => segment.bodyLine);
-                expect(group.flowLines, `flow lines of line ${block.line}`).toEqual(parserFlow);
+                expect(group.flow, `flow of line ${block.line}`).toEqual(task.flow);
             }
 
             // Every flow line the editor gives an owner is one that owner's
