@@ -61,6 +61,7 @@ import { LogManager } from './log/log-manager';
 import { LogView, VIEW_TYPE_LOG } from './views/logview/LogView';
 import type { DeviceInfo } from './log/markdown-formatter';
 import { ViewEvents } from './views/sharedLogic/ViewEvents';
+import { applyBodyStyles, clearBodyStyles } from './settings/BodyStyles';
 import { deviceMemoryGb, jsHeapStats, nodeOs } from './utils/hostEnv';
 
 export default class TaskViewerPlugin extends Plugin {
@@ -374,9 +375,8 @@ export default class TaskViewerPlugin extends Plugin {
         // closed fence with this widget, and the editor underlines go with it.
         this.registerMarkdownCodeBlockProcessor(GEN_LANGUAGE_TAG, createGenBlockPreview());
 
-        // Apply global styles if enabled
-        this.updateGlobalStyles();
-        this.updateViewHeaderStyles();
+        // Body classes and root variables the settings drive
+        applyBodyStyles(this.settings);
 
         // Start day boundary check (every 5 minutes)
         this.startDateBoundaryCheck();
@@ -424,33 +424,9 @@ export default class TaskViewerPlugin extends Plugin {
         this.app.workspace.updateOptions();
         this.readService.updateStartHour(this.settings.startHour);
         this.readService.updateWeekStartDay(this.settings.weekStartDay);
-        this.updateViewHeaderStyles();
+        applyBodyStyles(this.settings);
 
         this.viewEvents.settingsChanged();
-    }
-
-    updateGlobalStyles() {
-        if (this.settings.applyGlobalStyles) {
-            document.body.classList.add('task-viewer-global-styles');
-        } else {
-            document.body.classList.remove('task-viewer-global-styles');
-        }
-    }
-
-    updateViewHeaderStyles() {
-        if (this.settings.hideViewHeader) {
-            document.body.classList.add('task-viewer-hide-view-header');
-        } else {
-            document.body.classList.remove('task-viewer-hide-view-header');
-        }
-        if (this.settings.fixMobileGradientWidth) {
-            document.body.classList.add('task-viewer-fix-mobile-gradient');
-        } else {
-            document.body.classList.remove('task-viewer-fix-mobile-gradient');
-        }
-        document.documentElement.style.setProperty(
-            '--tv-mobile-top-offset', `${this.settings.mobileTopOffset}px`
-        );
     }
 
     notifyEditorMenuSettingsChanged() {
@@ -577,7 +553,7 @@ export default class TaskViewerPlugin extends Plugin {
         untrackAllKeyboards();
         this.taskIndex?.dispose();
         AudioUtils.dispose();
-        document.body.classList.remove('task-viewer-global-styles');
+        clearBodyStyles();
         this.timerWidget?.destroy();
 
         // Clear day boundary check interval
