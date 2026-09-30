@@ -99,7 +99,7 @@ const result = api.today({
 | `root` | `boolean` | 親タスクを持たないタスクのみ |
 | `filter` | `FilterState` | 完全なフィルタ定義（上記フラグより優先） |
 | `filterFile` | `string` | vault 内フィルタファイルパス（`.json` / `.md` テンプレート） |
-| `list` | `string` | ピン留めリスト名（`filterFile` が `.md` テンプレートの場合） |
+| `list` | `string` | ピン留めリスト名（`filterFile` が `.md` テンプレートの場合）。テンプレートのビューのフィルタは、そのリストの「ビューフィルターを適用」がオンのときだけ重ねる（ビューの表示と同じ） |
 | `sort` | `ApiSortRule[]` | ソートルール |
 | `limit` | `number` | 最大件数（デフォルト: 100, 0=件数のみ, Infinity=無制限） |
 

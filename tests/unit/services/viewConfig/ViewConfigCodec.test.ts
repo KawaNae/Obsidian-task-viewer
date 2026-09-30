@@ -72,6 +72,7 @@ const fullFixture: TestConfig = {
         id: 'g-1',
         name: 'Col A',
         filterState: { filters: [{ property: 'status', operator: 'equals', value: ' ' }], logic: 'and' },
+        applyViewFilter: true,
     }]],
     sky: { sunTimes: true, moonPhase: true },
     cursor: '2026-05-22',
@@ -106,6 +107,24 @@ describe('ViewConfigCodec', () => {
         it('parseConfig ignores unrelated keys', () => {
             const cfg = codec.parseConfig({ foo: 'bar', baz: 123 });
             expect(cfg).toEqual({});
+        });
+    });
+
+    describe('applyViewFilter is always a boolean past the codec', () => {
+        const list = { id: 'pl-1', name: 'L', filterState: { filters: [], logic: 'and' } };
+
+        it('a list saved without the key reads as false', () => {
+            expect(F.pinnedLists('pins').parse([list])?.[0].applyViewFilter).toBe(false);
+            expect(F.grid('grid').parse([[list]])?.[0][0].applyViewFilter).toBe(false);
+        });
+
+        it('a value that is not a boolean reads as false', () => {
+            expect(F.pinnedLists('pins').parse([{ ...list, applyViewFilter: 'yes' }])?.[0].applyViewFilter).toBe(false);
+        });
+
+        it('false is written, not omitted', () => {
+            const json = codec.serializeConfig({ pins: [{ ...list, applyViewFilter: false } as PinnedListDefinition] });
+            expect((json.pins as Record<string, unknown>[])[0].applyViewFilter).toBe(false);
         });
     });
 

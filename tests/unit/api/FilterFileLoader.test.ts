@@ -270,6 +270,21 @@ describe('loadFilterFile', () => {
             expect(result).toEqual(pinnedList.filterState);
         });
 
+        // The toggle's default lives in the codec: a list saved before the
+        // toggle was touched has no key and reads as false. The view shows such
+        // a list without the view filter; the CLI/API used to layer it in.
+        it('a list saved without the key does not layer the view filter, as the view does', async () => {
+            const pinnedList = makePinnedList('urgent');
+            const app = makeApp({ 'templates/untouched.md': '' });
+            mockLoadFullTemplate.mockResolvedValue(makeTemplate({
+                filterState: makeFilterState(),
+                pinnedLists: [pinnedList],
+            }));
+
+            const result = await loadFilterFile(app, 'templates/untouched.md', 'urgent');
+            expect(result).toEqual(pinnedList.filterState);
+        });
+
         it('uses grid flat() when pinnedLists is undefined', async () => {
             const pinnedList = makePinnedList('col1');
             const app = makeApp({ 'templates/grid.md': '' });
