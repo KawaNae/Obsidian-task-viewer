@@ -141,6 +141,106 @@ describe('sending a row', () => {
 });
 
 /**
+ * Start a count-up on the row of `SRC` whose text is `name`, in `mode`, and
+ * answer the timer's id and ^ids once its first line is written.
+ */
+function startTimer(name: string, mode: 'child' | 'sibling'): { id: string; target: string; tail: string } {
+    const result = obsidianEval(`(async () => {
+        const plugin = app.plugins.plugins['obsidian-task-viewer'];
+        const widget = plugin.getTimerWidget();
+        const task = plugin.getTaskIndex().getTasks().find(t => t.file === ${JSON.stringify(SRC)} && t.content === ${JSON.stringify(name)});
+        if (!task) throw new Error('no row ' + ${JSON.stringify(name)});
+        const before = new Set(widget.timers.keys());
+        widget.startTimer({ taskId: task.id, taskName: task.content, taskFile: task.file, taskOriginalText: task.originalText,
+            timerTargetId: task.anchor, timerType: 'countup', recordMode: ${JSON.stringify(mode)}, autoStart: true });
+        const timer = [...widget.timers.values()].find(t => t.timerType === 'countup' && !before.has(t.id));
+        const end = Date.now() + 5000;
+        while (Date.now() < end && !(timer.tailRecordBlockId && !timer.opening)) await new Promise(r => setTimeout(r, 50));
+        await new Promise(r => setTimeout(r, 300));
+        return JSON.stringify({ id: timer.id, target: timer.timerTargetId, tail: timer.tailRecordBlockId });
+    })()`);
+    if (result && typeof result === 'object' && 'error' in (result as object)) {
+        throw new Error(`eval failed: ${(result as { error: string }).error}`);
+    }
+    return result as { id: string; target: string; tail: string };
+}
+
+/** The note the timer `id` finds its lines in, or null when it is closed. */
+function timerFile(id: string): string | null {
+    return obsidianEval(`JSON.stringify(app.plugins.plugins['obsidian-task-viewer'].getTimerWidget().timers.get(${JSON.stringify(id)})?.taskFile ?? null)`) as string | null;
+}
+
+/** Press ⏸ (record and suspend) on the timer `id`, or ■ (record and close), and wait for it. */
+function stopTimer(id: string, how: 'suspendTimer' | 'finishTimer'): void {
+    obsidianEval(`(async () => {
+        const widget = app.plugins.plugins['obsidian-task-viewer'].getTimerWidget();
+        const timer = widget.timers.get(${JSON.stringify(id)});
+        if (timer) await widget.lifecycle.${how}(timer);
+        await new Promise(r => setTimeout(r, 500));
+        return JSON.stringify(true);
+    })()`);
+}
+
+/** Close the timer `id` without recording, if it is open. */
+function closeTimer(id: string): void {
+    obsidianEval(`(async () => {
+        const widget = app.plugins.plugins['obsidian-task-viewer'].getTimerWidget();
+        if (widget.timers.has(${JSON.stringify(id)})) widget.lifecycle.closeTimer(${JSON.stringify(id)});
+        await new Promise(r => setTimeout(r, 500));
+        return JSON.stringify(true);
+    })()`);
+}
+
+describe('sending a row a timer runs on (段 B4)', () => {
+    let open: string | null = null;
+    afterEach(() => {
+        if (open) closeTimer(open);
+        open = null;
+    });
+
+    it('its lines all sent: the timer follows them, and ⏸ records in the note they went to', async () => {
+        deleteTestFile(`${NEW}.md`);
+        await writeIndexedTestFile(SRC, ['- [ ] 計る', '- [ ] 残る', ''].join('\n'));
+        const timer = startTimer('計る', 'child');
+        open = timer.id;
+        expect(readTestFile(SRC)).toContain(`^${timer.tail}`);
+
+        const sent = send('計る', { note: { kind: 'new', folder: '', name: NEW }, section: SECTION });
+
+        expect(sent.result).toEqual({ kind: 'done', note: `${NEW}.md` });
+        expect(timerFile(timer.id)).toBe(`${NEW}.md`);
+        expect(readTestFile(SRC)).toBe([`- [[${NEW}]]`, '- [ ] 残る', ''].join('\n'));
+
+        stopTimer(timer.id, 'suspendTimer');
+        const made = readTestFile(`${NEW}.md`)!.split('\n');
+        const record = made.find(line => line.includes(`^${timer.tail}`));
+        expect(record).toMatch(/@\d{4}-\d{2}-\d{2}T\d{2}:\d{2}>\d{2}:\d{2}/);
+        expect(made.indexOf(record!)).toBeGreaterThan(made.findIndex(line => line.includes('計る')));
+        expect(readTestFile(SRC)).toBe([`- [[${NEW}]]`, '- [ ] 残る', ''].join('\n'));
+        deleteTestFile(`${NEW}.md`);
+    });
+
+    it('its records staying beside the row sent: not sent, nothing written, and told why', async () => {
+        deleteTestFile(`${NEW}.md`);
+        await writeIndexedTestFile(SRC, ['- [x] 続き', ''].join('\n'));
+        const timer = startTimer('続き', 'sibling');
+        open = timer.id;
+        const before = readTestFile(SRC);
+
+        const sent = send('続き', { note: { kind: 'new', folder: '', name: NEW }, section: SECTION });
+
+        expect(sent.result.kind).toBe('not-done');
+        expect(sent.notices).toHaveLength(1);
+        expect(sent.notices[0]).toContain(`^${timer.target}`);
+        expect(sent.notices[0]).toContain(`^${timer.tail}`);
+        await sleep(300);
+        expect(exists(`${NEW}.md`)).toBe(false);
+        expect(readTestFile(SRC)).toBe(before);
+        expect(timerFile(timer.id)).toBe(SRC);
+    });
+});
+
+/**
  * What every snippet on the dialog starts with: the plugin, the dialog as it
  * is drawn, and a press of the pointer as a mouse makes one.
  */
