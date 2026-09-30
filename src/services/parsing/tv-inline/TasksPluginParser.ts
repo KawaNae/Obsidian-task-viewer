@@ -1,3 +1,4 @@
+import { DateUtils } from '../../../utils/DateUtils';
 import type { Task, TasksPluginMapping, TaskFieldMapping } from '../../../types';
 import { ReadOnlyParserBase } from './ReadOnlyParserBase';
 
@@ -26,10 +27,10 @@ const EMOJI_DEFS: EmojiDef[] = [
 
 /** Build a combined regex that matches any emoji + optional date. */
 const EMOJI_PATTERN = EMOJI_DEFS.map(d => d.emoji).join('|');
-const EMOJI_FIELD_REGEX = new RegExp(`(${EMOJI_PATTERN})\\s*(\\d{4}-\\d{2}-\\d{2})?`, 'gu');
+const EMOJI_FIELD_REGEX = new RegExp(`(${EMOJI_PATTERN})\\s*(${DateUtils.DATE_PATTERN})?`, 'gu');
 
 /** Quick check: line must contain at least one date-bearing emoji followed by a date. */
-const HAS_DATE_EMOJI_REGEX = new RegExp(`(?:📅|⏳|🛫|✅)\\s*\\d{4}-\\d{2}-\\d{2}`, 'u');
+const HAS_DATE_EMOJI_REGEX = new RegExp(`(?:📅|⏳|🛫|✅)\\s*${DateUtils.DATE_PATTERN}`, 'u');
 
 /**
  * Read-only parser for the Obsidian Tasks plugin emoji notation.

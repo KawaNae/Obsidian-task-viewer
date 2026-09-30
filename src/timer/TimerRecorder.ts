@@ -259,8 +259,8 @@ export class TimerRecorder {
             const effectiveEndDate = task.endDate ?? (task.endTime ? task.startDate : undefined);
 
             if (task.startDate && effectiveEndDate && task.endTime) {
-                const oldStart = new Date(`${task.startDate}T${task.startTime}`);
-                const oldEnd = new Date(`${effectiveEndDate}T${task.endTime}`);
+                const oldStart = DateUtils.toDateTime(task.startDate, task.startTime);
+                const oldEnd = DateUtils.toDateTime(effectiveEndDate, task.endTime);
                 const durationMs = oldEnd.getTime() - oldStart.getTime();
                 const newEnd = new Date(now.getTime() + durationMs);
                 updates.endDate = this.formatDate(newEnd);
@@ -367,9 +367,7 @@ export class TimerRecorder {
         const display = this.plugin.getTaskReadService().getDisplayTask(target.id);
         if (!display?.effectiveEndDate || !display.effectiveEndTime) return undefined;
 
-        const effectiveEndMs = new Date(
-            `${display.effectiveEndDate}T${display.effectiveEndTime}`
-        ).getTime();
+        const effectiveEndMs = DateUtils.toDateTime(display.effectiveEndDate, display.effectiveEndTime).getTime();
         if (Number.isNaN(effectiveEndMs)) return undefined;
 
         const decision = decideLazyEnd(Date.now(), effectiveEndMs);
@@ -432,7 +430,7 @@ export class TimerRecorder {
      */
     private startMsOf(task: Task): number | null {
         if (!task.startDate || !task.startTime) return null;
-        const ms = new Date(`${task.startDate}T${task.startTime}`).getTime();
+        const ms = DateUtils.toDateTime(task.startDate, task.startTime).getTime();
         return Number.isNaN(ms) ? null : ms;
     }
 
@@ -828,10 +826,7 @@ export class TimerRecorder {
      * デイリーノートの見出しの下へ 1 行置き、書き込んだノートのパスを返す。
      */
     private async addTimerRecordToDailyNote(dateStr: string, taskLine: string): Promise<string | null> {
-        const [y, m, d] = dateStr.split('-').map(Number);
-        const date = new Date();
-        date.setFullYear(y, m - 1, d);
-        date.setHours(0, 0, 0, 0);
+        const date = DateUtils.parseDate(dateStr);
 
         return DailyNoteUtils.appendLineToDailyNote(
             this.app,

@@ -1,3 +1,4 @@
+import { DateUtils } from '../../../utils/DateUtils';
 import type { Span } from '../../lang/Diagnostic';
 import { FLOW_SPLIT } from '../utils/FlowLineScanner';
 import type { DateTimeRule } from '../../../types';
@@ -10,8 +11,11 @@ import type { DateTimeRule } from '../../../types';
  * Shared between TVInlineParser (field extraction) and the editor
  * diagnostics locator below — single definition, no drift.
  */
-export const DATE_BLOCK_REGEX =
-    /(@(?=[\d>T])(?:\d{4}-\d{2}-\d{2}(?:T\d{2}:\d{2})?|T?\d{2}:\d{2})?(?:>(?:\d{4}-\d{2}-\d{2}(?:T\d{2}:\d{2})?|\d{2}:\d{2})?)*)/;
+const D = DateUtils.DATE_PATTERN;
+const TM = DateUtils.TIME_PATTERN;
+export const DATE_BLOCK_REGEX = new RegExp(
+    String.raw`(@(?=[\d>T])(?:${D}(?:T${TM})?|T?${TM})?(?:>(?:${D}(?:T${TM})?|${TM})?)*)`,
+);
 
 /**
  * Column spans of a line's date block, all relative to the start of the

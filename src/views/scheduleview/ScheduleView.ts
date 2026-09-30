@@ -271,7 +271,7 @@ export class ScheduleView extends ItemView {
 
         this.applyConfig(config);
 
-        if (transient.currentDate && this.isValidDateKey(transient.currentDate)) {
+        if (transient.currentDate && DateUtils.isDateShape(transient.currentDate)) {
             this.currentVisualDate = transient.currentDate;
         }
 
@@ -564,7 +564,7 @@ export class ScheduleView extends ItemView {
     }
 
     private navigateDate(offset: number): void {
-        const date = this.parseLocalDate(this.currentVisualDate);
+        const date = DateUtils.parseDate(this.currentVisualDate);
         date.setDate(date.getDate() + offset);
         this.currentVisualDate = DateUtils.getLocalDateString(date);
         void this.app.workspace.requestSaveLayout();
@@ -591,13 +591,5 @@ export class ScheduleView extends ItemView {
         bodyScroll.scrollTop = (grid.offsetTop + nowTopPx) - bodyScroll.clientHeight / 2;
     }
 
-    private isValidDateKey(value: string): boolean {
-        return /^\d{4}-\d{2}-\d{2}$/.test(value);
-    }
-
-    private parseLocalDate(date: string): Date {
-        const [year, month, day] = date.split('-').map(Number);
-        return new Date(year, month - 1, day, 0, 0, 0, 0);
-    }
 
 }

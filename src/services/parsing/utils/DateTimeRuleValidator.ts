@@ -1,5 +1,8 @@
+import { DateUtils } from '../../../utils/DateUtils';
 import { t } from '../../../i18n';
 import type { DateTimeRule } from '../../../types';
+
+const CONTAINS_DATE_RE = new RegExp(DateUtils.DATE_PATTERN);
 
 export interface DateTimeValidationInput {
     startDate?: string;
@@ -82,7 +85,7 @@ export function validateDateTimeRules(
     }
 
     // Rule 5: Due without date
-    if (input.due && !/\d{4}-\d{2}-\d{2}/.test(input.due)) {
+    if (input.due && !CONTAINS_DATE_RE.test(input.due)) {
         return {
             severity: 'error',
             rule: 'due-without-date',

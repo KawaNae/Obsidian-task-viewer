@@ -1,5 +1,8 @@
 import { DateUtils } from '../../../utils/DateUtils';
 
+const DATE_IN_TEXT_RE = new RegExp(DateUtils.DATE_PATTERN);
+const TIME_IN_TEXT_RE = new RegExp(`(${DateUtils.TIME_PATTERN})`);
+
 /**
  * Shared date/time field parsing utilities — the single implementation of
  * "what counts as a date/time fragment" for BOTH notation surfaces
@@ -16,22 +19,17 @@ export function normalizeYamlDate(value: unknown): string | null {
     if (value === null || value === undefined) return null;
 
     if (value instanceof Date) {
-        const y = value.getFullYear();
-        const m = (value.getMonth() + 1).toString().padStart(2, '0');
-        const d = value.getDate().toString().padStart(2, '0');
+        const date = DateUtils.getLocalDateString(value);
         const h = value.getHours();
         const min = value.getMinutes();
-        if (h === 0 && min === 0) {
-            return `${y}-${m}-${d}`;
-        }
-        return `${y}-${m}-${d}T${h.toString().padStart(2, '0')}:${min.toString().padStart(2, '0')}`;
+        return h === 0 && min === 0 ? date : `${date}T${DateUtils.formatHHMM(h, min)}`;
     }
 
     if (typeof value === 'number') {
         if (value >= 0 && value < 1440) {
             const hours = Math.floor(value / 60);
             const minutes = value % 60;
-            return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`;
+            return DateUtils.formatHHMM(hours, minutes);
         }
         return null;
     }
@@ -55,16 +53,16 @@ export function parseDateTimeField(normalized: string | null): { date?: string; 
     if (!normalized) return {};
 
     let date: string | undefined;
-    const dateMatch = normalized.match(/(\d{4})-(\d{2})-(\d{2})/);
+    const dateMatch = normalized.match(DATE_IN_TEXT_RE);
     if (dateMatch) {
-        const month = Number(dateMatch[2]), day = Number(dateMatch[3]);
+        const month = Number(dateMatch[0].slice(5, 7)), day = Number(dateMatch[0].slice(8, 10));
         if (month >= 1 && month <= 12 && day >= 1 && day <= 31) {
             date = dateMatch[0];
         }
     }
 
     let time: string | undefined;
-    const timeMatch = normalized.match(/(\d{2}:\d{2})/);
+    const timeMatch = normalized.match(TIME_IN_TEXT_RE);
     if (timeMatch && DateUtils.isValidTimeString(timeMatch[1])) {
         time = timeMatch[1];
     }

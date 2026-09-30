@@ -12,9 +12,7 @@ import type { TaskReadService } from '../../services/data/TaskReadService';
 import { DailyNoteUtils } from '../../utils/DailyNoteUtils';
 import { isTaskCompleted as isTaskCompletedUtil } from '../../services/display/TaskStatusQuery';
 import {
-    parseLocalDateString,
     getCalendarDateRange,
-    getWeekStart,
     getNormalizedWindowStart,
     getReferenceMonth,
     getGridColumnForDay,
@@ -132,9 +130,9 @@ export class MiniCalendarView extends ItemView {
         this.applyConfig(config);
 
         if (transient.windowStart) {
-            const parsedWindowStart = parseLocalDateString(transient.windowStart);
+            const parsedWindowStart = DateUtils.readDate(transient.windowStart);
             if (parsedWindowStart) {
-                const weekStart = getWeekStart(parsedWindowStart, this.plugin.settings.weekStartDay);
+                const weekStart = DateUtils.getWeekStart(parsedWindowStart, this.plugin.settings.weekStartDay);
                 this.windowStart = DateUtils.getLocalDateString(weekStart);
             }
         }
@@ -413,7 +411,7 @@ export class MiniCalendarView extends ItemView {
         const weekNumberEl = weekEl.createDiv('cal-week-number cal-week-number--mini');
         const weekNumber = withWeekStartDay(weekStartDate, this.plugin.settings.weekStartDay).week();
 
-        const todayWeekStart = getWeekStart(new Date(), this.plugin.settings.weekStartDay);
+        const todayWeekStart = DateUtils.getWeekStart(new Date(), this.plugin.settings.weekStartDay);
         if (DateUtils.getLocalDateString(weekStartDate) === DateUtils.getLocalDateString(todayWeekStart)) {
             weekNumberEl.addClass('is-current-week');
         }
@@ -579,7 +577,7 @@ export class MiniCalendarView extends ItemView {
         weekEl.style.height = `${rowHeight}px`;
         weekEl.style.flex = 'none';
 
-        const startDate = parseLocalDateString(weekStart);
+        const startDate = DateUtils.readDate(weekStart);
         if (!startDate) {
             return weekEl;
         }

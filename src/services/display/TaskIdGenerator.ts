@@ -1,3 +1,4 @@
+import { DateUtils } from '../../utils/DateUtils';
 import type { ParserId } from '../../types';
 import { READING_ID_SOURCE, type ReadingId } from '../core/Reading';
 
@@ -16,7 +17,7 @@ export interface ParsedSegmentId {
 // provisional ID that leaked should fail to parse.
 const TASK_ID_REGEX = new RegExp(String.raw`^([^:]+):(.+):(n:${READING_ID_SOURCE}:\d+)$`);
 const NAME_ANCHOR_REGEX = new RegExp(String.raw`^n:(${READING_ID_SOURCE}):(\d+)$`);
-const SEGMENT_ID_REGEX = /^(.*)##seg:(\d{4}-\d{2}-\d{2})$/;
+const SEGMENT_ID_REGEX = new RegExp(String.raw`^(.*)##seg:(${DateUtils.DATE_PATTERN})$`);
 
 export class TaskIdGenerator {
     static generate(parserId: ParserId, filePath: string, anchor: string): string {

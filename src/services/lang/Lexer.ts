@@ -1,9 +1,10 @@
+import { DateUtils } from '../../utils/DateUtils';
 import { type Diagnostic, type Span, error } from './Diagnostic';
 import type { Token, TokenKind } from './Token';
 import { DECIMAL_PLACES, DURATION_UNITS, type DurUnit, MAX_EXACT_FRACTION } from './Value';
 
-const DATETIME_RE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/;
-const DATE_RE = /^\d{4}-\d{2}-\d{2}/;
+const DATETIME_RE = new RegExp(`^${DateUtils.DATE_PATTERN}T${DateUtils.TIME_PATTERN}`);
+const DATE_RE = new RegExp(`^${DateUtils.DATE_PATTERN}`);
 const TIME_RE = /^\d{1,2}:\d{2}/;
 const IDENT_RE = /^[A-Za-z_][A-Za-z0-9_]*/;
 

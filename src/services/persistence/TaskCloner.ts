@@ -5,7 +5,10 @@ import { FileOperations } from './utils/FileOperations';
 import { fileGone, processLines, type LineDraft, type WriteChannels, type WriteOutcome } from './FileLines';
 import type { PlannedTarget } from './TaskRefs';
 import { Outline } from '../parsing/utils/Outline';
+import { DATE_BLOCK_REGEX } from '../parsing/tv-inline/DateBlockLocator';
 import { Block, Placement, type Spot } from './utils/Placement';
+
+const DATES_RE = new RegExp(DateUtils.DATE_PATTERN, 'g');
 
 
 /**
@@ -137,12 +140,12 @@ export class TaskCloner {
      */
     private shiftInlineDates(line: string, dayOffset: number): string {
         return line.replace(
-            /(@(?=[\d>T])(?:\d{4}-\d{2}-\d{2}(?:T\d{2}:\d{2})?|T?\d{2}:\d{2})?(?:>(?:\d{4}-\d{2}-\d{2}(?:T\d{2}:\d{2})?|\d{2}:\d{2})?)*)/,
+            DATE_BLOCK_REGEX,
             (block) => {
                 const inner = block.slice(1); // remove '@'
                 const segments = inner.split('>');
                 const shifted = segments.map((seg, i) =>
-                    i < 2 ? seg.replace(/\d{4}-\d{2}-\d{2}/g, (d) => DateUtils.addDays(d, dayOffset)) : seg,
+                    i < 2 ? seg.replace(DATES_RE, (d) => DateUtils.shiftDateString(d, dayOffset)) : seg,
                 );
                 return '@' + shifted.join('>');
             },

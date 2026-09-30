@@ -20,12 +20,21 @@ export class DateUtils {
      */
     static readonly DATE_PATTERN = String.raw`\d{4}-\d{2}-\d{2}`;
 
+    /** The shape of an `HH:mm` time, as regex source, for the same grammars. */
+    static readonly TIME_PATTERN = String.raw`\d{2}:\d{2}`;
+
     private static readonly DATE_SHAPE_RE = new RegExp(`^${DateUtils.DATE_PATTERN}$`);
-    private static readonly DATE_TIME_TEXT_RE = new RegExp(`^(${DateUtils.DATE_PATTERN})[T ](\\d{2}:\\d{2})$`);
+    private static readonly TIME_SHAPE_RE = new RegExp(`^${DateUtils.TIME_PATTERN}$`);
+    private static readonly DATE_TIME_TEXT_RE = new RegExp(`^(${DateUtils.DATE_PATTERN})[T ](${DateUtils.TIME_PATTERN})$`);
 
     /** Whether `value` has the `YYYY-MM-DD` shape. Does not ask whether the day exists. */
     static isDateShape(value: string): boolean {
         return DateUtils.DATE_SHAPE_RE.test(value);
+    }
+
+    /** Whether `value` has the `HH:mm` shape. Does not ask whether the time exists. */
+    static isTimeShape(value: string): boolean {
+        return DateUtils.TIME_SHAPE_RE.test(value);
     }
 
     /**
@@ -117,7 +126,7 @@ export class DateUtils {
         const match = trimmed.match(DateUtils.DATE_TIME_TEXT_RE);
         if (match) return { date: match[1], time: match[2] };
         if (DateUtils.isDateShape(trimmed)) return { date: trimmed };
-        if (/^\d{2}:\d{2}$/.test(trimmed)) return { date: '', time: trimmed };
+        if (DateUtils.TIME_SHAPE_RE.test(trimmed)) return { date: '', time: trimmed };
         return null;
     }
 
@@ -234,7 +243,7 @@ export class DateUtils {
     }
 
     static isValidTimeString(value: string): boolean {
-        if (!/^\d{2}:\d{2}$/.test(value)) return false;
+        if (!DateUtils.TIME_SHAPE_RE.test(value)) return false;
         const [h, m] = value.split(':').map(Number);
         return h >= 0 && h <= 23 && m >= 0 && m <= 59;
     }

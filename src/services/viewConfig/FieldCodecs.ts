@@ -13,6 +13,7 @@
  * used to be replicated across 5 boundary call sites in the old codebase.
  */
 
+import { DateUtils } from '../../utils/DateUtils';
 import type { ConfigField, TransientField } from './ViewConfigSchema';
 import type { FilterState } from '../filter/FilterTypes';
 import { hasConditions } from '../filter/FilterTypes';
@@ -329,21 +330,20 @@ export const F = {
 
     /** YYYY-MM-DD string. */
     dateString(key: string, opts: FieldOptions = {}): ConfigField<string> {
-        const VALID = /^\d{4}-\d{2}-\d{2}$/;
         return {
             key,
             legacyKeys: opts.legacyKeys,
             parse(raw) {
-                return typeof raw === 'string' && VALID.test(raw) ? raw : undefined;
+                return typeof raw === 'string' && DateUtils.isDateShape(raw) ? raw : undefined;
             },
             serialize(value) {
-                return typeof value === 'string' && VALID.test(value) ? value : undefined;
+                return typeof value === 'string' && DateUtils.isDateShape(value) ? value : undefined;
             },
             toUriParam(value) {
-                return VALID.test(value) ? value : undefined;
+                return DateUtils.isDateShape(value) ? value : undefined;
             },
             fromUriParam(raw) {
-                return VALID.test(raw) ? raw : undefined;
+                return DateUtils.isDateShape(raw) ? raw : undefined;
             },
         };
     },

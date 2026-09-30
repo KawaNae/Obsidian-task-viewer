@@ -217,12 +217,7 @@ export class TimelineSectionRenderer {
         let taskDate = date;
         if (rawTotalMinutes >= 24 * 60) {
             // It's the next day
-            const d = new Date(date);
-            // Fix timezone for date calc
-            const [y, m, day] = date.split('-').map(Number);
-            d.setFullYear(y, m - 1, day);
-            d.setDate(d.getDate() + 1);
-            taskDate = DateUtils.getLocalDateString(d);
+            taskDate = DateUtils.addDays(date, 1);
         }
 
         openCreateTaskForDailyNote(this.plugin, date, { startDate: taskDate, startTime: timeString });
