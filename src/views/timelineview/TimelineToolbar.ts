@@ -37,8 +37,8 @@ export interface TimelineToolbarDeps {
     onJumpToNow: () => void;
     /** Show `date` the way the Now button shows today (same past-days lead). */
     onJumpToDate: (date: string) => void;
-    /** Dates the view shows now, for the date picker to open on and mark. */
-    getShownRange: () => { start: string; end: string };
+    /** The date (YYYY-MM-DD) the date picker opens on; `onJumpToDate` of it stays put. */
+    getCurrentDate: () => string;
 
     getCustomName: () => string | undefined;
     onRename: (newName: string | undefined) => void;
@@ -147,8 +147,7 @@ export class TimelineToolbar extends ViewToolbarBase {
             () => deps.onJumpToNow(),
             {
                 dateJump: {
-                    getSettings: () => deps.plugin.settings,
-                    getShownRange: () => deps.getShownRange(),
+                    getCurrentDate: () => deps.getCurrentDate(),
                     onJump: (date) => deps.onJumpToDate(date),
                 },
             }

@@ -541,7 +541,6 @@ src/styles/
 ├── _timer-widget.css         # Floating timer widget
 ├── _filter-popover.css       # Filter menu popover
 ├── _sort-popover.css         # Sort menu popover
-├── _date-picker.css          # Date picker popover (Today double-click, "Go to date")
 ├── _pinned-list.css          # Pinned list component
 ├── _sidebar.css              # Sidebar styles
 ├── _settings.css             # Settings tab

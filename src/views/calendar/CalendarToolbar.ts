@@ -27,8 +27,8 @@ export interface CalendarToolbarDeps {
     onJumpToCurrentMonth: () => void;
     /** Show the month containing `date`, as the Today button shows this month. */
     onJumpToDate: (date: string) => void;
-    /** Dates the view shows now, for the date picker to open on and mark. */
-    getShownRange: () => { start: string; end: string };
+    /** The date (YYYY-MM-DD) the date picker opens on; `onJumpToDate` of it stays put. */
+    getCurrentDate: () => string;
     onFilterChange: () => void;
 
     getCustomName: () => string | undefined;
@@ -102,8 +102,7 @@ export class CalendarToolbar extends ViewToolbarBase {
                 vertical: true,
                 onNavigateFast: (direction) => deps.onNavigateMonth(direction),
                 dateJump: {
-                    getSettings: () => deps.plugin.settings,
-                    getShownRange: () => deps.getShownRange(),
+                    getCurrentDate: () => deps.getCurrentDate(),
                     onJump: (date) => deps.onJumpToDate(date),
                 },
             }

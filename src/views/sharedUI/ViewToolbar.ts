@@ -14,7 +14,6 @@ import { buildExportFilename } from '../../services/export/ExportFilename';
 import type { MenuPresenter } from '../../interaction/menu/MenuPresenter';
 import { viewContentEl } from '../../utils/ObsidianView';
 import type { WriteChannel } from '../../services/persistence/FileLines';
-import { DatePickerPopover, type DateJumpOptions } from './DatePickerPopover';
 
 /**
  * Persistent toolbar root with mount/detach lifecycle.
@@ -76,6 +75,17 @@ export abstract class ViewToolbarBase {
     protected abstract buildDom(rootEl: HTMLElement): void;
 }
 
+/** What a view hands {@link DateNavigator} so the user can jump to any date. */
+export interface DateJumpOptions {
+    /**
+     * The date (YYYY-MM-DD) the picker opens on: the one that, handed to
+     * `onJump`, leaves the view where it is.
+     */
+    getCurrentDate: () => string;
+    /** Move the view to `date` (YYYY-MM-DD). What "move" means is the view's call. */
+    onJump: (date: string) => void;
+}
+
 /** What {@link DateNavigator.render} hands back to its toolbar. */
 export interface DateNavigatorHandle {
     /**
@@ -87,7 +97,8 @@ export interface DateNavigatorHandle {
 
 /**
  * Date navigation component with prev/next/today buttons. With `dateJump`, a
- * double-click on Today opens a {@link DatePickerPopover} to jump to any date.
+ * double-click on Today opens the platform's native date picker to jump to
+ * any date.
  */
 export class DateNavigator {
     /**
@@ -153,11 +164,46 @@ export class DateNavigator {
 
         if (!options?.dateJump) return { openDatePicker: () => {} };
 
+        // The picker is a hidden <input type="date"> laid under Today, so the
+        // native popup opens there. It sits in the document body, not the
+        // toolbar: views detach the toolbar on every render, and taking the
+        // input out of the document closes its popup. It lives from one
+        // opening to the next, as a cancel leaves no event to clean up on.
         // Today keeps its single click as is, with no wait to tell a double
         // click apart: both clicks of a double click go to today, and the
-        // dblclick that follows opens the picker, on today's month.
-        const picker = new DatePickerPopover(options.dateJump);
-        const openPicker = () => picker.open({ kind: 'element', element: todayBtn });
+        // dblclick that follows opens the picker.
+        const { getCurrentDate, onJump } = options.dateJump;
+        let dateInput: HTMLInputElement | null = null;
+        const openPicker = () => {
+            dateInput?.remove();
+            const input = todayBtn.ownerDocument.body.createEl('input', {
+                cls: 'view-toolbar__date-input',
+                type: 'date',
+            });
+            dateInput = input;
+            input.tabIndex = -1;
+            input.setAttribute('aria-hidden', 'true');
+            const rect = todayBtn.getBoundingClientRect();
+            input.setCssStyles({
+                left: `${rect.left}px`,
+                top: `${rect.bottom}px`,
+                width: `${rect.width}px`,
+            });
+            input.value = getCurrentDate();
+            // Fires only for a new date: cancel, or confirming the date the
+            // view is already on, leaves it alone. Clearing gives '', ignored.
+            input.addEventListener('change', () => {
+                if (input.value) onJump(input.value);
+            });
+            try {
+                input.showPicker();
+            } catch {
+                // showPicker wants a user gesture and a recent engine; failing
+                // that, the best left is to hand the input a click.
+                input.focus();
+                input.click();
+            }
+        };
         todayBtn.ondblclick = openPicker;
 
         return { openDatePicker: openPicker };

@@ -24,8 +24,6 @@ export interface ScheduleToolbarDeps {
     onNavigate: (days: number) => void;
     onToday: () => void;
     onJumpToDate: (date: string) => void;
-    /** Dates the view shows now, for the date picker to open on and mark. */
-    getShownRange: () => { start: string; end: string };
     onFilterChange: () => void;
 
     getCustomName: () => string | undefined;
@@ -92,8 +90,7 @@ export class ScheduleToolbar extends ViewToolbarBase {
             () => deps.onToday(),
             {
                 dateJump: {
-                    getSettings: () => deps.plugin.settings,
-                    getShownRange: () => deps.getShownRange(),
+                    getCurrentDate: () => deps.getCurrentDate(),
                     onJump: (date) => deps.onJumpToDate(date),
                 },
             }

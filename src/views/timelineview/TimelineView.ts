@@ -371,10 +371,8 @@ export class TimelineView extends ItemView {
                 this.viewState.startDate = this.startDateLeadingTo(date);
                 this.render();
             },
-            getShownRange: () => {
-                const dates = this.getDatesToShow();
-                return { start: dates[0], end: dates[dates.length - 1] };
-            },
+            // Undoes startDateLeadingTo, so confirming it leaves the view put.
+            getCurrentDate: () => DateUtils.addDays(this.viewState.startDate, this.plugin.settings.pastDaysToShow),
 
             getCustomName: () => this.viewState.customName,
             onRename: (newName) => {
@@ -745,7 +743,7 @@ export class TimelineView extends ItemView {
 
     /**
      * The start date that shows `date` with the configured past-days lead in
-     * front of it. The Now button applies it to today; the date picker to the
+     * front of it. The Now button applies it to today; "Go to date" to the
      * picked date, so a picked date sits where today would.
      */
     private startDateLeadingTo(date: string): string {
@@ -1145,6 +1143,11 @@ export class TimelineView extends ItemView {
         return dates;
     }
 
+    /** Open the toolbar's date picker (the "Go to date" command). */
+    openDatePicker(): void {
+        this.toolbar?.openDatePicker();
+    }
+
     /**
      * The date range currently drawn, for image export. Reads the same
      * `getDatesToShow()` the grid renders from rather than recomputing from
@@ -1152,11 +1155,6 @@ export class TimelineView extends ItemView {
      * actually on screen if the day-list logic ever changes (e.g. an
      * oldest-overdue start date).
      */
-    /** Open the toolbar's date picker (the "Go to date" command). */
-    openDatePicker(): void {
-        this.toolbar?.openDatePicker();
-    }
-
     getExportedDateRange(): { anchor: string; from: string; to: string } | null {
         const dates = this.getDatesToShow();
         if (dates.length === 0) return null;

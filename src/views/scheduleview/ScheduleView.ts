@@ -179,7 +179,6 @@ export class ScheduleView extends ItemView {
                 void this.app.workspace.requestSaveLayout();
                 this.render();
             },
-            getShownRange: () => ({ start: this.currentVisualDate, end: this.currentVisualDate }),
             onFilterChange: () => {
                 void this.app.workspace.requestSaveLayout();
                 this.render();
@@ -217,16 +216,16 @@ export class ScheduleView extends ItemView {
         });
     }
 
-    /**
-     * The date currently drawn, for image export. Schedule renders exactly
-     * one day (`this.currentVisualDate`, the same field `renderDayTimeline`
-     * is called with), so anchor/from/to all coincide.
-     */
     /** Open the toolbar's date picker (the "Go to date" command). */
     openDatePicker(): void {
         this.toolbar.openDatePicker();
     }
 
+    /**
+     * The date currently drawn, for image export. Schedule renders exactly
+     * one day (`this.currentVisualDate`, the same field `renderDayTimeline`
+     * is called with), so anchor/from/to all coincide.
+     */
     getExportedDateRange(): { anchor: string; from: string; to: string } | null {
         if (!this.currentVisualDate) return null;
         return { anchor: this.currentVisualDate, from: this.currentVisualDate, to: this.currentVisualDate };

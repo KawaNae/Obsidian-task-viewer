@@ -209,12 +209,9 @@ export class CalendarView extends ItemView {
                 this.toolbar.update();
             },
             getReferenceMonth: () => this.getReferenceMonth(),
-            getShownRange: () => {
+            getCurrentDate: () => {
                 const { year, month } = this.getReferenceMonth();
-                return {
-                    start: DateUtils.getLocalDateString(new Date(year, month, 1)),
-                    end: DateUtils.getLocalDateString(new Date(year, month + 1, 0)),
-                };
+                return DateUtils.getLocalDateString(new Date(year, month, 1));
             },
             linkInteractionManager: this.linkInteractionManager,
             hoverParent: this.hoverParent,
@@ -909,17 +906,17 @@ export class CalendarView extends ItemView {
         return getCalendarDateRange(this.windowStart, this.plugin.settings.weekStartDay);
     }
 
+    /** Open the toolbar's date picker (the "Go to date" command). */
+    openDatePicker(): void {
+        this.toolbar.openDatePicker();
+    }
+
     /**
      * The date range currently drawn, for image export. Calls the same
      * `getCalendarDateRange()` the grid renders from (line ~492) — the
      * week-aligned 42-day window, not the calendar month — so this can't
      * drift from what's actually on screen.
      */
-    /** Open the toolbar's date picker (the "Go to date" command). */
-    openDatePicker(): void {
-        this.toolbar.openDatePicker();
-    }
-
     getExportedDateRange(): { anchor: string; from: string; to: string } | null {
         const { startDate, endDate } = this.getCalendarDateRange();
         return {
@@ -1000,8 +997,8 @@ export class CalendarView extends ItemView {
 
     /**
      * Show the month that contains `date`, laid out from the week of its 1st.
-     * The Today button, month stepping and the date picker all land here, so
-     * a picked date and "today" line up the same way.
+     * The Today button, month stepping and "Go to date" all land here, so a
+     * picked date and "today" line up the same way.
      */
     private showMonthOf(date: Date): void {
         this.windowStart = DateUtils.getMonthGridStart(date, this.plugin.settings.weekStartDay);
