@@ -790,7 +790,7 @@ MIT License
 ## Style Token Rules (v0.13.1+)
 
 1. Do not reference Obsidian theme variables directly outside `src/styles/_variables.css`.
-2. `:root` is reserved for theme-independent constants (size, spacing, z-index).
+2. `:root` is reserved for theme-independent constants (size, spacing, z-index). A z-index built from Obsidian's `--layer-*` (ladder [A]: `--z-overlay`, `--z-timer-widget`) goes on `body` instead, because Obsidian declares `--layer-*` there and a `var()` resolves where the property is declared.
 3. Use `body` in `src/styles/_variables.css` as the single mapping layer from Obsidian vars to `--tv-*`.
 4. Component/style files must use only `--tv-*` tokens.
 5. Keep token design effectively single-layer; only keep `theme-light`/`theme-dark` overrides for app/card background and shadow strength.
@@ -1134,7 +1134,7 @@ All `ScopeKeys` fields (`start`, `end`, `due`, `color`, `linestyle`, `mask`, `ig
 ## Adding CSS Styles
 
 1. New CSS variables → define as `--tv-*` tokens in the `body` block of `src/styles/_variables.css`.
-2. `:root` is for theme-independent constants only (sizes, z-index values).
+2. `:root` is for theme-independent constants only (sizes, z-index values). A z-index built from Obsidian's `--layer-*` goes on `body` (see Style Token Rules).
 3. Component stylesheets must reference only `--tv-*` tokens (never Obsidian variables directly).
 4. Drag visuals: use `--tv-drop-*` for drop zones and `--tv-ghost-*` for drag ghosts.
 
