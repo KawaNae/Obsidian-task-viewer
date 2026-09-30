@@ -1,7 +1,13 @@
+/** A listener of the index's changes: a span (a row's name and the fields that moved), or no arguments for everything. */
+export type ChangeListener = (taskId?: string, changes?: string[]) => void;
+
 /**
- * Merges the change notifications of one frame into a single emission.
+ * The one way the index tells its listeners that what it holds changed, and
+ * the listeners themselves: two ports, {@link schedule} and
+ * {@link flushNow}, and nothing else calls a listener.
  *
- * A notification is either a change span — one task id plus the fields that
+ * Merges the change notifications of one frame into a single emission. A
+ * notification is either a change span — one task id plus the fields that
  * moved — or a full invalidation. Merging is what keeps a span a span: two
  * spans for the same task join into one, and anything else (a second task, or
  * a caller that could not name a task) collapses to a full invalidation,
@@ -19,19 +25,36 @@ export class NotifyCoalescer {
      * - `{ taskId, changes }`: one task's change span (changes accumulate)
      */
     private pending: { taskId: string; changes: Set<string> } | 'full' | null = null;
+    /** Whether the pending full emission is told each listener in a macrotask of its own. */
+    private staggered = false;
     private timer: NodeJS.Timeout | null = null;
+    private listeners: ChangeListener[] = [];
 
-    constructor(
-        private readonly emit: (taskId?: string, changes?: string[]) => void,
-        private readonly debounceMs: number,
-    ) {}
+    constructor(private readonly debounceMs: number) {}
+
+    /** Listen to what is emitted. @returns the unsubscribe. */
+    onChange(listener: ChangeListener): () => void {
+        this.listeners.push(listener);
+        return () => {
+            const at = this.listeners.indexOf(listener);
+            if (at !== -1) this.listeners.splice(at, 1);
+        };
+    }
 
     /**
      * Take a notification into the buffer and emit after `debounceMs` of quiet.
      * Successive calls restart the wait, so a burst renders once.
+     *
+     * `staggered`: the full emission this one ends in tells each listener in
+     * a macrotask of its own, for a change every view redraws after — the
+     * vault read whole, the settings changed — so no one task of the browser
+     * runs every redraw (Chrome's Long Task warning). A timer, not a frame: the
+     * index has no window of its own, and a popout's views would never hear
+     * from the main window's frame clock when that window is hidden.
      */
-    schedule(taskId?: string, changes?: string[]): void {
+    schedule(taskId?: string, changes?: string[], opts: { staggered?: boolean } = {}): void {
         this.merge(taskId, changes);
+        if (opts.staggered) this.staggered = true;
         if (this.timer) clearTimeout(this.timer);
         this.timer = setTimeout(() => {
             this.timer = null;
@@ -40,13 +63,15 @@ export class NotifyCoalescer {
     }
 
     /**
-     * Emit the buffer now, cancelling any pending wait.
+     * Emit the buffer now, cancelling any pending wait, every listener in
+     * this task.
      *
      * Used when the DOM has to match the model in this frame — the end of a
-     * drag, or an API write whose caller is about to hand control back.
+     * drag, the clock turning a card overdue.
      */
     flushNow(taskId?: string, changes?: string[]): void {
         this.merge(taskId, changes);
+        this.staggered = false;
         if (this.timer) {
             clearTimeout(this.timer);
             this.timer = null;
@@ -61,6 +86,7 @@ export class NotifyCoalescer {
             this.timer = null;
         }
         this.pending = null;
+        this.staggered = false;
     }
 
     private merge(taskId?: string, changes?: string[]): void {
@@ -82,12 +108,18 @@ export class NotifyCoalescer {
 
     private flush(): void {
         const pending = this.pending;
+        const staggered = this.staggered;
         this.pending = null;
+        this.staggered = false;
         if (pending === null) return;
-        if (pending === 'full') {
-            this.emit();
+        const listeners = [...this.listeners];
+        if (pending !== 'full') {
+            const changes = [...pending.changes];
+            for (const listener of listeners) listener(pending.taskId, changes);
+        } else if (staggered) {
+            for (const listener of listeners) setTimeout(() => listener(), 0);
         } else {
-            this.emit(pending.taskId, [...pending.changes]);
+            for (const listener of listeners) listener();
         }
     }
 }

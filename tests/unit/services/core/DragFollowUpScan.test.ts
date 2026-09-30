@@ -172,12 +172,12 @@ describe('writes after dispose', () => {
         const closed = buildHost({
             disposed: true,
             refuseAfterDispose: proto.refuseAfterDispose,
-            withNotify: vi.fn(),
+            repository: { write: vi.fn() },
         });
 
         await proto.writeLine.call(closed, FILE, editorRow(0, '- [ ] x', ''), [{ kind: 'update', text: '- [x] x' }]);
         await proto.insertLine.call(closed, 'id', '- [ ] x', 'firstChild');
 
-        expect(closed.withNotify).not.toHaveBeenCalled();
+        expect(closed.repository.write).not.toHaveBeenCalled();
     });
 });

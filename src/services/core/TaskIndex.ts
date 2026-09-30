@@ -11,9 +11,8 @@ import type { EditorLineHost } from '../../editor/EditorWrite';
 import type { FlowDeleteAssessment } from '../flow/FlowDeletion';
 import { TaskStore } from './TaskStore';
 import { TaskScanner } from './TaskScanner';
-import { PathTtlWindow } from './PathTtlWindow';
 import { refusalNotice, type IndexRefusal } from './RefusalClause';
-import { NotifyCoalescer } from './NotifyCoalescer';
+import { NotifyCoalescer, type ChangeListener } from './NotifyCoalescer';
 import { readName } from './RowNames';
 import { formatRow } from '../parsing/TaskLineFormat';
 import { lineParsersFingerprint } from '../parsing/TaskParser';
@@ -110,14 +109,12 @@ export class TaskIndex {
     /** The writes asked of each row, in order (see {@link onRow}). */
     private rowWrites?: Map<string, Promise<unknown>>;
 
-    // 1 フレーム（16ms）分の通知を 1 回にまとめる。合流規則は NotifyCoalescer 側。
-    private readonly notify = new NotifyCoalescer(
-        (taskId, changes) => this.store.notifyListeners(taskId, changes),
-        16,
-    );
-
-    // API CRUD (withNotify) の実行中を覚えておくためのウィンドウ。
-    private readonly apiWrites = new PathTtlWindow(2000);
+    /**
+     * The index's listeners, and the one way they are told: once a frame
+     * (16ms), merged (`NotifyCoalescer`), or at once (`notifyImmediate`).
+     * Told only when what the index holds changed.
+     */
+    private readonly notify = new NotifyCoalescer(16);
 
     /**
      * Every vault subscription this index opened, with the emitter that closes
@@ -192,7 +189,7 @@ export class TaskIndex {
 
     async initialize(): Promise<void> {
         this.app.workspace.onLayoutReady(async () => {
-            await this.scanner.scanVault();
+            await this.readVault();
             // From the vault as read, the disk is checked against it.
             this.reconciler?.start();
         });
@@ -200,17 +197,12 @@ export class TaskIndex {
         // Vault イベントハンドラー
         this.own(this.app.vault, this.app.vault.on('modify', async (file) => {
             if (file instanceof TFile && file.extension === 'md') {
-                // The file being dragged is read, but its reading is held back
-                // from the store until the drag ends (`TaskScanner.hold`).
-                await this.scanner.queueScan(file);
-                // Skip notify when an API write (withNotify) is in flight for this
-                // file — withNotify's own notifyImmediate is the authoritative notify.
-                // Editor direct edits (no withNotify) are unaffected: the API
-                // window is only marked during API CRUD operations. Nor for the
-                // file being dragged: the drag draws it, and its end notifies.
-                if (!this.apiWrites.has(file.path) && !this.scanner.holds(file.path)) {
-                    this.notify.schedule();
-                }
+                // Told only when the scan committed: a write of ours was read
+                // when it landed (`landed`), so its `modify` reads what the
+                // index holds and commits nothing; the file being dragged is
+                // read, but its reading is held back from the store until the
+                // drag ends (`TaskScanner.hold`).
+                if (await this.scanner.queueScan(file)) this.notify.schedule();
             }
         }));
 
@@ -302,6 +294,16 @@ export class TaskIndex {
         if (this.scanner.landed(path, landing)) this.notify.schedule();
     }
 
+    /**
+     * Read the whole vault, then tell every listener, each in a task of its
+     * own (`NotifyCoalescer.schedule`'s `staggered`): at startup, and when the
+     * settings change what a parse makes of the same lines.
+     */
+    private async readVault(): Promise<void> {
+        await this.scanner.scanVault();
+        this.notify.schedule(undefined, undefined, { staggered: true });
+    }
+
     /** Read the file back into the store, then notify. */
     private async rescanAndNotify(file: TFile): Promise<void> {
         await this.scanner.queueScan(file);
@@ -311,13 +313,12 @@ export class TaskIndex {
     // ===== 通知制御 =====
 
     /**
-     * 即時通知（debounceなし）。
-     * ドラッグ完了後にDOMを即座に更新する必要がある場合に使用。
-     * 引数あり: taskId / changes をリスナーに伝える。なし: 全体無効化。
-     * 既存のdebounceタイマーはキャンセルして即座に実行する。
+     * Tell every listener now that everything may have changed, with what was
+     * waiting for the frame: for a view that has to match the index in this
+     * frame — the end of a drag, the clock turning a card overdue.
      */
-    notifyImmediate(taskId?: string, changes?: string[]): void {
-        this.notify.flushNow(taskId, changes);
+    notifyImmediate(): void {
+        this.notify.flushNow();
     }
 
     // ===== ドラッグ制御 =====
@@ -351,12 +352,13 @@ export class TaskIndex {
         this.settings = settings;
         this.scanner.updateSettings(settings);
         if (needsRescan) {
-            this.scanner.scanVault()
+            this.readVault()
                 .catch((error) => {
                     logError(`[TaskIndex] Failed to rescan vault: ${(error as Error)?.message ?? error}`);
                 });
         } else {
-            this.store.notifyListenersStaggered();
+            // What a view draws of the same rows moved: every view draws again.
+            this.notify.schedule(undefined, undefined, { staggered: true });
         }
     }
 
@@ -376,7 +378,6 @@ export class TaskIndex {
         this.reconciler?.dispose();
 
         this.notify.dispose();
-        this.apiWrites.dispose();
     }
 
     // ===== データアクセス (TaskStoreへ委譲) =====
@@ -450,8 +451,8 @@ export class TaskIndex {
 
     // ===== イベント管理 (TaskStoreへ委譲) =====
 
-    onChange(callback: (taskId?: string, changes?: string[]) => void): () => void {
-        return this.store.onChange(callback);
+    onChange(callback: ChangeListener): () => void {
+        return this.notify.onChange(callback);
     }
 
     // ===== スキャン関連 (TaskScannerへ委譲) =====
@@ -461,27 +462,6 @@ export class TaskIndex {
     }
 
     // ===== CRUD操作 =====
-
-    /**
-     * Wrap a write operation so that any successful completion is followed by
-     * an immediate full notify. This guarantees that every TaskIndex write
-     * triggers a UI refresh, regardless of whether the underlying file event
-     * pipeline fires a debounced notify (e.g. local writes are intentionally
-     * skipped in the vault.modify handler).
-     *
-     * Note: notifyImmediate() is called with no args → full invalidation.
-     */
-    private async withNotify<T>(filePath: string | readonly string[], op: () => Promise<T>): Promise<T> {
-        const paths = typeof filePath === 'string' ? [filePath] : filePath;
-        for (const path of paths) this.apiWrites.mark(path);
-        try {
-            const result = await op();
-            this.notifyImmediate();
-            return result;
-        } finally {
-            for (const path of paths) this.apiWrites.clear(path);
-        }
-    }
 
     /**
      * Rewrite the row `taskId` names with `updates`, in one write of its file.
@@ -605,17 +585,15 @@ export class TaskIndex {
                 logWarn(`[TaskIndex] replaceSubtree: not a row to write: id=${taskId}`);
                 return { written: false, refused: null };
             }
-            return this.withNotify(task.file, async () => {
-                logInfo(`[replaceSubtree] id=${taskId} lines=${base.length}->${replacement.children.length + 1}`);
-                const target = { ...plannedOn(task), basis: { text: base[0], subtree: base } };
-                const defs = this.settings.statusDefinitions;
-                const outcome = await this.repository.replaceSubtree(task.file, target, replacement, {
-                    completes: (was, now) => completes(was, now, defs),
-                    fire: () => this.commandExecutor.fireOp(task.file),
-                }, { refused: (refusal) => { void hear(refusal); } });
-                this.tellNotRun(outcome);
-                return outcome.written ? { written: true } : { written: false, refused: outcome.refused };
-            });
+            logInfo(`[replaceSubtree] id=${taskId} lines=${base.length}->${replacement.children.length + 1}`);
+            const target = { ...plannedOn(task), basis: { text: base[0], subtree: base } };
+            const defs = this.settings.statusDefinitions;
+            const outcome = await this.repository.replaceSubtree(task.file, target, replacement, {
+                completes: (was, now) => completes(was, now, defs),
+                fire: () => this.commandExecutor.fireOp(task.file),
+            }, { refused: (refusal) => { void hear(refusal); } });
+            this.tellNotRun(outcome);
+            return outcome.written ? { written: true } : { written: false, refused: outcome.refused };
         });
     }
 
@@ -684,29 +662,26 @@ export class TaskIndex {
                 logWarn(`[TaskIndex] send: a note to make holds rows already: to=${to.path}`);
                 return { kind: 'not-done', refused: null };
             }
-            const paths = [...new Set([to.path, ...sent.map(({ task }) => task.file)])];
-            return this.withNotify(paths, async (): Promise<SendWrite> => {
-                logInfo(`[send] to=${to.path}#${to.section.heading}${to.create ? ' (new)' : ''} rows=${sent.map(({ task }) => task.id).join(',')}`);
-                const defs = this.settings.statusDefinitions;
-                const outcome = await this.repository.send(sent.map(({ task, row }) => ({
-                    file: task.file,
-                    row: {
-                        target: { ...plannedOn(task), basis: { text: row.base[0], subtree: row.base } },
-                        ...(row.draft ? { draft: row.draft } : {}),
-                    },
-                })), to, {
-                    completes: (was, now) => completes(was, now, defs),
-                    fire: (path) => this.commandExecutor.fireOp(path),
-                }, { refused: (refusal) => { void hear(refusal); }, landed: opts.landed });
-                if (outcome.kind === 'not-sent') return { kind: 'not-done', refused: outcome.refused };
-                for (const write of outcome.writes) this.tellNotRun(write);
-                for (const refusal of outcome.refused) await this.learnFrom(refusal);
-                logInfo(`[send] landed=${outcome.landed.join(',') || '-'} refused=${outcome.refused.map(one => `${one.file}:${one.reason.kind}`).join(',') || '-'} takenBack=${outcome.takenBack}`);
-                return {
-                    kind: 'done', note: outcome.note, subject: subjectOf(sent[0].task),
-                    landed: outcome.landed, refused: outcome.refused, takenBack: outcome.takenBack,
-                };
-            });
+            logInfo(`[send] to=${to.path}#${to.section.heading}${to.create ? ' (new)' : ''} rows=${sent.map(({ task }) => task.id).join(',')}`);
+            const defs = this.settings.statusDefinitions;
+            const outcome = await this.repository.send(sent.map(({ task, row }) => ({
+                file: task.file,
+                row: {
+                    target: { ...plannedOn(task), basis: { text: row.base[0], subtree: row.base } },
+                    ...(row.draft ? { draft: row.draft } : {}),
+                },
+            })), to, {
+                completes: (was, now) => completes(was, now, defs),
+                fire: (path) => this.commandExecutor.fireOp(path),
+            }, { refused: (refusal) => { void hear(refusal); }, landed: opts.landed });
+            if (outcome.kind === 'not-sent') return { kind: 'not-done', refused: outcome.refused };
+            for (const write of outcome.writes) this.tellNotRun(write);
+            for (const refusal of outcome.refused) await this.learnFrom(refusal);
+            logInfo(`[send] landed=${outcome.landed.join(',') || '-'} refused=${outcome.refused.map(one => `${one.file}:${one.reason.kind}`).join(',') || '-'} takenBack=${outcome.takenBack}`);
+            return {
+                kind: 'done', note: outcome.note, subject: subjectOf(sent[0].task),
+                landed: outcome.landed, refused: outcome.refused, takenBack: outcome.takenBack,
+            };
         });
     }
 
@@ -928,28 +903,26 @@ export class TaskIndex {
     private async writeDelete(taskId: string, options: { fireFlow?: boolean }, known: Task | undefined): Promise<boolean> {
         const task = await this.copyToPlan(taskId, known);
         if (!task) return false;
-        return this.withNotify(task.file, async () => {
-            logInfo(`[deleteTask] id=${taskId} fireFlow=${options.fireFlow === true}`);
-            if (task.isReadOnly) return false;
+        logInfo(`[deleteTask] id=${taskId} fireFlow=${options.fireFlow === true}`);
+        if (task.isReadOnly) return false;
 
 
-            let removed: boolean;
-            if (options.fireFlow && isTvInline(task)) {
-                removed = await this.commandExecutor.fireAndDelete(task);
-            } else {
-                // The row and the subtree the index read (`plannedOn`): a line
-                // written into the subtree since is not taken with it.
-                removed = (await this.repository.write(task.file, plannedOn(task, { subtree: true }), [{ kind: 'remove' }])).written;
-                if (!removed) {
-                    // Nothing was written, so no rescan follows and the store
-                    // still holds a task the file also still holds. They agree,
-                    // and the caller must not report the task gone.
-                    logWarn(`[TaskIndex] delete was not written: id=${taskId}`);
-                }
+        let removed: boolean;
+        if (options.fireFlow && isTvInline(task)) {
+            removed = await this.commandExecutor.fireAndDelete(task);
+        } else {
+            // The row and the subtree the index read (`plannedOn`): a line
+            // written into the subtree since is not taken with it.
+            removed = (await this.repository.write(task.file, plannedOn(task, { subtree: true }), [{ kind: 'remove' }])).written;
+            if (!removed) {
+                // Nothing was written, so no rescan follows and the store
+                // still holds a task the file also still holds. They agree,
+                // and the caller must not report the task gone.
+                logWarn(`[TaskIndex] delete was not written: id=${taskId}`);
             }
+        }
 
-            return removed;
-        });
+        return removed;
     }
 
     /** @returns whether the copy was written. */
@@ -965,17 +938,15 @@ export class TaskIndex {
 
     /** {@link duplicateTask} on the copy the store holds once the row's earlier writes are done. */
     private async writeDuplicateOf(task: ReadCopy, taskId: string, options?: DuplicateOptions): Promise<boolean> {
-        return this.withNotify(task.file, async () => {
-            if (task.isReadOnly) return false;
+        if (task.isReadOnly) return false;
 
 
-            const written = await this.writeDuplicate(task, options);
-            if (!written) {
-                logWarn(`[TaskIndex] duplicate was not written: id=${taskId}`);
-            }
+        const written = await this.writeDuplicate(task, options);
+        if (!written) {
+            logWarn(`[TaskIndex] duplicate was not written: id=${taskId}`);
+        }
 
-            return written;
-        });
+        return written;
     }
 
     /**
@@ -994,20 +965,18 @@ export class TaskIndex {
      */
     async createTask(filePath: string, taskLine: string, heading?: string): Promise<number | null> {
         if (this.refuseAfterDispose('createTask')) return null;
-        return this.withNotify(filePath, async () => {
-            logInfo(`[createTask] path=${filePath} heading=${heading ?? '(none)'}`);
+        logInfo(`[createTask] path=${filePath} heading=${heading ?? '(none)'}`);
 
-            // Under a heading, in a note that is there; at the end, in a note
-            // made empty when it is not. The appended text is built with LF;
-            // split here, the note's own terminator goes back between every
-            // line, and the lines are to read as they read by themselves.
-            const outcome = heading
-                ? await this.repository.putInNote(filePath, Destination.sectionNamed(heading, this.settings), Block.line(taskLine))
-                : await this.repository.putInNote(filePath, 'end', Block.read(splitLines(taskLine).lines), { create: () => '' });
-            // What the write left is in the index once it landed (`landed`):
-            // the caller finds the row on its line without waiting for a scan.
-            return outcome.written ? outcome.line : null;
-        });
+        // Under a heading, in a note that is there; at the end, in a note
+        // made empty when it is not. The appended text is built with LF;
+        // split here, the note's own terminator goes back between every
+        // line, and the lines are to read as they read by themselves.
+        const outcome = heading
+            ? await this.repository.putInNote(filePath, Destination.sectionNamed(heading, this.settings), Block.line(taskLine))
+            : await this.repository.putInNote(filePath, 'end', Block.read(splitLines(taskLine).lines), { create: () => '' });
+        // What the write left is in the index once it landed (`landed`):
+        // the caller finds the row on its line without waiting for a scan.
+        return outcome.written ? outcome.line : null;
     }
 
     /**
@@ -1036,14 +1005,12 @@ export class TaskIndex {
             const task = await this.copyToPlan(taskId, undefined);
             if (!task) return false;
             if (task.isReadOnly) return false;
-            return this.withNotify(task.file, async () => {
-                logInfo(`[insertLine] taskId=${taskId} place=${place}${rowId === undefined ? '' : ` rowId=${rowId ?? '(off)'}`}`);
-                const ops: TaskOp[] = [];
-                if (rowId !== undefined) ops.push({ kind: 'update', text: formatRow({ ...task, blockId: rowId ?? undefined }) });
-                ops.push({ kind: 'insert', place, text: line });
-                const { written } = await this.repository.write(task.file, plannedOn(task), ops);
-                return written;
-            });
+            logInfo(`[insertLine] taskId=${taskId} place=${place}${rowId === undefined ? '' : ` rowId=${rowId ?? '(off)'}`}`);
+            const ops: TaskOp[] = [];
+            if (rowId !== undefined) ops.push({ kind: 'update', text: formatRow({ ...task, blockId: rowId ?? undefined }) });
+            ops.push({ kind: 'insert', place, text: line });
+            const { written } = await this.repository.write(task.file, plannedOn(task), ops);
+            return written;
         });
     }
 
@@ -1059,13 +1026,11 @@ export class TaskIndex {
      */
     async writeLine(filePath: string, at: RowRef, ops: readonly TaskOp[]): Promise<boolean> {
         if (this.refuseAfterDispose('writeLine')) return false;
-        return this.withNotify(filePath, async () => {
-            const defs = this.settings.statusDefinitions;
-            const completing = ops.some(op => op.kind === 'update' && completes(at.basis.text, op.text, defs));
-            return this.writeCompleting(
-                completing ? filePath : null,
-                (fire) => this.repository.write(filePath, at, ops, { fire }));
-        });
+        const defs = this.settings.statusDefinitions;
+        const completing = ops.some(op => op.kind === 'update' && completes(at.basis.text, op.text, defs));
+        return this.writeCompleting(
+            completing ? filePath : null,
+            (fire) => this.repository.write(filePath, at, ops, { fire }));
     }
 
     /**

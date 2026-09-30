@@ -2,8 +2,8 @@ import type { Task } from '../../types';
 import type { GenBlock } from '../parsing/gen/GenBlockCollector';
 
 /**
- * タスクストア - タスクのインメモリ管理とアクセス
- * データアクセス、イベント管理、内部操作を提供
+ * タスクストア - タスクのインメモリ管理とアクセス。変更を聞き手へ告げるのは
+ * 索引の合流器（`NotifyCoalescer`）で、ストアは告げない。
  */
 export class TaskStore {
     private tasks: Map<string, Task> = new Map();
@@ -16,7 +16,6 @@ export class TaskStore {
     private anchors: Map<string, Map<string, string>> = new Map();
     /** filePath → (block name → block). Rebuilt by each scan of that file. */
     private genBlocks: Map<string, Map<string, GenBlock>> = new Map();
-    private listeners: ((taskId?: string, changes?: string[]) => void)[] = [];
     private revision: number = 0;
     private batchDepth: number = 0;
     private batchDirty: boolean = false;
@@ -133,49 +132,6 @@ export class TaskStore {
                 this.tasks.delete(id);
             }
             this.bumpRevision();
-        }
-    }
-
-    // ===== イベント管理 =====
-
-    /**
-     * 変更リスナーを登録
-     * @returns アンサブスクライブ関数
-     */
-    onChange(callback: (taskId?: string, changes?: string[]) => void): () => void {
-        this.listeners.push(callback);
-        return () => {
-            const idx = this.listeners.indexOf(callback);
-            if (idx !== -1) {
-                this.listeners.splice(idx, 1);
-            }
-        };
-    }
-
-    /**
-     * 全リスナーに変更を通知
-     */
-    notifyListeners(taskId?: string, changes?: string[]): void {
-        for (const listener of this.listeners) {
-            listener(taskId, changes);
-        }
-    }
-
-    /**
-     * 全リスナーに変更を通知（各リスナーを個別のマクロタスクに分散）。
-     * 初回スキャン等の重い通知で Chrome の Long Task 警告を回避するために使用。
-     *
-     * 分散に rAF ではなく setTimeout(0) を使う。store は DOM を持たないので
-     * host window を解決できず、素の rAF は main window のフレームクロックに
-     * 固定される — popout の view しか開いていない、あるいは main が最小化
-     * されている状況では通知そのものが届かない（listener 側は自分の window の
-     * rAF で coalesce するので、ここでフレーム境界に合わせる必要はない）。
-     * timer は背景 window で throttle されるが「いずれ必ず発火する」は保たれ、
-     * Long Task を割る目的は macrotask 境界で足りる。
-     */
-    notifyListenersStaggered(taskId?: string, changes?: string[]): void {
-        for (const listener of this.listeners) {
-            setTimeout(() => listener(taskId, changes), 0);
         }
     }
 
