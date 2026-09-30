@@ -49,12 +49,14 @@ export class TaskActionsMenuBuilder {
     }
 
     /**
-     * G5: 破壊的変更 — Open in Editor / Send to Note / Delete
+     * G5: 破壊的変更 — Open in Editor / Send to Note | Delete
+     * 行を消す Delete だけを、区切り線で前の2つから分ける。
      * onDestructive が渡されているとき各アクション実行後に invoke する。
      */
     addDestructiveActions(menu: Menu, task: Task, onDestructive?: () => void): void {
         this.addOpenInEditorItem(menu, task, onDestructive);
         this.addSendItem(menu, task, onDestructive);
+        menu.addSeparator();
         this.addDeleteItem(menu, task, onDestructive);
     }
 
