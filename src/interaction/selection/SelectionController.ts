@@ -8,9 +8,8 @@ import type { SelectionHost } from './SelectionHost';
  *   1. background-tap でタスク以外をタッチしたときの selection 解除
  *   2. UI 経由のタスク削除に追従した selection クリア
  *
- * selection state 自体は HandleManager が引き続き持つ — 本 controller は
- * その薄いファサード兼イベント窓口に徹する。HandleManager の責務分離は
- * 後続 PR で別途対応する。
+ * selection state 自体は HandleManager が持つ — 本 controller は
+ * その薄いファサード兼イベント窓口に徹する。
  */
 export class SelectionController {
     constructor(private readonly handleManager: SelectionHost) {}

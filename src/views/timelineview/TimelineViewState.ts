@@ -5,14 +5,12 @@
  * it — the fields say so: a start date, how many days to show, a zoom level.
  * It lives with the view that owns it.
  */
-import type { FilterState } from '../../services/filter/FilterTypes';
 import type { AstronomyDisplay, PinnedListDefinition } from '../../types';
 
 export interface ViewState {
     startDate: string;
     daysToShow: number;
     showSidebar: boolean;
-    filterState?: FilterState;
     zoomLevel?: number;
     pinnedListCollapsed?: Record<string, boolean>;
     pinnedLists?: PinnedListDefinition[];

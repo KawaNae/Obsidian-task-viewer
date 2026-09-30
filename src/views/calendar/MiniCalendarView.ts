@@ -10,14 +10,13 @@ import { getTaskDateRange } from '../../services/display/VisualDateRange';
 import { withWeekStartDay } from '../../utils/momentWeekLocale';
 import type { TaskReadService } from '../../services/data/TaskReadService';
 import { DailyNoteUtils } from '../../utils/DailyNoteUtils';
+import { isTaskCompleted as isTaskCompletedUtil } from '../../services/display/TaskStatusQuery';
 import {
-    isTaskCompleted as isTaskCompletedUtil,
     parseLocalDateString,
     getCalendarDateRange,
     getWeekStart,
     getNormalizedWindowStart,
     getReferenceMonth,
-    getColumnOffset,
     getGridColumnForDay,
     openOrCreateDailyNote,
 } from './CalendarDateUtils';
@@ -133,9 +132,9 @@ export class MiniCalendarView extends ItemView {
         this.applyConfig(config);
 
         if (transient.windowStart) {
-            const parsedWindowStart = this.parseLocalDateString(transient.windowStart);
+            const parsedWindowStart = parseLocalDateString(transient.windowStart);
             if (parsedWindowStart) {
-                const weekStart = this.getWeekStart(parsedWindowStart, this.plugin.settings.weekStartDay);
+                const weekStart = getWeekStart(parsedWindowStart, this.plugin.settings.weekStartDay);
                 this.windowStart = DateUtils.getLocalDateString(weekStart);
             }
         }
@@ -215,7 +214,7 @@ export class MiniCalendarView extends ItemView {
 
         this.isAnimating = false;
 
-        const normalizedWindowStart = this.getNormalizedWindowStart(this.windowStart);
+        const normalizedWindowStart = getNormalizedWindowStart(this.windowStart, this.plugin.settings.weekStartDay);
         if (normalizedWindowStart !== this.windowStart) {
             this.windowStart = normalizedWindowStart;
         }
@@ -291,7 +290,7 @@ export class MiniCalendarView extends ItemView {
         indicatorState: IndicatorState = { hasIncomplete: false, hasComplete: false },
     ): void {
         const cell = weekEl.createDiv('cal-day-cell cal-day-cell--mini');
-        cell.style.gridColumn = `${this.getGridColumnForDay(colIndex)}`;
+        cell.style.gridColumn = `${getGridColumnForDay(colIndex, this.shouldShowWeekNumbers())}`;
         cell.dataset.date = dateKey;
 
         if (date.getFullYear() !== referenceMonth.year || date.getMonth() !== referenceMonth.month) {
@@ -348,7 +347,7 @@ export class MiniCalendarView extends ItemView {
         }, { bindClick: false });
 
         cell.addEventListener('click', () => {
-            void this.openOrCreateDailyNote(date);
+            void openOrCreateDailyNote(this.app, date);
         });
     }
 
@@ -398,10 +397,6 @@ export class MiniCalendarView extends ItemView {
         return getCalendarDateRange(this.windowStart, this.plugin.settings.weekStartDay);
     }
 
-    private getWeekStart(date: Date, weekStartDay: 0 | 1): Date {
-        return getWeekStart(date, weekStartDay);
-    }
-
     private getWeekdayNames(): string[] {
         const labels = t('calendar.weekdaysNarrow').split(',');
         if (this.plugin.settings.weekStartDay === 1) {
@@ -414,19 +409,11 @@ export class MiniCalendarView extends ItemView {
         return this.plugin.settings.calendarShowWeekNumbers;
     }
 
-    private getColumnOffset(): number {
-        return getColumnOffset(this.shouldShowWeekNumbers());
-    }
-
-    private getGridColumnForDay(dayColumn: number): number {
-        return getGridColumnForDay(dayColumn, this.shouldShowWeekNumbers());
-    }
-
     private renderWeekNumberCell(weekEl: HTMLElement, weekStartDate: Date): void {
         const weekNumberEl = weekEl.createDiv('cal-week-number cal-week-number--mini');
         const weekNumber = withWeekStartDay(weekStartDate, this.plugin.settings.weekStartDay).week();
 
-        const todayWeekStart = this.getWeekStart(new Date(), this.plugin.settings.weekStartDay);
+        const todayWeekStart = getWeekStart(new Date(), this.plugin.settings.weekStartDay);
         if (DateUtils.getLocalDateString(weekStartDate) === DateUtils.getLocalDateString(todayWeekStart)) {
             weekNumberEl.addClass('is-current-week');
         }
@@ -448,7 +435,7 @@ export class MiniCalendarView extends ItemView {
             hoverParent: this.hoverParent,
         }, { bindClick: false });
         weekNumberEl.addEventListener('click', () => {
-            void this.openOrCreatePeriodicNote('weekly', weekStartDate);
+            void this.openOrCreateWeeklyNote(weekStartDate);
         });
     }
 
@@ -491,14 +478,6 @@ export class MiniCalendarView extends ItemView {
                 hostWindow(this.container).requestAnimationFrame(() => this.navigateWeek(nextOffset));
             }
         }, 50);
-    }
-
-    private parseLocalDateString(value: string): Date | null {
-        return parseLocalDateString(value);
-    }
-
-    private getNormalizedWindowStart(value: string): string {
-        return getNormalizedWindowStart(value, this.plugin.settings.weekStartDay);
     }
 
     private animateWeekSlide(body: HTMLElement, offset: number): void {
@@ -600,7 +579,7 @@ export class MiniCalendarView extends ItemView {
         weekEl.style.height = `${rowHeight}px`;
         weekEl.style.flex = 'none';
 
-        const startDate = this.parseLocalDateString(weekStart);
+        const startDate = parseLocalDateString(weekStart);
         if (!startDate) {
             return weekEl;
         }
@@ -626,29 +605,12 @@ export class MiniCalendarView extends ItemView {
 
         return weekEl;
     }
-    private async openOrCreateDailyNote(date: Date): Promise<void> {
-        return openOrCreateDailyNote(this.app, date);
-    }
 
-    private async openOrCreatePeriodicNote(
-        granularity: 'weekly' | 'monthly' | 'yearly',
-        date: Date
-    ): Promise<void> {
-        let file: TFile | null;
+    private async openOrCreateWeeklyNote(date: Date): Promise<void> {
         const settings = this.plugin.settings;
-        switch (granularity) {
-            case 'weekly':
-                file = DailyNoteUtils.getWeeklyNote(this.app, settings, date);
-                if (!file) file = await DailyNoteUtils.createWeeklyNote(this.app, settings, date);
-                break;
-            case 'monthly':
-                file = DailyNoteUtils.getMonthlyNote(this.app, settings, date);
-                if (!file) file = await DailyNoteUtils.createMonthlyNote(this.app, settings, date);
-                break;
-            case 'yearly':
-                file = DailyNoteUtils.getYearlyNote(this.app, settings, date);
-                if (!file) file = await DailyNoteUtils.createYearlyNote(this.app, settings, date);
-                break;
+        let file: TFile | null = DailyNoteUtils.getWeeklyNote(this.app, settings, date);
+        if (!file) {
+            file = await DailyNoteUtils.createWeeklyNote(this.app, settings, date);
         }
         if (file) {
             await this.app.workspace.getLeaf(false).openFile(file);

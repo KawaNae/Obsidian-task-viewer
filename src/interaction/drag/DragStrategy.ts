@@ -10,7 +10,6 @@ export interface DragContext {
     readService: TaskReadService;
     writeService: TaskWriteService;
     selectionController: SelectionController;
-    onTaskMove: () => void;
     onTaskClick: (taskId: string) => void;
     // Helper to get visual date from column element
     getDateFromCol: (el: HTMLElement) => string | null;

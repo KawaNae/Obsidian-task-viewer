@@ -217,22 +217,17 @@ export class TimelineView extends ItemView {
      * Single entry point used by setState AND by the toolbar's template apply,
      * so reset / load / restore all go through one path.
      *
-     * Note the deliberate difference from Calendar: Calendar takes an
-     * `explicit` flag and lets a user-driven apply keep the sidebar open on
-     * mobile, whereas Timeline always lets performRender's narrow-width check
-     * force it closed. Which rule is right (honour the user's request vs.
-     * honour the device constraint) is an open spec question; until it is
-     * settled each view keeps the behaviour it already had.
+     * `showSidebar` states the desktop-width starting position only. At mobile
+     * width the sidebar always starts closed whatever the config says, and
+     * only the toggle button opens it (see `sidebarOpenedThisSession`), so
+     * applying a config never marks the sidebar as user-opened. Calendar
+     * follows the same rule.
      */
     applyConfig(cfg: Partial<TimelineConfig>): void {
         const { filterState, ...rest } = this.codec.withDefaults(cfg);
         Object.assign(this.viewState, rest);
 
-        // FilterMenu owns the in-memory FilterState. viewState keeps no copy —
-        // a second, silently diverging mirror of the filter is exactly what
-        // this view used to have. (ViewState still declares the field; it is
-        // scheduled for removal with the types split.)
-        this.viewState.filterState = undefined;
+        // FilterMenu owns the in-memory FilterState; viewState keeps no copy.
         this.filterMenu.setFilterState(filterState ?? createEmptyFilterState());
 
         const sidebarOpen = rest.showSidebar ?? true;
@@ -450,7 +445,7 @@ export class TimelineView extends ItemView {
         });
 
         // Initialize Renderers
-        this.allDayRenderer = new AllDaySectionRenderer(this.plugin, this.menuHandler, this.handleManager, this.taskRenderer, () => this.viewState.daysToShow, VIEW_ID);
+        this.allDayRenderer = new AllDaySectionRenderer(this.plugin, this.menuHandler, this.handleManager, this.taskRenderer, VIEW_ID);
         this.timelineRenderer = new TimelineSectionRenderer(this.plugin, this.menuHandler, this.handleManager, this.taskRenderer, () => this.getEffectiveZoomLevel(), VIEW_ID);
         this.dateHeaderRenderer = new DateHeaderRenderer({
             app: this.app,
@@ -501,7 +496,6 @@ export class TimelineView extends ItemView {
                 const baseId = segInfo?.baseId ?? taskId;
                 this.handleManager.selectTask(baseId);
             },
-            () => { /* no-op: handles are inside task cards */ },
             () => this.viewState.startDate,
             () => DateUtils.addDays(this.viewState.startDate, this.viewState.daysToShow - 1),
             () => this.getEffectiveZoomLevel()
