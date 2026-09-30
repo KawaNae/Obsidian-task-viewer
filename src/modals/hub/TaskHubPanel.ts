@@ -62,8 +62,10 @@ export class TaskHubPanel {
         private deps: TaskHubDeps,
         private options: TaskHubPanelOptions = {},
     ) {
+        // A segment of a split task is a key within the display: the hub
+        // works on its row, by the row's name.
         const originalId = getOriginalTaskId(task);
-        this.task = deps.readService.getTask(originalId) ?? task;
+        this.task = deps.readService.getTask(originalId) ?? { ...task, id: originalId };
     }
 
     open(): void {
