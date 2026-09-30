@@ -137,11 +137,7 @@ export class TimerRenderer {
                 nameSpan.setText(timer.taskName);
             }
 
-            const fileName = getDisplayFileName(timer.taskName, timer.taskFile);
-            if (fileName) {
-                const fileSpan = titleContainer.createSpan('timer-widget__title-file');
-                fileSpan.setText(fileName);
-            }
+            this.syncFileName(titleContainer, timer);
 
             if (timer.pendingRecord) {
                 header.createSpan({ cls: 'timer-widget__state-badge', text: t('timer.unrecorded') });
@@ -346,10 +342,10 @@ export class TimerRenderer {
     }
 
     /**
-     * 索引が変わったときに、各 widget の名前欄と名前と色を索引の読みから合わせ
-     * 直す（{@link syncTimerTaskInfo}）。走っていない widget には tick が来ない
-     * ので、読みの変化はここから届く — 復元の描画は最初のスキャンの前に走り、
-     * そのときの名前欄は空になる。
+     * 索引が変わったときに、各 widget の名前欄、名前と色、ファイル名を索引の
+     * 読みから合わせ直す（{@link syncTimerTaskInfo}）。走っていない widget には
+     * tick が来ないので、読みの変化はここから届く — 復元の描画は最初のスキャン
+     * の前に走り、そのときの名前欄は空になる。
      */
     refreshFromIndex(): void {
         if (this.ctx.timers.size === 0) return;
@@ -370,7 +366,15 @@ export class TimerRenderer {
         TimerProgressUI.updateDisplay(itemEl, timer, this.formatSignedTime.bind(this));
     }
 
+    /**
+     * 索引の読みに widget の見出しを合わせる: 入力欄、名前と色、ファイル名。
+     * ファイル名は名前（名前がファイル名と同じなら出さない）と `timer.taskFile`
+     * から作る。`taskFile` は行を送ったとき（`TimerWidget.follow`）とノートの
+     * 名前を変えたとき（`handleFileRename`）に書き換わり、どちらのあとにも索引
+     * の変化が来るので、ファイル名もここで追随する。
+     */
     private syncTimerTaskInfo(itemEl: HTMLElement, timer: TimerInstance): void {
+        // Idle は対象もファイルも持たない。
         if (this.lifecycle.isIdleTimer(timer.id)) return;
 
         // 入力欄は索引の読み（尻尾の行）に追随する（打鍵中と未書き込みの入力が
@@ -378,9 +382,34 @@ export class TimerRenderer {
         const inputEl = itemEl.querySelector('.timer-widget__title-input') as HTMLTextAreaElement | null;
         if (inputEl) this.contentBinding.syncFromFile(timer, inputEl);
 
-        // デイリーノート起点は対象タスクを持たない（id は `daily-<date>`）。
-        if (isDailyTimer(timer)) return;
+        // デイリーノート起点は対象タスクを持たない（id は `daily-<date>`）が、
+        // ファイル（デイリーノート）は持つ。対象を引けないタスクも同じ。
+        if (!isDailyTimer(timer)) this.syncTaskNameAndColor(itemEl, timer);
 
+        const titleEl = itemEl.querySelector('.timer-widget__title') as HTMLElement | null;
+        if (titleEl) this.syncFileName(titleEl, timer);
+    }
+
+    /**
+     * 見出しのファイル名を名前と `timer.taskFile` から合わせる。出さない条件
+     * （{@link getDisplayFileName} が null）になれば外し、出す条件になれば足す。
+     * 見出しを組むときも同じ手で書く。
+     */
+    private syncFileName(titleEl: HTMLElement, timer: TimerInstance): void {
+        const fileName = getDisplayFileName(timer.taskName, timer.taskFile);
+        const fileEl = titleEl.querySelector('.timer-widget__title-file') as HTMLElement | null;
+        if (!fileName) {
+            fileEl?.remove();
+            return;
+        }
+        if (fileEl) {
+            if (fileEl.textContent !== fileName) fileEl.setText(fileName);
+            return;
+        }
+        titleEl.createSpan('timer-widget__title-file').setText(fileName);
+    }
+
+    private syncTaskNameAndColor(itemEl: HTMLElement, timer: TimerInstance): void {
         // 復元直後の taskId は、内容が変わっていれば何も指さない（名前は読みの内容から作る）。
         // 対象の錨で引けたら書き戻し、名前と色の追随を再開する。
         const { task, rewritten } = refreshTimerTask(timer, this.ctx.plugin.getTaskIndex());

@@ -23,6 +23,7 @@ import { deleteTestFile, readTestFile, vaultAbsolute, waitForFileDeindexed, writ
 const SRC = 'test-int-send-src.md';
 const DST = 'test-int-send-dst.md';
 const NEW = 'test-int-send-new';
+const RENAMED = 'test-int-send-renamed.md';
 
 const SECTION = { heading: 'Tasks', level: 2, side: 'head' };
 
@@ -70,7 +71,7 @@ beforeAll(() => {
 });
 
 afterAll(async () => {
-    for (const path of [SRC, DST, `${NEW}.md`]) deleteTestFile(path);
+    for (const path of [SRC, DST, `${NEW}.md`, RENAMED]) deleteTestFile(path);
     await waitForFileDeindexed(SRC);
 });
 
@@ -170,6 +171,20 @@ function timerFile(id: string): string | null {
     return obsidianEval(`JSON.stringify(app.plugins.plugins['obsidian-task-viewer'].getTimerWidget().timers.get(${JSON.stringify(id)})?.taskFile ?? null)`) as string | null;
 }
 
+/**
+ * The note name the header of the timer `id` shows, once it is `expected`,
+ * or what it shows after a wait: the header follows the index's change,
+ * which comes a moment after the timer's note changed.
+ */
+function timerFileShown(id: string, expected: string | null): string | null {
+    return obsidianEval(`(async () => {
+        const shown = () => document.querySelector('[data-timer-id="${id}"] .timer-widget__title-file')?.textContent ?? null;
+        const end = Date.now() + 3000;
+        while (Date.now() < end && shown() !== ${JSON.stringify(expected)}) await new Promise(r => setTimeout(r, 50));
+        return JSON.stringify(shown());
+    })()`) as string | null;
+}
+
 /** Press ⏸ (record and suspend) on the timer `id`, or ■ (record and close), and wait for it. */
 function stopTimer(id: string, how: 'suspendTimer' | 'finishTimer'): void {
     obsidianEval(`(async () => {
@@ -209,6 +224,7 @@ describe('sending a row a timer runs on (段 B4)', () => {
 
         expect(sent.result).toEqual({ kind: 'done', note: `${NEW}.md` });
         expect(timerFile(timer.id)).toBe(`${NEW}.md`);
+        expect(timerFileShown(timer.id, NEW)).toBe(NEW);
         expect(readTestFile(SRC)).toBe([`- [[${NEW}]]`, '- [ ] 残る', ''].join('\n'));
 
         stopTimer(timer.id, 'suspendTimer');
@@ -237,6 +253,25 @@ describe('sending a row a timer runs on (段 B4)', () => {
         expect(exists(`${NEW}.md`)).toBe(false);
         expect(readTestFile(SRC)).toBe(before);
         expect(timerFile(timer.id)).toBe(SRC);
+    });
+
+    it('its note renamed: the timer and the note name its header shows follow the note', async () => {
+        deleteTestFile(RENAMED);
+        await writeIndexedTestFile(SRC, ['- [ ] 名前が変わる', ''].join('\n'));
+        const timer = startTimer('名前が変わる', 'child');
+        open = timer.id;
+        expect(timerFileShown(timer.id, SRC.replace(/\.md$/, ''))).toBe(SRC.replace(/\.md$/, ''));
+
+        obsidianEval(`(async () => {
+            await app.vault.rename(app.vault.getAbstractFileByPath(${JSON.stringify(SRC)}), ${JSON.stringify(RENAMED)});
+            return JSON.stringify(true);
+        })()`);
+
+        expect(timerFile(timer.id)).toBe(RENAMED);
+        expect(timerFileShown(timer.id, RENAMED.replace(/\.md$/, ''))).toBe(RENAMED.replace(/\.md$/, ''));
+        closeTimer(timer.id);
+        open = null;
+        deleteTestFile(RENAMED);
     });
 });
 
