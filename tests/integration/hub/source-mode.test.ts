@@ -263,7 +263,7 @@ describe('the hub\'s source mode', () => {
             const border = parseFloat(getComputedStyle(children).borderLeftWidth);
             const guideLeft = c.left + border + parseFloat(guide.left);
             const guideTop = c.top + border + parseFloat(guide.top);
-            const dash = viewOf('parent').coordsAtPos(0, 1);
+            const dash = viewOf('parent').coordsForChar(0);
             const accent = colorOf('var(--tv-accent)');
             const focusedBoxes = () => [parent, children].map(box => getComputedStyle(box).borderTopColor === accent);
             viewOf('parent').focus();
