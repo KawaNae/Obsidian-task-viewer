@@ -354,17 +354,51 @@ describe('TVInlineParser', () => {
             expect(roundTrip('1. [ ] num @2026-01-15')).toBe('1. [ ] num @2026-01-15');
         });
 
-        // Regression: a second @date token embedded in content must not survive
-        // into the formatted line, or it would hijack the start date on re-parse
-        // (the bug reproduced live: a status toggle silently changed the date).
-        it('discards a second @date token and keeps the first as start date', () => {
+        // A second @date token is no part of the content and no date: it must
+        // not hijack the start date on re-parse (the bug reproduced live: a
+        // status toggle silently changed the date). Writing the row back keeps
+        // it verbatim right after the first block (issue #198).
+        it('keeps a second @date token out of the content and writes it back after the first', () => {
             const task = parser.parse('- [ ] task @2026-01-01 foo @2026-02-02', 'test.md', 0)!;
             expect(task.startDate).toBe('2026-01-01');
             expect(task.content).toBe('task foo');
-            const formatted = formatRow(task);
-            expect(formatted).toBe('- [ ] task foo @2026-01-01');
+            expect(task.extraDateBlocks).toEqual(['@2026-02-02']);
+            expect(task.validation?.rule).toBe('parse-error');
+            const formatted = formatRow({ ...task, statusChar: 'x' });
+            expect(formatted).toBe('- [x] task foo @2026-01-01 @2026-02-02');
             // Idempotent: re-parsing the formatted line keeps the same start date.
-            expect(parser.parse(formatted, 'test.md', 0)!.startDate).toBe('2026-01-01');
+            const again = parser.parse(formatted, 'test.md', 0)!;
+            expect(again.startDate).toBe('2026-01-01');
+            expect(again.extraDateBlocks).toEqual(['@2026-02-02']);
+            expect(again.validation?.rule).toBe('parse-error');
+            expect(formatRow(again)).toBe(formatted);
+        });
+
+        it('keeps the extra blocks of every notation and order (issue #198)', () => {
+            for (const [line, written] of [
+                ['- [ ] two blocks @2026-09-22 and @2026-09-21T10:00', '- [x] two blocks and @2026-09-22 @2026-09-21T10:00'],
+                ['- [ ] two blocks @2026-09-21T10:00 and @>2026-09-22', '- [x] two blocks and @2026-09-21T10:00 @>2026-09-22'],
+                ['- [ ] two blocks @2026-09-21T10:00 and @>>2026-09-22 ^abc', '- [x] two blocks and @2026-09-21T10:00 @>>2026-09-22 ^abc'],
+            ]) {
+                const task = parser.parse(line, 'test.md', 0)!;
+                expect(formatRow({ ...task, statusChar: 'x' })).toBe(written);
+            }
+        });
+
+        it('writes the empty block @> first when the dates are cleared, so an extra block does not become the dates', () => {
+            const task = parser.parse('- [ ] task @2026-01-01 foo @2026-02-02', 'test.md', 0)!;
+            const formatted = formatRow({ ...task, startDate: undefined });
+            expect(formatted).toBe('- [ ] task foo @> @2026-02-02');
+            const again = parser.parse(formatted, 'test.md', 0)!;
+            expect(again.startDate).toBe('');
+            expect(again.extraDateBlocks).toEqual(['@2026-02-02']);
+            expect(formatRow(again)).toBe(formatted);
+        });
+
+        it('skips a bare @ before the block (as the editor\'s reading does)', () => {
+            const task = parser.parse('- [ ] @1on1 sync @2026-01-15', 'test.md', 0)!;
+            expect(task.startDate).toBe('2026-01-15');
+            expect(task.content).toBe('@1on1 sync');
         });
 
         it('preserves non-command text after ==> verbatim', () => {

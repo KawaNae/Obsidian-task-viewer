@@ -307,6 +307,18 @@ Merge rules: style is `own ?? cascade`; tags are a sorted union; custom properti
 
 `Task.validation` の1枠は抽出で1回だけ埋まる。行のパーサが入れた日付の規則、日付ブロックの parse-error を優先し、どちらも無い行だけがフローの最初の診断を受け取る。
 
+#### 日付ブロック
+
+`@start>end>due` は `readDateBlock(text)`（`parsing/tv-inline/DateBlock.ts`）の1か所で読む。`text` は、内容から末尾の `^id` とコマンド（`==>` から後ろ）を除いたもの（`taskContentText`）である。返すものは次のとおり。
+
+- 最初のブロックの区間と値（開始、終了、期限）
+- 3つ目以降の `>` の区間
+- 2つ目以降のブロックの区間と原文
+
+`@` だけの一致（`@alice`、`@1on1`）はブロックではない。`TVInlineParser` は値を読む。エディタの診断（`DateBlockDiagnostics`）と日をずらす複製（`TaskCloner`）は、`readLineDateBlock(line)` で行の桁の区間を読む。
+
+2つ目以降のブロックは日付ではなく、内容にも入らず、parse-error の診断が付く。その原文は `Task.extraDateBlocks` に残り、`formatTaskLine` が最初のブロックの直後にそのまま書き戻す（issue #198）。位置は本文の途中から最初のブロックの直後へ移る。それでも2つ目以降のままなので、読み直しで開始日は入れ替わらない。日付を消したタスクに余分なブロックがあるときは、最初のブロックとして空の `@>`（日付なし）を書く。
+
 #### ChildLine.bodyLine のセマンティクス
 
 各 ChildLine は、ファイル先頭からの絶対行番号を内包する（`Task.line` と同規約）。レンダラとライタは `DisplayTask.childEntries[i].bodyLine` を直接読む（`buildChildEntries` が `ChildLine.bodyLine` をそのまま entry に転載する）。負の値は無い。フローのセグメント（`FlowChildSegment.bodyLine`）は、読んだものには必ず行があり、発火が計画してまだ書いていない次のインスタンスのものには無い。
