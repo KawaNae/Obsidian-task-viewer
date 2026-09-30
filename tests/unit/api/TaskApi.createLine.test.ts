@@ -54,6 +54,7 @@ function createMockApiForCreate(opts: {
         },
         settings: { startHour: 0 },
         getTaskReadService: () => readService,
+        getIndex: () => readService,
         getOperations: () => operations,
     };
     return { api: new TaskApi(mockPlugin as any), readService, operations };

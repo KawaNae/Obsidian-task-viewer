@@ -5,10 +5,14 @@ import { DateUtils } from '../../utils/DateUtils';
 
 export type OverdueLevel = 'none' | 'past-end' | 'past-due';
 
+/**
+ * Whether `task` counts as complete: its status char, and every child task's
+ * as displayed (`TaskReadService.getDisplayTask`).
+ */
 export function isTaskCompleted(
     task: DisplayTask,
     defs: StatusDefinition[],
-    readService: TaskReadService,
+    readService: Pick<TaskReadService, 'getDisplayTask'>,
 ): boolean {
     const completed = isCompleteStatusChar(task.statusChar || ' ', defs);
     if (!completed || task.childEntries.length === 0) {
@@ -17,7 +21,7 @@ export function isTaskCompleted(
 
     for (const entry of task.childEntries) {
         if (entry.kind !== 'task') continue;
-        const child = readService.getTask(entry.taskId);
+        const child = readService.getDisplayTask(entry.taskId);
         if (!child) continue;
         if (!isCompleteStatusChar(child.statusChar || ' ', defs)) return false;
     }
@@ -29,7 +33,7 @@ export function getOverdueLevel(
     task: DisplayTask,
     startHour: number,
     defs: StatusDefinition[],
-    readService: TaskReadService,
+    readService: Pick<TaskReadService, 'getDisplayTask'>,
 ): OverdueLevel {
     // overdue は「現在時刻 × タスク本来の日付」の絶対判定。split セグメントは
     // ビュー境界で切られた effective 日付を持つため、元タスクに解決して判定する。

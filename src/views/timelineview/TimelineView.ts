@@ -12,6 +12,7 @@ import { logDebug } from '../../log/log';
 
 import { DateUtils } from '../../utils/DateUtils';
 import type { TaskReadService } from '../../services/data/TaskReadService';
+import type { IndexReads } from '../../services/core/TaskIndex';
 import type { Operations } from '../../services/operations/Operations';
 
 import type { PluginContext } from '../../PluginContext';
@@ -71,6 +72,8 @@ type TimelineViewState = Partial<TimelineConfig> & Partial<TimelineTransient>;
 export class TimelineView extends ItemView {
     // ==================== Services & Handlers ====================
     private readService: TaskReadService;
+    /** The index's copies and changes (`PluginContext.getIndex`). */
+    private readonly index: IndexReads;
     private operations: Operations;
     private plugin: PluginContext & TimerHost;
     private taskRenderer: TaskCardRenderer;
@@ -168,6 +171,7 @@ export class TimelineView extends ItemView {
     constructor(leaf: WorkspaceLeaf, plugin: PluginContext & TimerHost) {
         super(leaf);
         this.readService = plugin.getTaskReadService();
+        this.index = plugin.getIndex();
         this.operations = plugin.getOperations();
         this.plugin = plugin;
         this.viewState = {
@@ -186,13 +190,13 @@ export class TimelineView extends ItemView {
             },
             getIsOpen: () => this.viewState.showSidebar,
         });
-        this.taskRenderer = new TaskCardRenderer(this.app, this.readService, this.plugin.getIndex(), this.operations, this.plugin.menuPresenter, {
+        this.taskRenderer = new TaskCardRenderer(this.app, this.readService, this.index, this.operations, this.plugin.menuPresenter, {
             hoverSource: TASK_VIEWER_HOVER_SOURCE_ID,
             getHoverParent: () => this.hoverParent,
         }, () => this.plugin.settings, () => this.viewState.maskMode ?? false);
         this.addChild(this.taskRenderer);
         this.filterMenu.setStartHourProvider(() => this.plugin.settings.startHour);
-        this.filterMenu.setTaskLookupProvider((id) => this.readService.getTask(id));
+        this.filterMenu.setTaskLookupProvider((id) => this.index.getTask(id));
         this.filterMenu.setStatusDefinitions(this.plugin.settings.statusDefinitions);
     }
 
@@ -284,7 +288,7 @@ export class TimelineView extends ItemView {
         this.tryRunInitialStateLogic();
         this.render();
         // setState may have changed filterState / pinnedLists / collapse — none
-        // of these go through readService.onChange, so PinnedList wouldn't
+        // of these go through index.onChange, so PinnedList wouldn't
         // otherwise refresh. (Safe to call even before attach: refresh() no-ops
         // when not attached.)
         this.pinnedListRenderer?.refresh();
@@ -311,20 +315,20 @@ export class TimelineView extends ItemView {
         );
 
         // Initialize MenuHandler
-        this.menuHandler = new MenuHandler(this.app, this.readService, this.operations, this.plugin);
+        this.menuHandler = new MenuHandler(this.app, this.operations, this.plugin);
         this.taskRenderer.setChildMenuCallback((taskId, x, y) => this.menuHandler.showMenuForTask(taskId, x, y));
         this.taskRenderer.setDetailCallback((task) => this.openTaskHub(task));
         this.taskRenderer.setContextMenuCallback((task, x, y) => this.menuHandler.showTaskContextMenu(task, x, y));
         this.taskRenderer.setOpenInEditorCallback((task) => openTaskInEditor(this.app, task, this.plugin.settings.reuseExistingTab));
         this.taskRenderer.setDoubleTapActionGetter(() => this.plugin.settings.doubleTapAction);
         this.menuHandler.setTaskHubOpener((taskId, opts) => {
-            const task = this.readService.getTask(taskId);
+            const task = this.index.getTask(taskId);
             if (task) this.openTaskHub(task, opts);
         });
 
         // Initialize HandleManager
         this.handleManager = new HandleManager(this.container, {
-            getTask: (id) => this.readService.getTask(id),
+            getTask: (id) => this.index.getTask(id),
             getStartHour: () => this.plugin.settings.startHour,
         });
         this.selectionController = new SelectionController(this.handleManager);
@@ -483,11 +487,11 @@ export class TimelineView extends ItemView {
         });
         this.moonRenderer = new MoonPhaseRenderer();
         this.sidebarFilterMenu.setStartHourProvider(() => this.plugin.settings.startHour);
-        this.sidebarFilterMenu.setTaskLookupProvider((id) => this.readService.getTask(id));
+        this.sidebarFilterMenu.setTaskLookupProvider((id) => this.index.getTask(id));
         this.sidebarFilterMenu.setStatusDefinitions(this.plugin.settings.statusDefinitions);
 
         // Initialize DragHandler with selection callback, move callback, and view start date provider
-        this.dragHandler = new DragHandler(this.container, this.readService, this.operations, this.plugin,
+        this.dragHandler = new DragHandler(this.container, this.operations, this.plugin,
             this.selectionController,
             (taskId: string) => {
                 // Store base task id so split segments all share one selection and
@@ -506,7 +510,7 @@ export class TimelineView extends ItemView {
         // case causes a visual glitch (line-shifted task inherits `.is-selected`),
         // user can click to re-select.
         this.selectionController.attachBackgroundClick(this.container);
-        this.unsubscribeDelete = this.selectionController.attachDeleteListener(this.plugin.getIndex());
+        this.unsubscribeDelete = this.selectionController.attachDeleteListener(this.index);
 
         // Initialize render dispatch controller (rAF coalesce only — partial
         // update was retired in favour of keyed reconciliation in performRender).
@@ -519,7 +523,7 @@ export class TimelineView extends ItemView {
         });
 
         // Subscribe to data changes
-        this.unsubscribe = this.readService.onChange((taskId, changes) => {
+        this.unsubscribe = this.index.onChange((taskId, changes) => {
             // First task delivery is one of the gates for initial state setup
             // (DOM + state + tasks). No auto-scroll here: user-driven scroll
             // only via Now button / refresh / onOpen.
@@ -641,7 +645,7 @@ export class TimelineView extends ItemView {
         if (this.hasRunInitialLogic) return;
         if (!this.initBarrier.domReady) return;
         if (!this.initBarrier.stateApplied) return;
-        if (this.readService.getTasks().length === 0) return;
+        if (this.index.getTasks().length === 0) return;
         this.hasRunInitialLogic = true;
 
         this.initializeStartDate();
@@ -666,7 +670,7 @@ export class TimelineView extends ItemView {
         createTaskHubOpener(this.app, {
             taskRenderer: this.taskRenderer,
             menuHandler: this.menuHandler,
-            readService: this.readService,
+            index: this.index,
             operations: this.operations,
             plugin: this.plugin,
         }, () => setTimeout(() => this.handleManager.selectTask(null), 0))(task, options);
@@ -901,7 +905,7 @@ export class TimelineView extends ItemView {
                 this.app.workspace.requestSaveLayout();
             },
             onTopRightEdit: (listDef, anchorEl) => {
-                const tasks = this.readService.getTasks();
+                const tasks = this.index.getTasks();
                 const propertyKeys = FilterValueCollector.collectPropertyKeys(tasks);
                 this.topRightEditor.open(anchorEl, {
                     config: listDef.topRight,
@@ -1126,7 +1130,7 @@ export class TimelineView extends ItemView {
                 this.app.workspace.requestSaveLayout();
                 this.pinnedListRenderer.refresh();
             },
-            getTasks: () => this.readService.getTasks(),
+            getTasks: () => this.index.getTasks(),
             getStartHour: () => this.plugin.settings.startHour,
         });
     }

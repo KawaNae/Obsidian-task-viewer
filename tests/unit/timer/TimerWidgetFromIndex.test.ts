@@ -51,10 +51,6 @@ function widgetOver(s: VaultSession) {
         settings: { ...DEFAULT_SETTINGS },
         getIndex: () => s.index,
         getOperations: () => s.ops,
-        getTaskReadService: () => ({
-            getTask: (id: string) => s.index.getTask(id),
-            onChange: (fn: () => void) => s.index.onChange(fn),
-        }),
         registerEvent: () => { },
     };
     const widget = new TimerWidget(s.app, plugin as never);

@@ -1,13 +1,14 @@
 import type { Task } from '../../types';
 import type { PluginContext } from '../../PluginContext';
-import type { TaskReadService } from '../../services/data/TaskReadService';
+import type { IndexReads } from '../../services/core/TaskIndex';
 import type { Operations } from '../../services/operations/Operations';
 import type { SelectionController } from '../selection/SelectionController';
 
 export interface DragContext {
     container: HTMLElement;
     plugin: PluginContext;
-    readService: TaskReadService;
+    /** The index's copies, and the drag's hold on its note (`PluginContext.getIndex`). */
+    index: IndexReads;
     operations: Operations;
     selectionController: SelectionController;
     onTaskClick: (taskId: string) => void;

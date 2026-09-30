@@ -1,7 +1,7 @@
 import { type App, Notice } from 'obsidian';
 import type { Task } from '../../types';
-import type { TaskReadService } from '../../services/data/TaskReadService';
 import type { Operations } from '../../services/operations/Operations';
+import type { IndexReads } from '../../services/core/TaskIndex';
 import type { PluginContext } from '../../PluginContext';
 import type { TimerHost } from '../../timer/TimerWidget';
 import { TouchLongPressBinder } from './TouchLongPressBinder';
@@ -50,12 +50,15 @@ export class MenuHandler {
     // 振る舞いが変わらないので最初の bind だけ生かせば十分。
     private boundCards: WeakSet<HTMLElement> = new WeakSet();
 
+    /** The index's copies, looked up by name (`PluginContext.getIndex`). */
+    private readonly index: IndexReads;
+
     constructor(
         private app: App,
-        private readService: TaskReadService,
         private operations: Operations,
         private plugin: PluginContext & TimerHost
     ) {
+        this.index = plugin.getIndex();
         // Initialize services
         this.propertyCalculator = new PropertyCalculator();
         this.propertyFormatter = new PropertyFormatter();
@@ -116,7 +119,7 @@ export class MenuHandler {
      * only the (always-original) task ID is available.
      */
     showMenuForTask(taskId: string, x: number, y: number): void {
-        const task = this.readService.getTask(taskId);
+        const task = this.index.getTask(taskId);
         if (!task) return;
         void this.showContextMenu(x, y, task);
     }
@@ -141,7 +144,7 @@ export class MenuHandler {
     private async showContextMenu(x: number, y: number, taskInput: Task, hooks?: TaskMenuHooks): Promise<void> {
         // Resolve the real task from the index
         const originalId = getOriginalTaskId(taskInput);
-        const task = this.readService.getTask(originalId);
+        const task = this.index.getTask(originalId);
 
         if (!task) {
             new Notice(t('notice.taskNotFoundInIndex'));
@@ -151,7 +154,7 @@ export class MenuHandler {
         if (!(await this.operations.confirmTask(task.id))) return;
 
         // Convert to DisplayTask for property display (implicit/explicit flags)
-        const displayTask = toDisplayTask(task, this.plugin.settings.startHour, (id) => this.readService.getTask(id));
+        const displayTask = toDisplayTask(task, this.plugin.settings.startHour, (id) => this.index.getTask(id));
 
         // Properties 項目の行き先: hub 内メニューなら自フォームへ focus、
         // それ以外はビュー登録の opener でタスクハブモーダルを開く。

@@ -34,6 +34,7 @@ import type { PinnedListDefinition, DisplayTask, Task } from '../../types';
 import { codecFor, type ViewConfigCodec } from '../../services/viewConfig';
 import { KanbanSchema, type KanbanConfig, type KanbanTransient } from './KanbanSchema';
 import type { TaskReadService } from '../../services/data/TaskReadService';
+import type { IndexReads } from '../../services/core/TaskIndex';
 import type { Operations } from '../../services/operations/Operations';
 import { TopRightConfigEditor } from '../customMenus/TopRightConfigEditor';
 import { FilterValueCollector } from '../../services/filter/FilterValueCollector';
@@ -61,6 +62,8 @@ type KanbanViewState = Partial<KanbanConfig> & Partial<KanbanTransient>;
 export class KanbanView extends ItemView {
     private readonly plugin: PluginContext & TimerHost;
     private readonly readService: TaskReadService;
+    /** The index's copies and changes (`PluginContext.getIndex`). */
+    private readonly index: IndexReads;
     private readonly operations: Operations;
     private readonly taskRenderer: TaskCardRenderer;
     private readonly linkInteractionManager: TaskLinkInteractionManager;
@@ -102,19 +105,20 @@ export class KanbanView extends ItemView {
         super(leaf);
         this.plugin = plugin;
         this.readService = this.plugin.getTaskReadService();
+        this.index = this.plugin.getIndex();
         this.operations = this.plugin.getOperations();
-        this.taskRenderer = new TaskCardRenderer(this.app, this.readService, this.plugin.getIndex(), this.operations, this.plugin.menuPresenter, {
+        this.taskRenderer = new TaskCardRenderer(this.app, this.readService, this.index, this.operations, this.plugin.menuPresenter, {
             hoverSource: TASK_VIEWER_HOVER_SOURCE_ID,
             getHoverParent: () => this.hoverParent,
         }, () => this.plugin.settings, () => this.maskMode);
         this.addChild(this.taskRenderer);
         this.linkInteractionManager = new TaskLinkInteractionManager(this.app, () => this.plugin.settings);
-        this.menuHandler = new MenuHandler(this.app, this.readService, this.operations, this.plugin);
+        this.menuHandler = new MenuHandler(this.app, this.operations, this.plugin);
         this.taskRenderer.setChildMenuCallback((taskId, x, y) => this.menuHandler.showMenuForTask(taskId, x, y));
         const openTaskHub = createTaskHubOpener(this.app, {
             taskRenderer: this.taskRenderer,
             menuHandler: this.menuHandler,
-            readService: this.readService,
+            index: this.index,
             operations: this.operations,
             plugin: this.plugin,
         });
@@ -123,14 +127,14 @@ export class KanbanView extends ItemView {
         this.taskRenderer.setOpenInEditorCallback((task) => openTaskInEditor(this.app, task, this.plugin.settings.reuseExistingTab));
         this.taskRenderer.setDoubleTapActionGetter(() => this.plugin.settings.doubleTapAction);
         this.menuHandler.setTaskHubOpener((taskId, opts) => {
-            const task = this.readService.getTask(taskId);
+            const task = this.index.getTask(taskId);
             if (task) openTaskHub(task, opts);
         });
         this.filterMenu.setStartHourProvider(() => this.plugin.settings.startHour);
-        this.filterMenu.setTaskLookupProvider((id) => this.readService.getTask(id));
+        this.filterMenu.setTaskLookupProvider((id) => this.index.getTask(id));
         this.filterMenu.setStatusDefinitions(this.plugin.settings.statusDefinitions);
         this.viewFilterMenu.setStartHourProvider(() => this.plugin.settings.startHour);
-        this.viewFilterMenu.setTaskLookupProvider((id) => this.readService.getTask(id));
+        this.viewFilterMenu.setTaskLookupProvider((id) => this.index.getTask(id));
         this.viewFilterMenu.setStatusDefinitions(this.plugin.settings.statusDefinitions);
         this.paging = new TaskPagingController(
             () => this.plugin.settings.pinnedListPageSize,
@@ -258,7 +262,7 @@ export class KanbanView extends ItemView {
             getHost: () => this.container,
         });
 
-        this.unsubscribe = this.readService.onChange((taskId, changes) => {
+        this.unsubscribe = this.index.onChange((taskId, changes) => {
             this.renderScheduler?.handleChange(taskId, changes);
         });
     }
@@ -364,7 +368,7 @@ export class KanbanView extends ItemView {
                         this.requestSaveLayout();
                         this.render();
                     },
-                    getTasks: () => this.readService.getTasks(),
+                    getTasks: () => this.index.getTasks(),
                     getStartHour: () => this.plugin.settings.startHour,
                 });
             },
@@ -436,7 +440,7 @@ export class KanbanView extends ItemView {
             item.setTitle(t('pinnedList.topRightLabel'))
                 .setIcon('tag')
                 .onClick(() => {
-                    const tasks = this.readService.getTasks();
+                    const tasks = this.index.getTasks();
                     const propertyKeys = FilterValueCollector.collectPropertyKeys(tasks);
                     this.topRightEditor.open(nameEl, {
                         config: listDef.topRight,

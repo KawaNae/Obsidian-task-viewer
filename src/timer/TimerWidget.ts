@@ -85,7 +85,7 @@ export class TimerWidget implements TimerContext, SendTimers {
         if (this.observer) return;
         this.observer = new TimerWidgetWindowObserver(this.app, this.plugin, this);
         this.observer.start();
-        this.unwatchIndex = this.plugin.getTaskReadService().onChange(() => this.renderer.refreshFromIndex());
+        this.unwatchIndex = this.plugin.getIndex().onChange(() => this.renderer.refreshFromIndex());
         this.persistence.restoreTimersFromStorage();
     }
 
@@ -166,7 +166,7 @@ export class TimerWidget implements TimerContext, SendTimers {
     private resolveStartTarget(config: TimerStartConfig): Task | undefined {
         if (config.timerType === 'idle') return undefined;
         if (!config.taskId || isDailyTimer(config)) return undefined;
-        return this.plugin.getTaskReadService().getTask(config.taskId);
+        return this.plugin.getIndex().getTask(config.taskId);
     }
 
     /**

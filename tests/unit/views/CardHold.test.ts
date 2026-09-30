@@ -285,7 +285,7 @@ function setup(settings = settingsWith()) {
     let menu: ((m: unknown) => void) | null = null;
     const menuPresenter = { present: (build: (m: unknown) => void) => { menu = build; } };
     const renderer = new TaskCardRenderer(
-        {} as never, idx.readService as never, { onTaskDeleted: () => () => {} } as never, operations as never, menuPresenter as never,
+        {} as never, idx.readService as never, { ...idx.readService, onTaskDeleted: () => () => {} } as never, operations as never, menuPresenter as never,
         { hoverSource: 'test', getHoverParent: () => ({}) } as never,
         () => settings,
     );
@@ -552,7 +552,7 @@ describe('the reconciler', () => {
 describe('a drag from a handle', () => {
     it('is for the task the card has now', () => {
         const getTask = vi.fn(() => undefined);
-        const router = new DragRouter({ readService: { getTask } } as never, {} as never, new FakeEl() as never);
+        const router = new DragRouter({ index: { getTask } } as never, {} as never, new FakeEl() as never);
         const card = new FakeEl('div', 'task-card');
         holdCard(card as unknown as HTMLElement, makeTask({ id: NOW.parent }) as DisplayTask, 'k', []);
         const handle = card.createDiv('task-card__handle').createDiv('task-card__handle-btn');

@@ -35,7 +35,6 @@ async function widgetOver() {
         settings: { ...DEFAULT_SETTINGS },
         getIndex: () => s.index,
         getOperations: () => s.ops,
-        getTaskReadService: () => ({ getTask: (id: string) => s.index.getTask(id) }),
     };
     const ticker = vi.spyOn(TimerLifecycle.prototype, 'startTimerTicker');
     const widget = new TimerWidget(s.app, plugin as never);

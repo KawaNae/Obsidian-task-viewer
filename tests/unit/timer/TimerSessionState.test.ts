@@ -45,7 +45,7 @@ function makeCtx(): TimerContext {
             settings: { pomodoroWorkMinutes: 25, pomodoroBreakMinutes: 5 },
             // アンカー検証は最初の onChange を合図にする。テストでは通知を出さない
             // ＝ 検証は走らない（保守的側の挙動そのもの）。
-            getTaskReadService: () => ({ onChange: () => () => { /* noop */ } }),
+            getIndex: () => ({ onChange: () => () => { /* noop */ } }),
         } as unknown as TimerContext['plugin'],
         app: {} as TimerContext['app'],
         startTimer: () => { /* unused */ },

@@ -47,7 +47,7 @@ function makeSuggester(tasks: DisplayTask[]): NextTaskSuggester {
         getTaskReadService: () => ({
             getStartHour: () => 0,
             getVisibleDisplayTasks: () => tasks,
-            getTask: (id: string) => tasks.find(t => t.id === id),
+            getDisplayTask: (id: string) => tasks.find(t => t.id === id),
         }),
     } as unknown as TaskViewerPlugin;
     return new NextTaskSuggester(plugin);

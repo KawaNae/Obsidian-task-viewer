@@ -72,7 +72,7 @@ export interface SourceHost {
     drained(): Promise<void>;
     /** Whether the index's copy of the row is the row on the disk (`Operations.confirmTask`); told the user when not. */
     confirm(taskId: string): Promise<boolean>;
-    /** The index's copy of the row, followed through our own writes (`TaskReadService.getTask`). */
+    /** The index's copy of the row, followed through our own writes (`IndexReads.getTask`). */
     reread(taskId: string): Task | undefined;
     /** Write the draft (`Operations.replaceSubtree`), the refusal shown here rather than in a notice. */
     replace(taskId: string, base: readonly string[], replacement: SubtreeReplacement): Promise<ReplaceAnswer>;

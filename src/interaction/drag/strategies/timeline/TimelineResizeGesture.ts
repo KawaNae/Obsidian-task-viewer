@@ -149,14 +149,14 @@ export class TimelineResizeGesture extends BaseDragStrategy {
         }
 
         const originalId = getOriginalTaskId(this.dragTask);
-        const originalTask = context.readService.getTask(originalId);
+        const originalTask = context.index.getTask(originalId);
         if (!originalTask) {
             this.cleanup();
             return;
         }
 
         const startHour = context.plugin.settings.startHour;
-        const displayTask = toDisplayTask(originalTask, startHour, (id) => context.readService.getTask(id));
+        const displayTask = toDisplayTask(originalTask, startHour, (id) => context.index.getTask(id));
         const startHourMinutes = startHour * 60;
 
         // 現状は CSS 変数が single source of truth。processResize が更新した

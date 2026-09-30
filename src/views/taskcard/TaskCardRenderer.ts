@@ -131,8 +131,8 @@ export class TaskCardRenderer extends Component {
 
     constructor(
         private app: App,
-        readService: TaskReadService,
-        index: IndexReads,
+        private readonly readService: TaskReadService,
+        private readonly index: IndexReads,
         operations: Operations,
         menuPresenter: MenuPresenter,
         private linkRuntime: TaskCardLinkRuntime,
@@ -148,8 +148,8 @@ export class TaskCardRenderer extends Component {
     ) {
         super();
         this.checkboxWiring = new CheckboxWiring(operations, menuPresenter);
-        this.childItemBuilder = new ChildItemBuilder(readService);
-        this.childSectionRenderer = new ChildSectionRenderer(app, this.checkboxWiring, readService);
+        this.childItemBuilder = new ChildItemBuilder(readService, index);
+        this.childSectionRenderer = new ChildSectionRenderer(app, this.checkboxWiring, index);
         this.linkInteractionManager = new TaskLinkInteractionManager(app, getSettings);
         // Clean up expandedTaskIds entries for rows whose names ended (the
         // index's delete notification) so the set does not grow unbounded
@@ -191,11 +191,10 @@ export class TaskCardRenderer extends Component {
         if (this.expandedTaskIds.has(cardInstanceId)) return true;
         if (!cardInstanceId.endsWith(taskId)) return false;
         const scope = cardInstanceId.slice(0, cardInstanceId.length - taskId.length);
-        const readService = this.childItemBuilder.getReadService();
         for (const key of this.expandedTaskIds) {
             if (!key.startsWith(scope)) continue;
             const held = key.slice(scope.length);
-            const now = mapRow(held, row => readService.getTask(row)?.id);
+            const now = mapRow(held, row => this.index.getTask(row)?.id);
             if (now !== taskId) continue;
             this.expandedTaskIds.delete(key);
             this.expandedTaskIds.add(cardInstanceId);
@@ -253,7 +252,7 @@ export class TaskCardRenderer extends Component {
         const isExpanded = this.isExpanded(cardInstanceId, task.id);
         const overdueLevel = getOverdueLevel(
             task, settings.startHour, settings.statusDefinitions,
-            this.childItemBuilder.getReadService(),
+            this.readService,
         );
         const sig = computeContentSignature(
             task, settings, options, topRightResolved, overdueLevel,
@@ -393,7 +392,7 @@ export class TaskCardRenderer extends Component {
     }
 
     private getOverdueIcon(task: DisplayTask, settings: TaskViewerSettings): string {
-        const level = getOverdueLevel(task, settings.startHour, settings.statusDefinitions, this.childItemBuilder.getReadService());
+        const level = getOverdueLevel(task, settings.startHour, settings.statusDefinitions, this.readService);
         return level === 'past-due' ? '🚨 '
             : level === 'past-end' ? '⚠️ '
             : '';
@@ -412,11 +411,9 @@ export class TaskCardRenderer extends Component {
     private getChildCompletion(task: DisplayTask, settings: TaskViewerSettings): { completed: number; total: number } {
         let completed = 0;
         let total = 0;
-        const lookup = this.childItemBuilder.getReadService();
-
         for (const entry of task.childEntries) {
             if (entry.kind !== 'task') continue;
-            const child = lookup.getTask(entry.taskId);
+            const child = this.index.getTask(entry.taskId);
             if (!child) continue;
             total++;
             if (isCompleteStatusChar(child.statusChar, settings.statusDefinitions)) completed++;

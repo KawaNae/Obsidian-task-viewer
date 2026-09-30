@@ -2,6 +2,7 @@ import { TFile } from 'obsidian';
 import type { PluginContext } from '../PluginContext';
 import type { Task, DisplayTask } from '../types';
 import type { TaskReadService } from '../services/data/TaskReadService';
+import type { IndexReads } from '../services/core/TaskIndex';
 import type { Operations } from '../services/operations/Operations';
 import { toDisplayTask } from '../services/display/DisplayTaskConverter';
 import { splitTasks } from '../services/display/TaskSplitter';
@@ -361,14 +362,17 @@ export interface ApiHost {
 
 export class TaskApi {
     private readService: TaskReadService;
+    /** The index's copies, by name, by anchor and by line, and its changes. */
+    private index: IndexReads;
     private operations: Operations;
 
     constructor(private plugin: PluginContext) {
         this.readService = plugin.getTaskReadService();
+        this.index = plugin.getIndex();
         this.operations = plugin.getOperations();
     }
 
-    private readonly lookup: TaskLookup = (name) => this.readService.getTask(name);
+    private readonly lookup: TaskLookup = (name) => this.index.getTask(name);
 
     /** A task as the API hands it out, its IDs included (`apiIdOf`). */
     private readonly out = (task: DisplayTask): NormalizedTask => normalizeTask(task, this.lookup, this.plugin.settings.startHour);
@@ -386,11 +390,11 @@ export class TaskApi {
     private rowOf(id: string): Task {
         const read = readApiId(id);
         if (read.kind === 'anchor') {
-            const task = this.readService.getTaskByAnchor(read.file, read.anchor);
+            const task = this.index.getTaskByAnchor(read.file, read.anchor);
             if (!task) throw new TaskApiError(anchorNotFound(id, read.file, read.anchor));
             return task;
         }
-        const task = this.readService.getTask(read.name);
+        const task = this.index.getTask(read.name);
         if (!task) throw new TaskApiError(`Task not found: ${id} (an ID without a ^id lasts only until its file changes or the plugin reloads; list the tasks again)`);
         return task;
     }
@@ -539,7 +543,7 @@ export class TaskApi {
         const insertedLine = await this.operations.createTask(params.file, line, params.heading);
         if (insertedLine === null) throw new TaskApiError(`Task could not be written to: ${params.file}`);
 
-        const created = this.readService.getTaskByFileLine(params.file, insertedLine);
+        const created = this.index.getTaskByFileLine(params.file, insertedLine);
         if (!created) throw new TaskApiError('Task was created but could not be found after scan');
 
         return { task: this.out(toDisplayTask(created, this.plugin.settings.startHour, this.lookup)) };
@@ -607,7 +611,7 @@ export class TaskApi {
         // The row's name now: our write moved its file on, and the name is
         // followed across it (`TaskIndex.getTask`). An unanchored row's ID
         // changes with it.
-        const updated = this.readService.getTask(task.id);
+        const updated = this.index.getTask(task.id);
         if (!updated) throw new TaskApiError(`Task not found after update: ${params.id}`);
 
         return { task: this.out(toDisplayTask(updated, this.plugin.settings.startHour, this.lookup)) };
@@ -776,7 +780,7 @@ export class TaskApi {
      */
     onChange(callback: (taskId?: string) => void): () => void {
         // The ID given is the API's (`apiIdOf`), like every other it hands out.
-        return this.readService.onChange(taskId => callback(taskId === undefined ? undefined : apiIdOf(taskId, this.lookup)));
+        return this.index.onChange(taskId => callback(taskId === undefined ? undefined : apiIdOf(taskId, this.lookup)));
     }
 
     /**

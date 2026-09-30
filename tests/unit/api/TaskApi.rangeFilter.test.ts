@@ -22,6 +22,7 @@ function createMockApi() {
         app: { vault: { getAbstractFileByPath: vi.fn() } },
         settings: { startHour: 5, weekStartDay: 1 as const },
         getTaskReadService: () => mockReadService,
+        getIndex: () => mockReadService,
         getOperations: () => ({}),
     };
     return { api: new TaskApi(mockPlugin as any), mockReadService };

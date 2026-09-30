@@ -113,7 +113,7 @@ describe('a card\'s menu', () => {
         const confirmTask = vi.fn(async () => fresh);
         const handler = Object.create(MenuHandler.prototype) as MenuHandler;
         Object.assign(handler, {
-            readService: { getTask: () => task },
+            index: { getTask: () => task },
             operations: { confirmTask },
             plugin: { settings: { startHour: 0 }, menuPresenter: { present } },
         });

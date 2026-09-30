@@ -36,7 +36,6 @@ async function widgetOver() {
         settings: { ...DEFAULT_SETTINGS },
         getIndex: () => s.index,
         getOperations: () => s.ops,
-        getTaskReadService: () => ({ getTask: (id: string) => s.index.getTask(id) }),
     };
     // widget の lifecycle は、開始が tick を立てるときに受け取る。
     const ticker = vi.spyOn(TimerLifecycle.prototype, 'startTimerTicker');

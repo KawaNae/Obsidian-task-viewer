@@ -33,6 +33,7 @@ async function replay(drag: boolean, dupBy: 'anchor' | 'name') {
             app: session.app,
             settings: { startHour: 0 },
             getTaskReadService: () => new TaskReadService(session.index, 0),
+            getIndex: () => session.index,
             getOperations: () => session.ops,
         };
         const api = new TaskApi(plugin as never);

@@ -51,11 +51,11 @@ describe('an expanded card', () => {
         const index = following(makeTask({ id: NOW, file: 'a.md' }));
         const state = renderer as unknown as {
             expandedTaskIds: Set<string>;
-            childItemBuilder: { getReadService(): unknown };
+            index: unknown;
             isExpanded(cardInstanceId: string, taskId: string): boolean;
         };
         state.expandedTaskIds = new Set(keys);
-        state.childItemBuilder = { getReadService: () => index };
+        state.index = index;
         return state;
     }
 

@@ -110,7 +110,7 @@ export class ScheduleToolbar extends ViewToolbarBase {
                     deps.onFilterChange();
                     this.update();
                 },
-                getTasks: () => deps.readService.getTasks(),
+                getTasks: () => deps.plugin.getIndex().getTasks(),
                 getStartHour: () => deps.plugin.settings.startHour,
             });
         });
@@ -184,7 +184,7 @@ export class ScheduleToolbar extends ViewToolbarBase {
         const { deps } = this;
         const compact: CompactMenuDeps = {
             filterMenu: deps.filterMenu,
-            getTasks: () => deps.readService.getTasks(),
+            getTasks: () => deps.plugin.getIndex().getTasks(),
             getStartHour: () => deps.plugin.settings.startHour,
             onFilterChange: () => deps.onFilterChange(),
             getMaskMode: () => deps.getMaskMode(),

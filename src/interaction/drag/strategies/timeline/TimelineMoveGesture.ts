@@ -75,7 +75,7 @@ export class TimelineMoveGesture extends BaseDragStrategy {
 
         // 分割タスク: 元 task の絶対分時刻を取得して anchor 計算と initialHeight に使う
         const originalId = getOriginalTaskId(task);
-        const originalTask = context.readService.getTask(originalId);
+        const originalTask = context.index.getTask(originalId);
         this.baseTask = originalTask ?? task;
 
         let originalTaskStartMinutes: number | null = null;

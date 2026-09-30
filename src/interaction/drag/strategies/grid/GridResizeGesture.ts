@@ -77,7 +77,7 @@ export class GridResizeGesture extends BaseDragStrategy {
 
         // baseTask: split segment safety
         const originalId = getOriginalTaskId(task);
-        this.baseTask = context.readService.getTask(originalId) ?? task;
+        this.baseTask = context.index.getTask(originalId) ?? task;
 
         const startHour = context.plugin.settings.startHour;
         const visual = this.getVisualDateRange(this.baseTask, startHour);

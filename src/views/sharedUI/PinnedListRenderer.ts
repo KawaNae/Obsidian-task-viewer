@@ -134,7 +134,7 @@ export class PinnedListRenderer {
         this.callbacks = params.callbacks;
         this.viewId = params.viewId;
 
-        this.unsubscribe = this.readService.onChange((_taskId, changes) => {
+        this.unsubscribe = this.plugin.getIndex().onChange((_taskId, changes) => {
             if (!shouldRenderForChanges(changes)) return;
             this.scheduleRefresh();
         });

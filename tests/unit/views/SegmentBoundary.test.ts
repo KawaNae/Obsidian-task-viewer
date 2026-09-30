@@ -37,7 +37,7 @@ describe('a segment acts on its row', () => {
         const [, second] = segments();
         const getTask = vi.fn(() => undefined);
         const handler = Object.create(MenuHandler.prototype) as MenuHandler;
-        Object.assign(handler, { readService: { getTask } });
+        Object.assign(handler, { index: { getTask } });
         await (handler as unknown as { showContextMenu(x: number, y: number, t: Task): Promise<void> }).showContextMenu(0, 0, second);
         expect(getTask).toHaveBeenCalledWith(NAME);
     });
@@ -45,13 +45,13 @@ describe('a segment acts on its row', () => {
     it('the hub works on the row, found by its name', () => {
         const [first] = segments();
         const row = makeTask({ id: NAME });
-        const panel = new TaskHubPanel({} as never, first, { readService: { getTask: (id: string) => (id === NAME ? row : undefined) } } as never);
+        const panel = new TaskHubPanel({} as never, first, { index: { getTask: (id: string) => (id === NAME ? row : undefined) } } as never);
         expect((panel as unknown as { task: Task }).task).toBe(row);
     });
 
     it('the hub names the row even when the index no longer holds it', () => {
         const [first] = segments();
-        const panel = new TaskHubPanel({} as never, first, { readService: { getTask: () => undefined } } as never);
+        const panel = new TaskHubPanel({} as never, first, { index: { getTask: () => undefined } } as never);
         expect((panel as unknown as { task: Task }).task.id).toBe(NAME);
     });
 });

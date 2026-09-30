@@ -2,7 +2,7 @@ import { ViewPlugin, type ViewUpdate, Decoration, WidgetType, type EditorView, t
 import { StateEffect, RangeSet, type Extension } from '@codemirror/state';
 import { editorInfoField, setIcon, MarkdownView, Notice } from 'obsidian';
 import type { App } from 'obsidian';
-import type { TaskReadService } from '../services/data/TaskReadService';
+import type { IndexReads } from '../services/core/TaskIndex';
 import type { TaskViewerSettings } from '../types';
 import { toDisplayTask } from '../services/display/DisplayTaskConverter';
 import type { PropertiesMenuBuilder } from '../interaction/menu/builders/PropertiesMenuBuilder';
@@ -76,7 +76,7 @@ export interface TaskMenuExtensionResult {
 
 export function createTaskMenuExtension(
     app: App,
-    readService: TaskReadService,
+    index: IndexReads,
     lineHost: EditorLineHost,
     propertiesBuilder: PropertiesMenuBuilder,
     timerBuilder: TimerMenuBuilder,
@@ -89,11 +89,11 @@ export function createTaskMenuExtension(
 ): TaskMenuExtensionResult {
 
     const lookup: ShownTaskLookup = {
-        taskAtEditorLine: (path, line, key) => readService.taskAtEditorLine(path, line, key),
+        taskAtEditorLine: (path, line, key) => index.taskAtEditorLine(path, line, key),
         readShown: async (editor) => {
             const info = editor.state.field(editorInfoField, false);
             if (info instanceof MarkdownView) await info.save();
-            if (info?.file) await readService.readNow(info.file);
+            if (info?.file) await index.requestScan(info.file);
         },
     };
 
@@ -117,7 +117,7 @@ export function createTaskMenuExtension(
             if (isTaskviewerTask && task) {
                 // Recognized taskviewer-notation task: full menu (G1〜G5)
                 validationBuilder.addValidationWarning(menu, task);
-                const dt = toDisplayTask(task, getSettings().startHour, (id) => readService.getTask(id));
+                const dt = toDisplayTask(task, getSettings().startHour, (id) => index.getTask(id));
                 // G1: 自身のデータ操作
                 propertiesBuilder.addStatusSubmenu(menu, task);
                 actionsBuilder.addOwnDataActions(menu, task);
@@ -198,7 +198,7 @@ export function createTaskMenuExtension(
                         // Not read yet in what the editor shows: a checkbox
                         // until the scan's change draws the buttons again.
                         key ??= keyOf(view.state.doc);
-                        const found = readService.taskAtEditorLine(filePath, lineNumber, key) ?? undefined;
+                        const found = index.taskAtEditorLine(filePath, lineNumber, key) ?? undefined;
                         const isTaskviewerTask = !!found && getTaskNotation(found.parserId) === 'taskviewer';
                         show = isTaskviewerTask ? settings.editorMenuForTasks : settings.editorMenuForCheckboxes;
                     }
@@ -246,7 +246,7 @@ export function createTaskMenuExtension(
         }
     );
 
-    const unsubscribe = readService.onChange(() => {
+    const unsubscribe = index.onChange(() => {
         app.workspace.iterateAllLeaves((leaf) => {
             if (leaf.view instanceof MarkdownView) {
                 const cm = editorCm(leaf.view.editor);

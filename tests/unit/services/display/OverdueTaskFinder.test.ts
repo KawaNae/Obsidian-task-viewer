@@ -40,7 +40,7 @@ const defs = DEFAULT_STATUS_DEFINITIONS;
 const startHour = 5;
 
 const mockReadService = {
-    getTask: vi.fn(),
+    getDisplayTask: vi.fn(),
 } as unknown as TaskReadService;
 
 describe('findOldestOverdueDate', () => {
@@ -115,7 +115,7 @@ describe('findOldestOverdueDate', () => {
     });
 
     it('parent complete but child unchecked counts as overdue', () => {
-        vi.mocked(mockReadService.getTask).mockReturnValue(makeTask({ id: 'child', statusChar: ' ' }));
+        vi.mocked(mockReadService.getDisplayTask).mockReturnValue(makeTask({ id: 'child', statusChar: ' ' }));
         const tasks = [makeDisplayTask({
             statusChar: 'x',
             effectiveStartDate: '2026-07-01',

@@ -70,7 +70,7 @@ function makeReadService(childTasks: Record<string, Partial<Task>> = {}): TaskRe
 
 /** What the card shows of the children of `task`, as the renderer builds it. */
 function shown(task: DisplayTask, rs: TaskReadService): ChildRenderItem[] {
-    return new ChildItemBuilder(rs).buildChildItems(task, '');
+    return new ChildItemBuilder(rs, rs as never).buildChildItems(task, '');
 }
 
 describe('computeContentSignature', () => {
