@@ -2,13 +2,15 @@
  * 走っている区間の開始をずらす（オフセット）ときの、ずらし先の決め方。
  *
  * 場面は「やり始めたがタイマーをかけ忘れた」で、あとから始めたタイマーを実際に
- * 始めた時刻から数え直す。widget の経過時間の表示から開くメニューが使い、書き込み
- * と状態の移し方は `TimerLifecycle.offsetStart` と `TimerRecorder.moveRunningStart`
- * が持つ。ここは時刻を決めるだけの純粋な関数で、どれも「今」を引数で受ける。
+ * 始めた時刻から数え直す。widget の経過時間の表示から開くメニューと「ずらす量を
+ * 指定…」のダイアログ（`TimerStartOffsetModal`）が使い、書き込みと状態の移し方は
+ * `TimerLifecycle.offsetStart` と `TimerRecorder.moveRunningStart` が持つ。ここは
+ * 時刻を決めて言い表すだけの純粋な関数で、どれも「今」を引数で受ける。
  */
 
 import type { CountdownTimer, CountupTimer, TimerInstance } from './TimerInstance';
 import { DateUtils } from '../utils/DateUtils';
+import { t } from '../i18n';
 
 /** メニューに並べる「N 分前から」の N。 */
 export const OFFSET_PRESET_MINUTES = [5, 10, 15, 30] as const;
@@ -47,21 +49,31 @@ function visualDateOf(ms: number, startHour: number): string {
 }
 
 /**
- * 「ずらす量を指定…」に打った値を、ずらし先の時刻（ミリ秒）に読む。
- *
- * - 数だけ（`20`）: 今から N 分前。N は 1 以上
- * - `HH:MM`（`9:40`）: 今日のその時刻。今より後なら前日のその時刻
- *
- * 全角の数字とコロンも読む。どちらの形でもなければ null。
+ * 「ずらす量を指定…」の欄の形。量（`minutes`）は今から何分前か、時刻（`time`）は
+ * 始めた時刻を打つ。ダイアログ（`TimerStartOffsetModal`）の上の切り替えで選ぶ。
  */
-export function parseOffsetInput(value: string, nowMs: number): number | null {
+export type OffsetInputKind = 'minutes' | 'time';
+
+/**
+ * 欄に打った値を、ずらし先の時刻（ミリ秒）に読む。読めなければ null。
+ *
+ * - 量: 1 以上の整数（`20`）。今から N 分前
+ * - 時刻: `HH:MM`（`9:40`）。今日のその時刻で、今より後なら前日のその時刻
+ *
+ * 全角の数字とコロンも読む。どちらの形でも、今より後にはならない。
+ */
+export function readOffsetInput(kind: OffsetInputKind, value: string, nowMs: number): number | null {
     const text = value.normalize('NFKC').trim();
+    return kind === 'minutes' ? readMinutesBack(text, nowMs) : readClockTime(text, nowMs);
+}
 
-    if (/^\d+$/.test(text)) {
-        const minutes = Number(text);
-        return minutes > 0 ? nowMs - minutes * MINUTE_MS : null;
-    }
+function readMinutesBack(text: string, nowMs: number): number | null {
+    if (!/^\d+$/.test(text)) return null;
+    const minutes = Number(text);
+    return minutes > 0 ? nowMs - minutes * MINUTE_MS : null;
+}
 
+function readClockTime(text: string, nowMs: number): number | null {
     const clock = /^(\d{1,2}):(\d{2})$/.exec(text);
     if (!clock) return null;
     const hours = Number(clock[1]);
@@ -75,10 +87,25 @@ export function parseOffsetInput(value: string, nowMs: number): number | null {
     return at.getTime();
 }
 
-/** メニューに出す時刻。今日なら `HH:MM`、ほかの日なら日付も添える。 */
+/**
+ * メニューとダイアログの見通しに出す時刻。今日なら `HH:MM`、前日なら「前日」を
+ * 添え、それより前なら日付を添える。日は暦の日で、時刻の欄が「今より後なら前日」
+ * と読むときの前日と同じ。
+ */
 export function startLabel(startMs: number, nowMs: number): string {
     const at = new Date(startMs);
     const time = DateUtils.formatHHMM(at.getHours(), at.getMinutes());
     const date = DateUtils.getLocalDateString(at);
-    return date === DateUtils.getLocalDateString(new Date(nowMs)) ? time : `${date} ${time}`;
+    const today = DateUtils.getLocalDateString(new Date(nowMs));
+    if (date === today) return time;
+    if (date === DateUtils.addDays(today, -1)) return t('timer.offsetPreviousDay', { time });
+    return `${date} ${time}`;
+}
+
+/** ずらし先が今から何分前か（「50 分前」「2 時間 5 分前」）。分に満たない端数は切り捨てる。 */
+export function agoLabel(startMs: number, nowMs: number): string {
+    const total = Math.max(0, Math.floor((nowMs - startMs) / MINUTE_MS));
+    const hours = Math.floor(total / 60);
+    const minutes = total % 60;
+    return hours > 0 ? t('timer.offsetAgoHours', { hours, minutes }) : t('timer.offsetAgoMinutes', { minutes });
 }

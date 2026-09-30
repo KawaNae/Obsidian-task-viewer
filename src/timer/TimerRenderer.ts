@@ -8,7 +8,7 @@
  * the renderer caring which document it lives in.
  */
 
-import { Notice, setIcon } from 'obsidian';
+import { setIcon } from 'obsidian';
 import type { DisplayTask } from '../types';
 import type {
     CountdownTimer,
@@ -28,8 +28,8 @@ import { getDisplayFileName, getTaskDisplayName } from '../services/parsing/util
 import { TaskStyling } from '../views/sharedUI/TaskStyling';
 import { TimerProgressUI } from './TimerProgressUI';
 import { TimerSettingsMenu } from './TimerSettingsMenu';
-import { OFFSET_PRESET_MINUTES, canOffsetStart, parseOffsetInput, rememberedStart, startLabel } from './TimerStartOffset';
-import { InputModal } from '../modals/InputModal';
+import { OFFSET_PRESET_MINUTES, canOffsetStart, rememberedStart, startLabel } from './TimerStartOffset';
+import { TimerStartOffsetModal } from '../modals/TimerStartOffsetModal';
 import { AudioUtils } from './AudioUtils';
 import { TimeFormatter } from '../utils/TimeFormatter';
 import { t } from '../i18n';
@@ -692,16 +692,9 @@ export class TimerRenderer {
         }, { kind: 'mouseEvent', event: e });
     }
 
-    /** 「ずらす量を指定…」: 分数か `HH:MM` を打たせる（{@link parseOffsetInput}）。 */
+    /** 「ずらす量を指定…」: 何分前か、時刻かを、ダイアログで打たせる。 */
     private askStartOffset(timer: TimerInstance): void {
-        new InputModal(this.ctx.app, t('timer.offsetStart'), t('timer.offsetInputLabel'), '', (value) => {
-            const startMs = parseOffsetInput(value, Date.now());
-            if (startMs === null) {
-                new Notice(t('notice.timerOffsetUnreadable', { value: value.trim() }));
-                return;
-            }
-            void this.lifecycle.offsetStart(timer, startMs);
-        }).open();
+        new TimerStartOffsetModal(this.ctx.app, (startMs) => void this.lifecycle.offsetStart(timer, startMs)).open();
     }
 
     private formatSignedTime(seconds: number): string {
