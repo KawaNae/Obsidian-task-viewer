@@ -80,7 +80,6 @@ export interface OverlayOpenOpts {
 export class OverlayShell {
     private rootEl: HTMLElement | null = null;
     private panelEl: HTMLElement | null = null;
-    private bodyEl: HTMLElement | null = null;
     private handleEl: HTMLElement | null = null;
     private hostDoc: Document | null = null;
     private hostWin: Window | null = null;
@@ -160,7 +159,6 @@ export class OverlayShell {
         closeBtn.addEventListener('click', () => this.requestClose());
 
         const body = panel.createDiv({ cls: 'tv-overlay__body' });
-        this.bodyEl = body;
 
         opts.build(body);
 
@@ -285,7 +283,6 @@ export class OverlayShell {
         this.hostDoc = null;
         this.hostWin = null;
         this.panelEl = null;
-        this.bodyEl = null;
         this.handleEl = null;
         this.anchor = null;
 
@@ -314,17 +311,7 @@ export class OverlayShell {
         return this.rootEl !== null && !this.closing;
     }
 
-    refresh(build: (bodyEl: HTMLElement) => void): void {
-        if (!this.bodyEl) return;
-        this.bodyEl.empty();
-        build(this.bodyEl);
-        this.repositionIfAnchored();
-    }
-
     getPanel(): HTMLElement | null { return this.panelEl; }
-    getBody(): HTMLElement | null { return this.bodyEl; }
-    getHostDoc(): Document | null { return this.hostDoc; }
-    getHostWin(): Window | null { return this.hostWin; }
 
     // ── Anchored positioning ──
 

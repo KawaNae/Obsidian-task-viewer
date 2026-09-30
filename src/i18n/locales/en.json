@@ -386,8 +386,6 @@
     "typePropertyValue": "Type value...",
     "propertyKeyLabel": "Key:",
     "propertyValueLabel": "Value:",
-    "select": "Select...",
-    "nSelected": "{{n}} selected",
     "relative": "Relative",
     "absolute": "Absolute",
     "hours": "Hours",

@@ -7,10 +7,8 @@ import {
 } from '../../services/filter/FilterTypes';
 import type { StatusDefinition, Task } from '../../types';
 import type { FilterDropdownMenus } from './FilterDropdownMenus';
-import {
-    getToday, getAvailableValues, getValueDisplay,
-    getPropertyValuesForKey,
-} from './FilterValueHelpers';
+import { getAvailableValues, getValueDisplay } from './FilterValueHelpers';
+import { DateUtils } from '../../utils/DateUtils';
 import { FilterValueCollector } from '../../services/filter/FilterValueCollector';
 import { t } from '../../i18n';
 import type { PopoverStack } from '../sharedUI/PopoverStack';
@@ -110,7 +108,7 @@ export class FilterConditionRenderer {
             wrapClass: 'filter-popover__property-value-wrap',
             inputClass: 'tv-ctrl__text-input',
             suggestClass: 'filter-popover__property-value-suggest',
-            getCandidates: () => key ? getPropertyValuesForKey(tasks, key) : [],
+            getCandidates: () => key ? FilterValueCollector.collectPropertyValuesForKey(tasks, key) : [],
             onCommit: (val) => {
                 condition.value = val;
                 this.getOnFilterChange()?.();
@@ -341,7 +339,7 @@ export class FilterConditionRenderer {
         modeBtn.addEventListener('click', (e) => {
             e.stopPropagation();
             if (isRelative) {
-                condition.value = getToday();
+                condition.value = DateUtils.getToday();
             } else {
                 condition.value = { preset: 'today' } as DateFilterValue;
             }
@@ -386,7 +384,7 @@ export class FilterConditionRenderer {
                 cls: 'tv-ctrl__text-input filter-popover__date-input',
                 type: 'date',
             });
-            dateInput.value = (typeof dateVal === 'string' ? dateVal : '') || getToday();
+            dateInput.value = (typeof dateVal === 'string' ? dateVal : '') || DateUtils.getToday();
             dateInput.addEventListener('change', () => {
                 condition.value = dateInput.value;
                 this.getOnFilterChange()?.();
