@@ -411,6 +411,23 @@ export class TimerLifecycle {
     }
 
     /**
+     * ✕ で失うものがあるか。**✕ の分かれ目はこれだけで決める**。
+     *
+     * 真なら、このタイマーはノートに走行中の行を持ち（開いた時点か ▶ 再開で
+     * 書いた行。書いている往復の途中も含む）、記録していない計測を持ちうる。
+     * ✕ は確認の2打を経て {@link discardTimer} で行ごと捨てる。偽なら、中断中
+     * （記録を書き終えた）か idle タイマー（行も記録も無い）で、確認なしに閉じる。
+     *
+     * 状態の型（種類と `runState`）だけを読む。`phase` や `isRunning` は見ない —
+     * countdown は超過で `phase = 'idle'` になり、未開始のタイマーは
+     * `isRunning === false` だが、どちらも走行中の行を持っている。記録待ち
+     * （`pendingRecord`）も中断の前なので `runState === 'running'` に含まれる。
+     */
+    holdsRunningLine(timer: TimerInstance): boolean {
+        return timer.timerType !== 'idle' && timer.runState !== 'suspended';
+    }
+
+    /**
      * ✕ 破棄（走行中）: 今回の走行を記録せずに閉じる。
      *
      * 開始時に自分が書いた placeholder 行は道連れにする — 記録しないと決めた以上、
