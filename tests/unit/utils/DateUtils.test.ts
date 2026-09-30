@@ -229,6 +229,27 @@ describe('DateUtils', () => {
         });
     });
 
+    describe('getMonthGridStart', () => {
+        // 2026-09-01 is a Tuesday.
+        it('backs up from the 1st to the Sunday when weeks start on Sunday', () => {
+            expect(DateUtils.getMonthGridStart(new Date(2026, 8, 17), 0)).toBe('2026-08-30');
+        });
+
+        it('backs up from the 1st to the Monday when weeks start on Monday', () => {
+            expect(DateUtils.getMonthGridStart(new Date(2026, 8, 17), 1)).toBe('2026-08-31');
+        });
+
+        it('starts on the 1st itself when it is the week start', () => {
+            // 2026-11-01 is a Sunday.
+            expect(DateUtils.getMonthGridStart(new Date(2026, 10, 30), 0)).toBe('2026-11-01');
+        });
+
+        it('crosses a year boundary', () => {
+            // 2027-01-01 is a Friday.
+            expect(DateUtils.getMonthGridStart(new Date(2027, 0, 20), 1)).toBe('2026-12-28');
+        });
+    });
+
     describe('isAllDayTask', () => {
         const startHour = 5;
 
