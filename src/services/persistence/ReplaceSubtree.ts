@@ -88,7 +88,7 @@ export function replaceSubtree(draft: LineDraft, session: WriteSession, line: nu
     for (let n = line + 1; n <= last; n++) {
         const old = kept.get(n);
         if (old === undefined) continue;
-        if (!Outline.VERBATIM.holds(handed[old], written[n])) {
+        if (!Outline.verbatim(handed[old], written[n])) {
             draft.rewrite(at, written[n]);
             rewritten.push({ row: session.mark(at), was: handed[old], now: written[n] });
         }

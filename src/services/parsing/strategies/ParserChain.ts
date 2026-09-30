@@ -6,7 +6,6 @@ import type { LeafParserStrategy, ParserStrategy } from './ParserStrategy';
  * Tries each parser in order until one successfully parses the line.
  */
 export class ParserChain implements ParserStrategy {
-    readonly isReadOnly = false;
     private parsers: LeafParserStrategy[];
 
     constructor(parsers: LeafParserStrategy[]) {

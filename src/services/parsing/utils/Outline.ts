@@ -20,20 +20,6 @@ const INDENT_RE = new RegExp(`^${INDENT_SOURCE}`);
 const BLANK_RE = /^[ 	 　]*$/;
 
 /**
- * A way two lines of a note can be the same line: two lines stand in it when
- * their keys are equal. `key` is what a collection of lines is keyed by, and
- * `holds` is only ever `key(a) === key(b)`, so the two cannot disagree.
- */
-export interface LineRelation {
-    key(line: string): string;
-    holds(a: string, b: string): boolean;
-}
-
-function relation(key: (line: string) => string): LineRelation {
-    return { key, holds: (a, b) => key(a) === key(b) };
-}
-
-/**
  * What the lines of a note are to each other: how deep a line is, where a
  * task's subtree ends, where the body begins.
  *
@@ -85,21 +71,22 @@ export class Outline {
         return line.slice(this.indentOf(line).length);
     }
 
-    /*
-     * Two lines are compared as this relation and no other, and which
-     * questions ask it is written here, once:
+    /**
+     * The same line, character for character, indentation included. Two lines
+     * are compared this way and no other, and which questions ask it is
+     * written here, once:
      *
-     * - `VERBATIM`: a plan's row, its subtree and
-     *   generation blocks (`RowBasis.readsAsPlanned`); a write's check that a line
-     *   still reads what it read — the editor's line, a coordinate carried
-     *   across the write's own edits, a line a carry moved (`FileLines`)
+     * - a plan's row, its subtree and generation blocks
+     *   (`RowBasis.readsAsPlanned`); a write's check that a line still reads
+     *   what it read — the editor's line, a coordinate carried across the
+     *   write's own edits, a line a carry moved (`FileLines`)
      *
-     * A comparison of lines not in the table joins it; one that needs
-     * another relation is a question for the outline, not for its caller.
+     * A comparison of lines not in the list joins it; one that needs another
+     * comparison is a question for the outline, not for its caller.
      */
-
-    /** The same line, character for character, indentation included. */
-    static readonly VERBATIM: LineRelation = relation(line => line);
+    static verbatim(a: string, b: string): boolean {
+        return a === b;
+    }
 
     /**
      * A blank line: nothing on it but spaces, tabs, no-break spaces and
@@ -374,11 +361,6 @@ export class OutlineReading {
     /** Whether `line` is code: inside a code block, its delimiters included. */
     inCode(line: number): boolean {
         return this.codes[line] ?? false;
-    }
-
-    /** Per-line {@link inCode}. */
-    codeMask(): boolean[] {
-        return [...this.codes];
     }
 
     /**

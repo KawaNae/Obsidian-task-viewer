@@ -25,7 +25,6 @@ export interface ReadOnlyTaskParams {
  */
 export abstract class ReadOnlyParserBase implements LeafParserStrategy {
     abstract readonly id: ParserId;
-    readonly isReadOnly = true;
 
     abstract parse(line: string, filePath: string, lineNumber: number): Task | null;
 

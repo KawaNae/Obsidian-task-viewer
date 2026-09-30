@@ -1,7 +1,6 @@
 import { type App, TFile } from 'obsidian';
 import { FileParsePipeline } from '../parsing/FileParsePipeline';
 import type { TaskStore } from './TaskStore';
-import type { TaskValidator } from './TaskValidator';
 import type { Task, TaskViewerSettings } from '../../types';
 import { TaskIdGenerator } from '../display/TaskIdGenerator';
 import { contentKeyOf, type ContentKey } from './ContentKey';
@@ -72,7 +71,6 @@ export class TaskScanner {
     constructor(
         private app: App,
         private store: TaskStore,
-        private validator: TaskValidator,
         private settings: TaskViewerSettings
     ) { }
 
@@ -80,7 +78,6 @@ export class TaskScanner {
      * Vault全体をスキャン
      */
     async scanVault(): Promise<void> {
-        this.validator.clearErrors();
         // Every file is read again from here on, whatever it read last.
         for (const path of this.committed.keys()) this.stale.add(path);
         const allFiles = this.app.vault.getMarkdownFiles();
@@ -264,7 +261,7 @@ export class TaskScanner {
     }
 
     /**
-     * ファイルをスキャンしてタスクを抽出（parse → identity → validate → commit）
+     * ファイルをスキャンしてタスクを抽出（parse → name → commit）
      */
     private async scanFile(file: TFile): Promise<boolean> {
         // Before the read: a number given while it is under way may be of a
@@ -335,7 +332,6 @@ export class TaskScanner {
             return false;
         }
         const file = { path };
-        this.validator.clearErrorsForFile(file.path);
 
         // --- parse ---
         const parsed = FileParsePipeline.parse(file.path, lines, this.settings, reading);
@@ -348,22 +344,9 @@ export class TaskScanner {
         }
 
         // --- name ---
-        // Right after parse, so nothing downstream — validator included — ever
-        // sees a provisional ID.
+        // Right after parse, so nothing downstream ever sees a provisional ID.
         nameRows(parsed.tasks, file.path, readingId(this.session, n));
         anchorRows(parsed.tasks, lines);
-
-        // --- validate ---
-        for (const task of parsed.tasks) {
-            if (task.validation) {
-                this.validator.addError({
-                    file: file.path,
-                    line: task.line + 1, // 1-indexed表示
-                    taskId: task.id,
-                    error: task.validation.message,
-                });
-            }
-        }
 
         // Two readings of one change, or a pipeline that outlived its index
         // and kept scanning, print this line twice: the console belongs to the

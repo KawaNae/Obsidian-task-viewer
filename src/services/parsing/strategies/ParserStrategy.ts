@@ -9,9 +9,6 @@ import type { ParserId, Task } from '../../../types';
  * the meta-strategy {@link ParserChain} that delegates to leaf parsers.
  */
 export interface ParserStrategy {
-    /** True when this parser is read-only (no writeback support). */
-    readonly isReadOnly: boolean;
-
     /**
      * Parse a line of text into a Task object.
      */

@@ -43,7 +43,7 @@ export interface RowBasis {
  */
 export function readsAsPlanned(outline: OutlineReading, line: number, basis: RowBasis): boolean {
     const { lines } = outline;
-    if (!Outline.VERBATIM.holds(lines[line], basis.text)) return false;
+    if (!Outline.verbatim(lines[line], basis.text)) return false;
     if (basis.commands) {
         const commands = collectFlowLineIndices(outline, line).map(i => flowLineTail(lines[i]));
         if (commands.length !== basis.commands.length) return false;
@@ -66,5 +66,5 @@ export function subtreeAt(outline: OutlineReading, line: number): string[] {
 }
 
 function sameLines(a: readonly string[], b: readonly string[]): boolean {
-    return a.length === b.length && a.every((text, i) => Outline.VERBATIM.holds(text, b[i]));
+    return a.length === b.length && a.every((text, i) => Outline.verbatim(text, b[i]));
 }

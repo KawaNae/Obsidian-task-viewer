@@ -10,7 +10,6 @@ import type { EditorFireHost } from '../../editor/FlowFireExtension';
 import type { FlowDeleteAssessment } from '../flow/FlowDeletion';
 import { TaskStore } from './TaskStore';
 import { TaskScanner } from './TaskScanner';
-import { TaskValidator, type ValidationError } from './TaskValidator';
 import { PathTtlWindow } from './PathTtlWindow';
 import { refusalNotice, type IndexRefusal } from './RefusalClause';
 import { NotifyCoalescer } from './NotifyCoalescer';
@@ -92,7 +91,6 @@ export interface RowSnapshot {
 export class TaskIndex {
     private store: TaskStore;
     private scanner: TaskScanner;
-    private validator: TaskValidator;
     private repository: TaskRepository;
     private commandExecutor: FlowExecutor;
     private settings: TaskViewerSettings;
@@ -147,14 +145,13 @@ export class TaskIndex {
         this.parseFingerprint = computeParseFingerprint(settings);
 
         // サービスの初期化
-        this.store = new TaskStore(settings);
-        this.validator = new TaskValidator();
+        this.store = new TaskStore();
         this.repository = new TaskRepository(app);
         // Settings getter (not a snapshot): updateSettings replaces the
         // settings object, and trigger judgment must always see the latest
         // statusDefinitions.
         this.commandExecutor = new FlowExecutor(this.repository, this, app, () => this.settings);
-        this.scanner = new TaskScanner(app, this.store, this.validator, settings);
+        this.scanner = new TaskScanner(app, this.store, settings);
         // Connected here rather than built into the repository, because the
         // scanner does not exist when the repository does — and cut on dispose,
         // so a write that outlives this index lands nothing in it (see WriteChannels).
@@ -265,14 +262,13 @@ export class TaskIndex {
 
     /**
      * Take a note that is no longer there out of the index: its rows, what
-     * was read of it, its warnings. A note deleted, renamed to something that
+     * was read of it. A note deleted, renamed to something that
      * is not a note, or found gone from the disk (`DiskReconciler`). The
      * caller notifies.
      */
     private forgetFile(path: string): void {
         this.store.removeTasksByFile(path);
         this.scanner.handleFileDeleted(path);
-        this.validator.clearErrorsForFile(path);
     }
 
     /** Remember a subscription so `dispose` can close it. */
@@ -353,7 +349,6 @@ export class TaskIndex {
         this.parseFingerprint = newFingerprint;
         this.settings = settings;
         TaskParser.rebuildChain(settings);
-        this.store.updateSettings(settings);
         this.scanner.updateSettings(settings);
         if (needsRescan) {
             this.scanner.scanVault()
@@ -451,10 +446,6 @@ export class TaskIndex {
     taskAtEditorLine(filePath: string, line: number, key: ContentKey): Task | undefined | null {
         if (this.scanner.readingOf(filePath).key !== key) return null;
         return this.getTaskByFileLine(filePath, line);
-    }
-
-    getValidationErrors(): ValidationError[] {
-        return this.validator.getValidationErrors();
     }
 
     // ===== イベント管理 (TaskStoreへ委譲) =====

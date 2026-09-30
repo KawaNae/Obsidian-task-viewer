@@ -35,7 +35,6 @@ interface DateBlockResult {
  */
 export class TVInlineParser implements LeafParserStrategy {
     readonly id = 'tv-inline';
-    readonly isReadOnly = false;
 
     parse(line: string, filePath: string, lineNumber: number): Task | null {
         const classified = TaskLineClassifier.classify(line);

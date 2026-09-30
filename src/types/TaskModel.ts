@@ -35,11 +35,10 @@ export const DEFAULT_STATUS_DEFINITIONS: StatusDefinition[] = [
  * calls through, so fixing it here closes both the settings-screen toggle
  * and a pre-existing `data.json` value at once. The reason it matters: a
  * flow's next instance is always written as `[ ]` (`FlowEffects.ts`), and
- * if blank could read as complete, that instance would complete itself the
- * moment it lands. The only thing standing between that and a fire loop is
- * that the write which lands it never sets the flag firing reads (a flow's
- * own writes are not marked as a local edit), so this is a second, cheaper
- * line of defense against the same runaway rather than the only one.
+ * if blank could read as complete, that instance would read as done the
+ * moment it lands. It would not fire again — firing happens only in the
+ * operation that turns a line from incomplete to complete, and the write
+ * that lands an instance turns no line — but every view would show it done.
  */
 export function isCompleteStatusChar(statusChar: string, defs: StatusDefinition[]): boolean {
     if (statusChar === ' ') return false;
@@ -75,8 +74,7 @@ export interface ChildLine {
  *
  * - `task`: line is occupied by an independent child task (resolved via TaskIndex)
  * - `line`: raw property / text / link line under this task — never a checkbox,
- *   which is always a task of its own (unrelated to the legacy `'plain'`
- *   parserId migration alias in TimerPersistence)
+ *   which is always a task of its own
  *
  * Render layer walks `task.children` directly without re-classifying.
  * Write layer uses `bodyLine` as the absolute file line for surgical edits.
@@ -248,12 +246,6 @@ export function isTpInline(task: Pick<Task, 'parserId'>): boolean {
     return task.parserId === 'tasks-plugin';
 }
 
-/** True when the task has any date/time scheduling field. */
-export function hasScheduling(
-    task: Pick<Task, 'startDate' | 'startTime' | 'endDate' | 'endTime' | 'due'>
-): boolean {
-    return !!(task.startDate || task.startTime || task.endDate || task.endTime || task.due);
-}
 /**
  * Options for duplicating tasks.
  * dayOffset: number of days to shift dates (default: 0 = in-place copy)

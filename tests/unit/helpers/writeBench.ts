@@ -1,7 +1,6 @@
 import { TFile } from 'obsidian';
 import { TaskScanner } from '../../../src/services/core/TaskScanner';
 import { TaskStore } from '../../../src/services/core/TaskStore';
-import { TaskValidator } from '../../../src/services/core/TaskValidator';
 import { InlineTaskWriter } from '../../../src/services/persistence/writers/InlineTaskWriter';
 import { TaskCloner } from '../../../src/services/persistence/TaskCloner';
 import { TaskRepository } from '../../../src/services/persistence/TaskRepository';
@@ -101,8 +100,8 @@ export async function writeBench(files: string | string[] | Record<string, strin
         metadataCache: { getCache: () => null },
     };
 
-    const store = new TaskStore(DEFAULT_SETTINGS);
-    const scanner = new TaskScanner(app as never, store, new TaskValidator(), DEFAULT_SETTINGS);
+    const store = new TaskStore();
+    const scanner = new TaskScanner(app as never, store, DEFAULT_SETTINGS);
 
     const refused: Refusal[] = [];
     const filed: Filed[] = [];

@@ -91,8 +91,6 @@ describe('spansForRule', () => {
 
         const emptyEnd = locateDateBlock('- [ ] foo @2026-01-15>>2026-01-20')!;
         expect(spansForRule('cross-midnight', emptyEnd)).toEqual([emptyEnd.block]);
-
-        expect(spansForRule('frontmatter-time-only', startOnly)).toEqual([startOnly.block]);
     });
 
     it('maps parse-error to extra separators and extra blocks', () => {

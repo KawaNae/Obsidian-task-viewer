@@ -31,7 +31,7 @@ function itemsOf(outline: OutlineReading): Item[] {
 }
 
 function codeOf(outline: OutlineReading): string {
-    return outline.codeMask().map(code => (code ? '1' : '0')).join('');
+    return outline.lines.map((_, i) => (outline.inCode(i) ? '1' : '0')).join('');
 }
 
 const MEASURED: Array<{ q: string; name: string; lines: string[]; items: Item[]; code: string }> = [
