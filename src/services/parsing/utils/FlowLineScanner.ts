@@ -9,7 +9,7 @@
  */
 
 import { LIST_BULLET_SOURCE, SPACE_OR_TAB_SOURCE } from './ListMarker';
-import { INDENT_SOURCE, Outline, type OutlineReading } from './Outline';
+import { INDENT_SOURCE, type OutlineReading } from './Outline';
 import { IN_LINE } from '../../../utils/LineBreak';
 
 /**
@@ -78,14 +78,6 @@ export function collectFlowLineIndices(outline: OutlineReading, taskLine: number
         if (isFlowLine(outline.lines[line])) result.push(line);
     }
     return result;
-}
-
-/**
- * {@link collectFlowLineIndices} for callers that hold the whole file's
- * lines and no reading of them yet: reads them (`Outline.read`).
- */
-export function collectFlowLineIndicesInFile(lines: readonly string[], taskLine: number): number[] {
-    return collectFlowLineIndices(Outline.read(lines), taskLine);
 }
 
 /** Canonical physical form of a flow child line. */

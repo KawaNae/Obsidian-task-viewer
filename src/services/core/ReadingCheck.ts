@@ -21,8 +21,6 @@ export type Checked =
     | { verdict: 'unread' }
     | { verdict: 'unreadable' };
 
-export type Verdict = Checked['verdict'];
-
 /**
  * The file as a check of a copy read it. `read` says whether these lines are
  * the reading the copy was made in: when they are not, our own writes carried

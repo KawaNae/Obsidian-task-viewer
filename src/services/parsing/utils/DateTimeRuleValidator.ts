@@ -11,8 +11,6 @@ export interface DateTimeValidationInput {
     endDateImplicit: boolean;
     /** 暗黙の startDate（daily note 継承等） */
     implicitStartDate?: string;
-    /** frontmatter タスクの場合 true（time-only 検出用） */
-    isFrontmatter?: boolean;
 }
 
 export interface DateTimeValidationResult {
@@ -91,20 +89,6 @@ export function validateDateTimeRules(
             message: t('validation.dueWithoutDate'),
             hint: t('validationHint.dueWithoutDate'),
         };
-    }
-
-    // Rule 6: Frontmatter time-only (YAML sexagesimal problem)
-    if (input.isFrontmatter) {
-        const startTimeOnly = input.startTime && !input.startDate;
-        const endTimeOnly = input.endTime && !input.endDate;
-        if (startTimeOnly || endTimeOnly) {
-            return {
-                severity: 'warning',
-                rule: 'frontmatter-time-only',
-                message: t('validation.frontmatterTimeOnly'),
-                hint: t('validationHint.frontmatterTimeOnly'),
-            };
-        }
     }
 
     return undefined;

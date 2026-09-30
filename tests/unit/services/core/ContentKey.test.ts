@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { contentKeyOf, lineKey } from '../../../../src/services/core/ContentKey';
+import { contentKeyOf } from '../../../../src/services/core/ContentKey';
 import { splitLines, joinLines } from '../../../../src/services/persistence/FileLines';
 
 describe('contentKeyOf', () => {
@@ -37,17 +37,5 @@ describe('contentKeyOf', () => {
 
     it('carries the line count and the length next to the hash', () => {
         expect(contentKeyOf(['ab', 'c'])).toMatch(/^2:4:[0-9a-f]{16}$/);
-    });
-});
-
-describe('lineKey', () => {
-    it('is 16 hexadecimal digits, the hash contentKeyOf carries for that one line', () => {
-        expect(lineKey('- [ ] a')).toMatch(/^[0-9a-f]{16}$/);
-        expect(contentKeyOf(['- [ ] a']).endsWith(`:${lineKey('- [ ] a')}`)).toBe(true);
-    });
-
-    it('tells apart lines that differ only in their indentation or trailing spaces', () => {
-        expect(lineKey('- [ ] a')).not.toBe(lineKey('    - [ ] a'));
-        expect(lineKey('- [ ] a')).not.toBe(lineKey('- [ ] a '));
     });
 });

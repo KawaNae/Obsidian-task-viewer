@@ -100,8 +100,6 @@ export function spansForRule(
             return usable(loc.end) ? [loc.end] : [loc.block];
         case 'due-without-date':
             return usable(loc.due) ? [loc.due] : [loc.block];
-        case 'frontmatter-time-only':
-            return [loc.block];
         case 'parse-error': {
             const spans: Span[] = [];
             if (usable(loc.extraSeparators)) spans.push(loc.extraSeparators);

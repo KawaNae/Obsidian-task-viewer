@@ -28,15 +28,6 @@ export function contentKeyOf(lines: readonly string[]): ContentKey {
 }
 
 /**
- * The hash of one line, whole — its indentation and its trailing spaces
- * included — as 16 hexadecimal digits: the same two mixes as
- * {@link contentKeyOf}, over the line alone.
- */
-export function lineKey(line: string): string {
-    return mix(line);
-}
-
-/**
  * Two independent 32-bit mixes (FNV-1a and a multiply-rotate), 64 bits in
  * all. Synchronous on purpose: a write computes this inside the
  * `vault.process` callback, where nothing may be awaited.

@@ -8,7 +8,7 @@
  */
 export type DateTimeRule =
     | 'cross-midnight' | 'same-day-inversion' | 'end-before-start'
-    | 'end-time-without-start' | 'due-without-date' | 'frontmatter-time-only';
+    | 'end-time-without-start' | 'due-without-date';
 
 /**
  * Lang/flow diagnostic codes (Diagnostic.code): namespaced by layer.

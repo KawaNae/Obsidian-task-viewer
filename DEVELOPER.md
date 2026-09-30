@@ -62,7 +62,7 @@ graph TB
     Write[TaskWriteService<br/>Write Facade]
     Index[TaskIndex<br/>Orchestration]
     Parser[Parsers<br/>Read]
-    Repo[Repository<br/>Write]
+    Repo[Persistence<br/>Write]
 
     UI -->|read| Read
     UI -->|write| Write
@@ -86,7 +86,7 @@ graph TB
 | **TaskWriteService** | Write facade; delegates all mutations to TaskIndex |
 | **TaskIndex** | Central orchestration; scanning, indexing, event management |
 | **Parsers** | Convert markdown to Task objects |
-| **Repository** | Write tasks back to files (CRUD) |
+| **Persistence** | Write rows back to files: each write checks the lines it planned from and writes them in one `vault.process` (`TaskRepository`, `writers/`, `FileLines`) |
 
 ---
 
@@ -102,7 +102,7 @@ src/
 ├── api/                       # Public API (TaskApi, TaskNormalizer, FilterParamsBuilder, FilterFileLoader, TaskApiTypes)
 ├── cli/                       # CLI handlers (CliRegistrar, CliFilterBuilder, CliDatePresetParser, CliOutputFormatter, handlers/)
 ├── services/
-│   ├── core/                  # Core services (TaskIndex, TaskStore, TaskScanner, TaskValidator, identity/, etc.)
+│   ├── core/                  # Core services (TaskIndex, TaskStore, TaskScanner, Reading, ReadingCheck, DiskReconciler, etc.)
 │   ├── data/                  # Data access facade (TaskReadService, TaskWriteService)
 │   ├── display/               # Display conversion (DisplayTaskConverter, TaskSplitter, TaskDateCategorizer, TaskIdGenerator)
 │   ├── parsing/               # Parser layer

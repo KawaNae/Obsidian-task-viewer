@@ -1,4 +1,4 @@
-import type { Task, TaskViewerSettings } from '../../types';
+import type { Task } from '../../types';
 import type { GenBlock } from '../parsing/gen/GenBlockCollector';
 
 /**
@@ -13,8 +13,6 @@ export class TaskStore {
     private revision: number = 0;
     private batchDepth: number = 0;
     private batchDirty: boolean = false;
-
-    constructor(private settings: TaskViewerSettings) { }
 
     /** Current revision number. Incremented on every mutation. */
     getRevision(): number {
@@ -144,13 +142,6 @@ export class TaskStore {
         for (const listener of this.listeners) {
             setTimeout(() => listener(taskId, changes), 0);
         }
-    }
-
-    /**
-     * 設定を更新
-     */
-    updateSettings(settings: TaskViewerSettings): void {
-        this.settings = settings;
     }
 
     // ===== Generation blocks =====

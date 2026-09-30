@@ -573,7 +573,6 @@
     "startRequiresDate": "開始: 時刻を指定する場合は日付が必要です。",
     "endRequiresDate": "終了: 開始日がない場合は終了日が必要です。",
     "dueRequiresDate": "期限: 時刻を指定する場合は日付が必要です。",
-    "frontmatterTimeOnly": "frontmatterに時刻のみの値があると、YAMLの六十進法解釈の問題が起きる可能性があります。",
     "tooManySeparators": "日付ブロックの'>'区切りが多すぎます。最大2個（start>end>due）のところ{{count}}個あります。",
     "multipleDateBlocks": "日付ブロックが複数あります。最初のブロックを採用し{{count}}個を破棄しました。"
   },
@@ -582,8 +581,7 @@
     "sameDayInversion": "終了時刻を修正するか、終了日を変更してください。",
     "endBeforeStart": "終了日を修正してください。",
     "endTimeWithoutStart": "開始時刻を追加してください。",
-    "dueWithoutDate": "期限に日付を追加してください。",
-    "frontmatterTimeOnly": "日付を追加してください（例: 2026-01-15T09:00）。YAMLの六十進法解釈を避けられます。"
+    "dueWithoutDate": "期限に日付を追加してください。"
   },
   "menu": {
     "properties": "プロパティ",

@@ -27,7 +27,7 @@ export class TaskIdGenerator {
     }
 
     /**
-     * The ID a parser gives a task before the scan has matched it.
+     * The ID a parser gives a task before the scan names it.
      *
      * Line-based on purpose: one line yields at most one task, so this is unique
      * within a file even when two lines share a `^blockId`. It never outlives the

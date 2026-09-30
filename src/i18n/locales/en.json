@@ -573,7 +573,6 @@
     "startRequiresDate": "Start: date is required when time is specified.",
     "endRequiresDate": "End: date is required when there is no start date.",
     "dueRequiresDate": "Due: date is required when time is specified.",
-    "frontmatterTimeOnly": "Time-only value in frontmatter may cause YAML parsing issues.",
     "tooManySeparators": "Too many '>' separators in date block. Expected at most 2 (start>end>due), found {{count}}.",
     "multipleDateBlocks": "Multiple date blocks found; kept the first and discarded {{count}}."
   },
@@ -582,8 +581,7 @@
     "sameDayInversion": "Correct the end time or change the end date.",
     "endBeforeStart": "Correct the end date.",
     "endTimeWithoutStart": "Add a start time.",
-    "dueWithoutDate": "Add a date to the due field.",
-    "frontmatterTimeOnly": "Add a date (e.g. 2026-01-15T09:00) to avoid YAML sexagesimal interpretation."
+    "dueWithoutDate": "Add a date to the due field."
   },
   "menu": {
     "properties": "Properties",

@@ -347,7 +347,7 @@ function recordEdits(lines: string[]): { edits: LineEdits; reported: LineEdit[];
             reported.push(edit);
             placedBy.set(edit, put);
             items.forEach((item, i) => {
-                if (!Outline.VERBATIM.holds(item.text, sources[i])) reported.push({ kind: 'replaced', at: start + i });
+                if (!Outline.verbatim(item.text, sources[i])) reported.push({ kind: 'replaced', at: start + i });
             });
         },
     };
@@ -756,7 +756,7 @@ function explains(
     for (let i = 0; i < after.length; i++) {
         const from = replayed.origin[i];
         if (from === null || replayed.rewritten[i]) continue;
-        if (!Outline.VERBATIM.holds(after[i], before[from])) return false;
+        if (!Outline.verbatim(after[i], before[from])) return false;
     }
 
     return true;
@@ -870,7 +870,7 @@ export function editLines(
         const now = replayed.origin.indexOf(line);
         // Taken away by this very write: the row is not on these lines.
         if (now < 0) return null;
-        if (!replayed.rewritten[now] && !Outline.VERBATIM.holds(working[now], before[line])) {
+        if (!replayed.rewritten[now] && !Outline.verbatim(working[now], before[line])) {
             unsound = `line ${line} carried to ${now} does not read what it read`;
             return null;
         }
@@ -924,7 +924,7 @@ export function editLines(
         }
         const now = replayed.origin.indexOf(marked.marked);
         if (now < 0) return null;
-        if (!replayed.rewritten[now] && !Outline.VERBATIM.holds(working[now], marked.text)) {
+        if (!replayed.rewritten[now] && !Outline.verbatim(working[now], marked.text)) {
             unsound = `the line marked at ${marked.marked}, carried to ${now}, does not read what it read`;
             return null;
         }
