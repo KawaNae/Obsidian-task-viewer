@@ -22,7 +22,7 @@ src/views/taskcard/
 
 1. `TaskCardRenderer` is the entry point used by Timeline/Schedule renderers.
 2. `ChildSectionRenderer` owns child markdown render pipeline and notation injection.
-3. `CheckboxWiring` owns all checkbox event binding. Every checkbox, parent or child, is a task, so every write goes through `TaskWriteService.updateTask(taskId, { statusChar })`.
+3. `CheckboxWiring` owns all checkbox event binding. Every checkbox, parent or child, is a task, so every write goes through `Operations.updateTask(taskId, { statusChar })`.
 4. `ChildItemBuilder` walks `TaskReadService.getChildEntries(parent)` — the single source of truth for child render order.
 
 ### Child rendering rule
@@ -57,36 +57,43 @@ Raw `updateLine(file, line, text)` is reserved for editor-cursor callers (`TaskM
 
 ```mermaid
 graph TB
-    UI[UI Layer<br/>Views]
-    Read[TaskReadService<br/>Read Facade]
-    Write[TaskWriteService<br/>Write Facade]
-    Index[TaskIndex<br/>Orchestration]
+    UI[Consumers<br/>views, menus, hub, timers, API, CLI, editor]
+    Read[TaskReadService<br/>Display side]
+    Ops[Operations<br/>The one write port]
+    Index[TaskIndex<br/>The last reading's copies]
     Parser[Parsers<br/>Read]
     Repo[Persistence<br/>Write]
 
-    UI -->|read| Read
-    UI -->|write| Write
+    UI -->|draw| Read
+    UI -->|copies, changes: IndexReads| Index
+    UI -->|write| Ops
     Read --> Index
-    Write --> Index
+    Ops -->|check, landed| Index
+    Ops -->|write| Repo
     Index -->|parse| Parser
-    Index -->|write| Repo
 
     style Parser fill:#e1f5e1
     style Repo fill:#e1f5e1
     style Index fill:#fff4e1
+    style Ops fill:#fff4e1
     style Read fill:#e8f0fe
-    style Write fill:#e8f0fe
     style UI fill:#e1e8f5
 ```
 
 | Layer | Responsibility |
 |-------|----------------|
-| **Views** | UI rendering and user interaction |
-| **TaskReadService** | Read facade; cached DisplayTask conversion, filtering, date-range queries |
-| **TaskWriteService** | Write facade; delegates all mutations to TaskIndex |
-| **TaskIndex** | Central orchestration; scanning, indexing, event management |
+| **Consumers** | UI rendering and user interaction, the API, the CLI, timers, the editor's extensions |
+| **TaskReadService** | The display side of the read: cached DisplayTask conversion, date ranges, filters and sorts, a row's children in order. It passes no copy through |
+| **TaskIndex** (`services/core`) | The copies of the last reading of each note, looked up by name, anchor and line; whether a copy is what the disk holds; the telling of a change. Its read port is the type `IndexReads` (`PluginContext.getIndex`), which has no method that writes a note. The copies are written by the scan and by what a write of ours left (`landed`), nothing else. It knows nothing of the operations |
+| **Operations** (`services/operations`) | The one way a consumer writes (`PluginContext.getOperations`): checks the copy it plans from against the disk (`planCopy`, the read-only check included), orders the writes asked of one row (`onRow`), writes through the repository with the row's fire, tells the user a refusal once. Daily and periodic notes (`putInDailyNote`, `openPeriodicNote`) and template notes (`saveTemplateNote`) are written here too; the write channel does not leave it |
 | **Parsers** | Convert markdown to Task objects |
-| **Persistence** | Write rows back to files: each write checks the lines it planned from and writes them in one `vault.process` (`TaskRepository`, `writers/`, `FileLines`) |
+| **Persistence** | Write rows back to files: each write checks the lines it planned from and writes them in one `vault.process` (`TaskRepository`, `writers/`, `FileLines`, `Notes`) |
+
+A write does not change the index's copy. What it left comes back to the index as its next reading (`landed`), and that reading's notification draws it. A view that shows new values before then shows them from its own state (the hub's draft, the box a click changed).
+
+**Notification.** The index tells its `onChange` listeners through two ports only, both of its coalescer (`NotifyCoalescer`): `schedule`, merged over one frame (16ms), and `flushNow` (`TaskIndex.notifyImmediate`), for a view that has to match the index in this frame (the end of a drag, the overdue watch). It tells only when what it holds changed: a scan that committed, a write that landed, a note forgotten, the settings. A reading of the whole vault is told to each listener in a task of its own (`staggered`).
+
+**Delete notification.** `IndexReads.onTaskDeleted` hears each name that ends: a row the index held that it holds no more, under that name or the one a write of ours carried it to (`getTask`). A delete of ours ends the rows it took away; an edit from outside ends every row of its note, as it ends their names; a note deleted or renamed ends all of its rows. It is told in the task after the change, whoever made it, apart from the drawing notification. The selection (`SelectionController`) and a card's open children (`TaskCardRenderer`) let go of the name.
 
 ---
 
@@ -102,8 +109,9 @@ src/
 ├── api/                       # Public API (TaskApi, TaskNormalizer, FilterParamsBuilder, FilterFileLoader, TaskApiTypes)
 ├── cli/                       # CLI handlers (CliRegistrar, CliFilterBuilder, CliOutputFormatter, handlers/)
 ├── services/
-│   ├── core/                  # Core services (TaskIndex, TaskStore, TaskScanner, Reading, RowNames, ReadingCheck, DiskReconciler, etc.)
-│   ├── data/                  # Data access facade (TaskReadService, TaskWriteService)
+│   ├── core/                  # The index (TaskIndex, IndexReads, TaskStore, TaskScanner, NotifyCoalescer, Reading, RowNames, ReadingCheck, DiskReconciler, etc.)
+│   ├── data/                  # The display side of the read (TaskReadService), children in order, effective properties, NoteOps
+│   ├── operations/            # The one write port (Operations), DuplicateShift
 │   ├── display/               # Display conversion (DisplayTaskConverter, TaskSplitter, SegmentIds, TaskDateCategorizer, TaskContent)
 │   ├── parsing/               # Parser layer (TaskParser: lineParsers; TaskLineFormat: formatTaskLine, formatRow; FileParsePipeline)
 │   │   ├── tv-inline/         # Line-level parsers (TVInlineParser, DayPlannerParser, TasksPluginParser, ReadOnlyParserBase)
@@ -195,16 +203,18 @@ Quick reference for locating the right layer when implementing a feature.
 
 | Subsystem | Primary file | Responsibility |
 |-----------|--------------|----------------|
-| **TaskIndex** | `services/core/TaskIndex.ts` | Central orchestrator for scanning, indexing, and event management; branches on `parserId` |
-| **TaskStore** | `services/core/TaskStore.ts` | In-memory task cache; notifies UI via `onChange` listeners |
-| **TaskScanner** | `services/core/TaskScanner.ts` | File scanning → `FileParsePipeline` invocation (parse/detect/commit の3相 orchestration) |
-| **ReadingCheck** | `services/core/ReadingCheck.ts` | Whether the index's reading of a note is the note on disk, asked before an operation is planned from a copy (`checkCopy`, the same `followLine` question as a write's first check) or a row is looked up by anchor (`checkFile`). `TaskIndex.copyToPlan` and `freshByAnchor` act on the answer; a stale reading is refused through `reportRefusal` |
+| **TaskIndex** | `services/core/TaskIndex.ts` | The copies of the last readings, their lookups (`IndexReads`), the vault's change events, the drag's hold, the check of a copy against the disk (`checkCopy`, `checkFile`, `learnFrom`), the report of a write of ours (`landed`, `followLine`, `readingOf`), and the two notifications (`onChange`, `onTaskDeleted`) |
+| **Operations** | `services/operations/Operations.ts` | The one write port: rows (`updateTask`, `updateByAnchor`, `deleteTask`, `duplicateTask`, `createTask`, `insertLine`, `replaceSubtree`, `send`, `writeLine`), the editor's hosts, notes (`putInDailyNote`, `openPeriodicNote`, `saveTemplateNote`, `setFrontmatterKeys`), and the checks a caller asks before it acts (`confirmTask`, `rowSnapshot`, `freshByAnchor`, `assessFlowDelete`) |
+| **TaskStore** | `services/core/TaskStore.ts` | In-memory copies and the `(file, anchor)` table; written by the scanner only, tells no one |
+| **TaskScanner** | `services/core/TaskScanner.ts` | File scanning → `FileParsePipeline` invocation (parse/name/commit); the one writer of the store, and what hands the index the names a change dropped |
+| **NotifyCoalescer** | `services/core/NotifyCoalescer.ts` | The index's listeners and the two ports that tell them (`schedule`, `flushNow`) |
+| **ReadingCheck** | `services/core/ReadingCheck.ts` | Whether the index's reading of a note is the note on disk, asked before an operation is planned from a copy (`checkCopy`, the same `followLine` question as a write's first check) or a row is looked up by anchor (`checkFile`). `Operations.planCopy` and `freshByAnchor` act on the answer; a stale reading is refused through `reportRefusal` |
 | **DiskReconciler** | `services/core/DiskReconciler.ts` | Brings the index's readings to the disk when a change notice never comes: on start, focus, a plugin view, a refusal, a stale check and each minute (desktop), stats the notes Obsidian holds (`DiskProbe`; the whole vault on desktop, the notes the index has read elsewhere), reads again what moved through `queueScan`, forgets what is gone, and logs where Obsidian's stat of a note lasted apart from the disk (`modified`, `deleted`). Obsidian's model is only observed, never mended; a note Obsidian never heard created stays out of the index |
 | **FlowFireExtension** | `editor/FlowFireExtension.ts` | Fires a completion made in the editor, in the same transaction (see Flow Firing) |
 | **ParserChain** | `services/parsing/strategies/ParserChain.ts` | Tries multiple parsers in order (Strategy chain); parses only, never writes |
 | **TVInlineParser** | `services/parsing/tv-inline/TVInlineParser.ts` | Parses `@date` inline notation (line-level); cuts the `==>` command off the content without reading it (`readFlow` does) |
 | **TaskRepository** | `services/persistence/TaskRepository.ts` | Assembles the writers and the index's channel; its ports: `write(file, target, ops, { fire?, refused? })` (the one write of ops to a row, duplicates included as a `copies` op), `applyOps`, `replaceSubtree`, `send`, `putInNote`, `setFrontmatterKeys` |
-| **Notes** | `services/persistence/Notes.ts` | The one way a block is put in a note's section or at its end, the note made when the caller gives its seed (`putInNote`), the one way a note is made of lines (`createNote`, over `createFile`, the only `vault.create`), and daily / periodic notes made from their template (`openPeriodicNote`, `putInPeriodicNote`). Writes to one path run one at a time |
+| **Notes** | `services/persistence/Notes.ts` | The one way a block is put in a note's section or at its end, the note made when the caller gives its seed (`putInNote`), the one way a note is made of lines (`createNote`, over `createFile`, the only `vault.create`), and daily / periodic notes made from their template (`openPeriodicNote`, `putInPeriodicNote`, called by `Operations`). Writes to one path run one at a time |
 | **PeriodicNotes** | `utils/PeriodicNotes.ts` | The description of a daily or periodic note (`PeriodicNote`) and the pure answers of which note a date names: `notePath`, `linkTarget`, `label`, `dateOfPath` (formats with `/` included), `findNote` |
 | **FrontmatterWriter** | `services/persistence/writers/FrontmatterWriter.ts` | Surgical frontmatter key writes (`setKeys`, used by the color / line-style property suggests) |
 | **FrontmatterLineEditor** | `services/persistence/utils/FrontmatterLineEditor.ts` | Low-level YAML line operations; never touches unrelated lines |
@@ -213,8 +223,7 @@ Quick reference for locating the right layer when implementing a feature.
 | **FilterSerializer** | `services/filter/FilterSerializer.ts` | Filter state serialization (v4 recursive group format). The one load path for saved views and pinned lists, so it drops conditions on retired properties (`kind`) on read; a group left empty stays, and evaluates as true |
 | **TaskSorter** | `services/sort/TaskSorter.ts` | Task sort processing |
 | **ViewTemplateLoader/Writer** | `services/template/` | View template read/write |
-| **TaskReadService** | `services/data/TaskReadService.ts` | Read facade; filter, sort, DisplayTask conversion |
-| **TaskWriteService** | `services/data/TaskWriteService.ts` | Write facade; create, update, delete, duplicate |
+| **TaskReadService** | `services/data/TaskReadService.ts` | The display side of the read: filter, sort, date ranges, DisplayTask conversion, children in order |
 | **DisplayTaskConverter** | `services/display/DisplayTaskConverter.ts` | Task → DisplayTask conversion with effective field resolution |
 | **TaskSplitter** | `services/display/TaskSplitter.ts` | Visual-date / date-range task splitting |
 | **SectionClassifier** | `services/display/SectionClassifier.ts` | Single owner of the allDay / timed / dueOnly kind decision (`classifyForSection`); `bucketBySection` for section dispatch |
@@ -693,10 +702,10 @@ menu.addItem(item => item.setTitle('Delete task'));
 
 | Pattern | Where used |
 |---------|-----------|
-| **Facade** | `TaskIndex`, `TaskReadService`, `TaskWriteService`, `MenuHandler`, `TaskRepository` |
+| **Facade** | `TaskReadService`, `Operations`, `MenuHandler`, `TaskRepository` |
 | **Strategy** | `DragRouter.pickGesture()` selecting `TimelineMoveGesture` / `TimelineResizeGesture` / `GridMoveGesture` / `GridResizeGesture`, `ParserStrategy` |
 | **Builder** | `PropertiesMenuBuilder`, `TimerMenuBuilder`, and other menu builders |
-| **Observer** | `TaskStore.onChange()` notifies UI of task changes |
+| **Observer** | `IndexReads.onChange()` (drawing, through `NotifyCoalescer`) and `IndexReads.onTaskDeleted()` (names that ended) |
 | **Surgical Edit** | `FrontmatterLineEditor` operates on YAML one key range at a time |
 | **One reading** | `Outline.read` answers items, subtrees, code and headings once; `NoteSections` and `NoteTasks` read the note's sections and rows off it |
 
@@ -818,7 +827,7 @@ A scan, a `modify`, a sync, or another plugin's write to the vault is no operati
 
 - [`FlowFireExtension.ts`](./src/editor/FlowFireExtension.ts): the editor's fire (`fireFilter`)
 - [`FlowTrigger.ts`](./src/services/flow/FlowTrigger.ts): `completes` and `isOperation`
-- [`TaskIndex.ts`](./src/services/core/TaskIndex.ts): a completing write and its fire as one write (`writeCompleting`)
+- [`Operations.ts`](./src/services/operations/Operations.ts): a completing write and its fire as one write (`writeCompleting`)
 - [`FlowExecutor.ts`](./src/services/flow/FlowExecutor.ts): the fire's plan (`planFire`)
 
 ---
