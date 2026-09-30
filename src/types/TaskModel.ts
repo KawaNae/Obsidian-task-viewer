@@ -56,10 +56,7 @@ export interface PropertyValue {
 
 export interface ChildLine {
     text: string;
-    /**
-     * Absolute 0-indexed file line this child line lives on
-     * (same convention as `Task.line`; `-1` = no valid body line).
-     */
+    /** Absolute 0-indexed file line this child line lives on (same convention as `Task.line`). */
     bodyLine: number;
     indent: string;
     /** `- [[target]]` link lines: the target, kept for masking. */
@@ -110,9 +107,11 @@ export interface Task {
      */
     childIds: string[];
     /**
-     * @internal Parser-emitted raw body lines (each carries its absolute
-     * file line in `ChildLine.bodyLine`). Substrate for `buildChildEntries`;
-     * render/write consume via `DisplayTask.childEntries`.
+     * @internal The lines of the task's subtree that are its own: less its
+     * child tasks' subtrees and its own `- ==>` lines (`NoteTasks`), in the
+     * note's order, each with its absolute file line in `ChildLine.bodyLine`.
+     * Every line of a note is one task's at most. Substrate for
+     * `buildChildEntries`; render/write consume via `DisplayTask.childEntries`.
      */
     childLines: ChildLine[];
 
@@ -139,7 +138,7 @@ export interface Task {
 
     /**
      * Values inherited from the File → Section cascade rather than from the
-     * task's own lines / frontmatter.  Set by TreeTaskExtractor; never
+     * task's own lines / frontmatter.  Set by NoteTasks; never
      * serialized — formatTaskLine and all writers read only raw fields for
      * round-trip fidelity.
      *

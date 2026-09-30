@@ -15,7 +15,7 @@ import { diagnosticText } from '../services/lang/flow/diagnosticText';
 import { TaskLineClassifier } from '../services/parsing/utils/TaskLineClassifier';
 import { lineParsers, lineParsersFingerprint } from '../services/parsing/TaskParser';
 import type { ParserChain } from '../services/parsing/strategies/ParserChain';
-import type { TaskFlow, TaskViewerSettings } from '../types';
+import type { ReadFlow, TaskViewerSettings } from '../types';
 import { dateBlockDiagnostics } from '../services/parsing/tv-inline/DateBlockDiagnostics';
 import { outlineDiagnostics } from '../services/parsing/utils/OutlineDiagnostics';
 import {
@@ -61,7 +61,7 @@ interface SegmentLoc {
  * this function's; which segments there are, and what they say, is
  * `readFlow`'s.
  */
-function locateSegments(outline: OutlineReading, root: number, flow: TaskFlow): SegmentLoc[] {
+function locateSegments(outline: OutlineReading, root: number, flow: ReadFlow): SegmentLoc[] {
     const cut = taskLineFlowTail(outline.lines[root]);
     const tailStart = cut ? cut.marker + FLOW_MARKER.length : outline.lines[root].length;
     const segments: SegmentLoc[] = [{

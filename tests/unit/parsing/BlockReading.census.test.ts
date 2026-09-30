@@ -34,14 +34,14 @@ const IDIOMS: Array<{ name: string; test: (line: string) => boolean }> = [
 /** A line that may stay, by its file and a piece of its text, and why. */
 const ALLOWED: Array<{ file: string; contains: string; reason: string }> = [
     {
-        file: 'services/parsing/tree/DocumentTreeBuilder.ts',
-        contains: 'Outline.depthOf(line) !== 0',
+        file: 'services/parsing/tree/NoteSections.ts',
+        contains: 'Outline.depthOf(text) !== 0',
         reason: 'a section property is a line at column 0: a point check of one line, not a walk',
     },
     {
-        file: 'services/parsing/tree/DocumentTreeBuilder.ts',
-        contains: 'indent: Outline.depthOf(rawLine)',
-        reason: 'TaskBlock.indent, the task\'s depth as a value (Task.indent); no walk reads it',
+        file: 'services/parsing/tree/NoteTasks.ts',
+        contains: 'task.indent = Outline.depthOf(',
+        reason: 'the task\'s depth as a value (Task.indent); no walk reads it',
     },
     {
         file: 'services/persistence/utils/SubtreeFrame.ts',

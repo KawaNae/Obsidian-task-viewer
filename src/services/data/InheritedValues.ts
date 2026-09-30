@@ -1,7 +1,8 @@
 import { stringifyYaml } from 'obsidian';
 import type { PropertyValue, TaskViewerSettings } from '../../types';
 import { FileParsePipeline } from '../parsing/FileParsePipeline';
-import type { SectionNode, ValueSource } from '../parsing/tree/DocumentTree';
+import type { ValueSource } from '../parsing/tree/Sections';
+import { NoteSections } from '../parsing/tree/NoteSections';
 import { ChildLineClassifier } from '../parsing/utils/ChildLineClassifier';
 import { FrontmatterLineEditor } from '../persistence/utils/FrontmatterLineEditor';
 
@@ -27,7 +28,7 @@ const OBSIDIAN_KEYS: ReadonlySet<string> = new Set(['aliases', 'alias', 'cssclas
  * sent to, the row inherits there what it inherited here.
  *
  * What the row inherits is the resolution's answer for the section the row
- * stands in (`FileParsePipeline.resolveTree`, the same reading the index
+ * stands in (`FileParsePipeline.resolveSections`, the same reading the index
  * makes), whatever the row holds itself: a child row inherits its section's
  * values as its parent does, and a row with a date of its own still has its
  * section's to hand on. Which layer won each value is the resolution's
@@ -49,9 +50,9 @@ const OBSIDIAN_KEYS: ReadonlySet<string> = new Set(['aliases', 'alias', 'cssclas
  * the index does not read (`tv-ignore`) has no rows, and answers none.
  */
 export function inheritedAt(lines: readonly string[], row: number, settings: TaskViewerSettings): InheritedValue[] {
-    const tree = FileParsePipeline.resolveTree('', lines, settings);
-    if (!tree) return [];
-    const section = sectionAt(tree.doc.sections, row);
+    const read = FileParsePipeline.resolveSections(lines, settings);
+    if (!read) return [];
+    const section = NoteSections.at(read.sections, row);
     if (!section) return [];
 
     const keys = settings.scopeKeys;
@@ -74,7 +75,7 @@ export function inheritedAt(lines: readonly string[], row: number, settings: Tas
         }
         const range = FrontmatterLineEditor.findKeyRange(lines, fmEnd, key);
         const written = range ? trimBlank(lines.slice(range[0], range[1])) : null;
-        push(key, written ?? stringifyYaml({ [key]: tree.frontmatter?.[key] }).trimEnd().split('\n'), [from]);
+        push(key, written ?? stringifyYaml({ [key]: read.frontmatter?.[key] }).trimEnd().split('\n'), [from]);
     };
 
     const when = (key: string, date: string | undefined, time: string | undefined, sources: readonly (ValueSource | undefined)[]) => {
@@ -101,16 +102,7 @@ export function inheritedAt(lines: readonly string[], row: number, settings: Tas
     return out;
 }
 
-/** The innermost section whose lines hold `row`. */
-function sectionAt(sections: readonly SectionNode[], row: number): SectionNode | undefined {
-    for (const section of sections) {
-        if (row < section.startLine || row >= section.endLine) continue;
-        return sectionAt(section.children, row) ?? section;
-    }
-    return undefined;
-}
-
-/** The value a section's property line says, as the tree read it (`DocumentTreeBuilder`). */
+/** The value a section's property line says, as the sections read it (`NoteSections`). */
 function propertyValueAt(lines: readonly string[], line: number): string {
     return lines[line].match(ChildLineClassifier.PROPERTY_LINE)?.[2].trim() ?? '';
 }

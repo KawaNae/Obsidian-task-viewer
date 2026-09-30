@@ -1,4 +1,4 @@
-import type { TaskFlow } from '../types';
+import type { ReadFlow } from '../types';
 import type { OutlineReading } from '../services/parsing/utils/Outline';
 import { readFlow } from '../services/parsing/utils/FlowLineScanner';
 import { TaskLineClassifier } from '../services/parsing/utils/TaskLineClassifier';
@@ -27,7 +27,7 @@ export function flowOwnerOf(outline: OutlineReading, line: number): number | nul
  * when it has no command) and its child block — the lines of its subtree
  * below its own, which the migration notice weighs.
  */
-export function flowGroupOf(outline: OutlineReading, root: number): { flow: TaskFlow | undefined; childLines: string[] } {
+export function flowGroupOf(outline: OutlineReading, root: number): { flow: ReadFlow | undefined; childLines: string[] } {
     return {
         flow: readFlow(outline, root),
         childLines: outline.lines.slice(root + 1, outline.subtreeEnd(root)),

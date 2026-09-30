@@ -5,7 +5,7 @@ import { normalizeColor } from '../../../utils/ColorUtils';
 import { TagExtractor } from '../utils/TagExtractor';
 import { parseDateTimeField } from '../utils/DateTimeFieldParser';
 import { reservedPropertyKeys } from '../utils/FrontmatterPolicy';
-import type { ScalarField } from './DocumentTree';
+import type { ScalarField } from './Sections';
 
 export interface ExtractedProperties {
     color?: string;
@@ -41,7 +41,7 @@ export function fieldKey(field: ScalarField | 'tags', keys: ScopeKeys): string {
  * Record<string, PropertyValue> から組み込みキー（tv-color 等）を
  * 専用フィールドに分離し、残りをカスタムプロパティとして返す。
  *
- * SectionPropertyResolver / TreeTaskExtractor で共通使用（section-scope と
+ * SectionPropertyResolver / NoteTasks で共通使用（section-scope と
  * task-scope のビルトインキー抽出）。FM層は FilePropertyResolver が担う。
  */
 export class BuiltinPropertyExtractor {

@@ -27,7 +27,7 @@ export class ChildLineClassifier {
 
     /**
      * 生テキスト → ChildLine に変換。
-     * @param bodyLine 絶対ファイル行（`Task.line` と同規約、-1 = body 行なし）
+     * @param bodyLine 絶対ファイル行（`Task.line` と同規約）
      */
     static classify(text: string, bodyLine: number): ChildLine {
         const indent = Outline.indentOf(text);

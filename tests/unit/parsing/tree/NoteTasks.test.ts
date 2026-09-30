@@ -1,7 +1,8 @@
 import { describe, it, expect } from 'vitest';
-import { DocumentTreeBuilder } from '../../../../src/services/parsing/tree/DocumentTreeBuilder';
+import { NoteSections } from '../../../../src/services/parsing/tree/NoteSections';
 import { SectionPropertyResolver } from '../../../../src/services/parsing/tree/SectionPropertyResolver';
-import { TreeTaskExtractor, type TaskExtractionContext } from '../../../../src/services/parsing/tree/TreeTaskExtractor';
+import { NoteTasks, type TaskExtractionContext } from '../../../../src/services/parsing/tree/NoteTasks';
+import { Outline } from '../../../../src/services/parsing/utils/Outline';
 import { lineParsers } from '../../../../src/services/parsing/TaskParser';
 import { DEFAULT_SETTINGS, DEFAULT_SCOPE_KEYS } from '../../../../src/types';
 import {
@@ -16,12 +17,13 @@ const defaultCtx: TaskExtractionContext = {
 };
 
 function extractTasks(bodyLines: string[], frontmatter?: Record<string, any>, ctx?: Partial<TaskExtractionContext>) {
-    const doc = DocumentTreeBuilder.build('test.md', bodyLines, 0);
-    SectionPropertyResolver.resolve(doc, frontmatter, DEFAULT_SCOPE_KEYS);
-    return TreeTaskExtractor.extract(doc, { ...defaultCtx, ...ctx });
+    const outline = Outline.read(bodyLines);
+    const sections = NoteSections.read(outline);
+    SectionPropertyResolver.resolve(sections, frontmatter, DEFAULT_SCOPE_KEYS);
+    return NoteTasks.extract(outline, sections, { ...defaultCtx, ...ctx });
 }
 
-describe('TreeTaskExtractor', () => {
+describe('NoteTasks', () => {
     describe('基本的なタスク抽出', () => {
         it('単一タスクを抽出', () => {
             const tasks = extractTasks([

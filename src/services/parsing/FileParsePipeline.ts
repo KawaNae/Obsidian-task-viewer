@@ -1,11 +1,11 @@
 import { parseYaml } from 'obsidian';
 import type { Task, TaskViewerSettings } from '../../types';
 import { collectGenBlocks, type GenBlock } from './gen/GenBlockCollector';
-import { DocumentTreeBuilder } from './tree/DocumentTreeBuilder';
-import type { DocumentNode } from './tree/DocumentTree';
+import type { SectionNode } from './tree/Sections';
+import { NoteSections } from './tree/NoteSections';
+import { NoteTasks } from './tree/NoteTasks';
 import { Outline, type OutlineReading } from './utils/Outline';
 import { SectionPropertyResolver } from './tree/SectionPropertyResolver';
-import { TreeTaskExtractor } from './tree/TreeTaskExtractor';
 import { lineParsers } from './TaskParser';
 
 export interface FileParseResult {
@@ -21,16 +21,16 @@ export interface FileParseResult {
  * File → Task[] parse pipeline — the single place that knows the parse
  * order contract:
  *
- *   frontmatter boundary → ignore check
- *   → DocumentTreeBuilder → SectionPropertyResolver → TreeTaskExtractor
+ *   the note's reading (`Outline.read`) → frontmatter → ignore check
+ *   → NoteSections.read → SectionPropertyResolver.resolve → NoteTasks.extract
  *
  * Frontmatter makes no task: it is the root of the property cascade, which
  * hands its dates, style and tags down to every task in the note.
  *
- * build → resolve → extract mutate one shared DocumentNode in that exact
- * order; wrapping them here means callers cannot get it wrong. Pure with
- * respect to the vault: no I/O, no store access — TaskScanner owns the
- * store commits.
+ * The sections are read, then resolved in place, then read by the
+ * extraction, in that exact order; wrapping them here means callers cannot
+ * get it wrong. Pure with respect to the vault: no I/O, no store access —
+ * TaskScanner owns the store commits.
  */
 export class FileParsePipeline {
     /**
@@ -54,12 +54,11 @@ export class FileParsePipeline {
         settings: TaskViewerSettings,
         reading?: OutlineReading,
     ): FileParseResult {
-        const tree = this.resolveTree(filePath, lines, settings, reading);
-        if (!tree) return { ignored: true, tasks: [], genBlocks: new Map() };
-        const { doc } = tree;
-        const { outline } = doc;
+        const read = this.resolveSections(lines, settings, reading);
+        if (!read) return { ignored: true, tasks: [], genBlocks: new Map() };
+        const { outline, sections } = read;
 
-        const tasks = TreeTaskExtractor.extract(doc, {
+        const tasks = NoteTasks.extract(outline, sections, {
             filePath,
             scopeKeys: settings.scopeKeys,
             parsers: lineParsers(settings),
@@ -81,27 +80,28 @@ export class FileParsePipeline {
     }
 
     /**
-     * The note's section tree with every section's values resolved, and
-     * where each came from (`SectionNode.resolvedSources`): what `parse`
-     * extracts the rows from, for a reader who asks what a line of the note
-     * inherits (`InheritedValues`). Null for a tv-ignore'd note, which has
-     * no rows. `frontmatter` is the block as the YAML parser read it.
+     * The note's reading and its sections with every section's values
+     * resolved, and where each came from (`SectionNode.resolvedSources`):
+     * what `parse` extracts the rows from, for a reader who asks what a line
+     * of the note inherits (`InheritedValues`). Null for a tv-ignore'd note,
+     * which has no rows. `frontmatter` is the block as the YAML parser read
+     * it.
      */
-    static resolveTree(
-        filePath: string,
+    static resolveSections(
         lines: readonly string[],
         settings: TaskViewerSettings,
         reading?: OutlineReading,
-    ): { doc: DocumentNode; frontmatter: Record<string, any> | undefined } | null {
-        // --- Frontmatter境界検出 ---
+    ): { outline: OutlineReading; sections: SectionNode[]; frontmatter: Record<string, any> | undefined } | null {
+        const outline = reading && sameLines(reading.lines, lines) ? reading : Outline.read(lines);
+
         // The same reading a write takes of where the body begins
         // (`Placement`): a line the parser reads as body is one a write may
         // place a line at.
-        const bodyStartIndex = Outline.bodyStart(lines);
+        const { bodyStart } = outline;
         let frontmatterObj: Record<string, any> | undefined;
-        if (bodyStartIndex > 0) {
+        if (bodyStart > 0) {
             try {
-                const yamlContent = lines.slice(1, bodyStartIndex - 1).join('\n');
+                const yamlContent = lines.slice(1, bodyStart - 1).join('\n');
                 const parsed: unknown = parseYaml(yamlContent);
                 if (parsed && typeof parsed === 'object') frontmatterObj = parsed as Record<string, any>;
             } catch {
@@ -110,13 +110,11 @@ export class FileParsePipeline {
             }
         }
 
-        if (this.isIgnoredByFrontmatter(frontmatterObj, lines, bodyStartIndex, settings)) return null;
+        if (this.isIgnoredByFrontmatter(frontmatterObj, lines, bodyStart, settings)) return null;
 
-        // --- ツリーパイプライン（順序契約: build → resolve → extract）---
-        const outline = reading && sameLines(reading.lines, lines) ? reading : Outline.read(lines);
-        const doc = DocumentTreeBuilder.build(filePath, lines, bodyStartIndex, outline);
-        SectionPropertyResolver.resolve(doc, frontmatterObj, settings.scopeKeys);
-        return { doc, frontmatter: frontmatterObj };
+        const sections = NoteSections.read(outline);
+        SectionPropertyResolver.resolve(sections, frontmatterObj, settings.scopeKeys);
+        return { outline, sections, frontmatter: frontmatterObj };
     }
 
     private static isIgnoredByFrontmatter(

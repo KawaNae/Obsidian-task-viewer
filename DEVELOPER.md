@@ -29,7 +29,7 @@ src/views/taskcard/
 
 1. The renderer consumes `getChildEntries(parent): ChildEntry[]` (`'task' | 'line'`). A `'line'` entry is never a checkbox: every checkbox line is a task of its own. A `- [ ]` inside a code fence is an example and renders as plain text (no checkbox, not counted in the card's n/m). A `- [[note]]` child is an ordinary link line.
 2. Each entry carries an absolute `bodyLine`, so render code does no line-number arithmetic.
-3. The data layer (`buildChildEntries`) enforces a 1-line-1-owner invariant across siblings: a body line owned by a sibling task's subtree never surfaces in a `'line'` entry, so the renderer never deduplicates.
+3. Every body line is one task's at most: the extraction (`NoteTasks`) leaves a child task's subtree and a task's own `- ==>` lines out of its `childLines`. The data layer (`buildChildEntries`) only merges `childIds` and `childLines` by line, so neither it nor the renderer deduplicates.
 4. `ChildItemBuilder` walks the entries depth-first: a `'task'` entry renders the child and recurses into its own entries (depth-capped, cycle-guarded); a `'line'` entry renders the raw line.
 
 ### Line write rule
@@ -108,7 +108,7 @@ src/
 │   ├── parsing/               # Parser layer (TaskParser: lineParsers; TaskLineFormat: formatTaskLine, formatRow; FileParsePipeline)
 │   │   ├── tv-inline/         # Line-level parsers (TVInlineParser, DayPlannerParser, TasksPluginParser, ReadOnlyParserBase)
 │   │   ├── strategies/        # ParserChain, ParserStrategy
-│   │   ├── tree/              # Document structure tree (DocumentTree, DocumentTreeBuilder, SectionPropertyResolver, etc.)
+│   │   ├── tree/              # A note's sections and rows (NoteSections, NoteTasks, Sections, SectionPropertyResolver, BuiltinPropertyExtractor)
 │   │   └── utils/             # Parser utilities (ChildLineClassifier, CodeFenceTracker, Outline, TagExtractor, TaskLineClassifier)
 │   ├── persistence/           # Write layer (TaskRepository, TaskCloner)
 │   │   ├── writers/           # FrontmatterWriter, InlineTaskWriter, SendWriter, SendRows (which rows a send takes)
@@ -202,7 +202,7 @@ Quick reference for locating the right layer when implementing a feature.
 | **DiskReconciler** | `services/core/DiskReconciler.ts` | Brings the index's readings to the disk when a change notice never comes: on start, focus, a plugin view, a refusal, a stale check and each minute (desktop), stats the notes Obsidian holds (`DiskProbe`; the whole vault on desktop, the notes the index has read elsewhere), reads again what moved through `queueScan`, forgets what is gone, and logs where Obsidian's stat of a note lasted apart from the disk (`modified`, `deleted`). Obsidian's model is only observed, never mended; a note Obsidian never heard created stays out of the index |
 | **FlowFireExtension** | `editor/FlowFireExtension.ts` | Fires a completion made in the editor, in the same transaction (see Flow Firing) |
 | **ParserChain** | `services/parsing/strategies/ParserChain.ts` | Tries multiple parsers in order (Strategy chain); parses only, never writes |
-| **TVInlineParser** | `services/parsing/tv-inline/TVInlineParser.ts` | Parses `@date` inline notation (line-level) |
+| **TVInlineParser** | `services/parsing/tv-inline/TVInlineParser.ts` | Parses `@date` inline notation (line-level); cuts the `==>` command off the content without reading it (`readFlow` does) |
 | **TaskRepository** | `services/persistence/TaskRepository.ts` | Write facade over the inline writer, the cloner and frontmatter key writes |
 | **FrontmatterWriter** | `services/persistence/writers/FrontmatterWriter.ts` | Surgical frontmatter key writes (`setKeys`, used by the color / line-style property suggests) and insertion under a heading |
 | **FrontmatterLineEditor** | `services/persistence/utils/FrontmatterLineEditor.ts` | Low-level YAML line operations; never touches unrelated lines |
@@ -221,7 +221,9 @@ Quick reference for locating the right layer when implementing a feature.
 | **FilePropertyResolver** | `services/parsing/FilePropertyResolver.ts` | File-scope frontmatter → ExtractedProperties; the cascade root for SectionPropertyResolver |
 | **EffectiveProperties** | `services/data/EffectiveProperties.ts` | `getEffective*()` derived helpers merging raw + cascadeContext for properties/tags/style; see "Inheritance pipeline" |
 | **TaskValidator** | `services/core/TaskValidator.ts` | Task validation |
-| **DocumentTreeBuilder** | `services/parsing/tree/DocumentTreeBuilder.ts` | Document structure tree for section property inheritance |
+| **NoteSections** | `services/parsing/tree/NoteSections.ts` | A note's sections from `outline.headings`, each with its own property lines (the section scope of the cascade) |
+| **NoteTasks** | `services/parsing/tree/NoteTasks.ts` | A note's rows: every line that opens a task, its parent, child lines, flow, properties and section cascade, read once |
+| **FlowLineScanner** | `services/parsing/utils/FlowLineScanner.ts` | `readFlow(outline, taskLine)`: the one place a flow program is read from a note (the task line's tail and its own `- ==>` lines); the extraction and the editor diagnostics both use it |
 | **DayPlannerParser** | `services/parsing/tv-inline/DayPlannerParser.ts` | Day Planner compatible parser (read-only) |
 | **TasksPluginParser** | `services/parsing/tv-inline/TasksPluginParser.ts` | Tasks plugin compatible parser (read-only) |
 | **TaskApi** | `api/TaskApi.ts` | Public API (13 methods) |
@@ -248,15 +250,16 @@ Quick reference for locating the right layer when implementing a feature.
 
 ---
 
-## Document Tree Pipeline
+## Parse Pipeline
 
 `FileParsePipeline` (`services/parsing/FileParsePipeline.ts`) owns the parse order contract for each file. `TaskScanner` delegates the whole file to it and only handles the surrounding parse/detect/commit orchestration. The pipeline runs:
 
 ```
-0. Frontmatter boundary detection → tv-ignore check
-1. DocumentTreeBuilder.build()         — Parse file into heading-based hierarchy tree
-2. SectionPropertyResolver.resolve()   — Cascade properties through section nesting (delegates FM extraction to FilePropertyResolver)
-3. TreeTaskExtractor.extract()         — Extract Task[] from tree with section properties attached
+0. Outline.read(lines)                 — the note's one reading (items, subtrees, code, headings, body start)
+1. Frontmatter → tv-ignore check
+2. NoteSections.read(outline)          — sections from outline.headings, each with its own property lines
+3. SectionPropertyResolver.resolve()   — Cascade properties through section nesting (delegates FM extraction to FilePropertyResolver)
+4. NoteTasks.extract()                 — every line that opens a task, read once, with its section's values attached
 ```
 
 Frontmatter makes no task. It is only the root of the cascade below: its scope keys (`tv-start`/`tv-end`/`tv-due`/`tv-color`/`tv-linestyle`/`tv-mask`), `tags` and custom properties are inherited by every task in the note.
@@ -277,7 +280,7 @@ Properties / tags / styling cascade through two scopes, each with a dedicated re
 | Layer | Dates | Properties / tags / style | Written by | Read by |
 |-------|-------|---------------------------|------------|---------|
 | **raw** | `task.startDate` etc. | `task.color`/`linestyle`/`mask`/`tags`/`properties` | Parser, from the task's own lines only | `formatTaskLine`, all writers (round-trip fidelity) |
-| **cascade** | `task.cascadeContext.startDate` etc. | `task.cascadeContext.color`/`tags`/`properties` etc. | `TreeTaskExtractor`, from `SectionNode.resolvedX` | Merge step below |
+| **cascade** | `task.cascadeContext.startDate` etc. | `task.cascadeContext.color`/`tags`/`properties` etc. | `NoteTasks`, from `SectionNode.resolvedX` | Merge step below |
 | **effective** | `DisplayTask.effectiveStartDate` etc. (materialized — merge needs `startHour`) | `getEffective*()` derived helpers (`services/data/EffectiveProperties.ts` — merge closes over the Task alone) | — | Display, filter, sort, API output |
 
 Merge rules: style is `own ?? cascade`; tags are a sorted union; custom properties are per-key child-wins spread. The cascade layer stores style only when raw is absent (same guard as dates — equivalent for override semantics), but stores tags/properties unconditionally since they merge partially rather than shadow.
@@ -286,22 +289,25 @@ Merge rules: style is `own ?? cascade`; tags are a sorted union; custom properti
 
 ### Inline child line extraction
 
-チェックボックス行はすべてタスクになり、`childLines` にはチェックボックスでない行だけが残る。TreeTaskExtractor は次の規則でタスクと `childLines` を組む。
+チェックボックス行はすべてタスクになり、`childLines` にはチェックボックスでない行だけが残る。`NoteTasks.extract` は次の規則でタスクと `childLines` を組む。
 
-1. `DocumentTreeBuilder` がタスク行配下のインデント行を全て収集する（`childRawLines`）。コードフェンスの中の行は `childFenced` で印が付き、記法として読まれない
-2. フェンスの外のチェックボックス行は、直下のブロックとして `childTaskBlocks` にまとまる。間に非タスク行（`- メモ` など）を挟んだ深い行も、そのタスクの部分木の中にあれば同じ扱いになる
-3. `TreeTaskExtractor.classifyBlock()` が各 block を 1 回だけ判定し、パーサが読めればタスクにする。日付もコマンドも持たない `- [ ]` も、別のタスクの下の `- [ ]` もタスクになる。結果の `BlockOutcome` を、`childLines` からの除外と再帰の両方が共有する
-4. 親は直上のタスクブロックだけで、インデント幅（2 スペース、4 スペース、タブ）には依らない。孫は子の再帰が張るので、祖父の `childIds` には入らない。トップレベルの非タスク行の下のチェックボックスは、所有者のいない独立したタスクになる
-5. 各 `ChildLine.bodyLine` に絶対行番号を格納する
+1. タスクを開く行（`TaskLineClassifier.opensTask`: 読みが項目と読み、コードでないチェックボックス行）を上から1回走査し、各行を連鎖でパースする。日付もコマンドも持たない `- [ ]` も、別のタスクの下の `- [ ]` もタスクになる。連鎖の最後の `tv-inline` はチェックボックス行をすべて受け取るので、拒まれる行は無い
+2. 親は、祖先の項目（`itemsAbove`）のうち最も近いタスクである。インデント幅（2 スペース、4 スペース、タブ）にも、間に挟まる非タスク行（`- メモ` など）にも依らない。孫は子の `childIds` に入り、祖父のには入らない。トップレベルの非タスク行の下のチェックボックスは、所有者のいない独立したタスクになる
+3. `childLines` は、部分木の行から、子タスクの部分木と自分のフロー行を除いたものである。除外はこの1回で済み、ノートの各行はたかだか1つのタスクのものになる。字下げは部分木の空でない行の最小の字下げで揃える
+4. 各 `ChildLine.bodyLine` に絶対行番号を格納する
+5. プロパティは自分のプロパティ行（`ChildLineClassifier.ownPropertyLines`: `directItems` のうち `- key:: value` の形の行）から読む。書き込み（`ChildPropertyLineEditor`）が編集する行と同じ集合である
 
 フェンスの中の `- [ ]` はタスクにならず、`childLines` に普通の行として残る。カードではコードブロックの一部として描かれ、チェックボックスにはならない。
 
+#### フローと validation
+
+フロープログラムはタスク行の `==>` の後ろと、直下の `- ==>` 行（`collectFlowLineIndices`: `directItems` のうちフロー行の形の行）の全部から1回で決まる。行のパーサ（`TVInlineParser`）は `==>` から後ろを本文から切り落とすだけで、読まない。`readFlow(outline, taskLine)` が行の尾とフロー行を集めて1回パースし、抽出（`tv-inline` の行）とエディタの診断（`DiagnosticsExtension`、`FlowGroup`）がこれを使う。
+
+`Task.validation` の1枠は抽出で1回だけ埋まる。行のパーサが入れた日付の規則、日付ブロックの parse-error を優先し、どちらも無い行だけがフローの最初の診断を受け取る。
+
 #### ChildLine.bodyLine のセマンティクス
 
-各 ChildLine は、ファイル先頭からの絶対行番号を内包する（`Task.line` と同規約）。レンダラとライタは `DisplayTask.childEntries[i].bodyLine` を直接読む（`buildChildEntries` が `ChildLine.bodyLine` をそのまま entry に転載する）。
-
-- `TreeTaskExtractor` は `block.childLineNumbers`（= 絶対行）を classify に渡す
-- `bodyLine < 0` の entry は `buildChildEntries` で除外される（parser 契約上発生しない想定）
+各 ChildLine は、ファイル先頭からの絶対行番号を内包する（`Task.line` と同規約）。レンダラとライタは `DisplayTask.childEntries[i].bodyLine` を直接読む（`buildChildEntries` が `ChildLine.bodyLine` をそのまま entry に転載する）。負の値は無い。フローのセグメント（`FlowChildSegment.bodyLine`）は、読んだものには必ず行があり、発火が計画してまだ書いていない次のインスタンスのものには無い。
 
 ---
 
@@ -327,7 +333,7 @@ The plugin recognizes eight task types internally.
 Tasks are classified by **display behavior** — where they appear and what values are inferred.
 All times are relative to the configured `startHour` (default 5 → visual day 05:00–04:59).
 Display-layer implicit value resolution is centralised in `toDisplayTask()` (in `services/display/DisplayTaskConverter.ts`).
-Parse-layer date inheritance is via `cascadeContext` (set by `TreeTaskExtractor`, consumed by `DisplayTaskConverter`).
+Parse-layer date inheritance is via `cascadeContext` (set by `NoteTasks`, consumed by `DisplayTaskConverter`).
 
 #### 1. Timed tasks (S-Timed / E-Timed / SD-Timed / ED-Timed)
 
@@ -656,7 +662,7 @@ menu.addItem(item => item.setTitle('Delete task'));
 | **Builder** | `PropertiesMenuBuilder`, `TimerMenuBuilder`, and other menu builders |
 | **Observer** | `TaskStore.onChange()` notifies UI of task changes |
 | **Surgical Edit** | `FrontmatterLineEditor` operates on YAML one key range at a time |
-| **Document Tree** | `DocumentTreeBuilder` builds heading-based hierarchy for section property cascade |
+| **One reading** | `Outline.read` answers items, subtrees, code and headings once; `NoteSections` and `NoteTasks` read the note's sections and rows off it |
 
 ---
 
@@ -939,7 +945,7 @@ Every task is a line in a note. Writable (`tv-inline`) tasks are rewritten by `I
 
 | Event | Dates | Properties / tags / style |
 |-------|-------|---------------------------|
-| Parse (TreeTaskExtractor) | Set from file/section cascade when task lacks own dates | Style set when raw absent; tags/properties always (partial merge) |
+| Parse (NoteTasks) | Set from file/section cascade when task lacks own dates | Style set when raw absent; tags/properties always (partial merge) |
 | Effective merge | `DisplayTaskConverter` → `DisplayTask.effective*` via `\|\|` fallback | `getEffective*()` helpers (`services/data/EffectiveProperties.ts`) |
 | `formatTaskLine` / writers | Ignored — only raw fields are serialized | Same — inherited values are never written back |
 | Explicit edit (drag / resize / future property edit) | Raw fields set explicitly → cascade no longer contributes | Same principle |

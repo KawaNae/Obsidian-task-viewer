@@ -3,13 +3,22 @@ import type { FlowProgram } from '../services/lang/flow/FlowAst';
 
 /**
  * One `- ==> ...` child line owned by the task's flow program.
- * `raw` is the verbatim text after the line's `==>` marker (trimmed);
- * `bodyLine` is the absolute file line (same convention as
- * ChildLine.bodyLine), or -1 for a not-yet-written new instance.
+ * `raw` is the verbatim text after the line's `==>` marker (trimmed).
  */
 export interface FlowChildSegment {
     raw: string;
-    bodyLine: number;
+    /**
+     * The absolute file line it was read from (same convention as
+     * ChildLine.bodyLine). None on a segment the plugin has planned and not
+     * written yet: a next instance's (`FlowPlanner`). A flow read off a note
+     * has one on every segment (`ReadFlow`).
+     */
+    bodyLine?: number;
+}
+
+/** A flow as a note writes it (`readFlow`): every segment stands on its line. */
+export interface ReadFlow extends TaskFlow {
+    childSegments: Required<FlowChildSegment>[];
 }
 
 /**

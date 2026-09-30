@@ -7,9 +7,8 @@ import { vaultSession } from './vaultSession';
  *
  * `tv-color` is the cascade this exercises: `FilePropertyResolver.extract`
  * reads it from frontmatter, `SectionPropertyResolver` carries it down with
- * nothing to override it, and `TreeTaskExtractor` puts it on
- * `Task.cascadeContext.color` because the task's own lines declare none
- * (`TreeTaskExtractor.ts:184-195`). A task with its own `tv-color` line
+ * nothing to override it, and `NoteTasks` puts it on
+ * `Task.cascadeContext.color` because the task's own lines declare none. A task with its own `tv-color` line
  * would win instead — this scenario is about the frontmatter path reaching
  * a task at all, not about the merge order.
  */

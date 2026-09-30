@@ -15,7 +15,7 @@ import { LIST_BULLET_SOURCE, SPACE_OR_TAB_SOURCE } from './ListMarker';
 import { INDENT_SOURCE, type OutlineReading } from './Outline';
 import { TaskLineClassifier } from './TaskLineClassifier';
 import { IN_LINE } from '../../../utils/LineBreak';
-import type { TaskFlow } from '../../../types';
+import type { ReadFlow } from '../../../types';
 import { parseFlowSegments } from '../../lang/flow/FlowSegments';
 
 /**
@@ -110,7 +110,7 @@ export function collectFlowLineIndices(outline: OutlineReading, taskLine: number
  * the extraction reads a task's flow with it, and the editor's diagnostics
  * grade the same program.
  */
-export function readFlow(outline: OutlineReading, taskLine: number): TaskFlow | undefined {
+export function readFlow(outline: OutlineReading, taskLine: number): ReadFlow | undefined {
     const raw = taskLineFlowTail(outline.lines[taskLine])?.tail.trim() ?? '';
     const childSegments = collectFlowLineIndices(outline, taskLine)
         .map(line => ({ raw: flowLineTail(outline.lines[line]) ?? '', bodyLine: line }));

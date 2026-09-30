@@ -8,7 +8,7 @@ import type {
 import { sendingOf } from '../../services/data/NoteOps';
 import type { AnchorLink } from '../../services/data/NoteRefs';
 import type { UnresolvedReference } from '../../services/flow/FlowReferences';
-import type { ValueSource } from '../../services/parsing/tree/DocumentTree';
+import type { ValueSource } from '../../services/parsing/tree/Sections';
 import { Outline } from '../../services/parsing/utils/Outline';
 import { SubtreeFrame, type DraftCheck } from '../../services/persistence/utils/SubtreeFrame';
 import type { DraftEditor } from '../form/source/SourceEditor';

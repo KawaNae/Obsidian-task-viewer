@@ -310,7 +310,7 @@ export class NoteOps {
             heading: found,
             headings: outline.headings.map(h => h.text),
             present: preview.candidates.filter(one => FrontmatterLineEditor.hasKey(lines, one.key)).map(one => one.key),
-            ignored: FileParsePipeline.resolveTree(path, lines, settings) === null,
+            ignored: FileParsePipeline.resolveSections(lines, settings) === null,
             namesakes: at.namesakes,
             shared: anchorsIn(rows.filter(row => row.task.file !== path).flatMap(row => row.task.subtreeLines ?? []))
                 .filter(id => inNote.has(id)),
