@@ -3,15 +3,13 @@ import { parseGenBody } from '../../../src/services/parsing/gen/GenBodyParser';
 import { renderGenBody } from '../../../src/services/parsing/gen/GenBodyRenderer';
 import type { EvalContext } from '../../../src/services/lang/ExprEvaluator';
 import { FlowExecutor } from '../../../src/services/flow/FlowExecutor';
-import { lineParsers } from '../../../src/services/parsing/TaskParser';
+import { readLine } from '../helpers/readLine';
 import { TaskIndex } from '../../../src/services/core/TaskIndex';
 import { TaskRepository } from '../../../src/services/persistence/TaskRepository';
 import type { TaskOp } from '../../../src/services/persistence/TaskOps';
 import type { FlowInstanceInsert } from '../../../src/services/persistence/FlowInstanceLines';
 import { DEFAULT_SETTINGS, type Task } from '../../../src/types';
 import { completing } from '../helpers/completing';
-
-const PARSERS = lineParsers(DEFAULT_SETTINGS);
 
 /**
  * The ceilings an evaluation stops at.
@@ -174,7 +172,7 @@ const flush = () => new Promise(resolve => setTimeout(resolve, 0));
 /** Complete a task and hand back the line written for the next one. */
 async function fire(line: string): Promise<string | null> {
     const repository = makeRepository();
-    const task = PARSERS.parse(line, FILE, 0);
+    const task = readLine(line, DEFAULT_SETTINGS, FILE);
     await makeExecutor(repository).complete({ ...task!, statusChar: 'x' });
     await flush();
     const insert = insertOf(repository);
@@ -197,7 +195,7 @@ describe('a plain repeating task cannot write a date either', () => {
         const written = await fire('- [x] T @2026-08-17 ==> +1y');
         expect(written).toBe('- [ ] T @2027-08-17 ==> +1y');
         // And the line it wrote is one the scanner reads as the same task.
-        const back = PARSERS.parse(written!, FILE, 0);
+        const back = readLine(written!, DEFAULT_SETTINGS, FILE);
         expect(back?.startDate).toBe('2027-08-17');
         expect(back?.content).toBe('T');
     });

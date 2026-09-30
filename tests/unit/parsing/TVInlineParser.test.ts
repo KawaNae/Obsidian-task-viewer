@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { TVInlineParser } from '../../../src/services/parsing/tv-inline/TVInlineParser';
 import type { Task } from '../../../src/types';
 import { formatRow } from '../../../src/services/parsing/TaskLineFormat';
+import { readLine } from '../helpers/readLine';
 
 const parser = new TVInlineParser();
 
@@ -83,7 +84,7 @@ describe('TVInlineParser', () => {
         });
 
         it('parses flow commands into an executable program', () => {
-            const result = parser.parse('- [ ] task @2026-01-15 ==> move([[target]])', 'test.md', 0);
+            const result = readLine('- [ ] task @2026-01-15 ==> move([[target]])');
             expect(result).not.toBeNull();
             expect(result!.flow?.raw).toBe('move([[target]])');
             expect(result!.flow?.program?.move).toBeDefined();
@@ -91,7 +92,7 @@ describe('TVInlineParser', () => {
         });
 
         it('keeps raw and surfaces diagnostics for invalid flow', () => {
-            const result = parser.parse('- [ ] task @2026-01-15 ==> evry mon', 'test.md', 0);
+            const result = readLine('- [ ] task @2026-01-15 ==> evry mon');
             expect(result).not.toBeNull();
             expect(result!.flow?.raw).toBe('evry mon');
             expect(result!.flow?.program).toBeNull();
@@ -100,9 +101,16 @@ describe('TVInlineParser', () => {
         });
 
         it('flags legacy repeat() syntax as an unknown clause', () => {
-            const result = parser.parse('- [ ] task @2026-01-15 ==> repeat(weekly)', 'test.md', 0);
+            const result = readLine('- [ ] task @2026-01-15 ==> repeat(weekly)');
             expect(result!.flow?.program).toBeNull();
             expect(result!.flow?.diagnostics.some(d => d.code === 'flow.unknown-head')).toBe(true);
+        });
+
+        it('cuts the command off the content and reads none of it: the note is read for that', () => {
+            const result = parser.parse('- [ ] task @2026-01-15 ==> evry mon', 'test.md', 0);
+            expect(result!.content).toBe('task');
+            expect(result!.flow).toBeUndefined();
+            expect(result!.validation).toBeUndefined();
         });
 
         it('parses block id', () => {
@@ -156,7 +164,7 @@ describe('TVInlineParser', () => {
         });
 
         it('parses flow-command-only task (no date)', () => {
-            const result = parser.parse('- [ ] task ==> at(today + 3d)', 'test.md', 0);
+            const result = readLine('- [ ] task ==> at(today + 3d)');
             expect(result).not.toBeNull();
             expect(result!.flow?.program?.schedule).toMatchObject({ kind: 'at' });
             expect(result!.startDate).toBe('');
@@ -307,8 +315,9 @@ describe('TVInlineParser', () => {
     });
 
     describe('parse → formatRow round-trip', () => {
+        // A line read as the index reads it: its command too (`readFlow`).
         const roundTrip = (line: string) => {
-            const task = parser.parse(line, 'test.md', 0);
+            const task = readLine(line);
             expect(task).not.toBeNull();
             return formatRow(task!);
         };

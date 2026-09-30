@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { TaskLineClassifier } from '../../../src/services/parsing/utils/TaskLineClassifier';
-import { TVInlineParser } from '../../../src/services/parsing/tv-inline/TVInlineParser';
+import { readLine } from '../helpers/readLine';
 import { type TaskLineFields, formatRow, formatTaskLine } from '../../../src/services/parsing/TaskLineFormat';
 
 /**
@@ -54,9 +54,8 @@ describe('formatTaskLine', () => {
     });
 
     it('reads back as the task it wrote, for every empty part', () => {
-        const parser = new TVInlineParser();
         for (const line of ['- [ ] ', '- [x] ^abc', '- [ ] @2026-01-01', '- [ ] ==> every mon', '- [ ] a ==> every mon ^abc']) {
-            const task = parser.parse(line, 'n.md', 0)!;
+            const task = readLine(line)!;
             expect(task).not.toBeNull();
             expect(formatRow(task)).toBe(line);
         }
