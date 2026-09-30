@@ -1,3 +1,4 @@
+import { parseYaml } from 'obsidian';
 import { t } from '../../i18n';
 import { logWarn } from '../../log/log';
 import type { InheritedValue } from '../../services/data/InheritedValues';
@@ -53,7 +54,7 @@ export type SendPhase = 'open' | 'sending' | 'spent';
 /** A value offered for the note's frontmatter, as the surface lists it. */
 export interface CandidateView {
     key: string;
-    /** The value as the frontmatter will say it. */
+    /** The value the frontmatter will hold, read from the lines written (`yamlValue`). */
     value: string;
     /** Where the rows inherit it from: the frontmatter, or a heading's section. */
     from: string;
@@ -464,10 +465,58 @@ function sourceLabel(from: ValueSource): string {
 }
 
 /**
- * A key's frontmatter lines as its value reads: what follows the key on its
- * line, as written (quotes and all), or the items of a list under it.
+ * A key's frontmatter lines as the value they hold reads: the lines read
+ * as YAML, as the note will read them, and the value said bare. A string
+ * without its quotes, a date as its text, a list as its items joined with
+ * `, `, a number or a boolean as YAML says it. The lines are what is
+ * written (`InheritedValue.yaml`), so what is shown is what the note gets,
+ * however the lines spell it. Lines YAML does not read, or a mapping, are
+ * shown as written after the key.
  */
 export function yamlValue(yaml: readonly string[]): string {
+    try {
+        const read: unknown = parseYaml(yaml.join('\n'));
+        if (read && typeof read === 'object' && !Array.isArray(read)) {
+            const values = Object.values(read);
+            if (values.length === 1) {
+                const shown = scalarText(values[0]) ?? listText(values[0]);
+                if (shown !== null) return shown;
+            }
+        }
+    } catch {
+        // shown as written, below
+    }
+    return writtenValue(yaml);
+}
+
+/** A YAML scalar as its value reads; null for a list or a mapping. */
+function scalarText(value: unknown): string | null {
+    if (value === null || value === undefined) return '';
+    if (value instanceof Date) return dateText(value);
+    if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') return String(value);
+    return null;
+}
+
+/**
+ * A YAML timestamp as it was written: YAML reads one without a zone as UTC,
+ * so its UTC fields are the written ones. A date alone when the time is
+ * midnight, else to the minute.
+ */
+function dateText(date: Date): string {
+    if (Number.isNaN(date.getTime())) return '';
+    const iso = date.toISOString();
+    return iso.endsWith('T00:00:00.000Z') ? iso.slice(0, 10) : iso.slice(0, 16);
+}
+
+/** A YAML list of scalars as its items joined; null for anything else. */
+function listText(value: unknown): string | null {
+    if (!Array.isArray(value)) return null;
+    const items = value.map(scalarText);
+    return items.every((item): item is string => item !== null) ? items.join(', ') : null;
+}
+
+/** What follows the key on its line, as written, and the items of a list under it. */
+function writtenValue(yaml: readonly string[]): string {
     const [first = '', ...rest] = yaml;
     const onLine = first.match(/^(?:"(?:[^"\\]|\\.)*"|'(?:[^']|'')*'|[^:]*):\s*(.*)$/)?.[1] ?? first;
     if (rest.length === 0) return onLine;
