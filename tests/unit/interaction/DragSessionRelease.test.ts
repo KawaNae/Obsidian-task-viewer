@@ -39,6 +39,8 @@ describe('a drag that ends', () => {
         await session.handleUp({} as PointerEvent);
 
         expect(calls).toEqual(['drag note.md', 'commit', 'notify', 'drag null']);
+        // Drawn from the copy the commit changed, as a span of its dates.
+        expect(writeService.notifyImmediate).toHaveBeenCalledWith('t', ['startDate', 'startTime', 'endDate', 'endTime']);
         expect(session.isActive()).toBe(false);
     });
 });
