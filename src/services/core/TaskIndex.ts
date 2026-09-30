@@ -325,16 +325,15 @@ export class TaskIndex {
     /**
      * ドラッグ中のファイルパスを設定する。そのファイルの読みは、誰が読んだ
      * ものも store に入れずに保留する（`TaskScanner.hold`）。ドラッグは
-     * store の写しを描いているので、古い値で上書きしない。
-     * 通知は呼び出し元（DragHandler）が notifyImmediate で明示的に行う。
+     * 始めたときの写しを描いているので、ドラッグ中の読みで描き直さない。
      *
      * 終了時（null）には、保留した読みがあればファイルを読み直して入れ、
-     * 通知する。ドラッグ確定の書き込みもここに含まれる: `DragSession.handleUp`
-     * は commit を待ってからこれを下ろすので、確定の書き込みの読みは必ず
-     * 保留される側に入る。
+     * 通知を頼む。返す Promise はその読みが入ってから解ける。ドラッグ確定の
+     * 書き込みもここに含まれる: `DragSession.handleUp` は commit を待ってから
+     * これを下ろし、読みが入るのを待ってから描く。
      */
-    setDraggingFile(filePath: string | null): void {
-        void this.scanner.hold(filePath).then(committed => {
+    setDraggingFile(filePath: string | null): Promise<void> {
+        return this.scanner.hold(filePath).then(committed => {
             if (committed) this.notify.schedule();
         });
     }
@@ -485,9 +484,15 @@ export class TaskIndex {
     }
 
     /**
-     * @returns whether the file was written. A `false` means the update was
-     * reverted (see {@link revertUnwrittenUpdate}) — the index and the file
-     * agree again, and nothing changed.
+     * Rewrite the row `taskId` names with `updates`, in one write of its file.
+     *
+     * The index's copy is not touched: what the write left is the index's
+     * next reading of the file (`landed`), and its notify draws it. A view
+     * that shows the new values before then shows them from its own state
+     * (the hub's draft, the box a click changed), not from the copy.
+     *
+     * @returns whether the file was written. Not written: the user has been
+     * told why, once, and the copy still says what the file says.
      */
     async updateTask(taskId: string, updates: Partial<Task>): Promise<boolean> {
         if (this.refuseAfterDispose('updateTask')) return false;
@@ -503,47 +508,28 @@ export class TaskIndex {
         if (!task) return false;
         if (task.isReadOnly) return false;
 
-        // 非時刻プロパティ（color/tags/custom 等）の書き込み操作を導出。
-        // before スナップショット（Object.assign 前）との diff が必要なので
-        // ここで評価する。
+        // 非時刻プロパティ（color/tags/custom 等）の書き込み操作。写しと更新の
+        // diff から導く。
         const propertyOps = PropertyUpdatePlanner.plan(task, updates, this.settings.scopeKeys);
 
-        // 更新前の姿。行の探索と、書けなかったときの巻き戻しの両方で要る。
-        const before: ReadCopy = { ...task };
-
-        Object.assign(task, updates);
-        this.store.bumpRevision();
-
-        // ドラッグ中のファイルはnotifyをスキップ（ドラッグ終了時にsetDraggingFile(null)で一括通知）
-        if (!this.scanner.holds(task.file)) {
-            this.store.notifyListeners(taskId, Object.keys(updates));
-        }
-
-        // All inline tasks route through InlineTaskWriter; formatRow writes
-        // a tv-inline row with formatTaskLine, which handles both
-        // bare-checkbox and @notation-bearing output, so a task gaining or
-        // losing date fields just produces the right line — no parserId
-        // promotion/demotion needed.
-        //
-        // 探索は更新前の姿で行う。ファイルに書かれているのは更新前の行なので、
-        // 更新後の日付や時刻で探しに行くと、まさにその値を変える更新のときに
-        // 空振りする。第 2 引数が書く内容、第 1 引数がどの行かを決める。
-        // 子のプロパティ行も写しの値から作るので、書き換えるときは部分木も
-        // 計画が読んだものになる。外から足したタグの上に写しのタグを書かない。
+        // 書く行は写しに更新を重ねた姿から作る。行の探索は写しで行う:
+        // ファイルに書かれているのは写しの行なので、更新後の日付や時刻で
+        // 探しに行くと、まさにその値を変える更新のときに空振りする。子の
+        // プロパティ行も写しの値から作るので、書き換えるときは部分木も計画が
+        // 読んだものになる。外から足したタグの上に写しのタグを書かない。
         //
         // 行を完了させる書き換えは、同じ書き込みでフローを発火させる。完了か
         // どうかは、書き込みが照合する土台の行と書く行の対で答える
         // （`completes`）。発火の計画は書き込みの中で、書く行から立てる。
-        const target = plannedOn(before, { subtree: propertyOps.length > 0 });
+        const text = formatRow({ ...task, ...updates });
+        const target = plannedOn(task, { subtree: propertyOps.length > 0 });
         const written = await this.writeCompleting(
-            completes(before.originalText, formatRow(task), this.settings.statusDefinitions) ? task.file : null,
-            (fire) => this.repository.write(task.file, target, [{ kind: 'update', text: formatRow(task), childOps: propertyOps }], { fire }));
+            completes(task.originalText, text, this.settings.statusDefinitions) ? task.file : null,
+            (fire) => this.repository.write(task.file, target, [{ kind: 'update', text, childOps: propertyOps }], { fire }));
 
-        if (!written) {
-            this.revertUnwrittenUpdate(task, taskId, before, updates);
-            return false;
-        }
-        return true;
+        // Not written: the write layer has told the user why (see reportRefusal).
+        if (!written) logWarn(`[TaskIndex] update was not written: id=${taskId} fields=[${Object.keys(updates)}]`);
+        return written;
     }
 
     /**
@@ -879,17 +865,28 @@ export class TaskIndex {
      * from the copy the one before it left.
      *
      * Per row, not per file: a write to another row plans from that row's
-     * copy, which this one does not change.
+     * copy, which this one does not change. A row is one row across the
+     * names our writes give it (`getTask`).
      */
     private onRow<T>(taskId: string, op: () => Promise<T>): Promise<T> {
         const queue = (this.rowWrites ??= new Map<string, Promise<unknown>>());
-        const previous = queue.get(taskId) ?? Promise.resolve();
-        // After the one before, whether it landed or threw.
-        const next = previous.then(op, op);
+        // One row, whatever name it was asked by: a name asked before a write
+        // of ours is followed to the row's name now (`getTask`), so a write
+        // asked by the new name waits for one still under way by the old.
+        const row = this.rowNow(taskId);
+        const before = [...queue].filter(([name]) => name === taskId || this.rowNow(name) === row).map(([, write]) => write);
+        // After the ones before, whether they landed or threw.
+        const previous = Promise.all(before.map(write => write.then(() => undefined, () => undefined)));
+        const next = previous.then(op);
         queue.set(taskId, next);
         const settled = () => { if (queue.get(taskId) === next) queue.delete(taskId); };
         next.then(settled, settled);
         return next;
+    }
+
+    /** The name the row `taskId` names has now, or `taskId` itself when it names none. */
+    private rowNow(taskId: string): string {
+        return this.getTask(taskId)?.id ?? taskId;
     }
 
     /**
@@ -901,35 +898,6 @@ export class TaskIndex {
      */
     private onRows<T>(ids: readonly string[], op: () => Promise<T>): Promise<T> {
         return ids.reduceRight<() => Promise<T>>((inner, id) => () => this.onRow(id, inner), op)();
-    }
-
-    /**
-     * 書き込みが 1 バイトも書かなかった更新を取り消す。
-     *
-     * index を先に書き換える設計なので、書けなかった更新を残すと画面とファイルが
-     * 食い違ったまま居座る。値を戻す。拒否の理由は書き込みの層が伝え、拒否された
-     * ノートの読み直しは拒否の1か所（`reportRefusal`）が頼む。
-     */
-    private revertUnwrittenUpdate(
-        task: Task,
-        taskId: string,
-        before: Task,
-        updates: Partial<Task>,
-    ): void {
-        // 触ったキーだけを戻す。更新で新たに生えたキーは、スナップショットに
-        // undefined として写っているので同じ手順で消える。
-        const source = before as unknown as Record<string, unknown>;
-        const target = task as unknown as Record<string, unknown>;
-        for (const key of Object.keys(updates)) {
-            target[key] = source[key];
-        }
-        this.store.bumpRevision();
-        if (!this.scanner.holds(task.file)) {
-            this.store.notifyListeners(taskId, Object.keys(updates));
-        }
-
-        // The write layer has told the user why (see reportRefusal).
-        logWarn(`[TaskIndex] update was not written, reverted: id=${taskId} fields=[${Object.keys(updates)}]`);
     }
 
     /**

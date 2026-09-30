@@ -73,8 +73,8 @@ export abstract class BaseDragStrategy implements DragStrategy {
      * @returns 実際に書き戻したか。false は「掴んだが値は変わっていない」か
      *          「書き込みが拒否された」＝ファイルは旧ジオメトリのままで、ソース
      *          カードの旧ジオメトリがそのまま正しい、を意味する
-     *          （{@link commitAndReveal} の再可視化判断に使う）。拒否の通知と
-     *          写しの巻き戻しは TaskIndex が行う。
+     *          （{@link commitAndReveal} の再可視化判断に使う）。拒否の通知は
+     *          書き込みの層が行い、索引の写しは書き込みで変わらない。
      */
     protected async commitPlan(context: DragContext, plan: DragPlan | null, taskId: string): Promise<boolean> {
         if (!plan) return false;

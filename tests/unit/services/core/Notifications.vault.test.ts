@@ -27,7 +27,7 @@ function listen(session: VaultSession): string[] {
 const frame = () => new Promise<void>(resolve => setTimeout(resolve, 40));
 
 describe('what a write of ours tells the views', () => {
-    it('an update is told at once, as a span of the copy it changed, and again after the frame', async () => {
+    it('an update is told once, after the frame the write landed in', async () => {
         const { session } = await openLiveVault('- [ ] a @2026-10-01\n', s => { live = s; });
         const heard = listen(session);
         const row = session.index.getTasks()[0];
@@ -36,8 +36,8 @@ describe('what a write of ours tells the views', () => {
         const atReturn = [...heard];
         await frame();
 
-        expect(atReturn).toEqual(['span statusChar']);
-        expect(heard).toEqual(['span statusChar', 'full']);
+        expect(atReturn).toEqual([]);
+        expect(heard).toEqual(['full']);
     });
 
     it('a line put beside a row is told once, in full, before the write returns', async () => {
@@ -94,20 +94,20 @@ describe('who hears that a row was deleted', () => {
 });
 
 describe('what the end of a drag draws', () => {
-    it('draws the copy the commit changed while the note is held, then the note read again', async () => {
+    it('draws the note read again once the drag lets go of it, not the copy the drag began on', async () => {
         const { session } = await openLiveVault('- [ ] a @2026-10-01\n', s => { live = s; });
         const heard = listen(session);
         const row = session.index.getTasks()[0];
 
         session.index.setDraggingFile(NOTE);
         await session.index.updateTask(row.id, { startDate: '2026-10-02' });
-        // The copy the drag's end draws from (`DragSession.handleUp`).
-        expect(session.index.getTask(row.id)?.startDate).toBe('2026-10-02');
-        session.index.notifyImmediate(row.id, ['startDate', 'startTime', 'endDate', 'endTime']);
-        session.index.setDraggingFile(null);
-        await session.settle(NOTE);
+        // The write does not change the copy: the note is held.
+        expect(session.index.getTask(row.id)?.startDate).toBe('2026-10-01');
+        await session.index.setDraggingFile(null);
+        expect(session.index.getTasks()[0].startDate).toBe('2026-10-02');
+        session.index.notifyImmediate();
         await frame();
 
-        expect(heard).toEqual(['span startDate,startTime,endDate,endTime', 'full']);
+        expect(heard).toEqual(['full']);
     });
 });

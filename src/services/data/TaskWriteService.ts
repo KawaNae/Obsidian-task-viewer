@@ -24,9 +24,8 @@ export class TaskWriteService {
     // ===== Task CRUD =====
 
     /**
-     * @returns whether the file was written. A `false` means the update was
-     * reverted: the task still holds its former values, and a caller that
-     * reports the new ones would be reporting a change that never happened.
+     * @returns whether the file was written. The index's copy is not changed
+     * by the write: what it left comes in as the next reading.
      */
     async updateTask(taskId: string, updates: Partial<Task>): Promise<boolean> {
         return this.taskIndex.updateTask(taskId, updates);
@@ -170,8 +169,9 @@ export class TaskWriteService {
 
     // ===== Drag state control =====
 
-    setDraggingFile(filePath: string | null): void {
-        this.taskIndex.setDraggingFile(filePath);
+    /** Resolves once what was held back while dragging is read in (`TaskIndex.setDraggingFile`). */
+    setDraggingFile(filePath: string | null): Promise<void> {
+        return this.taskIndex.setDraggingFile(filePath);
     }
 
     notifyImmediate(taskId?: string, changes?: string[]): void {

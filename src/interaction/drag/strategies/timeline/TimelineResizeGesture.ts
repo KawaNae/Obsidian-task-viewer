@@ -205,8 +205,9 @@ export class TimelineResizeGesture extends BaseDragStrategy {
             };
 
         const plan: DragPlan = { edits, baseTask: originalTask };
-        // 書けなかったときも後続は同じ。拒否の通知と写しの巻き戻しは TaskIndex が、
-        // 伸ばした見た目の描き直しは DragSession.handleUp の notifyImmediate が行う。
+        // 書けなかったときも後続は同じ。拒否の通知は書き込みの層が、伸ばした
+        // 見た目の描き直しは DragSession.handleUp の、ノートを読み直したあとの
+        // 全体の描画が行う。
         await this.commitPlan(context, plan, this.dragTask.id);
         this.cleanup();
     }

@@ -6,11 +6,10 @@ import { formatRow } from '../../../src/services/parsing/TaskLineFormat';
 import { DEFAULT_STATUS_DEFINITIONS, type Task } from '../../../src/types';
 
 /**
- * Which values updateTask uses to find the line, and what it does when the
- * write reports that it found nothing.
- *
- * The two are related: the index is updated before the write, so a write that
- * cannot find its line leaves the index holding something the file never got.
+ * Which values updateTask uses to find the line, and what it leaves the
+ * index's copy: nothing changed, whether the write landed or not. What the
+ * write left comes in as the index's next reading (`landed`), and only that
+ * is told the views.
  */
 
 const proto = TaskIndex.prototype as any;
@@ -36,9 +35,8 @@ function buildHost(task: Task, written = true) {
         repository: {
             write: vi.fn(async () => ({ written, refused: null, fires: [] })),
         },
-        // The revert lives on the prototype; the host stands in for `this`.
-        revertUnwrittenUpdate: proto.revertUnwrittenUpdate,
         onRow: proto.onRow,
+        rowNow: proto.rowNow,
         writeUpdate: proto.writeUpdate,
         // The dispose guard every write goes through; this index is open.
         disposed: false,
@@ -75,7 +73,7 @@ describe('updateTask: which task resolves the line', () => {
         expect(op).toEqual({ kind: 'update', text: '- [x] ⏱️ 設計 @2026-08-14T11:00>11:30', childOps: [] });
     });
 
-    it('writes from the live task, planned from the snapshot', async () => {
+    it('writes the copy with the updates laid over it, planned from the copy', async () => {
         const task = makeTask({ content: 'x', startTime: '10:00', originalText: '- [ ] x @T10:00' });
         const host = buildHost(task);
 
@@ -83,64 +81,30 @@ describe('updateTask: which task resolves the line', () => {
 
         const [, target, [op]] = host.repository.write.mock.calls[0];
         expect(target.basis.text).toBe('- [ ] x @T10:00');
-        expect(op.text).toBe(formatRow(task));
-        expect(task.startTime).toBe('11:00');
+        expect(op.text).toBe(formatRow({ ...task, startTime: '11:00' }));
+        expect(task.startTime).toBe('10:00');
     });
 });
 
-describe('updateTask: when the write lands nowhere', () => {
-    it('puts the touched fields back', async () => {
-        const task = makeTask({ content: 'x', startTime: '10:00', statusChar: ' ' });
-        const host = buildHost(task, false);
+describe('updateTask: the index\'s copy', () => {
+    for (const written of [true, false]) {
+        it(`is left as it was, and nothing told, when the write ${written ? 'landed' : 'landed nowhere'}`, async () => {
+            const task = makeTask({ content: 'x', startTime: '10:00', statusChar: ' ' });
+            const host = buildHost(task, written);
+            const before = { ...task };
 
-        await proto.updateTask.call(host, task.id, { startTime: '11:00', statusChar: 'x' });
+            await proto.updateTask.call(host, task.id, { startTime: '11:00', statusChar: 'x', endTime: '12:00' });
 
-        expect(task.startTime).toBe('10:00');
-        expect(task.statusChar).toBe(' ');
-    });
-
-    it('drops a field the update introduced', async () => {
-        const task = makeTask({ content: 'x' });
-        const host = buildHost(task, false);
-
-        await proto.updateTask.call(host, task.id, { endTime: '12:00' });
-
-        expect(task.endTime).toBeUndefined();
-    });
-
-    it('leaves fields the update did not touch alone', async () => {
-        const task = makeTask({ content: 'x', startTime: '10:00', endTime: '10:30' });
-        const host = buildHost(task, false);
-
-        await proto.updateTask.call(host, task.id, { startTime: '11:00' });
-
-        expect(task.endTime).toBe('10:30');
-    });
-
-    it('notifies so the UI drops the value it briefly showed', async () => {
-        const task = makeTask({ content: 'x', startTime: '10:00' });
-        const host = buildHost(task, false);
-
-        await proto.updateTask.call(host, task.id, { startTime: '11:00' });
-
-        // Once for the optimistic update, once for the revert.
-        expect(host.store.notifyListeners).toHaveBeenCalledTimes(2);
-    });
-
-    it('keeps the update when the write succeeded', async () => {
-        const task = makeTask({ content: 'x', startTime: '10:00' });
-        const host = buildHost(task, true);
-
-        await proto.updateTask.call(host, task.id, { startTime: '11:00' });
-
-        expect(task.startTime).toBe('11:00');
-        expect(host.store.notifyListeners).toHaveBeenCalledTimes(1);
-    });
+            expect(task).toEqual(before);
+            expect(host.store.bumpRevision).not.toHaveBeenCalled();
+            expect(host.store.notifyListeners).not.toHaveBeenCalled();
+        });
+    }
 });
 
 /**
- * The answer updateTask gives its caller. The UI ignores it and keeps relying
- * on the revert and on the notice the write layer raises when it refuses (see
+ * The answer updateTask gives its caller. The UI mostly ignores it and relies
+ * on the notice the write layer raises when it refuses (see
  * `reportRefusal` below); the API turns a `false` into an error,
  * because a CLI that prints the new values after a write that never happened
  * is the only consumer that cannot see the notice.

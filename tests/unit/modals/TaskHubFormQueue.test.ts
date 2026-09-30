@@ -5,7 +5,8 @@ import type { Task } from '../../../src/types';
 
 /**
  * ハブの即時コミット（`queue`）は、ローカルの model を先に書き換えてから
- * updateTask を投げる。書けなかったら、index が戻した写し
+ * updateTask を投げる。続けて投げた書き込みの順は操作の層の行ごとの列が
+ * 守る（`onRow`。Names.vault.test.ts）ので、フォームは並べない。書けなかったら、index が戻した写し
  * （`readService.getTask`）で refresh し、楽観更新を捨てる。書けたなら echo を
  * 待つだけで、ここでは refresh しない。
  *
@@ -22,14 +23,14 @@ function formAnswering(written: boolean, fresh: Task | undefined) {
     const form = Object.create(TaskHubForm.prototype) as TaskHubForm & Record<string, unknown>;
     Object.assign(form, {
         task,
-        commitChain: Promise.resolve(),
+        writing: new Set(),
         deps: { writeService: { updateTask }, readService: { getTask } },
         refresh,
     });
 
     const queue = (updates: Partial<Task> | null) =>
         (form as unknown as { queue(u: Partial<Task> | null): void }).queue(updates);
-    const drained = () => form.commitChain as Promise<void>;
+    const drained = () => form.drained();
     return { form, queue, drained, updateTask, getTask, refresh };
 }
 
@@ -71,18 +72,23 @@ describe('TaskHubForm.queue', () => {
 });
 
 describe('TaskHubForm.drained', () => {
-    it('resolves once every write queued is done, those queued while it waits too', async () => {
+    it('resolves once every write asked is answered, those asked while it waits too', async () => {
         const h = formAnswering(true, makeTask({ id: 'task-1' }));
         const order: string[] = [];
         let release!: () => void;
         h.updateTask.mockImplementationOnce(async () => { await new Promise<void>(resolve => { release = resolve; }); order.push('first'); return true; });
-        h.updateTask.mockImplementationOnce(async () => { order.push('second'); return true; });
+        let releaseSecond!: () => void;
+        h.updateTask.mockImplementationOnce(async () => { await new Promise<void>(resolve => { releaseSecond = resolve; }); order.push('second'); return true; });
 
         h.queue({ content: 'A' });
         const drained = h.form.drained().then(() => { order.push('drained'); });
         await Promise.resolve();
         h.queue({ content: 'B' });
+        // Both are asked at once: the order is the operations' to keep.
+        expect(h.updateTask).toHaveBeenCalledTimes(2);
         release();
+        await Promise.resolve();
+        releaseSecond();
         await drained;
 
         expect(order).toEqual(['first', 'second', 'drained']);

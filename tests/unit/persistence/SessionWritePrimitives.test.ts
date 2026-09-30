@@ -227,6 +227,7 @@ function buildIndexHost(task: Task | undefined) {
         },
         withNotify: vi.fn(async (_file: string, fn: () => Promise<unknown>) => await fn()),
         onRow: proto.onRow,
+        rowNow: proto.rowNow,
         // The dispose guard every write goes through; this index is open.
         disposed: false,
         refuseAfterDispose: proto.refuseAfterDispose,
