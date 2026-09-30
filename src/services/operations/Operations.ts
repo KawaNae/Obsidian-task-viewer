@@ -22,6 +22,9 @@ import { Block } from '../persistence/utils/Placement';
 import type { SendTo } from '../persistence/writers/SendWriter';
 import type { OnDisk } from '../core/ReadingCheck';
 import { outermostRows } from '../persistence/writers/SendRows';
+import { openPeriodicNote, putInPeriodicNote } from '../persistence/Notes';
+import { saveTemplateNote } from '../template/TemplateNote';
+import { dailyNotes, type PeriodicNote } from '../../utils/PeriodicNotes';
 
 /**
  * A row looked up by its anchor in a reading of the note as the disk holds it
@@ -820,10 +823,51 @@ export class Operations {
         return (await this.repository.setFrontmatterKeys(filePath, updates)).written;
     }
 
+    // ===== ノートの書き込み =====
+
     /**
-     * Where a write to a file made outside the repository reports what it
-     * did — the daily note's heading insert, for one. Undefined once these
-     * operations are taken down. Bound, so a writer is handed it as it is.
+     * Put `line` under the task section (`Destination.taskSection`) of the
+     * daily note of `date` (`YYYY-MM-DD`), the note made of its template with
+     * the line in it when it is not there, in one write (`putInPeriodicNote`):
+     * a task a view's create dialog makes, a timer's first record.
+     *
+     * @returns the path of the note written, or null when it was not, the
+     * reason told the user once.
      */
-    readonly writeChannel: WriteChannels = (filePath) => this.repository.channelOf(filePath);
+    async putInDailyNote(date: string, line: string): Promise<string | null> {
+        if (this.refuseAfterDispose('putInDailyNote')) return null;
+        return putInPeriodicNote(this.app, dailyNotes(this.app), date, line, Destination.taskSection(this.settings), this.channels);
+    }
+
+    /**
+     * The periodic note `desc` names for `date` (`YYYY-MM-DD`), made of its
+     * template when it is not there (`openPeriodicNote`): what a view opens
+     * when a date, a week, a month or a year is clicked. Null when it could
+     * not be made, the reason told the user once.
+     */
+    async openPeriodicNote(desc: PeriodicNote, date: string): Promise<TFile | null> {
+        if (this.refuseAfterDispose('openPeriodicNote')) return null;
+        return openPeriodicNote(this.app, desc, date, this.channels);
+    }
+
+    /**
+     * Save `content` as the template note at `path`, over the note there or
+     * made (`TemplateNote.saveTemplateNote`): a view's template, an interval
+     * timer's. A whole note, not a row: it plans from no copy. `name` is what
+     * the note is about, for a refusal.
+     *
+     * @returns the note, or null when it was not written, the reason told the
+     * user once.
+     */
+    async saveTemplateNote(path: string, name: string, content: string): Promise<TFile | null> {
+        if (this.refuseAfterDispose('saveTemplateNote')) return null;
+        return saveTemplateNote(this.app, path, this.channels(path), name, content);
+    }
+
+    /**
+     * Where a write made here outside the repository — a note put together
+     * whole — reports what it did. Undefined once these operations are taken
+     * down. It does not leave the operations: a consumer asks for the write.
+     */
+    private readonly channels: WriteChannels = (filePath) => this.repository.channelOf(filePath);
 }

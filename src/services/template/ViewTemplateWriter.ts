@@ -9,15 +9,13 @@
  * logic lives here.
  */
 
-import type { App, TFile } from 'obsidian';
+import type { TFile } from 'obsidian';
 import type { ViewTemplate } from '../../types';
-import type { WriteChannel } from '../persistence/FileLines';
-import { saveTemplateNote, templateNoteContent, templateNotePath, yamlQuoted } from './TemplateNote';
+import { templateNoteContent, templateNotePath, yamlQuoted, type TemplateNoteSaver } from './TemplateNote';
 
 export class ViewTemplateWriter {
     constructor(
-        private app: App,
-        private channelFor: (path: string) => WriteChannel | undefined,
+        private notes: TemplateNoteSaver,
     ) {}
 
     /**
@@ -29,7 +27,7 @@ export class ViewTemplateWriter {
      */
     async saveTemplate(folderPath: string, template: ViewTemplate): Promise<TFile | null> {
         const filePath = templateNotePath(folderPath, template.name);
-        return saveTemplateNote(this.app, filePath, this.channelFor(filePath), template.name, this.buildFileContent(template));
+        return this.notes.saveTemplateNote(filePath, template.name, this.buildFileContent(template));
     }
 
     private buildFileContent(template: ViewTemplate): string {

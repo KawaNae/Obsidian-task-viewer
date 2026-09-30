@@ -1,8 +1,7 @@
 import type { App } from 'obsidian';
 import type { TaskViewerSettings } from '../../types';
-import type { WriteChannels } from '../../services/persistence/FileLines';
 import { linkTarget, periodicNotes } from '../../utils/PeriodicNotes';
-import { openPeriodicNoteInLeaf } from '../sharedLogic/OpenPeriodicNote';
+import { openPeriodicNoteInLeaf, type PeriodicNoteOpener } from '../sharedLogic/OpenPeriodicNote';
 import type { TaskLinkInteractionManager } from '../taskcard/TaskLinkInteractionManager';
 import type { TaskViewHoverParent } from '../taskcard/TaskViewHoverParent';
 import { TASK_VIEWER_HOVER_SOURCE_ID } from '../../constants/hover';
@@ -15,8 +14,8 @@ function firstOf(year: number, month: number): string {
 export interface DateLabelDeps {
     app: App;
     getSettings: () => TaskViewerSettings;
-    /** Where the making of a year's or month's note reports (`Operations.writeChannel`). */
-    writeChannel: WriteChannels;
+    /** What opens, or makes, a year's or month's note (`Operations.openPeriodicNote`). */
+    notes: PeriodicNoteOpener;
     linkInteractionManager: TaskLinkInteractionManager;
     hoverParent: TaskViewHoverParent;
 }
@@ -44,11 +43,11 @@ export class DateLabel {
         const monthLink = monthWrapper.createEl('a', { cls: 'internal-link' });
 
         yearWrapper.addEventListener('click', () => {
-            void openPeriodicNoteInLeaf(deps.app, periodicNotes(deps.getSettings(), 'yearly'), firstOf(currentYear, 0), deps.writeChannel);
+            void openPeriodicNoteInLeaf(deps.app, deps.notes, periodicNotes(deps.getSettings(), 'yearly'), firstOf(currentYear, 0));
         });
 
         monthWrapper.addEventListener('click', () => {
-            void openPeriodicNoteInLeaf(deps.app, periodicNotes(deps.getSettings(), 'monthly'), firstOf(currentYear, currentMonth), deps.writeChannel);
+            void openPeriodicNoteInLeaf(deps.app, deps.notes, periodicNotes(deps.getSettings(), 'monthly'), firstOf(currentYear, currentMonth));
         });
 
         const update = (year: number, month: number) => {

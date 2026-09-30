@@ -103,7 +103,7 @@ function makeHarness(options: { tail?: Task | undefined; siblingFails?: boolean 
     const storageUtils = {
         generateTimerTargetId: () => NEW_BLOCK_ID,
     } as unknown as TimerStorageUtils;
-    const recorder = new TimerRecorder({} as App, plugin, storageUtils, () => { /* unused */ }, () => []);
+    const recorder = new TimerRecorder(plugin, storageUtils, () => { /* unused */ }, () => []);
 
     return { recorder, siblingInserts, childInserts, updates, deletes };
 }

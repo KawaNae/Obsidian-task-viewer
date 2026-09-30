@@ -77,7 +77,7 @@ function harness(opts: { tailIsTarget: boolean; found: boolean; owned: string[];
     } as unknown as TaskViewerPlugin;
     const timer = makeTimer({ tailRecordBlockId: tailBlockId, timerTargetId: ANCHOR, ownedAnchors: opts.owned });
     const others = (opts.others ?? []).map((o, i) => makeTimer({ id: `other-${i}`, ...o }));
-    const recorder = new TimerRecorder({} as App, plugin, {} as TimerStorageUtils, () => { /* unused */ }, () => [timer, ...others]);
+    const recorder = new TimerRecorder(plugin, {} as TimerStorageUtils, () => { /* unused */ }, () => [timer, ...others]);
     return { recorder, timer, updateTask, getTaskByAnchor };
 }
 

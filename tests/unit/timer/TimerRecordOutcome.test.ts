@@ -78,7 +78,7 @@ function makeHarness(options: Options = {}) {
     } as unknown as TaskViewerPlugin;
 
     const storageUtils = { generateTimerTargetId: () => 'tv-timer-2' } as unknown as TimerStorageUtils;
-    const recorder = new TimerRecorder({} as App, plugin, storageUtils, () => { /* unused */ }, () => []);
+    const recorder = new TimerRecorder(plugin, storageUtils, () => { /* unused */ }, () => []);
 
     return { recorder, inserted, updates };
 }

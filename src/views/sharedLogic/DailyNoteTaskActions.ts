@@ -14,9 +14,6 @@ import type { PluginContext } from '../../PluginContext';
 import type { TimerHost } from '../../timer/TimerWidget';
 import { CreateTaskModal } from '../../modals/CreateTaskModal';
 import { formatTaskLine } from '../../services/parsing/TaskLineFormat';
-import { Destination } from '../../services/persistence/Destination';
-import { putInPeriodicNote } from '../../services/persistence/Notes';
-import { dailyNotes } from '../../utils/PeriodicNotes';
 
 export type DailyNoteTimerType = 'pomodoro' | 'countup';
 
@@ -58,14 +55,7 @@ export function openCreateTaskForDailyNote(
             // `date` is the file's day (the visual column), which is not always
             // the task's own start date — a click past midnight seeds the next
             // day while still belonging to this column's note.
-            await putInPeriodicNote(
-                plugin.app,
-                dailyNotes(plugin.app),
-                date,
-                taskLine,
-                Destination.taskSection(plugin.settings),
-                plugin.getOperations().writeChannel,
-            );
+            await plugin.getOperations().putInDailyNote(date, taskLine);
         },
         seed,
         { warnOnEmptyTask: true, dailyNoteDate: date, startHour: plugin.settings.startHour },

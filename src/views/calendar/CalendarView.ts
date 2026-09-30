@@ -752,7 +752,7 @@ export class CalendarView extends ItemView {
         dateLink.setAttribute('href', dayTarget);
         dateLink.addEventListener('click', (event: MouseEvent) => {
             event.preventDefault();
-            void openPeriodicNoteInLeaf(this.app, dailyNotes(this.app), dateKey, this.plugin.getOperations().writeChannel);
+            void openPeriodicNoteInLeaf(this.app, this.plugin.getOperations(), dailyNotes(this.app), dateKey);
         });
 
         this.linkInteractionManager.bind(cell, {
@@ -950,7 +950,7 @@ export class CalendarView extends ItemView {
             hoverParent: this.hoverParent,
         }, { bindClick: false });
         weekNumberEl.addEventListener('click', () => {
-            void openPeriodicNoteInLeaf(this.app, periodicNotes(this.plugin.settings, 'weekly'), DateUtils.getLocalDateString(weekStartDate), this.plugin.getOperations().writeChannel);
+            void openPeriodicNoteInLeaf(this.app, this.plugin.getOperations(), periodicNotes(this.plugin.settings, 'weekly'), DateUtils.getLocalDateString(weekStartDate));
         });
     }
 

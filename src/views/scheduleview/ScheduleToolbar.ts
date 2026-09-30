@@ -75,7 +75,7 @@ export class ScheduleToolbar extends ViewToolbarBase {
         const dateLabelDeps = {
             app: deps.app,
             getSettings: () => deps.plugin.settings,
-            writeChannel: deps.plugin.getOperations().writeChannel,
+            notes: deps.plugin.getOperations(),
             linkInteractionManager: deps.linkInteractionManager,
             hoverParent: deps.hoverParent,
         };
@@ -149,7 +149,7 @@ export class ScheduleToolbar extends ViewToolbarBase {
             }),
             viewType: VIEW_META_SCHEDULE.type,
             getViewTemplateFolder: () => deps.plugin.settings.viewTemplateFolder,
-            writeChannel: deps.plugin.getOperations().writeChannel,
+            templateNotes: deps.plugin.getOperations(),
             getViewTemplate: () => ({
                 filePath: '',
                 name: deps.getCustomName() || VIEW_META_SCHEDULE.displayText,
