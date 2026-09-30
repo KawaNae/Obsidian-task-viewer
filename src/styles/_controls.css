@@ -29,6 +29,10 @@
  *   - 無効: 欄の全体を薄くする。薄くするのは枠を描く要素で、中身は重ねて
  *     薄くしない（Obsidian は input:disabled を薄くするので中身では戻す）
  *   - 不正: 枠と背景を赤に
+ * 角の丸みは入力欄の丸み（--input-radius）。何行にもなる中身を囲む枠は
+ * --block を付け、ブロックの丸み（--radius-m）にする。モバイルの
+ * --input-radius は 1行の高さに合わせて大きく、何行もの枠では角が最初と
+ * 最後の行の字にかかり、空の枠は楕円に見えるからである。
  */
 .tv-ctrl .tv-ctrl__text-input,
 .tv-ctrl .tv-ctrl__input-wrap {
@@ -36,6 +40,10 @@
     border-radius: var(--input-radius, var(--tv-radius-s));
     background: var(--tv-bg-input);
     min-width: 0;
+}
+
+.tv-ctrl .tv-ctrl__input-wrap--block {
+    border-radius: var(--radius-m);
 }
 
 .tv-ctrl .tv-ctrl__text-input:focus,
