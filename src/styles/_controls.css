@@ -17,64 +17,76 @@
  * `tv-ctrl tv-ctrl__suggest` を付けて自己完結させる。
  */
 
-/* --- Text input (bordered, standalone) --- */
-.tv-ctrl .tv-ctrl__text-input {
-    font-size: var(--font-ui-small);
-    padding: 4px 8px;
+/* --- Field: the box a value is typed in ---
+ *
+ * 入力欄の枠は2つの形で描く。
+ *   - text-input: input が自分で枠を描く
+ *   - input-wrap: 枠を描かない中身を囲んで枠を描く。中身は枠なしの input
+ *     （tv-ctrl__input）か、ソースの編集欄の CodeMirror のビュー（SourceEditor）
+ * 枠、フォーカス、無効、不正の見た目は、下の規則で両方の形に同じく当てる。
+ * 部品ごとに足さない。
+ *   - フォーカス: 枠をアクセントの色に。--glow ではさらに外側に光を足す
+ *   - 無効: 欄の全体を薄くする。薄くするのは枠を描く要素で、中身は重ねて
+ *     薄くしない（Obsidian は input:disabled を薄くするので中身では戻す）
+ *   - 不正: 枠と背景を赤に
+ */
+.tv-ctrl .tv-ctrl__text-input,
+.tv-ctrl .tv-ctrl__input-wrap {
     border: 1px solid var(--tv-border);
     border-radius: var(--input-radius, var(--tv-radius-s));
     background: var(--tv-bg-input);
-    color: var(--tv-text);
-    width: 100%;
     min-width: 0;
 }
 
-.tv-ctrl .tv-ctrl__text-input:focus {
+.tv-ctrl .tv-ctrl__text-input:focus,
+.tv-ctrl .tv-ctrl__input-wrap:focus-within {
     border-color: var(--tv-accent);
     outline: none;
+}
+
+.tv-ctrl .tv-ctrl__text-input--glow:focus,
+.tv-ctrl .tv-ctrl__input-wrap--glow:focus-within {
+    box-shadow: 0 0 0 2px var(--tv-accent-hover);
+}
+
+.tv-ctrl .tv-ctrl__text-input:disabled,
+.tv-ctrl .tv-ctrl__input-wrap:has(> .tv-ctrl__input:disabled) {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.tv-ctrl .tv-ctrl__input-wrap > .tv-ctrl__input:disabled {
+    opacity: 1;
+    cursor: not-allowed;
+}
+
+.tv-ctrl .tv-ctrl__text-input--invalid,
+.tv-ctrl .tv-ctrl__input-wrap--invalid {
+    border-color: var(--tv-text-danger) !important;
+    background-color: var(--tv-danger-bg-subtle);
+}
+
+/* --- Text input (the input draws the box) --- */
+.tv-ctrl .tv-ctrl__text-input {
+    font-size: var(--font-ui-small);
+    padding: 4px 8px;
+    color: var(--tv-text);
+    width: 100%;
 }
 
 .tv-ctrl .tv-ctrl__text-input::placeholder {
     color: var(--tv-text-faint);
 }
 
-.tv-ctrl .tv-ctrl__text-input:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
-}
-
-/* --- Text input modifiers --- */
 .tv-ctrl .tv-ctrl__text-input--md {
     padding: 8px 12px;
     font-size: 1em;
 }
 
-.tv-ctrl .tv-ctrl__text-input--glow:focus {
-    box-shadow: 0 0 0 2px var(--tv-accent-hover);
-}
-
-.tv-ctrl .tv-ctrl__text-input--invalid {
-    border-color: var(--tv-text-danger) !important;
-    background-color: var(--tv-danger-bg-subtle);
-}
-
-/* --- Input wrap (bordered container) + borderless inner input --- */
+/* --- Input wrap (the wrap draws the box) + borderless inner input --- */
 .tv-ctrl .tv-ctrl__input-wrap {
     display: flex;
     align-items: center;
-    border: 1px solid var(--tv-border);
-    border-radius: var(--input-radius, var(--tv-radius-s));
-    background: var(--tv-bg-input);
-    min-width: 0;
-}
-.tv-ctrl .tv-ctrl__input-wrap:focus-within {
-    border-color: var(--tv-accent);
-    outline: none;
-}
-
-/* glow は text-input と同じく modifier でオプトイン（focus 表現の統一） */
-.tv-ctrl .tv-ctrl__input-wrap--glow:focus-within {
-    box-shadow: 0 0 0 2px var(--tv-accent-hover);
 }
 
 .tv-ctrl .tv-ctrl__input {
