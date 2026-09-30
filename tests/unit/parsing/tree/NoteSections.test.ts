@@ -1,18 +1,62 @@
 import { describe, it, expect } from 'vitest';
-import { DocumentTreeBuilder } from '../../../../src/services/parsing/tree/DocumentTreeBuilder';
+import { NoteSections } from '../../../../src/services/parsing/tree/NoteSections';
+import { NoteTasks } from '../../../../src/services/parsing/tree/NoteTasks';
+import type { SectionNode } from '../../../../src/services/parsing/tree/Sections';
+import { Outline, type OutlineReading } from '../../../../src/services/parsing/utils/Outline';
+import { lineParsers } from '../../../../src/services/parsing/TaskParser';
+import { DEFAULT_SETTINGS, DEFAULT_SCOPE_KEYS, type Task } from '../../../../src/types';
 
-function buildFromBody(bodyLines: string[]): ReturnType<typeof DocumentTreeBuilder.build> {
-    return DocumentTreeBuilder.build('test.md', bodyLines, 0);
+interface Read {
+    sections: SectionNode[];
+    bodyStartLine: number;
+    outline: OutlineReading;
+    tasks: Task[];
 }
 
-function buildWithFrontmatter(lines: string[]): ReturnType<typeof DocumentTreeBuilder.build> {
-    // frontmatter: lines 0-2 (---, key: val, ---)
-    const bodyStart = lines.indexOf('---', 1) + 1;
-    return DocumentTreeBuilder.build('test.md', lines, bodyStart);
+function read(lines: string[]): Read {
+    const outline = Outline.read(lines);
+    const sections = NoteSections.read(outline);
+    const tasks = NoteTasks.extract(outline, sections, {
+        filePath: 'test.md', scopeKeys: DEFAULT_SCOPE_KEYS, parsers: lineParsers(DEFAULT_SETTINGS),
+    });
+    return { sections, bodyStartLine: outline.bodyStart, outline, tasks };
 }
 
-describe('DocumentTreeBuilder', () => {
-    describe('Pass 1: セクションツリー構築', () => {
+function buildFromBody(bodyLines: string[]): Read {
+    return read(bodyLines);
+}
+
+function buildWithFrontmatter(lines: string[]): Read {
+    return read(lines);
+}
+
+/** A row as these tests look at it: its line, its subtree's lines, and its child rows. */
+interface RowView {
+    line: number;
+    rawLine: string;
+    childRawLines: string[];
+    childRows: RowView[];
+}
+
+function view(doc: Read, task: Task): RowView {
+    const { lines } = doc.outline;
+    return {
+        line: task.line,
+        rawLine: lines[task.line],
+        childRawLines: lines.slice(task.line + 1, doc.outline.subtreeEnd(task.line)),
+        childRows: doc.tasks.filter(child => child.parentId === task.id).map(child => view(doc, child)),
+    };
+}
+
+/** The top-level rows whose innermost section is `section`. */
+function blocksOf(doc: Read, section: SectionNode): RowView[] {
+    return doc.tasks
+        .filter(task => task.parentId === undefined && NoteSections.at(doc.sections, task.line) === section)
+        .map(task => view(doc, task));
+}
+
+describe('NoteSections', () => {
+    describe('節の木', () => {
         it('見出しなし → 暗黙ルートセクション1つ', () => {
             const doc = buildFromBody([
                 '- [ ] task1 @2026-03-24',
@@ -156,16 +200,15 @@ describe('DocumentTreeBuilder', () => {
         });
     });
 
-    describe('Pass 2: ブロック分類', () => {
+    describe('節のタスクとプロパティ', () => {
         it('タスクブロックを検出', () => {
             const doc = buildFromBody([
                 '## Section',
                 '- [ ] task @2026-03-24',
             ]);
-            const blocks = doc.sections[0].blocks;
+            const blocks = blocksOf(doc, doc.sections[0]);
             expect(blocks).toHaveLength(1);
-            expect(blocks[0].type).toBe('task-block');
-            const tb = blocks[0] as any;
+            const tb = blocks[0];
             expect(tb.rawLine).toBe('- [ ] task @2026-03-24');
             expect(tb.line).toBe(1);
         });
@@ -176,7 +219,7 @@ describe('DocumentTreeBuilder', () => {
                 '    - [ ] child @2026-03-25',
                 '    - note:: something',
             ]);
-            const tb = doc.sections[0].blocks[0] as any;
+            const tb = blocksOf(doc, doc.sections[0])[0];
             expect(tb.childRawLines).toHaveLength(2);
             expect(tb.childRawLines[0]).toBe('    - [ ] child @2026-03-25');
             expect(tb.childRawLines[1]).toBe('    - note:: something');
@@ -192,9 +235,9 @@ describe('DocumentTreeBuilder', () => {
                 '```',
                 '- [ ] real task @2026-03-25',
             ]);
-            const blocks = doc.sections[0].blocks;
+            const blocks = blocksOf(doc, doc.sections[0]);
             expect(blocks).toHaveLength(1);
-            expect((blocks[0] as any).rawLine).toBe('- [ ] real task @2026-03-25');
+            expect(blocks[0].rawLine).toBe('- [ ] real task @2026-03-25');
         });
 
         it('フェンス内のチェックボックス風行を子タスクにしない（childRawLines には残る）', () => {
@@ -205,11 +248,11 @@ describe('DocumentTreeBuilder', () => {
                 '    ```',
                 '    - [ ] real child @2026-03-26',
             ]);
-            const tb = doc.sections[0].blocks[0] as any;
+            const tb = blocksOf(doc, doc.sections[0])[0];
             expect(tb.childRawLines).toHaveLength(4);
             expect(tb.childRawLines[1]).toBe('    - [ ] fenced sample @2026-03-25');
-            expect(tb.childTaskBlocks).toHaveLength(1);
-            expect(tb.childTaskBlocks[0].rawLine).toBe('    - [ ] real child @2026-03-26');
+            expect(tb.childRows).toHaveLength(1);
+            expect(tb.childRows[0].rawLine).toBe('    - [ ] real child @2026-03-26');
         });
 
         it('フェンス内のタスク行で lead area を打ち切らない', () => {
@@ -224,7 +267,7 @@ describe('DocumentTreeBuilder', () => {
             ]);
             const section = doc.sections[0];
             expect(section.propertyBlock!.entries.map(e => e.key)).toEqual(['tv-color', 'tags']);
-            expect(section.blocks).toHaveLength(1);
+            expect(blocksOf(doc, section)).toHaveLength(1);
         });
 
         // タブ字下げのフェンス。Obsidian の既定インデントはタブなので、
@@ -237,10 +280,10 @@ describe('DocumentTreeBuilder', () => {
                 '\t```',
                 '\t- [ ] real child @2026-03-26',
             ]);
-            const tb = doc.sections[0].blocks[0] as any;
+            const tb = blocksOf(doc, doc.sections[0])[0];
             expect(tb.childRawLines).toHaveLength(4);
-            expect(tb.childTaskBlocks).toHaveLength(1);
-            expect(tb.childTaskBlocks[0].rawLine).toBe('\t- [ ] real child @2026-03-26');
+            expect(tb.childRows).toHaveLength(1);
+            expect(tb.childRows[0].rawLine).toBe('\t- [ ] real child @2026-03-26');
         });
 
         it('チルダフェンスにも対応する', () => {
@@ -250,7 +293,7 @@ describe('DocumentTreeBuilder', () => {
                 '~~~',
                 '- [ ] real task @2026-03-24',
             ]);
-            expect(doc.sections[0].blocks).toHaveLength(1);
+            expect(blocksOf(doc, doc.sections[0])).toHaveLength(1);
         });
 
         it('子タスクブロックを再帰的に検出', () => {
@@ -259,10 +302,10 @@ describe('DocumentTreeBuilder', () => {
                 '    - [ ] child @2026-03-25',
                 '        - tv-color:: 333333',
             ]);
-            const tb = doc.sections[0].blocks[0] as any;
-            expect(tb.childTaskBlocks).toHaveLength(1);
-            expect(tb.childTaskBlocks[0].rawLine).toBe('    - [ ] child @2026-03-25');
-            expect(tb.childTaskBlocks[0].childRawLines).toHaveLength(1);
+            const tb = blocksOf(doc, doc.sections[0])[0];
+            expect(tb.childRows).toHaveLength(1);
+            expect(tb.childRows[0].rawLine).toBe('    - [ ] child @2026-03-25');
+            expect(tb.childRows[0].childRawLines).toHaveLength(1);
         });
 
         it('フラット形式のプロパティブロックを検出', () => {
@@ -331,8 +374,7 @@ describe('DocumentTreeBuilder', () => {
             expect(pb.entries).toHaveLength(1);
             expect(pb.entries[0].key).toBe('tv-color');
             // text/property 行は block にしない: タスクのみ
-            expect(doc.sections[0].blocks).toHaveLength(1);
-            expect(doc.sections[0].blocks[0].type).toBe('task-block');
+            expect(blocksOf(doc, doc.sections[0])).toHaveLength(1);
         });
 
         it('空行を挟んだプロパティも収集 (Markdown loose list)', () => {
@@ -428,8 +470,7 @@ describe('DocumentTreeBuilder', () => {
             ]);
             expect(doc.sections[0].propertyBlock).toBeNull();
             // text 行は block 化しない: タスクのみ
-            expect(doc.sections[0].blocks).toHaveLength(1);
-            expect(doc.sections[0].blocks[0].type).toBe('task-block');
+            expect(blocksOf(doc, doc.sections[0])).toHaveLength(1);
         });
 
         it('暗黙ルートで末尾の property は拾わない (タスク以降は遡及しない)', () => {
@@ -465,10 +506,10 @@ describe('DocumentTreeBuilder', () => {
             ]);
             const parent = doc.sections[0];
             const child = parent.children[0];
-            expect(parent.blocks).toHaveLength(1);
-            expect((parent.blocks[0] as any).rawLine).toBe('- [ ] parent-task @2026-03-24');
-            expect(child.blocks).toHaveLength(1);
-            expect((child.blocks[0] as any).rawLine).toBe('- [ ] child-task @2026-03-25');
+            expect(blocksOf(doc, parent)).toHaveLength(1);
+            expect(blocksOf(doc, parent)[0].rawLine).toBe('- [ ] parent-task @2026-03-24');
+            expect(blocksOf(doc, child)).toHaveLength(1);
+            expect(blocksOf(doc, child)[0].rawLine).toBe('- [ ] child-task @2026-03-25');
         });
 
         it('3段ネストでブロックが正しく分離（孫のプロパティが親に漏れない）', () => {
@@ -492,29 +533,29 @@ describe('DocumentTreeBuilder', () => {
             const risona = expenses.children[1];
 
             // Expenses 自身は 1 タスクのみ、propertyBlock なし
-            expect(expenses.blocks).toHaveLength(1);
-            expect((expenses.blocks[0] as any).rawLine).toContain('expense');
+            expect(blocksOf(doc, expenses)).toHaveLength(1);
+            expect(blocksOf(doc, expenses)[0].rawLine).toContain('expense');
             expect(expenses.propertyBlock).toBeNull();
 
             // EPOS 自身はタスクなし・プロパティなし
-            expect(epos.blocks).toHaveLength(0);
+            expect(blocksOf(doc, epos)).toHaveLength(0);
             expect(epos.propertyBlock).toBeNull();
 
             // #### 普通 に 1 タスク
-            expect(normal.blocks).toHaveLength(1);
-            expect((normal.blocks[0] as any).rawLine).toContain('normal');
+            expect(blocksOf(doc, normal)).toHaveLength(1);
+            expect(blocksOf(doc, normal)[0].rawLine).toContain('normal');
 
             // #### 特殊 に tags プロパティ + 1 タスク
             expect(special.propertyBlock).not.toBeNull();
             expect(special.propertyBlock!.entries[0].key).toBe('tags');
-            expect(special.blocks).toHaveLength(1);
-            expect((special.blocks[0] as any).rawLine).toContain('special');
+            expect(blocksOf(doc, special)).toHaveLength(1);
+            expect(blocksOf(doc, special)[0].rawLine).toContain('special');
 
             // ### りそな に tags プロパティ + 1 タスク
             expect(risona.propertyBlock).not.toBeNull();
             expect(risona.propertyBlock!.entries[0].key).toBe('tags');
-            expect(risona.blocks).toHaveLength(1);
-            expect((risona.blocks[0] as any).rawLine).toContain('risona');
+            expect(blocksOf(doc, risona)).toHaveLength(1);
+            expect(blocksOf(doc, risona)[0].rawLine).toContain('risona');
         });
     });
 
@@ -533,7 +574,7 @@ describe('DocumentTreeBuilder', () => {
             expect(doc.sections.map(s => s.heading && { level: s.heading.level, text: s.heading.text, line: s.heading.line }))
                 .toEqual([null, { level: 2, text: 'Setext', line: 2 }, { level: 2, text: 'Indented', line: 6 }]);
             expect(doc.sections[0].endLine).toBe(2);
-            expect(doc.sections[1].blocks.map(b => (b as any).rawLine)).toEqual(['- [ ] a @2026-03-24']);
+            expect(blocksOf(doc, doc.sections[1]).map(b => b.rawLine)).toEqual(['- [ ] a @2026-03-24']);
         });
 
         it('項目の中の見出しでは節を区切らない', () => {

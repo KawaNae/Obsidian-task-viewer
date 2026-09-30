@@ -1,4 +1,4 @@
-import { SCALAR_FIELDS, type DocumentNode, type ResolvedSources, type ScalarField, type SectionNode, type ValueSource } from './DocumentTree';
+import { SCALAR_FIELDS, type ResolvedSources, type ScalarField, type SectionNode, type ValueSource } from './Sections';
 import type { ScopeKeys, PropertyValue } from '../../../types';
 import { BuiltinPropertyExtractor, fieldKey, type ExtractedProperties } from './BuiltinPropertyExtractor';
 import { ChildLineClassifier } from '../utils/ChildLineClassifier';
@@ -28,14 +28,14 @@ const FRONTMATTER: ValueSource = Object.freeze({ kind: 'frontmatter' });
  */
 export class SectionPropertyResolver {
     static resolve(
-        doc: DocumentNode,
+        sections: readonly SectionNode[],
         frontmatter: Record<string, any> | undefined,
         keys: ScopeKeys
     ): void {
         const values = FilePropertyResolver.extract(frontmatter, keys);
         const root: Resolved = { values, sources: this.frontmatterSources(values) };
 
-        for (const section of doc.sections) {
+        for (const section of sections) {
             this.resolveSection(section, root, keys);
         }
     }

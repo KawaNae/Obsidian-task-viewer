@@ -1,14 +1,15 @@
 import { describe, it, expect } from 'vitest';
-import { DocumentTreeBuilder } from '../../../../src/services/parsing/tree/DocumentTreeBuilder';
+import { NoteSections } from '../../../../src/services/parsing/tree/NoteSections';
+import { Outline } from '../../../../src/services/parsing/utils/Outline';
 import { SectionPropertyResolver } from '../../../../src/services/parsing/tree/SectionPropertyResolver';
 import { DEFAULT_SCOPE_KEYS } from '../../../../src/types';
 
 const keys = DEFAULT_SCOPE_KEYS;
 
 function buildAndResolve(bodyLines: string[], frontmatter?: Record<string, any>) {
-    const doc = DocumentTreeBuilder.build('test.md', bodyLines, 0);
-    SectionPropertyResolver.resolve(doc, frontmatter, keys);
-    return doc;
+    const sections = NoteSections.read(Outline.read(bodyLines));
+    SectionPropertyResolver.resolve(sections, frontmatter, keys);
+    return { sections };
 }
 
 describe('SectionPropertyResolver', () => {
@@ -322,7 +323,7 @@ describe('SectionPropertyResolver の出所', () => {
     const at = (line: number, text: string | null, level = 2) => ({
         kind: 'section',
         line,
-        heading: text === null ? null : { level, text, line: expect.any(Number) },
+        heading: text === null ? null : { level, text, line: expect.any(Number), end: expect.any(Number) },
     });
 
     it('frontmatter だけ: 値はどれも frontmatter から', () => {

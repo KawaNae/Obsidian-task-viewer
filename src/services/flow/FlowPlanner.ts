@@ -522,7 +522,7 @@ function nextFlow(program: FlowProgram, originalFlow: TaskFlow): TaskFlow | unde
     const lines = serializeFlowLines(nextProgram, table);
     return {
         raw: lines.taskLine,
-        childSegments: lines.childLines.map(raw => ({ raw, bodyLine: -1 })),
+        childSegments: lines.childLines.map(raw => ({ raw })),
         program: nextProgram,
         diagnostics: [],
     };

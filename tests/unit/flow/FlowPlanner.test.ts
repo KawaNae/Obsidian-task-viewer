@@ -148,7 +148,7 @@ describe('FlowPlanner', () => {
             expect(newTask.flow?.raw).toBe('every mon');
             // canonical within line: xN (decremented) before setter
             expect(newTask.flow?.childSegments.map(s => s.raw)).toEqual(['x2 setDue(start + 3d)']);
-            expect(newTask.flow?.childSegments[0].bodyLine).toBe(-1);
+            expect(newTask.flow?.childSegments[0].bodyLine).toBeUndefined();
         });
 
         it('supports flows living only in child lines (empty task-line segment)', () => {

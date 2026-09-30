@@ -1,8 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import type { App } from 'obsidian';
 import { Outline } from '../../../src/services/parsing/utils/Outline';
-import { DocumentTreeBuilder } from '../../../src/services/parsing/tree/DocumentTreeBuilder';
-import type { SectionNode, TaskBlock } from '../../../src/services/parsing/tree/DocumentTree';
 import { FileParsePipeline } from '../../../src/services/parsing/FileParsePipeline';
 import { FileOperations } from '../../../src/services/persistence/utils/FileOperations';
 import { DEFAULT_SETTINGS } from '../../../src/types';
@@ -33,20 +31,12 @@ describe('Outline.depthOf', () => {
     });
 });
 
-/** Every task block of the note, nested ones included. */
-function blocksOf(lines: string[]): TaskBlock[] {
-    const doc = DocumentTreeBuilder.build('note.md', lines, Outline.bodyStart(lines));
-    const out: TaskBlock[] = [];
-    const walkBlock = (block: TaskBlock) => {
-        out.push(block);
-        block.childTaskBlocks.forEach(walkBlock);
-    };
-    const walkSection = (section: SectionNode) => {
-        for (const block of section.blocks) if (block.type === 'task-block') walkBlock(block);
-        section.children.forEach(walkSection);
-    };
-    doc.sections.forEach(walkSection);
-    return out;
+/** Every row of the note, nested ones included, with the lines of its subtree below it as the parse reads them. */
+function rowsOf(lines: string[]): { line: number; childLineNumbers: number[] }[] {
+    return FileParsePipeline.parse('note.md', lines, DEFAULT_SETTINGS).tasks.map(task => ({
+        line: task.line,
+        childLineNumbers: (task.subtreeLines ?? []).slice(1).map((_, i) => task.line + 1 + i),
+    }));
 }
 
 /**
@@ -190,7 +180,7 @@ describe('the write and the parser agree on every subtree', () => {
     for (const [name, lines] of SHAPES) {
         it(name, () => {
             const ops = new FileOperations({} as App);
-            const blocks = blocksOf([...lines]);
+            const blocks = rowsOf([...lines]);
             expect(blocks.length).toBeGreaterThan(0);
             for (const block of blocks) {
                 const { childrenLines } = ops.collectChildrenFromLines(Outline.read([...lines]), block.line);

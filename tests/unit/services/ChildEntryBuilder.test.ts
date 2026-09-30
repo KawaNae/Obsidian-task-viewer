@@ -1,7 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import { buildChildEntries } from '../../../src/services/data/ChildEntryBuilder';
 import { makeTask } from '../helpers/makeTask';
-import type { Task, ChildLine } from '../../../src/types';
+import { FileParsePipeline } from '../../../src/services/parsing/FileParsePipeline';
+import { DEFAULT_SETTINGS, type Task, type ChildLine } from '../../../src/types';
 
 const plainCl = (text: string, bodyLine: number): ChildLine => ({
     text,
@@ -48,87 +49,25 @@ describe('buildChildEntries', () => {
         expect(entries.every(e => e.kind === 'task')).toBe(true);
     });
 
-    it('drops plain entries whose bodyLine is in a sibling tasks subtree', () => {
-        const parent = makeTask({
-            id: 'p',
-            line: 4,
-            childIds: ['c1'],
-            childLines: [
-                plainCl('- a', 5),  // line 5: this is c1's own line
-                plainCl('- b', 6),  // line 6: child of c1
-                plainCl('- c', 7),  // line 7: not in any subtree
-            ],
-        });
-        const c1 = makeTask({
-            id: 'c1',
-            parserId: 'tv-inline',
-            line: 5,
-            childIds: [],
-            childLines: [plainCl('- b', 6)],
-        });
-        const lookup = (id: string): Task | undefined => id === 'c1' ? c1 : undefined;
-        const entries = buildChildEntries(parent, lookup);
-        // line 5: replaced by 'task' entry for c1
-        // line 6: dropped (in c1's subtree)
-        // line 7: kept as 'plain'
+    // Every line is one task's at most: the extraction gives a child task's
+    // subtree, its own `- ==>` lines included, to the child and not to the
+    // parent (`NoteTasks`), so the entries only merge what it read.
+    it('shows a child task once, and none of its subtree or its flow lines as the parent\'s lines', () => {
+        const lines = [
+            '- [ ] p',                 // 0
+            '    - [ ] a',             // 1: a child task
+            '        - b',             // 2: a's line
+            '        - ==> every mon', // 3: a's flow line
+            '    - c',                 // 4: p's own line
+        ];
+        const { tasks } = FileParsePipeline.parse('A.md', lines, DEFAULT_SETTINGS);
+        const byId = new Map(tasks.map(task => [task.id, task]));
+        const parent = tasks.find(task => task.line === 0)!;
+        const entries = buildChildEntries(parent, id => byId.get(id));
         expect(entries.map(e => ({ kind: e.kind, bodyLine: e.bodyLine }))).toEqual([
-            { kind: 'task', bodyLine: 5 },
-            { kind: 'line', bodyLine: 7 },
+            { kind: 'task', bodyLine: 1 },
+            { kind: 'line', bodyLine: 4 },
         ]);
-    });
-
-    it('drops plain entries occupied by a sibling tasks flow child lines', () => {
-        // c1 owns a `- ==>` flow line at line 6; the extractor removes it
-        // from c1's childLines (it lives in flow.childSegments), but the
-        // parent must still treat it as c1's subtree line.
-        const parent = makeTask({
-            id: 'p',
-            line: 4,
-            childIds: ['c1'],
-            childLines: [
-                plainCl('- a', 5),               // line 5: c1's own line
-                plainCl('- ==> every mon', 6),   // line 6: c1's flow child line
-                plainCl('- c', 7),               // line 7: parent's own note
-            ],
-        });
-        const c1 = makeTask({
-            id: 'c1',
-            parserId: 'tv-inline',
-            line: 5,
-            childIds: [],
-            childLines: [],
-            flow: {
-                raw: '',
-                childSegments: [{ raw: 'every mon', bodyLine: 6 }],
-                program: null,
-                diagnostics: [],
-            },
-        });
-        const lookup = (id: string): Task | undefined => id === 'c1' ? c1 : undefined;
-        const entries = buildChildEntries(parent, lookup);
-        expect(entries.map(e => ({ kind: e.kind, bodyLine: e.bodyLine }))).toEqual([
-            { kind: 'task', bodyLine: 5 },
-            { kind: 'line', bodyLine: 7 },
-        ]);
-    });
-
-    it('keeps a plain entry whose bodyLine collides with a cross-file sibling subtree', () => {
-        // The parser never links across files any more; the file-qualified
-        // subtree keys stay as a guard. A child in B.md whose subtree occupies
-        // line 5 *in B.md* must not drop A.md's own line 5.
-        const parent = makeTask({
-            id: 'p', file: 'A.md', line: 4,
-            childIds: ['b'],
-            childLines: [plainCl('- note', 5)],
-        });
-        const b = makeTask({
-            id: 'b', file: 'B.md', line: 4,
-            childIds: [],
-            childLines: [plainCl('- sub', 5)],
-        });
-        const lookup = (id: string): Task | undefined => id === 'b' ? b : undefined;
-        const entries = buildChildEntries(parent, lookup);
-        expect(entries.some(e => e.kind === 'line' && e.bodyLine === 5)).toBe(true);
     });
 
     // A `- [[note]]` line links nowhere special: frontmatter makes no task
@@ -142,16 +81,6 @@ describe('buildChildEntries', () => {
         expect(entries).toHaveLength(1);
         expect(entries[0]).toMatchObject({ kind: 'line', bodyLine: 3 });
         expect(entries[0].kind === 'line' && entries[0].line.wikilinkTarget).toBe('Other');
-    });
-
-    it('skips childLines with invalid bodyLine (-1 sentinel)', () => {
-        const parent = makeTask({
-            childIds: [],
-            childLines: [plainCl('- a', 5), plainCl('- b', -1)],
-        });
-        const entries = buildChildEntries(parent, () => undefined);
-        expect(entries).toHaveLength(1);
-        expect(entries[0].bodyLine).toBe(5);
     });
 
     it('orders entries by bodyLine when tasks and plain interleave', () => {

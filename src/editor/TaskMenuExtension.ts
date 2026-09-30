@@ -177,8 +177,8 @@ export function createTaskMenuExtension(
         const widgets: { from: number; deco: Decoration }[] = [];
         const seen = new Set<number>();
         // A checkbox line in code, or one that opens no list item, is text,
-        // not a task — DocumentTreeBuilder reads it so from the same reading;
-        // this scan is independent of that tree (see the TaskLineClassifier
+        // not a task — the extraction (NoteTasks) reads it so from the same
+        // reading; this scan is independent of the extraction (see the TaskLineClassifier
         // import above), so it asks the reading itself.
         const outline = outlineFor(view.state.doc);
         // The key of what the editor shows, made once and only if asked.
