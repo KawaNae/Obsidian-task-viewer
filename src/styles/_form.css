@@ -1,6 +1,6 @@
 /* ======================================================
    Shared form widgets (tv-form__*)
-   TaskHubForm と CreateTaskModal（+ PickerTextField）が共有する
+   TaskHubForm、CreateTaskModal（+ PickerTextField）、SendModal が共有する
    フォーム部品。モーダル chrome は _modal.css、コントロール原子は
    _controls.css（tv-ctrl__*）。
    ====================================================== */
@@ -130,6 +130,48 @@
     font-size: var(--font-ui-small);
     font-weight: 600;
     color: var(--tv-text-muted);
+}
+
+/* セクション: 透明な面を区切り線で分ける（タスクハブ、送るダイアログ）。
+   最後のグループは区切り線なし。group の後ろに error / notice 要素が
+   並ぶため :last-child では届かない — 「後続に group がない group」で選ぶ */
+.tv-form .tv-form__group {
+    padding: 12px 0;
+    border-bottom: 1px solid var(--tv-border);
+}
+
+.tv-form .tv-form__group:not(:has(~ .tv-form__group)) {
+    border-bottom: none;
+}
+
+.tv-form .tv-form__group > :first-child {
+    margin-top: 0;
+}
+
+.tv-form .tv-form__group > .tv-form__name-section {
+    margin-bottom: 0;
+}
+
+/* 下書きを持つフォームのボタン行（ハブのソース、送るダイアログ）: 末尾に
+   キャンセルと確定。下書きを捨てるか問うときは、問いと「捨てる」が先頭に
+   入り、「捨てる」が残りを末尾へ押す — 手の行くボタンから離しておく */
+.tv-form__buttons {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 8px;
+    font-size: var(--font-ui-small);
+}
+
+.tv-form__discard {
+    margin-inline-end: auto;
+}
+
+/* phone では問い・捨てる・戻る・確定が1行に入らず、成り行きの折り返しでは
+   「捨てる」が「戻る」の上に来る。問いに1行を与え、「捨てる」は次の行の先頭に置く */
+.is-phone .tv-form__ask {
+    flex-basis: 100%;
 }
 
 .tv-form__input-with-picker {
