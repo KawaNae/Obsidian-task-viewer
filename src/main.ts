@@ -307,7 +307,9 @@ export default class TaskViewerPlugin extends Plugin {
             }
         });
 
-        // Opens the date picker of the focused Timeline / Schedule / Calendar.
+        // Opens the date picker of the focused Timeline / Schedule / Calendar,
+        // as its "Go to date" button does. It opens it with showPicker(),
+        // which iOS refuses: there, only a tap on the button opens it.
         this.addCommand({
             id: 'go-to-date',
             name: t('command.goToDate'),

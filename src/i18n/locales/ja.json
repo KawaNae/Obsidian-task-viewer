@@ -274,6 +274,7 @@
   "toolbar": {
     "today": "今日",
     "todayOrPickDate": "クリックで今日、ダブルクリックで日付を指定",
+    "goToDate": "日付へ移動",
     "previousDay": "前日",
     "nextDay": "翌日",
     "previousWeek": "前週",

@@ -1,0 +1,68 @@
+/**
+ * The platform's own picker (`<input type="date|time|color">`), laid unseen
+ * over the button that stands for it. The forms' date, time and color fields
+ * (PickerTextField) and the toolbar's "Go to date" button use it.
+ *
+ * One layout serves every platform; only what takes the tap differs, and CSS
+ * decides that (`input.tv-native-picker` in _controls.css):
+ * - Desktop: the input lets the pointer through. The button takes the click
+ *   and opens the picker with `showPicker()`.
+ * - Mobile (`.is-mobile`): the input takes the tap itself. iOS and iPadOS
+ *   refuse `showPicker()` (WebKit Bug #261703) and open the picker only for
+ *   a tap on the input, so the tap has to land on it.
+ *
+ * The parent must be the positioned box the input covers; the caller's CSS
+ * gives the input its place in it.
+ */
+export interface NativePicker {
+    readonly input: HTMLInputElement;
+    /**
+     * Open the picker without a tap on it: from the button, or from elsewhere
+     * (a command, a double-click). On iOS this can do nothing, for want of
+     * `showPicker()`.
+     */
+    open(): void;
+}
+
+export interface NativePickerOptions {
+    type: 'date' | 'time' | 'color';
+    /** Classes added to the input, for the caller's CSS to place it. */
+    cls: string;
+    /** Called just before the picker opens, by any path: to set the value it opens on. */
+    beforeOpen?: () => void;
+}
+
+export function createNativePicker(
+    parent: HTMLElement,
+    button: HTMLButtonElement,
+    opts: NativePickerOptions,
+): NativePicker {
+    const input = parent.createEl('input', { cls: `tv-native-picker ${opts.cls}`, type: opts.type });
+    // The keyboard reaches the picker through the button, so the input stays
+    // out of the tab order and out of what a screen reader reads.
+    input.tabIndex = -1;
+    input.setAttribute('aria-hidden', 'true');
+
+    const open = () => {
+        opts.beforeOpen?.();
+        try {
+            input.showPicker();
+        } catch {
+            // showPicker wants a user gesture and a recent engine; failing
+            // that, the best left is to hand the input a click.
+            input.focus();
+            input.click();
+        }
+    };
+    button.addEventListener('click', open);
+
+    // A tap on the input (mobile). pointerdown comes before the picker reads
+    // the value. Android opens the picker with showPicker; on iOS the tap has
+    // already opened it and showPicker throws.
+    if (opts.beforeOpen) input.addEventListener('pointerdown', opts.beforeOpen);
+    input.addEventListener('click', () => {
+        try { input.showPicker(); } catch { /* iOS: the tap opened it */ }
+    });
+
+    return { input, open };
+}

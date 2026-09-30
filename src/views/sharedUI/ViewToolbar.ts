@@ -13,6 +13,7 @@ import { exportDescriptorFor, resolveExportContainer } from '../../services/expo
 import { buildExportFilename } from '../../services/export/ExportFilename';
 import type { MenuPresenter } from '../../interaction/menu/MenuPresenter';
 import { viewContentEl } from '../../utils/ObsidianView';
+import { createNativePicker } from './NativePicker';
 import type { WriteChannel } from '../../services/persistence/FileLines';
 
 /**
@@ -97,8 +98,8 @@ export interface DateNavigatorHandle {
 
 /**
  * Date navigation component with prev/next/today buttons. With `dateJump`, a
- * double-click on Today opens the platform's native date picker to jump to
- * any date.
+ * "Go to date" button, and a double-click on Today, open the platform's
+ * native date picker to jump to any date.
  */
 export class DateNavigator {
     /**
@@ -106,7 +107,7 @@ export class DateNavigator {
      * @param toolbar - Parent element to render into
      * @param onNavigate - Callback when navigating by days (e.g., -1 or +1)
      * @param onToday - Callback when clicking Now button
-     * @param options.dateJump - Makes a double-click on Today open the picker.
+     * @param options.dateJump - Adds the "Go to date" button; a double-click on Today opens it too.
      */
     static render(
         toolbar: HTMLElement,
@@ -164,49 +165,33 @@ export class DateNavigator {
 
         if (!options?.dateJump) return { openDatePicker: () => {} };
 
-        // The picker is a hidden <input type="date"> laid under Today, so the
-        // native popup opens there. It sits in the document body, not the
-        // toolbar: views detach the toolbar on every render, and taking the
-        // input out of the document closes its popup. It lives from one
-        // opening to the next, as a cancel leaves no event to clean up on.
+        // "Go to date": a button whose picker lies over it (NativePicker), so
+        // a tap on it opens the picker on every platform, iOS included. It
+        // stays in the navigator, outside the action zone that compact mode
+        // folds into ⋮: from a menu item, iOS could not open the picker.
+        const { getCurrentDate, onJump } = options.dateJump;
+        const jumpBox = navGroup.createSpan('view-toolbar__date-jump');
+        const jumpBtn = jumpBox.createEl('button', { cls: 'view-toolbar__btn--icon' });
+        setIcon(jumpBtn, 'calendar-search');
+        jumpBtn.setAttribute('aria-label', t('toolbar.goToDate'));
+        const picker = createNativePicker(jumpBox, jumpBtn, {
+            type: 'date',
+            cls: 'view-toolbar__date-picker',
+            beforeOpen: () => { picker.input.value = getCurrentDate(); },
+        });
+        // Fires only for a new date: cancel, or confirming the date the view
+        // is already on, leaves it alone. Clearing gives '', ignored.
+        picker.input.addEventListener('change', () => {
+            if (picker.input.value) onJump(picker.input.value);
+        });
+
         // Today keeps its single click as is, with no wait to tell a double
         // click apart: both clicks of a double click go to today, and the
-        // dblclick that follows opens the picker.
-        const { getCurrentDate, onJump } = options.dateJump;
-        let dateInput: HTMLInputElement | null = null;
-        const openPicker = () => {
-            dateInput?.remove();
-            const input = todayBtn.ownerDocument.body.createEl('input', {
-                cls: 'view-toolbar__date-input',
-                type: 'date',
-            });
-            dateInput = input;
-            input.tabIndex = -1;
-            input.setAttribute('aria-hidden', 'true');
-            const rect = todayBtn.getBoundingClientRect();
-            input.setCssStyles({
-                left: `${rect.left}px`,
-                top: `${rect.bottom}px`,
-                width: `${rect.width}px`,
-            });
-            input.value = getCurrentDate();
-            // Fires only for a new date: cancel, or confirming the date the
-            // view is already on, leaves it alone. Clearing gives '', ignored.
-            input.addEventListener('change', () => {
-                if (input.value) onJump(input.value);
-            });
-            try {
-                input.showPicker();
-            } catch {
-                // showPicker wants a user gesture and a recent engine; failing
-                // that, the best left is to hand the input a click.
-                input.focus();
-                input.click();
-            }
-        };
-        todayBtn.ondblclick = openPicker;
+        // dblclick that follows opens the picker. Like the command, this
+        // opens it with showPicker(), which iOS refuses.
+        todayBtn.ondblclick = () => picker.open();
 
-        return { openDatePicker: openPicker };
+        return { openDatePicker: () => picker.open() };
     }
 }
 

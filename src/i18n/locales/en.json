@@ -274,6 +274,7 @@
   "toolbar": {
     "today": "Today",
     "todayOrPickDate": "Click for today, double-click to pick a date",
+    "goToDate": "Go to date",
     "previousDay": "Previous day",
     "nextDay": "Next day",
     "previousWeek": "Previous week",

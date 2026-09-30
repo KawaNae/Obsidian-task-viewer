@@ -1,5 +1,6 @@
 import { setIcon } from 'obsidian';
 import { t } from '../../i18n';
+import { createNativePicker } from '../../views/sharedUI/NativePicker';
 
 export type PickerType = 'date' | 'time' | 'color';
 
@@ -22,7 +23,7 @@ export interface PickerTextFieldOptions {
  *
  * 構造:
  * - 左端: ピッカーのボタン。その上に透明なネイティブの input が重なり、
- *   iPad ではそれが直接タップを受ける（WebKit Bug #261703）
+ *   モバイルではそれが直接タップを受ける（{@link createNativePicker}）
  * - 中央: テキストの入力（自由入力）
  * - 右端: × のボタン（clearable のとき。値があるときだけ出す）
  *
@@ -47,26 +48,12 @@ export class PickerTextField {
         // span ラッパー経由で挿す（プロジェクト共通ルール）
         setIcon(this.pickerButton.createSpan(), opts.icon);
 
-        // 見えないネイティブの input。キーボードではボタンが代わりに受けるので、
-        // タブの順に入れない
-        this.picker = this.el.createEl('input', { cls: 'tv-form__native-picker-input' });
-        this.picker.type = opts.type;
-        this.picker.tabIndex = -1;
-        this.picker.setAttribute('aria-hidden', 'true');
+        // 見えないネイティブの input をボタンに重ねる（NativePicker）
+        this.picker = createNativePicker(this.el, this.pickerButton, {
+            type: opts.type,
+            cls: 'tv-form__native-picker-input',
+        }).input;
         if (opts.type === 'time') this.picker.step = '60';
-
-        // desktop では showPicker() で開く。iPad では直接のタップで既に開いている
-        this.picker.addEventListener('click', () => {
-            try { this.picker.showPicker(); } catch { /* iOS Safari: the tap opened it */ }
-        });
-        this.pickerButton.addEventListener('click', () => {
-            try {
-                this.picker.showPicker();
-            } catch {
-                this.picker.focus();
-                this.picker.click();
-            }
-        });
 
         this.input = this.el.createEl('input', {
             type: 'text',
