@@ -5,8 +5,8 @@
  * 無い。往復するのはモードと、interval モードで選んだテンプレート名だけ。
  *
  * URI の `mode` / `intervalTemplate` は今も `ViewUriBuilder` が手書きで組み立てて
- * おり、この schema の語彙とは別系統。読み側（`main.ts` の `openTimerFromUri`）も
- * 同じく手書きで、どちらもここには通っていない。統合は C6 の担当。
+ * おり、この schema の語彙とは別系統。読み側（`UriViewOpener` の `timerState`）も
+ * 同じく手書きで、どちらもここには通っていない。
  */
 
 import { F } from '../services/viewConfig/FieldCodecs';
