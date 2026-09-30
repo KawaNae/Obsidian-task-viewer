@@ -5,7 +5,6 @@ import type { TimerStorageUtils } from '../../../src/timer/TimerStorageUtils';
 import type TaskViewerPlugin from '../../../src/main';
 import type { App } from 'obsidian';
 import type { Task } from '../../../src/types';
-import { DailyNoteUtils } from '../../../src/utils/DailyNoteUtils';
 import { makeTask } from '../helpers/makeTask';
 import { heldByAnchor, rowOf } from '../helpers/anchoredRow';
 
@@ -18,6 +17,13 @@ import { heldByAnchor, rowOf } from '../helpers/anchoredRow';
  */
 
 const DAILY_PATH = 'DailyNotes/2026-08-17.md';
+
+/** Where a line put in the daily note goes: the harness's own record of it. */
+const dailyPut = vi.hoisted(() => ({ put: null as null | ((line: string) => Promise<string | null>) }));
+vi.mock('../../../src/services/persistence/Notes', async (actual) => ({
+    ...(await actual<typeof import('../../../src/services/persistence/Notes')>()),
+    putInPeriodicNote: (_app: unknown, _desc: unknown, _date: string, line: string) => dailyPut.put!(line),
+}));
 
 interface Harness {
     recorder: TimerRecorder;
@@ -34,11 +40,11 @@ function makeHarness(): Harness {
     const tasks: Task[] = [];
     let idSeq = 0;
 
-    vi.spyOn(DailyNoteUtils, 'appendLineToDailyNote').mockImplementation(async (_app, _date, line) => {
+    dailyPut.put = async (line) => {
         appended.push(line);
         registerWrittenLine(line);
         return DAILY_PATH;
-    });
+    };
 
     /** 書いた行を index に載せる（スキャンの代役）。 */
     function registerWrittenLine(line: string): void {

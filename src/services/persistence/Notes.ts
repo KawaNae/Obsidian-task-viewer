@@ -1,9 +1,13 @@
 import { type App, TFile } from 'obsidian';
+import { logWarn } from '../../log/log';
+import { DateUtils } from '../../utils/DateUtils';
+import { normalizeTrailingNewline, processTemplate } from '../../utils/NoteTemplateProcessor';
+import { notePath, type PeriodicNote } from '../../utils/PeriodicNotes';
 import { Outline } from '../parsing/utils/Outline';
 import type { Section } from './Destination';
 import {
     UnfollowableDraft, createFile, editLines, fileGone, joinContent, processLines, splitLines, writeFailed,
-    type DraftEdit, type LineDraft, type WriteChannel, type WriteMade, type WriteRefused,
+    type DraftEdit, type LineDraft, type WriteChannel, type WriteChannels, type WriteMade, type WriteRefused,
 } from './FileLines';
 import { Block, Placement, type PlacedLine, type SectionLookup, type Spot } from './utils/Placement';
 
@@ -167,6 +171,69 @@ export function putInNote(
         const made = await makeNote(app, path, channel, subject, put.create, edit);
         return made.written ? { ...made, line: at } : made;
     });
+}
+
+/**
+ * The periodic note of `date` (`YYYY-MM-DD`), made of its template when it
+ * is not there ({@link createNote}); null when it could not be made, which
+ * the channel of its path has told once. Asked after the writes to its path
+ * already asked, so a note one of them makes is the one answered.
+ */
+export function openPeriodicNote(app: App, desc: PeriodicNote, date: string, channelFor: WriteChannels): Promise<TFile | null> {
+    const path = notePath(desc, date);
+    return inCreationLineOf(path, async () => {
+        const file = app.vault.getAbstractFileByPath(path);
+        if (file instanceof TFile) return file;
+        const made = await makeNote(app, path, channelFor(path), path, () => templateOf(app, desc, date));
+        return made.written ? made.file : null;
+    });
+}
+
+/**
+ * Put `line` in the section `to` of the periodic note of `date`
+ * (`YYYY-MM-DD`; {@link putInNote}), the note made of its template with the
+ * line in it when it is not there, in one write.
+ *
+ * @returns the path of the note written, or null when it was not, the
+ * reason told once through the channel of its path. A caller finds the line
+ * again by the path: a timer follows its running line by its `^id`, and
+ * closes it where it stands when it stops.
+ */
+export async function putInPeriodicNote(
+    app: App,
+    desc: PeriodicNote,
+    date: string,
+    line: string,
+    to: Section,
+    channelFor: WriteChannels,
+): Promise<string | null> {
+    const path = notePath(desc, date);
+    const outcome = await putInNote(app, path, channelFor(path), {
+        where: to, block: Block.line(line), create: () => templateOf(app, desc, date),
+    });
+    return outcome.written ? outcome.file.path : null;
+}
+
+/**
+ * What a new periodic note of `date` holds: its template (the path, or the
+ * path with `.md`) expanded for the date, ending with a terminator; '' with
+ * no template, or one that cannot be found, which is logged — a note is made
+ * all the same.
+ */
+async function templateOf(app: App, desc: PeriodicNote, date: string): Promise<string> {
+    if (!desc.template) return '';
+    const file = app.vault.getAbstractFileByPath(desc.template) ?? app.vault.getAbstractFileByPath(`${desc.template}.md`);
+    if (!(file instanceof TFile)) {
+        logWarn(`[task-viewer] Template not found for ${desc.kind} note: ${desc.template}`);
+        return '';
+    }
+    const raw = await app.vault.read(file);
+    return normalizeTrailingNewline(processTemplate(raw, {
+        noteType: desc.kind,
+        triggerDate: DateUtils.parseDate(date),
+        filenameFormat: desc.format,
+        weekStartDay: desc.weekStartDay.template,
+    }));
 }
 
 /**
