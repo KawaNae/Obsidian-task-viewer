@@ -12,7 +12,7 @@ import { fileGone, processLines, type WriteAt, type WriteChannels, type WriteOut
 export class FrontmatterWriter {
     constructor(
         private app: App,
-        private channelOf: WriteChannels = () => undefined,
+        private channelOf: WriteChannels,
     ) {}
 
     /**

@@ -19,28 +19,18 @@ describe('TaskIdGenerator', () => {
         });
     });
 
-    describe('legacy anchors', () => {
-        // Timers persisted by earlier versions carry these; the restore guard
-        // drops any task ID parse rejects.
-        it.each(['ln:3', 'blk:abc', 'tid:tv-t-1', 'seq:7'])('still parses %s', anchor => {
-            expect(TaskIdGenerator.parse(`tv-inline:a.md:${anchor}`)?.anchor).toBe(anchor);
+    describe('anchors that are no longer minted', () => {
+        // `seq:`, `blk:`, `tid:`, `ln:` and `fm-root` came before names; no ID
+        // of those shapes is minted or persisted any more.
+        it.each(['ln:3', 'blk:abc', 'tid:tv-t-1', 'seq:7', 'fm-root'])('does not parse %s', anchor => {
+            expect(TaskIdGenerator.parse(`tv-inline:a.md:${anchor}`)).toBeNull();
         });
     });
 
     describe('parse', () => {
-        it('parses valid ID', () => {
-            const result = TaskIdGenerator.parse('tv-inline:notes/daily.md:blk:abc123');
-            expect(result).toEqual({ parserId: 'tv-inline', filePath: 'notes/daily.md', anchor: 'blk:abc123' });
-        });
-
-        it('parses a legacy fm-root anchor (read only)', () => {
-            const result = TaskIdGenerator.parse('tv-file:project.md:fm-root');
-            expect(result).toEqual({ parserId: 'tv-file', filePath: 'project.md', anchor: 'fm-root' });
-        });
-
-        it('parses ln: anchor', () => {
-            const result = TaskIdGenerator.parse('tv-inline:file.md:ln:5');
-            expect(result).toEqual({ parserId: 'tv-inline', filePath: 'file.md', anchor: 'ln:5' });
+        it('parses a name', () => {
+            const result = TaskIdGenerator.parse('tv-inline:notes/daily.md:n:k1.2:5');
+            expect(result).toEqual({ parserId: 'tv-inline', filePath: 'notes/daily.md', anchor: 'n:k1.2:5' });
         });
 
         it('returns null for invalid format', () => {
@@ -48,11 +38,11 @@ describe('TaskIdGenerator', () => {
         });
     });
 
-    describe('generate → parse round-trip', () => {
+    describe('nameOf → parse round-trip', () => {
         it('round-trips correctly', () => {
-            const id = TaskIdGenerator.generate('tv-inline', 'path/to/file.md', 'blk:xyz');
+            const id = TaskIdGenerator.nameOf('tv-inline', 'path/to/file.md', 7, 'k1.2');
             const parsed = TaskIdGenerator.parse(id);
-            expect(parsed).toEqual({ parserId: 'tv-inline', filePath: 'path/to/file.md', anchor: 'blk:xyz' });
+            expect(parsed).toEqual({ parserId: 'tv-inline', filePath: 'path/to/file.md', anchor: 'n:k1.2:7' });
         });
     });
 

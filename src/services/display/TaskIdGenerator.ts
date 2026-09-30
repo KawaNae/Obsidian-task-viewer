@@ -12,12 +12,9 @@ export interface ParsedSegmentId {
     segmentDate: string;
 }
 
-// `seq:`, `blk:`, `tid:`, `ln:` and `fm-root` are no longer minted. They stay
-// readable because timers persisted by earlier versions still carry them, and
-// the restore guard (TimerPersistence.fromPersistedTimer) drops any ID `parse`
-// rejects. `prov:` is left out on purpose: a provisional ID that leaked should
-// fail to parse.
-const TASK_ID_REGEX = new RegExp(String.raw`^([^:]+):(.+):(n:${READING_ID_SOURCE}:\d+|blk:[^:]+|tid:[^:]+|seq:\d+|ln:\d+|fm-root)$`);
+// Only a name (`nameOf`) parses. `prov:` is left out on purpose: a
+// provisional ID that leaked should fail to parse.
+const TASK_ID_REGEX = new RegExp(String.raw`^([^:]+):(.+):(n:${READING_ID_SOURCE}:\d+)$`);
 const NAME_ANCHOR_REGEX = new RegExp(String.raw`^n:(${READING_ID_SOURCE}):(\d+)$`);
 const SEGMENT_ID_REGEX = /^(.*)##seg:(\d{4}-\d{2}-\d{2})$/;
 

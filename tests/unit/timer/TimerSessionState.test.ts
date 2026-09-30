@@ -75,7 +75,7 @@ function build() {
 function makeCountup(overrides: Partial<CountupTimer> = {}): CountupTimer {
     return {
         id: 'timer-1',
-        taskId: 'tv-inline:notes/a.md:ln:3',
+        taskId: 'tv-inline:notes/a.md:n:k1.1:3',
         taskName: 'A',
         taskOriginalText: '- [ ] A',
         taskFile: 'notes/a.md',
@@ -202,7 +202,7 @@ describe('session state persistence', () => {
         const idle = ctx.timers.get(IDLE_TIMER_ID)!;
         expect(idle.runState).toBe('running');
 
-        const fresh = creator.createTimer({ taskId: 'tv-inline:a.md:ln:1', taskName: 'A', timerType: 'countup' });
+        const fresh = creator.createTimer({ taskId: 'tv-inline:a.md:n:k1.1:1', taskName: 'A', timerType: 'countup' });
         expect(fresh.runState).toBe('running');
         expect(fresh.sessionCount).toBe(0);
         expect(fresh.recordedElapsedTime).toBe(0);
