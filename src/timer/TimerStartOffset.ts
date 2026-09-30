@@ -28,12 +28,22 @@ export function canOffsetStart(timer: TimerInstance): timer is CountupTimer | Co
  * メニューに出す覚えた時刻（{@link TimerInstance.priorStartMs}）。出すのは 1 本目の
  * 区間の間だけで、⏸→▶ のあとの区間には出さない。覚えた時刻が今より後なら出さない
  * （未来へはずらせない）。
+ *
+ * 出すのは、覚えた時刻が今日（`startHour` で区切った表示上の日）の中にあるときだけ。
+ * 何か月も前の予定の行で始めたとき、その start は作業を始めた時刻ではない。
  */
-export function rememberedStart(timer: TimerInstance, nowMs: number): number | null {
+export function rememberedStart(timer: TimerInstance, nowMs: number, startHour: number): number | null {
     if (timer.sessionCount !== 0) return null;
     const prior = timer.priorStartMs;
     if (typeof prior !== 'number' || prior >= nowMs) return null;
+    if (visualDateOf(prior, startHour) !== visualDateOf(nowMs, startHour)) return null;
     return prior;
+}
+
+function visualDateOf(ms: number, startHour: number): string {
+    const at = new Date(ms);
+    return DateUtils.toVisualDate(
+        DateUtils.getLocalDateString(at), DateUtils.formatHHMM(at.getHours(), at.getMinutes()), startHour);
 }
 
 /**

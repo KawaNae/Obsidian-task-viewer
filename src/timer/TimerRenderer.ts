@@ -670,7 +670,7 @@ export class TimerRenderer {
         if (!timer || !canOffsetStart(timer)) return;
         const offset = (startMs: number): void => void this.lifecycle.offsetStart(timer, startMs);
         const now = Date.now();
-        const remembered = rememberedStart(timer, now);
+        const remembered = rememberedStart(timer, now, this.ctx.plugin.settings.startHour);
 
         this.ctx.plugin.menuPresenter.present((menu) => {
             for (const minutes of OFFSET_PRESET_MINUTES) {
