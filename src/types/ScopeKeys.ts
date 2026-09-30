@@ -52,12 +52,17 @@ export function normalizeScopeKeys(value: unknown): ScopeKeys {
     return normalized;
 }
 
-export function validateScopeKeys(keys: ScopeKeys): string | null {
+/** Why a set of scope keys cannot be used. The settings tab words it. */
+export type ScopeKeysError =
+    | { kind: 'empty' }
+    | { kind: 'duplicate'; key: string };
+
+export function validateScopeKeys(keys: ScopeKeys): ScopeKeysError | null {
     const normalizedValues = new Map<keyof ScopeKeys, string>();
     for (const name of SCOPE_KEY_NAMES) {
         const value = keys[name].trim();
         if (!value) {
-            return 'Scope keys cannot be empty.';
+            return { kind: 'empty' };
         }
         normalizedValues.set(name, value);
     }
@@ -66,7 +71,7 @@ export function validateScopeKeys(keys: ScopeKeys): string | null {
     for (const name of SCOPE_KEY_NAMES) {
         const value = normalizedValues.get(name)!;
         if (seen.has(value)) {
-            return `Scope keys must be unique. Duplicate: "${value}".`;
+            return { kind: 'duplicate', key: value };
         }
         seen.add(value);
     }

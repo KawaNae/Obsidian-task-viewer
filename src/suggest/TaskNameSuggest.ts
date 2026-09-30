@@ -5,6 +5,7 @@
  */
 
 import { type App, AbstractInputSuggest } from 'obsidian';
+import { t } from '../i18n';
 import {
     linkTagCandidates, linkTagTrigger, replacedRange,
     type LinkTagCandidate, type LinkTagMode,
@@ -120,9 +121,9 @@ export class TaskNameSuggest extends AbstractInputSuggest<LinkTagCandidate> {
     private getHintText(): string | null {
         switch (this.currentMode) {
             case 'file':
-                return '#を入力すると 見出しにリンクできます　^を入力すると ブロックにリンクできます';
+                return t('modal.taskNameHint.file');
             case 'heading':
-                return '↵ で確定';
+                return t('modal.taskNameHint.heading');
             default:
                 return null;
         }

@@ -1,4 +1,5 @@
 import { type App, setIcon, type Plugin } from 'obsidian';
+import { t } from '../i18n';
 import type { TaskViewerSettings } from '../types';
 import type { EventRegistrar, PluginContext } from '../PluginContext';
 import { PropertyColorSuggest } from './color/PropertyColorSuggest';
@@ -165,7 +166,7 @@ export class WindowAttachment {
         if (container.querySelector('.task-viewer-color-picker-icon')) return;
 
         const iconBtn = container.createDiv({ cls: 'task-viewer-color-picker-icon clickable-icon' });
-        iconBtn.setAttribute('aria-label', 'カラーピッカーを開く');
+        iconBtn.setAttribute('aria-label', t('modal.openColorPicker'));
         iconBtn.style.position = 'relative';
         iconBtn.style.marginLeft = '4px';
         iconBtn.style.display = 'inline-flex';

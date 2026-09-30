@@ -25,6 +25,6 @@ describe('validateScopeKeys', () => {
     });
 
     it('rejects a duplicate name', () => {
-        expect(validateScopeKeys({ ...DEFAULT_SCOPE_KEYS, end: 'tv-start' })).toMatch(/unique/);
+        expect(validateScopeKeys({ ...DEFAULT_SCOPE_KEYS, end: 'tv-start' })).toEqual({ kind: 'duplicate', key: 'tv-start' });
     });
 });
