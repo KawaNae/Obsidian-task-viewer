@@ -9,13 +9,13 @@ import type { SelectionController } from '../../../src/interaction/selection/Sel
 import type { Task } from '../../../src/types';
 
 /**
- * A drag lets go of its file once its commit has landed and its change has
- * been told (`DragSession.handleUp`), before `handleUp` returns: the readings
- * held while it was dragged are answered by their content, the drag's own
- * write included, so nothing is left for a later frame to wait for.
+ * A drag lets go of its file once its commit has landed, and draws once the
+ * readings held while it was dragged are in the index, the drag's own write
+ * included (`DragSession.handleUp`): the write does not change the index's
+ * copy, so a draw before would put the card back where it was for a frame.
  */
 describe('a drag that ends', () => {
-    it('lets go of its file after the commit and the notify, before handleUp returns', async () => {
+    it('lets go of its file after the commit, and draws once what it held back is read', async () => {
         const calls: string[] = [];
         const writeService = {
             setDraggingFile: vi.fn((path: string | null) => { calls.push(`drag ${path}`); }),
@@ -38,9 +38,10 @@ describe('a drag that ends', () => {
         session.start(strategy, {} as PointerEvent, task, {} as HTMLElement);
         await session.handleUp({} as PointerEvent);
 
-        expect(calls).toEqual(['drag note.md', 'commit', 'notify', 'drag null']);
-        // Drawn from the copy the commit changed, as a span of its dates.
-        expect(writeService.notifyImmediate).toHaveBeenCalledWith('t', ['startDate', 'startTime', 'endDate', 'endTime']);
+        expect(calls).toEqual(['drag note.md', 'commit', 'drag null', 'notify']);
+        // Drawn in full once the note is read again: the rows carry the new
+        // reading's names, and the name the drag began with names none.
+        expect(writeService.notifyImmediate).toHaveBeenCalledWith();
         expect(session.isActive()).toBe(false);
     });
 });

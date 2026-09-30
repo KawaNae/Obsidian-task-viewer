@@ -49,9 +49,9 @@ export class InlineTaskWriter {
      * refusal in its own words hears it at `opts.refused` (`withRefused`).
      *
      * @returns the outcome. `written: false` means nothing was written at
-     * all, which the caller must not treat as a successful no-op: the index
-     * puts back a copy it changed before the write on that answer
-     * (`TaskIndex.revertUnwrittenUpdate`).
+     * all, which the caller must not treat as a successful no-op: nothing
+     * comes in to the index as a new reading, and the caller that showed the
+     * new values of its own (the hub's draft) reads the copy again.
      */
     async write<F extends CompletionFire = CompletionFire>(
         path: string,

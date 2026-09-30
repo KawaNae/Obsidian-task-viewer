@@ -78,7 +78,7 @@ describe('a drag of a row the disk no longer holds as the index read it', () => 
         answer.resolve(true);
         await up;
 
-        expect(calls).toEqual(['drag note.md', 'down', 'commit', 'notify', 'drag null']);
+        expect(calls).toEqual(['drag note.md', 'down', 'commit', 'drag null', 'notify']);
     });
 
     it('a check that throws answers no: the drag is cancelled, and nothing is left unhandled', async () => {

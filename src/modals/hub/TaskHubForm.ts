@@ -60,7 +60,8 @@ export interface TaskHubFormDeps {
  */
 export class TaskHubForm {
     private task: Task;
-    private commitChain: Promise<void> = Promise.resolve();
+    /** The writes asked and not yet answered, for {@link drained}. */
+    private writing = new Set<Promise<void>>();
     /** The row is gone from the index: nothing to write to. */
     private missing = false;
     /** The source mode holds the row: its draft is the one way to write it until it closes. */
@@ -336,7 +337,7 @@ export class TaskHubForm {
     private commitStatus(value: string): void {
         if (this.shut) return;
         this.queue(TaskUpdateBuilder.status(this.task, value));
-        this.renderStatusPill(); // 楽観 model から pill を即時更新
+        this.renderStatusPill(); // 打った値の model から pill を即時更新
     }
 
     private commitDates(group: DateGroupKey): void {
@@ -350,25 +351,32 @@ export class TaskHubForm {
         this.queue(updates);
     }
 
-    /** コミットを直列化して発行する（vault.process の競合防止） */
+    /**
+     * 編集を書き込みに出す。
+     *
+     * フォームの model（`this.task`）は入力欄に打った値そのもので、索引の
+     * 写しではない。echo（refresh）が来る前に次のコミットが組み立てられても
+     * 打った値から組み立てるよう、model へ先に重ねる。echo は refresh(fresh)
+     * が正として上書きする。
+     *
+     * 続けて出した書き込みの順は操作の層が守る: 同じ行の書き込みは頼んだ
+     * 順に並び、2本目は1本目が残した読みから計画される（`onRow`）。
+     * 書けなかったときの通知は書き込みの層が1回出す。model には打った値が
+     * 残るので、ここで写しを読み直す。
+     */
     protected queue(updates: Partial<Task> | null): void {
         if (!updates) return;
-        // 楽観更新: echo（refresh）到着前に次のコミットが組み立てられても
-        // 陳腐な base を掴まないよう、ローカル model へ先に反映する。
-        // echo は refresh(fresh) が正として上書きする。
         this.task = { ...this.task, ...updates };
         const id = this.task.id;
-        this.commitChain = this.commitChain
-            // 書けなかったときの通知と写しの巻き戻しは TaskIndex が行う。
-            // ローカル model には楽観更新が残るので、ここで写しを読み直す。
-            // 巻き戻しの通知はドラッグ中には届かないので、それを待たない。
-            .then(async () => {
-                const written = await this.deps.writeService.updateTask(id, updates);
+        const write = this.deps.writeService.updateTask(id, updates)
+            .then((written) => {
                 if (written) return;
                 const fresh = this.deps.readService.getTask(id);
                 if (fresh) this.refresh(fresh);
             })
-            .catch((e) => logError(`[TaskHubForm] commit failed: ${e instanceof Error ? e.message : String(e)}`));
+            .catch((e) => logError(`[TaskHubForm] commit failed: ${e instanceof Error ? e.message : String(e)}`))
+            .finally(() => { this.writing.delete(write); });
+        this.writing.add(write);
     }
 
     // ==================== 外部変更の取り込み ====================
@@ -436,11 +444,7 @@ export class TaskHubForm {
 
     /** Resolves once every write queued so far is done: the source opens on what they left. */
     async drained(): Promise<void> {
-        let chain: Promise<void>;
-        do {
-            chain = this.commitChain;
-            await chain;
-        } while (chain !== this.commitChain);
+        while (this.writing.size > 0) await Promise.all(this.writing);
     }
 
     /** Whether the form takes no edit, and why: the source open, or the row gone. */

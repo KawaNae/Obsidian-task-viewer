@@ -189,6 +189,39 @@ describe('a name given before a write of ours', () => {
         expect(session.index.getTask(b)?.content).toBe('B2');
     });
 
+    it('orders writes asked of one name without waiting: each is planned from what the one before left', async () => {
+        // The hub asks so: every field it commits is written at once, by the
+        // name the form was opened with (`TaskHubForm.queue`).
+        const { contents, session } = await open(['# note', '- [ ] A', '- [ ] B', '']);
+        const b = idOf(session, 'B');
+
+        const written = await Promise.all([
+            session.index.updateTask(b, { content: 'B2' }),
+            session.index.updateTask(b, { statusChar: 'x' }),
+            session.index.updateTask(b, { startDate: '2026-10-01' }),
+        ]);
+
+        expect(written).toEqual([true, true, true]);
+        expect(contents.get(FILE)).toBe(['# note', '- [ ] A', '- [x] B2 @2026-10-01', ''].join('\n'));
+    });
+
+    it('orders a write asked by the row\'s new name behind one still under way by its old name', async () => {
+        // The hub's form takes the row's new name when the index tells it of
+        // the first write, while a second asked by the old name is under way.
+        const { contents, session } = await open(['# note', '- [ ] A', '- [ ] B', '']);
+        const b = idOf(session, 'B');
+
+        const first = session.index.updateTask(b, { content: 'B2' });
+        const second = session.index.updateTask(b, { statusChar: 'x' });
+        expect(await first).toBe(true);
+        const now = session.index.getTask(b)!.id;
+        expect(now).not.toBe(b);
+        const third = session.index.updateTask(now, { startDate: '2026-10-01' });
+
+        expect(await Promise.all([second, third])).toEqual([true, true]);
+        expect(contents.get(FILE)).toBe(['# note', '- [ ] A', '- [x] B2 @2026-10-01', ''].join('\n'));
+    });
+
     it('names nothing once our write took the row away', async () => {
         const { session } = await open(['- [ ] Z', '- [ ] A', '- [ ] B', '']);
         const a = idOf(session, 'A');
