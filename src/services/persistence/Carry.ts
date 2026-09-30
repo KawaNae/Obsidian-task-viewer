@@ -77,7 +77,7 @@ export function putNumbered(draft: LineDraft, spot: Spot, block: readonly Placed
  * carried: to read, once written, as they read under the row (`Block.of`),
  * written as they stand, the row's own indentation before `head`
  * (`format` writes none). They are the rows they were, so each keeps its
- * `^id`: only a write that makes a copy takes a copy's off (`TaskCloner`).
+ * `^id`: only a write that makes a copy takes a copy's off (`TaskOp` `copies`).
  *
  * With `drop`, the row's own direct `- ==>` lines do not travel with it:
  * the fire that moves it consumes them. Descendant tasks' flow lines are

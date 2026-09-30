@@ -17,7 +17,7 @@ import { NotifyCoalescer } from './NotifyCoalescer';
 import { readName } from './RowNames';
 import { formatRow } from '../parsing/TaskLineFormat';
 import { lineParsersFingerprint } from '../parsing/TaskParser';
-import { planInPlaceCopies } from '../persistence/DuplicateShift';
+import { planDuplicate } from '../persistence/DuplicateShift';
 import type { GenBlock } from '../parsing/gen/GenBlockCollector';
 import { isReadCopy, plannedOn, subjectOf, type ReadCopy } from '../persistence/TaskRefs';
 import { logDebug, logError, logInfo, logWarn } from '../../log/log';
@@ -1010,32 +1010,13 @@ export class TaskIndex {
     }
 
     /**
-     * Route a duplicate to the axis its options ask for.
-     *
-     * `dayOffset` picks the axis and `count` says how many copies: without an
-     * offset the copies run along the clock, each starting where the one
-     * before it ends, and with one they run along the calendar as they always
-     * have. The in-place copies are composed here rather than in the writer,
-     * because deciding where they sit needs the effective dates — the hour a
-     * task was given implicitly is as much its end as a written one — and
-     * those are resolved at this layer. The writer is handed finished lines,
-     * the same division the recurrence path uses.
+     * The copies a duplicate asks for, planned from the index's copy of the
+     * row (`planDuplicate`: what they say needs the task's dates, which are
+     * resolved at this layer) and put by the write beside the row it names.
      */
     private async writeDuplicate(task: ReadCopy, options?: DuplicateOptions): Promise<boolean> {
-        const { dayOffset = 0, count = 1 } = options ?? {};
-        if (dayOffset !== 0) {
-            return (await this.repository.duplicateInlineTask(task.file, plannedOn(task), options)).written;
-        }
-
-        const copies = planInPlaceCopies(task, this.settings.startHour, count);
-        const outcome = await this.repository.duplicateInlineTaskInPlace(
-            task.file,
-            plannedOn(task),
-            copies.kind === 'verbatim'
-                ? copies
-                : { kind: 'lines', lines: copies.tasks.map(copy => formatRow(copy)) },
-        );
-        return outcome.written;
+        const copies = planDuplicate(task, options, this.settings.startHour);
+        return (await this.repository.applyToTask(task.file, plannedOn(task), [copies])).written;
     }
 
     /**

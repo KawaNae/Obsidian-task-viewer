@@ -2,7 +2,6 @@ import { TFile } from 'obsidian';
 import { TaskScanner } from '../../../src/services/core/TaskScanner';
 import { TaskStore } from '../../../src/services/core/TaskStore';
 import { InlineTaskWriter } from '../../../src/services/persistence/writers/InlineTaskWriter';
-import { TaskCloner } from '../../../src/services/persistence/TaskCloner';
 import { TaskRepository } from '../../../src/services/persistence/TaskRepository';
 import { DEFAULT_SETTINGS } from '../../../src/types';
 import type { Task } from '../../../src/types';
@@ -49,7 +48,6 @@ export interface WriteBench {
     readonly contents: Map<string, string>;
     readonly scanner: TaskScanner;
     readonly writer: InlineTaskWriter;
-    readonly cloner: TaskCloner;
     readonly repo: TaskRepository;
     /** Every write given up, in order, as the channel was told it. */
     readonly refused: Refusal[];
@@ -123,7 +121,6 @@ export async function writeBench(files: string | string[] | Record<string, strin
         contents,
         scanner,
         writer: new InlineTaskWriter(app, writes),
-        cloner: new TaskCloner(app, writes),
         repo,
         refused,
         filed,

@@ -110,7 +110,7 @@ src/
 │   │   ├── strategies/        # ParserChain, ParserStrategy
 │   │   ├── tree/              # A note's sections and rows (NoteSections, NoteTasks, Sections, SectionPropertyResolver, BuiltinPropertyExtractor)
 │   │   └── utils/             # Parser utilities (ChildLineClassifier, CodeFenceTracker, InlineNotation, Outline, TagExtractor, TaskLineClassifier)
-│   ├── persistence/           # Write layer (TaskRepository, TaskCloner)
+│   ├── persistence/           # Write layer (TaskRepository, InlineTaskWriter)
 │   │   ├── writers/           # FrontmatterWriter, InlineTaskWriter, SendWriter, SendRows (which rows a send takes)
 │   │   └── utils/             # FrontmatterLineEditor, Placement (where a write puts lines, and a child's indentation)
 │   ├── export/                # View data export (ViewExporter, per-view ExportStrategy)
@@ -329,7 +329,7 @@ Merge rules: style is `own ?? cascade`; tags are a sorted union; custom properti
 - 3つ目以降の `>` の区間
 - 2つ目以降のブロックの区間と原文
 
-`@` だけの一致（`@alice`、`@1on1`）はブロックではない。`TVInlineParser` は値を読む。エディタの診断（`DateBlockDiagnostics`）と日をずらす複製（`TaskCloner`）は、`readLineDateBlock(line)` で行の桁の区間を読む。
+`@` だけの一致（`@alice`、`@1on1`）はブロックではない。`TVInlineParser` は値を読む。エディタの診断（`DateBlockDiagnostics`）と日をずらす複製（`shiftLineDates`）は、`readLineDateBlock(line)` で行の桁の区間を読む。
 
 2つ目以降のブロックは日付ではなく、内容にも入らず、parse-error の診断が付く。その原文は `Task.extraDateBlocks` に残り、`formatTaskLine` が最初のブロックの直後にそのまま書き戻す（issue #198）。位置は本文の途中から最初のブロックの直後へ移る。それでも2つ目以降のままなので、読み直しで開始日は入れ替わらない。日付を消したタスクに余分なブロックがあるときは、最初のブロックとして空の `@>`（日付なし）を書く。
 

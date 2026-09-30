@@ -416,9 +416,9 @@ describe('8. a move within the note (the move op, in the completing write)', () 
     });
 });
 
-// ─── 9. duplicateInlineTask ──────────────────────────────────────────
+// ─── 9. duplicate with a day offset ──────────────────────────────────
 
-describe('9. duplicateInlineTask (a copy on another day)', () => {
+describe('9. duplicate with a day offset (a copy on another day)', () => {
     const TARGET = ['- [ ] 対象 @2026-09-21T10:00>11:00 ^blk', '\t- [ ] 子 @2026-09-21'];
 
     it('A: the copy goes above, and the names held for the original and its child follow them', async () => {
@@ -436,6 +436,21 @@ describe('9. duplicateInlineTask (a copy on another day)', () => {
         expect(Notice.messages).toEqual([]);
     });
 
+    it('C: the copy moves the due with the start and the end, and rewords nothing else of the line', async () => {
+        // The line is the user's: an end on the start's day keeps its date,
+        // the tag stays after the block, and the command's date stays put.
+        const line = '- [ ] 対象 @2026-09-21T10:00>2026-09-21T11:00>2026-09-25 #tag ==> until @2026-09-30';
+        const { contents, session } = await open({ [FILE]: NOTE(line) });
+
+        expect(await session.index.duplicateTask(rows(session)[1].id, { dayOffset: 1 })).toBe(true);
+        await session.settle(FILE);
+
+        expect(contents.get(FILE)).toBe(NOTE(
+            '- [ ] 対象 @2026-09-22T10:00>2026-09-22T11:00>2026-09-26 #tag ==> until @2026-09-30',
+            line,
+        ).join('\n'));
+    });
+
     it('B: a line written above from outside: nothing written, read again, one notice', async () => {
         const { contents, session } = await open({ [FILE]: NOTE(...TARGET.map(line => line.replace(' ^blk', ''))) });
         const before = rows(session).map(row => row.id);
@@ -450,9 +465,9 @@ describe('9. duplicateInlineTask (a copy on another day)', () => {
     });
 });
 
-// ─── 10. duplicateInlineTaskInPlace ──────────────────────────────────
+// ─── 10. duplicate in place ──────────────────────────────────────────
 
-describe('10. duplicateInlineTaskInPlace (a copy that continues)', () => {
+describe('10. duplicate in place (a copy that continues)', () => {
     const TARGET = ['- [ ] 対象 @2026-09-21T10:00>11:00', '\t- [ ] 子 @2026-09-21'];
 
     it('A: the copy goes after the subtree, and the name held for the original follows it', async () => {

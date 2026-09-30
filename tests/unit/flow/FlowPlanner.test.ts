@@ -80,6 +80,16 @@ describe('FlowPlanner', () => {
             expect(newTask.due).toBe('2026-07-10');
         });
 
+        it('writes out an end written as a time alone with the start\'s day', () => {
+            const { newTask } = createNextOf(plan('every mon', {
+                startDate: '2026-06-29', startTime: '09:00', endTime: '17:00',
+            }));
+            expect(newTask.startDate).toBe('2026-07-06');
+            expect(newTask.endDate).toBe('2026-07-06');
+            expect(newTask.endTime).toBe('17:00');
+            expect(newTask.due).toBeUndefined();
+        });
+
         it('anchors on due when start/end are absent', () => {
             const { newTask } = createNextOf(plan('every mo@25', { due: '2026-06-25T18:00' }));
             expect(newTask.due).toBe('2026-07-25T18:00');

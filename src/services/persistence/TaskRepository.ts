@@ -1,9 +1,8 @@
 import type { App } from 'obsidian';
-import type { DuplicateOptions, Task } from '../../types';
+import type { Task } from '../../types';
 import { InlineTaskWriter } from './writers/InlineTaskWriter';
 import { SendWriter, type SendCompleting, type SendHearing, type SendOutcome, type SendTo, type SentRow } from './writers/SendWriter';
 import { FrontmatterWriter } from './writers/FrontmatterWriter';
-import { TaskCloner, type InPlaceCopyLines } from './TaskCloner';
 import type { PropertyOp } from './PropertyUpdatePlanner';
 import type { LineDraft, Refusal, RowRef, RowTarget, WriteAt, WriteChannel, WriteOutcome, WriteSession } from './FileLines';
 import type { CompletionFire, FiringOutcome, SubtreeReplacement, TaskOp } from './TaskOps';
@@ -11,12 +10,11 @@ import type { Section } from './Destination';
 
 /**
  * TaskRepository - タスクのファイル操作を統括するファサードクラス
- * 各種ライター（InlineTaskWriter, FrontmatterWriter, TaskCloner）に処理を委譲
+ * 各種ライター（InlineTaskWriter, FrontmatterWriter, SendWriter）に処理を委譲
  */
 export class TaskRepository {
     private inlineWriter: InlineTaskWriter;
     private frontmatterWriter: FrontmatterWriter;
-    private cloner: TaskCloner;
     private sendWriter: SendWriter;
     /**
      * Where the writers hand what they left and say what they gave up: the
@@ -31,7 +29,6 @@ export class TaskRepository {
         const channelOf = (file: string) => this.channelOf(file);
         this.inlineWriter = new InlineTaskWriter(app, channelOf);
         this.frontmatterWriter = new FrontmatterWriter(app, channelOf);
-        this.cloner = new TaskCloner(app, channelOf);
         this.sendWriter = new SendWriter(app, this.inlineWriter, channelOf);
     }
 
@@ -119,17 +116,4 @@ export class TaskRepository {
     async setFrontmatterKeys(filePath: string, updates: Record<string, string | null>): Promise<WriteOutcome> {
         return this.frontmatterWriter.setKeys(filePath, updates);
     }
-
-    // --- Task Cloning Operations ---
-
-    /** @returns whether the copy was written (see TaskCloner). */
-    async duplicateInlineTask(file: string, target: RowRef, options?: DuplicateOptions): Promise<WriteOutcome> {
-        return this.cloner.duplicateInlineTask(file, target, options);
-    }
-
-    /** @returns whether the copies were written (see TaskCloner). */
-    async duplicateInlineTaskInPlace(file: string, target: RowRef, copies: InPlaceCopyLines): Promise<WriteOutcome> {
-        return this.cloner.duplicateInlineTaskInPlace(file, target, copies);
-    }
-
 }

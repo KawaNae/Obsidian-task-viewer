@@ -1,11 +1,16 @@
-import type { Task } from '../../types';
+import type { DuplicateOptions, Task } from '../../types';
 import { DateUtils } from '../../utils/DateUtils';
 import { resolveEffectiveDates } from '../../utils/EffectiveDates';
+import { formatRow } from '../parsing/TaskLineFormat';
+import { shiftLineDates } from '../parsing/tv-inline/DateBlock';
+import { TaskLineClassifier } from '../parsing/utils/TaskLineClassifier';
+import type { CopyLines, TaskOp } from './TaskOps';
 
 /**
- * Where the copies of a "duplicate as next" go on the clock.
+ * What a duplicate writes ({@link planDuplicate}): copies on other days, or
+ * copies that continue the task along the clock.
  *
- * A copy that lands on the original's own slot is two cards in the same
+ * Along the clock, a copy that lands on the original's own slot is two cards in the same
  * place with the same words: the view stacks them, and nothing tells the
  * user which is which. So a copy
  * starts where the original ends — implicitly an hour later when the task
@@ -23,17 +28,6 @@ interface Instant {
     date: string;
     minutes: number;
 }
-
-/**
- * What to write for a duplicate with no day offset.
- *
- * `verbatim` copies the line as it stands in the file, so a task that is not
- * being moved is not reworded either: it never passes through the formatter
- * and keeps its own spelling.
- */
-export type InPlaceCopies =
-    | { kind: 'verbatim'; count: number }
-    | { kind: 'shifted'; tasks: Task[] };
 
 function advance(from: Instant, minutes: number): Instant {
     const total = from.minutes + minutes;
@@ -63,11 +57,51 @@ function holdsTimeOfDay(task: Task): boolean {
 }
 
 /**
+ * What a duplicate of `task` writes, and on which side of it: the one op the
+ * index hands the write (`TaskIndex.writeDuplicate`). What the copies say is
+ * decided here, where the task's dates are known; where they go is the
+ * write's (`TaskOp` `copies`). Each copy carries the row's children.
+ *
+ * `dayOffset` picks the axis and `count` says how many copies. With an offset
+ * the copies run along the calendar ({@link dayShiftedCopies}) and go above
+ * the row, the newest first; without one they run along the clock
+ * ({@link planInPlaceCopies}) and go past its subtree, so the day reads in
+ * time order.
+ */
+export function planDuplicate(task: Task, options: DuplicateOptions | undefined, startHour: number): Extract<TaskOp, { kind: 'copies' }> {
+    const { dayOffset = 0, count = 1 } = options ?? {};
+    return dayOffset !== 0
+        ? { kind: 'copies', side: 'above', lines: dayShiftedCopies(task, dayOffset, count), children: true }
+        : { kind: 'copies', side: 'below', lines: planInPlaceCopies(task, startHour, count), children: true };
+}
+
+/**
+ * The copies of a duplicate on other days, in file order: one for each day
+ * of `dayOffset..dayOffset+count-1`, future first, so a newer date stands
+ * above an older one.
+ *
+ * Each is the line the task was read from (`originalText`, the line the
+ * write checks the row against), without its `^id`, with its start, end and
+ * due moved by the copy's days (`shiftLineDates`): the user's own line, with
+ * nothing outside those dates reworded. A date in the command stays as it
+ * is.
+ */
+export function dayShiftedCopies(task: Task, dayOffset: number, count: number): string[] {
+    const line = TaskLineClassifier.stripBlockIds([task.originalText])[0];
+    const copies: string[] = [];
+    for (let offset = dayOffset + count - 1; offset >= dayOffset; offset--) {
+        copies.push(shiftLineDates(line, offset, ['start', 'end', 'due']));
+    }
+    return copies;
+}
+
+/**
  * The copies to write for a duplicate with no day offset, in file order.
  *
- * Each copy is the task with its block id dropped — the id belongs to the
- * line that was written, not to a copy of it — and its instants moved on by
- * one length each.
+ * A task that holds no time of day is repeated as the file writes it
+ * (`verbatim`). Any other copy is the task with its block id dropped — the
+ * id belongs to the line that was written, not to a copy of it — and its
+ * instants moved on by one length each, written by `formatRow`.
  *
  * A copy writes only what it needs to sit where it now sits. A line that
  * wrote a time and took its day from the note's scope keeps that shape
@@ -79,13 +113,13 @@ function holdsTimeOfDay(task: Task): boolean {
  * inherit is written out, because the inherited value does not move with
  * the copy and would otherwise cut its length.
  */
-export function planInPlaceCopies(task: Task, startHour: number, count: number): InPlaceCopies {
+export function planInPlaceCopies(task: Task, startHour: number, count: number): CopyLines {
     const dates = resolveEffectiveDates(task, startHour);
     const shiftable = holdsTimeOfDay(task)
         && !!dates.effectiveStartDate && !!dates.effectiveStartTime
         && !!dates.effectiveEndDate && !!dates.effectiveEndTime;
 
-    if (!shiftable) return { kind: 'verbatim', count };
+    if (!shiftable) return { verbatim: count };
 
     const start: Instant = {
         date: dates.effectiveStartDate,
@@ -111,7 +145,7 @@ export function planInPlaceCopies(task: Task, startHour: number, count: number):
     const endIsScopeDated = !task.endDate && !!task.endTime;
 
     const base: Task = { ...task, blockId: undefined };
-    const tasks: Task[] = [];
+    const copies: string[] = [];
 
     for (let i = 1; i <= count; i++) {
         const copyStart = advance(start, step * i);
@@ -135,8 +169,8 @@ export function planInPlaceCopies(task: Task, startHour: number, count: number):
             }
         }
 
-        tasks.push(copy);
+        copies.push(formatRow(copy));
     }
 
-    return { kind: 'shifted', tasks };
+    return copies;
 }
