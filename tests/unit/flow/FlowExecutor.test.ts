@@ -235,7 +235,7 @@ describe('fireAndDelete', () => {
     /** The ops of each one-write call that takes the row away: the deletion fires. */
     function deletionsOf(repository: ReturnType<typeof makeRepository>): TaskOp[][] {
         return repository.applyToTask.mock.calls
-            .map(c => c[1] as TaskOp[])
+            .map(c => c[2] as TaskOp[])
             .filter(ops => ops.some(o => o.kind === 'remove'));
     }
 
@@ -248,7 +248,7 @@ describe('fireAndDelete', () => {
         // 挿入と削除を分けると、2本目が originalText で行を探し直すことになる。
         // 次回分は元の行と同じ本文になりうるので、その探索は当てにできない。
         expect(repository.applyToTask).toHaveBeenCalledTimes(1);
-        expect(repository.applyToTask).toHaveBeenCalledWith(plannedOn(task, { commands: true, subtree: true }), [
+        expect(repository.applyToTask).toHaveBeenCalledWith(task.file, plannedOn(task, { commands: true, subtree: true }), [
             { kind: 'insert-instance', insert: expect.objectContaining({ kind: 'recurrence' }) },
             { kind: 'remove' },
         ]);

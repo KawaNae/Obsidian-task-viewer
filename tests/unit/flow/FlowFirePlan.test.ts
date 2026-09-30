@@ -4,7 +4,7 @@ import { FlowExecutor } from '../../../src/services/flow/FlowExecutor';
 import { FileParsePipeline } from '../../../src/services/parsing/FileParsePipeline';
 import { InlineTaskWriter } from '../../../src/services/persistence/writers/InlineTaskWriter';
 import type { TaskOp } from '../../../src/services/persistence/TaskOps';
-import { editLines } from '../../../src/services/persistence/FileLines';
+import { editorRow, editLines } from '../../../src/services/persistence/FileLines';
 import { DEFAULT_SETTINGS } from '../../../src/types';
 import { freezeDate } from '../helpers/fakeDate';
 
@@ -26,7 +26,7 @@ const writer = new InlineTaskWriter(app as never, () => undefined);
 /** The lines a write of `ops` to the row at `line` leaves, with nothing written anywhere. */
 function written(lines: readonly string[], line: number, ops: readonly TaskOp[]): readonly string[] | null {
     const edited = editLines(FILE, lines, '\n',
-        (draft, _eol, session) => writer.applyOps(draft, session, { line, text: lines[line], key: contentKeyOf(lines) }, ops));
+        (draft, _eol, session) => writer.applyOps(draft, session, editorRow(line, lines[line], contentKeyOf(lines)), ops));
     return edited.written ? edited.lines : null;
 }
 

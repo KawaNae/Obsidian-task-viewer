@@ -5,8 +5,7 @@ import { SendWriter, type SendCompleting, type SendHearing, type SendOutcome, ty
 import { FrontmatterWriter } from './writers/FrontmatterWriter';
 import { TaskCloner, type InPlaceCopyLines } from './TaskCloner';
 import type { PropertyOp } from './PropertyUpdatePlanner';
-import type { EditorLine, LineDraft, Refusal, RowTarget, WriteAt, WriteChannel, WriteOutcome, WriteSession } from './FileLines';
-import type { PlannedTarget } from './TaskRefs';
+import type { LineDraft, Refusal, RowRef, RowTarget, WriteAt, WriteChannel, WriteOutcome, WriteSession } from './FileLines';
 import type { CompletionFire, FiringOutcome, SubtreeReplacement, TaskOp } from './TaskOps';
 import type { Section } from './Destination';
 
@@ -54,18 +53,19 @@ export class TaskRepository {
     // --- Inline Task Operations ---
 
     /** @returns what became of the write, and the row as it left it (see InlineTaskWriter). */
-    async updateTaskInFile<F extends CompletionFire>(target: PlannedTarget, updatedTask: Task, childOps: PropertyOp[] = [], fire?: F): Promise<FiringOutcome<F>> {
-        return this.inlineWriter.updateTaskInFile(target, updatedTask, childOps, fire);
+    async updateTaskInFile<F extends CompletionFire>(file: string, target: RowRef, updatedTask: Task, childOps: PropertyOp[] = [], fire?: F): Promise<FiringOutcome<F>> {
+        return this.inlineWriter.updateTaskInFile(file, target, updatedTask, childOps, fire);
     }
 
     /** The row and its subtree written anew, each row it completes fired (see InlineTaskWriter.replaceSubtreeInFile). */
     async replaceSubtreeInFile<F extends CompletionFire>(
-        target: PlannedTarget,
+        file: string,
+        target: RowRef,
         replacement: SubtreeReplacement,
         completing: { completes(before: string, after: string): boolean; fire(): F },
         opts: { refused?: (refusal: Refusal) => void } = {},
     ): Promise<FiringOutcome<F>> {
-        return this.inlineWriter.replaceSubtreeInFile(target, replacement, completing, opts);
+        return this.inlineWriter.replaceSubtreeInFile(file, target, replacement, completing, opts);
     }
 
     /** Rows and their subtrees sent to a section of a note, what went taken back when a note they came from refused (see SendWriter.send). */
@@ -84,7 +84,7 @@ export class TaskRepository {
     }
 
     /** Ops applied to the row at a line the editor pointed at, as `at` holds it (see InlineTaskWriter.applyToLine). */
-    async applyToLine<F extends CompletionFire>(filePath: string, at: EditorLine, ops: readonly TaskOp[], opts: { refused?: (refusal: Refusal) => void; fire?: F } = {}): Promise<FiringOutcome<F>> {
+    async applyToLine<F extends CompletionFire>(filePath: string, at: RowRef, ops: readonly TaskOp[], opts: { refused?: (refusal: Refusal) => void; fire?: F } = {}): Promise<FiringOutcome<F>> {
         return this.inlineWriter.applyToLine(filePath, at, ops, opts);
     }
 
@@ -93,11 +93,12 @@ export class TaskRepository {
      * (see {@link InlineTaskWriter.applyToTask}).
      */
     async applyToTask(
-        target: PlannedTarget,
+        file: string,
+        target: RowRef,
         ops: readonly TaskOp[],
         opts: { refused?: (refusal: Refusal) => void } = {},
     ): Promise<WriteOutcome> {
-        return this.inlineWriter.applyToTask(target, ops, opts);
+        return this.inlineWriter.applyToTask(file, target, ops, opts);
     }
 
     async appendTaskToFile(filePath: string, content: string): Promise<WriteAt> {
@@ -122,13 +123,13 @@ export class TaskRepository {
     // --- Task Cloning Operations ---
 
     /** @returns whether the copy was written (see TaskCloner). */
-    async duplicateInlineTask(target: PlannedTarget, options?: DuplicateOptions): Promise<WriteOutcome> {
-        return this.cloner.duplicateInlineTask(target, options);
+    async duplicateInlineTask(file: string, target: RowRef, options?: DuplicateOptions): Promise<WriteOutcome> {
+        return this.cloner.duplicateInlineTask(file, target, options);
     }
 
     /** @returns whether the copies were written (see TaskCloner). */
-    async duplicateInlineTaskInPlace(target: PlannedTarget, copies: InPlaceCopyLines): Promise<WriteOutcome> {
-        return this.cloner.duplicateInlineTaskInPlace(target, copies);
+    async duplicateInlineTaskInPlace(file: string, target: RowRef, copies: InPlaceCopyLines): Promise<WriteOutcome> {
+        return this.cloner.duplicateInlineTaskInPlace(file, target, copies);
     }
 
 }

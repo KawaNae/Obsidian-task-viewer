@@ -1,6 +1,5 @@
-import type { Task } from '../../types';
 import { splitLines, type ReadMark } from '../persistence/FileLines';
-import { plannedOn } from '../persistence/TaskRefs';
+import type { ReadCopy } from '../persistence/TaskRefs';
 import { contentKeyOf, type ContentKey } from './ContentKey';
 import { readReading, type ReadingId } from './Reading';
 
@@ -32,13 +31,9 @@ export interface OnDisk {
     read: boolean;
 }
 
-/**
- * {@link Checked} of a copy, with what the check read when it read the file:
- * a fresh copy whose name gives no reading is not checked against anything,
- * and has none.
- */
+/** {@link Checked} of a copy, with what the check read of the file when it is fresh. */
 export type CopyChecked =
-    | { verdict: 'fresh'; disk: OnDisk | null }
+    | { verdict: 'fresh'; disk: OnDisk }
     | Exclude<Checked, { verdict: 'fresh' }>;
 
 /** What a check asks of the index and of the disk. */
@@ -58,13 +53,9 @@ export interface CheckDeps {
  * write that check would let through. A copy carried across our own writes
  * is fresh, and so is one of the file being dragged whose reading since is
  * held back (`TaskScanner.hold`): it is numbered, if not committed.
- *
- * A copy whose name gives no reading is not one the index read: nothing
- * reads it fresh, and the write turns it away on its own (`changed`).
  */
-export async function checkCopy(deps: CheckDeps, task: Task): Promise<CopyChecked> {
-    const { read, line } = plannedOn(task);
-    if (read === undefined) return { verdict: 'fresh', disk: null };
+export async function checkCopy(deps: CheckDeps, task: ReadCopy): Promise<CopyChecked> {
+    const { reading: read, line } = task;
     const disk = await diskContent(deps, task.file);
     if (disk === null) return { verdict: 'unreadable' };
     if (deps.follow(task.file, read, line, disk.key) === null) return { verdict: 'stale', disk: disk.key };

@@ -1,8 +1,7 @@
 import { type App, TFile } from 'obsidian';
 import type { DuplicateOptions } from '../../types';
 import { DateUtils } from '../../utils/DateUtils';
-import { fileGone, processLines, type LineDraft, type WriteChannels, type WriteOutcome } from './FileLines';
-import type { PlannedTarget } from './TaskRefs';
+import { fileGone, processLines, type LineDraft, type RowRef, type WriteChannels, type WriteOutcome } from './FileLines';
 import { Outline } from '../parsing/utils/Outline';
 import { TaskLineClassifier } from '../parsing/utils/TaskLineClassifier';
 import { readLineDateBlock } from '../parsing/tv-inline/DateBlock';
@@ -44,13 +43,13 @@ export class TaskCloner {
      * @returns whether the copy was written. A `false` means the original line
      * could not be resolved and the file is untouched.
      */
-    async duplicateInlineTask(target: PlannedTarget, options?: DuplicateOptions): Promise<WriteOutcome> {
+    async duplicateInlineTask(path: string, target: RowRef, options?: DuplicateOptions): Promise<WriteOutcome> {
         const { dayOffset = 0, count = 1 } = options ?? {};
 
-        const file = this.app.vault.getAbstractFileByPath(target.file);
-        if (!(file instanceof TFile)) return fileGone(this.channelOf(target.file), target.file, target.subject);
+        const file = this.app.vault.getAbstractFileByPath(path);
+        if (!(file instanceof TFile)) return fileGone(this.channelOf(path), path, target.subject);
 
-        return processLines(this.app, file, this.channelOf(target.file), (draft, _eol, { row }) => {
+        return processLines(this.app, file, this.channelOf(path), (draft, _eol, { row }) => {
             const lines = draft.lines;
             const idx = row(target);
             if (idx === null) return false;
@@ -81,11 +80,11 @@ export class TaskCloner {
      *
      * @returns whether the copies were written.
      */
-    async duplicateInlineTaskInPlace(target: PlannedTarget, copies: InPlaceCopyLines): Promise<WriteOutcome> {
-        const file = this.app.vault.getAbstractFileByPath(target.file);
-        if (!(file instanceof TFile)) return fileGone(this.channelOf(target.file), target.file, target.subject);
+    async duplicateInlineTaskInPlace(path: string, target: RowRef, copies: InPlaceCopyLines): Promise<WriteOutcome> {
+        const file = this.app.vault.getAbstractFileByPath(path);
+        if (!(file instanceof TFile)) return fileGone(this.channelOf(path), path, target.subject);
 
-        return processLines(this.app, file, this.channelOf(target.file), (draft, _eol, { row }) => {
+        return processLines(this.app, file, this.channelOf(path), (draft, _eol, { row }) => {
             const lines = draft.lines;
             const idx = row(target);
             if (idx === null) return false;

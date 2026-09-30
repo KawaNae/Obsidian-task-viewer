@@ -31,7 +31,7 @@ describe('a remove takes the whole subtree', () => {
             '- [ ] sibling',
         ].join('\n'));
 
-        await h.writer.applyToTask(plannedOn(h.taskAt(0), { subtree: true }), [{ kind: 'remove' }]);
+        await h.writer.applyToTask(h.taskAt(0).file, plannedOn(h.taskAt(0), { subtree: true }), [{ kind: 'remove' }]);
 
         expect(h.lines()).toEqual(['- [ ] sibling']);
     });
@@ -44,7 +44,7 @@ describe('a remove takes the whole subtree', () => {
             '- [ ] sibling',
         ].join('\n'));
 
-        await h.writer.applyToTask(plannedOn(h.taskAt(0), { subtree: true }), [{ kind: 'remove' }]);
+        await h.writer.applyToTask(h.taskAt(0).file, plannedOn(h.taskAt(0), { subtree: true }), [{ kind: 'remove' }]);
 
         expect(h.lines()).toEqual(['- [ ] sibling']);
     });
@@ -59,7 +59,7 @@ describe('a remove takes the whole subtree', () => {
             '- [ ] next',
         ].join('\n'));
 
-        await h.writer.applyToTask(plannedOn(h.taskAt(0), { subtree: true }), [{ kind: 'remove' }]);
+        await h.writer.applyToTask(h.taskAt(0).file, plannedOn(h.taskAt(0), { subtree: true }), [{ kind: 'remove' }]);
 
         // The blank line after the subtree is not the parent's: it stays.
         expect(h.lines()).toEqual(['', '- [ ] next']);
@@ -75,7 +75,7 @@ describe('a remove takes the whole subtree', () => {
             '- [ ] sibling',
         ].join('\n'));
 
-        await h.writer.applyToTask(plannedOn(h.taskAt(0), { subtree: true }), [{ kind: 'remove' }]);
+        await h.writer.applyToTask(h.taskAt(0).file, plannedOn(h.taskAt(0), { subtree: true }), [{ kind: 'remove' }]);
 
         expect(h.lines()).toEqual(['- [ ] sibling']);
     });
@@ -90,7 +90,7 @@ describe('a remove takes the whole subtree', () => {
             '\t- [ ] sibling',
         ].join('\n'));
 
-        await h.writer.applyToTask(plannedOn(h.taskAt(1), { subtree: true }), [{ kind: 'remove' }]);
+        await h.writer.applyToTask(h.taskAt(1).file, plannedOn(h.taskAt(1), { subtree: true }), [{ kind: 'remove' }]);
 
         expect(h.lines()).toEqual(['- [ ] root', '\t- [ ] sibling']);
     });
@@ -107,7 +107,7 @@ describe('insertSiblingAfterTask walks whole subtrees', () => {
             '- [ ] next',
         ].join('\n'));
 
-        await h.writer.applyToTask(plannedOn(h.taskAt(0)), [
+        await h.writer.applyToTask(h.taskAt(0).file, plannedOn(h.taskAt(0)), [
             { kind: 'insert', place: 'afterSubtree', text: '- [ ] ⏱️ rec @2026-08-15T11:00' },
         ]);
 
@@ -125,7 +125,7 @@ describe('insertSiblingAfterTask walks whole subtrees', () => {
             '- [ ] next',
         ].join('\n'));
 
-        await h.writer.applyToTask(plannedOn(h.taskAt(0)), [
+        await h.writer.applyToTask(h.taskAt(0).file, plannedOn(h.taskAt(0)), [
             { kind: 'insert', place: 'afterCompletedRun', text: '- [ ] ⏱️ rec @2026-08-15T12:00' },
         ]);
 
@@ -138,7 +138,7 @@ describe('insertSiblingAfterTask walks whole subtrees', () => {
     it('writes the new record as the sibling below it is spelled (P1\'s B1)', async () => {
         const h = await writeBench(['1. [ ] T @2026-08-15', '  - [ ] U'].join('\n'));
 
-        const { written } = await h.writer.applyToTask(plannedOn(h.taskAt(0)), [
+        const { written } = await h.writer.applyToTask(h.taskAt(0).file, plannedOn(h.taskAt(0)), [
             { kind: 'insert', place: 'afterSubtree', text: '- [x] ⏱️ rec @2026-08-15T11:00>11:30' },
         ]);
 
@@ -161,7 +161,7 @@ describe('duplicateInlineTaskInPlace copies the subtree', () => {
             '\t\t- [ ] grandchild',
         ].join('\n'));
 
-        await h.cloner.duplicateInlineTaskInPlace(plannedOn(h.taskAt(0)), verbatimOnce);
+        await h.cloner.duplicateInlineTaskInPlace(h.taskAt(0).file, plannedOn(h.taskAt(0)), verbatimOnce);
 
         expect(h.lines()).toEqual([
             '- [ ] parent @2026-08-15',
@@ -181,7 +181,7 @@ describe('duplicateInlineTaskInPlace copies the subtree', () => {
             '\t```',
         ].join('\n'));
 
-        await h.cloner.duplicateInlineTaskInPlace(plannedOn(h.taskAt(0)), verbatimOnce);
+        await h.cloner.duplicateInlineTaskInPlace(h.taskAt(0).file, plannedOn(h.taskAt(0)), verbatimOnce);
 
         expect(h.lines().slice(0, 4)).toEqual([
             '- [ ] parent @2026-08-15',
@@ -205,7 +205,7 @@ describe('duplicateInlineTask shifts along the calendar', () => {
     it('puts the copy before the task and drops its block id', async () => {
         const h = await writeBench(subtree);
 
-        await h.cloner.duplicateInlineTask(plannedOn(h.taskAt(0)), { dayOffset: 1 });
+        await h.cloner.duplicateInlineTask(h.taskAt(0).file, plannedOn(h.taskAt(0)), { dayOffset: 1 });
 
         expect(h.lines()).toEqual([
             '- [ ] parent @2026-08-16',
@@ -219,7 +219,7 @@ describe('duplicateInlineTask shifts along the calendar', () => {
     it('writes count copies, latest first', async () => {
         const h = await writeBench(subtree);
 
-        await h.cloner.duplicateInlineTask(plannedOn(h.taskAt(0)), { dayOffset: 1, count: 3 });
+        await h.cloner.duplicateInlineTask(h.taskAt(0).file, plannedOn(h.taskAt(0)), { dayOffset: 1, count: 3 });
 
         // Future-first, so scrolling down walks back towards the original.
         expect(h.lines().filter(l => l.startsWith('- [ ] parent'))).toEqual([
@@ -233,7 +233,7 @@ describe('duplicateInlineTask shifts along the calendar', () => {
     it('gives every copy its own children', async () => {
         const h = await writeBench(subtree);
 
-        await h.cloner.duplicateInlineTask(plannedOn(h.taskAt(0)), { dayOffset: 2, count: 2 });
+        await h.cloner.duplicateInlineTask(h.taskAt(0).file, plannedOn(h.taskAt(0)), { dayOffset: 2, count: 2 });
 
         expect(h.lines()).toEqual([
             '- [ ] parent @2026-08-18',
@@ -252,7 +252,7 @@ describe('duplicateInlineTask shifts along the calendar', () => {
             '\t- [ ] child @2026-08-15T13:00>13:30',
         ].join('\n'));
 
-        await h.cloner.duplicateInlineTask(plannedOn(h.taskAt(0)), { dayOffset: 1 });
+        await h.cloner.duplicateInlineTask(h.taskAt(0).file, plannedOn(h.taskAt(0)), { dayOffset: 1 });
 
         // A child's dates are its own, not an offset from its parent's.
         expect(h.lines()[1]).toBe('\t- [ ] child @2026-08-15T13:00>13:30');
@@ -263,7 +263,7 @@ describe('duplicateInlineTask shifts along the calendar', () => {
 
 /** A move within the file, as the executor writes it: one op, the row carried to the end of the section `## Done`. */
 function moveToEnd(h: Awaited<ReturnType<typeof writeBench>>, text: string) {
-    return h.writer.applyToTask(plannedOn(h.taskAt(0)), [{ kind: 'move', to: { heading: 'Done', side: 'end' }, text }]);
+    return h.writer.applyToTask(h.taskAt(0).file, plannedOn(h.taskAt(0)), [{ kind: 'move', to: { heading: 'Done', side: 'end' }, text }]);
 }
 
 describe('a move within the file carries the subtree', () => {
@@ -298,7 +298,7 @@ describe('a move within the file carries the subtree', () => {
             '## Done',
         ].join('\n'));
 
-        await h.writer.applyToTask(plannedOn(h.taskAt(1)), [{ kind: 'move', to: { heading: 'Done', side: 'end' }, text: '- [x] parent @2026-08-15' }]);
+        await h.writer.applyToTask(h.taskAt(1).file, plannedOn(h.taskAt(1)), [{ kind: 'move', to: { heading: 'Done', side: 'end' }, text: '- [x] parent @2026-08-15' }]);
 
         expect(h.lines()).toEqual([
             '- [ ] root',
@@ -336,7 +336,7 @@ describe('a recurrence insert leaves the subtree with the instance that fired', 
     const NEXT = '- [ ] parent @2026-08-16';
     /** `applyToTask` with the one op a recurrence's next-instance insert makes. */
     const insertRecurrence = (h: WriteBench, task: Task, content: string, flowLines: string[] = []) =>
-        h.writer.applyToTask(plannedOn(task), [
+        h.writer.applyToTask(task.file, plannedOn(task), [
             { kind: 'insert-instance', insert: { kind: 'recurrence', content, flowLines } },
         ]);
 
@@ -413,7 +413,7 @@ describe('mixed indentation is read by the width it shows at', () => {
             '\t- [ ] sibling',
         ].join('\n'));
 
-        await h.writer.applyToTask(plannedOn(h.taskAt(1), { subtree: true }), [{ kind: 'remove' }]);
+        await h.writer.applyToTask(h.taskAt(1).file, plannedOn(h.taskAt(1), { subtree: true }), [{ kind: 'remove' }]);
 
         expect(h.lines()).toEqual([
             '- [ ] root',
@@ -433,7 +433,7 @@ describe('mixed indentation is read by the width it shows at', () => {
             '    - [ ] sibling',
         ].join('\n'));
 
-        await h.writer.applyToTask(plannedOn(h.taskAt(1), { subtree: true }), [{ kind: 'remove' }]);
+        await h.writer.applyToTask(h.taskAt(1).file, plannedOn(h.taskAt(1), { subtree: true }), [{ kind: 'remove' }]);
 
         expect(h.lines()).toEqual([
             '- [ ] root',

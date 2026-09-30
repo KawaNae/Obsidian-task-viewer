@@ -52,7 +52,7 @@ function makeRepository() {
 
 /** What the fire's one write inserts, if it inserts anything. */
 function insertOf(repository: ReturnType<typeof makeRepository>): FlowInstanceInsert | undefined {
-    const ops = repository.applyToTask.mock.calls[0]?.[1] as TaskOp[] | undefined;
+    const ops = repository.applyToTask.mock.calls[0]?.[2] as TaskOp[] | undefined;
     const op = ops?.find(o => o.kind === 'insert-instance');
     return op?.kind === 'insert-instance' ? op.insert : undefined;
 }
@@ -67,7 +67,7 @@ function generatedOf(repository: ReturnType<typeof makeRepository>): Extract<Flo
 /** How many strip-flow ops the fires wrote. */
 function stripsOf(repository: ReturnType<typeof makeRepository>): number {
     return repository.applyToTask.mock.calls
-        .flatMap(c => c[1] as TaskOp[]).filter(o => o.kind === 'strip-flow').length;
+        .flatMap(c => c[2] as TaskOp[]).filter(o => o.kind === 'strip-flow').length;
 }
 
 const app = { vault: { getAbstractFileByPath: () => null } };
@@ -380,7 +380,7 @@ describe('a block body reaches the file unchanged', () => {
         const h = await writeBench(document.join('\n'));
         const { parentLine, children } = shapeOf(document, '週報');
 
-        await h.writer.applyToTask(plannedOn(h.taskAt(0)), [
+        await h.writer.applyToTask(h.taskAt(0).file, plannedOn(h.taskAt(0)), [
             {
                 kind: 'insert-instance',
                 insert: { kind: 'generated', parentLine: parentLine!, flowLines: ['every mon', 'use("週報")'], children },
@@ -405,7 +405,7 @@ describe('a block body reaches the file unchanged', () => {
         const h = await writeBench(document.join('\n'));
         const { parentLine, children } = shapeOf(document, '週報');
 
-        await h.writer.applyToTask(plannedOn(h.taskAt(0)), [
+        await h.writer.applyToTask(h.taskAt(0).file, plannedOn(h.taskAt(0)), [
             { kind: 'insert-instance', insert: { kind: 'generated', parentLine: parentLine!, flowLines: [], children } },
         ]);
 
@@ -443,7 +443,7 @@ describe('a block body reaches the file unchanged', () => {
         const h = await writeBench(spaced.join('\n'));
         const { parentLine, children } = shapeOf(spaced, '週報');
 
-        await h.writer.applyToTask(plannedOn(h.taskAt(0)), [
+        await h.writer.applyToTask(h.taskAt(0).file, plannedOn(h.taskAt(0)), [
             { kind: 'insert-instance', insert: { kind: 'generated', parentLine: parentLine!, flowLines: [], children } },
         ]);
 

@@ -11,7 +11,7 @@ import type { FlowEffect } from './FlowEffects';
 import { type CreatingEffect, type FlowDeleteAssessment, assessFlowDelete, planFlowForDeletion } from './FlowDeletion';
 import type { FlowInstanceInsert } from '../persistence/FlowInstanceLines';
 import type { CompletionFire, TaskOp } from '../persistence/TaskOps';
-import { plannedOn, subjectOf } from '../persistence/TaskRefs';
+import { plannedOn, subjectOf, type ReadCopy } from '../persistence/TaskRefs';
 import type { Refusal } from '../persistence/FileLines';
 import { refusalClause } from '../core/RefusalClause';
 import { type InSection, Placement, type SectionSide } from '../persistence/utils/Placement';
@@ -245,7 +245,7 @@ export class FlowExecutor {
      * @returns whether the task is gone. False when the fire could not be
      * planned, which stops the delete.
      */
-    async fireAndDelete(task: Task): Promise<boolean> {
+    async fireAndDelete(task: ReadCopy): Promise<boolean> {
         logInfo(`[Flow:delete] taskId=${task.id} flow="${task.flow ? flowSource(task.flow) : ''}"`);
         try {
             return await this.executeDeletionFire(task);
@@ -274,7 +274,7 @@ export class FlowExecutor {
      * no and writes nothing either — nothing is written that the user would
      * then have to clear away by hand.
      */
-    private async executeDeletionFire(task: Task): Promise<boolean> {
+    private async executeDeletionFire(task: ReadCopy): Promise<boolean> {
         const read = this.readingBlocks();
         const outlook = planFlowForDeletion(task, read.deps);
 
@@ -294,7 +294,7 @@ export class FlowExecutor {
         // The instance goes in first, at the head of the sibling group, and
         // the removal follows at the row's line carried across that insert.
         const { written: removed } = await this.repository.applyToTask(
-            plannedOn(task, { commands: true, subtree: true, blocks: read.blocks }), [...inserts, { kind: 'remove' }]);
+            task.file, plannedOn(task, { commands: true, subtree: true, blocks: read.blocks }), [...inserts, { kind: 'remove' }]);
         if (!removed) {
             // Told to the user by the write layer, which refused it.
             logWarn(`[FlowExecutor] Flow fired but the original could not be deleted: ${task.id}`);

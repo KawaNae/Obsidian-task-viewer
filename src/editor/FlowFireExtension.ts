@@ -6,8 +6,8 @@ import { completes, isOperation } from '../services/flow/FlowTrigger';
 import { type FireOp, type NotRun, notRunOf } from '../services/flow/FlowExecutor';
 import type { TaskOp } from '../services/persistence/TaskOps';
 import {
-    editLines, replayEdits,
-    type EditorLine, type LineEdit, type LineDraft, type NamedRow, type WriteSession,
+    editLines, editorRow, replayEdits,
+    type LineEdit, type LineDraft, type RowRef, type WriteSession,
 } from '../services/persistence/FileLines';
 import { lineChanges } from './LineChanges';
 import { linesOf } from './EditorDoc';
@@ -24,7 +24,7 @@ export interface EditorFireHost {
     active(): boolean;
     statusDefinitions(): StatusDefinition[];
     fireOp(path: string): FireOp;
-    applyOps(draft: LineDraft, session: WriteSession, target: NamedRow | EditorLine, ops: readonly TaskOp[]): boolean;
+    applyOps(draft: LineDraft, session: WriteSession, target: RowRef, ops: readonly TaskOp[]): boolean;
     /** Tell the user a completed row's flow, or its move, was not run, and why: the row stays completed (`FlowExecutor.reportNotRun`). */
     notRun(why: NotRun): void;
 }
@@ -118,7 +118,7 @@ export function fireFilter(host: EditorFireHost): Extension {
             // not a change of the note's. Before any fire, that is the line
             // the transaction completed.
             const edited = editLines(path, lines, '\n',
-                (draft, _eol, session) => host.applyOps(draft, session, { line, text: lines[line], key: contentKeyOf(lines) }, ops));
+                (draft, _eol, session) => host.applyOps(draft, session, editorRow(line, lines[line], contentKeyOf(lines)), ops));
             if (!edited.written) {
                 host.notRun({ kind: 'refused', refusal: edited.refused });
                 continue;

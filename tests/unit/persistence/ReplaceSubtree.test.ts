@@ -22,7 +22,7 @@ type Child = [text: string, was: number | null];
 async function replace(b: WriteBench, line: number, text: string, children: Child[], base = b.taskAt(line).subtreeLines!) {
     const task = b.taskAt(line);
     const target = { ...plannedOn(task), basis: { text: base[0], subtree: base } };
-    return b.writer.replaceSubtreeInFile(target, {
+    return b.writer.replaceSubtreeInFile(task.file, target, {
         text,
         children: children.map(([childText, was]): SubtreeLine => ({ text: childText, was })),
     }, { completes: () => false, fire: () => { throw new Error('no row completes here'); } });

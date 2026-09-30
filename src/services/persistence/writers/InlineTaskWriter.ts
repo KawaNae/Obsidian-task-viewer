@@ -10,10 +10,9 @@ import type { PropertyOp } from '../PropertyUpdatePlanner';
 import { flowInstanceHead, renderFlowInstance } from '../FlowInstanceLines';
 import {
     UnfollowableDraft, createFile, editLines, fileGone, processLines, splitLines, withRefused,
-    type DraftEdit, type EditTrials, type EditedLines, type EditorLine, type LineDraft, type NamedRow, type Refusal,
-    type RowTarget, type WriteAt, type WriteRefused, type WriteChannel, type WriteChannels, type WriteOutcome, type WriteSession,
+    type DraftEdit, type EditTrials, type EditedLines, type LineDraft, type Refusal, type RowRef,
+    type RowTarget, type WriteAt, type WriteChannel, type WriteChannels, type WriteOutcome, type WriteSession,
 } from '../FileLines';
-import type { PlannedTarget } from '../TaskRefs';
 import type { CompletionFire, FiringOutcome, SubtreeReplacement, TaskOp } from '../TaskOps';
 import { replaceSubtree } from '../ReplaceSubtree';
 import { Outline, type OutlineReading } from '../../parsing/utils/Outline';
@@ -48,14 +47,14 @@ export class InlineTaskWriter {
      * (`TaskIndex.revertUnwrittenUpdate`). A write made says what came of
      * `fire` (`FiringOutcome`).
      */
-    async updateTaskInFile<F extends CompletionFire>(target: PlannedTarget, updatedTask: Task, childOps: PropertyOp[] = [], fire?: F): Promise<FiringOutcome<F>> {
-        const file = this.app.vault.getAbstractFileByPath(target.file);
-        if (!(file instanceof TFile)) return this.refusedGone(target);
+    async updateTaskInFile<F extends CompletionFire>(path: string, target: RowRef, updatedTask: Task, childOps: PropertyOp[] = [], fire?: F): Promise<FiringOutcome<F>> {
+        const file = this.app.vault.getAbstractFileByPath(path);
+        if (!(file instanceof TFile)) return fileGone(this.channelOf(path), path, target.subject);
 
         // 子プロパティ行（- key:: value）の更新はタスク行と同じ1回の書き込みで
         // 行う。行の土台を1回照合し、1回で書く。
         const update: TaskOp = { kind: 'update', text: formatRow(updatedTask), childOps };
-        return this.writeOps(file, this.channelOf(target.file), target, [update], fire);
+        return this.writeOps(file, this.channelOf(path), target, [update], fire);
     }
 
     /**
@@ -75,14 +74,15 @@ export class InlineTaskWriter {
      * (`withRefused`).
      */
     async replaceSubtreeInFile<F extends CompletionFire>(
-        target: PlannedTarget,
+        path: string,
+        target: RowRef,
         replacement: SubtreeReplacement,
         completing: { completes(before: string, after: string): boolean; fire(): F },
         opts: { refused?: (refusal: Refusal) => void } = {},
     ): Promise<FiringOutcome<F>> {
-        const file = this.app.vault.getAbstractFileByPath(target.file);
-        const channel = withRefused(this.channelOf(target.file), opts.refused);
-        if (!(file instanceof TFile)) return fileGone(channel, target.file, target.subject);
+        const file = this.app.vault.getAbstractFileByPath(path);
+        const channel = withRefused(this.channelOf(path), opts.refused);
+        if (!(file instanceof TFile)) return fileGone(channel, path, target.subject);
         return this.writeFiring(file, channel, (draft, session) => {
             const line = session.row(target);
             if (line === null) return false;
@@ -99,7 +99,7 @@ export class InlineTaskWriter {
     private writeOps<F extends CompletionFire>(
         file: TFile,
         channel: WriteChannel | undefined,
-        target: NamedRow | EditorLine,
+        target: RowRef,
         ops: readonly TaskOp[],
         fire: F | undefined,
     ): Promise<FiringOutcome<F>> {
@@ -239,11 +239,6 @@ export class InlineTaskWriter {
         };
     }
 
-    /** Nothing written: the file is not there. Told as `gone`, like a row that is not. */
-    private refusedGone(target: PlannedTarget): WriteRefused {
-        return fileGone(this.channelOf(target.file), target.file, target.subject);
-    }
-
     /**
      * Apply `ops` to the row at a line the editor pointed at, planned from the
      * row, and its subtree when `at` holds one: the editor menu's write, when
@@ -254,13 +249,13 @@ export class InlineTaskWriter {
      */
     async applyToLine<F extends CompletionFire>(
         filePath: string,
-        at: EditorLine,
+        at: RowRef,
         ops: readonly TaskOp[],
         opts: { refused?: (refusal: Refusal) => void; fire?: F } = {},
     ): Promise<FiringOutcome<F>> {
         const file = this.app.vault.getAbstractFileByPath(filePath);
         const channel = withRefused(this.channelOf(filePath), opts.refused);
-        if (!(file instanceof TFile)) return fileGone(channel, filePath, at.text.trim());
+        if (!(file instanceof TFile)) return fileGone(channel, filePath, at.subject);
         return this.writeOps(file, channel, at, ops, opts.fire);
     }
 
@@ -287,13 +282,14 @@ export class InlineTaskWriter {
      * left, so the lines written are the same.
      */
     async applyToTask(
-        target: PlannedTarget,
+        path: string,
+        target: RowRef,
         ops: readonly TaskOp[],
         opts: { refused?: (refusal: Refusal) => void } = {},
     ): Promise<WriteOutcome> {
-        const file = this.app.vault.getAbstractFileByPath(target.file);
-        const channel = withRefused(this.channelOf(target.file), opts.refused);
-        if (!(file instanceof TFile)) return fileGone(channel, target.file, target.subject);
+        const file = this.app.vault.getAbstractFileByPath(path);
+        const channel = withRefused(this.channelOf(path), opts.refused);
+        if (!(file instanceof TFile)) return fileGone(channel, path, target.subject);
 
         return processLines(this.app, file, channel, (draft, _eol, session) => this.applyOps(draft, session, target, ops));
     }

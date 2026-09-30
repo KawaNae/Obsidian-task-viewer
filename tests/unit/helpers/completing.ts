@@ -27,7 +27,7 @@ export function completing<E extends FlowExecutor>(
         if (plan.kind === 'failed') executor.reportNotRun(plan);
         if (plan.kind === 'fires') {
             const ops = plan.ops;
-            if (ops.length > 0) await repository.applyToTask(plannedOn(task), ops);
+            if (ops.length > 0) await repository.applyToTask(task.file, plannedOn(task), ops);
         }
         return plan;
     };

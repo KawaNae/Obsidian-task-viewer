@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { contentKeyOf } from '../../../src/services/core/ContentKey';
-import { editLines, replayEdits, type EditedLines } from '../../../src/services/persistence/FileLines';
+import { editorRow, editLines, replayEdits, type EditedLines } from '../../../src/services/persistence/FileLines';
 import { Outline } from '../../../src/services/parsing/utils/Outline';
 import type { TaskOp } from '../../../src/services/persistence/TaskOps';
 import { openVault, type VaultSession } from '../helpers/vaultSession';
@@ -35,7 +35,7 @@ afterEach(() => { vi.restoreAllMocks(); });
 function together(session: VaultSession, lines: readonly string[], line: number, ops: readonly TaskOp[]): EditedLines {
     const host = session.index.editorFireHost();
     return editLines(FILE, lines, '\n', (draft, _eol, s) =>
-        host.applyOps(draft, s, { line, text: lines[line], key: contentKeyOf(lines) }, ops));
+        host.applyOps(draft, s, editorRow(line, lines[line], contentKeyOf(lines)), ops));
 }
 
 /** The same ops, one attempt each, the row followed across each. */

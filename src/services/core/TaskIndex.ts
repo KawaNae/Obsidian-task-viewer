@@ -19,9 +19,9 @@ import { formatRow } from '../parsing/TaskLineFormat';
 import { lineParsersFingerprint } from '../parsing/TaskParser';
 import { planInPlaceCopies } from '../persistence/DuplicateShift';
 import type { GenBlock } from '../parsing/gen/GenBlockCollector';
-import { plannedOn, subjectOf } from '../persistence/TaskRefs';
+import { isReadCopy, plannedOn, subjectOf, type ReadCopy } from '../persistence/TaskRefs';
 import { logDebug, logError, logInfo, logWarn } from '../../log/log';
-import { readInLine, type EditorLine, type Landing, type Refusal } from '../persistence/FileLines';
+import { readInLine, type Landing, type Refusal, type RowRef } from '../persistence/FileLines';
 import type { FiringOutcome, InsertPlace, SubtreeReplacement, TaskOp } from '../persistence/TaskOps';
 import { Destination, type Section } from '../persistence/Destination';
 import type { SendTo } from '../persistence/writers/SendWriter';
@@ -508,7 +508,7 @@ export class TaskIndex {
         const propertyOps = PropertyUpdatePlanner.plan(task, updates, this.settings.scopeKeys);
 
         // 更新前の姿。行の探索と、書けなかったときの巻き戻しの両方で要る。
-        const before: Task = { ...task };
+        const before: ReadCopy = { ...task };
 
         Object.assign(task, updates);
         this.store.bumpRevision();
@@ -536,7 +536,7 @@ export class TaskIndex {
         const target = plannedOn(before, { subtree: propertyOps.length > 0 });
         const written = await this.writeCompleting(
             completes(before.originalText, formatRow(task), this.settings.statusDefinitions) ? task.file : null,
-            (fire) => this.repository.updateTaskInFile(target, task, propertyOps, fire));
+            (fire) => this.repository.updateTaskInFile(task.file, target, task, propertyOps, fire));
 
         if (!written) {
             this.revertUnwrittenUpdate(task, taskId, before, updates);
@@ -622,7 +622,7 @@ export class TaskIndex {
                 logInfo(`[replaceSubtree] id=${taskId} lines=${base.length}->${replacement.children.length + 1}`);
                 const target = { ...plannedOn(task), basis: { text: base[0], subtree: base } };
                 const defs = this.settings.statusDefinitions;
-                const outcome = await this.repository.replaceSubtreeInFile(target, replacement, {
+                const outcome = await this.repository.replaceSubtreeInFile(task.file, target, replacement, {
                     completes: (was, now) => completes(was, now, defs),
                     fire: () => this.commandExecutor.fireOp(task.file),
                 }, { refused: (refusal) => { void hear(refusal); } });
@@ -676,7 +676,7 @@ export class TaskIndex {
         // rows never wait for each other.
         const ids = [...asked.keys()].sort();
         return this.onRows(ids, async (): Promise<SendWrite> => {
-            const planned: { task: Task; row: SendRow }[] = [];
+            const planned: { task: ReadCopy; row: SendRow }[] = [];
             for (const id of ids) {
                 const copy = await this.planCopy(id, known.get(id), hear);
                 if ('refused' in copy) return { kind: 'not-done', refused: copy.refused };
@@ -731,7 +731,8 @@ export class TaskIndex {
      * A row the store no longer holds — an earlier write to it took it away,
      * or a scan read the file without it — is refused as `gone`, like any
      * write that finds its row gone. `known` is the copy as the operation was
-     * asked for, to say which row it was.
+     * asked for, to say which row it was. So is a copy that names no reading
+     * (`ReadCopy`): its line is a coordinate in no content a write can check.
      *
      * A copy the disk no longer reads as (`checkCopy`: a change the index was
      * never told of) is not planned from: it is refused as `stale`, the note
@@ -740,7 +741,7 @@ export class TaskIndex {
      * comes through here, and so do the drag and the card's menu before the
      * user puts work in (`confirmTask`).
      */
-    private async copyToPlan(taskId: string, known: Task | undefined): Promise<Task | undefined> {
+    private async copyToPlan(taskId: string, known: Task | undefined): Promise<ReadCopy | undefined> {
         const planned = await this.planCopy(taskId, known);
         return 'task' in planned ? planned.task : undefined;
     }
@@ -755,7 +756,7 @@ export class TaskIndex {
         taskId: string,
         known: Task | undefined,
         hear: (refusal: IndexRefusal) => Promise<void> = (refusal) => this.reportRefusal(refusal),
-    ): Promise<{ task: Task; disk: OnDisk | null } | { refused: IndexRefusal }> {
+    ): Promise<{ task: ReadCopy; disk: OnDisk } | { refused: IndexRefusal }> {
         const task = this.getTask(taskId);
         if (!task) {
             logWarn(`[TaskIndex] the index no longer holds the row: id=${taskId}`);
@@ -763,6 +764,14 @@ export class TaskIndex {
             // note, as a write refused before it read the note does.
             const file = known?.file ?? readName(taskId)?.filePath ?? '';
             const refused: IndexRefusal = { file, reason: { kind: 'gone' }, subject: known ? subjectOf(known) : file };
+            await hear(refused);
+            return { refused };
+        }
+        if (!isReadCopy(task)) {
+            // A copy no reading of the index made: its line is a coordinate
+            // in no content a write can check, so there is no row to write.
+            logWarn(`[TaskIndex] the copy names no reading: id=${taskId}`);
+            const refused: IndexRefusal = { file: task.file, reason: { kind: 'gone' }, subject: subjectOf(task) };
             await hear(refused);
             return { refused };
         }
@@ -808,7 +817,7 @@ export class TaskIndex {
             const planned = await this.planCopy(taskId, known);
             if ('refused' in planned) return undefined;
             const { task, disk } = planned;
-            if (!disk?.read) {
+            if (!disk.read) {
                 logWarn(`[TaskIndex] rowSnapshot: the copy was not read in what the disk holds: id=${taskId}`);
                 return undefined;
             }
@@ -961,7 +970,7 @@ export class TaskIndex {
             } else {
                 // The row and the subtree the index read (`plannedOn`): a line
                 // written into the subtree since is not taken with it.
-                removed = (await this.repository.applyToTask(plannedOn(task, { subtree: true }), [{ kind: 'remove' }])).written;
+                removed = (await this.repository.applyToTask(task.file, plannedOn(task, { subtree: true }), [{ kind: 'remove' }])).written;
                 if (!removed) {
                     // Nothing was written, so no rescan follows and the store
                     // still holds a task the file also still holds. They agree,
@@ -986,7 +995,7 @@ export class TaskIndex {
     }
 
     /** {@link duplicateTask} on the copy the store holds once the row's earlier writes are done. */
-    private async writeDuplicateOf(task: Task, taskId: string, options?: DuplicateOptions): Promise<boolean> {
+    private async writeDuplicateOf(task: ReadCopy, taskId: string, options?: DuplicateOptions): Promise<boolean> {
         return this.withNotify(task.file, async () => {
             if (task.isReadOnly) return false;
 
@@ -1012,14 +1021,15 @@ export class TaskIndex {
      * those are resolved at this layer. The writer is handed finished lines,
      * the same division the recurrence path uses.
      */
-    private async writeDuplicate(task: Task, options?: DuplicateOptions): Promise<boolean> {
+    private async writeDuplicate(task: ReadCopy, options?: DuplicateOptions): Promise<boolean> {
         const { dayOffset = 0, count = 1 } = options ?? {};
         if (dayOffset !== 0) {
-            return (await this.repository.duplicateInlineTask(plannedOn(task), options)).written;
+            return (await this.repository.duplicateInlineTask(task.file, plannedOn(task), options)).written;
         }
 
         const copies = planInPlaceCopies(task, this.settings.startHour, count);
         const outcome = await this.repository.duplicateInlineTaskInPlace(
+            task.file,
             plannedOn(task),
             copies.kind === 'verbatim'
                 ? copies
@@ -1077,7 +1087,7 @@ export class TaskIndex {
                 const ops: TaskOp[] = [];
                 if (rowId !== undefined) ops.push({ kind: 'update', text: formatRow({ ...task, blockId: rowId ?? undefined }) });
                 ops.push({ kind: 'insert', place, text: line });
-                const { written } = await this.repository.applyToTask(plannedOn(task), ops);
+                const { written } = await this.repository.applyToTask(task.file, plannedOn(task), ops);
                 return written;
             });
         });
@@ -1093,11 +1103,11 @@ export class TaskIndex {
      *
      * @returns whether the line was written.
      */
-    async writeLine(filePath: string, at: EditorLine, ops: readonly TaskOp[]): Promise<boolean> {
+    async writeLine(filePath: string, at: RowRef, ops: readonly TaskOp[]): Promise<boolean> {
         if (this.refuseAfterDispose('writeLine')) return false;
         return this.withNotify(filePath, async () => {
             const defs = this.settings.statusDefinitions;
-            const completing = ops.some(op => op.kind === 'update' && completes(at.text, op.text, defs));
+            const completing = ops.some(op => op.kind === 'update' && completes(at.basis.text, op.text, defs));
             return this.writeCompleting(
                 completing ? filePath : null,
                 (fire) => this.repository.applyToLine(filePath, at, ops, { fire }));

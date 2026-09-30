@@ -1,4 +1,5 @@
 import { describe, it, expect, afterEach, beforeEach } from 'vitest';
+import { editorRow } from '../../../src/services/persistence/FileLines';
 import { contentKeyOf } from '../../../src/services/core/ContentKey';
 import { Notice } from 'obsidian';
 import { openVault, type VaultSession } from '../helpers/vaultSession';
@@ -70,7 +71,7 @@ describe('the editor\'s duplicate (the `copy` op, copyOf)', () => {
     it('is spelled as the row it copies, not as the sibling below it', async () => {
         const { contents, session } = await open(['# n', '- [ ] P', '\t- [ ] T', '    - [ ] V', '']);
 
-        expect(await session.index.writeLine(FILE, { line: 2, text: '\t- [ ] T', key: contentKeyOf(contents.get(FILE)!.split('\n')) }, [{ kind: 'copy', text: '\t- [ ] T' }])).toBe(true);
+        expect(await session.index.writeLine(FILE, editorRow(2, '\t- [ ] T', contentKeyOf(contents.get(FILE)!.split('\n'))), [{ kind: 'copy', text: '\t- [ ] T' }])).toBe(true);
         await session.settle(FILE);
 
         expect(lines(contents)).toEqual(['# n', '- [ ] P', '\t- [ ] T', '\t- [ ] T', '    - [ ] V', '']);
@@ -81,7 +82,7 @@ describe('the editor\'s duplicate (the `copy` op, copyOf)', () => {
         const { contents, session } = await open(['# n', '- [ ] P', '\t- [ ] T', '      - [ ] c', '- [ ] U', '']);
         expect(parents(session)).toEqual([['P', null], ['T', 'P'], ['c', 'T'], ['U', null]]);
 
-        expect(await session.index.writeLine(FILE, { line: 2, text: '\t- [ ] T', key: contentKeyOf(contents.get(FILE)!.split('\n')) }, [{ kind: 'copy', text: '\t- [ ] T' }])).toBe(true);
+        expect(await session.index.writeLine(FILE, editorRow(2, '\t- [ ] T', contentKeyOf(contents.get(FILE)!.split('\n'))), [{ kind: 'copy', text: '\t- [ ] T' }])).toBe(true);
         await session.settle(FILE);
 
         expect(lines(contents)).toEqual(['# n', '- [ ] P', '\t- [ ] T', '      - [ ] c', '\t- [ ] T', '- [ ] U', '']);
