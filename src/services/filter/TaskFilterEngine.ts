@@ -4,7 +4,6 @@ import type { FilterContext } from './FilterContext';
 import { isFilterCondition } from './FilterTypes';
 import { DateResolver } from './DateResolver';
 import { toDisplayTask, NO_TASK_LOOKUP } from '../display/DisplayTaskConverter';
-import { getDisplayTaskDurationMs } from '../display/TaskDuration';
 import { DateUtils } from '../../utils/DateUtils';
 import { getTaskNotation } from './parserTaxonomy';
 import {
@@ -214,7 +213,7 @@ export class TaskFilterEngine {
         if (typeof c.value !== 'number') return true;
         if (!task.effectiveStartDate) return false;
 
-        const durationMs = getDisplayTaskDurationMs(task, startHour);
+        const durationMs = DateUtils.getDisplayTaskDurationMs(task, startHour);
         if (durationMs === null) return false;
 
         const unit = c.unit ?? 'hours';

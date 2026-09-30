@@ -1,3 +1,5 @@
+import type { DisplayTask } from '../types';
+
 /**
  * The date module: every conversion between a `YYYY-MM-DD` string and a
  * `Date`, the visual "today", the start of a week, shifting by days, and the
@@ -323,6 +325,53 @@ export class DateUtils {
         }
 
         return endDateTime.getTime() - startDateTime.getTime();
+    }
+
+    /**
+     * How long a task lasts, from its effective start (date and time) to its
+     * effective end. null for a task without a start (due only), or whose end
+     * comes before its start.
+     *
+     * The filter's `length` and the API's `durationMinutes` both read this, so
+     * a task that `length greaterThan 24 hours` picks up reports the same span.
+     */
+    static getDisplayTaskDurationMs(
+        task: Pick<DisplayTask, 'effectiveStartDate' | 'effectiveStartTime' | 'effectiveEndDate' | 'effectiveEndTime'>,
+        startHour: number,
+    ): number | null {
+        if (!task.effectiveStartDate) return null;
+        const ms = DateUtils.getTaskDurationMs(
+            task.effectiveStartDate, task.effectiveStartTime,
+            task.effectiveEndDate, task.effectiveEndTime,
+            startHour,
+        );
+        return Number.isFinite(ms) && ms >= 0 ? ms : null;
+    }
+
+    /**
+     * Minutes of an `HH:mm` time counted from midnight of the visual day's
+     * calendar date: a time before `startHour` belongs to the early morning
+     * after it, so it lands past 24:00.
+     */
+    static visualDayMinutes(time: string, startHour: number): number {
+        const minutes = DateUtils.timeToMinutes(time);
+        return minutes < startHour * 60 ? minutes + 24 * 60 : minutes;
+    }
+
+    /**
+     * Where a timed task sits in its visual day: start and end in
+     * {@link visualDayMinutes}. An end that reads before the start is the next
+     * day's; no end means the default length. The timeline's layout, its card
+     * placement and the render order all read this, so their stacking agrees.
+     */
+    static timedSpanMinutes(
+        startTime: string, endTime: string | undefined, startHour: number,
+    ): { start: number; end: number } {
+        const start = DateUtils.visualDayMinutes(startTime, startHour);
+        if (!endTime) return { start, end: start + DateUtils.DEFAULT_TIMED_DURATION_MINUTES };
+        let end = DateUtils.visualDayMinutes(endTime, startHour);
+        if (end < start) end += 24 * 60;
+        return { start, end };
     }
 
     /**

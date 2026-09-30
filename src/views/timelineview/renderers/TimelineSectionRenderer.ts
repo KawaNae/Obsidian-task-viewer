@@ -46,7 +46,7 @@ export class TimelineSectionRenderer {
         const startHour = this.plugin.settings.startHour;
 
         // Calculate layout for overlapping tasks
-        const layout = TaskLayout.calculateTaskLayout(timedTasks, date, startHour);
+        const layout = TaskLayout.calculateTaskLayout(timedTasks, startHour);
 
         timedTasks.forEach((task, index) => {
             if (!task.effectiveStartTime) return;
@@ -57,7 +57,7 @@ export class TimelineSectionRenderer {
             markHandleSurface(el, 'timeline');
             if (reused) container.appendChild(reused);
 
-            this.decorateLane(el, task, date, index, layout, startHour);
+            this.decorateLane(el, task, index, layout, startHour);
 
             this.taskRenderer.render(el, task, this.plugin.settings, {
                 cardInstanceId,
@@ -93,7 +93,6 @@ export class TimelineSectionRenderer {
     private decorateLane(
         el: HTMLElement,
         task: DisplayTask,
-        date: string,
         index: number,
         layout: ReturnType<typeof TaskLayout.calculateTaskLayout>,
         startHour: number,
@@ -108,32 +107,10 @@ export class TimelineSectionRenderer {
         TaskStyling.applyTaskLinestyle(el, getEffectiveLinestyle(task) ?? null);
         TaskStyling.applyReadOnly(el, task);
 
-        // Position math (mirrors the previous in-line code; isolated here for
-        // tidy reuse on reconciled elements).
-        let startMinutes = DateUtils.timeToMinutes(task.effectiveStartTime!);
-        let endMinutes: number;
-
-        if (task.effectiveEndTime) {
-            if (task.effectiveEndTime.includes('T')) {
-                const startDate = new Date(`${date}T00:00:00`);
-                const endDate = new Date(task.effectiveEndTime);
-                const diffMs = endDate.getTime() - startDate.getTime();
-                endMinutes = Math.floor(diffMs / 60000);
-            } else {
-                endMinutes = DateUtils.timeToMinutes(task.effectiveEndTime);
-                if (endMinutes < startMinutes) {
-                    endMinutes += 24 * 60;
-                }
-            }
-        } else {
-            endMinutes = startMinutes + DateUtils.DEFAULT_TIMED_DURATION_MINUTES;
-        }
-
+        // Position: the task's span in its visual day, the same one TaskLayout stacks by.
+        const { start: startMinutes, end: endMinutes } =
+            DateUtils.timedSpanMinutes(task.effectiveStartTime!, task.effectiveEndTime, startHour);
         const startHourMinutes = startHour * 60;
-        if (startMinutes < startHourMinutes) {
-            startMinutes += 24 * 60;
-            endMinutes += 24 * 60;
-        }
 
         const relativeStart = startMinutes - startHourMinutes;
         const duration = endMinutes - startMinutes;

@@ -1,3 +1,4 @@
+import { DateUtils } from '../utils/DateUtils';
 import type { DisplayTask, PropertyValue } from '../types';
 import type { NormalizedTask } from './TaskApiTypes';
 import {
@@ -7,7 +8,6 @@ import { serializeFlow } from '../services/flow/FlowSerializer';
 import { flowRaws } from '../services/flow/FlowSegments';
 import { ChildLineClassifier } from '../services/parsing/utils/ChildLineClassifier';
 import { apiIdOf, type TaskLookup } from './TaskIds';
-import { getDisplayTaskDurationMs } from '../services/display/TaskDuration';
 
 // ── Field extractors ──
 
@@ -78,7 +78,7 @@ function toNativeValue(pv: PropertyValue): unknown {
 // ── Duration computation ──
 
 function computeDurationMinutes(task: DisplayTask, startHour: number): number | null {
-    const ms = getDisplayTaskDurationMs(task, startHour);
+    const ms = DateUtils.getDisplayTaskDurationMs(task, startHour);
     return ms === null ? null : Math.round(ms / 60_000);
 }
 

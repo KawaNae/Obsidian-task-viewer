@@ -93,19 +93,8 @@ export class ScheduleTaskCategorizer {
     }
 
     private calculateDurationMinutes(dt: DisplayTask): number {
-        if (!dt.effectiveStartDate || !dt.effectiveStartTime) {
-            return DateUtils.DEFAULT_TIMED_DURATION_MINUTES;
-        }
-
-        const durationMs = DateUtils.getTaskDurationMs(
-            dt.effectiveStartDate,
-            dt.effectiveStartTime,
-            dt.effectiveEndDate,
-            dt.effectiveEndTime,
-            this.getStartHour()
-        );
-
-        if (!Number.isFinite(durationMs) || durationMs <= 0) {
+        const durationMs = dt.effectiveStartTime ? DateUtils.getDisplayTaskDurationMs(dt, this.getStartHour()) : null;
+        if (durationMs === null || durationMs <= 0) {
             return DateUtils.DEFAULT_TIMED_DURATION_MINUTES;
         }
 
