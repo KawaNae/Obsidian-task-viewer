@@ -295,10 +295,9 @@ export class TimerLifecycle {
     /**
      * ⏸ 中断: 走行分を**記録してから**ウィジェットを生かしたまま停める。
      *
-     * 現行 Stop との違いは `closeTimer` を呼ばないことだけ。記録を書き終えた行は
-     * そのまま**尻尾**として残す（`tailRecordBlockId` / `recordedChildTaskId` を
-     * 切らない）— 次の再開はその隣に新しいレコードを並べるので、どこが最後だった
-     * かを手放してはいけない。
+     * ■ 終了との違いは `closeTimer` を呼ばないことだけ。記録を書き終えた行は
+     * そのまま**尻尾**として残す（`tailRecordBlockId` を切らない）— 次の再開は
+     * その隣に新しいレコードを並べるので、どこが最後だったかを手放してはいけない。
      *
      * `recordMode` も触らない。v2 では 1 本目の書き方（self / child / sibling）
      * だけを表し、2 本目以降は常に尻尾の兄弟なので、中断時に書き換える理由が無い。
@@ -315,7 +314,7 @@ export class TimerLifecycle {
      * ▶ 再開: 新しいセッションを始める。
      *
      * **経過は 0 から**。セッション = レコード単位なので、前のセッションの
-     * 経過を持ち越すと 1 レコードの長さが実際の作業と食い違う（現行
+     * 経過を持ち越すと 1 レコードの長さが実際の作業と食い違う（interval の
      * {@link resumeTimer} の累積保持と違う点）。合計は
      * `recordedElapsedTime` が持っている。
      *
@@ -556,10 +555,8 @@ export class TimerLifecycle {
     }
 
     /**
-     * Whether some timer is already tracking `taskId`. The map is keyed by
-     * timer id, so this scans by task — which also keeps working after a file
-     * rename rewrites `timer.taskId` (the old code asked `timers.has(taskId)`,
-     * which silently allowed a second timer on the renamed task).
+     * Whether some timer is already tracking `taskId`, or the row anchored at
+     * `timerTargetId`. The map is keyed by timer id, so this scans by task.
      */
     hasActiveTimerForTask(taskId: string, timerTargetId?: string): boolean {
         if (this.isIdleTimer(taskId)) {
