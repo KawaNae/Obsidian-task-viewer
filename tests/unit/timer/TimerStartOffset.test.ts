@@ -6,7 +6,7 @@ import { STORAGE_VERSION } from '../../../src/timer/TimerStorageUtils';
 import type { TimerStorageUtils } from '../../../src/timer/TimerStorageUtils';
 import type { TimerContext } from '../../../src/timer/TimerContext';
 import type { CountdownTimer, CountupTimer, TimerInstance, TimerRecordMode } from '../../../src/timer/TimerInstance';
-import { canOffsetStart, parseOffsetInput, rememberedStart, startLabel } from '../../../src/timer/TimerStartOffset';
+import { agoLabel, canOffsetStart, readOffsetInput, rememberedStart, startLabel } from '../../../src/timer/TimerStartOffset';
 import { vaultSession, type VaultSession } from '../helpers/vaultSession';
 
 /**
@@ -206,7 +206,7 @@ describe('shifting the start of a running timer writes the running line, then mo
         expect(lines(contents)[0]).toContain(`@${DAY}T00:10>01:10`);
 
         vi.setSystemTime(at(0, 15));
-        const startMs = parseOffsetInput('23:50', Date.now());
+        const startMs = readOffsetInput('time', '23:50', Date.now());
         expect(startMs).toBe(at(23, 50, 29).getTime());
         await lifecycle.offsetStart(timer, startMs!);
         await settleAll(s);
@@ -332,20 +332,25 @@ describe('the remembered start is saved with the timer', () => {
 describe('where a shift goes (TimerStartOffset)', () => {
     const now = at(10, 20).getTime();
 
-    it('a number is minutes back from now', () => {
-        expect(parseOffsetInput('20', now)).toBe(at(10, 0).getTime());
-        expect(parseOffsetInput(' ２０ ', now)).toBe(at(10, 0).getTime());
-        expect(parseOffsetInput('0', now)).toBeNull();
+    it('an amount is whole minutes back from now, 1 or more', () => {
+        expect(readOffsetInput('minutes', '20', now)).toBe(at(10, 0).getTime());
+        expect(readOffsetInput('minutes', ' ２０ ', now)).toBe(at(10, 0).getTime());
+        expect(readOffsetInput('minutes', '0', now)).toBeNull();
+        expect(readOffsetInput('minutes', '-5', now)).toBeNull();
+        expect(readOffsetInput('minutes', '1.5', now)).toBeNull();
+        expect(readOffsetInput('minutes', '9:40', now)).toBeNull();
+        expect(readOffsetInput('minutes', '', now)).toBeNull();
     });
 
-    it('HH:MM is that time today, or the day before when it is later than now', () => {
-        expect(parseOffsetInput('9:40', now)).toBe(at(9, 40).getTime());
-        expect(parseOffsetInput('１０：１５', now)).toBe(at(10, 15).getTime());
-        expect(parseOffsetInput('10:30', now)).toBe(at(10, 30, 29).getTime());
-        expect(parseOffsetInput('24:00', now)).toBeNull();
-        expect(parseOffsetInput('9:4', now)).toBeNull();
-        expect(parseOffsetInput('-5', now)).toBeNull();
-        expect(parseOffsetInput('', now)).toBeNull();
+    it('a time is that time today, or the day before when it is later than now', () => {
+        expect(readOffsetInput('time', '9:40', now)).toBe(at(9, 40).getTime());
+        expect(readOffsetInput('time', '09:40', now)).toBe(at(9, 40).getTime());
+        expect(readOffsetInput('time', '１０：１５', now)).toBe(at(10, 15).getTime());
+        expect(readOffsetInput('time', '10:30', now)).toBe(at(10, 30, 29).getTime());
+        expect(readOffsetInput('time', '24:00', now)).toBeNull();
+        expect(readOffsetInput('time', '9:4', now)).toBeNull();
+        expect(readOffsetInput('time', '20', now)).toBeNull();
+        expect(readOffsetInput('time', '', now)).toBeNull();
     });
 
     it('the remembered start is offered in the first session only, and only when it is past', () => {
@@ -380,8 +385,16 @@ describe('where a shift goes (TimerStartOffset)', () => {
         expect(canOffsetStart({ ...running, pendingRecord: { endMs: now, seconds: 1, then: 'close' } } as TimerInstance)).toBe(false);
     });
 
-    it('a start on another day is labelled with its date', () => {
+    it('a start on another day says so: the day before by name, older ones by their date', () => {
         expect(startLabel(at(9, 5).getTime(), now)).toBe('09:05');
-        expect(startLabel(at(23, 50, 29).getTime(), now)).toBe('2026-09-29 23:50');
+        expect(startLabel(at(23, 50, 29).getTime(), now)).toBe('yesterday 23:50');
+        expect(startLabel(at(23, 50, 28).getTime(), now)).toBe('2026-09-28 23:50');
+    });
+
+    it('how long ago a start is, in minutes, and in hours and minutes from an hour on', () => {
+        expect(agoLabel(at(9, 30).getTime(), now)).toBe('50 min ago');
+        expect(agoLabel(now - 59_999, now)).toBe('0 min ago');
+        expect(agoLabel(at(8, 15).getTime(), now)).toBe('2 h 5 min ago');
+        expect(agoLabel(at(9, 20).getTime(), now)).toBe('1 h 0 min ago');
     });
 });
