@@ -272,6 +272,8 @@ describe('shifting the start of a running count-up', () => {
         await writeIndexedTestFile(FILE, ['- [ ] 量で', ''].join('\n'));
         open = startTimer('量で', 'child');
         pressElapsed(open, '...');
+        // Opened from the widget, the dialog comes over it, not under it.
+        expect(surfaceOverWidget(open)).toContain('tv-overlay');
 
         const unreadable = offsetDialog({ type: '1.5' });
         expect(unreadable).toMatchObject({ kind: 'minutes', says: 'warning', invalid: true, applicable: false });
@@ -364,6 +366,21 @@ function mouse(id: string, path: [number, number][], from: [number, number] = [0
         }
         const after = widget.getBoundingClientRect();
         return JSON.stringify({ presented, captured, moved: [Math.round(after.left - before.left), Math.round(after.top - before.top)] });
+    })()`);
+}
+
+/**
+ * The classes of the surface (the element the body holds) drawn on top at the
+ * middle of the widget that shows the timer `id`.
+ */
+function surfaceOverWidget(id: string): string {
+    return evalOrThrow(`(() => {
+        const item = document.querySelector('[data-timer-id="${id}"]');
+        if (!item) throw new Error('no timer shown');
+        const r = item.closest('.timer-widget').getBoundingClientRect();
+        let at = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+        while (at && at.parentElement !== document.body) at = at.parentElement;
+        return JSON.stringify(at ? at.className : '');
     })()`);
 }
 
