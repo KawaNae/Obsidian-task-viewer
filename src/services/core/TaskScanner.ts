@@ -2,11 +2,10 @@ import { type App, TFile } from 'obsidian';
 import { FileParsePipeline } from '../parsing/FileParsePipeline';
 import type { TaskStore } from './TaskStore';
 import type { Task, TaskViewerSettings } from '../../types';
-import { TaskIdGenerator } from '../display/TaskIdGenerator';
 import { contentKeyOf, type ContentKey } from './ContentKey';
 import { WriteLinks } from './WriteLinks';
 import { newSession, readReading, readingId, type ReadingId } from './Reading';
-import { namesOfReading } from './RowNames';
+import { nameOf, namesOfReading, readName } from './RowNames';
 import { splitLines, type Landing, type ReadMark } from '../persistence/FileLines';
 import type { OutlineReading } from '../parsing/utils/Outline';
 import { TaskLineClassifier } from '../parsing/utils/TaskLineClassifier';
@@ -252,14 +251,14 @@ export class TaskScanner {
      * some other way since, or what our writes left is not committed yet.
      */
     follow(name: string): string | null {
-        const read = TaskIdGenerator.readName(name);
+        const read = readName(name);
         const reading = read ? readReading(read.reading) : null;
         if (!read || !reading || reading.session !== this.session) return null;
         const last = this.numbers.get(read.filePath);
         if (last === undefined || this.committed.get(read.filePath) !== last.n) return null;
         const line = this.carry(read.filePath, reading.n, read.line);
         if (line === null) return null;
-        return TaskIdGenerator.nameOf(read.parserId as Task['parserId'], read.filePath, line, readingId(this.session, last.n));
+        return nameOf(read.parserId as Task['parserId'], read.filePath, line, readingId(this.session, last.n));
     }
 
     /**

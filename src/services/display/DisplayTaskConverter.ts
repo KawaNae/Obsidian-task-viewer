@@ -1,7 +1,7 @@
 import type { Task, DisplayTask } from '../../types';
 import { DateUtils } from '../../utils/DateUtils';
 import { dayBoundaryAt } from './DayBoundary';
-import { TaskIdGenerator } from './TaskIdGenerator';
+import { makeSegmentId } from './SegmentIds';
 import { buildChildEntries } from '../data/ChildEntryBuilder';
 
 /** Lookup signature for resolving sibling tasks during ChildEntry materialization. */
@@ -313,7 +313,7 @@ export function splitDisplayTaskAtBoundary(dt: DisplayTask, startHour: number): 
 
     const headSegment: DisplayTask = {
         ...dt,
-        id: TaskIdGenerator.makeSegmentId(dt.originalTaskId, beforeSegmentDate),
+        id: makeSegmentId(dt.originalTaskId, beforeSegmentDate),
         isSplit: true,
         splitContinuesBefore: dt.splitContinuesBefore ?? false,
         splitContinuesAfter: true,
@@ -326,7 +326,7 @@ export function splitDisplayTaskAtBoundary(dt: DisplayTask, startHour: number): 
 
     const tailSegment: DisplayTask = {
         ...dt,
-        id: TaskIdGenerator.makeSegmentId(dt.originalTaskId, afterSegmentDate),
+        id: makeSegmentId(dt.originalTaskId, afterSegmentDate),
         isSplit: true,
         splitContinuesBefore: true,
         splitContinuesAfter: dt.splitContinuesAfter ?? false,

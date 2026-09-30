@@ -1,7 +1,6 @@
 import type { Task } from '../../types';
 import type { RowBasis } from './RowBasis';
 import type { ReadingId } from '../core/Reading';
-import { TaskIdGenerator } from '../display/TaskIdGenerator';
 
 /** How a refused write names what it was about, to the user. */
 export function subjectOf(task: Task): string {
@@ -16,8 +15,7 @@ export function subjectOf(task: Task): string {
  * reads that way there (see `WriteSession.row`). Nothing looks for the row
  * anywhere else.
  *
- * `read` is the reading the copy was made in, which its name carries
- * (`TaskIdGenerator.nameOf`): the line counts only while the file reads as
+ * `read` is the reading the copy was made in (`Task.reading`): the line counts only while the file reads as
  * that reading did, or where our own writes from it carried the line
  * (`NamedRow.read`). Undefined for a copy that has no such name, which is
  * not written.
@@ -49,7 +47,7 @@ export function plannedOn(task: Task, reads: PlanReads = {}): PlannedTarget {
         file: task.file,
         line: task.line,
         subject: subjectOf(task),
-        read: TaskIdGenerator.readName(task.id)?.reading,
+        read: task.reading,
         basis: {
             text: task.originalText,
             ...(reads.commands ? { commands: (task.flow?.childSegments ?? []).map(segment => segment.raw) } : {}),

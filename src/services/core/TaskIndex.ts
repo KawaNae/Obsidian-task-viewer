@@ -14,7 +14,8 @@ import { TaskScanner } from './TaskScanner';
 import { PathTtlWindow } from './PathTtlWindow';
 import { refusalNotice, type IndexRefusal } from './RefusalClause';
 import { NotifyCoalescer } from './NotifyCoalescer';
-import { TaskIdGenerator } from '../display/TaskIdGenerator';
+import { parseSegmentId } from '../display/SegmentIds';
+import { readName } from './RowNames';
 import { formatRow } from '../parsing/TaskLineFormat';
 import { lineParsersFingerprint } from '../parsing/TaskParser';
 import { toDisplayTask } from '../display/DisplayTaskConverter';
@@ -497,7 +498,7 @@ export class TaskIndex {
         // 解決してから渡す契約（3cd26e96 で consumer の規約から write 境界の構造的
         // 保証へ移した）。ここに届くのはその境界を迂回した呼び出しなので、書き込みは
         // baseId で通したうえで声を上げる。落として黙るより、再発を見つけられる方がよい。
-        const segmentInfo = TaskIdGenerator.parseSegmentId(taskId);
+        const segmentInfo = parseSegmentId(taskId);
         if (segmentInfo) {
             logWarn(`[TaskIndex] segment id reached updateTask, resolving to base: ${taskId}`);
             taskId = segmentInfo.baseId;
@@ -773,7 +774,7 @@ export class TaskIndex {
             logWarn(`[TaskIndex] the index no longer holds the row: id=${taskId}`);
             // A row the caller named but the store never held here: say which
             // note, as a write refused before it read the note does.
-            const file = known?.file ?? TaskIdGenerator.parse(taskId)?.filePath ?? '';
+            const file = known?.file ?? readName(taskId)?.filePath ?? '';
             const refused: IndexRefusal = { file, reason: { kind: 'gone' }, subject: known ? subjectOf(known) : file };
             await hear(refused);
             return { refused };

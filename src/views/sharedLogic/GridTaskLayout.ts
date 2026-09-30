@@ -1,6 +1,6 @@
 import type { DisplayTask } from '../../types';
 import { DateUtils } from '../../utils/DateUtils';
-import { TaskIdGenerator } from '../../services/display/TaskIdGenerator';
+import { makeSegmentId } from '../../services/display/SegmentIds';
 
 /**
  * Effective date range for a task, provided by the consumer.
@@ -141,7 +141,7 @@ export function computeGridLayout(
         // Pre-split tasks already have segment IDs; generate only for non-pre-split clipping
         const needsInternalSegmentId = !dt.isSplit && isMultiDay && (effectiveStart < rangeStart || effectiveEnd > rangeEnd);
         const segmentId = needsInternalSegmentId
-            ? TaskIdGenerator.makeSegmentId(task.id, clippedStart)
+            ? makeSegmentId(task.id, clippedStart)
             : task.id;
 
         // 2. Compute due arrow

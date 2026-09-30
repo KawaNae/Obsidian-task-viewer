@@ -2,7 +2,7 @@ import { describe, it, expect, vi } from 'vitest';
 import { TaskCardRenderer } from '../../../src/views/taskcard/TaskCardRenderer';
 import { HandleManager } from '../../../src/views/sharedUI/handles/HandleManager';
 import { refreshTimerTask } from '../../../src/timer/TimerTaskSync';
-import { TaskIdGenerator } from '../../../src/services/display/TaskIdGenerator';
+import { makeSegmentId } from '../../../src/services/display/SegmentIds';
 import { makeTask } from '../helpers/makeTask';
 import type { Task } from '../../../src/types';
 
@@ -67,8 +67,8 @@ describe('an expanded card', () => {
     });
 
     it('follows a segment of a split task by its base', () => {
-        const old = TaskIdGenerator.makeSegmentId(OLD, '2026-09-25');
-        const now = TaskIdGenerator.makeSegmentId(NOW, '2026-09-25');
+        const old = makeSegmentId(OLD, '2026-09-25');
+        const now = makeSegmentId(NOW, '2026-09-25');
         const state = expansion([`timeline::allday::${old}`]);
 
         expect(state.isExpanded(`timeline::allday::${now}`, now)).toBe(true);

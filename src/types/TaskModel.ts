@@ -96,7 +96,15 @@ export type ParserId = 'tv-inline' | 'tasks-plugin' | 'day-planner';
 
 export interface Task {
     // Identity and source location.
+    /** The row's name: which reading, and which line of it (`RowNames`). */
     id: string;
+    /**
+     * The reading of the note this is a copy of (a `ReadingId`), given with
+     * the name by the index's scan (`namesOfReading`). Absent on a row read
+     * outside the index and on a task no reading made (`createTempTask`):
+     * neither is written.
+     */
+    reading?: string;
     file: string;
     /** 0-indexed line number in the source file. Every task has one. */
     line: number;

@@ -18,7 +18,16 @@ import { TaskLineClassifier } from '../utils/TaskLineClassifier';
  * extraction only applies it, once per row, and links parent and children
  * by it.
  */
-export type RowNamer = (parserId: ParserId, line: number) => string;
+export type RowNamer = (parserId: ParserId, line: number) => RowName;
+
+/**
+ * A row's name, and the reading it is a copy of (`Task.reading`) when the
+ * reader is the index's scan; a reader outside the index gives none.
+ */
+export interface RowName {
+    id: string;
+    reading?: string;
+}
 
 export interface TaskExtractionContext {
     filePath: string;
@@ -42,7 +51,8 @@ export class NoteTasks {
      * the order the note writes them.
      *
      * Then, for each row:
-     * - Its name is `ctx.name`'s, from its line.
+     * - Its name, and the reading it is a copy of, are `ctx.name`'s, from
+     *   its line.
      * - Its parent is the nearest item above it (`itemsAbove`) that is a row:
      *   a task among the items it stands in, whatever indentation (2 or 4
      *   spaces, a tab) and whatever notes stand between. Its children are
@@ -66,7 +76,7 @@ export class NoteTasks {
             // The chain ends in tv-inline, which reads every task line: no
             // line that opens a task is refused.
             const read = ctx.parsers.parse(outline.lines[line], ctx.filePath, line);
-            if (read) rows.set(line, { id: ctx.name(read.parserId, line), ...read });
+            if (read) rows.set(line, { ...ctx.name(read.parserId, line), ...read });
         }
 
         for (const [line, task] of rows) {
