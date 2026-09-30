@@ -164,6 +164,14 @@
     font-size: var(--font-ui-small);
 }
 
+/* 節の後に置くボタン行（送るダイアログ）は、最後の節から 24px 空ける。
+   作成のダイアログのボタン行（tv-form__actions）と同じ空きで、節の下の
+   padding 12px にこの 12px を足す。ハブのソースのボタン行は編集欄と同じ
+   面の中にあり、節の後ではないので当たらない */
+.tv-form .tv-form__group ~ .tv-form__buttons {
+    margin-top: 12px;
+}
+
 .tv-form__discard {
     margin-inline-end: auto;
 }

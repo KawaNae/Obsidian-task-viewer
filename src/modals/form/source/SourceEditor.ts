@@ -2,8 +2,9 @@ import { acceptCompletion, autocompletion, closeBrackets, closeBracketsKeymap, c
 import { defaultKeymap, history, historyKeymap, indentLess } from '@codemirror/commands';
 import { indentUnit } from '@codemirror/language';
 import { EditorState, Prec, type Extension } from '@codemirror/state';
-import { EditorView, keymap, tooltips, type Rect } from '@codemirror/view';
+import { EditorView, keymap, placeholder, tooltips, type Rect } from '@codemirror/view';
 import type { App } from 'obsidian';
+import { t } from '../../../i18n';
 import { BRACKET_CLOSERS, BRACKET_PAIRS } from '../../../utils/BracketRules';
 import { keyboardTop, trackKeyboard } from '../../../utils/KeyboardState';
 import { lineMapOf, trackLines } from './LineMap';
@@ -42,9 +43,10 @@ import { linkTagCompletionSource } from './SourceCompletion';
  * - The editors look indented under the parent's line by the width of
  *   `indentUnit` (`--tv-source-indent`), as a child line stands under its
  *   parent in Obsidian's editor.
- * - The two editors sit in one box, as one input field does
- *   (`tv-ctrl__input-wrap`): the caret goes from one to the other as through
- *   one text, and the box takes the fields' border and focus.
+ * - Each editor is an input field of its own (`tv-ctrl__input-wrap`), with
+ *   the fields' border and focus: the parent is always one line, the
+ *   children may be none, and one box would show an empty children's editor
+ *   as an empty child line. Empty, the children's editor shows a placeholder.
  * - A completion list stands in the window above the virtual keyboard
  *   (`keyboardTop`), and goes above the caret where there is no room under
  *   it: on Obsidian mobile the keyboard covers the page without shrinking
@@ -165,6 +167,8 @@ export function childrenState(
             trackLines(lines.length === 0 ? 0 : undefined),
             indentUnit.of(unit),
             listNumbering,
+            // Empty, the editor says what goes in it: a row may have no children.
+            placeholder(t('modal.sourceChildren')),
             Prec.high(keymap.of([
                 { key: 'Tab', run: acceptCompletion },
                 { key: 'Tab', run: indentMoreRestartingLists, shift: indentLess },
@@ -201,13 +205,16 @@ export function indentColumns(unit: string): number {
     return columns;
 }
 
+/** Each editor's box: an input field's, as the fields draw it (_controls.css). */
+const FIELD_BOX = 'tv-ctrl__input-wrap tv-ctrl__input-wrap--glow';
+
 export class SourceEditor implements DraftEditor {
     readonly dom: HTMLElement;
     private readonly parentView: EditorView;
     private readonly childrenView: EditorView;
 
     constructor(container: HTMLElement, private readonly options: SourceEditorOptions) {
-        this.dom = container.createDiv({ cls: 'tv-source-editor tv-ctrl__input-wrap tv-ctrl__input-wrap--glow' });
+        this.dom = container.createDiv({ cls: 'tv-source-editor' });
         trackKeyboard(container.ownerDocument.defaultView ?? window);
         const hooks: EditorHooks = { onSubmit: options.onSubmit, onChange: options.onChange };
         this.parentView = new EditorView({
@@ -216,14 +223,14 @@ export class SourceEditor implements DraftEditor {
                 onEnter: () => this.breakParent(),
                 onDown: (view) => this.downToChildren(view),
             }),
-            parent: this.dom.createDiv({ cls: 'tv-source-editor__parent' }),
+            parent: this.dom.createDiv({ cls: `tv-source-editor__parent ${FIELD_BOX}` }),
         });
         this.childrenView = new EditorView({
             state: childrenState(options.children, options.indentUnit, options.app, {
                 ...hooks,
                 onUp: (view) => this.upToParent(view),
             }),
-            parent: this.dom.createDiv({ cls: 'tv-source-editor__children' }),
+            parent: this.dom.createDiv({ cls: `tv-source-editor__children ${FIELD_BOX}` }),
         });
         this.dom.style.setProperty('--tv-source-indent', `${indentColumns(options.indentUnit)}ch`);
     }

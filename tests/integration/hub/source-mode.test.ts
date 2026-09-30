@@ -81,6 +81,8 @@ const press = async (key, opts = {}) => {
 const typeText = (text) => { const view = viewOf(focused()); view.dispatch(view.state.replaceSelection(text)); };
 /** Which editor has the focus: 'parent', 'children', or null. */
 const focused = () => ['parent', 'children'].find(which => document.activeElement === document.querySelector('.task-hub .tv-source-editor__' + which + ' .cm-content')) ?? null;
+/** The color a CSS value resolves to in the hub, as computed styles give it. */
+const colorOf = value => { const probe = document.querySelector('.task-hub').createDiv(); probe.style.color = value; const color = getComputedStyle(probe).color; probe.remove(); return color; };
 const caret = () => { const which = focused(); const view = which && viewOf(which); return view ? view.state.selection.main.head : null; };
 `;
 
@@ -250,6 +252,41 @@ describe('the hub\'s source mode', () => {
         }
     });
 
+    it('boxes the parent and the children each as an input field, the guide in the children\'s box, and says what goes in an empty one', async () => {
+        await writeIndexedTestFile(TEST_FILE, NOTE);
+        openSource('次');
+        const look = run<Record<string, unknown>>(`
+            const parent = document.querySelector('.task-hub .tv-source-editor__parent');
+            const children = document.querySelector('.task-hub .tv-source-editor__children');
+            const p = parent.getBoundingClientRect(), c = children.getBoundingClientRect();
+            const guide = getComputedStyle(children, '::before');
+            const guideLeft = c.left + parseFloat(getComputedStyle(children).borderLeftWidth) + parseFloat(guide.left);
+            const accent = colorOf('var(--tv-accent)');
+            const focusedBoxes = () => [parent, children].map(box => getComputedStyle(box).borderTopColor === accent);
+            viewOf('parent').focus();
+            await sleep(100);
+            const onParent = focusedBoxes();
+            viewOf('children').focus();
+            await sleep(100);
+            const onChildren = focusedBoxes();
+            return JSON.stringify({
+                boxes: [parent, children].map(box => box.classList.contains('tv-ctrl__input-wrap') && box.classList.contains('tv-ctrl__input-wrap--glow')),
+                oneBox: document.querySelector('.task-hub .tv-source-editor').classList.contains('tv-ctrl__input-wrap'),
+                leftAligned: Math.abs(p.left - c.left) < 1 && Math.abs(p.right - c.right) < 1,
+                guideInside: guideLeft > c.left && guideLeft < c.left + parseFloat(getComputedStyle(children).paddingLeft),
+                placeholder: children.querySelector('.cm-placeholder')?.textContent ?? null,
+                onParent, onChildren,
+            });
+        `);
+        expect(look).toEqual({
+            boxes: [true, true], oneBox: false, leftAligned: true, guideInside: true,
+            placeholder: '子の行', onParent: [true, false], onChildren: [false, true],
+        });
+        // Typed in, the placeholder goes.
+        const typed = run<string | null>(`viewOf('children').focus(); typeText('- [ ] 子'); await sleep(50); return JSON.stringify(document.querySelector('.task-hub .tv-source-editor__children .cm-placeholder')?.textContent ?? null);`);
+        expect(typed).toBeNull();
+    });
+
     it('shuts the form\'s picker fields as a whole: their clear and picker buttons change nothing', async () => {
         await writeIndexedTestFile(TEST_FILE, NOTE);
         openSource('親');
@@ -342,12 +379,9 @@ describe('the hub\'s source mode', () => {
             plugin.openTaskHub(next.id);
             await sleep(100);
             const pane = document.querySelector('.task-hub__source-pane');
-            const box = document.querySelector('.task-hub .tv-source-editor');
-            const probe = box.createDiv();
-            probe.style.color = 'var(--tv-text-danger)';
-            const danger = getComputedStyle(probe).color;
-            probe.remove();
-            return JSON.stringify({ ...state(), marked: pane.classList.contains('tv-source-drafts--asking'), red: getComputedStyle(box).borderTopColor === danger, preview: document.querySelector('.task-hub__preview').textContent });
+            const boxes = [...document.querySelectorAll('.task-hub .tv-source-editor > .tv-ctrl__input-wrap')];
+            const danger = colorOf('var(--tv-text-danger)');
+            return JSON.stringify({ ...state(), marked: pane.classList.contains('tv-source-drafts--asking'), red: boxes.length === 2 && boxes.every(box => getComputedStyle(box).borderTopColor === danger), preview: document.querySelector('.task-hub__preview').textContent });
         `);
         expect(asked).toMatchObject({ hub: true, source: true, asking: true, marked: true, red: true, children: '- [ ] 子a\n- [ ] 子b 下書き' });
 

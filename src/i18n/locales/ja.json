@@ -482,6 +482,7 @@
     "openDatePicker": "日付ピッカーを開く",
     "openTimePicker": "時刻ピッカーを開く",
     "openColorPicker": "カラーピッカーを開く",
+    "sourceChildren": "子の行",
     "hub": {
       "status": "ステータス",
       "readOnlyNotice": "このタスクは読み取り専用です（外部プラグイン記法）— 編集はできません。",
