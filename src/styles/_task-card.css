@@ -434,11 +434,6 @@
     right: 0;
 }
 
-.task-card__handle--move-top-left {
-    top: calc(var(--handle-overlap) - var(--handle-size));
-    left: 0;
-}
-
 .task-card__handle--move-bottom-right {
     bottom: calc(var(--handle-overlap) - var(--handle-size));
     right: 0;
@@ -503,10 +498,6 @@
 .task-card__handle-btn:hover {
     color: var(--tv-text);
     background-color: var(--tv-bg-task-handle-hover);
-}
-
-.task-card__handle-btn--resize {
-    cursor: pointer;
 }
 
 .task-card__handle--resize-top .task-card__handle-btn,
@@ -706,13 +697,11 @@
    handle が sawtooth の上に乗る)。CSS で cut 辺 handle を抑止することで
    clone の整合性を JS なしに吸収する。 */
 .task-card--split-continues-before:not(.task-card--multi-day) .task-card__handle--resize-top,
-.task-card--split-continues-before:not(.task-card--multi-day) .task-card__handle--move-top-left,
 .task-card--split-continues-before:not(.task-card--multi-day) .task-card__handle--move-top-right,
 .task-card--split-continues-after:not(.task-card--multi-day) .task-card__handle--resize-bottom,
 .task-card--split-continues-after:not(.task-card--multi-day) .task-card__handle--move-bottom-left,
 .task-card--split-continues-after:not(.task-card--multi-day) .task-card__handle--move-bottom-right,
 .task-card--multi-day.task-card--split-continues-before .task-card__handle--resize-left,
-.task-card--multi-day.task-card--split-continues-before .task-card__handle--move-top-left,
 .task-card--multi-day.task-card--split-continues-before .task-card__handle--move-bottom-left,
 .task-card--multi-day.task-card--split-continues-after .task-card__handle--resize-right,
 .task-card--multi-day.task-card--split-continues-after .task-card__handle--move-top-right,

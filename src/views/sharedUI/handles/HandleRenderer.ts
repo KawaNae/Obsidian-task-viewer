@@ -1,5 +1,5 @@
 export type ResizePosition = 'top' | 'bottom' | 'left' | 'right';
-export type MovePosition = 'top-right' | 'top-left' | 'bottom-right' | 'bottom-left';
+export type MovePosition = 'top-right' | 'bottom-right' | 'bottom-left';
 
 /**
  * Handle DOM 生成の共通ユーティリティ。Strategy 各実装はここを呼ぶだけで、
@@ -20,9 +20,8 @@ export const HandleRenderer = {
     },
 
     createMove(taskEl: HTMLElement, position: MovePosition): void {
-        const container = taskEl.createDiv(`task-card__handle task-card__handle--move-${position}`);
+        const container = taskEl.createDiv(`task-card__handle task-card__handle--move task-card__handle--move-${position}`);
         const btn = container.createDiv('task-card__handle-btn');
         btn.setText('::');
-        btn.style.cursor = 'move';
     },
 };
