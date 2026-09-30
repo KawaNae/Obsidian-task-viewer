@@ -204,7 +204,7 @@ export class MiniCalendarView extends ItemView {
         }
     }
 
-    public refresh(): void {
+    public redraw(): void {
         void this.render();
     }
 

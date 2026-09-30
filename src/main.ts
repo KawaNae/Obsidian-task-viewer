@@ -60,7 +60,7 @@ import { LogStorage } from './log/log-storage';
 import { LogManager } from './log/log-manager';
 import { LogView, VIEW_TYPE_LOG } from './views/logview/LogView';
 import type { DeviceInfo } from './log/markdown-formatter';
-import { refreshView } from './utils/ObsidianView';
+import { ViewEvents } from './views/sharedLogic/ViewEvents';
 import { deviceMemoryGb, jsHeapStats, nodeOs } from './utils/hostEnv';
 
 export default class TaskViewerPlugin extends Plugin {
@@ -76,8 +76,12 @@ export default class TaskViewerPlugin extends Plugin {
     public exportService: ExportService;
     public menuPresenter: MenuPresenter;
 
-    // Day boundary check
-    private lastVisualDate: string = '';
+    // Settings-changed and day-rolled events to the open views
+    private viewEvents = new ViewEvents(
+        () => [VIEW_TYPE_TIMELINE, VIEW_TYPE_SCHEDULE, VIEW_TYPE_CALENDAR, VIEW_TYPE_MINI_CALENDAR, VIEW_TYPE_KANBAN]
+            .flatMap(viewType => this.app.workspace.getLeavesOfType(viewType).map(leaf => leaf.view)),
+        () => DateUtils.getVisualDateOfNow(this.settings.startHour),
+    );
     private dateCheckInterval: ReturnType<typeof setInterval> | null = null;
 
     // Overdue watch (clock-driven, see startOverdueWatch)
@@ -422,7 +426,7 @@ export default class TaskViewerPlugin extends Plugin {
         this.readService.updateWeekStartDay(this.settings.weekStartDay);
         this.updateViewHeaderStyles();
 
-        this.refreshAllViews();
+        this.viewEvents.settingsChanged();
     }
 
     updateGlobalStyles() {
@@ -550,28 +554,12 @@ export default class TaskViewerPlugin extends Plugin {
     }
 
     private startDateBoundaryCheck(): void {
-        // Record current visual date
-        this.lastVisualDate = DateUtils.getVisualDateOfNow(this.settings.startHour);
+        this.viewEvents.watch();
 
         // Check every 5 minutes
         this.dateCheckInterval = setInterval(() => {
-            const currentVisualDate = DateUtils.getVisualDateOfNow(this.settings.startHour);
-            if (currentVisualDate !== this.lastVisualDate) {
-                this.lastVisualDate = currentVisualDate;
-                this.refreshAllViews();
-            }
+            this.viewEvents.rollIfChanged();
         }, 5 * 60 * 1000); // 5 minutes
-    }
-
-    /**
-     * Refresh all task viewer views
-     */
-    public refreshAllViews(): void {
-        [VIEW_TYPE_TIMELINE, VIEW_TYPE_SCHEDULE, VIEW_TYPE_CALENDAR, VIEW_TYPE_MINI_CALENDAR, VIEW_TYPE_KANBAN].forEach(viewType => {
-            this.app.workspace.getLeavesOfType(viewType).forEach(leaf => {
-                refreshView(leaf.view);
-            });
-        });
     }
 
     /** Open a view via ribbon / command. No state seeding — view uses its own defaults. */

@@ -343,7 +343,13 @@ export class ScheduleView extends ItemView {
         this.scrollRestorer.dispose();
     }
 
-    public refresh(): void {
+    /** Settings changed: redraw the day the user is on (see `redrawView`). */
+    public redraw(): void {
+        this.render();
+    }
+
+    /** The visual day changed: move to the new today. */
+    public onDayRolled(): void {
         this.currentVisualDate = DateUtils.getVisualDateOfNow(this.plugin.settings.startHour);
         this.scrollToNowOnNextRender = true;
         this.render();
