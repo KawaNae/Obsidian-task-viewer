@@ -185,12 +185,15 @@ describe('the date block create writes', () => {
         expect(await written(params)).toBe(line);
     });
 
-    // Pinned as they are: the hand-built block drops a due's time and spells
-    // an end on the start's own day in full.
+    // The block is formatTaskLine's, as every other line the plugin writes.
+    // A due keeps its time (the hand-built block dropped it), an end on the
+    // start's own day is written the notation's way, and a due with no date
+    // leaves no empty `>>` behind.
     it.each([
-        [{ start: '2026-07-18', due: '2026-07-25 17:00' }, '- [ ] t @2026-07-18>>2026-07-25'],
-        [{ start: '2026-07-18 09:00', end: '2026-07-18 10:00' }, '- [ ] t @2026-07-18T09:00>2026-07-18T10:00'],
-        [{ start: '2026-07-18', end: '2026-07-18' }, '- [ ] t @2026-07-18>2026-07-18'],
+        [{ start: '2026-07-18', due: '2026-07-25 17:00' }, '- [ ] t @2026-07-18>>2026-07-25T17:00'],
+        [{ start: '2026-07-18 09:00', end: '2026-07-18 10:00' }, '- [ ] t @2026-07-18T09:00>10:00'],
+        [{ start: '2026-07-18', end: '2026-07-18' }, '- [ ] t @2026-07-18'],
+        [{ start: '2026-07-18', due: '17:00' }, '- [ ] t @2026-07-18'],
     ])('%j -> %j', async (params, line) => {
         expect(await written(params)).toBe(line);
     });
