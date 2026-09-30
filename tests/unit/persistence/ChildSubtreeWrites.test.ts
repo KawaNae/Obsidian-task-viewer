@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { plannedOn } from '../../../src/services/persistence/TaskRefs';
 import type { Task } from '../../../src/types';
 import { writeBench, FILE, type WriteBench } from '../helpers/writeBench';
+import { planDuplicate } from '../../../src/services/persistence/DuplicateShift';
 
 /**
  * How far a task's subtree reaches, as seen by the writes that move it.
@@ -149,10 +150,10 @@ describe('insertSiblingAfterTask walks whole subtrees', () => {
 
 // ── duplicate: the extent decides what gets copied ──
 
-describe('duplicateInlineTaskInPlace copies the subtree', () => {
+describe('a duplicate in place copies the subtree', () => {
     // The entry production uses for a duplicate with no day offset. An
     // all-day task holds no time to move past, so its copy is the line again.
-    const verbatimOnce = { kind: 'verbatim', count: 1 } as const;
+    const verbatimOnce = [{ kind: 'copies', side: 'below', lines: { verbatim: 1 }, children: true }] as const;
 
     it('copies descendants and strips their block ids', async () => {
         const h = await writeBench([
@@ -161,7 +162,7 @@ describe('duplicateInlineTaskInPlace copies the subtree', () => {
             '\t\t- [ ] grandchild',
         ].join('\n'));
 
-        await h.cloner.duplicateInlineTaskInPlace(h.taskAt(0).file, plannedOn(h.taskAt(0)), verbatimOnce);
+        await h.writer.applyToTask(h.taskAt(0).file, plannedOn(h.taskAt(0)), verbatimOnce);
 
         expect(h.lines()).toEqual([
             '- [ ] parent @2026-08-15',
@@ -181,7 +182,7 @@ describe('duplicateInlineTaskInPlace copies the subtree', () => {
             '\t```',
         ].join('\n'));
 
-        await h.cloner.duplicateInlineTaskInPlace(h.taskAt(0).file, plannedOn(h.taskAt(0)), verbatimOnce);
+        await h.writer.applyToTask(h.taskAt(0).file, plannedOn(h.taskAt(0)), verbatimOnce);
 
         expect(h.lines().slice(0, 4)).toEqual([
             '- [ ] parent @2026-08-15',
@@ -195,7 +196,7 @@ describe('duplicateInlineTaskInPlace copies the subtree', () => {
 
 // ── duplicate with a day offset: the calendar axis, unchanged ──
 
-describe('duplicateInlineTask shifts along the calendar', () => {
+describe('a duplicate with a day offset shifts along the calendar', () => {
     const subtree = [
         '- [ ] parent @2026-08-15 ^abc123',
         '\t- [ ] child',
@@ -205,7 +206,7 @@ describe('duplicateInlineTask shifts along the calendar', () => {
     it('puts the copy before the task and drops its block id', async () => {
         const h = await writeBench(subtree);
 
-        await h.cloner.duplicateInlineTask(h.taskAt(0).file, plannedOn(h.taskAt(0)), { dayOffset: 1 });
+        await h.writer.applyToTask(h.taskAt(0).file, plannedOn(h.taskAt(0)), [planDuplicate(h.taskAt(0), { dayOffset: 1 }, 0)]);
 
         expect(h.lines()).toEqual([
             '- [ ] parent @2026-08-16',
@@ -219,7 +220,7 @@ describe('duplicateInlineTask shifts along the calendar', () => {
     it('writes count copies, latest first', async () => {
         const h = await writeBench(subtree);
 
-        await h.cloner.duplicateInlineTask(h.taskAt(0).file, plannedOn(h.taskAt(0)), { dayOffset: 1, count: 3 });
+        await h.writer.applyToTask(h.taskAt(0).file, plannedOn(h.taskAt(0)), [planDuplicate(h.taskAt(0), { dayOffset: 1, count: 3 }, 0)]);
 
         // Future-first, so scrolling down walks back towards the original.
         expect(h.lines().filter(l => l.startsWith('- [ ] parent'))).toEqual([
@@ -233,7 +234,7 @@ describe('duplicateInlineTask shifts along the calendar', () => {
     it('gives every copy its own children', async () => {
         const h = await writeBench(subtree);
 
-        await h.cloner.duplicateInlineTask(h.taskAt(0).file, plannedOn(h.taskAt(0)), { dayOffset: 2, count: 2 });
+        await h.writer.applyToTask(h.taskAt(0).file, plannedOn(h.taskAt(0)), [planDuplicate(h.taskAt(0), { dayOffset: 2, count: 2 }, 0)]);
 
         expect(h.lines()).toEqual([
             '- [ ] parent @2026-08-18',
@@ -252,7 +253,7 @@ describe('duplicateInlineTask shifts along the calendar', () => {
             '\t- [ ] child @2026-08-15T13:00>13:30',
         ].join('\n'));
 
-        await h.cloner.duplicateInlineTask(h.taskAt(0).file, plannedOn(h.taskAt(0)), { dayOffset: 1 });
+        await h.writer.applyToTask(h.taskAt(0).file, plannedOn(h.taskAt(0)), [planDuplicate(h.taskAt(0), { dayOffset: 1 }, 0)]);
 
         // A child's dates are its own, not an offset from its parent's.
         expect(h.lines()[1]).toBe('\t- [ ] child @2026-08-15T13:00>13:30');

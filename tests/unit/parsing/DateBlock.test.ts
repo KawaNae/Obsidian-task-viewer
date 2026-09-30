@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
     readDateBlock,
     readLineDateBlock,
+    shiftLineDates,
     spansForRule,
     type DateBlockReading,
 } from '../../../src/services/parsing/tv-inline/DateBlock';
@@ -156,5 +157,65 @@ describe('DATE_BLOCK_REGEX', () => {
             String.raw`(@(?=[\d>T])(?:\d{4}-\d{2}-\d{2}(?:T\d{2}:\d{2})?|T?\d{2}:\d{2})?(?:>(?:\d{4}-\d{2}-\d{2}(?:T\d{2}:\d{2})?|\d{2}:\d{2})?)*)`,
         );
         expect(DATE_BLOCK_REGEX.flags).toBe('');
+    });
+});
+
+describe('shiftLineDates', () => {
+    const all = ['start', 'end', 'due'] as const;
+
+    it('shifts a date-only block by +1 day', () => {
+        expect(shiftLineDates('- [ ] Task @2026-03-11', 1, all)).toBe('- [ ] Task @2026-03-12');
+    });
+
+    it('shifts start and end, each written as it was', () => {
+        // The end keeps its date though it falls on the start's day: the
+        // line is the user's, and only its dates move.
+        expect(shiftLineDates('- [ ] Task @2026-03-11T09:00>2026-03-11T17:00', 1, all))
+            .toBe('- [ ] Task @2026-03-12T09:00>2026-03-12T17:00');
+        expect(shiftLineDates('- [ ] Task @2026-03-11T09:00>2026-03-11', 1, all))
+            .toBe('- [ ] Task @2026-03-12T09:00>2026-03-12');
+        expect(shiftLineDates('- [ ] Task @2026-03-11>', 1, all)).toBe('- [ ] Task @2026-03-12>');
+    });
+
+    it('shifts the due when asked to', () => {
+        expect(shiftLineDates('- [ ] Task @2026-03-11>2026-03-12>2026-03-20', 1, all))
+            .toBe('- [ ] Task @2026-03-12>2026-03-13>2026-03-21');
+        expect(shiftLineDates('- [ ] Task @>>2026-03-20T18:00', 1, all)).toBe('- [ ] Task @>>2026-03-21T18:00');
+    });
+
+    it('shifts only the fields asked for', () => {
+        expect(shiftLineDates('- [ ] Task @2026-03-11>2026-03-12>2026-03-20', 1, ['start', 'end']))
+            .toBe('- [ ] Task @2026-03-12>2026-03-13>2026-03-20');
+    });
+
+    it('leaves a time-only segment unchanged', () => {
+        expect(shiftLineDates('- [ ] Task @09:00>10:00', 1, all)).toBe('- [ ] Task @09:00>10:00');
+        expect(shiftLineDates('- [ ] Task @2026-03-11T09:00>17:00', 1, all)).toBe('- [ ] Task @2026-03-12T09:00>17:00');
+    });
+
+    it('handles a month boundary', () => {
+        expect(shiftLineDates('- [ ] Task @2026-03-31', 1, all)).toBe('- [ ] Task @2026-04-01');
+    });
+
+    it('leaves a date in the command alone (the parser reads no block there)', () => {
+        expect(shiftLineDates('- [ ] Task ==> until @2026-03-11', 1, all)).toBe('- [ ] Task ==> until @2026-03-11');
+        expect(shiftLineDates('- [ ] Task @2026-03-11 ==> until @2026-03-11', 1, all))
+            .toBe('- [ ] Task @2026-03-12 ==> until @2026-03-11');
+    });
+
+    it('shifts the block past a bare @ (the block the parser reads), and no extra block', () => {
+        expect(shiftLineDates('- [ ] @1on1 sync @2026-03-11', 1, all)).toBe('- [ ] @1on1 sync @2026-03-12');
+        expect(shiftLineDates('- [ ] Task @2026-03-11 @2026-03-15', 1, all)).toBe('- [ ] Task @2026-03-12 @2026-03-15');
+    });
+
+    it('rewords nothing outside the dates', () => {
+        expect(shiftLineDates('- [ ] Task @2026-03-11 #tag [p:: 1]  ', 1, all)).toBe('- [ ] Task @2026-03-12 #tag [p:: 1]  ');
+        expect(shiftLineDates('1. [ ] @2026-03-11 Task  at head', 1, all)).toBe('1. [ ] @2026-03-12 Task  at head');
+        expect(shiftLineDates('\t* [x] Task @2026-03-11T9:00', 1, all)).toBe('\t* [x] Task @2026-03-12T9:00');
+    });
+
+    it('leaves a line without a block unchanged', () => {
+        const line = '- [ ] Plain task without date';
+        expect(shiftLineDates(line, 5, all)).toBe(line);
     });
 });

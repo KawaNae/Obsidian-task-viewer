@@ -67,11 +67,11 @@ function lines(contents: Map<string, string>): string[] {
     return contents.get(FILE)!.split('\n');
 }
 
-describe('the editor\'s duplicate (the `copy` op, copyOf)', () => {
+describe('the editor\'s duplicate (one line by the `copies` op, copyOf)', () => {
     it('is spelled as the row it copies, not as the sibling below it', async () => {
         const { contents, session } = await open(['# n', '- [ ] P', '\t- [ ] T', '    - [ ] V', '']);
 
-        expect(await session.index.writeLine(FILE, editorRow(2, '\t- [ ] T', contentKeyOf(contents.get(FILE)!.split('\n'))), [{ kind: 'copy', text: '\t- [ ] T' }])).toBe(true);
+        expect(await session.index.writeLine(FILE, editorRow(2, '\t- [ ] T', contentKeyOf(contents.get(FILE)!.split('\n'))), [{ kind: 'copies', side: 'below', lines: ['\t- [ ] T'], children: false }])).toBe(true);
         await session.settle(FILE);
 
         expect(lines(contents)).toEqual(['# n', '- [ ] P', '\t- [ ] T', '\t- [ ] T', '    - [ ] V', '']);
@@ -82,7 +82,7 @@ describe('the editor\'s duplicate (the `copy` op, copyOf)', () => {
         const { contents, session } = await open(['# n', '- [ ] P', '\t- [ ] T', '      - [ ] c', '- [ ] U', '']);
         expect(parents(session)).toEqual([['P', null], ['T', 'P'], ['c', 'T'], ['U', null]]);
 
-        expect(await session.index.writeLine(FILE, editorRow(2, '\t- [ ] T', contentKeyOf(contents.get(FILE)!.split('\n'))), [{ kind: 'copy', text: '\t- [ ] T' }])).toBe(true);
+        expect(await session.index.writeLine(FILE, editorRow(2, '\t- [ ] T', contentKeyOf(contents.get(FILE)!.split('\n'))), [{ kind: 'copies', side: 'below', lines: ['\t- [ ] T'], children: false }])).toBe(true);
         await session.settle(FILE);
 
         expect(lines(contents)).toEqual(['# n', '- [ ] P', '\t- [ ] T', '      - [ ] c', '\t- [ ] T', '- [ ] U', '']);
@@ -92,7 +92,7 @@ describe('the editor\'s duplicate (the `copy` op, copyOf)', () => {
     });
 });
 
-describe('the day-shifted duplicate (duplicateInlineTask, copyOf)', () => {
+describe('the day-shifted duplicate (`copies` above, copyOf)', () => {
     it('goes above the row, a copy of its subtree, and the row keeps its children', async () => {
         const { contents, session } = await open(['# n', '- [ ] P', '    - [ ] T @2026-09-21', '\t    - [ ] c', '- [ ] U', '']);
         expect(parents(session)).toEqual([['P', null], ['T', 'P'], ['c', 'T'], ['U', null]]);
@@ -107,7 +107,7 @@ describe('the day-shifted duplicate (duplicateInlineTask, copyOf)', () => {
     });
 });
 
-describe('the in-place duplicate (duplicateInlineTaskInPlace, copyOf)', () => {
+describe('the in-place duplicate (`copies` below, copyOf)', () => {
     // The third run's a: spelled as U, the copy would lose its copied child.
     it('is spelled as the row it copies, so the copied child stays the copy\'s', async () => {
         const { contents, session } = await open(['# n', '-\t[ ] T', '\t- [ ] c', '   - [ ] U', '']);

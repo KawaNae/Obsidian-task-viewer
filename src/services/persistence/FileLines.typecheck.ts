@@ -76,5 +76,5 @@ export function rowSignatureChecks(
     // @ts-expect-error a delete names its row with a plan
     void repository.applyToTask(task.file, task, [{ kind: 'remove' }]);
     // @ts-expect-error a duplicate names its row with a plan
-    void repository.duplicateInlineTaskInPlace(task.file, task, { kind: 'verbatim', count: 1 });
+    void repository.applyToTask(task.file, task, [{ kind: 'copies', side: 'below', lines: { verbatim: 1 }, children: true }]);
 }

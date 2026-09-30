@@ -4,6 +4,7 @@ import { contentKeyOf } from '../../../src/services/core/ContentKey';
 import { writeBench, FILE } from '../helpers/writeBench';
 import { plannedOn } from '../../../src/services/persistence/TaskRefs';
 import type { Task } from '../../../src/types';
+import { planDuplicate } from '../../../src/services/persistence/DuplicateShift';
 
 /**
  * Stage F5: one check for every write that names a row.
@@ -42,8 +43,8 @@ describe('after the editor\'s menu rewrote a row, before any scan', () => {
 
     it('refuses a duplicate-as-next made from the copy', async () => {
         const { bench, task } = await afterMenu();
-        const written = await bench.cloner.duplicateInlineTaskInPlace(
-            task.file, plannedOn(task), { kind: 'lines', lines: ['- [ ] 設計 @2026-09-22'] });
+        const written = await bench.writer.applyToTask(
+            task.file, plannedOn(task), [{ kind: 'copies', side: 'below', lines: ['- [ ] 設計 @2026-09-22'], children: true }]);
 
         expect(written.written).toBe(false);
         expect(bench.lines()).toEqual([TICKED, '']);
@@ -54,7 +55,7 @@ describe('after the editor\'s menu rewrote a row, before any scan', () => {
         const { bench, task } = await afterMenu();
 
         expect((await bench.writer.applyToTask(task.file, plannedOn(task, { subtree: true }), [{ kind: 'remove' }])).written).toBe(false);
-        expect((await bench.cloner.duplicateInlineTask(task.file, plannedOn(task), { dayOffset: 1 })).written).toBe(false);
+        expect((await bench.writer.applyToTask(task.file, plannedOn(task), [planDuplicate(task, { dayOffset: 1 }, 0)])).written).toBe(false);
         expect(bench.lines()).toEqual([TICKED, '']);
         expect(bench.refused.map(r => r.reason.kind)).toEqual(['changed', 'changed']);
     });

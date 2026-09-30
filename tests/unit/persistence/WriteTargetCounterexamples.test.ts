@@ -6,6 +6,7 @@ import type { Task } from '../../../src/types';
 import { formatRow } from '../../../src/services/parsing/TaskLineFormat';
 import type { TaskOp } from '../../../src/services/persistence/TaskOps';
 import { plannedOn } from '../../../src/services/persistence/TaskRefs';
+import { planDuplicate } from '../../../src/services/persistence/DuplicateShift';
 
 /**
  * Counterexamples found against the name-based targeting of F2 to F5b (a write
@@ -155,10 +156,10 @@ describe('identical rows', () => {
         // and their reports carry the copy's line to where the row is now.
         const bench = await writeBench(['- [ ] A', '- [ ] B']);
         const a = bench.taskAt(0);
-        expect((await bench.cloner.duplicateInlineTask(a.file, plannedOn(a))).written).toBe(true);
+        expect((await bench.writer.applyToTask(a.file, plannedOn(a), [planDuplicate(a, { dayOffset: 1 }, 0)])).written).toBe(true);
         await bench.repo.setFrontmatterKeys(FILE, { color: 'red' });
         const after = bench.lines();
-        // The duplicate went above the original (`duplicateInlineTask`).
+        // The duplicate went above the original (a duplicate on another day).
         const row = after.lastIndexOf('- [ ] A');
         expect(row).toBeGreaterThan(0);
         expect((await bench.writer.updateTaskInFile(a.file, plannedOn(a), checked(a))).written).toBe(true);

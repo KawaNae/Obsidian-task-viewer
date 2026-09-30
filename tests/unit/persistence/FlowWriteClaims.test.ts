@@ -162,7 +162,7 @@ describe('the wiring', () => {
     // writes stage adds later depends on that one line still being there.
     it('carries a strip through the repository to whoever is listening', async () => {
         // The bench connects the repository's own observer, not the one its
-        // `writer` and `cloner` are built with.
+        // `writer` is built with.
         const b = await writeBench(['- [x] ポモドーロ ==> every 1d', ''].join('\n'));
         const task = b.taskAt(0);
 

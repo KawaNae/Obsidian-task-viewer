@@ -4,6 +4,7 @@ import { cutFlowTail } from '../utils/FlowLineScanner';
 import { TaskLineClassifier } from '../utils/TaskLineClassifier';
 import { parseDateTimeField } from '../utils/DateTimeFieldParser';
 import type { DateTimeRule } from '../../../types';
+import type { DateField } from '../../../utils/ShiftDates';
 
 /**
  * The date block grammar: `@start>end>due`. Each segment accepts
@@ -153,6 +154,40 @@ export function readLineDateBlock(line: string): DateBlockReading | null {
     if (reading.due) shifted.due = shift(reading.due);
     if (reading.extraSeparators) shifted.extraSeparators = shift(reading.extraSeparators);
     return shifted;
+}
+
+/** A segment that writes a date: `YYYY-MM-DD`, with its time or without. */
+const DATED_SEGMENT = new RegExp(`^${D}`);
+
+/**
+ * `line` with the dates of `fields` in its date block moved by `days` whole
+ * days (`DateUtils.shiftDateString`), each written as it was: nothing of the
+ * line changes but those dates. The block is the one the parser reads
+ * ({@link readLineDateBlock}), so a date in the command or past a bare `@`
+ * (`@1on1`) is not moved, nor an extra block. A segment that writes a time
+ * alone, or nothing, has no date to move. A line with no block is returned
+ * as it is.
+ *
+ * The line's side of the one rule for moving a task by days: a copy of a
+ * line the user wrote is shifted here, and a line built from a task is
+ * shifted as the task (`shiftTaskDates`), each over the fields its caller
+ * names.
+ */
+export function shiftLineDates(line: string, days: number, fields: readonly DateField[]): string {
+    const dates = readLineDateBlock(line);
+    if (!dates) return line;
+    const spans = fields
+        .map(field => (field === 'start' ? dates.start : field === 'end' ? dates.end : dates.due))
+        .filter((span): span is Span => span !== undefined)
+        // From the end back, so an earlier segment's columns stay where they were.
+        .sort((a, b) => b.start - a.start);
+    let out = line;
+    for (const span of spans) {
+        const segment = line.slice(span.start, span.end);
+        if (!DATED_SEGMENT.test(segment)) continue;
+        out = out.slice(0, span.start) + DateUtils.shiftDateString(segment, days) + out.slice(span.end);
+    }
+    return out;
 }
 
 /**

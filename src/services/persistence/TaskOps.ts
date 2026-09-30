@@ -32,9 +32,13 @@ export type InsertPlace = 'firstChild' | 'afterSubtree' | 'afterCompletedRun';
  *   or past the completed siblings that follow it (`afterCompletedRun`),
  *   spelled as the item next to it. A timer's record, the one insert every
  *   timer line takes (`TaskIndex.insertLine`).
- * - `copy`: `text` goes in as the row's next sibling, past its subtree,
- *   spelled as the row is (`Placement.copyOf`): the editor menu's duplicate
- *   of a line.
+ * - `copies`: copies of the row go in as its siblings, on `side`: just
+ *   above it, or past its subtree, spelled as the row is
+ *   (`Placement.copyOf`). `lines` are the copies' own lines, finished
+ *   ({@link CopyLines}); with `children`, each copy is followed by the row's
+ *   children, without their `^id`s and otherwise as they stand. A card's,
+ *   the API's and the CLI's duplicate of a row (`planDuplicate`), and the
+ *   editor menu's duplicate of a line (one line, no children).
  * - `update`: the row reads `text` (indentation kept from the file), and
  *   its own property lines change by `childOps`. A card's, the API's and a
  *   timer's rewrite of a row, and the editor menu's rewrite of a line.
@@ -49,10 +53,19 @@ export type TaskOp =
     | { kind: 'strip-flow'; text: string }
     | { kind: 'move'; text: string; to: InSection }
     | { kind: 'remove' }
-    | { kind: 'copy'; text: string }
+    | { kind: 'copies'; side: 'above' | 'below'; lines: CopyLines; children: boolean }
     | { kind: 'insert'; place: InsertPlace; text: string }
     | { kind: 'update'; text: string; childOps?: readonly PropertyOp[] }
     | { kind: 'fire'; plan: (lines: readonly string[], line: number) => readonly TaskOp[] };
+
+/**
+ * The lines of a {@link TaskOp} `copies`, in file order: finished lines, or
+ * `verbatim`, that many repeats of the row's own line as the file holds it,
+ * without its `^id` (the id names the row, not a copy of it), so a copy that
+ * is not moved is not reworded either. Which to write is the caller's
+ * question, which needs the task's dates; this layer only puts them.
+ */
+export type CopyLines = readonly string[] | { verbatim: number };
 
 /**
  * The fire of a write that completes a row, handed in with the op by the flow

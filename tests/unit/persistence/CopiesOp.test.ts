@@ -1,18 +1,12 @@
 import { describe, it, expect } from 'vitest';
-import { TaskCloner } from '../../../src/services/persistence/TaskCloner';
+import { InlineTaskWriter } from '../../../src/services/persistence/writers/InlineTaskWriter';
 import { draftOver, replayEdits } from '../../../src/services/persistence/FileLines';
 import { Outline } from '../../../src/services/parsing/utils/Outline';
 import { checkWrite, type WrittenLine } from '../../../src/services/parsing/utils/OutlineCheck';
-import { Placement } from '../../../src/services/persistence/utils/Placement';
+import type { TaskOp } from '../../../src/services/persistence/TaskOps';
 
-// Access private methods via prototype
-const proto = TaskCloner.prototype as any;
-
-function callShiftInlineDates(line: string, dayOffset: number): string {
-    return proto.shiftInlineDates.call(null, line, dayOffset);
-}
-
-// putCopies only reads lines; the vault is never touched.
+// Applying a `copies` op only reads lines; the vault is never touched.
+const applyOp = (InlineTaskWriter.prototype as any).applyOp;
 
 function callSpliceCopies(
     lines: string[],
@@ -39,10 +33,9 @@ function spliceAndReport(
     position: 'before' | 'after',
 ) {
     const target = [...lines];
-    // Where the two duplicate paths put their copies.
-    const spot = Placement.copyOf(Outline.read(target), taskLine, position === 'before' ? 'above' : 'below', '- [ ] n');
+    const op: TaskOp = { kind: 'copies', side: position === 'before' ? 'above' : 'below', lines: parentLines, children: true };
     const { draft, reported, puts, placedBy } = draftOver(target);
-    proto.putCopies.call({}, draft, taskLine, parentLines, spot);
+    applyOp.call({}, draft, taskLine, op);
     // Every copy reads as the original's subtree does, and every other line
     // as it did: the check the write is held to (`checkWrite`).
     const replayed = replayEdits(lines.length, reported, placedBy)!;
@@ -59,51 +52,8 @@ function spliceAndReport(
 // Tests
 // ---------------------------------------------------------------------------
 
-describe('TaskCloner', () => {
-
-    describe('shiftInlineDates', () => {
-        it('shifts date-only @notation by +1 day', () => {
-            expect(callShiftInlineDates('- [ ] Task @2026-03-11', 1))
-                .toBe('- [ ] Task @2026-03-12');
-        });
-
-        it('shifts start and end dates', () => {
-            expect(callShiftInlineDates('- [ ] Task @2026-03-11T09:00>2026-03-11T17:00', 1))
-                .toBe('- [ ] Task @2026-03-12T09:00>2026-03-12T17:00');
-        });
-
-        it('does NOT shift due (3rd segment)', () => {
-            expect(callShiftInlineDates('- [ ] Task @2026-03-11>2026-03-12>2026-03-20', 1))
-                .toBe('- [ ] Task @2026-03-12>2026-03-13>2026-03-20');
-        });
-
-        it('time-only notation is unchanged', () => {
-            expect(callShiftInlineDates('- [ ] Task @09:00>10:00', 1))
-                .toBe('- [ ] Task @09:00>10:00');
-        });
-
-        it('handles month boundary', () => {
-            expect(callShiftInlineDates('- [ ] Task @2026-03-31', 1))
-                .toBe('- [ ] Task @2026-04-01');
-        });
-
-        it('leaves a date in the command alone (the parser reads no block there)', () => {
-            expect(callShiftInlineDates('- [ ] Task ==> until @2026-03-11', 1))
-                .toBe('- [ ] Task ==> until @2026-03-11');
-        });
-
-        it('shifts the block past a bare @ (the block the parser reads)', () => {
-            expect(callShiftInlineDates('- [ ] @1on1 sync @2026-03-11', 1))
-                .toBe('- [ ] @1on1 sync @2026-03-12');
-        });
-
-        it('line without @notation is unchanged', () => {
-            const line = '- [ ] Plain task without date';
-            expect(callShiftInlineDates(line, 5)).toBe(line);
-        });
-    });
-
-    describe('putCopies', () => {
+describe('the copies op', () => {
+    describe('where the copies go', () => {
         const file = [
             '# note',
             '',

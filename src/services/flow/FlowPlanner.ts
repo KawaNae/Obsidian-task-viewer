@@ -1,6 +1,7 @@
 import { TaskLineClassifier } from '../parsing/utils/TaskLineClassifier';
 import type { Task, TaskFlow } from '../../types';
 import { DateUtils } from '../../utils/DateUtils';
+import { shiftTaskDates } from '../../utils/ShiftDates';
 import { TIMER_ICON_PREFIX_RE } from '../../utils/TimerIcons';
 import type { Diagnostic } from '../lang/Diagnostic';
 import type { PropName } from '../lang/ExprAst';
@@ -380,13 +381,11 @@ function buildNextTask(task: Task, anchor: DateAnchor | null, next: NextOccurren
 
     const shiftDays = DateUtils.getDiffDays(anchor.date, next.date);
 
-    newTask.startDate = task.startDate ? DateUtils.shiftDateString(task.startDate, shiftDays) : undefined;
-    newTask.endDate = task.endDate
-        ? DateUtils.shiftDateString(task.endDate, shiftDays)
-        : (task.endTime && task.startDate)
-            ? DateUtils.shiftDateString(task.startDate, shiftDays)
-            : undefined;
-    newTask.due = task.due ? DateUtils.shiftDateString(task.due, shiftDays) : undefined;
+    const shifted = shiftTaskDates(task, shiftDays, ['start', 'end', 'due']);
+    newTask.startDate = shifted.startDate || undefined;
+    // An end written as a time alone is written out with the start's day.
+    newTask.endDate = shifted.endDate || (task.endTime && shifted.startDate) || undefined;
+    newTask.due = shifted.due || undefined;
 
     // Minute/hour grids move the anchor field's time as well.
     if (next.time !== undefined) {

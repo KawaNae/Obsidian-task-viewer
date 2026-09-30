@@ -16,6 +16,7 @@ import {
 import type { CompletionFire, FiringOutcome, SubtreeReplacement, TaskOp } from '../TaskOps';
 import { replaceSubtree } from '../ReplaceSubtree';
 import { Outline, type OutlineReading } from '../../parsing/utils/Outline';
+import { TaskLineClassifier } from '../../parsing/utils/TaskLineClassifier';
 import { indentUnit } from '../../../utils/ObsidianConfig';
 
 
@@ -373,12 +374,8 @@ export class InlineTaskWriter {
                 draft.put(Placement[op.place](draft.reading(), line, op.text, indentUnit(this.app)), Block.line(op.text));
                 return;
             }
-            case 'copy': {
-                // Usually a copy of the row, word for word. Put just below
-                // it, the copy took the row's children for its own (P1's
-                // counterexample 5): it goes past the subtree, and the
-                // report says which of the two rows the write made.
-                draft.put(Placement.copyOf(draft.reading(), line, 'below', op.text), Block.line(op.text));
+            case 'copies': {
+                putCopies(draft, line, op);
                 return;
             }
         }
@@ -442,4 +439,40 @@ export class InlineTaskWriter {
         const outcome = await processLines(this.app, file, channel, append, subject);
         return outcome.written ? { ...outcome, line: inserted } : outcome;
     }
+}
+
+
+/**
+ * Put the copies of `op` beside the row at `line`: siblings of it, on the
+ * op's side, spelled as the row is (`Placement.copyOf`), each followed, when
+ * the op carries children, by the row's children with their `^id`s taken
+ * off.
+ *
+ * Children travel verbatim. A child's dates are its own, not an offset from
+ * its parent's, so nothing here rewrites them. Each copy is to read as the
+ * original's subtree reads (`Block.of`), and is not written where it would
+ * not.
+ *
+ * A fence among the children that never closes ends with the copy's item,
+ * as it ended with the original's (`Outline.read`): below a copy stands the
+ * original's own line, or whatever stood below the original.
+ */
+function putCopies(draft: LineDraft, line: number, op: Extract<TaskOp, { kind: 'copies' }>): void {
+    const lines = draft.lines;
+    const outline = draft.reading();
+    const indent = Outline.indentOf(lines[line]);
+    const heads = 'verbatim' in op.lines
+        ? Array.from({ length: op.lines.verbatim }, () => TaskLineClassifier.stripBlockIds([lines[line]])[0])
+        : op.lines.map(text => indent + Outline.dedent(text));
+    const end = op.children ? outline.subtreeEnd(line) : line + 1;
+    const rows: number[] = [];
+    for (let row = line; row < end; row++) rows.push(row);
+    const children = TaskLineClassifier.stripBlockIds(rows.slice(1).map(row => lines[row]));
+
+    // Through the draft rather than beside it: a copy is often worded exactly
+    // like the line it copies, so a position off by one would read the same
+    // and hand the original's identity to the copy. One number does both.
+    // Each copy's lines stand under lines of that copy.
+    draft.put(Placement.copyOf(outline, line, op.side, heads[0]), heads.flatMap((head, copy) => Block.of(outline, rows, [head, ...children])
+        .map(placed => (typeof placed.under === 'number' ? { ...placed, under: placed.under + copy * rows.length } : placed))));
 }

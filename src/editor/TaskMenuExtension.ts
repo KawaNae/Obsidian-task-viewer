@@ -153,7 +153,7 @@ export function createTaskMenuExtension(
                     writeEditorLine(view, filePath, target, ops, lineHost);
                 const ops: CheckboxLineOps = {
                     updateLine: (content) => write(at, [{ kind: 'update', text: content }]),
-                    insertLineAfter: (content) => write(at, [{ kind: 'copy', text: content }]),
+                    insertLineAfter: (content) => write(at, [{ kind: 'copies', side: 'below', lines: [content], children: false }]),
                     deleteLine: () => write(editorRow(lineNumber, lineText, key, subtree), [{ kind: 'remove' }]),
                 };
 

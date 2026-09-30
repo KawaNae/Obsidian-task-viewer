@@ -1,6 +1,5 @@
 import { describe, it, expect } from 'vitest';
 import { planInPlaceCopies } from '../../../src/services/persistence/DuplicateShift';
-import { formatRow } from '../../../src/services/parsing/TaskLineFormat';
 import type { Task } from '../../../src/types';
 
 const START_HOUR = 5;
@@ -29,17 +28,15 @@ function makeTask(overrides: Partial<Task> = {}): Task {
  */
 function copyLines(task: Task, count = 1): string[] {
     const plan = planInPlaceCopies(task, START_HOUR, count);
-    if (plan.kind === 'verbatim') {
-        // The writer repeats the file's own line; the test stands in for it
-        // with the line the task was parsed from.
-        return Array.from({ length: plan.count }, () => task.originalText);
-    }
-    return plan.tasks.map(copy => formatRow(copy));
+    // The writer repeats the file's own line; the test stands in for it with
+    // the line the task was parsed from.
+    if ('verbatim' in plan) return Array.from({ length: plan.verbatim }, () => task.originalText);
+    return [...plan];
 }
 
 /** Whether the plan moves the task at all, as opposed to repeating its line. */
 function isShifted(task: Task): boolean {
-    return planInPlaceCopies(task, START_HOUR, 1).kind === 'shifted';
+    return !('verbatim' in planInPlaceCopies(task, START_HOUR, 1));
 }
 
 describe('planInPlaceCopies', () => {
