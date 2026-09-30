@@ -373,4 +373,34 @@ describe('DateUtils', () => {
             expect(DateUtils.visualDateAt(new Date(2026, 0, 1, 0, 0), 0)).toBe('2026-01-01');
         });
     });
+
+    describe('timedSpanMinutes / visualDayMinutes', () => {
+        it('counts a time before startHour past 24:00', () => {
+            expect(DateUtils.visualDayMinutes('04:00', 5)).toBe(28 * 60);
+            expect(DateUtils.visualDayMinutes('05:00', 5)).toBe(5 * 60);
+        });
+
+        it('an end that reads before the start is the next day', () => {
+            expect(DateUtils.timedSpanMinutes('23:00', '02:00', 5)).toEqual({ start: 23 * 60, end: 26 * 60 });
+            expect(DateUtils.timedSpanMinutes('06:00', '05:30', 5)).toEqual({ start: 360, end: 330 + 1440 });
+        });
+
+        it('no end is the default length', () => {
+            expect(DateUtils.timedSpanMinutes('10:00', undefined, 0)).toEqual({ start: 600, end: 660 });
+        });
+    });
+
+    describe('getDisplayTaskDurationMs', () => {
+        it('spans dates, not only the times of day', () => {
+            const ms = DateUtils.getDisplayTaskDurationMs({
+                effectiveStartDate: '2026-01-01', effectiveStartTime: '10:00',
+                effectiveEndDate: '2026-01-03', effectiveEndTime: '11:00',
+            }, 0);
+            expect(ms).toBe(49 * 60 * 60 * 1000);
+        });
+
+        it('null without a start', () => {
+            expect(DateUtils.getDisplayTaskDurationMs({ effectiveStartDate: '' }, 0)).toBeNull();
+        });
+    });
 });
