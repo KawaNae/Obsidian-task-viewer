@@ -1,4 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
+import { editorRow } from '../../../../src/services/persistence/FileLines';
 import { TaskIndex } from '../../../../src/services/core/TaskIndex';
 import { vaultSession, makeFile as sessionFile } from '../../helpers/vaultSession';
 import { freezeDate } from '../../helpers/fakeDate';
@@ -175,7 +176,7 @@ describe('writes after dispose', () => {
             withNotify: vi.fn(),
         });
 
-        await proto.writeLine.call(closed, FILE, { line: 0, text: '- [ ] x', key: '' }, [{ kind: 'update', text: '- [x] x' }]);
+        await proto.writeLine.call(closed, FILE, editorRow(0, '- [ ] x', ''), [{ kind: 'update', text: '- [x] x' }]);
         await proto.insertLine.call(closed, 'id', '- [ ] x', 'firstChild');
 
         expect(closed.withNotify).not.toHaveBeenCalled();

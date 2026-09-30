@@ -148,7 +148,7 @@ function makeRepository() {
 
 /** What the fire's one write inserts, if it inserts anything. */
 function insertOf(repository: ReturnType<typeof makeRepository>): FlowInstanceInsert | undefined {
-    const ops = repository.applyToTask.mock.calls[0]?.[1] as TaskOp[] | undefined;
+    const ops = repository.applyToTask.mock.calls[0]?.[2] as TaskOp[] | undefined;
     const op = ops?.find(o => o.kind === 'insert-instance');
     return op?.kind === 'insert-instance' ? op.insert : undefined;
 }

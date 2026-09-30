@@ -22,7 +22,7 @@ import { keyOf } from './EditorDoc';
 import { writeEditorLine, type EditorLineHost } from './EditorWrite';
 import { taskShownAt, type ShownTaskLookup } from './ShownTask';
 import type { ContentKey } from '../services/core/ContentKey';
-import type { EditorLine } from '../services/persistence/FileLines';
+import { editorRow, type RowRef } from '../services/persistence/FileLines';
 import type { TaskOp } from '../services/persistence/TaskOps';
 
 const taskIndexChanged = StateEffect.define<void>();
@@ -141,19 +141,20 @@ export function createTaskMenuExtension(
                 const lineText = view.state.doc.line(lineNumber + 1).text; // CM6 lines are 1-based
 
                 // The line holds only in the content the menu was opened in.
-                const at = { line: lineNumber, text: lineText, key: keyOf(view.state.doc) };
+                const key = keyOf(view.state.doc);
+                const at = editorRow(lineNumber, lineText, key);
                 // What a delete takes, as the editor shows it now: the line
                 // and its subtree. The write takes it only if they still
                 // read so.
                 const subtree = subtreeAt(outlineFor(view.state.doc), lineNumber);
                 // Written in this editor while it shows the note, as the
                 // user's own edit is; to the file once it does not (`shows`).
-                const write = (target: EditorLine, ops: readonly TaskOp[]) =>
+                const write = (target: RowRef, ops: readonly TaskOp[]) =>
                     writeEditorLine(view, filePath, target, ops, lineHost);
                 const ops: CheckboxLineOps = {
                     updateLine: (content) => write(at, [{ kind: 'update', text: content }]),
                     insertLineAfter: (content) => write(at, [{ kind: 'copy', text: content }]),
-                    deleteLine: () => write({ ...at, subtree }, [{ kind: 'remove' }]),
+                    deleteLine: () => write(editorRow(lineNumber, lineText, key, subtree), [{ kind: 'remove' }]),
                 };
 
                 checkboxBuilder.addFullMenu(menu, lineText, getSettings(), ops, filePath);

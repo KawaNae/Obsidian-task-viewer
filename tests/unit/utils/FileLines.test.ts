@@ -1,8 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import { contentKeyOf } from '../../../src/services/core/ContentKey';
 import { TFile } from 'obsidian';
-import { BrokenWrite, LineBreakInLine, UnfollowableDraft, draftOver, joinLines, processLines, replayEdits, splitLines } from '../../../src/services/persistence/FileLines';
-import type { Landing, LineEdit, NamedRow, Refusal } from '../../../src/services/persistence/FileLines';
+import { editorRow, BrokenWrite, LineBreakInLine, UnfollowableDraft, draftOver, joinLines, processLines, replayEdits, splitLines } from '../../../src/services/persistence/FileLines';
+import type { Landing, LineEdit, Refusal, RowRef } from '../../../src/services/persistence/FileLines';
 import { channelDouble } from '../helpers/channelDouble';
 import { holdsLineBreak } from '../../../src/utils/LineBreak';
 import { Block } from '../../../src/services/persistence/utils/Placement';
@@ -572,7 +572,7 @@ describe('processLines', () => {
     it('leaves the file byte-identical when the edit declines', async () => {
         const original = '- [ ] a\r\n- [ ] b\n';
         const h = harness(original);
-        const outcome = await processLines(h.app, h.file, undefined, (_draft, _eol, { row }) => row({ line: 0, text: '- [ ] z', key: contentKeyOf(['- [ ] a', '- [ ] b', '']) }) !== null);
+        const outcome = await processLines(h.app, h.file, undefined, (_draft, _eol, { row }) => row(editorRow(0, '- [ ] z', contentKeyOf(['- [ ] a', '- [ ] b', '']))) !== null);
 
         expect(outcome).toEqual({ written: false, refused: { file: 'note.md', reason: { kind: 'changed' }, subject: '- [ ] z' } });
         // Not even the mixed terminators are unified: a write that could not be
@@ -583,7 +583,7 @@ describe('processLines', () => {
 });
 
 /** A row named on `line` of the reading the file reads as, planned from a line that reads `text`. */
-const named = (line: number, text: string, subject = text): NamedRow => ({ line, subject, basis: { text }, read: 'test.1' });
+const named = (line: number, text: string, subject = text): RowRef => ({ line, subject, basis: { text }, in: { reading: 'test.1' } });
 
 describe('processLines: asking where a row stands, and giving up', () => {
 
@@ -610,7 +610,7 @@ describe('processLines: asking where a row stands, and giving up', () => {
         const h = harness('- [ ] a\rX\n- [ ] b\n- [ ] b\n');
 
         const outcome = await processLines(h.app, h.file, undefined, (draft, _eol, session) => {
-            const at = session.row({ line: 2, text: '- [ ] b', key: contentKeyOf(['- [ ] a', 'X', '- [ ] b', '- [ ] b', '']) });
+            const at = session.row(editorRow(2, '- [ ] b', contentKeyOf(['- [ ] a', 'X', '- [ ] b', '- [ ] b', ''])));
             if (at === null) return false;
             draft.rewrite(at, '- [x] b');
             return true;
@@ -653,31 +653,12 @@ describe('processLines: asking where a row stands, and giving up', () => {
         expect(h.text()).toBe('- [ ] a\n');
     });
 
-    it('refuses a row planned from a copy that names no reading, though its line reads as its basis', async () => {
-        const h = harness('- [ ] a\n');
-        const log = writeSink();
-        const { read: _read, ...unread } = named(0, '- [ ] a', 'a');
-
-        const outcome = await processLines(h.app, h.file, log.channel, (draft, _eol, session) => {
-            const at = session.row(unread);
-            if (at === null) return false;
-            draft.rewrite(at, '- [x] a');
-            return true;
-        });
-
-        expect(outcome).toEqual({
-            written: false,
-            refused: { file: 'note.md', reason: { kind: 'changed' }, subject: 'a' },
-        });
-        expect(h.text()).toBe('- [ ] a\n');
-    });
-
     it('tells the channel of a refusal exactly once', async () => {
         const h = harness('- [ ] a\n');
         const log = writeSink();
 
         const outcome = await processLines(h.app, h.file, log.channel, (_draft, _eol, session) =>
-            session.row({ line: 0, text: '- [ ] b', key: contentKeyOf(['- [ ] a', '']) }) !== null);
+            session.row(editorRow(0, '- [ ] b', contentKeyOf(['- [ ] a', '']))) !== null);
 
         const refusal = { file: 'note.md', reason: { kind: 'changed' }, subject: '- [ ] b' };
         expect(outcome).toEqual({ written: false, refused: refusal });
@@ -692,7 +673,7 @@ describe('processLines: asking where a row stands, and giving up', () => {
         const log = writeSink();
 
         const outcome = await processLines(h.app, h.file, log.channel, (_draft, _eol, session) =>
-            session.row({ line: 0, text: '- [ ] b', key: contentKeyOf(['- [ ] a', '']) }) !== null);
+            session.row(editorRow(0, '- [ ] b', contentKeyOf(['- [ ] a', '']))) !== null);
 
         expect(h.calls()).toBe(2);
         expect(log.refusals).toEqual([{ file: 'note.md', reason: { kind: 'changed' }, subject: '- [ ] b' }]);
@@ -708,7 +689,7 @@ describe('processLines: asking where a row stands, and giving up', () => {
 
         const outcome = await processLines(h.app, h.file, log.channel, (draft, _eol, session) => {
             run++;
-            if (run === 1) return session.row({ line: 0, text: '- [ ] b', key: contentKeyOf(['- [ ] a', '']) }) !== null;
+            if (run === 1) return session.row(editorRow(0, '- [ ] b', contentKeyOf(['- [ ] a', '']))) !== null;
             draft.rewrite(0, '- [x] a');
             return true;
         });

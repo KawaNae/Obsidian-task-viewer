@@ -39,7 +39,7 @@ function makeRepository() {
 
 /** What the fire's one write inserts, if it inserts anything. */
 function insertOf(repository: ReturnType<typeof makeRepository>): FlowInstanceInsert | undefined {
-    const ops = repository.applyToTask.mock.calls[0]?.[1] as TaskOp[] | undefined;
+    const ops = repository.applyToTask.mock.calls[0]?.[2] as TaskOp[] | undefined;
     const op = ops?.find(o => o.kind === 'insert-instance');
     return op?.kind === 'insert-instance' ? op.insert : undefined;
 }
@@ -54,7 +54,7 @@ function generatedOf(repository: ReturnType<typeof makeRepository>): Extract<Flo
 /** How many strip-flow ops the fires wrote. */
 function stripsOf(repository: ReturnType<typeof makeRepository>): number {
     return repository.applyToTask.mock.calls
-        .flatMap(c => c[1] as TaskOp[]).filter(o => o.kind === 'strip-flow').length;
+        .flatMap(c => c[2] as TaskOp[]).filter(o => o.kind === 'strip-flow').length;
 }
 
 const app = { vault: { getAbstractFileByPath: () => null } };

@@ -22,7 +22,7 @@ const child = (depth: number, body: string): GeneratedChild => ({ depth, body })
 function insertGenerated(
     h: WriteBench, task: Task, parentLine: string, flowLines: string[], children: GeneratedChild[],
 ) {
-    return h.writer.applyToTask(plannedOn(task), [
+    return h.writer.applyToTask(task.file, plannedOn(task), [
         { kind: 'insert-instance', insert: { kind: 'generated', parentLine, flowLines, children } },
     ]);
 }

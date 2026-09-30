@@ -30,7 +30,7 @@ async function runSiblingInsert(
     const bench = await writeBench(fileText);
     const task = bench.taskAt(line);
     if (now !== undefined) bench.edit(now);
-    const index = await bench.writer.applyToTask(plannedOn(task), [
+    const index = await bench.writer.applyToTask(task.file, plannedOn(task), [
         { kind: 'insert', place: opts.afterCompletedRun ? 'afterCompletedRun' : 'afterSubtree', text: lineBody },
     ]);
     return { text: bench.text(), index, refused: bench.refused };
@@ -216,9 +216,12 @@ describe('insertSiblingAfterTask afterCompletedRun', () => {
 const MADE = { written: true, refused: null, made: [], rows: new Map() } as const;
 
 function buildIndexHost(task: Task | undefined) {
+    // A copy the index read, which the disk still holds (`checkCopy`).
+    if (task) task.reading ??= 'k1.1';
     return {
         store: { getTask: () => task },
         scanner: { follow: () => null },
+        checks: { read: async () => task?.originalText ?? '', follow: () => task?.line ?? null, last: () => ({ n: 1, key: undefined }) },
         repository: {
             applyToTask: vi.fn(async () => MADE),
         },
@@ -243,7 +246,7 @@ describe('TaskIndex child insertion', () => {
         const host = buildIndexHost(makeTask({ originalText: '- [ ] parent' }));
         await proto.insertLine.call(host, 'tv-inline:note.md:ln:1', '- [ ] child', 'firstChild');
 
-        expect(host.repository.applyToTask.mock.calls[0][1]).toEqual([{ kind: 'insert', place: 'firstChild', text: '- [ ] child' }]);
+        expect(host.repository.applyToTask.mock.calls[0][2]).toEqual([{ kind: 'insert', place: 'firstChild', text: '- [ ] child' }]);
     });
 
     // Tasks / dayPlanner tasks are parsed read-only. TaskApi rejects writes to
@@ -271,7 +274,7 @@ describe('TaskIndex.insertLine', () => {
         );
 
         expect(host.repository.applyToTask).toHaveBeenCalledTimes(1);
-        expect(host.repository.applyToTask.mock.calls[0][1]).toEqual([
+        expect(host.repository.applyToTask.mock.calls[0][2]).toEqual([
             { kind: 'insert', place: 'afterCompletedRun', text: NEW_SESSION },
         ]);
         expect(line).toBe(true);
@@ -283,7 +286,7 @@ describe('TaskIndex.insertLine', () => {
         const host = buildIndexHost(makeTask({ originalText: '\t- [x] ⏱️ task A' }));
         await proto.insertLine.call(host, 'tv-inline:note.md:ln:1', NEW_SESSION, 'afterSubtree');
 
-        expect(host.repository.applyToTask.mock.calls[0][1]).toEqual([
+        expect(host.repository.applyToTask.mock.calls[0][2]).toEqual([
             { kind: 'insert', place: 'afterSubtree', text: NEW_SESSION },
         ]);
     });
@@ -335,7 +338,7 @@ async function runChildInsert(
 ): Promise<{ text: string; index: WriteOutcome }> {
     const bench = await writeBench(fileText);
     const task = bench.taskAt(line);
-    const index = await bench.writer.applyToTask(plannedOn(task), [{ kind: 'insert', place: 'firstChild', text: lineBody }]);
+    const index = await bench.writer.applyToTask(task.file, plannedOn(task), [{ kind: 'insert', place: 'firstChild', text: lineBody }]);
     return { text: bench.text(), index };
 }
 

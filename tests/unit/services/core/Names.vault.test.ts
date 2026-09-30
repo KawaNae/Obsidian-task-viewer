@@ -1,4 +1,4 @@
-import { describe, it, expect, afterEach } from 'vitest';
+import { describe, it, expect, afterEach, vi } from 'vitest';
 import { Notice } from 'obsidian';
 import { openVault, makeFile, vaultSession, type VaultSession } from '../../helpers/vaultSession';
 import { plannedOn } from '../../../../src/services/persistence/TaskRefs';
@@ -132,7 +132,7 @@ describe('a name given before our writes brought the file back to a content it h
         // The copy's line 1 reads as it did, in a content that reads as it
         // did: only the reading tells the rows apart. Carried across the two
         // writes, the row is on line 0.
-        const written = await session.index.getRepository().updateTaskInFile(plannedOn(held), { ...held, content: 'A2', originalText: '- [ ] A2' });
+        const written = await session.index.getRepository().updateTaskInFile(held.file, plannedOn(held), { ...held, content: 'A2', originalText: '- [ ] A2' });
         expect(written.written).toBe(true);
         expect(contents.get(FILE)).toBe(['- [ ] A2', '- [ ] A', ''].join('\n'));
     });
@@ -153,7 +153,7 @@ describe('a name given before edits from outside brought the file back to the co
 
         expect(session.index.getTask(r2)).toBeUndefined();
         expect(await session.index.updateTask(r2, { statusChar: 'x' })).toBe(false);
-        const written = await session.index.getRepository().updateTaskInFile(plannedOn(held), { ...held, statusChar: 'x', originalText: '- [x] A' });
+        const written = await session.index.getRepository().updateTaskInFile(held.file, plannedOn(held), { ...held, statusChar: 'x', originalText: '- [x] A' });
         expect(written.written).toBe(false);
         expect(contents.get(FILE)).toBe(first);
     });
@@ -242,14 +242,17 @@ describe('a name given before writes of ours to the file being dragged', () => {
     });
 });
 
-describe('a copy of a row whose target names no reading', () => {
-    it('is not written, though its line reads as it did: nothing says which reading the line is of', async () => {
+describe('a copy of a row that names no reading', () => {
+    it('is refused as gone before anything is written: its line is a coordinate in no content a write can check', async () => {
         const { contents, session } = await open(['- [ ] A', '']);
-        const held = session.index.getTask(idOf(session, 'A'))!;
-        const target = { ...plannedOn(held), read: undefined };
+        const id = idOf(session, 'A');
+        // The store's copy, as a copy no reading of the index made would be.
+        delete session.index.getTask(id)!.reading;
+        const told = vi.spyOn(session.index as unknown as { reportRefusal(refusal: unknown): Promise<void> }, 'reportRefusal');
 
-        const written = await session.index.getRepository().updateTaskInFile(target, { ...held, statusChar: 'x', originalText: '- [x] A' });
-        expect(written.refused?.reason).toEqual({ kind: 'changed' });
+        expect(await session.index.updateTask(id, { statusChar: 'x' })).toBe(false);
+        expect(told).toHaveBeenCalledTimes(1);
+        expect(told.mock.calls[0][0]).toMatchObject({ file: FILE, reason: { kind: 'gone' } });
         expect(contents.get(FILE)).toBe(['- [ ] A', ''].join('\n'));
     });
 });

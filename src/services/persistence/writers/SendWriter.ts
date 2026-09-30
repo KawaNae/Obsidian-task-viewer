@@ -6,10 +6,9 @@ import { carryTo, putNumbered, subtreeBlock } from '../Carry';
 import type { Section } from '../Destination';
 import {
     createFile, editLines, fileGone, readInLine, splitLines, takeBack, withRefused,
-    type LineDraft, type MarkedLine, type Refusal, type RowTarget, type TakeBack, type WriteChannel, type WriteChannels, type WriteSession,
+    type LineDraft, type MarkedLine, type Refusal, type RowRef, type RowTarget, type TakeBack, type WriteChannel, type WriteChannels, type WriteSession,
 } from '../FileLines';
 import { replaceSubtree } from '../ReplaceSubtree';
-import type { PlannedTarget } from '../TaskRefs';
 import type { CompletionFire, FiringOutcome, SubtreeReplacement } from '../TaskOps';
 import { FrontmatterLineEditor } from '../utils/FrontmatterLineEditor';
 import { ListNumber } from '../utils/ListNumber';
@@ -23,7 +22,7 @@ import type { InlineTaskWriter } from './InlineTaskWriter';
  * wrote before sending it, if any (`SubtreeReplacement`).
  */
 export interface SentRow {
-    target: PlannedTarget;
+    target: RowRef;
     draft?: SubtreeReplacement;
 }
 

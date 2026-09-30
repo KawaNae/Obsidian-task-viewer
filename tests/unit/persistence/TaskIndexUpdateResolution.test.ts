@@ -15,6 +15,7 @@ import { DEFAULT_STATUS_DEFINITIONS, type Task } from '../../../src/types';
 const proto = TaskIndex.prototype as any;
 
 function buildHost(task: Task, written = true) {
+    task.reading ??= 'k1.1';
     return {
         store: {
             getTask: () => task,
@@ -44,6 +45,8 @@ function buildHost(task: Task, written = true) {
 
         copyToPlan: proto.copyToPlan,
         planCopy: proto.planCopy,
+        // A copy the index read, which the disk still holds (`checkCopy`).
+        checks: { read: async () => task.originalText, follow: () => task.line, last: () => ({ n: 1, key: undefined }) },
         getTask: proto.getTask,
 
         reportRefusal: () => { /* the notice is not measured here */ },
@@ -62,7 +65,7 @@ describe('updateTask: which task resolves the line', () => {
             startTime: '11:00', endTime: '11:30', statusChar: 'x',
         });
 
-        const [target, toWrite] = host.repository.updateTaskInFile.mock.calls[0];
+        const [, target, toWrite] = host.repository.updateTaskInFile.mock.calls[0];
         // By its line, with the text as the index read it: the file still
         // says 10:00, so that is what the write has to find there.
         expect(target.line).toBe(task.line);
@@ -79,7 +82,7 @@ describe('updateTask: which task resolves the line', () => {
 
         await proto.updateTask.call(host, task.id, { startTime: '11:00', originalText: '- [ ] x @T11:00' });
 
-        const [target, toWrite] = host.repository.updateTaskInFile.mock.calls[0];
+        const [, target, toWrite] = host.repository.updateTaskInFile.mock.calls[0];
         expect(target.basis.text).toBe('- [ ] x @T10:00');
         expect(toWrite).toBe(task);
         expect(task.startTime).toBe('11:00');
