@@ -21,9 +21,10 @@ import { planDuplicate } from './DuplicateShift';
 import type { GenBlock } from '../parsing/gen/GenBlockCollector';
 import { isReadCopy, plannedOn, subjectOf, type ReadCopy } from '../persistence/TaskRefs';
 import { logDebug, logError, logInfo, logWarn } from '../../log/log';
-import { readInLine, type Landing, type Refusal, type RowRef } from '../persistence/FileLines';
+import { readInLine, splitLines, type Landing, type Refusal, type RowRef } from '../persistence/FileLines';
 import type { FiringOutcome, InsertPlace, SubtreeReplacement, TaskOp } from '../persistence/TaskOps';
 import { Destination, type Section } from '../persistence/Destination';
+import { Block } from '../persistence/utils/Placement';
 import type { SendTo } from '../persistence/writers/SendWriter';
 import type { ContentKey } from './ContentKey';
 import { checkCopy, checkFile, type CheckDeps, type OnDisk } from './ReadingCheck';
@@ -1028,9 +1029,13 @@ export class TaskIndex {
         return this.withNotify(filePath, async () => {
             logInfo(`[createTask] path=${filePath} heading=${heading ?? '(none)'}`);
 
+            // Under a heading, in a note that is there; at the end, in a note
+            // made empty when it is not. The appended text is built with LF;
+            // split here, the note's own terminator goes back between every
+            // line, and the lines are to read as they read by themselves.
             const outcome = heading
-                ? await this.repository.insertLineUnderHeading(filePath, taskLine, Destination.sectionNamed(heading, this.settings))
-                : await this.repository.appendTaskToFile(filePath, taskLine);
+                ? await this.repository.putInNote(filePath, Destination.sectionNamed(heading, this.settings), Block.line(taskLine))
+                : await this.repository.putInNote(filePath, 'end', Block.read(splitLines(taskLine).lines), { create: () => '' });
             // What the write left is in the index once it landed (`landed`):
             // the caller finds the row on its line without waiting for a scan.
             return outcome.written ? outcome.line : null;

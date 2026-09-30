@@ -1,19 +1,18 @@
 import { describe, it, expect } from 'vitest';
 import { TFile } from 'obsidian';
-import { HeadingInserter } from '../../../src/utils/HeadingInserter';
+import { createNote, putBlock, putInNote } from '../../../src/services/persistence/Notes';
+import { writeBench, FILE } from '../helpers/writeBench';
 import { draftOver } from '../../../src/services/persistence/FileLines';
 import type { Section } from '../../../src/services/persistence/Destination';
-import type { SectionSide } from '../../../src/services/persistence/utils/Placement';
+import { Block, Placement, type SectionSide } from '../../../src/services/persistence/utils/Placement';
 
 /** The section of the heading `heading`, made at `level`, at `side` (the head unless said). */
 const section = (heading: string, level = 2, side: SectionSide = 'head'): Section => ({ heading, level, side });
 
 /**
- * writeUnderHeading は TaskIndex.createTask / DailyNoteUtils.appendLineToDailyNote /
- * FrontmatterWriter.insertLineUnderHeading の 3 重実装を一本化した先。この
- * ラッパー自体は「insertUnderHeading の結果を vault.process で書き戻し、
- * insertedLine を返す」だけなので、pin するのは vault.process への配線と
- * ファイル不在時の拒否（gone）の 2 点。
+ * putInNote puts a block in a section of a note there through vault.process,
+ * and answers the line it went to; a note not there without `create` is
+ * refused as gone. What goes where is putBlock's, pinned below.
  */
 function harness(initial: string) {
     let content = initial;
@@ -27,45 +26,42 @@ function harness(initial: string) {
     return { app, text: () => content };
 }
 
+const put = (app: any, path: string, line: string, to: Section) =>
+    putInNote(app, path, undefined, { where: to, block: Block.line(line) });
+
 /**
- * insertUnderHeading は行配列で読み書きする（ファイルの改行を呼び口が持つ）。
- * これらのケースが見ているのは「どの行がどこに入るか」なので、文字列で書いた
- * 元のままにしておき、境界だけここで合わせる。
+ * putBlock reads and writes lines (the file's terminator is the write's).
+ * What these cases look at is which line goes where, so they stay written as
+ * text and meet the lines here.
  */
 function insertFromText(content: string, line: string, header: string, headerLevel: number, side: SectionSide = 'head') {
     const { draft } = draftOver(content.split('\n'));
-    const put = HeadingInserter.insertUnderHeading(draft, line, section(header, headerLevel, side));
-    if (typeof put !== 'number') throw new Error(`${put.count} headings`);
-    return { content: draft.lines.join('\n'), insertedLine: put };
+    const at = putBlock(draft, section(header, headerLevel, side), Block.line(line));
+    if (typeof at !== 'number') throw new Error(`${at.count} headings`);
+    return { content: draft.lines.join('\n'), insertedLine: at };
 }
 
-describe('HeadingInserter', () => {
-    describe('writeUnderHeading', () => {
-        it('writes the pure-function result back through vault.process and returns insertedLine', async () => {
+describe('Notes: a line put in a section', () => {
+    describe('putInNote', () => {
+        it('writes the draft back through vault.process and answers the line', async () => {
             const h = harness('some text\n## Tasks\n- [ ] existing line');
-            const at = await HeadingInserter.writeUnderHeading(
-                h.app, 'note.md', undefined, '- [ ] new task', section('Tasks')
-            );
+            const at = await put(h.app, 'note.md', '- [ ] new task', section('Tasks'));
             expect(at.written && at.line).toBe(2);
             expect(h.text().split('\n')[2]).toBe('- [ ] new task');
         });
 
-        it('creates the heading when absent, matching insertUnderHeading', async () => {
+        it('creates the heading when absent, as putBlock does', async () => {
             const h = harness('some text');
-            const at = await HeadingInserter.writeUnderHeading(
-                h.app, 'note.md', undefined, '- [ ] task', section('Tasks')
-            );
+            const at = await put(h.app, 'note.md', '- [ ] task', section('Tasks'));
             const lines = h.text().split('\n');
             expect(lines).toContain('## Tasks');
             if (!at.written) throw new Error('expected the write to be made');
             expect(lines[at.line]).toBe('- [ ] task');
         });
 
-        it('is refused as gone without writing when the file does not exist', async () => {
+        it('is refused as gone without writing when the file does not exist and nothing says what to make', async () => {
             const h = harness('unchanged');
-            const at = await HeadingInserter.writeUnderHeading(
-                h.app, 'missing.md', undefined, '- [ ] task', section('Tasks')
-            );
+            const at = await put(h.app, 'missing.md', '- [ ] task', section('Tasks'));
             expect(at.written).toBe(false);
             expect(at.refused?.reason).toEqual({ kind: 'gone' });
             expect(h.text()).toBe('unchanged');
@@ -73,34 +69,14 @@ describe('HeadingInserter', () => {
 
         it('is refused, told by the heading and how many there are, when the note has more than one by the name', async () => {
             const h = harness('## Tasks\n- [ ] a\n### tasks\n- [ ] b');
-            const at = await HeadingInserter.writeUnderHeading(h.app, 'note.md', undefined, '- [ ] n', section('Tasks'));
+            const at = await put(h.app, 'note.md', '- [ ] n', section('Tasks'));
             expect(at.written).toBe(false);
             expect(at.refused?.reason).toEqual({ kind: 'headings', name: 'Tasks', count: 2 });
             expect(h.text()).toBe('## Tasks\n- [ ] a\n### tasks\n- [ ] b');
         });
-
-        it('writes via a directly-passed TFile even when getAbstractFileByPath cannot resolve it yet', async () => {
-            // DailyNoteUtils.appendLineToDailyNote が createDailyNote 直後の
-            // TFile を渡す経路の pin。作成直後は vault index からパスで
-            // 引き直せるとは限らないため、TFile を経由しない配線が必須。
-            let content = '## Tasks\n- [ ] existing';
-            const file = new TFile();
-            const app = {
-                vault: {
-                    getAbstractFileByPath: () => null, // 意図的に解決できない状態を模す
-                    process: async (_f: TFile, fn: (data: string) => string) => { content = fn(content); },
-                },
-            } as any;
-
-            const at = await HeadingInserter.writeUnderHeading(
-                app, file, undefined, '- [ ] just created', section('Tasks')
-            );
-            expect(at.written && at.line).toBe(1);
-            expect(content.split('\n')[1]).toBe('- [ ] just created');
-        });
     });
 
-    describe('insertUnderHeading', () => {
+    describe('putBlock in a section', () => {
         it('inserts under existing heading', () => {
             const content = 'some text\n## Tasks\n- [ ] existing line';
             const result = insertFromText(content, '- [ ] new task', 'Tasks', 2);
@@ -186,7 +162,7 @@ describe('HeadingInserter', () => {
         it('puts nothing when two headings go by the name, whatever their levels and case', () => {
             for (const content of ['## Tasks\n- [ ] first\n## Tasks\nsecond', '## Tasks\n### TASKS']) {
                 const { draft } = draftOver(content.split('\n'));
-                expect(HeadingInserter.insertUnderHeading(draft, 'inserted', section('Tasks'))).toEqual({ kind: 'many', count: 2 });
+                expect(putBlock(draft, section('Tasks'), Block.line('inserted'))).toEqual({ kind: 'many', count: 2 });
                 expect(draft.lines.join('\n')).toBe(content);
             }
         });
@@ -292,5 +268,78 @@ describe('HeadingInserter', () => {
             expect(lines[lines.length - 2]).toBe('## Tasks');
             expect(result.insertedLine).toBe(lines.length - 1);
         });
+    });
+});
+
+describe('Notes: a note made with lines put in it', () => {
+    const NEW = '2026-10-01.md';
+    const LOG: Section = { heading: 'Log', level: 2, side: 'end' };
+
+    /** A bench whose `vault.create` answers a turn later and, as Obsidian's does, throws for a path taken. */
+    async function benchLikeObsidian() {
+        const b = await writeBench({ [FILE]: '# note' });
+        const create = b.app.vault.create;
+        b.app.vault.create = async (path: string, data: string) => {
+            await Promise.resolve();
+            if (b.contents.has(path)) throw new Error('File already exists.');
+            return create(path, data);
+        };
+        return b;
+    }
+
+    it('writes the seed with the block in it, in one create, the seed\'s terminator and mark kept', async () => {
+        const b = await writeBench({ [FILE]: '# note' });
+        const created: string[] = [];
+        const create = b.app.vault.create;
+        b.app.vault.create = async (path: string, data: string) => { created.push(data); return create(path, data); };
+
+        const at = await putInNote(b.app, NEW, b.channel(NEW), {
+            where: LOG, block: Block.line('- [ ] a'), create: () => '﻿# 2026-10-01\r\n\r\n## Log\r\n',
+        });
+
+        expect(at.written && at.line).toBe(3);
+        expect(created).toEqual(['﻿# 2026-10-01\r\n\r\n## Log\r\n- [ ] a\r\n']);
+        expect(b.refused).toEqual([]);
+    });
+
+    it('two blocks put in a note not there yet: the first makes it, the second is put in the note it made, neither refused', async () => {
+        const b = await benchLikeObsidian();
+        const template = () => '# 2026-10-01\n';
+
+        const [first, second] = await Promise.all([
+            putInNote(b.app, NEW, b.channel(NEW), { where: LOG, block: Block.line('- [x] first'), create: template }),
+            putInNote(b.app, NEW, b.channel(NEW), { where: LOG, block: Block.line('- [x] second'), create: template }),
+        ]);
+
+        expect(first.written).toBe(true);
+        expect(second.written).toBe(true);
+        expect(b.refused).toEqual([]);
+        // As two blocks put in turn in a note that was there: the section's end side puts the second below.
+        expect(b.text(NEW)).toBe('# 2026-10-01\n\n## Log\n- [x] first\n- [x] second\n');
+    });
+
+    it('a seed that could not be made fails the write, told once, and nothing created', async () => {
+        const b = await writeBench({ [FILE]: '# note' });
+
+        const at = await putInNote(b.app, NEW, b.channel(NEW), {
+            where: 'end', block: Block.line('- [ ] a'), create: async () => { throw new Error('template unreadable'); },
+        });
+
+        expect(at.refused?.reason).toEqual({ kind: 'failed' });
+        expect(b.refused).toHaveLength(1);
+        expect(b.contents.has(NEW)).toBe(false);
+    });
+
+    it('createNote makes the note of the seed as it is without an edit, and of the edit\'s lines with one', async () => {
+        const b = await writeBench({ [FILE]: '# note' });
+
+        expect((await createNote(b.app, 'a.md', b.channel('a.md'), 'a', () => ''))).toMatchObject({ written: true });
+        expect((await createNote(b.app, 'b.md', b.channel('b.md'), 'b', () => '', (draft) => {
+            draft.put(Placement.end(draft.reading()), Block.line('- [ ] b'));
+            return true;
+        }))).toMatchObject({ written: true });
+
+        expect(b.text('a.md')).toBe('');
+        expect(b.text('b.md')).toBe('- [ ] b\n');
     });
 });

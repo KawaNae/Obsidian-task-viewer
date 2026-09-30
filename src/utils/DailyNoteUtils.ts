@@ -1,6 +1,7 @@
 import { type App, TFile, moment } from 'obsidian';
-import { HeadingInserter } from './HeadingInserter';
-import { createFile, type WriteChannel } from '../services/persistence/FileLines';
+import type { WriteChannel } from '../services/persistence/FileLines';
+import { putInNote } from '../services/persistence/Notes';
+import { Block } from '../services/persistence/utils/Placement';
 import type { Section } from '../services/persistence/Destination';
 import type { TaskViewerSettings, NoteType } from '../types';
 import { processTemplate, normalizeTrailingNewline } from './NoteTemplateProcessor';
@@ -225,8 +226,8 @@ export class DailyNoteUtils {
     }
 
     /**
-     * Put a line in a section of the daily note (`HeadingInserter`).
-     * Creates the daily note and/or heading if they don't exist.
+     * Put a line in a section of the daily note (`Notes.putInNote`).
+     * The daily note is made of its template with the line in it when it is not there, in one write.
      * @param app Obsidian App instance
      * @param date Target date for the daily note
      * @param line The line to append (should include full task format, e.g., "- [x] ...")
@@ -247,18 +248,8 @@ export class DailyNoteUtils {
         to: Section,
         channelFor: (path: string) => WriteChannel | undefined,
     ): Promise<string | null> {
-        let file = this.getDailyNote(app, date);
-        if (!file) {
-            const { path, content } = this.dailyNoteToCreate(app, date);
-            const created = await createFile(app, path, channelFor(path), line.trim(), content);
-            if (!created.written) return null;
-            file = created.file;
-        }
-
-        // file は既に手元にある TFile を直接渡す。作成直後のファイルは
-        // getAbstractFileByPath で引き直せるとは限らないため、パスへ
-        // 変換すると書き込みが黙って失敗しうる。
-        const outcome = await HeadingInserter.writeUnderHeading(app, file, channelFor(file.path), line, to);
-        return outcome.written ? file.path : null;
+        const { path, content } = this.dailyNoteToCreate(app, date);
+        const outcome = await putInNote(app, path, channelFor(path), { where: to, block: Block.line(line), create: content });
+        return outcome.written ? outcome.file.path : null;
     }
 }

@@ -2,13 +2,13 @@ import { type App, TFile } from 'obsidian';
 import { collectFlowLineIndices } from '../../parsing/utils/FlowLineScanner';
 import { carryTo } from '../Carry';
 import { ChildPropertyLineEditor } from '../utils/ChildPropertyLineEditor';
-import { Block, Placement, type InSection, type PlacedLine, type Spot } from '../utils/Placement';
+import { Block, Placement, type InSection, type Spot } from '../utils/Placement';
 import { ListNumber } from '../utils/ListNumber';
 import { flowInstanceHead, renderFlowInstance } from '../FlowInstanceLines';
 import {
-    UnfollowableDraft, createFile, editLines, fileGone, processLines, splitLines, withRefused,
+    UnfollowableDraft, fileGone, processLines, withRefused,
     type DraftEdit, type EditTrials, type EditedLines, type LineDraft, type Refusal, type RowRef,
-    type RowTarget, type WriteAt, type WriteChannel, type WriteChannels, type WriteSession,
+    type RowTarget, type WriteChannel, type WriteChannels, type WriteSession,
 } from '../FileLines';
 import type { CompletionFire, FiringOutcome, SubtreeReplacement, TaskOp } from '../TaskOps';
 import { replaceSubtree } from '../ReplaceSubtree';
@@ -332,51 +332,6 @@ export class InlineTaskWriter {
         const found = Placement.into(outline, to, head);
         if (found.kind !== 'spot') throw new UnfollowableDraft(`a move to the heading '${to.heading}' finds ${found.kind === 'none' ? 'none' : found.count} where it was planned to find one`);
         return found.spot;
-    }
-
-    /**
-     * @returns the outcome.
-     *
-     * A note that does not exist yet is made of what the append writes to an
-     * empty note, held to the same check (`editLines`), and created whole
-     * (`createFile`): every row in it is new, and there is no report of lines
-     * to follow.
-     */
-    async appendTaskToFile(filePath: string, content: string): Promise<WriteAt> {
-        // The appended text is built with LF; splitting it here lets the file's
-        // own terminator go back between every line, its own included. The
-        // lines are to read as they read by themselves.
-        return this.appendBlock(filePath, Block.read(splitLines(content).lines));
-    }
-
-    /** Append `block` to the note, or make the note of it (see {@link appendTaskToFile}). */
-    private async appendBlock(filePath: string, block: readonly PlacedLine[]): Promise<WriteAt> {
-        const file = this.app.vault.getAbstractFileByPath(filePath);
-        const subject = block[0].text.trim();
-        const channel = this.channelOf(filePath);
-        let inserted = -1;
-        const append = (draft: LineDraft) => {
-            const spot = Placement.end(draft.reading());
-            draft.put(spot, block);
-            inserted = spot.at;
-            return true;
-        };
-
-        if (!file) {
-            const edited = editLines(filePath, [], '\n', append, { about: subject });
-            if (!edited.written) {
-                channel?.refused(edited.refused);
-                return edited;
-            }
-            const created = await createFile(this.app, filePath, channel, subject, () => edited.lines.join('\n'));
-            return created.written ? { ...created, line: inserted } : created;
-        }
-
-        // A folder by that name: there is no note to append to.
-        if (!(file instanceof TFile)) return fileGone(channel, filePath, subject);
-
-        const outcome = await processLines(this.app, file, channel, append, subject);
-        return outcome.written ? { ...outcome, line: inserted } : outcome;
     }
 }
 

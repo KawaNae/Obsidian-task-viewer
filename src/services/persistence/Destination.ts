@@ -3,7 +3,7 @@ import type { InSection } from './utils/Placement';
 
 /**
  * A section new lines go to (`Placement.into`), and the level its heading is
- * made at when the note has none by its name (`HeadingInserter`).
+ * made at when the note has none by its name (`Notes.sectionSpot`).
  */
 export interface Section extends InSection {
     level: number;

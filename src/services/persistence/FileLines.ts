@@ -67,6 +67,14 @@ export function joinLines(lines: string[], eol: Eol): string {
 }
 
 /**
+ * The content of `lines` as a file holds them: joined with its terminator,
+ * and opened with the mark when it had one (what {@link splitLines} took off).
+ */
+export function joinContent(lines: readonly string[], { eol, bom }: Pick<SplitLines, 'eol' | 'bom'>): string {
+    return (bom ? BOM : '') + joinLines([...lines], eol);
+}
+
+/**
  * One thing a write did to the file's lines, in the coordinates of the moment.
  *
  * Internal to this module and the replay: a writer never builds one. It says
@@ -569,7 +577,7 @@ export interface WriteSession {
     /**
      * Give the write up for what the lines hold, not for a target: the
      * section it goes to is under more than one heading of its name
-     * (`HeadingInserter`), a subtree's replacement would not read as the
+     * (`Notes.putInNote`), a subtree's replacement would not read as the
      * row's subtree (`ReplaceSubtree`), or the lines are not the ones the
      * write was made for (`changed`: a send's row whose subtree, once its
      * draft and fires are written, is not what went to its note, `SendWriter`;
@@ -1088,7 +1096,7 @@ export async function processLines(
         }
         const { before, lines: next, edits: reported } = edited;
         // The mark the note opened with, put back where it was.
-        const rebuilt = (bom ? BOM : '') + joinLines([...next], eol);
+        const rebuilt = joinContent(next, { eol, bom });
 
         // A rewrite that produced the same bytes is not a write: Obsidian
         // fires no `modify` for it, and there is nothing new to read. The
@@ -1454,7 +1462,7 @@ export async function takeBack(
                 const { lines, eol, bom } = splitLines(content);
                 if (!readsAsLeft(lines)) return null;
                 // The note's own mark and line ends, as they are now.
-                return (bom ? BOM : '') + joinLines([...how.lines], eol);
+                return joinContent(how.lines, { eol, bom });
             });
             if ('refused' in outcome) return { taken: false, why: 'failed' };
             return outcome.written ? { taken: true } : { taken: false, why: 'changed' };

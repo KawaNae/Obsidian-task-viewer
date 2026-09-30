@@ -1,10 +1,11 @@
 import { describe, it, expect } from 'vitest';
 import { TFile } from 'obsidian';
 import { TaskRepository } from '../../../src/services/persistence/TaskRepository';
+import { Block } from '../../../src/services/persistence/utils/Placement';
 
 /**
  * 一本化した見出し挿入経路の配線を pin する。
- * ロジック自体（見出し挿入の中身）は HeadingInserter.test.ts 側でカバー済み
+ * ロジック自体（見出し挿入の中身）は Notes.test.ts 側でカバー済み
  * なので、ここでは「TaskRepository の呼び出しが正しい下請けに届くか」だけを見る。
  */
 
@@ -20,11 +21,11 @@ function heading_harness(initial: string) {
     return { repo: new TaskRepository(app), text: () => content };
 }
 
-describe('TaskRepository.insertLineUnderHeading', () => {
+describe('TaskRepository.putInNote', () => {
     it('delegates to the shared heading-write op and returns insertedLine', async () => {
         const h = heading_harness('## Tasks\nexisting');
         // Past the paragraph under the heading, which a line put above it would take in (P1).
-        const at = await h.repo.insertLineUnderHeading('note.md', '- [ ] child', { heading: 'Tasks', level: 2, side: 'head' });
+        const at = await h.repo.putInNote('note.md', { heading: 'Tasks', level: 2, side: 'head' }, Block.line('- [ ] child'));
         expect(at.written && at.line).toBe(2);
         expect(h.text().split('\n')).toEqual(['## Tasks', 'existing', '- [ ] child']);
     });

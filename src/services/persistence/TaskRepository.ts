@@ -2,9 +2,10 @@ import type { App } from 'obsidian';
 import { InlineTaskWriter } from './writers/InlineTaskWriter';
 import { SendWriter, type SendCompleting, type SendHearing, type SendOutcome, type SendTo, type SentRow } from './writers/SendWriter';
 import { FrontmatterWriter } from './writers/FrontmatterWriter';
-import type { LineDraft, Refusal, RowRef, RowTarget, WriteAt, WriteChannel, WriteOutcome, WriteSession } from './FileLines';
+import type { LineDraft, Refusal, RowRef, RowTarget, WriteChannel, WriteOutcome, WriteSession } from './FileLines';
 import type { CompletionFire, FiringOutcome, SubtreeReplacement, TaskOp } from './TaskOps';
-import type { Section } from './Destination';
+import { putInNote, type NotePut, type NoteSpot } from './Notes';
+import type { PlacedLine } from './utils/Placement';
 
 /**
  * The write layer as the index holds it: the writers, built over the one
@@ -22,7 +23,7 @@ export class TaskRepository {
      */
     private channels: ((file: string) => WriteChannel) | null = null;
 
-    constructor(app: App) {
+    constructor(private app: App) {
         const channelOf = (file: string) => this.channelOf(file);
         this.inlineWriter = new InlineTaskWriter(app, channelOf);
         this.frontmatterWriter = new FrontmatterWriter(app, channelOf);
@@ -82,15 +83,16 @@ export class TaskRepository {
         return this.inlineWriter.applyOps(draft, session, target, ops);
     }
 
-    async appendTaskToFile(filePath: string, content: string): Promise<WriteAt> {
-        return this.inlineWriter.appendTaskToFile(filePath, content);
-    }
+    // --- Notes and frontmatter ---
 
-    // --- Heading and frontmatter writes ---
-
-    /** @returns 挿入した行の 0-based 行番号を持つ書き込みの結果か、拒否。 */
-    async insertLineUnderHeading(filePath: string, lineContent: string, to: Section): Promise<WriteAt> {
-        return this.frontmatterWriter.insertLineUnderHeading(filePath, lineContent, to);
+    /** A block put in a section of a note, or at its end, the note made of `create` when it is not there (see Notes.putInNote). */
+    async putInNote(
+        path: string,
+        where: NoteSpot,
+        block: readonly PlacedLine[],
+        opts: { create?: () => string | Promise<string> } = {},
+    ): Promise<NotePut> {
+        return putInNote(this.app, path, this.channelOf(path), { where, block, create: opts.create });
     }
 
     /**
