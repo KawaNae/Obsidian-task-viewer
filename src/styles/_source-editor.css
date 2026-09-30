@@ -6,33 +6,35 @@
  * 見せるので、Obsidian のエディタで子の行が親の下に立つのと同じ形に置く。
  * 子の文字は親の記号 `-` から字下げ一段（--tv-source-indent、SourceEditor が
  * 字下げの単位から ch で入れる）右で始まり、字下げの線は親の `-` の下に立つ。
+ *
+ * 2つのビューは1つの枠に入る。枠、フォーカス、不正の見た目は入力欄の規則
+ * （tv-ctrl__input-wrap、_controls.css）が描き、ビューは枠も背景も持たない。
  */
 
 .tv-source-editor {
-    display: flex;
     flex-direction: column;
-    gap: 5px;
     font-family: var(--font-monospace);
     font-size: var(--font-ui-small);
     color: var(--text-normal);
 }
 
-.tv-source-editor .cm-editor {
-    background: var(--tv-bg-input, var(--background-modifier-form-field));
-    border-radius: var(--radius-s);
+/* 枠の wrap は中身を中央に寄せる（align-items: center）。ビューは枠の幅いっぱいに置く */
+.tv-source-editor__parent,
+.tv-source-editor__children {
+    align-self: stretch;
 }
 
+.tv-source-editor .cm-editor,
 .tv-source-editor .cm-editor.cm-focused {
+    background: transparent;
     outline: none;
-    box-shadow: 0 0 0 2px var(--background-modifier-border-focus);
 }
 
 /* Asking whether to throw the draft away (the hub's source, the send
- * dialog): the editors under the host read as an invalid input does
- * (tv-ctrl__text-input--invalid). */
-.tv-source-drafts--asking .tv-source-editor .cm-editor,
-.tv-source-drafts--asking .tv-source-editor .cm-editor.cm-focused {
-    box-shadow: 0 0 0 1px var(--tv-text-danger);
+ * dialog): the box reads as an invalid input does (the fields' invalid
+ * rule, _controls.css). */
+.tv-ctrl .tv-source-drafts--asking .tv-source-editor {
+    border-color: var(--tv-text-danger) !important;
     background-color: var(--tv-danger-bg-subtle);
 }
 
