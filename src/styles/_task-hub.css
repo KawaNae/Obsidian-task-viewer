@@ -70,7 +70,10 @@
     color: var(--tv-text-faint);
 }
 
-/* --- Source (the row and its subtree as text) --- */
+/* --- Source (the row and its subtree as text) ---
+ * Asked whether to throw the draft away, the editors read as
+ * tv-source-drafts--asking (_source-editor.css) says, and the row of cancel
+ * and apply asks as tv-form__buttons (_form.css) does. */
 .task-hub__source-pane {
     display: flex;
     flex-direction: column;
@@ -78,21 +81,12 @@
     padding: 8px 0;
 }
 
-/* Asking whether to throw the draft away: the editors read as an invalid
- * input does (tv-ctrl__text-input--invalid). A lost row stays as it is. */
-.task-hub__source-pane--asking .tv-source-editor .cm-editor,
-.task-hub__source-pane--asking .tv-source-editor .cm-editor.cm-focused {
-    box-shadow: 0 0 0 1px var(--tv-text-danger);
-    background-color: var(--tv-danger-bg-subtle);
-}
-
 .task-hub__source-message {
     font-size: var(--font-ui-small);
     color: var(--text-error);
 }
 
-.task-hub__source-lost,
-.task-hub__source-actions {
+.task-hub__source-lost {
     display: flex;
     flex-wrap: wrap;
     align-items: center;
@@ -105,48 +99,11 @@
     color: var(--text-warning);
 }
 
-/* Cancel and apply at the end. Asked, the question and discard beside it
- * come in at the start, discard pushing the rest to the end: it stands apart
- * from back and apply. */
-.task-hub__source-actions {
-    justify-content: flex-end;
-}
-
-.task-hub__source-discard {
-    margin-inline-end: auto;
-}
-
-/* On a phone the row has no width for the question, discard, back and apply
- * on one line, and wrapping at will would set discard over back. The question
- * takes a line of its own, and discard starts the next, apart at its start. */
-.is-phone .task-hub__source-ask {
-    flex-basis: 100%;
-}
-
-/* --- Form: flat sections with dividers --- */
+/* --- Form: flat sections with dividers (tv-form__group, _form.css) --- */
 .task-hub__form {
     display: flex;
     flex-direction: column;
     gap: 8px;
-}
-
-.task-hub .tv-form__group {
-    padding: 12px 0;
-    border-bottom: 1px solid var(--tv-border);
-}
-
-/* 最後のグループは区切り線なし。group の後ろに error / notice 要素が
-   並ぶため :last-child では届かない — 「後続に group がない group」で選ぶ */
-.task-hub .tv-form__group:not(:has(~ .tv-form__group)) {
-    border-bottom: none;
-}
-
-.task-hub .tv-form__group > :first-child {
-    margin-top: 0;
-}
-
-.task-hub .tv-form__group > .tv-form__name-section {
-    margin-bottom: 0;
 }
 
 .task-hub__read-only-notice {

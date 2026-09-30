@@ -27,6 +27,15 @@
     box-shadow: 0 0 0 2px var(--background-modifier-border-focus);
 }
 
+/* Asking whether to throw the draft away (the hub's source, the send
+ * dialog): the editors under the host read as an invalid input does
+ * (tv-ctrl__text-input--invalid). */
+.tv-source-drafts--asking .tv-source-editor .cm-editor,
+.tv-source-drafts--asking .tv-source-editor .cm-editor.cm-focused {
+    box-shadow: 0 0 0 1px var(--tv-text-danger);
+    background-color: var(--tv-danger-bg-subtle);
+}
+
 .tv-source-editor .cm-scroller {
     font-family: inherit;
     line-height: var(--line-height-normal);

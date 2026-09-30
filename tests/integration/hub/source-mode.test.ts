@@ -309,7 +309,7 @@ describe('the hub\'s source mode', () => {
             await sleep(100);
             const pane = document.querySelector('.task-hub__source-pane');
             const editor = document.querySelector('.task-hub .tv-source-editor__children .cm-editor');
-            return JSON.stringify({ ...state(), marked: pane.classList.contains('task-hub__source-pane--asking'), shadow: getComputedStyle(editor).boxShadow, preview: document.querySelector('.task-hub__preview').textContent });
+            return JSON.stringify({ ...state(), marked: pane.classList.contains('tv-source-drafts--asking'), shadow: getComputedStyle(editor).boxShadow, preview: document.querySelector('.task-hub__preview').textContent });
         `);
         expect(asked).toMatchObject({ hub: true, source: true, asking: true, marked: true, children: '- [ ] 子a\n- [ ] 子b 下書き' });
         expect(asked.shadow).not.toBe('none');

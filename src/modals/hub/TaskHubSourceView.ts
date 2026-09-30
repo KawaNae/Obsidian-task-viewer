@@ -83,9 +83,9 @@ export class TaskHubSourceView implements SourceSurface {
         const lostDiscardBtn = this.lostEl.createEl('button', { cls: 'mod-warning', text: t('modal.hub.source.discard'), attr: { type: 'button' } });
         lostDiscardBtn.addEventListener('click', () => actions.discard());
 
-        this.actionsEl = this.pane.createDiv({ cls: 'task-hub__source-actions' });
-        this.askEl = this.actionsEl.createSpan({ cls: 'task-hub__source-ask', text: t('modal.hub.source.discardAsk') });
-        this.discardBtn = this.actionsEl.createEl('button', { cls: 'mod-warning task-hub__source-discard', text: t('modal.hub.source.discard'), attr: { type: 'button' } });
+        this.actionsEl = this.pane.createDiv({ cls: 'task-hub__source-actions tv-form__buttons' });
+        this.askEl = this.actionsEl.createSpan({ cls: 'task-hub__source-ask tv-form__ask', text: t('modal.hub.source.discardAsk') });
+        this.discardBtn = this.actionsEl.createEl('button', { cls: 'mod-warning task-hub__source-discard tv-form__discard', text: t('modal.hub.source.discard'), attr: { type: 'button' } });
         this.discardBtn.addEventListener('click', () => actions.discard());
         this.cancelBtn = this.actionsEl.createEl('button', { cls: 'task-hub__source-cancel', attr: { type: 'button' } });
         this.cancelBtn.addEventListener('click', () => (this.asking ? actions.keep() : actions.cancel()));
@@ -119,7 +119,7 @@ export class TaskHubSourceView implements SourceSurface {
         this.messageEl.setText(state.message ?? '');
         this.messageEl.toggle(open && state.message !== null);
         const asking = open && state.asking;
-        this.pane.toggleClass('task-hub__source-pane--asking', asking);
+        this.pane.toggleClass('tv-source-drafts--asking', asking);
         this.lostEl.toggle(open && state.lost && !asking);
         // A lost row has its own way out; asked there, the row asks as anywhere.
         this.actionsEl.toggle(open && (!state.lost || asking));
