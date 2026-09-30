@@ -152,7 +152,11 @@ export default class TaskViewerPlugin extends Plugin {
         this.readService = new TaskReadService(this.taskIndex, this.settings.startHour);
         this.readService.updateWeekStartDay(this.settings.weekStartDay);
         this.writeService = new TaskWriteService(this.taskIndex);
-        this.noteOps = new NoteOps(this.app, this.writeService, () => this.settings);
+        // The timer widget is made below; a send asks for it as it is made.
+        this.noteOps = new NoteOps(this.app, this.writeService, () => this.settings, {
+            getTask: (id) => this.readService.getTask(id),
+            timers: () => this.timerWidget ?? null,
+        });
 
         // Single source of truth for menu lifecycle (dedup across all views/touch paths).
         this.menuPresenter = new MenuPresenter();

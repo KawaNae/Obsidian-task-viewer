@@ -680,9 +680,11 @@ export class TaskIndex {
      * reads as (`planCopy`), a note the write turned away — is told the user
      * as any refusal is (`reportRefusal`), unless `opts.tellRefusal` is
      * false: the caller shows it itself, and a notice would say it twice.
-     * The index learns from it either way (`learnFrom`).
+     * The index learns from it either way (`learnFrom`). `opts.landed` is
+     * handed each note the rows came from whose write landed, as it lands
+     * (`SendHearing.landed`).
      */
-    async send(rows: readonly SendRow[], to: SendTo, opts: { tellRefusal?: boolean } = {}): Promise<SendWrite> {
+    async send(rows: readonly SendRow[], to: SendTo, opts: { tellRefusal?: boolean; landed?: (path: string) => void } = {}): Promise<SendWrite> {
         if (this.refuseAfterDispose('send')) return { kind: 'not-done', refused: null };
         const hear = opts.tellRefusal === false
             ? (refusal: IndexRefusal) => this.learnFrom(refusal)
@@ -728,7 +730,7 @@ export class TaskIndex {
                 })), to, {
                     completes: (was, now) => completes(was, now, defs),
                     fire: (path) => this.commandExecutor.fireOp(path),
-                }, { refused: (refusal) => { void hear(refusal); } });
+                }, { refused: (refusal) => { void hear(refusal); }, landed: opts.landed });
                 if (outcome.kind === 'not-sent') return { kind: 'not-done', refused: outcome.refused };
                 for (const write of outcome.writes) this.tellNotRun(write);
                 for (const refusal of outcome.refused) await this.learnFrom(refusal);

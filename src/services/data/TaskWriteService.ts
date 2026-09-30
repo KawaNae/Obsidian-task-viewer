@@ -156,7 +156,7 @@ export class TaskWriteService {
      * TaskIndex.send). A refusal before anything is written is told the user
      * too, unless `opts.tellRefusal` is false because the caller shows it.
      */
-    async send(rows: readonly SendRow[], to: SendTo, opts: { tellRefusal?: boolean } = {}): Promise<SendWrite> {
+    async send(rows: readonly SendRow[], to: SendTo, opts: { tellRefusal?: boolean; landed?: (path: string) => void } = {}): Promise<SendWrite> {
         return this.taskIndex.send(rows.map(row => ({ ...row, taskId: this.resolveTaskId(row.taskId) })), to, opts);
     }
 

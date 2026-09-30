@@ -2,7 +2,7 @@ import type { App } from 'obsidian';
 import type { DuplicateOptions, Task } from '../../types';
 import { FileOperations } from './utils/FileOperations';
 import { InlineTaskWriter } from './writers/InlineTaskWriter';
-import { SendWriter, type SendCompleting, type SendOutcome, type SendTo, type SentRow } from './writers/SendWriter';
+import { SendWriter, type SendCompleting, type SendHearing, type SendOutcome, type SendTo, type SentRow } from './writers/SendWriter';
 import { FrontmatterWriter } from './writers/FrontmatterWriter';
 import { TaskCloner, type InPlaceCopyLines } from './TaskCloner';
 import type { PropertyOp } from './PropertyUpdatePlanner';
@@ -76,7 +76,7 @@ export class TaskRepository {
         rows: ReadonlyArray<{ file: string; row: SentRow }>,
         to: SendTo,
         completing: SendCompleting<F>,
-        opts: { refused?: (refusal: Refusal) => void } = {},
+        opts: SendHearing = {},
     ): Promise<SendOutcome<F>> {
         return this.sendWriter.send(rows, to, completing, opts);
     }

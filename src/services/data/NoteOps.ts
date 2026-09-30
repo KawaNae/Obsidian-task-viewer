@@ -1,4 +1,4 @@
-import { Notice, type App, type TFile } from 'obsidian';
+import { Notice, TFile, type App } from 'obsidian';
 import { t } from '../../i18n';
 import type { Task, TaskViewerSettings } from '../../types';
 import { HeadingInserter } from '../../utils/HeadingInserter';
@@ -13,6 +13,8 @@ import { Destination, type Section } from '../persistence/Destination';
 import { splitLines } from '../persistence/FileLines';
 import { FrontmatterLineEditor } from '../persistence/utils/FrontmatterLineEditor';
 import { Placement, type HeadingLookup } from '../persistence/utils/Placement';
+import type { SubtreeReplacement } from '../persistence/TaskOps';
+import { TaskLineClassifier } from '../parsing/utils/TaskLineClassifier';
 import { logWarn } from '../../log/log';
 import { inheritedAt, type InheritedValue } from './InheritedValues';
 import type { TaskWriteService } from './TaskWriteService';
@@ -138,6 +140,71 @@ export interface NoteFacts {
      * send makes when it has none.
      */
     unresolved: readonly UnresolvedReference[];
+    /** How many lines of the note carry each `^id` (`TaskLineClassifier.blockIdCounts`); none for a note to make. */
+    anchors: ReadonlyMap<string, number>;
+}
+
+/**
+ * A note rows are sent from, as the timers are asked about a send
+ * (`SendTimers`): the lines of its rows as the send was planned on them
+ * (`SendRow.base`), and the lines that go of them — each row's draft, or its
+ * base when it has none.
+ */
+export interface SendingNote {
+    path: string;
+    base: readonly string[];
+    sent: readonly string[];
+}
+
+/** A send, as the timers are asked about it (`SendTimers`): the note sent to, the `^id`s it carries now, and the notes the rows come from. */
+export interface SendingLines {
+    to: string;
+    /** How many lines of the note sent to carry each `^id` before the send; none for a note the send makes. */
+    inNote: ReadonlyMap<string, number>;
+    from: readonly SendingNote[];
+}
+
+/**
+ * The open timers, as a send asks them (note-ops-plan.md 段 B4). A timer
+ * finds its lines by their `^id`s in its note; the timers are not the
+ * send's to know, so they answer here.
+ */
+export interface SendTimers {
+    /** Why the timers keep `sending` from being made, in one sentence; null when nothing keeps it. */
+    refuse(sending: SendingLines): string | null;
+    /**
+     * The rows of the note `from` landed in the note `to`, the lines carrying
+     * `anchors` with them: a timer of `from` whose `^id`s all went finds its
+     * lines in `to` from now on.
+     */
+    follow(from: string, to: string, anchors: readonly string[]): void;
+}
+
+/** What a send asks of the rest of the plugin besides the writes: the index's copy of a row, and the open timers (none while there are none to ask). */
+export interface NoteOpsDeps {
+    getTask(taskId: string): Task | undefined;
+    timers(): SendTimers | null;
+}
+
+/**
+ * A send of `rows` to the note at `to`, as the timers are asked about it:
+ * each row with the note it stands in, the base it was opened on and the
+ * draft the user wrote of it, if any; `inNote`, the `^id`s the note carries
+ * now.
+ */
+export function sendingOf(
+    rows: readonly { file: string; base: readonly string[]; draft?: SubtreeReplacement }[],
+    to: string,
+    inNote: ReadonlyMap<string, number>,
+): SendingLines {
+    const from: { path: string; base: string[]; sent: string[] }[] = [];
+    for (const row of rows) {
+        let note = from.find(one => one.path === row.file);
+        if (!note) from.push(note = { path: row.file, base: [], sent: [] });
+        note.base.push(...row.base);
+        note.sent.push(...(row.draft ? [row.draft.text, ...row.draft.children.map(line => line.text)] : row.base));
+    }
+    return { to, inNote, from };
 }
 
 /**
@@ -167,6 +234,7 @@ export class NoteOps {
         private app: App,
         private writeService: TaskWriteService,
         private getSettings: () => TaskViewerSettings,
+        private deps: NoteOpsDeps,
     ) { }
 
     /**
@@ -226,6 +294,7 @@ export class NoteOps {
                 namesakes: at.namesakes,
                 shared: [],
                 unresolved: unresolvedAt(sentTasks, [HeadingInserter.headingLine(section)]),
+                anchors: new Map(),
             };
         }
 
@@ -246,7 +315,18 @@ export class NoteOps {
             shared: anchorsIn(rows.filter(row => row.task.file !== path).flatMap(row => row.task.subtreeLines ?? []))
                 .filter(id => inNote.has(id)),
             unresolved: unresolvedAt(sentTasks, found.kind === 'none' ? [...lines, HeadingInserter.headingLine(section)] : lines),
+            anchors: TaskLineClassifier.blockIdCounts(lines),
         };
+    }
+
+    /**
+     * Why the open timers keep `sending` from being made, in one sentence
+     * (`SendTimers.refuse`); null when nothing keeps it, or no timer is
+     * there to ask. The dialog asks as it shows the send, and the send asks
+     * again as it is made.
+     */
+    timersRefuse(sending: SendingLines): string | null {
+        return this.deps.timers()?.refuse(sending) ?? null;
     }
 
     /** The note a send of `task` goes to by default (see `SendPreview.defaults`). */
@@ -282,6 +362,12 @@ export class NoteOps {
      * With `opts.tellRefusal` false, a send not made is not told: the caller
      * shows `why` itself, as the hub's source mode shows a draft it could
      * not write, and a notice would say it twice.
+     *
+     * The open timers are asked first ({@link timersRefuse}), the note sent
+     * to read as the vault holds it: a send that would leave a timer without
+     * its lines is not made. Each note the rows came from whose write lands
+     * takes its timers along to the note, as it lands (`SendTimers.follow`):
+     * one refused keeps them.
      */
     async send(req: SendRequest, opts: { tellRefusal?: boolean } = {}): Promise<SendResult> {
         const wrongly: SendResult = { kind: 'not-done', why: t('notice.notSent') };
@@ -305,9 +391,36 @@ export class NoteOps {
             logWarn(`[NoteOps] send: a frontmatter key is given twice: ${keys.join(', ')}`);
             return wrongly;
         }
-        const written = await this.writeService.send(req.rows, { path, create, section, frontmatter: req.frontmatter }, opts);
+        const sending = await this.sendingTo(req.rows, path, create);
+        const kept = this.timersRefuse(sending);
+        if (kept !== null) {
+            const why = [t('notice.notSent'), kept].join(' ');
+            if (opts.tellRefusal !== false) new Notice(why);
+            return { kind: 'not-done', why };
+        }
+        const went = new Map(sending.from.map(note => [note.path, [...TaskLineClassifier.blockIdCounts(note.sent).keys()]]));
+        const landed = (from: string) => this.deps.timers()?.follow(from, path, went.get(from) ?? []);
+        const written = await this.writeService.send(req.rows, { path, create, section, frontmatter: req.frontmatter }, { ...opts, landed });
         if (written.kind === 'not-done') return written.refused ? { kind: 'not-done', why: refusalNotice(written.refused) } : wrongly;
         return this.tell(written, req.rows.length, opts.tellRefusal !== false);
+    }
+
+    /**
+     * The send of `rows` to the note at `path`, as the timers are asked about
+     * it ({@link sendingOf}): each row in the note the index's copy of it
+     * stands in, those in another's subtree going with that one
+     * (`outermostRows`), as the send takes them; the note read as the vault
+     * holds it, unless the send makes it. A row the index no longer holds is
+     * left out: the send is refused for it (`planCopy`).
+     */
+    private async sendingTo(rows: readonly SendRow[], path: string, create: boolean): Promise<SendingLines> {
+        const known = rows.flatMap(row => {
+            const task = this.deps.getTask(row.taskId);
+            return task ? [{ task, row }] : [];
+        });
+        const file = create ? null : this.app.vault.getAbstractFileByPath(path);
+        const inNote = file instanceof TFile ? TaskLineClassifier.blockIdCounts(splitLines(await this.app.vault.read(file)).lines) : new Map<string, number>();
+        return sendingOf(outermostRows(known).map(({ task, row }) => ({ file: task.file, base: row.base, draft: row.draft })), path, inNote);
     }
 
     /**
