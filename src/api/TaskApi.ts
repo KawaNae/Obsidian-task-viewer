@@ -522,33 +522,19 @@ export class TaskApi {
 
         const file = this.plugin.app.vault.getAbstractFileByPath(params.file);
         if (!(file instanceof TFile)) throw new TaskApiError(`File not found: ${params.file}`);
-        const content = params.content;
-
-        let dateBlock = '';
-        const hasDateFields = params.start || params.end || params.due;
-        if (hasDateFields) {
-            if (params.start) {
-                const parsed = parseDateTimeParam(params.start, 'start');
-                dateBlock = `@${parsed.date}`;
-                if (parsed.time) dateBlock += parsed.date ? `T${parsed.time}` : parsed.time;
-            } else {
-                dateBlock = '@';
-            }
-
-            if (params.end) {
-                const parsed = parseDateTimeParam(params.end, 'end');
-                dateBlock += `>${parsed.date}`;
-                if (parsed.time) dateBlock += parsed.date ? `T${parsed.time}` : parsed.time;
-            }
-
-            if (params.due) {
-                if (!params.end) dateBlock += '>';
-                const parsed = parseDateTimeParam(params.due, 'due');
-                dateBlock += `>${parsed.date}`;
-            }
-
-        }
-        const line = TaskLineClassifier.formatPrefix(statusChar) + TaskLineClassifier.joinContent(content, dateBlock);
+        const start = params.start ? parseDateTimeParam(params.start, 'start') : undefined;
+        const end = params.end ? parseDateTimeParam(params.end, 'end') : undefined;
+        const due = params.due ? parseDateTimeParam(params.due, 'due') : undefined;
+        const line = formatTaskLine({
+            statusChar,
+            content: params.content,
+            startDate: start?.date || undefined,
+            startTime: start?.time,
+            endDate: end?.date || undefined,
+            endTime: end?.time,
+            // The notation's due is a date, with a time only after one.
+            due: due?.date ? (due.time ? `${due.date}T${due.time}` : due.date) : undefined,
+        });
 
         const insertedLine = await this.writeService.createTask(params.file, line, params.heading);
         if (insertedLine === null) throw new TaskApiError(`Task could not be written to: ${params.file}`);
