@@ -8,8 +8,6 @@ import type { ParserId } from '../../types';
 
 export type TaskNotation = 'taskviewer' | 'tasks' | 'dayplanner';
 
-export const TASK_NOTATION_VALUES: readonly TaskNotation[] = ['taskviewer', 'tasks', 'dayplanner'];
-
 export function getTaskNotation(parserId: ParserId): TaskNotation {
     switch (parserId) {
         case 'tasks-plugin':

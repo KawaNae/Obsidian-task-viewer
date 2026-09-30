@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { FilterSerializer } from '../../../src/services/filter/FilterSerializer';
 import type { FilterState, FilterCondition, FilterGroup } from '../../../src/services/filter/FilterTypes';
-import { isFilterCondition, isFilterGroup } from '../../../src/services/filter/FilterTypes';
+import { isFilterCondition } from '../../../src/services/filter/FilterTypes';
 import { TaskFilterEngine } from '../../../src/services/filter/TaskFilterEngine';
 import { makeTask } from '../helpers/makeTask';
 import type { DisplayTask } from '../../../src/types';
@@ -51,7 +51,7 @@ describe('FilterSerializer', () => {
 
             const restored = FilterSerializer.fromJSON(FilterSerializer.toJSON(state));
             expect(restored.filters).toHaveLength(2);
-            expect(isFilterGroup(restored.filters[0])).toBe(true);
+            expect(isFilterCondition(restored.filters[0])).toBe(false);
             const restoredInner = restored.filters[0] as FilterGroup;
             expect(restoredInner.logic).toBe('or');
             expect(restoredInner.filters).toHaveLength(1);

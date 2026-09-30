@@ -7,7 +7,6 @@ import {
     getAllConditions,
     deepCloneNode,
     isFilterCondition,
-    isFilterGroup,
 } from '../../../src/services/filter/FilterTypes';
 import type { FilterCondition, FilterGroup, FilterState } from '../../../src/services/filter/FilterTypes';
 
@@ -98,12 +97,10 @@ describe('FilterTypes utilities', () => {
         it('isFilterCondition identifies conditions', () => {
             const c = createDefaultCondition();
             expect(isFilterCondition(c)).toBe(true);
-            expect(isFilterGroup(c)).toBe(false);
         });
 
-        it('isFilterGroup identifies groups', () => {
+        it('isFilterCondition rejects groups', () => {
             const g = createFilterGroup();
-            expect(isFilterGroup(g)).toBe(true);
             expect(isFilterCondition(g)).toBe(false);
         });
     });

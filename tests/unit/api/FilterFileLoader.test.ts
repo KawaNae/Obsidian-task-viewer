@@ -1,7 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { loadFilterFile, mergeFilters } from '../../../src/api/FilterFileLoader';
 import type { FilterState, FilterCondition } from '../../../src/services/filter/FilterTypes';
-import { isFilterCondition, isFilterGroup } from '../../../src/services/filter/FilterTypes';
 import type { App } from 'obsidian';
 import type { ViewTemplate, PinnedListDefinition } from '../../../src/types';
 
