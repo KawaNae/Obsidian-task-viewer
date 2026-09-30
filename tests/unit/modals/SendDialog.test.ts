@@ -233,7 +233,7 @@ describe('the values offered for the frontmatter', () => {
         expect(h.state().candidates?.map(one => [one.key, one.checked])).toEqual([['project', false], ['aliases', true], ['cssclasses', false]]);
     });
 
-    it('show their value as the frontmatter says it, and where it came from', async () => {
+    it('show the value the frontmatter will hold, and where it came from', async () => {
         const h = await answered(facts(), {
             preview: previewOf({
                 candidates: [
@@ -244,10 +244,28 @@ describe('the values offered for the frontmatter', () => {
         });
 
         expect(h.state().candidates?.map(one => [one.value, one.from])).toEqual([
-            ['"2026-09-29"', t('modal.send.fromHeading', { heading: '設計' })],
+            ['2026-09-29', t('modal.send.fromHeading', { heading: '設計' })],
             ['a, b', [t('modal.send.fromFrontmatter'), t('modal.send.fromTop')].join(t('modal.send.fromJoin'))],
         ]);
         expect(yamlValue(['"a: b": c'])).toBe('c');
+    });
+
+    it('read the lines written, however they spell the value', () => {
+        expect(yamlValue(['tv-start: "2026-09-29T10:00"'])).toBe('2026-09-29T10:00');
+        expect(yamlValue(['tv-start: 2026-09-29'])).toBe('2026-09-29');
+        expect(yamlValue(['title: \'it\'\'s\''])).toBe("it's");
+        expect(yamlValue(['done: true'])).toBe('true');
+        expect(yamlValue(['n: 7'])).toBe('7');
+        expect(yamlValue(['tags:', '  - "a b"', '  - c'])).toBe('a b, c');
+        expect(yamlValue(['tags: [a, "b"]'])).toBe('a, b');
+        expect(yamlValue(['tags: []'])).toBe('');
+        expect(yamlValue(['note: |', '  line'])).toBe('line\n');
+        expect(yamlValue(['empty:'])).toBe('');
+    });
+
+    it('show a mapping, or lines YAML does not read, as written after the key', () => {
+        expect(yamlValue(['m:', '  a: 1'])).toBe('a: 1');
+        expect(yamlValue(['bad: "open'])).toBe('"open');
     });
 });
 
