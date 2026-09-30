@@ -105,6 +105,7 @@ function makeTimer(overrides: Partial<TimerInstance> = {}): TimerInstance {
         taskColor: '',
         pendingRecord: null,
         opening: null,
+        priorStartMs: null,
         ownedAnchors: [],
         timerType: 'countup',
         elapsedTime: 600,

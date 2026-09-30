@@ -8,7 +8,7 @@
  * the renderer caring which document it lives in.
  */
 
-import { setIcon } from 'obsidian';
+import { Notice, setIcon } from 'obsidian';
 import type { DisplayTask } from '../types';
 import type {
     CountdownTimer,
@@ -28,6 +28,8 @@ import { getDisplayFileName, getTaskDisplayName } from '../services/parsing/util
 import { TaskStyling } from '../views/sharedUI/TaskStyling';
 import { TimerProgressUI } from './TimerProgressUI';
 import { TimerSettingsMenu } from './TimerSettingsMenu';
+import { OFFSET_PRESET_MINUTES, canOffsetStart, parseOffsetInput, rememberedStart, startLabel } from './TimerStartOffset';
+import { InputModal } from '../modals/InputModal';
 import { AudioUtils } from './AudioUtils';
 import { TimeFormatter } from '../utils/TimeFormatter';
 import { t } from '../i18n';
@@ -364,6 +366,7 @@ export class TimerRenderer {
             headerTime.toggleClass('timer-widget__header-time--break', timer.phase === 'break');
         }
         TimerProgressUI.updateDisplay(itemEl, timer, this.formatSignedTime.bind(this));
+        this.syncStartOffset(itemEl, timer);
     }
 
     /**
@@ -436,6 +439,7 @@ export class TimerRenderer {
 
         const progressContainer = container.createDiv('timer-widget__progress-container');
         this.renderCircularProgress(progressContainer, timer);
+        this.bindStartOffset(progressContainer, timer);
 
         const controls = container.createDiv('timer-widget__controls');
         this.renderControls(controls, timer);
@@ -632,6 +636,72 @@ export class TimerRenderer {
             this.render();
             this.ctx.persistTimersToStorage();
         });
+    }
+
+    /**
+     * 経過時間の表示を、開始をずらすメニューの入口にする（countup と countdown）。
+     * 押せる見た目は走っている区間だけに付け（{@link syncStartOffset}）、押した
+     * ときにも確かめる — 表示の要素は状態が変わっても組み直されないことがある。
+     */
+    private bindStartOffset(container: HTMLElement, timer: TimerInstance): void {
+        if (timer.timerType !== 'countup' && timer.timerType !== 'countdown') return;
+        const display = container.querySelector('.timer-widget__time-display') as HTMLElement | null;
+        if (!display) return;
+        display.setAttribute('aria-label', t('timer.offsetStart'));
+        display.addEventListener('click', (e) => {
+            e.stopPropagation();
+            this.showStartOffsetMenu(e, timer.id);
+        });
+        this.syncStartOffset(container, timer);
+    }
+
+    private syncStartOffset(el: HTMLElement, timer: TimerInstance): void {
+        const display = el.querySelector('.timer-widget__time-display') as HTMLElement | null;
+        display?.toggleClass('timer-widget__time-display--offsettable', canOffsetStart(timer));
+    }
+
+    /**
+     * 開始をずらすメニュー: 「N 分前から」、覚えた時刻（あれば）、「ずらす量を指定…」。
+     * 「N 分前」は選んだ時点の今から数える。書き込みと状態の移し方は
+     * {@link TimerLifecycle.offsetStart} が持つ。
+     */
+    private showStartOffsetMenu(e: MouseEvent, timerId: string): void {
+        const timer = this.ctx.timers.get(timerId);
+        if (!timer || !canOffsetStart(timer)) return;
+        const offset = (startMs: number): void => void this.lifecycle.offsetStart(timer, startMs);
+        const now = Date.now();
+        const remembered = rememberedStart(timer, now);
+
+        this.ctx.plugin.menuPresenter.present((menu) => {
+            for (const minutes of OFFSET_PRESET_MINUTES) {
+                menu.addItem((item) => {
+                    item.setTitle(t('timer.offsetMinutesAgo', { minutes }))
+                        .onClick(() => offset(Date.now() - minutes * 60_000));
+                });
+            }
+            if (remembered !== null) {
+                menu.addItem((item) => {
+                    item.setTitle(t('timer.offsetFromTime', { time: startLabel(remembered, now) }))
+                        .onClick(() => offset(remembered));
+                });
+            }
+            menu.addSeparator();
+            menu.addItem((item) => {
+                item.setTitle(t('timer.offsetCustom')).onClick(() => this.askStartOffset(timer));
+            });
+        }, { kind: 'mouseEvent', event: e });
+    }
+
+    /** 「ずらす量を指定…」: 分数か `HH:MM` を打たせる（{@link parseOffsetInput}）。 */
+    private askStartOffset(timer: TimerInstance): void {
+        new InputModal(this.ctx.app, t('timer.offsetStart'), t('timer.offsetInputLabel'), '', (value) => {
+            const startMs = parseOffsetInput(value, Date.now());
+            if (startMs === null) {
+                new Notice(t('notice.timerOffsetUnreadable', { value: value.trim() }));
+                return;
+            }
+            void this.lifecycle.offsetStart(timer, startMs);
+        }).open();
     }
 
     private formatSignedTime(seconds: number): string {

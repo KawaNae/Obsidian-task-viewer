@@ -253,7 +253,7 @@ describe('the saved state is read only at its own version', () => {
         const next = await reload(notes());
         expect(next.ctx.timers.size).toBe(0);
         expect(store.has(keyFor(6))).toBe(false);
-        expect(STORAGE_VERSION).toBe(7);
+        expect(STORAGE_VERSION).toBe(8);
         next.s.dispose();
     });
 

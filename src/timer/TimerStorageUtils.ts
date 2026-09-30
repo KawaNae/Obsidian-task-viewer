@@ -5,13 +5,14 @@
 import { type App, FileSystemAdapter } from 'obsidian';
 import { generateTimerTargetId } from '../utils/TimerTargetIdUtils';
 /**
+ * v8: self の開始で覚えた、上書きする前の行の start（priorStartMs）を足した。
  * v7: 記録待ち（pendingRecord）を足し、対象と尻尾を錨だけで引く形にした。
  * ストレージキーにバージョンが入るので、旧い版の状態は読まずに捨てる（移し替えは
  * しない）。restore 時に旧キーを掃除する（放置すると localStorage に残り続ける）。
  */
-export const STORAGE_VERSION = 7;
+export const STORAGE_VERSION = 8;
 /** 掃除対象の旧バージョン。 */
-export const OBSOLETE_STORAGE_VERSIONS = [5, 6];
+export const OBSOLETE_STORAGE_VERSIONS = [5, 6, 7];
 export const STORAGE_KEY_PREFIX = 'task-viewer.active-timers';
 export const DEVICE_ID_KEY = 'task-viewer.device-id.v1';
 

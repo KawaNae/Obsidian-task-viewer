@@ -94,6 +94,7 @@ function makeCountup(overrides: Partial<CountupTimer> = {}): CountupTimer {
         pendingRecord: null,
         ownedAnchors: [],
         opening: null,
+        priorStartMs: null,
         timerType: 'countup',
         elapsedTime: 60,
         ...overrides,
@@ -110,7 +111,7 @@ describe('session state persistence', () => {
 
         const payload = JSON.parse(store.get(keyFor(STORAGE_VERSION))!);
         expect(payload.version).toBe(STORAGE_VERSION);
-        expect(STORAGE_VERSION).toBe(7);
+        expect(STORAGE_VERSION).toBe(8);
     });
 
     it('round-trips runState, sessionCount and recordedElapsedTime', () => {

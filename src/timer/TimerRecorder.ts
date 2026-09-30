@@ -277,6 +277,10 @@ export class TimerRecorder {
         }
         if (rowId) updates.blockId = rowId;
 
+        // 上書きする前の start を覚える（開始をずらすメニューの候補）。`opening` と
+        // 一緒に書き込みの前に保存されるので、書けなければタイマーごと消える。
+        timer.priorStartMs = this.startMsOf(task);
+
         return this.writeOpening(timer, this.opening(timer, target, { target, puts: rowId ? [rowId] : [] }),
             () => this.plugin.getTaskIndex().updateTask(task.id, updates));
     }
@@ -379,6 +383,57 @@ export class TimerRecorder {
             endTime: this.formatTime(end),
         });
         return decision.endMs;
+    }
+
+    /**
+     * 走っている区間の開始をずらす: 走行の行（尻尾）の start を `startMs` に書き直す。
+     * タイマーの `startTimeMs` は、これが書けてから呼び出し側が動かす
+     * （`TimerLifecycle.offsetStart`）。
+     *
+     * 規則は「走行の行の start を、ずらした時刻にする」の1つで、mode で分けない。
+     * self の 1 本目は止めたときに start を `end − 経過` で書き直すので、ここで
+     * 書かなくても記録は合うが、走っている間の行とタイムラインが実際の開始を示す
+     * よう同じく書く。child、sibling、▶ のあとの行は止めたときに start を書かない
+     * ので、ここで書かなければ記録の start と経過が食い違う。
+     *
+     * 尻尾を引けなければ書く行が無い。止めたときの予備の記録（{@link addRecord}）は
+     * start を経過から逆算するので、タイマーだけが動けば記録は合う。
+     *
+     * @returns 書けたか（書く行が無いときは書けたと答える）。書けなかったときは、
+     * 理由を1回だけ通知済み。
+     */
+    async moveRunningStart(timer: TimerInstance, startMs: number): Promise<boolean> {
+        const tail = await this.resolveTailRecord(timer);
+        switch (tail.kind) {
+            case 'unreadable': return this.noticeUnreadable(timer, 'moveRunningStart (not moved)');
+            case 'none':
+                logInfo(`[TimerRecorder] moveRunningStart: no running line, only the timer moves (${describeTimerAnchor(timer)})`);
+                return true;
+        }
+        const row = tail.task;
+        const start = new Date(startMs);
+        const updates: Partial<Task> = {
+            startDate: this.formatDate(start),
+            startTime: this.formatTime(start),
+        };
+        // 日付の無い end（`@…T10:20>11:20`）は start の日付で読まれる。start を前日へ
+        // ずらしても end が動かないよう、今の日付を書き出しておく。
+        if (row.endTime && !row.endDate && row.startDate) updates.endDate = row.startDate;
+
+        // 書けなかったときは、書き込みの層が理由を1回だけ通知済み。
+        if (!(await this.plugin.getTaskIndex().updateTask(row.id, updates))) return false;
+        // end の無い行の実効 end は start から決まる。書き足しの門を引き直す。
+        timer.lazyEndFloorMs = undefined;
+        return true;
+    }
+
+    /**
+     * 行の start（日付と時刻）のミリ秒。時刻の無い start は null（覚える時刻が無い）。
+     */
+    private startMsOf(task: Task): number | null {
+        if (!task.startDate || !task.startTime) return null;
+        const ms = new Date(`${task.startDate}T${task.startTime}`).getTime();
+        return Number.isNaN(ms) ? null : ms;
     }
 
     /**

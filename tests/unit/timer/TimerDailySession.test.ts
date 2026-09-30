@@ -103,6 +103,7 @@ function makeDailyTimer(overrides: Partial<TimerInstance> = {}): TimerInstance {
         elapsedTime: 0,
         ownedAnchors: [],
         opening: null,
+        priorStartMs: null,
         ...overrides,
     } as TimerInstance;
 }
