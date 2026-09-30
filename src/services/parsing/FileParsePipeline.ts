@@ -7,6 +7,7 @@ import { NoteTasks, type RowNamer } from './tree/NoteTasks';
 import { Outline, type OutlineReading } from './utils/Outline';
 import { SectionPropertyResolver } from './tree/SectionPropertyResolver';
 import { lineParsers } from './TaskParser';
+import { PropertyValues } from './utils/PropertyValues';
 
 export interface FileParseResult {
     /** tv-ignore'd file: produce no tasks (caller clears existing state). */
@@ -123,6 +124,14 @@ export class FileParsePipeline {
         return { outline, sections, frontmatter: frontmatterObj };
     }
 
+    /**
+     * Whether the note says `tv-ignore` (the configured key) is true, by the
+     * one boolean rule of property values (`PropertyValues`): the YAML's
+     * boolean `true` (`true`, `True`, `TRUE`). `yes`, `on`, `1` and a quoted
+     * `"true"` are not true. A block YAML refuses still says it line by line:
+     * then the key's line, with a trailing ` # comment` left out, must be one
+     * of those three spellings.
+     */
     private static isIgnoredByFrontmatter(
         frontmatterObj: Record<string, any> | undefined,
         lines: readonly string[],
@@ -130,45 +139,17 @@ export class FileParsePipeline {
         settings: TaskViewerSettings
     ): boolean {
         const ignoreKey = settings.scopeKeys.ignore;
-        if (this.isTruthyIgnoreValue(frontmatterObj?.[ignoreKey])) {
-            return true;
-        }
+        if (frontmatterObj) return PropertyValues.isTrue(PropertyValues.fromYaml(frontmatterObj[ignoreKey]));
+        if (bodyStartIndex <= 0) return false;
 
-        if (bodyStartIndex <= 0) {
-            return false;
-        }
-
-        // A block YAML refuses still says tv-ignore line by line.
         const escapedKey = ignoreKey.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
         const keyLineRegex = new RegExp(`^${escapedKey}\\s*:\\s*(.*)$`);
-
         for (let i = 1; i < bodyStartIndex - 1; i++) {
             const match = lines[i].match(keyLineRegex);
             if (!match) continue;
-            return this.isTruthyIgnoreValue(match[1]);
+            return PropertyValues.isTrue(PropertyValues.fromText(match[1].replace(/\s+#.*$/, '').trim()));
         }
-
         return false;
-    }
-
-    private static isTruthyIgnoreValue(value: unknown): boolean {
-        if (value === true || value === 1) {
-            return true;
-        }
-        if (typeof value !== 'string') {
-            return false;
-        }
-
-        const normalized = value
-            .trim()
-            .replace(/^['"]|['"]$/g, '')
-            .replace(/\s+#.*$/, '')
-            .toLowerCase();
-
-        return normalized === 'true'
-            || normalized === 'yes'
-            || normalized === 'on'
-            || normalized === '1';
     }
 }
 

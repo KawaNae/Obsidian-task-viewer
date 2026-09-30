@@ -56,16 +56,16 @@ describe('EffectiveProperties', () => {
     describe('properties: キー単位 child-wins', () => {
         it('cascade を raw が上書きし、非衝突キーは合流する', () => {
             const t = makeTask({
-                properties: { priority: { value: '5', type: 'number' } },
+                properties: { priority: { value: '5', type: 'number', number: 5 } },
                 cascadeContext: {
                     properties: {
-                        priority: { value: '1', type: 'number' },
+                        priority: { value: '1', type: 'number', number: 1 },
                         category: { value: 'work', type: 'string' },
                     },
                 },
             });
             const props = getEffectiveProperties(t);
-            expect(props['priority']).toEqual({ value: '5', type: 'number' });
+            expect(props['priority']).toEqual({ value: '5', type: 'number', number: 5 });
             expect(props['category']).toEqual({ value: 'work', type: 'string' });
         });
 

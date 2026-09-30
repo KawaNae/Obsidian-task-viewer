@@ -5,7 +5,6 @@ import { namesOutsideIndex } from '../../../src/services/core/RowNames';
 import {
     getEffectiveColor, getEffectiveLinestyle, getEffectiveMask, getEffectiveProperties, getEffectiveTags,
 } from '../../../src/services/data/EffectiveProperties';
-import { ChildLineClassifier } from '../../../src/services/parsing/utils/ChildLineClassifier';
 import { DEFAULT_SETTINGS, type PropertyValue, type Task } from '../../../src/types';
 
 const byKey = (values: InheritedValue[]) => Object.fromEntries(values.map(v => [v.key, v]));
@@ -124,7 +123,8 @@ describe('inheritedAt', () => {
         expect(values.day.yaml).toEqual(['day: "2026-09-29"']);
         expect(values.done.yaml).toEqual(['done: true']);
         expect(values.off.yaml).toEqual(['off: false']);
-        expect(values.word.yaml).toEqual(['word: "true"']);
+        // `true` is a boolean on a line as in YAML (論点14a), and is written as one.
+        expect(values.word.yaml).toEqual(['word: true']);
         expect(values.area.yaml).toEqual(['area:', '  - lab', '  - desk']);
         expect(values.pair.yaml).toEqual(['pair:', '  - x', '  - y']);
         expect(values.link.yaml).toEqual(['link:', '  - "[[x]]"']);
@@ -166,9 +166,9 @@ describe('inheritedAt の受け入れ: 候補を frontmatter に書いたノー�
 
     function meaning(property: PropertyValue): unknown {
         switch (property.type) {
-            case 'array': return ChildLineClassifier.arrayItems(property.value);
-            case 'boolean': return property.value.toLowerCase() === 'true';
-            case 'number': return Number(property.value);
+            case 'array': return property.items;
+            case 'boolean': return property.boolean;
+            case 'number': return property.number;
             case 'string': return property.value;
         }
     }
@@ -238,10 +238,10 @@ describe('inheritedAt の受け入れ: 候補を frontmatter に書いたノー�
         for (const key of ['priority', 'memo', 'area', 'link', 'refs', 'day', 'word', 'links', 'owner']) {
             expect(is[key], key).toEqual(was[key]);
         }
-        expect(was.done).toEqual({ value: 'True', type: 'boolean' });
-        expect(is.done).toEqual({ value: 'true', type: 'boolean' });
-        expect(is.pair).toEqual({ value: 'x, y', type: 'array' });
-        expect(is.size).toEqual({ value: '1.5', type: 'number' });
+        expect(was.done).toEqual({ value: 'True', type: 'boolean', boolean: true });
+        expect(is.done).toEqual({ value: 'true', type: 'boolean', boolean: true });
+        expect(is.pair).toEqual({ value: 'x, y', type: 'array', items: ['x', 'y'] });
+        expect(is.size).toEqual({ value: '1.5', type: 'number', number: 1.5 });
     });
 
     it('子タスクの行を単独で送っても', () => {

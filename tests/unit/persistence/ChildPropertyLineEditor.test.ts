@@ -99,6 +99,16 @@ describe('ChildPropertyLineEditor', () => {
             expect(lines[1]).toBe('\t- 金額:: 200');
         });
 
+        it('edits the property line the parser reads under any bullet, keeping its bullet (論点14b)', () => {
+            const lines = [
+                '- [ ] task',
+                '    * a:: 1',
+                '    1. b:: 2',
+            ];
+            apply(lines, 0, [{ key: 'a', op: 'set', value: '3' }, { key: 'b', op: 'delete' }]);
+            expect(lines).toEqual(['- [ ] task', '    * a:: 3']);
+        });
+
         it('値を空に設定すると空値プロパティ行として残る', () => {
             const lines = [
                 '- [ ] task',

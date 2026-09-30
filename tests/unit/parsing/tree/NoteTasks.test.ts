@@ -116,7 +116,7 @@ describe('NoteTasks', () => {
                 '    - priority:: 1',
             ]);
             expect(tasks[0].properties['note']).toEqual({ value: 'something', type: 'string' });
-            expect(tasks[0].properties['priority']).toEqual({ value: '1', type: 'number' });
+            expect(tasks[0].properties['priority']).toEqual({ value: '1', type: 'number', number: 1 });
         });
     });
 
@@ -160,7 +160,7 @@ describe('NoteTasks', () => {
                 '- [ ] task @2026-03-24',
                 '    - priority:: 5',
             ]);
-            expect(tasks[0].properties['priority']).toEqual({ value: '5', type: 'number' });
+            expect(tasks[0].properties['priority']).toEqual({ value: '5', type: 'number', number: 5 });
         });
     });
 

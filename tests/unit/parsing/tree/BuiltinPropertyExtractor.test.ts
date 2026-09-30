@@ -2,11 +2,13 @@ import { describe, it, expect } from 'vitest';
 import { BuiltinPropertyExtractor } from '../../../../src/services/parsing/tree/BuiltinPropertyExtractor';
 import { DEFAULT_SCOPE_KEYS } from '../../../../src/types';
 import type { PropertyValue } from '../../../../src/types';
+import { PropertyValues } from '../../../../src/services/parsing/utils/PropertyValues';
 
 const keys = DEFAULT_SCOPE_KEYS;
 
-function pv(value: string, type: 'string' | 'number' | 'boolean' | 'array' = 'string'): PropertyValue {
-    return { value, type };
+/** A value as a property line gives it (`PropertyValues.fromText`). */
+function pv(value: string): PropertyValue {
+    return PropertyValues.fromText(value);
 }
 
 describe('BuiltinPropertyExtractor', () => {
@@ -65,7 +67,7 @@ describe('BuiltinPropertyExtractor', () => {
     it('keeps non-builtin properties in properties', () => {
         const raw = {
             'custom-prop': pv('hello'),
-            '金額': pv('2000', 'number'),
+            '金額': pv('2000'),
         };
         const result = BuiltinPropertyExtractor.extract(raw, keys);
         expect(result.color).toBeUndefined();
@@ -73,7 +75,7 @@ describe('BuiltinPropertyExtractor', () => {
         expect(result.mask).toBeUndefined();
         expect(result.properties).toEqual({
             'custom-prop': pv('hello'),
-            '金額': pv('2000', 'number'),
+            '金額': pv('2000'),
         });
     });
 
@@ -82,7 +84,7 @@ describe('BuiltinPropertyExtractor', () => {
             'tv-color': pv('333333'),
             'tv-linestyle': pv('dotted'),
             'note': pv('something'),
-            'priority': pv('1', 'number'),
+            'priority': pv('1'),
         };
         const result = BuiltinPropertyExtractor.extract(raw, keys);
         expect(result.color).toBe('333333');
@@ -90,7 +92,7 @@ describe('BuiltinPropertyExtractor', () => {
         expect(result.mask).toBeUndefined();
         expect(result.properties).toEqual({
             'note': pv('something'),
-            'priority': pv('1', 'number'),
+            'priority': pv('1'),
         });
     });
 

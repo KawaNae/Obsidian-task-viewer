@@ -318,7 +318,7 @@ API が返すタスクオブジェクトのフィールド一覧です。CLI の
 | `effectiveEndDate` | `string \| null` | 暗黙値解決済み終了日 |
 | `effectiveEndTime` | `string \| null` | 暗黙値解決済み終了時刻 |
 | `durationMinutes` | `number \| null` | 所要時間（分）。暗黙値解決済みの開始から終了まで、日付を含めて数える（フィルタの `length` と同じ）。開始の無いタスクは `null` |
-| `properties` | `Record<string, unknown>` | カスタムプロパティ |
+| `properties` | `Record<string, unknown>` | カスタムプロパティ。値は型に従う: 数は `number`、真偽値（`true` `True` `TRUE` `false` `False` `FALSE`。行でも frontmatter でも同じ）は `boolean`、配列は `string[]`、ほかは `string` |
 
 ## DataviewJS 使用例
 

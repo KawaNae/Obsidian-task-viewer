@@ -2,7 +2,7 @@ import { setIcon } from 'obsidian';
 import { t } from '../../../i18n';
 import type { PropertyValue } from '../../../types';
 import { getEffectiveProperties } from '../../../services/data/EffectiveProperties';
-import { ChildLineClassifier } from '../../../services/parsing/utils/ChildLineClassifier';
+import { PropertyValues } from '../../../services/parsing/utils/PropertyValues';
 import { FilterValueCollector } from '../../../services/filter/FilterValueCollector';
 import { reservedPropertyKeys } from '../../../services/parsing/utils/FrontmatterPolicy';
 import { CascadeSource } from '../CascadeSource';
@@ -58,7 +58,7 @@ export class PropertiesFieldGroup {
                 const live = this.ctx.getTask().properties ?? {};
                 if (isOwn && raw === live[key]?.value) return;
                 if (!isOwn && raw === pv.value) return; // cascade 値のまま → 上書きを作らない
-                this.commit({ ...live, [key]: { value: raw, type: ChildLineClassifier.inferType(raw) } });
+                this.commit({ ...live, [key]: PropertyValues.fromText(raw) });
             };
             this.ctx.attachSuggest(valueInput, valueInput, {
                 getCandidates: (q) => FilterValueCollector
@@ -139,7 +139,7 @@ export class PropertiesFieldGroup {
                 return;
             }
             const raw = valueInput.value;
-            this.commit({ ...(this.ctx.getTask().properties ?? {}), [key]: { value: raw, type: ChildLineClassifier.inferType(raw) } });
+            this.commit({ ...(this.ctx.getTask().properties ?? {}), [key]: PropertyValues.fromText(raw) });
             keyInput.value = '';
             valueInput.value = '';
             this.ctx.stack.closeAll();

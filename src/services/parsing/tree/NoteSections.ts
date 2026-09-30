@@ -2,9 +2,10 @@ import { NO_SOURCES, type PropertyBlock, type PropertyBlockEntry, type SectionNo
 import { ChildLineClassifier } from '../utils/ChildLineClassifier';
 import { TaskLineClassifier } from '../utils/TaskLineClassifier';
 import { INDENT_SOURCE, Outline, type OutlineHeading, type OutlineReading } from '../utils/Outline';
-import { SPACE_OR_TAB_SOURCE } from '../utils/ListMarker';
+import { LIST_BULLET_SOURCE, SPACE_OR_TAB_SOURCE } from '../utils/ListMarker';
 
-const PROPERTY_GROUP_HEADER = new RegExp(`^${INDENT_SOURCE}-${SPACE_OR_TAB_SOURCE}+properties::\\s*$`);
+/** `- properties::`, with any list bullet, as a property line takes one (`ChildLineClassifier.PROPERTY_LINE`). */
+const PROPERTY_GROUP_HEADER = new RegExp(`^${INDENT_SOURCE}${LIST_BULLET_SOURCE}${SPACE_OR_TAB_SOURCE}+properties::\\s*$`);
 
 /**
  * The sections of a note and the property lines each one gives the rows in

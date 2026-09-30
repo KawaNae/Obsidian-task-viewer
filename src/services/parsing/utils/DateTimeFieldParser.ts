@@ -7,7 +7,7 @@ const TIME_IN_TEXT_RE = new RegExp(`(${DateUtils.TIME_PATTERN})`);
  * Shared date/time field parsing utilities — the single implementation of
  * "what counts as a date/time fragment" for BOTH notation surfaces
  * (@block via TVInlineParser and frontmatter/section/builtin-property via
- * FilePropertyResolver / BuiltinPropertyExtractor).
+ * BuiltinPropertyExtractor, for the frontmatter, a section and a task alike).
  */
 
 /**

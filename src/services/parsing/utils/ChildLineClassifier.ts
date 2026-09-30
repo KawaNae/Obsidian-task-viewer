@@ -1,11 +1,12 @@
-import type { ChildLine, PropertyType, PropertyValue } from '../../../types';
+import type { ChildLine, PropertyValue } from '../../../types';
 import { IN_LINE } from '../../../utils/LineBreak';
 import { LIST_BULLET_SOURCE, SPACE_OR_TAB_SOURCE } from './ListMarker';
 import { INDENT_SOURCE, Outline, type OutlineReading } from './Outline';
 import { extractWikilinkTarget } from '../../../utils/WikilinkUtils';
 import { FLOW_LINE_RE } from './FlowLineScanner';
 import { TaskLineClassifier } from './TaskLineClassifier';
-import { WIKILINK_SOURCE, WIKILINK_TEXT_SOURCE } from './InlineNotation';
+import { WIKILINK_TEXT_SOURCE } from './InlineNotation';
+import { PropertyValues } from './PropertyValues';
 
 /**
  * 子行のパース・分類ユーティリティ。
@@ -19,12 +20,15 @@ export class ChildLineClassifier {
      */
     static readonly WIKILINK_CHILD = new RegExp(`^${INDENT_SOURCE}${LIST_BULLET_SOURCE}${SPACE_OR_TAB_SOURCE}+\\[\\[(${WIKILINK_TEXT_SOURCE}+)\\]\\]\\s*$`);
     /**
-     * Matches `- key:: value` (Dataview-compatible). A key holds no `[` or `]`,
-     * so a checkbox line and a wikilink line are never property lines.
+     * Matches `- key:: value` (Dataview-compatible), with any list bullet as
+     * a `==>` line takes one (`*`, `+`, `1.`). A key holds no `[` or `]`,
+     * so a checkbox line and a wikilink line are never property lines. The
+     * parser reads a task's and a section's properties from these lines,
+     * and the writer (`ChildPropertyLineEditor`) edits the same lines.
      * 値部は空を許す（`- key ::` は空値プロパティ）。`(.+)` にすると末尾空白の
      * 有無で認識が反転する（`- key :: ` だけマッチ）ため `(.*)` が正しい。
      */
-    static readonly PROPERTY_LINE = new RegExp(`^${INDENT_SOURCE}-${SPACE_OR_TAB_SOURCE}+([^:\\[\\]]+?)::\\s*(${IN_LINE}*)$`);
+    static readonly PROPERTY_LINE = new RegExp(`^${INDENT_SOURCE}${LIST_BULLET_SOURCE}${SPACE_OR_TAB_SOURCE}+([^:\\[\\]]+?)::\\s*(${IN_LINE}*)$`);
 
     /**
      * 生テキスト → ChildLine に変換。
@@ -81,54 +85,12 @@ export class ChildLineClassifier {
         return outline.directItems(taskLine).filter(line => this.PROPERTY_LINE.test(outline.lines[line]));
     }
 
-    /** childLines から properties を集約 */
+    /** childLines から properties を集約（値の読みは `PropertyValues.fromText`） */
     static collectProperties(childLines: ChildLine[]): Record<string, PropertyValue> {
         const properties: Record<string, PropertyValue> = {};
         for (const cl of childLines) {
-            if (cl.propertyKey) {
-                const raw = cl.propertyValue!;
-                properties[cl.propertyKey] = { value: raw, type: this.inferType(raw) };
-            }
+            if (cl.propertyKey) properties[cl.propertyKey] = PropertyValues.fromText(cl.propertyValue!);
         }
         return properties;
     }
-
-    /** 文字列から型を推定 */
-    static inferType(raw: string): PropertyType {
-        if (/^\d+(\.\d+)?$/.test(raw)) return 'number';
-        if (raw === 'True' || raw === 'False') return 'boolean';
-        if (new RegExp(`^\\[${IN_LINE}*\\]$`).test(raw) || raw.includes(',')) return 'array';
-        return 'string';
-    }
-
-    /**
-     * The items of a value `inferType` reads as an array: the two forms it
-     * knows, a list in `[` `]` and a list `,` separates. A wikilink is one
-     * item whatever brackets and commas it holds (`[[x]]`, `[[a|b, c]]`),
-     * so the brackets `[` `]` strips are a list's only when a link's are not
-     * all there is. Items are trimmed and an empty one is none.
-     */
-    static arrayItems(raw: string): string[] {
-        // Links masked to same-length filler, so the list's brackets and
-        // commas are found by position in `masked` and cut out of `raw`.
-        const masked = raw.replace(ARRAY_ITEM_LINK, link => '_'.repeat(link.length));
-        let from = 0;
-        let to = raw.length;
-        if (masked.startsWith('[') && masked.endsWith(']') && masked.length >= 2) {
-            from = 1;
-            to = raw.length - 1;
-        }
-        const items: string[] = [];
-        let start = from;
-        for (let i = from; i <= to; i++) {
-            if (i < to && masked[i] !== ',') continue;
-            const item = raw.slice(start, i).trim();
-            if (item !== '') items.push(item);
-            start = i + 1;
-        }
-        return items;
-    }
 }
-
-/** A wikilink or embed, which an array value holds as one item. */
-const ARRAY_ITEM_LINK = new RegExp(`!?${WIKILINK_SOURCE}`, 'g');
