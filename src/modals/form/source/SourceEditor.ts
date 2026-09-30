@@ -205,8 +205,9 @@ export function indentColumns(unit: string): number {
     return columns;
 }
 
-/** Each editor's box: an input field's, as the fields draw it (_controls.css). */
-const FIELD_BOX = 'tv-ctrl__input-wrap tv-ctrl__input-wrap--glow';
+/** Each editor's box: an input field's, as the fields draw it (_controls.css),
+ *  with a block's corners, since the text in it runs to many lines. */
+const FIELD_BOX = 'tv-ctrl__input-wrap tv-ctrl__input-wrap--glow tv-ctrl__input-wrap--block';
 
 export class SourceEditor implements DraftEditor {
     readonly dom: HTMLElement;
