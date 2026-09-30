@@ -12,8 +12,8 @@ import type { TaskReadService } from '../../services/data/TaskReadService';
 import type { TaskWriteService } from '../../services/data/TaskWriteService';
 import { DailyNoteUtils } from '../../utils/DailyNoteUtils';
 import { MOBILE_BREAKPOINT_PX } from '../../constants/layout';
+import { getTaskDateRange } from '../../services/display/VisualDateRange';
 import {
-    getTaskDateRange,
     parseLocalDateString,
     getCalendarDateRange,
     getWeekStart,
@@ -162,7 +162,7 @@ export class CalendarView extends ItemView {
             onNavigateWeek: (days) => this.navigateWeek(days),
             onJumpToCurrentMonth: () => this.showMonthOf(new Date()),
             onJumpToDate: (date) => {
-                const parsed = this.parseLocalDateString(date);
+                const parsed = parseLocalDateString(date);
                 if (parsed) this.showMonthOf(parsed);
             },
             onFilterChange: () => {
@@ -284,9 +284,9 @@ export class CalendarView extends ItemView {
         // Transient: windowStart needs week alignment, so it's handled here
         // rather than letting applyConfig blanket-overwrite.
         if (transient.windowStart) {
-            const parsedWindowStart = this.parseLocalDateString(transient.windowStart);
+            const parsedWindowStart = parseLocalDateString(transient.windowStart);
             if (parsedWindowStart) {
-                const weekStart = this.getWeekStart(parsedWindowStart, this.plugin.settings.weekStartDay);
+                const weekStart = getWeekStart(parsedWindowStart, this.plugin.settings.weekStartDay);
                 this.windowStart = DateUtils.getLocalDateString(weekStart);
             }
         }
@@ -363,7 +363,6 @@ export class CalendarView extends ItemView {
                 const baseId = TaskIdGenerator.parseSegmentId(taskId)?.baseId ?? taskId;
                 this.handleManager?.selectTask(baseId);
             },
-            () => { /* no-op: handles are inside task cards */ },
             () => this.getViewStartDateString(),
             () => this.getViewEndDateString(),
             () => this.plugin.settings.zoomLevel
@@ -376,9 +375,8 @@ export class CalendarView extends ItemView {
         // Clear selection when the selected task is deleted via the UI.
         this.unsubscribeDelete = this.selectionController.attachDeleteListener(this.writeService);
 
-        // Initialize render dispatch controller (rAF coalesce only).
-        // Calendar still always full-renders today; reconciliation arrives in
-        // a follow-up phase.
+        // Initialize render dispatch controller (rAF coalesce only). Every
+        // change runs a full render(), which reconciles cards by key.
         this.renderScheduler = new RenderScheduler({
             performFull: () => this.render(),
             getHost: () => this.container,
@@ -444,7 +442,7 @@ export class CalendarView extends ItemView {
             return;
         }
 
-        const normalizedWindowStart = this.getNormalizedWindowStart(this.windowStart);
+        const normalizedWindowStart = getNormalizedWindowStart(this.windowStart, this.plugin.settings.weekStartDay);
         if (normalizedWindowStart !== this.windowStart) {
             this.windowStart = normalizedWindowStart;
         }
@@ -667,11 +665,6 @@ export class CalendarView extends ItemView {
         return out;
     }
 
-    /**
-     * One-shot migration: any key without `::` is assumed to be a legacy
-     * listId-only entry from before viewId-namespacing was introduced.
-     * Prefix it with `${viewId}::` so calendar owns it.
-     */
     private openPinnedListSort(listDef: PinnedListDefinition, anchorEl: HTMLElement): void {
         this.sidebarSortMenu.setSortState(listDef.sortState ?? createEmptySortState());
         this.sidebarSortMenu.showMenuAtElement(anchorEl, {
@@ -735,7 +728,7 @@ export class CalendarView extends ItemView {
             ? dateKey
             : `${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
 
-        cell.style.gridColumn = `${this.getGridColumnForDay(colIndex)}`;
+        cell.style.gridColumn = `${getGridColumnForDay(colIndex, this.shouldShowWeekNumbers())}`;
         cell.style.gridRow = '1';
         if (date.getFullYear() !== referenceMonth.year || date.getMonth() !== referenceMonth.month) {
             cell.addClass('is-outside-month');
@@ -761,7 +754,7 @@ export class CalendarView extends ItemView {
         dateLink.setAttribute('href', linkTarget);
         dateLink.addEventListener('click', (event: MouseEvent) => {
             event.preventDefault();
-            void this.openOrCreateDailyNote(date);
+            void openOrCreateDailyNote(this.app, date);
         });
 
         this.linkInteractionManager.bind(cell, {
@@ -921,10 +914,6 @@ export class CalendarView extends ItemView {
         };
     }
 
-    private getWeekStart(date: Date, weekStartDay: 0 | 1): Date {
-        return getWeekStart(date, weekStartDay);
-    }
-
     private getWeekdayNames(): string[] {
         const labels = t('calendar.weekdaysShort').split(',');
         if (this.plugin.settings.weekStartDay === 1) {
@@ -937,19 +926,11 @@ export class CalendarView extends ItemView {
         return this.plugin.settings.calendarShowWeekNumbers;
     }
 
-    private getColumnOffset(): number {
-        return getColumnOffset(this.shouldShowWeekNumbers());
-    }
-
-    private getGridColumnForDay(dayColumn: number): number {
-        return getGridColumnForDay(dayColumn, this.shouldShowWeekNumbers());
-    }
-
     private renderWeekNumberCell(weekRow: HTMLElement, weekStartDate: Date): void {
         const weekNumberEl = weekRow.createDiv('cal-week-number');
         const weekNumber = withWeekStartDay(weekStartDate, this.plugin.settings.weekStartDay).week();
 
-        const todayWeekStart = this.getWeekStart(new Date(), this.plugin.settings.weekStartDay);
+        const todayWeekStart = getWeekStart(new Date(), this.plugin.settings.weekStartDay);
         if (DateUtils.getLocalDateString(weekStartDate) === DateUtils.getLocalDateString(todayWeekStart)) {
             weekNumberEl.addClass('is-current-week');
         }
@@ -994,18 +975,6 @@ export class CalendarView extends ItemView {
         this.windowStart = DateUtils.getMonthGridStart(date, this.plugin.settings.weekStartDay);
         void this.app.workspace.requestSaveLayout();
         this.render();
-    }
-
-    private parseLocalDateString(value: string): Date | null {
-        return parseLocalDateString(value);
-    }
-
-    private getNormalizedWindowStart(value: string): string {
-        return getNormalizedWindowStart(value, this.plugin.settings.weekStartDay);
-    }
-
-    private async openOrCreateDailyNote(date: Date): Promise<void> {
-        return openOrCreateDailyNote(this.app, date);
     }
 
     private async openOrCreatePeriodicNote(date: Date): Promise<void> {

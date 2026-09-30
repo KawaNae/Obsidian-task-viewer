@@ -32,7 +32,7 @@ describe('a drag that ends', () => {
         // A window whose frames never come: nothing may wait for one.
         const view = { requestAnimationFrame: () => 1 };
         const container = { style: { touchAction: '' }, nodeType: 1, ownerDocument: { defaultView: view } } as unknown as HTMLElement;
-        const session = new DragSession({ onTaskMove: () => { } } as unknown as DragContext, container, writeService);
+        const session = new DragSession({} as unknown as DragContext, container, writeService);
         const task = { id: 't', file: 'note.md' } as Task;
 
         session.start(strategy, {} as PointerEvent, task, {} as HTMLElement);
@@ -68,7 +68,7 @@ describe('a drag that ends without a commit', () => {
             style: { touchAction: '' },
             ownerDocument: doc,
         }) as unknown as HTMLElement;
-        const context = { onTaskMove: () => { } } as unknown as DragContext;
+        const context = {} as unknown as DragContext;
         const task = { id: 't', file: 'note.md' } as Task;
         return { calls, writeService, strategy, container, context, task };
     }

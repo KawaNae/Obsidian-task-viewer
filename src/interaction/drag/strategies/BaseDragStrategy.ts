@@ -24,9 +24,6 @@ export abstract class BaseDragStrategy implements DragStrategy {
     protected hasMoved: boolean = false;
     protected currentContext: DragContext | null = null;
 
-    // ビュータイプ（Timeline or AllDay or Calendar）
-    protected viewType: 'timeline' | 'allday' | 'calendar' = 'timeline';
-
     // Grid 系 Gesture (Move/Resize) のみ使用。
     /** Calendar / AllDay どちらの Surface か。due-arrow・cross-view drop など
      *  AllDay 限定の機能がこのフラグで分岐する。 */
@@ -172,22 +169,6 @@ export abstract class BaseDragStrategy implements DragStrategy {
         this.dragEl = null;
         this.currentContext = null;
         this.hasMoved = false;
-    }
-
-    /**
-     * ビュータイプを判定する（要素の親コンテナから）
-     */
-    protected determineViewType(el: HTMLElement): 'timeline' | 'allday' | 'calendar' {
-        if (el.closest('.cal-week-row')) {
-            return 'calendar';
-        }
-        if (el.closest('.timeline-scroll-area__day-column')) {
-            return 'timeline';
-        }
-        if (el.closest('.allday-section')) {
-            return 'allday';
-        }
-        return 'timeline'; // デフォルト
     }
 
     /**

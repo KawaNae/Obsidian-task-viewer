@@ -33,7 +33,6 @@ export class AllDaySectionRenderer {
         private menuHandler: MenuHandler,
         private handleManager: HandleManager,
         private taskRenderer: TaskCardRenderer,
-        private getDaysToShow: () => number,
         private viewId: string
     ) { }
 

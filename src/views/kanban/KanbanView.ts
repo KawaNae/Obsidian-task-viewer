@@ -531,17 +531,6 @@ export class KanbanView extends ItemView {
         return 'kb-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 6);
     }
 
-    private addRow(): void {
-        const cols = this.grid[0]?.length ?? 1;
-        const newRow: PinnedListDefinition[] = [];
-        for (let c = 0; c < cols; c++) {
-            newRow.push(this.createDefaultList());
-        }
-        this.grid.push(newRow);
-        this.requestSaveLayout();
-        this.render();
-    }
-
     private insertRow(atIndex: number): void {
         const cols = this.grid[0]?.length ?? 1;
         const newRow: PinnedListDefinition[] = [];

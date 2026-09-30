@@ -72,7 +72,6 @@ export class DragSession {
     handleMove(e: PointerEvent): void {
         if (!this.currentStrategy) return;
         this.currentStrategy.onMove(e, this.context);
-        this.context.onTaskMove(); // handle 位置の追従更新
     }
 
     /**

@@ -6,12 +6,6 @@ import { DailyNoteUtils } from '../../utils/DailyNoteUtils';
  * Shared calendar date utilities used by both CalendarView and MiniCalendarView.
  */
 
-// Canonical implementation lives in services/display/VisualDateRange.ts
-export { getTaskDateRange } from '../../services/display/VisualDateRange';
-
-// Canonical implementation lives in services/display/TaskStatusQuery.ts
-export { isTaskCompleted } from '../../services/display/TaskStatusQuery';
-
 export function parseLocalDateString(value: string): Date | null {
     const match = value.match(/^(\d{4})-(\d{2})-(\d{2})$/);
     if (!match) {

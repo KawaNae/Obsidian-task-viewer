@@ -33,7 +33,7 @@ function dragRig(answers: Promise<boolean>[]) {
         onCancel: () => { calls.push('cancel'); },
     } as unknown as DragStrategy;
     const container = { style: { touchAction: '' } } as unknown as HTMLElement;
-    const session = new DragSession({ onTaskMove: () => { } } as unknown as DragContext, container, writeService);
+    const session = new DragSession({} as unknown as DragContext, container, writeService);
     const task = { id: 't', file: 'note.md' } as Task;
     return { calls, writeService, strategy, session, task };
 }
