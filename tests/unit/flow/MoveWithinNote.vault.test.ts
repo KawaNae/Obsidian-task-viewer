@@ -57,6 +57,7 @@ async function complete(lines: string[], line: number, content: string, path: Pa
             app: note.session.app,
             settings: { startHour: 0 },
             getTaskReadService: () => new TaskReadService(note.session.index, 0),
+            getIndex: () => note.session.index,
             getOperations: () => note.session.ops,
         } as never);
         await api.update({ id: note.idOf(content), status: 'x' });

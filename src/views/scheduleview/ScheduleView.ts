@@ -32,6 +32,7 @@ import { ScheduleGridRenderer } from './renderers/ScheduleGridRenderer';
 import { ScheduleTaskRenderer } from './renderers/ScheduleTaskRenderer';
 import { ScheduleSectionRenderer } from './renderers/ScheduleSectionRenderer';
 import type { TaskReadService } from '../../services/data/TaskReadService';
+import type { IndexReads } from '../../services/core/TaskIndex';
 import { splitTasks } from '../../services/display/TaskSplitter';
 import { categorizeTasksForDate, type CategorizedTasks as BaseCategorizedTasks } from '../../services/display/TaskDateCategorizer';
 import type { Operations } from '../../services/operations/Operations';
@@ -52,6 +53,8 @@ export class ScheduleView extends ItemView {
     private static readonly TIMELINE_BOTTOM_PADDING_PX = 16;
     private readonly plugin: PluginContext & TimerHost;
     private readonly readService: TaskReadService;
+    /** The index's copies and changes (`PluginContext.getIndex`). */
+    private readonly index: IndexReads;
     private readonly operations: Operations;
     private readonly taskRenderer: TaskCardRenderer;
     private readonly linkInteractionManager: TaskLinkInteractionManager;
@@ -93,8 +96,9 @@ export class ScheduleView extends ItemView {
         super(leaf);
         this.plugin = plugin;
         this.readService = plugin.getTaskReadService();
+        this.index = plugin.getIndex();
         this.operations = plugin.getOperations();
-        this.taskRenderer = new TaskCardRenderer(this.app, this.readService, this.plugin.getIndex(), this.operations, this.plugin.menuPresenter, {
+        this.taskRenderer = new TaskCardRenderer(this.app, this.readService, this.index, this.operations, this.plugin.menuPresenter, {
             hoverSource: TASK_VIEWER_HOVER_SOURCE_ID,
             getHoverParent: () => this.hoverParent,
         }, () => this.plugin.settings, () => this.maskMode);
@@ -113,12 +117,12 @@ export class ScheduleView extends ItemView {
             hoverParent: this.hoverParent,
             linkInteractionManager: this.linkInteractionManager,
         });
-        this.menuHandler = new MenuHandler(this.app, this.readService, this.operations, this.plugin);
+        this.menuHandler = new MenuHandler(this.app, this.operations, this.plugin);
         this.taskRenderer.setChildMenuCallback((taskId, x, y) => this.menuHandler.showMenuForTask(taskId, x, y));
         const openTaskHub = createTaskHubOpener(this.app, {
             taskRenderer: this.taskRenderer,
             menuHandler: this.menuHandler,
-            readService: this.readService,
+            index: this.index,
             operations: this.operations,
             plugin: this.plugin,
         });
@@ -127,7 +131,7 @@ export class ScheduleView extends ItemView {
         this.taskRenderer.setOpenInEditorCallback((task) => openTaskInEditor(this.app, task, this.plugin.settings.reuseExistingTab));
         this.taskRenderer.setDoubleTapActionGetter(() => this.plugin.settings.doubleTapAction);
         this.menuHandler.setTaskHubOpener((taskId, opts) => {
-            const task = this.readService.getTask(taskId);
+            const task = this.index.getTask(taskId);
             if (task) openTaskHub(task, opts);
         });
         this.gridCalculator = new ScheduleGridCalculator({
@@ -157,7 +161,7 @@ export class ScheduleView extends ItemView {
             currentVisualDateProvider: () => this.currentVisualDate,
         });
         this.filterMenu.setStartHourProvider(() => this.plugin.settings.startHour);
-        this.filterMenu.setTaskLookupProvider((id) => this.readService.getTask(id));
+        this.filterMenu.setTaskLookupProvider((id) => this.index.getTask(id));
         this.filterMenu.setStatusDefinitions(this.plugin.settings.statusDefinitions);
 
         this.toolbar = new ScheduleToolbar({
@@ -309,7 +313,7 @@ export class ScheduleView extends ItemView {
             performFull: () => this.render(),
             getHost: () => this.container,
         });
-        this.unsubscribe = this.readService.onChange((taskId, changes) => {
+        this.unsubscribe = this.index.onChange((taskId, changes) => {
             this.renderScheduler?.handleChange(taskId, changes);
         });
 

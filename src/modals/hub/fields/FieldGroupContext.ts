@@ -1,7 +1,7 @@
 import type { App } from 'obsidian';
 import type { Task } from '../../../types';
 import type { PluginContext } from '../../../PluginContext';
-import type { TaskReadService } from '../../../services/data/TaskReadService';
+import type { IndexReads } from '../../../services/core/TaskIndex';
 import type { PopoverStack } from '../../../views/sharedUI/PopoverStack';
 import type { CascadeSourceKind } from '../CascadeSource';
 
@@ -18,7 +18,7 @@ export interface FieldGroupContext {
     queue: (updates: Partial<Task> | null) => void;
     app: App;
     plugin: PluginContext;
-    readService: TaskReadService;
+    index: IndexReads;
     stack: PopoverStack;
     attachSuggest: (
         input: HTMLInputElement,

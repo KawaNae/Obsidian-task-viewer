@@ -61,7 +61,7 @@ export class KanbanToolbar extends ViewToolbarBase {
                     deps.onFilterChange();
                     this.update();
                 },
-                getTasks: () => deps.readService.getTasks(),
+                getTasks: () => deps.plugin.getIndex().getTasks(),
                 getStartHour: () => deps.plugin.settings.startHour,
             });
         };

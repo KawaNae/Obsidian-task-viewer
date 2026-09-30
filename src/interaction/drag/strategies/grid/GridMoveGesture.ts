@@ -106,7 +106,7 @@ export class GridMoveGesture extends BaseDragStrategy {
         }
 
         const originalId = getOriginalTaskId(task);
-        this.baseTask = context.readService.getTask(originalId) ?? task;
+        this.baseTask = context.index.getTask(originalId) ?? task;
 
         const startHour = context.plugin.settings.startHour;
         const visual = this.getVisualDateRange(this.baseTask, startHour);

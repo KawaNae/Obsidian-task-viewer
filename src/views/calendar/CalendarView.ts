@@ -9,6 +9,7 @@ import { getEffectiveAstronomyDisplay } from '../../services/astronomy/Astronomy
 import { DateUtils } from '../../utils/DateUtils';
 import { withWeekStartDay } from '../../utils/momentWeekLocale';
 import type { TaskReadService } from '../../services/data/TaskReadService';
+import type { IndexReads } from '../../services/core/TaskIndex';
 import type { Operations } from '../../services/operations/Operations';
 import { dailyNotes, linkTarget, periodicNotes } from '../../utils/PeriodicNotes';
 import { openPeriodicNoteInLeaf } from '../sharedLogic/OpenPeriodicNote';
@@ -80,6 +81,8 @@ interface CalendarViewState {
 export class CalendarView extends ItemView {
     private readonly plugin: PluginContext & TimerHost;
     private readonly readService: TaskReadService;
+    /** The index's copies and changes (`PluginContext.getIndex`). */
+    private readonly index: IndexReads;
     private readonly operations: Operations;
     private readonly taskRenderer: TaskCardRenderer;
     private readonly linkInteractionManager: TaskLinkInteractionManager;
@@ -124,8 +127,9 @@ export class CalendarView extends ItemView {
         super(leaf);
         this.plugin = plugin;
         this.readService = plugin.getTaskReadService();
+        this.index = plugin.getIndex();
         this.operations = plugin.getOperations();
-        this.taskRenderer = new TaskCardRenderer(this.app, this.readService, this.plugin.getIndex(), this.operations, this.plugin.menuPresenter, {
+        this.taskRenderer = new TaskCardRenderer(this.app, this.readService, this.index, this.operations, this.plugin.menuPresenter, {
             hoverSource: TASK_VIEWER_HOVER_SOURCE_ID,
             getHoverParent: () => this.hoverParent,
         }, () => this.plugin.settings, () => this.maskMode);
@@ -144,10 +148,10 @@ export class CalendarView extends ItemView {
         });
         this.windowStart = DateUtils.getMonthGridStart(new Date(), this.plugin.settings.weekStartDay);
         this.filterMenu.setStartHourProvider(() => this.plugin.settings.startHour);
-        this.filterMenu.setTaskLookupProvider((id) => this.readService.getTask(id));
+        this.filterMenu.setTaskLookupProvider((id) => this.index.getTask(id));
         this.filterMenu.setStatusDefinitions(this.plugin.settings.statusDefinitions);
         this.sidebarFilterMenu.setStartHourProvider(() => this.plugin.settings.startHour);
-        this.sidebarFilterMenu.setTaskLookupProvider((id) => this.readService.getTask(id));
+        this.sidebarFilterMenu.setTaskLookupProvider((id) => this.index.getTask(id));
         this.sidebarFilterMenu.setStatusDefinitions(this.plugin.settings.statusDefinitions);
 
         this.toolbar = new CalendarToolbar({
@@ -295,7 +299,7 @@ export class CalendarView extends ItemView {
         await super.setState(state, result);
         await this.renderSerializer.request();
         // setState may have changed filterState / pinnedLists / collapse — none
-        // of these go through readService.onChange, so PinnedList wouldn't
+        // of these go through index.onChange, so PinnedList wouldn't
         // otherwise refresh. (Safe to call even before attach: refresh() no-ops
         // when not attached.)
         this.pinnedListRenderer?.refresh();
@@ -320,13 +324,13 @@ export class CalendarView extends ItemView {
             this.registerDomEvent(el, ev, handler),
         );
 
-        this.menuHandler = new MenuHandler(this.app, this.readService, this.operations, this.plugin);
+        this.menuHandler = new MenuHandler(this.app, this.operations, this.plugin);
         this.taskRenderer.setChildMenuCallback((taskId, x, y) => this.menuHandler.showMenuForTask(taskId, x, y));
         this.taskRenderer.setContextMenuCallback((task, x, y) => this.menuHandler.showTaskContextMenu(task, x, y));
         this.taskRenderer.setOpenInEditorCallback((task) => openTaskInEditor(this.app, task, this.plugin.settings.reuseExistingTab));
         this.taskRenderer.setDoubleTapActionGetter(() => this.plugin.settings.doubleTapAction);
         this.menuHandler.setTaskHubOpener((taskId, opts) => {
-            const task = this.readService.getTask(taskId);
+            const task = this.index.getTask(taskId);
             if (task) this.openTaskHub(task, opts);
         });
         this.pinnedListRenderer = new PinnedListRenderer(
@@ -345,13 +349,12 @@ export class CalendarView extends ItemView {
             viewId: VIEW_ID,
         });
         this.handleManager = new HandleManager(this.container, {
-            getTask: (id) => this.readService.getTask(id),
+            getTask: (id) => this.index.getTask(id),
             getStartHour: () => this.plugin.settings.startHour,
         });
         this.selectionController = new SelectionController(this.handleManager);
         this.dragHandler = new DragHandler(
             this.container,
-            this.readService,
             this.operations,
             this.plugin,
             this.selectionController,
@@ -371,7 +374,7 @@ export class CalendarView extends ItemView {
         await this.renderSerializer.request();
 
         // Clear selection when the selected task is deleted via the UI.
-        this.unsubscribeDelete = this.selectionController.attachDeleteListener(this.plugin.getIndex());
+        this.unsubscribeDelete = this.selectionController.attachDeleteListener(this.index);
 
         // Initialize render dispatch controller (rAF coalesce only). Every
         // change runs a full render(), which reconciles cards by key.
@@ -380,7 +383,7 @@ export class CalendarView extends ItemView {
             getHost: () => this.container,
         });
 
-        this.unsubscribe = this.readService.onChange((taskId, changes) => {
+        this.unsubscribe = this.index.onChange((taskId, changes) => {
             this.renderScheduler.handleChange(taskId, changes);
         });
     }
@@ -417,7 +420,7 @@ export class CalendarView extends ItemView {
         createTaskHubOpener(this.app, {
             taskRenderer: this.taskRenderer,
             menuHandler: this.menuHandler,
-            readService: this.readService,
+            index: this.index,
             operations: this.operations,
             plugin: this.plugin,
         }, () => setTimeout(() => this.handleManager?.selectTask(null), 0))(task, options);
@@ -632,7 +635,7 @@ export class CalendarView extends ItemView {
                 this.app.workspace.requestSaveLayout();
             },
             onTopRightEdit: (listDef: PinnedListDefinition, anchorEl: HTMLElement) => {
-                const tasks = this.readService.getTasks();
+                const tasks = this.index.getTasks();
                 const propertyKeys = FilterValueCollector.collectPropertyKeys(tasks);
                 this.topRightEditor.open(anchorEl, {
                     config: listDef.topRight,
@@ -682,7 +685,7 @@ export class CalendarView extends ItemView {
                 this.app.workspace.requestSaveLayout();
                 this.pinnedListRenderer.refresh();
             },
-            getTasks: () => this.readService.getTasks(),
+            getTasks: () => this.index.getTasks(),
             getStartHour: () => this.plugin.settings.startHour,
         });
     }

@@ -43,7 +43,7 @@ function makeDisplayTask(overrides: Partial<DisplayTask> = {}): DisplayTask {
 const defs = DEFAULT_STATUS_DEFINITIONS;
 
 const mockReadService = {
-    getTask: vi.fn(),
+    getDisplayTask: vi.fn(),
 } as unknown as TaskReadService;
 
 describe('isTaskCompleted', () => {
@@ -69,7 +69,7 @@ describe('isTaskCompleted', () => {
 
     it('parent incomplete → false regardless of children', () => {
         const childTask = makeTask({ id: 'child-1', statusChar: 'x' });
-        vi.mocked(mockReadService.getTask).mockReturnValue(childTask);
+        vi.mocked(mockReadService.getDisplayTask).mockReturnValue(childTask);
         const dt = makeDisplayTask({
             statusChar: ' ',
             childEntries: [
@@ -81,7 +81,7 @@ describe('isTaskCompleted', () => {
 
     it('parent complete + child task complete → true', () => {
         const childTask = makeTask({ id: 'child-1', statusChar: 'x' });
-        vi.mocked(mockReadService.getTask).mockReturnValue(childTask);
+        vi.mocked(mockReadService.getDisplayTask).mockReturnValue(childTask);
         const dt = makeDisplayTask({
             statusChar: 'x',
             childEntries: [
@@ -93,7 +93,7 @@ describe('isTaskCompleted', () => {
 
     it('parent complete + child task incomplete → false', () => {
         const childTask = makeTask({ id: 'child-1', statusChar: ' ' });
-        vi.mocked(mockReadService.getTask).mockReturnValue(childTask);
+        vi.mocked(mockReadService.getDisplayTask).mockReturnValue(childTask);
         const dt = makeDisplayTask({
             statusChar: 'x',
             childEntries: [
@@ -123,7 +123,7 @@ describe('getOverdueLevel', () => {
     beforeEach(() => {
         vi.useFakeTimers();
         vi.setSystemTime(NOW);
-        vi.mocked(mockReadService.getTask).mockReturnValue(undefined);
+        vi.mocked(mockReadService.getDisplayTask).mockReturnValue(undefined);
     });
 
     afterEach(() => {
@@ -249,7 +249,7 @@ describe('getOverdueLevel', () => {
 
     it('child incomplete makes parent not completed → overdue possible', () => {
         const childTask = makeTask({ id: 'child-1', statusChar: ' ' });
-        vi.mocked(mockReadService.getTask).mockReturnValue(childTask);
+        vi.mocked(mockReadService.getDisplayTask).mockReturnValue(childTask);
         const dt = makeDisplayTask({
             statusChar: 'x',
             due: '2026-07-10',

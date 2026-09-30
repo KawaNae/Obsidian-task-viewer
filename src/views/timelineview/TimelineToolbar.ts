@@ -241,7 +241,7 @@ export class TimelineToolbar extends ViewToolbarBase {
         const { deps } = this;
         return {
             filterMenu: deps.filterMenu,
-            getTasks: () => deps.readService.getTasks(),
+            getTasks: () => deps.plugin.getIndex().getTasks(),
             getStartHour: () => deps.plugin.settings.startHour,
             onFilterChange: () => deps.onFilterChange(),
             getMaskMode: () => deps.getMaskMode(),
@@ -257,7 +257,7 @@ export class TimelineToolbar extends ViewToolbarBase {
         filterBtn.setAttribute('aria-label', t('toolbar.filter'));
 
         filterBtn.onclick = (e) => {
-            const allTasks = deps.readService.getTasks();
+            const allTasks = deps.plugin.getIndex().getTasks();
 
             deps.filterMenu.showMenu(e, {
                 onFilterChange: () => deps.onFilterChange(),

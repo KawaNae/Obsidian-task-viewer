@@ -63,6 +63,7 @@ export interface PluginContext {
 
     /** The index as the read side sees it: its copies, its changes, the drag's hold. It writes nothing. */
     getIndex(): IndexReads;
+    /** The display side of the read: DisplayTasks, date ranges, filters and sorts (`TaskReadService`). */
     getTaskReadService(): TaskReadService;
     /** The operations on the notes: the one way to write (`Operations`). */
     getOperations(): Operations;

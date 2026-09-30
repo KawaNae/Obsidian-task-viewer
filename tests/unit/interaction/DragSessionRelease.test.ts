@@ -4,7 +4,6 @@ import { DragHandler } from '../../../src/interaction/drag/DragHandler';
 import type { DragContext, DragStrategy } from '../../../src/interaction/drag/DragStrategy';
 import type { Operations } from '../../../src/services/operations/Operations';
 import type { IndexReads } from '../../../src/services/core/TaskIndex';
-import type { TaskReadService } from '../../../src/services/data/TaskReadService';
 import type { PluginContext } from '../../../src/PluginContext';
 import type { SelectionController } from '../../../src/interaction/selection/SelectionController';
 import type { Task } from '../../../src/types';
@@ -80,7 +79,7 @@ describe('a drag that ends without a commit', () => {
     it('lets go of its file when its view is closed mid-drag', () => {
         const { calls, ports, strategy, container, task } = rig(async () => { });
         const handler = new DragHandler(
-            container, {} as TaskReadService, ports, { getIndex: () => ports } as unknown as PluginContext,
+            container, ports, { getIndex: () => ports } as unknown as PluginContext,
             {} as SelectionController, () => { }, () => { }, () => '', () => '', () => 1,
         );
         const session = (handler as unknown as { session: DragSession }).session;

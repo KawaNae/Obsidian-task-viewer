@@ -3,7 +3,7 @@ import { type App } from 'obsidian';
 import { t } from '../../i18n';
 import { type Task } from '../../types';
 import type { PluginContext } from '../../PluginContext';
-import type { TaskReadService } from '../../services/data/TaskReadService';
+import type { IndexReads } from '../../services/core/TaskIndex';
 import type { Operations } from '../../services/operations/Operations';
 import { DateFieldGroup } from '../form/DateFieldGroup';
 import { buildStatusOptions, getStatusLabel } from '../../constants/statusOptions';
@@ -32,7 +32,7 @@ export type TaskHubFocusField =
 export interface TaskHubFormDeps {
     app: App;
     plugin: PluginContext;
-    readService: TaskReadService;
+    index: IndexReads;
     operations: Operations;
     /** suggest（SuggestController）の子ポップオーバーを積む先（パネル所有） */
     stack: PopoverStack;
@@ -91,7 +91,7 @@ export class TaskHubForm {
             queue: (updates) => this.queue(updates),
             app: deps.app,
             plugin: deps.plugin,
-            readService: deps.readService,
+            index: deps.index,
             stack: deps.stack,
             attachSuggest: (input, anchorEl, opts) => this.attachSuggest(input, anchorEl, opts),
             sourceLabel: (source) => this.sourceLabel(source),
@@ -193,7 +193,7 @@ export class TaskHubForm {
                 due: DateUtils.joinDateTime(f.dueDate, f.dueTime),
             }),
             getStartHour: () => this.deps.plugin.settings.startHour,
-            taskLookup: (id) => this.deps.readService.getTask(id),
+            taskLookup: (id) => this.deps.index.getTask(id),
             getValidationCtx: () => ({
                 hasImplicitStartDate: !!this.task.cascadeContext?.startDate,
                 implicitStartDate: this.task.cascadeContext?.startDate,
@@ -371,7 +371,7 @@ export class TaskHubForm {
         const write = this.deps.operations.updateTask(id, updates)
             .then((written) => {
                 if (written) return;
-                const fresh = this.deps.readService.getTask(id);
+                const fresh = this.deps.index.getTask(id);
                 if (fresh) this.refresh(fresh);
             })
             .catch((e) => logError(`[TaskHubForm] commit failed: ${e instanceof Error ? e.message : String(e)}`))

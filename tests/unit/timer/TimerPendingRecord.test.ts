@@ -52,7 +52,7 @@ function pluginOver(s: VaultSession) {
         timers: new Map<string, TimerInstance>(), recorder: s.recorder,
         plugin: {
             settings: { pomodoroWorkMinutes: 25, pomodoroBreakMinutes: 5 },
-            getTaskReadService: () => ({ onChange: () => () => { } }),
+            getIndex: () => ({ onChange: () => () => { } }),
         },
         app: s.app,
         startTimer: () => { }, render: () => { }, renderTimerItem: () => { },

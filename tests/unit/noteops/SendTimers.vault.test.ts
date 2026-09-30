@@ -42,7 +42,6 @@ async function open(files: Record<string, string[]>) {
         settings: { ...DEFAULT_SETTINGS },
         getIndex: () => session.index,
         getOperations: () => session.ops,
-        getTaskReadService: () => ({ getTask: (id: string) => session.index.getTask(id) }),
     };
     const ticker = vi.spyOn(TimerLifecycle.prototype, 'startTimerTicker');
     const widget = new TimerWidget(session.app, plugin as never);

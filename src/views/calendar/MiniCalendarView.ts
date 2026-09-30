@@ -9,6 +9,7 @@ import { DateUtils } from '../../utils/DateUtils';
 import { getTaskDateRange } from '../../services/display/VisualDateRange';
 import { withWeekStartDay } from '../../utils/momentWeekLocale';
 import type { TaskReadService } from '../../services/data/TaskReadService';
+import type { IndexReads } from '../../services/core/TaskIndex';
 import { dailyNotes, linkTarget, periodicNotes } from '../../utils/PeriodicNotes';
 import { openPeriodicNoteInLeaf } from '../sharedLogic/OpenPeriodicNote';
 import { isTaskCompleted as isTaskCompletedUtil } from '../../services/display/TaskStatusQuery';
@@ -42,6 +43,8 @@ type MiniCalendarViewState = Partial<MiniCalendarConfig> & Partial<MiniCalendarT
 export class MiniCalendarView extends ItemView {
     private readonly plugin: PluginContext;
     private readonly readService: TaskReadService;
+    /** The index's copies and changes (`PluginContext.getIndex`). */
+    private readonly index: IndexReads;
     private readonly linkInteractionManager: TaskLinkInteractionManager;
     private readonly filterMenu = new FilterMenuComponent();
     private readonly toolbar: MiniCalendarToolbar;
@@ -60,10 +63,11 @@ export class MiniCalendarView extends ItemView {
         super(leaf);
         this.plugin = plugin;
         this.readService = this.plugin.getTaskReadService();
+        this.index = this.plugin.getIndex();
         this.linkInteractionManager = new TaskLinkInteractionManager(this.app, () => this.plugin.settings);
 
         this.filterMenu.setStartHourProvider(() => this.plugin.settings.startHour);
-        this.filterMenu.setTaskLookupProvider((id) => this.readService.getTask(id));
+        this.filterMenu.setTaskLookupProvider((id) => this.index.getTask(id));
         this.filterMenu.setStatusDefinitions(this.plugin.settings.statusDefinitions);
 
         this.windowStart = DateUtils.getMonthGridStart(new Date(), this.plugin.settings.weekStartDay);
@@ -178,7 +182,7 @@ export class MiniCalendarView extends ItemView {
 
         await this.render();
 
-        this.unsubscribe = this.readService.onChange((_taskId, changes) => {
+        this.unsubscribe = this.index.onChange((_taskId, changes) => {
             if (!shouldRenderForChanges(changes)) return;
             void this.render();
         });

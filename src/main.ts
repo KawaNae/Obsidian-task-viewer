@@ -158,7 +158,7 @@ export default class TaskViewerPlugin extends Plugin {
         this.operations = new Operations(this.app, this.taskIndex);
         // The timer widget is made below; a send asks for it as it is made.
         this.noteOps = new NoteOps(this.app, this.operations, () => this.settings, {
-            getTask: (id) => this.readService.getTask(id),
+            getTask: (id) => this.taskIndex.getTask(id),
             timers: () => this.timerWidget ?? null,
         });
 
@@ -342,7 +342,7 @@ export default class TaskViewerPlugin extends Plugin {
         // Register inline menu button on checkbox lines (CM6 extension)
         const taskMenuResult = createTaskMenuExtension(
             this.app,
-            this.readService,
+            this.taskIndex,
             this.operations.editorLineHost(),
             editorPropertiesBuilder,
             editorTimerBuilder,
@@ -434,7 +434,7 @@ export default class TaskViewerPlugin extends Plugin {
      * TaskCardRenderer / MenuHandler を使用）を通る。
      */
     openTaskHub(taskId: string, options?: TaskHubPanelOptions): void {
-        const task = this.readService.getTask(taskId);
+        const task = this.taskIndex.getTask(taskId);
         if (!task) return;
 
         if (!this.hubTaskRenderer) {
@@ -450,14 +450,14 @@ export default class TaskViewerPlugin extends Plugin {
             this.addChild(this.hubTaskRenderer);
         }
         if (!this.hubMenuHandler) {
-            this.hubMenuHandler = new MenuHandler(this.app, this.readService, this.operations, this);
+            this.hubMenuHandler = new MenuHandler(this.app, this.operations, this);
             this.hubMenuHandler.setTaskHubOpener((id, opts) => this.openTaskHub(id, opts));
         }
 
         new TaskHubPanel(this.app, task, {
             taskRenderer: this.hubTaskRenderer,
             menuHandler: this.hubMenuHandler,
-            readService: this.readService,
+            index: this.taskIndex,
             operations: this.operations,
             plugin: this,
         }, options).open();

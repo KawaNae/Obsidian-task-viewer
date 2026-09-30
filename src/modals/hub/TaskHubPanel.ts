@@ -5,7 +5,7 @@ import type { PluginContext } from '../../PluginContext';
 import type { TaskCardRenderer } from '../../views/taskcard/TaskCardRenderer';
 import { TaskStyling } from '../../views/sharedUI/TaskStyling';
 import type { MenuHandler } from '../../interaction/menu/MenuHandler';
-import type { TaskReadService } from '../../services/data/TaskReadService';
+import type { IndexReads } from '../../services/core/TaskIndex';
 import type { Operations } from '../../services/operations/Operations';
 import { toDisplayTask, getOriginalTaskId } from '../../services/display/DisplayTaskConverter';
 import { getEffectiveColor, getEffectiveLinestyle } from '../../services/data/EffectiveProperties';
@@ -20,7 +20,7 @@ import { indentUnit } from '../../utils/ObsidianConfig';
 export interface TaskHubDeps {
     taskRenderer: TaskCardRenderer;
     menuHandler: MenuHandler;
-    readService: TaskReadService;
+    index: IndexReads;
     operations: Operations;
     plugin: PluginContext;
 }
@@ -32,7 +32,7 @@ export interface TaskHubPanelOptions {
 /**
  * タスクハブパネル — 「タスクを開く」の単一の目的地。
  *
- * 上部にカードプレビュー（readService.onChange でライブ再描画）、下部に
+ * 上部にカードプレビュー（index.onChange でライブ再描画）、下部に
  * プロパティ編集フォーム（フィールド確定で即保存）。read-only タスクは
  * プレビューのみに縮退。プレビューの上の切り替えで、カードの代わりに
  * 行と部分木のソースを編集できる（TaskHubSource）。ソースに下書きがある間、
@@ -65,7 +65,7 @@ export class TaskHubPanel {
         // A segment of a split task is a key within the display: the hub
         // works on its row, by the row's name.
         const originalId = getOriginalTaskId(task);
-        this.task = deps.readService.getTask(originalId) ?? { ...task, id: originalId };
+        this.task = deps.index.getTask(originalId) ?? { ...task, id: originalId };
     }
 
     open(): void {
@@ -116,7 +116,7 @@ export class TaskHubPanel {
             this.form = new TaskHubForm(formHost, this.task, {
                 app: this.app,
                 plugin: this.deps.plugin,
-                readService: this.deps.readService,
+                index: this.deps.index,
                 operations: this.deps.operations,
                 stack: this.stack,
                 onNavigate: () => this.close(),
@@ -134,7 +134,7 @@ export class TaskHubPanel {
         this.source = new TaskHubSource(this.task, {
             drained: () => this.form?.drained() ?? Promise.resolve(),
             confirm: (id) => this.deps.operations.confirmTask(id),
-            reread: (id) => this.deps.readService.getTask(id),
+            reread: (id) => this.deps.index.getTask(id),
             // The refusal is shown under the draft it leaves; a notice would say it twice.
             replace: (id, base, replacement) => this.deps.operations.replaceSubtree(id, base, replacement, { tellRefusal: false }),
             indentUnit: () => indentUnit(this.app),
@@ -144,9 +144,9 @@ export class TaskHubPanel {
     }
 
     private setupLiveUpdates(): void {
-        this.unsubscribe = this.deps.readService.onChange((taskId) => {
+        this.unsubscribe = this.deps.index.onChange((taskId) => {
             if (taskId !== undefined && taskId !== this.task.id) return;
-            const fresh = this.deps.readService.getTask(this.task.id);
+            const fresh = this.deps.index.getTask(this.task.id);
             if (fresh) {
                 this.task = fresh;
                 void this.renderPreview();
@@ -176,7 +176,7 @@ export class TaskHubPanel {
             onOpenPropertiesFocus: (field) => this.form?.focusField(field),
         });
 
-        const dt = toDisplayTask(this.task, settings.startHour, (id) => this.deps.readService.getTask(id));
+        const dt = toDisplayTask(this.task, settings.startHour, (id) => this.deps.index.getTask(id));
         await this.deps.taskRenderer.render(card, dt, settings, {
             cardInstanceId: `hub::${dt.id}`,
             context: 'hub-preview',

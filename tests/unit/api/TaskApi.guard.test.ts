@@ -40,6 +40,7 @@ function createMockApi(task: Task | undefined, opts: { writesLand?: boolean } = 
         app: { vault: { getAbstractFileByPath: vi.fn() } },
         settings: { startHour: 0 },
         getTaskReadService: () => mockReadService,
+        getIndex: () => mockReadService,
         getOperations: () => mockWriteService,
     };
     return new TaskApi(mockPlugin as any);

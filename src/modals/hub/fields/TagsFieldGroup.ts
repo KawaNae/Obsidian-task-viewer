@@ -81,7 +81,7 @@ export class TagsFieldGroup {
             getCandidates: (query) => {
                 const q = query.toLowerCase().replace(/^#/, '');
                 const selected = new Set(getEffectiveTags(this.ctx.getTask()));
-                return FilterValueCollector.collectTags(this.ctx.readService.getTasks())
+                return FilterValueCollector.collectTags(this.ctx.index.getTasks())
                     .filter(v => !selected.has(v))
                     .filter(v => !q || v.toLowerCase().includes(q));
             },

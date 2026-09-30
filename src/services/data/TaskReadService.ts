@@ -4,8 +4,6 @@ import type { FilterContext } from '../filter/FilterContext';
 import { hasConditions } from '../filter/FilterTypes';
 import type { SortState } from '../sort/SortTypes';
 import type { IndexReads } from '../core/TaskIndex';
-import type { ContentKey } from '../core/ContentKey';
-import type { TFile } from 'obsidian';
 import { toDisplayTask, toDisplayTasks } from '../display/DisplayTaskConverter';
 import { TaskFilterEngine } from '../filter/TaskFilterEngine';
 import { TaskSorter } from '../sort/TaskSorter';
@@ -14,11 +12,15 @@ import { DateUtils } from '../../utils/DateUtils';
 import { buildChildEntries } from './ChildEntryBuilder';
 
 /**
- * Read-side entry point for views and interaction handlers.
+ * The display side of the read: the index's copies as a view draws them.
  *
  * Provides cached DisplayTask conversion, date-based filtering/splitting,
- * and shared FilterContext creation. Used by both internal views and
- * the public TaskApi.
+ * a row's children in the note's order, and shared FilterContext creation.
+ * Used by both internal views and the public TaskApi.
+ *
+ * The copies themselves — by name, by anchor, by line, and the index's
+ * changes — are the index's to answer (`IndexReads`, `PluginContext.getIndex`);
+ * nothing here passes them through.
  */
 export class TaskReadService {
     private cachedDisplayTasks: DisplayTask[] | null = null;
@@ -48,38 +50,6 @@ export class TaskReadService {
         return this.startHour;
     }
 
-    // ===== Raw task access (proxied from TaskIndex) =====
-
-    /** All raw tasks. Primary use: FilterMenu callbacks. */
-    getTasks(): Task[] {
-        return this.taskIndex.getTasks();
-    }
-
-    /** Single raw task lookup. Primary use: FilterMenu, child resolution, drag validation, export masking. */
-    getTask(taskId: string): Task | undefined {
-        return this.taskIndex.getTask(taskId);
-    }
-
-    /** Inline task lookup by file + line. Primary use: editor extensions. */
-    getTaskByFileLine(filePath: string, line: number): Task | undefined {
-        return this.taskIndex.getTaskByFileLine(filePath, line);
-    }
-
-    /** The task on a line an editor shows, in the content it shows (`TaskIndex.taskAtEditorLine`). Primary use: the editor's menu. */
-    taskAtEditorLine(filePath: string, line: number, key: ContentKey): Task | undefined | null {
-        return this.taskIndex.taskAtEditorLine(filePath, line, key);
-    }
-
-    /** Have the index read `file` now, and wait until it has (`TaskIndex.requestScan`). */
-    async readNow(file: TFile): Promise<void> {
-        return this.taskIndex.requestScan(file);
-    }
-
-    /** The row a file's `^id` anchors now (`TaskIndex.getTaskByAnchor`). Primary use: the API's IDs. */
-    getTaskByAnchor(filePath: string, anchor: string): Task | undefined {
-        return this.taskIndex.getTaskByAnchor(filePath, anchor);
-    }
-
     /**
      * Ordered ChildEntry[] for a task. Source of truth for the renderer.
      *
@@ -89,13 +59,6 @@ export class TaskReadService {
      */
     getChildEntries(task: Task): ChildEntry[] {
         return buildChildEntries(task, (id) => this.taskIndex.getTask(id));
-    }
-
-    // ===== Event subscription =====
-
-    /** Subscribe to task changes. Returns unsubscribe function. */
-    onChange(callback: (taskId?: string, changes?: string[]) => void): () => void {
-        return this.taskIndex.onChange(callback);
     }
 
     // ===== Core data access =====

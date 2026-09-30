@@ -225,9 +225,8 @@ export class TimerPersistence {
      * 引けなければ記録待ちになって通知が1回出る。閉じるのは利用者だけ。
      */
     private scheduleRestoredCheck(): void {
-        const readService = this.ctx.plugin.getTaskReadService();
         let done = false;
-        const unsubscribe = readService.onChange(() => {
+        const unsubscribe = this.ctx.plugin.getIndex().onChange(() => {
             if (done) return;
             done = true;
             unsubscribe();

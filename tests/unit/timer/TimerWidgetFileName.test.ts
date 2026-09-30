@@ -64,10 +64,6 @@ async function open(files: Record<string, string[]>) {
         settings: { ...DEFAULT_SETTINGS },
         getIndex: () => session.index,
         getOperations: () => session.ops,
-        getTaskReadService: () => ({
-            getTask: (id: string) => session.index.getTask(id),
-            onChange: (fn: () => void) => session.index.onChange(fn),
-        }),
         registerEvent: () => { },
     };
     const widget = new TimerWidget(session.app, plugin as never);

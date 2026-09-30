@@ -1,4 +1,3 @@
-import type { TaskReadService } from '../../services/data/TaskReadService';
 import type { Operations } from '../../services/operations/Operations';
 import type { PluginContext } from '../../PluginContext';
 import type { SelectionController } from '../selection/SelectionController';
@@ -33,7 +32,6 @@ export class DragHandler {
 
     constructor(
         private readonly container: HTMLElement,
-        readService: TaskReadService,
         operations: Operations,
         plugin: PluginContext,
         selectionController: SelectionController,
@@ -44,7 +42,7 @@ export class DragHandler {
     ) {
         this.context = {
             container,
-            readService,
+            index: plugin.getIndex(),
             operations,
             plugin,
             selectionController,
@@ -54,7 +52,7 @@ export class DragHandler {
             getViewEndDate,
             getZoomLevel,
         };
-        this.session = new DragSession(this.context, container, operations, plugin.getIndex());
+        this.session = new DragSession(this.context, container, operations, this.context.index);
         this.router = new DragRouter(this.context, this.session, container);
 
         this.boundPointerDown = this.onPointerDown.bind(this);

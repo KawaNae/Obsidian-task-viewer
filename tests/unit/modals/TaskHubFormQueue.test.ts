@@ -7,7 +7,7 @@ import type { Task } from '../../../src/types';
  * ハブの即時コミット（`queue`）は、ローカルの model を先に書き換えてから
  * updateTask を投げる。続けて投げた書き込みの順は操作の層の行ごとの列が
  * 守る（`onRow`。Names.vault.test.ts）ので、フォームは並べない。書けなかったら、index が戻した写し
- * （`readService.getTask`）で refresh し、楽観更新を捨てる。書けたなら echo を
+ * （`IndexReads.getTask`）で refresh し、楽観更新を捨てる。書けたなら echo を
  * 待つだけで、ここでは refresh しない。
  *
  * フォームの DOM 構築（constructor → render）は node の unit では組めないので、
@@ -24,7 +24,7 @@ function formAnswering(written: boolean, fresh: Task | undefined) {
     Object.assign(form, {
         task,
         writing: new Set(),
-        deps: { operations: { updateTask }, readService: { getTask } },
+        deps: { operations: { updateTask }, index: { getTask } },
         refresh,
     });
 

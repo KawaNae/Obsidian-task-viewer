@@ -62,7 +62,7 @@ export class PropertiesFieldGroup {
             };
             this.ctx.attachSuggest(valueInput, valueInput, {
                 getCandidates: (q) => FilterValueCollector
-                    .collectPropertyValuesForKey(this.ctx.readService.getTasks(), key)
+                    .collectPropertyValuesForKey(this.ctx.index.getTasks(), key)
                     .filter(v => !q || v.toLowerCase().includes(q.toLowerCase())),
                 onPick: (val) => { valueInput.value = val; commitValue(); },
             });
@@ -111,7 +111,7 @@ export class PropertiesFieldGroup {
         this.ctx.attachSuggest(keyInput, keyInput, {
             getCandidates: (q) => {
                 const used = new Set(Object.keys(effective));
-                return FilterValueCollector.collectPropertyKeys(this.ctx.readService.getTasks())
+                return FilterValueCollector.collectPropertyKeys(this.ctx.index.getTasks())
                     .filter(k => !used.has(k))
                     .filter(k => !q || k.toLowerCase().includes(q.toLowerCase()));
             },
@@ -122,7 +122,7 @@ export class PropertiesFieldGroup {
                 const key = keyInput.value.trim();
                 if (!key) return [];
                 return FilterValueCollector
-                    .collectPropertyValuesForKey(this.ctx.readService.getTasks(), key)
+                    .collectPropertyValuesForKey(this.ctx.index.getTasks(), key)
                     .filter(v => !q || v.toLowerCase().includes(q.toLowerCase()));
             },
             onPick: (val) => { valueInput.value = val; commitAdd(); },

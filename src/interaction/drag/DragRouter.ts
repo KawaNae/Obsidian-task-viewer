@@ -49,7 +49,7 @@ export class DragRouter {
 
         if (!taskEl || !taskId) return;
 
-        const task = this.context.readService.getTask(taskId);
+        const task = this.context.index.getTask(taskId);
         if (!task) return;
         if (task.isReadOnly && isFromHandle) return;
 
