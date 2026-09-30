@@ -16,7 +16,7 @@ import { join, relative } from 'path';
 const SRC = join(__dirname, '../../../src');
 
 /** The two files the reading lives in. */
-const READING = new Set(['services/parsing/utils/Outline.ts', 'utils/CodeFenceTracker.ts']);
+const READING = new Set(['services/parsing/utils/Outline.ts', 'services/parsing/utils/CodeFenceTracker.ts']);
 
 const IDIOMS: Array<{ name: string; test: (line: string) => boolean }> = [
     // A fence delimiter written into a pattern or a string: ``` or ~~~, or a

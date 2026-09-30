@@ -28,7 +28,7 @@ import type { SendTo } from '../persistence/writers/SendWriter';
 import type { ContentKey } from './ContentKey';
 import { checkCopy, checkFile, type CheckDeps, type OnDisk } from './ReadingCheck';
 import { DiskReconciler } from './DiskReconciler';
-import { outermostRows } from './SendRows';
+import { outermostRows } from '../persistence/writers/SendRows';
 import { diskProbeOf, type DiskProbe } from './DiskProbe';
 
 /**

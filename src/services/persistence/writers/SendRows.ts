@@ -1,4 +1,4 @@
-import type { Task } from '../../types';
+import type { Task } from '../../../types';
 
 /**
  * The rows a send takes of the ones it was asked for, each once: a row in

@@ -3,7 +3,7 @@
  */
 
 import { type App, FileSystemAdapter } from 'obsidian';
-import { generateTimerTargetId } from '../utils/TimerTargetIdUtils';
+import { generateTimerTargetId } from './TimerTargetIdUtils';
 /**
  * v8: self の開始で覚えた、上書きする前の行の start（priorStartMs）を足した。
  * v7: 記録待ち（pendingRecord）を足し、対象と尻尾を錨だけで引く形にした。

@@ -5,7 +5,7 @@ import { HeadingInserter } from '../../utils/HeadingInserter';
 import { openFile } from '../../utils/NavigationUtils';
 import type { RowSnapshot, SendRow, SendWrite } from '../core/TaskIndex';
 import { refusalClause, refusalNotice } from '../core/RefusalClause';
-import { outermostRows } from '../core/SendRows';
+import { outermostRows } from '../persistence/writers/SendRows';
 import { unresolvedAt, type UnresolvedReference } from '../flow/FlowReferences';
 import { FileParsePipeline } from '../parsing/FileParsePipeline';
 import { Outline } from '../parsing/utils/Outline';

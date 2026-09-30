@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { TIMER_TARGET_ID_PREFIX, generateTimerTargetId } from '../../../src/utils/TimerTargetIdUtils';
+import { TIMER_TARGET_ID_PREFIX, generateTimerTargetId } from '../../../src/timer/TimerTargetIdUtils';
 
 /**
  * The timer's block ID sits in the note while a session runs, so its length is
