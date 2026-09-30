@@ -189,7 +189,7 @@ export class SendModal implements SendSurface {
         }
         if (!this.candidatesEl.isConnected) this.errorEl.before(this.candidatesLabel, this.candidatesEl);
         for (const one of candidates) {
-            const { row } = createFormRow(this.candidatesEl, one.key);
+            const { row } = createFormRow(this.candidatesEl, one.key, { alignStart: true });
             const label = row.createEl('label', { cls: 'tv-send__candidate' });
             const box = label.createEl('input', { type: 'checkbox' });
             box.checked = one.checked;
