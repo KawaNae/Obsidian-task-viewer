@@ -4,7 +4,9 @@
  * an item of the menu it opens chosen. A self start shifted back to the
  * start it overwrote records from that start; a child's running line has
  * its start rewritten when the shift is chosen; after ⏸ and ▶ the menu no
- * longer offers the remembered start. And a real press of the mouse on the
+ * longer offers the remembered start, nor one outside today. "Set the
+ * shift..." opens a dialog that warns of what it cannot read under the field
+ * and foresees where the start goes. And a real press of the mouse on the
  * elapsed time: without moving it opens the menu, moving it drags the
  * widget. The note's bytes are read back from the disk.
  *
@@ -210,6 +212,50 @@ describe('shifting the start of a running count-up', () => {
         expect(titles.filter(title => /\b(5|10|15|30)\b/.test(title))).toHaveLength(4);
     });
 
+    it('self, on a line planned months before: the start it overwrote is not offered, not being within today', async () => {
+        const prior = minuteFloor(Date.now() - 90 * 24 * 60 * 60_000);
+        await writeIndexedTestFile(FILE, [`- [ ] 昔の予定 @${dateOf(prior)}T${timeOf(prior)}`, ''].join('\n'));
+        open = startTimer('昔の予定', 'self');
+
+        const titles = pressElapsed(open);
+        expect(titles.filter(title => /\d{2}:\d{2}/.test(title))).toEqual([]);
+        expect(titles.filter(title => /\b(5|10|15|30)\b/.test(title))).toHaveLength(4);
+    });
+
+    it('"Set the shift...": an amount unreadable is warned under the field and not taken; a readable one is foreseen and shifts', async () => {
+        await writeIndexedTestFile(FILE, ['- [ ] 量で', ''].join('\n'));
+        open = startTimer('量で', 'child');
+        pressElapsed(open, '...');
+
+        const unreadable = offsetDialog({ type: '1.5' });
+        expect(unreadable).toMatchObject({ kind: 'minutes', says: 'warning', invalid: true, applicable: false });
+
+        const before = Date.now();
+        const readable = offsetDialog({ type: '25' });
+        const expected = [before, Date.now()].map(ms => timeOf(ms - 25 * 60_000));
+        expect(readable).toMatchObject({ kind: 'minutes', says: 'info', invalid: false, applicable: true });
+        expect(expected.some(time => readable.text.includes(time)), readable.text).toBe(true);
+
+        offsetDialog({ apply: true });
+        const shifted = readTestFile(FILE).split('\n')[1];
+        expect(expected.some(time => shifted.includes(`T${time}`)), shifted).toBe(true);
+    });
+
+    it('"Set the shift...": a time later than now is foreseen as the day before, and shifts to it', async () => {
+        await writeIndexedTestFile(FILE, ['- [ ] 時刻で', ''].join('\n'));
+        open = startTimer('時刻で', 'child');
+        pressElapsed(open, '...');
+
+        const seen = offsetDialog({ kind: 'time', type: '23:59' });
+        // 23:59 is later than now but in the last minute of the day.
+        const yesterday = dateOf(Date.now() - 24 * 60 * 60_000);
+        expect(seen).toMatchObject({ kind: 'time', says: 'info', applicable: true });
+        expect(seen.text).toMatch(/前日 23:59|yesterday 23:59/);
+
+        offsetDialog({ apply: true });
+        expect(readTestFile(FILE).split('\n')[1]).toContain(`@${yesterday}T23:59`);
+    });
+
     it('a real press of the mouse on the elapsed time opens the menu, and does not move the widget', async () => {
         await writeIndexedTestFile(FILE, ['- [ ] 押す', ''].join('\n'));
         open = startTimer('押す', 'child');
@@ -272,5 +318,45 @@ function mouse(id: string, path: [number, number][], from: [number, number] = [0
         }
         const after = widget.getBoundingClientRect();
         return JSON.stringify({ presented, captured, moved: [Math.round(after.left - before.left), Math.round(after.top - before.top)] });
+    })()`);
+}
+
+/**
+ * Act on the open "Set the shift..." dialog (`TimerStartOffsetModal`): choose
+ * the amount or the time with the switch, type into the field shown, or
+ * press the button that shifts. Answer what the dialog shows then: the kind
+ * chosen, the line under the field and its tone, whether the field is marked
+ * invalid, and whether the button can be pressed.
+ */
+function offsetDialog(act: { kind?: 'minutes' | 'time'; type?: string; apply?: boolean }): {
+    kind: string; text: string; says: 'info' | 'warning' | null; invalid: boolean; applicable: boolean;
+} {
+    return evalOrThrow(`(async () => {
+        const dialog = document.querySelector('.tv-timer-offset');
+        if (!dialog) throw new Error('no start-offset dialog open');
+        const act = ${JSON.stringify(act)};
+        const [minutesBtn, timeBtn] = dialog.querySelectorAll('.tv-ctrl__segments > button');
+        if (act.kind) (act.kind === 'minutes' ? minutesBtn : timeBtn).click();
+        const kind = timeBtn.classList.contains('is-active') ? 'time' : 'minutes';
+        const rows = dialog.querySelectorAll('.tv-form__row');
+        const input = rows[kind === 'minutes' ? 0 : 1].querySelector('input[type="text"]');
+        if (act.type !== undefined) {
+            input.value = act.type;
+            input.dispatchEvent(new Event('input', { bubbles: true }));
+        }
+        const says = dialog.querySelector('.tv-timer-offset__says');
+        const apply = dialog.querySelector('.tv-form__buttons .mod-cta');
+        const seen = {
+            kind,
+            text: says.textContent,
+            says: says.style.display === 'none' ? null : says.classList.contains('tv-form__warning') ? 'warning' : says.classList.contains('tv-form__info') ? 'info' : null,
+            invalid: input.classList.contains('tv-ctrl__text-input--invalid'),
+            applicable: !apply.disabled,
+        };
+        if (act.apply) {
+            apply.click();
+            await new Promise(r => setTimeout(r, 800));
+        }
+        return JSON.stringify(seen);
     })()`);
 }
