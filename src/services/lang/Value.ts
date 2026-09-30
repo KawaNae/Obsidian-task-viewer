@@ -201,7 +201,7 @@ export function addDuration(
 // ---------------------------------------------------------------------------
 
 /** Sortable key for date/datetime values (plain dates sort as 00:00). */
-export function datishKey(v: Value & { type: 'date' | 'datetime' }): string {
+function datishKey(v: Value & { type: 'date' | 'datetime' }): string {
     return v.type === 'date' ? `${v.value}T00:00` : `${v.date}T${v.time}`;
 }
 
@@ -265,7 +265,7 @@ export function fieldKeyLiteral(key: string): string {
  * values the grid exists to support. Trailing zeros go, since they say
  * nothing.
  */
-export function numberToLiteral(value: number): string {
+function numberToLiteral(value: number): string {
     if (Number.isInteger(value)) return String(value);
     return value.toFixed(DECIMAL_PLACES).replace(/0+$/, '').replace(/\.$/, '');
 }

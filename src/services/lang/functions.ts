@@ -1,6 +1,6 @@
 import { addDays, addMonths, addYears, differenceInCalendarDays } from 'date-fns';
 import type { Span } from './Diagnostic';
-import type { Expr, FnName } from './ExprAst';
+import { type Expr, type FnName, UNIT_KEYWORDS } from './ExprAst';
 import {
     type DurUnit, type Value, WEEKDAY_NAMES, type Weekday, dateAt, formatDateStr, isDatishValue, parseDateStr,
     weekdayFromName,
@@ -123,11 +123,9 @@ export interface FnSig {
     checkArgs?: (args: Expr[]) => FnSigViolation | null;
 }
 
-const UNIT_SET = ['week', 'month', 'year'];
-
 function requireUnitKeyword(args: Expr[]): FnSigViolation | null {
     const first = args[0];
-    if (first && first.kind === 'lit' && first.value.type === 'string' && !UNIT_SET.includes(first.value.value)) {
+    if (first && first.kind === 'lit' && first.value.type === 'string' && !(UNIT_KEYWORDS as readonly string[]).includes(first.value.value)) {
         return {
             code: 'type.bad-unit-keyword',
             message: `Expected week, month or year, got '${first.value.value}'`,

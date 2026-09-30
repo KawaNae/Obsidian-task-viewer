@@ -1016,7 +1016,7 @@ const SCALAR_MEMBERS: readonly {
 export const SCALAR_MEMBER_SIGS: readonly MemberSig[] = SCALAR_MEMBERS.flatMap(
     e => [...Object.values(e.members), ...Object.values(e.methods)]);
 
-export function memberSignature(receiver: StaticType, name: string, isMethod: boolean): MemberSig | null {
+function memberSignature(receiver: StaticType, name: string, isMethod: boolean): MemberSig | null {
     const entry = SCALAR_MEMBERS.find(e => e.applies(receiver));
     if (!entry) return null;
     return lookupWord(isMethod ? entry.methods : entry.members, name) ?? null;
