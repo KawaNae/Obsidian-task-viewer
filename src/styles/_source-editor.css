@@ -78,7 +78,8 @@
 /* 子の文字は、親の行の記号の位置（行の左の余白）から字下げ一段右。
    線は Obsidian の字下げの線（.cm-indent::before）と同じ太さと色で、
    親の記号 `-` の幅の中ほどに、子の枠の中に立てる。2つの枠は左端が揃うので、
-   枠の中の同じ位置が親の `-` の下になる */
+   枠の中の同じ位置が親の `-` の下になる。上下は行の範囲（.cm-content の
+   padding の内側）に収め、枠の線に触れさせない */
 .tv-source-editor__children {
     position: relative;
     padding-left: var(--tv-source-indent, 4ch);
@@ -87,8 +88,8 @@
 .tv-source-editor__children::before {
     content: '';
     position: absolute;
-    top: 0;
-    bottom: 0;
+    top: 4px;
+    bottom: 4px;
     left: calc(var(--tv-source-line-pad) + 0.5ch);
     border-left: var(--indentation-guide-width, 1px) solid var(--indentation-guide-color, var(--background-modifier-border));
 }
