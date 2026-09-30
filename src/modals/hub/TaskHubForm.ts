@@ -10,6 +10,7 @@ import { TaskNameSuggest } from '../../suggest/TaskNameSuggest';
 import { createFormRow } from '../form/formRow';
 import { PROPERTY_ICONS } from '../../constants/propertyIcons';
 import { attachBracketPairing, type BracketPairingHandle } from '../form/bracketPairing';
+import { isFormEnter } from '../form/formEnter';
 import { TaskUpdateBuilder } from '../form/TaskUpdateBuilder';
 import { CascadeSource, type CascadeSourceKind } from './CascadeSource';
 import { openFile } from '../../utils/NavigationUtils';
@@ -118,7 +119,7 @@ export class TaskHubForm {
         this.pairing = attachBracketPairing(this.nameInput, () => { /* 値取り込みは commit 時 */ });
         this.nameInput.addEventListener('blur', () => this.commitContent());
         this.nameInput.addEventListener('keydown', (e: KeyboardEvent) => {
-            if (e.key === 'Enter' && !e.isComposing && !this.pairing.isComposing()) {
+            if (isFormEnter(e, this.pairing.isComposing())) {
                 this.commitContent();
             }
         });
