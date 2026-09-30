@@ -6,7 +6,7 @@ import type { DraftEditor, SourceDraft } from '../../../src/modals/form/source/S
 import type { SubtreeFrame } from '../../../src/services/persistence/utils/SubtreeFrame';
 import type { InheritedValue } from '../../../src/services/data/InheritedValues';
 import type {
-    DestinationAsk, DestinationFacts, NoteFacts, SendPreview, SendRequest, SendResult,
+    DestinationAsk, DestinationFacts, NoteFacts, SendingLines, SendPreview, SendRequest, SendResult,
 } from '../../../src/services/data/NoteOps';
 import { makeTask } from '../helpers/makeTask';
 
@@ -77,11 +77,12 @@ function facts(overrides: Partial<NoteFacts> = {}): NoteFacts {
         namesakes: [],
         shared: [],
         unresolved: [],
+        anchors: new Map(),
         ...overrides,
     };
 }
 
-function setUp(opts: { preview?: SendPreview; results?: SendResult[] } = {}) {
+function setUp(opts: { preview?: SendPreview; results?: SendResult[]; timers?: (sending: SendingLines) => string | null } = {}) {
     const preview = opts.preview ?? previewOf();
     const states: SendViewState[] = [];
     const editors: FakeEditor[] = [];
@@ -99,6 +100,7 @@ function setUp(opts: { preview?: SendPreview; results?: SendResult[] } = {}) {
                 answer: async (f) => { resolve(f); await Promise.resolve(); await Promise.resolve(); },
             });
         }),
+        timers: opts.timers ?? (() => null),
         send,
         indentUnit: () => '    ',
         sent,
@@ -283,6 +285,40 @@ describe('what keeps a send from being asked', () => {
         expect(h.state().errors).toEqual([t('modal.send.notTask')]);
         h.editor().type('- [ ] A!');
         expect(h.state()).toMatchObject({ canSend: true, errors: [] });
+    });
+
+    it('a timer the send would leave without its lines: said, asked with the draft as it is and the note\'s ^ids', async () => {
+        const asked: SendingLines[] = [];
+        const h = await answered(facts({ kind: 'existing', path: 'Plan.md', anchors: new Map([['x', 1]]) }), {
+            preview: previewOf({ subtree: ['- [ ] A ^t', '    - [ ] a ^r'] }),
+            timers: (sending) => {
+                asked.push(sending);
+                return sending.from[0].sent.some(line => line.endsWith('^r')) ? null : 'lost';
+            },
+        });
+        expect(h.state()).toMatchObject({ canSend: true, errors: [] });
+        expect(asked[asked.length - 1]).toEqual({
+            to: 'Plan.md',
+            inNote: new Map([['x', 1]]),
+            from: [{ path: 'note.md', base: ['- [ ] A ^t', '    - [ ] a ^r'], sent: ['- [ ] A ^t', '    - [ ] a ^r'] }],
+        });
+
+        h.editor().children = [{ text: '- [ ] a', was: 1 }];
+        h.editor().type('- [ ] A ^t');
+        expect(h.state()).toMatchObject({ canSend: false, errors: ['lost'] });
+        await h.dialog.send();
+        expect(h.send).not.toHaveBeenCalled();
+    });
+
+    it('not asked of the timers while the fields name no note, or a draft cannot be written', async () => {
+        const timers = vi.fn(() => 'kept');
+        const h = await answered({ kind: 'unnamed', why: { ok: false, why: 'empty' } }, { timers });
+        expect(timers).not.toHaveBeenCalled();
+        await h.dialog.fieldsChanged({ folder: '', name: 'Plan', heading: '' });
+        await h.answer(facts());
+        expect(h.state().errors).toEqual(['kept']);
+        h.editor().type('plain');
+        expect(h.state().errors).toEqual([t('modal.send.notTask')]);
     });
 
     it('an answer for fields that changed since: not taken, and no send until the last is answered', async () => {

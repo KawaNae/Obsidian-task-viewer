@@ -121,6 +121,7 @@ export class SendModal implements SendSurface {
 
         this.dialog = new SendDialog(this.preview, {
             facts: (ask) => this.ops.destinationFacts(this.preview, ask),
+            timers: (sending) => this.ops.timersRefuse(sending),
             // Shown under the fields; a notice would say it twice.
             send: (req) => this.ops.send(req, { tellRefusal: false }),
             indentUnit: () => indentUnit(this.app),
