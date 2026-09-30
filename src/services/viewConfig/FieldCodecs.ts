@@ -424,6 +424,7 @@ function serializePinnedList(pl: PinnedListDefinition): Record<string, unknown> 
         id: pl.id,
         name: pl.name,
         filterState: FilterSerializer.toJSON(pl.filterState),
+        applyViewFilter: pl.applyViewFilter,
     };
     if (pl.sortState) {
         result.sortState = {
@@ -434,7 +435,6 @@ function serializePinnedList(pl: PinnedListDefinition): Record<string, unknown> 
             })),
         };
     }
-    if (pl.applyViewFilter !== undefined) result.applyViewFilter = pl.applyViewFilter;
     if (pl.topRight && pl.topRight.fields.length > 0) {
         const tr: Record<string, unknown> = { fields: pl.topRight.fields, separator: pl.topRight.separator };
         if (pl.topRight.prefix) tr.prefix = pl.topRight.prefix;
@@ -458,7 +458,11 @@ function parsePinnedLists(raw: unknown[]): PinnedListDefinition[] {
         if (!obj.filterState || typeof obj.filterState !== 'object') continue;
         const filterState = FilterSerializer.fromJSON(obj.filterState);
 
-        const def: PinnedListDefinition = { id, name, filterState };
+        // A list saved before the toggle was touched has no key: it reads as
+        // false (the view filter is not applied). This is the one place the
+        // default lives; everything past the codec sees a boolean.
+        const applyViewFilter = obj.applyViewFilter === true;
+        const def: PinnedListDefinition = { id, name, filterState, applyViewFilter };
 
         if (obj.sortState && typeof obj.sortState === 'object') {
             const rawSort = obj.sortState as Record<string, unknown>;
@@ -474,7 +478,6 @@ function parsePinnedLists(raw: unknown[]): PinnedListDefinition[] {
                 };
             }
         }
-        if (typeof obj.applyViewFilter === 'boolean') def.applyViewFilter = obj.applyViewFilter;
         if (obj.topRight && typeof obj.topRight === 'object') {
             const tr = obj.topRight as Record<string, unknown>;
             if (Array.isArray(tr.fields)) {

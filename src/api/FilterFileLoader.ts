@@ -67,8 +67,9 @@ export async function loadFilterFile(
                     ? `Pinned list "${listName}" not found. Available: ${names.join(', ')}`
                     : `No pinned lists in template. Remove --list flag`;
             }
-            // Combine viewFilter + pinnedList filter if applyViewFilter !== false
-            if (list.applyViewFilter !== false && filterState && hasConditions(filterState)) {
+            // Layer the view filter under the list's, as the view does when the
+            // list's toggle is on.
+            if (list.applyViewFilter && filterState && hasConditions(filterState)) {
                 return mergeFilters(filterState, list.filterState);
             }
             return list.filterState;

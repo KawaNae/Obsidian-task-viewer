@@ -58,7 +58,7 @@ obsidian obsidian-task-viewer:list tag=work format=json output-fields=content,st
 | `type` | タスク notation で絞り込み | `type=taskviewer` |
 | `root` | 親タスクを持たないタスクのみ | `root` |
 | `filter-file` | FilterState JSON (.json) またはビューテンプレート (.md) | `filter-file=filters/tag.json` |
-| `list` | ピン留めリスト名（`.md` テンプレート用） | `list=urgent` |
+| `list` | ピン留めリスト名（`.md` テンプレート用）。ビューのフィルタは、リストの「ビューフィルターを適用」がオンのときだけ重ねる（ビューの表示と同じ） | `list=urgent` |
 
 > `from`/`to` は inclusive なクエリ窓です。窓と期間が重なるタスクが対象になります（例: 6/28〜7/2 のタスクは `from=2026-07-01` に含まれます）。`date` と `from`/`to` の同時指定はエラーです。
 >

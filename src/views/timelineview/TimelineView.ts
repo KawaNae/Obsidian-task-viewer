@@ -999,6 +999,7 @@ export class TimelineView extends ItemView {
                 id: newId,
                 name: t('pinnedList.newList'),
                 filterState: createDefaultListFilterState(),
+                applyViewFilter: false,
             });
             this.app.workspace.requestSaveLayout();
             this.pinnedListRenderer.scheduleRename(newId);

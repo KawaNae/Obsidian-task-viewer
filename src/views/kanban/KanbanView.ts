@@ -454,7 +454,7 @@ export class KanbanView extends ItemView {
             item
                 .setTitle(t('menu.applyViewFilter'))
                 .setIcon('filter')
-                .setChecked(!!listDef.applyViewFilter)
+                .setChecked(listDef.applyViewFilter)
                 .onClick(() => {
                     listDef.applyViewFilter = !listDef.applyViewFilter;
                     this.requestSaveLayout();
@@ -523,6 +523,7 @@ export class KanbanView extends ItemView {
             id: this.generateId(),
             name: t('pinnedList.newList'),
             filterState: createDefaultListFilterState(),
+            applyViewFilter: false,
         };
     }
 

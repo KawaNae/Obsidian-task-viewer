@@ -329,7 +329,7 @@ export class PinnedListRenderer {
                 item
                     .setTitle(t('menu.applyViewFilter'))
                     .setIcon('filter')
-                    .setChecked(!!listDef.applyViewFilter)
+                    .setChecked(listDef.applyViewFilter)
                     .onClick(() => callbacks.onToggleApplyViewFilter!(listDef));
             });
         }

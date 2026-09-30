@@ -20,7 +20,7 @@ export interface PinnedListDefinition {
     name: string;
     filterState: FilterState;
     sortState?: SortState;
-    applyViewFilter?: boolean;
+    applyViewFilter: boolean;
     topRight?: TopRightConfig;
 }
 
