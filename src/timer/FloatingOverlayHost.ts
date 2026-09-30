@@ -4,7 +4,7 @@
  * Owns the DOM container element for a floating widget (timer widget today;
  * could be reused for other window-anchored overlays). Encapsulates:
  *   - container creation / disposal in a specific window's body
- *   - drag-to-move (pointer capture, viewport-relative coordinates)
+ *   - drag-to-move once a press moves (pointer capture, viewport-relative coordinates)
  *   - resize-driven viewport clamp so the widget never gets stranded off-screen
  *   - drag-end notification used by the observer to defer window migration
  *
@@ -18,12 +18,20 @@
 import { trackKeyboard, keyboardTop } from '../utils/KeyboardState';
 
 const DEFAULT_OFFSET = 24;
+/**
+ * How far a press must move before it becomes a drag of the widget
+ * (`BaseDragStrategy.checkMoveThreshold` uses the same distance).
+ */
+const DRAG_THRESHOLD_PX = 5;
 
 export interface FloatingOverlayHostOptions {
     /**
-     * Selectors inside the container whose clicks must not start a drag (they
-     * are interactive: buttons, pin badge, inputs). The drag handler ignores
-     * pointerdown when target.closest(selector) matches any of these.
+     * Selectors inside the container where a press must not become a drag
+     * even when it moves: fields, where moving the pointer selects text. A
+     * press elsewhere that does not move is a plain click on what it pressed
+     * (a button, the elapsed time); the drag starts only once it moves. The
+     * drag handler ignores pointerdown when target.closest(selector) matches
+     * any of these.
      */
     nonDraggableSelectors: string[];
 }
@@ -35,6 +43,8 @@ export class FloatingOverlayHost {
     private resizeHandler: (() => void) | null = null;
     private vvResizeHandler: (() => void) | null = null;
     private kbHandler: (() => void) | null = null;
+    /** A press on the widget not yet released: where it began. It becomes a drag once it moves. */
+    private press: { pointerId: number; x: number; y: number } | null = null;
     private dragging = false;
     private dragOffset = { x: 0, y: 0 };
     private onDragEndCb: (() => void) | null = null;
@@ -105,6 +115,7 @@ export class FloatingOverlayHost {
         this.win = null;
         this.doc = null;
         this.resizeHandler = null;
+        this.press = null;
         this.dragging = false;
     }
 
@@ -181,34 +192,51 @@ export class FloatingOverlayHost {
         if (!this.container) return;
         const header = this.container;
 
+        // 押しただけではドラッグにしない。押した位置を覚え、DRAG_THRESHOLD_PX
+        // 動いた時点でドラッグを始めて pointer を捕捉する。動かさずに離せば捕捉は
+        // 起きず、click は押した要素へそのまま届く（捕捉していると、click は
+        // 捕捉した container へ付け替えられる）。
         header.addEventListener('pointerdown', (e) => {
+            if (e.button !== 0) return;
             const target = e.target as HTMLElement;
             for (const sel of this.opts.nonDraggableSelectors) {
                 if (target.closest(sel)) return;
             }
 
-            this.dragging = true;
             // キーボード退避 transform を除いた layout 座標で掴む（transform は
             // ドラッグ中も維持され、drag 終了時に再計算される）
             const t = this.container!.style.transform;
             this.container!.style.transform = '';
             const rect = this.container!.getBoundingClientRect();
             this.container!.style.transform = t;
+            this.press = { pointerId: e.pointerId, x: e.clientX, y: e.clientY };
             this.dragOffset.x = e.clientX - rect.left;
             this.dragOffset.y = e.clientY - rect.top;
-            this.container!.style.cursor = 'grabbing';
-            header.setPointerCapture(e.pointerId);
         });
 
         header.addEventListener('pointermove', (e) => {
-            if (!this.dragging || !this.container) return;
+            if (!this.press || e.pointerId !== this.press.pointerId || !this.container) return;
+            if (!this.dragging) {
+                const dx = e.clientX - this.press.x;
+                const dy = e.clientY - this.press.y;
+                if (Math.abs(dx) < DRAG_THRESHOLD_PX && Math.abs(dy) < DRAG_THRESHOLD_PX) return;
+                this.dragging = true;
+                this.container.style.cursor = 'grabbing';
+                try {
+                    header.setPointerCapture(e.pointerId);
+                } catch {
+                    // The pointer may already be gone (released outside the window).
+                }
+            }
             const left = e.clientX - this.dragOffset.x;
             const top = e.clientY - this.dragOffset.y;
             this.userPosition = { left, top };
             this.applyPosition();
         });
 
-        const endDrag = (e: PointerEvent) => {
+        const endPress = (e: PointerEvent) => {
+            if (!this.press || e.pointerId !== this.press.pointerId) return;
+            this.press = null;
             if (!this.dragging) return;
             this.dragging = false;
             if (this.container) this.container.style.cursor = 'grab';
@@ -221,7 +249,7 @@ export class FloatingOverlayHost {
             this.avoidKeyboard();
             this.onDragEndCb?.();
         };
-        header.addEventListener('pointerup', endDrag);
-        header.addEventListener('pointercancel', endDrag);
+        header.addEventListener('pointerup', endPress);
+        header.addEventListener('pointercancel', endPress);
     }
 }

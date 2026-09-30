@@ -4,8 +4,9 @@
  * an item of the menu it opens chosen. A self start shifted back to the
  * start it overwrote records from that start; a child's running line has
  * its start rewritten when the shift is chosen; after ⏸ and ▶ the menu no
- * longer offers the remembered start. The note's bytes are read back from
- * the disk.
+ * longer offers the remembered start. And a real press of the mouse on the
+ * elapsed time: without moving it opens the menu, moving it drags the
+ * widget. The note's bytes are read back from the disk.
  *
  * The menu is asked to draw itself in the page rather than as the OS's
  * native menu, whose items a test cannot reach.
@@ -209,41 +210,67 @@ describe('shifting the start of a running count-up', () => {
         expect(titles.filter(title => /\b(5|10|15|30)\b/.test(title))).toHaveLength(4);
     });
 
-    // Known bug: a press of the mouse on the elapsed time starts the widget's
-    // drag (FloatingOverlayHost's pointerdown captures the pointer on the
-    // widget, the elapsed time not being among the non-draggable selectors),
-    // and the click then goes to the widget, not the elapsed time: the menu
-    // does not open. Drop `.fails` once that is fixed.
-    it.fails('a real press of the mouse on the elapsed time opens the menu, not a drag', async () => {
+    it('a real press of the mouse on the elapsed time opens the menu, and does not move the widget', async () => {
         await writeIndexedTestFile(FILE, ['- [ ] 押す', ''].join('\n'));
         open = startTimer('押す', 'child');
-        const seen = evalOrThrow<{ presented: number; captured: boolean }>(`(async () => {
-            const plugin = app.plugins.plugins['obsidian-task-viewer'];
-            const presenter = plugin.menuPresenter;
-            const present = presenter.present;
-            let presented = 0;
-            presenter.present = (build, anchor) => { presented++; return present.call(presenter, (menu) => { menu.setUseNativeMenu(false); build(menu); }, anchor); };
-            const display = document.querySelector('[data-timer-id="${open}"] .timer-widget__time-display');
-            let captured = false;
-            const widget = display.closest('.timer-widget');
-            const onCapture = () => { captured = true; };
-            widget.addEventListener('gotpointercapture', onCapture);
-            try {
-                const r = display.getBoundingClientRect();
-                const x = Math.round(r.left + r.width / 2), y = Math.round(r.top + r.height / 2);
-                const contents = require('electron').remote.getCurrentWebContents();
-                contents.sendInputEvent({ type: 'mouseMove', x, y });
-                contents.sendInputEvent({ type: 'mouseDown', x, y, button: 'left', clickCount: 1 });
-                await new Promise(r => setTimeout(r, 80));
-                contents.sendInputEvent({ type: 'mouseUp', x, y, button: 'left', clickCount: 1 });
-                await new Promise(r => setTimeout(r, 300));
-            } finally {
-                presenter.present = present;
-                widget.removeEventListener('gotpointercapture', onCapture);
-                presenter.dismiss();
-            }
-            return JSON.stringify({ presented, captured });
-        })()`);
-        expect(seen).toEqual({ presented: 1, captured: false });
+
+        expect(mouse(open, [[0, 0]])).toEqual({ presented: 1, captured: false, moved: [0, 0] });
+    });
+
+    it('a real press of the mouse that moves drags the widget, and opens no menu', async () => {
+        await writeIndexedTestFile(FILE, ['- [ ] 動かす', ''].join('\n'));
+        open = startTimer('動かす', 'child');
+
+        const seen = mouse(open, [[0, 0], [3, 0], [-20, -10], [-40, -30]]);
+        // Dragged back, to leave the widget where it was.
+        mouse(open, [[-40, -30], [-20, -10], [0, 0]], [-40, -30]);
+
+        expect(seen).toEqual({ presented: 0, captured: true, moved: [-40, -30] });
     });
 });
+
+/**
+ * Press the mouse — real input, through Electron — on the elapsed time of the
+ * timer `id` (plus `from`), move it along `path` (offsets from the elapsed
+ * time's middle; the first is where it goes down, the last where it goes
+ * up), and answer whether the start-offset menu was asked for, whether the
+ * widget captured the pointer (a drag), and how far the widget moved.
+ */
+function mouse(id: string, path: [number, number][], from: [number, number] = [0, 0]): { presented: number; captured: boolean; moved: [number, number] } {
+    return evalOrThrow(`(async () => {
+        const plugin = app.plugins.plugins['obsidian-task-viewer'];
+        const presenter = plugin.menuPresenter;
+        const present = presenter.present;
+        let presented = 0;
+        presenter.present = (build, anchor) => { presented++; return present.call(presenter, (menu) => { menu.setUseNativeMenu(false); build(menu); }, anchor); };
+        const display = document.querySelector('[data-timer-id="${id}"] .timer-widget__time-display');
+        if (!display) throw new Error('no elapsed time shown');
+        const widget = display.closest('.timer-widget');
+        let captured = false;
+        const onCapture = () => { captured = true; };
+        widget.addEventListener('gotpointercapture', onCapture);
+        const before = widget.getBoundingClientRect();
+        try {
+            const r = display.getBoundingClientRect();
+            const x0 = Math.round(r.left + r.width / 2) + ${from[0]}, y0 = Math.round(r.top + r.height / 2) + ${from[1]};
+            const path = ${JSON.stringify(path)}.map(([dx, dy]) => ({ x: x0 + dx, y: y0 + dy }));
+            const contents = require('electron').remote.getCurrentWebContents();
+            const wait = (ms) => new Promise(r => setTimeout(r, ms));
+            contents.sendInputEvent({ type: 'mouseMove', ...path[0] });
+            contents.sendInputEvent({ type: 'mouseDown', ...path[0], button: 'left', clickCount: 1 });
+            for (const at of path.slice(1)) {
+                await wait(30);
+                contents.sendInputEvent({ type: 'mouseMove', ...at, button: 'left', modifiers: ['leftButtonDown'] });
+            }
+            await wait(80);
+            contents.sendInputEvent({ type: 'mouseUp', ...path[path.length - 1], button: 'left', clickCount: 1 });
+            await wait(300);
+        } finally {
+            presenter.present = present;
+            widget.removeEventListener('gotpointercapture', onCapture);
+            presenter.dismiss();
+        }
+        const after = widget.getBoundingClientRect();
+        return JSON.stringify({ presented, captured, moved: [Math.round(after.left - before.left), Math.round(after.top - before.top)] });
+    })()`);
+}
