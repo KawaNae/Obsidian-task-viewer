@@ -20,7 +20,7 @@ function vault(initial: string) {
             process: async (_f: TFile, fn: (data: string) => string) => { content = fn(content); return content; },
         },
     };
-    return { writer: new FrontmatterWriter(app as never), read: () => content };
+    return { writer: new FrontmatterWriter(app as never, () => undefined), read: () => content };
 }
 
 describe('FrontmatterWriter.setKeys', () => {
