@@ -17,7 +17,7 @@ import { NotifyCoalescer } from './NotifyCoalescer';
 import { readName } from './RowNames';
 import { formatRow } from '../parsing/TaskLineFormat';
 import { lineParsersFingerprint } from '../parsing/TaskParser';
-import { planDuplicate } from '../persistence/DuplicateShift';
+import { planDuplicate } from './DuplicateShift';
 import type { GenBlock } from '../parsing/gen/GenBlockCollector';
 import { isReadCopy, plannedOn, subjectOf, type ReadCopy } from '../persistence/TaskRefs';
 import { logDebug, logError, logInfo, logWarn } from '../../log/log';

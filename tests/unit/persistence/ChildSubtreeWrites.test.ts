@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { plannedOn } from '../../../src/services/persistence/TaskRefs';
 import type { Task } from '../../../src/types';
 import { writeBench, FILE, type WriteBench } from '../helpers/writeBench';
-import { planDuplicate } from '../../../src/services/persistence/DuplicateShift';
+import { planDuplicate } from '../../../src/services/core/DuplicateShift';
 
 /**
  * How far a task's subtree reaches, as seen by the writes that move it.
