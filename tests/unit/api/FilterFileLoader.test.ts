@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { loadFilterFile, mergeFilters } from '../../../src/api/FilterFileLoader';
+import { loadFilterFile } from '../../../src/api/FilterFileLoader';
 import type { FilterState, FilterCondition } from '../../../src/services/filter/FilterTypes';
 import type { App } from 'obsidian';
 import type { ViewTemplate, PinnedListDefinition } from '../../../src/types';
@@ -89,19 +89,6 @@ function makeTemplate(overrides: {
 }
 
 // ── Tests ──
-
-describe('mergeFilters', () => {
-    it('combines two FilterStates under an AND group', () => {
-        const a = makeFilterState();
-        const b = makeFilterState();
-        const merged = mergeFilters(a, b);
-
-        expect(merged.logic).toBe('and');
-        expect(merged.filters).toHaveLength(2);
-        expect(merged.filters[0]).toBe(a);
-        expect(merged.filters[1]).toBe(b);
-    });
-});
 
 describe('loadFilterFile', () => {
     beforeEach(() => {

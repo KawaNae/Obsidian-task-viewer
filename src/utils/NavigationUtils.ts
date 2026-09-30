@@ -22,7 +22,7 @@ function revealExistingTab(app: App, filePath: string): boolean {
 /**
  * ファイルパスを指定して既存タブに移動、なければ新規タブで開く。
  */
-export function openFileInExistingOrNewTab(app: App, filePath: string): void {
+function openFileInExistingOrNewTab(app: App, filePath: string): void {
     if (!revealExistingTab(app, filePath)) {
         void app.workspace.openLinkText(filePath, '', true);
     }
@@ -56,7 +56,7 @@ export function openLinkInExistingOrNewTab(app: App, linktext: string, sourcePat
 /**
  * ファイルを開いて指定行を選択・フォーカスする。
  */
-export function openFileAndSelectLine(app: App, filePath: string, lineNumber: number, reuseTab: boolean): void {
+function openFileAndSelectLine(app: App, filePath: string, lineNumber: number, reuseTab: boolean): void {
     openFile(app, filePath, reuseTab);
 
     setTimeout(() => {

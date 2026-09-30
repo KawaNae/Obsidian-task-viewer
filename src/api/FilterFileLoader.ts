@@ -9,7 +9,7 @@ import { F } from '../services/viewConfig/FieldCodecs';
 /**
  * Merge two FilterStates by combining them under a new AND group.
  */
-export function mergeFilters(a: FilterState, b: FilterState): FilterState {
+function mergeFilters(a: FilterState, b: FilterState): FilterState {
     return { filters: [a, b], logic: 'and' };
 }
 

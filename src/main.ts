@@ -486,9 +486,6 @@ export default class TaskViewerPlugin extends Plugin {
     }
 
     /**
-     * Start checking for day boundary changes every 5 minutes
-     */
-    /**
      * Turn the passage of time into a render, but only when it changed
      * something.
      *
@@ -525,6 +522,9 @@ export default class TaskViewerPlugin extends Plugin {
         }, msToNextMinute);
     }
 
+    /**
+     * Start checking for day boundary changes every 5 minutes
+     */
     private startDateBoundaryCheck(): void {
         this.viewEvents.watch();
 
