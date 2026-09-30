@@ -8,7 +8,7 @@ import { freezeDate } from './fakeDate';
 freezeDate(new Date(2026, 8, 25, 12, 0, 0));
 
 /**
- * A flow's own writes do not fire again (structure.md, 「発火の可否」). A fire
+ * A flow's own writes do not fire again (structure/firing.md, 「発火の可否」). A fire
  * is made in the write that completes its row, and nothing else has a way to
  * fire: the scans that read the flow's writes, the `changed` that follows
  * them, have none (stage X). These count the fires the index plans, through

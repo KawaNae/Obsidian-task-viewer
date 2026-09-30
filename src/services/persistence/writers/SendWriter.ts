@@ -102,8 +102,8 @@ type Rehearsed = ReadonlyArray<{ lines: readonly string[]; block: readonly Place
 
 /**
  * The writes of a send: rows and their subtrees taken to a section of a note
- * (`v0.58-features.md`, 送る操作への一般化; the order and what is taken back,
- * `note-ops-plan.md` 3).
+ * (`archive/2026-09-send.md`, 仕様の決定, 移す操作から送る操作へ; the order and
+ * what is taken back, 書き込みの順序と補償).
  */
 export class SendWriter {
     constructor(

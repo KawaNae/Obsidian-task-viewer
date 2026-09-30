@@ -6,7 +6,7 @@ import { vaultSession, type VaultSession } from '../../helpers/vaultSession';
 
 /**
  * The reconciler brings the index's readings to the disk when a change
- * notice never comes (`DiskReconciler`, structure.md の読みの鮮度). The disk
+ * notice never comes (`DiskReconciler`, structure/layers.md の読みの鮮度). The disk
  * here is `contents` and a stand-in probe: setting `contents` is an edit no
  * event reports, and the probe's stat says the file moved. `TFile.stat` in
  * the harness is 0/0 for every note, as Obsidian's model of a note it never

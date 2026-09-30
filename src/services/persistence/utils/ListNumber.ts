@@ -9,7 +9,7 @@ const ORDERED_RE = /^([ \t]*)(\d+)([.)])/;
  * as one there and goes on the list it lands in.
  *
  * CommonMark lets an ordered item interrupt a paragraph only when it starts
- * at 1 (`structure.md`, the rules of where lines go). An item put straight
+ * at 1 (`structure/placement.md`, 置き場所の規則). An item put straight
  * below an ordered sibling, with its delimiter, goes on that list, and takes
  * the number after it; anywhere else it opens a list of its own, at 1. A
  * bullet is written as it is.

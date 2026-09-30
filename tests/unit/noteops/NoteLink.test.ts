@@ -5,7 +5,7 @@ import { makeFile } from '../helpers/vaultSession';
 
 /**
  * The link a row is left with, under each of the link settings measured at
- * stage 0 (`stages/s0-measure/observation.md`, 2), through a stand-in that
+ * stage 0 (`archive/2026-09-stages/3-v058-2026-09-28.md`, s0-measure, リンクの生成), through a stand-in that
  * spells links as Obsidian was measured to (`linkDouble`). What is asserted
  * is what `noteLink` hands Obsidian: the note, the note the row is in, and a
  * display text that is always there — the note's name.

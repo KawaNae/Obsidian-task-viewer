@@ -20,11 +20,11 @@ import { logDebug, logError, logInfo } from '../../log/log';
  *   commit   — store 更新
  *
  * 前回の読みと突き合わせない。名前は 1 回の読みの中だけで意味を持ち、読み
- * 直しをまたぐ同一性は `^id` だけが担う（structure.md の「名前」）。自分の
+ * 直しをまたぐ同一性は `^id` だけが担う（structure/layers.md の「名前」）。自分の
  * 書き込みをまたぐ名前は、書き込みの報告で写す（`WriteLinks`）。
  *
  * スキャンは読むだけで、フローを発火させない。発火は完了させた操作が起こす
- * （エディタのトランザクションと、プラグイン自身の書き込み。structure.md の
+ * （エディタのトランザクションと、プラグイン自身の書き込み。structure/firing.md の
  * 「発火の可否」）。
  */
 export class TaskScanner {

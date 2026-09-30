@@ -4,7 +4,7 @@ import { anchorsOf, checkTimerSend, timerSendText, type AnchoredTimer } from '..
 import type { SendingLines } from '../../../src/services/data/NoteOps';
 
 /**
- * Whether the open timers let rows go to a note (note-ops-plan.md 段 B4):
+ * Whether the open timers let rows go to a note (`archive/2026-09-send.md`, 開いているタイマー):
  * a timer whose `^id`s all go follows them; one whose `^id`s would go in
  * part, be lost to the draft, or be carried by two lines of the note it
  * finds its lines in keeps the send from being made.

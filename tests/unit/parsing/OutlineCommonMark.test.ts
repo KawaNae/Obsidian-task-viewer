@@ -4,7 +4,7 @@ import fixture from './fixtures/l3-commonmark.json';
 
 /**
  * `Outline.read` against CommonMark (commonmark.js 0.31.2) on the shapes L3
- * measured in Obsidian (`stages\l3-indent\measurement.md`, 235 shapes) and a
+ * measured in Obsidian (`archive/2026-09-stages/2-rebuild-2026-09-24.md`, 行と読み, L3 の実測, 235 shapes) and a
  * few more for the readings L3 changed. The fixture is written by
  * `C:/VScode/obsidian-task-viewer-worktrees/verify-scripts/l3-cm-fixture.js`,
  * outside the repository; its head names the generator and the
@@ -101,7 +101,7 @@ describe('Outline.read reads a space before a tab as CommonMark does, where both
  * The outline's second exception (L2; kept 2026-09-25): a line of only NBSP
  * or U+3000 is blank, where CommonMark reads it as text. Both views read it
  * blank in every shape where that changes a task, a parent or a subtree
- * (`stages\l3-indent\report.md`). What it changes and they do not show the
+ * (`archive/2026-09-stages/2-rebuild-2026-09-24.md`, 行と読み, after the L3 measurement). What it changes and they do not show the
  * same way is a line's kind alone: a line four columns past the content
  * column after it is indented code to the outline, and the reading view
  * draws it as text, as CommonMark reads it.

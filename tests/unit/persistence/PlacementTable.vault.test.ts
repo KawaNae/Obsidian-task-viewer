@@ -12,7 +12,7 @@ freezeDate(new Date(2026, 8, 25, 12, 0, 0));
 
 /**
  * Every write that adds lines, one row of the P1 table each
- * (`stages\p1-placement\design.md`): where the line goes (`Placement`), and
+ * (`archive/2026-09-stages/2-rebuild-2026-09-24.md`, 置き場所と書き込み, P1): where the line goes (`Placement`), and
  * the check the write is held to (`checkWrite`) — the line put in is a
  * task under the item meant, outside code, and every task already there
  * keeps its parent. Or nothing is written, and the user hears why.

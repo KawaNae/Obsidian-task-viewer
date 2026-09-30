@@ -5,7 +5,7 @@ import type { TimerBase } from './TimerInstance';
 
 /**
  * Whether the open timers let rows go to a note (the send operation,
- * `NoteOps.send`; note-ops-plan.md 段 B4). A timer finds its lines by their
+ * `NoteOps.send`; `archive/2026-09-send.md`, 開いているタイマー). A timer finds its lines by their
  * `^id`s in its note (`taskFile`), so a send that carries them away must
  * take the timer along, and one that would leave it without its lines is
  * not made.

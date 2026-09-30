@@ -4,7 +4,7 @@ import { checkWrite, type WrittenLine } from '../../../src/services/parsing/util
 
 /**
  * `Outline.read` against what Obsidian 1.12.4 reads of the same notes
- * (`stages\l2-blocks\measurement.md`, questions 1-16). Each shape is one the
+ * (`archive/2026-09-stages/2-rebuild-2026-09-24.md`, 行と読み, L2 の実測, questions 1-16). Each shape is one the
  * measurement wrote to a note, and the expected items and code lines are the
  * ones its `listItems`, `sections` and reading view gave.
  *
