@@ -368,7 +368,7 @@ function shift(span: Span, base: number): Span {
  * Shared by the template-literal lexer and the interpolation of a generation
  * block's body — the two places where a `${` has to be closed correctly.
  */
-export function findInterpolationEnd(src: string, open: number): number {
+function findInterpolationEnd(src: string, open: number): number {
     /** Closers still owed, innermost last. Every bracket kind, not just the
      *  braces: keeping one list means a kind added later cannot be forgotten
      *  the way a hand-written brace count would forget it. */

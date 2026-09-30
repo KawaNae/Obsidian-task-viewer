@@ -552,7 +552,7 @@ function shifted(value: Value, span: Span): Value {
     return value;
 }
 
-export function applyAddSub(op: '+' | '-', l: Value, r: Value, span: Span): Value {
+function applyAddSub(op: '+' | '-', l: Value, r: Value, span: Span): Value {
     const sign = op === '+' ? 1 : -1;
     if (isDatishValue(l) && r.type === 'duration') return shifted(addDuration(l, r, sign as 1 | -1), span);
     if (op === '+' && l.type === 'duration' && isDatishValue(r)) return shifted(addDuration(r, l, 1), span);
