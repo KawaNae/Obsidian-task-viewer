@@ -1,3 +1,4 @@
+import { DateUtils } from '../../utils/DateUtils';
 import type { DisplayTask } from '../../types';
 
 export interface CalculatedProperty {
@@ -78,8 +79,8 @@ export class PropertyCalculator {
 
         const inherited = !task.due;
 
-        if (due.includes('T')) {
-            const [date, time] = due.split('T');
+        const { date, time } = DateUtils.splitDateTime(due);
+        if (time !== undefined) {
             return {
                 date,
                 time,

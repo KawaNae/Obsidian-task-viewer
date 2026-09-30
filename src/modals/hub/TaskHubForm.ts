@@ -1,3 +1,4 @@
+import { DateUtils } from '../../utils/DateUtils';
 import { type App } from 'obsidian';
 import { t } from '../../i18n';
 import { type Task } from '../../types';
@@ -170,7 +171,7 @@ export class TaskHubForm {
         });
 
         // --- Start / End / Due ---
-        const dl = DateFieldGroup.splitDue(this.task.due);
+        const dl = DateUtils.splitDateTime(this.task.due ?? '');
         this.dateGroup = new DateFieldGroup(scheduleGroup, {
             labels: { start: t('modal.start'), end: t('modal.end'), due: t('modal.due') },
             icons: { start: PROPERTY_ICONS.start, end: PROPERTY_ICONS.end, due: PROPERTY_ICONS.due },
@@ -188,7 +189,7 @@ export class TaskHubForm {
                 startTime: f.startTime || undefined,
                 endDate: f.endDate || undefined,
                 endTime: f.endTime || undefined,
-                due: f.dueDate ? (f.dueTime ? `${f.dueDate}T${f.dueTime}` : f.dueDate) : undefined,
+                due: DateUtils.joinDateTime(f.dueDate, f.dueTime),
             }),
             getStartHour: () => this.deps.plugin.settings.startHour,
             taskLookup: (id) => this.deps.readService.getTask(id),
@@ -390,7 +391,7 @@ export class TaskHubForm {
         try {
             this.setInputValue(this.nameInput, fresh.content ?? '', this.pairing.isComposing());
             this.renderStatusPill();
-            const dl = DateFieldGroup.splitDue(fresh.due);
+            const dl = DateUtils.splitDateTime(fresh.due ?? '');
             this.dateGroup.setInputValue(this.dateGroup.getInput('startDate'), fresh.startDate ?? '');
             this.dateGroup.setInputValue(this.dateGroup.getInput('startTime'), fresh.startTime ?? '');
             this.dateGroup.setInputValue(this.dateGroup.getInput('endDate'), fresh.endDate ?? '');
