@@ -102,9 +102,9 @@ src/
 ├── api/                       # Public API (TaskApi, TaskNormalizer, FilterParamsBuilder, FilterFileLoader, TaskApiTypes)
 ├── cli/                       # CLI handlers (CliRegistrar, CliFilterBuilder, CliOutputFormatter, handlers/)
 ├── services/
-│   ├── core/                  # Core services (TaskIndex, TaskStore, TaskScanner, Reading, ReadingCheck, DiskReconciler, etc.)
+│   ├── core/                  # Core services (TaskIndex, TaskStore, TaskScanner, Reading, RowNames, ReadingCheck, DiskReconciler, etc.)
 │   ├── data/                  # Data access facade (TaskReadService, TaskWriteService)
-│   ├── display/               # Display conversion (DisplayTaskConverter, TaskSplitter, TaskDateCategorizer, TaskIdGenerator, TaskContent)
+│   ├── display/               # Display conversion (DisplayTaskConverter, TaskSplitter, SegmentIds, TaskDateCategorizer, TaskContent)
 │   ├── parsing/               # Parser layer (TaskParser: lineParsers; TaskLineFormat: formatTaskLine, formatRow; FileParsePipeline)
 │   │   ├── tv-inline/         # Line-level parsers (TVInlineParser, DayPlannerParser, TasksPluginParser, ReadOnlyParserBase)
 │   │   ├── strategies/        # ParserChain, ParserStrategy
@@ -264,6 +264,8 @@ Quick reference for locating the right layer when implementing a feature.
 
 Parsing spells no name. A line parser answers an unnamed task (`UnnamedTask`); `NoteTasks` finds each row's parent and children by line and names them with the `RowNamer` its caller hands the pipeline. The index's scan passes `namesOfReading(path, reading)` (`services/core/RowNames.ts`), so a row is named once, by the reading that read it; a reader outside the index (a fire's plan, a send's preview) passes `namesOutsideIndex(path)`, whose names never reach the store.
 
+The name layer lives in `services/core/RowNames.ts`: the spelling of a name (`nameOf`, `readName`) and the namers. A namer gives a row its reading (`Task.reading`) together with its name, so a write takes the reading from the copy (`plannedOn`) and reads no name's spelling. What outlives a reading is a row's anchor (`Task.anchor`, set by the scan); `TaskStore` keeps a `(file, anchor) → name` table with the tasks, and `TaskIndex.getTaskByAnchor` is one lookup in it. A segment of a task split at the day boundary (`<name>##seg:YYYY-MM-DD`, `services/display/SegmentIds.ts`) is a key within the display: a caller acting on one hands its row's name (`getOriginalTaskId`), and the write side does not take segments apart.
+
 Frontmatter makes no task. It is only the root of the cascade below: its scope keys (`tv-start`/`tv-end`/`tv-due`/`tv-color`/`tv-linestyle`/`tv-mask`), `tags` and custom properties are inherited by every task in the note.
 
 ### Inheritance pipeline (File / Section)
@@ -364,7 +366,7 @@ The plugin recognizes eight task types internally.
 
 Tasks are classified by **display behavior** — where they appear and what values are inferred.
 All times are relative to the configured `startHour` (default 5 → visual day 05:00–04:59).
-Display-layer implicit value resolution is centralised in `toDisplayTask()` (in `services/display/DisplayTaskConverter.ts`).
+Implicit value resolution is centralised in `resolveEffectiveDates()` (`utils/EffectiveDates.ts`); `toDisplayTask()` (in `services/display/DisplayTaskConverter.ts`) puts its answer on the display copy, and the in-place duplicate asks it for the slot a task fills.
 Parse-layer date inheritance is via `cascadeContext` (set by `NoteTasks`, consumed by `DisplayTaskConverter`).
 
 #### 1. Timed tasks (S-Timed / E-Timed / SD-Timed / ED-Timed)
@@ -407,9 +409,9 @@ Only a due is specified, no start or end.
 - **Inference**: none — D does not affect display position or duration inference
 - Example: `@>>2026-03-13`
 
-### Implicit value resolution rules (`toDisplayTask()`)
+### Implicit value resolution rules (`resolveEffectiveDates()`)
 
-All display-layer implicit resolution is centralised in `toDisplayTask()` (in `services/display/DisplayTaskConverter.ts`).
+All implicit resolution is centralised in `resolveEffectiveDates()` (in `utils/EffectiveDates.ts`), which `toDisplayTask()` calls.
 Written dates are **calendarDates**. Complement uses `startHour` where possible,
 falling back to `00:00`/`23:59` when same-day end < start occurs.
 
@@ -1032,7 +1034,8 @@ All visual date calculations MUST flow through the same code path. Two canonical
 
 | Function | Location | Purpose |
 |----------|----------|---------|
-| `toDisplayTask()` | `services/display/DisplayTaskConverter.ts` | Resolves implicit effective fields from raw Task |
+| `resolveEffectiveDates()` | `utils/EffectiveDates.ts` | Resolves implicit effective fields from raw Task |
+| `toDisplayTask()` | `services/display/DisplayTaskConverter.ts` | Raw Task → DisplayTask (effective fields, child entries) |
 | `getTaskDateRange()` | `services/display/VisualDateRange.ts` (canonical; re-exported from `views/calendar/CalendarDateUtils.ts`) | Converts DisplayTask effective fields to inclusive visual start/end dates |
 
 Any code that needs a task's visual date range — renderers, grid layout, drag ghosts, split boundaries — must use this pipeline, never compute visual dates independently from raw task fields.
