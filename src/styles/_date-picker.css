@@ -1,8 +1,9 @@
 /* ── Date Picker ──
  *
- * Month calendar opened from the toolbar's calendar button (DateNavigator →
- * DatePickerPopover). Root chrome and the phone bottom-sheet come from
- * OverlayShell (_overlay.css); this file only lays out the header and grid.
+ * Month calendar opened by double-clicking the toolbar's Today button, or by
+ * the "Go to date" command (DateNavigator → DatePickerPopover). Root chrome
+ * and the phone bottom-sheet come from OverlayShell (_overlay.css); this file
+ * only lays out the header and grid.
  */
 
 .tv-date-picker {

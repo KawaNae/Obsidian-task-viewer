@@ -3,7 +3,6 @@ import { t } from '../../i18n';
 import type { AstronomyDisplay } from '../../types';
 import type { TaskReadService } from '../../services/data/TaskReadService';
 import type { PluginContext } from '../../PluginContext';
-import type { DateJumpOptions } from '../sharedUI/DatePickerPopover';
 import { DateNavigator, type DateNavigatorHandle, DaysToShowSelector, ZoomSelector, ViewSettingsMenu, MaskToggleButton, ViewToolbarBase, appendCompactFilterAndMask, type ViewSettingsOptions, type CompactMenuDeps } from '../sharedUI/ViewToolbar';
 import { DateLabel } from '../sharedUI/DateLabel';
 import { appendAstronomyMenuSection } from '../sharedUI/AstronomyMenuSection';
@@ -146,7 +145,13 @@ export class TimelineToolbar extends ViewToolbarBase {
             toolbar,
             (days) => deps.onNavigateDays(days),
             () => deps.onJumpToNow(),
-            { dateJump: this.dateJump }
+            {
+                dateJump: {
+                    getSettings: () => deps.plugin.settings,
+                    getShownRange: () => deps.getShownRange(),
+                    onJump: (date) => deps.onJumpToDate(date),
+                },
+            }
         );
 
         // Push action zone to the right
@@ -235,16 +240,6 @@ export class TimelineToolbar extends ViewToolbarBase {
     /** Open the date picker from outside the toolbar (the "Go to date" command). */
     openDatePicker(): void {
         this.dateNavigatorHandle?.openDatePicker();
-    }
-
-    /** The date picker's hookup, shared by the calendar button and the ⋮ entry. */
-    private get dateJump(): DateJumpOptions {
-        const { deps } = this;
-        return {
-            getSettings: () => deps.plugin.settings,
-            getShownRange: () => deps.getShownRange(),
-            onJump: (date) => deps.onJumpToDate(date),
-        };
     }
 
     /** Shared filter + mask entries for the compact menu. */
@@ -339,9 +334,6 @@ export class TimelineToolbar extends ViewToolbarBase {
 
     private appendCompactMenuItems(menu: Menu, moreBtn: HTMLElement): void {
         const { deps } = this;
-
-        DateNavigator.appendCompactItem(menu, moreBtn, this.dateJump);
-        menu.addSeparator();
 
         DaysToShowSelector.appendSubmenu(
             menu,

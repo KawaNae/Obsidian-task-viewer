@@ -303,8 +303,7 @@
     "daysCount": "{{n}} Days",
     "increaseDays": "Increase days shown",
     "decreaseDays": "Decrease days shown",
-    "zoomLabel": "Zoom: {{pct}}",
-    "goToDate": "Go to date"
+    "zoomLabel": "Zoom: {{pct}}"
   },
   "position": {
     "leftSidebar": "Left sidebar",

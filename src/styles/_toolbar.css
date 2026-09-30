@@ -132,12 +132,9 @@
     display: none;
 }
 
-/* Compact mode: hide inline action buttons, show ⋮. The date-jump button
-   moves into ⋮ too (DateNavigator.appendCompactItem); prev / today / next
-   stay inline. */
+/* Compact mode: hide inline action buttons, show ⋮ */
 @container (max-width: 500px) {
-    .view-toolbar__action-zone,
-    .view-toolbar__btn--date-jump {
+    .view-toolbar__action-zone {
         display: none;
     }
     .view-toolbar__btn--more {

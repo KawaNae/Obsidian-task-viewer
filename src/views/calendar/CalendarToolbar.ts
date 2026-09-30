@@ -4,7 +4,6 @@ import type { PluginContext } from '../../PluginContext';
 import type { TaskReadService } from '../../services/data/TaskReadService';
 import type { PinnedListDefinition, AstronomyDisplay } from '../../types';
 import { VIEW_META_CALENDAR } from '../../constants/viewRegistry';
-import type { DateJumpOptions } from '../sharedUI/DatePickerPopover';
 import { DateNavigator, type DateNavigatorHandle, ViewSettingsMenu, MaskToggleButton, ViewToolbarBase, appendCompactFilterAndMask, type ViewSettingsOptions, type CompactMenuDeps } from '../sharedUI/ViewToolbar';
 import { DateLabel } from '../sharedUI/DateLabel';
 import { appendAstronomyMenuSection } from '../sharedUI/AstronomyMenuSection';
@@ -102,7 +101,11 @@ export class CalendarToolbar extends ViewToolbarBase {
             {
                 vertical: true,
                 onNavigateFast: (direction) => deps.onNavigateMonth(direction),
-                dateJump: this.dateJump,
+                dateJump: {
+                    getSettings: () => deps.plugin.settings,
+                    getShownRange: () => deps.getShownRange(),
+                    onJump: (date) => deps.onJumpToDate(date),
+                },
             }
         );
 
@@ -162,16 +165,6 @@ export class CalendarToolbar extends ViewToolbarBase {
         this.dateNavigatorHandle?.openDatePicker();
     }
 
-    /** The date picker's hookup, shared by the calendar button and the ⋮ entry. */
-    private get dateJump(): DateJumpOptions {
-        const { deps } = this;
-        return {
-            getSettings: () => deps.plugin.settings,
-            getShownRange: () => deps.getShownRange(),
-            onJump: (date) => deps.onJumpToDate(date),
-        };
-    }
-
     private getSettingsOptions(): ViewSettingsOptions {
         const { deps } = this;
         return {
@@ -227,8 +220,6 @@ export class CalendarToolbar extends ViewToolbarBase {
             setMaskMode: (next) => deps.setMaskMode(next),
             onAfter: () => this.update(),
         };
-        DateNavigator.appendCompactItem(menu, moreBtn, this.dateJump);
-        menu.addSeparator();
         appendCompactFilterAndMask(menu, moreBtn, compact);
     }
 

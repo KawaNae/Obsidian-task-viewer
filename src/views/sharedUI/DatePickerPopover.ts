@@ -6,8 +6,8 @@ import { OverlayShell } from './OverlayShell';
 import type { PopoverAnchor } from './PopoverShell';
 
 /**
- * What a view hands the toolbar so the user can jump to any date. Shared by
- * the toolbar's calendar button and the compact "⋮" menu entry.
+ * What a view hands the toolbar so the user can jump to any date, from a
+ * double-click on Today or the "Go to date" command.
  */
 export interface DateJumpOptions {
     getSettings: () => TaskViewerSettings;
@@ -36,7 +36,7 @@ export function monthGridDates(year: number, month: number, weekStartDay: 0 | 1)
 }
 
 /**
- * A small month calendar anchored to a toolbar button. Picking a day hands it
+ * A small month calendar anchored to the toolbar's Today button. Picking a day hands it
  * to `onJump` and closes. The month arrows only page the picker; the view does
  * not move until a day is picked.
  *
