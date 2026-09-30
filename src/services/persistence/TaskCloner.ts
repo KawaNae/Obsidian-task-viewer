@@ -5,7 +5,7 @@ import { FileOperations } from './utils/FileOperations';
 import { fileGone, processLines, type LineDraft, type WriteChannels, type WriteOutcome } from './FileLines';
 import type { PlannedTarget } from './TaskRefs';
 import { Outline } from '../parsing/utils/Outline';
-import { DATE_BLOCK_REGEX } from '../parsing/tv-inline/DateBlockLocator';
+import { readLineDateBlock } from '../parsing/tv-inline/DateBlock';
 import { Block, Placement, type Spot } from './utils/Placement';
 
 const DATES_RE = new RegExp(DateUtils.DATE_PATTERN, 'g');
@@ -136,19 +136,20 @@ export class TaskCloner {
 
     /**
      * @notation ブロック内の start/end 日付を dayOffset 日シフトする。
-     * due（3番目のセグメント）はシフトしない。
+     * due（3番目のセグメント）はシフトしない。ブロックはパーサと同じ読み
+     * （`readLineDateBlock`）で決めるので、コマンドの尾や `@1on1` の中の日付は
+     * ずらさない。
      */
     private shiftInlineDates(line: string, dayOffset: number): string {
-        return line.replace(
-            DATE_BLOCK_REGEX,
-            (block) => {
-                const inner = block.slice(1); // remove '@'
-                const segments = inner.split('>');
-                const shifted = segments.map((seg, i) =>
-                    i < 2 ? seg.replace(DATES_RE, (d) => DateUtils.shiftDateString(d, dayOffset)) : seg,
-                );
-                return '@' + shifted.join('>');
-            },
-        );
+        const dates = readLineDateBlock(line);
+        if (!dates) return line;
+        let out = line;
+        // From the end back, so the earlier span's columns stay where they were.
+        for (const span of [dates.end, dates.start].filter(s => s !== undefined)) {
+            const shifted = line.slice(span.start, span.end)
+                .replace(DATES_RE, d => DateUtils.shiftDateString(d, dayOffset));
+            out = out.slice(0, span.start) + shifted + out.slice(span.end);
+        }
+        return out;
     }
 }

@@ -1,23 +1,12 @@
 import type { Task } from '../../../types';
 import type { UnnamedTask } from '../TaskFactory';
 import { t } from '../../../i18n';
-import { cutFlowTail } from '../utils/FlowLineScanner';
 import { createBaseTask } from '../TaskFactory';
 import type { LeafParserStrategy } from '../strategies/ParserStrategy';
 import { TagExtractor } from '../utils/TagExtractor';
-import { parseDateTimeField } from '../utils/DateTimeFieldParser';
 import { TaskLineClassifier } from '../utils/TaskLineClassifier';
 import { validateDateTimeRules, type DateTimeValidationResult } from '../utils/DateTimeRuleValidator';
-import { DATE_BLOCK_REGEX } from './DateBlockLocator';
-
-interface DateBlockResult {
-    date: string;
-    startTime?: string;
-    endDate?: string;
-    endTime?: string;
-    due?: string;
-    validationWarning?: string; // parseDateBlock internal warning (excess separators)
-}
+import { readDateBlock, taskContentText, withoutDateBlocks, type DateBlockReading } from './DateBlock';
 
 /**
  * Task Viewer native inline parser.
@@ -41,41 +30,33 @@ export class TVInlineParser implements LeafParserStrategy {
         }
         const { statusChar } = classified;
 
-        // 1. The trailing block ID (^id) is the content's last part
-        const { text: body, blockId } = TaskLineClassifier.extractBlockId(classified.rawContent);
+        // 1. The trailing block ID (^id) is the content's last part, and the
+        // command (`==>` and what follows) is no part of the content: it is
+        // cut off here and read, with the task's `- ==>` lines, by `readFlow`
+        // when the note is read — the line alone does not say the whole
+        // program.
+        const { text, blockId } = taskContentText(classified.rawContent);
 
-        // 2. The command (`==>` and what follows) is no part of the content:
-        // it is cut off here and read, with the task's `- ==>` lines, by
-        // `readFlow` when the note is read — the line alone does not say the
-        // whole program.
-        const cut = cutFlowTail(body);
-        const rawContent = cut ? body.slice(0, cut.marker) : body;
-
-        // 3. Parse date block (@start>end>due)
-        let content = rawContent;
-        let date = '';
-        let startTime: string | undefined;
-        let endDate: string | undefined;
-        let endTime: string | undefined;
-        let due: string | undefined;
-        let parseWarning: string | undefined;
-
-        const dateBlock = this.parseDateBlock(rawContent);
-        if (dateBlock) {
-            ({ date, startTime, endDate, endTime, due,
-               validationWarning: parseWarning } = dateBlock.fields);
-            content = dateBlock.content;
-        }
+        // 2. The date block (@start>end>due): the first block is the dates;
+        // the others are kept verbatim, so that writing the row back keeps
+        // them (`formatTaskLine`). The content is the text without any.
+        const dates = readDateBlock(text);
+        const content = dates ? withoutDateBlocks(text, dates) : text;
+        const { startDate: date, startTime, endDate, endTime, due } = dates?.values ?? { startDate: '' };
+        const extraDateBlocks = dates && dates.extraBlocks.length > 0
+            ? dates.extraBlocks.map(extra => extra.text)
+            : undefined;
 
         // No early return: TVInline accepts any classified checkbox line, with
         // or without a scheduling block. ParserChain order ensures external
         // notation parsers (tasks-plugin, day-planner) get first crack on lines
         // that match their syntax; everything else falls through to here.
 
-        // 4. Validate date/time constraints: the line's own verdict. The
+        // 3. Validate date/time constraints: the line's own verdict. The
         // command's is the extraction's to add (`NoteTasks`), after these.
         let validation: Task['validation'];
         const ruleResult = this.validateDateBlock(date, startTime, endDate, endTime, due);
+        const parseWarning = dates ? this.blockWarning(dates) : undefined;
         if (ruleResult) {
             validation = ruleResult;
         } else if (parseWarning) {
@@ -100,6 +81,7 @@ export class TVInlineParser implements LeafParserStrategy {
             endDate,
             endTime,
             due,
+            extraDateBlocks,
             tags: TagExtractor.fromContent(content.trim()),
             blockId,
             validation,
@@ -107,99 +89,18 @@ export class TVInlineParser implements LeafParserStrategy {
     }
 
     /**
-     * Parse the @start>end>due date block into structured fields.
-     * Returns null if no date block was found in the content.
+     * What the notation does not read in a line's blocks: separators past
+     * the second, and blocks past the first.
      */
-    private parseDateBlock(content: string): { fields: DateBlockResult; content: string } | null {
-        const dateBlockMatch = content.match(DATE_BLOCK_REGEX);
-        if (!dateBlockMatch) {
-            return null;
+    private blockWarning(dates: DateBlockReading): string | undefined {
+        const warnings: string[] = [];
+        if (dates.separators > 2) {
+            warnings.push(t('validation.tooManySeparators', { count: dates.separators }));
         }
-
-        const fullDateBlock = dateBlockMatch[1]; // first block = canonical
-
-        // content は notation-free が不変条件。最初の date block を canonical と
-        // して採用し、content 中に残る全 date-like トークンを除去する。これが
-        // ないと formatTaskLine の末尾再付与が次回 parse で先頭マッチを奪い、開始日が
-        // 化ける(round-trip 破壊)。除去で生じた連続スペースは単一に畳む。
-        const globalRe = new RegExp(DATE_BLOCK_REGEX.source, 'g');
-        let dateBlockCount = 0;
-        const cleanedContent = content
-            .replace(globalRe, (m) => {
-                if (m.length > 1) { dateBlockCount++; return ''; }
-                return m;
-            })
-            .replace(/\s{2,}/g, ' ')
-            .trim();
-
-        const rawBlock = fullDateBlock.substring(1); // Remove leading @
-        const parts = rawBlock.split('>');
-
-        let date = '';
-        let startTime: string | undefined;
-        let endDate: string | undefined;
-        let endTime: string | undefined;
-        let due: string | undefined;
-        let validationWarning: string | undefined;
-
-        // --- Start segment ---
-        const rawStart = parts[0];
-        if (rawStart !== '') {
-            const parsed = parseDateTimeField(rawStart);
-            if (parsed.date) {
-                date = parsed.date;
-            }
-            if (parsed.time) {
-                startTime = parsed.time;
-            }
+        if (dates.extraBlocks.length > 0) {
+            warnings.push(t('validation.multipleDateBlocks', { count: dates.extraBlocks.length }));
         }
-
-        // --- End segment ---
-        // endDate is only set when explicitly written (e.g. >2026-02-16T08:00).
-        // Time-only end (>08:00) or empty end (>>due) leave endDate undefined;
-        // DisplayTaskConverter resolves the implicit endDate at display time.
-        if (parts.length > 1) {
-            const rawEnd = parts[1];
-            if (!rawEnd) {
-                // Empty end (@start>>due): endDate stays undefined
-            } else {
-                const parsed = parseDateTimeField(rawEnd);
-                if (parsed.date) {
-                    endDate = parsed.date;
-                }
-                if (parsed.time) {
-                    endTime = parsed.time;
-                }
-            }
-        }
-
-        // --- Due segment ---
-        if (parts.length > 2 && parts[2]) {
-            const parsed = parseDateTimeField(parts[2]);
-            due = parsed.date;
-            if (parsed.date && parsed.time) {
-                due += `T${parsed.time}`;
-            }
-        }
-
-        // --- Excess separator check ---
-        if (parts.length > 3) {
-            validationWarning = t('validation.tooManySeparators', { count: parts.length - 1 });
-        }
-
-        // --- Multiple date blocks check ---
-        if (dateBlockCount > 1) {
-            const extra = t('validation.multipleDateBlocks', { count: dateBlockCount - 1 });
-            validationWarning = validationWarning ? `${validationWarning} ${extra}` : extra;
-        }
-
-        return {
-            fields: {
-                date, startTime, endDate, endTime, due,
-                validationWarning,
-            },
-            content: cleanedContent,
-        };
+        return warnings.length > 0 ? warnings.join(' ') : undefined;
     }
 
     /**

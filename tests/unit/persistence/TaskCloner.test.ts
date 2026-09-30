@@ -90,6 +90,16 @@ describe('TaskCloner', () => {
                 .toBe('- [ ] Task @2026-04-01');
         });
 
+        it('leaves a date in the command alone (the parser reads no block there)', () => {
+            expect(callShiftInlineDates('- [ ] Task ==> until @2026-03-11', 1))
+                .toBe('- [ ] Task ==> until @2026-03-11');
+        });
+
+        it('shifts the block past a bare @ (the block the parser reads)', () => {
+            expect(callShiftInlineDates('- [ ] @1on1 sync @2026-03-11', 1))
+                .toBe('- [ ] @1on1 sync @2026-03-12');
+        });
+
         it('line without @notation is unchanged', () => {
             const line = '- [ ] Plain task without date';
             expect(callShiftInlineDates(line, 5)).toBe(line);
