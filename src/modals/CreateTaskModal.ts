@@ -1,7 +1,6 @@
 import { DateUtils } from '../utils/DateUtils';
 import { type App, Setting } from 'obsidian';
 import { t } from '../i18n';
-import { TaskParser } from '../services/parsing/TaskParser';
 import { NO_TASK_LOOKUP } from '../services/display/DisplayTaskConverter';
 import { createTempTask } from '../services/data/createTempTask';
 import { TaskNameSuggest } from '../suggest/TaskNameSuggest';
@@ -11,6 +10,11 @@ import { DateFieldGroup } from './form/DateFieldGroup';
 import { OverlayShell } from '../views/sharedUI/OverlayShell';
 import { hostWindow } from '../utils/HostWindow';
 
+/**
+ * What the dialog asks for: the fields of a new task line, less its status
+ * and marker, which the caller supplies when it writes the line with
+ * `formatTaskLine`.
+ */
 export interface CreateTaskResult {
     content: string;
     startDate?: string;   // YYYY-MM-DD
@@ -18,23 +22,6 @@ export interface CreateTaskResult {
     endDate?: string;     // YYYY-MM-DD
     endTime?: string;     // HH:mm
     due?: string;    // YYYY-MM-DD or YYYY-MM-DDThh:mm
-}
-
-/**
- * Format a CreateTaskResult into a markdown task line (e.g. "- [ ] 会議 @2026-02-05T10:00>11:00").
- * Uses TaskParser.format() to ensure notation is consistent with the rest of the plugin.
- */
-export function formatTaskLine(result: CreateTaskResult): string {
-    const task = createTempTask({
-        id: 'create-temp',
-        content: result.content,
-        startDate: result.startDate,
-        startTime: result.startTime,
-        endDate: result.endDate,
-        endTime: result.endTime,
-        due: result.due,
-    });
-    return TaskParser.format(task);
 }
 
 export interface CreateTaskModalOptions {

@@ -17,7 +17,9 @@ import { childCopyMigrationWarning } from '../services/flow/ChildCopyMigration';
 import { FLOW_MARKER, isFlowLine, matchFlowLine } from '../services/parsing/utils/FlowLineScanner';
 import { diagnosticText } from '../services/lang/flow/diagnosticText';
 import { TaskLineClassifier } from '../services/parsing/utils/TaskLineClassifier';
-import { TaskParser } from '../services/parsing/TaskParser';
+import { lineParsers, lineParsersFingerprint } from '../services/parsing/TaskParser';
+import type { ParserChain } from '../services/parsing/strategies/ParserChain';
+import type { TaskViewerSettings } from '../types';
 import { dateBlockDiagnostics } from '../services/parsing/tv-inline/DateBlockDiagnostics';
 import { outlineDiagnostics } from '../services/parsing/utils/OutlineDiagnostics';
 import {
@@ -71,14 +73,42 @@ interface SegmentLoc {
  * and verdicts match the scanner exactly.
  *
  * Deliberately TaskIndex-independent — lines are re-parsed, so diagnostics
- * track unsaved text immediately. Results are memoized by source text;
- * both caches are dropped when the parser chain is rebuilt (settings).
+ * track unsaved text immediately. Results are memoized by source text. The
+ * line parse is keyed on the settings it was read with
+ * (`lineParsersFingerprint`): when they change, the chain is built again from
+ * them and the caches that hold its verdicts are dropped.
  */
-export function createDiagnosticsExtension(): Extension {
+export function createDiagnosticsExtension(settings: () => TaskViewerSettings): Extension {
     const cache = new Map<string, ParseFlowSegmentsResult>();
     const dateCache = new Map<string, Diagnostic[]>();
     const inertCache = new Map<string, InertNotation | null>();
     const CACHE_CAP = 500;
+
+    /**
+     * The chain the date and inert caches were filled with, and the
+     * fingerprint of the settings it was built from. The settings object is
+     * mutated in place, so the fingerprint, not the reference, says whether
+     * it still reads lines the same way.
+     */
+    let chain: { key: string; parsers: ParserChain } | null = null;
+    /**
+     * Bring the chain up to the current settings, dropping the caches filled
+     * with an older one, and return its fingerprint.
+     */
+    const syncChain = (): string => {
+        const current = settings();
+        const key = lineParsersFingerprint(current);
+        if (chain?.key !== key) {
+            chain = { key, parsers: lineParsers(current) };
+            dateCache.clear();
+            inertCache.clear();
+        }
+        return key;
+    };
+    const parsers = (): ParserChain => {
+        syncChain();
+        return chain!.parsers;
+    };
 
     /**
      * The parse of one flow group, memoized. The program is kept alongside
@@ -89,11 +119,11 @@ export function createDiagnosticsExtension(): Extension {
         memoize(cache, CACHE_CAP, raws.join('\n'), () => parseFlowSegments(raws));
 
     const dateDiagnosticsFor = (lineText: string): Diagnostic[] =>
-        memoize(dateCache, CACHE_CAP, lineText, () => dateBlockDiagnostics(lineText));
+        memoize(dateCache, CACHE_CAP, lineText, () => dateBlockDiagnostics(lineText, parsers()));
 
-    /** Memoized `inertNotationOf` — same chain-generation lifetime as the rest. */
+    /** Memoized `inertNotationOf` — same chain lifetime as the date cache. */
     const inertNotationFor = (lineText: string): InertNotation | null =>
-        memoize(inertCache, CACHE_CAP, lineText, () => inertNotationOf(lineText));
+        memoize(inertCache, CACHE_CAP, lineText, () => inertNotationOf(lineText, parsers()));
 
     /**
      * The note's reading (list items, subtrees, code) and its per-doc cache
@@ -399,24 +429,22 @@ export function createDiagnosticsExtension(): Extension {
     return ViewPlugin.fromClass(
         class {
             decorations: DecorationSet;
-            chainGeneration = TaskParser.getChainGeneration();
+            /** Fingerprint of the settings these decorations were drawn with. */
+            drawnWith: string;
 
             constructor(view: EditorView) {
+                this.drawnWith = syncChain();
                 this.decorations = buildDecorations(view);
             }
 
             update(update: ViewUpdate) {
-                // A parser-chain rebuild (settings change) invalidates date
-                // ownership/verdicts — drop both caches and redecorate.
-                // Clearing shared caches from multiple editors is idempotent.
-                const generation = TaskParser.getChainGeneration();
-                if (generation !== this.chainGeneration) {
-                    this.chainGeneration = generation;
-                    cache.clear();
-                    dateCache.clear();
-                    inertCache.clear();
-                    this.decorations = buildDecorations(update.view);
-                } else if (update.docChanged || update.viewportChanged) {
+                // Settings that read lines differently invalidate date
+                // ownership/verdicts. The chain and its caches are shared by
+                // every editor, so the first to notice rebuilds them; each
+                // editor redecorates when its own marks came from the old one.
+                const key = syncChain();
+                if (key !== this.drawnWith || update.docChanged || update.viewportChanged) {
+                    this.drawnWith = key;
                     this.decorations = buildDecorations(update.view);
                 }
             }

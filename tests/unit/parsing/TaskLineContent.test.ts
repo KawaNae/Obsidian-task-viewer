@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { TaskLineClassifier } from '../../../src/services/parsing/utils/TaskLineClassifier';
 import { TVInlineParser } from '../../../src/services/parsing/tv-inline/TVInlineParser';
-import { createTempTask } from '../../../src/services/data/createTempTask';
+import { type TaskLineFields, formatRow, formatTaskLine } from '../../../src/services/parsing/TaskLineFormat';
 
 /**
  * A checkbox is a task to Obsidian only with a space or a tab after its `]`.
@@ -36,16 +36,21 @@ describe('TaskLineClassifier.joinContent', () => {
     });
 });
 
-describe('TVInlineParser.format', () => {
-    const format = (fields: Parameters<typeof createTempTask>[0]) => new TVInlineParser().format(createTempTask(fields));
+describe('formatTaskLine', () => {
+    const format = (fields: Partial<TaskLineFields>) => formatTaskLine({ statusChar: ' ', content: '', ...fields });
 
     it('writes a task with nothing in it as `- [ ] `', () => {
-        expect(format({ id: 't' })).toBe('- [ ] ');
+        expect(format({})).toBe('- [ ] ');
     });
 
     it('writes one space between the checkbox and each part that is there', () => {
-        expect(format({ id: 't', startDate: '2026-01-01' })).toBe('- [ ] @2026-01-01');
-        expect(format({ id: 't', content: 'a', startDate: '2026-01-01' })).toBe('- [ ] a @2026-01-01');
+        expect(format({ startDate: '2026-01-01' })).toBe('- [ ] @2026-01-01');
+        expect(format({ content: 'a', startDate: '2026-01-01' })).toBe('- [ ] a @2026-01-01');
+    });
+
+    it('writes the marker it is given, and `- ` without one', () => {
+        expect(format({ content: 'a', marker: '1. ' })).toBe('1. [ ] a');
+        expect(format({ content: 'a' })).toBe('- [ ] a');
     });
 
     it('reads back as the task it wrote, for every empty part', () => {
@@ -53,7 +58,7 @@ describe('TVInlineParser.format', () => {
         for (const line of ['- [ ] ', '- [x] ^abc', '- [ ] @2026-01-01', '- [ ] ==> every mon', '- [ ] a ==> every mon ^abc']) {
             const task = parser.parse(line, 'n.md', 0)!;
             expect(task).not.toBeNull();
-            expect(parser.format(task)).toBe(line);
+            expect(formatRow(task)).toBe(line);
         }
     });
 });

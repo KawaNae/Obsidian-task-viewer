@@ -13,7 +13,8 @@ import type { Menu } from 'obsidian';
 import { t } from '../../i18n';
 import type { PluginContext } from '../../PluginContext';
 import type { TimerHost } from '../../timer/TimerWidget';
-import { CreateTaskModal, formatTaskLine } from '../../modals/CreateTaskModal';
+import { CreateTaskModal } from '../../modals/CreateTaskModal';
+import { formatTaskLine } from '../../services/parsing/TaskLineFormat';
 import { Destination } from '../../services/persistence/Destination';
 
 export type DailyNoteTimerType = 'pomodoro' | 'countup';
@@ -52,7 +53,7 @@ export function openCreateTaskForDailyNote(
     new CreateTaskModal(
         plugin.app,
         async (result) => {
-            const taskLine = formatTaskLine(result);
+            const taskLine = formatTaskLine({ statusChar: ' ', ...result });
             // `date` is the file's day (the visual column), which is not always
             // the task's own start date — a click past midnight seeds the next
             // day while still belonging to this column's note.

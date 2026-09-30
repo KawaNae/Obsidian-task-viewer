@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { contentKeyOf } from '../../../src/services/core/ContentKey';
 import { writeBench, FILE, type Filed, type WriteBench } from '../helpers/writeBench';
 import type { Task } from '../../../src/types';
-import { TaskParser } from '../../../src/services/parsing/TaskParser';
+import { formatRow } from '../../../src/services/parsing/TaskLineFormat';
 import type { TaskOp } from '../../../src/services/persistence/TaskOps';
 import { plannedOn } from '../../../src/services/persistence/TaskRefs';
 
@@ -26,7 +26,7 @@ const checked = (task: Task): Task => ({ ...task, statusChar: 'x' });
 /** A recurrence's fire as the executor writes it: the next instance, then the strip, one write. */
 const fire = (task: Task, next: string): TaskOp[] => [
     { kind: 'insert-instance', insert: { kind: 'recurrence', content: next, flowLines: ['every 1d'] } },
-    { kind: 'strip-flow', text: TaskParser.format({ ...task, flow: undefined }).trim() },
+    { kind: 'strip-flow', text: formatRow({ ...task, flow: undefined }).trim() },
 ];
 
 /** The one claim a write filed. */

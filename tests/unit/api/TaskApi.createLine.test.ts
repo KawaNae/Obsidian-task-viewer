@@ -159,3 +159,39 @@ describe('the line create and insertChildTask write', () => {
         expect(writeService.insertLine).toHaveBeenCalledWith('parent-1', '- [ ] child', 'firstChild');
     });
 });
+
+describe('the date block create writes', () => {
+    const written = async (params: { start?: string; end?: string; due?: string }): Promise<string> => {
+        const { api, writeService } = createMockApiForCreate({
+            insertedLine: 5,
+            createdTask: makeFullTask({ line: 5 }),
+        });
+        await api.create({ file: 'test.md', content: 't', ...params });
+        return writeService.createTask.mock.calls[0][1];
+    };
+
+    it.each([
+        [{ start: '2026-07-18' }, '- [ ] t @2026-07-18'],
+        [{ start: '2026-07-18 09:00' }, '- [ ] t @2026-07-18T09:00'],
+        [{ start: '09:00' }, '- [ ] t @09:00'],
+        [{ start: '2026-07-18', end: '2026-07-20' }, '- [ ] t @2026-07-18>2026-07-20'],
+        [{ start: '2026-07-18 09:00', end: '2026-07-20 10:00' }, '- [ ] t @2026-07-18T09:00>2026-07-20T10:00'],
+        [{ start: '2026-07-18 09:00', end: '10:00' }, '- [ ] t @2026-07-18T09:00>10:00'],
+        [{ end: '2026-07-20' }, '- [ ] t @>2026-07-20'],
+        [{ due: '2026-07-25' }, '- [ ] t @>>2026-07-25'],
+        [{ start: '2026-07-18', due: '2026-07-25' }, '- [ ] t @2026-07-18>>2026-07-25'],
+        [{ start: '2026-07-18', end: '2026-07-20', due: '2026-07-25' }, '- [ ] t @2026-07-18>2026-07-20>2026-07-25'],
+    ])('%j -> %j', async (params, line) => {
+        expect(await written(params)).toBe(line);
+    });
+
+    // Pinned as they are: the hand-built block drops a due's time and spells
+    // an end on the start's own day in full.
+    it.each([
+        [{ start: '2026-07-18', due: '2026-07-25 17:00' }, '- [ ] t @2026-07-18>>2026-07-25'],
+        [{ start: '2026-07-18 09:00', end: '2026-07-18 10:00' }, '- [ ] t @2026-07-18T09:00>2026-07-18T10:00'],
+        [{ start: '2026-07-18', end: '2026-07-18' }, '- [ ] t @2026-07-18>2026-07-18'],
+    ])('%j -> %j', async (params, line) => {
+        expect(await written(params)).toBe(line);
+    });
+});

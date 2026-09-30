@@ -15,7 +15,8 @@ import { PathTtlWindow } from './PathTtlWindow';
 import { refusalNotice, type IndexRefusal } from './RefusalClause';
 import { NotifyCoalescer } from './NotifyCoalescer';
 import { TaskIdGenerator } from '../display/TaskIdGenerator';
-import { TaskParser } from '../parsing/TaskParser';
+import { formatRow } from '../parsing/TaskLineFormat';
+import { lineParsersFingerprint } from '../parsing/TaskParser';
 import { toDisplayTask } from '../display/DisplayTaskConverter';
 import { planInPlaceCopies } from '../persistence/DuplicateShift';
 import type { GenBlock } from '../parsing/gen/GenBlockCollector';
@@ -349,7 +350,6 @@ export class TaskIndex {
         const needsRescan = newFingerprint !== this.parseFingerprint;
         this.parseFingerprint = newFingerprint;
         this.settings = settings;
-        TaskParser.rebuildChain(settings);
         this.scanner.updateSettings(settings);
         if (needsRescan) {
             this.scanner.scanVault()
@@ -530,8 +530,8 @@ export class TaskIndex {
             this.store.notifyListeners(taskId, Object.keys(updates));
         }
 
-        // All inline tasks route through InlineTaskWriter; TaskParser.format
-        // dispatches by parserId. TVInlineParser.format() handles both
+        // All inline tasks route through InlineTaskWriter; formatRow writes
+        // a tv-inline row with formatTaskLine, which handles both
         // bare-checkbox and @notation-bearing output, so a task gaining or
         // losing date fields just produces the right line — no parserId
         // promotion/demotion needed.
@@ -547,7 +547,7 @@ export class TaskIndex {
         // （`completes`）。発火の計画は書き込みの中で、書く行から立てる。
         const target = plannedOn(before, { subtree: propertyOps.length > 0 });
         const written = await this.writeCompleting(
-            completes(before.originalText, TaskParser.format(task), this.settings.statusDefinitions) ? task.file : null,
+            completes(before.originalText, formatRow(task), this.settings.statusDefinitions) ? task.file : null,
             (fire) => this.repository.updateTaskInFile(target, task, propertyOps, fire));
 
         if (!written) {
@@ -1036,7 +1036,7 @@ export class TaskIndex {
             plannedOn(task),
             copies.kind === 'verbatim'
                 ? copies
-                : { kind: 'lines', lines: copies.tasks.map(copy => TaskParser.format(copy)) },
+                : { kind: 'lines', lines: copies.tasks.map(copy => formatRow(copy)) },
         );
         return outcome.written;
     }
@@ -1088,7 +1088,7 @@ export class TaskIndex {
             return this.withNotify(task.file, async () => {
                 logInfo(`[insertLine] taskId=${taskId} place=${place}${rowId === undefined ? '' : ` rowId=${rowId ?? '(off)'}`}`);
                 const ops: TaskOp[] = [];
-                if (rowId !== undefined) ops.push({ kind: 'update', text: TaskParser.format({ ...task, blockId: rowId ?? undefined }) });
+                if (rowId !== undefined) ops.push({ kind: 'update', text: formatRow({ ...task, blockId: rowId ?? undefined }) });
                 ops.push({ kind: 'insert', place, text: line });
                 const { written } = await this.repository.applyToTask(plannedOn(task), ops);
                 return written;
@@ -1213,19 +1213,13 @@ function shortKey(key: ContentKey | undefined): string {
 // called with the same ref). Field-by-field prev/next comparison would always
 // see them as equal.
 //
-//   scopeKeys          — frontmatter field names for tv-start/end/due/etc.
-//   enableDayPlanner    — toggles DayPlanner parser in the chain
-//   enableTasksPlugin   — toggles TasksPlugin parser in the chain
-//   tasksPluginMapping  — emoji-to-field mapping for TasksPlugin parser
+//   scopeKeys           — frontmatter field names for tv-start/end/due/etc.
+//   lineParsersFingerprint — what the parser chain reads (which parsers are
+//                         on, the Tasks emoji mapping); see lineParsers
 //
 // Not statusDefinitions: which status chars count as complete is read where a
 // completion is answered and where a view draws, never by the parse, so a
 // change to it needs only the notify.
 export function computeParseFingerprint(settings: TaskViewerSettings): string {
-    return JSON.stringify([
-        settings.scopeKeys,
-        settings.enableDayPlanner,
-        settings.enableTasksPlugin,
-        settings.tasksPluginMapping,
-    ]);
+    return JSON.stringify([settings.scopeKeys, lineParsersFingerprint(settings)]);
 }

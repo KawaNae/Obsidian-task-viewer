@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { enabledLineParserIds, TaskParser } from '../../../src/services/parsing/TaskParser';
+import { enabledLineParserIds, lineParsers, lineParsersFingerprint } from '../../../src/services/parsing/TaskParser';
 import { DEFAULT_SETTINGS } from '../../../src/types';
 import type { TaskViewerSettings } from '../../../src/types';
 
@@ -57,19 +57,29 @@ describe('enabledLineParserIds', () => {
 describe('the chain built from that list', () => {
     it('holds one parser per id, in the same order', () => {
         const settings = settingsWith({ enableDayPlanner: true, enableTasksPlugin: true });
-
-        TaskParser.withChain(settings, () => {
-            const chain = TaskParser.getStrategy() as unknown as { parsers: { id: string }[] };
-            // Mutation: build the chain from its own settings checks again and
-            // the two answers can drift — which is the whole reason the list
-            // is derived once.
-            expect(chain.parsers.map(p => p.id)).toEqual(enabledLineParserIds(settings));
-        });
+        const chain = lineParsers(settings) as unknown as { parsers: { id: string }[] };
+        // Mutation: build the chain from its own settings checks again and
+        // the two answers can drift — which is the whole reason the list
+        // is derived once.
+        expect(chain.parsers.map(p => p.id)).toEqual(enabledLineParserIds(settings));
     });
 
-    it('is restored after withChain, list and all', () => {
-        const before = TaskParser.getStrategy();
-        TaskParser.withChain(settingsWith({ enableDayPlanner: true }), () => { /* swapped */ });
-        expect(TaskParser.getStrategy()).toBe(before);
+    it('is built from the settings it is handed, and from nothing else', () => {
+        const line = '- [ ] 09:00 - 10:00 standup';
+        expect(lineParsers(settingsWith({ enableDayPlanner: true })).parse(line, 'n.md', 0)!.parserId).toBe('day-planner');
+        // Mutation: keep a chain between calls and this reads day-planner too.
+        expect(lineParsers(settingsWith({ enableDayPlanner: false })).parse(line, 'n.md', 0)!.parserId).toBe('tv-inline');
+    });
+});
+
+describe('lineParsersFingerprint', () => {
+    it('changes with what the chain reads, and only with that', () => {
+        const base = lineParsersFingerprint(DEFAULT_SETTINGS);
+        expect(lineParsersFingerprint(settingsWith({ enableDayPlanner: true }))).not.toBe(base);
+        expect(lineParsersFingerprint(settingsWith({ enableTasksPlugin: true }))).not.toBe(base);
+        expect(lineParsersFingerprint(settingsWith({
+            tasksPluginMapping: { ...DEFAULT_SETTINGS.tasksPluginMapping, start: 'due' as const },
+        }))).not.toBe(base);
+        expect(lineParsersFingerprint(settingsWith({ startHour: DEFAULT_SETTINGS.startHour + 1 }))).toBe(base);
     });
 });

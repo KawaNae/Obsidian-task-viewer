@@ -4,7 +4,7 @@ import type { DocumentNode, SectionNode, TaskBlock } from './DocumentTree';
 import { BuiltinPropertyExtractor } from './BuiltinPropertyExtractor';
 import { ChildLineClassifier } from '../utils/ChildLineClassifier';
 import { TagExtractor } from '../utils/TagExtractor';
-import { TaskParser } from '../TaskParser';
+import type { ParserChain } from '../strategies/ParserChain';
 import { collectFlowLineIndices, flowLineTail } from '../utils/FlowLineScanner';
 import { flowValidation, parseFlowSegments } from '../../lang/flow/FlowSegments';
 import { Outline, type OutlineReading } from '../utils/Outline';
@@ -12,6 +12,8 @@ import { Outline, type OutlineReading } from '../utils/Outline';
 export interface TaskExtractionContext {
     filePath: string;
     scopeKeys: ScopeKeys;
+    /** The chain the note's task lines are read with (`lineParsers(settings)`). */
+    parsers: ParserChain;
 }
 
 /** What extracting one note's tasks reads: the context and the note's one reading. */
@@ -65,7 +67,7 @@ export class TreeTaskExtractor {
         section: SectionNode,
         ctx: NoteContext
     ): BlockOutcome {
-        const task = TaskParser.parse(block.rawLine, ctx.filePath, block.line);
+        const task = ctx.parsers.parse(block.rawLine, ctx.filePath, block.line);
         if (!task) return { kind: 'lines' };
 
         const flowLineIndices = this.mergeChildFlow(task, block, ctx.outline);

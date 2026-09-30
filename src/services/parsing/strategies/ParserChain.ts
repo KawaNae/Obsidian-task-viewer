@@ -28,18 +28,4 @@ export class ParserChain implements ParserStrategy {
         }
         return null;
     }
-
-    /**
-     * Format using the original parser that parsed this task.
-     */
-    format(task: Task): string {
-        if (task.parserId) {
-            const parser = this.parsers.find(p => p.id === task.parserId);
-            if (parser) {
-                return parser.format(task);
-            }
-        }
-        // Fallback: use originalText or first parser
-        return task.originalText || this.parsers[0].format(task);
-    }
 }

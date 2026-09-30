@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { planInPlaceCopies } from '../../../src/services/persistence/DuplicateShift';
 import { toDisplayTask } from '../../../src/services/display/DisplayTaskConverter';
-import { TaskParser } from '../../../src/services/parsing/TaskParser';
+import { formatRow } from '../../../src/services/parsing/TaskLineFormat';
 import type { Task } from '../../../src/types';
 
 const START_HOUR = 5;
@@ -35,7 +35,7 @@ function copyLines(task: Task, count = 1): string[] {
         // with the line the task was parsed from.
         return Array.from({ length: plan.count }, () => task.originalText);
     }
-    return plan.tasks.map(copy => TaskParser.format(copy));
+    return plan.tasks.map(copy => formatRow(copy));
 }
 
 /** Whether the plan moves the task at all, as opposed to repeating its line. */

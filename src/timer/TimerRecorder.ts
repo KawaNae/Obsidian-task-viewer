@@ -11,10 +11,9 @@ import { type Opening, type PendingRecord, type TimerInstance, dailyDateOf, desc
 import { DailyNoteUtils } from '../utils/DailyNoteUtils';
 import { Destination } from '../services/persistence/Destination';
 import { DateUtils } from '../utils/DateUtils';
-import { TaskParser } from '../services/parsing/TaskParser';
+import { type TaskLineFields, formatTaskLine } from '../services/parsing/TaskLineFormat';
 import type { Task } from '../types';
 import type { AnchoredRow } from '../services/core/TaskIndex';
-import { createTempTask } from '../services/data/createTempTask';
 import { TimeFormatter } from '../utils/TimeFormatter';
 import { type TimerIcon, getTimerIcon, splitTimerIcon, withTimerIcon } from '../utils/TimerIcons';
 import { decideLazyEnd } from './TimerLazyEnd';
@@ -59,14 +58,14 @@ export class TimerRecorder {
         const startTime = new Date(endTime.getTime() - elapsedSeconds * 1000);
 
         const icon = this.getTimerIcon(timer);
-        const taskObj = this.createTaskObject(
+        const fields = this.recordFields(
             this.recordLabel(timer),
             this.formatDate(startTime),
             this.formatTime(startTime),
             this.formatDate(endTime),
             this.formatTime(endTime)
         );
-        if (!(await this.writeRecordLine(timer, taskObj))) return false;
+        if (!(await this.writeRecordLine(timer, fields))) return false;
         new Notice(t('notice.timerRecorded', { icon, duration: TimeFormatter.formatSeconds(elapsedSeconds) }));
         return true;
     }
@@ -80,14 +79,14 @@ export class TimerRecorder {
         const startTime = new Date(endTime.getTime() - elapsedSeconds * 1000);
 
         const icon = this.getTimerIcon(timer);
-        const taskObj = this.createTaskObject(
+        const fields = this.recordFields(
             this.recordLabel(timer),
             this.formatDate(startTime),
             this.formatTime(startTime),
             this.formatDate(endTime),
             this.formatTime(endTime)
         );
-        if (!(await this.writeRecordLine(timer, taskObj))) return false;
+        if (!(await this.writeRecordLine(timer, fields))) return false;
         new Notice(t('notice.countdownRecorded', { icon, duration: TimeFormatter.formatSeconds(elapsedSeconds) }));
         return true;
     }
@@ -104,14 +103,14 @@ export class TimerRecorder {
         const isPomodoroSource = timer.timerType === 'interval' && timer.intervalSource === 'pomodoro';
         const icon = this.getTimerIcon(timer);
 
-        const taskObj = this.createTaskObject(
+        const fields = this.recordFields(
             this.recordLabel(timer),
             this.formatDate(startTime),
             this.formatTime(startTime),
             this.formatDate(endTime),
             this.formatTime(endTime)
         );
-        if (!(await this.writeRecordLine(timer, taskObj))) return false;
+        if (!(await this.writeRecordLine(timer, fields))) return false;
         const kind = isPomodoroSource ? 'Pomodoro' : 'Interval';
         new Notice(t('notice.kindRecorded', { icon, kind, duration: TimeFormatter.formatSeconds(elapsedSeconds) }));
         return true;
@@ -450,16 +449,14 @@ export class TimerRecorder {
         const now = new Date(startMs);
         const blockId = this.storageUtils.generateTimerTargetId();
 
-        const taskObj = this.createTaskObject(
+        const fields = this.recordFields(
             this.sessionName(timer),
             this.formatDate(now),
             this.formatTime(now),
             '', ''
         );
-        taskObj.statusChar = ' ';
-        taskObj.blockId = blockId;
 
-        return { line: TaskParser.format(taskObj), blockId };
+        return { line: formatTaskLine({ ...fields, statusChar: ' ', blockId }), blockId };
     }
 
     /**
@@ -816,9 +813,9 @@ export class TimerRecorder {
      *
      * @returns whether the record was written. Not written has been told to the user, once.
      */
-    private async writeRecordLine(timer: TimerInstance, record: Task): Promise<boolean> {
+    private async writeRecordLine(timer: TimerInstance, record: TaskLineFields): Promise<boolean> {
         const anchor = this.storageUtils.generateTimerTargetId();
-        const line = TaskParser.format({ ...record, blockId: anchor });
+        const line = formatTaskLine({ ...record, blockId: anchor });
         return this.writeOpening(timer, this.opening(timer, anchor, { puts: [anchor] }), () => this.writeChildLine(timer, line));
     }
 
@@ -838,24 +835,23 @@ export class TimerRecorder {
     }
 
     /**
-     * Create a minimal Task object for formatting.
+     * The fields of a record line the timer writes: done, with its span.
      */
-    private createTaskObject(
+    private recordFields(
         label: string,
         startDate: string,
         startTime: string,
         endDate: string,
         endTime: string
-    ): Task {
-        return createTempTask({
-            id: 'timer-temp',
+    ): TaskLineFields {
+        return {
             content: label,
             statusChar: 'x',
             startDate,
             startTime,
             endDate: endDate || undefined,
             endTime: endTime || undefined,
-        });
+        };
     }
 
     private formatDate(d: Date): string {

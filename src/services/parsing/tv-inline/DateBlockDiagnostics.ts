@@ -1,6 +1,6 @@
 import type { Diagnostic } from '../../lang/Diagnostic';
 import type { DateTimeRule } from '../../../types';
-import { TaskParser } from '../TaskParser';
+import type { ParserChain } from '../strategies/ParserChain';
 import { locateDateBlock, spansForRule } from './DateBlockLocator';
 
 /**
@@ -18,11 +18,11 @@ import { locateDateBlock, spansForRule } from './DateBlockLocator';
  * (message + hint); diagnosticText() falls back to it because date rules
  * have no `flowDiag.*` entry.
  */
-export function dateBlockDiagnostics(lineText: string): Diagnostic[] {
+export function dateBlockDiagnostics(lineText: string, parsers: ParserChain): Diagnostic[] {
     const loc = locateDateBlock(lineText);
     if (!loc) return []; // every date validation requires a block — no false negatives
 
-    const task = TaskParser.parse(lineText, '', 0);
+    const task = parsers.parse(lineText, '', 0);
     if (!task || task.parserId !== 'tv-inline' || !task.validation) return [];
 
     const { rule, severity, message, hint } = task.validation;

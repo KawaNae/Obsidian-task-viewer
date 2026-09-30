@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { DocumentTreeBuilder } from '../../../../src/services/parsing/tree/DocumentTreeBuilder';
 import { SectionPropertyResolver } from '../../../../src/services/parsing/tree/SectionPropertyResolver';
 import { TreeTaskExtractor, type TaskExtractionContext } from '../../../../src/services/parsing/tree/TreeTaskExtractor';
-import { TaskParser } from '../../../../src/services/parsing/TaskParser';
+import { lineParsers } from '../../../../src/services/parsing/TaskParser';
 import { DEFAULT_SETTINGS, DEFAULT_SCOPE_KEYS } from '../../../../src/types';
 import {
     getEffectiveColor, getEffectiveLinestyle, getEffectiveMask,
@@ -12,6 +12,7 @@ import {
 const defaultCtx: TaskExtractionContext = {
     filePath: 'test.md',
     scopeKeys: DEFAULT_SCOPE_KEYS,
+    parsers: lineParsers(DEFAULT_SETTINGS),
 };
 
 function extractTasks(bodyLines: string[], frontmatter?: Record<string, any>, ctx?: Partial<TaskExtractionContext>) {
@@ -779,16 +780,14 @@ describe('TreeTaskExtractor', () => {
         });
 
         it('非 tv-inline タスクの `- ==>` 子行は通常の childLine のまま', () => {
-            TaskParser.withChain({ ...DEFAULT_SETTINGS, enableDayPlanner: true }, () => {
-                const tasks = extractTasks([
-                    '- [ ] 09:00 - 10:00 dp task',
-                    '    - ==> every mon',
-                ], { 'tv-start': '2026-03-24' });
-                expect(tasks).toHaveLength(1);
-                expect(tasks[0].parserId).toBe('day-planner');
-                expect(tasks[0].flow).toBeUndefined();
-                expect(tasks[0].childLines.map(cl => cl.text.trim())).toEqual(['- ==> every mon']);
-            });
+            const tasks = extractTasks([
+                '- [ ] 09:00 - 10:00 dp task',
+                '    - ==> every mon',
+            ], { 'tv-start': '2026-03-24' }, { parsers: lineParsers({ ...DEFAULT_SETTINGS, enableDayPlanner: true }) });
+            expect(tasks).toHaveLength(1);
+            expect(tasks[0].parserId).toBe('day-planner');
+            expect(tasks[0].flow).toBeUndefined();
+            expect(tasks[0].childLines.map(cl => cl.text.trim())).toEqual(['- ==> every mon']);
         });
     });
 

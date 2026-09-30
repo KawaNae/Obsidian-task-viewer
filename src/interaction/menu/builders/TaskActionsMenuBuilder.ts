@@ -3,7 +3,8 @@ import type { Task } from '../../../types';
 import type { TaskWriteService } from '../../../services/data/TaskWriteService';
 import type { PluginContext } from '../../../PluginContext';
 import type { TimerHost } from '../../../timer/TimerWidget';
-import { CreateTaskModal, formatTaskLine } from '../../../modals/CreateTaskModal';
+import { CreateTaskModal } from '../../../modals/CreateTaskModal';
+import { formatTaskLine } from '../../../services/parsing/TaskLineFormat';
 import { ConfirmModal } from '../../../modals/ConfirmModal';
 import { FlowDeleteChoiceModal } from '../../../modals/FlowDeleteChoiceModal';
 import { SendModal } from '../../../modals/noteops/SendModal';
@@ -118,7 +119,7 @@ export class TaskActionsMenuBuilder {
                 .onClick(() => {
                     menu.close();
                     new CreateTaskModal(this.app, async (result) => {
-                        const taskLine = formatTaskLine(result);
+                        const taskLine = formatTaskLine({ statusChar: ' ', ...result });
                         await this.writeService.insertLine(task.id, taskLine, 'firstChild');
                     }, {}, { startHour: this.plugin.settings.startHour }).open();
                 });

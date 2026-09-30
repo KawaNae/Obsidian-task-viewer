@@ -12,7 +12,7 @@ import { TagExtractor } from '../parsing/utils/TagExtractor';
  * property merge closes over the Task alone, so it stays a derived helper
  * (same pattern as `getTaskNotation`).
  *
- * Consumers: display, filter, sort, API output. Writers and format() must
+ * Consumers: display, filter, sort, API output. Writers and formatTaskLine must
  * keep reading raw fields only — inherited values are never serialized.
  */
 
