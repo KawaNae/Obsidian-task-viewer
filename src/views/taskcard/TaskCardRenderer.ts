@@ -46,6 +46,7 @@ import type { ChildRenderItem, TaskCardLinkRuntime } from './types';
 import { getEffectiveMask } from '../../services/data/EffectiveProperties';
 import { TaskIdGenerator } from '../../services/display/TaskIdGenerator';
 import { holdCard, type CardHold } from './CardHold';
+import { withoutEmbeds } from '../../services/parsing/utils/InlineNotation';
 
 /**
  * What a card shows, to tell whether a kept card can stay as it is drawn.
@@ -321,9 +322,7 @@ export class TaskCardRenderer extends Component {
             const childCountBar = container.createDiv('task-card__child-count');
             const countLabelSpan = childCountBar.createSpan();
 
-            const strippedMarkdown = parentMarkdown
-                .replace(/!\[\[([^\]]*)\]\]/g, '')
-                .replace(/!\[([^\]]*)\]\([^)]*\)/g, '');
+            const strippedMarkdown = withoutEmbeds(parentMarkdown);
             await MarkdownRenderer.render(this.app, strippedMarkdown, contentContainer, task.file, cardComp);
 
             const { completed, total } = this.getChildCompletion(task, settings);

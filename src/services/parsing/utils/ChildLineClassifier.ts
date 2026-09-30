@@ -5,6 +5,7 @@ import { INDENT_SOURCE, Outline, type OutlineReading } from './Outline';
 import { extractWikilinkTarget } from '../../../utils/WikilinkUtils';
 import { FLOW_LINE_RE } from './FlowLineScanner';
 import { TaskLineClassifier } from './TaskLineClassifier';
+import { WIKILINK_SOURCE, WIKILINK_TEXT_SOURCE } from './InlineNotation';
 
 /**
  * 子行のパース・分類ユーティリティ。
@@ -16,7 +17,7 @@ export class ChildLineClassifier {
      * marker is followed by spaces and tabs as a list item's is
      * (`Outline.read`); a no-break space there opens no item.
      */
-    static readonly WIKILINK_CHILD = new RegExp(`^${INDENT_SOURCE}${LIST_BULLET_SOURCE}${SPACE_OR_TAB_SOURCE}+\\[\\[([^\\]]+)\\]\\]\\s*$`);
+    static readonly WIKILINK_CHILD = new RegExp(`^${INDENT_SOURCE}${LIST_BULLET_SOURCE}${SPACE_OR_TAB_SOURCE}+\\[\\[(${WIKILINK_TEXT_SOURCE}+)\\]\\]\\s*$`);
     /**
      * Matches `- key:: value` (Dataview-compatible). A key holds no `[` or `]`,
      * so a checkbox line and a wikilink line are never property lines.
@@ -130,4 +131,4 @@ export class ChildLineClassifier {
 }
 
 /** A wikilink or embed, which an array value holds as one item. */
-const ARRAY_ITEM_LINK = /!?\[\[[^[\]\r\n]*\]\]/g;
+const ARRAY_ITEM_LINK = new RegExp(`!?${WIKILINK_SOURCE}`, 'g');

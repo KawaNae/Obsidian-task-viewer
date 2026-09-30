@@ -1,21 +1,18 @@
+import { scanNotation } from './InlineNotation';
+
 /**
  * Shared utility for extracting tags from task content and frontmatter.
  */
 export class TagExtractor {
-    private static readonly TAG_REGEX = /\B#[^\s#]+/g;
-
     /**
-     * Extract tags from inline content text.
+     * The tags of inline content text: its `#tag` notation outside code and
+     * links (`scanNotation`), so `[[報告書#見出し]]` holds none.
      * Returns sorted, deduplicated tag names (without leading #).
      */
     static fromContent(content: string): string[] {
         const tags = new Set<string>();
-        const matches = content.match(TagExtractor.TAG_REGEX) ?? [];
-        for (const raw of matches) {
-            const tag = raw.substring(1).trim();
-            if (tag.length > 0) {
-                tags.add(tag);
-            }
+        for (const notation of scanNotation(content)) {
+            if (notation.kind === 'tag') tags.add(notation.tag);
         }
         return Array.from(tags).sort();
     }

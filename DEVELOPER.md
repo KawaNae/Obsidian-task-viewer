@@ -109,7 +109,7 @@ src/
 │   │   ├── tv-inline/         # Line-level parsers (TVInlineParser, DayPlannerParser, TasksPluginParser, ReadOnlyParserBase)
 │   │   ├── strategies/        # ParserChain, ParserStrategy
 │   │   ├── tree/              # A note's sections and rows (NoteSections, NoteTasks, Sections, SectionPropertyResolver, BuiltinPropertyExtractor)
-│   │   └── utils/             # Parser utilities (ChildLineClassifier, CodeFenceTracker, Outline, TagExtractor, TaskLineClassifier)
+│   │   └── utils/             # Parser utilities (ChildLineClassifier, CodeFenceTracker, InlineNotation, Outline, TagExtractor, TaskLineClassifier)
 │   ├── persistence/           # Write layer (TaskRepository, TaskCloner)
 │   │   ├── writers/           # FrontmatterWriter, InlineTaskWriter, SendWriter, SendRows (which rows a send takes)
 │   │   └── utils/             # FrontmatterLineEditor, FileOperations
@@ -318,6 +318,12 @@ Merge rules: style is `own ?? cascade`; tags are a sorted union; custom properti
 `@` だけの一致（`@alice`、`@1on1`）はブロックではない。`TVInlineParser` は値を読む。エディタの診断（`DateBlockDiagnostics`）と日をずらす複製（`TaskCloner`）は、`readLineDateBlock(line)` で行の桁の区間を読む。
 
 2つ目以降のブロックは日付ではなく、内容にも入らず、parse-error の診断が付く。その原文は `Task.extraDateBlocks` に残り、`formatTaskLine` が最初のブロックの直後にそのまま書き戻す（issue #198）。位置は本文の途中から最初のブロックの直後へ移る。それでも2つ目以降のままなので、読み直しで開始日は入れ替わらない。日付を消したタスクに余分なブロックがあるときは、最初のブロックとして空の `@>`（日付なし）を書く。
+
+#### 本文の記法
+
+本文の中の記法は `scanNotation(text)`（`parsing/utils/InlineNotation.ts`）が一度に切る。切るものは、コード（`` ` ``）、wikilink と Markdown のリンク（`!` が付けば埋め込み）、タグである。記法の中の記法は数えない。そのため `[[報告書#見出し]]` やコードの中の `#x` はタグにならない。`TagExtractor.fromContent` はこの結果のタグを読む。
+
+リンクの正規表現は同じ断片（`WIKILINK_SOURCE`、`MARKDOWN_LINK_SOURCE`）から組む。使う所は `ChildLineClassifier` の wikilink の子行と配列の項目、`NoteName`、カードの埋め込みの除去（`withoutEmbeds`）である。wikilink の中身は `[` `]` と改行を含まない。
 
 #### ChildLine.bodyLine のセマンティクス
 
