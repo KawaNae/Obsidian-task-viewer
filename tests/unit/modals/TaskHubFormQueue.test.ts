@@ -69,3 +69,22 @@ describe('TaskHubForm.queue', () => {
         expect(h.refresh).not.toHaveBeenCalled();
     });
 });
+
+describe('TaskHubForm.drained', () => {
+    it('resolves once every write queued is done, those queued while it waits too', async () => {
+        const h = formAnswering(true, makeTask({ id: 'task-1' }));
+        const order: string[] = [];
+        let release!: () => void;
+        h.updateTask.mockImplementationOnce(async () => { await new Promise<void>(resolve => { release = resolve; }); order.push('first'); return true; });
+        h.updateTask.mockImplementationOnce(async () => { order.push('second'); return true; });
+
+        h.queue({ content: 'A' });
+        const drained = h.form.drained().then(() => { order.push('drained'); });
+        await Promise.resolve();
+        h.queue({ content: 'B' });
+        release();
+        await drained;
+
+        expect(order).toEqual(['first', 'second', 'drained']);
+    });
+});

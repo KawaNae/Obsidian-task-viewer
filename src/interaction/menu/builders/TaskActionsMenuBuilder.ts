@@ -1,4 +1,4 @@
-import { type App, MarkdownView, type Menu } from 'obsidian';
+import type { App, Menu } from 'obsidian';
 import type { Task } from '../../../types';
 import type { TaskWriteService } from '../../../services/data/TaskWriteService';
 import type { PluginContext } from '../../../PluginContext';
@@ -6,10 +6,11 @@ import type { TimerHost } from '../../../timer/TimerWidget';
 import { CreateTaskModal, formatTaskLine } from '../../../modals/CreateTaskModal';
 import { ConfirmModal } from '../../../modals/ConfirmModal';
 import { FlowDeleteChoiceModal } from '../../../modals/FlowDeleteChoiceModal';
+import { SendModal } from '../../../modals/noteops/SendModal';
 import type { FlowDeleteOutlook } from '../../../services/flow/FlowDeletion';
 import { runtimeText } from '../../../services/flow/runtimeText';
 import { getTaskDisplayName } from '../../../services/parsing/utils/TaskContent';
-import { openFileInExistingOrNewTab } from '../../../utils/NavigationUtils';
+import { openTaskInEditor } from '../../../utils/NavigationUtils';
 import { DateUtils } from '../../../utils/DateUtils';
 import { t } from '../../../i18n';
 import { getEffectiveColor } from '../../../services/data/EffectiveProperties';
@@ -48,11 +49,14 @@ export class TaskActionsMenuBuilder {
     }
 
     /**
-     * G5: 破壊的変更 — Open in Editor / Delete
+     * G5: 破壊的変更 — Open in Editor / Send to Note | Delete
+     * 行を消す Delete だけを、区切り線で前の2つから分ける。
      * onDestructive が渡されているとき各アクション実行後に invoke する。
      */
     addDestructiveActions(menu: Menu, task: Task, onDestructive?: () => void): void {
         this.addOpenInEditorItem(menu, task, onDestructive);
+        this.addSendItem(menu, task, onDestructive);
+        menu.addSeparator();
         this.addDeleteItem(menu, task, onDestructive);
     }
 
@@ -128,26 +132,32 @@ export class TaskActionsMenuBuilder {
         menu.addItem((item) => {
             item.setTitle(t('menu.openInEditor'))
                 .setIcon('document')
+                .onClick(() => {
+                    menu.close();
+                    openTaskInEditor(this.app, task, this.plugin.settings.reuseExistingTab);
+                    onDestructive?.();
+                });
+        });
+    }
+
+    /**
+     * "Send to Note": the row and its subtree, sent to a note the dialog
+     * names (`SendModal`). It opens on the row as the disk holds it
+     * (`NoteOps.previewSend`), and not when the row is not the one there,
+     * which the user is told. The row leaves where it stood once it went,
+     * all of it or some (`onDestructive`); a send not made keeps the dialog
+     * open.
+     */
+    private addSendItem(menu: Menu, task: Task, onDestructive?: () => void): void {
+        menu.addItem((item) => {
+            item.setTitle(t('menu.sendToNote'))
+                .setIcon('send')
                 .onClick(async () => {
                     menu.close();
-                    if (this.plugin.settings.reuseExistingTab) {
-                        openFileInExistingOrNewTab(this.app, task.file);
-                    } else {
-                        await this.app.workspace.openLinkText(task.file, '', true);
-                    }
-                    setTimeout(() => {
-                        const view = this.app.workspace.getActiveViewOfType(MarkdownView);
-                        if (view) {
-                            const editor = view.editor;
-                            const lineText = editor.getLine(task.line);
-                            editor.setSelection(
-                                { line: task.line, ch: 0 },
-                                { line: task.line, ch: lineText.length }
-                            );
-                            editor.focus();
-                        }
-                    }, 100);
-                    onDestructive?.();
+                    const ops = this.plugin.getNoteOps();
+                    const preview = await ops.previewSend([task.id]);
+                    if (!preview) return;
+                    new SendModal(this.app, ops, preview, () => onDestructive?.()).open();
                 });
         });
     }

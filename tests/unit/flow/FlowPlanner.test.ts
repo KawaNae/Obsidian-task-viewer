@@ -55,7 +55,7 @@ describe('FlowPlanner', () => {
         });
 
         it('move alone: move', () => {
-            const effects = plan('move()');
+            const effects = plan('move([[#Done]])');
             expect(effects.map(e => e.kind)).toEqual(['move']);
         });
 
@@ -331,15 +331,22 @@ describe('FlowPlanner', () => {
 
     describe('move', () => {
         it('goes where the parser read it goes, evaluating nothing', () => {
-            const to = (src: string) => plan(src).find(e => e.kind === 'move');
-            expect(to('move()')).toMatchObject({ to: { kind: 'end' } });
-            expect(to('move([[#Done|d]])')).toMatchObject({ to: { kind: 'heading', name: 'Done' } });
-            // Refused where the fire is planned against the note (`FlowExecutor.planTask`).
-            expect(to('move([[Log/]] + file.name)')).toMatchObject({ to: { kind: 'retired' } });
+            expect(plan('move([[#Done|d]])').find(e => e.kind === 'move')).toMatchObject({ heading: 'Done' });
+        });
+
+        it('drops a retired move, and only the move: the command is consumed and the rest is planned', () => {
+            for (const src of ['move([[Log/]] + file.name)', 'move()', 'move([[Other]])']) {
+                const kinds = plan(src).map(e => e.kind);
+                expect(kinds).toEqual(['strip-flow', 'move-dropped']);
+            }
+            const effects = plan('every mon move()');
+            expect(effects.map(e => e.kind)).toEqual(['create-next', 'strip-flow', 'move-dropped']);
+            const dropped = effects[2];
+            expect(dropped.kind === 'move-dropped' && dropped.error.code).toBe('eval.move-retired');
         });
 
         it('strips the flow from the moved task and keeps its ^id: the row is carried, not copied', () => {
-            const move = plan('move()', { blockId: 'xyz' }).find(e => e.kind === 'move');
+            const move = plan('move([[#Done]])', { blockId: 'xyz' }).find(e => e.kind === 'move');
             if (move?.kind !== 'move') throw new Error('no move');
             expect(move.movedTask.flow).toBeUndefined();
             expect(move.movedTask.blockId).toBe('xyz');

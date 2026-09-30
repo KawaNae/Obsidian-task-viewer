@@ -99,14 +99,14 @@ describe('CE2: a command line edited from outside, before any scan read it', () 
 
     it('a move is refused until a scan, then goes where the command names now', async () => {
         const { contents, session } = await open({
-            [FILE]: ['# note', '- [ ] A @2026-09-21', '\t- ==> move()', '\t- [ ] c', '- [ ] Z', '## Done', ''],
+            [FILE]: ['# note', '- [ ] A @2026-09-21', '\t- ==> move([[#Later]])', '\t- [ ] c', '- [ ] Z', '## Done', '## Later', ''],
         });
         const id = idOf(session, 'A');
-        contents.set(FILE, contents.get(FILE)!.replace('move()', 'move([[#Done]])'));
+        contents.set(FILE, contents.get(FILE)!.replace('move([[#Later]])', 'move([[#Done]])'));
 
         await check(session, await refusedUntilScanned(contents, session, id));
 
-        expect(contents.get(FILE)).toBe(['# note', '- [ ] Z', '## Done', '- [x] A @2026-09-21', '\t- [ ] c', ''].join('\n'));
+        expect(contents.get(FILE)).toBe(['# note', '- [ ] Z', '## Done', '- [x] A @2026-09-21', '\t- [ ] c', '## Later', ''].join('\n'));
         expect(Notice.messages).toEqual([]);
     });
 });
@@ -170,14 +170,14 @@ describe('F5: a subtree changed from outside, before any scan read it', () => {
 
     it('a move within the file is refused until a scan, then carries the child as the file holds it', async () => {
         const { contents, session } = await open({
-            [FILE]: ['# note', '- [ ] A @2026-09-21', '\t- ==> move()', '\t- [ ] 子', '- [ ] Z', ''],
+            [FILE]: ['# note', '- [ ] A @2026-09-21', '\t- ==> move([[#Done]])', '\t- [ ] 子', '- [ ] Z', '## Done', ''],
         });
         const id = idOf(session, 'A');
         contents.set(FILE, contents.get(FILE)!.replace('\t- [ ] 子', '\t- [ ] 子 書き足し'));
 
         await check(session, await refusedUntilScanned(contents, session, id));
 
-        expect(contents.get(FILE)).toBe(['# note', '- [ ] Z', '- [x] A @2026-09-21', '\t- [ ] 子 書き足し', ''].join('\n'));
+        expect(contents.get(FILE)).toBe(['# note', '- [ ] Z', '## Done', '- [x] A @2026-09-21', '\t- [ ] 子 書き足し', ''].join('\n'));
         expect(Notice.messages).toEqual([]);
     });
 

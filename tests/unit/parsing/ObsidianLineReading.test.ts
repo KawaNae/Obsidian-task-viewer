@@ -5,7 +5,6 @@ import { TaskLineClassifier } from '../../../src/services/parsing/utils/TaskLine
 import { ChildLineClassifier } from '../../../src/services/parsing/utils/ChildLineClassifier';
 import { matchFlowLine } from '../../../src/services/parsing/utils/FlowLineScanner';
 import { readsAsPlanned } from '../../../src/services/persistence/RowBasis';
-import { FileOperations } from '../../../src/services/persistence/utils/FileOperations';
 import { splitLines } from '../../../src/services/persistence/FileLines';
 import { DEFAULT_SETTINGS } from '../../../src/types';
 
@@ -79,12 +78,6 @@ describe('indentation, as Obsidian nests a list', () => {
             expect(matchFlowLine(`${lead}- ==> next`) !== null, label).toBe(nests);
             expect(Outline.dedent(`${lead}- [ ] x`), label).toBe(`${lead}- [ ] x`.slice(indent.length));
         }
-    });
-
-    it('takes an indent unit only from a tab or a space', () => {
-        expect(FileOperations.detectIndentUnit(['- a', `${IDEOGRAPHIC}- b`, '  - c'])).toBe('    ');
-        expect(FileOperations.detectIndentUnit(['- a', `${NBSP}- b`])).toBe('\t');
-        expect(FileOperations.detectIndentUnit(['- a', '\t- b'])).toBe('\t');
     });
 
     it('takes only the row as written, indentation included, for the row a basis was read from', () => {

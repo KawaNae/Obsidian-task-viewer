@@ -71,13 +71,13 @@ describe('a task line written over', () => {
     });
 
     it('keeps the gap when a move within the note carries it with its child', async () => {
-        const { contents, session } = await open(['# note', '-    [ ] T @2026-09-21 ==> move()', '      - [ ] c', '- [ ] U', '']);
+        const { contents, session } = await open(['# note', '-    [ ] T @2026-09-21 ==> move([[#Done]])', '      - [ ] c', '- [ ] U', '## Done', '']);
 
         await complete(session, 'T');
 
         const lines = contents.get(FILE)!.split('\n');
         const at = lines.findIndex(line => line.startsWith('-    [x] T'));
-        expect(at).toBeGreaterThan(-1);
+        expect(at).toBe(lines.indexOf('## Done') + 1);
         expect(lines[at + 1]).toBe('      - [ ] c');
         const c = session.index.getTasks().find(task => task.content === 'c')!;
         expect(session.index.getTask(c.parentId!)?.content).toBe('T');
@@ -124,12 +124,12 @@ describe('a task moved to another indentation', () => {
 
     it('keeps its children and its properties within the note', async () => {
         const { contents, session } = await openNotes({
-            [FILE]: ['# note', '- [ ] P', '  -\t[ ] T @2026-09-21 ==> move()', '    - [ ] c', '    - memo:: a', '- [ ] U', ''],
+            [FILE]: ['# note', '- [ ] P', '  -\t[ ] T @2026-09-21 ==> move([[#Done]])', '    - [ ] c', '    - memo:: a', '- [ ] U', '## Done', ''],
         });
 
         await completeIn(session, 'T', [FILE]);
 
-        expect(contents.get(FILE)!.split('\n')).toEqual(['# note', '- [ ] P', '- [ ] U', '- [x] T @2026-09-21', '  - [ ] c', '  - memo:: a', '']);
+        expect(contents.get(FILE)!.split('\n')).toEqual(['# note', '- [ ] P', '- [ ] U', '## Done', '- [x] T @2026-09-21', '  - [ ] c', '  - memo:: a', '']);
         const { T, c } = movedIn(session, FILE);
         expect(c?.parentId).toBe(T.id);
         expect(T.properties?.memo?.value).toBe('a');

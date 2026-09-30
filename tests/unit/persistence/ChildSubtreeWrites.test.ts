@@ -261,9 +261,9 @@ describe('duplicateInlineTask shifts along the calendar', () => {
 
 // ── same-file move: the extent decides what travels ──
 
-/** A move within the file, as the executor writes it: one op, the row carried to the end. */
+/** A move within the file, as the executor writes it: one op, the row carried to the end of the section `## Done`. */
 function moveToEnd(h: Awaited<ReturnType<typeof writeBench>>, text: string) {
-    return h.writer.applyToTask(plannedOn(h.taskAt(0)), [{ kind: 'move', to: { kind: 'end' }, text }]);
+    return h.writer.applyToTask(plannedOn(h.taskAt(0)), [{ kind: 'move', to: { heading: 'Done', side: 'end' }, text }]);
 }
 
 describe('a move within the file carries the subtree', () => {
@@ -274,11 +274,13 @@ describe('a move within the file carries the subtree', () => {
             '- [ ] parent @2026-08-15',
             '\t- [ ] child',
             '\t\t- [ ] grandchild',
+            '## Done',
         ].join('\n'));
 
         await moveToEnd(h, '- [x] parent @2026-08-15');
 
         expect(h.lines()).toEqual([
+            '## Done',
             '- [x] parent @2026-08-15',
             '\t- [ ] child',
             '\t\t- [ ] grandchild',
@@ -293,12 +295,14 @@ describe('a move within the file carries the subtree', () => {
             '\t- [ ] parent @2026-08-15',
             '\t\t- [ ] child',
             '\t\t\t- [ ] grandchild',
+            '## Done',
         ].join('\n'));
 
-        await h.writer.applyToTask(plannedOn(h.taskAt(1)), [{ kind: 'move', to: { kind: 'end' }, text: '- [x] parent @2026-08-15' }]);
+        await h.writer.applyToTask(plannedOn(h.taskAt(1)), [{ kind: 'move', to: { heading: 'Done', side: 'end' }, text: '- [x] parent @2026-08-15' }]);
 
         expect(h.lines()).toEqual([
             '- [ ] root',
+            '## Done',
             '- [x] parent @2026-08-15',
             '\t- [ ] child',
             '\t\t- [ ] grandchild',
@@ -311,11 +315,13 @@ describe('a move within the file carries the subtree', () => {
             '\t```md',
             '\t- [ ] sample',
             '\t```',
+            '## Done',
         ].join('\n'));
 
         await moveToEnd(h, '- [x] parent @2026-08-15');
 
         expect(h.lines()).toEqual([
+            '## Done',
             '- [x] parent @2026-08-15',
             '\t```md',
             '\t- [ ] sample',

@@ -170,6 +170,29 @@ describe('ChildLineClassifier', () => {
         });
     });
 
+    describe('arrayItems', () => {
+        it('a list , separates', () => {
+            expect(ChildLineClassifier.arrayItems('lab, desk')).toEqual(['lab', 'desk']);
+            expect(ChildLineClassifier.arrayItems('a,b')).toEqual(['a', 'b']);
+        });
+        it('a list in brackets', () => {
+            expect(ChildLineClassifier.arrayItems('[lab, desk]')).toEqual(['lab', 'desk']);
+            expect(ChildLineClassifier.arrayItems('[one]')).toEqual(['one']);
+            expect(ChildLineClassifier.arrayItems('[]')).toEqual([]);
+        });
+        it('a wikilink is one item, its brackets and commas its own', () => {
+            expect(ChildLineClassifier.arrayItems('[[x]]')).toEqual(['[[x]]']);
+            expect(ChildLineClassifier.arrayItems('[[a]], [[b]]')).toEqual(['[[a]]', '[[b]]']);
+            expect(ChildLineClassifier.arrayItems('[[a|b, c]]')).toEqual(['[[a|b, c]]']);
+            expect(ChildLineClassifier.arrayItems('[[[a]], b]')).toEqual(['[[a]]', 'b']);
+            expect(ChildLineClassifier.arrayItems('![[p.png]], x')).toEqual(['![[p.png]]', 'x']);
+        });
+        it('an empty item is none', () => {
+            expect(ChildLineClassifier.arrayItems('a, , b,')).toEqual(['a', 'b']);
+            expect(ChildLineClassifier.arrayItems(',')).toEqual([]);
+        });
+    });
+
     describe('classifyLines', () => {
         it('classifies multiple lines and carries bodyLines', () => {
             const results = ChildLineClassifier.classifyLines([

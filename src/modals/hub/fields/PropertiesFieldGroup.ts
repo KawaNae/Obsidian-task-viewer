@@ -32,7 +32,7 @@ export class PropertiesFieldGroup {
         this.valueInputs.clear();
 
         const task = this.ctx.getTask();
-        const missing = this.ctx.isMissing();
+        const shut = this.ctx.isShut();
 
         // render 時スナップショット。表示判定（isOwn / pv）専用 — commit の
         // merge base には使わない。focus ガードで rebuild がスキップされる間に
@@ -50,7 +50,7 @@ export class PropertiesFieldGroup {
 
             const valueInput = row.createEl('input', { type: 'text', cls: 'tv-ctrl__text-input tv-ctrl__text-input--md tv-ctrl__text-input--glow tv-form__control' });
             valueInput.value = pv.value;
-            valueInput.disabled = missing;
+            valueInput.disabled = shut;
             this.valueInputs.set(key, valueInput);
 
             const commitValue = () => {
@@ -75,7 +75,7 @@ export class PropertiesFieldGroup {
                 const removeBtn = row.createEl('button', { cls: 'tv-ctrl__pill-remove' });
                 setIcon(removeBtn.createSpan(), 'x');
                 removeBtn.setAttribute('aria-label', t('modal.hub.removeProperty', { key }));
-                removeBtn.disabled = missing;
+                removeBtn.disabled = shut;
                 removeBtn.addEventListener('click', () => {
                     const next = { ...(this.ctx.getTask().properties ?? {}) };
                     delete next[key];
@@ -103,8 +103,8 @@ export class PropertiesFieldGroup {
             type: 'text', placeholder: t('modal.hub.propertyValue'),
             cls: 'tv-ctrl__text-input tv-ctrl__text-input--md tv-ctrl__text-input--glow tv-form__control',
         });
-        keyInput.disabled = missing;
-        valueInput.disabled = missing;
+        keyInput.disabled = shut;
+        valueInput.disabled = shut;
         this.addKeyInput = keyInput;
 
         // 候補: 既存キー（vault 全体）から未使用のもの / 値はキーに応じて
@@ -163,7 +163,7 @@ export class PropertiesFieldGroup {
     }
 
     private commit(props: Record<string, PropertyValue>): void {
-        if (this.ctx.isMissing()) return;
+        if (this.ctx.isShut()) return;
         this.ctx.queue(TaskUpdateBuilder.customProperties(this.ctx.getTask(), props));
     }
 

@@ -134,6 +134,7 @@ function makeTimer(overrides: Partial<TimerInstance> = {}): TimerInstance {
         // 尻尾の行の錨は、このタイマーが書いた行に付けたもの。
         ownedAnchors: ['tv-t-old5678'],
         opening: null,
+        priorStartMs: null,
         ...overrides,
     } as TimerInstance;
 }

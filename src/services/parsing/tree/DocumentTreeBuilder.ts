@@ -1,4 +1,4 @@
-import type { DocumentNode, SectionNode, BlockNode, PropertyBlockEntry, TaskBlock } from './DocumentTree';
+import { NO_SOURCES, type DocumentNode, type SectionNode, type BlockNode, type PropertyBlockEntry, type TaskBlock } from './DocumentTree';
 import { ChildLineClassifier } from '../utils/ChildLineClassifier';
 import { TaskLineClassifier } from '../utils/TaskLineClassifier';
 import { INDENT_SOURCE, Outline, type OutlineReading } from '../utils/Outline';
@@ -13,7 +13,7 @@ const PROPERTY_GROUP_HEADER = new RegExp(`^${INDENT_SOURCE}-${SPACE_OR_TAB_SOURC
 export class DocumentTreeBuilder {
     static build(
         filePath: string,
-        lines: string[],
+        lines: readonly string[],
         bodyStartLine: number,
         outline: OutlineReading = Outline.read(lines),
     ): DocumentNode {
@@ -109,6 +109,7 @@ export class DocumentTreeBuilder {
             heading,
             propertyBlock: null,
             resolvedProperties: {},
+            resolvedSources: NO_SOURCES,
             blocks: [],
             children: [],
             startLine,
@@ -125,7 +126,7 @@ export class DocumentTreeBuilder {
 
     private static classifyBlocks(
         section: SectionNode,
-        allLines: string[],
+        allLines: readonly string[],
         outline: OutlineReading
     ): void {
         const ownRanges = this.getOwnLineRanges(section);
@@ -159,7 +160,7 @@ export class DocumentTreeBuilder {
      */
     private static collectSectionProperties(
         section: SectionNode,
-        allLines: string[],
+        allLines: readonly string[],
         ownRanges: [number, number][],
         outline: OutlineReading
     ): { entries: PropertyBlockEntry[] } | null {
@@ -205,7 +206,7 @@ export class DocumentTreeBuilder {
      */
     private static collectLeadAreaLines(
         section: SectionNode,
-        allLines: string[],
+        allLines: readonly string[],
         ownRanges: [number, number][],
         outline: OutlineReading
     ): number[] {
@@ -228,7 +229,7 @@ export class DocumentTreeBuilder {
      */
     private static classifyTaskBlocks(
         section: SectionNode,
-        allLines: string[],
+        allLines: readonly string[],
         ownRanges: [number, number][],
         outline: OutlineReading
     ): BlockNode[] {
@@ -277,7 +278,7 @@ export class DocumentTreeBuilder {
      * the outline reads, at the top of the note, where no item is open.
      */
     private static collectBlock(
-        allLines: string[],
+        allLines: readonly string[],
         outline: OutlineReading,
         row: number,
     ): TaskBlock {

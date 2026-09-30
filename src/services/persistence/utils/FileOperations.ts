@@ -54,38 +54,31 @@ export class FileOperations {
     }
 
     /**
-     * One indent level as this file spells it, taken from the first indented
-     * line. A file with no indentation anywhere gets a tab, Obsidian's default.
-     */
-    static detectIndentUnit(lines: readonly string[]): string {
-        for (const line of lines) {
-            const indent = Outline.indentOf(line);
-            if (indent !== '' && line.trim() !== '') return indent.includes('\t') ? '\t' : '    ';
-        }
-        return '\t';
-    }
-
-    /**
      * The indent to give a new child of the task at `taskLineIndex`, the
      * child going under `parent`: the task's own line, or a line not yet
      * written in its place — the next instance of a series, a generated
      * parent or child — whose children are to be spelled as the task's are.
      *
-     * The task's existing children decide it, so a subtree keeps one spelling:
-     * its first child, past the lines in `except` (the ones the write takes
-     * away) where it has another, carried under `parent` as far past it as it
-     * stood past the task (`Outline.shiftedIndent`). With no children to copy,
-     * the rest of the file decides — reading the parent line alone cannot,
-     * because a top-level task has no indentation to read a unit from. Reading
-     * it there answered four spaces for every file, tab-written ones included,
-     * and put the two spellings in one subtree. The file's unit is repeated
-     * until the line reaches the parent's content column (`Outline.childIndent`,
-     * the one rule for a child's indentation). The lines are read as
-     * `outline` reads them.
+     * Obsidian's editor's rule, as the source editor keeps it too: a line
+     * written at the depth of a line there takes that line's spelling, and a
+     * line one level deeper than any there takes `unit`, the level Obsidian's
+     * settings say (`ObsidianConfig.indentUnit`). So the task's existing
+     * children decide it, and a subtree keeps one spelling: its first child,
+     * past the lines in `except` (the ones the write takes away) where it has
+     * another, carried under `parent` as far past it as it stood past the
+     * task (`Outline.shiftedIndent`). A task with no children has its first
+     * one a level deeper: `parent`'s indentation and `unit`, repeated until
+     * the line reaches the parent's content column (`Outline.childIndent`,
+     * the one rule for a child's indentation). How the rest of the file is
+     * indented does not decide it, as it does not in the editor: a
+     * space-indented vault with a note of top-level tasks had its first child
+     * written with a tab, the editor's children with spaces. The lines are
+     * read as `outline` reads them.
      */
     static resolveChildIndent(
         outline: OutlineReading,
         taskLineIndex: number,
+        unit: string,
         parent: string = outline.lines[taskLineIndex],
         except: ReadonlySet<number> = new Set(),
     ): string {
@@ -94,7 +87,7 @@ export class FileOperations {
             ?? (except.size > 0 ? FileOperations.firstChildIndent(outline, taskLineIndex) : null);
         const sample = first === null ? null
             : Outline.shiftedIndent(first, Outline.indentOf(lines[taskLineIndex]), Outline.indentOf(parent));
-        return Outline.childIndent(parent, sample, FileOperations.detectIndentUnit(lines));
+        return Outline.childIndent(parent, sample, unit);
     }
 
     /**

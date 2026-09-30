@@ -1,0 +1,17 @@
+/* ======================================================
+   Timer start-offset dialog (tv-timer-offset__*): "Set the
+   shift..." of a running timer (TimerStartOffsetModal).
+   Its frame is the form's shared pieces (_form.css) and the
+   segments of _controls.css, as the send dialog's is. This
+   file holds what only this dialog has.
+   ====================================================== */
+
+/* One field and a line under it: narrower than the form dialogs. */
+.tv-overlay__panel--dialog.tv-timer-offset {
+    width: min(24em, calc(100vw - 32px));
+}
+
+/* Where the start goes, or what keeps it from going, under the field. */
+.tv-timer-offset .tv-timer-offset__says {
+    margin: 8px 0 0;
+}

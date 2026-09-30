@@ -621,28 +621,12 @@ btn.setAttribute('aria-label', 'Filter');
 btn.setAttribute('title', 'Filter');
 ```
 
-**Native `<input type="date/time">` の注意**: Electron/Chromium はこれらの入力要素にビルトインのブラウザツールチップを表示する。`title=""` では抑制できない。対処法:
+**Native `<input type="date/time/color">` の注意**: ネイティブのピッカーは `src/views/sharedUI/NativePicker.ts` の `createNativePicker()` で作る（フォームの欄の PickerTextField と、ツールバーの「日付へ移動」が使う）。見えない input をボタンに重ね、次のように動く:
 
-1. CSS で `pointer-events: none` を設定してホバーが native input に到達しないようにする
-2. 表示用の要素（アイコンボタン等）に `aria-label` を設定して Obsidian 標準ツールチップを表示
-3. アイコンボタンの `click` イベントで `showPicker()` を呼んでピッカーを開く
-4. iOS Safari では `showPicker()` が動かない (WebKit Bug #261703) ため `focus()` + `click()` でフォールバック
-
-```ts
-// Native input: pointer-events: none (CSS), aria-hidden
-nativeInput.setAttribute('aria-hidden', 'true');
-
-// Icon button: aria-label for Obsidian tooltip, click to open picker
-pickerButton.setAttribute('aria-label', 'Open date picker');
-pickerButton.addEventListener('click', () => {
-    try {
-        nativeInput.showPicker();
-    } catch {
-        nativeInput.focus();
-        nativeInput.click();
-    }
-});
-```
+1. desktop では input を `pointer-events: none` にし、ボタンが click を受けて `showPicker()` で開く。Electron/Chromium が native input に出すビルトインのツールチップ（`title=""` では消せない）と、shadow DOM の内部の欄で cursor が default に落ちることを避けるため
+2. ボタンに `aria-label` を付けて Obsidian 標準のツールチップを出す。input は `aria-hidden`、`tabIndex = -1`
+3. `.is-mobile` では input がタップを直接受ける。iOS / iPadOS は `showPicker()` を拒み（WebKit Bug #261703）、`focus()` + `click()` でも開かないので、input への直接のタップが唯一の開き方
+4. したがって、ボタンから離れた所（コマンド、メニューの項目、ダブルクリック）から開く経路は iOS では開かない。iOS でも要る入口は、input を重ねたボタンとして表に置く
 
 ### Wording: "Remove" vs "Delete"
 
@@ -806,7 +790,7 @@ MIT License
 ## Style Token Rules (v0.13.1+)
 
 1. Do not reference Obsidian theme variables directly outside `src/styles/_variables.css`.
-2. `:root` is reserved for theme-independent constants (size, spacing, z-index).
+2. `:root` is reserved for theme-independent constants (size, spacing, z-index). A z-index built from Obsidian's `--layer-*` (ladder [A]: `--z-overlay`, `--z-timer-widget`) goes on `body` instead, because Obsidian declares `--layer-*` there and a `var()` resolves where the property is declared.
 3. Use `body` in `src/styles/_variables.css` as the single mapping layer from Obsidian vars to `--tv-*`.
 4. Component/style files must use only `--tv-*` tokens.
 5. Keep token design effectively single-layer; only keep `theme-light`/`theme-dark` overrides for app/card background and shadow strength.
@@ -1150,7 +1134,7 @@ All `ScopeKeys` fields (`start`, `end`, `due`, `color`, `linestyle`, `mask`, `ig
 ## Adding CSS Styles
 
 1. New CSS variables → define as `--tv-*` tokens in the `body` block of `src/styles/_variables.css`.
-2. `:root` is for theme-independent constants only (sizes, z-index values).
+2. `:root` is for theme-independent constants only (sizes, z-index values). A z-index built from Obsidian's `--layer-*` goes on `body` (see Style Token Rules).
 3. Component stylesheets must reference only `--tv-*` tokens (never Obsidian variables directly).
 4. Drag visuals: use `--tv-drop-*` for drop zones and `--tv-ghost-*` for drag ghosts.
 

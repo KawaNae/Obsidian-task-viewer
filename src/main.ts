@@ -52,6 +52,7 @@ import { TaskApi } from './api/TaskApi';
 import { ExportService } from './services/export/ExportService';
 import { TaskReadService } from './services/data/TaskReadService';
 import { TaskWriteService } from './services/data/TaskWriteService';
+import { NoteOps } from './services/data/NoteOps';
 import { initI18n, t } from './i18n';
 import { TaskParser, enabledLineParserIds } from './services/parsing/TaskParser';
 import { initLog, logInfo } from './log/log';
@@ -66,6 +67,7 @@ export default class TaskViewerPlugin extends Plugin {
     private taskIndex: TaskIndex;
     private readService: TaskReadService;
     private writeService: TaskWriteService;
+    private noteOps: NoteOps;
     private timerWidget: TimerWidget;
     private logStorage: LogStorage;
     private logManager: LogManager;
@@ -150,6 +152,11 @@ export default class TaskViewerPlugin extends Plugin {
         this.readService = new TaskReadService(this.taskIndex, this.settings.startHour);
         this.readService.updateWeekStartDay(this.settings.weekStartDay);
         this.writeService = new TaskWriteService(this.taskIndex);
+        // The timer widget is made below; a send asks for it as it is made.
+        this.noteOps = new NoteOps(this.app, this.writeService, () => this.settings, {
+            getTask: (id) => this.readService.getTask(id),
+            timers: () => this.timerWidget ?? null,
+        });
 
         // Single source of truth for menu lifecycle (dedup across all views/touch paths).
         this.menuPresenter = new MenuPresenter();
@@ -492,6 +499,10 @@ export default class TaskViewerPlugin extends Plugin {
 
     getTaskWriteService(): TaskWriteService {
         return this.writeService;
+    }
+
+    getNoteOps(): NoteOps {
+        return this.noteOps;
     }
 
     getTimerWidget(): TimerWidget {

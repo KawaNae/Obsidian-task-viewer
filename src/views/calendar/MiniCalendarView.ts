@@ -69,10 +69,7 @@ export class MiniCalendarView extends ItemView {
         this.filterMenu.setTaskLookupProvider((id) => this.readService.getTask(id));
         this.filterMenu.setStatusDefinitions(this.plugin.settings.statusDefinitions);
 
-        const now = new Date();
-        const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
-        const weekStart = this.getWeekStart(monthStart, this.plugin.settings.weekStartDay);
-        this.windowStart = DateUtils.getLocalDateString(weekStart);
+        this.windowStart = DateUtils.getMonthGridStart(new Date(), this.plugin.settings.weekStartDay);
 
         this.toolbar = new MiniCalendarToolbar({
             app: this.app,
@@ -86,10 +83,7 @@ export class MiniCalendarView extends ItemView {
             onNavigateWeek: (direction) => this.navigateWeek(direction),
             onJumpToCurrentMonth: () => {
                 if (this.isAnimating) return;
-                const today = new Date();
-                const monthStart = new Date(today.getFullYear(), today.getMonth(), 1);
-                const weekStart = this.getWeekStart(monthStart, this.plugin.settings.weekStartDay);
-                this.windowStart = DateUtils.getLocalDateString(weekStart);
+                this.windowStart = DateUtils.getMonthGridStart(new Date(), this.plugin.settings.weekStartDay);
                 void this.app.workspace.requestSaveLayout();
                 void this.render();
             },

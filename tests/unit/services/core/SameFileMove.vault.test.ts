@@ -43,15 +43,15 @@ const followed = (session: VaultSession, ids: string[]): Array<string | undefine
     ids.map(id => session.index.getTask(id)?.id);
 
 const COMMANDS: Array<[string, string]> = [
-    ['a move alone', 'move()'],
-    ['a next instance and a move', 'every mon move()'],
+    ['a move alone', 'move([[#Done]])'],
+    ['a next instance and a move', 'every mon move([[#Done]])'],
 ];
 
 describe.each(COMMANDS)('%s within the same file', (_name, command) => {
     it.each([0, 1, 2, 1000])('the name held for the moved row follows it, with %i task rows between', async (between) => {
         const fillers = Array.from({ length: between }, (_, i) => `- [ ] 行${i} @2026-09-21`);
         const contents = new Map([[FILE, [
-            '# note', '- [ ] 移す @2026-09-21', `\t- ==> ${command}`, '\t- [ ] 子 @2026-09-21', ...fillers, '',
+            '# note', '- [ ] 移す @2026-09-21', `\t- ==> ${command}`, '\t- [ ] 子 @2026-09-21', ...fillers, '## Done', '',
         ].join('\n')]]);
         live = vaultSession(contents);
         await live.scanAll();

@@ -44,6 +44,7 @@ function makeTimer(overrides: Partial<TimerInstance> = {}): TimerInstance {
         elapsedTime: 0,
         pendingRecord: null,
         opening: null,
+        priorStartMs: null,
         ownedAnchors: [],
         ...overrides,
     } as TimerInstance;

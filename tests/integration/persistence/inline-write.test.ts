@@ -18,7 +18,7 @@ import {
 } from '../helpers/cli-helper';
 import {
     writeTestFile, readTestFile, deleteTestFile,
-    waitForFileIndexed, waitForFileDeindexed,
+    writeIndexedTestFile, waitForFileDeindexed,
 } from '../helpers/test-file-manager';
 import {
     getFileLines, expectFileContains, expectFileNotContains, expectLineContains,
@@ -72,12 +72,11 @@ afterAll(async () => {
 // ────────────────────────────────────────────
 describe('update inline task', () => {
     beforeAll(async () => {
-        writeTestFile(TEST_FILE, [
+        await writeIndexedTestFile(TEST_FILE, [
             '- [ ] Original task @2026-05-01',
             '- [ ] Second task @2026-05-02',
             '- [ ] Third task @2026-05-03',
         ].join('\n'));
-        await waitForFileIndexed(TEST_FILE);
     });
 
     it('updates task content', async () => {
@@ -152,12 +151,11 @@ describe('update inline task', () => {
 // ────────────────────────────────────────────
 describe('delete inline task', () => {
     beforeAll(async () => {
-        writeTestFile(TEST_FILE, [
+        await writeIndexedTestFile(TEST_FILE, [
             '- [ ] Keep me @2026-05-10',
             '- [ ] Delete me @2026-05-11',
             '- [ ] Also keep @2026-05-12',
         ].join('\n'));
-        await waitForFileIndexed(TEST_FILE);
     });
 
     it('deletes a single task', async () => {
@@ -188,13 +186,12 @@ describe('delete inline task', () => {
 
 describe('delete task with children', () => {
     beforeAll(async () => {
-        writeTestFile(TEST_FILE, [
+        await writeIndexedTestFile(TEST_FILE, [
             '- [ ] Parent task @2026-05-20',
             '\t- child line 1',
             '\t- child line 2',
             '- [ ] Sibling task @2026-05-21',
         ].join('\n'));
-        await waitForFileIndexed(TEST_FILE);
     });
 
     it('deletes task line and its children', async () => {
@@ -217,10 +214,9 @@ describe('delete task with children', () => {
 // ────────────────────────────────────────────
 describe('create inline task', () => {
     beforeAll(async () => {
-        writeTestFile(TEST_FILE, [
+        await writeIndexedTestFile(TEST_FILE, [
             '- [ ] Existing task @2026-05-01',
         ].join('\n'));
-        await waitForFileIndexed(TEST_FILE);
     });
 
     it('appends a new task to existing file', async () => {
@@ -327,7 +323,7 @@ describe('create task in empty file', () => {
 // ────────────────────────────────────────────
 describe('create under heading', () => {
     beforeAll(async () => {
-        writeTestFile(TEST_FILE, [
+        await writeIndexedTestFile(TEST_FILE, [
             '---',
             'tv-start: 2026-05-01',
             'tv-content: Project note',
@@ -336,7 +332,6 @@ describe('create under heading', () => {
             '## Tasks',
             '- [ ] Existing heading task @2026-05-01',
         ].join('\n'));
-        await waitForFileIndexed(TEST_FILE);
     });
 
     it('creates task under specified heading', async () => {
@@ -420,10 +415,9 @@ describe('full round-trip', () => {
 // ────────────────────────────────────────────
 describe('clear status via none sentinel', () => {
     beforeAll(async () => {
-        writeTestFile(TEST_FILE, [
+        await writeIndexedTestFile(TEST_FILE, [
             '- [x] Completed task @2026-05-01',
         ].join('\n'));
-        await waitForFileIndexed(TEST_FILE);
     });
 
     it('unchecks task via status=none', async () => {

@@ -104,7 +104,7 @@ describe('Outline.shiftIndent', () => {
 });
 
 describe('renderFlowInstance: the lines a next instance is written as', () => {
-    const render = (lines: string[], line: number, insert: FlowInstanceInsert) => renderFlowInstance(Outline.read(lines), line, insert);
+    const render = (lines: string[], line: number, insert: FlowInstanceInsert) => renderFlowInstance(Outline.read(lines), line, insert, '\t');
 
     it('spells the next instance as the row that fired, its `==>` line its child (H2)', () => {
         // `10.   [ ] T` opens its content at column 6, and its `==>` line at

@@ -3,6 +3,7 @@ import { Notice } from 'obsidian';
 import { openLiveVault, type VaultSession } from '../helpers/vaultSession';
 import { t } from '../../../src/i18n';
 import { freezeDate } from '../helpers/fakeDate';
+import { DEFAULT_SETTINGS } from '../../../src/types';
 
 // Frozen so `==> every mon` on `@2026-09-21` lands on the `@2026-09-28` these
 // tests hard-code, no matter which day the suite runs.
@@ -216,28 +217,29 @@ describe('a next instance with nowhere in the body to go', () => {
         });
     });
 
-    it('refuses a move to the end of a note that ends inside a fence that never closes', async () => {
-        // Appended past the opening line, the row and its child would be code.
-        const note = ['# note', '- [ ] 対象 @2026-09-21 ==> move()', '\t- [ ] 子', '```', 'code', ''];
+    it('refuses a move to the end of a section that ends inside a fence that never closes', async () => {
+        // Put past the opening line, the row and its child would be code.
+        const note = ['# note', '- [ ] 対象 @2026-09-21 ==> move([[#Done]])', '\t- [ ] 子', '## Done', '```', 'code', ''];
         const { contents, session } = await open(note);
+        session.index.updateSettings({ ...DEFAULT_SETTINGS, sectionSide: 'end' });
         const before = contents.get(FILE)!;
 
         await fire(session);
 
         expect(contents.get(FILE)).toBe(before.replace('- [ ] 対象', '- [x] 対象'));
         // The notice names the fence: the line that opens it, as the note stands.
-        expect(Notice.messages).toEqual([t('notice.flowNotRun', { reason: t('notice.refusedUnplaceableInFence', { line: 4 }), subject: '対象' })]);
+        expect(Notice.messages).toEqual([t('notice.flowNotRun', { reason: t('notice.refusedUnplaceableInFence', { line: 5 }), subject: '対象' })]);
     });
 });
 
 describe('the end of a note', () => {
-    it('keeps its final terminator when a move carries a row there', async () => {
-        const note = ['# note', '- [ ] 対象 @2026-09-21 ==> move()', '\t- [ ] 子', '- [ ] 下', ''];
+    it('keeps its final terminator when a move carries a row to a section there', async () => {
+        const note = ['# note', '- [ ] 対象 @2026-09-21 ==> move([[#Done]])', '\t- [ ] 子', '- [ ] 下', '## Done', ''];
         const { contents, session } = await open(note);
 
         await fire(session);
 
-        expect(contents.get(FILE)).toBe(['# note', '- [ ] 下', '- [x] 対象 @2026-09-21', '\t- [ ] 子', ''].join('\n'));
+        expect(contents.get(FILE)).toBe(['# note', '- [ ] 下', '## Done', '- [x] 対象 @2026-09-21', '\t- [ ] 子', ''].join('\n'));
     });
 });
 
@@ -285,9 +287,10 @@ describe('a line put past a fence in a list item that never closes', () => {
         const written = contents.get(FILE) !== before;
         if (written) expect(tasksWorded(session, 'c')).toHaveLength(1);
         else expect(Notice.messages).toEqual([t('notice.notWritten', { reason: t('notice.refusedUnplaceable'), subject: 'T' })]);
-        // As it stands, it is written above the fence.
+        // As it stands, it is written above the fence, a new level as
+        // Obsidian's settings say (their default here: a tab).
         expect(written).toBe(true);
-        expect(contents.get(FILE)!.split('\n').slice(1, 4)).toEqual(['- [ ] T', '    - [ ] c', '    ```']);
+        expect(contents.get(FILE)!.split('\n').slice(1, 4)).toEqual(['- [ ] T', '\t- [ ] c', '    ```']);
     });
 
     it('reads a task written under a heading made at the end as a task', async () => {

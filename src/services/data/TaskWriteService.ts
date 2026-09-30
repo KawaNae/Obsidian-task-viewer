@@ -1,8 +1,10 @@
 import type { TFile } from 'obsidian';
 import type { EditorLine, WriteChannels } from '../persistence/FileLines';
-import type { InsertPlace, TaskOp } from '../persistence/TaskOps';
+import type { InsertPlace, SubtreeReplacement, TaskOp } from '../persistence/TaskOps';
+import type { IndexRefusal } from '../core/RefusalClause';
 import type { DuplicateOptions, Task } from '../../types';
-import type { AnchoredRow, TaskIndex } from '../core/TaskIndex';
+import type { AnchoredRow, RowSnapshot, SendRow, SendWrite, TaskIndex } from '../core/TaskIndex';
+import type { SendTo } from '../persistence/writers/SendWriter';
 import type { FlowDeleteAssessment } from '../flow/FlowDeletion';
 import { TaskIdGenerator } from '../display/TaskIdGenerator';
 
@@ -122,6 +124,40 @@ export class TaskWriteService {
      */
     async insertLine(taskId: string, line: string, place: InsertPlace, rowId?: string | null): Promise<boolean> {
         return this.taskIndex.insertLine(this.resolveTaskId(taskId), line, place, rowId);
+    }
+
+    /**
+     * The row and its subtree written anew from a draft of their text, each
+     * row the draft completes fired in the same write (see
+     * TaskIndex.replaceSubtree). `base` is the row and its subtree as the
+     * draft was opened on them.
+     *
+     * @returns whether it was written; when not, why not — told the user
+     * too, unless `opts.tellRefusal` is false because the caller shows it.
+     */
+    async replaceSubtree(
+        taskId: string,
+        base: readonly string[],
+        replacement: SubtreeReplacement,
+        opts: { tellRefusal?: boolean } = {},
+    ): Promise<{ written: true } | { written: false; refused: IndexRefusal | null }> {
+        return this.taskIndex.replaceSubtree(this.resolveTaskId(taskId), base, replacement, opts);
+    }
+
+    // ===== Sending rows to a note =====
+
+    /** The row and its note's lines as the disk holds them, or undefined (see TaskIndex.rowSnapshot). */
+    async rowSnapshot(taskId: string): Promise<RowSnapshot | undefined> {
+        return this.taskIndex.rowSnapshot(this.resolveTaskId(taskId));
+    }
+
+    /**
+     * Rows and their subtrees sent to a section of a note (see
+     * TaskIndex.send). A refusal before anything is written is told the user
+     * too, unless `opts.tellRefusal` is false because the caller shows it.
+     */
+    async send(rows: readonly SendRow[], to: SendTo, opts: { tellRefusal?: boolean; landed?: (path: string) => void } = {}): Promise<SendWrite> {
+        return this.taskIndex.send(rows.map(row => ({ ...row, taskId: this.resolveTaskId(row.taskId) })), to, opts);
     }
 
     // ===== A line the editor pointed at =====

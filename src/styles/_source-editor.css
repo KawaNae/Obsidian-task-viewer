@@ -1,0 +1,131 @@
+/* ── Source editor (modals/form/source/SourceEditor) ──
+ *
+ * 行の1行（親）とその下の行（子）の2つの CodeMirror 6 のビュー。
+ * Obsidian のテーマの .cm-* はプラグインが単独で組むビューには当たらない前提で、
+ * Obsidian の CSS 変数から組む。子のエディタは親より一段深い字下げを 0 として
+ * 見せるので、Obsidian のエディタで子の行が親の下に立つのと同じ形に置く。
+ * 子の文字は親の記号 `-` から字下げ一段（--tv-source-indent、SourceEditor が
+ * 字下げの単位から ch で入れる）右で始まり、字下げの線は親の `-` の下に立つ。
+ *
+ * ビューはそれぞれ1つの入力欄で、自分の枠に入る。親は必ず1行、子は無くても
+ * よい別のものなので、1つの枠に入れると空の子のビューが空の子の行に見える。
+ * 枠、フォーカス、不正の見た目は入力欄の規則（tv-ctrl__input-wrap、
+ * _controls.css）が描き、ビューは枠も背景も持たない。子の枠は字下げ一段
+ * 右に置き、字下げの線はその左の外に立てる。
+ */
+
+.tv-source-editor {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+    font-family: var(--font-monospace);
+    font-size: var(--font-ui-small);
+    color: var(--text-normal);
+}
+
+/* 枠の wrap は中身を中央に寄せる（align-items: center）。ビューは枠の幅と高さいっぱいに置く */
+.tv-source-editor .cm-editor {
+    flex: 1 1 auto;
+    align-self: stretch;
+    min-width: 0;
+}
+
+.tv-source-editor .cm-editor,
+.tv-source-editor .cm-editor.cm-focused {
+    background: transparent;
+    outline: none;
+}
+
+/* Asking whether to throw the draft away (the hub's source, the send
+ * dialog): both boxes read as an invalid input does (the fields' invalid
+ * rule, _controls.css). */
+.tv-ctrl .tv-source-drafts--asking .tv-source-editor > .tv-ctrl__input-wrap {
+    border-color: var(--tv-text-danger) !important;
+    background-color: var(--tv-danger-bg-subtle);
+}
+
+.tv-source-editor .cm-scroller {
+    font-family: inherit;
+    line-height: var(--line-height-normal);
+}
+
+.tv-source-editor .cm-content {
+    padding: 4px 0;
+    caret-color: var(--caret-color, var(--text-normal));
+}
+
+.tv-source-editor {
+    --tv-source-line-pad: 8px;
+}
+
+.tv-source-editor .cm-line {
+    padding: 0 var(--tv-source-line-pad);
+}
+
+.tv-source-editor .cm-cursor {
+    border-left-color: var(--caret-color, var(--text-normal));
+}
+
+.tv-source-editor .cm-placeholder {
+    color: var(--text-faint);
+}
+
+.tv-source-editor .cm-selectionBackground,
+.tv-source-editor .cm-focused .cm-selectionBackground {
+    background: var(--text-selection);
+}
+
+/* 子の枠は親の枠から字下げ一段（--tv-source-indent）右に置く。子は親の下に
+   必ず字下げされることを、枠そのものの位置で見せる。子の文字は枠の中で親の
+   文字と同じ余白から始まるので、親の記号 `-` から字下げ一段右になる。
+   線は Obsidian の字下げの線（.cm-indent::before）と同じ太さと色で、子の枠の
+   左の外（字下げの余白の中）、親の記号 `-` の幅の中ほどの下に、子の枠の上端
+   から下端まで立てる。2つの枠の枠線は同じ幅なので、子の枠の padding box から
+   見た親の `-` の位置は「行の余白 + 0.5ch − 字下げ」になる。上下の -1px は
+   枠線（_controls.css の 1px）の分で、線を枠の外の高さに揃える */
+.tv-source-editor__children {
+    position: relative;
+    margin-left: var(--tv-source-indent, 4ch);
+}
+
+.tv-source-editor__children::before {
+    content: '';
+    position: absolute;
+    top: -1px;
+    bottom: -1px;
+    left: calc(var(--tv-source-line-pad) + 0.5ch - var(--tv-source-indent, 4ch));
+    border-left: var(--indentation-guide-width, 1px) solid var(--indentation-guide-color, var(--background-modifier-border));
+}
+
+.tv-source-editor__children .cm-content {
+    min-height: 3em;
+}
+
+/* Completion list */
+.tv-source-editor .cm-tooltip {
+    background: var(--background-primary);
+    border: 1px solid var(--background-modifier-border);
+    border-radius: var(--radius-m);
+    box-shadow: var(--shadow-s);
+    color: var(--text-normal);
+}
+
+.tv-source-editor .cm-tooltip-autocomplete > ul {
+    font-family: var(--font-interface);
+    max-height: 16em;
+}
+
+.tv-source-editor .cm-tooltip-autocomplete > ul > li {
+    padding: 2px 8px;
+}
+
+.tv-source-editor .cm-tooltip-autocomplete > ul > li[aria-selected] {
+    background: var(--background-modifier-hover);
+    color: var(--text-normal);
+}
+
+.tv-source-editor .cm-completionDetail {
+    margin-left: 0.8em;
+    color: var(--text-muted);
+    font-style: normal;
+}

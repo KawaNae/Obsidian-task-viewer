@@ -95,6 +95,7 @@ function startCountup(ctx: TimerContext, overrides: Partial<CountupTimer> = {}):
         pendingRecord: null,
         ownedAnchors: [],
         opening: null,
+        priorStartMs: null,
         timerType: 'countup',
         elapsedTime: 600,
         recordedChildTaskId: 'tv-inline:notes/a.md:ln:4',
@@ -129,6 +130,7 @@ function startInterval(ctx: TimerContext, overrides: Partial<IntervalTimer> = {}
         pendingRecord: null,
         ownedAnchors: [],
         opening: null,
+        priorStartMs: null,
         timerType: 'interval',
         intervalSource: 'pomodoro',
         groups: [{

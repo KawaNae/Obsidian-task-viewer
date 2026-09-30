@@ -26,30 +26,53 @@
     filter: none;
 }
 
-/* --- Form: flat sections with dividers --- */
+/* --- Preview / source switch (TaskHubSourceView) --- */
+.task-hub__mode-bar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding-top: 4px;
+}
+
+.task-hub__mode-shut {
+    font-size: var(--font-ui-smaller);
+    color: var(--tv-text-faint);
+}
+
+/* --- Source (the row and its subtree as text) ---
+ * Asked whether to throw the draft away, the editors read as
+ * tv-source-drafts--asking (_source-editor.css) says, and the row of cancel
+ * and apply asks as tv-form__buttons (_form.css) does. */
+.task-hub__source-pane {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding: 8px 0;
+}
+
+.task-hub__source-message {
+    font-size: var(--font-ui-small);
+    color: var(--text-error);
+}
+
+.task-hub__source-lost {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+    font-size: var(--font-ui-small);
+}
+
+.task-hub__source-lost > span {
+    flex: 1 1 12em;
+    color: var(--text-warning);
+}
+
+/* --- Form: flat sections with dividers (tv-form__group, _form.css) --- */
 .task-hub__form {
     display: flex;
     flex-direction: column;
     gap: 8px;
-}
-
-.task-hub .tv-form__group {
-    padding: 12px 0;
-    border-bottom: 1px solid var(--tv-border);
-}
-
-/* 最後のグループは区切り線なし。group の後ろに error / notice 要素が
-   並ぶため :last-child では届かない — 「後続に group がない group」で選ぶ */
-.task-hub .tv-form__group:not(:has(~ .tv-form__group)) {
-    border-bottom: none;
-}
-
-.task-hub .tv-form__group > :first-child {
-    margin-top: 0;
-}
-
-.task-hub .tv-form__group > .tv-form__name-section {
-    margin-bottom: 0;
 }
 
 .task-hub__read-only-notice {

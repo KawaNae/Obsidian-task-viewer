@@ -4,7 +4,7 @@ import type { DuplicateOptions, Task, TaskViewerSettings } from '../../types';
 import { isTvInline } from '../../types';
 import { TaskRepository } from '../persistence/TaskRepository';
 import { PropertyUpdatePlanner } from '../persistence/PropertyUpdatePlanner';
-import { FlowExecutor, type FireOp } from '../flow/FlowExecutor';
+import { FlowExecutor, type FireOp, notRunOf } from '../flow/FlowExecutor';
 import { completes } from '../flow/FlowTrigger';
 import type { EditorFireHost } from '../../editor/FlowFireExtension';
 import type { FlowDeleteAssessment } from '../flow/FlowDeletion';
@@ -21,11 +21,14 @@ import { planInPlaceCopies } from '../persistence/DuplicateShift';
 import type { GenBlock } from '../parsing/gen/GenBlockCollector';
 import { plannedOn, subjectOf } from '../persistence/TaskRefs';
 import { logDebug, logError, logInfo, logWarn } from '../../log/log';
-import { readInLine, type EditorLine, type Landing, type WriteOutcome } from '../persistence/FileLines';
-import type { InsertPlace, TaskOp } from '../persistence/TaskOps';
+import { readInLine, type EditorLine, type Landing, type Refusal } from '../persistence/FileLines';
+import type { FiringOutcome, InsertPlace, SubtreeReplacement, TaskOp } from '../persistence/TaskOps';
+import { Destination, type Section } from '../persistence/Destination';
+import type { SendTo } from '../persistence/writers/SendWriter';
 import type { ContentKey } from './ContentKey';
-import { checkCopy, checkFile, type CheckDeps } from './ReadingCheck';
+import { checkCopy, checkFile, type CheckDeps, type OnDisk } from './ReadingCheck';
 import { DiskReconciler } from './DiskReconciler';
+import { outermostRows } from './SendRows';
 import { diskProbeOf, type DiskProbe } from './DiskProbe';
 
 /**
@@ -48,6 +51,38 @@ export interface ReconcileOptions {
      * index's; none by default.
      */
     isOwnView?: (viewType: string) => boolean;
+}
+
+/**
+ * A row a send takes (`TaskIndex.send`): its id, the row and its subtree as
+ * the send's dialog was opened on them (`Task.subtreeLines`), which the write
+ * is checked against, and the draft the user wrote of them there
+ * (`SubtreeFrame.check`'s `write`), if any.
+ */
+export interface SendRow {
+    taskId: string;
+    base: readonly string[];
+    draft?: SubtreeReplacement;
+}
+
+/**
+ * What came of a send (`TaskIndex.send`): the note written, what the send
+ * was about in the user's words (the first row's text), the notes
+ * whose rows went there (`landed`), and the refusals of the notes whose rows
+ * stayed where they stood, not told the user (`refused`), and whether what
+ * went of those was taken out of the note again (`takenBack`; the note
+ * taken away or written back as it was when no row went); or nothing
+ * written, and why — told the user unless the caller asked not to — or
+ * `refused: null` for a send its caller asked wrongly, said only in the log.
+ */
+export type SendWrite =
+    | { kind: 'done'; note: TFile; subject: string; landed: readonly string[]; refused: readonly Refusal[]; takenBack: boolean }
+    | { kind: 'not-done'; refused: IndexRefusal | null };
+
+/** A row as the index read it, and the note's lines it was read in (`TaskIndex.rowSnapshot`). */
+export interface RowSnapshot {
+    task: Task;
+    lines: readonly string[];
 }
 
 /**
@@ -445,14 +480,15 @@ export class TaskIndex {
      *
      * Note: notifyImmediate() is called with no args → full invalidation.
      */
-    private async withNotify<T>(filePath: string, op: () => Promise<T>): Promise<T> {
-        this.apiWrites.mark(filePath);
+    private async withNotify<T>(filePath: string | readonly string[], op: () => Promise<T>): Promise<T> {
+        const paths = typeof filePath === 'string' ? [filePath] : filePath;
+        for (const path of paths) this.apiWrites.mark(path);
         try {
             const result = await op();
             this.notifyImmediate();
             return result;
         } finally {
-            this.apiWrites.clear(filePath);
+            for (const path of paths) this.apiWrites.clear(path);
         }
     }
 
@@ -532,23 +568,179 @@ export class TaskIndex {
     /**
      * A write that may complete a row (`completingIn`, its file; null when it
      * does not), made with the row's fire in it: whether it was written. A
-     * write refused with a fire that writes lines is made without it in the
-     * same attempt (`CompletionFire.writes`). Once the completion landed, the
-     * user is told if its flow was not run: the fire's write was refused, or
-     * its plan failed (`FlowExecutor.reportNotRun`).
+     * write refused with the fire in it is made without it in the same
+     * attempt (`InlineTaskWriter.writeFiring`), and the user told
+     * ({@link tellNotRun}).
      */
     private async writeCompleting(
         completingIn: string | null,
-        write: (fire?: FireOp) => Promise<WriteOutcome>,
+        write: (fire?: FireOp) => Promise<FiringOutcome<FireOp>>,
     ): Promise<boolean> {
-        if (completingIn === null) return (await write()).written;
-        const fire = this.commandExecutor.fireOp(completingIn);
-        const outcome = await write(fire);
-        if (!outcome.written) return false;
-        const planned = fire.planned();
-        if (outcome.insteadOf) this.commandExecutor.reportNotRun({ kind: 'refused', refusal: outcome.insteadOf });
-        else if (planned?.kind === 'failed') this.commandExecutor.reportNotRun(planned);
-        return true;
+        const outcome = await write(completingIn === null ? undefined : this.commandExecutor.fireOp(completingIn));
+        this.tellNotRun(outcome);
+        return outcome.written;
+    }
+
+    /**
+     * Once a write that completed rows landed, tell the user of each row
+     * whose flow was not run, once: its fire was set aside, the write with it
+     * refused, or its plan failed, or it fired without its move
+     * (`FlowExecutor.reportNotRun`). The one word of it for every write of
+     * the index that completes rows.
+     */
+    private tellNotRun(outcome: FiringOutcome<FireOp>): void {
+        if (!outcome.written) return;
+        for (const { fire, setAside } of outcome.fires) {
+            const notRun = setAside ? { kind: 'refused' as const, refusal: setAside } : notRunOf(fire.planned());
+            if (notRun) this.commandExecutor.reportNotRun(notRun);
+        }
+    }
+
+    /**
+     * Write the row `taskId` and its subtree anew from a draft of their text:
+     * the hub's source mode. `base` is the row and its subtree as the draft
+     * was opened on them (the copy's `subtreeLines`), and the write is made
+     * only over a subtree that still reads so; `replacement` is the draft
+     * (`SubtreeReplacement`).
+     *
+     * One write, as every write that names a row: planned from the copy the
+     * index holds once the row's earlier writes are done (`onRow`,
+     * `copyToPlan`), named by the copy's line and reading, and checked against
+     * `base`. A row the write completes — the row, or a child line it keeps
+     * and writes checked — fires in the same write, each on its own
+     * (`InlineTaskWriter.writeFiring`), as the editor fires the rows one
+     * transaction completed; a line the draft made fires nothing, however it
+     * reads.
+     *
+     * @returns whether the draft was written; when not, why not, for the
+     * caller to show beside the draft it keeps. The user is told it as any
+     * refusal is (`reportRefusal`), unless `opts.tellRefusal` is false: the
+     * caller shows it itself, and a notice would say it twice. The index
+     * learns from it either way (`learnFrom`). A read-only row is not
+     * written and answers `refused: null`: the hub does not offer it.
+     */
+    async replaceSubtree(
+        taskId: string,
+        base: readonly string[],
+        replacement: SubtreeReplacement,
+        opts: { tellRefusal?: boolean } = {},
+    ): Promise<{ written: true } | { written: false; refused: IndexRefusal | null }> {
+        if (this.refuseAfterDispose('replaceSubtree')) return { written: false, refused: null };
+        const known = this.getTask(taskId);
+        const hear = opts.tellRefusal === false
+            ? (refusal: IndexRefusal) => this.learnFrom(refusal)
+            : (refusal: IndexRefusal) => this.reportRefusal(refusal);
+        return this.onRow(taskId, async () => {
+            const planned = await this.planCopy(taskId, known, hear);
+            if ('refused' in planned) return { written: false, refused: planned.refused };
+            const { task } = planned;
+            if (task.isReadOnly || base.length === 0) {
+                logWarn(`[TaskIndex] replaceSubtree: not a row to write: id=${taskId}`);
+                return { written: false, refused: null };
+            }
+            return this.withNotify(task.file, async () => {
+                logInfo(`[replaceSubtree] id=${taskId} lines=${base.length}->${replacement.children.length + 1}`);
+                const target = { ...plannedOn(task), basis: { text: base[0], subtree: base } };
+                const defs = this.settings.statusDefinitions;
+                const outcome = await this.repository.replaceSubtreeInFile(target, replacement, {
+                    completes: (was, now) => completes(was, now, defs),
+                    fire: () => this.commandExecutor.fireOp(task.file),
+                }, { refused: (refusal) => { void hear(refusal); } });
+                this.tellNotRun(outcome);
+                return outcome.written ? { written: true } : { written: false, refused: outcome.refused };
+            });
+        });
+    }
+
+    /**
+     * Send rows and their subtrees to a section of a note: the send
+     * operation (`NoteOps.send`). Each row is `SendRow`: named by its id,
+     * with the subtree the dialog was opened on (`base`) and the draft the
+     * user wrote of it, if any. `to` is the note, made by the send when
+     * `create` says so, its section, and the keys to write into its
+     * frontmatter where it has none by their name.
+     *
+     * Planned as every write that names a row: once the writes already
+     * asked of each row are done (`onRow`), from copies the disk still reads
+     * as (`planCopy`), each named by its line and checked against its
+     * `base`. A row inside another's subtree goes with that one's subtree
+     * (`outermostRows`), and the rows go in the order they stand, note by
+     * note.
+     *
+     * The write layer makes it (`SendWriter.send`): to the rows' own note,
+     * one write; to another, the note first, then each note the rows came
+     * from, what went taken back again for a note that refused. A refusal
+     * before anything is written is told as for any write. One of a note the
+     * rows came from, once the note is written, is only learnt from
+     * (`learnFrom`) and answered, for the caller to tell once with what
+     * became of the rest.
+     *
+     * @returns `done` once the note is written; else `not-done`, and why.
+     * A refusal before anything is written — a row's copy the disk no longer
+     * reads as (`planCopy`), a note the write turned away — is told the user
+     * as any refusal is (`reportRefusal`), unless `opts.tellRefusal` is
+     * false: the caller shows it itself, and a notice would say it twice.
+     * The index learns from it either way (`learnFrom`). `opts.landed` is
+     * handed each note the rows came from whose write landed, as it lands
+     * (`SendHearing.landed`).
+     */
+    async send(rows: readonly SendRow[], to: SendTo, opts: { tellRefusal?: boolean; landed?: (path: string) => void } = {}): Promise<SendWrite> {
+        if (this.refuseAfterDispose('send')) return { kind: 'not-done', refused: null };
+        const hear = opts.tellRefusal === false
+            ? (refusal: IndexRefusal) => this.learnFrom(refusal)
+            : (refusal: IndexRefusal) => this.reportRefusal(refusal);
+        const asked = new Map<string, SendRow>();
+        for (const row of rows) if (!asked.has(row.taskId)) asked.set(row.taskId, row);
+        const known = new Map([...asked.keys()].map(id => [id, this.getTask(id)]));
+        // Every row's writes queued in one order, so two sends of the same
+        // rows never wait for each other.
+        const ids = [...asked.keys()].sort();
+        return this.onRows(ids, async (): Promise<SendWrite> => {
+            const planned: { task: Task; row: SendRow }[] = [];
+            for (const id of ids) {
+                const copy = await this.planCopy(id, known.get(id), hear);
+                if ('refused' in copy) return { kind: 'not-done', refused: copy.refused };
+                const row = asked.get(id)!;
+                if (copy.task.isReadOnly || row.base.length === 0) {
+                    logWarn(`[TaskIndex] send: not a row to write: id=${id}`);
+                    return { kind: 'not-done', refused: null };
+                }
+                planned.push({ task: copy.task, row });
+            }
+            const sent = outermostRows(planned);
+            for (const { row } of planned) {
+                if (row.draft && !sent.some(one => one.row === row)) {
+                    logWarn(`[TaskIndex] send: a draft of a row in another's subtree is not written: id=${row.taskId}`);
+                }
+            }
+            if (to.create && sent.some(({ task }) => task.file === to.path)) {
+                logWarn(`[TaskIndex] send: a note to make holds rows already: to=${to.path}`);
+                return { kind: 'not-done', refused: null };
+            }
+            const paths = [...new Set([to.path, ...sent.map(({ task }) => task.file)])];
+            return this.withNotify(paths, async (): Promise<SendWrite> => {
+                logInfo(`[send] to=${to.path}#${to.section.heading}${to.create ? ' (new)' : ''} rows=${sent.map(({ task }) => task.id).join(',')}`);
+                const defs = this.settings.statusDefinitions;
+                const outcome = await this.repository.send(sent.map(({ task, row }) => ({
+                    file: task.file,
+                    row: {
+                        target: { ...plannedOn(task), basis: { text: row.base[0], subtree: row.base } },
+                        ...(row.draft ? { draft: row.draft } : {}),
+                    },
+                })), to, {
+                    completes: (was, now) => completes(was, now, defs),
+                    fire: (path) => this.commandExecutor.fireOp(path),
+                }, { refused: (refusal) => { void hear(refusal); }, landed: opts.landed });
+                if (outcome.kind === 'not-sent') return { kind: 'not-done', refused: outcome.refused };
+                for (const write of outcome.writes) this.tellNotRun(write);
+                for (const refusal of outcome.refused) await this.learnFrom(refusal);
+                logInfo(`[send] landed=${outcome.landed.join(',') || '-'} refused=${outcome.refused.map(one => `${one.file}:${one.reason.kind}`).join(',') || '-'} takenBack=${outcome.takenBack}`);
+                return {
+                    kind: 'done', note: outcome.note, subject: subjectOf(sent[0].task),
+                    landed: outcome.landed, refused: outcome.refused, takenBack: outcome.takenBack,
+                };
+            });
+        });
     }
 
     /**
@@ -569,20 +761,37 @@ export class TaskIndex {
      * user puts work in (`confirmTask`).
      */
     private async copyToPlan(taskId: string, known: Task | undefined): Promise<Task | undefined> {
+        const planned = await this.planCopy(taskId, known);
+        return 'task' in planned ? planned.task : undefined;
+    }
+
+    /**
+     * {@link copyToPlan}, with why not when the copy is not the row on the
+     * disk: handed to `hear` — told the user and learnt from
+     * (`reportRefusal`), or only learnt from, for a caller that shows it in
+     * a place of its own (the hub's source mode) — and answered too.
+     */
+    private async planCopy(
+        taskId: string,
+        known: Task | undefined,
+        hear: (refusal: IndexRefusal) => Promise<void> = (refusal) => this.reportRefusal(refusal),
+    ): Promise<{ task: Task; disk: OnDisk | null } | { refused: IndexRefusal }> {
         const task = this.getTask(taskId);
         if (!task) {
             logWarn(`[TaskIndex] the index no longer holds the row: id=${taskId}`);
             // A row the caller named but the store never held here: say which
             // note, as a write refused before it read the note does.
             const file = known?.file ?? TaskIdGenerator.parse(taskId)?.filePath ?? '';
-            await this.reportRefusal({ file, reason: { kind: 'gone' }, subject: known ? subjectOf(known) : file });
-            return undefined;
+            const refused: IndexRefusal = { file, reason: { kind: 'gone' }, subject: known ? subjectOf(known) : file };
+            await hear(refused);
+            return { refused };
         }
         const checked = await checkCopy(this.checks, task);
-        if (checked.verdict === 'fresh') return task;
+        if (checked.verdict === 'fresh') return { task, disk: checked.disk };
         const reason = checked.verdict === 'stale' ? { kind: 'stale' as const, disk: checked.disk } : { kind: 'unreadable' as const };
-        await this.reportRefusal({ file: task.file, reason, subject: subjectOf(task) });
-        return undefined;
+        const refused: IndexRefusal = { file: task.file, reason, subject: subjectOf(task) };
+        await hear(refused);
+        return { refused };
     }
 
     /**
@@ -595,6 +804,36 @@ export class TaskIndex {
     async confirmTask(taskId: string): Promise<boolean> {
         if (this.refuseAfterDispose('confirmTask')) return false;
         return (await this.copyToPlan(taskId, undefined)) !== undefined;
+    }
+
+    /**
+     * The index's copy of the row `taskId`, and all the lines of the note it
+     * was read in, as the disk holds them: what an operation that reads more
+     * of the note than the row plans from — the send dialog, the values the
+     * row inherits (`InheritedValues`). The same check as every write's
+     * (`planCopy`), which reads the note for it and keeps what it read.
+     *
+     * Undefined when the copy is not the row on the disk: told the user and
+     * the note read again, as for a write (`stale`, `gone`, `unreadable`).
+     * Undefined too, with nothing to tell, for a copy read before our own
+     * write the index has not committed, as while its note is dragged
+     * (`TaskScanner.hold`): the copy says what the row was, not what these
+     * lines say. Waits for the writes already asked of the row
+     * (`onRow`), so it reads what they left.
+     */
+    async rowSnapshot(taskId: string): Promise<RowSnapshot | undefined> {
+        if (this.refuseAfterDispose('rowSnapshot')) return undefined;
+        const known = this.getTask(taskId);
+        return this.onRow(taskId, async () => {
+            const planned = await this.planCopy(taskId, known);
+            if ('refused' in planned) return undefined;
+            const { task, disk } = planned;
+            if (!disk?.read) {
+                logWarn(`[TaskIndex] rowSnapshot: the copy was not read in what the disk holds: id=${taskId}`);
+                return undefined;
+            }
+            return { task, lines: disk.lines };
+        });
     }
 
     /**
@@ -661,6 +900,17 @@ export class TaskIndex {
         const settled = () => { if (queue.get(taskId) === next) queue.delete(taskId); };
         next.then(settled, settled);
         return next;
+    }
+
+    /**
+     * {@link onRow} for each of `ids`, nested in their order: `op` runs once
+     * every write already asked of any of them has finished, and each write
+     * asked of one of them after it waits for it. A caller hands the ids in
+     * one order (sorted), so two such operations over the same rows queue
+     * one behind the other and never each wait for the other.
+     */
+    private onRows<T>(ids: readonly string[], op: () => Promise<T>): Promise<T> {
+        return ids.reduceRight<() => Promise<T>>((inner, id) => () => this.onRow(id, inner), op)();
     }
 
     /**
@@ -809,7 +1059,7 @@ export class TaskIndex {
             logInfo(`[createTask] path=${filePath} heading=${heading ?? '(none)'}`);
 
             const outcome = heading
-                ? await this.repository.insertLineUnderHeading(filePath, taskLine, heading, 2)
+                ? await this.repository.insertLineUnderHeading(filePath, taskLine, Destination.sectionNamed(heading, this.settings))
                 : await this.repository.appendTaskToFile(filePath, taskLine);
             // What the write left is in the index once it landed (`landed`):
             // the caller finds the row on its line without waiting for a scan.
@@ -935,7 +1185,7 @@ export class TaskIndex {
                 break;
             default:
                 logWarn(`[TaskIndex] refused: file=${file} reason=${reason.kind} subject=${subject}`);
-                // `gone`, `unplaceable`, `disturbs`: the note read as the index read it.
+                // `gone`, `unplaceable`, `disturbs`, `headings`: the note read as the index read it.
                 if (reason.kind !== 'changed' && reason.kind !== 'failed') return;
         }
         this.reconciler?.request('refusal', file);

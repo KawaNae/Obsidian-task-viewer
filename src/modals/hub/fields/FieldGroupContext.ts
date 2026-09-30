@@ -14,7 +14,7 @@ import type { CascadeSourceKind } from '../CascadeSource';
  */
 export interface FieldGroupContext {
     getTask: () => Task;
-    isMissing: () => boolean;
+    isShut: () => boolean;
     queue: (updates: Partial<Task> | null) => void;
     app: App;
     plugin: PluginContext;

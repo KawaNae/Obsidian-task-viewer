@@ -1,16 +1,19 @@
 import { describe, expect, it } from 'vitest';
-import { Placement, headingKey } from '../../../src/services/persistence/utils/Placement';
+import { Placement, type SectionSide, headingKey } from '../../../src/services/persistence/utils/Placement';
 import { Outline } from '../../../src/services/parsing/utils/Outline';
 
 /**
- * A move's destination in its own note (F8): the heading a `[[#name]]` names,
- * looked up as Obsidian resolves the link, and the end of its section.
+ * Where lines go in a section (`Placement.into`): the heading a `[[#name]]`
+ * names, looked up as Obsidian resolves the link, and its head or its end.
+ * A section, to a line put in it, runs to the next heading of any level.
  */
-const endOf = (lines: string[], name: string, head = '- [ ] m') => {
-    const found = Placement.heading(Outline.read(lines), name);
-    if (found.kind !== 'one') throw new Error(`no one heading: ${found.kind}`);
-    return Placement.sectionEnd(Outline.read(lines), found.heading, head);
+const spotIn = (side: SectionSide) => (lines: string[], name: string, head = '- [ ] m') => {
+    const found = Placement.into(Outline.read(lines), { heading: name, side }, head);
+    if (found.kind !== 'spot') throw new Error(`no spot: ${found.kind}`);
+    return found.spot;
 };
+const endOf = spotIn('end');
+const headOf = spotIn('head');
 
 describe('headingKey', () => {
     it('compares as Obsidian does: case aside, ASCII marks but \' - _ read as a space, spaces run together, trimmed', () => {
@@ -41,18 +44,39 @@ describe('Placement.heading', () => {
     });
 });
 
-describe('Placement.sectionEnd', () => {
-    it('is past the last line of the section, which runs to the next heading of its level or above', () => {
+describe('Placement.into', () => {
+    it('answers none and many as the heading is looked up, at either side', () => {
+        const lines = ['## Case', '- [ ] a', '### case', '## Other'];
+        for (const side of ['head', 'end'] as const) {
+            expect(Placement.into(Outline.read(lines), { heading: 'CASE', side }, '- [ ] m')).toEqual({ kind: 'many', count: 2 });
+            expect(Placement.into(Outline.read(lines), { heading: 'Nope', side }, '- [ ] m')).toEqual({ kind: 'none' });
+        }
+    });
+
+    it('finds a heading of any level by its name', () => {
+        const lines = ['# Top', '### Tasks', '- [ ] a'];
+        expect(headOf(lines, 'tasks').at).toBe(2);
+        expect(endOf(lines, 'Tasks').at).toBe(3);
+    });
+});
+
+describe('Placement.into, at the end', () => {
+    it('is past the last line of the section, which runs to the next heading', () => {
         const lines = ['# A', '- [ ] a1', '## B', '- [ ] b1', '# C', '- [ ] c1'];
-        expect(endOf(lines, 'A')).toEqual({ at: 4, parent: null, indent: '' });
+        expect(endOf(lines, 'A')).toEqual({ at: 2, parent: null, indent: '' });
         expect(endOf(lines, 'B')).toEqual({ at: 4, parent: null, indent: '' });
         expect(endOf(lines, 'C')).toEqual({ at: 6, parent: null, indent: '' });
     });
 
-    it('stops at a heading of its own level, not at a deeper one', () => {
-        const lines = ['## A', '- [ ] a1', '### Sub', '- [ ] s1', '## B', '- [ ] b1'];
-        expect(endOf(lines, 'A').at).toBe(4);
-        expect(endOf(lines, 'Sub').at).toBe(4);
+    it('stops at a deeper heading as at one of its own level: a line past it would read as the deeper one\'s', () => {
+        const lines = ['## A', '- [ ] a1', '### Sub', '- tv-color:: gray', '- [ ] s1', '## B', '- [ ] b1'];
+        expect(endOf(lines, 'A').at).toBe(2);
+        expect(endOf(lines, 'Sub').at).toBe(5);
+    });
+
+    it('is just below the heading when a deeper heading follows it straight away', () => {
+        expect(endOf(['## A', '### Sub', '- [ ] s1'], 'A').at).toBe(1);
+        expect(endOf(['## A', '', '### Sub'], 'A').at).toBe(1);
     });
 
     it('is past the subtree of the last item, as its sibling, when the section ends in an item', () => {
@@ -86,5 +110,28 @@ describe('Placement.sectionEnd', () => {
 
     it('spells the line as the item it goes below', () => {
         expect(endOf(['## K', '  - [ ] k', '', '## L'], 'K')).toEqual({ at: 2, parent: null, indent: '  ' });
+    });
+});
+
+describe('Placement.into, at the head', () => {
+    it('is just below the heading, at the top, unindented when no item follows', () => {
+        expect(headOf(['## H', '- [ ] a'], 'H')).toEqual({ at: 1, parent: null, indent: '' });
+        expect(headOf(['## H'], 'H')).toEqual({ at: 1, parent: null, indent: '' });
+    });
+
+    it('is at the indentation of the first item at the top below it, blank lines aside, as its sibling (P1)', () => {
+        expect(headOf(['## H', '', '  - [ ] a', '\t- [ ] b'], 'H')).toEqual({ at: 1, parent: null, indent: '  ' });
+    });
+
+    it('is past the paragraph and the indented code below the heading, and not past the next heading', () => {
+        expect(headOf(['## H', 'para', 'more', '', '- [ ] a'], 'H').at).toBe(3);
+        // Four columns under a heading is indented code (measurement.md q10).
+        expect(headOf(['## H', '\t- [ ] a', '\t\t- [ ] b', '- [ ] c'], 'H')).toEqual({ at: 3, parent: null, indent: '' });
+        expect(headOf(['## H', '### Sub', 'para'], 'H').at).toBe(1);
+        expect(headOf(['## H', '---', 'para'], 'H').at).toBe(1);
+    });
+
+    it('is below a setext heading\'s underline', () => {
+        expect(headOf(['Tasks', '---', '- [ ] a'], 'Tasks').at).toBe(2);
     });
 });

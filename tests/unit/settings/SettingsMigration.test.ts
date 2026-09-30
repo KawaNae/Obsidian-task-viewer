@@ -160,6 +160,22 @@ describe('migrateSettings: legacy key names', () => {
         expect('tvFileKeys' in raw).toBe(false);
     });
 
+    // v0.58: the daily note's heading became the one a new task goes under
+    // in any note.
+    it('moves the daily note\'s heading and its level onto the task heading\'s', () => {
+        const raw: Record<string, unknown> = { dailyNoteHeader: 'ToDo', dailyNoteHeaderLevel: 3, startHour: 5 };
+        migrateSettings(raw);
+        expect(raw).toEqual({ taskHeading: 'ToDo', taskHeadingLevel: 3, startHour: 5 });
+        migrateSettings(raw);
+        expect(raw).toEqual({ taskHeading: 'ToDo', taskHeadingLevel: 3, startHour: 5 });
+    });
+
+    it('keeps the task heading when the daily note\'s is there too, and drops the daily note\'s', () => {
+        const raw: Record<string, unknown> = { dailyNoteHeader: '古い', taskHeading: '新しい', dailyNoteHeaderLevel: 3 };
+        migrateSettings(raw);
+        expect(raw).toEqual({ taskHeading: '新しい', taskHeadingLevel: 3 });
+    });
+
     it('transcribes a falsy legacy value rather than reading it as absent', () => {
         // Mutation: test the old key for truthiness instead of !== undefined
         // and `false` / `0` silently revert to their defaults.

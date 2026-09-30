@@ -390,14 +390,17 @@ export interface EditorLine {
  * read as meant where it goes (`unplaceable`), writing it would change what
  * another line is or which item it stands in (`disturbs`; both are
  * `checkWrite`, and name the fence that never closes when that is where the
- * line reads: `WriteFinding.fence`), or the write itself failed — it threw,
- * or the file could not be read or written.
+ * line reads: `WriteFinding.fence`), the section it goes to is under
+ * `count` headings named `name` and none of them is the one (`headings`,
+ * `Placement.into`), or the write itself failed — it threw, or the file could
+ * not be read or written.
  */
 export type RefusalReason =
     | { kind: 'gone' }
     | { kind: 'changed' }
     | { kind: 'unplaceable'; fence: number | null }
     | { kind: 'disturbs'; fence: number | null }
+    | { kind: 'headings'; name: string; count: number }
     | { kind: 'failed' };
 
 /** A write that was not made, as it is told to whoever reports it. */
@@ -513,6 +516,25 @@ export interface NamedRow {
 }
 
 /**
+ * A line a write marked in its own lines (`WriteSession.mark`): where it
+ * stood then, and how far the write's report had got, so the edits reported
+ * after it carry it. Made only by the session of the write it is in.
+ */
+export interface MarkedLine {
+    /** The line, in the lines as they stood when it was marked. */
+    readonly marked: number;
+    /** What the line read when it was marked. */
+    readonly text: string;
+    /** How many lines there were then. */
+    readonly length: number;
+    /** How many edits the write had reported then. */
+    readonly after: number;
+}
+
+/** What a write can ask its session for the line of (`WriteSession.row`). */
+export type RowTarget = NamedRow | EditorLine | MarkedLine;
+
+/**
  * What one `processLines` callback is handed besides its draft: where its
  * target stands. A write is given up only when `row` answers null, so the
  * refusal and whom it is about are answered here, in one place.
@@ -542,7 +564,31 @@ export interface WriteSession {
      * write that carried a coordinate is refused whole if its report does not
      * account for the lines it returns.
      */
-    row(target: NamedRow | EditorLine): number | null;
+    row(target: RowTarget): number | null;
+
+    /**
+     * Name `line` of the lines as they stand now, for {@link row} to carry
+     * across the edits this write reports from here: a line the write itself
+     * made or rewrote, which no plan read and no editor pointed at — a row
+     * that a subtree's replacement completed, for its fire to find where the
+     * edits after it leave it (`ReplaceSubtree`). The carrying is the one
+     * `row` already does for a named row, begun partway through the write;
+     * the write's own report is the whole of the map, so nothing is guessed.
+     * A mark is good only in the write that made it.
+     */
+    mark(line: number): MarkedLine;
+
+    /**
+     * Give the write up for what the lines hold, not for a target: the
+     * section it goes to is under more than one heading of its name
+     * (`HeadingInserter`), a subtree's replacement would not read as the
+     * row's subtree (`ReplaceSubtree`), or the lines are not the ones the
+     * write was made for (`changed`: a send's row whose subtree, once its
+     * draft and fires are written, is not what went to its note, `SendWriter`;
+     * a note to take a write back from that was written since, `takeBack`).
+     * The callback returns what this answers.
+     */
+    refuse(reason: Extract<RefusalReason, { kind: 'headings' | 'unplaceable' | 'disturbs' | 'changed' }>): false;
 }
 
 /**
@@ -570,12 +616,6 @@ export interface WriteMade {
     /** The callback said to write, whether or not the lines differed. */
     written: true;
     refused: null;
-    /**
-     * The refusal of the edit tried first, when the one written is the edit
-     * tried in its place (`processLines`'s `instead`). Told by the caller,
-     * which knows what the edit it gave up was.
-     */
-    insteadOf?: Refusal;
 }
 
 /**
@@ -585,13 +625,20 @@ export interface WriteMade {
 export type DraftEdit = (draft: LineDraft, eol: Eol, session: WriteSession) => boolean;
 
 /**
- * The edit a write tries in place of its first, on the same lines, when the
- * first is refused as `when` answers: one attempt, one `vault.process`, so
- * nothing written from outside comes between the two.
+ * A write that settles on the edit it writes by trying edits on the same
+ * lines, one after another: `tryEdit` lets an edit change the lines handed in
+ * and answers what came of it (`editLines`), writing nothing, and what
+ * `settle` answers is written, or refused. All of it happens in one run of
+ * the write's callback, one `vault.process`, so nothing written from outside
+ * comes between the tries. `settle` is run again on every run of the
+ * callback, and only the last run's answer counts.
+ *
+ * A completion's fires are tried so (`InlineTaskWriter.writeFiring`): a fire
+ * the write is refused with is set aside, and the completion written without
+ * it.
  */
-export interface EditInstead {
-    when: (refused: Refusal) => boolean;
-    edit: DraftEdit;
+export interface EditTrials {
+    settle(tryEdit: (edit: DraftEdit) => EditedLines): EditedLines;
 }
 
 /** Where each line of the file came from, once a write's report is replayed. */
@@ -740,8 +787,8 @@ export type EditedLines =
     }
     | { written: false; refused: Refusal };
 
-/** The text a write is about when it asks for `target`: a named row's subject, the editor's line. */
-function subjectOf(target: NamedRow | EditorLine): string {
+/** The text a write is about when it asks for `target`: a named row's subject, the editor's line, the line marked. */
+function subjectOf(target: RowTarget): string {
     return 'basis' in target ? target.subject : target.text.trim();
 }
 
@@ -806,6 +853,9 @@ export function editLines(
     // Each target is asked once, of the lines as they were handed in, and
     // its basis checked there: the answer is its line, or why not.
     const answered = new Map<NamedRow | EditorLine, number | RefusalReason>();
+    // The lines this write marked (`WriteSession.mark`): a mark of another
+    // write names a line of other lines.
+    const marks = new WeakSet<MarkedLine>();
     // Whether a coordinate was carried across this write's own edits,
     // and whether carrying one caught the report out.
     let carried = false;
@@ -861,11 +911,41 @@ export function editLines(
         }
         return holds ? line : { kind: 'changed' };
     };
+    // Where the line a mark names stands now, carried across the edits
+    // reported since it was made, as `carry` carries a row from the lines
+    // handed in; null when one of them took it away.
+    const follow = (marked: MarkedLine): number | null => {
+        if (!marks.has(marked)) throw new UnfollowableDraft('a line marked by another write was asked for');
+        carried = true;
+        const replayed = replayEdits(marked.length, reported.slice(marked.after));
+        if (!replayed) {
+            unsound = 'a report no file could follow';
+            return null;
+        }
+        const now = replayed.origin.indexOf(marked.marked);
+        if (now < 0) return null;
+        if (!replayed.rewritten[now] && !Outline.VERBATIM.holds(working[now], marked.text)) {
+            unsound = `the line marked at ${marked.marked}, carried to ${now}, does not read what it read`;
+            return null;
+        }
+        return now;
+    };
     const session: WriteSession = {
+        mark: (line) => {
+            if (!Number.isInteger(line) || line < 0 || line >= working.length) throw new UnfollowableDraft(`line ${line} marked past the lines`);
+            const marked: MarkedLine = { marked: line, text: working[line], length: working.length, after: reported.length };
+            marks.add(marked);
+            return marked;
+        },
         row: (target) => {
             const about = subjectOf(target);
             lastSubject = about;
             subjects.asked?.(about);
+            if ('marked' in target) {
+                const now = follow(target);
+                if (now === null) { refuse({ kind: 'gone' }, about); return null; }
+                return now;
+            }
             let found = answered.get(target);
             if (found === undefined) {
                 found = answer(target);
@@ -877,6 +957,7 @@ export function editLines(
             if (now === null) { refuse({ kind: 'gone' }, about); return null; }
             return now;
         },
+        refuse: (reason) => refuse(reason, subject()),
     };
     const notWritten = (): EditedLines => ({ written: false, refused: refused! });
     // A caller's bug, not the user's: a development build throws so the
@@ -974,21 +1055,17 @@ export function editLines(
  * written branch only, and after `vault.process`: a write that never landed
  * leaves nothing behind.
  *
- * `instead`, when given, is the edit tried on the same lines when `edit` is
- * refused as `instead.when` answers; the outcome then says what `edit` met
- * (`WriteMade.insteadOf`). Which refusals those are is the caller's to say.
+ * `edit` is one edit, or edits tried in turn on the same lines, the one to
+ * write settled among them (`EditTrials`).
  */
 export async function processLines(
     app: App,
     file: TFile,
     channel: WriteChannel | undefined,
-    edit: DraftEdit,
+    edit: DraftEdit | EditTrials,
     about?: string,
-    instead?: EditInstead,
 ): Promise<WriteOutcome> {
     let refused: Refusal | null = null;
-    // The refusal of `edit`, when `instead` was written in its place.
-    let setAside: Refusal | null = null;
     // What the write left, when it changed the file: handed to the channel
     // once it is known to have landed.
     let landing: Landing | null = null;
@@ -1008,15 +1085,13 @@ export async function processLines(
     // Set inside the callback too.
     const landed = landing as Landing | null;
     if (landed !== null) channel?.landed(landed);
-    const gaveWay = setAside as Refusal | null;
-    return gaveWay === null ? { written: true, refused: null } : { written: true, refused: null, insteadOf: gaveWay };
+    return { written: true, refused: null };
 
     /** One run of the callback: the content to write, or the content as it was. */
     function attempt(content: string): string {
         // Obsidian may run the callback again (it retries on a conflicting
         // write). Only the last attempt is the one written.
         refused = null;
-        setAside = null;
         landing = null;
         lastSubject = '';
         // Asked with the lines in hand: the reading the write starts from.
@@ -1028,12 +1103,11 @@ export async function processLines(
             asked: (said: string) => { lastSubject = said; },
             follow: channel ? (read: ReadingId, line: number, now: ContentKey) => channel.follow(read, line, now) : undefined,
         };
-        let edited = editLines(file.path, lines, eol, edit, subjects);
-        if (!edited.written && instead?.when(edited.refused)) {
-            setAside = edited.refused;
+        const tryEdit = (one: DraftEdit): EditedLines => {
             lastSubject = '';
-            edited = editLines(file.path, lines, eol, instead.edit, subjects);
-        }
+            return editLines(file.path, lines, eol, one, subjects);
+        };
+        const edited = typeof edit === 'function' ? tryEdit(edit) : edit.settle(tryEdit);
         if (!edited.written) {
             refused = edited.refused;
             return content;
@@ -1245,4 +1319,113 @@ export async function replaceWhole(
     const landed = landing as Landing | null;
     if (landed !== null) channel?.landed(landed);
     return { written: true, refused: null };
+}
+
+/**
+ * How a write of ours is taken back once the operation it was part of could
+ * not be made whole (`takeBack`): a send whose rows went to a note, and one
+ * of whose notes they came from refused to let them go (`SendWriter`).
+ *
+ * - `made`: the note the write created is taken away, to the trash the
+ *   user's settings name (`fileManager.trashFile`).
+ * - `restore`: the note is written back to `lines`, the lines the write was
+ *   handed: nothing it wrote is left.
+ * - `remove`: the lines `ranges` names (`[from, to)` of the lines the write
+ *   left) are taken away, and the rest of what it wrote is left.
+ */
+export type TakeBack =
+    | { kind: 'made' }
+    | { kind: 'restore'; lines: readonly string[] }
+    | { kind: 'remove'; ranges: readonly (readonly [number, number])[] };
+
+/**
+ * What became of a take-back: made, or not, and why — the note no longer
+ * reads as the write left it (`changed`: written since, from outside or by
+ * the user), it is not there under its path (`gone`: taken away or renamed
+ * since), or taking it back failed or would not read as the lines around it
+ * did (`failed`). A take-back that was not made left the note as it was, and
+ * tells nobody: its caller says what became of the operation, once.
+ */
+export type TakenBack = { taken: true } | { taken: false; why: 'changed' | 'gone' | 'failed' };
+
+/**
+ * Take back what a write of ours left in `file`, as `how` says — only while
+ * the note reads as the write left it (`left`, its lines; its mark and line
+ * ends aside), so nothing written since is lost with it.
+ *
+ * Run in the file's line (`processOrFail`): no write of ours comes between
+ * the reading and the taking back, and one asked after waits for it. What
+ * can still come between is a save from outside in the moment between the
+ * two, as it can around any write.
+ *
+ * What it leaves is handed to `channel` as any write's is: `remove` with its
+ * report, as lines taken away, so the rows it leaves are the rows they were;
+ * `restore` with none, as a whole content written (`replaceWhole`). A
+ * refusal or a failure is told to nobody.
+ */
+export async function takeBack(
+    app: App,
+    file: TFile,
+    channel: WriteChannel | undefined,
+    left: readonly string[],
+    how: TakeBack,
+): Promise<TakenBack> {
+    const readsAsLeft = (lines: readonly string[]) => lines.length === left.length && lines.every((line, i) => line === left[i]);
+    if (app.vault.getAbstractFileByPath(file.path) !== file) return { taken: false, why: 'gone' };
+    // Told to nobody: the caller says what became of the operation.
+    const quiet: WriteChannel | undefined = channel ? { ...channel, refused: () => { } } : undefined;
+    switch (how.kind) {
+        case 'made':
+            return inLineOf(file, async (): Promise<TakenBack> => {
+                let now: string;
+                try {
+                    now = await app.vault.read(file);
+                } catch (error) {
+                    logError(`[FileLines] ${file.path}: could not read the note to take back the write; left as it is: ${String(error)}`, { notice: false });
+                    return { taken: false, why: 'failed' };
+                }
+                if (!readsAsLeft(splitLines(now).lines)) return { taken: false, why: 'changed' };
+                try {
+                    await app.fileManager.trashFile(file);
+                    return { taken: true };
+                } catch (error) {
+                    logError(`[FileLines] ${file.path}: could not take the note away; left as it is: ${String(error)}`, { notice: false });
+                    return { taken: false, why: 'failed' };
+                }
+            });
+        case 'remove': {
+            // From the bottom, so each range stands where the write left it.
+            const ranges = [...how.ranges].sort((a, b) => b[0] - a[0]);
+            const outcome = await processLines(app, file, quiet, (draft, _eol, session) => {
+                if (!readsAsLeft(draft.lines)) return session.refuse({ kind: 'changed' });
+                for (const [from, to] of ranges) draft.splice(from, to - from);
+                return true;
+            });
+            if (outcome.written) return { taken: true };
+            if (outcome.refused.reason.kind !== 'changed') {
+                logWarn(`[FileLines] ${file.path}: the lines a write left were not taken back (${outcome.refused.reason.kind}); left as they are`);
+            }
+            return { taken: false, why: outcome.refused.reason.kind === 'changed' ? 'changed' : 'failed' };
+        }
+        case 'restore': {
+            let written = false;
+            let landing: Landing | null = null;
+            const threw = await processOrFail(app, file, quiet, (content) => {
+                written = false;
+                landing = null;
+                const { lines, eol, bom } = splitLines(content);
+                if (!readsAsLeft(lines)) return content;
+                written = true;
+                // The note's own mark and line ends, as they are now.
+                const back = (bom ? BOM : '') + joinLines([...how.lines], eol);
+                if (back !== content && quiet) landing = { before: lines, lines: [...how.lines], edits: null, reading: null, handed: quiet.reading() };
+                return back;
+            }, () => file.path);
+            if (threw) return { taken: false, why: 'failed' };
+            // Set inside the callback, which the compiler does not follow.
+            const landed = landing as Landing | null;
+            if (landed !== null) quiet?.landed(landed);
+            return (written as boolean) ? { taken: true } : { taken: false, why: 'changed' };
+        }
+    }
 }

@@ -10,13 +10,12 @@ import { EvalError } from '../lang/ExprEvaluator';
 import type { FlowEffect } from './FlowEffects';
 import { type CreatingEffect, type FlowDeleteAssessment, assessFlowDelete, planFlowForDeletion } from './FlowDeletion';
 import type { FlowInstanceInsert } from '../persistence/FlowInstanceLines';
-import type { CompletionFire, MoveDestination, TaskOp } from '../persistence/TaskOps';
+import type { CompletionFire, TaskOp } from '../persistence/TaskOps';
 import { plannedOn, subjectOf } from '../persistence/TaskRefs';
 import type { Refusal } from '../persistence/FileLines';
 import { refusalClause } from '../core/RefusalClause';
-import { Placement } from '../persistence/utils/Placement';
+import { type InSection, Placement, type SectionSide } from '../persistence/utils/Placement';
 import { Outline } from '../parsing/utils/Outline';
-import type { MoveTarget } from './FlowAst';
 import { flowSource } from './FlowSegments';
 import { type FlowPlanDeps, GenerationError, planFlow } from './FlowPlanner';
 import { canTriggerFlow } from './FlowTrigger';
@@ -26,25 +25,22 @@ import type { GenBlock } from '../parsing/gen/GenBlockCollector';
 import { runtimeText } from './runtimeText';
 
 /**
- * Where a move to `to` goes in `lines`, or why it cannot be made there: it
- * names another note (retired, F8), or the heading it names is not there, or
- * is there more than once (`Placement.heading`, as the write will look it up).
+ * Where a move to the heading `name` goes in `lines`, at `side` of the
+ * section, or why it cannot be made there: the heading is not there, or is
+ * there more than once (`Placement.heading`, as the write will look it up:
+ * `Placement.into`). A destination that names no heading of the note never
+ * gets here: the planner drops that move (`move-dropped`).
  */
-function destinationIn(to: MoveTarget, lines: readonly string[]): MoveDestination | GenerationError {
-    if (to.kind === 'retired') {
-        return new GenerationError('eval.move-retired',
-            'move() moves the task within its note only, and this one names another note');
-    }
-    if (to.kind === 'end') return to;
-    const found = Placement.heading(Outline.read(lines), to.name);
+function destinationIn(name: string, side: SectionSide, lines: readonly string[]): InSection | GenerationError {
+    const found = Placement.heading(Outline.read(lines), name);
     if (found.kind === 'none') {
-        return new GenerationError('eval.move-no-heading', `No heading '${to.name}' in this note`, { name: to.name });
+        return new GenerationError('eval.move-no-heading', `No heading '${name}' in this note`, { name });
     }
     if (found.kind === 'many') {
         return new GenerationError('eval.move-heading-ambiguous',
-            `${found.count} headings are named '${to.name}' in this note`, { name: to.name, count: found.count });
+            `${found.count} headings are named '${name}' in this note`, { name, count: found.count });
     }
-    return to;
+    return { heading: name, side };
 }
 
 /** How long one failure stays quiet after it has been shown. */
@@ -61,23 +57,41 @@ function fileName(path: string): string {
  *
  * - `none`: nothing fires — the row is no task that can fire, or its note is
  *   ignored.
- * - `failed`: the plan failed (an expression, a block, a move's
- *   destination). Nothing is written for the fire, the command stays, and
- *   the caller says so once the completion has landed (`reportNotRun`).
+ * - `failed`: the plan failed (an expression, a block, a move to a heading
+ *   that is not one place in the note). Nothing is written for the fire,
+ *   the command stays, and the caller says so once the completion has
+ *   landed (`reportNotRun`).
  * - `fires`: `ops` are what the fire does to the row in the completing
- *   write.
+ *   write. `unmoved` is the move the command asks for and the fire drops,
+ *   with why (a retired destination: `move-dropped`), or null; the caller
+ *   says so once the completion has landed.
  */
 export type FirePlan =
     | { kind: 'none' }
     | { kind: 'failed'; task: Task; error: EvalError | GenerationError }
-    | { kind: 'fires'; task: Task; ops: TaskOp[] };
+    | { kind: 'fires'; task: Task; ops: TaskOp[]; unmoved: GenerationError | null };
 
 /**
- * Why a completion was written without its flow (`FlowExecutor.reportNotRun`):
- * the fire's plan failed, or the fire's write was refused, for the reason the
- * write gave.
+ * What of a completion's flow was not run (`FlowExecutor.reportNotRun`): the
+ * whole of it, because the fire's plan failed or the fire's write was
+ * refused, for the reason the write gave; or its move alone, dropped by a
+ * plan that otherwise fired (`unmoved`).
  */
-export type NotRun = Extract<FirePlan, { kind: 'failed' }> | { kind: 'refused'; refusal: Refusal };
+export type NotRun =
+    | Extract<FirePlan, { kind: 'failed' }>
+    | { kind: 'refused'; refusal: Refusal }
+    | { kind: 'unmoved'; task: Task; error: GenerationError };
+
+/**
+ * What the user is owed of a fire's plan once its completion has landed:
+ * the plan failed, or it fired without its move; else null. The one reading
+ * of it, for a card's write and the editor's alike.
+ */
+export function notRunOf(plan: FirePlan | null): NotRun | null {
+    if (plan?.kind === 'failed') return plan;
+    if (plan?.kind === 'fires' && plan.unmoved) return { kind: 'unmoved', task: plan.task, error: plan.unmoved };
+    return null;
+}
 
 /**
  * A `fire` op, what its plan answered the last time a write ran it, and
@@ -134,11 +148,14 @@ export class FlowExecutor {
      * The fire of a row read as `task` in `lines`, its blocks looked up by
      * `blockNamed`: the plan, and what it does to the row, as ops.
      *
-     * A move whose destination is not one place in `lines` fails the plan
+     * A move to a heading that is not one place in `lines` fails the plan
      * whole, as an expression that fails does: nothing of the fire is
      * written, the command stays, and the user is told why. Dropping only
      * the move would consume the command, and the user who fixes the heading
-     * and checks the row again would find nothing left to fire.
+     * and checks the row again would find nothing left to fire. A move whose
+     * destination is retired is another matter, answered by the planner from
+     * how it is written: no fixing of the note makes it one, so the plan
+     * fires without it (`move-dropped`, `unmoved`).
      */
     planTask(task: Task, blockNamed: (name: string) => GenBlock | undefined, lines: readonly string[]): FirePlan {
         const program = task.flow?.program;
@@ -159,13 +176,19 @@ export class FlowExecutor {
             throw err;
         }
         const ops: TaskOp[] = [];
+        let unmoved: GenerationError | null = null;
         for (const effect of effects) {
             logInfo(`[Flow:effect] ${effect.kind} taskId=${task.id}`);
+            if (effect.kind === 'move-dropped') {
+                logWarn(`[FlowExecutor] Flow fired without its move for ${task.id}: ${effect.error.message}`);
+                unmoved = effect.error;
+                continue;
+            }
             if (effect.kind !== 'move') {
                 ops.push(...this.opsFor(task, effect));
                 continue;
             }
-            const to = destinationIn(effect.to, lines);
+            const to = destinationIn(effect.heading, this.getSettings().sectionSide, lines);
             if (to instanceof GenerationError) {
                 logWarn(`[FlowExecutor] Flow did not fire for ${task.id}: ${to.message}`);
                 return { kind: 'failed', task, error: to };
@@ -174,7 +197,7 @@ export class FlowExecutor {
             // fired, and taking it from where it stood is part of the carrying.
             ops.push({ kind: 'move', text: TaskParser.format(effect.movedTask), to });
         }
-        return { kind: 'fires', task, ops };
+        return { kind: 'fires', task, ops, unmoved };
     }
 
     /**
@@ -313,7 +336,7 @@ export class FlowExecutor {
      * What one effect does in the row's own file, as the write applies it. A
      * move's op takes the destination looked up in the lines (`planTask`).
      */
-    private opsFor(task: Task, effect: Exclude<FlowEffect, { kind: 'move' }>): TaskOp[] {
+    private opsFor(task: Task, effect: Exclude<FlowEffect, { kind: 'move' | 'move-dropped' }>): TaskOp[] {
         switch (effect.kind) {
             case 'create-next':
             case 'create-generated':
@@ -329,8 +352,9 @@ export class FlowExecutor {
 
     /**
      * Tell the user a completion was written and its flow was not run, and
-     * why: its plan failed, or the fire's write was refused. The one notice of
-     * it, for a card's write and the editor's alike.
+     * why: its plan failed, or the fire's write was refused; or that the flow
+     * ran without its move, and why. The one notice of it, for a card's write
+     * and the editor's alike.
      *
      * Not firing and not consuming is the design — a command whose expression
      * failed has to stay on the line — but from the outside it is a checkbox
@@ -346,8 +370,9 @@ export class FlowExecutor {
             new Notice(t('notice.flowNotRun', { reason: refusalClause(reason), subject }));
             return;
         }
-        if (this.shownLately('notice.flowNotRun', why.task, why.error)) return;
-        new Notice(t('notice.flowNotRun', { reason: runtimeText(why.error), subject: subjectOf(why.task) }));
+        const notice = why.kind === 'unmoved' ? 'notice.flowMoveNotRun' : 'notice.flowNotRun';
+        if (this.shownLately(notice, why.task, why.error)) return;
+        new Notice(t(notice, { reason: runtimeText(why.error), subject: subjectOf(why.task) }));
     }
 
     /**

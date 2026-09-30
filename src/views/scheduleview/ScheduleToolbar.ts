@@ -23,6 +23,7 @@ export interface ScheduleToolbarDeps {
 
     onNavigate: (days: number) => void;
     onToday: () => void;
+    onJumpToDate: (date: string) => void;
     onFilterChange: () => void;
 
     getCustomName: () => string | undefined;
@@ -86,7 +87,12 @@ export class ScheduleToolbar extends ViewToolbarBase {
             toolbar,
             (days) => deps.onNavigate(days),
             () => deps.onToday(),
-            {}
+            {
+                dateJump: {
+                    getCurrentDate: () => deps.getCurrentDate(),
+                    onJump: (date) => deps.onJumpToDate(date),
+                },
+            }
         );
 
         toolbar.createDiv('view-toolbar__spacer');

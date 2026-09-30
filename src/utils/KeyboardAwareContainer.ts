@@ -5,11 +5,19 @@ import { trackKeyboard, nativeKeyboardHeight, keyboardTop } from './KeyboardStat
  * Mobile virtual keyboard awareness for fixed-position containers.
  *
  * Never moves the container or the panel itself. When the keyboard
- * covers the focused input, the panel's height is locked at its
- * current value and just enough bottom padding is injected to create
- * scroll room, then the contents are scrolled so the input's bottom
- * sits at the keyboard's top edge. Everything (height / padding /
- * scrollTop) is restored when the keyboard closes.
+ * covers the focused field, the panel's height is locked at its
+ * current value, bottom padding is injected where the panel lacks the
+ * scroll room, and the contents are scrolled so what is typed at sits
+ * at the keyboard's top edge. Everything (height / padding / scrollTop)
+ * is restored when the keyboard closes.
+ *
+ * A field is an input, a textarea, or an editable element
+ * (contenteditable: a CodeMirror editor's content). What is typed at is
+ * the field's bottom for an input or a textarea, and the caret for an
+ * editable element, whose lines may run below the keyboard however tall
+ * it grows: the caret is followed as it moves (`selectionchange`, which
+ * the DOM fires for any editable element, CodeMirror's own selection
+ * among them), so no editor has to tell of its caret.
  *
  * Keyboard detection is dual-source (state は KeyboardState に集約):
  * - visualViewport resize — Windows / Safari 系。`innerHeight - vv.height`
@@ -27,6 +35,8 @@ export class KeyboardAwareContainer {
     private blurHandler: (() => void) | null = null;
     private blurTimer: ReturnType<typeof setTimeout> | null = null;
     private focusTimer: ReturnType<typeof setTimeout> | null = null;
+    private selectionHandler: (() => void) | null = null;
+    private selectionFrame: number | null = null;
     /** panel inline styles + scrollTop as they were before we touched them */
     private saved: { height: string; paddingBottom: string; scrollTop: number } | null = null;
     /** CSS-computed padding-bottom (px) captured before inline override */
@@ -64,8 +74,7 @@ export class KeyboardAwareContainer {
         // 再発火しない）
         this.focusHandler = (e: FocusEvent) => {
             const target = e.target;
-            if (!(target instanceof HTMLInputElement ||
-                  target instanceof HTMLTextAreaElement)) return;
+            if (!isField(target)) return;
             if (this.blurTimer) { clearTimeout(this.blurTimer); this.blurTimer = null; }
             if (this.focusTimer) clearTimeout(this.focusTimer);
             this.focusTimer = setTimeout(() => {
@@ -84,6 +93,23 @@ export class KeyboardAwareContainer {
             }, 200);
         };
         this.container.addEventListener('focusout', this.blurHandler);
+
+        // The caret of an editable field moving while the keyboard is open
+        // (typing on to a new line, a tap further down): once a frame.
+        this.selectionHandler = () => {
+            if (!this.keyboardOpen || this.selectionFrame !== null) return;
+            const follow = () => {
+                this.selectionFrame = null;
+                const active = this.activeInput();
+                if (this.keyboardOpen && active?.isContentEditable) this.ensureAboveKeyboard(active);
+            };
+            if (typeof this.win.requestAnimationFrame === 'function') {
+                this.selectionFrame = this.win.requestAnimationFrame(follow);
+            } else {
+                follow();
+            }
+        };
+        this.container.ownerDocument.addEventListener('selectionchange', this.selectionHandler);
     }
 
     /** 両検知源から開閉状態を再計算し、必要な補正/復元を行う */
@@ -109,29 +135,30 @@ export class KeyboardAwareContainer {
         }
     }
 
-    /** container 内のフォーカス中 input/textarea（なければ null） */
+    /** container 内のフォーカス中の欄（なければ null） */
     private activeInput(): HTMLElement | null {
         const active = this.container.ownerDocument.activeElement;
-        if (this.container.contains(active) &&
-            (active instanceof HTMLInputElement ||
-             active instanceof HTMLTextAreaElement)) {
+        if (this.container.contains(active) && isField(active)) {
             return active;
         }
         return null;
     }
 
     /**
-     * target の下端がキーボード上端より下にある場合のみ、不足分ちょうどを
-     * パネル内スクロールで解消する。パネルの高さは lock するので、padding
-     * 注入でパネル自体が成長・移動することはない。
+     * 打つ位置（input/textarea は欄の下端、編集可能な要素は字句）がキーボード
+     * 上端より下にある場合のみ、不足分ちょうどをパネル内スクロールで解消する。
+     * パネルの高さは lock するので、padding 注入でパネル自体が成長・移動する
+     * ことはない。padding はスクロールの余地が足りない分だけ足す。
      */
     private ensureAboveKeyboard(target: HTMLElement): void {
         const panel = this.scrollTarget;
         if (!panel) return;
 
         const kbTop = keyboardTop(this.win);
-        const overshoot =
-            target.getBoundingClientRect().bottom - kbTop + 10;
+        const bottom = target.isContentEditable
+            ? (caretRect(target)?.bottom ?? target.getBoundingClientRect().bottom)
+            : target.getBoundingClientRect().bottom;
+        const overshoot = bottom - kbTop + 10;
         if (overshoot <= 0) return; // 被っていない → 何もしない
         logDebug(`[kb] scroll overshoot=${Math.round(overshoot)} kbTop=${Math.round(kbTop)}`);
 
@@ -148,8 +175,11 @@ export class KeyboardAwareContainer {
             panel.style.height = `${panel.getBoundingClientRect().height}px`;
         }
 
-        this.extraPad += overshoot;
-        panel.style.paddingBottom = `${this.basePad + this.extraPad}px`;
+        const room = Math.max(0, (panel.scrollHeight - panel.clientHeight - panel.scrollTop) || 0);
+        if (overshoot > room) {
+            this.extraPad += overshoot - room;
+            panel.style.paddingBottom = `${this.basePad + this.extraPad}px`;
+        }
         panel.scrollBy({ top: overshoot, behavior: 'instant' });
     }
 
@@ -184,6 +214,10 @@ export class KeyboardAwareContainer {
         }
         if (this.blurTimer) clearTimeout(this.blurTimer);
         if (this.focusTimer) clearTimeout(this.focusTimer);
+        if (this.selectionHandler) {
+            this.container.ownerDocument.removeEventListener('selectionchange', this.selectionHandler);
+        }
+        if (this.selectionFrame !== null) this.win.cancelAnimationFrame(this.selectionFrame);
         this.restore();
         this.vvHandler = null;
         this.kbHandler = null;
@@ -191,7 +225,36 @@ export class KeyboardAwareContainer {
         this.blurHandler = null;
         this.blurTimer = null;
         this.focusTimer = null;
+        this.selectionHandler = null;
+        this.selectionFrame = null;
         this.keyboardOpen = false;
         this.scrollTarget = null;
     }
+}
+
+/** An input, a textarea, or an editable element (contenteditable, and what is in one). */
+function isField(node: EventTarget | null): node is HTMLElement {
+    return node instanceof HTMLInputElement
+        || node instanceof HTMLTextAreaElement
+        || (node as HTMLElement | null)?.isContentEditable === true;
+}
+
+/**
+ * Where the caret of an editable field stands: the selection's focus, as
+ * the DOM lays it out, when it is in `field`. A caret between elements (an
+ * empty line) has no box of its own, and stands for the element it is in.
+ */
+export function caretRect(field: HTMLElement): DOMRect | null {
+    const doc = field.ownerDocument;
+    const selection = doc.getSelection();
+    const node = selection?.focusNode ?? null;
+    if (!selection || !node || !field.contains(node)) return null;
+    const range = doc.createRange();
+    range.setStart(node, selection.focusOffset);
+    range.collapse(true);
+    const rects = range.getClientRects();
+    const last = rects.length > 0 ? rects[rects.length - 1] : null;
+    if (last && last.height > 0) return last;
+    const el = node.nodeType === 1 ? node as Element : node.parentElement;
+    return el ? el.getBoundingClientRect() : null;
 }

@@ -178,6 +178,23 @@ export class Outline {
     }
 
     /**
+     * The reading of a row and its subtree taken out of the note
+     * (`Task.subtreeLines`), the row first: the lines as they read in it.
+     * Read where they stood, a row indented four columns or more is indented
+     * code at the top of the lines, no item. So every line is moved left by
+     * the row's columns less their remainder by four (`shiftIndent`): the row
+     * stands in the first four columns and opens an item, and a tab reaches
+     * the column it reached. The reading's lines are the moved ones; its
+     * line numbers are the lines'.
+     */
+    static readSubtree(lines: readonly string[]): OutlineReading {
+        if (lines.length === 0) return this.read(lines);
+        const from = this.indentOf(lines[0]);
+        const to = ' '.repeat(this.depthOf(from) % 4);
+        return readOutline(lines.map(line => this.shiftIndent(line, from, to)), 0);
+    }
+
+    /**
      * The index of the body's first line: past the frontmatter when the note
      * opens with one, 0 otherwise. A `---` on the first line that nothing
      * closes opens no frontmatter.
@@ -273,8 +290,8 @@ export class OutlineReading {
          * the note only — not in an item, a quote, a fence or indented code,
          * none of which Obsidian links a heading to (F8's Dev measurement).
          * Every reader of a heading asks this: the sections of the note
-         * (`DocumentTreeBuilder`), the line under a heading
-         * (`HeadingInserter`), and a move's destination (`Placement`).
+         * (`DocumentTreeBuilder`), and where lines go in a heading's
+         * section (`Placement.into`: a move, a task made under a heading).
          */
         readonly headings: readonly OutlineHeading[],
     ) {}

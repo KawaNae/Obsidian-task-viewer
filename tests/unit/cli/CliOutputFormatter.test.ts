@@ -157,3 +157,16 @@ describe('CliOutputFormatter', () => {
         });
     });
 });
+
+describe('boolean properties (TaskNormalizer)', () => {
+    it('reads true whether a property line spells it True or frontmatter reads it back as true', () => {
+        const normalized = makeNormalized({
+            properties: {
+                line: { value: 'True', type: 'boolean' },
+                front: { value: 'true', type: 'boolean' },
+                off: { value: 'false', type: 'boolean' },
+            },
+        });
+        expect(normalized.properties).toMatchObject({ line: true, front: true, off: false });
+    });
+});

@@ -229,6 +229,7 @@ function buildIndexHost(task: Task | undefined) {
         refuseAfterDispose: proto.refuseAfterDispose,
 
         copyToPlan: proto.copyToPlan,
+        planCopy: proto.planCopy,
         getTask: proto.getTask,
 
         reportRefusal: () => { /* the notice is not measured here */ },

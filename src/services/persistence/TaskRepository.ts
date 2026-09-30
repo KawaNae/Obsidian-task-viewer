@@ -2,12 +2,14 @@ import type { App } from 'obsidian';
 import type { DuplicateOptions, Task } from '../../types';
 import { FileOperations } from './utils/FileOperations';
 import { InlineTaskWriter } from './writers/InlineTaskWriter';
+import { SendWriter, type SendCompleting, type SendHearing, type SendOutcome, type SendTo, type SentRow } from './writers/SendWriter';
 import { FrontmatterWriter } from './writers/FrontmatterWriter';
 import { TaskCloner, type InPlaceCopyLines } from './TaskCloner';
 import type { PropertyOp } from './PropertyUpdatePlanner';
-import type { EditorLine, LineDraft, NamedRow, WriteAt, WriteChannel, WriteOutcome, WriteSession } from './FileLines';
+import type { EditorLine, LineDraft, Refusal, RowTarget, WriteAt, WriteChannel, WriteOutcome, WriteSession } from './FileLines';
 import type { PlannedTarget } from './TaskRefs';
-import type { CompletionFire, TaskOp } from './TaskOps';
+import type { CompletionFire, FiringOutcome, SubtreeReplacement, TaskOp } from './TaskOps';
+import type { Section } from './Destination';
 
 /**
  * TaskRepository - タスクのファイル操作を統括するファサードクラス
@@ -18,6 +20,7 @@ export class TaskRepository {
     private inlineWriter: InlineTaskWriter;
     private frontmatterWriter: FrontmatterWriter;
     private cloner: TaskCloner;
+    private sendWriter: SendWriter;
     /**
      * Where the writers hand what they left and say what they gave up: the
      * channel the index connected, or null before it has and once it has cut
@@ -33,6 +36,7 @@ export class TaskRepository {
         this.inlineWriter = new InlineTaskWriter(app, this.fileOps, channelOf);
         this.frontmatterWriter = new FrontmatterWriter(app, this.fileOps, channelOf);
         this.cloner = new TaskCloner(app, this.fileOps, channelOf);
+        this.sendWriter = new SendWriter(app, this.inlineWriter, this.fileOps, channelOf);
     }
 
     /** @internal For the index to connect once its scanner exists. */
@@ -53,17 +57,37 @@ export class TaskRepository {
     // --- Inline Task Operations ---
 
     /** @returns what became of the write, and the row as it left it (see InlineTaskWriter). */
-    async updateTaskInFile(target: PlannedTarget, updatedTask: Task, childOps: PropertyOp[] = [], fire?: CompletionFire): Promise<WriteOutcome> {
+    async updateTaskInFile<F extends CompletionFire>(target: PlannedTarget, updatedTask: Task, childOps: PropertyOp[] = [], fire?: F): Promise<FiringOutcome<F>> {
         return this.inlineWriter.updateTaskInFile(target, updatedTask, childOps, fire);
     }
 
+    /** The row and its subtree written anew, each row it completes fired (see InlineTaskWriter.replaceSubtreeInFile). */
+    async replaceSubtreeInFile<F extends CompletionFire>(
+        target: PlannedTarget,
+        replacement: SubtreeReplacement,
+        completing: { completes(before: string, after: string): boolean; fire(): F },
+        opts: { refused?: (refusal: Refusal) => void } = {},
+    ): Promise<FiringOutcome<F>> {
+        return this.inlineWriter.replaceSubtreeInFile(target, replacement, completing, opts);
+    }
+
+    /** Rows and their subtrees sent to a section of a note, what went taken back when a note they came from refused (see SendWriter.send). */
+    async send<F extends CompletionFire>(
+        rows: ReadonlyArray<{ file: string; row: SentRow }>,
+        to: SendTo,
+        completing: SendCompleting<F>,
+        opts: SendHearing = {},
+    ): Promise<SendOutcome<F>> {
+        return this.sendWriter.send(rows, to, completing, opts);
+    }
+
     /** The one loop that applies ops to a row, inside a write (see InlineTaskWriter.applyOps). */
-    applyOps(draft: LineDraft, session: WriteSession, target: NamedRow | EditorLine, ops: readonly TaskOp[]): boolean {
+    applyOps(draft: LineDraft, session: WriteSession, target: RowTarget, ops: readonly TaskOp[]): boolean {
         return this.inlineWriter.applyOps(draft, session, target, ops);
     }
 
     /** Ops applied to the row at a line the editor pointed at, as `at` holds it (see InlineTaskWriter.applyToLine). */
-    async applyToLine(filePath: string, at: EditorLine, ops: readonly TaskOp[], opts: { tellRefusal?: boolean; fire?: CompletionFire } = {}): Promise<WriteOutcome> {
+    async applyToLine<F extends CompletionFire>(filePath: string, at: EditorLine, ops: readonly TaskOp[], opts: { refused?: (refusal: Refusal) => void; fire?: F } = {}): Promise<FiringOutcome<F>> {
         return this.inlineWriter.applyToLine(filePath, at, ops, opts);
     }
 
@@ -74,7 +98,7 @@ export class TaskRepository {
     async applyToTask(
         target: PlannedTarget,
         ops: readonly TaskOp[],
-        opts: { tellRefusal?: boolean } = {},
+        opts: { refused?: (refusal: Refusal) => void } = {},
     ): Promise<WriteOutcome> {
         return this.inlineWriter.applyToTask(target, ops, opts);
     }
@@ -86,8 +110,8 @@ export class TaskRepository {
     // --- Heading and frontmatter writes ---
 
     /** @returns 挿入した行の 0-based 行番号。ファイルが無ければ -1。 */
-    async insertLineUnderHeading(filePath: string, lineContent: string, header: string, headerLevel: number): Promise<WriteAt> {
-        return this.frontmatterWriter.insertLineUnderHeading(filePath, lineContent, header, headerLevel);
+    async insertLineUnderHeading(filePath: string, lineContent: string, to: Section): Promise<WriteAt> {
+        return this.frontmatterWriter.insertLineUnderHeading(filePath, lineContent, to);
     }
 
     /**

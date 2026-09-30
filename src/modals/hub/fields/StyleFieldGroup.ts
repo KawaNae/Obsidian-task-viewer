@@ -1,4 +1,3 @@
-import { setIcon } from 'obsidian';
 import { t } from '../../../i18n';
 import { VALID_LINE_STYLES } from '../../../constants/style';
 import { filterColors, renderColorSuggestion } from '../../../suggest/color/colorUtils';
@@ -6,6 +5,7 @@ import { filterLineStyles, renderLineStyleSuggestion } from '../../../suggest/li
 import { CascadeSource } from '../CascadeSource';
 import { TaskUpdateBuilder } from '../../form/TaskUpdateBuilder';
 import { createFormRow } from '../../form/formRow';
+import { PickerTextField } from '../../form/PickerTextField';
 import { PROPERTY_ICONS } from '../../../constants/propertyIcons';
 import type { FieldGroupContext } from './FieldGroupContext';
 
@@ -16,9 +16,10 @@ type StyleField = 'color' | 'linestyle' | 'mask';
  * suggest が絡み合っているため 3 分割せず 1 グループにまとめている。
  */
 export class StyleFieldGroup {
+    private colorField!: PickerTextField;
     private colorInput!: HTMLInputElement;
     private colorSwatch!: HTMLElement;
-    private nativeColorInput?: HTMLInputElement;
+    private nativeColorInput!: HTMLInputElement;
     private linestyleInput!: HTMLInputElement;
     private maskInput!: HTMLInputElement;
     private sourceEls: Partial<Record<StyleField, HTMLElement>> = {};
@@ -39,30 +40,20 @@ export class StyleFieldGroup {
         let input: HTMLInputElement;
 
         if (field === 'color') {
-            // 日付/時刻 picker と同じ構造: 左端アイコンボタン + native overlay + [swatch]text input
-            const wrapper = row.createDiv({ cls: 'tv-form__input-with-picker tv-form__input-with-picker--color tv-form__control' });
-
-            const pickerButton = wrapper.createDiv({ cls: 'tv-form__picker-button' });
-            setIcon(pickerButton.createSpan(), 'palette');
-
-            this.nativeColorInput = wrapper.createEl('input', { cls: 'tv-form__native-picker-input' });
-            this.nativeColorInput.type = 'color';
-            this.nativeColorInput.setAttribute('aria-hidden', 'true');
-
-            this.nativeColorInput.addEventListener('click', () => {
-                try { this.nativeColorInput!.showPicker(); } catch { /* iPad: direct tap opens */ }
+            // 日付/時刻の欄と同じ部品: 左端のピッカーのボタン + ネイティブの input + [色見本]テキスト
+            this.colorField = new PickerTextField(row, {
+                type: 'color',
+                icon: 'palette',
+                pickerLabel: t('modal.openColorPicker'),
+                initialValue: '',
+                clearable: false,
+                cls: 'tv-form__input-with-picker--color tv-form__control',
             });
-            pickerButton.addEventListener('click', () => {
-                try { this.nativeColorInput!.showPicker(); } catch {
-                    this.nativeColorInput!.focus();
-                    this.nativeColorInput!.click();
-                }
-            });
-
-            // swatch はテキスト入力内の左端にインライン配置
-            this.colorSwatch = wrapper.createSpan({ cls: 'tv-ctrl__color-swatch task-hub__color-swatch' });
-
-            input = wrapper.createEl('input', { type: 'text', cls: 'tv-ctrl__text-input tv-ctrl__text-input--md tv-ctrl__text-input--glow' });
+            this.nativeColorInput = this.colorField.picker;
+            input = this.colorField.input;
+            // 色見本はテキストの入力の中の左端に重ねる
+            this.colorSwatch = this.colorField.el.createSpan({ cls: 'tv-ctrl__color-swatch task-hub__color-swatch' });
+            this.colorField.el.insertBefore(this.colorSwatch, input);
         } else {
             input = row.createEl('input', { type: 'text', cls: 'tv-ctrl__text-input tv-ctrl__text-input--md tv-ctrl__text-input--glow tv-form__control' });
         }
@@ -75,23 +66,21 @@ export class StyleFieldGroup {
         const commit = () => this.commit(field);
         if (field === 'color') {
             this.colorInput = input;
-            if (this.nativeColorInput) {
-                const nci = this.nativeColorInput;
-                nci.value = this.resolveColorForPicker(input.value);
-                // ドラッグ中は swatch とテキストだけ更新し、nci.value への
-                // 書き戻し（updateColorSwatch 内）を避ける — 書き戻すと
-                // ピッカーの内部状態が壊れるフィードバックループになる
-                nci.addEventListener('input', () => {
-                    input.value = nci.value.replace(/^#/, '');
-                    if (this.colorSwatch) {
-                        this.colorSwatch.style.backgroundColor = nci.value;
-                    }
-                });
-                nci.addEventListener('change', () => {
-                    this.updateColorSwatch();
-                    commit();
-                });
-            }
+            const nci = this.nativeColorInput;
+            nci.value = this.resolveColorForPicker(input.value);
+            // ドラッグ中は swatch とテキストだけ更新し、nci.value への
+            // 書き戻し（updateColorSwatch 内）を避ける — 書き戻すと
+            // ピッカーの内部状態が壊れるフィードバックループになる
+            nci.addEventListener('input', () => {
+                input.value = nci.value.replace(/^#/, '');
+                if (this.colorSwatch) {
+                    this.colorSwatch.style.backgroundColor = nci.value;
+                }
+            });
+            nci.addEventListener('change', () => {
+                this.updateColorSwatch();
+                commit();
+            });
             this.ctx.attachSuggest(input, input, {
                 getCandidates: (q) => (q.trim() === '' ? filterColors('', 20) : filterColors(q)),
                 renderItem: (item, val) => renderColorSuggestion(val, item),
@@ -118,7 +107,7 @@ export class StyleFieldGroup {
     }
 
     private commit(field: StyleField): void {
-        if (this.ctx.isMissing()) return;
+        if (this.ctx.isShut()) return;
         const input = this.inputFor(field);
         const value = input.value.trim();
 
@@ -160,9 +149,7 @@ export class StyleFieldGroup {
         this.colorSwatch.style.backgroundColor = value
             ? (/^[0-9a-fA-F]{3,6}$/.test(value) ? `#${value}` : value)
             : 'transparent';
-        if (this.nativeColorInput) {
-            this.nativeColorInput.value = this.resolveColorForPicker(value);
-        }
+        this.nativeColorInput.value = this.resolveColorForPicker(value);
     }
 
     private resolveColorForPicker(raw: string): string {
@@ -193,7 +180,8 @@ export class StyleFieldGroup {
     }
 
     setEnabled(enabled: boolean): void {
-        for (const input of [this.colorInput, this.linestyleInput, this.maskInput]) {
+        this.colorField?.setEnabled(enabled);
+        for (const input of [this.linestyleInput, this.maskInput]) {
             if (input) input.disabled = !enabled;
         }
     }

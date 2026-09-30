@@ -49,7 +49,7 @@ export class FlowDeleteChoiceModal extends Modal {
             text: t('flowDelete.nextInstance'),
         });
         preview.createEl('code', {
-            cls: 'tv-flow-delete__preview-line',
+            cls: 'tv-form__line-preview',
             text: this.opts.previewLine,
         });
 

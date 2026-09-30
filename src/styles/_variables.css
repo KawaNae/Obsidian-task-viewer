@@ -1,7 +1,8 @@
 /* ========================================================================== */
 /* Design Tokens */
 /* - :root => theme-independent constants (layout/size/z-index) */
-/* - body  => single-layer tv tokens mapped from Obsidian theme vars */
+/* - body  => single-layer tv tokens mapped from Obsidian theme vars, and the */
+/*            body-level z-index tokens built on Obsidian's --layer-*        */
 /* ========================================================================== */
 
 :root {
@@ -71,8 +72,16 @@
        stacking contexts they live in are disjoint, so a value that is "high"
        in one is meaningless in the other.
        [A] body-level (Obsidian's modal space, document.body children):
-           --z-overlay (= --layer-modal, 50) < own popovers (+1)
-           < native suggest (60) / menu (65) / tooltip (70)
+           timer widget (--layer-popover - 1, 29)
+           < native popover (30) < --z-overlay (= --layer-modal, 50)
+           < own popovers (+1) < native notice / suggest list (60)
+           / menu (65) / tooltip (70)
+           Rule: what stays on screen (the widget) stands above the
+           workspace and below every surface opened over it, so whatever
+           is opened — from the widget or elsewhere — is never under it.
+           Its tokens are declared on body (below), where Obsidian declares
+           --layer-*: a var() resolves where the property is declared, and
+           on :root --layer-* does not exist.
        [B] leaf-level (inside .workspace-leaf, which is isolation:isolate):
            normal cards <= 190 (Z_MAX, TimelineSectionRenderer)
            < selected card / current-time-indicator 200 < drag ghost 210
@@ -102,15 +111,7 @@
     --z-timeline-date-header: 250;
     --z-timeline-periodic-header: 255;
     --z-allday-cell-drag-over: 50;
-    --z-timer-widget: 65;
     --z-task-card-selected: 200;
-    /* overlay は Obsidian の modal 層（--layer-modal, 50）に立つ。
-       Obsidian native の menu(65)/suggest(60)/tooltip(70) はその上に
-       来るのが正しい。自前 popover は calc(+1) で overlay の直上。
-       これは梯子 [A] = body 直下面**専用**のトークン。leaf 内の面に
-       使ってはならない（50 では leaf 内のカード帯 ≤190 に負ける）。
-       leaf 内のドロワー面には --z-view-drawer を使う。 */
-    --z-overlay: var(--layer-modal, 50);
     /* 210 = above selected card / now-line (200), below the sticky band
        (245+). The absolute (in-grid) ghost thus stays under sticky
        headers while covering all cards. The fixed ghost is relocated to
@@ -127,6 +128,25 @@
 }
 
 body {
+    /* Z-index ladder [A] (see :root). Here and not on :root: Obsidian
+       declares --layer-* on body, and a var() resolves where the property
+       is declared. Each window's body has them, a popout's too. */
+    /* overlay は Obsidian の modal 層（--layer-modal, 50）に立つ。
+       Obsidian native の menu(65)/suggest(60)/tooltip(70) はその上に
+       来るのが正しい。自前 popover は calc(+1) で overlay の直上。
+       これは梯子 [A] = body 直下面**専用**のトークン。leaf 内の面に
+       使ってはならない（50 では leaf 内のカード帯 ≤190 に負ける）。
+       leaf 内のドロワー面には --z-view-drawer を使う。 */
+    --z-overlay: var(--layer-modal, 50);
+    /* The widget stays on screen while the user works: above the
+       workspace (the leaves are isolation:isolate; the chrome stays at or
+       under the status bar, 15), and just under the lowest layer Obsidian
+       opens surfaces in (--layer-popover, 30: a hover preview, the phone's
+       drawers). So modals, our overlays, notices, suggest lists, menus,
+       the phone's toolbar and tooltips all come over it — a dialog or
+       menu opened from the widget included. */
+    --z-timer-widget: calc(var(--layer-popover, 30) - 1);
+
     /* Base tokens from Obsidian */
     --tv-bg-primary: var(--background-primary);
     --tv-bg-secondary: var(--background-secondary);

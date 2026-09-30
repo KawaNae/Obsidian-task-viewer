@@ -108,6 +108,6 @@ export function checkFlow(program: FlowProgram, diagnostics: Diagnostic[]): void
     }
 
     // `move`'s target is not an expression to check: where it goes is read
-    // off how it is written (`MoveTarget`), and anything but `()` and a link
-    // to a heading of the note is retired, which the parser has said.
+    // off how it is written (`MoveTarget`), and anything but a link to a
+    // heading of the note is retired, which the parser has said.
 }

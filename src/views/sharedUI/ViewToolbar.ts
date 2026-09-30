@@ -13,6 +13,7 @@ import { exportDescriptorFor, resolveExportContainer } from '../../services/expo
 import { buildExportFilename } from '../../services/export/ExportFilename';
 import type { MenuPresenter } from '../../interaction/menu/MenuPresenter';
 import { viewContentEl } from '../../utils/ObsidianView';
+import { createNativePicker } from './NativePicker';
 import type { WriteChannel } from '../../services/persistence/FileLines';
 
 /**
@@ -75,8 +76,21 @@ export abstract class ViewToolbarBase {
     protected abstract buildDom(rootEl: HTMLElement): void;
 }
 
+/** What a view hands {@link DateNavigator} so the user can jump to any date. */
+export interface DateJumpOptions {
+    /**
+     * The date (YYYY-MM-DD) the picker opens on: the one that, handed to
+     * `onJump`, leaves the view where it is.
+     */
+    getCurrentDate: () => string;
+    /** Move the view to `date` (YYYY-MM-DD). What "move" means is the view's call. */
+    onJump: (date: string) => void;
+}
+
 /**
- * Date navigation component with prev/next/today buttons.
+ * Date navigation component with prev/next/today buttons. With `dateJump`, a
+ * "Go to date" button opens the platform's native date picker to jump to any
+ * date.
  */
 export class DateNavigator {
     /**
@@ -84,12 +98,16 @@ export class DateNavigator {
      * @param toolbar - Parent element to render into
      * @param onNavigate - Callback when navigating by days (e.g., -1 or +1)
      * @param onToday - Callback when clicking Now button
+     * @param options.dateJump - Adds the "Go to date" button.
      */
     static render(
         toolbar: HTMLElement,
         onNavigate: (days: number) => void,
         onToday: () => void,
-        options?: { vertical?: boolean; onNavigateFast?: (direction: number) => void }
+        options?: {
+            vertical?: boolean;
+            dateJump?: DateJumpOptions;
+        }
     ): void {
         const vertical = options?.vertical ?? false;
         const prevIcon = vertical ? 'chevron-up' : 'chevron-left';
@@ -98,15 +116,6 @@ export class DateNavigator {
         const nextLabel = vertical ? t('toolbar.nextWeek') : t('toolbar.nextDay');
 
         const navGroup = toolbar.createDiv('view-toolbar__nav-group');
-
-        if (options?.onNavigateFast) {
-            const fastPrevIcon = vertical ? 'chevrons-up' : 'chevrons-left';
-            const fastPrevBtn = navGroup.createEl('button', { cls: 'view-toolbar__btn--icon' });
-            setIcon(fastPrevBtn, fastPrevIcon);
-            fastPrevBtn.setAttribute('aria-label', t('toolbar.previousMonth'));
-            const onFastPrev = options.onNavigateFast;
-            fastPrevBtn.onclick = () => onFastPrev(-1);
-        }
 
         const prevBtn = navGroup.createEl('button', { cls: 'view-toolbar__btn--icon' });
         setIcon(prevBtn, prevIcon);
@@ -125,14 +134,27 @@ export class DateNavigator {
         nextBtn.setAttribute('aria-label', nextLabel);
         nextBtn.onclick = () => onNavigate(1);
 
-        if (options?.onNavigateFast) {
-            const fastNextIcon = vertical ? 'chevrons-down' : 'chevrons-right';
-            const fastNextBtn = navGroup.createEl('button', { cls: 'view-toolbar__btn--icon' });
-            setIcon(fastNextBtn, fastNextIcon);
-            fastNextBtn.setAttribute('aria-label', t('toolbar.nextMonth'));
-            const onFastNext = options.onNavigateFast;
-            fastNextBtn.onclick = () => onFastNext(1);
-        }
+        if (!options?.dateJump) return;
+
+        // "Go to date": a button whose picker lies over it (NativePicker), so
+        // a tap on it opens the picker on every platform, iOS included. It
+        // stays in the navigator, outside the action zone that compact mode
+        // folds into ⋮: from a menu item, iOS could not open the picker.
+        const { getCurrentDate, onJump } = options.dateJump;
+        const jumpBox = navGroup.createSpan('view-toolbar__date-jump');
+        const jumpBtn = jumpBox.createEl('button', { cls: 'view-toolbar__btn--icon' });
+        setIcon(jumpBtn, 'calendar-search');
+        jumpBtn.setAttribute('aria-label', t('toolbar.goToDate'));
+        const picker = createNativePicker(jumpBox, jumpBtn, {
+            type: 'date',
+            cls: 'view-toolbar__date-picker',
+            beforeOpen: () => { picker.value = getCurrentDate(); },
+        });
+        // Fires only for a new date: cancel, or confirming the date the view
+        // is already on, leaves it alone. Clearing gives '', ignored.
+        picker.addEventListener('change', () => {
+            if (picker.value) onJump(picker.value);
+        });
     }
 }
 

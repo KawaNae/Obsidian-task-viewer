@@ -12,7 +12,7 @@ import { PROPERTY_ICONS } from '../../constants/propertyIcons';
 import { attachBracketPairing, type BracketPairingHandle } from '../form/bracketPairing';
 import { TaskUpdateBuilder } from '../form/TaskUpdateBuilder';
 import { CascadeSource, type CascadeSourceKind } from './CascadeSource';
-import { openFileInExistingOrNewTab } from '../../utils/NavigationUtils';
+import { openFile } from '../../utils/NavigationUtils';
 import { SuggestController } from '../../views/customMenus/SuggestController';
 import type { PopoverStack } from '../../views/sharedUI/PopoverStack';
 import type { DateGroupKey } from '../form/DateFieldGroup';
@@ -59,7 +59,10 @@ export interface TaskHubFormDeps {
 export class TaskHubForm {
     private task: Task;
     private commitChain: Promise<void> = Promise.resolve();
+    /** The row is gone from the index: nothing to write to. */
     private missing = false;
+    /** The source mode holds the row: its draft is the one way to write it until it closes. */
+    private sourceOpen = false;
     private refreshing = false;
     private fieldCtx: FieldGroupContext;
 
@@ -81,7 +84,7 @@ export class TaskHubForm {
         this.task = task;
         this.fieldCtx = {
             getTask: () => this.task,
-            isMissing: () => this.missing,
+            isShut: () => this.shut,
             queue: (updates) => this.queue(updates),
             app: deps.app,
             plugin: deps.plugin,
@@ -131,7 +134,7 @@ export class TaskHubForm {
 
         const statusSuggest = new SuggestController(this.deps.stack, this.statusPill, '', 'min');
         const openStatusSuggest = () => {
-            if (this.missing) return;
+            if (this.shut) return;
             this.deps.stack.closeAll();
             const defs = this.deps.plugin.settings.statusDefinitions;
             statusSuggest.show(
@@ -264,7 +267,7 @@ export class TaskHubForm {
         const render = opts.renderItem
             ?? ((item: HTMLElement, val: string) => { item.createSpan().setText(val); });
         const show = (showAll: boolean) => {
-            if (this.missing) return;
+            if (this.shut) return;
             // hub の stack は suggest しか持たない（root popover なし）ので、
             // closeAll = 「他フィールドの suggest を閉じる」。
             this.deps.stack.closeAll();
@@ -311,11 +314,7 @@ export class TaskHubForm {
     }
 
     private jumpToFile(): void {
-        if (this.deps.plugin.settings.reuseExistingTab) {
-            openFileInExistingOrNewTab(this.deps.app, this.task.file);
-        } else {
-            void this.deps.app.workspace.openLinkText(this.task.file, '', true);
-        }
+        openFile(this.deps.app, this.task.file, this.deps.plugin.settings.reuseExistingTab);
         this.deps.onNavigate?.();
     }
 
@@ -328,18 +327,18 @@ export class TaskHubForm {
     // ==================== コミット ====================
 
     private commitContent(): void {
-        if (this.missing) return;
+        if (this.shut) return;
         this.queue(TaskUpdateBuilder.content(this.task, this.nameInput.value));
     }
 
     private commitStatus(value: string): void {
-        if (this.missing) return;
+        if (this.shut) return;
         this.queue(TaskUpdateBuilder.status(this.task, value));
         this.renderStatusPill(); // 楽観 model から pill を即時更新
     }
 
     private commitDates(group: DateGroupKey): void {
-        if (this.missing) return;
+        if (this.shut) return;
         if (!this.dateGroup.validate()) return;
         const f = this.dateGroup.collect();
         const updates =
@@ -383,8 +382,7 @@ export class TaskHubForm {
             // setEnabled(true) を通すと force rebuild が focus 中の入力を
             // 破壊し、focus ガードの意味がなくなる。
             this.missing = false;
-            this.noticeEl.style.display = 'none';
-            this.setEnabled(true);
+            this.showShut();
         }
 
         this.refreshing = true;
@@ -418,10 +416,42 @@ export class TaskHubForm {
 
     /** タスクが index から消えた（削除 / id 変化）ときの縮退表示 */
     setMissing(): void {
+        if (this.missing) return;
         this.missing = true;
-        this.setEnabled(false);
-        this.noticeEl.setText(t('modal.hub.taskMissing'));
-        this.noticeEl.style.display = 'block';
+        this.showShut();
+    }
+
+    /**
+     * The source mode opened or closed on the row. While it is open the form
+     * takes no edit: two ways of writing one row would have one of them
+     * refused (`changed`), and the draft is the user's work.
+     */
+    setSourceOpen(open: boolean): void {
+        if (this.sourceOpen === open) return;
+        this.sourceOpen = open;
+        this.showShut();
+    }
+
+    /** Resolves once every write queued so far is done: the source opens on what they left. */
+    async drained(): Promise<void> {
+        let chain: Promise<void>;
+        do {
+            chain = this.commitChain;
+            await chain;
+        } while (chain !== this.commitChain);
+    }
+
+    /** Whether the form takes no edit, and why: the source open, or the row gone. */
+    private get shut(): boolean {
+        return this.missing || this.sourceOpen;
+    }
+
+    /** The fields enabled or not, and the notice of why not, as the two states say. */
+    private showShut(): void {
+        this.setEnabled(!this.shut);
+        const notice = this.sourceOpen ? t('modal.hub.source.formShut') : this.missing ? t('modal.hub.taskMissing') : null;
+        this.noticeEl.setText(notice ?? '');
+        this.noticeEl.style.display = notice ? 'block' : 'none';
     }
 
     private setEnabled(enabled: boolean): void {
@@ -433,7 +463,7 @@ export class TaskHubForm {
             this.statusPill.toggleClass('is-disabled', !enabled);
         }
         this.styleField?.setEnabled(enabled);
-        // tags / props の動的セクションは missing フラグを見て再構築する
+        // tags / props の動的セクションは shut を見て再構築する
         this.tagsField?.setEnabled(enabled);
         this.propsField?.setEnabled(enabled);
     }

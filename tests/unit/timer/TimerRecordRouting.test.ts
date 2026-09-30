@@ -87,6 +87,7 @@ function makeTimer(overrides: Partial<TimerInstance> = {}): TimerInstance {
         tailRecordBlockId: 'tv-timer-1',
         pendingRecord: null,
         opening: null,
+        priorStartMs: null,
         ownedAnchors: [],
         ...overrides,
     } as TimerInstance;

@@ -13,14 +13,27 @@
  *
  * Child popovers (dropdowns, suggests) continue to use PopoverShell via
  * PopoverStack. OverlayShell coordinates with an optional childStack for
- * outside-click and Escape handling.
+ * Escape handling.
+ *
+ * The overlay's surface is its panel and what opens on top of it while it
+ * is open (`LayerOrder`): the child popovers, and the lists and menus
+ * Obsidian opens from a field in the panel on the body (an input suggest's
+ * list). A press outside the surface asks to close; the focus in it keeps
+ * Obsidian's hotkeys out (`HotkeyShield`).
+ *
+ * Escape and the user's "back" (Android's back gesture, the desktop mouse's
+ * back button: `HistoryBack`) step back alike: a child popover open closes
+ * first, else the overlay is asked to close.
  */
 
-import { setIcon } from 'obsidian';
+import { setIcon, type Keymap } from 'obsidian';
 import type { PopoverAnchor } from './PopoverShell';
 import { positionElement, resolveHost } from './PopoverShell';
 import type { PopoverStack } from './PopoverStack';
 import { registerOverlay, unregisterOverlay } from './OverlayRegistry';
+import { inLayerAbove } from './LayerOrder';
+import { HotkeyShield } from './HotkeyShield';
+import { holdHistoryBack } from './HistoryBack';
 import { KeyboardAwareContainer } from '../../utils/KeyboardAwareContainer';
 import { trackKeyboard } from '../../utils/KeyboardState';
 import { t } from '../../i18n';
@@ -33,8 +46,35 @@ export interface OverlayOpenOpts {
     panelClass?: string;
     build: (bodyEl: HTMLElement) => void;
     onClose?: () => void;
+    /**
+     * Asked, synchronously, before a close the user asks for (the close
+     * button, Escape, the back, a click outside, a swipe, another overlay
+     * taking its place: `requestClose`): false keeps the overlay open, the body having
+     * said why in its own place (a draft to throw away or keep). Not asked
+     * where nothing can be kept open — the window going away, the plugin
+     * unloading — which close at once (`close`).
+     */
+    beforeClose?: () => boolean;
+    /**
+     * Whether the body takes this Escape itself (a completion list of an
+     * editor in it closing), so the overlay neither closes nor stops it.
+     */
+    yieldsEscape?: (e: KeyboardEvent) => boolean;
+    /**
+     * Whether the body takes this back itself (a completion list of an editor
+     * in it closing, as `yieldsEscape` lets an Escape do), so the overlay
+     * neither closes nor asks. The back is no key, so the body acts on it here.
+     */
+    takesBack?: () => boolean;
     childStack?: PopoverStack;
     hostDoc?: Document;
+    /**
+     * Obsidian's keymap (`app.keymap`): given, its hotkeys are kept out
+     * while the focus is in the overlay, its child popovers among it
+     * (`HotkeyShield`), so a key pressed in a field of the overlay does not
+     * act on the note behind. Escape and the keys of the fields still work.
+     */
+    keymap?: Keymap;
 }
 
 export class OverlayShell {
@@ -48,8 +88,11 @@ export class OverlayShell {
     private anchor: PopoverAnchor | null = null;
     private childStack: PopoverStack | null = null;
     private onCloseCb: (() => void) | null = null;
+    private beforeCloseCb: (() => boolean) | null = null;
     private closing = false;
     private kbAware: KeyboardAwareContainer | null = null;
+    private hotkeys: HotkeyShield | null = null;
+    private releaseBack: (() => void) | null = null;
 
     private outsideClickHandler: ((e: MouseEvent) => void) | null = null;
     private escapeHandler: ((e: KeyboardEvent) => void) | null = null;
@@ -65,6 +108,7 @@ export class OverlayShell {
         this.anchor = opts.anchor ?? null;
         this.childStack = opts.childStack ?? null;
         this.onCloseCb = opts.onClose ?? null;
+        this.beforeCloseCb = opts.beforeClose ?? null;
         this.closing = false;
 
         // Resolve host document (popout-aware)
@@ -92,6 +136,10 @@ export class OverlayShell {
         // backdrop で吸収する。touchend の preventDefault は合成 mouse
         // イベント（mousedown/mouseup/click）の発生自体を抑止する
         backdrop.addEventListener('touchend', (e) => e.preventDefault(), { passive: false });
+        // A mouse press on the backdrop moves no focus: a close refused
+        // there has put the focus where the body wants it (`beforeClose`),
+        // and the press's default would take it to the document's body.
+        backdrop.addEventListener('mousedown', (e) => e.preventDefault());
         backdrop.addEventListener('click', (e) => {
             e.preventDefault();
             e.stopPropagation();
@@ -109,7 +157,7 @@ export class OverlayShell {
         const closeBtn = panel.createEl('button', { cls: 'tv-overlay__close' });
         setIcon(closeBtn.createSpan(), 'x');
         closeBtn.setAttribute('aria-label', t('modal.cancel'));
-        closeBtn.addEventListener('click', () => this.close());
+        closeBtn.addEventListener('click', () => this.requestClose());
 
         const body = panel.createDiv({ cls: 'tv-overlay__body' });
         this.bodyEl = body;
@@ -131,27 +179,35 @@ export class OverlayShell {
         this.setupSwipeToDismiss(handle, panel, root, body);
 
         // Escape
+        const yieldsEscape = opts.yieldsEscape;
         this.escapeHandler = (e: KeyboardEvent) => {
             if (e.key !== 'Escape') return;
+            if (yieldsEscape?.(e)) return;
             e.stopPropagation();
-            if (this.childStack?.isOpen()) {
-                this.childStack.closeAll();
-            } else {
-                this.close();
-            }
+            this.stepBack();
         };
         hostDoc.addEventListener('keydown', this.escapeHandler, true);
 
+        // Back (Android's back, the mouse's back button): as Escape.
+        const takesBack = opts.takesBack;
+        this.releaseBack = holdHistoryBack(() => {
+            if (takesBack?.()) return;
+            this.stepBack();
+        });
+
         // Outside-click
         this.outsideClickHandler = (e: MouseEvent) => {
-            const target = e.target as Node;
-            if (this.panelEl?.contains(target)) return;
-            if (this.childStack?.containsTarget(target)) return;
-            this.close();
+            if (this.holds(e.target as Node | null)) return;
+            this.requestClose();
         };
         hostDoc.addEventListener('pointerdown', this.outsideClickHandler, true);
 
-        // Pagehide (popout window close)
+        // Hotkeys: kept out while the focus is in the surface.
+        if (opts.keymap) {
+            this.hotkeys = new HotkeyShield(opts.keymap, hostDoc, (node) => this.holds(node));
+        }
+
+        // Pagehide (popout window close): nothing to keep open for, so not asked.
         this.pageHideHandler = () => this.close();
         hostWin.addEventListener('pagehide', this.pageHideHandler);
 
@@ -160,6 +216,40 @@ export class OverlayShell {
         registerOverlay(this);
     }
 
+    /**
+     * Close as the user asked, unless `beforeClose` keeps it open.
+     * @returns whether it closed (or was not open).
+     */
+    requestClose(): boolean {
+        if (!this.rootEl || this.closing) return true;
+        if (this.beforeCloseCb && !this.beforeCloseCb()) return false;
+        this.close();
+        return true;
+    }
+
+    /**
+     * Whether `node` is in the overlay's surface: in its panel, in a child
+     * popover, or in a layer opened on top of it (an input suggest's list
+     * Obsidian puts on the body). Its backdrop, and what stood before it,
+     * are outside.
+     */
+    private holds(node: Node | null): boolean {
+        if (node === null || !this.rootEl) return false;
+        return (this.panelEl?.contains(node) ?? false)
+            || (this.childStack?.containsTarget(node) ?? false)
+            || inLayerAbove(this.rootEl, node);
+    }
+
+    /** Escape or the back: a child popover open closes first, else the overlay is asked to close. */
+    private stepBack(): void {
+        if (this.childStack?.isOpen()) {
+            this.childStack.closeAll();
+        } else {
+            this.requestClose();
+        }
+    }
+
+    /** Close now, asking nothing: the window or the plugin going away, or the body closing itself. */
     close(): void {
         if (!this.rootEl || this.closing) return;
         this.closing = true;
@@ -168,6 +258,10 @@ export class OverlayShell {
         // Logical teardown (immediate — overlay is inert from here)
         this.kbAware?.detach();
         this.kbAware = null;
+        this.hotkeys?.detach();
+        this.hotkeys = null;
+        this.releaseBack?.();
+        this.releaseBack = null;
         this.childStack?.closeAll();
         this.childStack = null;
 
@@ -187,6 +281,7 @@ export class OverlayShell {
 
         const cb = this.onCloseCb;
         this.onCloseCb = null;
+        this.beforeCloseCb = null;
         this.hostDoc = null;
         this.hostWin = null;
         this.panelEl = null;
@@ -313,13 +408,14 @@ export class OverlayShell {
         const endDrag = () => {
             if (!dragging) return;
             dragging = false;
-            if (dy > 80) {
+            if (dy > 80 && (!this.beforeCloseCb || this.beforeCloseCb())) {
                 panel.style.transition = 'transform 150ms ease-in';
                 panel.style.transform = 'translateY(100%)';
                 if (backdrop) {
                     backdrop.style.transition = 'opacity 150ms ease-in';
                     backdrop.style.opacity = '0';
                 }
+                // Already asked, above: the panel is on its way out.
                 window.setTimeout(() => this.close(), 160);
             } else {
                 panel.style.transition = 'transform 150ms ease-out';
@@ -342,18 +438,23 @@ export class OverlayShell {
         handle.addEventListener('pointerup', endDrag);
         handle.addEventListener('pointercancel', endDrag);
 
+        // Pulling the body down from its top drags the sheet, unless the
+        // touch began in a field: there it is the field's, to select text
+        // or scroll it, and the sheet stays put.
         let touchStartY = 0;
         let overscrolling = false;
         let isBottomSheet = false;
+        let inField = false;
 
         body.addEventListener('touchstart', (e) => {
             touchStartY = e.touches[0].clientY;
             overscrolling = false;
             isBottomSheet = handle.offsetHeight > 0;
+            inField = isInField(e.target);
         }, { passive: true });
 
         body.addEventListener('touchmove', (e) => {
-            if (!isBottomSheet) return;
+            if (!isBottomSheet || inField) return;
             const currentY = e.touches[0].clientY;
             if (overscrolling) {
                 e.preventDefault();
@@ -380,4 +481,11 @@ export class OverlayShell {
         const handle = root.querySelector<HTMLElement>('.tv-overlay__handle');
         return (handle?.offsetHeight ?? 0) > 0;
     }
+}
+
+/** Whether a touch began in a field: an input, a textarea, or an editable element (a CodeMirror editor's content). */
+function isInField(target: EventTarget | null): boolean {
+    const el = target as HTMLElement | null;
+    if (!el || typeof el.closest !== 'function') return false;
+    return el.isContentEditable || el.closest('input, textarea') !== null;
 }

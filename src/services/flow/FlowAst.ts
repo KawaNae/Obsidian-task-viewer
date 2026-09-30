@@ -1,7 +1,6 @@
 import type { Span } from '../lang/Diagnostic';
 import type { Expr } from '../lang/ExprAst';
 import type { DurUnit, Value, Weekday } from '../lang/Value';
-import type { MoveDestination } from '../persistence/TaskOps';
 
 /** Calendar-grid recurrence rules (`every ...`). */
 export type EveryRule =
@@ -102,24 +101,27 @@ export interface FlowProgram {
      */
     sets?: Partial<Record<SetField, { expr: Expr; span: Span }>>;
     /**
-     * `move()` / `move([[#heading]])` — carry the completed task and its
-     * subtree within its note. `target` is what is written between the
-     * parentheses (null for none), printed back as it is; `to` is where the
-     * task goes, read off how it is written (`FlowParser`), never evaluated.
+     * `move([[#heading]])` — carry the completed task and its subtree to a
+     * heading's section within its note. `target` is what is written between
+     * the parentheses, printed back as it is, null for `move()`; `to` is
+     * where the task goes, read off how it is written (`FlowParser`), never
+     * evaluated.
      */
     move?: { target: Expr | null; to: MoveTarget; span: Span };
 }
 
 /**
  * Where a move takes the task, answered from how the clause is written,
- * once, by the parser: the end of the note (`move()`), the end of the section
- * of a heading of the note (`move([[#name]])`, an alias aside), or nowhere —
- * anything else names another note, and moving to another note is retired
- * (F8). The parser warns on a retired one, and a completion with it does not
- * fire; the diagnostic and the fire read this one answer. A move that is
- * not retired names where the write puts the row (`MoveDestination`).
+ * once, by the parser: the section of a heading of the note
+ * (`move([[#name]])`, an alias aside), or nowhere — anything else names no
+ * heading of the note, and is retired: another note (F8), or nothing at all,
+ * `move()` (2026-09-28). The parser warns
+ * on a retired one, and a completion with it fires without the move and
+ * says so (`FlowPlanner`, `move-dropped`); the diagnostic and the fire read
+ * this one answer. Which end of the section is the settings'
+ * (`sectionSide`), not the clause's.
  */
-export type MoveTarget = MoveDestination | { kind: 'retired' };
+export type MoveTarget = { kind: 'heading'; name: string } | { kind: 'retired' };
 
 /**
  * Every clause's span, said once.

@@ -43,6 +43,11 @@ const ALLOWED: Array<{ file: string; contains: string; reason: string }> = [
         contains: 'indent: Outline.depthOf(rawLine)',
         reason: 'TaskBlock.indent, the task\'s depth as a value (Task.indent); no walk reads it',
     },
+    {
+        file: 'services/persistence/utils/SubtreeFrame.ts',
+        contains: 'Outline.depthOf(base[i]) < Outline.depthOf(childIndent)',
+        reason: 'a line the child editor has no column for: a point check of one line against the child indentation, not a walk',
+    },
     // A template file keeps its JSON in a fence it writes and reads whole;
     // that is the file's own format, not a reading of a note's blocks.
     { file: 'services/template/ViewTemplateLoader.ts', contains: '```json', reason: 'template JSON' },

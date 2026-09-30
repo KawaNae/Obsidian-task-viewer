@@ -18,8 +18,8 @@ import {
     isObsidianRunning, waitForTask, sleep,
 } from '../helpers/cli-helper';
 import {
-    writeTestFile, deleteTestFile,
-    waitForFileIndexed, waitForFileDeindexed, vaultAbsolute,
+    writeIndexedTestFile, deleteTestFile,
+    waitForFileDeindexed, vaultAbsolute,
 } from '../helpers/test-file-manager';
 import * as fs from 'fs';
 
@@ -86,8 +86,7 @@ async function waitForFileContent(predicate: (content: string) => boolean, timeo
 
 /** Reset fixture to clean state */
 async function resetFixture(): Promise<void> {
-    writeTestFile(TEST_FILE, FIXTURE_CONTENT);
-    await waitForFileIndexed(TEST_FILE);
+    await writeIndexedTestFile(TEST_FILE, FIXTURE_CONTENT);
 }
 
 beforeAll(async () => {
@@ -255,7 +254,7 @@ describe('move', () => {
         );
         expect(newTask).not.toBeNull();
 
-        // Completed original carried to the end of the Done section
+        // Completed original carried to the Done section
         const moved = await waitForFileContent(() => doneSection().includes('- [x] flow-combo-F @2026-04-01'));
         expect(moved).toBe(true);
 

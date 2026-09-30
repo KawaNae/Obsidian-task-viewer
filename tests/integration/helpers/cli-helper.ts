@@ -1,4 +1,4 @@
-import { execSync } from 'child_process';
+import { execFileSync, execSync } from 'child_process';
 
 /**
  * Execute an Obsidian CLI command and return parsed JSON. On Windows the CLI
@@ -27,7 +27,11 @@ export function obsidianCli(command: string, flags: Record<string, string | bool
         const shellCmd = process.platform === 'win32'
             ? `powershell.exe -Command "${fullCmd}"`
             : fullCmd;
-        raw = execSync(shellCmd, { encoding: 'utf-8', timeout: 15000 }).trim();
+        // SIGKILL: a CLI client has been seen to wait more than ten minutes
+        // for an answer that never came, and not to end on the SIGTERM the
+        // timeout sent, which left the suite hanging instead of failing the
+        // call.
+        raw = execSync(shellCmd, { encoding: 'utf-8', timeout: 15000, killSignal: 'SIGKILL' }).trim();
     } catch (err: unknown) {
         // execSync throws on non-zero exit code; stderr may contain the error
         const msg = (err as { stderr?: string }).stderr?.trim()
@@ -41,6 +45,36 @@ export function obsidianCli(command: string, flags: Record<string, string | bool
     } catch {
         // Non-JSON output (e.g. Obsidian's built-in "Error: Missing required parameter" text)
         return { error: raw };
+    }
+}
+
+/**
+ * Evaluate `code` in the Dev vault's Obsidian (`obsidian eval`) and return
+ * the value it printed, parsed as JSON when it is JSON. `code` is an
+ * expression; a Promise is waited for. A thrown error comes back as
+ * `{ error }`. The code is passed as one argument, not through a shell, so it
+ * needs no quoting. Killed as a CLI call is (see {@link obsidianCli}).
+ */
+export function obsidianEval(code: string): unknown {
+    let raw: string;
+    try {
+        raw = process.platform === 'win32'
+            ? execSync(`powershell.exe -Command "obsidian vault=dev eval code='${code.replace(/'/g, "''").replace(/"/g, '\\"')}'"`,
+                { encoding: 'utf-8', timeout: 15000, killSignal: 'SIGKILL' }).trim()
+            : execFileSync('obsidian', ['vault=dev', 'eval', `code=${code}`],
+                { encoding: 'utf-8', timeout: 15000, killSignal: 'SIGKILL' }).trim();
+    } catch (err: unknown) {
+        return { error: (err as { stderr?: string }).stderr?.trim() || String(err) };
+    }
+    // The console lines the code wrote come first; the value is on the line
+    // `=> ` opens.
+    const at = raw.lastIndexOf('=> ');
+    const value = at >= 0 && (at === 0 || raw[at - 1] === '\n') ? raw.slice(at + 3) : raw;
+    if (value.startsWith('Error:')) return { error: value };
+    try {
+        return JSON.parse(value);
+    } catch {
+        return value;
     }
 }
 

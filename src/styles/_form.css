@@ -1,9 +1,22 @@
 /* ======================================================
    Shared form widgets (tv-form__*)
-   TaskHubForm と CreateTaskModal（+ PickerTextField）が共有する
+   TaskHubForm、CreateTaskModal（+ PickerTextField）、SendModal が共有する
    フォーム部品。モーダル chrome は _modal.css、コントロール原子は
    _controls.css（tv-ctrl__*）。
    ====================================================== */
+
+/* OverlayShell の上のフォームダイアログ（CreateTaskModal など）の
+   見出しとボタン行。ボタン行は Obsidian の Setting を枠なしで置く */
+.tv-form__title {
+    margin: 0 0 12px;
+}
+
+.tv-form__actions.setting-item {
+    background: transparent;
+    border: none;
+    padding: 0;
+    margin: 24px 0 0;
+}
 
 /* --- 行文法: 左固定幅ラベル列 + コントロール領域 --- */
 .tv-form {
@@ -119,8 +132,69 @@
     color: var(--tv-text-muted);
 }
 
+/* セクション: 透明な面を区切り線で分ける（タスクハブ、送るダイアログ）。
+   最後のグループは区切り線なし。group の後ろに error / notice 要素が
+   並ぶため :last-child では届かない — 「後続に group がない group」で選ぶ */
+.tv-form .tv-form__group {
+    padding: 12px 0;
+    border-bottom: 1px solid var(--tv-border);
+}
+
+.tv-form .tv-form__group:not(:has(~ .tv-form__group)) {
+    border-bottom: none;
+}
+
+.tv-form .tv-form__group > :first-child {
+    margin-top: 0;
+}
+
+.tv-form .tv-form__group > .tv-form__name-section {
+    margin-bottom: 0;
+}
+
+/* 下書きを持つフォームのボタン行（ハブのソース、送るダイアログ）: 末尾に
+   キャンセルと確定。下書きを捨てるか問うときは、問いと「捨てる」が先頭に
+   入り、「捨てる」が残りを末尾へ押す — 手の行くボタンから離しておく */
+.tv-form__buttons {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 8px;
+    font-size: var(--font-ui-small);
+}
+
+/* 節の後に置くボタン行（送るダイアログ）は、最後の節から 24px 空ける。
+   作成のダイアログのボタン行（tv-form__actions）と同じ空きで、節の下の
+   padding 12px にこの 12px を足す。ハブのソースのボタン行は編集欄と同じ
+   面の中にあり、節の後ではないので当たらない */
+.tv-form .tv-form__group ~ .tv-form__buttons {
+    margin-top: 12px;
+}
+
+.tv-form__discard {
+    margin-inline-end: auto;
+}
+
+/* phone では問い・捨てる・戻る・確定が1行に入らず、成り行きの折り返しでは
+   「捨てる」が「戻る」の上に来る。問いに1行を与え、「捨てる」は次の行の先頭に置く */
+.is-phone .tv-form__ask {
+    flex-basis: 100%;
+}
+
 .tv-form__input-with-picker {
     position: relative;
+}
+
+/* 枠は中の text-input が描き、ピッカーと × のボタン、色見本はその上に重なる。
+   無効の欄は全体を薄くする（_controls.css の欄の規則）ので、ここでは重なる部品を
+   含む全体を薄くし、input は重ねて薄くしない */
+.tv-ctrl .tv-form__input-with-picker:has(> .tv-ctrl__text-input:disabled) {
+    opacity: 0.5;
+}
+
+.tv-ctrl .tv-form__input-with-picker > .tv-ctrl__text-input:disabled {
+    opacity: 1;
 }
 
 .tv-ctrl .tv-form__input-with-picker .tv-ctrl__text-input {
@@ -135,7 +209,7 @@
     padding-right: 12px;
 }
 
-.tv-form__picker-button {
+.tv-ctrl .tv-form__picker-button {
     position: absolute;
     top: 0;
     left: 0;
@@ -148,6 +222,7 @@
     /* hover 背景が親 input の角丸を貫通しないよう、外側の角は input と
        同じ radius に追従させる（mobile の 44px pill でも clamp で一致） */
     border-radius: var(--input-radius, var(--tv-radius-s)) 0 0 var(--input-radius, var(--tv-radius-s));
+    box-shadow: none;
     cursor: pointer;
     display: inline-flex;
     align-items: center;
@@ -180,67 +255,39 @@
 
 /* is-mobile ではオーバーレイ（native input）がヒット対象のため :hover が
    button に立たない — overlay の hover を :has() で button に接続する */
-.tv-form__picker-button:hover,
-.tv-form__input-with-picker:has(> .tv-form__native-picker-input:hover) .tv-form__picker-button {
+.tv-ctrl .tv-form__picker-button:enabled:hover,
+.tv-ctrl .tv-form__input-with-picker:has(> .tv-form__native-picker-input:enabled:hover) .tv-form__picker-button {
     color: var(--tv-text);
     background-color: var(--tv-bg-hover);
+    box-shadow: none;
 }
 
-.tv-form__picker-button:focus-visible {
+.tv-ctrl .tv-form__picker-button:focus-visible {
     outline: 2px solid var(--tv-accent);
     outline-offset: 1px;
+    box-shadow: none;
 }
 
-/* Native picker input: transparent overlay on the picker-button area.
-   desktop では pointer-events: none — hover/cursor は下の pickerButton が
-   受け、click は pickerButton → showPicker() で開く。native input の
-   shadow DOM 内部フィールドは CSS の cursor 指定を無視するため、
-   オーバーレイをヒット対象にすると cursor が default に落ちる */
-.tv-form__input-with-picker > input.tv-form__native-picker-input[type='date'],
-.tv-form__input-with-picker > input.tv-form__native-picker-input[type='time'],
-.tv-form__input-with-picker > input.tv-form__native-picker-input[type='color'] {
-    position: absolute !important;
+/* 無効の欄のボタン: 押せないことをカーソルで示す。薄くするのは欄の全体
+   （上の input-with-picker の規則）なので、Obsidian の button[disabled] の
+   薄さは重ねない */
+.tv-ctrl .tv-form__picker-button:disabled,
+.tv-ctrl .tv-form__clear-button:disabled {
+    opacity: 1;
+    cursor: not-allowed;
+}
+
+/* ネイティブのピッカー（NativePicker）の置き場所: ピッカーのボタンの上。
+   見えなさと、どの端末でタップを受けるかは _controls.css の共通の規則 */
+.tv-form__input-with-picker > input.tv-form__native-picker-input {
     top: 0 !important;
     left: 0 !important;
     width: 36px !important;
     height: 100% !important;
-    opacity: 0 !important;
-    margin: 0 !important;
-    padding: 0 !important;
-    border: 0 !important;
-    pointer-events: none !important;
-    cursor: pointer !important;
-    -webkit-appearance: none !important;
-    appearance: none !important;
-}
-
-/* Mobile (touch): iPad は programmatic showPicker が拒否される
-   （WebKit Bug #261703）ため、native input への直接タップで開く */
-.is-mobile .tv-form__input-with-picker > input.tv-form__native-picker-input[type='date'],
-.is-mobile .tv-form__input-with-picker > input.tv-form__native-picker-input[type='time'],
-.is-mobile .tv-form__input-with-picker > input.tv-form__native-picker-input[type='color'] {
-    pointer-events: auto !important;
-}
-
-/* date/time input の shadow DOM 内部フィールドは input 側の cursor 指定を
-   継承しない（color にはこの内部構造がないため対称性が崩れる）。
-   オーバーレイがヒット対象になる is-mobile + ポインタ環境
-   （エミュレーション / iPad + トラックパッド）でも pointer を出す */
-.tv-form__native-picker-input::-webkit-datetime-edit,
-.tv-form__native-picker-input::-webkit-datetime-edit-fields-wrapper,
-.tv-form__native-picker-input::-webkit-datetime-edit-text,
-.tv-form__native-picker-input::-webkit-datetime-edit-year-field,
-.tv-form__native-picker-input::-webkit-datetime-edit-month-field,
-.tv-form__native-picker-input::-webkit-datetime-edit-day-field,
-.tv-form__native-picker-input::-webkit-datetime-edit-hour-field,
-.tv-form__native-picker-input::-webkit-datetime-edit-minute-field,
-.tv-form__native-picker-input::-webkit-datetime-edit-ampm-field,
-.tv-form__native-picker-input::-webkit-calendar-picker-indicator {
-    cursor: pointer;
 }
 
 /* Clear button (right side, visible only when input has a value) */
-.tv-form__clear-button {
+.tv-ctrl .tv-form__clear-button {
     position: absolute;
     top: 0;
     right: 0;
@@ -251,14 +298,17 @@
     justify-content: center;
     cursor: pointer;
     color: var(--tv-text-muted);
+    padding: 0;
     border: none;
     background: transparent;
+    box-shadow: none;
     border-radius: 0 var(--input-radius, var(--tv-radius-s)) var(--input-radius, var(--tv-radius-s)) 0;
 }
 
-.tv-form__clear-button:hover {
+.tv-ctrl .tv-form__clear-button:enabled:hover {
     color: var(--tv-text);
     background-color: var(--tv-bg-hover);
+    box-shadow: none;
 }
 
 .tv-form__clear-button .svg-icon {
@@ -287,4 +337,26 @@
     color: var(--tv-text-warning);
     font-size: 0.85em;
     margin-bottom: 12px;
+}
+
+/* Info message: what the form will do, in the text's own colour */
+.tv-form__info {
+    color: var(--tv-text);
+    font-size: 0.85em;
+    margin-bottom: 12px;
+}
+
+/* A line of a note shown verbatim, as it will be written (the next instance
+   a flow's delete would write). Monospace says "this is the text, as text";
+   a long line wraps rather than widening the dialog */
+.tv-form__line-preview {
+    display: block;
+    padding: 8px;
+    border-radius: var(--tv-radius-s);
+    background: var(--tv-bg-input);
+    color: var(--tv-text);
+    font-family: var(--tv-font-mono);
+    font-size: 0.9em;
+    white-space: pre-wrap;
+    word-break: break-word;
 }

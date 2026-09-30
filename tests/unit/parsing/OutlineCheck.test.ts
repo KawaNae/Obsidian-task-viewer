@@ -32,13 +32,19 @@ function found(lines: string[], edit: (draft: LineDraft) => void): WriteFinding 
 const checked = (lines: string[], edit: (draft: LineDraft) => void): WriteCheck => found(lines, edit).check;
 
 /** One line put at `spot`, to read as it does by itself. */
+/** The head of the section of `## H`, the note's first line (`Placement.into`). */
+const headOf = (lines: string[], head: string): Spot => {
+    const found = Placement.into(Outline.read(lines), { heading: 'H', side: 'head' }, head);
+    if (found.kind !== 'spot') throw new Error(`no spot: ${found.kind}`);
+    return found.spot;
+};
 const putLine = (spot: Spot, text: string) => (draft: LineDraft) => draft.put(spot, Block.line(spot.indent + text));
 
 describe('a line put in reads as its block says, or the write is unplaceable', () => {
     it('is sound where the line is a task under the item meant', () => {
         const lines = ['- [ ] T', '  - [ ] a', '- [ ] U'];
-        expect(checked(lines, putLine(Placement.firstChild(Outline.read(lines), 0, '- [ ] n'), '- [ ] c'))).toBe('sound');
-        expect(checked(lines, putLine(Placement.afterSubtree(Outline.read(lines), 0, '- [ ] n'), '- [ ] c'))).toBe('sound');
+        expect(checked(lines, putLine(Placement.firstChild(Outline.read(lines), 0, '- [ ] n', '\t'), '- [ ] c'))).toBe('sound');
+        expect(checked(lines, putLine(Placement.afterSubtree(Outline.read(lines), 0, '- [ ] n', '\t'), '- [ ] c'))).toBe('sound');
         expect(checked(lines, putLine(Placement.end(Outline.read(lines)), '- [ ] c'))).toBe('sound');
     });
 
@@ -47,10 +53,10 @@ describe('a line put in reads as its block says, or the write is unplaceable', (
         // Past the fence, the line goes on it.
         expect(checked(lines, putLine({ at: 3, parent: 0, indent: '    ' }, '- [ ] c'))).toBe('unplaceable');
         // A child goes above the fence, where it reads as a task.
-        expect(Placement.firstChild(Outline.read(lines), 0, '- [ ] n').at).toBe(1);
-        expect(checked(lines, putLine(Placement.firstChild(Outline.read(lines), 0, '- [ ] n'), '- [ ] c'))).toBe('sound');
+        expect(Placement.firstChild(Outline.read(lines), 0, '- [ ] n', '\t').at).toBe(1);
+        expect(checked(lines, putLine(Placement.firstChild(Outline.read(lines), 0, '- [ ] n', '\t'), '- [ ] c'))).toBe('sound');
         // A sibling put there starts an item, which ends the fence.
-        expect(checked(lines, putLine(Placement.afterSubtree(Outline.read(lines), 0, '- [ ] n'), '- [ ] c'))).toBe('sound');
+        expect(checked(lines, putLine(Placement.afterSubtree(Outline.read(lines), 0, '- [ ] n', '\t'), '- [ ] c'))).toBe('sound');
     });
 
     it('is unplaceable at the end of a note whose fence at the top never closes, and inside a closed one', () => {
@@ -79,8 +85,8 @@ describe('a line put in reads as its block says, or the write is unplaceable', (
         // The copy's child is written as text: no item where the original's is.
         const lines = ['- [ ] T', '  - [ ] c', '- [ ] U'];
         const reading = Outline.read(lines);
-        expect(checked(lines, (draft) => draft.put(Placement.afterSubtree(Outline.read(lines), 0, '- [ ] n'), Block.of(reading, [0, 1], ['- [ ] T', '  - [ ] c'])))).toBe('sound');
-        expect(checked(lines, (draft) => draft.put(Placement.afterSubtree(Outline.read(lines), 0, '- [ ] n'), Block.of(reading, [0, 1], ['- [ ] T', '  c'])))).toBe('unplaceable');
+        expect(checked(lines, (draft) => draft.put(Placement.afterSubtree(Outline.read(lines), 0, '- [ ] n', '\t'), Block.of(reading, [0, 1], ['- [ ] T', '  - [ ] c'])))).toBe('sound');
+        expect(checked(lines, (draft) => draft.put(Placement.afterSubtree(Outline.read(lines), 0, '- [ ] n', '\t'), Block.of(reading, [0, 1], ['- [ ] T', '  c'])))).toBe('unplaceable');
     });
 
     it('lets a note bullet that lost its item go where it lands: it is no task, command or property', () => {
@@ -145,7 +151,7 @@ describe('a line kept keeps its kind, and a task its items above, or the write d
         const lines = ['- [ ] T', '  ```', '  x', '  ```', 'after'];
         expect(found(lines, (draft) => draft.put({ at: 4, parent: null, indent: '' }, Block.read(['```'])))).toEqual({ check: 'disturbs', fence: null });
         // A sound write names none.
-        expect(found(item, putLine(Placement.firstChild(Outline.read(item), 0, '- [ ] n'), '- [ ] c'))).toEqual({ check: 'sound', fence: null });
+        expect(found(item, putLine(Placement.firstChild(Outline.read(item), 0, '- [ ] n', '\t'), '- [ ] c'))).toEqual({ check: 'sound', fence: null });
     });
 
     it('leaves a blank line blank wherever it stands: taking a fence\'s blank line out of it disturbs nothing (q13)', () => {
@@ -165,13 +171,13 @@ describe('an item put in takes in no line past its block, or the write disturbs'
         const lines = ['- [ ] T', 'lazy', '- [ ] U'];
         expect(checked(lines, putLine({ at: 1, parent: 0, indent: '\t' }, '- [ ] c'))).toBe('disturbs');
         // Past the lazy line, nothing goes on it.
-        expect(checked(lines, putLine(Placement.firstChild(Outline.read(lines), 0, '- [ ] n'), '- [ ] c'))).toBe('sound');
+        expect(checked(lines, putLine(Placement.firstChild(Outline.read(lines), 0, '- [ ] n', '\t'), '- [ ] c'))).toBe('sound');
     });
 
     it('disturbs where a heading\'s paragraph would go on the new item', () => {
         const lines = ['## H', 'words', '- [ ] a'];
         expect(checked(lines, putLine({ at: 1, parent: null, indent: '' }, '- [ ] n'))).toBe('disturbs');
-        expect(checked(lines, putLine(Placement.underHeading(Outline.read(lines), 0, '- [ ] n'), '- [ ] n'))).toBe('sound');
+        expect(checked(lines, putLine(headOf(lines, '- [ ] n'), '- [ ] n'))).toBe('sound');
     });
 });
 
@@ -186,8 +192,8 @@ describe('a line spliced into the body without a block', () => {
 describe('mixed indentation', () => {
     it('is sound where a child is put under a tab row among space-indented siblings', () => {
         const lines = ['- [ ] P', '    - [ ] a', '\t- [ ] T', '    - [ ] b'];
-        expect(checked(lines, putLine(Placement.afterSubtree(Outline.read(lines), 2, '- [ ] n'), '- [ ] c'))).toBe('sound');
-        expect(checked(lines, putLine(Placement.firstChild(Outline.read(lines), 2, '- [ ] n'), '- [ ] c'))).toBe('sound');
+        expect(checked(lines, putLine(Placement.afterSubtree(Outline.read(lines), 2, '- [ ] n', '\t'), '- [ ] c'))).toBe('sound');
+        expect(checked(lines, putLine(Placement.firstChild(Outline.read(lines), 2, '- [ ] n', '\t'), '- [ ] c'))).toBe('sound');
     });
 });
 
@@ -200,15 +206,15 @@ describe('a line placed past what it would take in, as the reading with it in sa
 
     it('goes past a closed fence under a heading that a line put above would take in (the second run\'s H1)', () => {
         const lines = ['## H', '  ```', '  x', '  ```', '- [ ] A'];
-        expect(put(lines, text => Placement.underHeading(Outline.read(lines), 0, text), '- [ ] n'))
+        expect(put(lines, text => headOf(lines, text), '- [ ] n'))
             .toEqual({ spot: { at: 4, parent: null, indent: '' }, check: 'sound' });
     });
 
     it('goes past a task\'s closed fence past the new child\'s content column (H2, H3)', () => {
         const lines = ['1. [ ] T', '      ```', '      x', '      ```', '   - [ ] c'];
-        expect(put(lines, text => Placement.firstChild(Outline.read(lines), 0, text), '- [ ] n'))
+        expect(put(lines, text => Placement.firstChild(Outline.read(lines), 0, text, '\t'), '- [ ] n'))
             .toEqual({ spot: { at: 4, parent: 0, indent: '   ' }, check: 'sound' });
-        expect(put(lines, text => Placement.firstChild(Outline.read(lines), 0, text), '- zz:: 1'))
+        expect(put(lines, text => Placement.firstChild(Outline.read(lines), 0, text, '\t'), '- zz:: 1'))
             .toEqual({ spot: { at: 4, parent: 0, indent: '   ' }, check: 'sound' });
     });
 
@@ -220,7 +226,7 @@ describe('a line placed past what it would take in, as the reading with it in sa
 
     it('stops at an item of the note it would take in, and takes that item\'s indentation', () => {
         const lines = ['## H', 'text', '  - [ ] a'];
-        expect(put(lines, text => Placement.underHeading(Outline.read(lines), 0, text), '- [ ] n'))
+        expect(put(lines, text => headOf(lines, text), '- [ ] n'))
             .toEqual({ spot: { at: 2, parent: null, indent: '  ' }, check: 'sound' });
     });
 
@@ -228,13 +234,13 @@ describe('a line placed past what it would take in, as the reading with it in sa
         // `more` is T's indented code: past a tab and `- ` it would go on
         // the line as a paragraph of its own; past a tab and `10. `, not.
         const lines = ['- [ ] T', '', '	  more', '- [ ] U'];
-        expect(put(lines, text => Placement.firstChild(Outline.read(lines), 0, text), '- [ ] n').spot.at).toBe(3);
-        expect(put(lines, text => Placement.firstChild(Outline.read(lines), 0, text), '10. [ ] n').spot.at).toBe(1);
+        expect(put(lines, text => Placement.firstChild(Outline.read(lines), 0, text, '\t'), '- [ ] n').spot.at).toBe(3);
+        expect(put(lines, text => Placement.firstChild(Outline.read(lines), 0, text, '\t'), '10. [ ] n').spot.at).toBe(1);
     });
 
     it('takes for a new line the indentation of the sibling it goes above: a sibling of `1.` over a `- ` at two (the first run\'s B)', () => {
         const lines = ['1. [ ] T', '  - [ ] U'];
-        expect(put(lines, text => Placement.afterSubtree(Outline.read(lines), 0, text), '- [x] n'))
+        expect(put(lines, text => Placement.afterSubtree(Outline.read(lines), 0, text, '\t'), '- [x] n'))
             .toEqual({ spot: { at: 1, parent: null, indent: '  ' }, check: 'sound' });
         // A copy of T is spelled as T, and reads as T does: U, not T's, stays where it stands.
         expect(put(lines, text => Placement.copyOf(Outline.read(lines), 0, 'below', text), '1. [ ] T'))
@@ -246,8 +252,8 @@ describe('a next instance put at a sibling spelled apart from the row that fired
     it('is written at the sibling\'s indentation, its `==>` line as far past it as it stands past the row', () => {
         // R is four spaces in, its group's head A a tab: both P's children.
         const lines = ['- [ ] P', '\t- [x] A', '    - [ ] R ==> every mon', '      - ==> every mon', ''];
-        const block = renderFlowInstance(Outline.read(lines), 2, { kind: 'recurrence', content: '- [ ] R', flowLines: ['every mon'] });
-        const spot = Placement.groupHead(Outline.read(lines), 2, '- [ ] R');
+        const block = renderFlowInstance(Outline.read(lines), 2, { kind: 'recurrence', content: '- [ ] R', flowLines: ['every mon'] }, '\t');
+        const spot = Placement.groupHead(Outline.read(lines), 2, '- [ ] R', '\t');
         expect(spot).toEqual({ at: 1, parent: 0, indent: '\t' });
         const check = checked(lines, (draft) => draft.put(spot, block));
         expect(check).toBe('sound');
@@ -263,7 +269,7 @@ describe('a copy written at the spelling of the row it copies (the third run\'s 
         const reading = Outline.read(lines);
         const spot = Placement.copyOf(Outline.read(lines), 0, 'below', lines[0]);
         // A new line there is spelled as U, and takes the copied child in.
-        expect(Placement.afterSubtree(Outline.read(lines), 0, lines[0])).toEqual({ at: 2, parent: null, indent: '   ' });
+        expect(Placement.afterSubtree(Outline.read(lines), 0, lines[0], '\t')).toEqual({ at: 2, parent: null, indent: '   ' });
         expect(spot).toEqual({ at: 2, parent: null, indent: '' });
         expect(checked(lines, (draft) => draft.put(spot, Block.of(reading, [0, 1], [lines[0], lines[1]])))).toBe('sound');
     });

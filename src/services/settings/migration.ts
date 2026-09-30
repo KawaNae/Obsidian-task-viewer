@@ -61,6 +61,10 @@ const RENAMES: ReadonlyArray<readonly [string, string]> = [
     ['frontmatterTaskKeys', 'tvFileKeys'],
     ['tvFileKeys', 'scopeKeys'],
     ['calendarWeekStartDay', 'weekStartDay'],
+    // The daily note's heading became the one a new task goes under in any
+    // note (v0.58).
+    ['dailyNoteHeader', 'taskHeading'],
+    ['dailyNoteHeaderLevel', 'taskHeadingLevel'],
 ];
 
 /**

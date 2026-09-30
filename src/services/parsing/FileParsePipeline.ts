@@ -2,6 +2,7 @@ import { parseYaml } from 'obsidian';
 import type { Task, TaskViewerSettings } from '../../types';
 import { collectGenBlocks, type GenBlock } from './gen/GenBlockCollector';
 import { DocumentTreeBuilder } from './tree/DocumentTreeBuilder';
+import type { DocumentNode } from './tree/DocumentTree';
 import { Outline, type OutlineReading } from './utils/Outline';
 import { SectionPropertyResolver } from './tree/SectionPropertyResolver';
 import { TreeTaskExtractor } from './tree/TreeTaskExtractor';
@@ -52,31 +53,11 @@ export class FileParsePipeline {
         settings: TaskViewerSettings,
         reading?: OutlineReading,
     ): FileParseResult {
-        // --- Frontmatter境界検出 ---
-        // The same reading a write takes of where the body begins
-        // (`Placement`): a line the parser reads as body is one a write may
-        // place a line at.
-        const bodyStartIndex = Outline.bodyStart(lines);
-        let frontmatterObj: Record<string, any> | undefined;
-        if (bodyStartIndex > 0) {
-            try {
-                const yamlContent = lines.slice(1, bodyStartIndex - 1).join('\n');
-                const parsed: unknown = parseYaml(yamlContent);
-                if (parsed && typeof parsed === 'object') frontmatterObj = parsed as Record<string, any>;
-            } catch {
-                // A malformed block reads as no frontmatter, as metadataCache
-                // reads it.
-            }
-        }
+        const tree = this.resolveTree(filePath, lines, settings, reading);
+        if (!tree) return { ignored: true, tasks: [], genBlocks: new Map() };
+        const { doc } = tree;
+        const { outline } = doc;
 
-        if (this.isIgnoredByFrontmatter(frontmatterObj, lines, bodyStartIndex, settings)) {
-            return { ignored: true, tasks: [], genBlocks: new Map() };
-        }
-
-        // --- ツリーパイプライン（順序契約: build → resolve → extract）---
-        const outline = reading && sameLines(reading.lines, lines) ? reading : Outline.read(lines);
-        const doc = DocumentTreeBuilder.build(filePath, lines, bodyStartIndex, outline);
-        SectionPropertyResolver.resolve(doc, frontmatterObj, settings.scopeKeys);
         const tasks = TreeTaskExtractor.extract(doc, {
             filePath,
             scopeKeys: settings.scopeKeys,
@@ -97,9 +78,48 @@ export class FileParsePipeline {
         return { ignored: false, tasks, genBlocks };
     }
 
+    /**
+     * The note's section tree with every section's values resolved, and
+     * where each came from (`SectionNode.resolvedSources`): what `parse`
+     * extracts the rows from, for a reader who asks what a line of the note
+     * inherits (`InheritedValues`). Null for a tv-ignore'd note, which has
+     * no rows. `frontmatter` is the block as the YAML parser read it.
+     */
+    static resolveTree(
+        filePath: string,
+        lines: readonly string[],
+        settings: TaskViewerSettings,
+        reading?: OutlineReading,
+    ): { doc: DocumentNode; frontmatter: Record<string, any> | undefined } | null {
+        // --- Frontmatter境界検出 ---
+        // The same reading a write takes of where the body begins
+        // (`Placement`): a line the parser reads as body is one a write may
+        // place a line at.
+        const bodyStartIndex = Outline.bodyStart(lines);
+        let frontmatterObj: Record<string, any> | undefined;
+        if (bodyStartIndex > 0) {
+            try {
+                const yamlContent = lines.slice(1, bodyStartIndex - 1).join('\n');
+                const parsed: unknown = parseYaml(yamlContent);
+                if (parsed && typeof parsed === 'object') frontmatterObj = parsed as Record<string, any>;
+            } catch {
+                // A malformed block reads as no frontmatter, as metadataCache
+                // reads it.
+            }
+        }
+
+        if (this.isIgnoredByFrontmatter(frontmatterObj, lines, bodyStartIndex, settings)) return null;
+
+        // --- ツリーパイプライン（順序契約: build → resolve → extract）---
+        const outline = reading && sameLines(reading.lines, lines) ? reading : Outline.read(lines);
+        const doc = DocumentTreeBuilder.build(filePath, lines, bodyStartIndex, outline);
+        SectionPropertyResolver.resolve(doc, frontmatterObj, settings.scopeKeys);
+        return { doc, frontmatter: frontmatterObj };
+    }
+
     private static isIgnoredByFrontmatter(
         frontmatterObj: Record<string, any> | undefined,
-        lines: string[],
+        lines: readonly string[],
         bodyStartIndex: number,
         settings: TaskViewerSettings
     ): boolean {

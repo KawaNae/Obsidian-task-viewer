@@ -113,7 +113,7 @@ obsidian obsidian-task-viewer:create file=DailyNotes/2026-03-15.md content="Meet
 | `end` | | 終了日時 | `end=15:00` |
 | `due` | | 締切日 | `due=2026-03-20` |
 | `status` | | ステータス文字（デフォルト: ` `） | `status=!` |
-| `heading` | | 挿入先の見出し | `heading=Tasks` |
+| `heading` | | 挿入先の見出し（探し方と置き場所は [API の create](api.md#create) と同じ） | `heading=Tasks` |
 
 **日時の形式:** `YYYY-MM-DD`, `YYYY-MM-DDTHH:mm`, `HH:mm`
 

@@ -61,7 +61,7 @@ function makeHarness(): Harness {
     };
 
     const plugin = {
-        settings: { dailyNoteHeader: 'Tasks', dailyNoteHeaderLevel: 2 },
+        settings: { taskHeading: 'Tasks', taskHeadingLevel: 2, sectionSide: 'head' },
         getTaskIndex: () => taskIndex,
         getTaskWriteService: () => ({
             freshByAnchor: heldByAnchor(taskIndex),
@@ -103,6 +103,7 @@ function makeDailyTimer(overrides: Partial<TimerInstance> = {}): TimerInstance {
         elapsedTime: 0,
         ownedAnchors: [],
         opening: null,
+        priorStartMs: null,
         ...overrides,
     } as TimerInstance;
 }

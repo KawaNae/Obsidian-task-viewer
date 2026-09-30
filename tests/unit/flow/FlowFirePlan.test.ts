@@ -85,15 +85,22 @@ describe('FlowExecutor.planFire: a completion planned from the lines the write h
         expect(plan.kind).toBe('failed');
     });
 
-    it('fails a move that names another note, and a heading that is not one, from the lines it is handed', () => {
+    it('drops a move that names another note, and fails one to a heading that is not one, from the lines it is handed', () => {
         const retired = executor().planFire(FILE, ['- [x] T @2026-08-17 ==> move("archive")', '    - c'], 0);
-        expect(retired.kind === 'failed' && retired.error.code).toBe('eval.move-retired');
+        expect(retired.kind === 'fires' && retired.unmoved?.code).toBe('eval.move-retired');
+        expect(retired.kind === 'fires' && retired.ops.map(o => o.kind)).toEqual(['strip-flow']);
         const none = executor().planFire(FILE, ['- [x] T @2026-08-17 ==> move([[#Done]])', '## Other'], 0);
         expect(none.kind === 'failed' && none.error.code).toBe('eval.move-no-heading');
         const many = executor().planFire(FILE, ['- [x] T @2026-08-17 ==> move([[#Done]])', '## Done', '# done'], 0);
         expect(many.kind === 'failed' && many.error.code).toBe('eval.move-heading-ambiguous');
         const one = executor().planFire(FILE, ['- [x] T @2026-08-17 ==> move([[#Done]])', '## Done'], 0);
-        expect(one.kind === 'fires' && one.ops).toEqual([{ kind: 'move', text: '- [x] T @2026-08-17', to: { kind: 'heading', name: 'Done' } }]);
+        expect(one.kind === 'fires' && one.ops).toEqual([{ kind: 'move', text: '- [x] T @2026-08-17', to: { heading: 'Done', side: 'head' } }]);
+    });
+
+    it('fires move(), which names no heading of the note, without its move, as it does a move to another note', () => {
+        const plan = executor().planFire(FILE, ['- [x] T @2026-08-17 ==> every 1d move()', '## Done'], 0);
+        expect(plan.kind === 'fires' && plan.unmoved?.code).toBe('eval.move-retired');
+        expect(plan.kind === 'fires' && plan.ops.map(o => o.kind)).toEqual(['insert-instance', 'strip-flow']);
     });
 });
 

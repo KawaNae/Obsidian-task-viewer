@@ -23,6 +23,16 @@ export class FrontmatterLineEditor {
     }
 
     /**
+     * Whether the frontmatter of `lines` has the top-level key `key`, as a
+     * write reads it ({@link findKeyRange}): the one answer both a send's
+     * write and its dialog give, the one to add only the keys a note has
+     * none of, the other to say which it will not write.
+     */
+    static hasKey(lines: readonly string[], key: string): boolean {
+        return this.findKeyRange(lines, this.findEnd(lines), key) !== null;
+    }
+
+    /**
      * frontmatter を持たないファイルのために空の block を先頭へ挿し、
      * fmEnd を返す。既にある場合は何も足さない。
      *

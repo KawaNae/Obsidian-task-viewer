@@ -244,11 +244,11 @@ describe('flow effects', () => {
     });
 
     it('same-file move with an identical text: the original goes, not the row carried to the end', async () => {
-        const bench = await writeBench(['- [x] A', '- [ ] B']);
+        const bench = await writeBench(['- [x] A', '- [ ] B', '## Done']);
         const a = bench.taskAt(0);
-        const outcome = await bench.writer.applyToTask(plannedOn(a), [{ kind: 'move', to: { kind: 'end' }, text: '- [x] A' }]);
+        const outcome = await bench.writer.applyToTask(plannedOn(a), [{ kind: 'move', to: { heading: 'Done', side: 'end' }, text: '- [x] A' }]);
         expect(outcome.written).toBe(true);
-        expect(bench.lines()).toEqual(['- [ ] B', '- [x] A']);
+        expect(bench.lines()).toEqual(['- [ ] B', '## Done', '- [x] A']);
         expect(only(bench.filed).edits.some(edit => edit.kind === 'carried')).toBe(true);
     });
 

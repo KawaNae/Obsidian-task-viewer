@@ -2,7 +2,7 @@
  * Lightweight obsidian module stub for unit tests.
  * Only the symbols actually imported by source code are stubbed here.
  */
-import { load as loadYaml } from 'js-yaml';
+import { dump as dumpYaml, load as loadYaml } from 'js-yaml';
 import { StateField } from '@codemirror/state';
 
 // --- Core classes ---
@@ -58,6 +58,12 @@ export class Plugin {
     saveData(_data: any) { return Promise.resolve(); }
 }
 
+export class Scope {
+    constructor(public parent?: Scope) {}
+    register(): unknown { return {}; }
+    unregister(): void {}
+}
+
 export class Modal {
     app: App;
     constructor(app: App) { this.app = app; }
@@ -88,6 +94,47 @@ export class EditorSuggest<T> {
     close(): void { }
     /** Unused by the stub; present so the type parameter is read. */
     protected value?: T;
+}
+
+/**
+ * Obsidian's stack of what takes the back (`onHistoryBack`), and
+ * `PopoverSuggest`'s `open` and `close` on it, written as Obsidian 1.13.7's
+ * are: the scope pushed, the DOM attached, then the suggestion pushed; and
+ * the reverse on close.
+ */
+export const historyStack: { onHistoryBack(): void }[] = [];
+
+export class PopoverSuggest {
+    app: any;
+    scope: unknown;
+    isOpen = false;
+    win: unknown = null;
+    autoDestroy: (() => void) | null = null;
+    suggestions: any;
+    constructor(app: any) { this.app = app; }
+    attachDom(): void {}
+    detachDom(): void {}
+    onHistoryBack(): void { this.close(); }
+    open(): void {
+        const app = this.app;
+        if (this.isOpen) return;
+        this.isOpen = true;
+        this.win = (globalThis as { activeWindow?: unknown }).activeWindow ?? null;
+        app.keymap.pushScope(this.scope);
+        this.attachDom();
+        historyStack.push(this);
+    }
+    close(): void {
+        const app = this.app;
+        if (this.autoDestroy) { this.autoDestroy(); this.autoDestroy = null; }
+        app.keymap.popScope(this.scope);
+        if (!this.isOpen) return;
+        this.isOpen = false;
+        this.suggestions.setSuggestions([]);
+        this.detachDom();
+        historyStack.splice(historyStack.indexOf(this), 1);
+        this.win = null;
+    }
 }
 
 export class AbstractInputSuggest {
@@ -140,6 +187,12 @@ export class FileSystemAdapter {
 export function setIcon(_el: HTMLElement, _icon: string) {}
 export function normalizePath(path: string) { return path; }
 
+/** A wikilink's text cut at its first `#`, as Obsidian cuts it: the subpath keeps the `#`. */
+export function parseLinktext(linktext: string): { path: string; subpath: string } {
+    const hash = linktext.indexOf('#');
+    return hash < 0 ? { path: linktext, subpath: '' } : { path: linktext.slice(0, hash), subpath: linktext.slice(hash) };
+}
+
 /**
  * A bare `2026-09-21` in frontmatter comes back as a `Date`, not a string —
  * `DateTimeFieldParser.normalizeYamlDate` exists specifically to turn that
@@ -152,6 +205,11 @@ export function normalizePath(path: string) { return path; }
  */
 export function parseYaml(yaml: string): any {
     return loadYaml(yaml);
+}
+
+/** Obsidian's writes the block style too; js-yaml's dump is the nearest. */
+export function stringifyYaml(obj: any): string {
+    return dumpYaml(obj);
 }
 
 // --- CodeMirror integration stubs ---

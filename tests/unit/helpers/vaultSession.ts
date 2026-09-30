@@ -1,4 +1,4 @@
-import { type App, parseYaml, TFile } from 'obsidian';
+import { type App, parseYaml, TFile, TFolder } from 'obsidian';
 import { TaskIndex } from '../../../src/services/core/TaskIndex';
 import type { TaskScanner } from '../../../src/services/core/TaskScanner';
 import { TaskWriteService } from '../../../src/services/data/TaskWriteService';
@@ -13,6 +13,7 @@ import { splitLines } from '../../../src/services/persistence/FileLines';
 import type { Refusal, WriteChannel } from '../../../src/services/persistence/FileLines';
 import type { DiskProbe } from '../../../src/services/core/DiskProbe';
 import type { DiskReconciler } from '../../../src/services/core/DiskReconciler';
+import { linkDouble } from './linkDouble';
 
 export function makeFile(path: string): TFile {
     const file = new TFile();
@@ -23,10 +24,22 @@ export function makeFile(path: string): TFile {
     return file;
 }
 
-/** What `metadataCache.getCache` answers — only the fields `TaskScanner` reads. */
+/** A wikilink as `metadataCache.getCache` lists it: its target (alias left out) and the line it is on. */
+interface CachedLink {
+    link: string;
+    original: string;
+    position: { start: { line: number; col: number; offset: number }; end: { line: number; col: number; offset: number } };
+}
+
+/**
+ * What `metadataCache.getCache` answers — the fields `TaskScanner` reads,
+ * and the wikilinks and embeds a note writes (`NoteRefs.linksTo`).
+ */
 interface VaultCache {
     frontmatter?: Record<string, unknown>;
     listItems?: unknown[];
+    links: CachedLink[];
+    embeds: CachedLink[];
 }
 
 /** A line that opens a bullet, a numbered item, or a checkbox. */
@@ -72,7 +85,31 @@ function computeCache(content: string): VaultCache {
     }
 
     const listItems = lines.some(line => LIST_LINE.test(line)) ? [{}] : undefined;
-    return { frontmatter, listItems };
+    const links: CachedLink[] = [];
+    const embeds: CachedLink[] = [];
+    lines.forEach((line, n) => {
+        for (const m of line.matchAll(/(!?)\[\[([^\]]*)\]\]/g)) {
+            const col = m.index ?? 0;
+            const at = { line: n, col, offset: 0 };
+            (m[1] ? embeds : links).push({
+                link: m[2].split('|')[0],
+                original: m[0],
+                position: { start: at, end: { ...at, col: col + m[0].length } },
+            });
+        }
+    });
+    return { frontmatter, listItems, links, embeds };
+}
+
+/**
+ * The note of `paths` a link spelling `linkpath` resolves to, as Obsidian
+ * resolves one (`getFirstLinkpathDest`), case aside: the note at that path,
+ * or else the first by that name.
+ */
+function linkDest(paths: readonly string[], linkpath: string): string | undefined {
+    const bare = linkpath.replace(/\.md$/i, '').toLowerCase();
+    return paths.find(p => p.replace(/\.md$/i, '').toLowerCase() === bare)
+        ?? paths.find(p => (p.split('/').pop() ?? p).replace(/\.md$/i, '').toLowerCase() === bare);
 }
 
 /**
@@ -108,8 +145,12 @@ export function scannerOf(index: TaskIndex): TaskScanner {
  * has a reconciler only when `probe` is given (its stand-in for the disk's
  * stats); it starts it when the test says (`reconciler.start()`), as the
  * plugin does once the vault is read.
+ *
+ * `config` is what `.obsidian/app.json` holds (`Vault.getConfig`); without
+ * it the vault has no `getConfig`, and the plugin reads Obsidian's defaults
+ * (`ObsidianConfig`).
  */
-export function vaultSession(contents: Map<string, string>, options: { probe?: DiskProbe } = {}) {
+export function vaultSession(contents: Map<string, string>, options: { probe?: DiskProbe; config?: Record<string, unknown> } = {}) {
     let scanner: TaskScanner | undefined;
     const noop = { on: () => ({}), offref: () => { } };
     const vaultHandlers = new Map<string, (...args: unknown[]) => unknown>();
@@ -125,8 +166,10 @@ export function vaultSession(contents: Map<string, string>, options: { probe?: D
         const changed = vaultHandlers.get('changed') as ((f: TFile) => void) | undefined;
         if (changed) changed(file);
     };
+    const config = options.config;
     const app = {
         vault: {
+            ...(config ? { getConfig: (key: string) => config[key] } : {}),
             on: (name: string, fn: (...args: unknown[]) => unknown) => { vaultHandlers.set(name, fn); return {}; },
             offref: () => { },
             read: async (file: TFile) => contents.get(file.path) ?? '',
@@ -148,7 +191,10 @@ export function vaultSession(contents: Map<string, string>, options: { probe?: D
             // A file written whole. Obsidian answers the new TFile and sends a
             // `create`, which the index scans like any other arrival — so the
             // scan follows here too, and every row in the file is minted by it.
+            // A path that differs from a note's in case alone is taken, as
+            // on the file systems of macOS and Windows (stage 0).
             create: async (path: string, data: string) => {
+                if ([...contents.keys()].some(p => p.toLowerCase() === path.toLowerCase())) throw new Error('File already exists.');
                 const file = fileAt(path);
                 contents.set(path, data);
                 await (vaultHandlers.get('create') as (f: TFile) => void | Promise<void>)(file);
@@ -156,11 +202,49 @@ export function vaultSession(contents: Map<string, string>, options: { probe?: D
             },
             getAbstractFileByPath: (path: string) => (contents.has(path) ? fileAt(path) : null),
             getMarkdownFiles: () => [...contents.keys()].map(fileAt),
+            getFiles: () => [...contents.keys()].map(fileAt),
+            // The folders the notes are in; none is kept apart from them.
+            getAllFolders: () => [...new Set([...contents.keys()].flatMap(path => {
+                const parts = path.split('/').slice(0, -1);
+                return parts.map((_, i) => parts.slice(0, i + 1).join('/'));
+            }))].map(path => Object.assign(new TFolder(), { path, name: path.split('/').pop() })),
+            createFolder: async () => { },
+        },
+        fileManager: {
+            // To the trash: the note is gone from the vault, which says so.
+            trashFile: async (file: TFile) => {
+                contents.delete(file.path);
+                held.delete(file.path);
+                await (vaultHandlers.get('delete') as (f: TFile) => void)(file);
+            },
+            // Spelt as Obsidian was measured to spell a new link, by default settings.
+            generateMarkdownLink: linkDouble(() => [...contents.keys()]),
+            // Obsidian's default place for new notes: the vault's root.
+            getNewFileParent: (_sourcePath: string) => Object.assign(new TFolder(), { path: '/', name: '' }),
         },
         metadataCache: {
             ...noop,
             on: (name: string, fn: (...args: unknown[]) => unknown) => { vaultHandlers.set(name, fn); return {}; },
             getCache: (path: string) => (contents.has(path) ? computeCache(contents.get(path)!) : null),
+            getFirstLinkpathDest: (linkpath: string, _sourcePath: string) => {
+                const path = linkDest([...contents.keys()], linkpath);
+                return path === undefined ? null : fileAt(path);
+            },
+            /** Per note, the notes its links and embeds resolve to, and how many times. */
+            get resolvedLinks(): Record<string, Record<string, number>> {
+                const paths = [...contents.keys()];
+                const out: Record<string, Record<string, number>> = {};
+                for (const [from, content] of contents) {
+                    out[from] = {};
+                    const { links, embeds } = computeCache(content);
+                    for (const one of [...links, ...embeds]) {
+                        const to = one.link.split('#')[0];
+                        const dest = to === '' ? undefined : linkDest(paths, to);
+                        if (dest !== undefined) out[from][dest] = (out[from][dest] ?? 0) + 1;
+                    }
+                }
+                return out;
+            },
         },
         workspace: { ...noop, onLayoutReady: () => { }, activeLeaf: null },
     };
@@ -254,6 +338,7 @@ const NOTE = 'note.md';
  */
 export async function openVault(
     files: string | string[] | Record<string, string | string[]>,
+    options: { config?: Record<string, unknown> } = {},
 ): Promise<{ contents: Map<string, string>; session: VaultSession }> {
     const text = (content: string | string[]) => (typeof content === 'string' ? content : content.join('\n'));
     const contents = new Map<string, string>(
@@ -261,7 +346,7 @@ export async function openVault(
             ? [[NOTE, text(files)]]
             : Object.entries(files).map(([path, content]) => [path, text(content)]),
     );
-    const session = vaultSession(contents);
+    const session = vaultSession(contents, options);
     await session.scanAll();
     return { contents, session };
 }
@@ -277,8 +362,9 @@ export type VaultSession = ReturnType<typeof vaultSession>;
 export async function openLiveVault(
     files: string | string[] | Record<string, string | string[]>,
     setLive: (session: VaultSession) => void,
+    options: { config?: Record<string, unknown> } = {},
 ): Promise<{ contents: Map<string, string>; session: VaultSession }> {
-    const opened = await openVault(files);
+    const opened = await openVault(files, options);
     setLive(opened.session);
     return opened;
 }

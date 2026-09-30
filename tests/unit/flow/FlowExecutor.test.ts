@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { Notice, setMockLocale } from 'obsidian';
 import { initI18n } from '../../../src/i18n';
-import { FlowExecutor, type FirePlan } from '../../../src/services/flow/FlowExecutor';
+import { FlowExecutor, type FirePlan, notRunOf } from '../../../src/services/flow/FlowExecutor';
 import { parseFlowSegments, singleLineFlow } from '../../../src/services/flow/FlowSegments';
 import { TaskIndex } from '../../../src/services/core/TaskIndex';
 import { TaskRepository } from '../../../src/services/persistence/TaskRepository';
@@ -87,17 +87,41 @@ describe('FlowExecutor.planTask: what a completion fires', () => {
         expect(ops.filter(o => o.kind === 'strip-flow')).toHaveLength(1);
     });
 
-    it('carries the row with move(), after the next instance, in the completing write', () => {
-        const ops = opsOf(planOf(flowTask('every mon move()')));
+    it('carries the row with move([[#heading]]), after the next instance, in the completing write, to the side the settings say', () => {
+        const task = flowTask('every mon move([[#Done]])');
+        const ops = opsOf(makeExecutor().planTask(task, () => undefined, ['## Done']));
 
         expect(ops.map(o => o.kind)).toEqual(['insert-instance', 'move']);
-        expect(ops[1]).toEqual({ kind: 'move', text: '- [x] Test task @2026-06-29', to: { kind: 'end' } });
+        expect(ops[1]).toEqual({ kind: 'move', text: '- [x] Test task @2026-06-29', to: { heading: 'Done', side: 'head' } });
+
+        const atEnd = new FlowExecutor(
+            makeRepository() as unknown as TaskRepository,
+            { getTask: vi.fn(), getGenBlock: vi.fn() } as unknown as TaskIndex,
+            app as never,
+            () => ({ ...DEFAULT_SETTINGS, sectionSide: 'end' }),
+        );
+        expect(opsOf(atEnd.planTask(task, () => undefined, ['## Done']))[1]).toMatchObject({ to: { heading: 'Done', side: 'end' } });
     });
 
-    it('fails a move that names another note: retired, nothing of the fire is written', () => {
+    it('fires without a move that names another note: the move is dropped, the rest runs, the command is consumed', () => {
         const plan = planOf(flowTask('every mon move([[Archive]])'));
 
-        expect(plan.kind === 'failed' && plan.error.code).toBe('eval.move-retired');
+        expect(opsOf(plan).map(o => o.kind)).toEqual(['insert-instance', 'strip-flow']);
+        expect(plan.kind === 'fires' && plan.unmoved?.code).toBe('eval.move-retired');
+    });
+
+    it('consumes a command that is a retired move alone: nothing moves, the command goes', () => {
+        for (const command of ['move([[Other]])', 'move()']) {
+            const plan = planOf(flowTask(command));
+            expect(opsOf(plan).map(o => o.kind)).toEqual(['strip-flow']);
+            expect(plan.kind === 'fires' && plan.unmoved?.code).toBe('eval.move-retired');
+        }
+    });
+
+    it('fails the fire whole on a move to a heading that is not in the note', () => {
+        const plan = makeExecutor().planTask(flowTask('every mon move([[#Done]])'), () => undefined, ['## Other']);
+
+        expect(plan.kind === 'failed' && plan.error.code).toBe('eval.move-no-heading');
     });
 
     it('consumes without generating when until has expired', () => {
@@ -133,8 +157,8 @@ describe('a fire that does not happen says so', () => {
     async function complete(executor: FlowExecutor, command: string, file = 'notes/週報.md'): Promise<void> {
         const fire = executor.fireOp(file);
         fire.op.plan([`- [x] Test task @2026-06-29 ==> ${command}`], 0);
-        const planned = fire.planned();
-        if (planned?.kind === 'failed') executor.reportNotRun(planned);
+        const notRun = notRunOf(fire.planned());
+        if (notRun) executor.reportNotRun(notRun);
     }
 
     it('shows what stopped it, and which task it was', async () => {
@@ -184,6 +208,16 @@ describe('a fire that does not happen says so', () => {
         expect(Notice.messages[0]).toContain("このタスクにプロパティ 'end' は設定されていません");
     });
 
+    it('says the move was dropped when the rest of the fire ran without it', async () => {
+        // move() はノートの見出しを指していない。次回分は生まれ、コマンドは
+        // 消費されるので、「実行しませんでした」ではなく移動だけを落とした旨を出す。
+        await complete(makeExecutor(), 'every mon move()');
+
+        expect(Notice.messages).toHaveLength(1);
+        expect(Notice.messages[0]).toContain('its flow was run, but it was not moved');
+        expect(Notice.messages[0]).toContain('names no heading of the note');
+    });
+
     it('stays quiet when the fire went through', async () => {
         await complete(makeExecutor(), 'at(today + 1d)');
 
@@ -229,7 +263,7 @@ describe('fireAndDelete', () => {
     });
 
     it('does not move, whatever the move names: a delete was not a request to keep a copy', async () => {
-        for (const move of ['move()', 'move([[#Nope]])', 'move([[Archive]])']) {
+        for (const move of ['move([[#Nope]])', 'move([[Archive]])']) {
             const repository = makeRepository();
 
             expect(await makeExecutor(repository).fireAndDelete(flowTask(`every mon ${move}`, { statusChar: ' ' }))).toBe(true);

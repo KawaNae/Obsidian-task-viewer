@@ -77,10 +77,11 @@ export class GenerationError extends Error {
  *
  * Fire-consumes semantics: the returned effects ALWAYS remove the command
  * from the original line (strip-flow, or the move that carries it), even
- * when no next instance is generated (until expired / telomere exhausted).
+ * when no next instance is generated (until expired / telomere exhausted),
+ * and when the move is retired and dropped (move-dropped).
  *
  * Evaluation contexts (do not mix up):
- * - at(expr) evaluates against the PRE-shift original task. move() is not
+ * - at(expr) evaluates against the PRE-shift original task. move(...) is not
  *   evaluated: where it goes is read off how it is written (`MoveTarget`).
  * - set(field: expr) evaluates against the POST-shift new instance; all
  *   right-hand sides see the same snapshot, then apply at once (no chaining).
@@ -132,14 +133,27 @@ export function planFlow(task: Task, program: FlowProgram, deps: FlowPlanDeps): 
         }
     }
 
-    if (program.move) {
-        // Where to is the parser's answer, read off how the clause is
-        // written; nothing of it is evaluated. The row is carried, not
-        // copied, so it keeps its `^id`: only a write that makes a copy (the
-        // next instance, a duplicate) takes the copy's off.
-        effects.push({ kind: 'move', to: program.move.to, movedTask: { ...task, flow: undefined } });
+    // Where to is the parser's answer, read off how the clause is written;
+    // nothing of it is evaluated. A retired destination is known here, before
+    // any note is read, and this is the one place it is answered: the move
+    // is dropped, and only the move. The command is consumed as a fire
+    // without a move consumes it, and the rest of the fire stands — the
+    // clause will never move anything, so keeping the command for it would
+    // hold the next instance back for a move that cannot come. Whether a
+    // heading of the note is one place is answered against the note's lines
+    // (`FlowExecutor.planTask`), and failing there fails the fire whole.
+    const move = program.move;
+    if (move?.to.kind === 'heading') {
+        // The row is carried, not copied, so it keeps its `^id`: only a
+        // write that makes a copy (the next instance, a duplicate) takes
+        // the copy's off.
+        effects.push({ kind: 'move', heading: move.to.name, movedTask: { ...task, flow: undefined } });
     } else {
         effects.push({ kind: 'strip-flow' });
+        if (move) {
+            effects.push({ kind: 'move-dropped', error: new GenerationError('eval.move-retired',
+                'move() moves the task to a heading\'s section of its note, and this one names no heading of the note') });
+        }
     }
 
     return effects;

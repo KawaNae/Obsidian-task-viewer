@@ -81,6 +81,28 @@
     flex-shrink: 0;
 }
 
+/* "Go to date": the button, and the unseen native date input over it
+   (NativePicker; what it looks like and when it takes the tap is in
+   _controls.css). The box is what the input covers. */
+.view-toolbar__date-jump {
+    position: relative;
+    display: inline-flex;
+    flex-shrink: 0;
+}
+
+.view-toolbar__date-jump > input.view-toolbar__date-picker {
+    inset: 0 !important;
+    width: 100% !important;
+    height: 100% !important;
+}
+
+/* On mobile the input takes the pointer, so the button shows the hover. */
+.view-toolbar__date-jump:has(> input.view-toolbar__date-picker:hover) > button {
+    background-color: var(--tv-bg-hover);
+    border-color: var(--tv-border);
+    color: var(--tv-text);
+}
+
 .view-toolbar__spacer {
     flex: 1;
 }

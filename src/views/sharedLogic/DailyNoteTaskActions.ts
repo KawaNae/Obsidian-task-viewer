@@ -13,6 +13,7 @@ import { t } from '../../i18n';
 import type { PluginContext } from '../../PluginContext';
 import type { TimerHost } from '../../timer/TimerWidget';
 import { CreateTaskModal, formatTaskLine } from '../../modals/CreateTaskModal';
+import { Destination } from '../../services/persistence/Destination';
 
 export type DailyNoteTimerType = 'pomodoro' | 'countup';
 
@@ -64,8 +65,7 @@ export function openCreateTaskForDailyNote(
                 plugin.app,
                 dateObj,
                 taskLine,
-                plugin.settings.dailyNoteHeader,
-                plugin.settings.dailyNoteHeaderLevel,
+                Destination.taskSection(plugin.settings),
                 plugin.getTaskWriteService().writeChannel,
             );
         },

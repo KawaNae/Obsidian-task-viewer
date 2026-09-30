@@ -5,7 +5,7 @@ import {
     validateDateTimeFormats, validateDateRequirements, validateDateRange,
     type DateValidationError,
 } from '../TaskDateValidator';
-import { createPickerTextField } from './PickerTextField';
+import { createPickerTextField, type PickerTextField } from './PickerTextField';
 import { createFormRow } from './formRow';
 
 export type DateGroupKey = 'start' | 'end' | 'due';
@@ -48,6 +48,7 @@ export class DateFieldGroup {
     private endTimeInput: HTMLInputElement;
     private dueDateInput: HTMLInputElement;
     private dueTimeInput: HTMLInputElement;
+    private fields: PickerTextField[] = [];
     private errorEl: HTMLElement | null = null;
 
     constructor(
@@ -77,12 +78,16 @@ export class DateFieldGroup {
         const { row } = createFormRow(container, label, { dates: true, icon: this.opts.icons?.[group] });
 
         const dateField = row.createDiv({ cls: 'tv-form__field tv-form__field--date' });
-        const dateInput = createPickerTextField(dateField, 'date', 'YYYY-MM-DD', initialDate || '');
+        const date = createPickerTextField(dateField, 'date', 'YYYY-MM-DD', initialDate || '');
+        const dateInput = date.input;
         dateInput.setAttribute('aria-label', `${label} — ${t('modal.date')}`);
 
         const timeField = row.createDiv({ cls: 'tv-form__field tv-form__field--time' });
-        const timeInput = createPickerTextField(timeField, 'time', 'HH:mm', initialTime || '');
+        const time = createPickerTextField(timeField, 'time', 'HH:mm', initialTime || '');
+        const timeInput = time.input;
         timeInput.setAttribute('aria-label', `${label} — ${t('modal.time')}`);
+
+        this.fields.push(date, time);
 
         for (const input of [dateInput, timeInput]) {
             input.addEventListener('input', (e: Event) => {
@@ -209,13 +214,9 @@ export class DateFieldGroup {
         }
     }
 
+    /** Every field of the group taking input or not, its picker and clear buttons with it. */
     setEnabled(enabled: boolean): void {
-        const inputs = [
-            this.startDateInput, this.startTimeInput,
-            this.endDateInput, this.endTimeInput,
-            this.dueDateInput, this.dueTimeInput,
-        ];
-        for (const i of inputs) { if (i) i.disabled = !enabled; }
+        for (const field of this.fields) field.setEnabled(enabled);
     }
 
     setInputValue(input: HTMLInputElement, value: string, composing = false): void {
