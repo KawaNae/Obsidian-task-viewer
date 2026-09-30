@@ -421,7 +421,7 @@ export class TaskIndex {
      * (`WriteSession.row`): a file that changed since the reading refuses it.
      */
     getTaskByAnchor(filePath: string, anchor: string): Task | undefined {
-        return this.getTasks().find(t => t.file === filePath && t.anchor === anchor);
+        return this.store.getTaskByAnchor(filePath, anchor);
     }
 
     /**

@@ -7,6 +7,13 @@ import type { GenBlock } from '../parsing/gen/GenBlockCollector';
  */
 export class TaskStore {
     private tasks: Map<string, Task> = new Map();
+    /**
+     * filePath → (anchor → name): the row each `^id` of the file anchors
+     * (`Task.anchor`), kept with the tasks as they go in and out. The scan
+     * gives a row its anchor before it goes in, and nothing changes a
+     * copy's anchor after.
+     */
+    private anchors: Map<string, Map<string, string>> = new Map();
     /** filePath → (block name → block). Rebuilt by each scan of that file. */
     private genBlocks: Map<string, Map<string, GenBlock>> = new Map();
     private listeners: ((taskId?: string, changes?: string[]) => void)[] = [];
@@ -53,13 +60,28 @@ export class TaskStore {
         return this.tasks.get(taskId);
     }
 
+    /**
+     * The row `anchor` anchors in `filePath`, or undefined when no row of the
+     * file carries that `^id` alone. One lookup, however many rows are held.
+     */
+    getTaskByAnchor(filePath: string, anchor: string): Task | undefined {
+        const name = this.anchors.get(filePath)?.get(anchor);
+        return name === undefined ? undefined : this.tasks.get(name);
+    }
+
     // ===== 内部操作 =====
 
     /**
      * タスクを設定
      */
     setTask(taskId: string, task: Task): void {
+        this.forgetAnchor(taskId);
         this.tasks.set(taskId, task);
+        if (task.anchor !== undefined) {
+            let anchors = this.anchors.get(task.file);
+            if (!anchors) this.anchors.set(task.file, anchors = new Map());
+            anchors.set(task.anchor, taskId);
+        }
         this.bumpRevision();
     }
 
@@ -67,8 +89,19 @@ export class TaskStore {
      * タスクを削除
      */
     deleteTask(taskId: string): void {
+        this.forgetAnchor(taskId);
         this.tasks.delete(taskId);
         this.bumpRevision();
+    }
+
+    /** Take the anchor the row `taskId` held, if any, out of the table. */
+    private forgetAnchor(taskId: string): void {
+        const held = this.tasks.get(taskId);
+        if (held?.anchor === undefined) return;
+        const anchors = this.anchors.get(held.file);
+        if (anchors?.get(held.anchor) !== taskId) return;
+        anchors.delete(held.anchor);
+        if (anchors.size === 0) this.anchors.delete(held.file);
     }
 
     /**
@@ -76,6 +109,7 @@ export class TaskStore {
      */
     clear(): void {
         this.tasks.clear();
+        this.anchors.clear();
         this.genBlocks.clear();
         this.bumpRevision();
     }
@@ -93,6 +127,7 @@ export class TaskStore {
         // Generation blocks are keyed by file, not by task, so a file that
         // holds only blocks is forgotten here too.
         const hadBlocks = this.genBlocks.delete(filePath);
+        this.anchors.delete(filePath);
         if (toRemove.length > 0 || hadBlocks) {
             for (const id of toRemove) {
                 this.tasks.delete(id);

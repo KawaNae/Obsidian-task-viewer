@@ -17,8 +17,10 @@ export interface TimerTaskRefresh {
  * anchor (`getTaskByAnchor`), the one place an anchor is looked up; writing
  * that answer back is what lets the name and colour follow the task again.
  * One given before a write of ours is followed to the row's name now
- * (`getTask`), and the timer takes it over. The direct lookup stays the fast
- * path: this runs on every render, and the anchor's lookup walks every task.
+ * (`getTask`), and the timer takes it over. The anchor's lookup is one
+ * table lookup (`TaskStore.getTaskByAnchor`); the name is kept and looked up
+ * first only until the timer holds its subject by anchor alone (stage 8 of
+ * the refactoring).
  */
 export function refreshTimerTask(
     timer: SyncedTimer,
