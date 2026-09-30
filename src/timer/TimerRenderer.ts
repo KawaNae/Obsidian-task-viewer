@@ -192,19 +192,12 @@ export class TimerRenderer {
             const closeBtn = header.createEl('button', { cls: 'timer-widget__close-btn' });
             setIcon(closeBtn, 'x');
             closeBtn.onclick = () => {
-                // 中断中は記録済み＝失うものが無いので確認なしで閉じる。
-                // 走行中は 2-tap 確認（走行分は記録せず捨てる）。記録待ちも
-                // 計測を持つので走行中と同じに扱う。
-                const holdsRun = timer.pendingRecord !== null;
-                if (timer.runState === 'suspended' || (!timer.isRunning && !holdsRun)) {
-                    this.clearCloseConfirmTimer(timerId);
-                    this.lifecycle.closeTimer(timerId);
-                    return;
-                }
-                // Idle timers close without confirmation, but ignore accidental clicks
-                // right after the idle timer spawns (e.g. double-clicking a previous close)
-                if (timer.phase === 'idle' && !holdsRun) {
-                    if (Date.now() - timer.startTimeMs < 500) return;
+                // 失うもの（走行中の行と記録していない計測）が無ければ確認なしで
+                // 閉じる。有れば 2-tap 確認のあと行ごと捨てる。分かれ目は
+                // lifecycle が1か所で答える（holdsRunningLine）。
+                if (!this.lifecycle.holdsRunningLine(timer)) {
+                    // idle タイマーは直前の ✕ の2度押しで出た直後に閉じない。
+                    if (timer.timerType === 'idle' && Date.now() - timer.startTimeMs < 500) return;
                     this.clearCloseConfirmTimer(timerId);
                     this.lifecycle.closeTimer(timerId);
                     return;
