@@ -144,10 +144,7 @@ export class CalendarView extends ItemView {
             },
             getIsOpen: () => this.showSidebar,
         });
-        const now = new Date();
-        const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
-        const weekStart = this.getWeekStart(monthStart, this.plugin.settings.weekStartDay);
-        this.windowStart = DateUtils.getLocalDateString(weekStart);
+        this.windowStart = DateUtils.getMonthGridStart(new Date(), this.plugin.settings.weekStartDay);
         this.filterMenu.setStartHourProvider(() => this.plugin.settings.startHour);
         this.filterMenu.setTaskLookupProvider((id) => this.readService.getTask(id));
         this.filterMenu.setStatusDefinitions(this.plugin.settings.statusDefinitions);
@@ -164,14 +161,7 @@ export class CalendarView extends ItemView {
             container: this.containerEl,
             onNavigateWeek: (days) => this.navigateWeek(days),
             onNavigateMonth: (direction) => this.navigateMonth(direction),
-            onJumpToCurrentMonth: () => {
-                const today = new Date();
-                const monthStart = new Date(today.getFullYear(), today.getMonth(), 1);
-                const weekStart = this.getWeekStart(monthStart, this.plugin.settings.weekStartDay);
-                this.windowStart = DateUtils.getLocalDateString(weekStart);
-                void this.app.workspace.requestSaveLayout();
-                this.render();
-            },
+            onJumpToCurrentMonth: () => this.showMonthOf(new Date()),
             onFilterChange: () => {
                 void this.app.workspace.requestSaveLayout();
                 this.render();
@@ -989,9 +979,16 @@ export class CalendarView extends ItemView {
 
     private navigateMonth(offset: number): void {
         const ref = this.getReferenceMonth();
-        const monthStart = new Date(ref.year, ref.month + offset, 1);
-        const weekStart = this.getWeekStart(monthStart, this.plugin.settings.weekStartDay);
-        this.windowStart = DateUtils.getLocalDateString(weekStart);
+        this.showMonthOf(new Date(ref.year, ref.month + offset, 1));
+    }
+
+    /**
+     * Show the month that contains `date`, laid out from the week of its 1st.
+     * Today and the month steps both land here, so every month lines up the
+     * same way.
+     */
+    private showMonthOf(date: Date): void {
+        this.windowStart = DateUtils.getMonthGridStart(date, this.plugin.settings.weekStartDay);
         void this.app.workspace.requestSaveLayout();
         this.render();
     }
