@@ -815,13 +815,13 @@ Timer phases: `'idle'` | `'work'` | `'break'` | `'prepare'`
 
 ### Persistence
 
-- Storage key: `task-viewer.active-timers.v5:{vaultFingerprint}`
-- Migration logic exists for v3 → v4 → v5.
-- **Always bump the version number and add a migration handler when changing the storage key.**
+- Storage key: `task-viewer.active-timers.v8:{vaultFingerprint}` (`STORAGE_VERSION` in `TimerStorageUtils.ts`)
+- An older version is not migrated: its state is dropped, and its key is removed on restore (`OBSOLETE_STORAGE_VERSIONS`).
+- **When the persisted shape changes, bump `STORAGE_VERSION` and add the old version to `OBSOLETE_STORAGE_VERSIONS`.**
 
 ### Task integration
 
-- `TimerTaskResolver` — resolves the timer's inline task (by `timerTargetId`, then task ID, then file + original text)
+- `refreshTimerTask` (`TimerTaskSync.ts`) — finds the timer's task by its task ID while that name is current, and otherwise by its anchor (`timerTargetId`), re-pointing the task ID at the row found. A row is followed across readings only by its anchor; there is no fallback by text
 - `TimerRecorder` — records a session to the target line itself (self), as a child of the target line (child), as a sibling after the last record (sibling), or under the daily note's heading when the timer started from the daily note
 - `timerTargetId` — the inline block ID (`^id`) the timer anchors to; it survives edits and file renames. Frontmatter holds no timer target: a leftover `tv-timer-target-id` key is only reserved so it never becomes a custom property
 
@@ -833,8 +833,10 @@ Timer phases: `'idle'` | `'work'` | `'break'` | `'prepare'`
 - `TimerContext` — timer context management
 - `TimerCreator` — timer instance creation
 - `TimerLifecycle` — timer lifecycle management
-- `TimerStorageUtils` — timer storage utilities
-- `TimerTargetManager` — timer-task association management
+- `TimerStorageUtils` — storage key, device and vault identification
+- `TimerPersistence` — save and restore of the open timers
+- `TimerRecorder` — the record writes (self, child, sibling, daily note)
+- `TimerContentBinding` — keeps the widget's content field and the running row in step
 - `IntervalTemplateLoader` / `IntervalTemplateWriter` — interval template read/write (markdown files with `_tv-*` frontmatter keys)
 
 ### Audio notifications (`timer/AudioUtils.ts`)

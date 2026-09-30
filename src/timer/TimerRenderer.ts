@@ -79,8 +79,8 @@ export class TimerRenderer {
         const timer = this.ctx.timers.get(timerId);
         if (!timer) return;
 
-        // DOM key is the timer id, not the task id: a file rename rewrites
-        // `timer.taskId` and would otherwise strand this node.
+        // DOM key is the timer id, not the task id: `refreshTimerTask`
+        // rewrites `timer.taskId` and would otherwise strand this node.
         let itemEl = container.querySelector(`[data-timer-id="${timerId}"]`) as HTMLElement;
         const isNewItem = !itemEl;
 
@@ -531,7 +531,7 @@ export class TimerRenderer {
      *   記録待ち … [⏸ 中断][■ 終了]（固定した記録を書き直す。押した方が行き先）
      *   中断中   … [▶ 再開][■ 終了]
      *
-     * interval は現行の Pause(prepare)/Stop を維持するので、ここには来ない。
+     * interval は自分の Pause(prepare)/Stop を持つので、ここには来ない。
      */
     private renderSessionControls(container: HTMLElement, timer: CountupTimer | CountdownTimer): void {
         // 走行の側で止まっているのは、まだ始めていないときと記録待ちだけ。

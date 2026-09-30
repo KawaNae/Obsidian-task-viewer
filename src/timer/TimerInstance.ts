@@ -11,8 +11,9 @@ export type TimerPhase = 'idle' | 'work' | 'break' | 'prepare';
 /**
  * Identity of a timer instance, stable for its whole life.
  *
- * It must NOT be derived from the task: `handleFileRename` rewrites
- * `timer.taskId` in place, and anything keyed by the old task id (the
+ * It must NOT be derived from the task: `refreshTimerTask` rewrites
+ * `timer.taskId` in place when the row is found under another name, and
+ * anything keyed by the old task id (the
  * `timers` map, the widget DOM node, the tick interval) would be stranded.
  * Lookups by task go through a scan instead — the map never holds more than a
  * handful of timers.
@@ -170,7 +171,7 @@ export interface TimerBase {
      */
     priorStartMs: number | null;
     recordMode: TimerRecordMode;
-    /** Always a current {@link ParserId}; legacy persisted values are normalized at load. */
+    /** Always a current {@link ParserId}; a persisted timer with any other value is not loaded. */
     parserId: ParserId;
     taskColor: string;
 }

@@ -797,9 +797,9 @@ export class TimerRecorder {
             endTime: this.formatTime(endTime),
             statusChar: 'x',
             // ⏸ では blockId を**残す**。この行は self モードのレコードであると同時に
-            // 尻尾でもあり、中断→再開の次セッションはこの id でしか隣を
-            // 決められない（記録で content も日時も変わるため、originalText /
-            // 内容一致では解決できなくなる）。ユーザーの手動 blockId はもとより保持。
+            // 尻尾でもあり、中断→再開の次セッションはこの錨で隣を決める
+            // （行を時間を越えて追えるのは錨だけである）。ユーザーの手動
+            // blockId はもとより保持。
             blockId: closes ? undefined : task.blockId,
             content: withTimerIcon(icon, task.content.trim()),
         };
