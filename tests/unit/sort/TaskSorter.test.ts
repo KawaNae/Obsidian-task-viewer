@@ -24,6 +24,8 @@ function makeDT(overrides: Partial<DisplayTask> = {}): DisplayTask {
         originalTaskId: overrides.id ?? 'test-1',
         isSplit: false,
         ...overrides,
+        // toDisplayTask resolves effectiveDue from the row's own due when it has one.
+        effectiveDue: overrides.effectiveDue ?? overrides.due,
     } as DisplayTask;
 }
 
@@ -127,6 +129,30 @@ describe('TaskSorter', () => {
             ];
             TaskSorter.sort(tasks, { rules: [] });
             expect(tasks[0].id).toBe('a');
+        });
+    });
+
+    // A due inherited from a heading or the note is the one the filter matches
+    // (`effectiveDue`); the sort used to read the row's own `due` and put such
+    // tasks among those without a deadline.
+    describe('inherited due', () => {
+        it('a rule on due sorts by the inherited due', () => {
+            const tasks = [
+                makeDT({ id: 'own-later', due: '2026-03-20' }),
+                makeDT({ id: 'inherited', effectiveDue: '2026-03-01' }),
+                makeDT({ id: 'none' }),
+            ];
+            TaskSorter.sort(tasks, { rules: [{ id: 'r', property: 'due', direction: 'asc' }] });
+            expect(tasks.map(t => t.id)).toEqual(['none', 'inherited', 'own-later']);
+        });
+
+        it('the default order reads the inherited due too', () => {
+            const tasks = [
+                makeDT({ id: 'own-later', due: '2026-03-20' }),
+                makeDT({ id: 'inherited', effectiveDue: '2026-03-01' }),
+            ];
+            TaskSorter.sort(tasks, undefined);
+            expect(tasks.map(t => t.id)).toEqual(['inherited', 'own-later']);
         });
     });
 });
