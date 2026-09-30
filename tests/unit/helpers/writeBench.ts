@@ -5,7 +5,10 @@ import { InlineTaskWriter } from '../../../src/services/persistence/writers/Inli
 import { TaskRepository } from '../../../src/services/persistence/TaskRepository';
 import { DEFAULT_SETTINGS } from '../../../src/types';
 import type { Task } from '../../../src/types';
-import type { LineEdit, Refusal, WriteChannel } from '../../../src/services/persistence/FileLines';
+import type { LineEdit, Refusal, RowRef, WriteChannel } from '../../../src/services/persistence/FileLines';
+import type { CompletionFire, FiringOutcome } from '../../../src/services/persistence/TaskOps';
+import type { PropertyOp } from '../../../src/services/persistence/PropertyUpdatePlanner';
+import { formatRow } from '../../../src/services/parsing/TaskLineFormat';
 
 /**
  * A vault in memory with a real `TaskScanner` over it, and the write layer
@@ -141,4 +144,20 @@ export async function writeBench(files: string | string[] | Record<string, strin
 
     for (const path of contents.keys()) await bench.scan(path);
     return bench;
+}
+
+/**
+ * The row rewritten as `task`, its property lines by `childOps`, with `fire`
+ * when the rewrite completes it: the `update` a card's write hands the
+ * write layer (`TaskIndex.writeUpdate`), through `writer`'s `write`.
+ */
+export function updateRow<F extends CompletionFire>(
+    writer: Pick<InlineTaskWriter, 'write'>,
+    file: string,
+    target: RowRef,
+    task: Task,
+    childOps: PropertyOp[] = [],
+    fire?: F,
+): Promise<FiringOutcome<F>> {
+    return writer.write(file, target, [{ kind: 'update', text: formatRow(task), childOps }], { fire });
 }

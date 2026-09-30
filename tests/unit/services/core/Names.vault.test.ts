@@ -2,6 +2,7 @@ import { describe, it, expect, afterEach, vi } from 'vitest';
 import { Notice } from 'obsidian';
 import { openVault, makeFile, vaultSession, type VaultSession } from '../../helpers/vaultSession';
 import { plannedOn } from '../../../../src/services/persistence/TaskRefs';
+import { updateRow } from '../../helpers/writeBench';
 
 /**
  * N1: a name lasts one reading of its file (the path, the reading's number,
@@ -132,7 +133,7 @@ describe('a name given before our writes brought the file back to a content it h
         // The copy's line 1 reads as it did, in a content that reads as it
         // did: only the reading tells the rows apart. Carried across the two
         // writes, the row is on line 0.
-        const written = await session.index.getRepository().updateTaskInFile(held.file, plannedOn(held), { ...held, content: 'A2', originalText: '- [ ] A2' });
+        const written = await updateRow(session.index.getRepository(), held.file, plannedOn(held), { ...held, content: 'A2', originalText: '- [ ] A2' });
         expect(written.written).toBe(true);
         expect(contents.get(FILE)).toBe(['- [ ] A2', '- [ ] A', ''].join('\n'));
     });
@@ -153,7 +154,7 @@ describe('a name given before edits from outside brought the file back to the co
 
         expect(session.index.getTask(r2)).toBeUndefined();
         expect(await session.index.updateTask(r2, { statusChar: 'x' })).toBe(false);
-        const written = await session.index.getRepository().updateTaskInFile(held.file, plannedOn(held), { ...held, statusChar: 'x', originalText: '- [x] A' });
+        const written = await updateRow(session.index.getRepository(), held.file, plannedOn(held), { ...held, statusChar: 'x', originalText: '- [x] A' });
         expect(written.written).toBe(false);
         expect(contents.get(FILE)).toBe(first);
     });

@@ -266,7 +266,7 @@ export class FlowExecutor {
      * goes ahead.
      *
      * What the fire writes and what the delete takes away are one write (see
-     * {@link TaskRepository.applyToTask}): an instance is never left standing
+     * {@link TaskRepository.write}): an instance is never left standing
      * beside an original that did not go.
      *
      * @returns whether the task is gone. A fire that could not be planned
@@ -293,7 +293,7 @@ export class FlowExecutor {
 
         // The instance goes in first, at the head of the sibling group, and
         // the removal follows at the row's line carried across that insert.
-        const { written: removed } = await this.repository.applyToTask(
+        const { written: removed } = await this.repository.write(
             task.file, plannedOn(task, { commands: true, subtree: true, blocks: read.blocks }), [...inserts, { kind: 'remove' }]);
         if (!removed) {
             // Told to the user by the write layer, which refused it.

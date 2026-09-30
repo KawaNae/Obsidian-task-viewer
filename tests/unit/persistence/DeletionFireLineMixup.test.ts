@@ -31,7 +31,7 @@ const GENERATED = {
 
 /** A deletion fire as the executor writes it: the instances, then the removal, as one write. */
 async function deletionFire(h: WriteBench, task: Task, inserts: FlowInstanceInsert[]): Promise<boolean> {
-    const outcome = await h.writer.applyToTask(task.file, plannedOn(task), [
+    const outcome = await h.writer.write(task.file, plannedOn(task), [
         ...inserts.map(insert => ({ kind: 'insert-instance' as const, insert })),
         { kind: 'remove' as const },
     ]);

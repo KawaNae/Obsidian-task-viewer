@@ -18,11 +18,11 @@ const FLOW = ['every mon', 'use("週報")'];
 
 const child = (depth: number, body: string): GeneratedChild => ({ depth, body });
 
-/** `applyToTask` with a single `insert-instance` op of kind `generated`. */
+/** `write` with a single `insert-instance` op of kind `generated`. */
 function insertGenerated(
     h: WriteBench, task: Task, parentLine: string, flowLines: string[], children: GeneratedChild[],
 ) {
-    return h.writer.applyToTask(task.file, plannedOn(task), [
+    return h.writer.write(task.file, plannedOn(task), [
         { kind: 'insert-instance', insert: { kind: 'generated', parentLine, flowLines, children } },
     ]);
 }

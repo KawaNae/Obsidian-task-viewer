@@ -8,7 +8,7 @@ export type InsertPlace = 'firstChild' | 'afterSubtree' | 'afterCompletedRun';
 
 /**
  * One thing an operation does to the row it names, in a write that may do
- * several (see `InlineTaskWriter.applyToTask`).
+ * several (see `InlineTaskWriter.write`).
  *
  * Each carries finished text or a finished instance, never a task: what to
  * write is the caller's to decide, and where it goes is decided here, against

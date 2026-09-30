@@ -10,7 +10,7 @@ import { DEFAULT_SETTINGS, type Task } from '../../../src/types';
  * does, over a stand-in repository: the row read as `task` fires only if it
  * can (`canTriggerFlow`, as `planFire` asks), its fire planned with the blocks
  * its note holds (`FlowExecutor.planTask`), the ops it plans handed to
- * `repository.applyToTask` as the one write that applies them, and a plan
+ * `repository.write` as the one write that applies them, and a plan
  * that failed told as the write tells it once it landed.
  *
  * For a test of what a fire plans. What the write makes of the ops is the
@@ -18,7 +18,7 @@ import { DEFAULT_SETTINGS, type Task } from '../../../src/types';
  */
 export function completing<E extends FlowExecutor>(
     executor: E,
-    repository: { applyToTask: Mock },
+    repository: { write: Mock },
     blocks: Record<string, GenBlock> = {},
 ): E & { complete(task: Task): Promise<FirePlan> } {
     const complete = async (task: Task): Promise<FirePlan> => {
@@ -27,7 +27,7 @@ export function completing<E extends FlowExecutor>(
         if (plan.kind === 'failed') executor.reportNotRun(plan);
         if (plan.kind === 'fires') {
             const ops = plan.ops;
-            if (ops.length > 0) await repository.applyToTask(task.file, plannedOn(task), ops);
+            if (ops.length > 0) await repository.write(task.file, plannedOn(task), ops);
         }
         return plan;
     };

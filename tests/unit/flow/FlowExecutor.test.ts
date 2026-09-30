@@ -14,7 +14,7 @@ import { makeTask } from '../helpers/makeTask';
 
 function makeRepository() {
     return {
-        applyToTask: vi.fn().mockResolvedValue({ written: true, refused: null, made: [] }),
+        write: vi.fn().mockResolvedValue({ written: true, refused: null, made: [] }),
     };
 }
 
@@ -234,7 +234,7 @@ describe('fireAndDelete', () => {
 
     /** The ops of each one-write call that takes the row away: the deletion fires. */
     function deletionsOf(repository: ReturnType<typeof makeRepository>): TaskOp[][] {
-        return repository.applyToTask.mock.calls
+        return repository.write.mock.calls
             .map(c => c[2] as TaskOp[])
             .filter(ops => ops.some(o => o.kind === 'remove'));
     }
@@ -247,8 +247,8 @@ describe('fireAndDelete', () => {
 
         // 挿入と削除を分けると、2本目が originalText で行を探し直すことになる。
         // 次回分は元の行と同じ本文になりうるので、その探索は当てにできない。
-        expect(repository.applyToTask).toHaveBeenCalledTimes(1);
-        expect(repository.applyToTask).toHaveBeenCalledWith(task.file, plannedOn(task, { commands: true, subtree: true }), [
+        expect(repository.write).toHaveBeenCalledTimes(1);
+        expect(repository.write).toHaveBeenCalledWith(task.file, plannedOn(task, { commands: true, subtree: true }), [
             { kind: 'insert-instance', insert: expect.objectContaining({ kind: 'recurrence' }) },
             { kind: 'remove' },
         ]);
@@ -289,7 +289,7 @@ describe('fireAndDelete', () => {
         const removed = await makeExecutor(repository).fireAndDelete(flowTask('every mon setDue(end + 1d)', { statusChar: ' ' }));
 
         expect(removed).toBe(false);
-        expect(repository.applyToTask).not.toHaveBeenCalled();
+        expect(repository.write).not.toHaveBeenCalled();
         expect(Notice.messages).toHaveLength(1);
         expect(Notice.messages[0]).toContain('the task was not deleted');
     });
@@ -308,7 +308,7 @@ describe('fireAndDelete', () => {
         // 答えは no。ユーザーへの通知は書き込みを拒否した側（TaskIndex.reportRefusal）
         // が一度だけ出すので、ここでは出さない。
         const repository = makeRepository();
-        repository.applyToTask.mockResolvedValue({
+        repository.write.mockResolvedValue({
             written: false, refused: { file: 'note.md', reason: { kind: 'gone' }, subject: 'Test task' }, made: [],
         });
 
@@ -319,7 +319,7 @@ describe('fireAndDelete', () => {
     it('answers, rather than throws, when a write throws', async () => {
         // 待ち手を残したまま返らないと、呼んだメニューがそのまま固まる。
         const repository = makeRepository();
-        repository.applyToTask.mockRejectedValueOnce(new Error('disk on fire'));
+        repository.write.mockRejectedValueOnce(new Error('disk on fire'));
 
         expect(await makeExecutor(repository).fireAndDelete(flowTask('every mon', { statusChar: ' ' }))).toBe(false);
     });

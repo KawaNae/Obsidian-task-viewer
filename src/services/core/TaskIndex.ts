@@ -536,7 +536,7 @@ export class TaskIndex {
         const target = plannedOn(before, { subtree: propertyOps.length > 0 });
         const written = await this.writeCompleting(
             completes(before.originalText, formatRow(task), this.settings.statusDefinitions) ? task.file : null,
-            (fire) => this.repository.updateTaskInFile(task.file, target, task, propertyOps, fire));
+            (fire) => this.repository.write(task.file, target, [{ kind: 'update', text: formatRow(task), childOps: propertyOps }], { fire }));
 
         if (!written) {
             this.revertUnwrittenUpdate(task, taskId, before, updates);
@@ -622,7 +622,7 @@ export class TaskIndex {
                 logInfo(`[replaceSubtree] id=${taskId} lines=${base.length}->${replacement.children.length + 1}`);
                 const target = { ...plannedOn(task), basis: { text: base[0], subtree: base } };
                 const defs = this.settings.statusDefinitions;
-                const outcome = await this.repository.replaceSubtreeInFile(task.file, target, replacement, {
+                const outcome = await this.repository.replaceSubtree(task.file, target, replacement, {
                     completes: (was, now) => completes(was, now, defs),
                     fire: () => this.commandExecutor.fireOp(task.file),
                 }, { refused: (refusal) => { void hear(refusal); } });
@@ -970,7 +970,7 @@ export class TaskIndex {
             } else {
                 // The row and the subtree the index read (`plannedOn`): a line
                 // written into the subtree since is not taken with it.
-                removed = (await this.repository.applyToTask(task.file, plannedOn(task, { subtree: true }), [{ kind: 'remove' }])).written;
+                removed = (await this.repository.write(task.file, plannedOn(task, { subtree: true }), [{ kind: 'remove' }])).written;
                 if (!removed) {
                     // Nothing was written, so no rescan follows and the store
                     // still holds a task the file also still holds. They agree,
@@ -1016,7 +1016,7 @@ export class TaskIndex {
      */
     private async writeDuplicate(task: ReadCopy, options?: DuplicateOptions): Promise<boolean> {
         const copies = planDuplicate(task, options, this.settings.startHour);
-        return (await this.repository.applyToTask(task.file, plannedOn(task), [copies])).written;
+        return (await this.repository.write(task.file, plannedOn(task), [copies])).written;
     }
 
     /**
@@ -1068,7 +1068,7 @@ export class TaskIndex {
                 const ops: TaskOp[] = [];
                 if (rowId !== undefined) ops.push({ kind: 'update', text: formatRow({ ...task, blockId: rowId ?? undefined }) });
                 ops.push({ kind: 'insert', place, text: line });
-                const { written } = await this.repository.applyToTask(task.file, plannedOn(task), ops);
+                const { written } = await this.repository.write(task.file, plannedOn(task), ops);
                 return written;
             });
         });
@@ -1091,7 +1091,7 @@ export class TaskIndex {
             const completing = ops.some(op => op.kind === 'update' && completes(at.basis.text, op.text, defs));
             return this.writeCompleting(
                 completing ? filePath : null,
-                (fire) => this.repository.applyToLine(filePath, at, ops, { fire }));
+                (fire) => this.repository.write(filePath, at, ops, { fire }));
         });
     }
 

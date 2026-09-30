@@ -34,7 +34,7 @@ describe('a write whose file is not there', () => {
     it.each(['missing', 'folder'] as const)('%s: a write to the line the editor pointed at is refused as gone, told once', async (kind) => {
         const { b } = await benchWithout(kind);
 
-        const outcome = await b.writer.applyToLine(FILE, editorRow(1, TASK, contentKeyOf([])), [{ kind: 'update', text: '- [x] 消える @2026-09-21' }]);
+        const outcome = await b.writer.write(FILE, editorRow(1, TASK, contentKeyOf([])), [{ kind: 'update', text: '- [x] 消える @2026-09-21' }]);
 
         expect(outcome.written).toBe(false);
         expect(outcome.refused?.reason).toEqual({ kind: 'gone' });
@@ -45,7 +45,7 @@ describe('a write whose file is not there', () => {
     it.each(['missing', 'folder'] as const)('%s: a remove is refused as gone, told once', async (kind) => {
         const { b, task } = await benchWithout(kind);
 
-        const outcome = await b.writer.applyToTask(task.file, plannedOn(task, { subtree: true }), [{ kind: 'remove' }]);
+        const outcome = await b.writer.write(task.file, plannedOn(task, { subtree: true }), [{ kind: 'remove' }]);
 
         expect(outcome.written).toBe(false);
         expect(outcome.refused?.reason).toEqual({ kind: 'gone' });

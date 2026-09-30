@@ -32,7 +32,7 @@ describe('what a remove reports', () => {
             '- [ ] 次の親 @2026-09-21',
         ]);
 
-        const removed = await b.writer.applyToTask(b.taskAt(1).file, plannedOn(b.taskAt(1), { subtree: true }), [{ kind: 'remove' }]);
+        const removed = await b.writer.write(b.taskAt(1).file, plannedOn(b.taskAt(1), { subtree: true }), [{ kind: 'remove' }]);
 
         expect(removed.written).toBe(true);
         expect(only(b.filed).edits).toEqual([{ kind: 'removed', at: 1, count: 3 }]);
@@ -53,7 +53,7 @@ describe('what a remove reports', () => {
             '- [ ] 次のタスク',
         ]);
 
-        await b.writer.applyToTask(b.taskAt(0).file, plannedOn(b.taskAt(0), { subtree: true }), [{ kind: 'remove' }]);
+        await b.writer.write(b.taskAt(0).file, plannedOn(b.taskAt(0), { subtree: true }), [{ kind: 'remove' }]);
 
         expect(only(b.filed).edits).toEqual([{ kind: 'removed', at: 0, count: 4 }]);
         expect(b.lines()).toEqual(['', '- [ ] 次のタスク']);
@@ -65,7 +65,7 @@ describe('what a remove reports', () => {
         const task = b.taskAt(1);
         b.edit(['# note', '- [ ] 別のタスク @2026-09-21']);
 
-        const removed = await b.writer.applyToTask(task.file, plannedOn(task, { subtree: true }), [{ kind: 'remove' }]);
+        const removed = await b.writer.write(task.file, plannedOn(task, { subtree: true }), [{ kind: 'remove' }]);
 
         expect(removed.written).toBe(false);
         expect(b.filed).toEqual([]);
@@ -84,7 +84,7 @@ describe('the origin half of a move says what it did', () => {
         // file is another row, as the ladder would also say.
         const b = await writeBench(['# note', moving, '\t- [ ] 子']);
 
-        const outcome = await b.writer.applyToTask(b.taskAt(1).file, plannedOn(b.taskAt(1)), [{ kind: 'remove' }]);
+        const outcome = await b.writer.write(b.taskAt(1).file, plannedOn(b.taskAt(1)), [{ kind: 'remove' }]);
 
         expect(outcome.written).toBe(true);
         expect(b.lines()).toEqual(['# note']);
@@ -94,14 +94,14 @@ describe('the origin half of a move says what it did', () => {
     it('says the lines were carried, when the destination is this same file', async () => {
         const b = await writeBench(['# note', moving, '## archive', '']);
 
-        await b.writer.applyToTask(b.taskAt(1).file, plannedOn(b.taskAt(1)), [{ kind: 'move', to: { heading: 'archive', side: 'end' }, text: '- [x] 移動する @2026-09-21' }]);
+        await b.writer.write(b.taskAt(1).file, plannedOn(b.taskAt(1)), [{ kind: 'move', to: { heading: 'archive', side: 'end' }, text: '- [x] 移動する @2026-09-21' }]);
 
         expect(b.lines()).toEqual(['# note', '## archive', '- [x] 移動する @2026-09-21', '']);
         expect(only(b.filed).edits.map(edit => edit.kind)).toEqual(['carried', 'replaced', 'removed']);
     });
 });
 
-describe('what the editor menu delete reports (applyToLine, remove)', () => {
+describe('what the editor menu delete reports (write, remove)', () => {
     it('says the line and its subtree went, as a card\'s delete does (P1)', async () => {
         const b = await writeBench([
             '- [ ] 親 @2026-09-21',
@@ -109,7 +109,7 @@ describe('what the editor menu delete reports (applyToLine, remove)', () => {
             '- [ ] 次 @2026-09-21',
         ]);
 
-        await b.writer.applyToLine(FILE, editorRow(0, b.lines()[0], contentKeyOf(b.lines()), b.lines().slice(0, 2)), [{ kind: 'remove' }]);
+        await b.writer.write(FILE, editorRow(0, b.lines()[0], contentKeyOf(b.lines()), b.lines().slice(0, 2)), [{ kind: 'remove' }]);
 
         expect(only(b.filed).edits).toEqual([{ kind: 'removed', at: 0, count: 2 }]);
         expect(b.lines()).toEqual(['- [ ] 次 @2026-09-21']);
@@ -125,7 +125,7 @@ describe('what the editor menu delete reports (applyToLine, remove)', () => {
         for (const at of [1, 3, 4, 6]) {
             const b = await writeBench(note);
 
-            await b.writer.applyToLine(FILE, editorRow(at, note[at], contentKeyOf(note), [note[at]]), [{ kind: 'remove' }]);
+            await b.writer.write(FILE, editorRow(at, note[at], contentKeyOf(note), [note[at]]), [{ kind: 'remove' }]);
 
             expect(only(b.filed).edits).toEqual([{ kind: 'removed', at, count: 1 }]);
             expect(b.lines()).toEqual(note.filter((_, i) => i !== at));
@@ -135,7 +135,7 @@ describe('what the editor menu delete reports (applyToLine, remove)', () => {
     it('files nothing when the coordinate is past the end', async () => {
         const b = await writeBench(['- [ ] 親 @2026-09-21']);
 
-        await b.writer.applyToLine(FILE, editorRow(5, '- [ ] 親 @2026-09-21', contentKeyOf(b.lines()), ['- [ ] 親 @2026-09-21']), [{ kind: 'remove' }]);
+        await b.writer.write(FILE, editorRow(5, '- [ ] 親 @2026-09-21', contentKeyOf(b.lines()), ['- [ ] 親 @2026-09-21']), [{ kind: 'remove' }]);
 
         expect(b.filed).toEqual([]);
         expect(b.refused).toEqual([{ file: FILE, reason: { kind: 'changed' }, subject: '- [ ] 親 @2026-09-21' }]);

@@ -1,16 +1,15 @@
 import type { App } from 'obsidian';
-import type { Task } from '../../types';
 import { InlineTaskWriter } from './writers/InlineTaskWriter';
 import { SendWriter, type SendCompleting, type SendHearing, type SendOutcome, type SendTo, type SentRow } from './writers/SendWriter';
 import { FrontmatterWriter } from './writers/FrontmatterWriter';
-import type { PropertyOp } from './PropertyUpdatePlanner';
 import type { LineDraft, Refusal, RowRef, RowTarget, WriteAt, WriteChannel, WriteOutcome, WriteSession } from './FileLines';
 import type { CompletionFire, FiringOutcome, SubtreeReplacement, TaskOp } from './TaskOps';
 import type { Section } from './Destination';
 
 /**
- * TaskRepository - タスクのファイル操作を統括するファサードクラス
- * 各種ライター（InlineTaskWriter, FrontmatterWriter, SendWriter）に処理を委譲
+ * The write layer as the index holds it: the writers, built over the one
+ * channel the index connects, and the ways in to them. It keeps no state but
+ * that channel, and every way in is a writer's own.
  */
 export class TaskRepository {
     private inlineWriter: InlineTaskWriter;
@@ -23,9 +22,7 @@ export class TaskRepository {
      */
     private channels: ((file: string) => WriteChannel) | null = null;
 
-    constructor(
-        private app: App,
-    ) {
+    constructor(app: App) {
         const channelOf = (file: string) => this.channelOf(file);
         this.inlineWriter = new InlineTaskWriter(app, channelOf);
         this.frontmatterWriter = new FrontmatterWriter(app, channelOf);
@@ -47,15 +44,20 @@ export class TaskRepository {
         return this.channels?.(file);
     }
 
-    // --- Inline Task Operations ---
+    // --- Rows ---
 
-    /** @returns what became of the write, and the row as it left it (see InlineTaskWriter). */
-    async updateTaskInFile<F extends CompletionFire>(file: string, target: RowRef, updatedTask: Task, childOps: PropertyOp[] = [], fire?: F): Promise<FiringOutcome<F>> {
-        return this.inlineWriter.updateTaskInFile(file, target, updatedTask, childOps, fire);
+    /** Ops applied to the row `target` names, as one write, with the row's fire when it completes (see InlineTaskWriter.write). */
+    async write<F extends CompletionFire = CompletionFire>(
+        file: string,
+        target: RowRef,
+        ops: readonly TaskOp[],
+        opts: { fire?: F; refused?: (refusal: Refusal) => void } = {},
+    ): Promise<FiringOutcome<F>> {
+        return this.inlineWriter.write(file, target, ops, opts);
     }
 
     /** The row and its subtree written anew, each row it completes fired (see InlineTaskWriter.replaceSubtreeInFile). */
-    async replaceSubtreeInFile<F extends CompletionFire>(
+    async replaceSubtree<F extends CompletionFire>(
         file: string,
         target: RowRef,
         replacement: SubtreeReplacement,
@@ -78,24 +80,6 @@ export class TaskRepository {
     /** The one loop that applies ops to a row, inside a write (see InlineTaskWriter.applyOps). */
     applyOps(draft: LineDraft, session: WriteSession, target: RowTarget, ops: readonly TaskOp[]): boolean {
         return this.inlineWriter.applyOps(draft, session, target, ops);
-    }
-
-    /** Ops applied to the row at a line the editor pointed at, as `at` holds it (see InlineTaskWriter.applyToLine). */
-    async applyToLine<F extends CompletionFire>(filePath: string, at: RowRef, ops: readonly TaskOp[], opts: { refused?: (refusal: Refusal) => void; fire?: F } = {}): Promise<FiringOutcome<F>> {
-        return this.inlineWriter.applyToLine(filePath, at, ops, opts);
-    }
-
-    /**
-     * Everything one operation does to one row, as one write
-     * (see {@link InlineTaskWriter.applyToTask}).
-     */
-    async applyToTask(
-        file: string,
-        target: RowRef,
-        ops: readonly TaskOp[],
-        opts: { refused?: (refusal: Refusal) => void } = {},
-    ): Promise<WriteOutcome> {
-        return this.inlineWriter.applyToTask(file, target, ops, opts);
     }
 
     async appendTaskToFile(filePath: string, content: string): Promise<WriteAt> {

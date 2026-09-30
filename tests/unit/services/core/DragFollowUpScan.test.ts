@@ -158,15 +158,14 @@ describe('writes after dispose', () => {
             disposed: true,
             refuseAfterDispose: proto.refuseAfterDispose,
             store: { getTask: vi.fn() },
-            repository: { updateTaskInFile: vi.fn(), applyToTask: vi.fn() },
+            repository: { write: vi.fn() },
         });
 
         await proto.updateTask.call(closed, 'id', { statusChar: 'x' });
         await proto.deleteTask.call(closed, 'id');
 
         expect(closed.store.getTask).not.toHaveBeenCalled();
-        expect(closed.repository.updateTaskInFile).not.toHaveBeenCalled();
-        expect(closed.repository.applyToTask).not.toHaveBeenCalled();
+        expect(closed.repository.write).not.toHaveBeenCalled();
     });
 
     it('leave the line-level writes alone too', async () => {

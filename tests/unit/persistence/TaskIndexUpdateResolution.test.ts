@@ -2,6 +2,7 @@ import { describe, it, expect, vi } from 'vitest';
 import { Notice } from 'obsidian';
 import { TaskIndex } from '../../../src/services/core/TaskIndex';
 import { makeTask } from '../helpers/makeTask';
+import { formatRow } from '../../../src/services/parsing/TaskLineFormat';
 import { DEFAULT_STATUS_DEFINITIONS, type Task } from '../../../src/types';
 
 /**
@@ -33,7 +34,7 @@ function buildHost(task: Task, written = true) {
         scanner: { follow: () => null, holds: () => false },
         app: { vault: { getAbstractFileByPath: () => null } },
         repository: {
-            updateTaskInFile: vi.fn(async () => ({ written, refused: null, fires: [] })),
+            write: vi.fn(async () => ({ written, refused: null, fires: [] })),
         },
         // The revert lives on the prototype; the host stands in for `this`.
         revertUnwrittenUpdate: proto.revertUnwrittenUpdate,
@@ -65,15 +66,13 @@ describe('updateTask: which task resolves the line', () => {
             startTime: '11:00', endTime: '11:30', statusChar: 'x',
         });
 
-        const [, target, toWrite] = host.repository.updateTaskInFile.mock.calls[0];
+        const [, target, [op]] = host.repository.write.mock.calls[0];
         // By its line, with the text as the index read it: the file still
         // says 10:00, so that is what the write has to find there.
         expect(target.line).toBe(task.line);
         expect(target.basis).toEqual({ text: '- [ ] ⏱️ 設計 @2026-08-14T10:00' });
         // The line is rewritten from the updated values.
-        expect(toWrite.startTime).toBe('11:00');
-        expect(toWrite.endTime).toBe('11:30');
-        expect(toWrite.statusChar).toBe('x');
+        expect(op).toEqual({ kind: 'update', text: '- [x] ⏱️ 設計 @2026-08-14T11:00>11:30', childOps: [] });
     });
 
     it('writes from the live task, planned from the snapshot', async () => {
@@ -82,9 +81,9 @@ describe('updateTask: which task resolves the line', () => {
 
         await proto.updateTask.call(host, task.id, { startTime: '11:00', originalText: '- [ ] x @T11:00' });
 
-        const [, target, toWrite] = host.repository.updateTaskInFile.mock.calls[0];
+        const [, target, [op]] = host.repository.write.mock.calls[0];
         expect(target.basis.text).toBe('- [ ] x @T10:00');
-        expect(toWrite).toBe(task);
+        expect(op.text).toBe(formatRow(task));
         expect(task.startTime).toBe('11:00');
     });
 });
@@ -179,7 +178,7 @@ describe('updateTask: the answer', () => {
         const written = await proto.updateTask.call(host, task.id, { startTime: '11:00' });
 
         expect(written).toBe(false);
-        expect(host.repository.updateTaskInFile).not.toHaveBeenCalled();
+        expect(host.repository.write).not.toHaveBeenCalled();
     });
 });
 
