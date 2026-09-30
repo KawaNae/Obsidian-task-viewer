@@ -57,7 +57,7 @@ export class TaskHubSourceView implements SourceSurface {
         actions: SourceViewActions,
     ) {
         bar.addClass('task-hub__mode-bar');
-        const toggle = bar.createDiv({ cls: 'task-hub__mode-toggle' });
+        const toggle = bar.createDiv({ cls: 'task-hub__mode-toggle tv-ctrl__segments' });
         this.viewBtn = toggle.createEl('button', { text: t('modal.hub.source.view'), attr: { type: 'button' } });
         this.sourceBtn = toggle.createEl('button', { text: t('modal.hub.source.source'), attr: { type: 'button' } });
         this.shutEl = bar.createSpan({ cls: 'task-hub__mode-shut' });

@@ -1,7 +1,7 @@
 /* ── Shared UI Controls (tv-ctrl) ──
  *
  * filter-popover とタスクハブパネルが共有する UI 部品（pill / suggest /
- * input / swatch / checkbox）。
+ * input / swatch / checkbox / segments）。
  *
  * 詳細度の設計:
  * Obsidian は button / input[type="text"] に border・padding・background・
@@ -114,6 +114,41 @@
     border: none;
     background: transparent;
     box-shadow: none;
+}
+
+/* --- Segments: one of a few, chosen side by side ---
+ * ボタンを枠1つに並べ、選んだものを is-active で入力面の色にする。ハブの
+ * 表示とソースの切り替え（TaskHubSourceView）、開始をずらすダイアログの量と
+ * 時刻の切り替え（TimerStartOffsetModal）が使う。 */
+.tv-ctrl__segments {
+    display: inline-flex;
+    border: 1px solid var(--tv-border);
+    border-radius: var(--tv-radius-s, 4px);
+    overflow: hidden;
+}
+
+.tv-ctrl .tv-ctrl__segments > button {
+    appearance: none;
+    -webkit-appearance: none;
+    border: none;
+    border-radius: 0;
+    box-shadow: none;
+    background: transparent;
+    color: var(--tv-text-muted);
+    font-size: var(--font-ui-small);
+    height: auto;
+    padding: 2px 10px;
+    cursor: pointer;
+}
+
+.tv-ctrl .tv-ctrl__segments > button.is-active {
+    background: var(--tv-bg-input);
+    color: var(--tv-text);
+}
+
+.tv-ctrl .tv-ctrl__segments > button:disabled {
+    cursor: default;
+    opacity: 0.6;
 }
 
 /* --- Pills --- */
