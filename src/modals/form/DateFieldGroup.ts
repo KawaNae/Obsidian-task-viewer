@@ -7,6 +7,7 @@ import {
 } from '../TaskDateValidator';
 import { createPickerTextField, type PickerTextField } from './PickerTextField';
 import { createFormRow } from './formRow';
+import { isFormEnter } from './formEnter';
 
 export type DateGroupKey = 'start' | 'end' | 'due';
 export type DateFieldKey = 'startDate' | 'startTime' | 'endDate' | 'endTime' | 'dueDate' | 'dueTime';
@@ -102,7 +103,7 @@ export class DateFieldGroup {
                 this.opts.onCommit?.(group, this.collect());
             });
             input.addEventListener('keydown', (e: KeyboardEvent) => {
-                if (e.key === 'Enter') {
+                if (isFormEnter(e)) {
                     if (this.opts.onEnter) {
                         this.opts.onEnter();
                     } else {

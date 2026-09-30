@@ -5,6 +5,7 @@ import { NO_TASK_LOOKUP } from '../services/display/DisplayTaskConverter';
 import { createTempTask } from '../services/data/createTempTask';
 import { TaskNameSuggest } from '../suggest/TaskNameSuggest';
 import { attachBracketPairing } from './form/bracketPairing';
+import { isFormEnter } from './form/formEnter';
 import { DateFieldGroup } from './form/DateFieldGroup';
 import { OverlayShell } from '../views/sharedUI/OverlayShell';
 import { hostWindow } from '../utils/HostWindow';
@@ -105,12 +106,12 @@ export class CreateTaskModal {
         });
         this.nameInput.value = this.result.content ?? '';
         new TaskNameSuggest(this.app, this.nameInput);
-        attachBracketPairing(this.nameInput, () => {
+        const pairing = attachBracketPairing(this.nameInput, () => {
             this.result.content = this.nameInput.value;
             this.checkWarning();
         });
         this.nameInput.addEventListener('keydown', (e: KeyboardEvent) => {
-            if (e.key === 'Enter') this.submit();
+            if (isFormEnter(e, pairing.isComposing())) this.submit();
         });
 
         // --- Start / End / Due ---
