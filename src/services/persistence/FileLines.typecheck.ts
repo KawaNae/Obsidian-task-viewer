@@ -72,9 +72,9 @@ export function rowSignatureChecks(
     // The index's copy is not a target: an update, a delete and a duplicate are
     // named with their plan.
     // @ts-expect-error an update names its row with a plan
-    void repository.updateTaskInFile(task.file, task, task);
+    void repository.write(task.file, task, [{ kind: 'update', text: task.originalText }]);
     // @ts-expect-error a delete names its row with a plan
-    void repository.applyToTask(task.file, task, [{ kind: 'remove' }]);
+    void repository.write(task.file, task, [{ kind: 'remove' }]);
     // @ts-expect-error a duplicate names its row with a plan
-    void repository.applyToTask(task.file, task, [{ kind: 'copies', side: 'below', lines: { verbatim: 1 }, children: true }]);
+    void repository.write(task.file, task, [{ kind: 'copies', side: 'below', lines: { verbatim: 1 }, children: true }]);
 }

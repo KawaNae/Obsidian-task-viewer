@@ -29,17 +29,16 @@ const FILE = 'note.md';
 
 function makeRepository() {
     return {
-        applyToTask: vi.fn().mockResolvedValue({ written: true, refused: null, made: [] }),
+        write: vi.fn().mockResolvedValue({ written: true, refused: null, made: [] }),
         insertRecurrenceForTask: vi.fn().mockResolvedValue(undefined),
         insertGeneratedInstance: vi.fn().mockResolvedValue(undefined),
-        updateTaskInFile: vi.fn().mockResolvedValue(undefined),
         stripFlow: vi.fn().mockResolvedValue(undefined),
     };
 }
 
 /** What the fire's one write inserts, if it inserts anything. */
 function insertOf(repository: ReturnType<typeof makeRepository>): FlowInstanceInsert | undefined {
-    const ops = repository.applyToTask.mock.calls[0]?.[2] as TaskOp[] | undefined;
+    const ops = repository.write.mock.calls[0]?.[2] as TaskOp[] | undefined;
     const op = ops?.find(o => o.kind === 'insert-instance');
     return op?.kind === 'insert-instance' ? op.insert : undefined;
 }
@@ -53,7 +52,7 @@ function generatedOf(repository: ReturnType<typeof makeRepository>): Extract<Flo
 
 /** How many strip-flow ops the fires wrote. */
 function stripsOf(repository: ReturnType<typeof makeRepository>): number {
-    return repository.applyToTask.mock.calls
+    return repository.write.mock.calls
         .flatMap(c => c[2] as TaskOp[]).filter(o => o.kind === 'strip-flow').length;
 }
 
@@ -239,7 +238,7 @@ describe('a value that cannot be written back stops the fire', () => {
         await flush();
 
         // 2 相のまま: 何も書かれず、コマンドも消費されない。
-        expect(repository.applyToTask).not.toHaveBeenCalled();
+        expect(repository.write).not.toHaveBeenCalled();
         expect(repository.insertGeneratedInstance).not.toHaveBeenCalled();
         expect(repository.stripFlow).not.toHaveBeenCalled();
     };

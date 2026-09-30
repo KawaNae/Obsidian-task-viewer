@@ -27,7 +27,7 @@ freezeDate(new Date(2026, 8, 25, 12, 0, 0));
  *
  * A fire is made in the write that completes its row: the check, the next
  * instance and the strip, the removal or the move within the note are one
- * write, `updateTaskInFile`, and its B puts the outside edit just before it.
+ * write, an `update`, and its B puts the outside edit just before it.
  *
  * The last block is the note whose rows read alike. A twin moved onto the
  * coordinate by an outside edit reads exactly as the basis did, and nothing
@@ -111,9 +111,9 @@ async function check(session: VaultSession, id: string): Promise<void> {
 
 const NOTE = (...target: string[]) => ['# note', '- [ ] 上 @2026-09-21', ...target, '- [ ] 下 @2026-09-21', ''];
 
-// ─── 1. updateTaskInFile ─────────────────────────────────────────────
+// ─── 1. an update ──────────────────────────────────────────────────────────────────────────────────────────────
 
-describe('1. updateTaskInFile', () => {
+describe('1. an update', () => {
     it('A: a check rewrites the row and every name held before the write follows its row', async () => {
         const { contents, session } = await open({ [FILE]: NOTE('- [ ] 対象 @2026-09-21') });
         const before = rows(session);
@@ -211,7 +211,7 @@ describe('2. stripFlow (a completion consuming its command)', () => {
         const { contents, session } = await open({ [FILE]: NOTE('- [ ] 対象 @2026-09-21 ==> every mon') });
         const held = { target: idOf(session, '対象') };
 
-        editBefore(session, 'updateTaskInFile', () => writeOutside(contents, 1));
+        editBefore(session, 'write', () => writeOutside(contents, 1));
         expect(await session.index.updateTask(held.target, { statusChar: 'x' })).toBe(false);
         await session.flowSettled(FILE);
 
@@ -251,9 +251,9 @@ describe('3. remove (deleteTask)', () => {
 
 });
 
-// ─── 4. a deletion fire (applyToTask) ────────────────────────────────
+// ─── 4. a deletion fire (write) ────────────────────────────────
 
-describe('4. a deletion fire (the instance and the removal, one applyToTask)', () => {
+describe('4. a deletion fire (the instance and the removal, one write)', () => {
     it('A: the next instance goes in, the fired row goes, and the names held for the rows around follow them', async () => {
         const { contents, session } = await open({ [FILE]: NOTE('- [ ] 対象 @2026-09-21 ==> every mon') });
         const held = { above: idOf(session, '上'), target: idOf(session, '対象'), below: idOf(session, '下') };
@@ -405,7 +405,7 @@ describe('8. a move within the note (the move op, in the completing write)', () 
         });
 
         // A move within one file is in the completing write.
-        editBefore(session, 'updateTaskInFile', () => writeOutside(contents, 1));
+        editBefore(session, 'write', () => writeOutside(contents, 1));
         expect(await session.index.updateTask(idOf(session, '対象'), { statusChar: 'x' })).toBe(false);
         await session.flowSettled(FILE);
 
@@ -525,7 +525,7 @@ describe('11. insertRecurrenceForTask (create-next)', () => {
         const { contents, session } = await open({ [FILE]: NOTE('- [ ] 対象 @2026-09-21', '\t- ==> every mon') });
         const held = { target: idOf(session, '対象') };
 
-        editBefore(session, 'updateTaskInFile', () => writeOutside(contents, 1));
+        editBefore(session, 'write', () => writeOutside(contents, 1));
         expect(await session.index.updateTask(held.target, { statusChar: 'x' })).toBe(false);
         await session.flowSettled(FILE);
 
@@ -571,7 +571,7 @@ describe('12. insertGeneratedInstance (create-generated)', () => {
         const { contents, session } = await open({ [FILE]: SOURCE() });
         const held = { target: idOf(session, '対象') };
 
-        editBefore(session, 'updateTaskInFile', () => writeOutside(contents, 1));
+        editBefore(session, 'write', () => writeOutside(contents, 1));
         expect(await session.index.updateTask(held.target, { statusChar: 'x' })).toBe(false);
         await session.flowSettled(FILE);
 
@@ -592,7 +592,7 @@ describe('twins after an outside edit: refused, with one notice', () => {
     // on the line tells them apart; the content does, and the copy was not
     // read in this one (`NamedRow.read`). So the write is refused until a
     // scan has read the file (2026-09-25).
-    it('updateTaskInFile is refused, though the twin now on the coordinate reads as the basis', async () => {
+    it('an update is refused, though the twin now on the coordinate reads as the basis', async () => {
         const { contents, session } = await open({ [FILE]: TWINS('- [ ] 子 @2026-09-21') });
         const second = rows(session)[2].id;
 
@@ -625,7 +625,7 @@ describe('twins after an outside edit: refused, with one notice', () => {
         const { contents, session } = await open({ [FILE]: TWINS('- [ ] 子 @2026-09-21 ==> every mon') });
         const second = rows(session)[2].id;
 
-        editBefore(session, 'updateTaskInFile', () => {
+        editBefore(session, 'write', () => {
             contents.set(FILE, contents.get(FILE)!.replace('\t- [ ] 子', '\t- [x] 子'));
             writeOutside(contents, 1);
         });

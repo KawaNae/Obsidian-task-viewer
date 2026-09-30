@@ -1,17 +1,14 @@
 import { type App, TFile } from 'obsidian';
-import type { Task } from '../../../types';
-import { formatRow } from '../../parsing/TaskLineFormat';
 import { collectFlowLineIndices } from '../../parsing/utils/FlowLineScanner';
 import { carryTo } from '../Carry';
 import { ChildPropertyLineEditor } from '../utils/ChildPropertyLineEditor';
 import { Block, Placement, type InSection, type PlacedLine, type Spot } from '../utils/Placement';
 import { ListNumber } from '../utils/ListNumber';
-import type { PropertyOp } from '../PropertyUpdatePlanner';
 import { flowInstanceHead, renderFlowInstance } from '../FlowInstanceLines';
 import {
     UnfollowableDraft, createFile, editLines, fileGone, processLines, splitLines, withRefused,
     type DraftEdit, type EditTrials, type EditedLines, type LineDraft, type Refusal, type RowRef,
-    type RowTarget, type WriteAt, type WriteChannel, type WriteChannels, type WriteOutcome, type WriteSession,
+    type RowTarget, type WriteAt, type WriteChannel, type WriteChannels, type WriteSession,
 } from '../FileLines';
 import type { CompletionFire, FiringOutcome, SubtreeReplacement, TaskOp } from '../TaskOps';
 import { replaceSubtree } from '../ReplaceSubtree';
@@ -31,31 +28,45 @@ export class InlineTaskWriter {
     ) { }
 
     /**
-     * Rewrite the row as `updatedTask`, and its property lines by `childOps`
-     * — and, with `fire`, fire its flow in the same write: a card's, the
-     * API's or a timer's completion of the row (`TaskIndex.writeUpdate`).
-     * A write refused with a fire that writes lines leaves the rewrite
-     * written alone, in the same attempt ({@link writeFiring}).
+     * Apply `ops` to the row `target` names, as one write: the one way a
+     * write of ops reaches a note. A card's, the API's and a timer's rewrite
+     * of a row (`update`), a delete, a duplicate, a timer's line, a fire's
+     * effects, and the editor menu's write once the editor no longer shows
+     * the file.
      *
-     * The line is made from the index's copy, so it is written only over a
-     * row that still reads as that copy (`target.basis`): a line edited since
-     * — by hand, by the editor's menu, by a fire — would otherwise be put back
-     * to what the copy says, the edit lost without a word.
+     * With `opts.fire`, the write completes the row, and its flow fires in the
+     * same write, after `ops`; a write refused with a fire that writes lines
+     * is made without it in the same attempt ({@link writeFiring}). Without
+     * one, `fires` is empty.
      *
-     * @returns the outcome. `written: false` means nothing was written at all,
-     * which the caller must not treat as a successful no-op: the index changed
-     * its copy before the write and puts it back on this answer
-     * (`TaskIndex.revertUnwrittenUpdate`). A write made says what came of
-     * `fire` (`FiringOutcome`).
+     * The row is found once, and every op after the first takes its line
+     * from that answer, carried across the ops before it (`WriteSession.row`):
+     * either every op lands or none does, and a row that cannot be placed
+     * leaves the file as it was. A line planned from the index's copy is
+     * written only over a row that still reads as that copy (`target.basis`):
+     * a line edited since, by hand, by the editor's menu or by a fire, would
+     * otherwise be put back to what the copy says. A caller that tells a
+     * refusal in its own words hears it at `opts.refused` (`withRefused`).
+     *
+     * @returns the outcome. `written: false` means nothing was written at
+     * all, which the caller must not treat as a successful no-op: the index
+     * puts back a copy it changed before the write on that answer
+     * (`TaskIndex.revertUnwrittenUpdate`).
      */
-    async updateTaskInFile<F extends CompletionFire>(path: string, target: RowRef, updatedTask: Task, childOps: PropertyOp[] = [], fire?: F): Promise<FiringOutcome<F>> {
+    async write<F extends CompletionFire = CompletionFire>(
+        path: string,
+        target: RowRef,
+        ops: readonly TaskOp[],
+        opts: { fire?: F; refused?: (refusal: Refusal) => void } = {},
+    ): Promise<FiringOutcome<F>> {
         const file = this.app.vault.getAbstractFileByPath(path);
-        if (!(file instanceof TFile)) return fileGone(this.channelOf(path), path, target.subject);
-
-        // 子プロパティ行（- key:: value）の更新はタスク行と同じ1回の書き込みで
-        // 行う。行の土台を1回照合し、1回で書く。
-        const update: TaskOp = { kind: 'update', text: formatRow(updatedTask), childOps };
-        return this.writeOps(file, this.channelOf(path), target, [update], fire);
+        const channel = withRefused(this.channelOf(path), opts.refused);
+        if (!(file instanceof TFile)) return fileGone(channel, path, target.subject);
+        const fire = opts.fire;
+        return this.writeFiring(file, channel, (draft, session) => {
+            if (!this.applyOps(draft, session, target, ops)) return false;
+            return fire ? [target] : [];
+        }, () => fire!);
     }
 
     /**
@@ -91,23 +102,6 @@ export class InlineTaskWriter {
             if (rewritten === false) return false;
             return rewritten.filter(row => completing.completes(row.was, row.now)).map(row => row.row);
         }, completing.fire);
-    }
-
-    /**
-     * Apply `ops` to the row `target` names, as one write, with `fire` after
-     * them when a fire goes with them ({@link writeFiring}).
-     */
-    private writeOps<F extends CompletionFire>(
-        file: TFile,
-        channel: WriteChannel | undefined,
-        target: RowRef,
-        ops: readonly TaskOp[],
-        fire: F | undefined,
-    ): Promise<FiringOutcome<F>> {
-        return this.writeFiring(file, channel, (draft, session) => {
-            if (!this.applyOps(draft, session, target, ops)) return false;
-            return fire ? [target] : [];
-        }, () => fire!);
     }
 
     /**
@@ -241,63 +235,8 @@ export class InlineTaskWriter {
     }
 
     /**
-     * Apply `ops` to the row at a line the editor pointed at, planned from the
-     * row, and its subtree when `at` holds one: the editor menu's write, when
-     * the editor it was opened in no longer shows the file, with `opts.fire`
-     * when it completes the line (see {@link updateTaskInFile}). A caller that
-     * tells a refusal in its own words has it from the outcome, as
-     * `applyToTask` does.
-     */
-    async applyToLine<F extends CompletionFire>(
-        filePath: string,
-        at: RowRef,
-        ops: readonly TaskOp[],
-        opts: { refused?: (refusal: Refusal) => void; fire?: F } = {},
-    ): Promise<FiringOutcome<F>> {
-        const file = this.app.vault.getAbstractFileByPath(filePath);
-        const channel = withRefused(this.channelOf(filePath), opts.refused);
-        if (!(file instanceof TFile)) return fileGone(channel, filePath, at.subject);
-        return this.writeOps(file, channel, at, ops, opts.fire);
-    }
-
-    /**
-     * Do everything one operation does to one row of one file, as one write.
-     *
-     * A fire used to write each of its effects on its own — the next
-     * instance, then the consumed command — and each write asked where the
-     * row stood. The second asked after the first had moved it, and found it
-     * only because the line just written read differently from the one that
-     * fired: held by value, not by construction. Here the row is located once,
-     * every effect after the first takes its line from that answer carried
-     * across the splices before it (see `WriteSession.row`), and nothing
-     * searches the file a second time.
-     *
-     * One write also settles what the separate ones could not: either every
-     * effect lands, or none does. A row that cannot be placed leaves the file
-     * byte-identical — no next instance beside a command that was not
-     * consumed, which would fire again.
-     *
-     * Where each line goes is read off the lines as they stand when the
-     * effect is applied: the sibling group, the subtree, the indentation. The
-     * separate writes did the same, each against the file the previous one
-     * left, so the lines written are the same.
-     */
-    async applyToTask(
-        path: string,
-        target: RowRef,
-        ops: readonly TaskOp[],
-        opts: { refused?: (refusal: Refusal) => void } = {},
-    ): Promise<WriteOutcome> {
-        const file = this.app.vault.getAbstractFileByPath(path);
-        const channel = withRefused(this.channelOf(path), opts.refused);
-        if (!(file instanceof TFile)) return fileGone(channel, path, target.subject);
-
-        return processLines(this.app, file, channel, (draft, _eol, session) => this.applyOps(draft, session, target, ops));
-    }
-
-    /**
      * Apply `ops` in order to the row `target` names, inside a write: the
-     * one loop every write of ops runs, to a file (`applyToTask`) or to an
+     * one loop every write of ops runs, to a file ({@link write}) or to an
      * editor's lines (`editLines`). Answers false when the row has no line,
      * which the session has refused with its reason.
      *
