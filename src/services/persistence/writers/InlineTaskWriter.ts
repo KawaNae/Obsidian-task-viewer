@@ -3,14 +3,13 @@ import type { Task } from '../../../types';
 import { formatRow } from '../../parsing/TaskLineFormat';
 import { collectFlowLineIndices } from '../../parsing/utils/FlowLineScanner';
 import { carryTo } from '../Carry';
-import { FileOperations } from '../utils/FileOperations';
 import { ChildPropertyLineEditor } from '../utils/ChildPropertyLineEditor';
 import { Block, Placement, type InSection, type PlacedLine, type Spot } from '../utils/Placement';
 import { ListNumber } from '../utils/ListNumber';
 import type { PropertyOp } from '../PropertyUpdatePlanner';
 import { flowInstanceHead, renderFlowInstance } from '../FlowInstanceLines';
 import {
-    UnfollowableDraft, createFile, editLines, fileGone, processLines, splitLines,
+    UnfollowableDraft, createFile, editLines, fileGone, processLines, splitLines, withRefused,
     type DraftEdit, type EditTrials, type EditedLines, type EditorLine, type LineDraft, type NamedRow, type Refusal,
     type RowTarget, type WriteAt, type WriteRefused, type WriteChannel, type WriteChannels, type WriteOutcome, type WriteSession,
 } from '../FileLines';
@@ -28,7 +27,6 @@ import { indentUnit } from '../../../utils/ObsidianConfig';
 export class InlineTaskWriter {
     constructor(
         private app: App,
-        private fileOps: FileOperations,
         private channelOf: WriteChannels,
     ) { }
 
@@ -74,7 +72,7 @@ export class InlineTaskWriter {
      * write is made only over a subtree that still reads so: a line written
      * into it since, by the form, a timer or by hand, refuses it as `changed`.
      * A caller that shows the refusal itself hears it at `opts.refused`
-     * ({@link channelHearing}).
+     * (`withRefused`).
      */
     async replaceSubtreeInFile<F extends CompletionFire>(
         target: PlannedTarget,
@@ -83,7 +81,7 @@ export class InlineTaskWriter {
         opts: { refused?: (refusal: Refusal) => void } = {},
     ): Promise<FiringOutcome<F>> {
         const file = this.app.vault.getAbstractFileByPath(target.file);
-        const channel = this.channelHearing(target.file, opts.refused);
+        const channel = withRefused(this.channelOf(target.file), opts.refused);
         if (!(file instanceof TFile)) return fileGone(channel, target.file, target.subject);
         return this.writeFiring(file, channel, (draft, session) => {
             const line = session.row(target);
@@ -247,18 +245,6 @@ export class InlineTaskWriter {
     }
 
     /**
-     * The channel a write to `file` goes through: the index's, with a refusal
-     * handed to `refused` instead when the caller gives one. A caller that
-     * shows the refusal in a place of its own hears it there, and decides
-     * what else is done of it (the index still learns from it); telling it
-     * through the channel too would be the same news twice.
-     */
-    private channelHearing(file: string, refused: ((refusal: Refusal) => void) | undefined): WriteChannel | undefined {
-        const told = this.channelOf(file);
-        return told && refused ? { ...told, refused } : told;
-    }
-
-    /**
      * Apply `ops` to the row at a line the editor pointed at, planned from the
      * row, and its subtree when `at` holds one: the editor menu's write, when
      * the editor it was opened in no longer shows the file, with `opts.fire`
@@ -273,7 +259,7 @@ export class InlineTaskWriter {
         opts: { refused?: (refusal: Refusal) => void; fire?: F } = {},
     ): Promise<FiringOutcome<F>> {
         const file = this.app.vault.getAbstractFileByPath(filePath);
-        const channel = this.channelHearing(filePath, opts.refused);
+        const channel = withRefused(this.channelOf(filePath), opts.refused);
         if (!(file instanceof TFile)) return fileGone(channel, filePath, at.text.trim());
         return this.writeOps(file, channel, at, ops, opts.fire);
     }
@@ -306,7 +292,7 @@ export class InlineTaskWriter {
         opts: { refused?: (refusal: Refusal) => void } = {},
     ): Promise<WriteOutcome> {
         const file = this.app.vault.getAbstractFileByPath(target.file);
-        const channel = this.channelHearing(target.file, opts.refused);
+        const channel = withRefused(this.channelOf(target.file), opts.refused);
         if (!(file instanceof TFile)) return fileGone(channel, target.file, target.subject);
 
         return processLines(this.app, file, channel, (draft, _eol, session) => this.applyOps(draft, session, target, ops));
@@ -383,8 +369,7 @@ export class InlineTaskWriter {
                 return;
             }
             case 'remove': {
-                const { childrenLines } = this.fileOps.collectChildrenFromLines(draft.reading(), line);
-                draft.splice(line, 1 + childrenLines.length);
+                draft.splice(line, draft.reading().subtreeEnd(line) - line);
                 return;
             }
             case 'insert': {
@@ -451,10 +436,7 @@ export class InlineTaskWriter {
                 channel?.refused(edited.refused);
                 return edited;
             }
-            const created = await createFile(this.app, filePath, channel, subject, async () => {
-                await this.fileOps.ensureDirectoryExists(filePath);
-                return edited.lines.join('\n');
-            });
+            const created = await createFile(this.app, filePath, channel, subject, () => edited.lines.join('\n'));
             return created.written ? { ...created, line: inserted } : created;
         }
 

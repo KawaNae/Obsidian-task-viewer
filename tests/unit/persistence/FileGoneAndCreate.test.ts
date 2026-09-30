@@ -1,4 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
+import { TFolder } from 'obsidian';
 import { contentKeyOf } from '../../../src/services/core/ContentKey';
 import { writeBench, FILE } from '../helpers/writeBench';
 import { plannedOn } from '../../../src/services/persistence/TaskRefs';
@@ -175,5 +176,56 @@ describe('creating a note', () => {
         expect(made.refused).toEqual({ file: NEW, reason: { kind: 'unplaceable', fence: null }, subject: CODE.trim() });
         expect(create).not.toHaveBeenCalled();
         expect(b.refused).toHaveLength(2);
+    });
+
+    describe('createFile makes the folders the path names', () => {
+        /** A bench whose vault holds the folders `held`, and records each folder it is asked to create. */
+        async function benchWithFolders(held: string[], createFolder?: (path: string) => Promise<void>) {
+            const b = await writeBench({ [FILE]: '# note' });
+            const folders = new Set(held);
+            const asked: string[] = [];
+            const lookup = b.app.vault.getAbstractFileByPath;
+            b.app.vault.getAbstractFileByPath = (path: string) =>
+                (folders.has(path) ? Object.assign(new TFolder(), { path }) : lookup(path));
+            b.app.vault.createFolder = async (path: string) => {
+                asked.push(path);
+                if (createFolder) return createFolder(path);
+                folders.add(path);
+            };
+            return { b, asked, folders };
+        }
+
+        it('creates the missing folders from the top, before the note', async () => {
+            const { b, asked } = await benchWithFolders(['a']);
+
+            const outcome = await createFile(b.app, 'a/b/c/new.md', b.channel('a/b/c/new.md'), 'new', () => CONTENT);
+
+            expect(outcome.written).toBe(true);
+            expect(asked).toEqual(['a/b', 'a/b/c']);
+            expect(b.text('a/b/c/new.md')).toBe(CONTENT);
+        });
+
+        it('takes a folder another write made meanwhile as there, by the vault holding it', async () => {
+            const { b, folders } = await benchWithFolders([], async (path) => {
+                folders.add(path);
+                throw new Error('Folder already exists.');
+            });
+
+            const outcome = await createFile(b.app, 'x/new.md', b.channel('x/new.md'), 'new', () => CONTENT);
+
+            expect(outcome.written).toBe(true);
+            expect(b.refused).toEqual([]);
+        });
+
+        it('a folder that could not be made fails the write, told once, and nothing created', async () => {
+            const { b } = await benchWithFolders([], async () => { throw new Error('Folder already exists.'); });
+            const create = vi.spyOn(b.app.vault, 'create');
+
+            const outcome = await createFile(b.app, 'x/new.md', b.channel('x/new.md'), 'new', () => CONTENT);
+
+            expect(outcome.refused?.reason).toEqual({ kind: 'failed' });
+            expect(b.refused).toHaveLength(1);
+            expect(create).not.toHaveBeenCalled();
+        });
     });
 });

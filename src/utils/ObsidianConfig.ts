@@ -33,7 +33,7 @@ function configOf(app: App, key: string): unknown {
  * line nested one level deeper than any line there is gets — the first child
  * of a row that has none, a Tab in the source editor. A line written beside
  * one of the same depth takes that line's indentation instead
- * (`FileOperations.resolveChildIndent`).
+ * (`Placement.resolveChildIndent`).
  *
  * A tab when `useTab` is not a boolean, or `getConfig` answers nothing.
  * `tabSize` that is not a whole number is 4; one past 4 is 4, since a unit

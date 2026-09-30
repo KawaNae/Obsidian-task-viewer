@@ -5,13 +5,12 @@ import { TaskLineClassifier } from '../../parsing/utils/TaskLineClassifier';
 import { carryTo, putNumbered, subtreeBlock } from '../Carry';
 import type { Section } from '../Destination';
 import {
-    createFile, editLines, fileGone, readInLine, splitLines, takeBack,
+    createFile, editLines, fileGone, readInLine, splitLines, takeBack, withRefused,
     type LineDraft, type MarkedLine, type Refusal, type RowTarget, type TakeBack, type WriteChannel, type WriteChannels, type WriteSession,
 } from '../FileLines';
 import { replaceSubtree } from '../ReplaceSubtree';
 import type { PlannedTarget } from '../TaskRefs';
 import type { CompletionFire, FiringOutcome, SubtreeReplacement } from '../TaskOps';
-import type { FileOperations } from '../utils/FileOperations';
 import { FrontmatterLineEditor } from '../utils/FrontmatterLineEditor';
 import { ListNumber } from '../utils/ListNumber';
 import { noteLink } from '../utils/NoteLink';
@@ -109,7 +108,6 @@ export class SendWriter {
     constructor(
         private app: App,
         private inline: InlineTaskWriter,
-        private fileOps: FileOperations,
         private channelOf: WriteChannels,
     ) { }
 
@@ -171,7 +169,7 @@ export class SendWriter {
         completing: SendCompleting<F>,
         opts: SendHearing = {},
     ): Promise<SendOutcome<F>> {
-        const hearing = (path: string) => hearingChannel(this.channelOf(path), opts.refused);
+        const hearing = (path: string) => withRefused(this.channelOf(path), opts.refused);
         const own = rows.filter(one => one.file === to.path).map(one => one.row);
         const others: { path: string; rows: SentRow[] }[] = [];
         for (const { file, row } of rows) {
@@ -302,10 +300,7 @@ export class SendWriter {
             channel?.refused(edited.refused);
             return { refused: edited.refused };
         }
-        const created = await createFile(this.app, to.path, channel, subject, async () => {
-            await this.fileOps.ensureDirectoryExists(to.path);
-            return edited.lines.join('\n');
-        });
+        const created = await createFile(this.app, to.path, channel, subject, () => edited.lines.join('\n'));
         if (!created.written) return { refused: created.refused };
         return { note: created.file, placed: placed!, before: [], outcome: null };
     }
@@ -421,7 +416,7 @@ export class SendWriter {
         completing: SendCompleting<F>,
     ): Promise<FiringOutcome<F>> {
         const file = this.app.vault.getAbstractFileByPath(path);
-        const channel = quiet(this.channelOf(path));
+        const channel = withRefused(this.channelOf(path), 'quiet');
         if (!(file instanceof TFile)) return fileGone(channel, path, rows[0]?.target.subject ?? path);
         const link = noteLink(this.app.fileManager, note, path);
         let sent: RowTarget[] = [];
@@ -475,14 +470,4 @@ function writeDrafts<F extends CompletionFire>(
         }
     }
     return { sent, completed };
-}
-
-/** `channel`, with a refusal handed to `refused` instead when the caller gives one (see {@link SendWriter.send}). */
-function hearingChannel(channel: WriteChannel | undefined, refused: ((refusal: Refusal) => void) | undefined): WriteChannel | undefined {
-    return channel && refused ? { ...channel, refused } : channel;
-}
-
-/** `channel`, with a refusal told to nobody: a write whose caller says what came of it. */
-function quiet(channel: WriteChannel | undefined): WriteChannel | undefined {
-    return channel ? { ...channel, refused: () => { } } : undefined;
 }

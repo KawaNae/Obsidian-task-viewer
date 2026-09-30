@@ -51,9 +51,8 @@ const ALLOWED: Array<{ file: string; contains: string; reason: string }> = [
     // A template file keeps its JSON in a fence it writes and reads whole;
     // that is the file's own format, not a reading of a note's blocks.
     { file: 'services/template/ViewTemplateLoader.ts', contains: '```json', reason: 'template JSON' },
-    { file: 'services/template/ViewTemplateWriter.ts', contains: '```', reason: 'template JSON' },
+    { file: 'services/template/TemplateNote.ts', contains: '```', reason: 'template JSON' },
     { file: 'timer/IntervalTemplateLoader.ts', contains: '```json', reason: 'template JSON' },
-    { file: 'timer/IntervalTemplateWriter.ts', contains: '```', reason: 'template JSON' },
 ];
 
 function sources(dir: string): string[] {

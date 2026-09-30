@@ -1,10 +1,10 @@
 import { type App, TFile } from 'obsidian';
 import type { DuplicateOptions } from '../../types';
 import { DateUtils } from '../../utils/DateUtils';
-import { FileOperations } from './utils/FileOperations';
 import { fileGone, processLines, type LineDraft, type WriteChannels, type WriteOutcome } from './FileLines';
 import type { PlannedTarget } from './TaskRefs';
 import { Outline } from '../parsing/utils/Outline';
+import { TaskLineClassifier } from '../parsing/utils/TaskLineClassifier';
 import { readLineDateBlock } from '../parsing/tv-inline/DateBlock';
 import { Block, Placement, type Spot } from './utils/Placement';
 
@@ -30,7 +30,6 @@ export type InPlaceCopyLines =
 export class TaskCloner {
     constructor(
         private app: App,
-        private fileOps: FileOperations,
         private channelOf: WriteChannels,
     ) { }
 
@@ -56,7 +55,7 @@ export class TaskCloner {
             const idx = row(target);
             if (idx === null) return false;
 
-            const cleanParent = this.fileOps.stripBlockIds([lines[idx]])[0];
+            const cleanParent = TaskLineClassifier.stripBlockIds([lines[idx]])[0];
             const parents: string[] = [];
             // Future-first order: highest offset first so newer dates appear above older ones.
             for (let offset = dayOffset + count - 1; offset >= dayOffset; offset--) {
@@ -94,7 +93,7 @@ export class TaskCloner {
             const indent = Outline.indentOf(lines[idx]);
             const parents = copies.kind === 'verbatim'
                 ? Array.from({ length: copies.count },
-                    () => this.fileOps.stripBlockIds([lines[idx]])[0])
+                    () => TaskLineClassifier.stripBlockIds([lines[idx]])[0])
                 : copies.lines.map(l => indent + Outline.dedent(l));
 
             this.putCopies(draft, idx, parents, Placement.copyOf(draft.reading(), idx, 'below', parents[0]));
@@ -124,7 +123,7 @@ export class TaskCloner {
         const outline = draft.reading();
         const rows: number[] = [];
         for (let row = taskLine; row < outline.subtreeEnd(taskLine); row++) rows.push(row);
-        const cleanedChildren = this.fileOps.stripBlockIds(rows.slice(1).map(row => lines[row]));
+        const cleanedChildren = TaskLineClassifier.stripBlockIds(rows.slice(1).map(row => lines[row]));
 
         // Through the draft rather than beside it: the copy is worded exactly
         // like the line it copies, so a position off by one would read the same

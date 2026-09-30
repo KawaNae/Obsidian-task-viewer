@@ -1,4 +1,4 @@
-import { TFile, type App } from 'obsidian';
+import { TFile, TFolder, type App } from 'obsidian';
 import { logError, logWarn } from '../../log/log';
 import { LINE_BREAK, holdsLineBreak } from '../../utils/LineBreak';
 import { Outline, type OutlineReading } from '../parsing/utils/Outline';
@@ -1248,10 +1248,10 @@ export function fileGone(channel: WriteChannel | undefined, file: string, subjec
 /**
  * Create a note holding what `content` makes, as one write: made, with the
  * note, or refused as `failed` and told once. Every note the plugin creates
- * for a write is created here. Making the content — a folder to put it in, a
- * template to read — is part of the write, and failing there fails it too.
- * As with `processLines`, a failure that left the note in place reading as
- * asked is a write that landed.
+ * for a write is created here. Making the note — the folders its path names
+ * ({@link ensureFolderOf}), its content, a template to read — is part of the
+ * write, and failing there fails it too. As with `processLines`, a failure
+ * that left the note in place reading as asked is a write that landed.
  *
  * These writes do not queue with the ones to notes already there (see
  * {@link processOrFail}): there was no note for another write to change.
@@ -1264,12 +1264,13 @@ export async function createFile(
     content: () => string | Promise<string>,
 ): Promise<WriteRefused | (WriteMade & { file: TFile })> {
     let asked: string | null = null;
-    let handed: ReadMark | undefined;
+    let landing: Landing | null = null;
     try {
+        await ensureFolderOf(app, path);
         asked = await content();
-        handed = channel?.reading();
+        landing = wholeLanding(channel, [], splitLines(asked).lines);
         const file = await app.vault.create(path, asked);
-        if (channel && handed) channel.landed({ before: [], lines: splitLines(asked).lines, edits: null, reading: null, handed });
+        if (landing) channel?.landed(landing);
         return { written: true, refused: null, file };
     } catch (error) {
         const made = app.vault.getAbstractFileByPath(path);
@@ -1277,9 +1278,55 @@ export async function createFile(
             return writeFailed(channel, path, subject, error);
         }
         logWarn(`[FileLines] ${path}: creating the note reported a failure, but it reads as written; kept: ${String(error)}`);
-        if (channel && handed) channel.landed({ before: [], lines: splitLines(asked).lines, edits: null, reading: null, handed });
+        if (landing) channel?.landed(landing);
         return { written: true, refused: null, file: made };
     }
+}
+
+/**
+ * Make the folders `path` is to be in, those not there yet, from the top. A
+ * folder is there when the vault holds one by its path; creating one that
+ * throws is taken as made when the vault holds it then (another write made
+ * it meanwhile), and fails the write otherwise — a note in the way included.
+ */
+async function ensureFolderOf(app: App, path: string): Promise<void> {
+    const folders = path.split('/').slice(0, -1).filter(part => part !== '');
+    let at = '';
+    for (const folder of folders) {
+        at = at === '' ? folder : `${at}/${folder}`;
+        if (app.vault.getAbstractFileByPath(at) instanceof TFolder) continue;
+        try {
+            await app.vault.createFolder(at);
+        } catch (error) {
+            if (!(app.vault.getAbstractFileByPath(at) instanceof TFolder)) throw error;
+        }
+    }
+}
+
+/**
+ * The landing of a write that put `lines` in place of `before` whole — a
+ * note created, a content replaced — which cannot say which line became
+ * which, and so lands with no report and no reading of its own. Made as the
+ * write is handed its lines, for the reading it starts from
+ * (`Landing.handed`); null with no channel to hand it to.
+ */
+function wholeLanding(channel: WriteChannel | undefined, before: readonly string[], lines: readonly string[]): Landing | null {
+    return channel ? { before, lines, edits: null, reading: null, handed: channel.reading() } : null;
+}
+
+/**
+ * `channel`, with a refusal handed to `refused` instead, or told to nobody
+ * for `'quiet'`; `channel` itself when `refused` is not given. A caller that
+ * says what came of the write itself — in a place of its own, or from the
+ * outcome — hears the refusal there (the index still learns what a write
+ * left); told through the channel too, it would be the same news twice.
+ */
+export function withRefused(
+    channel: WriteChannel | undefined,
+    refused: ((refusal: Refusal) => void) | 'quiet' | undefined,
+): WriteChannel | undefined {
+    if (!channel || refused === undefined) return channel;
+    return { ...channel, refused: refused === 'quiet' ? () => { } : refused };
 }
 
 /** Whether the file now reads as `content`, the mark at its head aside. A file that cannot be read does not. */
@@ -1307,18 +1354,39 @@ export async function replaceWhole(
     channel: WriteChannel | undefined,
     content: string,
 ): Promise<WriteOutcome> {
+    const outcome = await processWhole(app, file, channel, () => content);
+    return 'refused' in outcome ? outcome : { written: true, refused: null };
+}
+
+/**
+ * One `vault.process` that writes the content `next` answers of the file's,
+ * whole, or leaves the file as it is where `next` answers null; the landing
+ * ({@link wholeLanding}) told once it is over, when the content changed.
+ * Answers whether `next` answered a content in the run written, or the
+ * refusal when the write threw (`processOrFail`).
+ */
+async function processWhole(
+    app: App,
+    file: TFile,
+    channel: WriteChannel | undefined,
+    next: (content: string) => string | null,
+): Promise<{ written: boolean } | WriteRefused> {
+    let written = false;
     let landing: Landing | null = null;
-    const threw = await processOrFail(app, file, channel, (current) => {
+    const threw = await processOrFail(app, file, channel, (content) => {
+        written = false;
         landing = null;
-        if (current === content) return current;
-        if (channel) landing = { before: splitLines(current).lines, lines: splitLines(content).lines, edits: null, reading: null, handed: channel.reading() };
-        return content;
+        const whole = next(content);
+        if (whole === null) return content;
+        written = true;
+        if (whole !== content) landing = wholeLanding(channel, splitLines(content).lines, splitLines(whole).lines);
+        return whole;
     }, () => file.path);
     if (threw) return threw;
     // Set inside the callback, which the compiler does not follow.
     const landed = landing as Landing | null;
     if (landed !== null) channel?.landed(landed);
-    return { written: true, refused: null };
+    return { written: written as boolean };
 }
 
 /**
@@ -1373,7 +1441,7 @@ export async function takeBack(
     const readsAsLeft = (lines: readonly string[]) => lines.length === left.length && lines.every((line, i) => line === left[i]);
     if (app.vault.getAbstractFileByPath(file.path) !== file) return { taken: false, why: 'gone' };
     // Told to nobody: the caller says what became of the operation.
-    const quiet: WriteChannel | undefined = channel ? { ...channel, refused: () => { } } : undefined;
+    const quiet = withRefused(channel, 'quiet');
     switch (how.kind) {
         case 'made':
             return inLineOf(file, async (): Promise<TakenBack> => {
@@ -1408,24 +1476,14 @@ export async function takeBack(
             return { taken: false, why: outcome.refused.reason.kind === 'changed' ? 'changed' : 'failed' };
         }
         case 'restore': {
-            let written = false;
-            let landing: Landing | null = null;
-            const threw = await processOrFail(app, file, quiet, (content) => {
-                written = false;
-                landing = null;
+            const outcome = await processWhole(app, file, quiet, (content) => {
                 const { lines, eol, bom } = splitLines(content);
-                if (!readsAsLeft(lines)) return content;
-                written = true;
+                if (!readsAsLeft(lines)) return null;
                 // The note's own mark and line ends, as they are now.
-                const back = (bom ? BOM : '') + joinLines([...how.lines], eol);
-                if (back !== content && quiet) landing = { before: lines, lines: [...how.lines], edits: null, reading: null, handed: quiet.reading() };
-                return back;
-            }, () => file.path);
-            if (threw) return { taken: false, why: 'failed' };
-            // Set inside the callback, which the compiler does not follow.
-            const landed = landing as Landing | null;
-            if (landed !== null) quiet?.landed(landed);
-            return (written as boolean) ? { taken: true } : { taken: false, why: 'changed' };
+                return (bom ? BOM : '') + joinLines([...how.lines], eol);
+            });
+            if ('refused' in outcome) return { taken: false, why: 'failed' };
+            return outcome.written ? { taken: true } : { taken: false, why: 'changed' };
         }
     }
 }

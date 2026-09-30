@@ -1,6 +1,5 @@
 import type { App } from 'obsidian';
 import type { DuplicateOptions, Task } from '../../types';
-import { FileOperations } from './utils/FileOperations';
 import { InlineTaskWriter } from './writers/InlineTaskWriter';
 import { SendWriter, type SendCompleting, type SendHearing, type SendOutcome, type SendTo, type SentRow } from './writers/SendWriter';
 import { FrontmatterWriter } from './writers/FrontmatterWriter';
@@ -16,7 +15,6 @@ import type { Section } from './Destination';
  * 各種ライター（InlineTaskWriter, FrontmatterWriter, TaskCloner）に処理を委譲
  */
 export class TaskRepository {
-    private fileOps: FileOperations;
     private inlineWriter: InlineTaskWriter;
     private frontmatterWriter: FrontmatterWriter;
     private cloner: TaskCloner;
@@ -31,12 +29,11 @@ export class TaskRepository {
     constructor(
         private app: App,
     ) {
-        this.fileOps = new FileOperations(app);
         const channelOf = (file: string) => this.channelOf(file);
-        this.inlineWriter = new InlineTaskWriter(app, this.fileOps, channelOf);
+        this.inlineWriter = new InlineTaskWriter(app, channelOf);
         this.frontmatterWriter = new FrontmatterWriter(app, channelOf);
-        this.cloner = new TaskCloner(app, this.fileOps, channelOf);
-        this.sendWriter = new SendWriter(app, this.inlineWriter, this.fileOps, channelOf);
+        this.cloner = new TaskCloner(app, channelOf);
+        this.sendWriter = new SendWriter(app, this.inlineWriter, channelOf);
     }
 
     /** @internal For the index to connect once its scanner exists. */

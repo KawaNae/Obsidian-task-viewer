@@ -57,6 +57,16 @@ export class TaskLineClassifier {
     }
 
     /**
+     * Each of `lines` without its trailing `^block-id`
+     * ({@link extractLineBlockId}): the lines of a copy, which is not the
+     * row it was copied from. Read as every parser reads an id, so no id the
+     * parser still reads is left behind to claim the original's anchor.
+     */
+    static stripBlockIds(lines: readonly string[]): string[] {
+        return lines.map(line => this.extractLineBlockId(line).text);
+    }
+
+    /**
      * How many of `lines` carry each `^id` ({@link extractLineBlockId}), every
      * line counted, a task's or not. An `^id` carried by exactly one line of a
      * note is an anchor there (`TaskScanner`'s `anchorRows`); one carried by
