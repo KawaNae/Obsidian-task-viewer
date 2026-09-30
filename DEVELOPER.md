@@ -100,7 +100,7 @@ src/
 ├── constants/                 # Constants and view registry
 ├── i18n/                      # Internationalization (locale files)
 ├── api/                       # Public API (TaskApi, TaskNormalizer, FilterParamsBuilder, FilterFileLoader, TaskApiTypes)
-├── cli/                       # CLI handlers (CliRegistrar, CliFilterBuilder, CliDatePresetParser, CliOutputFormatter, handlers/)
+├── cli/                       # CLI handlers (CliRegistrar, CliFilterBuilder, CliOutputFormatter, handlers/)
 ├── services/
 │   ├── core/                  # Core services (TaskIndex, TaskStore, TaskScanner, Reading, ReadingCheck, DiskReconciler, etc.)
 │   ├── data/                  # Data access facade (TaskReadService, TaskWriteService)
@@ -1211,8 +1211,7 @@ src/api/
 src/cli/
   CliRegistrar.ts        # Registers 13 CLI handlers, export-image included (flags derived from OperationSchemas)
   CliParamValidator.ts   # Strict flag validation (unknown flags error with did-you-mean)
-  CliFilterBuilder.ts    # Flag value parsers (date/datetime, sort)
-  CliDatePresetParser.ts # Date preset parsing (today, thisWeek, etc.)
+  CliFilterBuilder.ts    # Sort flag parser (date values are parsed by services/filter/DatePreset and DateUtils.parseDateTimeText, which the API uses too)
   CliOutputFormatter.ts  # Field selection + JSON/TSV/JSONL formatting
   handlers/
     TaskQueryHandlers.ts   # list / today / get

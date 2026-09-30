@@ -1,4 +1,3 @@
-import { differenceInCalendarDays } from 'date-fns';
 import { TaskLineClassifier } from '../parsing/utils/TaskLineClassifier';
 import type { Task, TaskFlow } from '../../types';
 import { DateUtils } from '../../utils/DateUtils';
@@ -8,7 +7,7 @@ import type { PropName } from '../lang/ExprAst';
 import { type EvalContext, EvalError, evalExpr } from '../lang/ExprEvaluator';
 import type { EvalHost, StaticType } from '../lang/functions';
 import type { CellStore } from '../lang/StmtEvaluator';
-import { type Value, isDatishValue, parseDateStr, valueToDisplay } from '../lang/Value';
+import { type Value, isDatishValue, valueToDisplay } from '../lang/Value';
 import type { GenBlock } from '../parsing/gen/GenBlockCollector';
 import { parseGenBody } from '../parsing/gen/GenBodyParser';
 import { renderGenBody } from '../parsing/gen/GenBodyRenderer';
@@ -382,7 +381,7 @@ function buildNextTask(task: Task, anchor: DateAnchor | null, next: NextOccurren
         return newTask;
     }
 
-    const shiftDays = differenceInCalendarDays(parseDateStr(next.date), parseDateStr(anchor.date));
+    const shiftDays = DateUtils.getDiffDays(anchor.date, next.date);
 
     newTask.startDate = task.startDate ? DateUtils.shiftDateString(task.startDate, shiftDays) : undefined;
     newTask.endDate = task.endDate

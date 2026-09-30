@@ -1,4 +1,6 @@
 import type { CliData } from 'obsidian';
+import { RELATIVE_DATE_PRESETS } from '../../services/filter/FilterTypes';
+import { NAMED_DATE_PRESETS } from '../../services/filter/DatePreset';
 import {
     renderFlagTable,
     LIST_SCHEMA, CREATE_SCHEMA, UPDATE_SCHEMA, DUPLICATE_SCHEMA,
@@ -62,7 +64,7 @@ Date Formats
   Absolute:  YYYY-MM-DD (e.g. 2026-03-15)
   Datetime:  YYYY-MM-DD HH:mm (e.g. 2026-03-15 14:00)
   Time only: HH:mm (e.g. 14:00, inherits date from context)
-  Presets:   today, thisWeek, pastWeek, nextWeek, thisMonth, thisYear,
+  Presets:   ${NAMED_DATE_PRESETS.join(', ')},
              next7days, next30days
              (usable on all window flags: date, from, to, due — including
               the range commands)
@@ -272,7 +274,7 @@ Value Types
 
 Date Presets
 ------------
-  today, thisWeek, nextWeek, pastWeek, nextNDays (with "n" field), thisMonth, thisYear
+  ${RELATIVE_DATE_PRESETS.map(p => (p === 'nextNDays' ? `${p} (with "n" field)` : p)).join(', ')}
 `.trim();
 
 export function createHelpHandler() {

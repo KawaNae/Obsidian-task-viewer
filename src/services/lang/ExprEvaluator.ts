@@ -1,3 +1,4 @@
+import { DateUtils } from '../../utils/DateUtils';
 import type { Diagnostic, Span } from './Diagnostic';
 import { type Expr, type PropName, isExprBody } from './ExprAst';
 import { type EvalRuntime, FnCallError, callFn } from './functions';
@@ -6,7 +7,7 @@ import { type EvalRuntime, FnCallError, callFn } from './functions';
 // each other the way the two parsers do.
 import { type CellStore, type Scope, burn, callFunction, execArrowBody } from './StmtEvaluator';
 import {
-    type DurUnit, type Value, WEEKDAY_NAMES, addDuration, compareValues, isDatishValue, isWritableDatish, parseDateStr,
+    type DurUnit, type Value, WEEKDAY_NAMES, addDuration, compareValues, isDatishValue, isWritableDatish,
     DECIMAL_SCALE, MAX_EXACT_FRACTION, durationToMinutes, recordField, valueToDisplay,
 } from './Value';
 
@@ -435,7 +436,7 @@ function callMember(obj: Value, name: string, args: Value[], ctx: EvalContext, s
             // compared against string literals in user expressions, so they
             // must stay the same seven identifiers in every locale.
             const date = obj.type === 'date' ? obj.value : obj.date;
-            return { type: 'string', value: WEEKDAY_NAMES[parseDateStr(date).getDay()] };
+            return { type: 'string', value: WEEKDAY_NAMES[DateUtils.weekdayOf(date)] };
         }
     }
 

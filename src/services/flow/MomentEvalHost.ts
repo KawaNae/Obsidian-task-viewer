@@ -1,5 +1,6 @@
 import type { EvalHost } from '../lang/functions';
-import { type Value, parseDateStr } from '../lang/Value';
+import { DateUtils } from '../../utils/DateUtils';
+import { type Value } from '../lang/Value';
 import { withWeekStartDay } from '../../utils/momentWeekLocale';
 
 /**
@@ -21,9 +22,9 @@ export function createMomentEvalHost(): EvalHost {
 }
 
 function toDate(value: Value): Date | null {
-    if (value.type === 'date') return parseDateStr(value.value);
+    if (value.type === 'date') return DateUtils.parseDate(value.value);
     if (value.type === 'datetime') {
-        const d = parseDateStr(value.date);
+        const d = DateUtils.parseDate(value.date);
         const [h, m] = value.time.split(':').map(n => parseInt(n, 10));
         d.setHours(h, m, 0, 0);
         return d;

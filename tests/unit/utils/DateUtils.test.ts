@@ -267,4 +267,110 @@ describe('DateUtils', () => {
             expect(DateUtils.isAllDayTask('2026-01-15', '05:00', '2026-01-16', undefined, startHour)).toBe(true);
         });
     });
+    describe('parseDateTimeText', () => {
+        it('parses date only', () => {
+            expect(DateUtils.parseDateTimeText('2026-03-14')).toEqual({ date: '2026-03-14' });
+        });
+
+        it('parses date with time (space separator)', () => {
+            expect(DateUtils.parseDateTimeText('2026-03-14 10:00')).toEqual({ date: '2026-03-14', time: '10:00' });
+        });
+
+        it('parses date with time (T separator)', () => {
+            expect(DateUtils.parseDateTimeText('2026-03-14T10:00')).toEqual({ date: '2026-03-14', time: '10:00' });
+        });
+
+        it('parses time only', () => {
+            expect(DateUtils.parseDateTimeText('10:00')).toEqual({ date: '', time: '10:00' });
+        });
+
+        it('trims whitespace', () => {
+            expect(DateUtils.parseDateTimeText('  2026-03-14  ')).toEqual({ date: '2026-03-14' });
+        });
+
+        it('returns null for invalid format', () => {
+            expect(DateUtils.parseDateTimeText('invalid-date')).toBeNull();
+            expect(DateUtils.parseDateTimeText('2026/03/14')).toBeNull();
+            expect(DateUtils.parseDateTimeText('March 14')).toBeNull();
+            expect(DateUtils.parseDateTimeText('')).toBeNull();
+        });
+    });
+
+    describe('dateAt / parseDate / readDate', () => {
+        it('keeps a two-digit year as written', () => {
+            expect(DateUtils.dateAt(26, 0, 1).getFullYear()).toBe(26);
+            expect(DateUtils.parseDate('0026-01-01').getFullYear()).toBe(26);
+        });
+
+        it('parses as local midnight', () => {
+            const d = DateUtils.parseDate('2026-03-14');
+            expect([d.getFullYear(), d.getMonth(), d.getDate(), d.getHours()]).toEqual([2026, 2, 14, 0]);
+        });
+
+        it('readDate rejects a wrong shape and a day that does not exist', () => {
+            expect(DateUtils.readDate('2026-3-14')).toBeNull();
+            expect(DateUtils.readDate('2026-02-30')).toBeNull();
+            expect(DateUtils.readDate('2026-03-14T10:00')).toBeNull();
+            expect(DateUtils.readDate('2024-02-29')?.getDate()).toBe(29);
+        });
+    });
+
+    describe('getLocalDateString', () => {
+        it('prints the year with four digits', () => {
+            expect(DateUtils.getLocalDateString(DateUtils.dateAt(26, 0, 1))).toBe('0026-01-01');
+            expect(DateUtils.getLocalDateString(DateUtils.dateAt(999, 11, 31))).toBe('0999-12-31');
+        });
+    });
+
+    describe('isDateShape / isValidDateString', () => {
+        it('shape only vs a day that exists', () => {
+            expect(DateUtils.isDateShape('2026-02-30')).toBe(true);
+            expect(DateUtils.isValidDateString('2026-02-30')).toBe(false);
+        });
+
+        it('accepts a year below 100, which the notation and the lexer read as written', () => {
+            expect(DateUtils.isValidDateString('0026-01-01')).toBe(true);
+        });
+    });
+
+    describe('toDateTime / weekdayOf', () => {
+        it('builds a local moment', () => {
+            const d = DateUtils.toDateTime('2026-03-14', '09:05');
+            expect([d.getFullYear(), d.getMonth(), d.getDate(), d.getHours(), d.getMinutes()]).toEqual([2026, 2, 14, 9, 5]);
+        });
+
+        it('weekday of a date string', () => {
+            expect(DateUtils.weekdayOf('2026-03-15')).toBe(0); // Sunday
+            expect(DateUtils.weekdayOf('2026-03-16')).toBe(1);
+        });
+    });
+
+    describe('splitDateTime / joinDateTime', () => {
+        it('splits a date and a date-time', () => {
+            expect(DateUtils.splitDateTime('2026-03-14')).toEqual({ date: '2026-03-14' });
+            expect(DateUtils.splitDateTime('2026-03-14T10:00')).toEqual({ date: '2026-03-14', time: '10:00' });
+        });
+
+        it('joins, dropping a time without a date', () => {
+            expect(DateUtils.joinDateTime('2026-03-14', '10:00')).toBe('2026-03-14T10:00');
+            expect(DateUtils.joinDateTime('2026-03-14', '')).toBe('2026-03-14');
+            expect(DateUtils.joinDateTime('', '10:00')).toBeUndefined();
+            expect(DateUtils.joinDateTime(undefined, undefined)).toBeUndefined();
+        });
+
+        it('round-trips', () => {
+            for (const v of ['2026-03-14', '2026-03-14T23:59']) {
+                const { date, time } = DateUtils.splitDateTime(v);
+                expect(DateUtils.joinDateTime(date, time)).toBe(v);
+            }
+        });
+    });
+
+    describe('visualDateAt', () => {
+        it('takes the clock as an argument', () => {
+            expect(DateUtils.visualDateAt(new Date(2026, 0, 1, 4, 59), 5)).toBe('2025-12-31');
+            expect(DateUtils.visualDateAt(new Date(2026, 0, 1, 5, 0), 5)).toBe('2026-01-01');
+            expect(DateUtils.visualDateAt(new Date(2026, 0, 1, 0, 0), 0)).toBe('2026-01-01');
+        });
+    });
 });
