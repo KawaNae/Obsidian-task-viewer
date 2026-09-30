@@ -482,6 +482,7 @@
     "openDatePicker": "Open date picker",
     "openTimePicker": "Open time picker",
     "openColorPicker": "Open color picker",
+    "sourceChildren": "Child lines",
     "hub": {
       "status": "Status",
       "readOnlyNotice": "This task is read-only (external plugin format) — editing is disabled.",

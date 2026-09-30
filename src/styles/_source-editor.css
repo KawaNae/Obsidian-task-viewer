@@ -7,21 +7,27 @@
  * 子の文字は親の記号 `-` から字下げ一段（--tv-source-indent、SourceEditor が
  * 字下げの単位から ch で入れる）右で始まり、字下げの線は親の `-` の下に立つ。
  *
- * 2つのビューは1つの枠に入る。枠、フォーカス、不正の見た目は入力欄の規則
- * （tv-ctrl__input-wrap、_controls.css）が描き、ビューは枠も背景も持たない。
+ * ビューはそれぞれ1つの入力欄で、自分の枠に入る。親は必ず1行、子は無くても
+ * よい別のものなので、1つの枠に入れると空の子のビューが空の子の行に見える。
+ * 枠、フォーカス、不正の見た目は入力欄の規則（tv-ctrl__input-wrap、
+ * _controls.css）が描き、ビューは枠も背景も持たない。2つの枠は左端を揃え、
+ * 子の字下げと線は子の枠の中に置く。
  */
 
 .tv-source-editor {
+    display: flex;
     flex-direction: column;
+    gap: 5px;
     font-family: var(--font-monospace);
     font-size: var(--font-ui-small);
     color: var(--text-normal);
 }
 
-/* 枠の wrap は中身を中央に寄せる（align-items: center）。ビューは枠の幅いっぱいに置く */
-.tv-source-editor__parent,
-.tv-source-editor__children {
+/* 枠の wrap は中身を中央に寄せる（align-items: center）。ビューは枠の幅と高さいっぱいに置く */
+.tv-source-editor .cm-editor {
+    flex: 1 1 auto;
     align-self: stretch;
+    min-width: 0;
 }
 
 .tv-source-editor .cm-editor,
@@ -31,9 +37,9 @@
 }
 
 /* Asking whether to throw the draft away (the hub's source, the send
- * dialog): the box reads as an invalid input does (the fields' invalid
+ * dialog): both boxes read as an invalid input does (the fields' invalid
  * rule, _controls.css). */
-.tv-ctrl .tv-source-drafts--asking .tv-source-editor {
+.tv-ctrl .tv-source-drafts--asking .tv-source-editor > .tv-ctrl__input-wrap {
     border-color: var(--tv-text-danger) !important;
     background-color: var(--tv-danger-bg-subtle);
 }
@@ -60,6 +66,10 @@
     border-left-color: var(--caret-color, var(--text-normal));
 }
 
+.tv-source-editor .cm-placeholder {
+    color: var(--text-faint);
+}
+
 .tv-source-editor .cm-selectionBackground,
 .tv-source-editor .cm-focused .cm-selectionBackground {
     background: var(--text-selection);
@@ -67,7 +77,8 @@
 
 /* 子の文字は、親の行の記号の位置（行の左の余白）から字下げ一段右。
    線は Obsidian の字下げの線（.cm-indent::before）と同じ太さと色で、
-   親の記号 `-` の幅の中ほどに立てる */
+   親の記号 `-` の幅の中ほどに、子の枠の中に立てる。2つの枠は左端が揃うので、
+   枠の中の同じ位置が親の `-` の下になる */
 .tv-source-editor__children {
     position: relative;
     padding-left: var(--tv-source-indent, 4ch);
