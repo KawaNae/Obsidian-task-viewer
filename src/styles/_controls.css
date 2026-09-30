@@ -245,8 +245,8 @@
 /* --- Native picker overlay (NativePicker) ---
  *
  * ボタンの上に重ねる、見えないネイティブの input（date / time / color）。
- * フォームの欄が使う。どのボタンにも重ねられるよう、この節の規則は .tv-ctrl
- * に限らない。置き場所（top / left /
+ * フォームの欄と、ツールバーの「日付へ移動」が使う。.tv-ctrl の外（ツールバー）
+ * でも使うので、この節の規則は .tv-ctrl に限らない。置き場所（top / left /
  * 幅と高さ）は使う側の CSS が決める。
  * !important は Obsidian が input[type=date] などに与える枠、余白、高さを
  * 打ち消すため。

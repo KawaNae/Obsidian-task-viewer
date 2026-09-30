@@ -2,12 +2,14 @@ export interface NativePickerOptions {
     type: 'date' | 'time' | 'color';
     /** Classes added to the input, for the caller's CSS to place it. */
     cls: string;
+    /** Called just before the picker opens, by button or by tap: to set the value it opens on. */
+    beforeOpen?: () => void;
 }
 
 /**
  * The platform's own picker (`<input type="date|time|color">`), laid unseen
  * over the button that stands for it. The forms' date, time and color fields
- * (PickerTextField) use it.
+ * (PickerTextField) and the toolbar's "Go to date" button use it.
  *
  * One layout serves every platform; only what takes the tap differs, and CSS
  * decides that (`input.tv-native-picker` in _controls.css):
@@ -36,6 +38,7 @@ export function createNativePicker(
     input.setAttribute('aria-hidden', 'true');
 
     const open = () => {
+        opts.beforeOpen?.();
         try {
             input.showPicker();
         } catch {
@@ -47,8 +50,10 @@ export function createNativePicker(
     };
     button.addEventListener('click', open);
 
-    // A tap on the input (mobile). Android opens the picker with showPicker;
-    // on iOS the tap has already opened it and showPicker throws.
+    // A tap on the input (mobile). pointerdown comes before the picker reads
+    // the value. Android opens the picker with showPicker; on iOS the tap has
+    // already opened it and showPicker throws.
+    if (opts.beforeOpen) input.addEventListener('pointerdown', opts.beforeOpen);
     input.addEventListener('click', () => {
         try { input.showPicker(); } catch { /* iOS: the tap opened it */ }
     });

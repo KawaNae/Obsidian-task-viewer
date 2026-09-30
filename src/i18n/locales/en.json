@@ -272,6 +272,7 @@
   },
   "toolbar": {
     "today": "Today",
+    "goToDate": "Go to date",
     "previousDay": "Previous day",
     "nextDay": "Next day",
     "previousWeek": "Previous week",
