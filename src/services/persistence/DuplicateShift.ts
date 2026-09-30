@@ -1,5 +1,6 @@
-import type { DisplayTask, Task } from '../../types';
+import type { Task } from '../../types';
 import { DateUtils } from '../../utils/DateUtils';
+import { resolveEffectiveDates } from '../../utils/EffectiveDates';
 
 /**
  * Where the copies of a "duplicate as next" go on the clock.
@@ -78,20 +79,21 @@ function holdsTimeOfDay(task: Task): boolean {
  * inherit is written out, because the inherited value does not move with
  * the copy and would otherwise cut its length.
  */
-export function planInPlaceCopies(task: Task, display: DisplayTask, count: number): InPlaceCopies {
+export function planInPlaceCopies(task: Task, startHour: number, count: number): InPlaceCopies {
+    const dates = resolveEffectiveDates(task, startHour);
     const shiftable = holdsTimeOfDay(task)
-        && !!display.effectiveStartDate && !!display.effectiveStartTime
-        && !!display.effectiveEndDate && !!display.effectiveEndTime;
+        && !!dates.effectiveStartDate && !!dates.effectiveStartTime
+        && !!dates.effectiveEndDate && !!dates.effectiveEndTime;
 
     if (!shiftable) return { kind: 'verbatim', count };
 
     const start: Instant = {
-        date: display.effectiveStartDate,
-        minutes: DateUtils.timeToMinutes(display.effectiveStartTime!),
+        date: dates.effectiveStartDate,
+        minutes: DateUtils.timeToMinutes(dates.effectiveStartTime!),
     };
     const end: Instant = {
-        date: display.effectiveEndDate!,
-        minutes: DateUtils.timeToMinutes(display.effectiveEndTime!),
+        date: dates.effectiveEndDate!,
+        minutes: DateUtils.timeToMinutes(dates.effectiveEndTime!),
     };
     const length = span(start, end);
 

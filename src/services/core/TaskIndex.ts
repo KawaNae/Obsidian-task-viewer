@@ -18,7 +18,6 @@ import { parseSegmentId } from '../display/SegmentIds';
 import { readName } from './RowNames';
 import { formatRow } from '../parsing/TaskLineFormat';
 import { lineParsersFingerprint } from '../parsing/TaskParser';
-import { toDisplayTask } from '../display/DisplayTaskConverter';
 import { planInPlaceCopies } from '../persistence/DuplicateShift';
 import type { GenBlock } from '../parsing/gen/GenBlockCollector';
 import { plannedOn, subjectOf } from '../persistence/TaskRefs';
@@ -1031,8 +1030,7 @@ export class TaskIndex {
             return (await this.repository.duplicateInlineTask(plannedOn(task), options)).written;
         }
 
-        const display = toDisplayTask(task, this.settings.startHour, (id) => this.store.getTask(id));
-        const copies = planInPlaceCopies(task, display, count);
+        const copies = planInPlaceCopies(task, this.settings.startHour, count);
         const outcome = await this.repository.duplicateInlineTaskInPlace(
             plannedOn(task),
             copies.kind === 'verbatim'
