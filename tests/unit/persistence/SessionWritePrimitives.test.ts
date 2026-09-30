@@ -225,7 +225,6 @@ function buildIndexHost(task: Task | undefined) {
         repository: {
             write: vi.fn(async () => MADE),
         },
-        withNotify: vi.fn(async (_file: string, fn: () => Promise<unknown>) => await fn()),
         onRow: proto.onRow,
         rowNow: proto.rowNow,
         // The dispose guard every write goes through; this index is open.
@@ -256,14 +255,13 @@ describe('TaskIndex child insertion', () => {
         const host = buildIndexHost(makeTask({ isReadOnly: true, parserId: 'tasks-plugin' }));
         await proto.insertLine.call(host, 'tv-inline:note.md:ln:1', '- [ ] child', 'firstChild');
 
-        expect(host.withNotify).not.toHaveBeenCalled();
         expect(host.repository.write).not.toHaveBeenCalled();
     });
 
     it('insertLine is a no-op when the task is unknown', async () => {
         const host = buildIndexHost(undefined);
         await proto.insertLine.call(host, 'missing', '- [ ] child', 'firstChild');
-        expect(host.withNotify).not.toHaveBeenCalled();
+        expect(host.repository.write).not.toHaveBeenCalled();
     });
 });
 
@@ -300,7 +298,6 @@ describe('TaskIndex.insertLine', () => {
         expect(await proto.insertLine.call(unknown, 'missing', NEW_SESSION, 'afterSubtree')).toBe(false);
 
         for (const host of [readOnly, unknown]) {
-            expect(host.withNotify).not.toHaveBeenCalled();
             expect(host.repository.write).not.toHaveBeenCalled();
         }
     });

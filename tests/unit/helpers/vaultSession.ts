@@ -259,6 +259,7 @@ export function vaultSession(contents: Map<string, string>, options: { probe?: D
         commandExecutor: FlowExecutorView;
         reportRefusal(refusal: Refusal): void;
         reconciler: DiskReconciler | null;
+        readVault(): Promise<void>;
     };
     const executor = internals.commandExecutor;
     // The channel `TaskIndex` connected, taken before a test connects another.
@@ -300,7 +301,8 @@ export function vaultSession(contents: Map<string, string>, options: { probe?: D
         onOpenTimers: (fn: () => Iterable<TimerInstance>): void => { openTimers = fn; },
         creator: new TimerCreator({} as TimerContext),
         fireVault: (name: string, ...args: unknown[]) => vaultHandlers.get(name)!(...args),
-        scanAll: () => scanner!.scanVault(),
+        /** Read the whole vault, and tell the listeners, as the index does once the layout is ready. */
+        scanAll: () => internals.readVault(),
         /**
          * Hold every write's change events until `release`, which sends them
          * in order: the moment between a write landing and the scan it starts.

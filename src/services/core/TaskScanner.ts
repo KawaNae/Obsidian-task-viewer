@@ -76,7 +76,7 @@ export class TaskScanner {
     ) { }
 
     /**
-     * Vault全体をスキャン
+     * Vault全体をスキャン。告げるのは呼び手（索引）。
      */
     async scanVault(): Promise<void> {
         // Every file is read again from here on, whatever it read last.
@@ -91,7 +91,6 @@ export class TaskScanner {
             await this.queue(file);
         }
 
-        this.store.notifyListenersStaggered();
         logInfo(`[scanVault:done] tasks=${this.store.getTasks().length}`);
     }
 

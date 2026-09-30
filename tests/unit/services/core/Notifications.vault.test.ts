@@ -26,9 +26,16 @@ function listen(session: VaultSession): string[] {
 /** Past one frame of the coalescer. */
 const frame = () => new Promise<void>(resolve => setTimeout(resolve, 40));
 
+/** A session over `text`, read, and past what reading the vault tells. */
+async function openQuiet(text: string) {
+    const opened = await openLiveVault(text, s => { live = s; });
+    await frame();
+    return opened;
+}
+
 describe('what a write of ours tells the views', () => {
     it('an update is told once, after the frame the write landed in', async () => {
-        const { session } = await openLiveVault('- [ ] a @2026-10-01\n', s => { live = s; });
+        const { session } = await openQuiet('- [ ] a @2026-10-01\n');
         const heard = listen(session);
         const row = session.index.getTasks()[0];
 
@@ -40,8 +47,8 @@ describe('what a write of ours tells the views', () => {
         expect(heard).toEqual(['full']);
     });
 
-    it('a line put beside a row is told once, in full, before the write returns', async () => {
-        const { session } = await openLiveVault('- [ ] a @2026-10-01\n', s => { live = s; });
+    it('a line put beside a row is told once, after the frame the write landed in', async () => {
+        const { session } = await openQuiet('- [ ] a @2026-10-01\n');
         const heard = listen(session);
         const row = session.index.getTasks()[0];
 
@@ -49,24 +56,24 @@ describe('what a write of ours tells the views', () => {
         const atReturn = [...heard];
         await frame();
 
-        expect(atReturn).toEqual(['full']);
+        expect(atReturn).toEqual([]);
         expect(heard).toEqual(['full']);
     });
 });
 
 describe('what a change event tells the views', () => {
-    it('a modify that reads what the index already holds is told all the same', async () => {
-        const { session } = await openLiveVault('- [ ] a @2026-10-01\n', s => { live = s; });
+    it('a modify that reads what the index already holds tells nothing', async () => {
+        const { session } = await openQuiet('- [ ] a @2026-10-01\n');
         const heard = listen(session);
 
         await session.fireVault('modify', makeFile(NOTE));
         await frame();
 
-        expect(heard).toEqual(['full']);
+        expect(heard).toEqual([]);
     });
 
     it('a modify that reads a change from outside is told once', async () => {
-        const { contents, session } = await openLiveVault('- [ ] a @2026-10-01\n', s => { live = s; });
+        const { contents, session } = await openQuiet('- [ ] a @2026-10-01\n');
         const heard = listen(session);
 
         contents.set(NOTE, '- [ ] a @2026-10-02\n');
@@ -79,7 +86,7 @@ describe('what a change event tells the views', () => {
 
 describe('who hears that a row was deleted', () => {
     it('a delete through the write service is heard; one straight to the index is not', async () => {
-        const { session } = await openLiveVault('- [ ] a\n- [ ] b\n', s => { live = s; });
+        const { session } = await openQuiet('- [ ] a\n- [ ] b\n');
         const service = new TaskWriteService(session.index);
         const deleted: string[] = [];
         service.onTaskDeleted(id => deleted.push(id));
@@ -95,7 +102,7 @@ describe('who hears that a row was deleted', () => {
 
 describe('what the end of a drag draws', () => {
     it('draws the note read again once the drag lets go of it, not the copy the drag began on', async () => {
-        const { session } = await openLiveVault('- [ ] a @2026-10-01\n', s => { live = s; });
+        const { session } = await openQuiet('- [ ] a @2026-10-01\n');
         const heard = listen(session);
         const row = session.index.getTasks()[0];
 

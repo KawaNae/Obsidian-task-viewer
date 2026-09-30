@@ -174,8 +174,8 @@ export class TaskWriteService {
         return this.taskIndex.setDraggingFile(filePath);
     }
 
-    notifyImmediate(taskId?: string, changes?: string[]): void {
-        this.taskIndex.notifyImmediate(taskId, changes);
+    notifyImmediate(): void {
+        this.taskIndex.notifyImmediate();
     }
 
     // ===== Scan control (for menu-triggered rescans) =====
