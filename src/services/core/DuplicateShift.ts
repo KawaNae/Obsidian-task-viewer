@@ -4,7 +4,7 @@ import { resolveEffectiveDates } from '../../utils/EffectiveDates';
 import { formatRow } from '../parsing/TaskLineFormat';
 import { shiftLineDates } from '../parsing/tv-inline/DateBlock';
 import { TaskLineClassifier } from '../parsing/utils/TaskLineClassifier';
-import type { CopyLines, TaskOp } from './TaskOps';
+import type { CopyLines, TaskOp } from '../persistence/TaskOps';
 
 /**
  * What a duplicate writes ({@link planDuplicate}): copies on other days, or

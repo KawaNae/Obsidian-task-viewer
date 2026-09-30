@@ -6,7 +6,7 @@ import type { Task } from '../../../src/types';
 import { formatRow } from '../../../src/services/parsing/TaskLineFormat';
 import type { TaskOp } from '../../../src/services/persistence/TaskOps';
 import { plannedOn } from '../../../src/services/persistence/TaskRefs';
-import { planDuplicate } from '../../../src/services/persistence/DuplicateShift';
+import { planDuplicate } from '../../../src/services/core/DuplicateShift';
 
 /**
  * Counterexamples found against the name-based targeting of F2 to F5b (a write
