@@ -13,8 +13,8 @@ export interface ParsedSegmentId {
     segmentDate: string;
 }
 
-// Only a name (`nameOf`) parses. `prov:` is left out on purpose: a
-// provisional ID that leaked should fail to parse.
+// Only a name (`nameOf`) parses. `prov:` is left out on purpose: a row read
+// outside the index (`provisionalId`) is never taken for a reading's.
 const TASK_ID_REGEX = new RegExp(String.raw`^([^:]+):(.+):(n:${READING_ID_SOURCE}:\d+)$`);
 const NAME_ANCHOR_REGEX = new RegExp(String.raw`^n:(${READING_ID_SOURCE}):(\d+)$`);
 const SEGMENT_ID_REGEX = new RegExp(String.raw`^(.*)##seg:(${DateUtils.DATE_PATTERN})$`);
@@ -25,12 +25,12 @@ export class TaskIdGenerator {
     }
 
     /**
-     * The ID a parser gives a task before the scan names it.
+     * The name of a row read outside the index (`namesOutsideIndex`): a fire
+     * planned from the lines a write holds, a send's preview.
      *
      * Line-based on purpose: one line yields at most one task, so this is unique
-     * within a file even when two lines share a `^blockId`. It never outlives the
-     * scan — the scan swaps it for the row's name (`nameOf`) before anything
-     * else reads it.
+     * within a file even when two lines share a `^blockId`. It never reaches
+     * the store, and `readName` refuses it.
      */
     static provisionalId(parserId: ParserId, filePath: string, line: number): string {
         return this.generate(parserId, filePath, `prov:${line}`);

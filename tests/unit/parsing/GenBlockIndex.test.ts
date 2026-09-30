@@ -1,10 +1,11 @@
 import { describe, it, expect } from 'vitest';
 import { FileParsePipeline } from '../../../src/services/parsing/FileParsePipeline';
+import { namesOutsideIndex } from '../../../src/services/core/RowNames';
 import { TaskStore } from '../../../src/services/core/TaskStore';
 import { DEFAULT_SETTINGS } from '../../../src/types';
 
 const parse = (lines: string[]) =>
-    FileParsePipeline.parse('note.md', lines, DEFAULT_SETTINGS);
+    FileParsePipeline.parse('note.md', lines, DEFAULT_SETTINGS, namesOutsideIndex('note.md'));
 
 describe('FileParsePipeline — generation blocks', () => {
     it('carries the blocks of the file', () => {

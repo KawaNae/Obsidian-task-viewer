@@ -1,4 +1,5 @@
 import { FileParsePipeline } from '../../../src/services/parsing/FileParsePipeline';
+import { namesOutsideIndex } from '../../../src/services/core/RowNames';
 import { DEFAULT_SETTINGS, type Task, type TaskViewerSettings } from '../../../src/types';
 
 /**
@@ -8,6 +9,6 @@ import { DEFAULT_SETTINGS, type Task, type TaskViewerSettings } from '../../../s
  * when the line holds no row.
  */
 export function readLine(line: string, settings: TaskViewerSettings = DEFAULT_SETTINGS, file = 'test.md'): Task | null {
-    const { tasks } = FileParsePipeline.parse(file, [line], settings);
+    const { tasks } = FileParsePipeline.parse(file, [line], settings, namesOutsideIndex(file));
     return tasks[0] ?? null;
 }

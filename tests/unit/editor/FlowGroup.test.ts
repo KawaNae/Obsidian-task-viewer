@@ -3,6 +3,7 @@ import { flowGroupOf, flowOwnerOf } from '../../../src/editor/FlowGroup';
 import { Outline } from '../../../src/services/parsing/utils/Outline';
 import { isFlowLine } from '../../../src/services/parsing/utils/FlowLineScanner';
 import { FileParsePipeline } from '../../../src/services/parsing/FileParsePipeline';
+import { namesOutsideIndex } from '../../../src/services/core/RowNames';
 import { DEFAULT_SETTINGS } from '../../../src/types';
 
 const D = '@2026-09-24';
@@ -38,7 +39,7 @@ describe('the editor diagnostics read the subtree and the flow lines the parser 
     for (const [name, lines] of SHAPES) {
         it(name, () => {
             const outline = Outline.read(lines);
-            const parsed = FileParsePipeline.parse('note.md', [...lines], DEFAULT_SETTINGS);
+            const parsed = FileParsePipeline.parse('note.md', [...lines], DEFAULT_SETTINGS, namesOutsideIndex('note.md'));
             if (parsed.ignored) throw new Error('ignored');
             expect(parsed.tasks.length).toBeGreaterThan(0);
 

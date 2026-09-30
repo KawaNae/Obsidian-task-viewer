@@ -21,6 +21,7 @@ import { type FlowPlanDeps, GenerationError, planFlow } from './FlowPlanner';
 import { canTriggerFlow } from './FlowTrigger';
 import { createMomentEvalHost } from './MomentEvalHost';
 import { FileParsePipeline } from '../parsing/FileParsePipeline';
+import { namesOutsideIndex } from '../core/RowNames';
 import type { GenBlock } from '../parsing/gen/GenBlockCollector';
 import { runtimeText } from './runtimeText';
 
@@ -137,7 +138,7 @@ export class FlowExecutor {
         let commanded = false;
         for (let i = line; i < lines.length && !commanded; i++) commanded = lines[i].includes('==>');
         if (!commanded) return { kind: 'none' };
-        const parsed = FileParsePipeline.parse(path, [...lines], this.getSettings());
+        const parsed = FileParsePipeline.parse(path, [...lines], this.getSettings(), namesOutsideIndex(path));
         if (parsed.ignored) return { kind: 'none' };
         const task = parsed.tasks.find(candidate => candidate.line === line);
         if (!task || !canTriggerFlow(task, this.getSettings().statusDefinitions)) return { kind: 'none' };

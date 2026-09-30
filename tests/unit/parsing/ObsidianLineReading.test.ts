@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { FileParsePipeline } from '../../../src/services/parsing/FileParsePipeline';
+import { namesOutsideIndex } from '../../../src/services/core/RowNames';
 import { Outline } from '../../../src/services/parsing/utils/Outline';
 import { TaskLineClassifier } from '../../../src/services/parsing/utils/TaskLineClassifier';
 import { ChildLineClassifier } from '../../../src/services/parsing/utils/ChildLineClassifier';
@@ -24,7 +25,7 @@ const NBSP = String.fromCharCode(0x00a0);
 const BOM = String.fromCharCode(0xfeff);
 
 function parse(content: string) {
-    const parsed = FileParsePipeline.parse('note.md', splitLines(content).lines, DEFAULT_SETTINGS);
+    const parsed = FileParsePipeline.parse('note.md', splitLines(content).lines, DEFAULT_SETTINGS, namesOutsideIndex('note.md'));
     if (parsed.ignored) throw new Error('ignored');
     const tasks = parsed.tasks;
     const parentOf = (content: string) => {

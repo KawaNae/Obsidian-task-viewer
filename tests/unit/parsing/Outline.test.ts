@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import type { App } from 'obsidian';
 import { Outline } from '../../../src/services/parsing/utils/Outline';
 import { FileParsePipeline } from '../../../src/services/parsing/FileParsePipeline';
+import { namesOutsideIndex } from '../../../src/services/core/RowNames';
 import { FileOperations } from '../../../src/services/persistence/utils/FileOperations';
 import { DEFAULT_SETTINGS } from '../../../src/types';
 
@@ -33,7 +34,7 @@ describe('Outline.depthOf', () => {
 
 /** Every row of the note, nested ones included, with the lines of its subtree below it as the parse reads them. */
 function rowsOf(lines: string[]): { line: number; childLineNumbers: number[] }[] {
-    return FileParsePipeline.parse('note.md', lines, DEFAULT_SETTINGS).tasks.map(task => ({
+    return FileParsePipeline.parse('note.md', lines, DEFAULT_SETTINGS, namesOutsideIndex('note.md')).tasks.map(task => ({
         line: task.line,
         childLineNumbers: (task.subtreeLines ?? []).slice(1).map((_, i) => task.line + 1 + i),
     }));
@@ -56,7 +57,7 @@ const MIXED = [
 
 describe('a note that mixes tabs and spaces', () => {
     it('is read with the parent and children it shows', () => {
-        const parsed = FileParsePipeline.parse('note.md', [...MIXED], DEFAULT_SETTINGS);
+        const parsed = FileParsePipeline.parse('note.md', [...MIXED], DEFAULT_SETTINGS, namesOutsideIndex('note.md'));
         if (parsed.ignored) throw new Error('ignored');
         const byContent = new Map(parsed.tasks.map(task => [task.content, task]));
         const parentOf = (content: string) => {
@@ -107,7 +108,7 @@ describe('OutlineReading.subtreeEnd', () => {
 describe('a child below a blank line', () => {
     it('is read as the child of the task above the blank line', () => {
         const lines = ['- [ ] p', '\t- [ ] a', '', '\t- [ ] b', '\t- key:: value', '', '- [ ] q', ''];
-        const parsed = FileParsePipeline.parse('note.md', [...lines], DEFAULT_SETTINGS);
+        const parsed = FileParsePipeline.parse('note.md', [...lines], DEFAULT_SETTINGS, namesOutsideIndex('note.md'));
         if (parsed.ignored) throw new Error('ignored');
         const p = parsed.tasks.find(task => task.content === 'p')!;
         const b = parsed.tasks.find(task => task.content === 'b')!;
@@ -119,7 +120,7 @@ describe('a child below a blank line', () => {
 
     it('of a child task stays the child\'s, not the parent\'s child line', () => {
         const lines = ['- [ ] p', '\t- [ ] c', '', '\t\tmemo of c', '', '\tmemo of p', ''];
-        const parsed = FileParsePipeline.parse('note.md', [...lines], DEFAULT_SETTINGS);
+        const parsed = FileParsePipeline.parse('note.md', [...lines], DEFAULT_SETTINGS, namesOutsideIndex('note.md'));
         if (parsed.ignored) throw new Error('ignored');
         const p = parsed.tasks.find(task => task.content === 'p')!;
         // The blank line after c's subtree is not c's; it stands in p.
@@ -130,7 +131,7 @@ describe('a child below a blank line', () => {
     // paragraph `memo of c` opened (a lazy continuation), so it is c's.
     it('takes a shallower line right below it as its paragraph going on (Obsidian, measurement.md q5)', () => {
         const lines = ['- [ ] p', '\t- [ ] c', '', '\t\tmemo of c', '\tmemo of p', ''];
-        const parsed = FileParsePipeline.parse('note.md', [...lines], DEFAULT_SETTINGS);
+        const parsed = FileParsePipeline.parse('note.md', [...lines], DEFAULT_SETTINGS, namesOutsideIndex('note.md'));
         if (parsed.ignored) throw new Error('ignored');
         const p = parsed.tasks.find(task => task.content === 'p')!;
         const c = parsed.tasks.find(task => task.content === 'c')!;

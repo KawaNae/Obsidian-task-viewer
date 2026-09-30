@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { inheritedAt, type InheritedValue } from '../../../src/services/data/InheritedValues';
 import { FileParsePipeline } from '../../../src/services/parsing/FileParsePipeline';
+import { namesOutsideIndex } from '../../../src/services/core/RowNames';
 import {
     getEffectiveColor, getEffectiveLinestyle, getEffectiveMask, getEffectiveProperties, getEffectiveTags,
 } from '../../../src/services/data/EffectiveProperties';
@@ -56,7 +57,7 @@ describe('inheritedAt', () => {
         ];
         const child = rowOf(lines, 'child');
         // The row's own copy does not keep what its date hides.
-        const task = FileParsePipeline.parse('n.md', lines, DEFAULT_SETTINGS).tasks.find(t => t.line === child)!;
+        const task = FileParsePipeline.parse('n.md', lines, DEFAULT_SETTINGS, namesOutsideIndex('n.md')).tasks.find(t => t.line === child)!;
         expect(task.cascadeContext?.startDate).toBeUndefined();
 
         const values = byKey(inheritedAt(lines, child, DEFAULT_SETTINGS));
@@ -173,7 +174,7 @@ describe('inheritedAt の受け入れ: 候補を frontmatter に書いたノー�
     }
 
     function send(lines: string[], row: number): { before: Task; after: Task } {
-        const before = FileParsePipeline.parse('from.md', lines, DEFAULT_SETTINGS).tasks.find(t => t.line === row)!;
+        const before = FileParsePipeline.parse('from.md', lines, DEFAULT_SETTINGS, namesOutsideIndex('from.md')).tasks.find(t => t.line === row)!;
         const block = before.subtreeLines!;
         const indent = block[0].length - block[0].trimStart().length;
         const note = [
@@ -184,7 +185,7 @@ describe('inheritedAt の受け入れ: 候補を frontmatter に書いたノー�
             ...block.map(line => line.slice(indent)),
         ];
         const at = note.indexOf('## Tasks') + 1;
-        const after = FileParsePipeline.parse('to.md', note, DEFAULT_SETTINGS).tasks.find(t => t.line === at)!;
+        const after = FileParsePipeline.parse('to.md', note, DEFAULT_SETTINGS, namesOutsideIndex('to.md')).tasks.find(t => t.line === at)!;
         return { before, after };
     }
 

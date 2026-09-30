@@ -69,7 +69,7 @@ describe('what a write left, before any scan', () => {
         session.holdScans();
 
         expect(await session.index.updateTask(taskNamed(session, 'A').id, { statusChar: 'x' })).toBe(true);
-        const reading = parse.mock.calls[parse.mock.calls.length - 1][3];
+        const reading = parse.mock.calls[parse.mock.calls.length - 1][4];
         expect(reading?.lines).toEqual(['# note', '- [x] A', '']);
     });
 

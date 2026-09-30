@@ -1,7 +1,6 @@
-import type { ParserId, Task } from '../../../types';
+import type { ParserId } from '../../../types';
 import type { LeafParserStrategy } from '../strategies/ParserStrategy';
-import { createBaseTask } from '../TaskFactory';
-import { TaskIdGenerator } from '../../display/TaskIdGenerator';
+import { createBaseTask, type UnnamedTask } from '../TaskFactory';
 import { TagExtractor } from '../utils/TagExtractor';
 import { TaskLineClassifier } from '../utils/TaskLineClassifier';
 
@@ -27,12 +26,11 @@ export interface ReadOnlyTaskParams {
 export abstract class ReadOnlyParserBase implements LeafParserStrategy {
     abstract readonly id: ParserId;
 
-    abstract parse(line: string, filePath: string, lineNumber: number): Task | null;
+    abstract parse(line: string, filePath: string, lineNumber: number): UnnamedTask | null;
 
-    /** Build a Task from parsed fields. Sets isReadOnly: true. */
-    protected buildTask(params: ReadOnlyTaskParams): Task {
+    /** Build a task from parsed fields. Sets isReadOnly: true. */
+    protected buildTask(params: ReadOnlyTaskParams): UnnamedTask {
         return createBaseTask({
-            id: TaskIdGenerator.provisionalId(this.id, params.filePath, params.lineNumber),
             file: params.filePath,
             line: params.lineNumber,
             content: params.content,

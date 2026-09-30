@@ -1,4 +1,4 @@
-import type { Task } from '../../../types';
+import type { UnnamedTask } from '../TaskFactory';
 import type { LeafParserStrategy, ParserStrategy } from './ParserStrategy';
 
 /**
@@ -18,13 +18,10 @@ export class ParserChain implements ParserStrategy {
     /**
      * Try each parser in order until one succeeds.
      */
-    parse(line: string, filePath: string, lineNumber: number): Task | null {
+    parse(line: string, filePath: string, lineNumber: number): UnnamedTask | null {
         for (const parser of this.parsers) {
             const result = parser.parse(line, filePath, lineNumber);
-            if (result !== null) {
-                result.parserId = parser.id; // Record which parser was used
-                return result;
-            }
+            if (result !== null) return result;
         }
         return null;
     }

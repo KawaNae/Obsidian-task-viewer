@@ -1,4 +1,5 @@
-import type { ParserId, Task } from '../../../types';
+import type { ParserId } from '../../../types';
+import type { UnnamedTask } from '../TaskFactory';
 
 /**
  * Reads a line as a task, or declines it.
@@ -13,15 +14,16 @@ import type { ParserId, Task } from '../../../types';
  */
 export interface ParserStrategy {
     /**
-     * Parse a line of text into a Task object.
+     * Parse a line of text into a task, unnamed: a name is the reader's to
+     * give (`NoteTasks`).
      */
-    parse(line: string, filePath: string, lineNumber: number): Task | null;
+    parse(line: string, filePath: string, lineNumber: number): UnnamedTask | null;
 }
 
 /**
- * Leaf parser that stamps a specific {@link ParserId} onto each Task it
- * produces. ParserChain wraps a list of these and propagates `id` to
- * `Task.parserId` after parsing.
+ * Leaf parser that stamps its {@link ParserId} onto each task it produces
+ * (`Task.parserId`, through `createBaseTask`). ParserChain wraps a list of
+ * these.
  */
 export interface LeafParserStrategy extends ParserStrategy {
     readonly id: ParserId;

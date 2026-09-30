@@ -3,7 +3,7 @@ import type { Task, TaskViewerSettings } from '../../types';
 import { collectGenBlocks, type GenBlock } from './gen/GenBlockCollector';
 import type { SectionNode } from './tree/Sections';
 import { NoteSections } from './tree/NoteSections';
-import { NoteTasks } from './tree/NoteTasks';
+import { NoteTasks, type RowNamer } from './tree/NoteTasks';
 import { Outline, type OutlineReading } from './utils/Outline';
 import { SectionPropertyResolver } from './tree/SectionPropertyResolver';
 import { lineParsers } from './TaskParser';
@@ -44,6 +44,10 @@ export class FileParsePipeline {
      * reading a write lands and the scan that follows have to read the same
      * lines the same way, which only the lines themselves allow.
      *
+     * `name` gives each row its name (`RowNamer`): the index's scan names
+     * the rows of one reading, and a reader outside the index gives its own.
+     * Parsing spells no name.
+     *
      * `reading` is a reading of these very lines someone already made (a
      * write's check, `processLines`), taken instead of reading them again.
      * One of other lines is not taken.
@@ -52,6 +56,7 @@ export class FileParsePipeline {
         filePath: string,
         lines: string[],
         settings: TaskViewerSettings,
+        name: RowNamer,
         reading?: OutlineReading,
     ): FileParseResult {
         const read = this.resolveSections(lines, settings, reading);
@@ -62,6 +67,7 @@ export class FileParsePipeline {
             filePath,
             scopeKeys: settings.scopeKeys,
             parsers: lineParsers(settings),
+            name,
         });
         // What an operation that takes a row away plans from (`RowBasis`).
         // Slices of one array share its strings, so a deep tree costs one

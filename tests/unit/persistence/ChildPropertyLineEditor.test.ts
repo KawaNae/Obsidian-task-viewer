@@ -4,6 +4,7 @@ import { Outline } from '../../../src/services/parsing/utils/Outline';
 import { draftOver, type LineEdit } from '../../../src/services/persistence/FileLines';
 import type { PropertyOp } from '../../../src/services/persistence/PropertyUpdatePlanner';
 import { FileParsePipeline } from '../../../src/services/parsing/FileParsePipeline';
+import { namesOutsideIndex } from '../../../src/services/core/RowNames';
 import { DEFAULT_SETTINGS } from '../../../src/types';
 
 /**
@@ -252,7 +253,7 @@ describe('ChildPropertyLineEditor', () => {
 
         for (const [name, lines, expected] of SHAPES) {
             it(name, () => {
-                const parsed = FileParsePipeline.parse('note.md', [...lines], DEFAULT_SETTINGS);
+                const parsed = FileParsePipeline.parse('note.md', [...lines], DEFAULT_SETTINGS, namesOutsideIndex('note.md'));
                 if (parsed.ignored) throw new Error('ignored');
                 const task = parsed.tasks.find(candidate => candidate.line === 0)!;
                 const written = Object.fromEntries(

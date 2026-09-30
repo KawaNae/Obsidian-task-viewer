@@ -4,6 +4,7 @@ import { SectionPropertyResolver } from '../../../../src/services/parsing/tree/S
 import { NoteTasks, type TaskExtractionContext } from '../../../../src/services/parsing/tree/NoteTasks';
 import { Outline } from '../../../../src/services/parsing/utils/Outline';
 import { lineParsers } from '../../../../src/services/parsing/TaskParser';
+import { namesOutsideIndex } from '../../../../src/services/core/RowNames';
 import { DEFAULT_SETTINGS, DEFAULT_SCOPE_KEYS } from '../../../../src/types';
 import {
     getEffectiveColor, getEffectiveLinestyle, getEffectiveMask,
@@ -14,6 +15,7 @@ const defaultCtx: TaskExtractionContext = {
     filePath: 'test.md',
     scopeKeys: DEFAULT_SCOPE_KEYS,
     parsers: lineParsers(DEFAULT_SETTINGS),
+    name: namesOutsideIndex('test.md'),
 };
 
 function extractTasks(bodyLines: string[], frontmatter?: Record<string, any>, ctx?: Partial<TaskExtractionContext>) {
@@ -882,5 +884,19 @@ describe('NoteTasks', () => {
             ]);
             expect(tasks).toHaveLength(0);
         });
+    });
+});
+
+describe('NoteTasks の名前', () => {
+    it('各行は渡された namer の名前を持ち、親子もその名前で張られる', () => {
+        const outline = Outline.read(['- [ ] p', '    - [ ] c']);
+        const sections = NoteSections.read(outline);
+        const tasks = NoteTasks.extract(outline, sections, {
+            ...defaultCtx,
+            name: (parserId, line) => `${parserId}@${line}`,
+        });
+        expect(tasks.map(t => t.id)).toEqual(['tv-inline@0', 'tv-inline@1']);
+        expect(tasks[0].childIds).toEqual(['tv-inline@1']);
+        expect(tasks[1].parentId).toBe('tv-inline@0');
     });
 });
