@@ -27,8 +27,7 @@ export class ChildItemBuilder {
     buildChildItems(task: Task, indent: string = ''): ChildRenderItem[] {
         // 表示層の合成 ID（split セグメント等）はここで index 在住の原タスクへ
         // 解決し、下流（render item / menu / hub）には原タスクの ID と最新状態
-        // を渡す。不変条件「合成 ID を write 層に漏らさない」の強制自体は
-        // TaskWriteService.resolveTaskId が担うので、ここは読み側の正規化。
+        // を渡す。区間 ID は表示の中だけの鍵で、書き込みの口は剥がさない。
         const parent = this.readService.getTask(getOriginalTaskId(task)) ?? task;
         return this.walk(parent, indent, new Set(), 0);
     }

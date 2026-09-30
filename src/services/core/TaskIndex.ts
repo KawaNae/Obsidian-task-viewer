@@ -14,7 +14,6 @@ import { TaskScanner } from './TaskScanner';
 import { PathTtlWindow } from './PathTtlWindow';
 import { refusalNotice, type IndexRefusal } from './RefusalClause';
 import { NotifyCoalescer } from './NotifyCoalescer';
-import { parseSegmentId } from '../display/SegmentIds';
 import { readName } from './RowNames';
 import { formatRow } from '../parsing/TaskLineFormat';
 import { lineParsersFingerprint } from '../parsing/TaskParser';
@@ -493,19 +492,8 @@ export class TaskIndex {
         if (this.refuseAfterDispose('updateTask')) return false;
         logInfo(`[updateTask] id=${taskId} fields=[${Object.keys(updates)}]`);
 
-        // 合成セグメント ID (##seg:YYYY-MM-DD) は TaskWriteService が原タスクへ
-        // 解決してから渡す契約（3cd26e96 で consumer の規約から write 境界の構造的
-        // 保証へ移した）。ここに届くのはその境界を迂回した呼び出しなので、書き込みは
-        // baseId で通したうえで声を上げる。落として黙るより、再発を見つけられる方がよい。
-        const segmentInfo = parseSegmentId(taskId);
-        if (segmentInfo) {
-            logWarn(`[TaskIndex] segment id reached updateTask, resolving to base: ${taskId}`);
-            taskId = segmentInfo.baseId;
-        }
-
-        const id = taskId;
-        const known = this.getTask(id);
-        return this.onRow(id, () => this.writeUpdate(id, updates, known));
+        const known = this.getTask(taskId);
+        return this.onRow(taskId, () => this.writeUpdate(taskId, updates, known));
     }
 
     /** {@link updateTask}, once every write already asked of the row has finished. */

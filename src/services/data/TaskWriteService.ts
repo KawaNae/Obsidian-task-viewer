@@ -6,30 +6,20 @@ import type { DuplicateOptions, Task } from '../../types';
 import type { AnchoredRow, RowSnapshot, SendRow, SendWrite, TaskIndex } from '../core/TaskIndex';
 import type { SendTo } from '../persistence/writers/SendWriter';
 import type { FlowDeleteAssessment } from '../flow/FlowDeletion';
-import { parseSegmentId } from '../display/SegmentIds';
 
 /**
  * Write-side entry point for views and interaction handlers.
  * All task mutations go through this service.
  * Pure delegation layer — no business logic here.
  *
- * ID contract: every taskId-taking method accepts display-layer synthetic
- * segment IDs (`…##seg:YYYY-MM-DD`) and resolves them to the original task
- * via {@link resolveTaskId}. A split segment shares the original's file and
- * lines, so a mutation addressed to a segment IS a mutation of the original —
- * enforcing that here makes "synthetic IDs never reach TaskIndex" hold by
- * construction, rather than relying on each UI caller to remember
- * getOriginalTaskId before calling.
+ * Every taskId is a row's name. A segment of a task split at the day
+ * boundary is a key within the display (`SegmentIds`); a caller acting on
+ * one hands its row's name (`getOriginalTaskId`).
  */
 export class TaskWriteService {
     private deleteListeners: Array<(taskId: string) => void> = [];
 
     constructor(private taskIndex: TaskIndex) {}
-
-    /** Resolve a synthetic segment ID to the original task ID (see class doc). */
-    private resolveTaskId(taskId: string): string {
-        return parseSegmentId(taskId)?.baseId ?? taskId;
-    }
 
     // ===== Task CRUD =====
 
@@ -39,7 +29,7 @@ export class TaskWriteService {
      * reports the new ones would be reporting a change that never happened.
      */
     async updateTask(taskId: string, updates: Partial<Task>): Promise<boolean> {
-        return this.taskIndex.updateTask(this.resolveTaskId(taskId), updates);
+        return this.taskIndex.updateTask(taskId, updates);
     }
 
     /**
@@ -49,10 +39,9 @@ export class TaskWriteService {
      * task still on the page.
      */
     async deleteTask(taskId: string, options: { fireFlow?: boolean } = {}): Promise<boolean> {
-        const id = this.resolveTaskId(taskId);
-        const removed = await this.taskIndex.deleteTask(id, options);
+        const removed = await this.taskIndex.deleteTask(taskId, options);
         if (removed) {
-            for (const cb of this.deleteListeners) cb(id);
+            for (const cb of this.deleteListeners) cb(taskId);
         }
         return removed;
     }
@@ -66,7 +55,7 @@ export class TaskWriteService {
      * the very line the write would produce.
      */
     assessFlowDelete(taskId: string): FlowDeleteAssessment {
-        return this.taskIndex.assessFlowDelete(this.resolveTaskId(taskId));
+        return this.taskIndex.assessFlowDelete(taskId);
     }
 
     /**
@@ -75,7 +64,7 @@ export class TaskWriteService {
      * told, and the note read again; the caller does not go on.
      */
     async confirmTask(taskId: string): Promise<boolean> {
-        return this.taskIndex.confirmTask(this.resolveTaskId(taskId));
+        return this.taskIndex.confirmTask(taskId);
     }
 
     /**
@@ -104,7 +93,7 @@ export class TaskWriteService {
 
     /** @returns whether the copy was written. */
     async duplicateTask(taskId: string, options?: DuplicateOptions): Promise<boolean> {
-        return this.taskIndex.duplicateTask(this.resolveTaskId(taskId), options);
+        return this.taskIndex.duplicateTask(taskId, options);
     }
 
     // ===== Task creation =====
@@ -123,7 +112,7 @@ export class TaskWriteService {
      * read-only task, or a write that was refused (and told the user why).
      */
     async insertLine(taskId: string, line: string, place: InsertPlace, rowId?: string | null): Promise<boolean> {
-        return this.taskIndex.insertLine(this.resolveTaskId(taskId), line, place, rowId);
+        return this.taskIndex.insertLine(taskId, line, place, rowId);
     }
 
     /**
@@ -141,14 +130,14 @@ export class TaskWriteService {
         replacement: SubtreeReplacement,
         opts: { tellRefusal?: boolean } = {},
     ): Promise<{ written: true } | { written: false; refused: IndexRefusal | null }> {
-        return this.taskIndex.replaceSubtree(this.resolveTaskId(taskId), base, replacement, opts);
+        return this.taskIndex.replaceSubtree(taskId, base, replacement, opts);
     }
 
     // ===== Sending rows to a note =====
 
     /** The row and its note's lines as the disk holds them, or undefined (see TaskIndex.rowSnapshot). */
     async rowSnapshot(taskId: string): Promise<RowSnapshot | undefined> {
-        return this.taskIndex.rowSnapshot(this.resolveTaskId(taskId));
+        return this.taskIndex.rowSnapshot(taskId);
     }
 
     /**
@@ -157,7 +146,7 @@ export class TaskWriteService {
      * too, unless `opts.tellRefusal` is false because the caller shows it.
      */
     async send(rows: readonly SendRow[], to: SendTo, opts: { tellRefusal?: boolean; landed?: (path: string) => void } = {}): Promise<SendWrite> {
-        return this.taskIndex.send(rows.map(row => ({ ...row, taskId: this.resolveTaskId(row.taskId) })), to, opts);
+        return this.taskIndex.send(rows, to, opts);
     }
 
     // ===== Frontmatter key writes (Task を介さない書き込み) =====
@@ -186,7 +175,7 @@ export class TaskWriteService {
     }
 
     notifyImmediate(taskId?: string, changes?: string[]): void {
-        this.taskIndex.notifyImmediate(taskId === undefined ? undefined : this.resolveTaskId(taskId), changes);
+        this.taskIndex.notifyImmediate(taskId, changes);
     }
 
     // ===== Scan control (for menu-triggered rescans) =====
