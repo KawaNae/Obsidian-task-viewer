@@ -371,6 +371,11 @@
     color: var(--tv-text-muted);
 }
 
+/* 走っている countup / countdown の経過は、押すと開始をずらすメニューが開く。 */
+.timer-widget__time-display--offsettable {
+    cursor: pointer;
+}
+
 .timer-widget__repeat-info {
     position: absolute;
     left: 50%;

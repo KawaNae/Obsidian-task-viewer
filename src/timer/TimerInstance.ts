@@ -160,6 +160,15 @@ export interface TimerBase {
      * 錨で引いて、在れば当てる。無ければ null。
      */
     opening: Opening | null;
+    /**
+     * self の開始が対象の行の start を今に上書きする前の、その行の start（ミリ秒）。
+     * 開始をずらすメニューの候補に出す（`TimerStartOffset.rememberedStart`）。
+     * 始めたあとでは行に残っていないので、開始の書き込みの前に覚えて保存する。
+     *
+     * 覚えるのは self の開始で、行の start に時刻があるときだけ。ほかは null —
+     * child と sibling の走行の行の start は常に開始の時刻で、覚えるものが無い。
+     */
+    priorStartMs: number | null;
     recordMode: TimerRecordMode;
     /** Always a current {@link ParserId}; legacy persisted values are normalized at load. */
     parserId: ParserId;

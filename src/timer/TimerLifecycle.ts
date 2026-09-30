@@ -27,6 +27,7 @@ import {
     applyIntervalPauseSnapshot,
     applyIntervalTick,
 } from './TimerTickMath';
+import { canOffsetStart } from './TimerStartOffset';
 
 export class TimerLifecycle {
     /** end の書き足しが飛んでいるタイマー。1 秒 tick の二重発行を防ぐ。 */
@@ -360,6 +361,37 @@ export class TimerLifecycle {
     }
 
     /**
+     * 走っている区間の開始を `startMs` へずらす。かけ忘れたタイマーを、実際に
+     * 始めた時刻から数え直す操作（`TimerStartOffset`）。
+     *
+     * 規則は「書けてから状態を進める」。先に走行の行の start を書き直し
+     * （`TimerRecorder.moveRunningStart`）、書けてから `startTimeMs` を動かす。
+     * 書けなければ何も動かない。経過はずらした分だけ変わり、countdown の残りも
+     * その分だけ変わる。
+     *
+     * ずらせるのは countup と countdown の走っている区間だけ（{@link canOffsetStart}）で、
+     * 未来へはずらせない。⏸ を挟んだあとの今の区間にも下限は置かない — 前の区間の
+     * 記録と重なっても止めない。出口と同じく {@link exclusive} の中で書く。
+     */
+    async offsetStart(timer: TimerInstance, startMs: number): Promise<void> {
+        return this.exclusive(timer, async () => {
+            if (!canOffsetStart(timer) || startMs > Date.now()) return;
+            if (!(await this.ctx.recorder.moveRunningStart(timer, startMs))) return;
+
+            timer.startTimeMs = startMs;
+            timer.pausedElapsedTime = 0;
+            const now = Date.now();
+            if (timer.timerType === 'countup') {
+                applyCountupTick(timer, now);
+            } else {
+                timer.phase = applyCountdownTick(timer, now).remaining < 0 ? 'idle' : 'work';
+            }
+            this.ctx.renderTimerItem(timer.id);
+            this.ctx.persistTimersToStorage();
+        });
+    }
+
+    /**
      * ■ 終了: 走行中なら記録してからウィジェットを畳む。
      *
      * **タスクの状態は触らない**。タイマーは計測と記録の装置で、完了はユーザーが
@@ -551,6 +583,7 @@ export class TimerLifecycle {
             recordedElapsedTime: 0,
             pendingRecord: null,
             opening: null,
+            priorStartMs: null,
             isExpanded: true,
             intervalId: null,
             timerType: 'idle',

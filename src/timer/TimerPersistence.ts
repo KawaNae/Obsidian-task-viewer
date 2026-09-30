@@ -62,6 +62,11 @@ function isPendingRecordOrNull(value: unknown): value is PendingRecord | null {
         && (record.then === 'suspend' || record.then === 'close');
 }
 
+/** 保存に在る覚えた時刻。無いか数でないものは、この版が保存したタイマーではない。 */
+function isNumberOrNull(value: unknown): value is number | null {
+    return value === null || (typeof value === 'number' && Number.isFinite(value));
+}
+
 export interface PersistedTimer {
     id: string;
     taskId: string;
@@ -82,6 +87,7 @@ export interface PersistedTimer {
     pendingContent?: string;
     pendingRecord: PendingRecord | null;
     opening: Opening | null;
+    priorStartMs: number | null;
     /**
      * 保存するのは実行時の種別だけ。`TimerStartConfig` の `'pomodoro'` は
      * 開始時の便宜値で、`TimerInstance` になった時点で `interval` に化けている。
@@ -275,6 +281,7 @@ export class TimerPersistence {
             pendingContent: timer.pendingContent,
             pendingRecord: timer.pendingRecord,
             opening: timer.opening,
+            priorStartMs: timer.priorStartMs,
             timerType: timer.timerType,
             recordMode: timer.recordMode,
             parserId: timer.parserId,
@@ -325,7 +332,8 @@ export class TimerPersistence {
             return null;
         }
         if (!isPendingRecordOrNull(persisted.pendingRecord) || !isOpeningOrNull(persisted.opening)
-            || !isStringArray(persisted.ownedAnchors) || !isParserId(persisted.parserId)) {
+            || !isStringArray(persisted.ownedAnchors) || !isParserId(persisted.parserId)
+            || !isNumberOrNull(persisted.priorStartMs)) {
             return null;
         }
 
@@ -352,6 +360,7 @@ export class TimerPersistence {
             pendingContent: persisted.pendingContent,
             pendingRecord: persisted.pendingRecord,
             opening: persisted.opening,
+            priorStartMs: persisted.priorStartMs,
             recordMode: persisted.recordMode || 'child',
             parserId: persisted.parserId,
             taskColor: persisted.taskColor || ''
