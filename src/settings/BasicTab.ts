@@ -87,7 +87,6 @@ export function render(el: HTMLElement, plugin: PluginContext): void {
             .onChange(async (value) => {
                 plugin.settings.applyGlobalStyles = value;
                 await plugin.saveSettings();
-                plugin.updateGlobalStyles();
             }));
 
     // Status Definitions

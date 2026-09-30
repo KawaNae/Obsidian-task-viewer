@@ -68,8 +68,6 @@ export interface PluginContext {
     getNoteOps(): NoteOps;
     getLogManager(): LogManager | null;
 
-    /** Re-apply the body classes that the global-style settings drive. */
-    updateGlobalStyles(): void;
     /** Tell the editor's inline task menu that its settings moved. */
     notifyEditorMenuSettingsChanged(): void;
 }
