@@ -69,10 +69,17 @@ export class TaskScanner {
      * copy the drag draws from until it ends.
      */
     private holding: { path: string; held: boolean } | null = null;
+
+    /**
+     * @param dropped hears the names a change to the store took out of it,
+     * once it is made (`tellDropped`): what the index's delete notification
+     * asks of (`TaskIndex.onTaskDeleted`).
+     */
     constructor(
         private app: App,
         private store: TaskStore,
-        private settings: TaskViewerSettings
+        private settings: TaskViewerSettings,
+        private readonly dropped: (names: readonly string[]) => void = () => {},
     ) { }
 
     /**
@@ -338,9 +345,10 @@ export class TaskScanner {
         const parsed = FileParsePipeline.parse(file.path, lines, this.settings, namesOfReading(file.path, readingId(this.session, n)), reading);
 
         if (parsed.ignored) {
-            this.store.removeTasksByFile(file.path);
+            const before = this.store.removeTasksByFile(file.path);
             this.links.drop(file.path);
             this.readRead(file.path, n);
+            this.tellDropped(before);
             return true;
         }
 
@@ -352,9 +360,10 @@ export class TaskScanner {
         logDebug(`[scan] file=${file.path} tasks=${parsed.tasks.length}`);
 
         // --- commit (batched: 1 file = 1 revision bump) ---
+        let before: string[] = [];
         this.store.beginBatch();
         try {
-            this.store.removeTasksByFile(file.path);
+            before = this.store.removeTasksByFile(file.path);
 
             for (const task of parsed.tasks) {
                 this.store.setTask(task.id, task);
@@ -369,7 +378,20 @@ export class TaskScanner {
         } finally {
             this.store.endBatch();
         }
+        this.tellDropped(before);
         return true;
+    }
+
+    /**
+     * Hand `dropped` the names of `before`, the names the store held for a
+     * file before a change to it, that it holds no more. Whether each still
+     * names a row, followed across a write of ours (`follow`), is not asked
+     * here: a scan may commit what a write of ours left before the write
+     * reports it (`landed`), and until then nothing follows a name across it.
+     */
+    private tellDropped(before: readonly string[]): void {
+        const dropped = before.filter(name => !this.store.getTask(name));
+        if (dropped.length > 0) this.dropped(dropped);
     }
 
     /** Reading `n` of `path` is committed. */
@@ -380,7 +402,7 @@ export class TaskScanner {
 
     /**
      * ファイルリネーム（md → md）時の内部状態の破棄。名前はパスを含むので、
-     * 新パスの読みが新しい名前を付ける。
+     * 新パスの読みが新しい名前を付ける。旧パスの行はすべて終わる。
      */
     handleFileRenamed(oldPath: string, newPath: string): void {
         this.scanQueue.delete(oldPath);
@@ -388,8 +410,9 @@ export class TaskScanner {
     }
 
     /**
-     * ファイル削除（md → 非 md のリネームを含む）時の内部状態の破棄。
-     * scanQueue から path を除去し、読みと書き込みの記録を捨てる。
+     * ファイル削除（md → 非 md のリネーム、ディスクに無いことを含む）時の
+     * 内部状態の破棄。scanQueue から path を除去し、行と読みと書き込みの
+     * 記録を捨てる。行はすべて終わる。
      */
     handleFileDeleted(path: string): void {
         this.scanQueue.delete(path);
@@ -397,16 +420,19 @@ export class TaskScanner {
     }
 
     /**
-     * Let go of what was read of `path`, but the last number given, and of
-     * holding it: a file renamed or deleted is not the one being dragged.
+     * Take `path`'s rows out of the store, and let go of what was read of it,
+     * but the last number given, and of holding it: a file renamed or
+     * deleted is not the one being dragged. Its names are dropped (`dropped`).
      */
     private forget(path: string): void {
+        const dropped = this.store.removeTasksByFile(path);
         if (this.holding?.path === path) this.holding = null;
         const last = this.numbers.get(path);
         if (last !== undefined) this.numbers.set(path, { n: last.n, key: undefined });
         this.committed.delete(path);
         this.stale.delete(path);
         this.links.drop(path);
+        if (dropped.length > 0) this.dropped(dropped);
     }
 
     /**

@@ -1,4 +1,4 @@
-import type { Operations } from '../../services/operations/Operations';
+import type { IndexReads } from '../../services/core/TaskIndex';
 import type { SelectionHost } from './SelectionHost';
 
 /**
@@ -38,11 +38,12 @@ export class SelectionController {
     }
 
     /**
-     * 選択中タスクが UI 経由で削除されたら selection をクリアする。
+     * 選択中のタスクの名前が終わったら（索引の削除の通知。自分の削除、外の
+     * 編集、ノートの削除）selection をクリアする。
      * 戻り値は購読解除 callback (`view.unload` 等で呼ぶ)。
      */
-    attachDeleteListener(operations: Operations): () => void {
-        return operations.onTaskDeleted((deletedId) => {
+    attachDeleteListener(index: Pick<IndexReads, 'onTaskDeleted'>): () => void {
+        return index.onTaskDeleted((deletedId) => {
             if (this.handleManager.getSelectedTaskId() === deletedId) {
                 this.handleManager.selectTask(null);
             }

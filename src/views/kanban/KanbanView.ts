@@ -103,7 +103,7 @@ export class KanbanView extends ItemView {
         this.plugin = plugin;
         this.readService = this.plugin.getTaskReadService();
         this.operations = this.plugin.getOperations();
-        this.taskRenderer = new TaskCardRenderer(this.app, this.readService, this.operations, this.plugin.menuPresenter, {
+        this.taskRenderer = new TaskCardRenderer(this.app, this.readService, this.plugin.getIndex(), this.operations, this.plugin.menuPresenter, {
             hoverSource: TASK_VIEWER_HOVER_SOURCE_ID,
             getHoverParent: () => this.hoverParent,
         }, () => this.plugin.settings, () => this.maskMode);

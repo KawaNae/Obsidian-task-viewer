@@ -84,17 +84,95 @@ describe('what a change event tells the views', () => {
 });
 
 describe('who hears that a row was deleted', () => {
-    it('a delete through the operations is heard; a row gone by an edit from outside is not', async () => {
-        const { contents, session } = await openQuiet('- [ ] a\n- [ ] b\n');
+    /** Every name the index says ended, in order. */
+    function hearDeletes(session: VaultSession): string[] {
         const deleted: string[] = [];
-        session.ops.onTaskDeleted(id => deleted.push(id));
-        const [a] = session.index.getTasks().sort((x, y) => x.line - y.line);
+        session.index.onTaskDeleted(id => deleted.push(id));
+        return deleted;
+    }
+    const byLine = (session: VaultSession) => session.index.getTasks().sort((x, y) => x.line - y.line);
+    /** Past the task the index tells the names that ended in. */
+    const settled = () => new Promise<void>(resolve => setTimeout(resolve, 0));
+
+    it('a delete of ours ends the row and its subtree, told in the task after; the rows after it go on', async () => {
+        const { session } = await openQuiet('- [ ] a\n    - [ ] a1\n- [ ] b\n');
+        const deleted = hearDeletes(session);
+        const [a, a1, b] = byLine(session);
 
         expect(await session.ops.deleteTask(a.id)).toBe(true);
-        contents.set(NOTE, '');
+        expect(deleted).toEqual([]);
+        await settled();
+
+        expect(deleted.sort()).toEqual([a.id, a1.id].sort());
+        expect(session.index.getTask(b.id)?.content).toBe('b');
+    });
+
+    it('a rewrite of ours ends nothing, though the scan its change event starts commits before the write reports', async () => {
+        // The session's vault runs the `modify` scan inside `vault.process`,
+        // so the scan commits what the write left before `landed` links it.
+        const { session } = await openQuiet('- [ ] a\n- [ ] b\n');
+        const deleted = hearDeletes(session);
+        const [a] = byLine(session);
+
+        await session.ops.updateTask(a.id, { statusChar: 'x' });
+        await session.ops.insertLine(a.id, '- [ ] new', 'firstChild');
+        await settled();
+
+        expect(deleted).toEqual([]);
+    });
+
+    it('an edit from outside ends every name of the file, as it does the names', async () => {
+        const { contents, session } = await openQuiet('- [ ] a\n- [ ] b\n');
+        const deleted = hearDeletes(session);
+        const [a, b] = byLine(session);
+
+        contents.set(NOTE, '- [ ] a\n');
         await session.fireVault('modify', makeFile(NOTE));
+        await settled();
+
+        expect(deleted.sort()).toEqual([a.id, b.id].sort());
+    });
+
+    it('a change event that reads what the index holds ends nothing', async () => {
+        const { session } = await openQuiet('- [ ] a\n');
+        const deleted = hearDeletes(session);
+
+        await session.fireVault('modify', makeFile(NOTE));
+        await settled();
+
+        expect(deleted).toEqual([]);
+    });
+
+    it('a note deleted or renamed ends every row of it', async () => {
+        const { contents, session } = await openQuiet('- [ ] a\n');
+        const deleted = hearDeletes(session);
+        const [a] = byLine(session);
+
+        contents.set('moved.md', contents.get(NOTE)!);
+        contents.delete(NOTE);
+        await session.fireVault('rename', makeFile('moved.md'), NOTE);
+        await settled();
+        const [moved] = byLine(session);
+        expect(deleted).toEqual([a.id]);
+
+        contents.delete('moved.md');
+        await session.fireVault('delete', makeFile('moved.md'));
+        await settled();
+        expect(deleted).toEqual([a.id, moved.id]);
+    });
+
+    it('a listener that throws stops neither the others nor the reading', async () => {
+        const { contents, session } = await openQuiet('- [ ] a\n');
+        session.index.onTaskDeleted(() => { throw new Error('boom'); });
+        const deleted = hearDeletes(session);
+        const [a] = byLine(session);
+
+        contents.set(NOTE, '- [ ] b\n');
+        await session.fireVault('modify', makeFile(NOTE));
+        await settled();
 
         expect(deleted).toEqual([a.id]);
+        expect(byLine(session)[0].content).toBe('b');
     });
 });
 

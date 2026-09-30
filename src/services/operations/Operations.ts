@@ -118,8 +118,6 @@ export class Operations {
     /** The writes asked of each row, in order (see {@link onRow}). */
     private rowWrites?: Map<string, Promise<unknown>>;
 
-    private deleteListeners: Array<(taskId: string) => void> = [];
-
     constructor(private readonly app: App, private readonly index: TaskIndex) {
         this.repository = new TaskRepository(app);
         // Settings asked of the index each time (not a snapshot): a change of
@@ -633,11 +631,9 @@ export class Operations {
     async deleteTask(taskId: string, options: { fireFlow?: boolean } = {}): Promise<boolean> {
         if (this.refuseAfterDispose('deleteTask')) return false;
         const known = this.index.getTask(taskId);
-        const removed = await this.onRow(taskId, () => this.writeDelete(taskId, options, known));
-        // A delete that stopped keeps the row, and the listeners hear nothing:
-        // a view told to drop its selection would drop it for a row still there.
-        if (removed) for (const cb of [...this.deleteListeners]) cb(taskId);
-        return removed;
+        // The rows it took away are told by the index, once what the write
+        // left is read (`IndexReads.onTaskDeleted`).
+        return this.onRow(taskId, () => this.writeDelete(taskId, options, known));
     }
 
     /** {@link deleteTask}, once every write already asked of the row has finished. */
@@ -830,20 +826,4 @@ export class Operations {
      * operations are taken down. Bound, so a writer is handed it as it is.
      */
     readonly writeChannel: WriteChannels = (filePath) => this.repository.channelOf(filePath);
-
-    // ===== 削除の聞き手 =====
-
-    /**
-     * Hear the rows a delete of these operations took away, once it has
-     * (`deleteTask` answering yes). Views use it to let go of a selection of
-     * a row no longer there, so its name is not given to a row that comes to
-     * stand on its line.
-     */
-    onTaskDeleted(cb: (taskId: string) => void): () => void {
-        this.deleteListeners.push(cb);
-        return () => {
-            const i = this.deleteListeners.indexOf(cb);
-            if (i >= 0) this.deleteListeners.splice(i, 1);
-        };
-    }
 }

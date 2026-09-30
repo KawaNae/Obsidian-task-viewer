@@ -439,7 +439,7 @@ export default class TaskViewerPlugin extends Plugin {
 
         if (!this.hubTaskRenderer) {
             this.hubTaskRenderer = new TaskCardRenderer(
-                this.app, this.readService, this.operations, this.menuPresenter,
+                this.app, this.readService, this.taskIndex, this.operations, this.menuPresenter,
                 {
                     hoverSource: TASK_VIEWER_HOVER_SOURCE_ID,
                     getHoverParent: () => this.hubHoverParent,

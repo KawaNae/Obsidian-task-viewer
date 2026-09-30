@@ -94,7 +94,7 @@ export class ScheduleView extends ItemView {
         this.plugin = plugin;
         this.readService = plugin.getTaskReadService();
         this.operations = plugin.getOperations();
-        this.taskRenderer = new TaskCardRenderer(this.app, this.readService, this.operations, this.plugin.menuPresenter, {
+        this.taskRenderer = new TaskCardRenderer(this.app, this.readService, this.plugin.getIndex(), this.operations, this.plugin.menuPresenter, {
             hoverSource: TASK_VIEWER_HOVER_SOURCE_ID,
             getHoverParent: () => this.hoverParent,
         }, () => this.plugin.settings, () => this.maskMode);
