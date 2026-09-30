@@ -957,6 +957,8 @@ Every task is a line in a note. Writable (`tv-inline`) tasks are rewritten by `I
 - `DateUtils.getToday()`, `DateUtils.addDays()` operate on **calendarDate**
 - `startHour` is the boundary between two visual days (default: 5:00 AM)
 
+`DateUtils` is the one date module. Converting between `YYYY-MM-DD` text and `Date` (`parseDate`, `readDate`, `toDateTime`, `getLocalDateString`), the date shape (`DATE_PATTERN`, `isDateShape`), the visual today at a given moment (`visualDateAt(now, startHour)`), the week start, shifting by days (`shiftDateString`), splitting and joining a due (`splitDateTime`, `joinDateTime`), and a task's length (`getDisplayTaskDurationMs`, `timedSpanMinutes`) are answered there. Other code does not split date strings, build `new Date('...')` from them, or write the date regex; a grammar that embeds a date builds its pattern from `DATE_PATTERN`. Years are four digits (`0026` is the year 26).
+
 ### @notation endDate semantics — **dual semantic at raw layer**
 
 `task.endDate` is a **calendarDate** with a **dual semantic** that depends on whether `endTime` is present:

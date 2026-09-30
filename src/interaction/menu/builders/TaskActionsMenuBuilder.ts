@@ -238,9 +238,7 @@ export class TaskActionsMenuBuilder {
             } else {
                 // → Timeline
                 const now = new Date();
-                const hh = now.getHours().toString().padStart(2, '0');
-                const mm = now.getMinutes().toString().padStart(2, '0');
-                const nowTime = `${hh}:${mm}`;
+                const nowTime = DateUtils.formatHHMM(now.getHours(), now.getMinutes());
 
                 if (showBothVariants) {
                     this.addSwitchToItem(subMenu, menu, task.id, t('menu.timelineModeKeepDate'), 'clock', {
