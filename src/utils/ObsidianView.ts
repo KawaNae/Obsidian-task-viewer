@@ -13,15 +13,32 @@ export function viewContentEl(leaf: WorkspaceLeaf): HTMLElement | undefined {
 }
 
 /**
- * `refresh()` is this plugin's own convention for "redraw yourself", not an
- * Obsidian one, so no Obsidian type mentions it. Naming the shape says which
- * method we are reaching for; `as any` said only that we had given up.
+ * The two events a view of ours hears from the plugin. Neither is an Obsidian
+ * convention, so no Obsidian type mentions them; naming the shape says which
+ * method we are reaching for.
+ *
+ * - `redraw()` — something the view draws from changed (settings saved). The
+ *   view keeps where it is: the dates it shows, its scroll.
+ * - `onDayRolled()` — the visual day changed. Each view decides what following
+ *   the new day means; one without its own answer just redraws.
+ *
+ * They used to share one name, `refresh()`, whose meaning differed by view:
+ * Timeline and Schedule went back to today on it, so every settings save
+ * moved them off the day the user was looking at.
  */
-interface RefreshableView extends View {
-    refresh?: () => void;
+interface TaskViewerView extends View {
+    redraw?: () => void;
+    onDayRolled?: () => void;
 }
 
-/** Ask a view to redraw, if it is one of ours. */
-export function refreshView(view: View): void {
-    (view as RefreshableView).refresh?.();
+/** Tell a view of ours that settings changed: redraw in place. */
+export function redrawView(view: View): void {
+    (view as TaskViewerView).redraw?.();
+}
+
+/** Tell a view of ours that the visual day changed. */
+export function notifyDayRolled(view: View): void {
+    const v = view as TaskViewerView;
+    if (v.onDayRolled) v.onDayRolled();
+    else v.redraw?.();
 }

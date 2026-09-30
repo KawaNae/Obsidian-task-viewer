@@ -728,7 +728,7 @@ export class TimelineView extends ItemView {
     /**
      * Move startDate to the "now" window: today minus the configured past-days
      * span, pulled further back to the oldest overdue date when the setting
-     * asks for it. Shared by the Now button, refresh(), and initial state.
+     * asks for it. Shared by the Now button, onDayRolled(), and initial state.
      */
     private jumpToNowStartDate(): void {
         const visualToday = DateUtils.getVisualDateOfNow(this.plugin.settings.startHour);
@@ -750,8 +750,13 @@ export class TimelineView extends ItemView {
         return DateUtils.addDays(date, -this.plugin.settings.pastDaysToShow);
     }
 
-    public refresh() {
-        // Re-evaluate startDate (Now button logic) for day boundary crossing or settings change
+    /** Settings changed: redraw where the user is (see `redrawView`). */
+    public redraw(): void {
+        this.render();
+    }
+
+    /** The visual day changed: move to the new "now" window (Now button logic). */
+    public onDayRolled(): void {
         this.jumpToNowStartDate();
         this.scrollToNowOnNextRender = true;
         this.render();

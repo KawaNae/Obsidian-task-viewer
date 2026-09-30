@@ -276,7 +276,7 @@ export class KanbanView extends ItemView {
         this.scrollRestorer.dispose();
     }
 
-    refresh(): void {
+    redraw(): void {
         this.render();
     }
 

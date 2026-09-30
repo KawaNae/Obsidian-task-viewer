@@ -413,7 +413,7 @@ export class CalendarView extends ItemView {
         this.scrollRestorer.dispose();
     }
 
-    public refresh(): void {
+    public redraw(): void {
         this.render();
     }
 
