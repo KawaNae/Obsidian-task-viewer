@@ -206,7 +206,7 @@ describe('SectionPropertyResolver', () => {
         ]);
 
         expect(doc.sections[0].resolvedProperties['priority']).toEqual({
-            value: '1', type: 'number',
+            value: '1', type: 'number', number: 1,
         });
     });
 

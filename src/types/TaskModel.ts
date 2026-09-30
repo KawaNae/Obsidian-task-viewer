@@ -47,12 +47,19 @@ export function isCompleteStatusChar(statusChar: string, defs: StatusDefinition[
 
 export type NoteType = 'daily' | 'weekly' | 'monthly' | 'yearly';
 
-export type PropertyType = 'string' | 'number' | 'boolean' | 'array';
+/**
+ * A property's value (`- key:: value` or frontmatter), read once by
+ * `PropertyValues`: `value` is the text as written, which a write-back writes
+ * again; the type's own field is the value it means. A reader asks the type
+ * (`boolean`, `number`, `items`) and never reads truth or numbers off `value`.
+ */
+export type PropertyValue =
+    | { type: 'string'; value: string }
+    | { type: 'number'; value: string; number: number }
+    | { type: 'boolean'; value: string; boolean: boolean }
+    | { type: 'array'; value: string; items: string[] };
 
-export interface PropertyValue {
-    value: string;
-    type: PropertyType;
-}
+export type PropertyType = PropertyValue['type'];
 
 export interface ChildLine {
     text: string;

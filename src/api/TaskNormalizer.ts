@@ -6,7 +6,6 @@ import {
 } from '../services/data/EffectiveProperties';
 import { serializeFlow } from '../services/lang/flow/FlowSerializer';
 import { flowRaws } from '../services/lang/flow/FlowSegments';
-import { ChildLineClassifier } from '../services/parsing/utils/ChildLineClassifier';
 import { apiIdOf, type TaskLookup } from './TaskIds';
 
 // ── Field extractors ──
@@ -67,11 +66,10 @@ function extractFlowString(task: DisplayTask): string | null {
 
 function toNativeValue(pv: PropertyValue): unknown {
     switch (pv.type) {
-        case 'number': return Number(pv.value);
-        // A property line spells it True/False, frontmatter reads it back as true/false.
-        case 'boolean': return pv.value.toLowerCase() === 'true';
-        case 'array': return ChildLineClassifier.arrayItems(pv.value);
-        default: return pv.value;
+        case 'number': return pv.number;
+        case 'boolean': return pv.boolean;
+        case 'array': return pv.items;
+        case 'string': return pv.value;
     }
 }
 

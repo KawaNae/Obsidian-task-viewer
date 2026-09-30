@@ -8,6 +8,7 @@ import { matchFlowLine } from '../../../src/services/parsing/utils/FlowLineScann
 import { readsAsPlanned } from '../../../src/services/persistence/RowBasis';
 import { splitLines } from '../../../src/services/persistence/FileLines';
 import { DEFAULT_SETTINGS } from '../../../src/types';
+import { PropertyValues } from '../../../src/services/parsing/utils/PropertyValues';
 
 /**
  * What a line is and how deep it stands, read as Obsidian 1.12.4 reads it
@@ -181,7 +182,7 @@ describe('line breaks, as Obsidian ends a line', () => {
 
         const property = ChildLineClassifier.classify(`    - k:: a${LS}b`, 0);
         expect([property.propertyKey, property.propertyValue]).toEqual(['k', `a${LS}b`]);
-        expect(ChildLineClassifier.inferType(`[a${LS}b]`)).toBe('array');
+        expect(PropertyValues.fromText(`[a${LS}b]`).type).toBe('array');
 
         expect(matchFlowLine(`    - ==> next${LS}more`)?.tail).toBe(`next${LS}more`);
         expect(Outline.read([`## a${LS}b`]).headings[0].text).toBe(`a${LS}b`);

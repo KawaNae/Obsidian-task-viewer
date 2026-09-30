@@ -1,74 +1,79 @@
 import { describe, it, expect } from 'vitest';
-import { FilePropertyResolver } from '../../../src/services/parsing/FilePropertyResolver';
+import { BuiltinPropertyExtractor } from '../../../src/services/parsing/tree/BuiltinPropertyExtractor';
+import { PropertyValues } from '../../../src/services/parsing/utils/PropertyValues';
 import { DEFAULT_SCOPE_KEYS } from '../../../src/types';
 
 const keys = DEFAULT_SCOPE_KEYS;
 
-describe('FilePropertyResolver', () => {
+/** The frontmatter as the sections' base reads it: normalized, then its built-ins put apart. */
+const frontmatterLayer = (fm: Record<string, unknown> | undefined, k: typeof keys) =>
+    BuiltinPropertyExtractor.extract(PropertyValues.fromFrontmatter(fm, k), k);
+
+describe('the frontmatter layer (PropertyValues.fromFrontmatter + BuiltinPropertyExtractor)', () => {
     describe('builtin keys', () => {
         it('色を normalizeColor で正規化', () => {
-            const result = FilePropertyResolver.extract({ 'tv-color': '#ff0000' }, keys);
+            const result = frontmatterLayer({ 'tv-color': '#ff0000' }, keys);
             expect(result.color).toBe('ff0000');
         });
 
         it('色が空文字なら undefined', () => {
-            const result = FilePropertyResolver.extract({ 'tv-color': '   ' }, keys);
+            const result = frontmatterLayer({ 'tv-color': '   ' }, keys);
             expect(result.color).toBeUndefined();
         });
 
         it('linestyle が valid set 内なら小文字化して返す', () => {
-            const result = FilePropertyResolver.extract({ 'tv-linestyle': 'Dashed' }, keys);
+            const result = frontmatterLayer({ 'tv-linestyle': 'Dashed' }, keys);
             expect(result.linestyle).toBe('dashed');
         });
 
         it('linestyle が invalid 値なら undefined (validation)', () => {
-            const result = FilePropertyResolver.extract({ 'tv-linestyle': 'bogus-value' }, keys);
+            const result = frontmatterLayer({ 'tv-linestyle': 'bogus-value' }, keys);
             expect(result.linestyle).toBeUndefined();
         });
 
         it('linestyle が string でないなら undefined', () => {
-            const result = FilePropertyResolver.extract({ 'tv-linestyle': 123 }, keys);
+            const result = frontmatterLayer({ 'tv-linestyle': 123 }, keys);
             expect(result.linestyle).toBeUndefined();
         });
 
         it('mask は trim して返す', () => {
-            const result = FilePropertyResolver.extract({ 'tv-mask': '  test  ' }, keys);
+            const result = frontmatterLayer({ 'tv-mask': '  test  ' }, keys);
             expect(result.mask).toBe('test');
         });
 
         it('mask が空文字なら undefined', () => {
-            const result = FilePropertyResolver.extract({ 'tv-mask': '   ' }, keys);
+            const result = frontmatterLayer({ 'tv-mask': '   ' }, keys);
             expect(result.mask).toBeUndefined();
         });
     });
 
     describe('custom properties', () => {
         it('ScopeKeys に該当しないキーを properties に格納', () => {
-            const result = FilePropertyResolver.extract({
+            const result = frontmatterLayer({
                 'tv-color': 'ff0000',
                 'custom1': 'value1',
                 'custom2': 42,
             }, keys);
             expect(result.properties['custom1']).toEqual({ value: 'value1', type: 'string' });
-            expect(result.properties['custom2']).toEqual({ value: '42', type: 'number' });
+            expect(result.properties['custom2']).toEqual({ value: '42', type: 'number', number: 42 });
             expect(result.properties['tv-color']).toBeUndefined();
         });
 
         it('boolean / number / array / string を type 推定', () => {
-            const result = FilePropertyResolver.extract({
+            const result = frontmatterLayer({
                 'b': true,
                 'n': 3.14,
                 'a': ['x', 'y'],
                 's': 'hello',
             }, keys);
-            expect(result.properties['b']).toEqual({ value: 'true', type: 'boolean' });
-            expect(result.properties['n']).toEqual({ value: '3.14', type: 'number' });
-            expect(result.properties['a']).toEqual({ value: 'x, y', type: 'array' });
+            expect(result.properties['b']).toEqual({ value: 'true', type: 'boolean', boolean: true });
+            expect(result.properties['n']).toEqual({ value: '3.14', type: 'number', number: 3.14 });
+            expect(result.properties['a']).toEqual({ value: 'x, y', type: 'array', items: ['x', 'y'] });
             expect(result.properties['s']).toEqual({ value: 'hello', type: 'string' });
         });
 
         it('null / undefined 値は properties から除外', () => {
-            const result = FilePropertyResolver.extract({
+            const result = frontmatterLayer({
                 'a': null,
                 'b': undefined,
                 'c': 'kept',
@@ -79,7 +84,7 @@ describe('FilePropertyResolver', () => {
         });
 
         it('Obsidian 内部キー (position) を properties から除外', () => {
-            const result = FilePropertyResolver.extract({
+            const result = frontmatterLayer({
                 'position': { start: { line: 0 }, end: { line: 5 } },
                 'real-prop': 'kept',
             }, keys);
@@ -88,7 +93,7 @@ describe('FilePropertyResolver', () => {
         });
 
         it('tags キーは properties に含めない (専用フィールドへ)', () => {
-            const result = FilePropertyResolver.extract({
+            const result = frontmatterLayer({
                 'tags': ['a', 'b'],
                 'custom': 'kept',
             }, keys);
@@ -99,34 +104,52 @@ describe('FilePropertyResolver', () => {
 
     describe('tags', () => {
         it('配列形式の tags を抽出', () => {
-            const result = FilePropertyResolver.extract({ 'tags': ['x', 'y'] }, keys);
+            const result = frontmatterLayer({ 'tags': ['x', 'y'] }, keys);
             expect(result.tags).toEqual(['x', 'y']);
         });
 
         it('カンマ区切り string の tags を抽出', () => {
-            const result = FilePropertyResolver.extract({ 'tags': 'a, b, c' }, keys);
+            const result = frontmatterLayer({ 'tags': 'a, b, c' }, keys);
             expect(result.tags).toEqual(['a', 'b', 'c']);
         });
 
         it('tags が空なら undefined', () => {
-            const result = FilePropertyResolver.extract({ 'tags': [] }, keys);
+            const result = frontmatterLayer({ 'tags': [] }, keys);
             expect(result.tags).toBeUndefined();
         });
 
         it('tags が無いなら undefined', () => {
-            const result = FilePropertyResolver.extract({ 'tv-color': 'ff0000' }, keys);
+            const result = frontmatterLayer({ 'tv-color': 'ff0000' }, keys);
             expect(result.tags).toBeUndefined();
+        });
+    });
+
+    describe('dates', () => {
+        it('reads a date key\'s Date and minutes of the day as the date text', () => {
+            const result = frontmatterLayer({
+                'tv-start': new Date(2026, 8, 21, 9, 30),
+                'tv-end': 630,
+                'tv-due': '2026-09-30',
+            }, keys);
+            expect(result.startDate).toBe('2026-09-21');
+            expect(result.startTime).toBe('09:30');
+            expect(result.endTime).toBe('10:30');
+            expect(result.due).toBe('2026-09-30');
+        });
+
+        it('keeps a number under another key a number', () => {
+            expect(frontmatterLayer({ n: 630 }, keys).properties.n).toEqual({ value: '630', type: 'number', number: 630 });
         });
     });
 
     describe('edge cases', () => {
         it('frontmatter が undefined なら empty result', () => {
-            const result = FilePropertyResolver.extract(undefined, keys);
+            const result = frontmatterLayer(undefined, keys);
             expect(result).toEqual({ properties: {} });
         });
 
         it('frontmatter が空 object なら empty result', () => {
-            const result = FilePropertyResolver.extract({}, keys);
+            const result = frontmatterLayer({}, keys);
             expect(result.color).toBeUndefined();
             expect(result.linestyle).toBeUndefined();
             expect(result.mask).toBeUndefined();
@@ -135,7 +158,7 @@ describe('FilePropertyResolver', () => {
         });
 
         it('全フィールドを統合的に抽出', () => {
-            const result = FilePropertyResolver.extract({
+            const result = frontmatterLayer({
                 'tv-color': '#abcdef',
                 'tv-linestyle': 'dotted',
                 'tv-mask': 'mask-val',

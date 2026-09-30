@@ -38,7 +38,7 @@ const OBSIDIAN_KEYS: ReadonlySet<string> = new Set(['aliases', 'alias', 'cssclas
  *   lines go as they are: the resolved value is normalized (a list
  *   joined), and the lines keep what it lost. A property line's value is
  *   said in the YAML of the type the line gave it
- *   (`ChildLineClassifier.inferType`), so the frontmatter reads back the
+ *   (`PropertyValues.fromText`), so the frontmatter reads back the
  *   same type (`propertyYaml`); the plugin's own keys (color, line style,
  *   mask) are read as text either way, and go as a string.
  * - A date and its time may come from two layers, so the key is put
@@ -109,9 +109,9 @@ function propertyValueAt(lines: readonly string[], line: number): string {
 
 /**
  * A property line's value as frontmatter lines the frontmatter reads back
- * as the same type (`FilePropertyResolver`): a number bare, a boolean as
- * YAML's, an array as a list of its items (`ChildLineClassifier.arrayItems`,
- * which the frontmatter joins back with `, `), a string quoted when it has
+ * as the same type (`PropertyValues.fromYaml`): a number bare, a boolean as
+ * the plugin writes a new one (lowercase), an array as a list of its items
+ * (which the frontmatter joins back with `, `), a string quoted when it has
  * to be. The text comes back as written but where the YAML type has its
  * own spelling: `True` as `true`, `007` as `7`, `[a,b]` as `a, b`.
  */
@@ -119,11 +119,10 @@ function propertyYaml(key: string, property: PropertyValue): string[] {
     const head = `${yamlKey(key)}:`;
     switch (property.type) {
         case 'number': return [`${head} ${property.value}`];
-        case 'boolean': return [`${head} ${property.value === 'True'}`];
+        case 'boolean': return [`${head} ${property.boolean}`];
         case 'array': {
-            const items = ChildLineClassifier.arrayItems(property.value);
-            if (items.length === 0) return [`${head} []`];
-            return [head, ...items.map(item => `  - ${FrontmatterLineEditor.escapeYamlScalar(item)}`)];
+            if (property.items.length === 0) return [`${head} []`];
+            return [head, ...property.items.map(item => `  - ${FrontmatterLineEditor.escapeYamlScalar(item)}`)];
         }
         case 'string': return [`${head} ${FrontmatterLineEditor.escapeYamlScalar(property.value)}`];
     }

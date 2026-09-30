@@ -208,7 +208,7 @@ describe('a property line (ChildPropertyLineEditor.applyOps)', () => {
     it('goes past the last property\'s subtree, as its sibling, tab and spaces mixed', async () => {
         const { contents, session } = await open(['# n', '- [ ] P', '    - [ ] T', '\t    - a:: 1', '\t      - note', '- [ ] U', '']);
 
-        expect(await session.index.updateTask(only(session, 'T').id, { properties: { a: { value: '1', type: 'number' }, b: { value: '2', type: 'number' } } } as never)).toBe(true);
+        expect(await session.index.updateTask(only(session, 'T').id, { properties: { a: { value: '1', type: 'number', number: 1 }, b: { value: '2', type: 'number', number: 2 } } } as never)).toBe(true);
         await session.settle(FILE);
 
         expect(lines(contents)).toEqual(['# n', '- [ ] P', '    - [ ] T', '\t    - a:: 1', '\t      - note', '\t    - b:: 2', '- [ ] U', '']);
