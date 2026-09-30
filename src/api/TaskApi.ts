@@ -376,7 +376,7 @@ export class TaskApi {
     private readonly lookup: TaskLookup = (name) => this.readService.getTask(name);
 
     /** A task as the API hands it out, its IDs included (`apiIdOf`). */
-    private readonly out = (task: DisplayTask): NormalizedTask => normalizeTask(task, this.lookup);
+    private readonly out = (task: DisplayTask): NormalizedTask => normalizeTask(task, this.lookup, this.plugin.settings.startHour);
 
     /**
      * The index's copy of the row an ID the API took names (`readApiId`),

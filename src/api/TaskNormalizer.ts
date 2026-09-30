@@ -7,13 +7,20 @@ import { serializeFlow } from '../services/flow/FlowSerializer';
 import { flowRaws } from '../services/flow/FlowSegments';
 import { ChildLineClassifier } from '../services/parsing/utils/ChildLineClassifier';
 import { apiIdOf, type TaskLookup } from './TaskIds';
+import { getDisplayTaskDurationMs } from '../services/display/TaskDuration';
 
 // ── Field extractors ──
 
+/** What an extractor may read besides the task. */
+interface RecordEnv {
+    lookup: TaskLookup;
+    startHour: number;
+}
+
 // Every ID goes out through `apiIdOf`: the row's own, its parent's and its
 // children's alike, so no ID of one shape reaches a caller in another.
-const FIELD_EXTRACTORS: Record<string, (task: DisplayTask, lookup: TaskLookup) => unknown> = {
-    id:          (t, lookup) => apiIdOf(t.id, lookup),
+const FIELD_EXTRACTORS: Record<string, (task: DisplayTask, env: RecordEnv) => unknown> = {
+    id:          (t, { lookup }) => apiIdOf(t.id, lookup),
     file:        t => t.file,
     line:        t => t.line,
     content:     t => t.content,
@@ -25,8 +32,8 @@ const FIELD_EXTRACTORS: Record<string, (task: DisplayTask, lookup: TaskLookup) =
     due:         t => t.due ?? null,
     tags:        t => getEffectiveTags(t),
     parserId:    t => t.parserId,
-    parentId:    (t, lookup) => (t.parentId === undefined ? null : apiIdOf(t.parentId, lookup)),
-    childIds:    (t, lookup) => t.childIds.map(id => apiIdOf(id, lookup)),
+    parentId:    (t, { lookup }) => (t.parentId === undefined ? null : apiIdOf(t.parentId, lookup)),
+    childIds:    (t, { lookup }) => t.childIds.map(id => apiIdOf(id, lookup)),
     color:       t => getEffectiveColor(t) ?? null,
     linestyle:   t => getEffectiveLinestyle(t) ?? null,
     effectiveStartDate: t => t.effectiveStartDate || null,
@@ -34,7 +41,7 @@ const FIELD_EXTRACTORS: Record<string, (task: DisplayTask, lookup: TaskLookup) =
     effectiveEndDate:   t => t.effectiveEndDate ?? null,
     effectiveEndTime:   t => t.effectiveEndTime ?? null,
     effectiveDue:       t => t.effectiveDue ?? null,
-    durationMinutes:    t => computeDurationMinutes(t),
+    durationMinutes:    (t, { startHour }) => computeDurationMinutes(t, startHour),
     properties:         t => {
         const result: Record<string, unknown> = {};
         for (const [k, v] of Object.entries(getEffectiveProperties(t))) {
@@ -70,32 +77,30 @@ function toNativeValue(pv: PropertyValue): unknown {
 
 // ── Duration computation ──
 
-function computeDurationMinutes(task: DisplayTask): number | null {
-    const startTime = task.effectiveStartTime;
-    const endTime = task.effectiveEndTime;
-    if (!startTime || !endTime) return null;
-
-    const [sh, sm] = startTime.split(':').map(Number);
-    const [eh, em] = endTime.split(':').map(Number);
-    let minutes = (eh * 60 + em) - (sh * 60 + sm);
-    if (minutes < 0) minutes += 24 * 60; // midnight crossing
-    return minutes;
+function computeDurationMinutes(task: DisplayTask, startHour: number): number | null {
+    const ms = getDisplayTaskDurationMs(task, startHour);
+    return ms === null ? null : Math.round(ms / 60_000);
 }
 
 // ── Record extraction (for CLI field selection) ──
 
-export function taskToRecord(task: DisplayTask, fields: string[], lookup: TaskLookup): Record<string, unknown> {
+export function taskToRecord(task: DisplayTask, fields: string[], lookup: TaskLookup, startHour: number): Record<string, unknown> {
     const record: Record<string, unknown> = {};
+    const env: RecordEnv = { lookup, startHour };
     for (const field of fields) {
         const extractor = FIELD_EXTRACTORS[field];
-        record[field] = extractor ? extractor(task, lookup) : null;
+        record[field] = extractor ? extractor(task, env) : null;
     }
     return record;
 }
 
 // ── Full normalization (for API) ──
 
-/** `lookup` finds a row by its name, to give its ID (`apiIdOf`). */
-export function normalizeTask(task: DisplayTask, lookup: TaskLookup): NormalizedTask {
-    return taskToRecord(task, ALL_FIELD_NAMES, lookup) as unknown as NormalizedTask;
+/**
+ * `lookup` finds a row by its name, to give its ID (`apiIdOf`). `startHour`
+ * is the visual day boundary the duration is measured with, as the filter's
+ * `length` measures it.
+ */
+export function normalizeTask(task: DisplayTask, lookup: TaskLookup, startHour: number): NormalizedTask {
+    return taskToRecord(task, ALL_FIELD_NAMES, lookup, startHour) as unknown as NormalizedTask;
 }
