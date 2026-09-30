@@ -1,3 +1,4 @@
+import { DateUtils } from '../utils/DateUtils';
 import { type App, Setting } from 'obsidian';
 import { t } from '../i18n';
 import { TaskParser } from '../services/parsing/TaskParser';
@@ -115,7 +116,7 @@ export class CreateTaskModal {
         });
 
         // --- Start / End / Due ---
-        const dlParts = DateFieldGroup.splitDue(this.result.due);
+        const dlParts = DateUtils.splitDateTime(this.result.due ?? '');
         this.dateGroup = new DateFieldGroup(bodyEl, {
             labels: { start: t('modal.start'), end: t('modal.end'), due: t('modal.due') },
             initial: {
@@ -149,7 +150,7 @@ export class CreateTaskModal {
                 this.result.startTime = st;
                 this.result.endDate = ed;
                 this.result.endTime = et;
-                this.result.due = f.dueDate ? (f.dueTime ? `${f.dueDate}T${f.dueTime}` : f.dueDate) : undefined;
+                this.result.due = DateUtils.joinDateTime(f.dueDate, f.dueTime);
                 this.checkWarning();
             },
             onEnter: () => this.submit(),

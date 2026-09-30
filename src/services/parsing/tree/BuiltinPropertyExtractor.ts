@@ -1,3 +1,4 @@
+import { DateUtils } from '../../../utils/DateUtils';
 import type { ScopeKeys, PropertyValue } from '../../../types';
 import { VALID_LINE_STYLES } from '../../../constants/style';
 import { normalizeColor } from '../../../utils/ColorUtils';
@@ -73,9 +74,7 @@ export class BuiltinPropertyExtractor {
                 if (parsed.time) result.endTime = parsed.time;
             } else if (key === keys.due) {
                 const parsed = parseDateTimeField(pv.value.trim());
-                if (parsed.date) {
-                    result.due = parsed.time ? `${parsed.date}T${parsed.time}` : parsed.date;
-                }
+                if (parsed.date) result.due = DateUtils.joinDateTime(parsed.date, parsed.time);
             } else if (!reserved.has(key)) {
                 // A reserved key this extractor has no field for (tv-ignore,
                 // the file task's legacy tv-content / tv-status /

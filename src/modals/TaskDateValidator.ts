@@ -2,6 +2,7 @@ import { DateUtils } from '../utils/DateUtils';
 import { t } from '../i18n';
 import { validateDateTimeRules } from '../services/parsing/utils/DateTimeRuleValidator';
 
+/** The six date and time inputs of a task form, as typed. The due's two are joined by {@link DateUtils.joinDateTime}. */
 export interface DateTimeFields {
     startDate: string;
     startTime: string;
@@ -18,7 +19,7 @@ export interface ValidationContext {
 }
 
 export interface DateValidationError {
-    field: 'startDate' | 'startTime' | 'endDate' | 'endTime' | 'dueDate' | 'dueTime';
+    field: keyof DateTimeFields;
     message: string;
     hint?: string;
 }
@@ -70,9 +71,7 @@ export function validateDateRequirements(fields: DateTimeFields, ctx: Validation
  * Cross-midnight, same-day inversion, end-before-start are all handled by the shared rules.
  */
 export function validateDateRange(fields: DateTimeFields, ctx: ValidationContext = {}): DateValidationError | null {
-    const due = fields.dueDate
-        ? (fields.dueTime ? `${fields.dueDate}T${fields.dueTime}` : fields.dueDate)
-        : undefined;
+    const due = DateUtils.joinDateTime(fields.dueDate, fields.dueTime);
 
     const result = validateDateTimeRules({
         startDate: fields.startDate || undefined,

@@ -1,3 +1,4 @@
+import { DateUtils } from '../../utils/DateUtils';
 import type { ScopeKeys, PropertyValue } from '../../types';
 import type { ExtractedProperties } from './tree/BuiltinPropertyExtractor';
 import { VALID_LINE_STYLES } from '../../constants/style';
@@ -37,9 +38,7 @@ export class FilePropertyResolver {
         const startTime = startParsed.time;
         const endDate = endParsed.date;
         const endTime = endParsed.time;
-        const due = dueParsed.date
-            ? (dueParsed.time ? `${dueParsed.date}T${dueParsed.time}` : dueParsed.date)
-            : undefined;
+        const due = DateUtils.joinDateTime(dueParsed.date, dueParsed.time);
 
         const excluded = reservedPropertyKeys(keys);
 

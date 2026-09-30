@@ -1,38 +1,29 @@
+import { DateUtils } from '../../utils/DateUtils';
 import { t } from '../../i18n';
 import type { Task } from '../../types';
 import { toDisplayTask } from '../../services/display/DisplayTaskConverter';
 import {
     validateDateTimeFormats, validateDateRequirements, validateDateRange,
-    type DateValidationError,
+    type DateTimeFields, type DateValidationError,
 } from '../TaskDateValidator';
 import { createPickerTextField, type PickerTextField } from './PickerTextField';
 import { createFormRow } from './formRow';
 import { isFormEnter } from './formEnter';
 
 export type DateGroupKey = 'start' | 'end' | 'due';
-export type DateFieldKey = 'startDate' | 'startTime' | 'endDate' | 'endTime' | 'dueDate' | 'dueTime';
-
-export interface DateFieldValues {
-    startDate: string;
-    startTime: string;
-    endDate: string;
-    endTime: string;
-    dueDate: string;
-    dueTime: string;
-}
 
 export interface DateFieldGroupOptions {
     labels: { start: string; end: string; due: string };
     icons?: Partial<Record<DateGroupKey, string>>;
-    initial: Partial<DateFieldValues>;
-    buildOverlayTask: (f: DateFieldValues) => Task;
+    initial: Partial<DateTimeFields>;
+    buildOverlayTask: (f: DateTimeFields) => Task;
     getStartHour: () => number;
     taskLookup: (id: string) => Task | undefined;
     getValidationCtx: () => { hasImplicitStartDate: boolean; implicitStartDate?: string };
     getFallbackDatePlaceholder?: () => string | undefined;
     isSuspended?: () => boolean;
-    onInput?: (group: DateGroupKey, f: DateFieldValues) => void;
-    onCommit?: (group: DateGroupKey, f: DateFieldValues) => void;
+    onInput?: (group: DateGroupKey, f: DateTimeFields) => void;
+    onCommit?: (group: DateGroupKey, f: DateTimeFields) => void;
     onEnter?: () => void;
 }
 
@@ -120,7 +111,7 @@ export class DateFieldGroup {
         this.errorEl = el;
     }
 
-    collect(): DateFieldValues {
+    collect(): DateTimeFields {
         return {
             startDate: this.startDateInput?.value.trim() || '',
             startTime: this.startTimeInput?.value.trim() || '',
@@ -195,7 +186,7 @@ export class DateFieldGroup {
         // due の implicit は cascade 継承のみ (raw due なし && effectiveDue あり)。
         // 開始/終了と同じく placeholder として注入する。fallback (dailyNoteDate)
         // は開始日の既定値であって due の既定値ではないため、due には使わない。
-        const dueInherited = !dt.due ? DateFieldGroup.splitDue(dt.effectiveDue) : { date: undefined, time: undefined };
+        const dueInherited: { date?: string; time?: string } = !dt.due && dt.effectiveDue ? DateUtils.splitDateTime(dt.effectiveDue) : {};
         if (this.dueDateInput) {
             this.dueDateInput.placeholder = dueInherited.date || 'YYYY-MM-DD';
         }
@@ -204,7 +195,7 @@ export class DateFieldGroup {
         }
     }
 
-    getInput(key: DateFieldKey): HTMLInputElement {
+    getInput(key: keyof DateTimeFields): HTMLInputElement {
         switch (key) {
             case 'startDate': return this.startDateInput;
             case 'startTime': return this.startTimeInput;
@@ -225,14 +216,5 @@ export class DateFieldGroup {
         if (input.value === value) return;
         input.value = value;
         input.dispatchEvent(new Event('input', { bubbles: true }));
-    }
-
-    static splitDue(due: string | undefined): { date: string | undefined; time: string | undefined } {
-        if (!due) return { date: undefined, time: undefined };
-        if (due.includes('T')) {
-            const [date, time] = due.split('T');
-            return { date, time };
-        }
-        return { date: due, time: undefined };
     }
 }

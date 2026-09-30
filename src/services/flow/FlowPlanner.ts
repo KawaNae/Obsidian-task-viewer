@@ -348,10 +348,7 @@ function checkedChild(child: { depth: number; body: string }, warnings: Diagnost
 export function resolveAnchor(task: Task): DateAnchor | null {
     if (task.startDate) return { date: task.startDate, time: task.startTime };
     if (task.endDate) return { date: task.endDate, time: task.endTime };
-    if (task.due) {
-        const [date, time] = task.due.split('T');
-        return { date, time };
-    }
+    if (task.due) return DateUtils.splitDateTime(task.due);
     return null;
 }
 
@@ -395,7 +392,7 @@ function buildNextTask(task: Task, anchor: DateAnchor | null, next: NextOccurren
     if (next.time !== undefined) {
         if (task.startDate) newTask.startTime = next.time;
         else if (task.endDate) newTask.endTime = next.time;
-        else if (task.due) newTask.due = `${next.date}T${next.time}`;
+        else if (task.due) newTask.due = DateUtils.joinDateTime(next.date, next.time);
     }
 
     return newTask;
@@ -473,18 +470,18 @@ function applySet(newTask: Task, program: FlowProgram, deps: FlowPlanDeps): void
                 if (value.type === 'none') {
                     newTask.due = undefined;
                 } else if (value.type === 'datetime') {
-                    newTask.due = `${value.date}T${value.time}`;
+                    newTask.due = DateUtils.joinDateTime(value.date, value.time);
                 } else if (value.type === 'date') {
                     newTask.due = value.value;
                 }
                 break;
             case 'dueTime':
                 if (newTask.due) {
-                    const dueDate = newTask.due.split('T')[0];
+                    const dueDate = DateUtils.splitDateTime(newTask.due).date;
                     if (value.type === 'none') {
                         newTask.due = dueDate;
                     } else if (value.type === 'time') {
-                        newTask.due = `${dueDate}T${value.value}`;
+                        newTask.due = DateUtils.joinDateTime(dueDate, value.value);
                     }
                 }
                 break;
@@ -553,7 +550,7 @@ function buildEvalContext(task: Task, deps: FlowPlanDeps): EvalContext {
     if (task.startDate) props.start = datish(task.startDate, task.startTime);
     if (task.endDate) props.end = datish(task.endDate, task.endTime);
     if (task.due) {
-        const [date, time] = task.due.split('T');
+        const { date, time } = DateUtils.splitDateTime(task.due);
         props.due = datish(date, time);
     }
     return { props, today: deps.today, now: deps.now, weekStartDay: deps.weekStartDay, host: deps.host };
