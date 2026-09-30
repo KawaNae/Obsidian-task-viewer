@@ -35,6 +35,10 @@ export interface TimelineToolbarDeps {
     onNavigateDays: (days: number) => void;
     /** Jump to today (or the oldest overdue date) and scroll to now. */
     onJumpToNow: () => void;
+    /** Show `date` the way the Now button shows today (same past-days lead). */
+    onJumpToDate: (date: string) => void;
+    /** The date (YYYY-MM-DD) the date picker opens on; `onJumpToDate` of it stays put. */
+    getCurrentDate: () => string;
 
     getCustomName: () => string | undefined;
     onRename: (newName: string | undefined) => void;
@@ -140,7 +144,12 @@ export class TimelineToolbar extends ViewToolbarBase {
             toolbar,
             (days) => deps.onNavigateDays(days),
             () => deps.onJumpToNow(),
-            {}
+            {
+                dateJump: {
+                    getCurrentDate: () => deps.getCurrentDate(),
+                    onJump: (date) => deps.onJumpToDate(date),
+                },
+            }
         );
 
         // Push action zone to the right

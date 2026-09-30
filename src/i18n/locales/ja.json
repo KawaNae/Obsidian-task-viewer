@@ -272,6 +272,7 @@
   },
   "toolbar": {
     "today": "今日",
+    "goToDate": "日付へ移動",
     "previousDay": "前日",
     "nextDay": "翌日",
     "previousWeek": "前週",

@@ -162,6 +162,10 @@ export class CalendarView extends ItemView {
             onNavigateWeek: (days) => this.navigateWeek(days),
             onNavigateMonth: (direction) => this.navigateMonth(direction),
             onJumpToCurrentMonth: () => this.showMonthOf(new Date()),
+            onJumpToDate: (date) => {
+                const parsed = this.parseLocalDateString(date);
+                if (parsed) this.showMonthOf(parsed);
+            },
             onFilterChange: () => {
                 void this.app.workspace.requestSaveLayout();
                 this.render();
@@ -205,6 +209,10 @@ export class CalendarView extends ItemView {
                 this.toolbar.update();
             },
             getReferenceMonth: () => this.getReferenceMonth(),
+            getCurrentDate: () => {
+                const { year, month } = this.getReferenceMonth();
+                return DateUtils.getLocalDateString(new Date(year, month, 1));
+            },
             linkInteractionManager: this.linkInteractionManager,
             hoverParent: this.hoverParent,
         });
@@ -984,8 +992,8 @@ export class CalendarView extends ItemView {
 
     /**
      * Show the month that contains `date`, laid out from the week of its 1st.
-     * Today and the month steps both land here, so every month lines up the
-     * same way.
+     * Today, the month steps and "Go to date" all land here, so a picked date
+     * and "today" line up the same way.
      */
     private showMonthOf(date: Date): void {
         this.windowStart = DateUtils.getMonthGridStart(date, this.plugin.settings.weekStartDay);

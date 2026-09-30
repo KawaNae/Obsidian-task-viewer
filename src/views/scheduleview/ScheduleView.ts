@@ -174,6 +174,11 @@ export class ScheduleView extends ItemView {
                 void this.app.workspace.requestSaveLayout();
                 this.render();
             },
+            onJumpToDate: (date) => {
+                this.currentVisualDate = date;
+                void this.app.workspace.requestSaveLayout();
+                this.render();
+            },
             onFilterChange: () => {
                 void this.app.workspace.requestSaveLayout();
                 this.render();
