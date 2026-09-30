@@ -21,17 +21,13 @@ export interface ReadOnlyTaskParams {
 
 /**
  * Abstract base class for read-only parsers.
- * Read-only parsers parse external task formats for display only — no writeback.
+ * Read-only parsers parse external task formats for display only — no writeback
+ * (`formatRow` returns such a row's line as it was read).
  */
 export abstract class ReadOnlyParserBase implements LeafParserStrategy {
     abstract readonly id: ParserId;
 
     abstract parse(line: string, filePath: string, lineNumber: number): Task | null;
-
-    /** Read-only: return the original text unchanged. */
-    format(task: Task): string {
-        return task.originalText;
-    }
 
     /** Build a Task from parsed fields. Sets isReadOnly: true. */
     protected buildTask(params: ReadOnlyTaskParams): Task {

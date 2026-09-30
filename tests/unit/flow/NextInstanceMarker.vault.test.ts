@@ -6,7 +6,7 @@ import { freezeDate } from '../helpers/fakeDate';
 /**
  * The next instance is spelled as the row that fired: its list marker and
  * the gap after it (L2's H2, handed to stage X). It used to be written from a
- * task with no line of its own (`TaskParser.format` over `originalText: ''`),
+ * task with no line of its own (`formatRow` over `originalText: ''`),
  * so `*`, `+` and `1)` came back as `- `; and a row whose content opens far
  * from its marker (`10.   [ ] T`) got a next instance whose content opens
  * two columns in, under which the `==>` lines and a generated child written

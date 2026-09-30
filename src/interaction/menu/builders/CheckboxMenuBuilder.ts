@@ -1,7 +1,8 @@
 import type { App, Menu } from 'obsidian';
 import type { StatusDefinition, TaskViewerSettings } from '../../../types';
 import { buildStatusOptions, createStatusTitle } from '../../../constants/statusOptions';
-import { CreateTaskModal, formatTaskLine } from '../../../modals/CreateTaskModal';
+import { CreateTaskModal } from '../../../modals/CreateTaskModal';
+import { formatTaskLine } from '../../../services/parsing/TaskLineFormat';
 import { DateUtils } from '../../../utils/DateUtils';
 import { DailyNoteUtils } from '../../../utils/DailyNoteUtils';
 import { TaskLineClassifier } from '../../../services/parsing/utils/TaskLineClassifier';
@@ -123,9 +124,7 @@ export class CheckboxMenuBuilder {
                     new CreateTaskModal(
                         this.app,
                         async (result) => {
-                            const formatted = formatTaskLine(result);
-                            const newLine = indent + TaskLineClassifier.formatPrefix(statusChar, '', marker)
-                                + TaskLineClassifier.splitContent(formatted).content;
+                            const newLine = indent + formatTaskLine({ ...result, statusChar, marker });
                             await ops.updateLine(newLine);
                         },
                         { content, startDate: today },

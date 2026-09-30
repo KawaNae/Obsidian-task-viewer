@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import { FlowExecutor } from '../../../src/services/flow/FlowExecutor';
 import { parseFlowSegments } from '../../../src/services/lang/flow/FlowSegments';
-import { TaskParser } from '../../../src/services/parsing/TaskParser';
+import { lineParsers } from '../../../src/services/parsing/TaskParser';
 import type { GenBlock } from '../../../src/services/parsing/gen/GenBlockCollector';
 import { TaskIndex } from '../../../src/services/core/TaskIndex';
 import { TaskRepository } from '../../../src/services/persistence/TaskRepository';
@@ -10,6 +10,8 @@ import type { FlowInstanceInsert } from '../../../src/services/persistence/FlowI
 import { DEFAULT_SETTINGS, type Task } from '../../../src/types';
 import { completing } from '../helpers/completing';
 import { freezeDate } from '../helpers/fakeDate';
+
+const PARSERS = lineParsers(DEFAULT_SETTINGS);
 
 // `every` lands on the first grid point after the later of today and the
 // instance's own date, so the fixtures below (anchored on 2026-08-17) only
@@ -97,7 +99,7 @@ interface Written {
  */
 async function fire(line: string, blocks: Record<string, GenBlock>): Promise<Written> {
     const repository = makeRepository();
-    const task = TaskParser.parse(line, FILE, 0);
+    const task = PARSERS.parse(line, FILE, 0);
     expect(task, `the line has to read back as a task: ${line}`).not.toBeNull();
     await makeExecutor(repository, blocks).complete({ ...task!, statusChar: 'x' });
     await flush();
@@ -153,7 +155,7 @@ describe('a cell travels from one generation to the next', () => {
         expect(written.parentLine).toContain('state(prev: "- [ ] a\\n- [ ] b")');
 
         // 書いた行がそのまま読み戻せること。値も往復する。
-        const back = TaskParser.parse(written.parentLine, FILE, 0);
+        const back = PARSERS.parse(written.parentLine, FILE, 0);
         expect(back!.flow!.diagnostics).toEqual([]);
         expect(back!.flow!.program!.cells!.entries[0].value)
             .toEqual({ type: 'string', value: '- [ ] a\n- [ ] b' });
@@ -175,7 +177,7 @@ describe('a cell travels from one generation to the next', () => {
             });
         expect(written.fired).toBe(true);
         expect(written.parentLine.split('\n')).toHaveLength(1);
-        expect(TaskParser.parse(written.parentLine, FILE, 0)!.flow!.program!.cells!.entries[0].value)
+        expect(PARSERS.parse(written.parentLine, FILE, 0)!.flow!.program!.cells!.entries[0].value)
             .toEqual({ type: 'string', value: 'one\ntwo' });
     });
 
@@ -183,7 +185,7 @@ describe('a cell travels from one generation to the next', () => {
         // use() の無いコマンドは評価する物を持たない。宣言された値がその
         // まま次インスタンスへ運ばれる。
         const repository = makeRepository();
-        const task = TaskParser.parse('- [x] 週報 @2026-08-17 ==> every mon state(n: 3)', FILE, 0)!;
+        const task = PARSERS.parse('- [x] 週報 @2026-08-17 ==> every mon state(n: 3)', FILE, 0)!;
         await makeExecutor(repository, {}).complete({ ...task, statusChar: 'x' });
         await flush();
 
@@ -199,7 +201,7 @@ describe('a cell travels from one generation to the next', () => {
         expect(diagnostics.filter(d => d.severity === 'error')).toEqual([]);
 
         const repository = makeRepository();
-        const task = TaskParser.parse('- [x] 週報 第3回 @2026-08-17', FILE, 0)!;
+        const task = PARSERS.parse('- [x] 週報 第3回 @2026-08-17', FILE, 0)!;
         await makeExecutor(repository, COUNTER).complete({
             ...task,
             statusChar: 'x',
@@ -233,7 +235,7 @@ describe('the state ends with the command', () => {
 describe('a value that cannot be written back stops the fire', () => {
     const refuses = async (body: string[]) => {
         const repository = makeRepository();
-        const task = TaskParser.parse(
+        const task = PARSERS.parse(
             '- [x] 週報 第3回 @2026-08-17 ==> every mon state(n: 3) use("週報")', FILE, 0)!;
         await makeExecutor(repository, { 週報: block('週報', body) })
             .complete({ ...task, statusChar: 'x' });

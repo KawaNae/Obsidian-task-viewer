@@ -54,7 +54,7 @@ import { TaskReadService } from './services/data/TaskReadService';
 import { TaskWriteService } from './services/data/TaskWriteService';
 import { NoteOps } from './services/data/NoteOps';
 import { initI18n, t } from './i18n';
-import { TaskParser, enabledLineParserIds } from './services/parsing/TaskParser';
+import { enabledLineParserIds } from './services/parsing/TaskParser';
 import { initLog, logInfo } from './log/log';
 import { LogStorage } from './log/log-storage';
 import { LogManager } from './log/log-manager';
@@ -115,7 +115,6 @@ export default class TaskViewerPlugin extends Plugin {
 
         // Load Settings
         await this.loadSettings();
-        TaskParser.rebuildChain(this.settings);
 
         // Initialize logging subsystem
         initLog(
@@ -364,7 +363,7 @@ export default class TaskViewerPlugin extends Plugin {
 
         // Wavy-underline diagnostics for `==>` flow commands and `@date`
         // blocks. Pure re-parse of visible lines — no TaskIndex.
-        this.registerEditorExtension(createDiagnosticsExtension());
+        this.registerEditorExtension(createDiagnosticsExtension(() => this.settings));
 
         // Reading-view rendering of `tv-gen` blocks. Also the only place a
         // Live Preview user sees their diagnostics: Obsidian replaces a

@@ -2,13 +2,13 @@ import { describe, it, expect } from 'vitest';
 import { contentKeyOf } from '../../../src/services/core/ContentKey';
 import { makeTask } from '../helpers/makeTask';
 import { writeBench, FILE, type Filed } from '../helpers/writeBench';
-import { TaskParser } from '../../../src/services/parsing/TaskParser';
+import { formatRow } from '../../../src/services/parsing/TaskLineFormat';
 import { plannedOn } from '../../../src/services/persistence/TaskRefs';
 import type { Task } from '../../../src/types';
 
 /** `applyToTask` with the one op a strip-flow write makes. */
 function stripFlow(task: Task) {
-    return { kind: 'strip-flow' as const, text: TaskParser.format({ ...task, flow: undefined }).trim() };
+    return { kind: 'strip-flow' as const, text: formatRow({ ...task, flow: undefined }).trim() };
 }
 
 /**
@@ -173,11 +173,11 @@ describe('the wiring', () => {
 });
 
 describe('what an update reports', () => {
-    // Every fixture below is the writer's own output: `TaskParser.format` is
+    // Every fixture below is the writer's own output: `formatRow` is
     // what `updateTaskInFile` puts on the line, so a file built any other way
     // would pin a shape the writer never produces (#202).
     const bare = (statusChar: string) =>
-        TaskParser.format(makeTask({ content: 'ポモドーロ', statusChar }));
+        formatRow(makeTask({ content: 'ポモドーロ', statusChar }));
     const checked = (task: Task): Task => ({ ...task, statusChar: 'x' });
 
     it('is the writer that decides what TASK and DONE read', () => {

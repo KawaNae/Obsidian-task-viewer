@@ -4,7 +4,7 @@ import { t } from '../../i18n';
 import { DateUtils } from '../../utils/DateUtils';
 import { logError, logInfo, logWarn } from '../../log/log';
 import type { TaskIndex } from '../core/TaskIndex';
-import { TaskParser } from '../parsing/TaskParser';
+import { formatRow } from '../parsing/TaskLineFormat';
 import type { TaskRepository } from '../persistence/TaskRepository';
 import { EvalError } from '../lang/ExprEvaluator';
 import type { FlowEffect } from './FlowEffects';
@@ -195,7 +195,7 @@ export class FlowExecutor {
             }
             // One op: the row is carried, so the moved row is the row that
             // fired, and taking it from where it stood is part of the carrying.
-            ops.push({ kind: 'move', text: TaskParser.format(effect.movedTask), to });
+            ops.push({ kind: 'move', text: formatRow(effect.movedTask), to });
         }
         return { kind: 'fires', task, ops, unmoved };
     }
@@ -314,7 +314,7 @@ export class FlowExecutor {
         if (effect.kind === 'create-next') {
             return {
                 kind: 'recurrence',
-                content: TaskParser.format(effect.newTask),
+                content: formatRow(effect.newTask),
                 flowLines: (effect.newTask.flow?.childSegments ?? []).map(s => s.raw),
             };
         }
@@ -346,7 +346,7 @@ export class FlowExecutor {
                 // row from the lines its write holds, so this is the row as it
                 // is written; a deletion's is checked against the row it was
                 // planned from (`plannedOn`).
-                return [{ kind: 'strip-flow', text: TaskParser.format({ ...task, flow: undefined }) }];
+                return [{ kind: 'strip-flow', text: formatRow({ ...task, flow: undefined }) }];
         }
     }
 

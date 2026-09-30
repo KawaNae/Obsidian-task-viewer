@@ -22,9 +22,9 @@ export interface TempTaskFields {
 }
 
 /**
- * Builds a synthetic raw {@link Task} suitable for one of:
- * - feeding through `TaskParser.format()` for string serialization
- * - `toDisplayTask(t, startHour, NO_TASK_LOOKUP)` for modal placeholders
+ * Builds a synthetic raw {@link Task} for display only: the create dialog's
+ * preview, through `toDisplayTask(t, startHour, NO_TASK_LOOKUP)`. A new line
+ * is written from its fields with `formatTaskLine`, never through a Task.
  *
  * Centralizing the construction keeps the substrate fields
  * (`childIds`, `childLines`, `tags`, `properties`) consistent across

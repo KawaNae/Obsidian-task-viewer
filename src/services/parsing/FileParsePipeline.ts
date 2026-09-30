@@ -6,6 +6,7 @@ import type { DocumentNode } from './tree/DocumentTree';
 import { Outline, type OutlineReading } from './utils/Outline';
 import { SectionPropertyResolver } from './tree/SectionPropertyResolver';
 import { TreeTaskExtractor } from './tree/TreeTaskExtractor';
+import { lineParsers } from './TaskParser';
 
 export interface FileParseResult {
     /** tv-ignore'd file: produce no tasks (caller clears existing state). */
@@ -61,6 +62,7 @@ export class FileParsePipeline {
         const tasks = TreeTaskExtractor.extract(doc, {
             filePath,
             scopeKeys: settings.scopeKeys,
+            parsers: lineParsers(settings),
         });
         // What an operation that takes a row away plans from (`RowBasis`).
         // Slices of one array share its strings, so a deep tree costs one

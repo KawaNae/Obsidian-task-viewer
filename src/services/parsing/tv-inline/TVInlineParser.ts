@@ -10,7 +10,6 @@ import { parseDateTimeField } from '../utils/DateTimeFieldParser';
 import { TaskLineClassifier } from '../utils/TaskLineClassifier';
 import { validateDateTimeRules, type DateTimeValidationResult } from '../utils/DateTimeRuleValidator';
 import { DATE_BLOCK_REGEX } from './DateBlockLocator';
-import { formatDateBlock } from './DateBlockFormat';
 
 interface DateBlockResult {
     date: string;
@@ -28,9 +27,9 @@ interface DateBlockResult {
  * - With scheduling block: `- [ ] foo @start>end>due`
  * - Without scheduling block: `- [ ] foo` (catch-all for non-external checkboxes)
  *
- * Acts as the single inline format authority — `format()` correctly emits
- * either the bare line (no dates) or the @notation block (with dates),
- * so a task gaining or losing dates is handled by the same parser without
+ * Its lines are written by `formatTaskLine` (TaskLineFormat), which emits
+ * either the bare line (no dates) or the @notation block (with dates), so a
+ * task gaining or losing dates stays this parser's line without
  * promotion/demotion bookkeeping.
  */
 export class TVInlineParser implements LeafParserStrategy {
@@ -52,7 +51,7 @@ export class TVInlineParser implements LeafParserStrategy {
         const flowPart = flowSplit[1] || '';
 
         // 2. Parse the flow command. `raw` always carries the verbatim text
-        // so format() re-emits it losslessly even when parsing failed;
+        // so formatTaskLine re-emits it losslessly even when parsing failed;
         // `program` is non-null only when the command is executable.
         // Line-level view only: `- ==>` child segments are merged (and the
         // program re-parsed from the joined source) by TreeTaskExtractor.
@@ -138,7 +137,7 @@ export class TVInlineParser implements LeafParserStrategy {
 
         // content は notation-free が不変条件。最初の date block を canonical と
         // して採用し、content 中に残る全 date-like トークンを除去する。これが
-        // ないと format() の末尾再付与が次回 parse で先頭マッチを奪い、開始日が
+        // ないと formatTaskLine の末尾再付与が次回 parse で先頭マッチを奪い、開始日が
         // 化ける(round-trip 破壊)。除去で生じた連続スペースは単一に畳む。
         const globalRe = new RegExp(DATE_BLOCK_REGEX.source, 'g');
         let dateBlockCount = 0;
@@ -235,26 +234,5 @@ export class TVInlineParser implements LeafParserStrategy {
             startTime, endDate, endTime, due,
             endDateImplicit: !endDate,
         });
-    }
-
-    format(task: Task): string {
-        const statusChar = task.statusChar || ' ';
-        // The block itself is built where the `dates` built-in reads it from,
-        // so the notation a line is written in and the notation a generation
-        // block is handed are one implementation rather than two that agree
-        // until one of them is changed.
-        const dateBlock = formatDateBlock(task);
-
-        // Flow text is always re-emitted verbatim (round-trip safety, even
-        // for unparseable commands). Canonical re-serialization happens only
-        // when a fire generates the next instance (FlowPlanner). Only the
-        // task-line segment is emitted here — `- ==>` child segments are
-        // physical lines of their own and are never rewritten by format().
-        const flowStr = task.flow?.raw ? `==> ${task.flow.raw}` : '';
-
-        const blockIdStr = task.blockId ? `^${task.blockId}` : '';
-        const marker = TaskLineClassifier.extractMarker(task.originalText);
-        return TaskLineClassifier.formatPrefix(statusChar, '', marker)
-            + TaskLineClassifier.joinContent(task.content, dateBlock, flowStr, blockIdStr);
     }
 }

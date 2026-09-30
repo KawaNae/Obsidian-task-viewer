@@ -105,7 +105,7 @@ src/
 │   ├── core/                  # Core services (TaskIndex, TaskStore, TaskScanner, Reading, ReadingCheck, DiskReconciler, etc.)
 │   ├── data/                  # Data access facade (TaskReadService, TaskWriteService)
 │   ├── display/               # Display conversion (DisplayTaskConverter, TaskSplitter, TaskDateCategorizer, TaskIdGenerator, TaskContent)
-│   ├── parsing/               # Parser layer
+│   ├── parsing/               # Parser layer (TaskParser: lineParsers; TaskLineFormat: formatTaskLine, formatRow; FileParsePipeline)
 │   │   ├── tv-inline/         # Line-level parsers (TVInlineParser, DayPlannerParser, TasksPluginParser, ReadOnlyParserBase)
 │   │   ├── strategies/        # ParserChain, ParserStrategy
 │   │   ├── tree/              # Document structure tree (DocumentTree, DocumentTreeBuilder, SectionPropertyResolver, etc.)
@@ -201,7 +201,7 @@ Quick reference for locating the right layer when implementing a feature.
 | **ReadingCheck** | `services/core/ReadingCheck.ts` | Whether the index's reading of a note is the note on disk, asked before an operation is planned from a copy (`checkCopy`, the same `followLine` question as a write's first check) or a row is looked up by anchor (`checkFile`). `TaskIndex.copyToPlan` and `freshByAnchor` act on the answer; a stale reading is refused through `reportRefusal` |
 | **DiskReconciler** | `services/core/DiskReconciler.ts` | Brings the index's readings to the disk when a change notice never comes: on start, focus, a plugin view, a refusal, a stale check and each minute (desktop), stats the notes Obsidian holds (`DiskProbe`; the whole vault on desktop, the notes the index has read elsewhere), reads again what moved through `queueScan`, forgets what is gone, and logs where Obsidian's stat of a note lasted apart from the disk (`modified`, `deleted`). Obsidian's model is only observed, never mended; a note Obsidian never heard created stays out of the index |
 | **FlowFireExtension** | `editor/FlowFireExtension.ts` | Fires a completion made in the editor, in the same transaction (see Flow Firing) |
-| **ParserChain** | `services/parsing/strategies/ParserChain.ts` | Tries multiple parsers in order (Strategy chain) |
+| **ParserChain** | `services/parsing/strategies/ParserChain.ts` | Tries multiple parsers in order (Strategy chain); parses only, never writes |
 | **TVInlineParser** | `services/parsing/tv-inline/TVInlineParser.ts` | Parses `@date` inline notation (line-level) |
 | **TaskRepository** | `services/persistence/TaskRepository.ts` | Write facade over the inline writer, the cloner and frontmatter key writes |
 | **FrontmatterWriter** | `services/persistence/writers/FrontmatterWriter.ts` | Surgical frontmatter key writes (`setKeys`, used by the color / line-style property suggests) and insertion under a heading |
@@ -243,7 +243,8 @@ Quick reference for locating the right layer when implementing a feature.
 | **SuggestController** | `views/customMenus/SuggestController.ts` | Shared suggest-dropdown machinery (tv-ctrl__suggest) used by both filter-popover value selectors and TaskHubPanel form fields |
 | **PropertyUpdatePlanner** | `services/persistence/PropertyUpdatePlanner.ts` | Pure diff: `Partial<Task>` updates → normalized PropertyOp[] for non-time properties (canonical-location / clear semantics) |
 | **ChildPropertyLineEditor** | `services/persistence/utils/ChildPropertyLineEditor.ts` | Surgical CRUD for inline child property lines (`- key:: value`), representation-preserving |
-| **TaskParser** | `services/parsing/TaskParser.ts` | Static facade wrapping active ParserChain; rebuilt on settings change |
+| **TaskParser** | `services/parsing/TaskParser.ts` | `lineParsers(settings)`: the ParserChain the settings read lines with, built by whoever reads (FileParsePipeline, editor diagnostics); no chain is held. `lineParsersFingerprint` says when settings read lines differently |
+| **TaskLineFormat** | `services/parsing/TaskLineFormat.ts` | `formatTaskLine(fields)`: the one spelling of a task line the plugin writes (new or rewritten); `formatRow(task)`: a read row written back (tv-inline via `formatTaskLine`, read-only notations return `originalText`) |
 
 ---
 
@@ -275,7 +276,7 @@ Properties / tags / styling cascade through two scopes, each with a dedicated re
 
 | Layer | Dates | Properties / tags / style | Written by | Read by |
 |-------|-------|---------------------------|------------|---------|
-| **raw** | `task.startDate` etc. | `task.color`/`linestyle`/`mask`/`tags`/`properties` | Parser, from the task's own lines only | `format()`, all writers (round-trip fidelity) |
+| **raw** | `task.startDate` etc. | `task.color`/`linestyle`/`mask`/`tags`/`properties` | Parser, from the task's own lines only | `formatTaskLine`, all writers (round-trip fidelity) |
 | **cascade** | `task.cascadeContext.startDate` etc. | `task.cascadeContext.color`/`tags`/`properties` etc. | `TreeTaskExtractor`, from `SectionNode.resolvedX` | Merge step below |
 | **effective** | `DisplayTask.effectiveStartDate` etc. (materialized — merge needs `startHour`) | `getEffective*()` derived helpers (`services/data/EffectiveProperties.ts` — merge closes over the Task alone) | — | Display, filter, sort, API output |
 
@@ -650,7 +651,7 @@ menu.addItem(item => item.setTitle('Delete task'));
 
 | Pattern | Where used |
 |---------|-----------|
-| **Facade** | `TaskIndex`, `TaskReadService`, `TaskWriteService`, `MenuHandler`, `TaskRepository`, `TaskParser` |
+| **Facade** | `TaskIndex`, `TaskReadService`, `TaskWriteService`, `MenuHandler`, `TaskRepository` |
 | **Strategy** | `DragRouter.pickGesture()` selecting `TimelineMoveGesture` / `TimelineResizeGesture` / `GridMoveGesture` / `GridResizeGesture`, `ParserStrategy` |
 | **Builder** | `PropertiesMenuBuilder`, `TimerMenuBuilder`, and other menu builders |
 | **Observer** | `TaskStore.onChange()` notifies UI of task changes |
@@ -911,7 +912,7 @@ When working with `FrontmatterWriter` / `FrontmatterLineEditor`:
 
 Every task is a line in a note. Writable (`tv-inline`) tasks are rewritten by `InlineTaskWriter`; `tasks-plugin` and `day-planner` tasks are read-only and never written. Frontmatter is written only through `setFrontmatterKeys` (scope keys from the property suggests), never on a task's behalf.
 
-- Every task has a real body line. `TimerRecorder` calls `createTempTask()` without a `line`, so the resulting temp Task gets `line: 0` (the `createTempTask` default).
+- Every task has a real body line. A new line (the API's `create` and `insertChildTask`, the create dialog, the timer's records) is written from its fields with `formatTaskLine`, never through a temporary Task; `createTempTask` is only for the create dialog's preview.
 
 ### Inline persistence rules
 
@@ -919,14 +920,14 @@ Every task is a line in a note. Writable (`tv-inline`) tasks are rewritten by `I
 
 - Time-only values are allowed (`@10:00`); the date comes from the section or note scope via `cascadeContext`.
 - `endDate` is omitted when it equals `startDate` (`>14:00` = same day as start).
-- Updates re-format the whole line via `TVInlineParser.format()`.
+- Updates re-format the whole line via `formatRow` (`formatTaskLine` for tv-inline).
 - An empty field in the hub is a sparse update: the field is omitted, so the cascade value shows through.
 
-#### tv-inline notation format rules (`TVInlineParser.format()`)
+#### tv-inline notation format rules (`formatTaskLine`)
 
 **cascadeContext**:
 - Inherited values from file/section cascade; consumed by DisplayTaskConverter only
-- `format()` reads raw fields only — cascade values are never serialized back
+- `formatTaskLine` reads raw fields only — cascade values are never serialized back
 
 **endDate same-day omission**:
 - `endDate === startDate` + endTime → `>14:00` (date omitted)
@@ -940,7 +941,7 @@ Every task is a line in a note. Writable (`tv-inline`) tasks are rewritten by `I
 |-------|-------|---------------------------|
 | Parse (TreeTaskExtractor) | Set from file/section cascade when task lacks own dates | Style set when raw absent; tags/properties always (partial merge) |
 | Effective merge | `DisplayTaskConverter` → `DisplayTask.effective*` via `\|\|` fallback | `getEffective*()` helpers (`services/data/EffectiveProperties.ts`) |
-| `format()` (TVInlineParser) / writers | Ignored — only raw fields are serialized | Same — inherited values are never written back |
+| `formatTaskLine` / writers | Ignored — only raw fields are serialized | Same — inherited values are never written back |
 | Explicit edit (drag / resize / future property edit) | Raw fields set explicitly → cascade no longer contributes | Same principle |
 
 ---

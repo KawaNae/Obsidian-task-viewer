@@ -4,6 +4,7 @@ import { DayPlannerParser } from '../../../src/services/parsing/tv-inline/DayPla
 import { TasksPluginParser } from '../../../src/services/parsing/tv-inline/TasksPluginParser';
 import { DEFAULT_STATUS_DEFINITIONS } from '../../../src/types';
 import type { TasksPluginMapping } from '../../../src/types';
+import { formatRow } from '../../../src/services/parsing/TaskLineFormat';
 
 const defaultMapping: TasksPluginMapping = {
     start: 'startDate',
@@ -61,9 +62,9 @@ describe('DayPlannerParser', () => {
         expect(task!.endDate).toBeUndefined();
     });
 
-    it('format returns originalText', () => {
+    it('formatRow returns originalText', () => {
         const task = parser.parse('- [ ] 09:00 Test', 'daily.md', 0)!;
-        expect(parser.format(task)).toBe('- [ ] 09:00 Test');
+        expect(formatRow(task)).toBe('- [ ] 09:00 Test');
     });
 
     it('read-only tasks never trigger flow (canTriggerFlow gate)', () => {
@@ -158,9 +159,9 @@ describe('TasksPluginParser', () => {
         expect(task!.due).toBe('2026-03-28');
     });
 
-    it('format returns originalText', () => {
+    it('formatRow returns originalText', () => {
         const task = parser.parse('- [ ] Task 📅 2026-03-21', 'test.md', 0)!;
-        expect(parser.format(task)).toBe('- [ ] Task 📅 2026-03-21');
+        expect(formatRow(task)).toBe('- [ ] Task 📅 2026-03-21');
     });
 
     it('read-only tasks never trigger flow (canTriggerFlow gate)', () => {

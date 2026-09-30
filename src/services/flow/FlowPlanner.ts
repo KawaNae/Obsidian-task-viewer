@@ -11,7 +11,7 @@ import { type Value, isDatishValue, valueToDisplay } from '../lang/Value';
 import type { GenBlock } from '../parsing/gen/GenBlockCollector';
 import { parseGenBody } from '../parsing/gen/GenBodyParser';
 import { renderGenBody } from '../parsing/gen/GenBodyRenderer';
-import { TaskParser } from '../parsing/TaskParser';
+import { formatRow } from '../parsing/TaskLineFormat';
 import { formatDateBlock } from '../parsing/tv-inline/DateBlockFormat';
 import type { GeneratedChild } from '../persistence/FlowInstanceLines';
 import { type FlowProgram, SET_FIELD_ORDER, isCellValue } from '../lang/flow/FlowAst';
@@ -298,7 +298,7 @@ function withWrittenCells(program: FlowProgram, written: ReadonlyMap<string, Val
  * task when the block wrote no parent line.
  *
  * Both roads end in one string so the write layer never learns that a block
- * can leave the parent out. The clause is spelled the way format() spells
+ * can leave the parent out. The clause is spelled the way formatRow spells
  * it, since these are two ways of writing the same line.
  *
  * Corrections collect into `warnings`. A status the block wrote as done is
@@ -310,7 +310,7 @@ function composeParentLine(
     newTask: Task,
     warnings: Diagnostic[],
 ): string {
-    if (parentText === null) return TaskParser.format(newTask);
+    if (parentText === null) return formatRow(newTask);
 
     const checked = checkGeneratedParentLine(parentText);
     // The line check speaks in diagnostics, and its sentence is the whole of

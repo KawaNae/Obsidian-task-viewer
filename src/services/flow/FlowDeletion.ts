@@ -1,6 +1,6 @@
 import type { Task } from '../../types';
 import { EvalError } from '../lang/ExprEvaluator';
-import { TaskParser } from '../parsing/TaskParser';
+import { formatRow } from '../parsing/TaskLineFormat';
 import type { FlowEffect } from './FlowEffects';
 import { type FlowPlanDeps, GenerationError, planFlow } from './FlowPlanner';
 
@@ -128,6 +128,6 @@ export function countDescendantFlows(task: Task, getTask: (id: string) => Task |
  */
 function previewOf(effect: FlowEffect): string {
     if (effect.kind === 'create-generated') return effect.parentLine.trim();
-    if (effect.kind === 'create-next') return TaskParser.format(effect.newTask).trim();
+    if (effect.kind === 'create-next') return formatRow(effect.newTask).trim();
     return '';
 }

@@ -140,7 +140,7 @@ export interface Task {
     /**
      * Values inherited from the File → Section cascade rather than from the
      * task's own lines / frontmatter.  Set by TreeTaskExtractor; never
-     * serialized — format() and all writers read only raw fields for
+     * serialized — formatTaskLine and all writers read only raw fields for
      * round-trip fidelity.
      *
      * Dates are merged into `DisplayTask.effective*` by DisplayTaskConverter
@@ -190,7 +190,7 @@ export interface Task {
 
     /**
      * Flow command (`==> ...`), parsed by the flow language core.
-     * format() always re-emits `raw` verbatim; canonical re-serialization
+     * formatTaskLine always re-emits `raw` verbatim; canonical re-serialization
      * happens only when a fire generates the next instance.
      */
     flow?: TaskFlow;

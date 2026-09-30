@@ -1,6 +1,6 @@
 import { type App, TFile } from 'obsidian';
 import type { Task } from '../../../types';
-import { TaskParser } from '../../parsing/TaskParser';
+import { formatRow } from '../../parsing/TaskLineFormat';
 import { collectFlowLineIndices } from '../../parsing/utils/FlowLineScanner';
 import { carryTo } from '../Carry';
 import { FileOperations } from '../utils/FileOperations';
@@ -56,7 +56,7 @@ export class InlineTaskWriter {
 
         // 子プロパティ行（- key:: value）の更新はタスク行と同じ1回の書き込みで
         // 行う。行の土台を1回照合し、1回で書く。
-        const update: TaskOp = { kind: 'update', text: TaskParser.format(updatedTask), childOps };
+        const update: TaskOp = { kind: 'update', text: formatRow(updatedTask), childOps };
         return this.writeOps(file, this.channelOf(target.file), target, [update], fire);
     }
 

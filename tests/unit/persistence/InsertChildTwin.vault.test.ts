@@ -28,10 +28,9 @@ const EDITED = ['メモ', '- [ ] 読書', '- [ ] 読書', ''].join('\n');
 let submitted: Promise<unknown> | undefined;
 
 vi.mock('../../../src/modals/CreateTaskModal', () => ({
-    formatTaskLine: () => '- [ ] c',
     CreateTaskModal: class {
         constructor(_app: unknown, private readonly submit: (result: unknown) => Promise<unknown>) { }
-        open() { submitted = this.submit({}); }
+        open() { submitted = this.submit({ content: 'c' }); }
     },
 }));
 
