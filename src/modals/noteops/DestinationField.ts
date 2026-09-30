@@ -18,8 +18,9 @@ export interface DestinationFieldOptions {
 }
 
 /**
- * Where lines go: a note, by its name and folder (`NoteFields`), and a
- * heading in it, the note's headings suggested. Left empty, the heading
+ * Where lines go: a note, by its folder and name (`NoteFields`), and a
+ * heading in it, the note's headings suggested: three form rows, each with
+ * its icon, as the hub's rows are. Left empty, the heading
  * field stands for the default one, which it shows in its place.
  *
  * It holds what the user typed and nothing of the operation it is for:
@@ -40,10 +41,10 @@ export class DestinationField {
             onEnter: opts.onEnter,
         });
 
-        const { row } = createFormRow(container, t('modal.send.heading'));
+        const { row } = createFormRow(container, t('modal.send.heading'), { icon: 'heading' });
         this.headingInput = row.createEl('input', {
             type: 'text',
-            cls: 'tv-ctrl__text-input tv-form__control',
+            cls: 'tv-ctrl__text-input tv-ctrl__text-input--md tv-ctrl__text-input--glow tv-form__control',
             placeholder: opts.defaultHeading,
         });
         this.headingInput.value = opts.initial.heading;

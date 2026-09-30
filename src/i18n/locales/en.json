@@ -527,11 +527,9 @@
     },
     "send": {
       "title": "Send to a note",
-      "rows": "Rows to send ({{count}} lines)",
       "shallow": "Line {{line}} is indented less than the children, so the rows cannot be edited here. They are sent as they are.",
       "parentBreak": "The task's line must stay one line.",
       "notTask": "The first line is not a task line.",
-      "destination": "Destination",
       "heading": "Heading",
       "toNew": "Makes a new note {{note}} and puts the rows under the heading {{heading}}",
       "toHead": "Sends the rows to the top of the heading {{heading}} in the existing note {{note}}",

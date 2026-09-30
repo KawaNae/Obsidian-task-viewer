@@ -61,8 +61,6 @@ export type Tone = 'info' | 'warning' | 'error';
 /** What the surface shows. */
 export interface SendViewState {
     phase: SendPhase;
-    /** The lines sent, as the drafts stand. */
-    lineCount: number;
     /** What the send does, in one sentence; null until the fields name a note the send can go to. */
     destination: { text: string; tone: Tone } | null;
     /** The headings of the note the fields name, for the heading field to offer. */
@@ -183,7 +181,6 @@ export class SendDialog {
 
         return {
             phase: this.phase,
-            lineCount: this.lineCount(),
             destination: facts && facts.kind !== 'unnamed' ? destinationText(facts) : null,
             headings: facts && facts.kind !== 'unnamed' ? facts.headings : [],
             candidates: this.candidatesOf(facts),
@@ -336,22 +333,6 @@ export class SendDialog {
         return this.drafts().some(({ check }) => check !== null && check.kind !== 'same');
     }
 
-    /** The lines the rows send, as their drafts stand. */
-    private lineCount(): number {
-        let count = 0;
-        for (const row of this.rows) {
-            if (row.kind === 'fixed') {
-                count += row.base.length;
-                continue;
-            }
-            const check = row.frame.check(row.editor.draft());
-            if (check.kind === 'write') count += 1 + check.replacement.children.length;
-            else if (check.kind === 'same') count += row.frame.base.length;
-            else count += 1 + trimmedLength(row.editor.draft().children.map(line => line.text));
-        }
-        return count;
-    }
-
     private isChecked(candidate: InheritedValue): boolean {
         return this.checks.get(candidate.key) ?? checkedByDefault(candidate);
     }
@@ -474,11 +455,4 @@ export function yamlValue(yaml: readonly string[]): string {
 function atFirstColumn(base: readonly string[]): string[] {
     const indent = Outline.indentOf(base[0]);
     return base.map(line => (Outline.isBlank(line) ? '' : Outline.shiftIndent(line, indent, '')));
-}
-
-/** How many of `lines` there are, the blank ones at the end left out. */
-function trimmedLength(lines: readonly string[]): number {
-    let count = lines.length;
-    while (count > 0 && Outline.isBlank(lines[count - 1])) count--;
-    return count;
 }

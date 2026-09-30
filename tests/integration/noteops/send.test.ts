@@ -158,13 +158,13 @@ const viewOf = which => {
 const state = () => ({
     open: !!panel(),
     closing: !!document.querySelector('.tv-overlay.is-closing'),
-    name: inputs()[0]?.value ?? null,
-    folder: inputs()[1]?.value ?? null,
+    folder: inputs()[0]?.value ?? null,
+    name: inputs()[1]?.value ?? null,
     heading: inputs()[2]?.value ?? null,
     says: shown(panel()?.querySelector('.tv-send__says')) ? panel().querySelector('.tv-send__says').textContent : null,
-    asking: shown(panel()?.querySelector('.tv-send__ask')),
-    canSend: panel() ? !panel().querySelector('.tv-send__actions .mod-cta').disabled : false,
-    editors: panel()?.querySelectorAll('.tv-send__row-list .cm-content').length ?? 0,
+    asking: shown(panel()?.querySelector('.tv-form__ask')),
+    canSend: panel() ? !panel().querySelector('.tv-form__buttons .mod-cta').disabled : false,
+    editors: panel()?.querySelectorAll('.tv-send__rows .cm-content').length ?? 0,
     fixed: panel()?.querySelector('.tv-send__fixed pre')?.textContent ?? null,
     why: panel()?.querySelector('.tv-send__fixed .tv-form__info')?.textContent ?? null,
 });
@@ -177,7 +177,7 @@ const press = el => {
     el.dispatchEvent(new MouseEvent('mouseup', at));
     el.dispatchEvent(new MouseEvent('click', at));
 };
-/** Type \`text\` into the field \`i\` (name, folder, heading), and press the item of its list that reads \`pick\`. */
+/** Type \`text\` into the field \`i\` (folder, name, heading), and press the item of its list that reads \`pick\`. */
 const pickFrom = async (i, text, pick) => {
     const input = inputs()[i];
     input.focus();
@@ -242,7 +242,7 @@ function closeDialog(): void {
     onDialog(`
         panel()?.querySelector('.tv-overlay__close')?.click();
         await sleep(100);
-        panel()?.querySelector('.tv-send__discard')?.click();
+        panel()?.querySelector('.tv-form__discard')?.click();
         await until(() => !panel());
         return 'ok';
     `);
@@ -261,7 +261,7 @@ describe('the send dialog', () => {
         const picked = onDialog<DialogState & { draft: string }>(`
             const children = viewOf('children');
             children.dispatch({ changes: { from: children.state.doc.line(1).to, insert: '2' } });
-            await pickFrom(0, ${JSON.stringify(SRC.slice(0, -5))}, ${JSON.stringify(SRC)});
+            await pickFrom(1, ${JSON.stringify(SRC.slice(0, -5))}, ${JSON.stringify(SRC)});
             await until(() => state().says?.includes('このノート'));
             await pickFrom(2, 'Do', 'Done');
             await until(() => state().says?.includes('Done') && state().canSend);
@@ -273,7 +273,7 @@ describe('the send dialog', () => {
 
         const sent = onDialog<{ open: boolean; notices: number }>(`
             const before = new Set(document.querySelectorAll('.notice'));
-            panel().querySelector('.tv-send__actions .mod-cta').click();
+            panel().querySelector('.tv-form__buttons .mod-cta').click();
             await until(() => !panel());
             await sleep(300);
             return JSON.stringify({ open: !!panel(), notices: [...document.querySelectorAll('.notice')].filter(el => !before.has(el)).length });
@@ -289,13 +289,13 @@ describe('the send dialog', () => {
         expect(opened.why).toContain('1 行目');
 
         const sent = onDialog<DialogState>(`
-            const [name, , heading] = inputs();
+            const [, name, heading] = inputs();
             name.value = ${JSON.stringify(SRC.slice(0, -3))};
             name.dispatchEvent(new Event('input', { bubbles: true }));
             heading.value = 'Done';
             heading.dispatchEvent(new Event('input', { bubbles: true }));
             await until(() => state().says?.includes('Done') && state().canSend);
-            panel().querySelector('.tv-send__actions .mod-cta').click();
+            panel().querySelector('.tv-form__buttons .mod-cta').click();
             await until(() => !panel());
             return JSON.stringify(state());
         `);

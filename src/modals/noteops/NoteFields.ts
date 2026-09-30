@@ -17,9 +17,10 @@ export interface NoteFieldsOptions {
 }
 
 /**
- * The fields that name a note and say where it goes: its name (with the
- * vault's notes suggested), and its folder (with the vault's folders
- * suggested). Picking a note puts its name and its folder in the two. They
+ * The fields that name a note and say where it goes, in the order of its
+ * path: its folder (with the vault's folders suggested), and its name (with
+ * the vault's notes suggested), each a form row with its icon, as the hub's
+ * rows are. Picking a note puts its folder and its name in the two. They
  * answer the note the two point at (`NoteName.at`) — a new note or one of the
  * vault's, which the fields do not keep apart themselves — and whether the
  * name can be one; what the form does with that note is the form's to say.
@@ -35,8 +36,18 @@ export class NoteFields {
     private typedName = false;
 
     constructor(private readonly app: App, container: HTMLElement, opts: NoteFieldsOptions) {
-        const { row: nameRow } = createFormRow(container, t('modal.noteFields.name'));
-        this.nameInput = nameRow.createEl('input', { type: 'text', cls: 'tv-ctrl__text-input tv-form__control' });
+        const { row: folderRow } = createFormRow(container, t('modal.noteFields.folder'), { icon: 'folder' });
+        this.folderInput = folderRow.createEl('input', {
+            type: 'text',
+            cls: 'tv-ctrl__text-input tv-ctrl__text-input--md tv-ctrl__text-input--glow tv-form__control',
+            placeholder: t('modal.noteFields.folderRoot'),
+        });
+        this.folderInput.value = opts.folder;
+        this.folderSuggest = new FolderSuggest(app, this.folderInput);
+        this.folderInput.addEventListener('input', () => opts.onChange());
+
+        const { row: nameRow } = createFormRow(container, t('modal.noteFields.name'), { icon: 'file-text' });
+        this.nameInput = nameRow.createEl('input', { type: 'text', cls: 'tv-ctrl__text-input tv-ctrl__text-input--md tv-ctrl__text-input--glow tv-form__control' });
         this.nameInput.value = opts.name;
         this.nameInput.addEventListener('input', () => {
             this.typedName = true;
@@ -47,19 +58,9 @@ export class NoteFields {
             opts.onChange();
         });
 
-        const { row: folderRow } = createFormRow(container, t('modal.noteFields.folder'));
-        this.folderInput = folderRow.createEl('input', {
-            type: 'text',
-            cls: 'tv-ctrl__text-input tv-form__control',
-            placeholder: t('modal.noteFields.folderRoot'),
-        });
-        this.folderInput.value = opts.folder;
-        this.folderSuggest = new FolderSuggest(app, this.folderInput);
-        this.folderInput.addEventListener('input', () => opts.onChange());
-
         const lists: [HTMLInputElement, ShownSuggest<unknown>][] = [
-            [this.nameInput, this.fileSuggest],
             [this.folderInput, this.folderSuggest],
+            [this.nameInput, this.fileSuggest],
         ];
         for (const [input, suggest] of lists) {
             input.addEventListener('keydown', (e: KeyboardEvent) => {
