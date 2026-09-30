@@ -2,8 +2,9 @@ import { t } from '../../i18n';
 import { logWarn } from '../../log/log';
 import type { InheritedValue } from '../../services/data/InheritedValues';
 import type {
-    DestinationAsk, DestinationFacts, NoteFacts, SendPreview, SendRequest, SendResult, SendRow,
+    DestinationAsk, DestinationFacts, NoteFacts, SendingLines, SendPreview, SendRequest, SendResult, SendRow,
 } from '../../services/data/NoteOps';
+import { sendingOf } from '../../services/data/NoteOps';
 import type { AnchorLink } from '../../services/data/NoteRefs';
 import type { UnresolvedReference } from '../../services/flow/FlowReferences';
 import type { ValueSource } from '../../services/parsing/tree/DocumentTree';
@@ -30,6 +31,12 @@ import type { DraftEditor } from '../form/source/SourceEditor';
  *   Obsidian's own keys; a check the user changed stays as they left it
  *   whichever note the fields name. A key the note has already is not
  *   written, and is offered as such. The rows' own note is offered none.
+ * - The open timers are asked whether they let the send be made
+ *   (`SendHost.timers`) whenever the dialog shows it, with the drafts as
+ *   they are: a send that would leave a timer without its lines is not
+ *   offered, and why is said. A timer that changes by itself while the
+ *   dialog is open (an interval's record) is seen at the next showing; the
+ *   send asks again as it is made.
  * - A send not made keeps the draft and says why under it; a send made
  *   closes the dialog. A send made for some rows only says why too, and
  *   offers no send again: the rows that went are no longer where the
@@ -93,6 +100,8 @@ export interface SendSurface {
 export interface SendHost {
     /** What the destination the fields name is (`NoteOps.destinationFacts`). */
     facts(ask: DestinationAsk): Promise<DestinationFacts>;
+    /** Why the open timers keep the send `sending` from being made, in one sentence; null when nothing keeps it (`NoteOps.timersRefuse`). */
+    timers(sending: SendingLines): string | null;
     /** Make the send (`NoteOps.send`), a send not made shown here rather than in a notice. */
     send(req: SendRequest): Promise<SendResult>;
     /** A new level of indentation, as Obsidian's settings say (`ObsidianConfig.indentUnit`). */
@@ -177,6 +186,8 @@ export class SendDialog {
         for (const why of new Set(this.drafts().flatMap(({ check }) => (check?.kind === 'refused' ? [draftError(check.reason)] : [])))) {
             errors.push(why);
         }
+        const timers = this.timersRefuse(facts);
+        if (timers !== null) errors.push(timers);
         if (facts && facts.kind !== 'unnamed') warnings.push(...this.warningsOf(facts));
 
         return {
@@ -351,6 +362,19 @@ export class SendDialog {
                 shut: has ? t('modal.send.present', { note: present!.path }) : null,
             };
         });
+    }
+
+    /**
+     * Why the open timers keep a send to the note `facts` names from being
+     * made, the rows as their editors hold them; null when nothing keeps it,
+     * or the fields name no note, or a draft cannot be written (said
+     * already).
+     */
+    private timersRefuse(facts: DestinationFacts | null): string | null {
+        const req = this.request();
+        if (!req || !facts || facts.kind === 'unnamed') return null;
+        const rows = req.rows.map((row, i) => ({ ...row, file: this.preview.rows[i].task.file }));
+        return this.host.timers(sendingOf(rows, facts.path, facts.anchors));
     }
 
     private warningsOf(facts: NoteFacts): string[] {
