@@ -1,7 +1,7 @@
 import type { FilterState, FilterCondition, FilterGroup, FilterProperty } from '../services/filter/FilterTypes';
 import { getAllConditions, PROPERTY_OPERATORS } from '../services/filter/FilterTypes';
 import { FilterSerializer } from '../services/filter/FilterSerializer';
-import { parseDatePreset } from '../cli/CliDatePresetParser';
+import { DATE_PRESET_SYNTAX, parseDatePreset } from '../services/filter/DatePreset';
 import { TaskApiError } from './TaskApiTypes';
 import type { ListParams } from './TaskApiTypes';
 
@@ -164,12 +164,12 @@ export function buildFilterFromParams(params: ListParams): FilterState | null {
     const windowToName = params.date ? 'date' : 'to';
     if (windowFrom) {
         const fromValue = parseDatePreset(windowFrom);
-        if (!fromValue) throw new TaskApiError(`Invalid date value for ${windowFromName}: ${windowFrom}. Use YYYY-MM-DD or a preset (today, thisWeek, pastWeek, nextWeek, thisMonth, thisYear, nextNdays)`);
+        if (!fromValue) throw new TaskApiError(`Invalid date value for ${windowFromName}: ${windowFrom}. Use YYYY-MM-DD or a preset (${DATE_PRESET_SYNTAX})`);
         conditions.push(condition('endDate', 'onOrAfter', fromValue));
     }
     if (windowTo) {
         const toValue = parseDatePreset(windowTo);
-        if (!toValue) throw new TaskApiError(`Invalid date value for ${windowToName}: ${windowTo}. Use YYYY-MM-DD or a preset (today, thisWeek, pastWeek, nextWeek, thisMonth, thisYear, nextNdays)`);
+        if (!toValue) throw new TaskApiError(`Invalid date value for ${windowToName}: ${windowTo}. Use YYYY-MM-DD or a preset (${DATE_PRESET_SYNTAX})`);
         conditions.push(condition('startDate', 'onOrBefore', toValue));
     }
 

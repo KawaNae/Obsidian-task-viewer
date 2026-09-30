@@ -181,7 +181,7 @@ export class TaskFilterEngine {
 
         if (c.value == null) return true;
         if (!taskDate) return false;
-        const { start, end } = DateResolver.resolve(c.value as DateFilterValue, weekStartDay, startHour);
+        const { start, end } = DateResolver.resolve(c.value as DateFilterValue, weekStartDay, startHour, new Date());
         switch (c.operator) {
             case 'equals':     return taskDate >= start && taskDate <= end;
             case 'before':     return taskDate < start;

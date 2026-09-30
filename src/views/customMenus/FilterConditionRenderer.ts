@@ -3,7 +3,7 @@ import type {
     FilterCondition, DateFilterValue, RelativeDatePreset,
 } from '../../services/filter/FilterTypes';
 import {
-    getRelativeDateLabel,
+    DEFAULT_NEXT_N_DAYS, RELATIVE_DATE_PRESETS, getRelativeDateLabel,
 } from '../../services/filter/FilterTypes';
 import type { StatusDefinition, Task } from '../../types';
 import type { FilterDropdownMenus } from './FilterDropdownMenus';
@@ -352,7 +352,7 @@ export class FilterConditionRenderer {
             const presetBtn = container.createEl('button', {
                 cls: 'filter-popover__dropdown',
                 text: relVal.preset === 'nextNDays'
-                    ? t('filter.relativeDate.nextNDaysValue', { n: relVal.n ?? 7 })
+                    ? t('filter.relativeDate.nextNDaysValue', { n: relVal.n ?? DEFAULT_NEXT_N_DAYS })
                     : getRelativeDateLabel(relVal.preset),
             });
             presetBtn.addEventListener('click', (e) => {
@@ -367,7 +367,7 @@ export class FilterConditionRenderer {
                     type: 'number',
                 });
                 nInput.style.width = '52px';
-                nInput.value = String(relVal.n ?? 7);
+                nInput.value = String(relVal.n ?? DEFAULT_NEXT_N_DAYS);
                 nInput.min = '1';
                 nInput.placeholder = 'N';
                 nInput.addEventListener('change', () => {
@@ -393,12 +393,11 @@ export class FilterConditionRenderer {
     }
 
     showRelativeDateMenu(anchorEl: HTMLElement, condition: FilterCondition): void {
-        const presets: RelativeDatePreset[] = ['today', 'thisWeek', 'nextWeek', 'pastWeek', 'nextNDays', 'thisMonth', 'thisYear'];
         const dateVal = condition.value as DateFilterValue;
         const currentPreset = typeof dateVal === 'object' && 'preset' in dateVal
             ? dateVal.preset : 'today';
 
-        const items = presets.map(p => ({
+        const items = RELATIVE_DATE_PRESETS.map(p => ({
             label: getRelativeDateLabel(p),
             value: p,
             checked: currentPreset === p,
@@ -407,7 +406,7 @@ export class FilterConditionRenderer {
         this.dropdowns.showSelectPopover(anchorEl, items, (val) => {
             const preset = val as RelativeDatePreset;
             condition.value = preset === 'nextNDays'
-                ? { preset, n: 7 } as DateFilterValue
+                ? { preset, n: DEFAULT_NEXT_N_DAYS } as DateFilterValue
                 : { preset } as DateFilterValue;
             this.refreshPopover();
         });

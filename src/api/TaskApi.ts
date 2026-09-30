@@ -11,8 +11,7 @@ import { apiIdOf, readApiId, type TaskLookup } from './TaskIds';
 import { TaskSorter } from '../services/sort/TaskSorter';
 import type { SortState, SortProperty } from '../services/sort/SortTypes';
 import { DateUtils } from '../utils/DateUtils';
-import { parseDateTimeFlag } from '../cli/CliFilterBuilder';
-import { parseDatePreset } from '../cli/CliDatePresetParser';
+import { DATE_PRESET_SYNTAX, NAMED_DATE_PRESETS, parseDatePreset } from '../services/filter/DatePreset';
 import { DateResolver } from '../services/filter/DateResolver';
 import { buildFilterFromParams, buildRangeFilterFromParams, assertValidFilterState } from './FilterParamsBuilder';
 import type { FilterState } from '../services/filter/FilterTypes';
@@ -188,7 +187,7 @@ Date Formats
   Absolute:  YYYY-MM-DD (e.g. 2026-03-15)
   Datetime:  YYYY-MM-DD HH:mm (e.g. 2026-03-15 14:00)
   Time only: HH:mm (e.g. 14:00)
-  Presets:   today, thisWeek, pastWeek, nextWeek, thisMonth, thisYear,
+  Presets:   ${NAMED_DATE_PRESETS.join(', ')},
              next7days, next30days
 
 FilterState (JSON format)
@@ -338,7 +337,7 @@ function paginate(tasks: DisplayTask[], params: PaginationParams): PaginateResul
 }
 
 function parseDateTimeParam(value: string, fieldName: string): { date: string; time?: string } {
-    const result = parseDateTimeFlag(value);
+    const result = DateUtils.parseDateTimeText(value);
     if (!result) {
         throw new TaskApiError(
             `Invalid date format for ${fieldName}: ${value}. Use YYYY-MM-DD, YYYY-MM-DD HH:mm, or HH:mm`,
@@ -748,11 +747,11 @@ export class TaskApi {
         const parsed = parseDatePreset(value);
         if (!parsed) {
             throw new TaskApiError(
-                `Invalid date value for ${side}: ${value}. Use YYYY-MM-DD or a preset (today, thisWeek, pastWeek, nextWeek, thisMonth, thisYear, nextNdays)`,
+                `Invalid date value for ${side}: ${value}. Use YYYY-MM-DD or a preset (${DATE_PRESET_SYNTAX})`,
             );
         }
         const { weekStartDay, startHour } = this.plugin.settings;
-        const window = DateResolver.resolve(parsed, weekStartDay, startHour);
+        const window = DateResolver.resolve(parsed, weekStartDay, startHour, new Date());
         return side === 'from' ? window.start : window.end;
     }
 

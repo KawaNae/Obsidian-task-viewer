@@ -20,7 +20,17 @@ export type FilterOperator =
 
 // ── Value types ──
 
-export type RelativeDatePreset = 'today' | 'thisWeek' | 'nextWeek' | 'pastWeek' | 'nextNDays' | 'thisMonth' | 'thisYear';
+/**
+ * The relative date presets, in the order the UI lists them. The type, the
+ * filter menu, the API/CLI parser, its error messages and the help texts all
+ * read this list.
+ */
+export const RELATIVE_DATE_PRESETS = ['today', 'thisWeek', 'nextWeek', 'pastWeek', 'nextNDays', 'thisMonth', 'thisYear'] as const;
+
+export type RelativeDatePreset = typeof RELATIVE_DATE_PRESETS[number];
+
+/** `n` of `nextNDays` when none is given. */
+export const DEFAULT_NEXT_N_DAYS = 7;
 
 export type DateFilterValue =
     | string                                        // "2024-01-01" (absolute)

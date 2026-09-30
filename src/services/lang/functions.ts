@@ -1,8 +1,9 @@
 import { addDays, addMonths, addYears, differenceInCalendarDays } from 'date-fns';
+import { DateUtils } from '../../utils/DateUtils';
 import type { Span } from './Diagnostic';
 import { type Expr, type FnName, UNIT_KEYWORDS } from './ExprAst';
 import {
-    type DurUnit, type Value, WEEKDAY_NAMES, type Weekday, dateAt, formatDateStr, isDatishValue, parseDateStr,
+    type DurUnit, type Value, WEEKDAY_NAMES, type Weekday, isDatishValue,
     weekdayFromName,
 } from './Value';
 
@@ -229,8 +230,8 @@ export function callFn(fn: FnName, args: Value[], rt: EvalRuntime): Value {
             const [unit, from] = args;
             if (unit.type !== 'string') throw new FnCallError('eval.fn-unit-keyword',
                 `${fn}() expects week, month or year`, { fn });
-            const base = parseDateStr(datishDateOr(from, rt.today));
-            return { type: 'date', value: formatDateStr(fn === 'startOf' ? startOf(unit.value, base, rt.weekStartDay) : endOf(unit.value, base, rt.weekStartDay)) };
+            const base = DateUtils.parseDate(datishDateOr(from, rt.today));
+            return { type: 'date', value: DateUtils.getLocalDateString(fn === 'startOf' ? startOf(unit.value, base, rt.weekStartDay) : endOf(unit.value, base, rt.weekStartDay)) };
         }
         case 'nextCycle': {
             const [anchor, step] = args;
@@ -297,9 +298,9 @@ function datishDateOr(v: Value | undefined, fallback: string): string {
 
 /** Strictly-after next occurrence of a weekday. */
 export function nextWeekdayAfter(weekday: Weekday, fromDate: string): string {
-    const from = parseDateStr(fromDate);
+    const from = DateUtils.parseDate(fromDate);
     const delta = ((weekday - from.getDay() + 7) % 7) || 7;
-    return formatDateStr(addDays(from, delta));
+    return DateUtils.getLocalDateString(addDays(from, delta));
 }
 
 // ---------------------------------------------------------------------------
@@ -336,16 +337,16 @@ export function nextCycle(
 
     if (step.unit === 'd' || step.unit === 'w') {
         const stepDays = step.amount * (step.unit === 'w' ? 7 : 1);
-        const diff = differenceInCalendarDays(parseDateStr(rt.today), parseDateStr(anchorDate));
+        const diff = DateUtils.getDiffDays(anchorDate, rt.today);
         const k = Math.max(1, Math.floor(diff / stepDays) + 1);
-        return { type: 'date', value: formatDateStr(addDays(parseDateStr(anchorDate), k * stepDays)) };
+        return { type: 'date', value: DateUtils.addDays(anchorDate, k * stepDays) };
     }
 
     // mo / y
-    const base = parseDateStr(anchorDate);
+    const base = DateUtils.parseDate(anchorDate);
     for (let k = 1; k <= MAX_GRID_STEPS; k++) {
         const candidate = step.unit === 'mo' ? addMonths(base, k * step.amount) : addYears(base, k * step.amount);
-        const s = formatDateStr(candidate);
+        const s = DateUtils.getLocalDateString(candidate);
         if (s > rt.today) return { type: 'date', value: s };
     }
     throw new FnCallError('eval.fn-cycle-overflow', 'nextCycle() overflow');
@@ -356,38 +357,35 @@ const GRID_REF_DAY = new Date(2000, 0, 1);
 
 function toGridMinutes(date: string, time: string): number {
     const [h, m] = time.split(':').map(n => parseInt(n, 10));
-    const dayNumber = differenceInCalendarDays(parseDateStr(date), GRID_REF_DAY);
+    const dayNumber = differenceInCalendarDays(DateUtils.parseDate(date), GRID_REF_DAY);
     return dayNumber * 1440 + h * 60 + m;
 }
 
 function fromGridMinutes(totalMin: number): Value & { type: 'datetime' } {
     const dayNumber = Math.floor(totalMin / 1440);
     const minOfDay = totalMin - dayNumber * 1440;
-    const date = dateAt(GRID_REF_DAY.getFullYear(), GRID_REF_DAY.getMonth(), GRID_REF_DAY.getDate() + dayNumber);
+    const date = DateUtils.dateAt(GRID_REF_DAY.getFullYear(), GRID_REF_DAY.getMonth(), GRID_REF_DAY.getDate() + dayNumber);
     const h = Math.floor(minOfDay / 60);
     const m = minOfDay % 60;
     return {
         type: 'datetime',
-        date: formatDateStr(date),
+        date: DateUtils.getLocalDateString(date),
         time: `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`,
     };
 }
 
 function startOf(unit: string, d: Date, weekStartDay: 0 | 1): Date {
     switch (unit) {
-        case 'week': {
-            const back = (d.getDay() - weekStartDay + 7) % 7;
-            return addDays(d, -back);
-        }
-        case 'month': return dateAt(d.getFullYear(), d.getMonth(), 1);
-        default: return dateAt(d.getFullYear(), 0, 1);
+        case 'week': return DateUtils.getWeekStart(d, weekStartDay);
+        case 'month': return DateUtils.dateAt(d.getFullYear(), d.getMonth(), 1);
+        default: return DateUtils.dateAt(d.getFullYear(), 0, 1);
     }
 }
 
 function endOf(unit: string, d: Date, weekStartDay: 0 | 1): Date {
     switch (unit) {
         case 'week': return addDays(startOf('week', d, weekStartDay), 6);
-        case 'month': return dateAt(d.getFullYear(), d.getMonth() + 1, 0);
-        default: return dateAt(d.getFullYear(), 11, 31);
+        case 'month': return DateUtils.dateAt(d.getFullYear(), d.getMonth() + 1, 0);
+        default: return DateUtils.dateAt(d.getFullYear(), 11, 31);
     }
 }

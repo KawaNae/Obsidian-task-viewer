@@ -1,89 +1,55 @@
 import { DateUtils } from '../../utils/DateUtils';
-import type { DateFilterValue } from './FilterTypes';
+import { DEFAULT_NEXT_N_DAYS, type DateFilterValue } from './FilterTypes';
 
 /**
  * Resolves a DateFilterValue to concrete { start, end } YYYY-MM-DD boundaries.
  * Range presets (thisWeek, nextNDays) return inclusive ranges.
  * Point presets (today) and absolute dates return start === end.
+ *
+ * Relative presets count from the visual date at `now` (the caller's clock).
  */
 export class DateResolver {
-    static resolve(value: DateFilterValue, weekStartDay: 0 | 1, startHour: number): { start: string; end: string } {
+    static resolve(
+        value: DateFilterValue, weekStartDay: 0 | 1, startHour: number, now: Date,
+    ): { start: string; end: string } {
         if (typeof value === 'string') {
             return { start: value, end: value };
         }
 
-        const now = new Date();
-        const today = new Date(now);
-        today.setHours(0, 0, 0, 0);
-        // Shift to visual "today" when before startHour boundary
-        if (now.getHours() < startHour) {
-            today.setDate(today.getDate() - 1);
-        }
+        const today = DateUtils.visualDateAt(now, startHour);
+        const week = (anyDay: string) => {
+            const start = DateUtils.getLocalDateString(DateUtils.getWeekStart(DateUtils.parseDate(anyDay), weekStartDay));
+            return { start, end: DateUtils.addDays(start, 6) };
+        };
 
         switch (value.preset) {
-            case 'today':
-                return { start: DateUtils.getLocalDateString(today), end: DateUtils.getLocalDateString(today) };
-
-            case 'thisWeek': {
-                const { monday, sunday } = getWeekBounds(today, weekStartDay);
-                return { start: DateUtils.getLocalDateString(monday), end: DateUtils.getLocalDateString(sunday) };
-            }
-
-            case 'nextWeek': {
-                const next = new Date(today);
-                next.setDate(next.getDate() + 7);
-                const { monday, sunday } = getWeekBounds(next, weekStartDay);
-                return { start: DateUtils.getLocalDateString(monday), end: DateUtils.getLocalDateString(sunday) };
-            }
-
-            case 'pastWeek': {
-                const past = new Date(today);
-                past.setDate(past.getDate() - 7);
-                const { monday, sunday } = getWeekBounds(past, weekStartDay);
-                return { start: DateUtils.getLocalDateString(monday), end: DateUtils.getLocalDateString(sunday) };
-            }
-
+            case 'thisWeek':
+                return week(today);
+            case 'nextWeek':
+                return week(DateUtils.addDays(today, 7));
+            case 'pastWeek':
+                return week(DateUtils.addDays(today, -7));
             case 'nextNDays': {
-                const n = value.n ?? 7;
-                const end = new Date(today);
-                end.setDate(end.getDate() + n - 1);
-                return { start: DateUtils.getLocalDateString(today), end: DateUtils.getLocalDateString(end) };
+                const n = value.n ?? DEFAULT_NEXT_N_DAYS;
+                return { start: today, end: DateUtils.addDays(today, n - 1) };
             }
-
             case 'thisMonth': {
-                const monthStart = new Date(today.getFullYear(), today.getMonth(), 1);
-                const monthEnd = new Date(today.getFullYear(), today.getMonth() + 1, 0);
-                return { start: DateUtils.getLocalDateString(monthStart), end: DateUtils.getLocalDateString(monthEnd) };
+                const d = DateUtils.parseDate(today);
+                return {
+                    start: DateUtils.getLocalDateString(DateUtils.dateAt(d.getFullYear(), d.getMonth(), 1)),
+                    end: DateUtils.getLocalDateString(DateUtils.dateAt(d.getFullYear(), d.getMonth() + 1, 0)),
+                };
             }
-
             case 'thisYear': {
-                const yearStart = new Date(today.getFullYear(), 0, 1);
-                const yearEnd = new Date(today.getFullYear(), 11, 31);
-                return { start: DateUtils.getLocalDateString(yearStart), end: DateUtils.getLocalDateString(yearEnd) };
+                const year = DateUtils.parseDate(today).getFullYear();
+                return {
+                    start: DateUtils.getLocalDateString(DateUtils.dateAt(year, 0, 1)),
+                    end: DateUtils.getLocalDateString(DateUtils.dateAt(year, 11, 31)),
+                };
             }
-
+            case 'today':
             default:
-                return { start: DateUtils.getLocalDateString(today), end: DateUtils.getLocalDateString(today) };
+                return { start: today, end: today };
         }
     }
-}
-
-/** Get the week start (monday) and end (sunday) containing the given date */
-function getWeekBounds(date: Date, weekStartDay: 0 | 1): { monday: Date; sunday: Date } {
-    const d = new Date(date);
-    const dayOfWeek = d.getDay(); // 0=Sun, 1=Mon, ...
-
-    const start = new Date(d);
-    if (weekStartDay === 1) {
-        // Monday start: offset = (dayOfWeek + 6) % 7
-        start.setDate(d.getDate() - ((dayOfWeek + 6) % 7));
-    } else {
-        // Sunday start: offset = dayOfWeek
-        start.setDate(d.getDate() - dayOfWeek);
-    }
-
-    const end = new Date(start);
-    end.setDate(start.getDate() + 6);
-
-    return { monday: start, sunday: end };
 }
