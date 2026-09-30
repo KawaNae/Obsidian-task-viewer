@@ -1,4 +1,4 @@
-import { CodeFenceTracker, type FenceDelimiter } from '../../../utils/CodeFenceTracker';
+import { CodeFenceTracker, type FenceDelimiter } from './CodeFenceTracker';
 import { LIST_BULLET_SOURCE, SPACE_OR_TAB_SOURCE } from './ListMarker';
 
 /**

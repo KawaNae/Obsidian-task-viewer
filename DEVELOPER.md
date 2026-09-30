@@ -109,9 +109,9 @@ src/
 │   │   ├── tv-inline/         # Line-level parsers (TVInlineParser, DayPlannerParser, TasksPluginParser, ReadOnlyParserBase)
 │   │   ├── strategies/        # ParserChain, ParserStrategy
 │   │   ├── tree/              # Document structure tree (DocumentTree, DocumentTreeBuilder, SectionPropertyResolver, etc.)
-│   │   └── utils/             # Parser utilities (ChildLineClassifier, TagExtractor, TaskContent, TaskLineClassifier)
+│   │   └── utils/             # Parser utilities (ChildLineClassifier, CodeFenceTracker, Outline, TagExtractor, TaskContent, TaskLineClassifier)
 │   ├── persistence/           # Write layer (TaskRepository, TaskCloner)
-│   │   ├── writers/           # FrontmatterWriter, InlineTaskWriter
+│   │   ├── writers/           # FrontmatterWriter, InlineTaskWriter, SendWriter, SendRows (which rows a send takes)
 │   │   └── utils/             # FrontmatterLineEditor, FileOperations
 │   ├── export/                # View data export (ViewExporter, per-view ExportStrategy)
 │   ├── filter/                # Filter engine, serializer, types, value collector
@@ -131,13 +131,13 @@ src/
 │   ├── customMenus/           # Filter/Sort popover menus, IntervalTemplateCreator
 │   ├── sidebar/               # SidebarManager, SidebarToggleButton
 │   └── TimerView.ts           # Timer view (Pomodoro / Countdown / Countup / Interval)
-├── timer/                     # Timer widget and all timer services (including AudioUtils)
+├── timer/                     # Timer widget and all timer services (including AudioUtils, TimerTargetIdUtils)
 ├── interaction/
 │   ├── drag/                  # Drag & drop (DragHandler, DragStrategy, strategies/, ghost/)
 │   └── menu/                  # Context menus (MenuHandler, PropertyCalculator, PropertyFormatter, builders/)
 ├── modals/                    # Modal UI (CreateTaskModal, ConfirmModal, etc.)
 ├── suggest/                   # Obsidian property panel autocomplete (color/, line/, tags/)
-├── utils/                     # General utilities (DateUtils, ViewUriBuilder, etc.)
+├── utils/                     # Layer-less leaves used by two or more layers (DateUtils, LineBreak, HostWindow, etc.; see "utils placement rule")
 └── styles/                    # CSS (BEM naming, --tv-* tokens)
 ```
 
@@ -608,6 +608,10 @@ The build writes into `<vault>/.obsidian/plugins/obsidian-task-viewer`. Vault pa
 | `src/views/taskcard/types.ts` | Task-card-local render helper types |
 | Inside each subsystem directory | Subsystem-specific types (do not promote to cross-layer) |
 
+### utils placement rule
+
+`src/utils/` holds only leaves that belong to no layer and are used by two or more layers (e.g. `DateUtils`, `LineBreak`, `HostWindow`). A module that answers one layer's question, or that only one layer uses, lives in that layer, even when it is a small pure helper: `CodeFenceTracker` is a parsing question and lives in `services/parsing/utils/`; `TimerTargetIdUtils` is the timer's and lives in `timer/`. When the last caller outside a layer goes away, move the module into that layer. Existing files that do not meet the rule yet are moved when touched, not kept as precedent.
+
 ### Tooltip convention
 
 Use `aria-label` for tooltips. **Never set `title`** on interactive elements — Obsidian renders styled tooltips from `aria-label`, and a `title` attribute would cause a duplicate native browser tooltip.
@@ -834,6 +838,7 @@ Timer phases: `'idle'` | `'work'` | `'break'` | `'prepare'`
 - `TimerCreator` — timer instance creation
 - `TimerLifecycle` — timer lifecycle management
 - `TimerStorageUtils` — storage key, device and vault identification
+- `TimerTargetIdUtils` — the block IDs the timer writes onto the line it records into
 - `TimerPersistence` — save and restore of the open timers
 - `TimerRecorder` — the record writes (self, child, sibling, daily note)
 - `TimerContentBinding` — keeps the widget's content field and the running row in step

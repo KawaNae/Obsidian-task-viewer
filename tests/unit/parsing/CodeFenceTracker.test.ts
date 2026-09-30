@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { CodeFenceTracker } from '../../../src/utils/CodeFenceTracker';
+import { CodeFenceTracker } from '../../../src/services/parsing/utils/CodeFenceTracker';
 
 describe('CodeFenceTracker.opening', () => {
     it('reads the character, the length and the trimmed info string', () => {
