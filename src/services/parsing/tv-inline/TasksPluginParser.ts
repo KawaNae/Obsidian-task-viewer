@@ -1,5 +1,6 @@
 import { DateUtils } from '../../../utils/DateUtils';
-import type { Task, TasksPluginMapping, TaskFieldMapping } from '../../../types';
+import type { TasksPluginMapping, TaskFieldMapping } from '../../../types';
+import type { UnnamedTask } from '../TaskFactory';
 import { ReadOnlyParserBase } from './ReadOnlyParserBase';
 
 /**
@@ -46,7 +47,7 @@ export class TasksPluginParser extends ReadOnlyParserBase {
         super();
     }
 
-    parse(line: string, filePath: string, lineNumber: number): Task | null {
+    parse(line: string, filePath: string, lineNumber: number): UnnamedTask | null {
         const classified = this.classify(line);
         if (!classified) return null;
 

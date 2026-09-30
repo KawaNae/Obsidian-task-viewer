@@ -1,4 +1,4 @@
-import type { Task, ScopeKeys } from '../../../types';
+import type { ParserId, Task, ScopeKeys } from '../../../types';
 import { isTvInline } from '../../../types';
 import type { SectionNode } from './Sections';
 import { NoteSections } from './NoteSections';
@@ -11,11 +11,22 @@ import { flowValidation } from '../../lang/flow/FlowSegments';
 import { Outline, type OutlineReading } from '../utils/Outline';
 import { TaskLineClassifier } from '../utils/TaskLineClassifier';
 
+/**
+ * The name a row of the note takes, from the line it stands on and the
+ * parser that read it. The reader decides what a name is (the index's scan
+ * names the rows of one reading; a reader outside the index, its own); the
+ * extraction only applies it, once per row, and links parent and children
+ * by it.
+ */
+export type RowNamer = (parserId: ParserId, line: number) => string;
+
 export interface TaskExtractionContext {
     filePath: string;
     scopeKeys: ScopeKeys;
     /** The chain the note's task lines are read with (`lineParsers(settings)`). */
     parsers: ParserChain;
+    /** The name each row takes (`RowNamer`). */
+    name: RowNamer;
 }
 
 /**
@@ -31,10 +42,12 @@ export class NoteTasks {
      * the order the note writes them.
      *
      * Then, for each row:
+     * - Its name is `ctx.name`'s, from its line.
      * - Its parent is the nearest item above it (`itemsAbove`) that is a row:
      *   a task among the items it stands in, whatever indentation (2 or 4
      *   spaces, a tab) and whatever notes stand between. Its children are
-     *   the rows whose parent it is, in the note's order.
+     *   the rows whose parent it is, in the note's order. Both are found by
+     *   line and written as names.
      * - Its flow is read once (`readFlow`), for a `tv-inline` row.
      * - Its child lines are the lines of its subtree, less its child rows'
      *   subtrees and its own flow lines: each line of the note is a child
@@ -52,8 +65,8 @@ export class NoteTasks {
             if (!TaskLineClassifier.opensTask(outline, line)) continue;
             // The chain ends in tv-inline, which reads every task line: no
             // line that opens a task is refused.
-            const task = ctx.parsers.parse(outline.lines[line], ctx.filePath, line);
-            if (task) rows.set(line, task);
+            const read = ctx.parsers.parse(outline.lines[line], ctx.filePath, line);
+            if (read) rows.set(line, { id: ctx.name(read.parserId, line), ...read });
         }
 
         for (const [line, task] of rows) {

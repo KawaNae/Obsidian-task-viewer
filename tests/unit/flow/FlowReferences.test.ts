@@ -1,10 +1,11 @@
 import { describe, it, expect } from 'vitest';
 import { unresolvedAt } from '../../../src/services/flow/FlowReferences';
 import { FileParsePipeline } from '../../../src/services/parsing/FileParsePipeline';
+import { namesOutsideIndex } from '../../../src/services/core/RowNames';
 import { DEFAULT_SETTINGS } from '../../../src/types';
 
 /** The rows of `lines`, each as the index reads it. */
-const rowsOf = (lines: string[]) => FileParsePipeline.parse('from.md', lines, DEFAULT_SETTINGS).tasks;
+const rowsOf = (lines: string[]) => FileParsePipeline.parse('from.md', lines, DEFAULT_SETTINGS, namesOutsideIndex('from.md')).tasks;
 
 const GEN = ['```tv-gen 週報', '- [ ] 資料集め', '```'];
 

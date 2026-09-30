@@ -31,8 +31,7 @@ export interface TempTaskFields {
  * temp-task call sites and makes `parserId` defaulting explicit.
  */
 export function createTempTask(fields: TempTaskFields): Task {
-    return createBaseTask({
-        id: fields.id,
+    const task = createBaseTask({
         file: fields.file ?? '',
         line: fields.line ?? 0,
         content: fields.content ?? '',
@@ -47,4 +46,5 @@ export function createTempTask(fields: TempTaskFields): Task {
         endTime: fields.endTime,
         due: fields.due,
     });
+    return { id: fields.id, ...task };
 }

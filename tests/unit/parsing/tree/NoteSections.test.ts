@@ -4,6 +4,7 @@ import { NoteTasks } from '../../../../src/services/parsing/tree/NoteTasks';
 import type { SectionNode } from '../../../../src/services/parsing/tree/Sections';
 import { Outline, type OutlineReading } from '../../../../src/services/parsing/utils/Outline';
 import { lineParsers } from '../../../../src/services/parsing/TaskParser';
+import { namesOutsideIndex } from '../../../../src/services/core/RowNames';
 import { DEFAULT_SETTINGS, DEFAULT_SCOPE_KEYS, type Task } from '../../../../src/types';
 
 interface Read {
@@ -17,7 +18,7 @@ function read(lines: string[]): Read {
     const outline = Outline.read(lines);
     const sections = NoteSections.read(outline);
     const tasks = NoteTasks.extract(outline, sections, {
-        filePath: 'test.md', scopeKeys: DEFAULT_SCOPE_KEYS, parsers: lineParsers(DEFAULT_SETTINGS),
+        filePath: 'test.md', scopeKeys: DEFAULT_SCOPE_KEYS, parsers: lineParsers(DEFAULT_SETTINGS), name: namesOutsideIndex('test.md'),
     });
     return { sections, bodyStartLine: outline.bodyStart, outline, tasks };
 }

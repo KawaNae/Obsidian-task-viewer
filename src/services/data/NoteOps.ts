@@ -8,6 +8,7 @@ import { refusalClause, refusalNotice } from '../core/RefusalClause';
 import { outermostRows } from '../persistence/writers/SendRows';
 import { unresolvedAt, type UnresolvedReference } from '../flow/FlowReferences';
 import { FileParsePipeline } from '../parsing/FileParsePipeline';
+import { namesOutsideIndex } from '../core/RowNames';
 import { Outline } from '../parsing/utils/Outline';
 import { Destination, type Section } from '../persistence/Destination';
 import { splitLines } from '../persistence/FileLines';
@@ -499,7 +500,8 @@ function spanOf(task: Task): LineSpan {
  */
 function withDescendants(rows: readonly RowSnapshot[], settings: TaskViewerSettings): Task[] {
     const spans = rows.map(row => spanOf(row.task));
-    const { tasks } = FileParsePipeline.parse(rows[0].task.file, [...rows[0].lines], settings);
+    const path = rows[0].task.file;
+    const { tasks } = FileParsePipeline.parse(path, [...rows[0].lines], settings, namesOutsideIndex(path));
     return tasks.filter(task => spans.some(span => task.line >= span.start && task.line < span.end));
 }
 

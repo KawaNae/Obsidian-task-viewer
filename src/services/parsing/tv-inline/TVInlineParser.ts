@@ -1,9 +1,9 @@
 import type { Task } from '../../../types';
+import type { UnnamedTask } from '../TaskFactory';
 import { t } from '../../../i18n';
 import { cutFlowTail } from '../utils/FlowLineScanner';
 import { createBaseTask } from '../TaskFactory';
 import type { LeafParserStrategy } from '../strategies/ParserStrategy';
-import { TaskIdGenerator } from '../../display/TaskIdGenerator';
 import { TagExtractor } from '../utils/TagExtractor';
 import { parseDateTimeField } from '../utils/DateTimeFieldParser';
 import { TaskLineClassifier } from '../utils/TaskLineClassifier';
@@ -34,7 +34,7 @@ interface DateBlockResult {
 export class TVInlineParser implements LeafParserStrategy {
     readonly id = 'tv-inline';
 
-    parse(line: string, filePath: string, lineNumber: number): Task | null {
+    parse(line: string, filePath: string, lineNumber: number): UnnamedTask | null {
         const classified = TaskLineClassifier.classify(line);
         if (!classified) {
             return null;
@@ -88,7 +88,6 @@ export class TVInlineParser implements LeafParserStrategy {
         }
 
         return createBaseTask({
-            id: TaskIdGenerator.provisionalId(this.id, filePath, lineNumber),
             file: filePath,
             line: lineNumber,
             content: content.trim(),

@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { buildChildEntries } from '../../../src/services/data/ChildEntryBuilder';
 import { makeTask } from '../helpers/makeTask';
 import { FileParsePipeline } from '../../../src/services/parsing/FileParsePipeline';
+import { namesOutsideIndex } from '../../../src/services/core/RowNames';
 import { DEFAULT_SETTINGS, type Task, type ChildLine } from '../../../src/types';
 
 const plainCl = (text: string, bodyLine: number): ChildLine => ({
@@ -60,7 +61,7 @@ describe('buildChildEntries', () => {
             '        - ==> every mon', // 3: a's flow line
             '    - c',                 // 4: p's own line
         ];
-        const { tasks } = FileParsePipeline.parse('A.md', lines, DEFAULT_SETTINGS);
+        const { tasks } = FileParsePipeline.parse('A.md', lines, DEFAULT_SETTINGS, namesOutsideIndex('A.md'));
         const byId = new Map(tasks.map(task => [task.id, task]));
         const parent = tasks.find(task => task.line === 0)!;
         const entries = buildChildEntries(parent, id => byId.get(id));

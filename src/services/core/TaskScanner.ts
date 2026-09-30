@@ -6,6 +6,7 @@ import { TaskIdGenerator } from '../display/TaskIdGenerator';
 import { contentKeyOf, type ContentKey } from './ContentKey';
 import { WriteLinks } from './WriteLinks';
 import { newSession, readReading, readingId, type ReadingId } from './Reading';
+import { namesOfReading } from './RowNames';
 import { splitLines, type Landing, type ReadMark } from '../persistence/FileLines';
 import type { OutlineReading } from '../parsing/utils/Outline';
 import { TaskLineClassifier } from '../parsing/utils/TaskLineClassifier';
@@ -13,10 +14,11 @@ import { logDebug, logError, logInfo } from '../../log/log';
 
 /**
  * タスクスキャナー — ファイル単位の読みのオーケストレーション。
- * 1 回の読みは 4 相を順に呼ぶだけ:
- *   parse    — FileParsePipeline（ファイル → Task[]、仮 ID。パース順序契約の所有者）
- *   name     — 仮 ID を、この読みの中の名前（パス、読みの番号、行）に置き換える
- *   validate — バリデーション警告の収集（以降は名前しか見ない）
+ * 1 回の読みは次を順に呼ぶだけ:
+ *   parse    — FileParsePipeline（ファイル → Task[]。パース順序契約の所有者）。
+ *              各行の名前は、この読みの中の名前（パス、読みの番号、行）を
+ *              `namesOfReading` が付け、パースはそれを当てるだけ
+ *   anchor   — `^id` が一意な行に anchor を付ける
  *   commit   — store 更新
  *
  * 前回の読みと突き合わせない。名前は 1 回の読みの中だけで意味を持ち、読み
@@ -333,8 +335,9 @@ export class TaskScanner {
         }
         const file = { path };
 
-        // --- parse ---
-        const parsed = FileParsePipeline.parse(file.path, lines, this.settings, reading);
+        // --- parse and name ---
+        // Every row is named by this reading as it is read (`namesOfReading`).
+        const parsed = FileParsePipeline.parse(file.path, lines, this.settings, namesOfReading(file.path, readingId(this.session, n)), reading);
 
         if (parsed.ignored) {
             this.store.removeTasksByFile(file.path);
@@ -343,9 +346,6 @@ export class TaskScanner {
             return true;
         }
 
-        // --- name ---
-        // Right after parse, so nothing downstream ever sees a provisional ID.
-        nameRows(parsed.tasks, file.path, readingId(this.session, n));
         anchorRows(parsed.tasks, lines);
 
         // Two readings of one change, or a pipeline that outlived its index
@@ -416,24 +416,6 @@ export class TaskScanner {
      */
     updateSettings(settings: TaskViewerSettings): void {
         this.settings = settings;
-    }
-}
-
-/**
- * Give every row of one reading its name, in place of the provisional ID the
- * parser gave it: `parentId` and `childIds` too, which the parser has
- * already written with the provisional ones. A provisional ID is the row's
- * line, and so is a name, so one reading's names are as distinct as its
- * lines.
- */
-function nameRows(tasks: Task[], path: string, reading: ReadingId): void {
-    const names = new Map<string, string>();
-    for (const task of tasks) names.set(task.id, TaskIdGenerator.nameOf(task.parserId, path, task.line, reading));
-    const rename = (id: string) => names.get(id) ?? id;
-    for (const task of tasks) {
-        task.id = rename(task.id);
-        if (task.parentId !== undefined) task.parentId = rename(task.parentId);
-        task.childIds = task.childIds.map(rename);
     }
 }
 
