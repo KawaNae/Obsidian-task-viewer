@@ -621,28 +621,12 @@ btn.setAttribute('aria-label', 'Filter');
 btn.setAttribute('title', 'Filter');
 ```
 
-**Native `<input type="date/time">` の注意**: Electron/Chromium はこれらの入力要素にビルトインのブラウザツールチップを表示する。`title=""` では抑制できない。対処法:
+**Native `<input type="date/time/color">` の注意**: ネイティブのピッカーは `src/views/sharedUI/NativePicker.ts` の `createNativePicker()` で作る（フォームの欄の PickerTextField が使う）。見えない input をボタンに重ね、次のように動く:
 
-1. CSS で `pointer-events: none` を設定してホバーが native input に到達しないようにする
-2. 表示用の要素（アイコンボタン等）に `aria-label` を設定して Obsidian 標準ツールチップを表示
-3. アイコンボタンの `click` イベントで `showPicker()` を呼んでピッカーを開く
-4. iOS Safari では `showPicker()` が動かない (WebKit Bug #261703) ため `focus()` + `click()` でフォールバック
-
-```ts
-// Native input: pointer-events: none (CSS), aria-hidden
-nativeInput.setAttribute('aria-hidden', 'true');
-
-// Icon button: aria-label for Obsidian tooltip, click to open picker
-pickerButton.setAttribute('aria-label', 'Open date picker');
-pickerButton.addEventListener('click', () => {
-    try {
-        nativeInput.showPicker();
-    } catch {
-        nativeInput.focus();
-        nativeInput.click();
-    }
-});
-```
+1. desktop では input を `pointer-events: none` にし、ボタンが click を受けて `showPicker()` で開く。Electron/Chromium が native input に出すビルトインのツールチップ（`title=""` では消せない）と、shadow DOM の内部の欄で cursor が default に落ちることを避けるため
+2. ボタンに `aria-label` を付けて Obsidian 標準のツールチップを出す。input は `aria-hidden`、`tabIndex = -1`
+3. `.is-mobile` では input がタップを直接受ける。iOS / iPadOS は `showPicker()` を拒み（WebKit Bug #261703）、`focus()` + `click()` でも開かないので、input への直接のタップが唯一の開き方
+4. したがって、ボタンから離れた所（コマンド、メニューの項目、ダブルクリック）から開く経路は iOS では開かない。iOS でも要る入口は、input を重ねたボタンとして表に置く
 
 ### Wording: "Remove" vs "Delete"
 
