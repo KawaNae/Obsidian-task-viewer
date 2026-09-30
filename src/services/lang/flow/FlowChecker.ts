@@ -1,6 +1,6 @@
-import { type Diagnostic, error } from '../lang/Diagnostic';
-import { FLOW_TYPE_ENV, checkExpr } from '../lang/ExprChecker';
-import { isDatishType, typeName } from '../lang/functions';
+import { type Diagnostic, error } from '../Diagnostic';
+import { FLOW_TYPE_ENV, checkExpr } from '../ExprChecker';
+import { isDatishType, typeName } from '../functions';
 import { type FlowProgram, SET_FIELD_ORDER, isCellValue, setHeadName } from './FlowAst';
 
 /** Nodes whose field name is not what the user writes. */

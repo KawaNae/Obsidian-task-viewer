@@ -1,5 +1,5 @@
 import type { Diagnostic } from '../services/lang/Diagnostic';
-import type { FlowProgram } from '../services/flow/FlowAst';
+import type { FlowProgram } from '../services/lang/flow/FlowAst';
 
 /**
  * One `- ==> ...` child line owned by the task's flow program.
@@ -28,7 +28,7 @@ export interface FlowChildSegment {
  * - `program` is non-null iff parsing AND checking the joined source
  *   produced no error diagnostics — i.e. the command is executable.
  * - `diagnostics` spans are offsets into the joined source (see
- *   services/flow/FlowSegments.ts for the segment table mapping).
+ *   services/lang/flow/FlowSegments.ts for the segment table mapping).
  */
 export interface TaskFlow {
     raw: string;

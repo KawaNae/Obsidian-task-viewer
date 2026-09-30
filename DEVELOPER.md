@@ -46,8 +46,8 @@ Raw `updateLine(file, line, text)` is reserved for editor-cursor callers (`TaskM
 
 1. `Task.content` stores raw user-provided content only.
 2. A bare `- [ ]` keeps `content` as an empty string.
-3. UI fallback labels (file basename / `Untitled`) must be resolved in view helpers (`src/services/parsing/utils/TaskContent.ts`), not in parsers.
-4. API normalizer (`TaskNormalizer`) passes `content` through as-is (`t => t.content`); it does not fall back to file basename. Basename fallback is a display-only concern handled by `getTaskDisplayName` (`src/services/parsing/utils/TaskContent.ts`).
+3. UI fallback labels (file basename / `Untitled`) must be resolved in view helpers (`src/services/display/TaskContent.ts`), not in parsers.
+4. API normalizer (`TaskNormalizer`) passes `content` through as-is (`t => t.content`); it does not fall back to file basename. Basename fallback is a display-only concern handled by `getTaskDisplayName` (`src/services/display/TaskContent.ts`).
 
 ---
 
@@ -104,12 +104,12 @@ src/
 ├── services/
 │   ├── core/                  # Core services (TaskIndex, TaskStore, TaskScanner, Reading, ReadingCheck, DiskReconciler, etc.)
 │   ├── data/                  # Data access facade (TaskReadService, TaskWriteService)
-│   ├── display/               # Display conversion (DisplayTaskConverter, TaskSplitter, TaskDateCategorizer, TaskIdGenerator)
+│   ├── display/               # Display conversion (DisplayTaskConverter, TaskSplitter, TaskDateCategorizer, TaskIdGenerator, TaskContent)
 │   ├── parsing/               # Parser layer
 │   │   ├── tv-inline/         # Line-level parsers (TVInlineParser, DayPlannerParser, TasksPluginParser, ReadOnlyParserBase)
 │   │   ├── strategies/        # ParserChain, ParserStrategy
 │   │   ├── tree/              # Document structure tree (DocumentTree, DocumentTreeBuilder, SectionPropertyResolver, etc.)
-│   │   └── utils/             # Parser utilities (ChildLineClassifier, CodeFenceTracker, Outline, TagExtractor, TaskContent, TaskLineClassifier)
+│   │   └── utils/             # Parser utilities (ChildLineClassifier, CodeFenceTracker, Outline, TagExtractor, TaskLineClassifier)
 │   ├── persistence/           # Write layer (TaskRepository, TaskCloner)
 │   │   ├── writers/           # FrontmatterWriter, InlineTaskWriter, SendWriter, SendRows (which rows a send takes)
 │   │   └── utils/             # FrontmatterLineEditor, FileOperations
@@ -117,9 +117,10 @@ src/
 │   ├── filter/                # Filter engine, serializer, types, value collector
 │   ├── sort/                  # Task sorting (TaskSorter, SortTypes)
 │   ├── template/              # View template load/save (ViewTemplateLoader/Writer)
-│   ├── flow/                  # ==> フロー記法の実行 (FlowExecutor/FlowParser/FlowPlanner/ScheduleEngine, every/+/at/x/until/move)
-│   └── lang/                  # 式パーサ (Lexer/ExprParser/ExprEvaluator)
-├── editor/                    # Editor extensions (TaskMenuExtension)
+│   ├── flow/                  # ==> フローの計画と実行 (FlowExecutor/FlowPlanner/ScheduleEngine/FlowTrigger)
+│   └── lang/                  # 式と文の言語 (Lexer/ExprParser/ExprEvaluator/StmtParser, Diagnostic)
+│       └── flow/              # ==> フロー記法の言語 (FlowAst/FlowParser/FlowChecker/FlowSegments/FlowSerializer/diagnosticText)。lang、i18n、types だけに依存する
+├── editor/                    # Editor extensions (TaskMenuExtension, DiagnosticsExtension, GenHighlight, etc.)
 ├── views/
 │   ├── timelineview/          # Timeline view (including renderers/)
 │   ├── scheduleview/          # Schedule view (including renderers/, utils/)

@@ -1,5 +1,5 @@
-import { t } from '../../i18n';
-import type { Diagnostic } from '../lang/Diagnostic';
+import { t } from '../../../i18n';
+import type { Diagnostic } from '../Diagnostic';
 
 /**
  * Localize a lang/flow diagnostic for display.

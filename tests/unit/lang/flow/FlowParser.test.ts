@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { parseFlow, parseFlowCells } from '../../../src/services/flow/FlowParser';
-import { serializeFlow } from '../../../src/services/flow/FlowSerializer';
+import { parseFlow, parseFlowCells } from '../../../../src/services/lang/flow/FlowParser';
+import { serializeFlow } from '../../../../src/services/lang/flow/FlowSerializer';
 
 function errorsIn(diagnostics: { severity: string; code: string }[]): string[] {
     return diagnostics.filter(d => d.severity === 'error').map(d => d.code);

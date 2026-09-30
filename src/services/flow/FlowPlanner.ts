@@ -14,11 +14,11 @@ import { renderGenBody } from '../parsing/gen/GenBodyRenderer';
 import { TaskParser } from '../parsing/TaskParser';
 import { formatDateBlock } from '../parsing/tv-inline/DateBlockFormat';
 import type { GeneratedChild } from '../persistence/FlowInstanceLines';
-import { type FlowProgram, SET_FIELD_ORDER, isCellValue } from './FlowAst';
+import { type FlowProgram, SET_FIELD_ORDER, isCellValue } from '../lang/flow/FlowAst';
 import type { FlowEffect } from './FlowEffects';
 import { checkGeneratedChildLine, checkGeneratedParentLine } from './GeneratedLineCheck';
-import { flowRaws, joinSegments } from './FlowSegments';
-import { serializeFlowLines } from './FlowSerializer';
+import { flowRaws, joinSegments } from '../lang/flow/FlowSegments';
+import { serializeFlowLines } from '../lang/flow/FlowSerializer';
 import { holdsLineBreak } from '../../utils/LineBreak';
 import { type DateAnchor, type NextOccurrence, nextOccurrence } from './ScheduleEngine';
 

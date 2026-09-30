@@ -24,7 +24,7 @@ import type { TimerCreator } from './TimerCreator';
 import { computeCompletedDuration, computeTotalDuration, getCurrentSegment } from './IntervalMath';
 import { createControlButton, type ControlButtonVariant } from './TimerControlButton';
 import type { TimerLifecycle } from './TimerLifecycle';
-import { getDisplayFileName, getTaskDisplayName } from '../services/parsing/utils/TaskContent';
+import { getDisplayFileName, getTaskDisplayName } from '../services/display/TaskContent';
 import { TaskStyling } from '../views/sharedUI/TaskStyling';
 import { TimerProgressUI } from './TimerProgressUI';
 import { TimerSettingsMenu } from './TimerSettingsMenu';

@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { canTriggerFlow } from '../../../src/services/flow/FlowTrigger';
-import { singleLineFlow } from '../../../src/services/flow/FlowSegments';
+import { singleLineFlow } from '../../../src/services/lang/flow/FlowSegments';
 import { DEFAULT_STATUS_DEFINITIONS, TaskFlow } from '../../../src/types';
 import { makeTask } from '../helpers/makeTask';
 

@@ -35,7 +35,7 @@ const RENDERER_OWNED_CHILD_CLASSES = [
 const SHAPE_CLASS = 'task-card__shape';
 import type { TaskReadService } from '../../services/data/TaskReadService';
 import type { TaskWriteService } from '../../services/data/TaskWriteService';
-import { getFileBaseName, hasTaskContent } from '../../services/parsing/utils/TaskContent';
+import { getFileBaseName, hasTaskContent } from '../../services/display/TaskContent';
 import { ChildItemBuilder } from './ChildItemBuilder';
 import { ChildSectionRenderer, type ChildMenuCallback } from './ChildSectionRenderer';
 import { CheckboxWiring } from './CheckboxWiring';

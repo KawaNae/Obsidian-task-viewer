@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { parseGenBody } from '../../../src/services/parsing/gen/GenBodyParser';
-import { highlightGenBody } from '../../../src/services/parsing/gen/GenHighlight';
+import { highlightGenBody } from '../../../src/editor/GenHighlight';
 import type { StaticType } from '../../../src/services/lang/functions';
 
 /**

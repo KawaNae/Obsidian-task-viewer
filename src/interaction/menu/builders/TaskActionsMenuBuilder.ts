@@ -9,7 +9,7 @@ import { FlowDeleteChoiceModal } from '../../../modals/FlowDeleteChoiceModal';
 import { SendModal } from '../../../modals/noteops/SendModal';
 import type { FlowDeleteOutlook } from '../../../services/flow/FlowDeletion';
 import { runtimeText } from '../../../services/flow/runtimeText';
-import { getTaskDisplayName } from '../../../services/parsing/utils/TaskContent';
+import { getTaskDisplayName } from '../../../services/display/TaskContent';
 import { openTaskInEditor } from '../../../utils/NavigationUtils';
 import { DateUtils } from '../../../utils/DateUtils';
 import { t } from '../../../i18n';

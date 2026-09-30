@@ -6,7 +6,7 @@ import { TimerWidget } from '../../../src/timer/TimerWidget';
 import { IDLE_TIMER_ID } from '../../../src/timer/TimerContext';
 import type { TimerInstance } from '../../../src/timer/TimerInstance';
 import { DEFAULT_SETTINGS } from '../../../src/types';
-import { getDisplayFileName } from '../../../src/services/parsing/utils/TaskContent';
+import { getDisplayFileName } from '../../../src/services/display/TaskContent';
 
 /**
  * widget の見出しのファイル名は `timer.taskFile` に追随する。行を別のノートへ

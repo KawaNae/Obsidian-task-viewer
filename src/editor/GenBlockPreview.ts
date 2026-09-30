@@ -1,5 +1,5 @@
 import type { MarkdownPostProcessorContext } from 'obsidian';
-import { diagnosticText } from '../services/flow/diagnosticText';
+import { diagnosticText } from '../services/lang/flow/diagnosticText';
 import {
     collectGenBlocks,
     type GenBlockScan,

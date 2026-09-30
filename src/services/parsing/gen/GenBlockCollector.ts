@@ -1,5 +1,5 @@
 import { Outline, type OutlineReading } from '../utils/Outline';
-import { type Diagnostic, error, warning } from '../../lang/Diagnostic';
+import { type LocatedDiagnostic, error, warning } from '../../lang/Diagnostic';
 
 /** Language tag that marks a generation block. */
 export const GEN_LANGUAGE_TAG = 'tv-gen';
@@ -16,26 +16,6 @@ export interface GenBlock {
     openLine: number;
     /** Absolute index of the closing delimiter line. */
     closeLine: number;
-}
-
-/** A diagnostic anchored to one line, with columns inside that line. */
-export interface LocatedDiagnostic extends Diagnostic {
-    /** Absolute index of the line the span belongs to. */
-    line: number;
-    /**
-     * Last line the span reaches, when it reaches past its first.
-     *
-     * A js section is the first source here that is more than one line, so a
-     * statement broken across two of them has a span that no single line
-     * holds. `span.start` is then a column on `line` and `span.end` a column
-     * on `endLine`. Absent means the two are the same, which is every
-     * diagnostic that came before the section existed.
-     *
-     * One diagnostic still means one problem. Cutting it into a mark per line
-     * is the decorator's job — doing it here would make the count of
-     * diagnostics stop matching the count of things wrong.
-     */
-    endLine?: number;
 }
 
 /**

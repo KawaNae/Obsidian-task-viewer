@@ -2,7 +2,7 @@ import type { Menu } from 'obsidian';
 import type { Task } from '../../../types';
 import type { PluginContext } from '../../../PluginContext';
 import type { TimerHost } from '../../../timer/TimerWidget';
-import { getTaskDisplayName } from '../../../services/parsing/utils/TaskContent';
+import { getTaskDisplayName } from '../../../services/display/TaskContent';
 import { DateUtils } from '../../../utils/DateUtils';
 import { canTriggerFlow } from '../../../services/flow/FlowTrigger';
 import { t } from '../../../i18n';

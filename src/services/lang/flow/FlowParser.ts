@@ -1,10 +1,10 @@
-import { type Diagnostic, type Span, error, warning } from '../lang/Diagnostic';
-import type { Expr } from '../lang/ExprAst';
-import { nestingOverflow, parseExpr } from '../lang/ExprParser';
-import { splitDurationText, tokenize } from '../lang/Lexer';
-import { type Token, TokenCursor, tokenSpan } from '../lang/Token';
-import { type Value, type Weekday, weekdayFromName } from '../lang/Value';
-import { lookupWord } from '../lang/WordTable';
+import { type Diagnostic, type Span, error, warning } from '../Diagnostic';
+import type { Expr } from '../ExprAst';
+import { nestingOverflow, parseExpr } from '../ExprParser';
+import { splitDurationText, tokenize } from '../Lexer';
+import { type Token, TokenCursor, tokenSpan } from '../Token';
+import { type Value, type Weekday, weekdayFromName } from '../Value';
+import { lookupWord } from '../WordTable';
 import { type EveryRule, type FlowCell, type FlowProgram, type MoveTarget, SET_FIELD_ORDER, type SetField, type ScheduleNode, setHeadName } from './FlowAst';
 import { checkFlow } from './FlowChecker';
 

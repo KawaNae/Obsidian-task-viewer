@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { Notice, setMockLocale } from 'obsidian';
 import { initI18n } from '../../../src/i18n';
 import { FlowExecutor, type FirePlan, notRunOf } from '../../../src/services/flow/FlowExecutor';
-import { parseFlowSegments, singleLineFlow } from '../../../src/services/flow/FlowSegments';
+import { parseFlowSegments, singleLineFlow } from '../../../src/services/lang/flow/FlowSegments';
 import { TaskIndex } from '../../../src/services/core/TaskIndex';
 import { TaskRepository } from '../../../src/services/persistence/TaskRepository';
 import type { TaskOp } from '../../../src/services/persistence/TaskOps';

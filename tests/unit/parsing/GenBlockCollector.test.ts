@@ -1,9 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import {
-    collectGenBlocks,
-    type LocatedDiagnostic,
-    spreadOverLines,
-} from '../../../src/services/parsing/gen/GenBlockCollector';
+import { collectGenBlocks, spreadOverLines } from '../../../src/services/parsing/gen/GenBlockCollector';
+import type { LocatedDiagnostic } from '../../../src/services/lang/Diagnostic';
 import { Outline } from '../../../src/services/parsing/utils/Outline';
 import { outlineDiagnostics } from '../../../src/services/parsing/utils/OutlineDiagnostics';
 

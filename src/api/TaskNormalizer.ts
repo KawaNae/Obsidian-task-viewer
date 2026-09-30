@@ -4,8 +4,8 @@ import type { NormalizedTask } from './TaskApiTypes';
 import {
     getEffectiveColor, getEffectiveLinestyle, getEffectiveTags, getEffectiveProperties,
 } from '../services/data/EffectiveProperties';
-import { serializeFlow } from '../services/flow/FlowSerializer';
-import { flowRaws } from '../services/flow/FlowSegments';
+import { serializeFlow } from '../services/lang/flow/FlowSerializer';
+import { flowRaws } from '../services/lang/flow/FlowSegments';
 import { ChildLineClassifier } from '../services/parsing/utils/ChildLineClassifier';
 import { apiIdOf, type TaskLookup } from './TaskIds';
 
