@@ -125,7 +125,7 @@ export class CalendarView extends ItemView {
         this.plugin = plugin;
         this.readService = plugin.getTaskReadService();
         this.operations = plugin.getOperations();
-        this.taskRenderer = new TaskCardRenderer(this.app, this.readService, this.operations, this.plugin.menuPresenter, {
+        this.taskRenderer = new TaskCardRenderer(this.app, this.readService, this.plugin.getIndex(), this.operations, this.plugin.menuPresenter, {
             hoverSource: TASK_VIEWER_HOVER_SOURCE_ID,
             getHoverParent: () => this.hoverParent,
         }, () => this.plugin.settings, () => this.maskMode);
@@ -371,7 +371,7 @@ export class CalendarView extends ItemView {
         await this.renderSerializer.request();
 
         // Clear selection when the selected task is deleted via the UI.
-        this.unsubscribeDelete = this.selectionController.attachDeleteListener(this.operations);
+        this.unsubscribeDelete = this.selectionController.attachDeleteListener(this.plugin.getIndex());
 
         // Initialize render dispatch controller (rAF coalesce only). Every
         // change runs a full render(), which reconciles cards by key.

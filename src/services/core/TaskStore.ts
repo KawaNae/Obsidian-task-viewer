@@ -114,9 +114,9 @@ export class TaskStore {
     }
 
     /**
-     * 指定ファイルのタスクを全て削除
+     * 指定ファイルのタスクを全て削除し、消した名前を返す。
      */
-    removeTasksByFile(filePath: string): void {
+    removeTasksByFile(filePath: string): string[] {
         const toRemove: string[] = [];
         for (const [id, task] of this.tasks) {
             if (task.file === filePath) {
@@ -133,6 +133,7 @@ export class TaskStore {
             }
             this.bumpRevision();
         }
+        return toRemove;
     }
 
     // ===== Generation blocks =====

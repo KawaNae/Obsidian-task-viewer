@@ -35,6 +35,7 @@ const RENDERER_OWNED_CHILD_CLASSES = [
 const SHAPE_CLASS = 'task-card__shape';
 import type { TaskReadService } from '../../services/data/TaskReadService';
 import type { Operations } from '../../services/operations/Operations';
+import type { IndexReads } from '../../services/core/TaskIndex';
 import { getFileBaseName, hasTaskContent } from '../../services/display/TaskContent';
 import { ChildItemBuilder } from './ChildItemBuilder';
 import { ChildSectionRenderer, type ChildMenuCallback } from './ChildSectionRenderer';
@@ -131,6 +132,7 @@ export class TaskCardRenderer extends Component {
     constructor(
         private app: App,
         readService: TaskReadService,
+        index: IndexReads,
         operations: Operations,
         menuPresenter: MenuPresenter,
         private linkRuntime: TaskCardLinkRuntime,
@@ -149,12 +151,13 @@ export class TaskCardRenderer extends Component {
         this.childItemBuilder = new ChildItemBuilder(readService);
         this.childSectionRenderer = new ChildSectionRenderer(app, this.checkboxWiring, readService);
         this.linkInteractionManager = new TaskLinkInteractionManager(app, getSettings);
-        // Clean up expandedTaskIds entries for tasks deleted via the UI so the
-        // set does not grow unbounded over the renderer's lifetime. Keys are
+        // Clean up expandedTaskIds entries for rows whose names ended (the
+        // index's delete notification) so the set does not grow unbounded
+        // over the renderer's lifetime. Keys are
         // `${viewId}::${scope}::${task.id}` (cardInstanceId). Match by suffix so
         // all card instances of the deleted task are dropped regardless of view /
         // scope (main grid, pinned list, etc.).
-        this.unsubscribeTaskDeleted = operations.onTaskDeleted((taskId) => {
+        this.unsubscribeTaskDeleted = index.onTaskDeleted((taskId) => {
             const suffix = `::${taskId}`;
             for (const key of [...this.expandedTaskIds]) {
                 if (key.endsWith(suffix)) {

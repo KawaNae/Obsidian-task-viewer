@@ -46,6 +46,8 @@ export interface IndexReads {
     /** The task on a line an editor shows, in the content it shows (`TaskIndex.taskAtEditorLine`). */
     taskAtEditorLine(filePath: string, line: number, key: ContentKey): Task | undefined | null;
     onChange(callback: ChangeListener): () => void;
+    /** Hear each name that ends: its row gone from the index's next reading (`TaskIndex.onTaskDeleted`). */
+    onTaskDeleted(callback: (taskId: string) => void): () => void;
     /** Have the index read `file` now, and wait until it has. */
     requestScan(file: TFile): Promise<void>;
     /** Tell every listener now (`TaskIndex.notifyImmediate`). */
@@ -76,6 +78,16 @@ export class TaskIndex implements IndexReads {
      */
     private readonly notify = new NotifyCoalescer(16);
 
+    /** Who hears that a name ended (`onTaskDeleted`). */
+    private readonly deleteListeners = new Set<(taskId: string) => void>();
+
+    /**
+     * Names the store let go of, to be asked whether they name a row once
+     * what is under way has settled (`tellDeleted`), and the timer that asks.
+     */
+    private dropped = new Set<string>();
+    private droppedTimer: ReturnType<typeof setTimeout> | null = null;
+
     /**
      * Every vault subscription this index opened, with the emitter that closes
      * it.
@@ -102,7 +114,7 @@ export class TaskIndex implements IndexReads {
         this.parseFingerprint = computeParseFingerprint(settings);
 
         this.store = new TaskStore();
-        this.scanner = new TaskScanner(app, this.store, settings);
+        this.scanner = new TaskScanner(app, this.store, settings, (names) => this.dropNames(names));
         this.checks = {
             read: (path) => {
                 const file = app.vault.getAbstractFileByPath(path);
@@ -186,7 +198,6 @@ export class TaskIndex implements IndexReads {
             }
 
             // md → md（通常のリネーム）。ドラッグ中のファイルなら、保留も外れる。
-            this.store.removeTasksByFile(oldPath);
             this.scanner.handleFileRenamed(oldPath, file.path);
 
             await this.rescanAndNotify(file);
@@ -196,11 +207,10 @@ export class TaskIndex implements IndexReads {
     /**
      * Take a note that is no longer there out of the index: its rows, what
      * was read of it. A note deleted, renamed to something that
-     * is not a note, or found gone from the disk (`DiskReconciler`). The
-     * caller notifies.
+     * is not a note, or found gone from the disk (`DiskReconciler`). Its
+     * names end (`onTaskDeleted`); the caller notifies.
      */
     private forgetFile(path: string): void {
-        this.store.removeTasksByFile(path);
         this.scanner.handleFileDeleted(path);
     }
 
@@ -316,6 +326,10 @@ export class TaskIndex implements IndexReads {
         this.reconciler?.dispose();
 
         this.notify.dispose();
+        if (this.droppedTimer !== null) clearTimeout(this.droppedTimer);
+        this.droppedTimer = null;
+        this.dropped.clear();
+        this.deleteListeners.clear();
     }
 
     // ===== データアクセス (TaskStoreへ委譲) =====
@@ -391,6 +405,55 @@ export class TaskIndex implements IndexReads {
 
     onChange(callback: ChangeListener): () => void {
         return this.notify.onChange(callback);
+    }
+
+    // ===== 削除の通知 =====
+
+    /**
+     * Hear each name that ends: a row the index held that it holds no more,
+     * under that name or the one a write of ours carried it to (`getTask`).
+     * A row a write of ours took away ends, and the rows it rewrote do not;
+     * after an edit from outside every row of the file ends, as its names do;
+     * a note forgotten (deleted, renamed, gone from the disk) ends all of its
+     * rows. A content read again ends none (structure/layers.md, 名前).
+     *
+     * Told in the task after the change is in the index, whoever read it:
+     * a scan may commit what a write of ours left before the write reports
+     * it (`landed`), and a name is asked whether it ended once that report
+     * had its turn. A subscription of its own, apart from the telling that
+     * draws (`onChange`). A view lets go of what it keeps by a row's name —
+     * the selection, a card's open children — so the name is not given to a
+     * row that comes to stand on its line.
+     */
+    onTaskDeleted(callback: (taskId: string) => void): () => void {
+        this.deleteListeners.add(callback);
+        return () => { this.deleteListeners.delete(callback); };
+    }
+
+    /** The store let go of `names` (`TaskScanner`): ask of them in the next task. */
+    private dropNames(names: readonly string[]): void {
+        for (const name of names) this.dropped.add(name);
+        this.droppedTimer ??= setTimeout(() => this.tellDeleted(), 0);
+    }
+
+    /**
+     * Tell every delete listener the names dropped that name no row now
+     * (`getTask`, the one place a name is followed). One listener that
+     * throws stops neither the others nor the index.
+     */
+    private tellDeleted(): void {
+        this.droppedTimer = null;
+        const ended = [...this.dropped].filter(name => this.getTask(name) === undefined);
+        this.dropped = new Set();
+        for (const listener of [...this.deleteListeners]) {
+            for (const name of ended) {
+                try {
+                    listener(name);
+                } catch (error) {
+                    logError(`[TaskIndex] a delete listener threw: ${(error as Error)?.message ?? error}`);
+                }
+            }
+        }
     }
 
     // ===== スキャン関連 (TaskScannerへ委譲) =====

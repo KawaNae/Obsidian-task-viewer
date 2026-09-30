@@ -186,7 +186,7 @@ export class TimelineView extends ItemView {
             },
             getIsOpen: () => this.viewState.showSidebar,
         });
-        this.taskRenderer = new TaskCardRenderer(this.app, this.readService, this.operations, this.plugin.menuPresenter, {
+        this.taskRenderer = new TaskCardRenderer(this.app, this.readService, this.plugin.getIndex(), this.operations, this.plugin.menuPresenter, {
             hoverSource: TASK_VIEWER_HOVER_SOURCE_ID,
             getHoverParent: () => this.hoverParent,
         }, () => this.plugin.settings, () => this.viewState.maskMode ?? false);
@@ -506,7 +506,7 @@ export class TimelineView extends ItemView {
         // case causes a visual glitch (line-shifted task inherits `.is-selected`),
         // user can click to re-select.
         this.selectionController.attachBackgroundClick(this.container);
-        this.unsubscribeDelete = this.selectionController.attachDeleteListener(this.operations);
+        this.unsubscribeDelete = this.selectionController.attachDeleteListener(this.plugin.getIndex());
 
         // Initialize render dispatch controller (rAF coalesce only — partial
         // update was retired in favour of keyed reconciliation in performRender).
